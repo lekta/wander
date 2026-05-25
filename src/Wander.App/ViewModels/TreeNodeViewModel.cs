@@ -5,7 +5,7 @@ using Wander.Core.FileSystem;
 namespace Wander.App.ViewModels;
 
 public sealed class TreeNodeViewModel : ObservableObject {
-    private static readonly TreeNodeViewModel _placeholder = new("__placeholder__", "", EntryKind.Directory, null);
+    private static readonly TreeNodeViewModel _placeholder = new("__placeholder__", "", EntryKind.Directory, null, hasChildren: false);
 
     private readonly IFileSystem? _fs;
     private bool _isExpanded;
@@ -13,12 +13,18 @@ public sealed class TreeNodeViewModel : ObservableObject {
     private bool _loaded;
 
 
-    public TreeNodeViewModel(string name, string fullPath, EntryKind kind, IFileSystem? fs) {
+    public TreeNodeViewModel(string name, string fullPath, EntryKind kind, IFileSystem? fs, bool hasChildren) {
         Name = name;
         FullPath = fullPath;
         Kind = kind;
         _fs = fs;
-        Children = new ObservableCollection<TreeNodeViewModel> { _placeholder };
+        Children = new ObservableCollection<TreeNodeViewModel>();
+
+        // Placeholder so WPF draws the expander chevron before we lazy-load.
+        // No placeholder for leaf folders (HasSubdirectories=false) — no chevron drawn.
+        if (hasChildren) {
+            Children.Add(_placeholder);
+        }
     }
 
 
@@ -28,8 +34,9 @@ public sealed class TreeNodeViewModel : ObservableObject {
     public ObservableCollection<TreeNodeViewModel> Children { get; }
 
     /// <summary>
-    /// Bound to TreeViewItem.IsExpanded TwoWay. We only ever set this to <c>true</c>
-    /// from code — collapsing must be a user action (Wander never self-collapses the tree).
+    /// Bound to TreeViewItem.IsExpanded TwoWay. Wander never auto-collapses the tree
+    /// without an explicit user gesture — programmatic <c>false</c> only happens
+    /// when the user Alt-clicks the chevron (recursive collapse).
     /// </summary>
     public bool IsExpanded {
         get => _isExpanded;
@@ -52,10 +59,10 @@ public sealed class TreeNodeViewModel : ObservableObject {
 
 
     /// <summary>
-    /// Recursively expands nodes along the way to <paramref name="targetPath"/> and selects
-    /// the deepest matching node. Returns true if the target was reached.
+    /// Recursively expands nodes along the way to <paramref name="targetPath"/> and (optionally)
+    /// selects the deepest matching node. Returns true if the target was reached.
     /// </summary>
-    public bool TryExpandToPath(string targetPath) {
+    public bool TryExpandToPath(string targetPath, bool select = true) {
         if (string.IsNullOrEmpty(FullPath) || string.IsNullOrEmpty(targetPath)) {
             return false;
         }
@@ -65,15 +72,16 @@ public sealed class TreeNodeViewModel : ObservableObject {
         }
 
         if (PathsEqual(targetPath, FullPath)) {
-            IsSelected = true;
+            if (select) {
+                IsSelected = true;
+            }
             return true;
         }
 
-        // Need to descend — expand (lazy-loads children on first expand).
         IsExpanded = true;
 
         foreach (var child in Children) {
-            if (child.TryExpandToPath(targetPath)) {
+            if (child.TryExpandToPath(targetPath, select)) {
                 return true;
             }
         }
@@ -92,9 +100,12 @@ public sealed class TreeNodeViewModel : ObservableObject {
 
         try {
             foreach (var entry in _fs.Enumerate(FullPath)) {
-                if (entry.Kind == EntryKind.Directory) {
-                    Children.Add(new TreeNodeViewModel(entry.Name, entry.FullPath, EntryKind.Directory, _fs));
+                if (entry.Kind != EntryKind.Directory) {
+                    continue;
                 }
+
+                bool childHasChildren = _fs.HasSubdirectories(entry.FullPath);
+                Children.Add(new TreeNodeViewModel(entry.Name, entry.FullPath, EntryKind.Directory, _fs, childHasChildren));
             }
         } catch {
             // access denied / unavailable — silently skip; UI will show empty

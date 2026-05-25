@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using System.ComponentModel;
 using System.IO;
 using System.Windows;
 using Wander.Core;
@@ -24,6 +26,8 @@ public sealed class MainViewModel : ObservableObject {
     private string? _clipboardSource;
     private bool _clipboardIsCut;
 
+    private bool _restoring;
+
 
     public MainViewModel() {
         _fs = ServiceLocator.Get<IFileSystem>();
@@ -46,7 +50,9 @@ public sealed class MainViewModel : ObservableObject {
         PasteCommand = new RelayCommand(_ => Paste(), _ => _clipboardSource is not null && _nav.Current is not null);
         NewFolderCommand = new RelayCommand(_ => NewFolder(), _ => _nav.Current is not null);
         RefreshCommand = new RelayCommand(_ => Refresh());
-        ToggleViewModeCommand = new RelayCommand(_ => ToggleViewMode());
+        SetViewModeCommand = new RelayCommand(p => SetViewMode(p as string));
+        ExitCommand = new RelayCommand(_ => Application.Current?.Shutdown());
+        OptionsCommand = new RelayCommand(_ => Status = "Options dialog is not implemented yet.");
 
         _nav.CurrentChanged += (_, _) => OnNavigationChanged();
 
@@ -94,7 +100,20 @@ public sealed class MainViewModel : ObservableObject {
     public RelayCommand PasteCommand { get; }
     public RelayCommand NewFolderCommand { get; }
     public RelayCommand RefreshCommand { get; }
-    public RelayCommand ToggleViewModeCommand { get; }
+    public RelayCommand SetViewModeCommand { get; }
+    public RelayCommand ExitCommand { get; }
+    public RelayCommand OptionsCommand { get; }
+
+    public string WindowTitle {
+        get {
+            if (string.IsNullOrEmpty(_nav.Current)) {
+                return "Wander";
+            }
+            string trimmed = _nav.Current.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string name = Path.GetFileName(trimmed);
+            return string.IsNullOrEmpty(name) ? _nav.Current : name;
+        }
+    }
 
 
     public void NavigateTo(string path) {
@@ -129,27 +148,65 @@ public sealed class MainViewModel : ObservableObject {
     private void RestoreState() {
         var state = _stateStore.Load();
 
-        if (!string.IsNullOrEmpty(state.ViewMode) && Enum.TryParse<ViewMode>(state.ViewMode, out var mode)) {
-            _viewMode = mode;
-            Raise(nameof(ViewMode));
-        }
+        _restoring = true;
+        try {
+            if (!string.IsNullOrEmpty(state.ViewMode) && Enum.TryParse<ViewMode>(state.ViewMode, out var mode)) {
+                _viewMode = mode;
+                Raise(nameof(ViewMode));
+            }
 
-        if (!string.IsNullOrEmpty(state.LastPath) && _fs.DirectoryExists(state.LastPath)) {
-            _nav.NavigateTo(state.LastPath);
-            return;
-        }
+            foreach (string path in state.ExpandedPaths) {
+                ExpandToPath(path, select: false);
+            }
 
-        string? first = Roots.FirstOrDefault()?.FullPath;
-        if (first is not null) {
-            _nav.NavigateTo(first);
+            if (!string.IsNullOrEmpty(state.LastPath) && _fs.DirectoryExists(state.LastPath)) {
+                _nav.NavigateTo(state.LastPath);
+            } else {
+                string? first = Roots.FirstOrDefault()?.FullPath;
+                if (first is not null) {
+                    _nav.NavigateTo(first);
+                }
+            }
+        } finally {
+            _restoring = false;
         }
     }
 
     private void SaveState() {
+        if (_restoring) {
+            return;
+        }
+
         _stateStore.Save(new AppState {
             LastPath = _nav.Current,
             ViewMode = _viewMode.ToString(),
+            ExpandedPaths = CollectExpanded(),
         });
+    }
+
+    private List<string> CollectExpanded() {
+        var result = new List<string>();
+        foreach (var root in Roots) {
+            CollectExpandedRecursive(root, result);
+        }
+        return result;
+    }
+
+    private static void CollectExpandedRecursive(TreeNodeViewModel node, List<string> result) {
+        if (node.IsExpanded && !string.IsNullOrEmpty(node.FullPath)) {
+            result.Add(node.FullPath);
+        }
+        foreach (var child in node.Children) {
+            CollectExpandedRecursive(child, result);
+        }
+    }
+
+    private void ExpandToPath(string path, bool select) {
+        foreach (var root in Roots) {
+            if (root.TryExpandToPath(path, select)) {
+                return;
+            }
+        }
     }
 
 
@@ -177,6 +234,7 @@ public sealed class MainViewModel : ObservableObject {
 
     private void OnNavigationChanged() {
         AddressText = _nav.Current ?? "";
+        Raise(nameof(WindowTitle));
         Refresh();
         ExpandTreeToCurrent();
         SaveState();
@@ -187,11 +245,7 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
-        foreach (var root in Roots) {
-            if (root.TryExpandToPath(_nav.Current)) {
-                return;
-            }
-        }
+        ExpandToPath(_nav.Current, select: true);
     }
 
     private void Refresh() {
@@ -213,15 +267,43 @@ public sealed class MainViewModel : ObservableObject {
     private void LoadRoots() {
         Roots.Clear();
         foreach (var root in _fs.GetRoots()) {
-            Roots.Add(new TreeNodeViewModel(root.Name, root.FullPath, EntryKind.Drive, _fs));
+            bool hasChildren = _fs.HasSubdirectories(root.FullPath);
+            var node = new TreeNodeViewModel(root.Name, root.FullPath, EntryKind.Drive, _fs, hasChildren);
+            Roots.Add(node);
+            WireTreeNode(node);
+        }
+    }
+
+    private void WireTreeNode(TreeNodeViewModel node) {
+        node.PropertyChanged += OnTreeNodePropertyChanged;
+        node.Children.CollectionChanged += OnTreeChildrenChanged;
+        foreach (var child in node.Children) {
+            WireTreeNode(child);
+        }
+    }
+
+    private void OnTreeChildrenChanged(object? sender, NotifyCollectionChangedEventArgs e) {
+        if (e.NewItems is null) {
+            return;
+        }
+        foreach (TreeNodeViewModel added in e.NewItems) {
+            WireTreeNode(added);
+        }
+    }
+
+    private void OnTreeNodePropertyChanged(object? sender, PropertyChangedEventArgs e) {
+        if (e.PropertyName == nameof(TreeNodeViewModel.IsExpanded)) {
+            SaveState();
         }
     }
 
 
     // --- View modes ----------------------------------------------------
 
-    private void ToggleViewMode() {
-        ViewMode = _viewMode == ViewMode.Details ? ViewMode.LargeIcons : ViewMode.Details;
+    private void SetViewMode(string? name) {
+        if (Enum.TryParse<ViewMode>(name, out var mode)) {
+            ViewMode = mode;
+        }
     }
 
 

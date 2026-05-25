@@ -7,6 +7,13 @@ public interface IFileSystem {
     IReadOnlyList<FileSystemEntry> Enumerate(string path);
     IReadOnlyList<FileSystemEntry> GetRoots();
 
+    /// <summary>
+    /// Cheap probe: does <paramref name="path"/> contain at least one subdirectory?
+    /// Used by the tree view to decide whether to draw an expand chevron without
+    /// loading the full content of the directory.
+    /// </summary>
+    bool HasSubdirectories(string path);
+
     string? GetParent(string path);
 
     void CreateDirectory(string path);

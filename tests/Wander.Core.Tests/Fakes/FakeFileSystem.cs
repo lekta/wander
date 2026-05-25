@@ -41,6 +41,16 @@ internal sealed class FakeFileSystem : IFileSystem {
         return Array.Empty<FileSystemEntry>();
     }
 
+    public bool HasSubdirectories(string path) {
+        foreach (string d in Directories) {
+            string? parent = System.IO.Path.GetDirectoryName(d);
+            if (string.Equals(parent, path, StringComparison.OrdinalIgnoreCase)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public string? GetParent(string path) {
         return System.IO.Path.GetDirectoryName(path);
     }

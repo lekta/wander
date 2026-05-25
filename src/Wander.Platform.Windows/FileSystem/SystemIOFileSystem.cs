@@ -51,6 +51,14 @@ public sealed class SystemIOFileSystem : IFileSystem {
         return result;
     }
 
+    public bool HasSubdirectories(string path) {
+        try {
+            return Directory.EnumerateDirectories(path).Any();
+        } catch {
+            return false;
+        }
+    }
+
     public string? GetParent(string path) {
         var parent = Directory.GetParent(path);
         return parent?.FullName;
