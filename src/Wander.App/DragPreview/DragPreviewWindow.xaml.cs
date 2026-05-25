@@ -51,11 +51,24 @@ public partial class DragPreviewWindow : Window {
     }
 
     public void MoveToCursor() {
-        if (NativeMethods.GetCursorPos(out var pt)) {
-            // Offset so the preview doesn't cover the cursor / system drop cursor.
+        if (!NativeMethods.GetCursorPos(out var pt)) {
+            return;
+        }
+
+        // GetCursorPos returns physical pixels. Window.Left/Top is in DIPs.
+        // On non-100% DPI scaling the two scales differ; convert via the
+        // window's current PresentationSource transform.
+        var source = PresentationSource.FromVisual(this);
+        if (source?.CompositionTarget is null) {
             Left = pt.X + 18;
             Top = pt.Y + 18;
+            return;
         }
+
+        var dip = source.CompositionTarget.TransformFromDevice.Transform(new Point(pt.X, pt.Y));
+        // Small offset so the preview sits to the bottom-right of the cursor.
+        Left = dip.X + 18;
+        Top = dip.Y + 18;
     }
 
 

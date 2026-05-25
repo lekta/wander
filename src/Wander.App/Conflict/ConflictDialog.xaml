@@ -1,0 +1,47 @@
+<Window x:Class="Wander.App.Conflict.ConflictDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Replace or skip file"
+        Width="520" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False">
+    <StackPanel Margin="16">
+        <TextBlock x:Name="HeaderText"
+                   FontSize="14" FontWeight="SemiBold"
+                   TextWrapping="Wrap"/>
+
+        <Grid Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" BorderBrush="#CCC" BorderThickness="1" Padding="10" Margin="0,0,6,0">
+                <StackPanel>
+                    <TextBlock Text="Source (being copied)" Foreground="#666" FontSize="11"/>
+                    <TextBlock x:Name="SourceName" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Margin="0,4,0,0"/>
+                    <TextBlock x:Name="SourceSize" FontSize="11" Foreground="#444" Margin="0,4,0,0"/>
+                    <TextBlock x:Name="SourceModified" FontSize="11" Foreground="#444"/>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="1" BorderBrush="#CCC" BorderThickness="1" Padding="10" Margin="6,0,0,0">
+                <StackPanel>
+                    <TextBlock Text="Already in destination" Foreground="#666" FontSize="11"/>
+                    <TextBlock x:Name="TargetName" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Margin="0,4,0,0"/>
+                    <TextBlock x:Name="TargetSize" FontSize="11" Foreground="#444" Margin="0,4,0,0"/>
+                    <TextBlock x:Name="TargetModified" FontSize="11" Foreground="#444"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+            <Button Content="Replace" Width="90" Margin="0,0,6,0" Click="OnReplace"/>
+            <Button Content="Skip" Width="80" Margin="0,0,6,0" Click="OnSkip"/>
+            <Button Content="Keep both" Width="90" Margin="0,0,6,0" Click="OnRename"
+                    ToolTip="Save a copy with a numeric suffix, e.g. 'name (1).txt'"/>
+            <Button Content="Cancel" Width="80" IsCancel="True" Click="OnCancel"/>
+        </StackPanel>
+    </StackPanel>
+</Window>

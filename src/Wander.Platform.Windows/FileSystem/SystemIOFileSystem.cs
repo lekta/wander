@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Wander.Core.FileSystem;
 
 namespace Wander.Platform.Windows.FileSystem;
@@ -13,18 +14,31 @@ public sealed class SystemIOFileSystem : IFileSystem {
 
 
     public IReadOnlyList<FileSystemEntry> Enumerate(string path) {
-        var result = new List<FileSystemEntry>();
+        var dirs = new List<FileSystemEntry>();
+        var files = new List<FileSystemEntry>();
 
         foreach (var dir in Directory.EnumerateDirectories(path)) {
-            result.Add(BuildEntry(dir, EntryKind.Directory));
+            dirs.Add(BuildEntry(dir, EntryKind.Directory));
         }
-
         foreach (var file in Directory.EnumerateFiles(path)) {
-            result.Add(BuildEntry(file, EntryKind.File));
+            files.Add(BuildEntry(file, EntryKind.File));
         }
 
+        // Explorer-style natural sort (numbers, special chars, "_" before letters)
+        // — StrCmpLogicalW is what Explorer itself uses. Folders are listed first.
+        var comparer = Comparer<FileSystemEntry>.Create((a, b) => StrCmpLogicalW(a.Name, b.Name));
+        dirs.Sort(comparer);
+        files.Sort(comparer);
+
+        var result = new List<FileSystemEntry>(dirs.Count + files.Count);
+        result.AddRange(dirs);
+        result.AddRange(files);
         return result;
     }
+
+
+    [DllImport("shlwapi.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    private static extern int StrCmpLogicalW(string x, string y);
 
     public IReadOnlyList<FileSystemEntry> GetRoots() {
         var result = new List<FileSystemEntry>();
@@ -64,6 +78,16 @@ public sealed class SystemIOFileSystem : IFileSystem {
         return parent?.FullName;
     }
 
+    public FileSystemEntry? GetEntry(string path) {
+        if (Directory.Exists(path)) {
+            return BuildEntry(path, EntryKind.Directory);
+        }
+        if (File.Exists(path)) {
+            return BuildEntry(path, EntryKind.File);
+        }
+        return null;
+    }
+
 
     public void CreateDirectory(string path) {
         Directory.CreateDirectory(path);
@@ -75,6 +99,22 @@ public sealed class SystemIOFileSystem : IFileSystem {
 
     public void DeleteDirectory(string path, bool recursive) {
         Directory.Delete(path, recursive);
+    }
+
+    public void ClearReadOnly(string path) {
+        if (File.Exists(path)) {
+            var attrs = File.GetAttributes(path);
+            if ((attrs & FileAttributes.ReadOnly) != 0) {
+                File.SetAttributes(path, attrs & ~FileAttributes.ReadOnly);
+            }
+            return;
+        }
+        if (Directory.Exists(path)) {
+            var info = new DirectoryInfo(path);
+            if ((info.Attributes & FileAttributes.ReadOnly) != 0) {
+                info.Attributes &= ~FileAttributes.ReadOnly;
+            }
+        }
     }
 
     public void CopyFile(string source, string destination, bool overwrite) {
@@ -97,11 +137,22 @@ public sealed class SystemIOFileSystem : IFileSystem {
 
     public void MoveEntry(string source, string destination) {
         if (Directory.Exists(source)) {
-            Directory.Move(source, destination);
+            try {
+                Directory.Move(source, destination);
+            } catch (IOException) when (RootsDiffer(source, destination)) {
+                // Directory.Move can't span volumes; fall back to recursive
+                // copy + delete. File.Move handles cross-volume by itself.
+                CopyDirectory(source, destination, overwrite: false);
+                Directory.Delete(source, recursive: true);
+            }
             return;
         }
 
         File.Move(source, destination);
+    }
+
+    private static bool RootsDiffer(string a, string b) {
+        return !string.Equals(Path.GetPathRoot(a), Path.GetPathRoot(b), StringComparison.OrdinalIgnoreCase);
     }
 
     public void Rename(string path, string newName) {

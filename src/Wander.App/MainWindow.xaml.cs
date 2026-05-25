@@ -7,6 +7,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using Wander.App.Converters;
 using Wander.App.DragPreview;
+using Wander.App.Util;
 using Wander.App.ViewModels;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
@@ -24,6 +25,13 @@ public partial class MainWindow : Window {
     private Point _dragOrigin;
     private bool _dragArmed;
     private int _dragPathCount;
+    private string? _dragFirstName;
+
+    // Deferred-selection guard so that "click one of several selected rows
+    // and drag" keeps the full selection, matching Explorer.
+    private bool _deferredSelection;
+    private FileSystemEntry? _deferredEntry;
+    private object? _deferredSenderControl;
 
     // --- Drag preview + drop indicator state ---------------------------
     private DragPreviewWindow? _dragPreview;
@@ -31,6 +39,8 @@ public partial class MainWindow : Window {
     private AdornerLayer? _dropAdornerLayer;
     private string? _currentDropTarget;
     private DragDropEffects _currentDragEffect;
+    private SelfDropReason _currentSelfDropReason;
+    private string? _currentSelfDropOffender;
 
 
     public MainWindow() {
@@ -132,7 +142,7 @@ public partial class MainWindow : Window {
             return;
         }
 
-        string? input = PromptDialog.Show("Rename", "New name:", entry.Name);
+        string? input = PromptDialog.Show("Rename", "New name:", entry.Name, filenameMode: true);
         if (input is null || input == entry.Name) {
             return;
         }
@@ -224,16 +234,62 @@ public partial class MainWindow : Window {
 
     private void List_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
         _dragArmed = false;
+        _deferredSelection = false;
+        _deferredEntry = null;
+        _deferredSenderControl = null;
         _dragOrigin = e.GetPosition(this);
 
-        var hit = e.OriginalSource as DependencyObject;
+        var clicked = FindEntryAtSource(e.OriginalSource);
+        if (clicked is null) {
+            return;
+        }
+        _dragArmed = true;
+
+        // If the user clicks (without Ctrl/Shift) on a row that's already part
+        // of a multi-selection, default WPF would collapse to just that row —
+        // making the subsequent drag carry only one file. Defer the selection
+        // change to mouse-up so we can keep all selected if a drag starts.
+        bool plainClick = (Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) == 0;
+        bool clickedOnSelected = Vm.SelectedEntries.Contains(clicked);
+        bool multi = Vm.SelectedEntries.Count > 1;
+
+        if (plainClick && clickedOnSelected && multi) {
+            _deferredSelection = true;
+            _deferredEntry = clicked;
+            _deferredSenderControl = sender;
+            e.Handled = true;
+        }
+    }
+
+    private void List_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e) {
+        if (_deferredSelection && _deferredEntry is FileSystemEntry entry) {
+            // No drag happened — finalize the click as a plain single-select.
+            switch (_deferredSenderControl) {
+                case DataGrid dg:
+                    dg.SelectedItems.Clear();
+                    dg.SelectedItem = entry;
+                    break;
+                case ListBox lb:
+                    lb.SelectedItems.Clear();
+                    lb.SelectedItem = entry;
+                    break;
+            }
+        }
+        _deferredSelection = false;
+        _deferredEntry = null;
+        _deferredSenderControl = null;
+        _dragArmed = false;
+    }
+
+    private static FileSystemEntry? FindEntryAtSource(object originalSource) {
+        var hit = originalSource as DependencyObject;
         while (hit is not null) {
-            if (hit is FrameworkElement fe && fe.DataContext is FileSystemEntry) {
-                _dragArmed = true;
-                return;
+            if (hit is FrameworkElement fe && fe.DataContext is FileSystemEntry entry) {
+                return entry;
             }
             hit = VisualTreeHelper.GetParent(hit);
         }
+        return null;
     }
 
     private void List_PreviewMouseMove(object sender, MouseEventArgs e) {
@@ -248,6 +304,7 @@ public partial class MainWindow : Window {
         }
 
         _dragArmed = false;
+        _deferredSelection = false; // drag started — keep the full selection
 
         var paths = Vm.SelectedEntries.Select(en => en.FullPath).ToArray();
         if (paths.Length == 0) {
@@ -259,13 +316,15 @@ public partial class MainWindow : Window {
 
     private void StartDrag(DependencyObject src, string[] paths) {
         _dragPathCount = paths.Length;
+        _dragFirstName = Path.GetFileName(paths[0].TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
         _currentDropTarget = null;
         _currentDragEffect = DragDropEffects.None;
 
         var preview = new DragPreviewWindow();
         preview.SetIcon(IconConverter.Load(paths[0], IconSize.Normal));
         preview.SetCount(paths.Length);
-        preview.SetAction(DragAction.Forbidden, paths.Length == 1 ? "Drag 1 item" : $"Drag {paths.Length} items", null);
+        string startDesc = paths.Length == 1 ? $"Drag '{_dragFirstName}'" : $"Drag {paths.Length} items";
+        preview.SetAction(DragAction.Forbidden, startDesc, null);
         preview.Show();
         preview.MoveToCursor();
         _dragPreview = preview;
@@ -308,11 +367,17 @@ public partial class MainWindow : Window {
 
         if (_currentDragEffect == DragDropEffects.None || _currentDropTarget is null) {
             action = DragAction.Forbidden;
-            desc = count == 1 ? "Cannot drop here" : $"Cannot drop {count} items";
+            if (_currentSelfDropReason != SelfDropReason.None && _currentDropTarget is not null) {
+                desc = PathSafety.FormatReason(_currentSelfDropReason, _currentSelfDropOffender, _currentDropTarget);
+            } else {
+                desc = count == 1
+                    ? $"Cannot drop '{_dragFirstName}' here"
+                    : $"Cannot drop {count} items here";
+            }
         } else {
             action = _currentDragEffect == DragDropEffects.Move ? DragAction.Move : DragAction.Copy;
             string verb = action == DragAction.Move ? "Move" : "Copy";
-            string what = count == 1 ? "1 item" : $"{count} items";
+            string what = count == 1 ? $"'{_dragFirstName}'" : $"{count} items";
             desc = $"{verb} {what}";
             targetText = "to " + FormatTarget(_currentDropTarget);
         }
@@ -333,8 +398,7 @@ public partial class MainWindow : Window {
         if (!e.Data.GetDataPresent(DataFormats.FileDrop)) {
             e.Effects = DragDropEffects.None;
             e.Handled = true;
-            _currentDragEffect = DragDropEffects.None;
-            _currentDropTarget = null;
+            ResetDropState();
             SetDropHighlight(null);
             return;
         }
@@ -342,16 +406,27 @@ public partial class MainWindow : Window {
         var paths = (string[])e.Data.GetData(DataFormats.FileDrop);
         string? target = ResolveDropTarget(e);
 
-        if (target is null || IsSelfDrop(paths, target)) {
+        if (target is null) {
             e.Effects = DragDropEffects.None;
-            _currentDragEffect = DragDropEffects.None;
-            _currentDropTarget = null;
+            ResetDropState();
             SetDropHighlight(null);
         } else {
-            e.Effects = ChooseEffect(paths, target);
-            _currentDragEffect = e.Effects;
-            _currentDropTarget = target;
-            SetDropHighlight(FindHighlightElement(e));
+            var reason = PathSafety.DetectSelfDrop(paths, target, out string? offender);
+            if (reason != SelfDropReason.None) {
+                e.Effects = DragDropEffects.None;
+                _currentDragEffect = DragDropEffects.None;
+                _currentDropTarget = target;
+                _currentSelfDropReason = reason;
+                _currentSelfDropOffender = offender;
+                SetDropHighlight(null);
+            } else {
+                e.Effects = ChooseEffect(paths, target);
+                _currentDragEffect = e.Effects;
+                _currentDropTarget = target;
+                _currentSelfDropReason = SelfDropReason.None;
+                _currentSelfDropOffender = null;
+                SetDropHighlight(FindHighlightElement(e));
+            }
         }
         e.Handled = true;
     }
@@ -364,7 +439,12 @@ public partial class MainWindow : Window {
 
             var paths = ((string[])e.Data.GetData(DataFormats.FileDrop)).ToList();
             string? target = ResolveDropTarget(e);
-            if (target is null || IsSelfDrop(paths, target)) {
+            if (target is null) {
+                return;
+            }
+
+            var reason = PathSafety.DetectSelfDrop(paths, target, out _);
+            if (reason != SelfDropReason.None) {
                 return;
             }
 
@@ -375,6 +455,13 @@ public partial class MainWindow : Window {
         } finally {
             ClearDropHighlight();
         }
+    }
+
+    private void ResetDropState() {
+        _currentDragEffect = DragDropEffects.None;
+        _currentDropTarget = null;
+        _currentSelfDropReason = SelfDropReason.None;
+        _currentSelfDropOffender = null;
     }
 
 
@@ -434,8 +521,7 @@ public partial class MainWindow : Window {
 
     private void ClearDropHighlight() {
         SetDropHighlight(null);
-        _currentDropTarget = null;
-        _currentDragEffect = DragDropEffects.None;
+        ResetDropState();
     }
 
 
@@ -458,25 +544,4 @@ public partial class MainWindow : Window {
         return string.Equals(ra, rb, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool IsSelfDrop(IReadOnlyList<string> paths, string target) {
-        string targetNorm = target.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-
-        foreach (string p in paths) {
-            string pNorm = p.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-
-            if (string.Equals(pNorm, targetNorm, StringComparison.OrdinalIgnoreCase)) {
-                return true;
-            }
-            string parent = Path.GetDirectoryName(pNorm) ?? "";
-            if (string.Equals(parent.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-                              targetNorm, StringComparison.OrdinalIgnoreCase)) {
-                return true;
-            }
-            string prefix = pNorm + Path.DirectorySeparatorChar;
-            if (targetNorm.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) {
-                return true;
-            }
-        }
-        return false;
-    }
 }

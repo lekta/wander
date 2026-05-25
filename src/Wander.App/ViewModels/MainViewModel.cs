@@ -3,7 +3,10 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.IO;
 using System.Windows;
+using Wander.App.Conflict;
+using Wander.App.Util;
 using Wander.Core;
+using Wander.Core.Diagnostics;
 using Wander.Core.FileSystem;
 using Wander.Core.Navigation;
 using Wander.Core.Persistence;
@@ -15,6 +18,7 @@ public sealed class MainViewModel : ObservableObject {
     private readonly IFileSystem _fs;
     private readonly IShellLauncher _shell;
     private readonly IAppStateStore _stateStore;
+    private readonly IFileLockInspector? _lockInspector;
     private readonly NavigationService _nav = new();
     private readonly FileOperationService _ops;
 
@@ -34,6 +38,9 @@ public sealed class MainViewModel : ObservableObject {
         _fs = ServiceLocator.Get<IFileSystem>();
         _shell = ServiceLocator.Get<IShellLauncher>();
         _stateStore = ServiceLocator.Get<IAppStateStore>();
+        _lockInspector = ServiceLocator.IsRegistered<IFileLockInspector>()
+            ? ServiceLocator.Get<IFileLockInspector>()
+            : null;
         _ops = new FileOperationService(_fs);
 
         Entries = new ObservableCollection<FileSystemEntry>();
@@ -170,34 +177,19 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
-        int ok = 0;
-        foreach (string src in sourcePaths) {
-            string name = Path.GetFileName(src.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-            if (string.IsNullOrEmpty(name)) {
-                continue;
-            }
-
-            string dest = Path.Combine(targetFolder, name);
-            if (string.Equals(src, dest, StringComparison.OrdinalIgnoreCase)) {
-                continue;
-            }
-
-            try {
-                if (effect == DropEffect.Move) {
-                    _ops.Move(src, dest);
-                } else {
-                    _ops.Copy(src, dest);
-                }
-                ok++;
-            } catch (Exception ex) {
-                Status = $"{(effect == DropEffect.Move ? "Move" : "Copy")} failed for {name}: {ex.Message}";
-            }
+        var resolver = new InteractiveConflictResolver();
+        IReadOnlyList<FileOperationService.BatchItemResult> results;
+        try {
+            results = effect == DropEffect.Move
+                ? _ops.MoveMany(sourcePaths, targetFolder, resolver)
+                : _ops.CopyMany(sourcePaths, targetFolder, resolver);
+        } catch (Exception ex) {
+            Status = $"Drop failed: {ex.Message}";
+            return;
         }
 
         Refresh();
-        if (ok > 0) {
-            Status = $"{(effect == DropEffect.Move ? "Moved" : "Copied")} {ok} item(s) to {targetFolder}";
-        }
+        ReportBatchResults(results, effect == DropEffect.Move ? "Moved" : "Copied", targetFolder);
     }
 
 
@@ -406,11 +398,34 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
+        // Read-only second-stage confirmation: list affected items explicitly.
+        var readOnlys = _selectedEntries.Where(en => en.IsReadOnly).ToList();
+        if (readOnlys.Count > 0) {
+            string list = string.Join("\n", readOnlys.Take(5).Select(en => "• " + en.Name)) +
+                (readOnlys.Count > 5 ? $"\n… and {readOnlys.Count - 5} more" : "");
+            string roMsg = readOnlys.Count == 1
+                ? $"The item is read-only:\n\n{list}\n\nDelete anyway?"
+                : $"These items are read-only:\n\n{list}\n\nDelete all anyway?";
+
+            var roResult = MessageBox.Show(
+                roMsg,
+                "Read-only",
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Warning,
+                MessageBoxResult.Cancel);
+            if (roResult != MessageBoxResult.OK) {
+                return;
+            }
+        }
+
         foreach (var entry in _selectedEntries.ToList()) {
             try {
+                if (entry.IsReadOnly) {
+                    _fs.ClearReadOnly(entry.FullPath);
+                }
                 _ops.Delete(entry.FullPath);
             } catch (Exception ex) {
-                Status = $"Delete failed for {entry.Name}: {ex.Message}";
+                Status = $"Delete failed for {entry.Name}: {DescribeError(ex, entry.FullPath)}";
             }
         }
         Refresh();
@@ -429,7 +444,7 @@ public sealed class MainViewModel : ObservableObject {
             _ops.Rename(_selectedEntry.FullPath, newName);
             Refresh();
         } catch (Exception ex) {
-            Status = $"Rename failed: {ex.Message}";
+            Status = $"Rename failed: {DescribeError(ex, _selectedEntry.FullPath)}";
         }
     }
 
@@ -458,33 +473,65 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
+        // Self-drop protection (paste-into-self / into-own-descendant).
+        var reason = PathSafety.DetectSelfDrop(_clipboard, _nav.Current, out string? offender);
+        if (reason == SelfDropReason.IntoOwnDescendant || reason == SelfDropReason.Same) {
+            string text = PathSafety.FormatReason(reason, offender, _nav.Current);
+            MessageBox.Show(text, "Cannot paste", MessageBoxButton.OK, MessageBoxImage.Warning);
+            Status = text;
+            return;
+        }
+
         if (_clipboardIsCut && !ConfirmMove(_clipboard, _nav.Current)) {
             return;
         }
 
-        int ok = 0;
-        foreach (string src in _clipboard) {
-            string name = Path.GetFileName(src.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-            string target = Path.Combine(_nav.Current, name);
-            try {
-                if (_clipboardIsCut) {
-                    _ops.Move(src, target);
-                } else {
-                    _ops.Copy(src, target);
-                }
-                ok++;
-            } catch (Exception ex) {
-                Status = $"Paste failed for {name}: {ex.Message}";
-            }
+        bool wasCut = _clipboardIsCut;
+        var resolver = new InteractiveConflictResolver();
+        IReadOnlyList<FileOperationService.BatchItemResult> results;
+        try {
+            results = wasCut
+                ? _ops.MoveMany(_clipboard, _nav.Current, resolver)
+                : _ops.CopyMany(_clipboard, _nav.Current, resolver);
+        } catch (Exception ex) {
+            Status = $"Paste failed: {ex.Message}";
+            return;
         }
 
-        if (_clipboardIsCut) {
+        if (wasCut) {
             _clipboard.Clear();
         }
         Refresh();
-        if (ok > 0) {
-            Status = $"{(_clipboardIsCut ? "Moved" : "Pasted")} {ok} item(s)";
+        ReportBatchResults(results, wasCut ? "Moved" : "Copied", _nav.Current);
+    }
+
+    private void ReportBatchResults(IReadOnlyList<FileOperationService.BatchItemResult> results, string verb, string target) {
+        int ok = results.Count(r =>
+            r.Status == FileOperationService.BatchItemStatus.Ok ||
+            r.Status == FileOperationService.BatchItemStatus.Replaced ||
+            r.Status == FileOperationService.BatchItemStatus.Renamed);
+        int skipped = results.Count(r => r.Status == FileOperationService.BatchItemStatus.Skipped);
+        int failed = results.Count(r => r.Status == FileOperationService.BatchItemStatus.Failed);
+        int cancelled = results.Count(r => r.Status == FileOperationService.BatchItemStatus.Cancelled);
+
+        if (ok == 0 && skipped == 0 && failed == 0 && cancelled == results.Count) {
+            Status = "Operation cancelled.";
+            return;
         }
+
+        var parts = new List<string> { $"{verb} {ok} item(s) to {target}" };
+        if (skipped > 0) {
+            parts.Add($"skipped {skipped}");
+        }
+        if (cancelled > 0) {
+            parts.Add($"cancelled {cancelled}");
+        }
+        if (failed > 0) {
+            var firstFail = results.First(r => r.Status == FileOperationService.BatchItemStatus.Failed);
+            string detail = firstFail.Error is null ? "" : ": " + DescribeError(firstFail.Error, firstFail.Source);
+            parts.Add($"{failed} failed{detail}");
+        }
+        Status = string.Join(", ", parts);
     }
 
     private void NewFolder() {
@@ -506,6 +553,24 @@ public sealed class MainViewModel : ObservableObject {
             Status = $"Create failed: {ex.Message}";
         }
     }
+
+    /// <summary>
+    /// Turn an IOException into a human-readable string that includes which
+    /// process holds the file when we can determine it via RestartManager.
+    /// For directory operations we only get the wrapping IOException; we still
+    /// try the path itself in case it's actually a file.
+    /// </summary>
+    private string DescribeError(Exception ex, string path) {
+        if (ex is IOException && _lockInspector is not null) {
+            var lockers = _lockInspector.WhoIsLocking(path);
+            if (lockers.Count > 0) {
+                string procs = string.Join(", ", lockers.Select(l => $"{l.ProcessName} (PID {l.ProcessId})"));
+                return $"file is open in: {procs}";
+            }
+        }
+        return ex.Message;
+    }
+
 
     private static bool ConfirmMove(IReadOnlyList<string> sources, string target) {
         string message;

@@ -41,6 +41,16 @@ internal sealed class FakeFileSystem : IFileSystem {
         return Array.Empty<FileSystemEntry>();
     }
 
+    public FileSystemEntry? GetEntry(string path) {
+        if (Directories.Contains(path)) {
+            return new FileSystemEntry(System.IO.Path.GetFileName(path), path, EntryKind.Directory, null, DateTime.MinValue, false, false);
+        }
+        if (Files.TryGetValue(path, out var bytes)) {
+            return new FileSystemEntry(System.IO.Path.GetFileName(path), path, EntryKind.File, bytes.Length, DateTime.MinValue, false, false);
+        }
+        return null;
+    }
+
     public bool HasSubdirectories(string path) {
         foreach (string d in Directories) {
             string? parent = System.IO.Path.GetDirectoryName(d);
@@ -69,6 +79,10 @@ internal sealed class FakeFileSystem : IFileSystem {
     public void DeleteDirectory(string path, bool recursive) {
         CallLog.Add($"DeleteDirectory:{path}:{recursive}");
         Directories.Remove(path);
+    }
+
+    public void ClearReadOnly(string path) {
+        CallLog.Add($"ClearReadOnly:{path}");
     }
 
     public void CopyFile(string source, string destination, bool overwrite) {
