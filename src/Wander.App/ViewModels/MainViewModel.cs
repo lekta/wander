@@ -21,9 +21,10 @@ public sealed class MainViewModel : ObservableObject {
     private string _addressText = "";
     private string _status = "";
     private FileSystemEntry? _selectedEntry;
+    private IReadOnlyList<FileSystemEntry> _selectedEntries = Array.Empty<FileSystemEntry>();
     private ViewMode _viewMode = ViewMode.Details;
 
-    private string? _clipboardSource;
+    private List<string> _clipboard = new();
     private bool _clipboardIsCut;
 
     private bool _restoring;
@@ -43,16 +44,17 @@ public sealed class MainViewModel : ObservableObject {
         UpCommand = new RelayCommand(_ => GoUp(), _ => _nav.CanGoUp);
         NavigateCommand = new RelayCommand(_ => NavigateToAddress());
         OpenCommand = new RelayCommand(p => OpenEntry(p as FileSystemEntry ?? _selectedEntry), _ => _selectedEntry is not null);
-        DeleteCommand = new RelayCommand(_ => DeleteSelected(), _ => _selectedEntry is not null);
+        DeleteCommand = new RelayCommand(_ => DeleteSelected(), _ => _selectedEntries.Count > 0);
         RenameCommand = new RelayCommand(p => Rename(p as string), _ => _selectedEntry is not null);
-        CopyCommand = new RelayCommand(_ => Copy(), _ => _selectedEntry is not null);
-        CutCommand = new RelayCommand(_ => Cut(), _ => _selectedEntry is not null);
-        PasteCommand = new RelayCommand(_ => Paste(), _ => _clipboardSource is not null && _nav.Current is not null);
+        CopyCommand = new RelayCommand(_ => Copy(), _ => _selectedEntries.Count > 0);
+        CutCommand = new RelayCommand(_ => Cut(), _ => _selectedEntries.Count > 0);
+        PasteCommand = new RelayCommand(_ => Paste(), _ => _clipboard.Count > 0 && _nav.Current is not null);
         NewFolderCommand = new RelayCommand(_ => NewFolder(), _ => _nav.Current is not null);
         RefreshCommand = new RelayCommand(_ => Refresh());
         SetViewModeCommand = new RelayCommand(p => SetViewMode(p as string));
         ExitCommand = new RelayCommand(_ => Application.Current?.Shutdown());
         OptionsCommand = new RelayCommand(_ => Status = "Options dialog is not implemented yet.");
+        PropertiesCommand = new RelayCommand(_ => ShowProperties(), _ => _selectedEntry is not null);
 
         _nav.CurrentChanged += (_, _) => OnNavigationChanged();
 
@@ -63,6 +65,8 @@ public sealed class MainViewModel : ObservableObject {
 
     public ObservableCollection<FileSystemEntry> Entries { get; }
     public ObservableCollection<TreeNodeViewModel> Roots { get; }
+
+    public string? CurrentPath => _nav.Current;
 
     public string AddressText {
         get => _addressText;
@@ -77,6 +81,11 @@ public sealed class MainViewModel : ObservableObject {
     public FileSystemEntry? SelectedEntry {
         get => _selectedEntry;
         set => SetField(ref _selectedEntry, value);
+    }
+
+    public IReadOnlyList<FileSystemEntry> SelectedEntries {
+        get => _selectedEntries;
+        set => SetField(ref _selectedEntries, value);
     }
 
     public ViewMode ViewMode {
@@ -103,6 +112,7 @@ public sealed class MainViewModel : ObservableObject {
     public RelayCommand SetViewModeCommand { get; }
     public RelayCommand ExitCommand { get; }
     public RelayCommand OptionsCommand { get; }
+    public RelayCommand PropertiesCommand { get; }
 
     public string WindowTitle {
         get {
@@ -140,6 +150,54 @@ public sealed class MainViewModel : ObservableObject {
         }
 
         NavigateTo(entry.FullPath);
+    }
+
+    /// <summary>
+    /// Called by the View when files are dropped into a list / tree / window.
+    /// </summary>
+    public void HandleDrop(IReadOnlyList<string> sourcePaths, string? targetFolder, DropEffect effect) {
+        if (sourcePaths.Count == 0) {
+            return;
+        }
+
+        targetFolder ??= _nav.Current;
+        if (string.IsNullOrEmpty(targetFolder) || !_fs.DirectoryExists(targetFolder)) {
+            Status = "No target folder for drop.";
+            return;
+        }
+
+        if (effect == DropEffect.Move && !ConfirmMove(sourcePaths, targetFolder)) {
+            return;
+        }
+
+        int ok = 0;
+        foreach (string src in sourcePaths) {
+            string name = Path.GetFileName(src.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            if (string.IsNullOrEmpty(name)) {
+                continue;
+            }
+
+            string dest = Path.Combine(targetFolder, name);
+            if (string.Equals(src, dest, StringComparison.OrdinalIgnoreCase)) {
+                continue;
+            }
+
+            try {
+                if (effect == DropEffect.Move) {
+                    _ops.Move(src, dest);
+                } else {
+                    _ops.Copy(src, dest);
+                }
+                ok++;
+            } catch (Exception ex) {
+                Status = $"{(effect == DropEffect.Move ? "Move" : "Copy")} failed for {name}: {ex.Message}";
+            }
+        }
+
+        Refresh();
+        if (ok > 0) {
+            Status = $"{(effect == DropEffect.Move ? "Moved" : "Copied")} {ok} item(s) to {targetFolder}";
+        }
     }
 
 
@@ -235,6 +293,7 @@ public sealed class MainViewModel : ObservableObject {
     private void OnNavigationChanged() {
         AddressText = _nav.Current ?? "";
         Raise(nameof(WindowTitle));
+        Raise(nameof(CurrentPath));
         Refresh();
         ExpandTreeToCurrent();
         SaveState();
@@ -306,17 +365,35 @@ public sealed class MainViewModel : ObservableObject {
         }
     }
 
-
-    // --- Destructive operations (always confirm, Cancel-default) -------
-
-    private void DeleteSelected() {
+    private void ShowProperties() {
         if (_selectedEntry is null) {
             return;
         }
+        try {
+            _shell.ShowProperties(_selectedEntry.FullPath);
+        } catch (Exception ex) {
+            Status = $"Properties failed: {ex.Message}";
+        }
+    }
 
-        var entry = _selectedEntry;
-        string kind = entry.Kind == EntryKind.Directory ? "folder" : "file";
-        string message = $"Delete {kind} '{entry.Name}'?\n\n{entry.FullPath}";
+
+    // --- Destructive / clipboard ops (always confirm, Cancel-default) --
+
+    private void DeleteSelected() {
+        if (_selectedEntries.Count == 0) {
+            return;
+        }
+
+        string message;
+        if (_selectedEntries.Count == 1) {
+            var e0 = _selectedEntries[0];
+            string kind = e0.Kind == EntryKind.Directory ? "folder" : "file";
+            message = $"Delete {kind} '{e0.Name}'?\n\n{e0.FullPath}";
+        } else {
+            message = $"Delete {_selectedEntries.Count} items?\n\n" +
+                string.Join("\n", _selectedEntries.Take(5).Select(e => "• " + e.Name)) +
+                (_selectedEntries.Count > 5 ? $"\n… and {_selectedEntries.Count - 5} more" : "");
+        }
 
         var result = MessageBox.Show(
             message,
@@ -329,12 +406,14 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
-        try {
-            _ops.Delete(entry.FullPath);
-            Refresh();
-        } catch (Exception ex) {
-            Status = $"Delete failed: {ex.Message}";
+        foreach (var entry in _selectedEntries.ToList()) {
+            try {
+                _ops.Delete(entry.FullPath);
+            } catch (Exception ex) {
+                Status = $"Delete failed for {entry.Name}: {ex.Message}";
+            }
         }
+        Refresh();
     }
 
     private void Rename(string? newName) {
@@ -355,47 +434,56 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     private void Copy() {
-        if (_selectedEntry is null) {
+        if (_selectedEntries.Count == 0) {
             return;
         }
 
-        _clipboardSource = _selectedEntry.FullPath;
+        _clipboard = _selectedEntries.Select(e => e.FullPath).ToList();
         _clipboardIsCut = false;
-        Status = $"Copied: {_selectedEntry.Name}";
+        Status = $"Copied {_clipboard.Count} item(s)";
     }
 
     private void Cut() {
-        if (_selectedEntry is null) {
+        if (_selectedEntries.Count == 0) {
             return;
         }
 
-        _clipboardSource = _selectedEntry.FullPath;
+        _clipboard = _selectedEntries.Select(e => e.FullPath).ToList();
         _clipboardIsCut = true;
-        Status = $"Cut: {_selectedEntry.Name}";
+        Status = $"Cut {_clipboard.Count} item(s)";
     }
 
     private void Paste() {
-        if (_clipboardSource is null || _nav.Current is null) {
+        if (_clipboard.Count == 0 || _nav.Current is null) {
             return;
         }
 
-        string name = Path.GetFileName(_clipboardSource);
-        string target = Path.Combine(_nav.Current, name);
-
-        if (_clipboardIsCut && !ConfirmMove(_clipboardSource, target)) {
+        if (_clipboardIsCut && !ConfirmMove(_clipboard, _nav.Current)) {
             return;
         }
 
-        try {
-            if (_clipboardIsCut) {
-                _ops.Move(_clipboardSource, target);
-                _clipboardSource = null;
-            } else {
-                _ops.Copy(_clipboardSource, target);
+        int ok = 0;
+        foreach (string src in _clipboard) {
+            string name = Path.GetFileName(src.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            string target = Path.Combine(_nav.Current, name);
+            try {
+                if (_clipboardIsCut) {
+                    _ops.Move(src, target);
+                } else {
+                    _ops.Copy(src, target);
+                }
+                ok++;
+            } catch (Exception ex) {
+                Status = $"Paste failed for {name}: {ex.Message}";
             }
-            Refresh();
-        } catch (Exception ex) {
-            Status = $"Paste failed: {ex.Message}";
+        }
+
+        if (_clipboardIsCut) {
+            _clipboard.Clear();
+        }
+        Refresh();
+        if (ok > 0) {
+            Status = $"{(_clipboardIsCut ? "Moved" : "Pasted")} {ok} item(s)";
         }
     }
 
@@ -419,8 +507,13 @@ public sealed class MainViewModel : ObservableObject {
         }
     }
 
-    private static bool ConfirmMove(string source, string target) {
-        string message = $"Move this entry?\n\nFrom: {source}\nTo: {target}";
+    private static bool ConfirmMove(IReadOnlyList<string> sources, string target) {
+        string message;
+        if (sources.Count == 1) {
+            message = $"Move this entry?\n\nFrom: {sources[0]}\nTo:   {Path.Combine(target, Path.GetFileName(sources[0].TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)))}";
+        } else {
+            message = $"Move {sources.Count} items to:\n{target}?";
+        }
 
         var result = MessageBox.Show(
             message,

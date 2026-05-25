@@ -13,15 +13,19 @@ namespace Wander.App.Converters;
 /// </summary>
 public sealed class IconConverter : IValueConverter {
     public object? Convert(object value, Type targetType, object? parameter, CultureInfo culture) {
-        if (value is not string path || string.IsNullOrEmpty(path)) {
+        return value is string path ? Load(path, ParseSize(parameter as string)) : null;
+    }
+
+    public object ConvertBack(object value, Type targetType, object? parameter, CultureInfo culture) {
+        throw new NotSupportedException();
+    }
+
+
+    public static BitmapImage? Load(string path, IconSize size) {
+        if (string.IsNullOrEmpty(path) || !ServiceLocator.IsRegistered<IIconProvider>()) {
             return null;
         }
 
-        if (!ServiceLocator.IsRegistered<IIconProvider>()) {
-            return null;
-        }
-
-        var size = ParseSize(parameter as string);
         byte[]? bytes = ServiceLocator.Get<IIconProvider>().GetIcon(path, size);
         if (bytes is null) {
             return null;
@@ -34,10 +38,6 @@ public sealed class IconConverter : IValueConverter {
         image.EndInit();
         image.Freeze();
         return image;
-    }
-
-    public object ConvertBack(object value, Type targetType, object? parameter, CultureInfo culture) {
-        throw new NotSupportedException();
     }
 
 

@@ -5,7 +5,10 @@
         xmlns:conv="clr-namespace:Wander.App.Converters"
         Title="{Binding WindowTitle}"
         Icon="Assets\app.ico"
-        Height="700" Width="1100">
+        Height="700" Width="1100"
+        AllowDrop="True"
+        DragOver="OnDragOver"
+        Drop="OnDrop">
     <Window.DataContext>
         <vm:MainViewModel/>
     </Window.DataContext>
@@ -14,7 +17,6 @@
         <conv:ViewModeToVisibilityConverter x:Key="ViewModeToVisibility"/>
         <conv:EnumEqualsConverter x:Key="EnumEquals"/>
 
-        <!-- Borderless toolbar button. Transparent by default, subtle hover/press tint. -->
         <Style x:Key="ToolbarButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -49,15 +51,18 @@
     <Window.InputBindings>
         <KeyBinding Key="F5" Command="{Binding RefreshCommand}"/>
         <KeyBinding Key="Delete" Command="{Binding DeleteCommand}"/>
+        <KeyBinding Key="Enter" Command="{Binding OpenCommand}"/>
+        <KeyBinding Key="Back" Command="{Binding UpCommand}"/>
         <KeyBinding Modifiers="Alt" Key="Left" Command="{Binding BackCommand}"/>
         <KeyBinding Modifiers="Alt" Key="Right" Command="{Binding ForwardCommand}"/>
         <KeyBinding Modifiers="Alt" Key="Up" Command="{Binding UpCommand}"/>
         <KeyBinding Modifiers="Ctrl" Key="C" Command="{Binding CopyCommand}"/>
         <KeyBinding Modifiers="Ctrl" Key="X" Command="{Binding CutCommand}"/>
         <KeyBinding Modifiers="Ctrl" Key="V" Command="{Binding PasteCommand}"/>
+        <KeyBinding Modifiers="Ctrl+Shift" Key="N" Command="{Binding NewFolderCommand}"/>
+        <KeyBinding Modifiers="Alt" Key="Enter" Command="{Binding PropertiesCommand}"/>
     </Window.InputBindings>
     <DockPanel>
-        <!-- Top bar: nav | address | view + spacer + main menu -->
         <DockPanel DockPanel.Dock="Top" Background="#F3F3F3">
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" Margin="4,4,8,4">
                 <Button Style="{StaticResource ToolbarButton}"
@@ -67,11 +72,10 @@
                         Command="{Binding ForwardCommand}" ToolTip="Forward (Alt+Right)"
                         Width="28" Height="28" Margin="2,0" Content="&#x2192;"/>
                 <Button Style="{StaticResource ToolbarButton}"
-                        Command="{Binding UpCommand}" ToolTip="Up (Alt+Up)"
+                        Command="{Binding UpCommand}" ToolTip="Up (Alt+Up / Backspace)"
                         Width="28" Height="28" Margin="2,0" Content="&#x2191;"/>
             </StackPanel>
 
-            <!-- Right side: View menu, spacer, main menu -->
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" Margin="8,4,4,4">
                 <Menu Background="Transparent" VerticalAlignment="Center">
                     <MenuItem Padding="8,4">
@@ -96,7 +100,6 @@
                     </MenuItem>
                 </Menu>
 
-                <!-- Spacer for breathing room between View and main menu -->
                 <Border Width="12"/>
 
                 <Menu Background="Transparent" VerticalAlignment="Center">
@@ -105,6 +108,7 @@
                             <TextBlock Text="&#x22EF;" FontSize="16" Margin="0,-4,0,0"/>
                         </MenuItem.Header>
                         <MenuItem Header="Refresh" Command="{Binding RefreshCommand}" InputGestureText="F5"/>
+                        <MenuItem Header="New folder" Command="{Binding NewFolderCommand}" InputGestureText="Ctrl+Shift+N"/>
                         <MenuItem Header="Options..." Command="{Binding OptionsCommand}"/>
                         <Separator/>
                         <MenuItem Header="Exit" Command="{Binding ExitCommand}"/>
@@ -112,7 +116,8 @@
                 </Menu>
             </StackPanel>
 
-            <TextBox VerticalAlignment="Center" Margin="0,4,4,4" Padding="6,4"
+            <TextBox x:Name="AddressBox"
+                     VerticalAlignment="Center" Margin="0,4,4,4" Padding="6,4"
                      Text="{Binding AddressText, UpdateSourceTrigger=PropertyChanged}">
                 <TextBox.InputBindings>
                     <KeyBinding Key="Enter" Command="{Binding NavigateCommand}"/>
@@ -136,7 +141,10 @@
                       SelectedItemChanged="Tree_SelectedItemChanged"
                       PreviewMouseLeftButtonDown="Tree_PreviewMouseLeftButtonDown"
                       TreeViewItem.Expanded="TreeViewItem_Expanded"
-                      TreeViewItem.Collapsed="TreeViewItem_Collapsed">
+                      TreeViewItem.Collapsed="TreeViewItem_Collapsed"
+                      AllowDrop="True"
+                      DragOver="OnDragOver"
+                      Drop="OnDrop">
                 <TreeView.ItemContainerStyle>
                     <Style TargetType="TreeViewItem">
                         <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
@@ -156,15 +164,26 @@
 
             <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" Background="#DDD"/>
 
-            <Grid Grid.Column="2">
+            <Grid Grid.Column="2"
+                  AllowDrop="True"
+                  DragOver="OnDragOver"
+                  Drop="OnDrop"
+                  Background="Transparent">
                 <!-- Details -->
                 <DataGrid x:Name="Grid"
                           Visibility="{Binding ViewMode, Converter={StaticResource ViewModeToVisibility}, ConverterParameter=Details}"
                           ItemsSource="{Binding Entries}"
                           SelectedItem="{Binding SelectedEntry}"
                           AutoGenerateColumns="False" IsReadOnly="True"
-                          SelectionMode="Single" SelectionUnit="FullRow"
+                          SelectionMode="Extended" SelectionUnit="FullRow"
+                          ClipboardCopyMode="None"
                           MouseDoubleClick="Grid_MouseDoubleClick"
+                          SelectionChanged="List_SelectionChanged"
+                          PreviewMouseLeftButtonDown="List_PreviewMouseLeftButtonDown"
+                          PreviewMouseMove="List_PreviewMouseMove"
+                          AllowDrop="True"
+                          DragOver="OnDragOver"
+                          Drop="OnDrop"
                           GridLinesVisibility="None" AlternatingRowBackground="#F7F7F7"
                           HeadersVisibility="Column" RowHeight="24">
                     <DataGrid.Columns>
@@ -190,9 +209,11 @@
                             <MenuItem Header="Paste" Command="{Binding PasteCommand}" InputGestureText="Ctrl+V"/>
                             <Separator/>
                             <MenuItem Header="Delete" Command="{Binding DeleteCommand}" InputGestureText="Del"/>
-                            <MenuItem Header="Rename" Click="Rename_Click"/>
+                            <MenuItem Header="Rename" Click="Rename_Click" InputGestureText="F2"/>
                             <Separator/>
-                            <MenuItem Header="New folder" Command="{Binding NewFolderCommand}"/>
+                            <MenuItem Header="New folder" Command="{Binding NewFolderCommand}" InputGestureText="Ctrl+Shift+N"/>
+                            <Separator/>
+                            <MenuItem Header="Properties" Command="{Binding PropertiesCommand}" InputGestureText="Alt+Enter"/>
                         </ContextMenu>
                     </DataGrid.ContextMenu>
                 </DataGrid>
@@ -202,8 +223,15 @@
                          Visibility="{Binding ViewMode, Converter={StaticResource ViewModeToVisibility}, ConverterParameter=Tiles}"
                          ItemsSource="{Binding Entries}"
                          SelectedItem="{Binding SelectedEntry}"
+                         SelectionMode="Extended"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                          MouseDoubleClick="Tiles_MouseDoubleClick"
+                         SelectionChanged="List_SelectionChanged"
+                         PreviewMouseLeftButtonDown="List_PreviewMouseLeftButtonDown"
+                         PreviewMouseMove="List_PreviewMouseMove"
+                         AllowDrop="True"
+                         DragOver="OnDragOver"
+                         Drop="OnDrop"
                          BorderThickness="0">
                     <ListBox.ItemsPanel>
                         <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
@@ -233,9 +261,11 @@
                             <MenuItem Header="Paste" Command="{Binding PasteCommand}" InputGestureText="Ctrl+V"/>
                             <Separator/>
                             <MenuItem Header="Delete" Command="{Binding DeleteCommand}" InputGestureText="Del"/>
-                            <MenuItem Header="Rename" Click="Rename_Click"/>
+                            <MenuItem Header="Rename" Click="Rename_Click" InputGestureText="F2"/>
                             <Separator/>
-                            <MenuItem Header="New folder" Command="{Binding NewFolderCommand}"/>
+                            <MenuItem Header="New folder" Command="{Binding NewFolderCommand}" InputGestureText="Ctrl+Shift+N"/>
+                            <Separator/>
+                            <MenuItem Header="Properties" Command="{Binding PropertiesCommand}" InputGestureText="Alt+Enter"/>
                         </ContextMenu>
                     </ListBox.ContextMenu>
                 </ListBox>
@@ -245,8 +275,15 @@
                          Visibility="{Binding ViewMode, Converter={StaticResource ViewModeToVisibility}, ConverterParameter=LargeIcons}"
                          ItemsSource="{Binding Entries}"
                          SelectedItem="{Binding SelectedEntry}"
+                         SelectionMode="Extended"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                          MouseDoubleClick="Tiles_MouseDoubleClick"
+                         SelectionChanged="List_SelectionChanged"
+                         PreviewMouseLeftButtonDown="List_PreviewMouseLeftButtonDown"
+                         PreviewMouseMove="List_PreviewMouseMove"
+                         AllowDrop="True"
+                         DragOver="OnDragOver"
+                         Drop="OnDrop"
                          BorderThickness="0">
                     <ListBox.ItemsPanel>
                         <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
@@ -273,9 +310,11 @@
                             <MenuItem Header="Paste" Command="{Binding PasteCommand}" InputGestureText="Ctrl+V"/>
                             <Separator/>
                             <MenuItem Header="Delete" Command="{Binding DeleteCommand}" InputGestureText="Del"/>
-                            <MenuItem Header="Rename" Click="Rename_Click"/>
+                            <MenuItem Header="Rename" Click="Rename_Click" InputGestureText="F2"/>
                             <Separator/>
-                            <MenuItem Header="New folder" Command="{Binding NewFolderCommand}"/>
+                            <MenuItem Header="New folder" Command="{Binding NewFolderCommand}" InputGestureText="Ctrl+Shift+N"/>
+                            <Separator/>
+                            <MenuItem Header="Properties" Command="{Binding PropertiesCommand}" InputGestureText="Alt+Enter"/>
                         </ContextMenu>
                     </ListBox.ContextMenu>
                 </ListBox>
