@@ -4,6 +4,7 @@ using System.Windows;
 using Wander.Core;
 using Wander.Core.FileSystem;
 using Wander.Core.Navigation;
+using Wander.Core.Persistence;
 using Wander.Core.Shell;
 
 namespace Wander.App.ViewModels;
@@ -11,12 +12,14 @@ namespace Wander.App.ViewModels;
 public sealed class MainViewModel : ObservableObject {
     private readonly IFileSystem _fs;
     private readonly IShellLauncher _shell;
+    private readonly IAppStateStore _stateStore;
     private readonly NavigationService _nav = new();
     private readonly FileOperationService _ops;
 
     private string _addressText = "";
     private string _status = "";
     private FileSystemEntry? _selectedEntry;
+    private ViewMode _viewMode = ViewMode.Details;
 
     private string? _clipboardSource;
     private bool _clipboardIsCut;
@@ -25,6 +28,7 @@ public sealed class MainViewModel : ObservableObject {
     public MainViewModel() {
         _fs = ServiceLocator.Get<IFileSystem>();
         _shell = ServiceLocator.Get<IShellLauncher>();
+        _stateStore = ServiceLocator.Get<IAppStateStore>();
         _ops = new FileOperationService(_fs);
 
         Entries = new ObservableCollection<FileSystemEntry>();
@@ -42,15 +46,12 @@ public sealed class MainViewModel : ObservableObject {
         PasteCommand = new RelayCommand(_ => Paste(), _ => _clipboardSource is not null && _nav.Current is not null);
         NewFolderCommand = new RelayCommand(_ => NewFolder(), _ => _nav.Current is not null);
         RefreshCommand = new RelayCommand(_ => Refresh());
+        ToggleViewModeCommand = new RelayCommand(_ => ToggleViewMode());
 
         _nav.CurrentChanged += (_, _) => OnNavigationChanged();
 
         LoadRoots();
-
-        string? first = Roots.FirstOrDefault()?.FullPath;
-        if (first is not null) {
-            _nav.NavigateTo(first);
-        }
+        RestoreState();
     }
 
 
@@ -72,6 +73,15 @@ public sealed class MainViewModel : ObservableObject {
         set => SetField(ref _selectedEntry, value);
     }
 
+    public ViewMode ViewMode {
+        get => _viewMode;
+        set {
+            if (SetField(ref _viewMode, value)) {
+                SaveState();
+            }
+        }
+    }
+
     public RelayCommand BackCommand { get; }
     public RelayCommand ForwardCommand { get; }
     public RelayCommand UpCommand { get; }
@@ -84,6 +94,7 @@ public sealed class MainViewModel : ObservableObject {
     public RelayCommand PasteCommand { get; }
     public RelayCommand NewFolderCommand { get; }
     public RelayCommand RefreshCommand { get; }
+    public RelayCommand ToggleViewModeCommand { get; }
 
 
     public void NavigateTo(string path) {
@@ -113,6 +124,37 @@ public sealed class MainViewModel : ObservableObject {
     }
 
 
+    // --- Startup state -------------------------------------------------
+
+    private void RestoreState() {
+        var state = _stateStore.Load();
+
+        if (!string.IsNullOrEmpty(state.ViewMode) && Enum.TryParse<ViewMode>(state.ViewMode, out var mode)) {
+            _viewMode = mode;
+            Raise(nameof(ViewMode));
+        }
+
+        if (!string.IsNullOrEmpty(state.LastPath) && _fs.DirectoryExists(state.LastPath)) {
+            _nav.NavigateTo(state.LastPath);
+            return;
+        }
+
+        string? first = Roots.FirstOrDefault()?.FullPath;
+        if (first is not null) {
+            _nav.NavigateTo(first);
+        }
+    }
+
+    private void SaveState() {
+        _stateStore.Save(new AppState {
+            LastPath = _nav.Current,
+            ViewMode = _viewMode.ToString(),
+        });
+    }
+
+
+    // --- Navigation glue -----------------------------------------------
+
     private void NavigateToAddress() {
         if (string.IsNullOrWhiteSpace(AddressText)) {
             return;
@@ -136,6 +178,20 @@ public sealed class MainViewModel : ObservableObject {
     private void OnNavigationChanged() {
         AddressText = _nav.Current ?? "";
         Refresh();
+        ExpandTreeToCurrent();
+        SaveState();
+    }
+
+    private void ExpandTreeToCurrent() {
+        if (_nav.Current is null) {
+            return;
+        }
+
+        foreach (var root in Roots) {
+            if (root.TryExpandToPath(_nav.Current)) {
+                return;
+            }
+        }
     }
 
     private void Refresh() {
@@ -162,14 +218,32 @@ public sealed class MainViewModel : ObservableObject {
     }
 
 
+    // --- View modes ----------------------------------------------------
+
+    private void ToggleViewMode() {
+        ViewMode = _viewMode == ViewMode.Details ? ViewMode.LargeIcons : ViewMode.Details;
+    }
+
+
+    // --- Destructive operations (always confirm, Cancel-default) -------
+
     private void DeleteSelected() {
         if (_selectedEntry is null) {
             return;
         }
 
         var entry = _selectedEntry;
-        string msg = $"Delete '{entry.Name}'?";
-        if (MessageBox.Show(msg, "Confirm", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) {
+        string kind = entry.Kind == EntryKind.Directory ? "folder" : "file";
+        string message = $"Delete {kind} '{entry.Name}'?\n\n{entry.FullPath}";
+
+        var result = MessageBox.Show(
+            message,
+            "Confirm deletion",
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Warning,
+            MessageBoxResult.Cancel);
+
+        if (result != MessageBoxResult.OK) {
             return;
         }
 
@@ -226,6 +300,10 @@ public sealed class MainViewModel : ObservableObject {
         string name = Path.GetFileName(_clipboardSource);
         string target = Path.Combine(_nav.Current, name);
 
+        if (_clipboardIsCut && !ConfirmMove(_clipboardSource, target)) {
+            return;
+        }
+
         try {
             if (_clipboardIsCut) {
                 _ops.Move(_clipboardSource, target);
@@ -257,5 +335,18 @@ public sealed class MainViewModel : ObservableObject {
         } catch (Exception ex) {
             Status = $"Create failed: {ex.Message}";
         }
+    }
+
+    private static bool ConfirmMove(string source, string target) {
+        string message = $"Move this entry?\n\nFrom: {source}\nTo: {target}";
+
+        var result = MessageBox.Show(
+            message,
+            "Confirm move",
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Warning,
+            MessageBoxResult.Cancel);
+
+        return result == MessageBoxResult.OK;
     }
 }

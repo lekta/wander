@@ -21,9 +21,11 @@ public partial class MainWindow : Window {
     }
 
     private void Grid_MouseDoubleClick(object sender, MouseButtonEventArgs e) {
-        if (Vm.SelectedEntry is FileSystemEntry entry) {
-            Vm.OpenEntry(entry);
-        }
+        OpenSelected();
+    }
+
+    private void Tiles_MouseDoubleClick(object sender, MouseButtonEventArgs e) {
+        OpenSelected();
     }
 
     private void Rename_Click(object sender, RoutedEventArgs e) {
@@ -37,5 +39,12 @@ public partial class MainWindow : Window {
         }
 
         Vm.RenameCommand.Execute(input);
+    }
+
+
+    private void OpenSelected() {
+        if (Vm.SelectedEntry is FileSystemEntry entry) {
+            Vm.OpenEntry(entry);
+        }
     }
 }
