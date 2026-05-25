@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet --list-sdks)",
+      "Bash(dotnet --version)",
+      "PowerShell(Get-ChildItem 'D:\\\\Dev\\\\lekta\\\\Wander\\\\src\\\\Wander.App' -Recurse -File | Where-Object { $_.Extension -notin '.csproj','.json' } | Select-Object -ExpandProperty FullName)"
+    ]
+  }
+}
