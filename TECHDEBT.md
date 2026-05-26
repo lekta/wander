@@ -12,6 +12,21 @@
 
 ## Открыто
 
+- **ShellRecycleBin.Restore не реализован** —
+  `Wander.Platform.Windows/FileSystem/ShellRecycleBin.cs`. Send работает
+  (SHFileOperation/FOF_ALLOWUNDO), Restore кидает NotImplementedException.
+  Делать через `IFileOperation::CopyItem` (а не Shell32 dynamic InvokeVerb,
+  чтобы не зависеть от локализованного имени verb'а "Restore"/"Восстановить").
+  Плюс: обработка коллизий по дате удаления и кейс «target path уже занят».
+  В коде в Restore лежит детальный TODO-комментарий с эскизом.
+- **FileOperationService — async overloads** — все методы синхронные. Когда
+  начнём выносить долгие копирования с UI-потока, добавлять Task-вариант;
+  UndoService.BeginOperation уже умеет держать guard на весь жизненный цикл
+  async-операции (CanUndo вернёт false пока IsBusy).
+- **Undo не переживает рестарт** — стек живёт в памяти. После закрытия
+  Wander Ctrl+Z пуст, но файлы в системной корзине остаются —
+  пользователь может восстановить через Explorer. Persisting undo log
+  отдельной задачей, если понадобится.
 - **MainWindow.xaml** — `ContextMenu` файлового списка продублирован в трёх
   местах (DataGrid Details, ListBox Tiles, ListBox LargeIcons). Вынести в
   `Window.Resources` и переиспользовать.
@@ -40,9 +55,18 @@
   junctions / hard links не создаются и не «разрешаются»; их
   Reparse-флаг не отображается отдельной иконкой. Это отдельная
   фича (требует прав/Developer Mode для symlink, либо junction-only).
-- **Preview pane** — загрузка картинок/текста синхронная на UI-потоке.
-  Большие файлы или с медленных дисков подвесят при выборе. Async
-  с дебаунсом (300мс после смены selection) уместен.
+- **Preview pane: debounce** — async переключение происходит сразу на
+  каждое изменение selection. При очень быстрой прокрутке списка стрелками
+  будут лишние Task-старты (хоть и отменяемые). Стоит добавить 200-300 ms
+  дебаунс.
+- **Preview pane: WebView2 init cost** — WebView2 init происходит при
+  первом обращении (PDF/HTML/MD). Это ~1-2 секунды на первом использовании.
+  Можно прогревать в фоне через `EnsureCoreWebView2Async` на старте,
+  если preview включён в state.
+- **Preview pane: AvalonEdit для XAML** — AvalonEdit подсвечивает XAML
+  отдельной грамматикой через extension; у нас xaml есть в списке code,
+  но AvalonEdit'у не хватает XAML-definition в стандартной поставке (надо
+  доустановить из его репозитория). Сейчас xaml открывается как plain XML.
 - **Ctrl+L** — фокус идёт в адресную строку, но текст не selectAll
   визуально подсвечивается синим, проверь на машине; если что — TextBox
   Focus + SelectAll иногда требуют BeginInvoke на Dispatcher.

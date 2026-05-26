@@ -1,0 +1,14 @@
+<Project>
+
+  <PropertyGroup>
+    <Authors>Lekta</Authors>
+    <Company>Lekta</Company>
+    <Product>Wander</Product>
+    <Copyright>© Lekta 2026</Copyright>
+    <NeutralLanguage>en</NeutralLanguage>
+    <Version>0.0.1</Version>
+    <FileVersion>0.0.1.0</FileVersion>
+    <AssemblyVersion>0.0.0.0</AssemblyVersion>
+  </PropertyGroup>
+
+</Project>

@@ -54,6 +54,8 @@
     <Window.InputBindings>
         <KeyBinding Key="F5" Command="{Binding RefreshCommand}"/>
         <KeyBinding Key="Delete" Command="{Binding DeleteCommand}"/>
+        <KeyBinding Modifiers="Shift" Key="Delete" Command="{Binding PermanentDeleteCommand}"/>
+        <KeyBinding Modifiers="Ctrl" Key="Z" Command="{Binding UndoCommand}"/>
         <KeyBinding Key="Enter" Command="{Binding OpenCommand}"/>
         <KeyBinding Key="Back" Command="{Binding UpCommand}"/>
         <KeyBinding Modifiers="Alt" Key="Left" Command="{Binding BackCommand}"/>

@@ -1,14 +1,24 @@
 using Wander.Core.FileSystem;
+using Wander.Core.Logging;
 using Wander.Core.Tests.Fakes;
+using Wander.Core.Undo;
 
 namespace Wander.Core.Tests;
 
 public class FileOperationServiceTests {
+    private static (FileOperationService Ops, FakeFileSystem Fs, FakeRecycleBin Bin, UndoService Undo) Setup() {
+        var fs = new FakeFileSystem();
+        var bin = new FakeRecycleBin(fs);
+        var undo = new UndoService();
+        var ops = new FileOperationService(fs, bin, undo, NullLogger.Instance);
+        return (ops, fs, bin, undo);
+    }
+
+
     [Fact]
     public void Copy_File_CallsCopyFile() {
-        var fs = new FakeFileSystem();
+        var (ops, fs, _, _) = Setup();
         fs.Files[@"C:\a.txt"] = new byte[] { 1, 2, 3 };
-        var ops = new FileOperationService(fs);
 
         ops.Copy(@"C:\a.txt", @"C:\b.txt");
 
@@ -17,9 +27,8 @@ public class FileOperationServiceTests {
 
     [Fact]
     public void Copy_Directory_CallsCopyDirectory() {
-        var fs = new FakeFileSystem();
+        var (ops, fs, _, _) = Setup();
         fs.Directories.Add(@"C:\src");
-        var ops = new FileOperationService(fs);
 
         ops.Copy(@"C:\src", @"C:\dst");
 
@@ -28,39 +37,73 @@ public class FileOperationServiceTests {
 
     [Fact]
     public void Copy_MissingSource_Throws() {
-        var fs = new FakeFileSystem();
-        var ops = new FileOperationService(fs);
+        var (ops, _, _, _) = Setup();
 
         Assert.Throws<FileNotFoundException>(() => ops.Copy(@"C:\missing", @"C:\x"));
     }
 
     [Fact]
-    public void Delete_File_CallsDeleteFile() {
-        var fs = new FakeFileSystem();
+    public void Delete_File_RoutesToRecycleBin() {
+        var (ops, fs, bin, _) = Setup();
         fs.Files[@"C:\a.txt"] = new byte[0];
-        var ops = new FileOperationService(fs);
 
         ops.Delete(@"C:\a.txt");
 
-        Assert.Contains(@"DeleteFile:C:\a.txt", fs.CallLog);
+        Assert.Contains(@"Recycle:C:\a.txt", bin.CallLog);
+        Assert.DoesNotContain(@"DeleteFile:C:\a.txt", fs.CallLog);
     }
 
     [Fact]
-    public void Delete_Directory_CallsDeleteDirectoryRecursive() {
-        var fs = new FakeFileSystem();
+    public void Delete_Directory_RoutesToRecycleBin() {
+        var (ops, fs, bin, _) = Setup();
         fs.Directories.Add(@"C:\dir");
-        var ops = new FileOperationService(fs);
 
         ops.Delete(@"C:\dir");
 
+        Assert.Contains(@"Recycle:C:\dir", bin.CallLog);
+        Assert.DoesNotContain(@"DeleteDirectory:C:\dir:True", fs.CallLog);
+    }
+
+    [Fact]
+    public void PermanentDelete_File_BypassesRecycleBin() {
+        var (ops, fs, bin, _) = Setup();
+        fs.Files[@"C:\a.txt"] = new byte[0];
+
+        ops.PermanentDelete(@"C:\a.txt");
+
+        Assert.Contains(@"DeleteFile:C:\a.txt", fs.CallLog);
+        Assert.Empty(bin.CallLog);
+    }
+
+    [Fact]
+    public void PermanentDelete_Directory_BypassesRecycleBin() {
+        var (ops, fs, bin, _) = Setup();
+        fs.Directories.Add(@"C:\dir");
+
+        ops.PermanentDelete(@"C:\dir");
+
         Assert.Contains(@"DeleteDirectory:C:\dir:True", fs.CallLog);
+        Assert.Empty(bin.CallLog);
+    }
+
+    [Fact]
+    public void PermanentDelete_ClearsUndoStack() {
+        var (ops, fs, _, undo) = Setup();
+        fs.Files[@"C:\a.txt"] = new byte[0];
+        fs.Files[@"C:\b.txt"] = new byte[0];
+
+        ops.Rename(@"C:\a.txt", "renamed.txt");
+        Assert.Equal(1, undo.Depth);
+
+        ops.PermanentDelete(@"C:\b.txt");
+        Assert.Equal(0, undo.Depth);
+        Assert.False(undo.CanUndo);
     }
 
     [Fact]
     public void Move_CallsMoveEntry() {
-        var fs = new FakeFileSystem();
+        var (ops, fs, _, _) = Setup();
         fs.Files[@"C:\a.txt"] = new byte[0];
-        var ops = new FileOperationService(fs);
 
         ops.Move(@"C:\a.txt", @"C:\b.txt");
 
@@ -69,19 +112,58 @@ public class FileOperationServiceTests {
 
     [Fact]
     public void Rename_EmptyName_Throws() {
-        var fs = new FakeFileSystem();
-        var ops = new FileOperationService(fs);
+        var (ops, _, _, _) = Setup();
 
         Assert.Throws<ArgumentException>(() => ops.Rename(@"C:\a.txt", " "));
     }
 
     [Fact]
     public void CreateFolder_CombinesPath() {
-        var fs = new FakeFileSystem();
-        var ops = new FileOperationService(fs);
+        var (ops, fs, _, _) = Setup();
 
         ops.CreateFolder(@"C:\base", "new");
 
         Assert.Contains(@"CreateDirectory:C:\base\new", fs.CallLog);
+    }
+
+
+    // --- Undo round-trips ---------------------------------------------
+
+    [Fact]
+    public void Rename_PushesUndo_ThatReversesTheRename() {
+        var (ops, fs, _, undo) = Setup();
+        fs.Files[@"C:\a.txt"] = new byte[0];
+
+        ops.Rename(@"C:\a.txt", "b.txt");
+        Assert.True(undo.CanUndo);
+
+        undo.Undo();
+        Assert.Contains(@"Rename:C:\b.txt->a.txt", fs.CallLog);
+    }
+
+    [Fact]
+    public void Delete_PushesUndo_ThatRestoresViaRecycleBin() {
+        var (ops, fs, bin, undo) = Setup();
+        fs.Files[@"C:\a.txt"] = new byte[] { 1, 2, 3 };
+
+        ops.Delete(@"C:\a.txt");
+        Assert.True(undo.CanUndo);
+        Assert.False(fs.FileExists(@"C:\a.txt"));
+
+        undo.Undo();
+        Assert.Contains(@"Restore:C:\a.txt", bin.CallLog);
+        Assert.True(fs.FileExists(@"C:\a.txt"));
+    }
+
+    [Fact]
+    public void CreateFolder_PushesUndo_ThatRecyclesTheNewFolder() {
+        var (ops, fs, bin, undo) = Setup();
+
+        ops.CreateFolder(@"C:\base", "new");
+        Assert.Contains(@"C:\base\new", fs.Directories);
+
+        undo.Undo();
+        Assert.Contains(@"Recycle:C:\base\new", bin.CallLog);
+        Assert.DoesNotContain(@"C:\base\new", fs.Directories);
     }
 }

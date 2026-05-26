@@ -13,9 +13,11 @@ using Wander.Core;
 using Wander.Core.Diagnostics;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
+using Wander.Core.Logging;
 using Wander.Core.Navigation;
 using Wander.Core.Persistence;
 using Wander.Core.Shell;
+using Wander.Core.Undo;
 // Disambiguate from System.Windows.Media.ImageMetadata.
 using ImageMetadata = Wander.Core.Icons.ImageMetadata;
 
@@ -29,6 +31,8 @@ public sealed class MainViewModel : ObservableObject {
     private readonly IImageMetadataReader? _metadataReader;
     private readonly NavigationService _nav = new();
     private readonly FileOperationService _ops;
+    private readonly UndoService _undo;
+    private readonly ILogger _log;
 
     private string _addressText = "";
     private string _status = "";
@@ -68,7 +72,9 @@ public sealed class MainViewModel : ObservableObject {
         _metadataReader = ServiceLocator.IsRegistered<IImageMetadataReader>()
             ? ServiceLocator.Get<IImageMetadataReader>()
             : null;
-        _ops = new FileOperationService(_fs);
+        _ops = ServiceLocator.Get<FileOperationService>();
+        _undo = ServiceLocator.Get<UndoService>();
+        _log = ServiceLocator.IsRegistered<ILogger>() ? ServiceLocator.Get<ILogger>() : NullLogger.Instance;
 
         Entries = new ObservableCollection<FileSystemEntry>();
         Roots = new ObservableCollection<TreeNodeViewModel>();
@@ -90,6 +96,13 @@ public sealed class MainViewModel : ObservableObject {
         OptionsCommand = new RelayCommand(_ => Status = "Options dialog is not implemented yet.");
         PropertiesCommand = new RelayCommand(_ => ShowProperties(), _ => _selectedEntry is not null);
         TogglePreviewCommand = new RelayCommand(_ => IsPreviewVisible = !IsPreviewVisible);
+        UndoCommand = new RelayCommand(_ => UndoLast(), _ => _undo.CanUndo);
+        PermanentDeleteCommand = new RelayCommand(_ => DeleteSelected(permanent: true), _ => _selectedEntries.Count > 0);
+
+        _undo.Changed += (_, _) => {
+            UndoCommand.RaiseCanExecuteChanged();
+            Raise(nameof(UndoTooltip));
+        };
 
         _nav.CurrentChanged += (_, _) => OnNavigationChanged();
 
@@ -240,6 +253,10 @@ public sealed class MainViewModel : ObservableObject {
     public RelayCommand OptionsCommand { get; }
     public RelayCommand PropertiesCommand { get; }
     public RelayCommand TogglePreviewCommand { get; }
+    public RelayCommand UndoCommand { get; }
+    public RelayCommand PermanentDeleteCommand { get; }
+
+    public string UndoTooltip => _undo.NextDescription is { } next ? $"Undo: {next}" : "Nothing to undo";
 
     public string WindowTitle {
         get {
@@ -255,9 +272,11 @@ public sealed class MainViewModel : ObservableObject {
 
     public void NavigateTo(string path) {
         if (!_fs.DirectoryExists(path)) {
+            _log.Warn($"Navigate: path not found {path}");
             Status = $"Path not found: {path}";
             return;
         }
+        _log.Info($"Navigate: {path}");
         _nav.NavigateTo(path);
     }
 
@@ -298,6 +317,7 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
+        _log.Info($"Drop: {effect} {sourcePaths.Count} item(s) into {targetFolder}");
         var resolver = new InteractiveConflictResolver();
         IReadOnlyList<FileOperationService.BatchItemResult> results;
         try {
@@ -305,6 +325,7 @@ public sealed class MainViewModel : ObservableObject {
                 ? _ops.MoveMany(sourcePaths, targetFolder, resolver)
                 : _ops.CopyMany(sourcePaths, targetFolder, resolver);
         } catch (Exception ex) {
+            _log.Error($"Drop failed: {effect} -> {targetFolder}", ex);
             Status = $"Drop failed: {ex.Message}";
             return;
         }
@@ -892,30 +913,35 @@ public sealed class MainViewModel : ObservableObject {
 
     // --- Destructive / clipboard ops (always confirm, Cancel-default) --
 
-    private void DeleteSelected() {
+    private void DeleteSelected(bool permanent = false) {
         if (_selectedEntries.Count == 0) {
             return;
         }
 
+        string verb = permanent ? "Permanently delete" : "Delete";
         string message;
         if (_selectedEntries.Count == 1) {
             var e0 = _selectedEntries[0];
             string kind = e0.Kind == EntryKind.Directory ? "folder" : "file";
-            message = $"Delete {kind} '{e0.Name}'?\n\n{e0.FullPath}";
+            message = $"{verb} {kind} '{e0.Name}'?\n\n{e0.FullPath}";
         } else {
-            message = $"Delete {_selectedEntries.Count} items?\n\n" +
+            message = $"{verb} {_selectedEntries.Count} items?\n\n" +
                 string.Join("\n", _selectedEntries.Take(5).Select(e => "• " + e.Name)) +
                 (_selectedEntries.Count > 5 ? $"\n… and {_selectedEntries.Count - 5} more" : "");
+        }
+        if (permanent) {
+            message += "\n\nThis cannot be undone.";
         }
 
         var result = MessageBox.Show(
             message,
-            "Confirm deletion",
+            permanent ? "Confirm permanent deletion" : "Confirm deletion",
             MessageBoxButton.OKCancel,
-            MessageBoxImage.Warning,
+            permanent ? MessageBoxImage.Error : MessageBoxImage.Warning,
             MessageBoxResult.Cancel);
 
         if (result != MessageBoxResult.OK) {
+            _log.Info($"Delete cancelled by user (permanent={permanent}, items={_selectedEntries.Count})");
             return;
         }
 
@@ -943,12 +969,36 @@ public sealed class MainViewModel : ObservableObject {
                 if (entry.IsReadOnly) {
                     _fs.ClearReadOnly(entry.FullPath);
                 }
-                _ops.Delete(entry.FullPath);
+                if (permanent) {
+                    _ops.PermanentDelete(entry.FullPath);
+                } else {
+                    _ops.Delete(entry.FullPath);
+                }
             } catch (Exception ex) {
+                _log.Error($"Delete failed for {entry.FullPath}", ex);
                 Status = $"Delete failed for {entry.Name}: {DescribeError(ex, entry.FullPath)}";
             }
         }
         Refresh();
+    }
+
+    private void UndoLast() {
+        try {
+            var action = _undo.Undo();
+            if (action is null) {
+                return;
+            }
+            _log.Info($"Undo: {action.Description}");
+            Status = $"Undone: {action.Description}";
+            Refresh();
+        } catch (NotImplementedException ex) {
+            // Restoring from the recycle bin is the one path that still throws this.
+            _log.Warn($"Undo not implemented: {ex.Message}");
+            Status = ex.Message;
+        } catch (Exception ex) {
+            _log.Error("Undo failed", ex);
+            Status = $"Undo failed: {ex.Message}";
+        }
     }
 
     private void Rename(string? newName) {
@@ -963,6 +1013,7 @@ public sealed class MainViewModel : ObservableObject {
             _ops.Rename(_selectedEntry.FullPath, newName);
             Refresh();
         } catch (Exception ex) {
+            _log.Error($"Rename failed: {_selectedEntry.FullPath} -> {newName}", ex);
             Status = $"Rename failed: {DescribeError(ex, _selectedEntry.FullPath)}";
         }
     }
@@ -1003,6 +1054,7 @@ public sealed class MainViewModel : ObservableObject {
         }
 
         bool wasCut = _clipboardIsCut;
+        _log.Info($"Paste: {(wasCut ? "move" : "copy")} {_clipboard.Count} item(s) into {_nav.Current}");
         var resolver = new InteractiveConflictResolver();
         IReadOnlyList<FileOperationService.BatchItemResult> results;
         try {
@@ -1010,6 +1062,7 @@ public sealed class MainViewModel : ObservableObject {
                 ? _ops.MoveMany(_clipboard, _nav.Current, resolver)
                 : _ops.CopyMany(_clipboard, _nav.Current, resolver);
         } catch (Exception ex) {
+            _log.Error($"Paste failed into {_nav.Current}", ex);
             Status = $"Paste failed: {ex.Message}";
             return;
         }
@@ -1066,6 +1119,7 @@ public sealed class MainViewModel : ObservableObject {
             _ops.CreateFolder(_nav.Current, name);
             Refresh();
         } catch (Exception ex) {
+            _log.Error($"CreateFolder failed in {_nav.Current}: {name}", ex);
             Status = $"Create failed: {ex.Message}";
         }
     }
