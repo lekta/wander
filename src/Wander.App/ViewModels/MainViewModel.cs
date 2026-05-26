@@ -2,6 +2,8 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -10,9 +12,12 @@ using Wander.App.Util;
 using Wander.Core;
 using Wander.Core.Diagnostics;
 using Wander.Core.FileSystem;
+using Wander.Core.Icons;
 using Wander.Core.Navigation;
 using Wander.Core.Persistence;
 using Wander.Core.Shell;
+// Disambiguate from System.Windows.Media.ImageMetadata.
+using ImageMetadata = Wander.Core.Icons.ImageMetadata;
 
 namespace Wander.App.ViewModels;
 
@@ -21,6 +26,7 @@ public sealed class MainViewModel : ObservableObject {
     private readonly IShellLauncher _shell;
     private readonly IAppStateStore _stateStore;
     private readonly IFileLockInspector? _lockInspector;
+    private readonly IImageMetadataReader? _metadataReader;
     private readonly NavigationService _nav = new();
     private readonly FileOperationService _ops;
 
@@ -33,8 +39,18 @@ public sealed class MainViewModel : ObservableObject {
     private bool _isPreviewVisible;
     private double _previewWidth = 280;
     private PreviewKind _previewKind = PreviewKind.None;
+    private bool _isPreviewLoading;
     private string? _previewText;
     private ImageSource? _previewImage;
+    private string? _previewCodeText;
+    private string? _previewCodeExtension;
+    private Uri? _previewWebUri;
+    private string? _previewWebHtml;
+    private ImageMetadata? _previewImageMetadata;
+    private string _previewSummary = "";
+
+    private CancellationTokenSource? _previewCts;
+    private CancellationTokenSource? _summaryCts;
 
     private List<string> _clipboard = new();
     private bool _clipboardIsCut;
@@ -48,6 +64,9 @@ public sealed class MainViewModel : ObservableObject {
         _stateStore = ServiceLocator.Get<IAppStateStore>();
         _lockInspector = ServiceLocator.IsRegistered<IFileLockInspector>()
             ? ServiceLocator.Get<IFileLockInspector>()
+            : null;
+        _metadataReader = ServiceLocator.IsRegistered<IImageMetadataReader>()
+            ? ServiceLocator.Get<IImageMetadataReader>()
             : null;
         _ops = new FileOperationService(_fs);
 
@@ -98,14 +117,19 @@ public sealed class MainViewModel : ObservableObject {
         get => _selectedEntry;
         set {
             if (SetField(ref _selectedEntry, value)) {
-                UpdatePreview();
+                SchedulePreviewUpdate();
+                ScheduleSummaryUpdate();
             }
         }
     }
 
     public IReadOnlyList<FileSystemEntry> SelectedEntries {
         get => _selectedEntries;
-        set => SetField(ref _selectedEntries, value);
+        set {
+            if (SetField(ref _selectedEntries, value)) {
+                ScheduleSummaryUpdate();
+            }
+        }
     }
 
     public ViewMode ViewMode {
@@ -121,7 +145,8 @@ public sealed class MainViewModel : ObservableObject {
         get => _isPreviewVisible;
         set {
             if (SetField(ref _isPreviewVisible, value)) {
-                UpdatePreview();
+                SchedulePreviewUpdate();
+                ScheduleSummaryUpdate();
                 SaveState();
             }
         }
@@ -130,7 +155,6 @@ public sealed class MainViewModel : ObservableObject {
     public double PreviewWidth {
         get => _previewWidth;
         set {
-            // Clamp to keep the pane usable.
             double clamped = Math.Max(120, Math.Min(900, value));
             if (SetField(ref _previewWidth, clamped)) {
                 SaveState();
@@ -148,6 +172,11 @@ public sealed class MainViewModel : ObservableObject {
         }
     }
 
+    public bool IsPreviewLoading {
+        get => _isPreviewLoading;
+        private set => SetField(ref _isPreviewLoading, value);
+    }
+
     public string? PreviewText {
         get => _previewText;
         private set => SetField(ref _previewText, value);
@@ -156,6 +185,36 @@ public sealed class MainViewModel : ObservableObject {
     public ImageSource? PreviewImage {
         get => _previewImage;
         private set => SetField(ref _previewImage, value);
+    }
+
+    public string? PreviewCodeText {
+        get => _previewCodeText;
+        private set => SetField(ref _previewCodeText, value);
+    }
+
+    public string? PreviewCodeExtension {
+        get => _previewCodeExtension;
+        private set => SetField(ref _previewCodeExtension, value);
+    }
+
+    public Uri? PreviewWebUri {
+        get => _previewWebUri;
+        private set => SetField(ref _previewWebUri, value);
+    }
+
+    public string? PreviewWebHtml {
+        get => _previewWebHtml;
+        private set => SetField(ref _previewWebHtml, value);
+    }
+
+    public ImageMetadata? PreviewImageMetadata {
+        get => _previewImageMetadata;
+        private set => SetField(ref _previewImageMetadata, value);
+    }
+
+    public string PreviewSummary {
+        get => _previewSummary;
+        private set => SetField(ref _previewSummary, value);
     }
 
     public bool IsPreviewPlaceholderVisible =>
@@ -199,7 +258,6 @@ public sealed class MainViewModel : ObservableObject {
             Status = $"Path not found: {path}";
             return;
         }
-
         _nav.NavigateTo(path);
     }
 
@@ -220,9 +278,6 @@ public sealed class MainViewModel : ObservableObject {
         NavigateTo(entry.FullPath);
     }
 
-    /// <summary>
-    /// Called by the View when files are dropped into a list / tree / window.
-    /// </summary>
     public void HandleDrop(IReadOnlyList<string> sourcePaths, string? targetFolder, DropEffect effect) {
         if (sourcePaths.Count == 0) {
             return;
@@ -341,93 +396,6 @@ public sealed class MainViewModel : ObservableObject {
         });
     }
 
-
-    // --- Preview -------------------------------------------------------
-
-    private static readonly HashSet<string> _imageExtensions = new(StringComparer.OrdinalIgnoreCase) {
-        ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".webp", ".tif", ".tiff",
-    };
-
-    private static readonly HashSet<string> _textExtensions = new(StringComparer.OrdinalIgnoreCase) {
-        ".txt", ".md", ".markdown", ".log", ".csv", ".tsv",
-        ".json", ".xml", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf",
-        ".cs", ".csproj", ".sln", ".slnx", ".props", ".targets", ".editorconfig",
-        ".js", ".ts", ".jsx", ".tsx", ".html", ".htm", ".css", ".scss", ".less",
-        ".py", ".rb", ".go", ".rs", ".java", ".kt", ".swift", ".php",
-        ".c", ".cpp", ".h", ".hpp", ".m", ".mm",
-        ".sh", ".ps1", ".bat", ".cmd",
-        ".gitignore", ".gitattributes",
-    };
-
-    // Read at most 1 MB from disk, render at most ~200 KB of text.
-    private const long PreviewMaxFileSize = 1_048_576;
-    private const int PreviewMaxChars = 200_000;
-
-
-    private void UpdatePreview() {
-        if (!_isPreviewVisible) {
-            SetPreview(PreviewKind.None, null, null);
-            return;
-        }
-
-        if (_selectedEntry is null || _selectedEntry.Kind != EntryKind.File) {
-            SetPreview(PreviewKind.None, null, null);
-            return;
-        }
-
-        string path = _selectedEntry.FullPath;
-        string ext = Path.GetExtension(path);
-
-        if (_imageExtensions.Contains(ext)) {
-            TryLoadImage(path);
-            return;
-        }
-
-        if (_textExtensions.Contains(ext) || string.IsNullOrEmpty(ext)) {
-            if ((_selectedEntry.Size ?? 0) > PreviewMaxFileSize) {
-                SetPreview(PreviewKind.Unsupported, null, null);
-                return;
-            }
-            TryLoadText(path);
-            return;
-        }
-
-        SetPreview(PreviewKind.Unsupported, null, null);
-    }
-
-    private void TryLoadImage(string path) {
-        try {
-            var bitmap = new BitmapImage();
-            bitmap.BeginInit();
-            bitmap.CacheOption = BitmapCacheOption.OnLoad;
-            bitmap.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
-            bitmap.UriSource = new Uri(path);
-            bitmap.EndInit();
-            bitmap.Freeze();
-            SetPreview(PreviewKind.Image, null, bitmap);
-        } catch {
-            SetPreview(PreviewKind.Unsupported, null, null);
-        }
-    }
-
-    private void TryLoadText(string path) {
-        try {
-            string text = File.ReadAllText(path);
-            if (text.Length > PreviewMaxChars) {
-                text = text.Substring(0, PreviewMaxChars) + "\n\n… (truncated)";
-            }
-            SetPreview(PreviewKind.Text, text, null);
-        } catch {
-            SetPreview(PreviewKind.Unsupported, null, null);
-        }
-    }
-
-    private void SetPreview(PreviewKind kind, string? text, ImageSource? image) {
-        PreviewText = text;
-        PreviewImage = image;
-        PreviewKind = kind;
-    }
-
     private List<string> CollectExpanded() {
         var result = new List<string>();
         foreach (var root in Roots) {
@@ -460,21 +428,12 @@ public sealed class MainViewModel : ObservableObject {
         if (string.IsNullOrWhiteSpace(AddressText)) {
             return;
         }
-
         NavigateTo(AddressText.Trim());
     }
 
-    private void GoBack() {
-        _nav.GoBack();
-    }
-
-    private void GoForward() {
-        _nav.GoForward();
-    }
-
-    private void GoUp() {
-        _nav.GoUp();
-    }
+    private void GoBack() => _nav.GoBack();
+    private void GoForward() => _nav.GoForward();
+    private void GoUp() => _nav.GoUp();
 
     private void OnNavigationChanged() {
         AddressText = _nav.Current ?? "";
@@ -483,13 +442,13 @@ public sealed class MainViewModel : ObservableObject {
         Refresh();
         ExpandTreeToCurrent();
         SaveState();
+        ScheduleSummaryUpdate();
     }
 
     private void ExpandTreeToCurrent() {
         if (_nav.Current is null) {
             return;
         }
-
         ExpandToPath(_nav.Current, select: true);
     }
 
@@ -563,6 +522,374 @@ public sealed class MainViewModel : ObservableObject {
     }
 
 
+    // --- Preview content -----------------------------------------------
+
+    private static readonly HashSet<string> _imageExtensions = new(StringComparer.OrdinalIgnoreCase) {
+        ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".webp", ".tif", ".tiff",
+        // RAW (may not render but we still try; metadata works regardless):
+        ".cr2", ".cr3", ".nef", ".arw", ".dng", ".raf", ".orf", ".rw2",
+    };
+
+    private static readonly HashSet<string> _textExtensions = new(StringComparer.OrdinalIgnoreCase) {
+        ".txt", ".log", ".csv", ".tsv",
+        ".ini", ".cfg", ".conf", ".toml", ".env", ".gitignore", ".gitattributes",
+        ".editorconfig",
+    };
+
+    private static readonly HashSet<string> _codeExtensions = new(StringComparer.OrdinalIgnoreCase) {
+        ".cs", ".csproj", ".props", ".targets", ".sln", ".slnx",
+        ".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs",
+        ".py", ".rb", ".go", ".rs", ".java", ".kt", ".swift", ".php",
+        ".c", ".cpp", ".cc", ".cxx", ".h", ".hpp", ".m", ".mm",
+        ".css", ".scss", ".less",
+        ".sh", ".ps1", ".bat", ".cmd",
+        ".sql",
+        ".xml", ".xaml", ".svg",
+        ".json", ".yaml", ".yml",
+    };
+
+    private const long PreviewMaxFileSize = 1_048_576;     // 1 MB
+    private const int PreviewMaxChars = 200_000;
+
+
+    private void SchedulePreviewUpdate() {
+        _previewCts?.Cancel();
+        _previewCts = new CancellationTokenSource();
+        _ = UpdatePreviewAsync(_previewCts.Token);
+    }
+
+    private async Task UpdatePreviewAsync(CancellationToken ct) {
+        ClearPreviewContent();
+
+        if (!_isPreviewVisible || _selectedEntry is null || _selectedEntry.Kind != EntryKind.File) {
+            PreviewKind = PreviewKind.None;
+            IsPreviewLoading = false;
+            return;
+        }
+
+        IsPreviewLoading = true;
+        try {
+            string path = _selectedEntry.FullPath;
+            string ext = Path.GetExtension(path);
+
+            if (_imageExtensions.Contains(ext)) {
+                await LoadImageAsync(path, ct);
+                return;
+            }
+
+            if (ext.Equals(".pdf", StringComparison.OrdinalIgnoreCase) ||
+                ext.Equals(".html", StringComparison.OrdinalIgnoreCase) ||
+                ext.Equals(".htm", StringComparison.OrdinalIgnoreCase)) {
+                PreviewWebUri = new Uri(path);
+                PreviewKind = PreviewKind.Web;
+                return;
+            }
+
+            if (ext.Equals(".md", StringComparison.OrdinalIgnoreCase) ||
+                ext.Equals(".markdown", StringComparison.OrdinalIgnoreCase)) {
+                await LoadMarkdownAsync(path, ct);
+                return;
+            }
+
+            if (_codeExtensions.Contains(ext)) {
+                await LoadCodeAsync(path, ext, ct);
+                return;
+            }
+
+            if (_textExtensions.Contains(ext) || string.IsNullOrEmpty(ext)) {
+                await LoadTextAsync(path, ct);
+                return;
+            }
+
+            PreviewKind = PreviewKind.Unsupported;
+        } catch (OperationCanceledException) {
+            // newer selection won — ignore
+        } finally {
+            if (!ct.IsCancellationRequested) {
+                IsPreviewLoading = false;
+                ScheduleSummaryUpdate();  // metadata might have arrived
+            }
+        }
+    }
+
+    private async Task LoadImageAsync(string path, CancellationToken ct) {
+        BitmapImage? image = null;
+        ImageMetadata? meta = null;
+
+        await Task.Run(() => {
+            ct.ThrowIfCancellationRequested();
+            try {
+                var bi = new BitmapImage();
+                bi.BeginInit();
+                bi.CacheOption = BitmapCacheOption.OnLoad;
+                bi.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
+                bi.UriSource = new Uri(path);
+                bi.EndInit();
+                bi.Freeze();
+                image = bi;
+            } catch {
+                // RAW or unsupported codec — image stays null, metadata may still load.
+            }
+
+            if (_metadataReader is not null) {
+                meta = _metadataReader.Read(path);
+            }
+        }, ct);
+
+        if (ct.IsCancellationRequested) {
+            return;
+        }
+
+        PreviewImageMetadata = meta;
+        if (image is not null) {
+            PreviewImage = image;
+            PreviewKind = PreviewKind.Image;
+        } else {
+            PreviewKind = PreviewKind.Unsupported;
+        }
+    }
+
+    private async Task LoadTextAsync(string path, CancellationToken ct) {
+        if ((_selectedEntry?.Size ?? 0) > PreviewMaxFileSize) {
+            PreviewKind = PreviewKind.Unsupported;
+            return;
+        }
+
+        string text;
+        try {
+            text = await File.ReadAllTextAsync(path, ct);
+        } catch (OperationCanceledException) {
+            return;
+        } catch {
+            PreviewKind = PreviewKind.Unsupported;
+            return;
+        }
+
+        if (ct.IsCancellationRequested) {
+            return;
+        }
+
+        if (text.Length > PreviewMaxChars) {
+            text = text.Substring(0, PreviewMaxChars) + "\n\n… (truncated)";
+        }
+        PreviewText = text;
+        PreviewKind = PreviewKind.Text;
+    }
+
+    private async Task LoadCodeAsync(string path, string ext, CancellationToken ct) {
+        if ((_selectedEntry?.Size ?? 0) > PreviewMaxFileSize) {
+            PreviewKind = PreviewKind.Unsupported;
+            return;
+        }
+
+        string text;
+        try {
+            text = await File.ReadAllTextAsync(path, ct);
+        } catch (OperationCanceledException) {
+            return;
+        } catch {
+            PreviewKind = PreviewKind.Unsupported;
+            return;
+        }
+
+        if (ct.IsCancellationRequested) {
+            return;
+        }
+
+        if (text.Length > PreviewMaxChars) {
+            text = text.Substring(0, PreviewMaxChars) + "\n\n// … (truncated)";
+        }
+        PreviewCodeText = text;
+        PreviewCodeExtension = ext;
+        PreviewKind = PreviewKind.Code;
+    }
+
+    private async Task LoadMarkdownAsync(string path, CancellationToken ct) {
+        if ((_selectedEntry?.Size ?? 0) > PreviewMaxFileSize) {
+            PreviewKind = PreviewKind.Unsupported;
+            return;
+        }
+
+        string md;
+        try {
+            md = await File.ReadAllTextAsync(path, ct);
+        } catch (OperationCanceledException) {
+            return;
+        } catch {
+            PreviewKind = PreviewKind.Unsupported;
+            return;
+        }
+
+        if (ct.IsCancellationRequested) {
+            return;
+        }
+
+        string html = await Task.Run(() => Markdig.Markdown.ToHtml(md), ct);
+        string wrapped = WrapHtml(html);
+        PreviewWebHtml = wrapped;
+        PreviewKind = PreviewKind.Web;
+    }
+
+    private static string WrapHtml(string body) {
+        return $@"<!doctype html><html><head><meta charset='utf-8'><style>
+            body {{ font-family: 'Segoe UI', sans-serif; font-size: 13px; padding: 10px; color: #222; }}
+            pre, code {{ font-family: Consolas, monospace; background: #f4f4f4; padding: 2px 4px; border-radius: 3px; }}
+            pre {{ padding: 8px; overflow-x: auto; }}
+            h1, h2, h3 {{ margin: 0.6em 0 0.3em; }}
+            blockquote {{ border-left: 3px solid #ccc; margin: 0; padding-left: 10px; color: #555; }}
+            table {{ border-collapse: collapse; }}
+            th, td {{ border: 1px solid #ccc; padding: 4px 8px; }}
+            img {{ max-width: 100%; }}
+        </style></head><body>{body}</body></html>";
+    }
+
+    private void ClearPreviewContent() {
+        PreviewText = null;
+        PreviewImage = null;
+        PreviewCodeText = null;
+        PreviewCodeExtension = null;
+        PreviewWebUri = null;
+        PreviewWebHtml = null;
+        PreviewImageMetadata = null;
+    }
+
+
+    // --- Preview footer summary ----------------------------------------
+
+    private void ScheduleSummaryUpdate() {
+        _summaryCts?.Cancel();
+        _summaryCts = new CancellationTokenSource();
+        _ = UpdateSummaryAsync(_summaryCts.Token);
+    }
+
+    private async Task UpdateSummaryAsync(CancellationToken ct) {
+        if (!_isPreviewVisible) {
+            PreviewSummary = "";
+            return;
+        }
+
+        // 1. Single file selected — show file details + EXIF if image.
+        if (_selectedEntries.Count == 1 && _selectedEntries[0].Kind == EntryKind.File) {
+            var e = _selectedEntries[0];
+            string summary = $"📄  {e.Name}\nSize: {SizeFormatter.Format(e.Size)}   •   Modified: {FormatModified(e.ModifiedUtc)}";
+            if (_previewImageMetadata is { } m) {
+                summary += "\n" + FormatExif(m);
+            }
+            PreviewSummary = summary;
+            return;
+        }
+
+        // 2. Single folder selected — recursive count + size, async.
+        if (_selectedEntries.Count == 1 && _selectedEntries[0].Kind == EntryKind.Directory) {
+            var e = _selectedEntries[0];
+            PreviewSummary = $"📁  {e.Name} — calculating…";
+            var (count, size) = await Task.Run(() => CountAndSum(new[] { e.FullPath }, ct), ct);
+            if (ct.IsCancellationRequested) {
+                return;
+            }
+            PreviewSummary = $"📁  {e.Name} — {count} files, {SizeFormatter.Format(size)}";
+            return;
+        }
+
+        // 3. Multiple items selected.
+        if (_selectedEntries.Count > 1) {
+            PreviewSummary = $"{_selectedEntries.Count} items selected — calculating…";
+            var paths = _selectedEntries.Select(en => en.FullPath).ToArray();
+            var (count, size) = await Task.Run(() => CountAndSum(paths, ct), ct);
+            if (ct.IsCancellationRequested) {
+                return;
+            }
+            PreviewSummary = $"{_selectedEntries.Count} items selected — {count} files inside, {SizeFormatter.Format(size)}";
+            return;
+        }
+
+        // 4. Nothing selected — summary of current folder.
+        if (!string.IsNullOrEmpty(_nav.Current)) {
+            string name = WindowTitle;
+            PreviewSummary = $"📁  {name} — calculating…";
+            string cur = _nav.Current;
+            var (count, size) = await Task.Run(() => CountAndSum(new[] { cur }, ct), ct);
+            if (ct.IsCancellationRequested) {
+                return;
+            }
+            PreviewSummary = $"📁  {name} — {count} files, {SizeFormatter.Format(size)}";
+            return;
+        }
+
+        PreviewSummary = "";
+    }
+
+    private static (int Count, long Size) CountAndSum(string[] paths, CancellationToken ct) {
+        int count = 0;
+        long size = 0;
+        foreach (var p in paths) {
+            if (ct.IsCancellationRequested) {
+                break;
+            }
+            try {
+                if (Directory.Exists(p)) {
+                    foreach (var f in Directory.EnumerateFiles(p, "*", SearchOption.AllDirectories)) {
+                        if (ct.IsCancellationRequested) {
+                            break;
+                        }
+                        count++;
+                        try {
+                            size += new FileInfo(f).Length;
+                        } catch {
+                            // access denied per-file — ignore
+                        }
+                    }
+                } else if (File.Exists(p)) {
+                    count++;
+                    try {
+                        size += new FileInfo(p).Length;
+                    } catch {
+                        // ignore
+                    }
+                }
+            } catch {
+                // access denied on enumeration — skip this root
+            }
+        }
+        return (count, size);
+    }
+
+    private static string FormatModified(DateTime utc) {
+        return utc == DateTime.MinValue ? "—" : utc.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+    }
+
+    private static string FormatExif(ImageMetadata m) {
+        var parts = new List<string>();
+        string? camera = string.Join(" ", new[] { m.CameraMake, m.CameraModel }.Where(s => !string.IsNullOrWhiteSpace(s)));
+        if (!string.IsNullOrWhiteSpace(camera)) {
+            parts.Add(camera);
+        }
+        var shot = new List<string>();
+        if (!string.IsNullOrEmpty(m.IsoSpeed)) {
+            shot.Add($"ISO {m.IsoSpeed}");
+        }
+        if (!string.IsNullOrEmpty(m.Aperture)) {
+            shot.Add(m.Aperture);
+        }
+        if (!string.IsNullOrEmpty(m.ShutterSpeed)) {
+            shot.Add(m.ShutterSpeed);
+        }
+        if (!string.IsNullOrEmpty(m.FocalLength)) {
+            shot.Add(m.FocalLength);
+        }
+        if (shot.Count > 0) {
+            parts.Add(string.Join(", ", shot));
+        }
+        if (m.PixelWidth is int w && m.PixelHeight is int h) {
+            parts.Add($"{w} × {h}");
+        }
+        if (m.DateTaken is { } dt) {
+            parts.Add(dt.ToString("yyyy-MM-dd HH:mm"));
+        }
+        return string.Join("   •   ", parts);
+    }
+
+
     // --- Destructive / clipboard ops (always confirm, Cancel-default) --
 
     private void DeleteSelected() {
@@ -592,7 +919,6 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
-        // Read-only second-stage confirmation: list affected items explicitly.
         var readOnlys = _selectedEntries.Where(en => en.IsReadOnly).ToList();
         if (readOnlys.Count > 0) {
             string list = string.Join("\n", readOnlys.Take(5).Select(en => "• " + en.Name)) +
@@ -629,7 +955,6 @@ public sealed class MainViewModel : ObservableObject {
         if (_selectedEntry is null || string.IsNullOrWhiteSpace(newName)) {
             return;
         }
-
         if (newName == _selectedEntry.Name) {
             return;
         }
@@ -646,7 +971,6 @@ public sealed class MainViewModel : ObservableObject {
         if (_selectedEntries.Count == 0) {
             return;
         }
-
         _clipboard = _selectedEntries.Select(e => e.FullPath).ToList();
         _clipboardIsCut = false;
         Status = $"Copied {_clipboard.Count} item(s)";
@@ -656,7 +980,6 @@ public sealed class MainViewModel : ObservableObject {
         if (_selectedEntries.Count == 0) {
             return;
         }
-
         _clipboard = _selectedEntries.Select(e => e.FullPath).ToList();
         _clipboardIsCut = true;
         Status = $"Cut {_clipboard.Count} item(s)";
@@ -667,7 +990,6 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
-        // Self-drop protection (paste-into-self / into-own-descendant).
         var reason = PathSafety.DetectSelfDrop(_clipboard, _nav.Current, out string? offender);
         if (reason == SelfDropReason.IntoOwnDescendant || reason == SelfDropReason.Same) {
             string text = PathSafety.FormatReason(reason, offender, _nav.Current);
@@ -748,12 +1070,6 @@ public sealed class MainViewModel : ObservableObject {
         }
     }
 
-    /// <summary>
-    /// Turn an IOException into a human-readable string that includes which
-    /// process holds the file when we can determine it via RestartManager.
-    /// For directory operations we only get the wrapping IOException; we still
-    /// try the path itself in case it's actually a file.
-    /// </summary>
     private string DescribeError(Exception ex, string path) {
         if (ex is IOException && _lockInspector is not null) {
             var lockers = _lockInspector.WhoIsLocking(path);
@@ -764,7 +1080,6 @@ public sealed class MainViewModel : ObservableObject {
         }
         return ex.Message;
     }
-
 
     private static bool ConfirmMove(IReadOnlyList<string> sources, string target) {
         string message;

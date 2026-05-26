@@ -1,11 +1,13 @@
 using System.ComponentModel;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using ICSharpCode.AvalonEdit.Highlighting;
 using Wander.App.Converters;
 using Wander.App.DragPreview;
 using Wander.App.Util;
@@ -54,18 +56,44 @@ public partial class MainWindow : Window {
     private MainViewModel Vm => (MainViewModel)DataContext;
 
 
-    // --- Preview pane layout -------------------------------------------
+    // --- Preview pane layout + content wiring --------------------------
+
+    private bool _webInitialized;
+
 
     private void OnLoaded(object sender, RoutedEventArgs e) {
         if (DataContext is MainViewModel vm) {
             vm.PropertyChanged += OnVmPropertyChanged;
         }
         ApplyPreviewLayout();
+        UpdateCodeEditor();
     }
 
-    private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e) {
-        if (e.PropertyName is nameof(MainViewModel.IsPreviewVisible) or nameof(MainViewModel.PreviewWidth)) {
-            ApplyPreviewLayout();
+    private async void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e) {
+        switch (e.PropertyName) {
+            case nameof(MainViewModel.IsPreviewVisible):
+            case nameof(MainViewModel.PreviewWidth):
+                ApplyPreviewLayout();
+                break;
+
+            case nameof(MainViewModel.PreviewCodeText):
+            case nameof(MainViewModel.PreviewCodeExtension):
+                UpdateCodeEditor();
+                break;
+
+            case nameof(MainViewModel.PreviewWebUri):
+                if (Vm.PreviewWebUri is { } uri) {
+                    await EnsureWebViewReadyAsync();
+                    try { WebPreview.Source = uri; } catch { /* webview not ready */ }
+                }
+                break;
+
+            case nameof(MainViewModel.PreviewWebHtml):
+                if (Vm.PreviewWebHtml is { } html) {
+                    await EnsureWebViewReadyAsync();
+                    try { WebPreview.NavigateToString(html); } catch { /* webview not ready */ }
+                }
+                break;
         }
     }
 
@@ -81,6 +109,36 @@ public partial class MainWindow : Window {
 
     private void PreviewSplitter_DragCompleted(object sender, DragCompletedEventArgs e) {
         Vm.PreviewWidth = PreviewColumn.ActualWidth;
+    }
+
+    private void UpdateCodeEditor() {
+        if (string.IsNullOrEmpty(Vm.PreviewCodeText)) {
+            CodeEditor.Clear();
+            CodeEditor.SyntaxHighlighting = null;
+            return;
+        }
+
+        string ext = Vm.PreviewCodeExtension ?? "";
+        // AvalonEdit ships highlighting for: C#, C++, Java, JS, TS, CSS, HTML, XML, JSON, Python, PHP, SQL, Markdown, ...
+        CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinitionByExtension(ext);
+        CodeEditor.Text = Vm.PreviewCodeText;
+    }
+
+    private async Task EnsureWebViewReadyAsync() {
+        if (_webInitialized) {
+            return;
+        }
+        try {
+            await WebPreview.EnsureCoreWebView2Async();
+            if (WebPreview.CoreWebView2 is not null) {
+                WebPreview.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
+                WebPreview.CoreWebView2.Settings.AreDevToolsEnabled = false;
+            }
+            _webInitialized = true;
+        } catch {
+            // WebView2 runtime not installed — the pane will stay blank
+            // for PDF / HTML / Markdown previews. Other previews are unaffected.
+        }
     }
 
 

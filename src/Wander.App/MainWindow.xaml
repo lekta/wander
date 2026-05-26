@@ -3,6 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:Wander.App.ViewModels"
         xmlns:conv="clr-namespace:Wander.App.Converters"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        xmlns:ae="http://icsharpcode.net/sharpdevelop/avalonedit"
         Title="{Binding WindowTitle}"
         Icon="Assets\app.ico"
         Height="700" Width="1100"
@@ -344,32 +346,85 @@
                     Background="#FAFAFA"
                     Visibility="{Binding IsPreviewVisible, Converter={StaticResource BoolToVisibility}}">
                 <Grid>
-                    <!-- Image preview -->
-                    <Image Source="{Binding PreviewImage}"
-                           Stretch="Uniform"
-                           Margin="8"
-                           Visibility="{Binding PreviewKind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Image}"/>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
 
-                    <!-- Text preview -->
-                    <TextBox Visibility="{Binding PreviewKind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Text}"
-                             Text="{Binding PreviewText, Mode=OneWay}"
-                             IsReadOnly="True"
-                             FontFamily="Consolas"
-                             FontSize="11"
-                             Background="Transparent"
-                             BorderThickness="0"
-                             AcceptsReturn="True"
-                             TextWrapping="NoWrap"
-                             VerticalScrollBarVisibility="Auto"
-                             HorizontalScrollBarVisibility="Auto"
-                             Padding="6"/>
+                    <!-- Content area -->
+                    <Grid Grid.Row="0">
+                        <!-- Image -->
+                        <Image Source="{Binding PreviewImage}"
+                               Stretch="Uniform" Margin="8"
+                               Visibility="{Binding PreviewKind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Image}"/>
 
-                    <!-- Placeholder (None / Unsupported) -->
-                    <TextBlock Text="{Binding PreviewPlaceholderText}"
-                               Foreground="#888"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"
-                               Visibility="{Binding IsPreviewPlaceholderVisible, Converter={StaticResource BoolToVisibility}}"/>
+                        <!-- Plain text -->
+                        <TextBox Visibility="{Binding PreviewKind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Text}"
+                                 Text="{Binding PreviewText, Mode=OneWay}"
+                                 IsReadOnly="True"
+                                 FontFamily="Consolas" FontSize="11"
+                                 Background="Transparent" BorderThickness="0"
+                                 AcceptsReturn="True" TextWrapping="NoWrap"
+                                 VerticalScrollBarVisibility="Auto"
+                                 HorizontalScrollBarVisibility="Auto"
+                                 Padding="6"/>
+
+                        <!-- Code with syntax highlighting -->
+                        <ae:TextEditor x:Name="CodeEditor"
+                                       Visibility="{Binding PreviewKind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Code}"
+                                       IsReadOnly="True"
+                                       ShowLineNumbers="True"
+                                       FontFamily="Consolas" FontSize="11"
+                                       Background="Transparent"
+                                       Padding="4"/>
+
+                        <!-- PDF / HTML / Markdown via WebView2 -->
+                        <wv2:WebView2 x:Name="WebPreview"
+                                      Visibility="{Binding PreviewKind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Web}"
+                                      DefaultBackgroundColor="White"/>
+
+                        <!-- Placeholder (None / Unsupported) -->
+                        <TextBlock Text="{Binding PreviewPlaceholderText}"
+                                   Foreground="#888"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Visibility="{Binding IsPreviewPlaceholderVisible, Converter={StaticResource BoolToVisibility}}"/>
+
+                        <!-- Loading spinner — overlays content while content loads -->
+                        <Grid Visibility="{Binding IsPreviewLoading, Converter={StaticResource BoolToVisibility}}"
+                              Background="#80FAFAFA"
+                              IsHitTestVisible="False">
+                            <Ellipse Width="32" Height="32" StrokeThickness="3"
+                                     Stroke="#0078D7" Fill="Transparent"
+                                     StrokeDashArray="3,2"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"
+                                     RenderTransformOrigin="0.5,0.5">
+                                <Ellipse.RenderTransform>
+                                    <RotateTransform x:Name="SpinnerRotate" Angle="0"/>
+                                </Ellipse.RenderTransform>
+                                <Ellipse.Triggers>
+                                    <EventTrigger RoutedEvent="Loaded">
+                                        <BeginStoryboard>
+                                            <Storyboard RepeatBehavior="Forever">
+                                                <DoubleAnimation Storyboard.TargetName="SpinnerRotate"
+                                                                 Storyboard.TargetProperty="Angle"
+                                                                 From="0" To="360" Duration="0:0:1"/>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </EventTrigger>
+                                </Ellipse.Triggers>
+                            </Ellipse>
+                        </Grid>
+                    </Grid>
+
+                    <!-- Summary footer -->
+                    <Border Grid.Row="1"
+                            BorderBrush="#DDD" BorderThickness="0,1,0,0"
+                            Padding="8,6" Background="#F3F3F3">
+                        <TextBlock Text="{Binding PreviewSummary}"
+                                   FontSize="11" Foreground="#444"
+                                   TextWrapping="Wrap"/>
+                    </Border>
                 </Grid>
             </Border>
         </Grid>
