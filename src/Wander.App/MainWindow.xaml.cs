@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -9,8 +10,10 @@ using Wander.App.Converters;
 using Wander.App.DragPreview;
 using Wander.App.Util;
 using Wander.App.ViewModels;
+using Wander.Core;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
+using Wander.Core.Shell;
 // Disambiguate from System.Windows.DragAction (used by QueryContinueDrag).
 using DragAction = Wander.App.DragPreview.DragAction;
 
@@ -45,9 +48,40 @@ public partial class MainWindow : Window {
 
     public MainWindow() {
         InitializeComponent();
+        Loaded += OnLoaded;
     }
 
     private MainViewModel Vm => (MainViewModel)DataContext;
+
+
+    // --- Preview pane layout -------------------------------------------
+
+    private void OnLoaded(object sender, RoutedEventArgs e) {
+        if (DataContext is MainViewModel vm) {
+            vm.PropertyChanged += OnVmPropertyChanged;
+        }
+        ApplyPreviewLayout();
+    }
+
+    private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e) {
+        if (e.PropertyName is nameof(MainViewModel.IsPreviewVisible) or nameof(MainViewModel.PreviewWidth)) {
+            ApplyPreviewLayout();
+        }
+    }
+
+    private void ApplyPreviewLayout() {
+        if (Vm.IsPreviewVisible) {
+            PreviewSplitterColumn.Width = new GridLength(4);
+            PreviewColumn.Width = new GridLength(Vm.PreviewWidth);
+        } else {
+            PreviewSplitterColumn.Width = new GridLength(0);
+            PreviewColumn.Width = new GridLength(0);
+        }
+    }
+
+    private void PreviewSplitter_DragCompleted(object sender, DragCompletedEventArgs e) {
+        Vm.PreviewWidth = PreviewColumn.ActualWidth;
+    }
 
 
     // --- Global hotkeys not bound to commands ---------------------------
@@ -334,7 +368,7 @@ public partial class MainWindow : Window {
 
         try {
             var data = new DataObject(DataFormats.FileDrop, paths);
-            System.Windows.DragDrop.DoDragDrop(src, data, DragDropEffects.Copy | DragDropEffects.Move);
+            System.Windows.DragDrop.DoDragDrop(src, data, DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link);
         } catch {
             // drop target may throw on rejection — ignore.
         } finally {
@@ -375,8 +409,16 @@ public partial class MainWindow : Window {
                     : $"Cannot drop {count} items here";
             }
         } else {
-            action = _currentDragEffect == DragDropEffects.Move ? DragAction.Move : DragAction.Copy;
-            string verb = action == DragAction.Move ? "Move" : "Copy";
+            action = _currentDragEffect switch {
+                DragDropEffects.Move => DragAction.Move,
+                DragDropEffects.Link => DragAction.Link,
+                _ => DragAction.Copy,
+            };
+            string verb = action switch {
+                DragAction.Move => "Move",
+                DragAction.Link => "Create shortcut to",
+                _ => "Copy",
+            };
             string what = count == 1 ? $"'{_dragFirstName}'" : $"{count} items";
             desc = $"{verb} {what}";
             targetText = "to " + FormatTarget(_currentDropTarget);
@@ -411,7 +453,17 @@ public partial class MainWindow : Window {
             ResetDropState();
             SetDropHighlight(null);
         } else {
-            var reason = PathSafety.DetectSelfDrop(paths, target, out string? offender);
+            // Self-drop checks don't apply to Link — Explorer happily makes a
+            // shortcut next to the original.
+            bool isLink = (Keyboard.Modifiers & ModifierKeys.Alt) != 0;
+            var reason = isLink
+                ? SelfDropReason.None
+                : PathSafety.DetectSelfDrop(paths, target, out _);
+            string? offender = null;
+            if (!isLink) {
+                PathSafety.DetectSelfDrop(paths, target, out offender);
+            }
+
             if (reason != SelfDropReason.None) {
                 e.Effects = DragDropEffects.None;
                 _currentDragEffect = DragDropEffects.None;
@@ -449,7 +501,11 @@ public partial class MainWindow : Window {
             }
 
             var wpfEffect = ChooseEffect(paths, target);
-            var effect = wpfEffect == DragDropEffects.Move ? DropEffect.Move : DropEffect.Copy;
+            var effect = wpfEffect switch {
+                DragDropEffects.Move => DropEffect.Move,
+                DragDropEffects.Link => DropEffect.Link,
+                _ => DropEffect.Copy,
+            };
             Vm.HandleDrop(paths, target, effect);
             e.Handled = true;
         } finally {
@@ -469,8 +525,17 @@ public partial class MainWindow : Window {
         var hit = e.OriginalSource as DependencyObject;
         while (hit is not null) {
             if (hit is FrameworkElement fe) {
-                if (fe.DataContext is FileSystemEntry entry && entry.Kind == EntryKind.Directory) {
-                    return entry.FullPath;
+                if (fe.DataContext is FileSystemEntry entry) {
+                    if (entry.Kind == EntryKind.Directory) {
+                        return entry.FullPath;
+                    }
+                    // .lnk pointing at a directory = drop into the real folder.
+                    if (entry.FullPath.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)) {
+                        string? resolved = ResolveShortcutTarget(entry.FullPath);
+                        if (resolved is not null && Directory.Exists(resolved)) {
+                            return resolved;
+                        }
+                    }
                 }
                 if (fe.DataContext is TreeNodeViewModel node && !string.IsNullOrEmpty(node.FullPath)) {
                     return node.FullPath;
@@ -479,6 +544,17 @@ public partial class MainWindow : Window {
             hit = VisualTreeHelper.GetParent(hit);
         }
         return Vm.CurrentPath;
+    }
+
+    private static string? ResolveShortcutTarget(string lnkPath) {
+        if (!ServiceLocator.IsRegistered<IShortcutService>()) {
+            return null;
+        }
+        try {
+            return ServiceLocator.Get<IShortcutService>().Resolve(lnkPath);
+        } catch {
+            return null;
+        }
     }
 
     private static UIElement? FindHighlightElement(DragEventArgs e) {
@@ -527,6 +603,10 @@ public partial class MainWindow : Window {
 
     private static DragDropEffects ChooseEffect(IReadOnlyList<string> paths, string target) {
         var mods = Keyboard.Modifiers;
+        // Alt → make a shortcut (Explorer parity).
+        if (mods.HasFlag(ModifierKeys.Alt)) {
+            return DragDropEffects.Link;
+        }
         if (mods.HasFlag(ModifierKeys.Shift)) {
             return DragDropEffects.Move;
         }

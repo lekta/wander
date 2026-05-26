@@ -12,6 +12,14 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <Authors>Lekta</Authors>
+    <Company>Lekta</Company>
+    <Product>Wander</Product>
+    <Description>Windows 11 alternative file manager</Description>
+    <Version>0.0.1</Version>
+    <FileVersion>0.0.1.0</FileVersion>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <NeutralLanguage>en</NeutralLanguage>
   </PropertyGroup>
 
   <ItemGroup>

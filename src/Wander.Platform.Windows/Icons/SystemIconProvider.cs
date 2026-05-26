@@ -52,6 +52,13 @@ public sealed class SystemIconProvider : IIconProvider {
         }
 
         string ext = Path.GetExtension(path);
+
+        // Shortcuts (.lnk) display the target's icon with a link overlay — so two
+        // different .lnk files have completely different icons. Cache by full path.
+        if (ext.Equals(".lnk", StringComparison.OrdinalIgnoreCase)) {
+            return $"lnk|{path}|{size}";
+        }
+
         if (string.IsNullOrEmpty(ext)) {
             return $"file|noext|{size}";
         }

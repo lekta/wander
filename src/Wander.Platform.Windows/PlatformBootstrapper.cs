@@ -19,5 +19,6 @@ public static class PlatformBootstrapper {
         ServiceLocator.Register<IIconProvider>(new SystemIconProvider());
         ServiceLocator.Register<IAppStateStore>(new JsonAppStateStore());
         ServiceLocator.Register<IFileLockInspector>(new RestartManagerLockInspector());
+        ServiceLocator.Register<IShortcutService>(new ShellShortcutService());
     }
 }

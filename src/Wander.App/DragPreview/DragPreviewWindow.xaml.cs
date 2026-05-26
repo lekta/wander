@@ -8,6 +8,7 @@ namespace Wander.App.DragPreview;
 public partial class DragPreviewWindow : Window {
     private static readonly Brush _moveBrush = Brushes.SteelBlue;
     private static readonly Brush _copyBrush = Brushes.SeaGreen;
+    private static readonly Brush _linkBrush = Brushes.DarkOrange;
     private static readonly Brush _forbiddenBrush = Brushes.IndianRed;
 
 
@@ -39,6 +40,10 @@ public partial class DragPreviewWindow : Window {
             case DragAction.Copy:
                 ActionIcon.Text = "＋"; // ＋
                 ActionIcon.Foreground = _copyBrush;
+                break;
+            case DragAction.Link:
+                ActionIcon.Text = "↗"; // ↗ (link/shortcut)
+                ActionIcon.Foreground = _linkBrush;
                 break;
             default:
                 ActionIcon.Text = "⊘"; // ⊘

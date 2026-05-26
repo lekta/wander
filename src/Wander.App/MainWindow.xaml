@@ -14,8 +14,9 @@
     </Window.DataContext>
     <Window.Resources>
         <conv:IconConverter x:Key="IconConverter"/>
-        <conv:ViewModeToVisibilityConverter x:Key="ViewModeToVisibility"/>
+        <conv:EnumToVisibilityConverter x:Key="EnumToVisibility"/>
         <conv:EnumEqualsConverter x:Key="EnumEquals"/>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
 
         <Style x:Key="ToolbarButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
@@ -109,6 +110,11 @@
                         </MenuItem.Header>
                         <MenuItem Header="Refresh" Command="{Binding RefreshCommand}" InputGestureText="F5"/>
                         <MenuItem Header="New folder" Command="{Binding NewFolderCommand}" InputGestureText="Ctrl+Shift+N"/>
+                        <Separator/>
+                        <MenuItem Header="Quick preview"
+                                  IsCheckable="True"
+                                  IsChecked="{Binding IsPreviewVisible, Mode=TwoWay}"/>
+                        <Separator/>
                         <MenuItem Header="Options..." Command="{Binding OptionsCommand}"/>
                         <Separator/>
                         <MenuItem Header="Exit" Command="{Binding ExitCommand}"/>
@@ -134,6 +140,8 @@
                 <ColumnDefinition Width="280"/>
                 <ColumnDefinition Width="4"/>
                 <ColumnDefinition Width="*"/>
+                <ColumnDefinition x:Name="PreviewSplitterColumn" Width="0"/>
+                <ColumnDefinition x:Name="PreviewColumn" Width="0"/>
             </Grid.ColumnDefinitions>
 
             <TreeView x:Name="Tree" Grid.Column="0"
@@ -171,7 +179,7 @@
                   Background="Transparent">
                 <!-- Details -->
                 <DataGrid x:Name="Grid"
-                          Visibility="{Binding ViewMode, Converter={StaticResource ViewModeToVisibility}, ConverterParameter=Details}"
+                          Visibility="{Binding ViewMode, Converter={StaticResource EnumToVisibility}, ConverterParameter=Details}"
                           ItemsSource="{Binding Entries}"
                           SelectedItem="{Binding SelectedEntry}"
                           AutoGenerateColumns="False" IsReadOnly="True"
@@ -221,7 +229,7 @@
 
                 <!-- Tiles -->
                 <ListBox x:Name="TilesView"
-                         Visibility="{Binding ViewMode, Converter={StaticResource ViewModeToVisibility}, ConverterParameter=Tiles}"
+                         Visibility="{Binding ViewMode, Converter={StaticResource EnumToVisibility}, ConverterParameter=Tiles}"
                          ItemsSource="{Binding Entries}"
                          SelectedItem="{Binding SelectedEntry}"
                          SelectionMode="Extended"
@@ -274,7 +282,7 @@
 
                 <!-- Large icons -->
                 <ListBox x:Name="IconsView"
-                         Visibility="{Binding ViewMode, Converter={StaticResource ViewModeToVisibility}, ConverterParameter=LargeIcons}"
+                         Visibility="{Binding ViewMode, Converter={StaticResource EnumToVisibility}, ConverterParameter=LargeIcons}"
                          ItemsSource="{Binding Entries}"
                          SelectedItem="{Binding SelectedEntry}"
                          SelectionMode="Extended"
@@ -322,6 +330,48 @@
                     </ListBox.ContextMenu>
                 </ListBox>
             </Grid>
+
+            <!-- Splitter between right pane and preview -->
+            <GridSplitter x:Name="PreviewSplitter"
+                          Grid.Column="3"
+                          HorizontalAlignment="Stretch"
+                          Background="#DDD"
+                          DragCompleted="PreviewSplitter_DragCompleted"/>
+
+            <!-- Preview pane -->
+            <Border Grid.Column="4"
+                    BorderBrush="#DDD" BorderThickness="1,0,0,0"
+                    Background="#FAFAFA"
+                    Visibility="{Binding IsPreviewVisible, Converter={StaticResource BoolToVisibility}}">
+                <Grid>
+                    <!-- Image preview -->
+                    <Image Source="{Binding PreviewImage}"
+                           Stretch="Uniform"
+                           Margin="8"
+                           Visibility="{Binding PreviewKind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Image}"/>
+
+                    <!-- Text preview -->
+                    <TextBox Visibility="{Binding PreviewKind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Text}"
+                             Text="{Binding PreviewText, Mode=OneWay}"
+                             IsReadOnly="True"
+                             FontFamily="Consolas"
+                             FontSize="11"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             AcceptsReturn="True"
+                             TextWrapping="NoWrap"
+                             VerticalScrollBarVisibility="Auto"
+                             HorizontalScrollBarVisibility="Auto"
+                             Padding="6"/>
+
+                    <!-- Placeholder (None / Unsupported) -->
+                    <TextBlock Text="{Binding PreviewPlaceholderText}"
+                               Foreground="#888"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               Visibility="{Binding IsPreviewPlaceholderVisible, Converter={StaticResource BoolToVisibility}}"/>
+                </Grid>
+            </Border>
         </Grid>
     </DockPanel>
 </Window>
