@@ -85,6 +85,13 @@ public sealed class SystemIconProvider : IIconProvider {
             flags |= SHGFI_USEFILEATTRIBUTES;
         }
 
+        // .lnk shortcuts: ask the shell to compose the link-overlay arrow
+        // (small ↗ in the corner). Without this flag SHGetFileInfo returns
+        // the bare target icon — same as Wander showed before.
+        if (path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)) {
+            flags |= SHGFI_LINKOVERLAY;
+        }
+
         var info = new SHFILEINFO();
         IntPtr result = SHGetFileInfo(
             path,
@@ -170,6 +177,7 @@ public sealed class SystemIconProvider : IIconProvider {
     private const uint SHGFI_LARGEICON = 0x000000000;
     private const uint SHGFI_SMALLICON = 0x000000001;
     private const uint SHGFI_SYSICONINDEX = 0x000004000;
+    private const uint SHGFI_LINKOVERLAY = 0x000008000;
     private const uint SHGFI_USEFILEATTRIBUTES = 0x000000010;
     private const uint FILE_ATTRIBUTE_NORMAL = 0x00000080;
 

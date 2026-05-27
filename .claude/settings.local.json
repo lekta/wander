@@ -4,7 +4,11 @@
       "Bash(dotnet --list-sdks)",
       "Bash(dotnet --version)",
       "PowerShell(Get-ChildItem 'D:\\\\Dev\\\\lekta\\\\Wander\\\\src\\\\Wander.App' -Recurse -File | Where-Object { $_.Extension -notin '.csproj','.json' } | Select-Object -ExpandProperty FullName)",
-      "PowerShell(& 'C:\\\\Program Files\\\\dotnet\\\\dotnet.exe' build Wander.slnx --nologo 2>&1)"
+      "PowerShell(& 'C:\\\\Program Files\\\\dotnet\\\\dotnet.exe' build Wander.slnx --nologo 2>&1)",
+      "PowerShell(.\\tools\\check.bat)",
+      "PowerShell(.\\tools\\check.bat:*)",
+      "Bash(cmd /c tools\\check.bat)",
+      "Bash(cmd /c tools\\check.bat:*)"
     ]
   }
 }

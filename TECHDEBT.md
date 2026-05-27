@@ -67,6 +67,11 @@
   отдельной грамматикой через extension; у нас xaml есть в списке code,
   но AvalonEdit'у не хватает XAML-definition в стандартной поставке (надо
   доустановить из его репозитория). Сейчас xaml открывается как plain XML.
+- **.lnk overlay для jumbo (LargeIcons)** — `SHGFI_LINKOVERLAY` работает
+  только с `SHGetFileInfo` (small/normal). Jumbo идёт через
+  `SHGetImageList` SHIL_JUMBO → overlay system не накладывает. Решение —
+  композитом наложить arrow-PNG из ресурсов после получения jumbo-иконки.
+  Затрагивает только режим LargeIcons; Details/Tiles/Tree уже корректные.
 - **Ctrl+L** — фокус идёт в адресную строку, но текст не selectAll
   визуально подсвечивается синим, проверь на машине; если что — TextBox
   Focus + SelectAll иногда требуют BeginInvoke на Dispatcher.

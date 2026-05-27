@@ -20,6 +20,23 @@
         <conv:EnumEqualsConverter x:Key="EnumEquals"/>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
 
+        <!--
+            Suppress the dashed focus rectangle on selectable row containers.
+            Default WPF draws it on top of the selection background, producing
+            "double selection" visuals. Selection state remains driven by the
+            normal background brushes; focus is still tracked semantically
+            (keyboard navigation works).
+        -->
+        <Style TargetType="DataGridRow">
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        </Style>
+        <Style TargetType="DataGridCell">
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        </Style>
+        <Style TargetType="ListBoxItem">
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        </Style>
+
         <Style x:Key="ToolbarButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -161,6 +178,7 @@
                     <Style TargetType="TreeViewItem">
                         <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
                         <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
+                        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
                     </Style>
                 </TreeView.ItemContainerStyle>
                 <TreeView.ItemTemplate>
@@ -355,9 +373,9 @@
 
                     <!-- Content area -->
                     <Grid Grid.Row="0">
-                        <!-- Image -->
+                        <!-- Image: scale only when bigger than container, don't upscale -->
                         <Image Source="{Binding PreviewImage}"
-                               Stretch="Uniform" Margin="8"
+                               Stretch="Uniform" StretchDirection="DownOnly" Margin="8"
                                Visibility="{Binding PreviewKind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Image}"/>
 
                         <!-- Plain text -->

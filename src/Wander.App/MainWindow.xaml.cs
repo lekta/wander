@@ -553,9 +553,14 @@ public partial class MainWindow : Window {
                 return;
             }
 
-            var reason = PathSafety.DetectSelfDrop(paths, target, out _);
-            if (reason != SelfDropReason.None) {
-                return;
+            // Self-drop checks don't apply to Link — Explorer happily makes a
+            // shortcut next to the original, including into the source folder.
+            bool isLink = (Keyboard.Modifiers & ModifierKeys.Alt) != 0;
+            if (!isLink) {
+                var reason = PathSafety.DetectSelfDrop(paths, target, out _);
+                if (reason != SelfDropReason.None) {
+                    return;
+                }
             }
 
             var wpfEffect = ChooseEffect(paths, target);
@@ -619,6 +624,13 @@ public partial class MainWindow : Window {
         var hit = e.OriginalSource as DependencyObject;
         while (hit is not null) {
             if (hit is TreeViewItem tvi && tvi.DataContext is TreeNodeViewModel) {
+                // RenderSize of a TreeViewItem includes its expanded children —
+                // adorning that would paint the highlight over the whole subtree.
+                // The default WPF template names the row container "Bd" (Aero2);
+                // adorn that if available, otherwise fall back to the row itself.
+                if (tvi.Template?.FindName("Bd", tvi) is UIElement header) {
+                    return header;
+                }
                 return tvi;
             }
             if (hit is ListBoxItem lbi && lbi.DataContext is FileSystemEntry fe1 && fe1.Kind == EntryKind.Directory) {
