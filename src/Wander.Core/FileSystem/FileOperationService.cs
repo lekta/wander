@@ -1,4 +1,5 @@
 using Wander.Core.Logging;
+using Wander.Core.Operations;
 using Wander.Core.Undo;
 
 namespace Wander.Core.FileSystem;
@@ -26,14 +27,16 @@ public sealed class FileOperationService {
     private readonly IFileSystem _fs;
     private readonly IRecycleBin _bin;
     private readonly UndoService _undo;
+    private readonly OperationTracker _tracker;
     private readonly ILogger _log;
 
 
     /// <summary>Full ctor — used by tests and the production registration in PlatformBootstrapper.</summary>
-    public FileOperationService(IFileSystem fs, IRecycleBin bin, UndoService undo, ILogger log) {
+    public FileOperationService(IFileSystem fs, IRecycleBin bin, UndoService undo, OperationTracker tracker, ILogger log) {
         _fs = fs;
         _bin = bin;
         _undo = undo;
+        _tracker = tracker;
         _log = log;
     }
 
@@ -43,6 +46,7 @@ public sealed class FileOperationService {
             ServiceLocator.Get<IFileSystem>(),
             ServiceLocator.Get<IRecycleBin>(),
             ServiceLocator.Get<UndoService>(),
+            ServiceLocator.Get<OperationTracker>(),
             ServiceLocator.IsRegistered<ILogger>() ? ServiceLocator.Get<ILogger>() : NullLogger.Instance) {
     }
 
@@ -127,15 +131,105 @@ public sealed class FileOperationService {
     public enum BatchItemStatus { Ok, Skipped, Replaced, Renamed, Cancelled, Failed }
 
     public IReadOnlyList<BatchItemResult> CopyMany(IReadOnlyList<string> sources, string targetFolder, IConflictResolver resolver) {
-        return ApplyBatch(sources, targetFolder, isMove: false, resolver);
+        return ApplyBatch(sources, targetFolder, isMove: false, resolver, progress: null);
     }
 
     public IReadOnlyList<BatchItemResult> MoveMany(IReadOnlyList<string> sources, string targetFolder, IConflictResolver resolver) {
-        return ApplyBatch(sources, targetFolder, isMove: true, resolver);
+        return ApplyBatch(sources, targetFolder, isMove: true, resolver, progress: null);
     }
 
 
-    private IReadOnlyList<BatchItemResult> ApplyBatch(IReadOnlyList<string> sources, string targetFolder, bool isMove, IConflictResolver resolver) {
+    // --- Async ops (off the UI thread, report through OperationTracker) -
+
+    public Task<IReadOnlyList<BatchItemResult>> CopyManyAsync(
+        IReadOnlyList<string> sources, string targetFolder, IConflictResolver resolver,
+        CancellationToken ct = default) {
+        return RunBatchAsync(sources, targetFolder, isMove: false, resolver, ct);
+    }
+
+    public Task<IReadOnlyList<BatchItemResult>> MoveManyAsync(
+        IReadOnlyList<string> sources, string targetFolder, IConflictResolver resolver,
+        CancellationToken ct = default) {
+        return RunBatchAsync(sources, targetFolder, isMove: true, resolver, ct);
+    }
+
+    private async Task<IReadOnlyList<BatchItemResult>> RunBatchAsync(
+        IReadOnlyList<string> sources, string targetFolder, bool isMove, IConflictResolver resolver,
+        CancellationToken ct) {
+        using var op = _tracker.Begin(isMove ? "Move" : "Copy", sources.Count);
+        return await Task.Run(
+            () => ApplyBatch(sources, targetFolder, isMove, resolver, op),
+            ct).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Async batch delete. <paramref name="permanent"/> = true bypasses the
+    /// recycle bin and clears the undo stack (same semantics as
+    /// <see cref="PermanentDelete"/>). Reports per-item progress.
+    /// </summary>
+    public async Task<IReadOnlyList<DeleteResult>> DeleteManyAsync(
+        IReadOnlyList<string> paths, bool permanent, CancellationToken ct = default) {
+        using var op = _tracker.Begin(permanent ? "Delete permanently" : "Recycle", paths.Count);
+        return await Task.Run(
+            () => DeleteManyCore(paths, permanent, op, ct),
+            ct).ConfigureAwait(false);
+    }
+
+    private IReadOnlyList<DeleteResult> DeleteManyCore(
+        IReadOnlyList<string> paths, bool permanent, IOperationHandle progress, CancellationToken ct) {
+        using var _ = _undo.BeginOperation();
+
+        var results = new List<DeleteResult>(paths.Count);
+        var undoSteps = new List<IUndoableAction>(paths.Count);
+
+        foreach (string path in paths) {
+            if (ct.IsCancellationRequested) {
+                results.Add(new DeleteResult(path, DeleteStatus.Cancelled, null));
+                continue;
+            }
+
+            try {
+                if (permanent) {
+                    if (_fs.DirectoryExists(path)) {
+                        _fs.DeleteDirectory(path, recursive: true);
+                    } else if (_fs.FileExists(path)) {
+                        _fs.DeleteFile(path);
+                    } else {
+                        throw new FileNotFoundException("Path not found", path);
+                    }
+                    _log.Warn($"Permanent delete: {path}");
+                    results.Add(new DeleteResult(path, DeleteStatus.Ok, null));
+                } else {
+                    var handle = _bin.Send(path);
+                    undoSteps.Add(new DeleteAction(_bin, handle));
+                    _log.Info($"Delete (recycle): {path}");
+                    results.Add(new DeleteResult(path, DeleteStatus.Ok, null));
+                }
+            } catch (Exception ex) {
+                _log.Error($"Delete failed: {path}", ex);
+                results.Add(new DeleteResult(path, DeleteStatus.Failed, ex));
+            }
+
+            progress.Advance(path);
+        }
+
+        if (permanent) {
+            // Permanent delete is not undoable — drop any history so users can't
+            // Ctrl+Z past it and think it worked.
+            _undo.Clear();
+        } else {
+            PushComposite(undoSteps, isMove: false, verbOverride: "delete");
+        }
+
+        return results;
+    }
+
+    public sealed record DeleteResult(string Path, DeleteStatus Status, Exception? Error);
+    public enum DeleteStatus { Ok, Failed, Cancelled }
+
+
+    private IReadOnlyList<BatchItemResult> ApplyBatch(IReadOnlyList<string> sources, string targetFolder, bool isMove, IConflictResolver resolver, IOperationHandle? progress) {
         using var _ = _undo.BeginOperation();
 
         var pairs = new List<(string src, string dest)>();
@@ -177,6 +271,7 @@ public sealed class FileOperationService {
                     return results;
                 case ConflictResolution.Skip:
                     results.Add(new BatchItemResult(src, dest, BatchItemStatus.Skipped, null));
+                    progress?.Advance(src);
                     continue;
                 case ConflictResolution.Rename:
                     dest = GenerateUniqueName(dest);
@@ -200,17 +295,19 @@ public sealed class FileOperationService {
                 results.Add(new BatchItemResult(src, dest, BatchItemStatus.Failed, ex));
                 _log.Error($"{(isMove ? "Move" : "Copy")} failed: {src} -> {dest}", ex);
             }
+
+            progress?.Advance(src);
         }
 
         PushComposite(undoSteps, isMove);
         return results;
     }
 
-    private void PushComposite(IReadOnlyList<IUndoableAction> steps, bool isMove) {
+    private void PushComposite(IReadOnlyList<IUndoableAction> steps, bool isMove, string? verbOverride = null) {
         if (steps.Count == 0) {
             return;
         }
-        string verb = isMove ? "move" : "copy";
+        string verb = verbOverride ?? (isMove ? "move" : "copy");
         string desc = steps.Count == 1
             ? steps[0].Description
             : $"{verb} of {steps.Count} items";

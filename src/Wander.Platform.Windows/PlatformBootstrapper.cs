@@ -3,6 +3,7 @@ using Wander.Core.Diagnostics;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
 using Wander.Core.Logging;
+using Wander.Core.Operations;
 using Wander.Core.Persistence;
 using Wander.Core.Shell;
 using Wander.Core.Undo;
@@ -20,6 +21,7 @@ public static class PlatformBootstrapper {
         // Logging first so anything below can log during construction if needed.
         var logger = new FileLogger();
         ServiceLocator.Register<ILogger>(logger);
+        ServiceLocator.Register<ILogFile>(logger);
         logger.Info($"=== Wander session start ({DateTime.Now:yyyy-MM-dd HH:mm:ss}) ===");
         logger.Info($"Log file: {logger.FilePath}");
 
@@ -34,6 +36,7 @@ public static class PlatformBootstrapper {
         // Undo + recycle bin + ops are the single shared instances every
         // caller (VM, drop handlers, future scripting) must reach for.
         ServiceLocator.Register<UndoService>(new UndoService());
+        ServiceLocator.Register<OperationTracker>(new OperationTracker());
         ServiceLocator.Register<IRecycleBin>(new ShellRecycleBin(logger));
         ServiceLocator.Register<FileOperationService>(new FileOperationService());
     }

@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -7,10 +8,32 @@ using Wander.Core.Icons;
 namespace Wander.Platform.Windows.Icons;
 
 /// <summary>
-/// Provides system icons via the Win32 shell:
-///  - Small/Normal via SHGetFileInfo (16/32 px).
-///  - Large via the system image list with SHIL_JUMBO (up to 256 px).
-/// PNG bytes are cached per (extension|directory, size).
+/// Provides system icons / thumbnails via the Win32 shell.
+///
+/// Strategy by size:
+///  - <b>Small / Normal</b>: <c>SHGetFileInfo</c>. The shell bakes the
+///    link-overlay arrow in at these sizes for free
+///    (<c>SHGFI_LINKOVERLAY</c>).
+///
+///  - <b>Large (256 px)</b>: a two-step compose, the same way Explorer does
+///    its "Large icons" view —
+///      1. base image via <c>IShellItemImageFactory.GetImage</c>; this
+///         returns the real thumbnail when the file has a thumbnail
+///         provider (images, videos, PDFs…) and falls back to the regular
+///         icon otherwise.
+///      2. overlay (if any) via <c>SHGetFileInfo(SHGFI_OVERLAYINDEX)</c> +
+///         <c>IImageList(SHIL_EXTRALARGE).GetOverlayImage / GetIcon</c>.
+///         The 48 px arrow is up-scaled to ~80 px and drawn into the
+///         bottom-left corner of the 256 px canvas.
+///
+///    The two-step is required because <c>IShellItemImageFactory.GetImage</c>
+///    is documented (in samples / community guidance) to NOT compose
+///    overlays — that's the caller's job. The jumbo system image list
+///    (<c>SHIL_JUMBO</c>) also doesn't reliably contain overlay icons at
+///    256 px; the smaller image lists do.
+///
+/// Caching is in-memory only and keyed by extension for the small / normal
+/// sizes (shared icons) and per-path for Large (each thumbnail is unique).
 /// </summary>
 public sealed class SystemIconProvider : IIconProvider {
     private readonly Dictionary<string, byte[]> _cache = new(StringComparer.OrdinalIgnoreCase);
@@ -46,17 +69,19 @@ public sealed class SystemIconProvider : IIconProvider {
 
     private static string BuildCacheKey(string path, IconSize size) {
         if (System.IO.Directory.Exists(path)) {
-            // Most directories share an icon; but custom folder icons (desktop.ini)
-            // would need per-path caching. For now we cache per-path to be safe.
             return $"dir|{path}|{size}";
         }
 
         string ext = Path.GetExtension(path);
 
-        // Shortcuts (.lnk) display the target's icon with a link overlay — so two
-        // different .lnk files have completely different icons. Cache by full path.
+        // Shortcuts (.lnk) get a unique composite per file → cache per path.
         if (ext.Equals(".lnk", StringComparison.OrdinalIgnoreCase)) {
             return $"lnk|{path}|{size}";
+        }
+
+        // Large = jumbo path with thumbnails → unique per file.
+        if (size == IconSize.Large) {
+            return $"thumb|{path}";
         }
 
         if (string.IsNullOrEmpty(ext)) {
@@ -67,7 +92,7 @@ public sealed class SystemIconProvider : IIconProvider {
 
     private static byte[]? LoadIcon(string path, IconSize size) {
         return size switch {
-            IconSize.Large => LoadJumboIcon(path),
+            IconSize.Large => LoadJumboImage(path),
             _ => LoadShellIcon(path, size),
         };
     }
@@ -85,9 +110,6 @@ public sealed class SystemIconProvider : IIconProvider {
             flags |= SHGFI_USEFILEATTRIBUTES;
         }
 
-        // .lnk shortcuts: ask the shell to compose the link-overlay arrow
-        // (small ↗ in the corner). Without this flag SHGetFileInfo returns
-        // the bare target icon — same as Wander showed before.
         if (path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)) {
             flags |= SHGFI_LINKOVERLAY;
         }
@@ -113,50 +135,233 @@ public sealed class SystemIconProvider : IIconProvider {
 
 
     // ------------------------------------------------------------------
-    // Large — system image list with SHIL_JUMBO (256x256).
+    // Large — IShellItemImageFactory + manual overlay composition.
     // ------------------------------------------------------------------
 
-    private static byte[]? LoadJumboIcon(string path) {
-        // First step: get the icon INDEX via SHGetFileInfo with SHGFI_SYSICONINDEX.
-        uint flags = SHGFI_SYSICONINDEX;
+    private static byte[]? LoadJumboImage(string path) {
+        Bitmap? baseBmp = LoadShellBitmapJumbo(path);
+        if (baseBmp is null) {
+            // Couldn't get a 256-px image at all — fall back to the
+            // shell's 32-px icon so the user sees *something* instead
+            // of a blank tile.
+            return LoadShellIcon(path, IconSize.Normal);
+        }
 
+        try {
+            int overlayIndex = GetOverlayIndex(path);
+            if (overlayIndex > 0) {
+                using Bitmap? overlayBmp = LoadOverlayBitmap(overlayIndex);
+                if (overlayBmp is not null) {
+                    CompositeOverlay(baseBmp, overlayBmp);
+                }
+            }
+
+            using var ms = new MemoryStream();
+            baseBmp.Save(ms, ImageFormat.Png);
+            return ms.ToArray();
+        } finally {
+            baseBmp.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// Gets a 256-px base image (thumbnail-if-available, otherwise icon),
+    /// without overlays. Returns a managed <see cref="Bitmap"/> in
+    /// top-down 32-bpp ARGB so the caller can paint over it safely.
+    /// </summary>
+    private static Bitmap? LoadShellBitmapJumbo(string path) {
+        IShellItem? item = null;
+        try {
+            int hr;
+            try {
+                hr = SHCreateItemFromParsingName(path, IntPtr.Zero, IID_IShellItem, out item);
+            } catch {
+                return null;
+            }
+            if (hr != 0 || item is null) {
+                return null;
+            }
+
+            if (item is not IShellItemImageFactory factory) {
+                return null;
+            }
+
+            var size = new SIZE { cx = JumboSize, cy = JumboSize };
+            int hrImg = factory.GetImage(size, SIIGBF_RESIZETOFIT, out IntPtr hBitmap);
+            if (hrImg != 0 || hBitmap == IntPtr.Zero) {
+                return null;
+            }
+
+            try {
+                return HBitmapToBitmap(hBitmap);
+            } finally {
+                DeleteObject(hBitmap);
+            }
+        } finally {
+            if (item is not null) {
+                Marshal.ReleaseComObject(item);
+            }
+        }
+    }
+
+
+    /// <summary>
+    /// Asks the shell which overlay (link arrow, shared hand, …) applies
+    /// to <paramref name="path"/>. Returns 0 when none, 1..15 otherwise.
+    /// </summary>
+    private static int GetOverlayIndex(string path) {
+        uint flags = SHGFI_OVERLAYINDEX | SHGFI_SYSICONINDEX;
         bool exists = File.Exists(path) || System.IO.Directory.Exists(path);
         if (!exists) {
             flags |= SHGFI_USEFILEATTRIBUTES;
         }
 
         var info = new SHFILEINFO();
-        IntPtr result = SHGetFileInfo(
+        IntPtr res = SHGetFileInfo(
             path,
             FILE_ATTRIBUTE_NORMAL,
             ref info,
             (uint)Marshal.SizeOf<SHFILEINFO>(),
             flags);
-
-        if (result == IntPtr.Zero) {
-            return LoadShellIcon(path, IconSize.Normal);
+        if (res == IntPtr.Zero) {
+            return 0;
         }
 
-        // Second step: get the image list at jumbo size, then extract that index.
+        // SHGFI_OVERLAYINDEX encodes the overlay index into the upper byte
+        // of iIcon. Bits 24..27 in practice (Windows defines 0..15), but
+        // MSDN says "upper eight bits" so we mask 0xFF defensively.
+        return (info.iIcon >> 24) & 0xFF;
+    }
+
+
+    /// <summary>
+    /// Fetches the overlay-only icon (e.g. just the link arrow on a
+    /// transparent canvas) from the shell's 48-px system image list.
+    /// The jumbo image list does NOT reliably contain overlays — they
+    /// live in the smaller image lists. 48 px scales up cleanly to the
+    /// ~80 px corner badge we want on a 256-px tile.
+    /// </summary>
+    private static Bitmap? LoadOverlayBitmap(int overlayIndex) {
         var iidImageList = new Guid("46EB5926-582E-4017-9FDF-E8998DAA0950");
-        int hr = SHGetImageList(SHIL_JUMBO, ref iidImageList, out IImageList list);
+        int hr = SHGetImageList(SHIL_EXTRALARGE, ref iidImageList, out IImageList list);
         if (hr != 0 || list is null) {
-            return LoadShellIcon(path, IconSize.Normal);
+            return null;
         }
 
         IntPtr hIcon = IntPtr.Zero;
         try {
-            int rc = list.GetIcon(info.iIcon, ILD_TRANSPARENT, ref hIcon);
-            if (rc != 0 || hIcon == IntPtr.Zero) {
-                return LoadShellIcon(path, IconSize.Normal);
+            if (list.GetOverlayImage(overlayIndex, out int overlayImg) != 0 || overlayImg <= 0) {
+                return null;
             }
-            return HIconToPng(hIcon);
+            if (list.GetIcon(overlayImg, ILD_TRANSPARENT, ref hIcon) != 0 || hIcon == IntPtr.Zero) {
+                return null;
+            }
+
+            // Icon.ToBitmap produces a 32-bpp ARGB managed bitmap with the
+            // correct orientation (icon glyphs are masked/AND-XOR'd by the
+            // ICO format; ToBitmap composes them). Alpha is preserved for
+            // 32-bpp source icons (which modern shell32 overlays are).
+            using var icon = Icon.FromHandle(hIcon);
+            return icon.ToBitmap();
         } finally {
             if (hIcon != IntPtr.Zero) {
                 DestroyIcon(hIcon);
             }
             Marshal.ReleaseComObject(list);
         }
+    }
+
+
+    /// <summary>
+    /// Draws <paramref name="overlay"/> in the bottom-left of <paramref name="canvas"/>,
+    /// scaled up to roughly match Explorer's badge size on jumbo icons.
+    /// </summary>
+    private static void CompositeOverlay(Bitmap canvas, Bitmap overlay) {
+        // ~31% of the canvas — matches Explorer's badge proportion on a
+        // 256-px tile (80 / 256 ≈ 0.31).
+        int overlayPx = canvas.Width * 5 / 16; // 80 for 256
+
+        using var g = Graphics.FromImage(canvas);
+        g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+        g.SmoothingMode = SmoothingMode.HighQuality;
+        g.CompositingMode = CompositingMode.SourceOver;
+        g.CompositingQuality = CompositingQuality.HighQuality;
+        var dest = new Rectangle(
+            0,
+            canvas.Height - overlayPx,
+            overlayPx,
+            overlayPx);
+        g.DrawImage(overlay, dest);
+    }
+
+
+    // ------------------------------------------------------------------
+    // HBITMAP / HICON → managed Bitmap conversion.
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Converts an arbitrary <c>HBITMAP</c> from the shell into a managed
+    /// 32-bpp ARGB <see cref="Bitmap"/>, normalised to top-down.
+    ///
+    /// We can't use the simpler <c>new Bitmap(w, h, stride, fmt, scan0)</c>
+    /// wrap because that interpretation depends on the source DIB's
+    /// orientation, which the <c>BITMAP</c> struct doesn't expose: shell
+    /// thumbnail providers usually return top-down 32-bpp PARGB, but the
+    /// icon-fallback path (for files without a thumbnail) often returns
+    /// bottom-up. The wrap rendered the bottom-up case upside-down.
+    ///
+    /// <c>GetDIBits</c> with <c>biHeight = -height</c> tells GDI to give
+    /// us pixels in top-down order regardless of how they're stored in
+    /// the source, which fixes both shapes with one path.
+    /// </summary>
+    private static Bitmap? HBitmapToBitmap(IntPtr hBitmap) {
+        var info = new BITMAP();
+        if (GetObject(hBitmap, Marshal.SizeOf<BITMAP>(), ref info) == 0) {
+            return null;
+        }
+
+        int width = info.bmWidth;
+        int height = info.bmHeight;
+        if (width <= 0 || height <= 0) {
+            return null;
+        }
+
+        var bmp = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+        bool ok = false;
+        var rect = new Rectangle(0, 0, width, height);
+        var data = bmp.LockBits(rect, ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+        try {
+            var bi = new BITMAPINFOHEADER {
+                biSize = (uint)Marshal.SizeOf<BITMAPINFOHEADER>(),
+                biWidth = width,
+                biHeight = -height,        // negative → top-down output
+                biPlanes = 1,
+                biBitCount = 32,
+                biCompression = BI_RGB,
+            };
+
+            IntPtr hdc = GetDC(IntPtr.Zero);
+            try {
+                int rc = GetDIBits(
+                    hdc, hBitmap,
+                    0, (uint)height,
+                    data.Scan0,
+                    ref bi,
+                    DIB_RGB_COLORS);
+                ok = rc != 0;
+            } finally {
+                ReleaseDC(IntPtr.Zero, hdc);
+            }
+        } finally {
+            bmp.UnlockBits(data);
+        }
+
+        if (!ok) {
+            bmp.Dispose();
+            return null;
+        }
+        return bmp;
     }
 
 
@@ -170,19 +375,29 @@ public sealed class SystemIconProvider : IIconProvider {
 
 
     // ------------------------------------------------------------------
-    // P/Invoke — Win32 shell.
+    // P/Invoke — shell + GDI.
     // ------------------------------------------------------------------
 
     private const uint SHGFI_ICON = 0x000000100;
     private const uint SHGFI_LARGEICON = 0x000000000;
     private const uint SHGFI_SMALLICON = 0x000000001;
+    private const uint SHGFI_OVERLAYINDEX = 0x000000040;
     private const uint SHGFI_SYSICONINDEX = 0x000004000;
     private const uint SHGFI_LINKOVERLAY = 0x000008000;
     private const uint SHGFI_USEFILEATTRIBUTES = 0x000000010;
     private const uint FILE_ATTRIBUTE_NORMAL = 0x00000080;
 
-    private const int SHIL_JUMBO = 0x4;     // 256x256
+    private const int JumboSize = 256;
+    private const int SIIGBF_RESIZETOFIT = 0x00000000;
+
+    private const int SHIL_EXTRALARGE = 0x2;   // 48 × 48
     private const int ILD_TRANSPARENT = 0x1;
+
+    private const int BI_RGB = 0;
+    private const uint DIB_RGB_COLORS = 0;
+
+    private static readonly Guid IID_IShellItem = new("43826D1E-E718-42EE-BC55-A1E261C37BFE");
+
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
     private struct SHFILEINFO {
@@ -195,6 +410,43 @@ public sealed class SystemIconProvider : IIconProvider {
         public string szTypeName;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SIZE {
+        public int cx;
+        public int cy;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct BITMAP {
+        public int bmType;
+        public int bmWidth;
+        public int bmHeight;
+        public int bmWidthBytes;
+        public ushort bmPlanes;
+        public ushort bmBitsPixel;
+        public IntPtr bmBits;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct BITMAPINFOHEADER {
+        public uint biSize;
+        public int biWidth;
+        public int biHeight;
+        public ushort biPlanes;
+        public ushort biBitCount;
+        public uint biCompression;
+        public uint biSizeImage;
+        public int biXPelsPerMeter;
+        public int biYPelsPerMeter;
+        public uint biClrUsed;
+        public uint biClrImportant;
+        // followed by bmiColors[] when biBitCount <= 8 — not needed for 32-bpp,
+        // but we still pass-by-ref so a few bytes of "color table" after the
+        // header are written into nothingness; with biClrUsed = 0 GDI doesn't
+        // read past biClrImportant for 32-bpp.
+    }
+
+
     [DllImport("shell32.dll", CharSet = CharSet.Auto)]
     private static extern IntPtr SHGetFileInfo(
         string pszPath,
@@ -203,6 +455,13 @@ public sealed class SystemIconProvider : IIconProvider {
         uint cbSizeFileInfo,
         uint uFlags);
 
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    private static extern int SHCreateItemFromParsingName(
+        [MarshalAs(UnmanagedType.LPWStr)] string pszPath,
+        IntPtr pbc,
+        [MarshalAs(UnmanagedType.LPStruct)] Guid riid,
+        [MarshalAs(UnmanagedType.Interface)] out IShellItem ppv);
+
     [DllImport("shell32.dll", EntryPoint = "#727")]
     private static extern int SHGetImageList(int iImageList, ref Guid riid, out IImageList ppv);
 
@@ -210,7 +469,48 @@ public sealed class SystemIconProvider : IIconProvider {
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool DestroyIcon(IntPtr hIcon);
 
-    // IImageList COM interface — only need GetIcon (11th method in vtable).
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetDC(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
+
+    [DllImport("gdi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool DeleteObject(IntPtr ho);
+
+    [DllImport("gdi32.dll", EntryPoint = "GetObject")]
+    private static extern int GetObject(IntPtr hgdiobj, int cb, ref BITMAP lpvObject);
+
+    [DllImport("gdi32.dll")]
+    private static extern int GetDIBits(
+        IntPtr hdc,
+        IntPtr hbm,
+        uint start,
+        uint cLines,
+        IntPtr lpvBits,
+        ref BITMAPINFOHEADER lpbmi,
+        uint usage);
+
+
+    [ComImport]
+    [Guid("43826D1E-E718-42EE-BC55-A1E261C37BFE")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IShellItem {
+        // Empty: we only need the RCW so we can QI to IShellItemImageFactory.
+    }
+
+    [ComImport]
+    [Guid("BCC18B79-BA16-442F-80C4-8A59C30C463B")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IShellItemImageFactory {
+        [PreserveSig] int GetImage(SIZE size, int flags, out IntPtr phbm);
+    }
+
+    // IImageList — we only invoke GetIcon (slot 8) and GetOverlayImage
+    // (slot 29). Methods 1..7 and 9..28 are declared as IntPtr stubs to
+    // preserve vtable ordering; the runtime fills the implicit IUnknown
+    // slots (1..3) ahead of these via [InterfaceType].
     [ComImport]
     [Guid("46EB5926-582E-4017-9FDF-E8998DAA0950")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -223,5 +523,26 @@ public sealed class SystemIconProvider : IIconProvider {
         [PreserveSig] int Draw(IntPtr pimldp);
         [PreserveSig] int Remove(int i);
         [PreserveSig] int GetIcon(int i, int flags, ref IntPtr picon);
+        [PreserveSig] int GetImageInfo(int i, IntPtr pImageInfo);
+        [PreserveSig] int Copy(int iDst, IntPtr punkSrc, int iSrc, int uFlags);
+        [PreserveSig] int Merge(int i1, IntPtr punk2, int i2, int dx, int dy, ref Guid riid, out IntPtr ppv);
+        [PreserveSig] int Clone(ref Guid riid, out IntPtr ppv);
+        [PreserveSig] int GetImageRect(int i, IntPtr prc);
+        [PreserveSig] int GetIconSize(out int cx, out int cy);
+        [PreserveSig] int SetIconSize(int cx, int cy);
+        [PreserveSig] int GetImageCount(out int pi);
+        [PreserveSig] int SetImageCount(int uNewCount);
+        [PreserveSig] int SetBkColor(int clrBk, out int pclr);
+        [PreserveSig] int GetBkColor(out int pclr);
+        [PreserveSig] int BeginDrag(int iTrack, int dxHotspot, int dyHotspot);
+        [PreserveSig] int EndDrag();
+        [PreserveSig] int DragEnter(IntPtr hwndLock, int x, int y);
+        [PreserveSig] int DragLeave(IntPtr hwndLock);
+        [PreserveSig] int DragMove(int x, int y);
+        [PreserveSig] int SetDragCursorImage(IntPtr punk, int iDrag, int dxHotspot, int dyHotspot);
+        [PreserveSig] int DragShowNolock(int fShow);
+        [PreserveSig] int GetDragImage(IntPtr ppt, IntPtr pptHotspot, ref Guid riid, out IntPtr ppv);
+        [PreserveSig] int GetItemFlags(int i, out int dwFlags);
+        [PreserveSig] int GetOverlayImage(int iOverlay, out int piIndex);
     }
 }

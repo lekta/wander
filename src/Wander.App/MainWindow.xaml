@@ -8,9 +8,12 @@
         Title="{Binding WindowTitle}"
         Icon="Assets\app.ico"
         Height="700" Width="1100"
+        WindowStartupLocation="CenterScreen"
         AllowDrop="True"
         DragOver="OnDragOver"
-        Drop="OnDrop">
+        Drop="OnDrop"
+        SourceInitialized="OnSourceInitialized"
+        Closing="OnClosing">
     <Window.DataContext>
         <vm:MainViewModel/>
     </Window.DataContext>
@@ -138,6 +141,12 @@
                         <Separator/>
                         <MenuItem Header="Options..." Command="{Binding OptionsCommand}"/>
                         <Separator/>
+                        <MenuItem Header="Debug">
+                            <MenuItem Header="Logs"
+                                      Command="{Binding OpenLogFileCommand}"
+                                      ToolTip="Open the current session log file"/>
+                        </MenuItem>
+                        <Separator/>
                         <MenuItem Header="Exit" Command="{Binding ExitCommand}"/>
                     </MenuItem>
                 </Menu>
@@ -153,7 +162,39 @@
         </DockPanel>
 
         <StatusBar DockPanel.Dock="Bottom">
-            <StatusBarItem><TextBlock Text="{Binding Status}"/></StatusBarItem>
+            <StatusBar.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <DockPanel HorizontalAlignment="Stretch"/>
+                </ItemsPanelTemplate>
+            </StatusBar.ItemsPanel>
+            <StatusBarItem DockPanel.Dock="Left">
+                <TextBlock Text="{Binding Status}" TextTrimming="CharacterEllipsis"/>
+            </StatusBarItem>
+            <StatusBarItem DockPanel.Dock="Right"
+                           Visibility="{Binding HasActiveOperations, Converter={StaticResource BoolToVisibility}}">
+                <ProgressBar Width="140" Height="14"
+                             Minimum="0" Maximum="100"
+                             Value="{Binding AggregateProgress, Mode=OneWay}">
+                    <ProgressBar.ToolTip>
+                        <ToolTip DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                            <ItemsControl ItemsSource="{Binding Operations}" MinWidth="260">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="0,3">
+                                            <TextBlock Text="{Binding Description}" FontSize="11"
+                                                       TextTrimming="CharacterEllipsis" MaxWidth="320"/>
+                                            <ProgressBar Width="240" Height="6"
+                                                         Minimum="0" Maximum="100"
+                                                         Value="{Binding Percent, Mode=OneWay}"
+                                                         Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ToolTip>
+                    </ProgressBar.ToolTip>
+                </ProgressBar>
+            </StatusBarItem>
         </StatusBar>
 
         <Grid>
@@ -323,13 +364,20 @@
                     </ListBox.ItemsPanel>
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <StackPanel Width="120" Margin="8" HorizontalAlignment="Center">
+                            <!--
+                                Sized to match Windows 11 Explorer "Large icons":
+                                ~72px icon, ~100px cell width, tight 2-3px margins.
+                                Earlier 120x?x8 layout wasted ~30 % horizontal space.
+                            -->
+                            <StackPanel Width="100" Margin="2" HorizontalAlignment="Center">
                                 <Image Source="{Binding FullPath, Converter={StaticResource IconConverter}, ConverterParameter=Large}"
-                                       Width="96" Height="96" Margin="0,0,0,4"/>
+                                       Width="72" Height="72" Margin="0,2,0,2"
+                                       HorizontalAlignment="Center"/>
                                 <TextBlock Text="{Binding Name}"
                                            TextAlignment="Center"
                                            TextWrapping="Wrap"
-                                           MaxHeight="36"
+                                           MaxHeight="32"
+                                           FontSize="12"
                                            TextTrimming="CharacterEllipsis"/>
                             </StackPanel>
                         </DataTemplate>

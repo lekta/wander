@@ -15,6 +15,7 @@ using Wander.App.ViewModels;
 using Wander.Core;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
+using Wander.Core.Persistence;
 using Wander.Core.Shell;
 // Disambiguate from System.Windows.DragAction (used by QueryContinueDrag).
 using DragAction = Wander.App.DragPreview.DragAction;
@@ -51,6 +52,80 @@ public partial class MainWindow : Window {
     public MainWindow() {
         InitializeComponent();
         Loaded += OnLoaded;
+    }
+
+
+    // --- Window geometry persistence -----------------------------------
+
+    private void OnSourceInitialized(object? sender, EventArgs e) {
+        RestoreWindowGeometry();
+    }
+
+    private void OnClosing(object? sender, CancelEventArgs e) {
+        SaveWindowGeometry();
+    }
+
+    private void RestoreWindowGeometry() {
+        if (!ServiceLocator.IsRegistered<IAppStateStore>()) {
+            return;
+        }
+        var state = ServiceLocator.Get<IAppStateStore>().Load();
+
+        // Restore size first — keeping a sane minimum so a previous truncation
+        // can't wedge the window down to a few pixels.
+        if (state.WindowWidth is double w && w >= 320 &&
+            state.WindowHeight is double h && h >= 240) {
+            Width = w;
+            Height = h;
+        }
+
+        // Restore position, clamped to the virtual screen. This handles the
+        // "saved on a monitor that is no longer connected" case without
+        // dropping the window off-screen.
+        if (state.WindowLeft is double l && state.WindowTop is double t) {
+            double vsLeft = SystemParameters.VirtualScreenLeft;
+            double vsTop = SystemParameters.VirtualScreenTop;
+            double vsRight = vsLeft + SystemParameters.VirtualScreenWidth;
+            double vsBottom = vsTop + SystemParameters.VirtualScreenHeight;
+
+            // Keep at least 100 px of titlebar visible so the user can grab it.
+            double minLeft = vsLeft - Width + 100;
+            double maxLeft = vsRight - 100;
+            double minTop = vsTop;
+            double maxTop = vsBottom - 60;
+
+            Left = Math.Min(Math.Max(l, minLeft), maxLeft);
+            Top = Math.Min(Math.Max(t, minTop), maxTop);
+            WindowStartupLocation = WindowStartupLocation.Manual;
+        }
+
+        if (state.WindowMaximized) {
+            WindowState = WindowState.Maximized;
+        }
+    }
+
+    private void SaveWindowGeometry() {
+        if (!ServiceLocator.IsRegistered<IAppStateStore>()) {
+            return;
+        }
+        var store = ServiceLocator.Get<IAppStateStore>();
+        var existing = store.Load();
+
+        // When the window is currently Maximized, Left/Top/Width/Height
+        // report the maximized rectangle. RestoreBounds gives the geometry
+        // the window had before being maximized — that's what we want to
+        // remember so a future Restore lands at the same size and position.
+        Rect bounds = WindowState == WindowState.Normal
+            ? new Rect(Left, Top, Width, Height)
+            : RestoreBounds;
+
+        store.Save(existing with {
+            WindowLeft = bounds.Left,
+            WindowTop = bounds.Top,
+            WindowWidth = bounds.Width,
+            WindowHeight = bounds.Height,
+            WindowMaximized = WindowState == WindowState.Maximized,
+        });
     }
 
     private MainViewModel Vm => (MainViewModel)DataContext;

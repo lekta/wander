@@ -8,7 +8,7 @@ namespace Wander.Platform.Windows.Logging;
 /// <c>%LOCALAPPDATA%\Wander\logs\</c>. Writes are line-based, timestamped,
 /// and synchronously flushed so a crash still leaves a useful tail.
 /// </summary>
-public sealed class FileLogger : ILogger, IDisposable {
+public sealed class FileLogger : ILogger, ILogFile, IDisposable {
     private readonly StreamWriter _writer;
     private readonly object _lock = new();
     private bool _disposed;

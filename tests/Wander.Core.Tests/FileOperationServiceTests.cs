@@ -1,5 +1,6 @@
 using Wander.Core.FileSystem;
 using Wander.Core.Logging;
+using Wander.Core.Operations;
 using Wander.Core.Tests.Fakes;
 using Wander.Core.Undo;
 
@@ -10,7 +11,8 @@ public class FileOperationServiceTests {
         var fs = new FakeFileSystem();
         var bin = new FakeRecycleBin(fs);
         var undo = new UndoService();
-        var ops = new FileOperationService(fs, bin, undo, NullLogger.Instance);
+        var tracker = new OperationTracker();
+        var ops = new FileOperationService(fs, bin, undo, tracker, NullLogger.Instance);
         return (ops, fs, bin, undo);
     }
 

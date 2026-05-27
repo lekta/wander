@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using Wander.App.Conflict;
 using Wander.App.Util;
 using Wander.Core;
@@ -15,6 +16,7 @@ using Wander.Core.FileSystem;
 using Wander.Core.Icons;
 using Wander.Core.Logging;
 using Wander.Core.Navigation;
+using Wander.Core.Operations;
 using Wander.Core.Persistence;
 using Wander.Core.Shell;
 using Wander.Core.Undo;
@@ -32,6 +34,8 @@ public sealed class MainViewModel : ObservableObject {
     private readonly NavigationService _nav = new();
     private readonly FileOperationService _ops;
     private readonly UndoService _undo;
+    private readonly OperationTracker _tracker;
+    private readonly Dispatcher _dispatcher;
     private readonly ILogger _log;
 
     private string _addressText = "";
@@ -74,21 +78,26 @@ public sealed class MainViewModel : ObservableObject {
             : null;
         _ops = ServiceLocator.Get<FileOperationService>();
         _undo = ServiceLocator.Get<UndoService>();
+        _tracker = ServiceLocator.Get<OperationTracker>();
+        _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
         _log = ServiceLocator.IsRegistered<ILogger>() ? ServiceLocator.Get<ILogger>() : NullLogger.Instance;
 
         Entries = new ObservableCollection<FileSystemEntry>();
         Roots = new ObservableCollection<TreeNodeViewModel>();
+        Operations = new ObservableCollection<OperationViewModel>();
+
+        _tracker.Changed += OnTrackerChanged;
 
         BackCommand = new RelayCommand(_ => GoBack(), _ => _nav.CanGoBack);
         ForwardCommand = new RelayCommand(_ => GoForward(), _ => _nav.CanGoForward);
         UpCommand = new RelayCommand(_ => GoUp(), _ => _nav.CanGoUp);
         NavigateCommand = new RelayCommand(_ => NavigateToAddress());
         OpenCommand = new RelayCommand(p => OpenEntry(p as FileSystemEntry ?? _selectedEntry), _ => _selectedEntry is not null);
-        DeleteCommand = new RelayCommand(_ => DeleteSelected(), _ => _selectedEntries.Count > 0);
+        DeleteCommand = new RelayCommand(_ => _ = DeleteSelectedAsync(permanent: false), _ => _selectedEntries.Count > 0);
         RenameCommand = new RelayCommand(p => Rename(p as string), _ => _selectedEntry is not null);
         CopyCommand = new RelayCommand(_ => Copy(), _ => _selectedEntries.Count > 0);
         CutCommand = new RelayCommand(_ => Cut(), _ => _selectedEntries.Count > 0);
-        PasteCommand = new RelayCommand(_ => Paste(), _ => _clipboard.Count > 0 && _nav.Current is not null);
+        PasteCommand = new RelayCommand(_ => _ = PasteAsync(), _ => _clipboard.Count > 0 && _nav.Current is not null);
         NewFolderCommand = new RelayCommand(_ => NewFolder(), _ => _nav.Current is not null);
         RefreshCommand = new RelayCommand(_ => Refresh());
         SetViewModeCommand = new RelayCommand(p => SetViewMode(p as string));
@@ -97,7 +106,8 @@ public sealed class MainViewModel : ObservableObject {
         PropertiesCommand = new RelayCommand(_ => ShowProperties(), _ => _selectedEntry is not null);
         TogglePreviewCommand = new RelayCommand(_ => IsPreviewVisible = !IsPreviewVisible);
         UndoCommand = new RelayCommand(_ => UndoLast(), _ => _undo.CanUndo);
-        PermanentDeleteCommand = new RelayCommand(_ => DeleteSelected(permanent: true), _ => _selectedEntries.Count > 0);
+        PermanentDeleteCommand = new RelayCommand(_ => _ = DeleteSelectedAsync(permanent: true), _ => _selectedEntries.Count > 0);
+        OpenLogFileCommand = new RelayCommand(_ => OpenLogFile(), _ => ServiceLocator.IsRegistered<ILogFile>());
 
         _undo.Changed += (_, _) => {
             UndoCommand.RaiseCanExecuteChanged();
@@ -113,6 +123,15 @@ public sealed class MainViewModel : ObservableObject {
 
     public ObservableCollection<FileSystemEntry> Entries { get; }
     public ObservableCollection<TreeNodeViewModel> Roots { get; }
+    public ObservableCollection<OperationViewModel> Operations { get; }
+
+    private double _aggregateProgress;
+    public double AggregateProgress {
+        get => _aggregateProgress;
+        private set => SetField(ref _aggregateProgress, value);
+    }
+
+    public bool HasActiveOperations => Operations.Count > 0;
 
     public string? CurrentPath => _nav.Current;
 
@@ -255,6 +274,7 @@ public sealed class MainViewModel : ObservableObject {
     public RelayCommand TogglePreviewCommand { get; }
     public RelayCommand UndoCommand { get; }
     public RelayCommand PermanentDeleteCommand { get; }
+    public RelayCommand OpenLogFileCommand { get; }
 
     public string UndoTooltip => _undo.NextDescription is { } next ? $"Undo: {next}" : "Nothing to undo";
 
@@ -286,6 +306,14 @@ public sealed class MainViewModel : ObservableObject {
         }
 
         if (entry.Kind == EntryKind.File) {
+            // A .lnk that points at a folder should behave like that folder:
+            // navigate inside Wander rather than handing the .lnk to the OS
+            // (which would open it in Explorer). File-targeted shortcuts fall
+            // through to the normal shell launcher — the OS resolves them.
+            if (TryFollowFolderShortcut(entry.FullPath)) {
+                return;
+            }
+
             try {
                 _shell.Open(entry.FullPath);
             } catch (Exception ex) {
@@ -297,7 +325,36 @@ public sealed class MainViewModel : ObservableObject {
         NavigateTo(entry.FullPath);
     }
 
+    private bool TryFollowFolderShortcut(string path) {
+        if (!path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)) {
+            return false;
+        }
+        if (!ServiceLocator.IsRegistered<IShortcutService>()) {
+            return false;
+        }
+
+        string? target;
+        try {
+            target = ServiceLocator.Get<IShortcutService>().Resolve(path);
+        } catch (Exception ex) {
+            _log.Warn($"Resolve shortcut failed: {path} ({ex.Message})");
+            return false;
+        }
+
+        if (string.IsNullOrEmpty(target) || !_fs.DirectoryExists(target)) {
+            return false;
+        }
+
+        _log.Info($"Follow folder shortcut: {path} -> {target}");
+        NavigateTo(target);
+        return true;
+    }
+
     public void HandleDrop(IReadOnlyList<string> sourcePaths, string? targetFolder, DropEffect effect) {
+        _ = HandleDropAsync(sourcePaths, targetFolder, effect);
+    }
+
+    private async Task HandleDropAsync(IReadOnlyList<string> sourcePaths, string? targetFolder, DropEffect effect) {
         if (sourcePaths.Count == 0) {
             return;
         }
@@ -318,12 +375,12 @@ public sealed class MainViewModel : ObservableObject {
         }
 
         _log.Info($"Drop: {effect} {sourcePaths.Count} item(s) into {targetFolder}");
-        var resolver = new InteractiveConflictResolver();
+        var resolver = new DispatcherConflictResolver(new InteractiveConflictResolver());
         IReadOnlyList<FileOperationService.BatchItemResult> results;
         try {
             results = effect == DropEffect.Move
-                ? _ops.MoveMany(sourcePaths, targetFolder, resolver)
-                : _ops.CopyMany(sourcePaths, targetFolder, resolver);
+                ? await _ops.MoveManyAsync(sourcePaths, targetFolder, resolver)
+                : await _ops.CopyManyAsync(sourcePaths, targetFolder, resolver);
         } catch (Exception ex) {
             _log.Error($"Drop failed: {effect} -> {targetFolder}", ex);
             Status = $"Drop failed: {ex.Message}";
@@ -408,7 +465,11 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
-        _stateStore.Save(new AppState {
+        // Read-modify-write: AppState now also carries window geometry, which
+        // the View persists separately. If we replaced the whole record here
+        // we'd silently wipe those fields on every navigation/preview toggle.
+        var current = _stateStore.Load();
+        _stateStore.Save(current with {
             LastPath = _nav.Current,
             ViewMode = _viewMode.ToString(),
             ExpandedPaths = CollectExpanded(),
@@ -528,6 +589,23 @@ public sealed class MainViewModel : ObservableObject {
     private void SetViewMode(string? name) {
         if (Enum.TryParse<ViewMode>(name, out var mode)) {
             ViewMode = mode;
+        }
+    }
+
+    private void OpenLogFile() {
+        if (!ServiceLocator.IsRegistered<ILogFile>()) {
+            Status = "Logging is not configured.";
+            return;
+        }
+        string path = ServiceLocator.Get<ILogFile>().FilePath;
+        if (string.IsNullOrEmpty(path) || !File.Exists(path)) {
+            Status = "Log file not found.";
+            return;
+        }
+        try {
+            _shell.Open(path);
+        } catch (Exception ex) {
+            Status = $"Open log failed: {ex.Message}";
         }
     }
 
@@ -913,21 +991,23 @@ public sealed class MainViewModel : ObservableObject {
 
     // --- Destructive / clipboard ops (always confirm, Cancel-default) --
 
-    private void DeleteSelected(bool permanent = false) {
+    private async Task DeleteSelectedAsync(bool permanent) {
         if (_selectedEntries.Count == 0) {
             return;
         }
 
-        string verb = permanent ? "Permanently delete" : "Delete";
+        var snapshot = _selectedEntries.ToList();
+        string verb = permanent ? "Permanently delete" : "Move to recycle bin";
+        string title = permanent ? "Confirm permanent deletion" : "Confirm move to recycle bin";
         string message;
-        if (_selectedEntries.Count == 1) {
-            var e0 = _selectedEntries[0];
+        if (snapshot.Count == 1) {
+            var e0 = snapshot[0];
             string kind = e0.Kind == EntryKind.Directory ? "folder" : "file";
             message = $"{verb} {kind} '{e0.Name}'?\n\n{e0.FullPath}";
         } else {
-            message = $"{verb} {_selectedEntries.Count} items?\n\n" +
-                string.Join("\n", _selectedEntries.Take(5).Select(e => "• " + e.Name)) +
-                (_selectedEntries.Count > 5 ? $"\n… and {_selectedEntries.Count - 5} more" : "");
+            message = $"{verb} {snapshot.Count} items?\n\n" +
+                string.Join("\n", snapshot.Take(5).Select(e => "• " + e.Name)) +
+                (snapshot.Count > 5 ? $"\n… and {snapshot.Count - 5} more" : "");
         }
         if (permanent) {
             message += "\n\nThis cannot be undone.";
@@ -935,17 +1015,17 @@ public sealed class MainViewModel : ObservableObject {
 
         var result = MessageBox.Show(
             message,
-            permanent ? "Confirm permanent deletion" : "Confirm deletion",
+            title,
             MessageBoxButton.OKCancel,
             permanent ? MessageBoxImage.Error : MessageBoxImage.Warning,
             MessageBoxResult.Cancel);
 
         if (result != MessageBoxResult.OK) {
-            _log.Info($"Delete cancelled by user (permanent={permanent}, items={_selectedEntries.Count})");
+            _log.Info($"Delete cancelled by user (permanent={permanent}, items={snapshot.Count})");
             return;
         }
 
-        var readOnlys = _selectedEntries.Where(en => en.IsReadOnly).ToList();
+        var readOnlys = snapshot.Where(en => en.IsReadOnly).ToList();
         if (readOnlys.Count > 0) {
             string list = string.Join("\n", readOnlys.Take(5).Select(en => "• " + en.Name)) +
                 (readOnlys.Count > 5 ? $"\n… and {readOnlys.Count - 5} more" : "");
@@ -962,24 +1042,36 @@ public sealed class MainViewModel : ObservableObject {
             if (roResult != MessageBoxResult.OK) {
                 return;
             }
-        }
-
-        foreach (var entry in _selectedEntries.ToList()) {
-            try {
-                if (entry.IsReadOnly) {
-                    _fs.ClearReadOnly(entry.FullPath);
+            foreach (var ro in readOnlys) {
+                try {
+                    _fs.ClearReadOnly(ro.FullPath);
+                } catch (Exception ex) {
+                    _log.Error($"ClearReadOnly failed: {ro.FullPath}", ex);
                 }
-                if (permanent) {
-                    _ops.PermanentDelete(entry.FullPath);
-                } else {
-                    _ops.Delete(entry.FullPath);
-                }
-            } catch (Exception ex) {
-                _log.Error($"Delete failed for {entry.FullPath}", ex);
-                Status = $"Delete failed for {entry.Name}: {DescribeError(ex, entry.FullPath)}";
             }
         }
+
+        var paths = snapshot.Select(e => e.FullPath).ToList();
+        IReadOnlyList<FileOperationService.DeleteResult> results;
+        try {
+            results = await _ops.DeleteManyAsync(paths, permanent);
+        } catch (Exception ex) {
+            _log.Error($"Delete batch failed", ex);
+            Status = $"Delete failed: {ex.Message}";
+            return;
+        }
+
         Refresh();
+
+        int ok = results.Count(r => r.Status == FileOperationService.DeleteStatus.Ok);
+        int failed = results.Count(r => r.Status == FileOperationService.DeleteStatus.Failed);
+        if (failed > 0) {
+            var firstFail = results.First(r => r.Status == FileOperationService.DeleteStatus.Failed);
+            string detail = firstFail.Error is null ? "" : ": " + DescribeError(firstFail.Error, firstFail.Path);
+            Status = $"{(permanent ? "Deleted" : "Recycled")} {ok}, {failed} failed{detail}";
+        } else {
+            Status = $"{(permanent ? "Deleted" : "Recycled")} {ok} item(s)";
+        }
     }
 
     private void UndoLast() {
@@ -1032,33 +1124,36 @@ public sealed class MainViewModel : ObservableObject {
         Status = $"Cut {_clipboard.Count} item(s)";
     }
 
-    private void Paste() {
+    private async Task PasteAsync() {
         if (_clipboard.Count == 0 || _nav.Current is null) {
             return;
         }
 
-        var reason = PathSafety.DetectSelfDrop(_clipboard, _nav.Current, out string? offender);
+        string target = _nav.Current;
+        var sources = _clipboard.ToList();
+
+        var reason = PathSafety.DetectSelfDrop(sources, target, out string? offender);
         if (reason == SelfDropReason.IntoOwnDescendant || reason == SelfDropReason.Same) {
-            string text = PathSafety.FormatReason(reason, offender, _nav.Current);
+            string text = PathSafety.FormatReason(reason, offender, target);
             MessageBox.Show(text, "Cannot paste", MessageBoxButton.OK, MessageBoxImage.Warning);
             Status = text;
             return;
         }
 
-        if (_clipboardIsCut && !ConfirmMove(_clipboard, _nav.Current)) {
+        bool wasCut = _clipboardIsCut;
+        if (wasCut && !ConfirmMove(sources, target)) {
             return;
         }
 
-        bool wasCut = _clipboardIsCut;
-        _log.Info($"Paste: {(wasCut ? "move" : "copy")} {_clipboard.Count} item(s) into {_nav.Current}");
-        var resolver = new InteractiveConflictResolver();
+        _log.Info($"Paste: {(wasCut ? "move" : "copy")} {sources.Count} item(s) into {target}");
+        var resolver = new DispatcherConflictResolver(new InteractiveConflictResolver());
         IReadOnlyList<FileOperationService.BatchItemResult> results;
         try {
             results = wasCut
-                ? _ops.MoveMany(_clipboard, _nav.Current, resolver)
-                : _ops.CopyMany(_clipboard, _nav.Current, resolver);
+                ? await _ops.MoveManyAsync(sources, target, resolver)
+                : await _ops.CopyManyAsync(sources, target, resolver);
         } catch (Exception ex) {
-            _log.Error($"Paste failed into {_nav.Current}", ex);
+            _log.Error($"Paste failed into {target}", ex);
             Status = $"Paste failed: {ex.Message}";
             return;
         }
@@ -1067,7 +1162,7 @@ public sealed class MainViewModel : ObservableObject {
             _clipboard.Clear();
         }
         Refresh();
-        ReportBatchResults(results, wasCut ? "Moved" : "Copied", _nav.Current);
+        ReportBatchResults(results, wasCut ? "Moved" : "Copied", target);
     }
 
     private void ReportBatchResults(IReadOnlyList<FileOperationService.BatchItemResult> results, string verb, string target) {
@@ -1130,6 +1225,31 @@ public sealed class MainViewModel : ObservableObject {
         }
         return ex.Message;
     }
+
+    // --- Operation progress (status bar) -------------------------------
+
+    private void OnTrackerChanged(object? sender, EventArgs e) {
+        if (_dispatcher.CheckAccess()) {
+            RebuildOperations();
+        } else {
+            _dispatcher.BeginInvoke(RebuildOperations);
+        }
+    }
+
+    private void RebuildOperations() {
+        var snapshots = _tracker.Snapshot();
+        Operations.Clear();
+        long totalCompleted = 0;
+        long totalSteps = 0;
+        foreach (var s in snapshots) {
+            Operations.Add(new OperationViewModel(s));
+            totalCompleted += s.Completed;
+            totalSteps += s.Total;
+        }
+        AggregateProgress = totalSteps > 0 ? (double)totalCompleted * 100.0 / totalSteps : 0.0;
+        Raise(nameof(HasActiveOperations));
+    }
+
 
     private static bool ConfirmMove(IReadOnlyList<string> sources, string target) {
         string message;

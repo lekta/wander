@@ -31,10 +31,12 @@
   или собственный STA-поток. И не освобождаем RCW через
   `Marshal.ReleaseComObject` — для коротких операций приемлемо, но
   для долгоживущей сессии стоит добавить.
-- **FileOperationService — async overloads** — все методы синхронные. Когда
-  начнём выносить долгие копирования с UI-потока, добавлять Task-вариант;
-  UndoService.BeginOperation уже умеет держать guard на весь жизненный цикл
-  async-операции (CanUndo вернёт false пока IsBusy).
+- **FileOperationService — async overloads (частично сделано)** —
+  батч-операции (CopyManyAsync / MoveManyAsync / DeleteManyAsync) с
+  репортингом в OperationTracker уже есть, VM использует их.
+  Single-item Copy / Move / Delete / PermanentDelete остались синхронными —
+  их зовут только тесты, но если из app-кода понадобится прямой одиночный
+  вызов, его тоже нужно перевести в Task.
 - **Undo не переживает рестарт** — стек живёт в памяти. После закрытия
   Wander Ctrl+Z пуст, но файлы в системной корзине остаются —
   пользователь может восстановить через Explorer. Persisting undo log
@@ -47,9 +49,12 @@
 - **Drag&drop UX** — нет визуального drop-indicator'а на TreeView/списках
   (подсветка узла под курсором), используется только системный курсор
   Copy/Move. Драг-ghost тоже системный по умолчанию.
-- **Долгие файловые операции** — recursive Copy/Move большой папки идёт
-  синхронно на UI-потоке, окно зависает без прогресса/отмены. Пора будет
-  выносить в Task с CancellationToken и прогресс-баром в статусе.
+- **Долгие файловые операции — cancel + per-file прогресс** — batch-операции
+  теперь async и репортят прогресс в OperationTracker (см. прогресс-бар
+  в статусе). Из коробки нет UI для отмены идущей операции (CancellationToken
+  пробрасывается, но кнопки нет), и прогресс считается по элементам верхнего
+  уровня, не по байтам. Для перекидывания одной 5-Гб папки бар надолго
+  встанет на 0% — рендерить per-file/per-byte прогресс отдельной задачей.
 - **PromptDialog (Rename)** — не выделяет имя без расширения, нет валидации
   недопустимых символов в имени файла, нет немедленного rename-in-place
   в строке списка (как в Explorer по F2).
@@ -79,15 +84,25 @@
   отдельной грамматикой через extension; у нас xaml есть в списке code,
   но AvalonEdit'у не хватает XAML-definition в стандартной поставке (надо
   доустановить из его репозитория). Сейчас xaml открывается как plain XML.
-- **.lnk overlay для jumbo (LargeIcons)** — `SHGFI_LINKOVERLAY` работает
-  только с `SHGetFileInfo` (small/normal). Jumbo идёт через
-  `SHGetImageList` SHIL_JUMBO → overlay system не накладывает. Решение —
-  композитом наложить arrow-PNG из ресурсов после получения jumbo-иконки.
-  Затрагивает только режим LargeIcons; Details/Tiles/Tree уже корректные.
 - **Ctrl+L** — фокус идёт в адресную строку, но текст не selectAll
   визуально подсвечивается синим, проверь на машине; если что — TextBox
   Focus + SelectAll иногда требуют BeginInvoke на Dispatcher.
+- **SystemIconProvider — кэш без ограничений** — после переезда на
+  `IShellItemImageFactory` LargeIcons кэшируется per-path (нужно для
+  тумбнэйлов изображений/видео). В папке с 10К+ файлов это N×~30 KB
+  PNG в памяти сессии. На v1 терпимо, но стоит добавить LRU bound
+  (например, 500 записей) когда станет заметно.
+- **SystemIconProvider — синхронный IShellItemImageFactory.GetImage** —
+  вызывается из `IconConverter` на UI-потоке при биндинге каждой
+  ячейки WrapPanel. Для уже закэшированных файлов мгновенно, но первое
+  открытие большой папки с видео может фризить UI (shell декодирует
+  первый кадр). Сделать async-загрузку с временным placeholder-иконкой
+  и обновлением через DispatcherTimer/PriorityBinding.
 
 ## Закрыто
 
-(пусто)
+- **.lnk overlay для jumbo (LargeIcons)** — для `.lnk` теперь запрашиваем
+  индекс overlay через `SHGFI_OVERLAYINDEX`, получаем jumbo-overlay-иконку
+  через `IImageList.GetOverlayImage` + `GetIcon` и композитим её поверх
+  target-иконки в `SystemIconProvider.ComposeIconWithOverlay`. Бадж стрелки
+  теперь виден в режиме Large icons.
