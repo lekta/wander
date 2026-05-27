@@ -8,7 +8,9 @@
       "PowerShell(.\\tools\\check.bat)",
       "PowerShell(.\\tools\\check.bat:*)",
       "Bash(cmd /c tools\\check.bat)",
-      "Bash(cmd /c tools\\check.bat:*)"
+      "Bash(cmd /c tools\\check.bat:*)",
+      "Bash(dotnet build *)",
+      "Bash(dotnet test *)"
     ]
   }
 }

@@ -991,10 +991,6 @@ public sealed class MainViewModel : ObservableObject {
             _log.Info($"Undo: {action.Description}");
             Status = $"Undone: {action.Description}";
             Refresh();
-        } catch (NotImplementedException ex) {
-            // Restoring from the recycle bin is the one path that still throws this.
-            _log.Warn($"Undo not implemented: {ex.Message}");
-            Status = ex.Message;
         } catch (Exception ex) {
             _log.Error("Undo failed", ex);
             Status = $"Undo failed: {ex.Message}";

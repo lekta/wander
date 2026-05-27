@@ -12,13 +12,25 @@
 
 ## Открыто
 
-- **ShellRecycleBin.Restore не реализован** —
-  `Wander.Platform.Windows/FileSystem/ShellRecycleBin.cs`. Send работает
-  (SHFileOperation/FOF_ALLOWUNDO), Restore кидает NotImplementedException.
-  Делать через `IFileOperation::CopyItem` (а не Shell32 dynamic InvokeVerb,
-  чтобы не зависеть от локализованного имени verb'а "Restore"/"Восстановить").
-  Плюс: обработка коллизий по дате удаления и кейс «target path уже занят».
-  В коде в Restore лежит детальный TODO-комментарий с эскизом.
+- **ShellRecycleBin.Restore — проверить на разных Windows-локалях** —
+  реализовано через `FolderItemVerb.DoIt()`, имя verb'а ищется в списке
+  по совпадению с локализованной строкой. Сейчас прошиты `Restore` (en)
+  и `Восстановить` (ru) в `ShellRecycleBin.IsRestoreVerb`. Для других
+  локалей (de, fr, es, zh, ja, …) Restore кинет понятный IOException
+  с подсказкой. Когда поедем за пределы en/ru — расширить список.
+  Заодно проверить, что `GetDetailsOf(item, 1/2)` — это всё ещё
+  "Original Location" / "Date deleted" на не-en системах (на Win10/11
+  должно быть стабильно, но не на 100%).
+- **ShellRecycleBin.Restore — кейс «target path занят»** —
+  если между Delete и Undo пользователь создал файл с тем же именем,
+  Shell сейчас молча допишет «(1)» к восстанавливаемому. Доработать
+  обработку, когда понадобится (для v1 этого кейса не должно случаться часто).
+- **ShellRecycleBin — STA + COM RCW lifetime** — Shell.Application
+  COM-объекты создаются на UI-потоке (STA, всё ОК пока операции
+  синхронные). При уходе в async для Restore нужен Dispatcher.Invoke
+  или собственный STA-поток. И не освобождаем RCW через
+  `Marshal.ReleaseComObject` — для коротких операций приемлемо, но
+  для долгоживущей сессии стоит добавить.
 - **FileOperationService — async overloads** — все методы синхронные. Когда
   начнём выносить долгие копирования с UI-потока, добавлять Task-вариант;
   UndoService.BeginOperation уже умеет держать guard на весь жизненный цикл
