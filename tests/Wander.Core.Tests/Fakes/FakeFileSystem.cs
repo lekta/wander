@@ -23,14 +23,14 @@ internal sealed class FakeFileSystem : IFileSystem {
         foreach (string d in Directories) {
             string? parent = System.IO.Path.GetDirectoryName(d);
             if (string.Equals(parent, path, StringComparison.OrdinalIgnoreCase)) {
-                entries.Add(new FileSystemEntry(System.IO.Path.GetFileName(d), d, EntryKind.Directory, null, DateTime.MinValue, false, false));
+                entries.Add(new FileSystemEntry(System.IO.Path.GetFileName(d), d, EntryKind.Directory, null, DateTime.MinValue, false, false, false));
             }
         }
 
         foreach (string f in Files.Keys) {
             string? parent = System.IO.Path.GetDirectoryName(f);
             if (string.Equals(parent, path, StringComparison.OrdinalIgnoreCase)) {
-                entries.Add(new FileSystemEntry(System.IO.Path.GetFileName(f), f, EntryKind.File, Files[f].Length, DateTime.MinValue, false, false));
+                entries.Add(new FileSystemEntry(System.IO.Path.GetFileName(f), f, EntryKind.File, Files[f].Length, DateTime.MinValue, false, false, false));
             }
         }
 
@@ -43,10 +43,10 @@ internal sealed class FakeFileSystem : IFileSystem {
 
     public FileSystemEntry? GetEntry(string path) {
         if (Directories.Contains(path)) {
-            return new FileSystemEntry(System.IO.Path.GetFileName(path), path, EntryKind.Directory, null, DateTime.MinValue, false, false);
+            return new FileSystemEntry(System.IO.Path.GetFileName(path), path, EntryKind.Directory, null, DateTime.MinValue, false, false, false);
         }
         if (Files.TryGetValue(path, out var bytes)) {
-            return new FileSystemEntry(System.IO.Path.GetFileName(path), path, EntryKind.File, bytes.Length, DateTime.MinValue, false, false);
+            return new FileSystemEntry(System.IO.Path.GetFileName(path), path, EntryKind.File, bytes.Length, DateTime.MinValue, false, false, false);
         }
         return null;
     }

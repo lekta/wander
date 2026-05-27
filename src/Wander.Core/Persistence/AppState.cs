@@ -18,4 +18,11 @@ public sealed record AppState {
     public double? WindowWidth { get; init; }
     public double? WindowHeight { get; init; }
     public bool WindowMaximized { get; init; }
+
+    /// <summary>
+    /// User preferences (separate from session-state above). Always
+    /// non-null so consumers don't have to null-check; the default
+    /// record represents the out-of-the-box settings.
+    /// </summary>
+    public AppSettings Settings { get; init; } = new();
 }

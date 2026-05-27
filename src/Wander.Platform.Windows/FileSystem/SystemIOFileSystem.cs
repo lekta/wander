@@ -59,7 +59,8 @@ public sealed class SystemIOFileSystem : IFileSystem {
                 Size: null,
                 ModifiedUtc: DateTime.MinValue,
                 IsHidden: false,
-                IsReadOnly: false));
+                IsReadOnly: false,
+                IsSystem: false));
         }
 
         return result;
@@ -173,7 +174,8 @@ public sealed class SystemIOFileSystem : IFileSystem {
                 Size: null,
                 ModifiedUtc: SafeUtc(() => info.LastWriteTimeUtc),
                 IsHidden: info.Attributes.HasFlag(FileAttributes.Hidden),
-                IsReadOnly: info.Attributes.HasFlag(FileAttributes.ReadOnly));
+                IsReadOnly: info.Attributes.HasFlag(FileAttributes.ReadOnly),
+                IsSystem: info.Attributes.HasFlag(FileAttributes.System));
         }
 
         var fileInfo = new FileInfo(path);
@@ -184,7 +186,8 @@ public sealed class SystemIOFileSystem : IFileSystem {
             Size: SafeLong(() => fileInfo.Length),
             ModifiedUtc: SafeUtc(() => fileInfo.LastWriteTimeUtc),
             IsHidden: fileInfo.Attributes.HasFlag(FileAttributes.Hidden),
-            IsReadOnly: fileInfo.Attributes.HasFlag(FileAttributes.ReadOnly));
+            IsReadOnly: fileInfo.Attributes.HasFlag(FileAttributes.ReadOnly),
+            IsSystem: fileInfo.Attributes.HasFlag(FileAttributes.System));
     }
 
     private static DateTime SafeUtc(Func<DateTime> f) {

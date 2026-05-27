@@ -9,6 +9,8 @@
         Icon="Assets\app.ico"
         Height="700" Width="1100"
         WindowStartupLocation="CenterScreen"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
         AllowDrop="True"
         DragOver="OnDragOver"
         Drop="OnDrop"
@@ -141,12 +143,13 @@
                         <Separator/>
                         <MenuItem Header="Options..." Command="{Binding OptionsCommand}"/>
                         <Separator/>
-                        <MenuItem Header="Debug">
+                        <MenuItem Header="Debug"
+                                  Visibility="{Binding Settings.ShowDebugMenu, Converter={StaticResource BoolToVisibility}}">
                             <MenuItem Header="Logs"
                                       Command="{Binding OpenLogFileCommand}"
                                       ToolTip="Open the current session log file"/>
                         </MenuItem>
-                        <Separator/>
+                        <Separator Visibility="{Binding Settings.ShowDebugMenu, Converter={StaticResource BoolToVisibility}}"/>
                         <MenuItem Header="Exit" Command="{Binding ExitCommand}"/>
                     </MenuItem>
                 </Menu>
@@ -365,19 +368,27 @@
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <!--
-                                Sized to match Windows 11 Explorer "Large icons":
-                                ~72px icon, ~100px cell width, tight 2-3px margins.
-                                Earlier 120x?x8 layout wasted ~30 % horizontal space.
+                                Live-bound to Settings.LargeIcon* so the Settings dialog
+                                can resize tiles on the fly. The ItemTemplate's own
+                                DataContext is the FileSystemEntry, so each binding
+                                hops back up to the Window's DataContext (MainViewModel)
+                                via RelativeSource.
                             -->
-                            <StackPanel Width="100" Margin="2" HorizontalAlignment="Center">
+                            <StackPanel HorizontalAlignment="Center"
+                                        Width="{Binding DataContext.Settings.LargeIconCellWidth, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        Margin="{Binding DataContext.Settings.LargeIconMargin, RelativeSource={RelativeSource AncestorType=Window}}">
                                 <Image Source="{Binding FullPath, Converter={StaticResource IconConverter}, ConverterParameter=Large}"
-                                       Width="72" Height="72" Margin="0,2,0,2"
-                                       HorizontalAlignment="Center"/>
+                                       Width="{Binding DataContext.Settings.LargeIconImageSize, RelativeSource={RelativeSource AncestorType=Window}}"
+                                       Height="{Binding DataContext.Settings.LargeIconImageSize, RelativeSource={RelativeSource AncestorType=Window}}"
+                                       Margin="0,2,0,2"
+                                       HorizontalAlignment="Center"
+                                       RenderOptions.BitmapScalingMode="HighQuality"
+                                       UseLayoutRounding="True"/>
                                 <TextBlock Text="{Binding Name}"
                                            TextAlignment="Center"
                                            TextWrapping="Wrap"
                                            MaxHeight="32"
-                                           FontSize="12"
+                                           FontSize="{Binding DataContext.Settings.LargeIconLabelFontSize, RelativeSource={RelativeSource AncestorType=Window}}"
                                            TextTrimming="CharacterEllipsis"/>
                             </StackPanel>
                         </DataTemplate>

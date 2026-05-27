@@ -365,6 +365,7 @@ public sealed class FileOperationService {
             Size: null,
             ModifiedUtc: DateTime.MinValue,
             IsHidden: false,
-            IsReadOnly: false);
+            IsReadOnly: false,
+            IsSystem: false);
     }
 }

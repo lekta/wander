@@ -86,6 +86,12 @@ public sealed class MainViewModel : ObservableObject {
         Roots = new ObservableCollection<TreeNodeViewModel>();
         Operations = new ObservableCollection<OperationViewModel>();
 
+        // Settings VM is owned by MainVM and shared with the dialog when it
+        // opens. Any mutation triggers a refresh-or-save side effect via
+        // OnSettingsChanged.
+        Settings = new SettingsViewModel();
+        Settings.PropertyChanged += OnSettingsChanged;
+
         _tracker.Changed += OnTrackerChanged;
 
         BackCommand = new RelayCommand(_ => GoBack(), _ => _nav.CanGoBack);
@@ -102,7 +108,7 @@ public sealed class MainViewModel : ObservableObject {
         RefreshCommand = new RelayCommand(_ => Refresh());
         SetViewModeCommand = new RelayCommand(p => SetViewMode(p as string));
         ExitCommand = new RelayCommand(_ => Application.Current?.Shutdown());
-        OptionsCommand = new RelayCommand(_ => Status = "Options dialog is not implemented yet.");
+        OptionsCommand = new RelayCommand(_ => OpenSettingsDialog());
         PropertiesCommand = new RelayCommand(_ => ShowProperties(), _ => _selectedEntry is not null);
         TogglePreviewCommand = new RelayCommand(_ => IsPreviewVisible = !IsPreviewVisible);
         UndoCommand = new RelayCommand(_ => UndoLast(), _ => _undo.CanUndo);
@@ -124,6 +130,14 @@ public sealed class MainViewModel : ObservableObject {
     public ObservableCollection<FileSystemEntry> Entries { get; }
     public ObservableCollection<TreeNodeViewModel> Roots { get; }
     public ObservableCollection<OperationViewModel> Operations { get; }
+
+    /// <summary>
+    /// User preferences. XAML binds to this (e.g. tile sizes) and the
+    /// settings dialog edits it directly. Side effects (re-listing the
+    /// folder when ShowHidden flips, persisting to disk) run through
+    /// <see cref="OnSettingsChanged"/>.
+    /// </summary>
+    public SettingsViewModel Settings { get; }
 
     private double _aggregateProgress;
     public double AggregateProgress {
@@ -431,6 +445,11 @@ public sealed class MainViewModel : ObservableObject {
 
         _restoring = true;
         try {
+            // Settings before view mode / navigation: ShowHidden affects
+            // what Refresh() displays, so load filters before the first
+            // Refresh fires via the navigation change below.
+            Settings.ApplyFrom(state.Settings);
+
             if (!string.IsNullOrEmpty(state.ViewMode) && Enum.TryParse<ViewMode>(state.ViewMode, out var mode)) {
                 _viewMode = mode;
                 Raise(nameof(ViewMode));
@@ -447,8 +466,13 @@ public sealed class MainViewModel : ObservableObject {
                 ExpandToPath(path, select: false);
             }
 
-            if (!string.IsNullOrEmpty(state.LastPath) && _fs.DirectoryExists(state.LastPath)) {
-                _nav.NavigateTo(state.LastPath);
+            // Honour the RestoreLastFolder preference: when off, ignore
+            // LastPath and start at the first drive.
+            bool wantRestore = Settings.RestoreLastFolder
+                && !string.IsNullOrEmpty(state.LastPath)
+                && _fs.DirectoryExists(state.LastPath);
+            if (wantRestore) {
+                _nav.NavigateTo(state.LastPath!);
             } else {
                 string? first = Roots.FirstOrDefault()?.FullPath;
                 if (first is not null) {
@@ -475,6 +499,7 @@ public sealed class MainViewModel : ObservableObject {
             ExpandedPaths = CollectExpanded(),
             IsPreviewVisible = _isPreviewVisible,
             PreviewWidth = _previewWidth,
+            Settings = Settings.ToRecord(),
         });
     }
 
@@ -540,11 +565,19 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
+        bool showHidden = Settings.ShowHidden;
+        bool showSystem = Settings.ShowSystem;
+
         try {
+            int hidden = 0;
             foreach (var e in _fs.Enumerate(_nav.Current)) {
+                if (!showHidden && e.IsHidden) { hidden++; continue; }
+                if (!showSystem && e.IsSystem) { hidden++; continue; }
                 Entries.Add(e);
             }
-            Status = $"{Entries.Count} items";
+            Status = hidden > 0
+                ? $"{Entries.Count} items ({hidden} hidden)"
+                : $"{Entries.Count} items";
         } catch (Exception ex) {
             Status = $"Error: {ex.Message}";
         }
@@ -590,6 +623,33 @@ public sealed class MainViewModel : ObservableObject {
         if (Enum.TryParse<ViewMode>(name, out var mode)) {
             ViewMode = mode;
         }
+    }
+
+    private void OnSettingsChanged(object? sender, PropertyChangedEventArgs e) {
+        // Side effects: re-list when filters change, persist always.
+        // Switching the Categories list-selection in the dialog should
+        // NOT trigger a Save — that's a UI-only property, not a setting.
+        if (e.PropertyName == nameof(SettingsViewModel.SelectedCategory)) {
+            return;
+        }
+
+        if (e.PropertyName == nameof(SettingsViewModel.ShowHidden) ||
+            e.PropertyName == nameof(SettingsViewModel.ShowSystem)) {
+            Refresh();
+        }
+
+        SaveState();
+    }
+
+    private void OpenSettingsDialog() {
+        // Lazy import: the View type lives in Wander.App.Views and is
+        // referenced via its full namespace to keep MainViewModel free
+        // of view-layer using directives at the top of the file.
+        var dlg = new Wander.App.Views.SettingsWindow {
+            DataContext = Settings,
+            Owner = Application.Current?.MainWindow,
+        };
+        dlg.ShowDialog();
     }
 
     private void OpenLogFile() {

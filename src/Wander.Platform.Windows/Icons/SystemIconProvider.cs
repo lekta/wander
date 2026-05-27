@@ -3,7 +3,9 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
+using Wander.Core;
 using Wander.Core.Icons;
+using Wander.Core.Logging;
 
 namespace Wander.Platform.Windows.Icons;
 
@@ -149,10 +151,34 @@ public sealed class SystemIconProvider : IIconProvider {
 
         try {
             int overlayIndex = GetOverlayIndex(path);
+            bool isLnk = path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase);
+
+            // Defensive fallback: if the shell didn't report an overlay
+            // for a .lnk, force index 1 (the well-known "link arrow"
+            // slot). Some Windows builds skip overlay computation when
+            // SHGFI_ICON isn't part of the call; this is a safety net.
+            if (overlayIndex == 0 && isLnk) {
+                overlayIndex = 1;
+                IconLog($"forced overlay=1 for .lnk (shell reported none): {path}");
+            }
+
+            if (isLnk) {
+                IconLog($"overlay query: path={path} idx={overlayIndex}");
+            }
+
             if (overlayIndex > 0) {
                 using Bitmap? overlayBmp = LoadOverlayBitmap(overlayIndex);
+                if (isLnk) {
+                    IconLog($"overlay bitmap: loaded={overlayBmp is not null}" +
+                            (overlayBmp is not null
+                                ? $" size={overlayBmp.Width}x{overlayBmp.Height} fmt={overlayBmp.PixelFormat}"
+                                : ""));
+                }
                 if (overlayBmp is not null) {
                     CompositeOverlay(baseBmp, overlayBmp);
+                    if (isLnk) {
+                        IconLog($"overlay composited onto base ({baseBmp.Width}x{baseBmp.Height})");
+                    }
                 }
             }
 
@@ -162,6 +188,21 @@ public sealed class SystemIconProvider : IIconProvider {
         } finally {
             baseBmp.Dispose();
         }
+    }
+
+
+    // Diagnostic logging — wired through the standard ILogger so the
+    // user can read what happened via Debug → Logs. Lazily resolved to
+    // avoid a hard dependency: tests register a NullLogger, and an
+    // unconfigured ServiceLocator just silently no-ops.
+    private static ILogger? _log;
+    private static bool _logResolved;
+    private static void IconLog(string msg) {
+        if (!_logResolved) {
+            _logResolved = true;
+            _log = ServiceLocator.IsRegistered<ILogger>() ? ServiceLocator.Get<ILogger>() : null;
+        }
+        _log?.Info("[icon] " + msg);
     }
 
 
@@ -209,9 +250,17 @@ public sealed class SystemIconProvider : IIconProvider {
     /// <summary>
     /// Asks the shell which overlay (link arrow, shared hand, …) applies
     /// to <paramref name="path"/>. Returns 0 when none, 1..15 otherwise.
+    ///
+    /// Includes <c>SHGFI_ICON</c> in the call even though we don't use
+    /// the returned icon — empirically, on Windows 11 some builds skip
+    /// overlay-index computation when only <c>SHGFI_SYSICONINDEX</c>
+    /// is set. The MSDN wording ("Modifies SHGFI_ICON. Modifies
+    /// SHGFI_SYSICONINDEX…") is ambiguous about whether both forms are
+    /// supported; the doc-blessed sample uses SHGFI_ICON, so we do too
+    /// and destroy the throwaway HICON.
     /// </summary>
     private static int GetOverlayIndex(string path) {
-        uint flags = SHGFI_OVERLAYINDEX | SHGFI_SYSICONINDEX;
+        uint flags = SHGFI_OVERLAYINDEX | SHGFI_ICON;
         bool exists = File.Exists(path) || System.IO.Directory.Exists(path);
         if (!exists) {
             flags |= SHGFI_USEFILEATTRIBUTES;
@@ -224,51 +273,111 @@ public sealed class SystemIconProvider : IIconProvider {
             ref info,
             (uint)Marshal.SizeOf<SHFILEINFO>(),
             flags);
+        if (info.hIcon != IntPtr.Zero) {
+            DestroyIcon(info.hIcon);
+        }
         if (res == IntPtr.Zero) {
             return 0;
         }
 
-        // SHGFI_OVERLAYINDEX encodes the overlay index into the upper byte
-        // of iIcon. Bits 24..27 in practice (Windows defines 0..15), but
-        // MSDN says "upper eight bits" so we mask 0xFF defensively.
-        return (info.iIcon >> 24) & 0xFF;
+        // Overlay index lives in the upper byte of iIcon. Use UNSIGNED
+        // right-shift so we don't sign-extend a negative iIcon into a
+        // bogus 0xFF overlay value.
+        return (int)(((uint)info.iIcon) >> 24) & 0xFF;
     }
 
 
     /// <summary>
     /// Fetches the overlay-only icon (e.g. just the link arrow on a
-    /// transparent canvas) from the shell's 48-px system image list.
-    /// The jumbo image list does NOT reliably contain overlays — they
-    /// live in the smaller image lists. 48 px scales up cleanly to the
-    /// ~80 px corner badge we want on a 256-px tile.
+    /// transparent canvas) from a shell system image list.
+    ///
+    /// Tries 48 → 32 → 16 px image lists in turn. The jumbo (256 px)
+    /// list doesn't reliably contain overlay slots, and on some builds
+    /// even the 48-px list comes back empty for certain overlays, so
+    /// we descend to whichever list actually answers.
+    ///
+    /// Pixel extraction goes through <c>GetIconInfo</c> → color HBITMAP
+    /// → <c>GetDIBits</c> rather than <c>Icon.FromHandle().ToBitmap()</c>.
+    /// ToBitmap has a long-standing alpha-handling problem with HICONs
+    /// returned by <c>ImageList_GetIcon</c>: the result often comes back
+    /// either fully transparent (badge invisible) or with the
+    /// transparency-mask collapsed to opaque black (badge surrounded
+    /// by a square block). GetIconInfo+GetDIBits gives us the raw
+    /// 32-bpp ARGB pixels directly, which paint correctly.
     /// </summary>
     private static Bitmap? LoadOverlayBitmap(int overlayIndex) {
+        // Order matters: prefer larger lists for sharper badges, but
+        // accept whatever's actually populated.
+        int[] sizes = { SHIL_EXTRALARGE, SHIL_LARGE, SHIL_SMALL };
+        foreach (int shilSize in sizes) {
+            var bmp = TryLoadOverlayFromList(overlayIndex, shilSize);
+            if (bmp is not null) {
+                return bmp;
+            }
+        }
+        return null;
+    }
+
+    private static Bitmap? TryLoadOverlayFromList(int overlayIndex, int shilSize) {
         var iidImageList = new Guid("46EB5926-582E-4017-9FDF-E8998DAA0950");
-        int hr = SHGetImageList(SHIL_EXTRALARGE, ref iidImageList, out IImageList list);
+        int hr = SHGetImageList(shilSize, ref iidImageList, out IImageList list);
         if (hr != 0 || list is null) {
+            IconLog($"SHGetImageList(SHIL={shilSize}) failed hr=0x{hr:X}");
             return null;
         }
 
         IntPtr hIcon = IntPtr.Zero;
         try {
-            if (list.GetOverlayImage(overlayIndex, out int overlayImg) != 0 || overlayImg <= 0) {
-                return null;
-            }
-            if (list.GetIcon(overlayImg, ILD_TRANSPARENT, ref hIcon) != 0 || hIcon == IntPtr.Zero) {
+            int rcMap = list.GetOverlayImage(overlayIndex, out int overlayImg);
+            if (rcMap != 0 || overlayImg <= 0) {
+                IconLog($"GetOverlayImage(SHIL={shilSize}, ov={overlayIndex}) -> rc=0x{rcMap:X} idx={overlayImg}");
                 return null;
             }
 
-            // Icon.ToBitmap produces a 32-bpp ARGB managed bitmap with the
-            // correct orientation (icon glyphs are masked/AND-XOR'd by the
-            // ICO format; ToBitmap composes them). Alpha is preserved for
-            // 32-bpp source icons (which modern shell32 overlays are).
-            using var icon = Icon.FromHandle(hIcon);
-            return icon.ToBitmap();
+            int rcIcon = list.GetIcon(overlayImg, ILD_TRANSPARENT, ref hIcon);
+            if (rcIcon != 0 || hIcon == IntPtr.Zero) {
+                IconLog($"GetIcon(SHIL={shilSize}, slot={overlayImg}) -> rc=0x{rcIcon:X}");
+                return null;
+            }
+
+            return HIconToBitmap(hIcon, shilSize);
         } finally {
             if (hIcon != IntPtr.Zero) {
                 DestroyIcon(hIcon);
             }
             Marshal.ReleaseComObject(list);
+        }
+    }
+
+    /// <summary>
+    /// Extracts the colour DIB out of an <c>HICON</c> and returns it as
+    /// a managed 32-bpp ARGB top-down <see cref="Bitmap"/>. See the
+    /// note above for why we don't use <c>Icon.ToBitmap()</c>.
+    /// </summary>
+    private static Bitmap? HIconToBitmap(IntPtr hIcon, int shilSize) {
+        var iconInfo = new ICONINFO();
+        if (!GetIconInfo(hIcon, ref iconInfo)) {
+            IconLog($"GetIconInfo failed for overlay (SHIL={shilSize})");
+            return null;
+        }
+
+        try {
+            if (iconInfo.hbmColor == IntPtr.Zero) {
+                // 1-bit-per-pixel monochrome icon — overlays from
+                // modern shell32 are always 32-bpp ARGB, so this
+                // shouldn't fire in practice. Bail out rather than
+                // synthesising colours from the mask.
+                IconLog($"overlay icon has no colour bitmap (SHIL={shilSize})");
+                return null;
+            }
+            return HBitmapToBitmap(iconInfo.hbmColor);
+        } finally {
+            if (iconInfo.hbmColor != IntPtr.Zero) {
+                DeleteObject(iconInfo.hbmColor);
+            }
+            if (iconInfo.hbmMask != IntPtr.Zero) {
+                DeleteObject(iconInfo.hbmMask);
+            }
         }
     }
 
@@ -278,9 +387,11 @@ public sealed class SystemIconProvider : IIconProvider {
     /// scaled up to roughly match Explorer's badge size on jumbo icons.
     /// </summary>
     private static void CompositeOverlay(Bitmap canvas, Bitmap overlay) {
-        // ~31% of the canvas — matches Explorer's badge proportion on a
-        // 256-px tile (80 / 256 ≈ 0.31).
-        int overlayPx = canvas.Width * 5 / 16; // 80 for 256
+        // ~62% of the canvas — larger than Explorer's default to make
+        // the badge unmissable on tiles that scale down to ~72 px in
+        // the LargeIcons view. At those sizes a 31 % badge becomes ~22 px,
+        // which is easy to overlook. 62 % gives a clearly visible arrow.
+        int overlayPx = canvas.Width * 5 / 8; // 160 for 256
 
         using var g = Graphics.FromImage(canvas);
         g.InterpolationMode = InterpolationMode.HighQualityBicubic;
@@ -390,6 +501,8 @@ public sealed class SystemIconProvider : IIconProvider {
     private const int JumboSize = 256;
     private const int SIIGBF_RESIZETOFIT = 0x00000000;
 
+    private const int SHIL_SMALL = 0x1;        // 16 × 16
+    private const int SHIL_LARGE = 0x0;        // 32 × 32
     private const int SHIL_EXTRALARGE = 0x2;   // 48 × 48
     private const int ILD_TRANSPARENT = 0x1;
 
@@ -425,6 +538,15 @@ public sealed class SystemIconProvider : IIconProvider {
         public ushort bmPlanes;
         public ushort bmBitsPixel;
         public IntPtr bmBits;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ICONINFO {
+        [MarshalAs(UnmanagedType.Bool)] public bool fIcon;
+        public int xHotspot;
+        public int yHotspot;
+        public IntPtr hbmMask;
+        public IntPtr hbmColor;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -468,6 +590,10 @@ public sealed class SystemIconProvider : IIconProvider {
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool DestroyIcon(IntPtr hIcon);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetIconInfo(IntPtr hIcon, ref ICONINFO piconinfo);
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetDC(IntPtr hWnd);

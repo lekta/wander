@@ -7,4 +7,5 @@ public sealed record FileSystemEntry(
     long? Size,
     DateTime ModifiedUtc,
     bool IsHidden,
-    bool IsReadOnly);
+    bool IsReadOnly,
+    bool IsSystem);
