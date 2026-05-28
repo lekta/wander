@@ -42,6 +42,14 @@ public sealed record AppSettings {
     public int LargeIconLabelFontSize { get; init; } = 12;
 
 
+    // --- Bookmarks -----------------------------------------------------
+    /// <summary>Show the synthetic "This PC" bookmark (parent of all drives).</summary>
+    public bool ShowBookmarkThisPc { get; init; } = true;
+
+    /// <summary>Show the user's Downloads folder as a default bookmark.</summary>
+    public bool ShowBookmarkDownloads { get; init; } = true;
+
+
     // --- Debug ---------------------------------------------------------
     /// <summary>Whether the "Debug" submenu is visible in the main menu.</summary>
     public bool ShowDebugMenu { get; init; } = true;

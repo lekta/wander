@@ -1,4 +1,5 @@
 <Window x:Class="Wander.App.MainWindow"
+        x:Name="WanderWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:Wander.App.ViewModels"
@@ -210,32 +211,129 @@
                 <ColumnDefinition x:Name="PreviewColumn" Width="0"/>
             </Grid.ColumnDefinitions>
 
-            <TreeView x:Name="Tree" Grid.Column="0"
-                      ItemsSource="{Binding Roots}"
-                      SelectedItemChanged="Tree_SelectedItemChanged"
-                      PreviewMouseLeftButtonDown="Tree_PreviewMouseLeftButtonDown"
-                      TreeViewItem.Expanded="TreeViewItem_Expanded"
-                      TreeViewItem.Collapsed="TreeViewItem_Collapsed"
-                      AllowDrop="True"
-                      DragOver="OnDragOver"
-                      Drop="OnDrop">
-                <TreeView.ItemContainerStyle>
-                    <Style TargetType="TreeViewItem">
-                        <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
-                        <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
-                        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-                    </Style>
-                </TreeView.ItemContainerStyle>
-                <TreeView.ItemTemplate>
-                    <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                        <StackPanel Orientation="Horizontal">
-                            <Image Source="{Binding FullPath, Converter={StaticResource IconConverter}, ConverterParameter=Small}"
-                                   Width="16" Height="16" Margin="0,0,4,0"/>
-                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </HierarchicalDataTemplate>
-                </TreeView.ItemTemplate>
-            </TreeView>
+            <!--
+                Left pane = vertical stack:
+                  • bookmarks panel (collapsible header + tree of favourites + special folders)
+                  • drives tree (the original, unchanged behaviour)
+                Drops onto an empty area of the bookmarks panel add the dragged
+                folder(s) as bookmarks; drops onto a specific bookmark folder
+                inside the bookmarks tree go through the normal OnDragOver/OnDrop
+                pipeline (copy/move into that folder).
+            -->
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <DockPanel Grid.Row="0"
+                           x:Name="BookmarksPanel"
+                           AllowDrop="True"
+                           DragOver="BookmarksPanel_DragOver"
+                           Drop="BookmarksPanel_Drop">
+                    <!-- Collapsible header: whole row is clickable to toggle. -->
+                    <Button DockPanel.Dock="Top"
+                            Command="{Binding ToggleBookmarksCommand}"
+                            HorizontalContentAlignment="Stretch"
+                            Padding="6,4"
+                            Background="#EEE"
+                            BorderBrush="#DDD"
+                            BorderThickness="0,0,0,1"
+                            Cursor="Hand"
+                            ToolTip="Свернуть / развернуть закладки">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Left"
+                                       Margin="0,0,6,0"
+                                       FontSize="10"
+                                       VerticalAlignment="Center">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="&#x25BC;"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsBookmarksExpanded}" Value="False">
+                                                <Setter Property="Text" Value="&#x25B6;"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <TextBlock Text="Закладки" FontWeight="SemiBold"/>
+                        </DockPanel>
+                    </Button>
+
+                    <!--
+                        AllowDrop=True so cursor feedback shows correctly,
+                        but DragOver/Drop are intentionally NOT attached here:
+                        the parent BookmarksPanel handles all drop events so
+                        that drops anywhere in this region (header, empty
+                        area, between items) add the dragged folder(s) as
+                        bookmarks rather than copying into the current folder.
+                    -->
+                    <TreeView x:Name="BookmarksTree"
+                              DockPanel.Dock="Top"
+                              ItemsSource="{Binding Bookmarks}"
+                              SelectedItemChanged="Tree_SelectedItemChanged"
+                              PreviewMouseLeftButtonDown="Tree_PreviewMouseLeftButtonDown"
+                              TreeViewItem.Expanded="TreeViewItem_Expanded"
+                              TreeViewItem.Collapsed="TreeViewItem_Collapsed"
+                              AllowDrop="True"
+                              Visibility="{Binding IsBookmarksExpanded, Converter={StaticResource BoolToVisibility}}"
+                              MaxHeight="280"
+                              BorderThickness="0">
+                        <TreeView.ItemContainerStyle>
+                            <Style TargetType="TreeViewItem">
+                                <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+                                <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
+                                <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                            </Style>
+                        </TreeView.ItemContainerStyle>
+                        <TreeView.ItemTemplate>
+                            <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                                <StackPanel Orientation="Horizontal">
+                                    <StackPanel.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="Убрать из закладок"
+                                                      IsEnabled="{Binding PlacementTarget.DataContext.IsRemovableBookmark, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                      Command="{Binding DataContext.RemoveBookmarkCommand, ElementName=WanderWindow}"
+                                                      CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                        </ContextMenu>
+                                    </StackPanel.ContextMenu>
+                                    <Image Source="{Binding FullPath, Converter={StaticResource IconConverter}, ConverterParameter=Small}"
+                                           Width="16" Height="16" Margin="0,0,4,0"/>
+                                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </HierarchicalDataTemplate>
+                        </TreeView.ItemTemplate>
+                    </TreeView>
+                </DockPanel>
+
+                <TreeView x:Name="Tree" Grid.Row="1"
+                          ItemsSource="{Binding Roots}"
+                          SelectedItemChanged="Tree_SelectedItemChanged"
+                          PreviewMouseLeftButtonDown="Tree_PreviewMouseLeftButtonDown"
+                          TreeViewItem.Expanded="TreeViewItem_Expanded"
+                          TreeViewItem.Collapsed="TreeViewItem_Collapsed"
+                          AllowDrop="True"
+                          DragOver="OnDragOver"
+                          Drop="OnDrop">
+                    <TreeView.ItemContainerStyle>
+                        <Style TargetType="TreeViewItem">
+                            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+                            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
+                            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                        </Style>
+                    </TreeView.ItemContainerStyle>
+                    <TreeView.ItemTemplate>
+                        <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                            <StackPanel Orientation="Horizontal">
+                                <Image Source="{Binding FullPath, Converter={StaticResource IconConverter}, ConverterParameter=Small}"
+                                       Width="16" Height="16" Margin="0,0,4,0"/>
+                                <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </HierarchicalDataTemplate>
+                    </TreeView.ItemTemplate>
+                </TreeView>
+            </Grid>
 
             <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" Background="#DDD"/>
 

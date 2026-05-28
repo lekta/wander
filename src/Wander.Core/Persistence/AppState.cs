@@ -8,6 +8,20 @@ public sealed record AppState {
     public double PreviewWidth { get; init; } = 280;
 
     /// <summary>
+    /// User-defined bookmark folders (full paths). Order is preserved as
+    /// the user reorders them; special folders (This PC, Downloads) live
+    /// separately and are toggled via <see cref="AppSettings"/>.
+    /// </summary>
+    public IReadOnlyList<string> Favorites { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Collapsed state of the bookmarks panel itself (the section above
+    /// the drives tree). Defaults to expanded for new users — discovery
+    /// matters more than chrome conservation on first run.
+    /// </summary>
+    public bool IsBookmarksExpanded { get; init; } = true;
+
+    /// <summary>
     /// Window position / size at close. Null on a fresh install (or after a
     /// rolled-back schema) so consumers fall back to the XAML defaults
     /// rather than to (0, 0, 0, 0). Width/Height are remembered even when

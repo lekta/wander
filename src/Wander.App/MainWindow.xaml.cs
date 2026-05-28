@@ -702,6 +702,47 @@ public partial class MainWindow : Window {
     }
 
 
+    // --- Bookmarks panel drop -------------------------------------------
+    // Any drop onto the bookmarks region (header, empty area, between tree
+    // items) registers the dragged folders as new bookmarks rather than
+    // copying/moving them. Drops onto a specific bookmark folder for
+    // copy-into are intentionally out of scope for now — the user can drop
+    // onto the drives tree below instead. Keeps the gesture unambiguous.
+    private void BookmarksPanel_DragOver(object sender, DragEventArgs e) {
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop)) {
+            e.Effects = DragDropEffects.None;
+            e.Handled = true;
+            return;
+        }
+        var paths = (string[])e.Data.GetData(DataFormats.FileDrop);
+        bool anyFolder = paths.Any(p => Directory.Exists(p));
+        e.Effects = anyFolder ? DragDropEffects.Link : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void BookmarksPanel_Drop(object sender, DragEventArgs e) {
+        try {
+            if (!e.Data.GetDataPresent(DataFormats.FileDrop)) {
+                return;
+            }
+            var paths = (string[])e.Data.GetData(DataFormats.FileDrop);
+            int added = 0;
+            foreach (string p in paths) {
+                if (Directory.Exists(p)) {
+                    Vm.AddBookmark(p);
+                    added++;
+                }
+            }
+            if (added == 0) {
+                Vm.Status = "В закладки можно перетаскивать только папки.";
+            }
+            e.Handled = true;
+        } finally {
+            ClearDropHighlight();
+        }
+    }
+
+
     private string? ResolveDropTarget(DragEventArgs e) {
         var hit = e.OriginalSource as DependencyObject;
         while (hit is not null) {

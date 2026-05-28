@@ -69,6 +69,20 @@ public sealed class SettingsViewModel : ObservableObject {
     }
 
 
+    // --- Bookmarks -----------------------------------------------------
+    private bool _showBookmarkThisPc;
+    public bool ShowBookmarkThisPc {
+        get => _showBookmarkThisPc;
+        set => SetField(ref _showBookmarkThisPc, value);
+    }
+
+    private bool _showBookmarkDownloads;
+    public bool ShowBookmarkDownloads {
+        get => _showBookmarkDownloads;
+        set => SetField(ref _showBookmarkDownloads, value);
+    }
+
+
     // --- Debug ---------------------------------------------------------
     private bool _showDebugMenu;
     public bool ShowDebugMenu {
@@ -96,6 +110,7 @@ public sealed class SettingsViewModel : ObservableObject {
             new GeneralSettingsCategory(this),
             new SafetySettingsCategory(this),
             new LayoutSettingsCategory(this),
+            new BookmarksSettingsCategory(this),
             new DebugSettingsCategory(this),
         };
         _selectedCategory = Categories[0];
@@ -112,6 +127,8 @@ public sealed class SettingsViewModel : ObservableObject {
         LargeIconImageSize = s.LargeIconImageSize;
         LargeIconMargin = s.LargeIconMargin;
         LargeIconLabelFontSize = s.LargeIconLabelFontSize;
+        ShowBookmarkThisPc = s.ShowBookmarkThisPc;
+        ShowBookmarkDownloads = s.ShowBookmarkDownloads;
         ShowDebugMenu = s.ShowDebugMenu;
     }
 
@@ -124,6 +141,8 @@ public sealed class SettingsViewModel : ObservableObject {
             LargeIconImageSize = LargeIconImageSize,
             LargeIconMargin = LargeIconMargin,
             LargeIconLabelFontSize = LargeIconLabelFontSize,
+            ShowBookmarkThisPc = ShowBookmarkThisPc,
+            ShowBookmarkDownloads = ShowBookmarkDownloads,
             ShowDebugMenu = ShowDebugMenu,
         };
     }

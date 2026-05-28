@@ -45,6 +45,12 @@ public sealed class LayoutSettingsCategory : SettingsCategoryViewModel {
 }
 
 
+public sealed class BookmarksSettingsCategory : SettingsCategoryViewModel {
+    public BookmarksSettingsCategory(SettingsViewModel owner)
+        : base("Закладки", owner) { }
+}
+
+
 public sealed class DebugSettingsCategory : SettingsCategoryViewModel {
     public DebugSettingsCategory(SettingsViewModel owner)
         : base("Отладка", owner) { }

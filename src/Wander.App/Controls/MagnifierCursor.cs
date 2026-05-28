@@ -102,12 +102,12 @@ internal static class MagnifierCursor {
 
         // Lens: dark ring sandwiched between two white rings for visibility.
         StrokeCircle(bgra, cx, cy, rOuter + 1, 0xFF, 0xFF, 0xFF, 0xFF);
-        StrokeCircle(bgra, cx, cy, rOuter,     0x00, 0x00, 0x00, 0xFF);
-        StrokeCircle(bgra, cx, cy, rInner,     0xFF, 0xFF, 0xFF, 0xFF);
+        StrokeCircle(bgra, cx, cy, rOuter, 0x00, 0x00, 0x00, 0xFF);
+        StrokeCircle(bgra, cx, cy, rInner, 0xFF, 0xFF, 0xFF, 0xFF);
 
         // Handle: thick line with a dark core for the same dual-bg legibility.
         StrokeLine(bgra, hxStart - 1, hyStart - 1, hxEnd, hyEnd, 0xFF, 0xFF, 0xFF, 0xFF);
-        StrokeLine(bgra, hxStart,     hyStart,     hxEnd, hyEnd, 0x00, 0x00, 0x00, 0xFF);
+        StrokeLine(bgra, hxStart, hyStart, hxEnd, hyEnd, 0x00, 0x00, 0x00, 0xFF);
     }
 
 
@@ -153,7 +153,10 @@ internal static class MagnifierCursor {
         int err = dx + dy;
         while (true) {
             Plot(bgra, x0, y0, b, g, r, a);
-            if (x0 == x1 && y0 == y1) break;
+            if (x0 == x1 && y0 == y1) {
+                break;
+            }
+
             int e2 = 2 * err;
             if (e2 >= dy) { err += dy; x0 += sx; }
             if (e2 <= dx) { err += dx; y0 += sy; }

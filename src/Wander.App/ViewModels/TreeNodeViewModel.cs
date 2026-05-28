@@ -57,6 +57,13 @@ public sealed class TreeNodeViewModel : ObservableObject {
         set => SetField(ref _isSelected, value);
     }
 
+    /// <summary>
+    /// True for nodes that represent a user-defined bookmark (vs. a special
+    /// folder like "This PC" or "Downloads" that's toggled via settings).
+    /// Controls visibility of the "Remove from bookmarks" context menu.
+    /// </summary>
+    public bool IsRemovableBookmark { get; init; }
+
 
     /// <summary>
     /// Recursively expands nodes along the way to <paramref name="targetPath"/> and (optionally)

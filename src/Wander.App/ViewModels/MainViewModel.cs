@@ -43,6 +43,11 @@ public sealed class MainViewModel : ObservableObject {
     private List<string> _clipboard = new();
     private bool _clipboardIsCut;
 
+    private readonly List<string> _favorites = new();
+    private bool _isBookmarksExpanded = true;
+    private bool _buildingBookmarks;
+    private IReadOnlyList<string> _persistedExpandedPaths = Array.Empty<string>();
+
     private bool _restoring;
 
 
@@ -66,6 +71,7 @@ public sealed class MainViewModel : ObservableObject {
 
         Entries = new ObservableCollection<FileSystemEntry>();
         Roots = new ObservableCollection<TreeNodeViewModel>();
+        Bookmarks = new ObservableCollection<TreeNodeViewModel>();
         Operations = new ObservableCollection<OperationViewModel>();
 
         // Settings VM is owned by MainVM and shared with the dialog when it
@@ -96,6 +102,9 @@ public sealed class MainViewModel : ObservableObject {
         UndoCommand = new RelayCommand(_ => UndoLast(), _ => _undo.CanUndo);
         PermanentDeleteCommand = new RelayCommand(_ => _ = DeleteSelectedAsync(permanent: true), _ => _selectedEntries.Count > 0);
         OpenLogFileCommand = new RelayCommand(_ => OpenLogFile(), _ => ServiceLocator.IsRegistered<ILogFile>());
+        ToggleBookmarksCommand = new RelayCommand(_ => IsBookmarksExpanded = !IsBookmarksExpanded);
+        AddBookmarkCommand = new RelayCommand(p => AddBookmark(p as string));
+        RemoveBookmarkCommand = new RelayCommand(p => RemoveBookmark(p as TreeNodeViewModel));
 
         _undo.Changed += (_, _) => {
             UndoCommand.RaiseCanExecuteChanged();
@@ -106,11 +115,13 @@ public sealed class MainViewModel : ObservableObject {
 
         LoadRoots();
         RestoreState();
+        BuildBookmarks();
     }
 
 
     public ObservableCollection<FileSystemEntry> Entries { get; }
     public ObservableCollection<TreeNodeViewModel> Roots { get; }
+    public ObservableCollection<TreeNodeViewModel> Bookmarks { get; }
     public ObservableCollection<OperationViewModel> Operations { get; }
 
     /// <summary>
@@ -215,6 +226,18 @@ public sealed class MainViewModel : ObservableObject {
     public RelayCommand UndoCommand { get; }
     public RelayCommand PermanentDeleteCommand { get; }
     public RelayCommand OpenLogFileCommand { get; }
+    public RelayCommand ToggleBookmarksCommand { get; }
+    public RelayCommand AddBookmarkCommand { get; }
+    public RelayCommand RemoveBookmarkCommand { get; }
+
+    public bool IsBookmarksExpanded {
+        get => _isBookmarksExpanded;
+        set {
+            if (SetField(ref _isBookmarksExpanded, value)) {
+                SaveState();
+            }
+        }
+    }
 
     public string UndoTooltip => _undo.NextDescription is { } next ? $"Undo: {next}" : "Nothing to undo";
 
@@ -389,7 +412,13 @@ public sealed class MainViewModel : ObservableObject {
                 Raise(nameof(PreviewWidth));
             }
 
-            foreach (string path in state.ExpandedPaths) {
+            _favorites.Clear();
+            _favorites.AddRange(state.Favorites);
+            _isBookmarksExpanded = state.IsBookmarksExpanded;
+            Raise(nameof(IsBookmarksExpanded));
+
+            _persistedExpandedPaths = state.ExpandedPaths.ToArray();
+            foreach (string path in _persistedExpandedPaths) {
                 ExpandToPath(path, select: false);
             }
 
@@ -412,7 +441,7 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     private void SaveState() {
-        if (_restoring) {
+        if (_restoring || _buildingBookmarks) {
             return;
         }
 
@@ -426,6 +455,8 @@ public sealed class MainViewModel : ObservableObject {
             ExpandedPaths = CollectExpanded(),
             IsPreviewVisible = _isPreviewVisible,
             PreviewWidth = _previewWidth,
+            Favorites = _favorites.ToArray(),
+            IsBookmarksExpanded = _isBookmarksExpanded,
             Settings = Settings.ToRecord(),
         });
     }
@@ -435,7 +466,13 @@ public sealed class MainViewModel : ObservableObject {
         foreach (var root in Roots) {
             CollectExpandedRecursive(root, result);
         }
-        return result;
+        foreach (var bookmark in Bookmarks) {
+            CollectExpandedRecursive(bookmark, result);
+        }
+        // Dedupe — drives appear in both Roots and (when This PC is shown)
+        // under the synthetic bookmark, but their expansion state is shared
+        // via the VM instance, so the same path can surface twice.
+        return result.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     private static void CollectExpandedRecursive(TreeNodeViewModel node, List<string> result) {
@@ -450,6 +487,11 @@ public sealed class MainViewModel : ObservableObject {
     private void ExpandToPath(string path, bool select) {
         foreach (var root in Roots) {
             if (root.TryExpandToPath(path, select)) {
+                return;
+            }
+        }
+        foreach (var bookmark in Bookmarks) {
+            if (bookmark.TryExpandToPath(path, select)) {
                 return;
             }
         }
@@ -565,7 +607,150 @@ public sealed class MainViewModel : ObservableObject {
             Refresh();
         }
 
+        if (e.PropertyName == nameof(SettingsViewModel.ShowBookmarkThisPc) ||
+            e.PropertyName == nameof(SettingsViewModel.ShowBookmarkDownloads)) {
+            BuildBookmarks();
+        }
+
         SaveState();
+    }
+
+
+    // --- Bookmarks ------------------------------------------------------
+
+    /// <summary>
+    /// Rebuilds the left-pane bookmarks list from the current settings
+    /// (enabled special folders) and the user's saved favourites. Idempotent;
+    /// any node currently realised in the visual tree gets a fresh instance,
+    /// so callers should be ready for binding refresh.
+    /// </summary>
+    private void BuildBookmarks() {
+        // Capture the *current* expansion state of bookmark folders so it
+        // survives the rebuild — BuildBookmarks creates fresh VM instances
+        // for the Downloads / user-favourite branches each time. Merge with
+        // the startup-loaded set so a freshly-launched session keeps what
+        // the user had expanded last time too.
+        var expanded = new List<string>();
+        foreach (var b in Bookmarks) {
+            CollectExpandedRecursive(b, expanded);
+        }
+        var expandedSet = new HashSet<string>(expanded, StringComparer.OrdinalIgnoreCase);
+        foreach (var p in _persistedExpandedPaths) {
+            expandedSet.Add(p);
+        }
+
+        _buildingBookmarks = true;
+        try {
+            Bookmarks.Clear();
+
+            if (Settings.ShowBookmarkThisPc) {
+                Bookmarks.Add(BuildThisPcNode());
+            }
+
+            if (Settings.ShowBookmarkDownloads) {
+                var downloads = TryBuildDownloadsNode();
+                if (downloads is not null) {
+                    Bookmarks.Add(downloads);
+                }
+            }
+
+            foreach (string path in _favorites) {
+                var node = TryBuildFolderNode(path);
+                if (node is not null) {
+                    Bookmarks.Add(node);
+                }
+            }
+
+            foreach (string p in expandedSet) {
+                foreach (var b in Bookmarks) {
+                    if (b.TryExpandToPath(p, select: false)) {
+                        break;
+                    }
+                }
+            }
+        } finally {
+            _buildingBookmarks = false;
+        }
+    }
+
+    private TreeNodeViewModel BuildThisPcNode() {
+        // Synthetic node — FullPath empty so clicking it does not navigate
+        // (Tree_SelectedItemChanged guards against empty paths). Children
+        // share VM instances with Roots so expand/collapse stays in sync
+        // between the two views.
+        var node = new TreeNodeViewModel("Этот компьютер", "", EntryKind.Drive, fs: null, hasChildren: false);
+        foreach (var root in Roots) {
+            node.Children.Add(root);
+        }
+        node.IsExpanded = true;
+        return node;
+    }
+
+    private TreeNodeViewModel? TryBuildDownloadsNode() {
+        string? path = null;
+        if (ServiceLocator.IsRegistered<IKnownFolders>()) {
+            path = ServiceLocator.Get<IKnownFolders>().GetDownloads();
+        }
+        if (string.IsNullOrEmpty(path) || !_fs.DirectoryExists(path)) {
+            return null;
+        }
+        var node = new TreeNodeViewModel("Загрузки", path, EntryKind.Directory, _fs, _fs.HasSubdirectories(path));
+        WireTreeNode(node);
+        return node;
+    }
+
+    private TreeNodeViewModel? TryBuildFolderNode(string path) {
+        if (string.IsNullOrEmpty(path) || !_fs.DirectoryExists(path)) {
+            return null;
+        }
+        string name = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        if (string.IsNullOrEmpty(name)) {
+            // e.g. a drive root — fall back to the trimmed path itself.
+            name = path;
+        }
+        var node = new TreeNodeViewModel(name, path, EntryKind.Directory, _fs, _fs.HasSubdirectories(path)) {
+            IsRemovableBookmark = true,
+        };
+        WireTreeNode(node);
+        return node;
+    }
+
+    public void AddBookmark(string? path) {
+        if (string.IsNullOrEmpty(path) || !_fs.DirectoryExists(path)) {
+            return;
+        }
+        if (_favorites.Any(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase))) {
+            Status = "Папка уже в закладках.";
+            return;
+        }
+        _favorites.Add(path);
+        _log.Info($"Bookmark added: {path}");
+        Status = $"Добавлено в закладки: {Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))}";
+        BuildBookmarks();
+        SaveState();
+    }
+
+    public void RemoveBookmark(TreeNodeViewModel? node) {
+        if (node is null || string.IsNullOrEmpty(node.FullPath)) {
+            return;
+        }
+        int idx = _favorites.FindIndex(p => string.Equals(p, node.FullPath, StringComparison.OrdinalIgnoreCase));
+        if (idx < 0) {
+            // Special folder (Downloads / This PC) — not a user favourite;
+            // hiding it goes via Settings.
+            return;
+        }
+        _favorites.RemoveAt(idx);
+        _log.Info($"Bookmark removed: {node.FullPath}");
+        BuildBookmarks();
+        SaveState();
+    }
+
+    public bool IsUserFavorite(TreeNodeViewModel? node) {
+        if (node is null || string.IsNullOrEmpty(node.FullPath)) {
+            return false;
+        }
+        return _favorites.Any(p => string.Equals(p, node.FullPath, StringComparison.OrdinalIgnoreCase));
     }
 
     private void OpenSettingsDialog() {

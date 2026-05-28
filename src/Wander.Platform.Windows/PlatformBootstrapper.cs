@@ -26,6 +26,7 @@ public static class PlatformBootstrapper {
         logger.Info($"Log file: {logger.FilePath}");
 
         ServiceLocator.Register<IFileSystem>(new SystemIOFileSystem());
+        ServiceLocator.Register<IKnownFolders>(new WindowsKnownFolders());
         ServiceLocator.Register<IShellLauncher>(new ShellLauncher());
         ServiceLocator.Register<IIconProvider>(new SystemIconProvider());
         ServiceLocator.Register<IAppStateStore>(new JsonAppStateStore());

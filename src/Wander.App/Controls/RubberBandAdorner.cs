@@ -16,16 +16,16 @@ internal sealed class RubberBandAdorner : Adorner {
 
     // Soft fill so item icons remain readable through the marquee; the
     // 1-pixel stroke pins down the rectangle's edges.
-    private static readonly Brush FillBrush;
-    private static readonly Pen StrokePen;
+    private static readonly Brush _fillBrush;
+    private static readonly Pen _strokePen;
 
     static RubberBandAdorner() {
-        FillBrush = new SolidColorBrush(Color.FromArgb(40, 0, 120, 215));
-        FillBrush.Freeze();
+        _fillBrush = new SolidColorBrush(Color.FromArgb(40, 0, 120, 215));
+        _fillBrush.Freeze();
         var strokeBrush = new SolidColorBrush(Color.FromArgb(180, 0, 120, 215));
         strokeBrush.Freeze();
-        StrokePen = new Pen(strokeBrush, 1.0);
-        StrokePen.Freeze();
+        _strokePen = new Pen(strokeBrush, 1.0);
+        _strokePen.Freeze();
     }
 
 
@@ -49,6 +49,6 @@ internal sealed class RubberBandAdorner : Adorner {
         if (rect.Width < 1 || rect.Height < 1) {
             return;
         }
-        dc.DrawRectangle(FillBrush, StrokePen, rect);
+        dc.DrawRectangle(_fillBrush, _strokePen, rect);
     }
 }

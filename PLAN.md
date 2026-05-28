@@ -50,7 +50,19 @@
 6. **A9 Click-empty=unselect**, **A10 Rubber-band selection**.
 7. **A2 Затемнить дерево**.
 8. **G1+G2 Search basic** (input в toolbar + фильтр текущей папки).
-9. **D Favorites**.
+9. ~~**D Favorites**~~ — **частично сделано (фаза 1)**. См. секцию D ниже:
+   панель закладок над деревом дисков, сворачиваемая, drag-add, контекстное
+   меню «Убрать из закладок», persist в `AppState.Favorites` /
+   `AppState.IsBookmarksExpanded`. Два дефолта: «Этот компьютер» (синтетический
+   узел, дети — те же VM-инстансы дисков, что и внизу) и «Загрузки» (через
+   `IKnownFolders` → `SHGetKnownFolderPath(FOLDERID_Downloads)`). Чекбоксы в
+   настройках (категория «Закладки»). Корзина — отдельный шаг ниже.
+10. **D5. Корзина внутри Wander (shell-namespace)** — нужно ввести
+    `IShellNamespace` в Core: enumerate shell items под `FOLDERID_RecycleBinFolder`,
+    маппинг shell-item → `FileSystemEntry`-аналог, операции Restore /
+    Empty / Delete-permanent через `IFileOperation` (Vista shell). После —
+    добавить «Корзину» как третий дефолт в bookmarks + третий чекбокс в
+    настройках. Влечёт shell-интеграцию, отложили намеренно.
 
 ### Спринт 4 — приятное (P2)
 10. **A3 Inline rename**.
@@ -293,9 +305,8 @@ Core готов, нужно дотянуть в UI / VM.
   shell сам соберёт миниатюру. Требует E3.
 - **[P1] A9. Клик в пустое пространство → снять выделение.** В DataGrid/ListBox
   при клике на пустую область — `UnselectAll()`. Сейчас селект сохраняется.
-- **[P1] A10. Rubber-band selection.** Drag по пустому месту → прямоугольник
-  выделения. ListBox с `SelectionMode=Extended` сам этого не делает —
-  нужен `MouseDown` + временный adorner + `IsInRubberBand` hit-test.
+- ~~**[P1] A10. Rubber-band selection.**~~ — **сделано**. `Controls/RubberBandAdorner.cs`
+  + hit-test в MainWindow.
 - **[P1] A11. Полупрозрачный системный курсор "невозможно" внутри окна.**
   Продолжение багфикса #4 — silent default cursor (стрелка), preview прячется.
 
@@ -314,11 +325,44 @@ Core готов, нужно дотянуть в UI / VM.
 
 ### D. Favorites (избранное) — [P1]
 
-- **D1.** Раздел "Favorites" над деревом дисков с раскрываемым узлом.
-- **D2.** Context-menu "Add to Favorites" + drag папки в раздел Favorites.
-  Удаление — context-menu "Remove from Favorites".
-- **D3.** По умолчанию: Downloads, Documents (через `SpecialFolder`).
-- **D4.** Сериализация: `AppState.Favorites: IReadOnlyList<string>`.
+- ~~**D1.** Раздел "Bookmarks" над деревом дисков с раскрываемым узлом.~~
+  — **сделано**. Свой Grid в левой колонке: заголовок-сворачиватель
+  (`ToggleBookmarksCommand`, состояние `IsBookmarksExpanded` persist),
+  `BookmarksTree` с `ItemsSource={Binding Bookmarks}`, тот же ItemTemplate
+  что у дерева дисков, MaxHeight=280 чтобы при большом списке появлялся
+  скролл и не выдавливалось дерево дисков ниже.
+- ~~**D2.** Drag папки в раздел + context-menu remove.~~ — **сделано**.
+  Дроп любых папок на `BookmarksPanel` (через `BookmarksPanel_Drop`)
+  добавляет их через `Vm.AddBookmark`. Файлы игнорируются с понятным
+  статусом. Контекст-меню «Убрать из закладок» работает только на
+  пользовательских закладках (флаг `TreeNodeViewModel.IsRemovableBookmark`),
+  для спец-папок IsEnabled=false.
+- ~~**D3.** Дефолтные спец-папки — Этот компьютер + Загрузки.~~ —
+  **сделано**. «Этот компьютер» — синтетический `TreeNodeViewModel`
+  с `FullPath=""` (клик не навигирует, гард в `Tree_SelectedItemChanged`),
+  Children = те же VM-инстансы, что и в `Roots`, так что
+  expand/collapse состояние шарится между панелями. «Загрузки» —
+  через `IKnownFolders.GetDownloads()` (новый интерфейс в Core,
+  реализация в `Wander.Platform.Windows.FileSystem.WindowsKnownFolders`
+  через `SHGetKnownFolderPath(FOLDERID_Downloads)`). Чекбоксы:
+  `AppSettings.ShowBookmarkThisPc` / `ShowBookmarkDownloads`.
+- ~~**D4.** Сериализация.~~ — **сделано**. `AppState.Favorites`,
+  `AppState.IsBookmarksExpanded`. Раскрытое состояние bookmark-папок
+  включено в `ExpandedPaths` (CollectExpanded теперь итерирует и
+  `Bookmarks`, и `Roots` с дедупом).
+- **[P1] D5. Корзина внутри Wander.** Нужна абстракция
+  `IShellNamespace` в Core: enumerate shell-items под
+  `FOLDERID_RecycleBinFolder` через `IShellFolder.EnumObjects`,
+  доменный тип `ShellItem` (display name, parsing name, иконка),
+  операции Restore/Delete через `IFileOperation`. После —
+  добавляем `BookmarksSettingsCategory` чекбокс «Показывать
+  «Корзину»» и кнопку-узел в bookmarks. Текущая фаза 1 без неё:
+  чекбокса нет, в тексте категории сказано «добавим отдельным
+  шагом».
+- **[P3] D6. Drag-reorder bookmarks.** Перетаскивание пользовательских
+  закладок между собой для смены порядка. Сейчас порядок = порядок
+  добавления, изменения через ручную правку state.json. Делать
+  при первом запросе.
 
 ### E. Async операции — [P1, главный фокус]
 
