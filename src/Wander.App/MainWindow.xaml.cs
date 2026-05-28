@@ -7,7 +7,10 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using ICSharpCode.AvalonEdit.Highlighting;
+using Wander.App.Controls;
 using Wander.App.Converters;
 using Wander.App.DragPreview;
 using Wander.App.Util;
@@ -35,6 +38,17 @@ public partial class MainWindow : Window {
 
     // --- Selection gestures (deferred collapse, active-list clear) ----
     private readonly SelectionController _selection = new();
+
+    // --- Rubber-band (marquee) selection state ------------------------
+    // Active when the user clicks empty space in a list and drags. Tracks
+    // the host control, the starting selection (so Ctrl-additive can layer
+    // on top), and the adorner used to paint the marquee.
+    private bool _rubberBandActive;
+    private ItemsControl? _rubberBandHost;
+    private AdornerLayer? _rubberBandLayer;
+    private RubberBandAdorner? _rubberBandAdorner;
+    private HashSet<FileSystemEntry>? _rubberBandBaseSelection;
+    private Point _rubberBandOrigin;
 
     // --- Drag preview + drop indicator state ---------------------------
     private DragPreviewWindow? _dragPreview;
@@ -142,6 +156,28 @@ public partial class MainWindow : Window {
         }
         ApplyPreviewLayout();
         UpdateCodeEditor();
+
+        // Cap the fitted preview image to its source's native pixel size:
+        // small files must never render above 100 %. StretchDirection=DownOnly
+        // *should* cover this, but it depends on WPF's measure happening with
+        // the source's natural size already known — which isn't always the
+        // case when Source flips between selections. MaxWidth/MaxHeight is a
+        // hard guard that survives those edge cases.
+        var srcDesc = System.ComponentModel.DependencyPropertyDescriptor
+            .FromProperty(Image.SourceProperty, typeof(Image));
+        srcDesc?.AddValueChanged(ImgFit, (_, _) => ApplyNativeSizeCap(ImgFit));
+        // Apply once for whatever's already there.
+        ApplyNativeSizeCap(ImgFit);
+    }
+
+    private static void ApplyNativeSizeCap(Image img) {
+        if (img.Source is BitmapSource bs && bs.PixelWidth > 0 && bs.PixelHeight > 0) {
+            img.MaxWidth = bs.PixelWidth;
+            img.MaxHeight = bs.PixelHeight;
+        } else {
+            img.MaxWidth = double.PositiveInfinity;
+            img.MaxHeight = double.PositiveInfinity;
+        }
     }
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e) {
@@ -172,6 +208,21 @@ public partial class MainWindow : Window {
                     await EnsureWebViewReadyAsync();
                     try { WebPreview.NavigateToString(html); } catch { /* webview not ready */ }
                 }
+                break;
+
+            case nameof(PreviewController.Kind):
+                // Bail out of any in-flight image-zoom state when the user
+                // switches to a different file (e.g., RMB held when changing
+                // selection). Also reset the video transport so a freshly
+                // opened video starts paused with the play button correct.
+                ExitImageZoom();
+                ResetVideoTransport();
+                break;
+
+            case nameof(PreviewController.VideoUri):
+                // MediaElement reloads on Source change via the binding; we
+                // just reset the slider / play button so the UI matches.
+                ResetVideoTransport();
                 break;
         }
     }
@@ -399,7 +450,13 @@ public partial class MainWindow : Window {
 
         var clicked = FindEntryAtSource(e.OriginalSource);
         if (clicked is null) {
+            // Empty area: start a rubber-band lasso. The drag-source path
+            // doesn't apply here (no source items), so we skip its arming
+            // and own the gesture end-to-end via MouseMove / MouseUp.
             _selection.TryArmDeferred(sender, null, Vm.SelectedEntries, Keyboard.Modifiers);
+            if (sender is ItemsControl host) {
+                StartRubberBand(host, e);
+            }
             return;
         }
         _dragArmed = true;
@@ -410,6 +467,11 @@ public partial class MainWindow : Window {
     }
 
     private void List_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e) {
+        if (_rubberBandActive) {
+            EndRubberBand();
+            e.Handled = true;
+            return;
+        }
         _selection.CommitOnMouseUp();
         _dragArmed = false;
     }
@@ -426,6 +488,21 @@ public partial class MainWindow : Window {
     }
 
     private void List_PreviewMouseMove(object sender, MouseEventArgs e) {
+        // Rubber-band wins over drag-source: if we started a marquee on
+        // empty space, every subsequent mouse-move is selection-update,
+        // not drag-arming.
+        if (_rubberBandActive && _rubberBandHost == sender) {
+            // Defensive: if we missed the MouseUp (capture stolen, window
+            // alt-tab, …), bail out cleanly the moment we see LMB up.
+            if (e.LeftButton != MouseButtonState.Pressed) {
+                EndRubberBand();
+                return;
+            }
+            UpdateRubberBand(e.GetPosition(_rubberBandHost));
+            e.Handled = true;
+            return;
+        }
+
         if (!_dragArmed || e.LeftButton != MouseButtonState.Pressed) {
             return;
         }
@@ -735,4 +812,458 @@ public partial class MainWindow : Window {
         return string.Equals(ra, rb, StringComparison.OrdinalIgnoreCase);
     }
 
+
+    // ======================================================================
+    // Preview pane: image zoom (FastStone-style RMB-hold pan zoom).
+    // ======================================================================
+    //
+    // When the previewed image is downscaled to fit the pane:
+    //   • the cursor turns into a magnifier glyph,
+    //   • holding the right mouse button shows the image at native 1:1 with
+    //     the pixel under the cursor anchored to the cursor's screen position,
+    //   • moving the mouse pans the 1:1 view — release RMB to return.
+    //
+    // Geometry: as the cursor moves from (0,0) to (host.W, host.H) we map
+    // linearly onto (0,0)..(src.W, src.H) image-pixel space, then position
+    // the 1:1 image so that mapped pixel sits under the cursor. This
+    // matches FastStone / IrfanView "navigator" zoom.
+
+    private bool _imageZoomActive;
+
+    private bool IsImageDownscaled() {
+        if (ImgFit.Source is not BitmapSource src) {
+            return false;
+        }
+        // A few pixels of slop avoid jitter exactly at break-even. If the
+        // source is already smaller than the available render area there's
+        // nothing useful to zoom into, so we don't switch the cursor.
+        return src.PixelWidth > ImgFit.ActualWidth + 1
+            || src.PixelHeight > ImgFit.ActualHeight + 1;
+    }
+
+    private void UpdateImageCursor() {
+        ImagePreviewHost.Cursor = IsImageDownscaled() ? MagnifierCursor.Instance : null;
+    }
+
+    private void ImgFit_SizeChanged(object sender, SizeChangedEventArgs e) {
+        // The fitted image's rendered size changes when the user resizes
+        // the pane or selects a differently-sized image. Refresh the
+        // cursor decision accordingly.
+        UpdateImageCursor();
+    }
+
+    private void ImageZoom_MouseEnter(object sender, MouseEventArgs e) {
+        UpdateImageCursor();
+    }
+
+    private void ImageZoom_MouseLeave(object sender, MouseEventArgs e) {
+        // Don't kill an active zoom on Leave — Mouse.Capture means we keep
+        // getting events anyway, and the user is probably panning to an
+        // image edge. Just restore the cursor.
+        if (!_imageZoomActive) {
+            ImagePreviewHost.Cursor = null;
+        }
+    }
+
+    private void ImageZoom_RmbDown(object sender, MouseButtonEventArgs e) {
+        if (!IsImageDownscaled()) {
+            return;
+        }
+        if (ImgFit.Source is not BitmapSource src) {
+            return;
+        }
+
+        _imageZoomActive = true;
+        // 1 DIP = 1 image pixel (no DPI compensation — matches FastStone's
+        // "100 %" semantics on the user's currently configured DPI).
+        ImgZoom.Width = src.PixelWidth;
+        ImgZoom.Height = src.PixelHeight;
+        ImgZoomCanvas.Visibility = Visibility.Visible;
+        UpdateZoomPosition(e.GetPosition(ImagePreviewHost));
+        // Capture so we still get the RMB-up if the user lifts the button
+        // outside the host (e.g., over the splitter). LostMouseCapture is
+        // our cleanup path.
+        ImagePreviewHost.CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void ImageZoom_RmbUp(object sender, MouseButtonEventArgs e) {
+        ExitImageZoom();
+        e.Handled = true;
+    }
+
+    private void ImageZoom_MouseMove(object sender, MouseEventArgs e) {
+        if (!_imageZoomActive) {
+            return;
+        }
+        // Defensive: if RMB was released while we missed an event (e.g.,
+        // capture got stolen), drop out of zoom.
+        if (e.RightButton != MouseButtonState.Pressed) {
+            ExitImageZoom();
+            return;
+        }
+        UpdateZoomPosition(e.GetPosition(ImagePreviewHost));
+    }
+
+    private void ImageZoom_LostCapture(object sender, MouseEventArgs e) {
+        ExitImageZoom();
+    }
+
+    private void UpdateZoomPosition(Point mouse) {
+        if (ImgFit.Source is not BitmapSource src) {
+            return;
+        }
+        double hw = ImagePreviewHost.ActualWidth;
+        double hh = ImagePreviewHost.ActualHeight;
+        if (hw <= 0 || hh <= 0) {
+            return;
+        }
+
+        // Map cursor position linearly into image-pixel space, then offset
+        // the 1:1 image so that pixel ends up under the cursor.
+        double px = (mouse.X / hw) * src.PixelWidth;
+        double py = (mouse.Y / hh) * src.PixelHeight;
+
+        Canvas.SetLeft(ImgZoom, mouse.X - px);
+        Canvas.SetTop(ImgZoom, mouse.Y - py);
+    }
+
+    private void ExitImageZoom() {
+        if (!_imageZoomActive) {
+            return;
+        }
+        _imageZoomActive = false;
+        ImgZoomCanvas.Visibility = Visibility.Collapsed;
+        if (ImagePreviewHost.IsMouseCaptured) {
+            ImagePreviewHost.ReleaseMouseCapture();
+        }
+        UpdateImageCursor();
+    }
+
+
+    // ======================================================================
+    // Preview pane: video transport (MediaElement + Play/Pause + seek).
+    // ======================================================================
+
+    private DispatcherTimer? _videoTimer;
+    private bool _videoIsPlaying;
+    private bool _videoSliderDragging;
+    private bool _suppressVideoSliderChanged;
+
+    private void VideoPreview_MediaOpened(object sender, RoutedEventArgs e) {
+        // Cap the video preview to native pixel size — same rationale as
+        // for images: a 320×240 clip shouldn't stretch to fill a giant
+        // preview pane. Done here because NaturalVideoWidth/Height aren't
+        // known until MediaElement has actually opened the file.
+        if (VideoPreview.NaturalVideoWidth > 0 && VideoPreview.NaturalVideoHeight > 0) {
+            VideoPreview.MaxWidth = VideoPreview.NaturalVideoWidth;
+            VideoPreview.MaxHeight = VideoPreview.NaturalVideoHeight;
+        } else {
+            VideoPreview.MaxWidth = double.PositiveInfinity;
+            VideoPreview.MaxHeight = double.PositiveInfinity;
+        }
+
+        if (!VideoPreview.NaturalDuration.HasTimeSpan) {
+            return;
+        }
+        double total = VideoPreview.NaturalDuration.TimeSpan.TotalSeconds;
+        _suppressVideoSliderChanged = true;
+        VideoSlider.Maximum = total;
+        VideoSlider.Value = 0;
+        _suppressVideoSliderChanged = false;
+
+        UpdateVideoTimeText();
+        EnsureVideoTimer();
+    }
+
+    private void VideoPreview_MediaEnded(object sender, RoutedEventArgs e) {
+        // Rewind to start, leave paused — same convention as Explorer's
+        // preview pane and most desktop video viewers.
+        VideoPreview.Position = TimeSpan.Zero;
+        VideoPreview.Pause();
+        _videoIsPlaying = false;
+        VideoPlayPauseButton.Content = "▶";
+    }
+
+    private void VideoPreview_MediaFailed(object sender, ExceptionRoutedEventArgs e) {
+        // Codec not installed (e.g. .webm without the Web Media Extensions)
+        // or corrupt file. Surface a minimal hint in the slider area.
+        VideoTimeText.Text = "Воспроизведение недоступно";
+    }
+
+    private void EnsureVideoTimer() {
+        if (_videoTimer is not null) {
+            return;
+        }
+        // 200 ms is responsive enough for a progress bar and cheap on CPU.
+        _videoTimer = new DispatcherTimer(DispatcherPriority.Background) {
+            Interval = TimeSpan.FromMilliseconds(200),
+        };
+        _videoTimer.Tick += VideoTimer_Tick;
+        _videoTimer.Start();
+    }
+
+    private void VideoTimer_Tick(object? sender, EventArgs e) {
+        if (_videoSliderDragging) {
+            return;
+        }
+        if (!VideoPreview.NaturalDuration.HasTimeSpan) {
+            return;
+        }
+        // Avoid feedback: setting Slider.Value programmatically would
+        // otherwise re-fire ValueChanged and try to seek us back.
+        _suppressVideoSliderChanged = true;
+        VideoSlider.Value = VideoPreview.Position.TotalSeconds;
+        _suppressVideoSliderChanged = false;
+        UpdateVideoTimeText();
+    }
+
+    private void VideoPlayPause_Click(object sender, RoutedEventArgs e) {
+        if (_videoIsPlaying) {
+            VideoPreview.Pause();
+            _videoIsPlaying = false;
+            VideoPlayPauseButton.Content = "▶";
+        } else {
+            VideoPreview.Play();
+            _videoIsPlaying = true;
+            VideoPlayPauseButton.Content = "⏸";
+        }
+    }
+
+    private void VideoSlider_PreviewMouseDown(object sender, MouseButtonEventArgs e) {
+        _videoSliderDragging = true;
+    }
+
+    private void VideoSlider_PreviewMouseUp(object sender, MouseButtonEventArgs e) {
+        _videoSliderDragging = false;
+        // Final seek to the slider's resting value — ValueChanged during the
+        // drag already kept Position roughly synced with ScrubbingEnabled,
+        // but a final commit handles the last pointer position cleanly.
+        if (VideoPreview.NaturalDuration.HasTimeSpan) {
+            VideoPreview.Position = TimeSpan.FromSeconds(VideoSlider.Value);
+            UpdateVideoTimeText();
+        }
+    }
+
+    private void VideoSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) {
+        if (_suppressVideoSliderChanged) {
+            return;
+        }
+        if (!VideoPreview.NaturalDuration.HasTimeSpan) {
+            return;
+        }
+        // ScrubbingEnabled lets MediaElement show frames while we seek
+        // mid-drag, so we apply Position on every tick — feels responsive.
+        VideoPreview.Position = TimeSpan.FromSeconds(e.NewValue);
+        UpdateVideoTimeText();
+    }
+
+    private void UpdateVideoTimeText() {
+        TimeSpan pos = VideoPreview.Position;
+        TimeSpan dur = VideoPreview.NaturalDuration.HasTimeSpan
+            ? VideoPreview.NaturalDuration.TimeSpan
+            : TimeSpan.Zero;
+        VideoTimeText.Text = $"{FormatTimecode(pos)} / {FormatTimecode(dur)}";
+    }
+
+    private static string FormatTimecode(TimeSpan t) {
+        return t.TotalHours >= 1
+            ? $"{(int)t.TotalHours}:{t.Minutes:D2}:{t.Seconds:D2}"
+            : $"{t.Minutes}:{t.Seconds:D2}";
+    }
+
+    private void ResetVideoTransport() {
+        // Explicitly pause: WPF's Visibility=Collapsed doesn't tear the
+        // MediaElement down, so audio would otherwise keep playing in the
+        // background after the user selects another file.
+        try { VideoPreview.Pause(); } catch { /* not yet loaded */ }
+        _videoIsPlaying = false;
+        VideoPlayPauseButton.Content = "▶";
+        _suppressVideoSliderChanged = true;
+        try {
+            VideoSlider.Value = 0;
+            VideoSlider.Maximum = 1;
+        } finally {
+            _suppressVideoSliderChanged = false;
+        }
+        VideoTimeText.Text = "0:00 / 0:00";
+        // Drop the native-size cap so a fresh video isn't constrained by
+        // the previous clip's resolution until MediaOpened reconfigures it.
+        VideoPreview.MaxWidth = double.PositiveInfinity;
+        VideoPreview.MaxHeight = double.PositiveInfinity;
+    }
+
+
+    // ======================================================================
+    // Rubber-band / marquee selection in the file list.
+    // ======================================================================
+    //
+    // Gesture: click on empty space in the right-pane list and drag. A
+    // translucent rectangle follows the cursor; every item whose container
+    // bounding box intersects the rectangle becomes selected. With Ctrl
+    // held, items in the rectangle are added to the existing selection
+    // (Explorer parity); without Ctrl the rectangle replaces selection.
+    //
+    // Implementation notes:
+    //   • The marquee is a single Adorner painted on the host's AdornerLayer
+    //     (RubberBandAdorner). InvalidateVisual on each mouse move repaints.
+    //   • Hit-testing iterates the host's items; for each one we ask
+    //     ItemContainerGenerator for the realised container and transform
+    //     its bounds back into the host's coordinate system. Virtualised
+    //     (not-yet-realised) items are skipped — they're off-screen anyway
+    //     and can't be intersected by a visible rectangle.
+    //   • Mouse capture on the host ensures we receive MouseUp even if the
+    //     cursor leaves the control mid-drag; LostMouseCapture is the
+    //     cleanup safety net.
+
+    private void StartRubberBand(ItemsControl host, MouseButtonEventArgs e) {
+        // If a previous gesture didn't clean up (shouldn't happen, but be
+        // robust), drop it first.
+        EndRubberBand();
+
+        bool additive = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
+        _rubberBandBaseSelection = additive
+            ? new HashSet<FileSystemEntry>(Vm.SelectedEntries)
+            : new HashSet<FileSystemEntry>();
+        if (!additive) {
+            ClearListSelection(host);
+        }
+
+        _rubberBandHost = host;
+        _rubberBandOrigin = e.GetPosition(host);
+        _rubberBandLayer = AdornerLayer.GetAdornerLayer(host);
+        if (_rubberBandLayer is null) {
+            // No adorner layer (extremely rare) — proceed without visuals,
+            // hit-testing still works.
+            _rubberBandAdorner = null;
+        } else {
+            _rubberBandAdorner = new RubberBandAdorner(host) {
+                StartPoint = _rubberBandOrigin,
+                CurrentPoint = _rubberBandOrigin,
+            };
+            _rubberBandLayer.Add(_rubberBandAdorner);
+        }
+
+        _rubberBandActive = true;
+        host.CaptureMouse();
+        host.LostMouseCapture += RubberBandHost_LostCapture;
+        e.Handled = true;
+    }
+
+    private void RubberBandHost_LostCapture(object sender, MouseEventArgs e) {
+        // Some other element grabbed the mouse — wrap things up so we don't
+        // leave a phantom marquee on screen.
+        EndRubberBand();
+    }
+
+    private void UpdateRubberBand(Point current) {
+        if (_rubberBandHost is null || _rubberBandBaseSelection is null) {
+            return;
+        }
+
+        if (_rubberBandAdorner is not null) {
+            _rubberBandAdorner.CurrentPoint = current;
+            _rubberBandAdorner.InvalidateVisual();
+        }
+        var rect = new Rect(_rubberBandOrigin, current);
+
+        // Build the new selection: base (already-selected at gesture start,
+        // empty in non-additive mode) ∪ items intersecting the rectangle.
+        var newSelection = new HashSet<FileSystemEntry>(_rubberBandBaseSelection);
+        foreach (var entry in Vm.Entries) {
+            if (TryGetContainerRect(_rubberBandHost, entry, out Rect itemRect)
+                && rect.IntersectsWith(itemRect)) {
+                newSelection.Add(entry);
+            }
+        }
+
+        SetListSelection(_rubberBandHost, newSelection);
+    }
+
+    private void EndRubberBand() {
+        if (!_rubberBandActive) {
+            return;
+        }
+        _rubberBandActive = false;
+
+        if (_rubberBandHost is { } host) {
+            host.LostMouseCapture -= RubberBandHost_LostCapture;
+            if (host.IsMouseCaptured) {
+                host.ReleaseMouseCapture();
+            }
+        }
+        if (_rubberBandAdorner is not null && _rubberBandLayer is not null) {
+            _rubberBandLayer.Remove(_rubberBandAdorner);
+        }
+        _rubberBandHost = null;
+        _rubberBandLayer = null;
+        _rubberBandAdorner = null;
+        _rubberBandBaseSelection = null;
+    }
+
+    /// <summary>
+    /// Returns the on-screen rectangle of the given entry's item container
+    /// in the host's coordinate space, or false if the item isn't realised
+    /// (virtualised away off-screen).
+    /// </summary>
+    private static bool TryGetContainerRect(ItemsControl host, FileSystemEntry entry, out Rect rect) {
+        rect = default;
+        if (host.ItemContainerGenerator.ContainerFromItem(entry) is not FrameworkElement fe) {
+            return false;
+        }
+        if (fe.ActualWidth <= 0 || fe.ActualHeight <= 0) {
+            return false;
+        }
+        try {
+            var transform = fe.TransformToAncestor(host);
+            var topLeft = transform.Transform(new Point(0, 0));
+            rect = new Rect(topLeft, new Size(fe.ActualWidth, fe.ActualHeight));
+            return true;
+        } catch {
+            // TransformToAncestor throws if the container has been detached
+            // from the visual tree mid-iteration; skip.
+            return false;
+        }
+    }
+
+    private static void ClearListSelection(ItemsControl host) {
+        if (host is ListBox lb) {
+            lb.UnselectAll();
+        } else if (host is DataGrid dg) {
+            dg.UnselectAll();
+        }
+    }
+
+    private static void SetListSelection(ItemsControl host, IEnumerable<FileSystemEntry> items) {
+        // Set the selection by delta — clearing+adding everything would
+        // collapse and re-expand the control's selection, causing visible
+        // flicker on ListBox and unnecessary SelectionChanged churn.
+        if (host is ListBox lb) {
+            ApplyDelta(lb.SelectedItems, items);
+        } else if (host is DataGrid dg) {
+            ApplyDelta(dg.SelectedItems, items);
+        }
+    }
+
+    private static void ApplyDelta(System.Collections.IList currentSelection, IEnumerable<FileSystemEntry> targetItems) {
+        var target = new HashSet<FileSystemEntry>(targetItems);
+        // Remove anything no longer in the target set.
+        for (int i = currentSelection.Count - 1; i >= 0; i--) {
+            if (currentSelection[i] is FileSystemEntry existing && !target.Contains(existing)) {
+                currentSelection.RemoveAt(i);
+            }
+        }
+        // Add anything missing.
+        var present = new HashSet<FileSystemEntry>();
+        foreach (var o in currentSelection) {
+            if (o is FileSystemEntry fe) {
+                present.Add(fe);
+            }
+        }
+        foreach (var entry in target) {
+            if (!present.Contains(entry)) {
+                currentSelection.Add(entry);
+            }
+        }
+    }
 }

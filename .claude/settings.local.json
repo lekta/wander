@@ -12,7 +12,8 @@
       "Bash(dotnet build *)",
       "Bash(dotnet test *)",
       "Bash(tools\\\\check.bat)",
-      "PowerShell(tools\\\\check.bat)"
+      "PowerShell(tools\\\\check.bat)",
+      "Bash(timeout 8 dotnet run --project src/Wander.App/Wander.App.csproj -c Debug --no-build)"
     ]
   }
 }

@@ -26,9 +26,23 @@ namespace Wander.App.ViewModels;
 /// </summary>
 public sealed class PreviewController : ObservableObject {
     private static readonly HashSet<string> _imageExtensions = new(StringComparer.OrdinalIgnoreCase) {
-        ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".webp", ".tif", ".tiff",
+        ".png", ".jpg", ".jpeg", ".bmp", ".ico", ".webp", ".tif", ".tiff",
         // RAW (may not render but we still try; metadata works regardless):
         ".cr2", ".cr3", ".nef", ".arw", ".dng", ".raf", ".orf", ".rw2",
+    };
+
+    // GIF lives apart from the static-image set because we want to animate it.
+    // Single-frame GIFs still hit this branch; the GifImage control degrades
+    // gracefully to a static display in that case.
+    private static readonly HashSet<string> _gifExtensions = new(StringComparer.OrdinalIgnoreCase) {
+        ".gif",
+    };
+
+    // MediaElement uses Windows Media Foundation, which on Win10/11 supports
+    // these out of the box. MKV / WEBM are listed but may fall back to
+    // "Unsupported" if the user hasn't installed extension packs.
+    private static readonly HashSet<string> _videoExtensions = new(StringComparer.OrdinalIgnoreCase) {
+        ".mp4", ".m4v", ".mov", ".wmv", ".avi", ".mkv", ".webm",
     };
 
     private static readonly HashSet<string> _textExtensions = new(StringComparer.OrdinalIgnoreCase) {
@@ -72,6 +86,8 @@ public sealed class PreviewController : ObservableObject {
     private string? _codeExtension;
     private Uri? _webUri;
     private string? _webHtml;
+    private Uri? _gifUri;
+    private Uri? _videoUri;
     private ImageMetadata? _imageMetadata;
     private string _summary = "";
 
@@ -126,6 +142,16 @@ public sealed class PreviewController : ObservableObject {
     public string? WebHtml {
         get => _webHtml;
         private set => SetField(ref _webHtml, value);
+    }
+
+    public Uri? GifUri {
+        get => _gifUri;
+        private set => SetField(ref _gifUri, value);
+    }
+
+    public Uri? VideoUri {
+        get => _videoUri;
+        private set => SetField(ref _videoUri, value);
     }
 
     public ImageMetadata? ImageMetadata {
@@ -203,6 +229,16 @@ public sealed class PreviewController : ObservableObject {
             string path = _primary.FullPath;
             string ext = Path.GetExtension(path);
 
+            if (_gifExtensions.Contains(ext)) {
+                LoadGif(path);
+                return;
+            }
+
+            if (_videoExtensions.Contains(ext)) {
+                LoadVideo(path);
+                return;
+            }
+
             if (_imageExtensions.Contains(ext)) {
                 await LoadImageAsync(path, ct);
                 return;
@@ -241,6 +277,25 @@ public sealed class PreviewController : ObservableObject {
                 ScheduleSummaryUpdate();  // metadata might have arrived
             }
         }
+    }
+
+    private void LoadGif(string path) {
+        // GifImage decodes the file lazily on the UI thread; we just set the URI.
+        // Metadata (pixel size, EXIF if any) goes through the same reader as
+        // for normal images so the footer summary line still works.
+        GifUri = new Uri(path);
+        if (_metadataReader is not null) {
+            try { ImageMetadata = _metadataReader.Read(path); } catch { /* best effort */ }
+        }
+        Kind = PreviewKind.Gif;
+    }
+
+    private void LoadVideo(string path) {
+        // MediaElement does its own threaded decode; we just hand it the URI.
+        // No metadata extraction (MetadataExtractor's container support varies
+        // by format; not worth the bytes here for v1).
+        VideoUri = new Uri(path);
+        Kind = PreviewKind.Video;
     }
 
     private async Task LoadImageAsync(string path, CancellationToken ct) {
@@ -381,6 +436,8 @@ public sealed class PreviewController : ObservableObject {
         CodeExtension = null;
         WebUri = null;
         WebHtml = null;
+        GifUri = null;
+        VideoUri = null;
         ImageMetadata = null;
     }
 

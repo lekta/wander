@@ -5,6 +5,7 @@
         xmlns:conv="clr-namespace:Wander.App.Converters"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         xmlns:ae="http://icsharpcode.net/sharpdevelop/avalonedit"
+        xmlns:controls="clr-namespace:Wander.App.Controls"
         Title="{Binding WindowTitle}"
         Icon="Assets\app.ico"
         Height="700" Width="1100"
@@ -432,10 +433,91 @@
 
                     <!-- Content area -->
                     <Grid Grid.Row="0">
-                        <!-- Image: scale only when bigger than container, don't upscale -->
-                        <Image Source="{Binding Preview.Image}"
-                               Stretch="Uniform" StretchDirection="DownOnly" Margin="8"
-                               Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Image}"/>
+                        <!--
+                            Image preview. The fitted image stays in ImgFit; a
+                            transparent canvas overlays it for the FastStone-style
+                            "hold RMB to zoom 1:1" interaction. Everything is wired
+                            in code-behind (ImageZoom_* handlers).
+                        -->
+                        <Grid x:Name="ImagePreviewHost"
+                              Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Image}"
+                              ClipToBounds="True"
+                              Background="Transparent"
+                              MouseEnter="ImageZoom_MouseEnter"
+                              MouseLeave="ImageZoom_MouseLeave"
+                              MouseMove="ImageZoom_MouseMove"
+                              MouseRightButtonDown="ImageZoom_RmbDown"
+                              MouseRightButtonUp="ImageZoom_RmbUp"
+                              LostMouseCapture="ImageZoom_LostCapture">
+                            <Image x:Name="ImgFit"
+                                   Source="{Binding Preview.Image}"
+                                   Stretch="Uniform" StretchDirection="DownOnly"
+                                   Margin="8,12,8,8"
+                                   VerticalAlignment="Top" HorizontalAlignment="Center"
+                                   SizeChanged="ImgFit_SizeChanged"/>
+                            <!-- Zoom view: visible only while the user holds RMB. -->
+                            <Canvas x:Name="ImgZoomCanvas"
+                                    Background="White"
+                                    Visibility="Collapsed"
+                                    IsHitTestVisible="False">
+                                <Image x:Name="ImgZoom"
+                                       Source="{Binding Source, ElementName=ImgFit}"/>
+                            </Canvas>
+                        </Grid>
+
+                        <!-- Animated GIF (also anchored middle-top with same margin). -->
+                        <controls:GifImage GifUri="{Binding Preview.GifUri}"
+                                           Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Gif}"
+                                           Stretch="Uniform" StretchDirection="DownOnly"
+                                           Margin="8,12,8,8"
+                                           VerticalAlignment="Top" HorizontalAlignment="Center"/>
+
+                        <!-- Video: MediaElement + simple transport (Play/Pause + seek slider). -->
+                        <Grid Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Video}">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <MediaElement x:Name="VideoPreview"
+                                          Grid.Row="0"
+                                          Source="{Binding Preview.VideoUri}"
+                                          LoadedBehavior="Manual"
+                                          UnloadedBehavior="Stop"
+                                          ScrubbingEnabled="True"
+                                          Stretch="Uniform" StretchDirection="DownOnly"
+                                          Margin="8,12,8,4"
+                                          VerticalAlignment="Top" HorizontalAlignment="Center"
+                                          MediaOpened="VideoPreview_MediaOpened"
+                                          MediaEnded="VideoPreview_MediaEnded"
+                                          MediaFailed="VideoPreview_MediaFailed"/>
+                            <Grid Grid.Row="1" Margin="8,4,8,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Button x:Name="VideoPlayPauseButton"
+                                        Content="▶" Width="32" Padding="0,2"
+                                        Grid.Column="0"
+                                        Click="VideoPlayPause_Click"
+                                        ToolTip="Space"/>
+                                <TextBlock x:Name="VideoTimeText"
+                                           Grid.Column="1"
+                                           VerticalAlignment="Center"
+                                           Margin="8,0"
+                                           FontFamily="Consolas" FontSize="11"
+                                           Text="0:00 / 0:00"/>
+                                <Slider x:Name="VideoSlider"
+                                        Grid.Column="2"
+                                        VerticalAlignment="Center"
+                                        Minimum="0" Maximum="1"
+                                        SmallChange="0.5" LargeChange="5"
+                                        IsMoveToPointEnabled="True"
+                                        PreviewMouseLeftButtonDown="VideoSlider_PreviewMouseDown"
+                                        PreviewMouseLeftButtonUp="VideoSlider_PreviewMouseUp"
+                                        ValueChanged="VideoSlider_ValueChanged"/>
+                            </Grid>
+                        </Grid>
 
                         <!-- Plain text -->
                         <TextBox Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Text}"
