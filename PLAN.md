@@ -111,10 +111,18 @@
     разъезжается по top-level полям. Migration: state.json от старых
     билдов потеряет позицию окна один раз (pre-1.0, ОК).
   - Не вошло (отложено как самостоятельные задачи):
-    - Покрыть `UndoService` busy-guard полноценным тестом под async
-      (race-conditions) — записано в TECHDEBT.
     - Унифицировать sync- и async-public API — sync single-item Copy/Move/Delete
       ещё нужны тестам, объединять не стали; запись в TECHDEBT уже была.
+
+  Сразу же подняли покрытие тестами (см. `Wander.Core.Tests`, 98 тестов
+  на момент закрытия): `BatchExecutorTests` (19 кейсов, конфликты /
+  отмена / failed items / прогресс), `UndoServiceTests` (busy-guard,
+  nested guards, async race), `OperationTrackerTests` (Begin/Advance/
+  Dispose + конкуррентный Advance), `UndoableActionsTests` (composite
+  reverse-order, single-action round-trips), `PathSafetyTests` (после
+  переноса `PathSafety` из `Wander.App.Util` в `Wander.Core.FileSystem`
+  ради тестируемости — sibling-substring kейс, case-insensitive,
+  нормализация trailing slash, и т.д.).
 - **Чистка #2 — после D + G + Settings**. Когда добавится Favorites, Search,
   SettingsDialog — VM раздуется. Кандидаты:
   - Разделить `MainViewModel` на specialized VM-ы (NavigationViewModel,

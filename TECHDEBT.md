@@ -12,11 +12,6 @@
 
 ## Открыто
 
-- **UndoService busy-guard — тест под async** — `BeginOperation()` уже
-  ловит активную операцию и роняет `CanUndo` на это время, но purpose-built
-  теста на race (две batch-операции наперегонки или Undo во время батча)
-  пока нет. По плану чистки #1 — было в кандидатах, отложено как отдельная
-  задача.
 - **state.json — миграция WindowGeometry** — после чистки #1 геометрия
   окна живёт в подrecord `Window` вместо top-level `WindowLeft/Top/...`
   Старые state.json теряют позицию окна один раз. Pre-1.0 ОК, но если

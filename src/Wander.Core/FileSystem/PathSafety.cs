@@ -1,6 +1,4 @@
-using System.IO;
-
-namespace Wander.App.Util;
+namespace Wander.Core.FileSystem;
 
 public enum SelfDropReason {
     None,
@@ -13,6 +11,12 @@ public enum SelfDropReason {
 /// Pre-flight checks shared by drag/drop and paste: deciding whether a copy/move
 /// makes sense before we touch the filesystem, and formatting the user-facing
 /// reason text.
+///
+/// <para>
+/// Pure string logic — no I/O, no WPF. Lives in <c>Wander.Core</c> so unit
+/// tests can hit it directly and other entry points (CLI, scripting) can
+/// share the same rules without dragging a UI dependency.
+/// </para>
 /// </summary>
 public static class PathSafety {
     public static SelfDropReason DetectSelfDrop(IReadOnlyList<string> sources, string target, out string? offender) {
