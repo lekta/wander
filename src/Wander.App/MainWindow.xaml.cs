@@ -33,11 +33,8 @@ public partial class MainWindow : Window {
     private int _dragPathCount;
     private string? _dragFirstName;
 
-    // Deferred-selection guard so that "click one of several selected rows
-    // and drag" keeps the full selection, matching Explorer.
-    private bool _deferredSelection;
-    private FileSystemEntry? _deferredEntry;
-    private object? _deferredSenderControl;
+    // --- Selection gestures (deferred collapse, active-list clear) ----
+    private readonly SelectionController _selection = new();
 
     // --- Drag preview + drop indicator state ---------------------------
     private DragPreviewWindow? _dragPreview;
@@ -70,36 +67,36 @@ public partial class MainWindow : Window {
             return;
         }
         var state = ServiceLocator.Get<IAppStateStore>().Load();
+        if (state.Window is not { } geom) {
+            return;
+        }
 
         // Restore size first — keeping a sane minimum so a previous truncation
         // can't wedge the window down to a few pixels.
-        if (state.WindowWidth is double w && w >= 320 &&
-            state.WindowHeight is double h && h >= 240) {
-            Width = w;
-            Height = h;
+        if (geom.Width >= 320 && geom.Height >= 240) {
+            Width = geom.Width;
+            Height = geom.Height;
         }
 
         // Restore position, clamped to the virtual screen. This handles the
         // "saved on a monitor that is no longer connected" case without
         // dropping the window off-screen.
-        if (state.WindowLeft is double l && state.WindowTop is double t) {
-            double vsLeft = SystemParameters.VirtualScreenLeft;
-            double vsTop = SystemParameters.VirtualScreenTop;
-            double vsRight = vsLeft + SystemParameters.VirtualScreenWidth;
-            double vsBottom = vsTop + SystemParameters.VirtualScreenHeight;
+        double vsLeft = SystemParameters.VirtualScreenLeft;
+        double vsTop = SystemParameters.VirtualScreenTop;
+        double vsRight = vsLeft + SystemParameters.VirtualScreenWidth;
+        double vsBottom = vsTop + SystemParameters.VirtualScreenHeight;
 
-            // Keep at least 100 px of titlebar visible so the user can grab it.
-            double minLeft = vsLeft - Width + 100;
-            double maxLeft = vsRight - 100;
-            double minTop = vsTop;
-            double maxTop = vsBottom - 60;
+        // Keep at least 100 px of titlebar visible so the user can grab it.
+        double minLeft = vsLeft - Width + 100;
+        double maxLeft = vsRight - 100;
+        double minTop = vsTop;
+        double maxTop = vsBottom - 60;
 
-            Left = Math.Min(Math.Max(l, minLeft), maxLeft);
-            Top = Math.Min(Math.Max(t, minTop), maxTop);
-            WindowStartupLocation = WindowStartupLocation.Manual;
-        }
+        Left = Math.Min(Math.Max(geom.Left, minLeft), maxLeft);
+        Top = Math.Min(Math.Max(geom.Top, minTop), maxTop);
+        WindowStartupLocation = WindowStartupLocation.Manual;
 
-        if (state.WindowMaximized) {
+        if (geom.Maximized) {
             WindowState = WindowState.Maximized;
         }
     }
@@ -120,11 +117,13 @@ public partial class MainWindow : Window {
             : RestoreBounds;
 
         store.Save(existing with {
-            WindowLeft = bounds.Left,
-            WindowTop = bounds.Top,
-            WindowWidth = bounds.Width,
-            WindowHeight = bounds.Height,
-            WindowMaximized = WindowState == WindowState.Maximized,
+            Window = new WindowGeometry {
+                Left = bounds.Left,
+                Top = bounds.Top,
+                Width = bounds.Width,
+                Height = bounds.Height,
+                Maximized = WindowState == WindowState.Maximized,
+            },
         });
     }
 
@@ -139,32 +138,37 @@ public partial class MainWindow : Window {
     private void OnLoaded(object sender, RoutedEventArgs e) {
         if (DataContext is MainViewModel vm) {
             vm.PropertyChanged += OnVmPropertyChanged;
+            vm.Preview.PropertyChanged += OnPreviewPropertyChanged;
         }
         ApplyPreviewLayout();
         UpdateCodeEditor();
     }
 
-    private async void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e) {
+    private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e) {
         switch (e.PropertyName) {
             case nameof(MainViewModel.IsPreviewVisible):
             case nameof(MainViewModel.PreviewWidth):
                 ApplyPreviewLayout();
                 break;
+        }
+    }
 
-            case nameof(MainViewModel.PreviewCodeText):
-            case nameof(MainViewModel.PreviewCodeExtension):
+    private async void OnPreviewPropertyChanged(object? sender, PropertyChangedEventArgs e) {
+        switch (e.PropertyName) {
+            case nameof(PreviewController.CodeText):
+            case nameof(PreviewController.CodeExtension):
                 UpdateCodeEditor();
                 break;
 
-            case nameof(MainViewModel.PreviewWebUri):
-                if (Vm.PreviewWebUri is { } uri) {
+            case nameof(PreviewController.WebUri):
+                if (Vm.Preview.WebUri is { } uri) {
                     await EnsureWebViewReadyAsync();
                     try { WebPreview.Source = uri; } catch { /* webview not ready */ }
                 }
                 break;
 
-            case nameof(MainViewModel.PreviewWebHtml):
-                if (Vm.PreviewWebHtml is { } html) {
+            case nameof(PreviewController.WebHtml):
+                if (Vm.Preview.WebHtml is { } html) {
                     await EnsureWebViewReadyAsync();
                     try { WebPreview.NavigateToString(html); } catch { /* webview not ready */ }
                 }
@@ -187,16 +191,16 @@ public partial class MainWindow : Window {
     }
 
     private void UpdateCodeEditor() {
-        if (string.IsNullOrEmpty(Vm.PreviewCodeText)) {
+        if (string.IsNullOrEmpty(Vm.Preview.CodeText)) {
             CodeEditor.Clear();
             CodeEditor.SyntaxHighlighting = null;
             return;
         }
 
-        string ext = Vm.PreviewCodeExtension ?? "";
+        string ext = Vm.Preview.CodeExtension ?? "";
         // AvalonEdit ships highlighting for: C#, C++, Java, JS, TS, CSS, HTML, XML, JSON, Python, PHP, SQL, Markdown, ...
         CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinitionByExtension(ext);
-        CodeEditor.Text = Vm.PreviewCodeText;
+        CodeEditor.Text = Vm.Preview.CodeText;
     }
 
     private async Task EnsureWebViewReadyAsync() {
@@ -248,17 +252,7 @@ public partial class MainWindow : Window {
     }
 
     private void ClearActiveSelection() {
-        switch (Vm.ViewMode) {
-            case ViewMode.Details:
-                Grid.UnselectAll();
-                break;
-            case ViewMode.Tiles:
-                TilesView.UnselectAll();
-                break;
-            case ViewMode.LargeIcons:
-                IconsView.UnselectAll();
-                break;
-        }
+        SelectionController.ClearActive(Vm.ViewMode, Grid, TilesView, IconsView);
     }
 
 
@@ -401,50 +395,22 @@ public partial class MainWindow : Window {
 
     private void List_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
         _dragArmed = false;
-        _deferredSelection = false;
-        _deferredEntry = null;
-        _deferredSenderControl = null;
         _dragOrigin = e.GetPosition(this);
 
         var clicked = FindEntryAtSource(e.OriginalSource);
         if (clicked is null) {
+            _selection.TryArmDeferred(sender, null, Vm.SelectedEntries, Keyboard.Modifiers);
             return;
         }
         _dragArmed = true;
 
-        // If the user clicks (without Ctrl/Shift) on a row that's already part
-        // of a multi-selection, default WPF would collapse to just that row —
-        // making the subsequent drag carry only one file. Defer the selection
-        // change to mouse-up so we can keep all selected if a drag starts.
-        bool plainClick = (Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) == 0;
-        bool clickedOnSelected = Vm.SelectedEntries.Contains(clicked);
-        bool multi = Vm.SelectedEntries.Count > 1;
-
-        if (plainClick && clickedOnSelected && multi) {
-            _deferredSelection = true;
-            _deferredEntry = clicked;
-            _deferredSenderControl = sender;
+        if (_selection.TryArmDeferred(sender, clicked, Vm.SelectedEntries, Keyboard.Modifiers)) {
             e.Handled = true;
         }
     }
 
     private void List_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e) {
-        if (_deferredSelection && _deferredEntry is FileSystemEntry entry) {
-            // No drag happened — finalize the click as a plain single-select.
-            switch (_deferredSenderControl) {
-                case DataGrid dg:
-                    dg.SelectedItems.Clear();
-                    dg.SelectedItem = entry;
-                    break;
-                case ListBox lb:
-                    lb.SelectedItems.Clear();
-                    lb.SelectedItem = entry;
-                    break;
-            }
-        }
-        _deferredSelection = false;
-        _deferredEntry = null;
-        _deferredSenderControl = null;
+        _selection.CommitOnMouseUp();
         _dragArmed = false;
     }
 
@@ -471,7 +437,7 @@ public partial class MainWindow : Window {
         }
 
         _dragArmed = false;
-        _deferredSelection = false; // drag started — keep the full selection
+        _selection.NotifyDragStarted(); // drag started — keep the full selection
 
         var paths = Vm.SelectedEntries.Select(en => en.FullPath).ToArray();
         if (paths.Length == 0) {

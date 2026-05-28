@@ -433,13 +433,13 @@
                     <!-- Content area -->
                     <Grid Grid.Row="0">
                         <!-- Image: scale only when bigger than container, don't upscale -->
-                        <Image Source="{Binding PreviewImage}"
+                        <Image Source="{Binding Preview.Image}"
                                Stretch="Uniform" StretchDirection="DownOnly" Margin="8"
-                               Visibility="{Binding PreviewKind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Image}"/>
+                               Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Image}"/>
 
                         <!-- Plain text -->
-                        <TextBox Visibility="{Binding PreviewKind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Text}"
-                                 Text="{Binding PreviewText, Mode=OneWay}"
+                        <TextBox Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Text}"
+                                 Text="{Binding Preview.Text, Mode=OneWay}"
                                  IsReadOnly="True"
                                  FontFamily="Consolas" FontSize="11"
                                  Background="Transparent" BorderThickness="0"
@@ -450,7 +450,7 @@
 
                         <!-- Code with syntax highlighting -->
                         <ae:TextEditor x:Name="CodeEditor"
-                                       Visibility="{Binding PreviewKind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Code}"
+                                       Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Code}"
                                        IsReadOnly="True"
                                        ShowLineNumbers="True"
                                        FontFamily="Consolas" FontSize="11"
@@ -459,18 +459,18 @@
 
                         <!-- PDF / HTML / Markdown via WebView2 -->
                         <wv2:WebView2 x:Name="WebPreview"
-                                      Visibility="{Binding PreviewKind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Web}"
+                                      Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Web}"
                                       DefaultBackgroundColor="White"/>
 
                         <!-- Placeholder (None / Unsupported) -->
-                        <TextBlock Text="{Binding PreviewPlaceholderText}"
+                        <TextBlock Text="{Binding Preview.PlaceholderText}"
                                    Foreground="#888"
                                    HorizontalAlignment="Center"
                                    VerticalAlignment="Center"
-                                   Visibility="{Binding IsPreviewPlaceholderVisible, Converter={StaticResource BoolToVisibility}}"/>
+                                   Visibility="{Binding Preview.IsPlaceholderVisible, Converter={StaticResource BoolToVisibility}}"/>
 
                         <!-- Loading spinner — overlays content while content loads -->
-                        <Grid Visibility="{Binding IsPreviewLoading, Converter={StaticResource BoolToVisibility}}"
+                        <Grid Visibility="{Binding Preview.IsLoading, Converter={StaticResource BoolToVisibility}}"
                               Background="#80FAFAFA"
                               IsHitTestVisible="False">
                             <Ellipse Width="32" Height="32" StrokeThickness="3"
@@ -500,7 +500,7 @@
                     <Border Grid.Row="1"
                             BorderBrush="#DDD" BorderThickness="0,1,0,0"
                             Padding="8,6" Background="#F3F3F3">
-                        <TextBlock Text="{Binding PreviewSummary}"
+                        <TextBlock Text="{Binding Preview.Summary}"
                                    FontSize="11" Foreground="#444"
                                    TextWrapping="Wrap"/>
                     </Border>

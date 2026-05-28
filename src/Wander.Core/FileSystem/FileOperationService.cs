@@ -11,24 +11,25 @@ namespace Wander.Core.FileSystem;
 /// future scripting, etc.).
 ///
 /// <para>
-/// Each successful op also lands as an <see cref="IUndoableAction"/> on the
-/// shared <see cref="UndoService"/>. Pure read paths still live on
-/// <see cref="IFileSystem"/> and bypass this service.
+/// This class is a thin facade: single-item ops (copy / move / delete /
+/// rename / create folder) are implemented inline, but the batch and async
+/// variants are delegated to <see cref="BatchExecutor"/>. Result types
+/// (<see cref="BatchItemResult"/>, <see cref="DeleteResult"/>) live at the
+/// namespace level so callers don't need to reach through the facade.
 /// </para>
 ///
 /// <para>
-/// Async note: today every method is synchronous. When we start moving
-/// large folders off the UI thread, signatures will gain Task-returning
-/// overloads and the undo guard (<see cref="UndoService.BeginOperation"/>)
-/// will hold for the whole async lifetime.
+/// Each successful op also lands as an <see cref="IUndoableAction"/> on the
+/// shared <see cref="UndoService"/>. Pure read paths still live on
+/// <see cref="IFileSystem"/> and bypass this service.
 /// </para>
 /// </summary>
 public sealed class FileOperationService {
     private readonly IFileSystem _fs;
     private readonly IRecycleBin _bin;
     private readonly UndoService _undo;
-    private readonly OperationTracker _tracker;
     private readonly ILogger _log;
+    private readonly BatchExecutor _batch;
 
 
     /// <summary>Full ctor — used by tests and the production registration in PlatformBootstrapper.</summary>
@@ -36,8 +37,8 @@ public sealed class FileOperationService {
         _fs = fs;
         _bin = bin;
         _undo = undo;
-        _tracker = tracker;
         _log = log;
+        _batch = new BatchExecutor(fs, bin, undo, tracker, log);
     }
 
     /// <summary>Convenience ctor that pulls collaborators from the locator. Used at app startup.</summary>
@@ -124,248 +125,25 @@ public sealed class FileOperationService {
     }
 
 
-    // --- Batch ops with conflict resolution ----------------------------
+    // --- Batch ops (delegate to BatchExecutor) -------------------------
 
-    public sealed record BatchItemResult(string Source, string FinalDestination, BatchItemStatus Status, Exception? Error);
+    public IReadOnlyList<BatchItemResult> CopyMany(IReadOnlyList<string> sources, string targetFolder, IConflictResolver resolver)
+        => _batch.CopyMany(sources, targetFolder, resolver);
 
-    public enum BatchItemStatus { Ok, Skipped, Replaced, Renamed, Cancelled, Failed }
-
-    public IReadOnlyList<BatchItemResult> CopyMany(IReadOnlyList<string> sources, string targetFolder, IConflictResolver resolver) {
-        return ApplyBatch(sources, targetFolder, isMove: false, resolver, progress: null);
-    }
-
-    public IReadOnlyList<BatchItemResult> MoveMany(IReadOnlyList<string> sources, string targetFolder, IConflictResolver resolver) {
-        return ApplyBatch(sources, targetFolder, isMove: true, resolver, progress: null);
-    }
-
-
-    // --- Async ops (off the UI thread, report through OperationTracker) -
+    public IReadOnlyList<BatchItemResult> MoveMany(IReadOnlyList<string> sources, string targetFolder, IConflictResolver resolver)
+        => _batch.MoveMany(sources, targetFolder, resolver);
 
     public Task<IReadOnlyList<BatchItemResult>> CopyManyAsync(
         IReadOnlyList<string> sources, string targetFolder, IConflictResolver resolver,
-        CancellationToken ct = default) {
-        return RunBatchAsync(sources, targetFolder, isMove: false, resolver, ct);
-    }
+        CancellationToken ct = default)
+        => _batch.CopyManyAsync(sources, targetFolder, resolver, ct);
 
     public Task<IReadOnlyList<BatchItemResult>> MoveManyAsync(
         IReadOnlyList<string> sources, string targetFolder, IConflictResolver resolver,
-        CancellationToken ct = default) {
-        return RunBatchAsync(sources, targetFolder, isMove: true, resolver, ct);
-    }
+        CancellationToken ct = default)
+        => _batch.MoveManyAsync(sources, targetFolder, resolver, ct);
 
-    private async Task<IReadOnlyList<BatchItemResult>> RunBatchAsync(
-        IReadOnlyList<string> sources, string targetFolder, bool isMove, IConflictResolver resolver,
-        CancellationToken ct) {
-        using var op = _tracker.Begin(isMove ? "Move" : "Copy", sources.Count);
-        return await Task.Run(
-            () => ApplyBatch(sources, targetFolder, isMove, resolver, op),
-            ct).ConfigureAwait(false);
-    }
-
-
-    /// <summary>
-    /// Async batch delete. <paramref name="permanent"/> = true bypasses the
-    /// recycle bin and clears the undo stack (same semantics as
-    /// <see cref="PermanentDelete"/>). Reports per-item progress.
-    /// </summary>
-    public async Task<IReadOnlyList<DeleteResult>> DeleteManyAsync(
-        IReadOnlyList<string> paths, bool permanent, CancellationToken ct = default) {
-        using var op = _tracker.Begin(permanent ? "Delete permanently" : "Recycle", paths.Count);
-        return await Task.Run(
-            () => DeleteManyCore(paths, permanent, op, ct),
-            ct).ConfigureAwait(false);
-    }
-
-    private IReadOnlyList<DeleteResult> DeleteManyCore(
-        IReadOnlyList<string> paths, bool permanent, IOperationHandle progress, CancellationToken ct) {
-        using var _ = _undo.BeginOperation();
-
-        var results = new List<DeleteResult>(paths.Count);
-        var undoSteps = new List<IUndoableAction>(paths.Count);
-
-        foreach (string path in paths) {
-            if (ct.IsCancellationRequested) {
-                results.Add(new DeleteResult(path, DeleteStatus.Cancelled, null));
-                continue;
-            }
-
-            try {
-                if (permanent) {
-                    if (_fs.DirectoryExists(path)) {
-                        _fs.DeleteDirectory(path, recursive: true);
-                    } else if (_fs.FileExists(path)) {
-                        _fs.DeleteFile(path);
-                    } else {
-                        throw new FileNotFoundException("Path not found", path);
-                    }
-                    _log.Warn($"Permanent delete: {path}");
-                    results.Add(new DeleteResult(path, DeleteStatus.Ok, null));
-                } else {
-                    var handle = _bin.Send(path);
-                    undoSteps.Add(new DeleteAction(_bin, handle));
-                    _log.Info($"Delete (recycle): {path}");
-                    results.Add(new DeleteResult(path, DeleteStatus.Ok, null));
-                }
-            } catch (Exception ex) {
-                _log.Error($"Delete failed: {path}", ex);
-                results.Add(new DeleteResult(path, DeleteStatus.Failed, ex));
-            }
-
-            progress.Advance(path);
-        }
-
-        if (permanent) {
-            // Permanent delete is not undoable — drop any history so users can't
-            // Ctrl+Z past it and think it worked.
-            _undo.Clear();
-        } else {
-            PushComposite(undoSteps, isMove: false, verbOverride: "delete");
-        }
-
-        return results;
-    }
-
-    public sealed record DeleteResult(string Path, DeleteStatus Status, Exception? Error);
-    public enum DeleteStatus { Ok, Failed, Cancelled }
-
-
-    private IReadOnlyList<BatchItemResult> ApplyBatch(IReadOnlyList<string> sources, string targetFolder, bool isMove, IConflictResolver resolver, IOperationHandle? progress) {
-        using var _ = _undo.BeginOperation();
-
-        var pairs = new List<(string src, string dest)>();
-        foreach (string src in sources) {
-            string name = Path.GetFileName(src.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-            pairs.Add((src, Path.Combine(targetFolder, name)));
-        }
-
-        int conflictCount = pairs.Count(p => Exists(p.dest));
-        ConflictResolution? batchOverride = null;
-
-        if (conflictCount > 0) {
-            batchOverride = resolver.StartBatch(conflictCount);
-            if (batchOverride == ConflictResolution.Cancel) {
-                _log.Info($"Batch {(isMove ? "move" : "copy")} cancelled by user before start ({pairs.Count} items, {conflictCount} conflicts)");
-                return pairs.Select(p => new BatchItemResult(p.src, p.dest, BatchItemStatus.Cancelled, null)).ToList();
-            }
-        }
-
-        var results = new List<BatchItemResult>(pairs.Count);
-        var undoSteps = new List<IUndoableAction>(pairs.Count);
-
-        foreach (var (src, originalDest) in pairs) {
-            string dest = originalDest;
-            BatchItemStatus statusKind = BatchItemStatus.Ok;
-            bool exists = Exists(dest);
-
-            ConflictResolution? choice = exists
-                ? (batchOverride ?? resolver.Resolve(BuildInfo(src, dest)))
-                : null;
-
-            switch (choice) {
-                case ConflictResolution.Cancel:
-                    results.Add(new BatchItemResult(src, dest, BatchItemStatus.Cancelled, null));
-                    foreach (var (rsrc, rdest) in pairs.Skip(results.Count)) {
-                        results.Add(new BatchItemResult(rsrc, rdest, BatchItemStatus.Cancelled, null));
-                    }
-                    PushComposite(undoSteps, isMove);
-                    return results;
-                case ConflictResolution.Skip:
-                    results.Add(new BatchItemResult(src, dest, BatchItemStatus.Skipped, null));
-                    progress?.Advance(src);
-                    continue;
-                case ConflictResolution.Rename:
-                    dest = GenerateUniqueName(dest);
-                    statusKind = BatchItemStatus.Renamed;
-                    break;
-                case ConflictResolution.Replace:
-                    statusKind = BatchItemStatus.Replaced;
-                    break;
-                case null:
-                    break;
-            }
-
-            try {
-                ApplyOne(src, dest, isMove, allowOverwrite: choice == ConflictResolution.Replace);
-                results.Add(new BatchItemResult(src, dest, statusKind, null));
-                undoSteps.Add(isMove
-                    ? new MoveAction(_fs, src, dest)
-                    : new CreateAction(_bin, dest));
-                _log.Info($"{(isMove ? "Move" : "Copy")}: {src} -> {dest} [{statusKind}]");
-            } catch (Exception ex) {
-                results.Add(new BatchItemResult(src, dest, BatchItemStatus.Failed, ex));
-                _log.Error($"{(isMove ? "Move" : "Copy")} failed: {src} -> {dest}", ex);
-            }
-
-            progress?.Advance(src);
-        }
-
-        PushComposite(undoSteps, isMove);
-        return results;
-    }
-
-    private void PushComposite(IReadOnlyList<IUndoableAction> steps, bool isMove, string? verbOverride = null) {
-        if (steps.Count == 0) {
-            return;
-        }
-        string verb = verbOverride ?? (isMove ? "move" : "copy");
-        string desc = steps.Count == 1
-            ? steps[0].Description
-            : $"{verb} of {steps.Count} items";
-        _undo.Push(steps.Count == 1 ? steps[0] : new CompositeAction(desc, steps));
-    }
-
-    private void ApplyOne(string src, string dest, bool isMove, bool allowOverwrite) {
-        if (isMove) {
-            if (allowOverwrite) {
-                // .NET's Move doesn't support overwrite-for-folders; clear target first.
-                if (_fs.FileExists(dest)) {
-                    _fs.DeleteFile(dest);
-                } else if (_fs.DirectoryExists(dest)) {
-                    _fs.DeleteDirectory(dest, recursive: true);
-                }
-            }
-            _fs.MoveEntry(src, dest);
-            return;
-        }
-
-        if (_fs.DirectoryExists(src)) {
-            _fs.CopyDirectory(src, dest, overwrite: allowOverwrite);
-        } else {
-            _fs.CopyFile(src, dest, overwrite: allowOverwrite);
-        }
-    }
-
-    private bool Exists(string path) => _fs.FileExists(path) || _fs.DirectoryExists(path);
-
-    private string GenerateUniqueName(string desiredPath) {
-        string dir = Path.GetDirectoryName(desiredPath) ?? "";
-        string nameNoExt = Path.GetFileNameWithoutExtension(desiredPath);
-        string ext = Path.GetExtension(desiredPath);
-        int i = 1;
-        while (true) {
-            string candidate = Path.Combine(dir, $"{nameNoExt} ({i}){ext}");
-            if (!Exists(candidate)) {
-                return candidate;
-            }
-            i++;
-        }
-    }
-
-    private FileConflictInfo BuildInfo(string src, string dest) {
-        var srcEntry = _fs.GetEntry(src) ?? Unknown(src);
-        var dstEntry = _fs.GetEntry(dest) ?? Unknown(dest);
-        return new FileConflictInfo(srcEntry, dstEntry);
-    }
-
-    private static FileSystemEntry Unknown(string path) {
-        return new FileSystemEntry(
-            Name: Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)),
-            FullPath: path,
-            Kind: EntryKind.File,
-            Size: null,
-            ModifiedUtc: DateTime.MinValue,
-            IsHidden: false,
-            IsReadOnly: false,
-            IsSystem: false);
-    }
+    public Task<IReadOnlyList<DeleteResult>> DeleteManyAsync(
+        IReadOnlyList<string> paths, bool permanent, CancellationToken ct = default)
+        => _batch.DeleteManyAsync(paths, permanent, ct);
 }

@@ -30,35 +30,35 @@
 
 ## Ближайший фокус
 
-### Спринт 1 — багфиксы + связать готовое (P0)
-1. **Закрыть готовый Core wiring**: Ctrl+Z в UI (UndoService готов), Shift+Delete →
-   `PermanentDelete` с явным предупреждением (см. "Незавершённое" ниже).
-2. **Багфиксы DnD**: #1 (ссылка в ту же папку), #2 (overlay стрелочки на .lnk),
-   #3 (drop highlight на всё дерево).
-3. **B1**: `Image.StretchDirection=DownOnly` (5 минут).
-4. **Двойное выделение** (#5): убрать FocusVisualStyle на row-контейнерах.
+### ~~Спринт 1 — багфиксы + связать готовое (P0)~~ — **закрыт**
+Все позиции отмечены ✓ выше: Ctrl+Z, Shift+Delete, FileLogger, DnD баги
+(#1/#2/#3), двойное выделение (#5), StretchDirection=DownOnly (B1).
 
-### Спринт 2 — async операций + первая техническая чистка (P1)
-5. **E. Async copy/move/delete** + `ProgressDialog`. Самая важная инфраструктурная
-   фича — она же разблокирует A7/A8 (thumbnails) и подтягивает надёжность.
-6. **Технические чистки #1** (см. секцию ниже) — сразу после E, поскольку async
-   меняет signature и публичный API `FileOperationService`.
+### ~~Спринт 2 — async операций~~ — **закрыт** (через параллельную сессию)
+- `OperationTracker` в Core, async batch ops в `FileOperationService`,
+  `DispatcherConflictResolver` для marshal обратно на UI, `OperationViewModel`
+  для отображения. См. секцию E ниже.
+- ProgressDialog (E2) и тест на UndoService busy-guard — **остаются**.
 
-### Спринт 3 — proper file-manager UX (P1)
-7. #4 ("Cannot drop here" не пугает внутри окна).
-8. **A5 Sort menu** + **A6 .lnk-папки рядом с папками**.
-9. **A4 Show hidden toggle + opacity**.
-10. **A9 Click-empty=unselect**, **A10 Rubber-band selection**.
-11. **A2 Затемнить дерево** (мелочь, можно вместе с A4/A5).
-12. **G1+G2 Search basic** (input в toolbar + фильтр текущей папки).
-13. **D Favorites**.
+### Спринт 3 — техническая чистка #1 + добить P1 (текущий фокус)
+1. ~~**Технические чистки #1**~~ — **сделано**. См. секцию ниже: `BatchExecutor`,
+   `PreviewController`, `SelectionController`, `WindowGeometry` подrecord.
+2. **E2 ProgressDialog** — modal-окно вокруг async-batch с Cancel и Hide.
+3. **A5 Sort menu** + **A6 .lnk-папки рядом с папками**.
+4. **#4 "Cannot drop here" не пугает внутри окна**.
+5. **A4 opacity для visible-hidden** (фильтр уже работает).
+6. **A9 Click-empty=unselect**, **A10 Rubber-band selection**.
+7. **A2 Затемнить дерево**.
+8. **G1+G2 Search basic** (input в toolbar + фильтр текущей папки).
+9. **D Favorites**.
 
 ### Спринт 4 — приятное (P2)
-14. **A3 Inline rename**.
-15. **A7 Thumbnails картинок** + **A8 Folder content preview** (требуют E3).
-16. **F2 SettingsDialog** + **F3 Reset**.
-17. **B2** — content для папки в preview (после согласования вида).
-18. **A1 Spacing/sizes** — итеративный полишинг.
+10. **A3 Inline rename**.
+11. **A7 Thumbnails картинок** + **A8 Folder content preview** (требуют E3).
+12. **F2 SettingsDialog: расширить** (Theme, Behavior, Advanced) + **F3 Reset**.
+13. **B2** — content для папки в preview (после согласования вида).
+14. **A1** — применить settings-binding к шаблонам Tiles/Details, перебрать
+    defaults.
 
 ### Дальше (P3)
 - **G3** Advanced search.
@@ -94,17 +94,34 @@
 
 ### Запланированные проходы
 
-- **Чистка #1 — после E (async операций).** `FileOperationService` получит
-  Task-overload-ы, появится `BatchProgress`, ProgressDialog. Возможные кандидаты:
-  - Разделить `FileOperationService` на читающую и пишущую части, или вынести
-    batch-логику (`ApplyBatch`/`PushComposite`/conflict-handling) в отдельный класс.
-  - Покрыть `UndoService` busy-guard полноценным тестом под async (race-conditions).
-  - Унифицировать sync- и async-public API — выбрать одну форму как primary.
+- ~~**Чистка #1 — после E (async операций).**~~ — **сделано**.
+  - `BatchExecutor` принял на себя `ApplyBatch` / `DeleteManyCore` /
+    `PushComposite` / `ApplyOne` и conflict-loop; `FileOperationService`
+    стал тонким фасадом ~120 строк (был ~370).
+  - Типы результатов (`BatchItemResult`, `DeleteResult` + соотв. enum) подняты
+    на уровень namespace `Wander.Core.FileSystem`, чтобы caller не лез
+    через фасад.
+  - VM-сторона: `PreviewController` забрал всю preview-логику (Kind /
+    Image / Text / Code / Web / Summary + расширения, async-pipeline,
+    cancellation), MainVM стал ~970 строк (был ~1330) и кормит контроллер
+    через `SetVisible / SetPrimary / SetSelection / SetCurrentFolder`.
+  - `SelectionController` забрал deferred-selection + active-list clear
+    из MainWindow.xaml.cs — отдельная коробка под будущие A9 / A10.
+  - `WindowGeometry` подrecord на `AppState` — geometry больше не
+    разъезжается по top-level полям. Migration: state.json от старых
+    билдов потеряет позицию окна один раз (pre-1.0, ОК).
+  - Не вошло (отложено как самостоятельные задачи):
+    - Покрыть `UndoService` busy-guard полноценным тестом под async
+      (race-conditions) — записано в TECHDEBT.
+    - Унифицировать sync- и async-public API — sync single-item Copy/Move/Delete
+      ещё нужны тестам, объединять не стали; запись в TECHDEBT уже была.
 - **Чистка #2 — после D + G + Settings**. Когда добавится Favorites, Search,
   SettingsDialog — VM раздуется. Кандидаты:
   - Разделить `MainViewModel` на specialized VM-ы (NavigationViewModel,
-    SelectionViewModel, PreviewViewModel, ...) с фасадом сверху.
-  - Пересмотреть `AppState` — выделить под-records (PreviewState, ViewState, ...).
+    ClipboardViewModel, ...) поверх уже выделенного `PreviewController`.
+  - Пересмотреть `AppState` дальше — выделить session-сектор (LastPath,
+    ViewMode, ExpandedPaths, IsPreviewVisible, PreviewWidth) в отдельный
+    подrecord по аналогии с `WindowGeometry`.
 
 При планировании следующих чисток — добавлять сюда новые подзаголовки.
 
@@ -180,16 +197,15 @@
 
 Core готов, нужно дотянуть в UI / VM.
 
-- **[P0] `UndoService` → UI**. KeyBinding `Ctrl+Z` на Window; `UndoCommand` в
-  VM (`CanExecute = _undo.CanUndo`). В Status текст последнего отменённого action.
-  Подписка на `UndoService.Changed` для refresh `CommandManager`.
-- **[P0] `Shift+Delete` → `PermanentDelete`**. KeyBinding в Window. В диалоге
-  явное предупреждение "This will be deleted permanently and **cannot be undone**"
-  + иконка Warning + Cancel по-умолчанию. После — Status: "Permanently deleted N items".
+- ~~**[P0] `UndoService` → UI**~~ — **сделано**. `UndoCommand` в VM,
+  `Ctrl+Z` в Window.InputBindings (видно из grep).
+- ~~**[P0] `Shift+Delete` → `PermanentDelete`**~~ — **сделано**. VM
+  использует `_ops.PermanentDelete` для permanent path, async версия
+  `DeleteManyAsync(permanent: true)` для batch.
 - ~~**[P0] Лог в файл**~~ — **сделано**. `FileLogger` пишет в
   `%LocalAppData%\Wander\logs\session-yyyymmdd-hhmmss.log`, регистрируется
-  первым в `PlatformBootstrapper`. Smoke-тест подтвердил запись session-start
-  и операций навигации.
+  первым в `PlatformBootstrapper`. Заодно зарегистрирован как `ILogFile`
+  (новый интерфейс).
 
 ---
 
@@ -235,15 +251,22 @@ Core готов, нужно дотянуть в UI / VM.
 
 - **[P2] A1. Spacing и размеры иконок.** В Tiles 220×40 — иконка 32 px, в LargeIcons —
   плитки 120 px / иконка 96 px. Пересмотреть отступы между плитками, размеры
-  самой плитки, дать побольше воздуха. Конкретные значения подобрать визуально.
+  самой плитки, дать побольше воздуха.
+  **Частично сделано** для LargeIcons: значения вынесены в `AppSettings`
+  (`LargeIconCellWidth`/`Image`/`Margin`/`LabelFontSize`) — пользователь
+  может менять. Остаётся: применить эти binding-и в XAML LargeIcons, плюс
+  то же самое для Tiles и Details, плюс перевыбрать defaults.
 - **[P1] A2. Чуть затемнить область дерева.** Background `#F8F8F8` или
   `SystemColors.ControlBrush`. Минут 10 работы.
 - **[P2] A3. Inline rename "на иконке".** F2 / клик-задержка превращает имя
   в TextBox прямо в строке/плитке (как в Explorer). PromptDialog оставить
   fallback'ом, когда primary selection отсутствует.
-- **[P1] A4. Toggle "Show hidden" + opacity.** Скрытые/системные по умолчанию
-  не показываем. В View-меню чекбокс "Show hidden" — при включении рисуются
-  с `Opacity=0.5`. Сохранять в `AppState.ShowHidden`.
+- ~~**[P1] A4. Toggle "Show hidden" + opacity.**~~ — **фильтрация сделана**.
+  `Settings.ShowHidden` / `Settings.ShowSystem` фильтруют `Entries` в
+  MainViewModel (line 568-575); пересборка списка по `PropertyChanged` (line 636).
+  По умолчанию обе скрыты — Explorer-parity.
+  **Остаётся** opacity для visible-hidden — сейчас при включении тогглов
+  они просто видны, без визуального отличия. Тривиальный binding в стилях.
 - **[P1] A5. Sort menu в View.** После view-modes (Details/Tiles/LargeIcons) —
   разделитель, потом группа "Sort by" → Name / Date modified / Size / Type,
   Asc/Desc как отдельные пункты, "Group folders first" чекбоксом. Применяется
@@ -291,28 +314,36 @@ Core готов, нужно дотянуть в UI / VM.
 
 ### E. Async операции — [P1, главный фокус]
 
-- **E1.** `FileOperationService.CopyManyAsync` / `MoveManyAsync` /
-  `DeleteAsync` / `PermanentDeleteAsync` с `IProgress<BatchProgress>` и
-  `CancellationToken`. `BatchProgress` = current/total + currentFileName +
-  bytesDone/bytesTotal. Sync-методы оставить тонкими обёртками `.GetAwaiter().GetResult()`
-  для текущего кода (потом смигрируем).
-- **E2. `ProgressDialog`.** Modal с прогрессом текущего файла + общим,
-  кнопкой Cancel, кнопкой "Hide" (свернуть в статус-бар). Спинер видим пока
-  не пошёл реальный прогресс (для маленьких файлов он и не появится).
-- **E3. Async thumbnails.** A7 / A8 поверх async-инфраструктуры. Cache в памяти
+- ~~**E1.**~~ — **сделано**. `CopyManyAsync` / `MoveManyAsync` /
+  `DeleteManyAsync(permanent)` в `FileOperationService`, докладывают прогресс
+  в общий `OperationTracker` (Core/Operations). Sync `CopyMany`/`MoveMany`
+  оставлены как тонкие обёртки. `DispatcherConflictResolver` маршалит conflict
+  dialogs обратно на UI thread с фонового потока.
+- **[P1] E2. `ProgressDialog`.** Modal с прогрессом текущего файла + общим,
+  кнопкой Cancel, кнопкой "Hide" (свернуть в статус-бар). Сейчас прогресс
+  виден только через `OperationViewModel` где-то в UI (предположительно
+  status-bar). Отдельного окна с Cancel нет — это P1.
+- **[P2] E3. Async thumbnails.** A7 / A8 поверх async-инфраструктуры. Cache в памяти
   + опционально на диске (`%LocalAppData%\Wander\thumbs\`) с ключом по path+mtime.
-- **E4. UndoService busy-guard.** Убедиться что `CanUndo=false` пока batch
-  в работе, и Ctrl+Z во время прогресса молча игнорируется. Тест на это.
+- ~~**E4.**~~ — **сделано в Core**. `UndoService.BeginOperation()` ловит
+  busy-period, `CanUndo` ложится при наличии активной операции. Покрытие
+  тестом проверить можно отдельно.
 
 ### F. Settings — [P1 для расширения state.json, P2 для окна]
 
-- **[P1] F1. Всё в `state.json`** (решено): добавляем `ShowHidden`, `SortKey`,
-  `SortAscending`, `GroupFoldersFirst`, `Favorites`, `Theme`. По мере появления
-  фич — дополняем `AppState`.
-- **[P2] F2. SettingsDialog.** Group: View (Show hidden, theme, ...); Behavior
-  (default action на double-click, auto-load thumbnails); Advanced (clear cache,
-  reset state). Открывается из главного меню Options (сейчас stub).
-- **[P2] F3. Reset to defaults.** Кнопка в SettingsDialog — `new AppState()` + save.
+- ~~**F1. Всё в `state.json`**~~ — **сделано**, но в более чистом виде, чем
+  планировалось: пользовательские настройки выделены в отдельный record
+  `AppSettings` (RestoreLastFolder, ShowHidden, ShowSystem, LargeIcon* tuning,
+  ShowDebugMenu) и встроены в `AppState.Settings`. Session-state (`LastPath`,
+  expanded, preview, window geometry) живёт там же, но разнесён по другому
+  под-полю.
+- ~~**F2. SettingsDialog (основа)**~~ — **сделано базово**. `SettingsViewModel`
+  с категориями (General / Safety / Layout / Debug), `SettingsCategoryViewModel`
+  иерархия, `SettingsWindow.xaml`. Открытие из главного меню — проверить
+  что пункт Options теперь зовёт реальный диалог, а не stub. Расширение
+  категорий (Theme, Behavior, Advanced) — по мере роста скоупа.
+- **[P2] F3. Reset to defaults.** Кнопка в SettingsDialog —
+  `new AppSettings()` + save. Не подтверждено существование.
 
 ### G. Поиск — [P1 для базы, P3 для advanced]
 

@@ -216,7 +216,7 @@ public sealed class SystemIconProvider : IIconProvider {
         try {
             int hr;
             try {
-                hr = SHCreateItemFromParsingName(path, IntPtr.Zero, IID_IShellItem, out item);
+                hr = SHCreateItemFromParsingName(path, IntPtr.Zero, _iidShellItem, out item);
             } catch {
                 return null;
             }
@@ -509,7 +509,7 @@ public sealed class SystemIconProvider : IIconProvider {
     private const int BI_RGB = 0;
     private const uint DIB_RGB_COLORS = 0;
 
-    private static readonly Guid IID_IShellItem = new("43826D1E-E718-42EE-BC55-A1E261C37BFE");
+    private static readonly Guid _iidShellItem = new("43826D1E-E718-42EE-BC55-A1E261C37BFE");
 
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]

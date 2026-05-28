@@ -39,7 +39,10 @@ if /i "%MODE%"=="run" (
     echo === smoke run ===
     set EXE=src\Wander.App\bin\Debug\net10.0-windows\Wander.App.exe
     start "" "!EXE!"
-    timeout /t 5 /nobreak > nul
+    rem `timeout` needs an interactive console; under redirected stdin it
+    rem prints "Input redirection is not supported". `ping` is the classic
+    rem workaround that always sleeps without touching stdin.
+    ping 127.0.0.1 -n 6 > nul
     taskkill /f /im Wander.App.exe > nul 2>&1
     echo   smoke launch ok
 )

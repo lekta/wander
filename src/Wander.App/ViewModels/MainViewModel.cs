@@ -2,11 +2,8 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.IO;
-using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Wander.App.Conflict;
 using Wander.App.Util;
@@ -20,8 +17,6 @@ using Wander.Core.Operations;
 using Wander.Core.Persistence;
 using Wander.Core.Shell;
 using Wander.Core.Undo;
-// Disambiguate from System.Windows.Media.ImageMetadata.
-using ImageMetadata = Wander.Core.Icons.ImageMetadata;
 
 namespace Wander.App.ViewModels;
 
@@ -30,7 +25,6 @@ public sealed class MainViewModel : ObservableObject {
     private readonly IShellLauncher _shell;
     private readonly IAppStateStore _stateStore;
     private readonly IFileLockInspector? _lockInspector;
-    private readonly IImageMetadataReader? _metadataReader;
     private readonly NavigationService _nav = new();
     private readonly FileOperationService _ops;
     private readonly UndoService _undo;
@@ -46,19 +40,6 @@ public sealed class MainViewModel : ObservableObject {
 
     private bool _isPreviewVisible;
     private double _previewWidth = 280;
-    private PreviewKind _previewKind = PreviewKind.None;
-    private bool _isPreviewLoading;
-    private string? _previewText;
-    private ImageSource? _previewImage;
-    private string? _previewCodeText;
-    private string? _previewCodeExtension;
-    private Uri? _previewWebUri;
-    private string? _previewWebHtml;
-    private ImageMetadata? _previewImageMetadata;
-    private string _previewSummary = "";
-
-    private CancellationTokenSource? _previewCts;
-    private CancellationTokenSource? _summaryCts;
 
     private List<string> _clipboard = new();
     private bool _clipboardIsCut;
@@ -73,14 +54,16 @@ public sealed class MainViewModel : ObservableObject {
         _lockInspector = ServiceLocator.IsRegistered<IFileLockInspector>()
             ? ServiceLocator.Get<IFileLockInspector>()
             : null;
-        _metadataReader = ServiceLocator.IsRegistered<IImageMetadataReader>()
-            ? ServiceLocator.Get<IImageMetadataReader>()
-            : null;
         _ops = ServiceLocator.Get<FileOperationService>();
         _undo = ServiceLocator.Get<UndoService>();
         _tracker = ServiceLocator.Get<OperationTracker>();
         _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
         _log = ServiceLocator.IsRegistered<ILogger>() ? ServiceLocator.Get<ILogger>() : NullLogger.Instance;
+
+        Preview = new PreviewController(
+            ServiceLocator.IsRegistered<IImageMetadataReader>()
+                ? ServiceLocator.Get<IImageMetadataReader>()
+                : null);
 
         Entries = new ObservableCollection<FileSystemEntry>();
         Roots = new ObservableCollection<TreeNodeViewModel>();
@@ -132,6 +115,13 @@ public sealed class MainViewModel : ObservableObject {
     public ObservableCollection<OperationViewModel> Operations { get; }
 
     /// <summary>
+    /// Owns the preview pane content (kind, image / text / code / web,
+    /// footer summary). MainVM only feeds it selection / folder / visibility
+    /// — XAML binds to <c>Preview.X</c> directly.
+    /// </summary>
+    public PreviewController Preview { get; }
+
+    /// <summary>
     /// User preferences. XAML binds to this (e.g. tile sizes) and the
     /// settings dialog edits it directly. Side effects (re-listing the
     /// folder when ShowHidden flips, persisting to disk) run through
@@ -163,8 +153,7 @@ public sealed class MainViewModel : ObservableObject {
         get => _selectedEntry;
         set {
             if (SetField(ref _selectedEntry, value)) {
-                SchedulePreviewUpdate();
-                ScheduleSummaryUpdate();
+                Preview.SetPrimary(value);
             }
         }
     }
@@ -173,7 +162,7 @@ public sealed class MainViewModel : ObservableObject {
         get => _selectedEntries;
         set {
             if (SetField(ref _selectedEntries, value)) {
-                ScheduleSummaryUpdate();
+                Preview.SetSelection(value);
             }
         }
     }
@@ -191,8 +180,7 @@ public sealed class MainViewModel : ObservableObject {
         get => _isPreviewVisible;
         set {
             if (SetField(ref _isPreviewVisible, value)) {
-                SchedulePreviewUpdate();
-                ScheduleSummaryUpdate();
+                Preview.SetVisible(value);
                 SaveState();
             }
         }
@@ -207,67 +195,6 @@ public sealed class MainViewModel : ObservableObject {
             }
         }
     }
-
-    public PreviewKind PreviewKind {
-        get => _previewKind;
-        private set {
-            if (SetField(ref _previewKind, value)) {
-                Raise(nameof(IsPreviewPlaceholderVisible));
-                Raise(nameof(PreviewPlaceholderText));
-            }
-        }
-    }
-
-    public bool IsPreviewLoading {
-        get => _isPreviewLoading;
-        private set => SetField(ref _isPreviewLoading, value);
-    }
-
-    public string? PreviewText {
-        get => _previewText;
-        private set => SetField(ref _previewText, value);
-    }
-
-    public ImageSource? PreviewImage {
-        get => _previewImage;
-        private set => SetField(ref _previewImage, value);
-    }
-
-    public string? PreviewCodeText {
-        get => _previewCodeText;
-        private set => SetField(ref _previewCodeText, value);
-    }
-
-    public string? PreviewCodeExtension {
-        get => _previewCodeExtension;
-        private set => SetField(ref _previewCodeExtension, value);
-    }
-
-    public Uri? PreviewWebUri {
-        get => _previewWebUri;
-        private set => SetField(ref _previewWebUri, value);
-    }
-
-    public string? PreviewWebHtml {
-        get => _previewWebHtml;
-        private set => SetField(ref _previewWebHtml, value);
-    }
-
-    public ImageMetadata? PreviewImageMetadata {
-        get => _previewImageMetadata;
-        private set => SetField(ref _previewImageMetadata, value);
-    }
-
-    public string PreviewSummary {
-        get => _previewSummary;
-        private set => SetField(ref _previewSummary, value);
-    }
-
-    public bool IsPreviewPlaceholderVisible =>
-        _isPreviewVisible && (_previewKind == PreviewKind.None || _previewKind == PreviewKind.Unsupported);
-
-    public string PreviewPlaceholderText =>
-        _previewKind == PreviewKind.None ? "Select a file to preview" : "No preview available";
 
     public RelayCommand BackCommand { get; }
     public RelayCommand ForwardCommand { get; }
@@ -390,7 +317,7 @@ public sealed class MainViewModel : ObservableObject {
 
         _log.Info($"Drop: {effect} {sourcePaths.Count} item(s) into {targetFolder}");
         var resolver = new DispatcherConflictResolver(new InteractiveConflictResolver());
-        IReadOnlyList<FileOperationService.BatchItemResult> results;
+        IReadOnlyList<BatchItemResult> results;
         try {
             results = effect == DropEffect.Move
                 ? await _ops.MoveManyAsync(sourcePaths, targetFolder, resolver)
@@ -457,6 +384,7 @@ public sealed class MainViewModel : ObservableObject {
 
             _isPreviewVisible = state.IsPreviewVisible;
             Raise(nameof(IsPreviewVisible));
+            Preview.SetVisible(_isPreviewVisible);
             if (state.PreviewWidth >= 120 && state.PreviewWidth <= 900) {
                 _previewWidth = state.PreviewWidth;
                 Raise(nameof(PreviewWidth));
@@ -548,8 +476,8 @@ public sealed class MainViewModel : ObservableObject {
         Raise(nameof(CurrentPath));
         Refresh();
         ExpandTreeToCurrent();
+        Preview.SetCurrentFolder(_nav.Current, WindowTitle);
         SaveState();
-        ScheduleSummaryUpdate();
     }
 
     private void ExpandTreeToCurrent() {
@@ -681,374 +609,6 @@ public sealed class MainViewModel : ObservableObject {
     }
 
 
-    // --- Preview content -----------------------------------------------
-
-    private static readonly HashSet<string> _imageExtensions = new(StringComparer.OrdinalIgnoreCase) {
-        ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".webp", ".tif", ".tiff",
-        // RAW (may not render but we still try; metadata works regardless):
-        ".cr2", ".cr3", ".nef", ".arw", ".dng", ".raf", ".orf", ".rw2",
-    };
-
-    private static readonly HashSet<string> _textExtensions = new(StringComparer.OrdinalIgnoreCase) {
-        ".txt", ".log", ".csv", ".tsv",
-        ".ini", ".cfg", ".conf", ".toml", ".env", ".gitignore", ".gitattributes",
-        ".editorconfig",
-    };
-
-    private static readonly HashSet<string> _codeExtensions = new(StringComparer.OrdinalIgnoreCase) {
-        ".cs", ".csproj", ".props", ".targets", ".sln", ".slnx",
-        ".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs",
-        ".py", ".rb", ".go", ".rs", ".java", ".kt", ".swift", ".php",
-        ".c", ".cpp", ".cc", ".cxx", ".h", ".hpp", ".m", ".mm",
-        ".css", ".scss", ".less",
-        ".sh", ".ps1", ".bat", ".cmd",
-        ".sql",
-        ".xml", ".xaml", ".svg",
-        ".json", ".yaml", ".yml",
-    };
-
-    private const long PreviewMaxFileSize = 1_048_576;     // 1 MB
-    private const int PreviewMaxChars = 200_000;
-
-
-    private void SchedulePreviewUpdate() {
-        _previewCts?.Cancel();
-        _previewCts = new CancellationTokenSource();
-        _ = UpdatePreviewAsync(_previewCts.Token);
-    }
-
-    private async Task UpdatePreviewAsync(CancellationToken ct) {
-        ClearPreviewContent();
-
-        if (!_isPreviewVisible || _selectedEntry is null || _selectedEntry.Kind != EntryKind.File) {
-            PreviewKind = PreviewKind.None;
-            IsPreviewLoading = false;
-            return;
-        }
-
-        IsPreviewLoading = true;
-        try {
-            string path = _selectedEntry.FullPath;
-            string ext = Path.GetExtension(path);
-
-            if (_imageExtensions.Contains(ext)) {
-                await LoadImageAsync(path, ct);
-                return;
-            }
-
-            if (ext.Equals(".pdf", StringComparison.OrdinalIgnoreCase) ||
-                ext.Equals(".html", StringComparison.OrdinalIgnoreCase) ||
-                ext.Equals(".htm", StringComparison.OrdinalIgnoreCase)) {
-                PreviewWebUri = new Uri(path);
-                PreviewKind = PreviewKind.Web;
-                return;
-            }
-
-            if (ext.Equals(".md", StringComparison.OrdinalIgnoreCase) ||
-                ext.Equals(".markdown", StringComparison.OrdinalIgnoreCase)) {
-                await LoadMarkdownAsync(path, ct);
-                return;
-            }
-
-            if (_codeExtensions.Contains(ext)) {
-                await LoadCodeAsync(path, ext, ct);
-                return;
-            }
-
-            if (_textExtensions.Contains(ext) || string.IsNullOrEmpty(ext)) {
-                await LoadTextAsync(path, ct);
-                return;
-            }
-
-            PreviewKind = PreviewKind.Unsupported;
-        } catch (OperationCanceledException) {
-            // newer selection won — ignore
-        } finally {
-            if (!ct.IsCancellationRequested) {
-                IsPreviewLoading = false;
-                ScheduleSummaryUpdate();  // metadata might have arrived
-            }
-        }
-    }
-
-    private async Task LoadImageAsync(string path, CancellationToken ct) {
-        BitmapImage? image = null;
-        ImageMetadata? meta = null;
-
-        await Task.Run(() => {
-            ct.ThrowIfCancellationRequested();
-            try {
-                var bi = new BitmapImage();
-                bi.BeginInit();
-                bi.CacheOption = BitmapCacheOption.OnLoad;
-                bi.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
-                bi.UriSource = new Uri(path);
-                bi.EndInit();
-                bi.Freeze();
-                image = bi;
-            } catch {
-                // RAW or unsupported codec — image stays null, metadata may still load.
-            }
-
-            if (_metadataReader is not null) {
-                meta = _metadataReader.Read(path);
-            }
-        }, ct);
-
-        if (ct.IsCancellationRequested) {
-            return;
-        }
-
-        PreviewImageMetadata = meta;
-        if (image is not null) {
-            PreviewImage = image;
-            PreviewKind = PreviewKind.Image;
-        } else {
-            PreviewKind = PreviewKind.Unsupported;
-        }
-    }
-
-    private async Task LoadTextAsync(string path, CancellationToken ct) {
-        if ((_selectedEntry?.Size ?? 0) > PreviewMaxFileSize) {
-            PreviewKind = PreviewKind.Unsupported;
-            return;
-        }
-
-        string text;
-        try {
-            text = await File.ReadAllTextAsync(path, ct);
-        } catch (OperationCanceledException) {
-            return;
-        } catch {
-            PreviewKind = PreviewKind.Unsupported;
-            return;
-        }
-
-        if (ct.IsCancellationRequested) {
-            return;
-        }
-
-        if (text.Length > PreviewMaxChars) {
-            text = text.Substring(0, PreviewMaxChars) + "\n\n… (truncated)";
-        }
-        PreviewText = text;
-        PreviewKind = PreviewKind.Text;
-    }
-
-    private async Task LoadCodeAsync(string path, string ext, CancellationToken ct) {
-        if ((_selectedEntry?.Size ?? 0) > PreviewMaxFileSize) {
-            PreviewKind = PreviewKind.Unsupported;
-            return;
-        }
-
-        string text;
-        try {
-            text = await File.ReadAllTextAsync(path, ct);
-        } catch (OperationCanceledException) {
-            return;
-        } catch {
-            PreviewKind = PreviewKind.Unsupported;
-            return;
-        }
-
-        if (ct.IsCancellationRequested) {
-            return;
-        }
-
-        if (text.Length > PreviewMaxChars) {
-            text = text.Substring(0, PreviewMaxChars) + "\n\n// … (truncated)";
-        }
-        PreviewCodeText = text;
-        PreviewCodeExtension = ext;
-        PreviewKind = PreviewKind.Code;
-    }
-
-    private async Task LoadMarkdownAsync(string path, CancellationToken ct) {
-        if ((_selectedEntry?.Size ?? 0) > PreviewMaxFileSize) {
-            PreviewKind = PreviewKind.Unsupported;
-            return;
-        }
-
-        string md;
-        try {
-            md = await File.ReadAllTextAsync(path, ct);
-        } catch (OperationCanceledException) {
-            return;
-        } catch {
-            PreviewKind = PreviewKind.Unsupported;
-            return;
-        }
-
-        if (ct.IsCancellationRequested) {
-            return;
-        }
-
-        string html = await Task.Run(() => Markdig.Markdown.ToHtml(md), ct);
-        string wrapped = WrapHtml(html);
-        PreviewWebHtml = wrapped;
-        PreviewKind = PreviewKind.Web;
-    }
-
-    private static string WrapHtml(string body) {
-        return $@"<!doctype html><html><head><meta charset='utf-8'><style>
-            body {{ font-family: 'Segoe UI', sans-serif; font-size: 13px; padding: 10px; color: #222; }}
-            pre, code {{ font-family: Consolas, monospace; background: #f4f4f4; padding: 2px 4px; border-radius: 3px; }}
-            pre {{ padding: 8px; overflow-x: auto; }}
-            h1, h2, h3 {{ margin: 0.6em 0 0.3em; }}
-            blockquote {{ border-left: 3px solid #ccc; margin: 0; padding-left: 10px; color: #555; }}
-            table {{ border-collapse: collapse; }}
-            th, td {{ border: 1px solid #ccc; padding: 4px 8px; }}
-            img {{ max-width: 100%; }}
-        </style></head><body>{body}</body></html>";
-    }
-
-    private void ClearPreviewContent() {
-        PreviewText = null;
-        PreviewImage = null;
-        PreviewCodeText = null;
-        PreviewCodeExtension = null;
-        PreviewWebUri = null;
-        PreviewWebHtml = null;
-        PreviewImageMetadata = null;
-    }
-
-
-    // --- Preview footer summary ----------------------------------------
-
-    private void ScheduleSummaryUpdate() {
-        _summaryCts?.Cancel();
-        _summaryCts = new CancellationTokenSource();
-        _ = UpdateSummaryAsync(_summaryCts.Token);
-    }
-
-    private async Task UpdateSummaryAsync(CancellationToken ct) {
-        if (!_isPreviewVisible) {
-            PreviewSummary = "";
-            return;
-        }
-
-        // 1. Single file selected — show file details + EXIF if image.
-        if (_selectedEntries.Count == 1 && _selectedEntries[0].Kind == EntryKind.File) {
-            var e = _selectedEntries[0];
-            string summary = $"📄  {e.Name}\nSize: {SizeFormatter.Format(e.Size)}   •   Modified: {FormatModified(e.ModifiedUtc)}";
-            if (_previewImageMetadata is { } m) {
-                summary += "\n" + FormatExif(m);
-            }
-            PreviewSummary = summary;
-            return;
-        }
-
-        // 2. Single folder selected — recursive count + size, async.
-        if (_selectedEntries.Count == 1 && _selectedEntries[0].Kind == EntryKind.Directory) {
-            var e = _selectedEntries[0];
-            PreviewSummary = $"📁  {e.Name} — calculating…";
-            var (count, size) = await Task.Run(() => CountAndSum(new[] { e.FullPath }, ct), ct);
-            if (ct.IsCancellationRequested) {
-                return;
-            }
-            PreviewSummary = $"📁  {e.Name} — {count} files, {SizeFormatter.Format(size)}";
-            return;
-        }
-
-        // 3. Multiple items selected.
-        if (_selectedEntries.Count > 1) {
-            PreviewSummary = $"{_selectedEntries.Count} items selected — calculating…";
-            var paths = _selectedEntries.Select(en => en.FullPath).ToArray();
-            var (count, size) = await Task.Run(() => CountAndSum(paths, ct), ct);
-            if (ct.IsCancellationRequested) {
-                return;
-            }
-            PreviewSummary = $"{_selectedEntries.Count} items selected — {count} files inside, {SizeFormatter.Format(size)}";
-            return;
-        }
-
-        // 4. Nothing selected — summary of current folder.
-        if (!string.IsNullOrEmpty(_nav.Current)) {
-            string name = WindowTitle;
-            PreviewSummary = $"📁  {name} — calculating…";
-            string cur = _nav.Current;
-            var (count, size) = await Task.Run(() => CountAndSum(new[] { cur }, ct), ct);
-            if (ct.IsCancellationRequested) {
-                return;
-            }
-            PreviewSummary = $"📁  {name} — {count} files, {SizeFormatter.Format(size)}";
-            return;
-        }
-
-        PreviewSummary = "";
-    }
-
-    private static (int Count, long Size) CountAndSum(string[] paths, CancellationToken ct) {
-        int count = 0;
-        long size = 0;
-        foreach (var p in paths) {
-            if (ct.IsCancellationRequested) {
-                break;
-            }
-            try {
-                if (Directory.Exists(p)) {
-                    foreach (var f in Directory.EnumerateFiles(p, "*", SearchOption.AllDirectories)) {
-                        if (ct.IsCancellationRequested) {
-                            break;
-                        }
-                        count++;
-                        try {
-                            size += new FileInfo(f).Length;
-                        } catch {
-                            // access denied per-file — ignore
-                        }
-                    }
-                } else if (File.Exists(p)) {
-                    count++;
-                    try {
-                        size += new FileInfo(p).Length;
-                    } catch {
-                        // ignore
-                    }
-                }
-            } catch {
-                // access denied on enumeration — skip this root
-            }
-        }
-        return (count, size);
-    }
-
-    private static string FormatModified(DateTime utc) {
-        return utc == DateTime.MinValue ? "—" : utc.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
-    }
-
-    private static string FormatExif(ImageMetadata m) {
-        var parts = new List<string>();
-        string? camera = string.Join(" ", new[] { m.CameraMake, m.CameraModel }.Where(s => !string.IsNullOrWhiteSpace(s)));
-        if (!string.IsNullOrWhiteSpace(camera)) {
-            parts.Add(camera);
-        }
-        var shot = new List<string>();
-        if (!string.IsNullOrEmpty(m.IsoSpeed)) {
-            shot.Add($"ISO {m.IsoSpeed}");
-        }
-        if (!string.IsNullOrEmpty(m.Aperture)) {
-            shot.Add(m.Aperture);
-        }
-        if (!string.IsNullOrEmpty(m.ShutterSpeed)) {
-            shot.Add(m.ShutterSpeed);
-        }
-        if (!string.IsNullOrEmpty(m.FocalLength)) {
-            shot.Add(m.FocalLength);
-        }
-        if (shot.Count > 0) {
-            parts.Add(string.Join(", ", shot));
-        }
-        if (m.PixelWidth is int w && m.PixelHeight is int h) {
-            parts.Add($"{w} × {h}");
-        }
-        if (m.DateTaken is { } dt) {
-            parts.Add(dt.ToString("yyyy-MM-dd HH:mm"));
-        }
-        return string.Join("   •   ", parts);
-    }
-
-
     // --- Destructive / clipboard ops (always confirm, Cancel-default) --
 
     private async Task DeleteSelectedAsync(bool permanent) {
@@ -1112,7 +672,7 @@ public sealed class MainViewModel : ObservableObject {
         }
 
         var paths = snapshot.Select(e => e.FullPath).ToList();
-        IReadOnlyList<FileOperationService.DeleteResult> results;
+        IReadOnlyList<DeleteResult> results;
         try {
             results = await _ops.DeleteManyAsync(paths, permanent);
         } catch (Exception ex) {
@@ -1123,10 +683,10 @@ public sealed class MainViewModel : ObservableObject {
 
         Refresh();
 
-        int ok = results.Count(r => r.Status == FileOperationService.DeleteStatus.Ok);
-        int failed = results.Count(r => r.Status == FileOperationService.DeleteStatus.Failed);
+        int ok = results.Count(r => r.Status == DeleteStatus.Ok);
+        int failed = results.Count(r => r.Status == DeleteStatus.Failed);
         if (failed > 0) {
-            var firstFail = results.First(r => r.Status == FileOperationService.DeleteStatus.Failed);
+            var firstFail = results.First(r => r.Status == DeleteStatus.Failed);
             string detail = firstFail.Error is null ? "" : ": " + DescribeError(firstFail.Error, firstFail.Path);
             Status = $"{(permanent ? "Deleted" : "Recycled")} {ok}, {failed} failed{detail}";
         } else {
@@ -1207,7 +767,7 @@ public sealed class MainViewModel : ObservableObject {
 
         _log.Info($"Paste: {(wasCut ? "move" : "copy")} {sources.Count} item(s) into {target}");
         var resolver = new DispatcherConflictResolver(new InteractiveConflictResolver());
-        IReadOnlyList<FileOperationService.BatchItemResult> results;
+        IReadOnlyList<BatchItemResult> results;
         try {
             results = wasCut
                 ? await _ops.MoveManyAsync(sources, target, resolver)
@@ -1225,14 +785,14 @@ public sealed class MainViewModel : ObservableObject {
         ReportBatchResults(results, wasCut ? "Moved" : "Copied", target);
     }
 
-    private void ReportBatchResults(IReadOnlyList<FileOperationService.BatchItemResult> results, string verb, string target) {
+    private void ReportBatchResults(IReadOnlyList<BatchItemResult> results, string verb, string target) {
         int ok = results.Count(r =>
-            r.Status == FileOperationService.BatchItemStatus.Ok ||
-            r.Status == FileOperationService.BatchItemStatus.Replaced ||
-            r.Status == FileOperationService.BatchItemStatus.Renamed);
-        int skipped = results.Count(r => r.Status == FileOperationService.BatchItemStatus.Skipped);
-        int failed = results.Count(r => r.Status == FileOperationService.BatchItemStatus.Failed);
-        int cancelled = results.Count(r => r.Status == FileOperationService.BatchItemStatus.Cancelled);
+            r.Status == BatchItemStatus.Ok ||
+            r.Status == BatchItemStatus.Replaced ||
+            r.Status == BatchItemStatus.Renamed);
+        int skipped = results.Count(r => r.Status == BatchItemStatus.Skipped);
+        int failed = results.Count(r => r.Status == BatchItemStatus.Failed);
+        int cancelled = results.Count(r => r.Status == BatchItemStatus.Cancelled);
 
         if (ok == 0 && skipped == 0 && failed == 0 && cancelled == results.Count) {
             Status = "Operation cancelled.";
@@ -1247,7 +807,7 @@ public sealed class MainViewModel : ObservableObject {
             parts.Add($"cancelled {cancelled}");
         }
         if (failed > 0) {
-            var firstFail = results.First(r => r.Status == FileOperationService.BatchItemStatus.Failed);
+            var firstFail = results.First(r => r.Status == BatchItemStatus.Failed);
             string detail = firstFail.Error is null ? "" : ": " + DescribeError(firstFail.Error, firstFail.Source);
             parts.Add($"{failed} failed{detail}");
         }
