@@ -131,10 +131,12 @@
         <DataTemplate DataType="{x:Type vm:BookmarksSettingsCategory}">
             <StackPanel>
                 <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
-                <CheckBox Content="Показывать «Этот компьютер»"
-                          IsChecked="{Binding Owner.ShowBookmarkThisPc}"/>
                 <CheckBox Content="Показывать «Загрузки»"
                           IsChecked="{Binding Owner.ShowBookmarkDownloads}"/>
+                <CheckBox Content="Показывать «Документы»"
+                          IsChecked="{Binding Owner.ShowBookmarkDocuments}"/>
+                <CheckBox Content="Показывать «Изображения»"
+                          IsChecked="{Binding Owner.ShowBookmarkPictures}"/>
                 <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0">
                     Спец-папки появляются в верхней панели слева. Любую папку
                     можно добавить туда перетаскиванием. «Корзину» добавим

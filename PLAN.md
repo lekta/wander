@@ -43,20 +43,50 @@
 ### Спринт 3 — техническая чистка #1 + добить P1 (текущий фокус)
 1. ~~**Технические чистки #1**~~ — **сделано**. См. секцию ниже: `BatchExecutor`,
    `PreviewController`, `SelectionController`, `WindowGeometry` подrecord.
-2. **E2 ProgressDialog** — modal-окно вокруг async-batch с Cancel и Hide.
+2. ~~**E2 ProgressDialog**~~ — **сделано (базовый)**. Modal-окно
+   `Views/ProgressDialog.xaml` с заголовком, current-path лейблом,
+   ProgressBar (0..100), счётчиком `done / total` и кнопкой «Отмена».
+   `MainViewModel.RunWithProgressDialogAsync` оборачивает
+   `CopyManyAsync` / `MoveManyAsync` / `DeleteManyAsync` (HandleDrop /
+   Paste / DeleteSelected). Кнопка дёргает `CancellationTokenSource`,
+   batch-операция сама раскладывает Cancelled-результаты, диалог
+   авто-закрывается при завершении задачи через `Task.ContinueWith` +
+   `Dispatcher.BeginInvoke`. Без Hide-в-статус-бар — это P2-доработка.
 3. **A5 Sort menu** + **A6 .lnk-папки рядом с папками**.
-4. **#4 "Cannot drop here" не пугает внутри окна**.
-5. **A4 opacity для visible-hidden** (фильтр уже работает).
-6. **A9 Click-empty=unselect**, **A10 Rubber-band selection**.
-7. **A2 Затемнить дерево**.
-8. **G1+G2 Search basic** (input в toolbar + фильтр текущей папки).
+4. ~~**#4 "Cannot drop here" не пугает внутри окна**~~ — **сделано**.
+   `UpdatePreviewForCurrentTarget` теперь прячет `DragPreviewWindow`,
+   когда `Effects=None` и нет конкретной `SelfDropReason` —
+   системный no-drop-курсор остаётся, красная плашка не маячит над
+   соседними валидными папками. Self-drop с причиной по-прежнему
+   показывается громко (там сообщение действительно полезно).
+5. ~~**A4 opacity для visible-hidden**~~ — **сделано**. Implicit-стили
+   `DataGridRow` / `ListBoxItem` в `MainWindow.xaml` получили
+   DataTrigger по `IsHidden` / `IsSystem` → `Opacity=0.55`. Заметно,
+   но не отвлекает.
+6. ~~**A9 Click-empty=unselect**~~ — **сделано** (через A10:
+   `StartRubberBand` без Ctrl вызывает `ClearListSelection` сразу при
+   MouseDown, прежде чем растягивать лассо; чистый клик в пустоту с
+   немедленным MouseUp оставляет пустое выделение).
+   **A10 Rubber-band selection** — **сделано**.
+7. ~~**A2 Затемнить дерево**~~ — **сделано**. `Background="#F8F8F8"` на
+   левой колонке (обёртка над bookmarks-панелью и деревом дисков).
+8. ~~**G1+G2 Search basic**~~ — **сделано**. Узкая TextBox справа от
+   адресной строки, фокус по `Ctrl+F` (с пропуском, когда фокус внутри
+   AvalonEdit code-preview). `MainViewModel.SearchQuery` фильтрует
+   `Entries` по `Name.Contains(query, OrdinalIgnoreCase)`. Фильтрация
+   асинхронная (Task.Run + CancellationTokenSource на каждый keystroke,
+   снапшоты `query` / `_allEntries` чтобы не гоняться с Refresh).
+   `Esc` чистит запрос, повторный `Esc` / `Enter` отдают фокус активному
+   списку. Навигация в новую папку сбрасывает фильтр. Status-bar
+   показывает `X of Y items match "query"` при активном фильтре.
+   Дерево не трогается. Расширенный поиск — G3 (по-прежнему P3).
 9. ~~**D Favorites**~~ — **частично сделано (фаза 1)**. См. секцию D ниже:
    панель закладок над деревом дисков, сворачиваемая, drag-add, контекстное
    меню «Убрать из закладок», persist в `AppState.Favorites` /
-   `AppState.IsBookmarksExpanded`. Два дефолта: «Этот компьютер» (синтетический
-   узел, дети — те же VM-инстансы дисков, что и внизу) и «Загрузки» (через
-   `IKnownFolders` → `SHGetKnownFolderPath(FOLDERID_Downloads)`). Чекбоксы в
-   настройках (категория «Закладки»). Корзина — отдельный шаг ниже.
+   `AppState.IsBookmarksExpanded`. Три дефолта-спец-папки: «Загрузки»,
+   «Документы», «Изображения» — через `IKnownFolders` + `SHGetKnownFolderPath`
+   (FOLDERID_Downloads / Documents / Pictures). Каждая — отдельный чекбокс
+   в категории «Закладки». Корзина — отдельный шаг ниже.
 10. **D5. Корзина внутри Wander (shell-namespace)** — нужно ввести
     `IShellNamespace` в Core: enumerate shell items под `FOLDERID_RecycleBinFolder`,
     маппинг shell-item → `FileSystemEntry`-аналог, операции Restore /
@@ -249,12 +279,11 @@ Core готов, нужно дотянуть в UI / VM.
   накрывает только строку узла, не subtree. Fallback на сам TreeViewItem
   если шаблон без `Bd`.
 
-### 4. [P1] "Cannot drop here" пугает при drag внутри окна
-- **Симптом**: пока курсор не над валидной папкой, плашка preview агрессивно
-  пишет "Cannot drop here".
-- **Действие**: внутри окна, если `Effects=None`, скрывать preview-плашку
-  целиком (или показывать только нейтральный мини-индикатор без красного знака).
-  Снаружи окна — оставить как есть, системный курсор всё равно справится.
+### 4. ~~[P1] "Cannot drop here" пугает при drag внутри окна~~ — **сделано**
+- Внутри окна при `Effects=None` без конкретной `SelfDropReason`
+  `DragPreviewWindow` теперь `Visibility=Hidden` — пользователь видит
+  только системный no-drop-курсор. Self-drop с причиной по-прежнему
+  показывается громко (см. `UpdatePreviewForCurrentTarget`).
 
 ### 5. ~~[P0] "Двойное выделение" = focus rectangle + selection background~~ — **сделано**
 - Добавил implicit `Style` для `DataGridRow`/`DataGridCell`/`ListBoxItem`
@@ -276,17 +305,18 @@ Core готов, нужно дотянуть в UI / VM.
   (`LargeIconCellWidth`/`Image`/`Margin`/`LabelFontSize`) — пользователь
   может менять. Остаётся: применить эти binding-и в XAML LargeIcons, плюс
   то же самое для Tiles и Details, плюс перевыбрать defaults.
-- **[P1] A2. Чуть затемнить область дерева.** Background `#F8F8F8` или
-  `SystemColors.ControlBrush`. Минут 10 работы.
+- ~~**[P1] A2. Чуть затемнить область дерева.**~~ — **сделано**.
+  `Background="#F8F8F8"` на левой колонке (обёртка над bookmarks-панелью
+  и деревом дисков).
 - **[P2] A3. Inline rename "на иконке".** F2 / клик-задержка превращает имя
   в TextBox прямо в строке/плитке (как в Explorer). PromptDialog оставить
   fallback'ом, когда primary selection отсутствует.
-- ~~**[P1] A4. Toggle "Show hidden" + opacity.**~~ — **фильтрация сделана**.
+- ~~**[P1] A4. Toggle "Show hidden" + opacity.**~~ — **сделано**.
   `Settings.ShowHidden` / `Settings.ShowSystem` фильтруют `Entries` в
-  MainViewModel (line 568-575); пересборка списка по `PropertyChanged` (line 636).
-  По умолчанию обе скрыты — Explorer-parity.
-  **Остаётся** opacity для visible-hidden — сейчас при включении тогглов
-  они просто видны, без визуального отличия. Тривиальный binding в стилях.
+  MainViewModel, по умолчанию обе скрыты (Explorer-parity). Когда тогглы
+  включены — implicit-стили `DataGridRow` / `ListBoxItem` получают
+  DataTrigger по `IsHidden` / `IsSystem` → `Opacity=0.55`. Заметно,
+  но не отвлекает.
 - **[P1] A5. Sort menu в View.** После view-modes (Details/Tiles/LargeIcons) —
   разделитель, потом группа "Sort by" → Name / Date modified / Size / Type,
   Asc/Desc как отдельные пункты, "Group folders first" чекбоксом. Применяется
@@ -303,12 +333,15 @@ Core готов, нужно дотянуть в UI / VM.
 - **[P2] A8. Folder content preview.** Win10-style: за иконкой папки видны
   миниатюры файлов из неё. Через `IShellItemImageFactory.GetImage` для папки —
   shell сам соберёт миниатюру. Требует E3.
-- **[P1] A9. Клик в пустое пространство → снять выделение.** В DataGrid/ListBox
-  при клике на пустую область — `UnselectAll()`. Сейчас селект сохраняется.
+- ~~**[P1] A9. Клик в пустое пространство → снять выделение.**~~ —
+  **сделано** (как side-effect A10): `StartRubberBand` без Ctrl
+  вызывает `ClearListSelection` сразу на MouseDown, чистый клик в
+  пустоту с немедленным MouseUp оставляет пустое выделение.
 - ~~**[P1] A10. Rubber-band selection.**~~ — **сделано**. `Controls/RubberBandAdorner.cs`
   + hit-test в MainWindow.
-- **[P1] A11. Полупрозрачный системный курсор "невозможно" внутри окна.**
-  Продолжение багфикса #4 — silent default cursor (стрелка), preview прячется.
+- ~~**[P1] A11. Полупрозрачный системный курсор "невозможно" внутри окна.**~~ —
+  **сделано** вместе с #4: `DragPreviewWindow` прячется в no-drop-зонах,
+  остаётся только системный курсор.
 
 ### B. Preview pane
 
@@ -337,15 +370,14 @@ Core готов, нужно дотянуть в UI / VM.
   статусом. Контекст-меню «Убрать из закладок» работает только на
   пользовательских закладках (флаг `TreeNodeViewModel.IsRemovableBookmark`),
   для спец-папок IsEnabled=false.
-- ~~**D3.** Дефолтные спец-папки — Этот компьютер + Загрузки.~~ —
-  **сделано**. «Этот компьютер» — синтетический `TreeNodeViewModel`
-  с `FullPath=""` (клик не навигирует, гард в `Tree_SelectedItemChanged`),
-  Children = те же VM-инстансы, что и в `Roots`, так что
-  expand/collapse состояние шарится между панелями. «Загрузки» —
-  через `IKnownFolders.GetDownloads()` (новый интерфейс в Core,
-  реализация в `Wander.Platform.Windows.FileSystem.WindowsKnownFolders`
-  через `SHGetKnownFolderPath(FOLDERID_Downloads)`). Чекбоксы:
-  `AppSettings.ShowBookmarkThisPc` / `ShowBookmarkDownloads`.
+- ~~**D3.** Дефолтные спец-папки — Загрузки + Документы + Изображения.~~ —
+  **сделано**. Все три — реальные пути через `IKnownFolders` (новый
+  интерфейс в Core, реализация в `Wander.Platform.Windows.FileSystem.WindowsKnownFolders`
+  через `SHGetKnownFolderPath` для FOLDERID_Downloads / Documents / Pictures).
+  Чекбоксы: `AppSettings.ShowBookmarkDownloads` / `ShowBookmarkDocuments`
+  / `ShowBookmarkPictures`. «Этот компьютер» рассматривался, но отложили
+  до D5 (через IShellNamespace) — нет смысла в синтетическом узле, который
+  дублирует дерево дисков визуально.
 - ~~**D4.** Сериализация.~~ — **сделано**. `AppState.Favorites`,
   `AppState.IsBookmarksExpanded`. Раскрытое состояние bookmark-папок
   включено в `ExpandedPaths` (CollectExpanded теперь итерирует и
@@ -363,6 +395,16 @@ Core готов, нужно дотянуть в UI / VM.
   закладок между собой для смены порядка. Сейчас порядок = порядок
   добавления, изменения через ручную правку state.json. Делать
   при первом запросе.
+- ~~**D7. Source-aware авто-разворот дерева.**~~ — **сделано**. Каждая
+  навигация теперь несёт `NavigationSource` (Drives / Bookmark /
+  Address / RightPane / Restore / External). `NavigationService` хранит
+  `List<NavigationEntry>` + cursor вместо двух стеков; Back/Forward
+  возвращают исходный source. `ExpandTreeToCurrent` для source=Bookmark
+  разворачивает только панель закладок (с fallback на drives, если
+  путь больше не в закладках — пример: пользователь убрал закладку
+  между визитами). Для остальных source — только drives. Заодно
+  чистим `IsSelected` на предыдущем узле, чтобы при прыжках между
+  панелями не оставалось «двойное выделение».
 
 ### E. Async операции — [P1, главный фокус]
 
@@ -371,10 +413,15 @@ Core готов, нужно дотянуть в UI / VM.
   в общий `OperationTracker` (Core/Operations). Sync `CopyMany`/`MoveMany`
   оставлены как тонкие обёртки. `DispatcherConflictResolver` маршалит conflict
   dialogs обратно на UI thread с фонового потока.
-- **[P1] E2. `ProgressDialog`.** Modal с прогрессом текущего файла + общим,
-  кнопкой Cancel, кнопкой "Hide" (свернуть в статус-бар). Сейчас прогресс
-  виден только через `OperationViewModel` где-то в UI (предположительно
-  status-bar). Отдельного окна с Cancel нет — это P1.
+- ~~**[P1] E2. `ProgressDialog`.**~~ — **сделано (базовый)**.
+  `Views/ProgressDialog.xaml`: заголовок ("Копирование" / "Перемещение" /
+  "Удаление" / "В корзину"), текущий файл, ProgressBar 0..100, счётчик
+  `done / total`, кнопка «Отмена». Подписан на `OperationTracker.Changed`,
+  пересчитывает прогресс из первой in-flight операции снапшота. Кнопка
+  «Отмена» (и крест в углу) дёргает `CancellationTokenSource`, batch
+  раскладывает Cancelled-результаты. `MainViewModel.RunWithProgressDialogAsync`
+  оборачивает Copy/Move/Delete batch — три точки вызова (HandleDrop /
+  Paste / DeleteSelected). Hide-в-статус-бар отложено (P2-доработка).
 - **[P2] E3. Async thumbnails.** A7 / A8 поверх async-инфраструктуры. Cache в памяти
   + опционально на диске (`%LocalAppData%\Wander\thumbs\`) с ключом по path+mtime.
 - ~~**E4.**~~ — **сделано в Core**. `UndoService.BeginOperation()` ловит
@@ -399,10 +446,19 @@ Core готов, нужно дотянуть в UI / VM.
 
 ### G. Поиск — [P1 для базы, P3 для advanced]
 
-- **[P1] G1.** Search input в toolbar справа от адресной строки. Узкая TextBox
-  + placeholder "Search in this folder". Фокус по `Ctrl+F`.
-- **[P1] G2.** Простой фильтр: `Name.Contains(query, IgnoreCase)`. Дерево
-  не трогается. Esc / пустой query — снимает фильтр.
+- ~~**[P1] G1.** Search input в toolbar справа от адресной строки.~~ —
+  **сделано**. Узкая TextBox 200px справа от `AddressBox` (Dock=Right
+  после правых меню → визуально слева от них). Placeholder
+  "Search in this folder" — TextBlock поверх с DataTrigger по
+  `HasSearchQuery`. Фокус по `Ctrl+F` (пропускается, если фокус внутри
+  AvalonEdit code-preview).
+- ~~**[P1] G2.** Простой фильтр: `Name.Contains(query, IgnoreCase)`.~~ —
+  **сделано**. `SearchQuery` setter триггерит `ApplyFilterAsync`:
+  `Task.Run` фильтрует `_allEntries` через cancellation token. Каждый
+  новый keystroke отменяет предыдущий проход — UI не фризим даже на
+  больших папках. Esc чистит запрос (повторный — отдаёт фокус списку),
+  навигация в другую папку тоже чистит. Status-bar показывает
+  `X of Y items match "query"`. Дерево не трогается.
 - **[P3] G3. Advanced.** Маленький значок ⋮ в search input → panel/dialog:
   recursive (по подпапкам), фильтр по типу/расширению, по дате/размеру,
   regex. Уточним scope отдельно.

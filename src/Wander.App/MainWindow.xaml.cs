@@ -288,6 +288,18 @@ public partial class MainWindow : Window {
             return;
         }
 
+        // Ctrl+F: focus the search box. Skip when the user is typing inside
+        // the code preview — AvalonEdit owns Ctrl+F there for its own search
+        // panel, and stealing it would be surprising.
+        if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control) {
+            if (!CodeEditor.IsKeyboardFocusWithin) {
+                SearchBox.Focus();
+                SearchBox.SelectAll();
+                e.Handled = true;
+                return;
+            }
+        }
+
         // F2: rename the primary selected entry.
         if (e.Key == Key.F2 && Vm.SelectedEntry is FileSystemEntry) {
             StartRename();
@@ -304,6 +316,34 @@ public partial class MainWindow : Window {
 
     private void ClearActiveSelection() {
         SelectionController.ClearActive(Vm.ViewMode, Grid, TilesView, IconsView);
+    }
+
+    private void SearchBox_PreviewKeyDown(object sender, KeyEventArgs e) {
+        // Esc: clear the filter on the first press, then hand focus back to
+        // the active file list on the second press (so the box doesn't trap
+        // the user). Enter also hands focus to the list so arrow keys work
+        // straight away on the filtered results.
+        if (e.Key == Key.Escape) {
+            if (!string.IsNullOrEmpty(Vm.SearchQuery)) {
+                Vm.SearchQuery = "";
+            } else {
+                FocusActiveList();
+            }
+            e.Handled = true;
+            return;
+        }
+        if (e.Key == Key.Enter) {
+            FocusActiveList();
+            e.Handled = true;
+        }
+    }
+
+    private void FocusActiveList() {
+        switch (Vm.ViewMode) {
+            case ViewMode.Details: Grid.Focus(); break;
+            case ViewMode.Tiles: TilesView.Focus(); break;
+            case ViewMode.LargeIcons: IconsView.Focus(); break;
+        }
     }
 
 
@@ -367,7 +407,13 @@ public partial class MainWindow : Window {
 
     private void Tree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e) {
         if (e.NewValue is TreeNodeViewModel node && !string.IsNullOrEmpty(node.FullPath)) {
-            Vm.NavigateTo(node.FullPath);
+            Vm.NavigateTo(node.FullPath, Wander.Core.Navigation.NavigationSource.Drives);
+        }
+    }
+
+    private void Bookmarks_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e) {
+        if (e.NewValue is TreeNodeViewModel node && !string.IsNullOrEmpty(node.FullPath)) {
+            Vm.NavigateTo(node.FullPath, Wander.Core.Navigation.NavigationSource.Bookmark);
         }
     }
 
@@ -576,15 +622,24 @@ public partial class MainWindow : Window {
         int count = _dragPathCount;
 
         if (_currentDragEffect == DragDropEffects.None || _currentDropTarget is null) {
-            action = DragAction.Forbidden;
+            // "Forbidden" branch. Two sub-cases:
+            //  • Self-drop with a specific reason ("into own subfolder", …) —
+            //    we want to surface that reason loudly so the user knows
+            //    *why* the drop is refused.
+            //  • Nothing useful under the cursor (column header, scrollbar,
+            //    splitter) — the system's no-drop cursor is enough, and a
+            //    red "Cannot drop here" plaque hovering over a perfectly
+            //    valid neighbouring folder is just noise. Hide the preview.
             if (_currentSelfDropReason != SelfDropReason.None && _currentDropTarget is not null) {
+                ShowDragPreview();
+                action = DragAction.Forbidden;
                 desc = PathSafety.FormatReason(_currentSelfDropReason, _currentSelfDropOffender, _currentDropTarget);
             } else {
-                desc = count == 1
-                    ? $"Cannot drop '{_dragFirstName}' here"
-                    : $"Cannot drop {count} items here";
+                HideDragPreview();
+                return;
             }
         } else {
+            ShowDragPreview();
             action = _currentDragEffect switch {
                 DragDropEffects.Move => DragAction.Move,
                 DragDropEffects.Link => DragAction.Link,
@@ -601,6 +656,18 @@ public partial class MainWindow : Window {
         }
 
         _dragPreview.SetAction(action, desc, targetText);
+    }
+
+    private void ShowDragPreview() {
+        if (_dragPreview is { Visibility: not Visibility.Visible } p) {
+            p.Visibility = Visibility.Visible;
+        }
+    }
+
+    private void HideDragPreview() {
+        if (_dragPreview is { Visibility: Visibility.Visible } p) {
+            p.Visibility = Visibility.Hidden;
+        }
     }
 
     private static string FormatTarget(string path) {

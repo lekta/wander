@@ -1,5 +1,7 @@
 using System.Runtime.InteropServices;
+using Wander.Core;
 using Wander.Core.FileSystem;
+using Wander.Core.Shell;
 
 namespace Wander.Platform.Windows.FileSystem;
 
@@ -14,26 +16,58 @@ public sealed class SystemIOFileSystem : IFileSystem {
 
 
     public IReadOnlyList<FileSystemEntry> Enumerate(string path) {
-        var dirs = new List<FileSystemEntry>();
+        // Folder-likes go in one bucket, plain files in another. A
+        // ".lnk → directory" is sorted with folders even though it's a
+        // file on disk; OpenEntry already treats it as a folder when the
+        // user double-clicks (TryFollowFolderShortcut), so sort grouping
+        // matches behavioural grouping.
+        var folderLikes = new List<FileSystemEntry>();
         var files = new List<FileSystemEntry>();
 
         foreach (var dir in Directory.EnumerateDirectories(path)) {
-            dirs.Add(BuildEntry(dir, EntryKind.Directory));
+            folderLikes.Add(BuildEntry(dir, EntryKind.Directory));
         }
         foreach (var file in Directory.EnumerateFiles(path)) {
-            files.Add(BuildEntry(file, EntryKind.File));
+            var entry = BuildEntry(file, EntryKind.File);
+            if (entry.LinksToDirectory) {
+                folderLikes.Add(entry);
+            } else {
+                files.Add(entry);
+            }
         }
 
         // Explorer-style natural sort (numbers, special chars, "_" before letters)
         // — StrCmpLogicalW is what Explorer itself uses. Folders are listed first.
         var comparer = Comparer<FileSystemEntry>.Create((a, b) => StrCmpLogicalW(a.Name, b.Name));
-        dirs.Sort(comparer);
+        folderLikes.Sort(comparer);
         files.Sort(comparer);
 
-        var result = new List<FileSystemEntry>(dirs.Count + files.Count);
-        result.AddRange(dirs);
+        var result = new List<FileSystemEntry>(folderLikes.Count + files.Count);
+        result.AddRange(folderLikes);
         result.AddRange(files);
         return result;
+    }
+
+
+    /// <summary>
+    /// Returns true if the given file is a <c>.lnk</c> shortcut that
+    /// resolves to an existing directory. Used at enumeration time so we
+    /// can sort folder-shortcuts with folders.
+    /// </summary>
+    private static bool IsFolderShortcut(string path) {
+        if (!path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)) {
+            return false;
+        }
+        if (!ServiceLocator.IsRegistered<IShortcutService>()) {
+            return false;
+        }
+        try {
+            string? target = ServiceLocator.Get<IShortcutService>().Resolve(path);
+            return !string.IsNullOrEmpty(target) && Directory.Exists(target);
+        } catch {
+            // Broken / dangling shortcut — treat as a regular file.
+            return false;
+        }
     }
 
 
@@ -60,7 +94,8 @@ public sealed class SystemIOFileSystem : IFileSystem {
                 ModifiedUtc: DateTime.MinValue,
                 IsHidden: false,
                 IsReadOnly: false,
-                IsSystem: false));
+                IsSystem: false,
+                LinksToDirectory: false));
         }
 
         return result;
@@ -175,7 +210,8 @@ public sealed class SystemIOFileSystem : IFileSystem {
                 ModifiedUtc: SafeUtc(() => info.LastWriteTimeUtc),
                 IsHidden: info.Attributes.HasFlag(FileAttributes.Hidden),
                 IsReadOnly: info.Attributes.HasFlag(FileAttributes.ReadOnly),
-                IsSystem: info.Attributes.HasFlag(FileAttributes.System));
+                IsSystem: info.Attributes.HasFlag(FileAttributes.System),
+                LinksToDirectory: false);
         }
 
         var fileInfo = new FileInfo(path);
@@ -187,7 +223,8 @@ public sealed class SystemIOFileSystem : IFileSystem {
             ModifiedUtc: SafeUtc(() => fileInfo.LastWriteTimeUtc),
             IsHidden: fileInfo.Attributes.HasFlag(FileAttributes.Hidden),
             IsReadOnly: fileInfo.Attributes.HasFlag(FileAttributes.ReadOnly),
-            IsSystem: fileInfo.Attributes.HasFlag(FileAttributes.System));
+            IsSystem: fileInfo.Attributes.HasFlag(FileAttributes.System),
+            LinksToDirectory: IsFolderShortcut(fileInfo.FullName));
     }
 
     private static DateTime SafeUtc(Func<DateTime> f) {

@@ -34,14 +34,37 @@
             normal background brushes; focus is still tracked semantically
             (keyboard navigation works).
         -->
+        <!--
+            Implicit row styles: kill the focus rectangle (see comment above),
+            and fade rows whose underlying entry has the Hidden / System
+            attribute. Fading only kicks in when the corresponding toggle is
+            on (otherwise the row isn't rendered at all), so the dimmed look
+            is the visual cue that "this is technically hidden by Windows".
+        -->
         <Style TargetType="DataGridRow">
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsHidden}" Value="True">
+                    <Setter Property="Opacity" Value="0.55"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsSystem}" Value="True">
+                    <Setter Property="Opacity" Value="0.55"/>
+                </DataTrigger>
+            </Style.Triggers>
         </Style>
         <Style TargetType="DataGridCell">
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         </Style>
         <Style TargetType="ListBoxItem">
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsHidden}" Value="True">
+                    <Setter Property="Opacity" Value="0.55"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsSystem}" Value="True">
+                    <Setter Property="Opacity" Value="0.55"/>
+                </DataTrigger>
+            </Style.Triggers>
         </Style>
 
         <Style x:Key="ToolbarButton" TargetType="Button">
@@ -157,6 +180,38 @@
                 </Menu>
             </StackPanel>
 
+            <!--
+                Search box. DockPanel.Dock="Right" placed AFTER the right-side
+                menus = sits to their LEFT, i.e. immediately to the right of the
+                address bar. Grid hosts a placeholder TextBlock overlaid on the
+                TextBox; the placeholder's visibility flips on HasSearchQuery.
+            -->
+            <Grid DockPanel.Dock="Right"
+                  Width="200" VerticalAlignment="Center"
+                  Margin="0,4,4,4">
+                <TextBox x:Name="SearchBox"
+                         Padding="6,4"
+                         Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Filter current folder (Ctrl+F, Esc to clear)"
+                         PreviewKeyDown="SearchBox_PreviewKeyDown"/>
+                <TextBlock Text="Search in this folder"
+                           Foreground="#999"
+                           Margin="8,0,8,0"
+                           VerticalAlignment="Center"
+                           IsHitTestVisible="False">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Visible"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasSearchQuery}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </Grid>
+
             <TextBox x:Name="AddressBox"
                      VerticalAlignment="Center" Margin="0,4,4,4" Padding="6,4"
                      Text="{Binding AddressText, UpdateSourceTrigger=PropertyChanged}">
@@ -220,7 +275,7 @@
                 inside the bookmarks tree go through the normal OnDragOver/OnDrop
                 pipeline (copy/move into that folder).
             -->
-            <Grid Grid.Column="0">
+            <Grid Grid.Column="0" Background="#F8F8F8">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
@@ -272,7 +327,7 @@
                     <TreeView x:Name="BookmarksTree"
                               DockPanel.Dock="Top"
                               ItemsSource="{Binding Bookmarks}"
-                              SelectedItemChanged="Tree_SelectedItemChanged"
+                              SelectedItemChanged="Bookmarks_SelectedItemChanged"
                               PreviewMouseLeftButtonDown="Tree_PreviewMouseLeftButtonDown"
                               TreeViewItem.Expanded="TreeViewItem_Expanded"
                               TreeViewItem.Collapsed="TreeViewItem_Collapsed"
@@ -308,6 +363,7 @@
                 </DockPanel>
 
                 <TreeView x:Name="Tree" Grid.Row="1"
+                          Margin="0,12,0,0"
                           ItemsSource="{Binding Roots}"
                           SelectedItemChanged="Tree_SelectedItemChanged"
                           PreviewMouseLeftButtonDown="Tree_PreviewMouseLeftButtonDown"

@@ -12,10 +12,22 @@ namespace Wander.Platform.Windows.FileSystem;
 public sealed class WindowsKnownFolders : IKnownFolders {
     // FOLDERID_Downloads — {374DE290-123F-4565-9164-39C4925E467B}
     private static readonly Guid _downloads = new("374DE290-123F-4565-9164-39C4925E467B");
+    // FOLDERID_Documents — {FDD39AD0-238F-46AF-ADB4-6C85480369C7}
+    private static readonly Guid _documents = new("FDD39AD0-238F-46AF-ADB4-6C85480369C7");
+    // FOLDERID_Pictures — {33E28130-4E1E-4676-835A-98395C3BC3BB}
+    private static readonly Guid _pictures = new("33E28130-4E1E-4676-835A-98395C3BC3BB");
 
 
     public string? GetDownloads() {
         return TryGetPath(_downloads);
+    }
+
+    public string? GetDocuments() {
+        return TryGetPath(_documents);
+    }
+
+    public string? GetPictures() {
+        return TryGetPath(_pictures);
     }
 
 

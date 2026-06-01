@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
@@ -47,6 +48,15 @@ public sealed class MainViewModel : ObservableObject {
     private bool _isBookmarksExpanded = true;
     private bool _buildingBookmarks;
     private IReadOnlyList<string> _persistedExpandedPaths = Array.Empty<string>();
+
+    // Search filter state. _allEntries is the unfiltered post-hidden/system
+    // snapshot of the current folder; Entries is the filtered projection
+    // shown to the user. _filterCts cancels an in-flight filter when a new
+    // keystroke arrives so rapid typing does not pile up stale results.
+    private List<FileSystemEntry> _allEntries = new();
+    private int _hiddenCount;
+    private string _searchQuery = "";
+    private CancellationTokenSource? _filterCts;
 
     private bool _restoring;
 
@@ -177,6 +187,24 @@ public sealed class MainViewModel : ObservableObject {
         }
     }
 
+    /// <summary>
+    /// Live filter over the current folder. Empty string = no filter.
+    /// Setter triggers an async pass over <see cref="_allEntries"/> on a
+    /// background thread; the previous in-flight filter is cancelled.
+    /// </summary>
+    public string SearchQuery {
+        get => _searchQuery;
+        set {
+            value ??= "";
+            if (SetField(ref _searchQuery, value)) {
+                Raise(nameof(HasSearchQuery));
+                _ = ApplyFilterAsync();
+            }
+        }
+    }
+
+    public bool HasSearchQuery => !string.IsNullOrEmpty(_searchQuery);
+
     public ViewMode ViewMode {
         get => _viewMode;
         set {
@@ -253,14 +281,14 @@ public sealed class MainViewModel : ObservableObject {
     }
 
 
-    public void NavigateTo(string path) {
+    public void NavigateTo(string path, NavigationSource source = NavigationSource.External) {
         if (!_fs.DirectoryExists(path)) {
             _log.Warn($"Navigate: path not found {path}");
             Status = $"Path not found: {path}";
             return;
         }
-        _log.Info($"Navigate: {path}");
-        _nav.NavigateTo(path);
+        _log.Info($"Navigate ({source}): {path}");
+        _nav.NavigateTo(path, source);
     }
 
     public void OpenEntry(FileSystemEntry? entry) {
@@ -285,7 +313,7 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
-        NavigateTo(entry.FullPath);
+        NavigateTo(entry.FullPath, NavigationSource.RightPane);
     }
 
     private bool TryFollowFolderShortcut(string path) {
@@ -309,7 +337,7 @@ public sealed class MainViewModel : ObservableObject {
         }
 
         _log.Info($"Follow folder shortcut: {path} -> {target}");
-        NavigateTo(target);
+        NavigateTo(target, NavigationSource.RightPane);
         return true;
     }
 
@@ -341,9 +369,14 @@ public sealed class MainViewModel : ObservableObject {
         var resolver = new DispatcherConflictResolver(new InteractiveConflictResolver());
         IReadOnlyList<BatchItemResult> results;
         try {
-            results = effect == DropEffect.Move
-                ? await _ops.MoveManyAsync(sourcePaths, targetFolder, resolver)
-                : await _ops.CopyManyAsync(sourcePaths, targetFolder, resolver);
+            results = await RunWithProgressDialogAsync(
+                effect == DropEffect.Move ? "Перемещение" : "Копирование",
+                ct => effect == DropEffect.Move
+                    ? _ops.MoveManyAsync(sourcePaths, targetFolder, resolver, ct)
+                    : _ops.CopyManyAsync(sourcePaths, targetFolder, resolver, ct));
+        } catch (OperationCanceledException) {
+            Status = "Operation cancelled.";
+            return;
         } catch (Exception ex) {
             _log.Error($"Drop failed: {effect} -> {targetFolder}", ex);
             Status = $"Drop failed: {ex.Message}";
@@ -428,11 +461,11 @@ public sealed class MainViewModel : ObservableObject {
                 && !string.IsNullOrEmpty(state.LastPath)
                 && _fs.DirectoryExists(state.LastPath);
             if (wantRestore) {
-                _nav.NavigateTo(state.LastPath!);
+                _nav.NavigateTo(state.LastPath!, NavigationSource.Restore);
             } else {
                 string? first = Roots.FirstOrDefault()?.FullPath;
                 if (first is not null) {
-                    _nav.NavigateTo(first);
+                    _nav.NavigateTo(first, NavigationSource.External);
                 }
             }
         } finally {
@@ -504,7 +537,7 @@ public sealed class MainViewModel : ObservableObject {
         if (string.IsNullOrWhiteSpace(AddressText)) {
             return;
         }
-        NavigateTo(AddressText.Trim());
+        NavigateTo(AddressText.Trim(), NavigationSource.Address);
     }
 
     private void GoBack() => _nav.GoBack();
@@ -515,22 +548,82 @@ public sealed class MainViewModel : ObservableObject {
         AddressText = _nav.Current ?? "";
         Raise(nameof(WindowTitle));
         Raise(nameof(CurrentPath));
+        // Drop any active filter when the user moves to a new folder — the
+        // filter is scoped to "the folder I'm looking at right now". Bypass
+        // the SearchQuery setter so we don't race a stale ApplyFilterAsync
+        // against the Refresh below; Refresh will trigger one fresh pass.
+        if (_searchQuery.Length > 0) {
+            _searchQuery = "";
+            Raise(nameof(SearchQuery));
+            Raise(nameof(HasSearchQuery));
+        }
         Refresh();
         ExpandTreeToCurrent();
         Preview.SetCurrentFolder(_nav.Current, WindowTitle);
         SaveState();
     }
 
+    private TreeNodeViewModel? _lastSelectedTreeNode;
+
     private void ExpandTreeToCurrent() {
         if (_nav.Current is null) {
             return;
         }
-        ExpandToPath(_nav.Current, select: true);
+
+        // Clear the previously selected tree node. IsSelected is two-way
+        // bound to the VM, so leaving it set keeps the prior bookmark/drive
+        // node visually highlighted when navigation jumps between panels.
+        if (_lastSelectedTreeNode is not null) {
+            _lastSelectedTreeNode.IsSelected = false;
+            _lastSelectedTreeNode = null;
+        }
+
+        var src = _nav.CurrentSource ?? NavigationSource.External;
+
+        // Source-aware expansion: a navigation that originated in the
+        // bookmarks panel (including replayed history) re-expands only the
+        // bookmarks tree, never the drives tree. Falls back to drives when
+        // the path is no longer reachable via any bookmark — typically
+        // because the user removed the bookmark since the history entry
+        // was recorded.
+        bool ok = false;
+        if (src == NavigationSource.Bookmark) {
+            ok = TryExpandAndSelectIn(Bookmarks, _nav.Current);
+        }
+        if (!ok) {
+            TryExpandAndSelectIn(Roots, _nav.Current);
+        }
+    }
+
+    private bool TryExpandAndSelectIn(IEnumerable<TreeNodeViewModel> nodes, string path) {
+        foreach (var node in nodes) {
+            if (node.TryExpandToPath(path, select: true)) {
+                _lastSelectedTreeNode = FindSelectedDescendant(node);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static TreeNodeViewModel? FindSelectedDescendant(TreeNodeViewModel node) {
+        if (node.IsSelected) {
+            return node;
+        }
+        foreach (var child in node.Children) {
+            var found = FindSelectedDescendant(child);
+            if (found is not null) {
+                return found;
+            }
+        }
+        return null;
     }
 
     private void Refresh() {
-        Entries.Clear();
         if (_nav.Current is null) {
+            _allEntries = new List<FileSystemEntry>();
+            _hiddenCount = 0;
+            Entries.Clear();
+            Status = "";
             return;
         }
 
@@ -538,17 +631,86 @@ public sealed class MainViewModel : ObservableObject {
         bool showSystem = Settings.ShowSystem;
 
         try {
+            var list = new List<FileSystemEntry>();
             int hidden = 0;
             foreach (var e in _fs.Enumerate(_nav.Current)) {
                 if (!showHidden && e.IsHidden) { hidden++; continue; }
                 if (!showSystem && e.IsSystem) { hidden++; continue; }
-                Entries.Add(e);
+                list.Add(e);
             }
-            Status = hidden > 0
-                ? $"{Entries.Count} items ({hidden} hidden)"
-                : $"{Entries.Count} items";
+            _allEntries = list;
+            _hiddenCount = hidden;
+            _ = ApplyFilterAsync();
         } catch (Exception ex) {
+            _allEntries = new List<FileSystemEntry>();
+            _hiddenCount = 0;
+            Entries.Clear();
             Status = $"Error: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Re-projects <see cref="_allEntries"/> through the current
+    /// <see cref="SearchQuery"/> into <see cref="Entries"/>. Filtering runs
+    /// on a background thread so the UI stays responsive even when the
+    /// folder is large; a fresh keystroke cancels the previous pass.
+    /// </summary>
+    private async Task ApplyFilterAsync() {
+        _filterCts?.Cancel();
+        _filterCts?.Dispose();
+        _filterCts = new CancellationTokenSource();
+        var token = _filterCts.Token;
+
+        // Snapshot the inputs so a Refresh / new keystroke mid-flight cannot
+        // race us — we either complete with these inputs or get cancelled.
+        string query = _searchQuery;
+        var source = _allEntries;
+
+        if (string.IsNullOrEmpty(query)) {
+            ReplaceEntries(source);
+            UpdateFilterStatus(source.Count, source.Count);
+            return;
+        }
+
+        List<FileSystemEntry> filtered;
+        try {
+            filtered = await Task.Run(() => {
+                var result = new List<FileSystemEntry>();
+                foreach (var e in source) {
+                    token.ThrowIfCancellationRequested();
+                    if (e.Name.Contains(query, StringComparison.OrdinalIgnoreCase)) {
+                        result.Add(e);
+                    }
+                }
+                return result;
+            }, token);
+        } catch (OperationCanceledException) {
+            return;
+        }
+
+        if (token.IsCancellationRequested) {
+            return;
+        }
+        ReplaceEntries(filtered);
+        UpdateFilterStatus(filtered.Count, source.Count);
+    }
+
+    private void ReplaceEntries(IReadOnlyList<FileSystemEntry> items) {
+        Entries.Clear();
+        foreach (var e in items) {
+            Entries.Add(e);
+        }
+    }
+
+    private void UpdateFilterStatus(int shown, int total) {
+        if (!string.IsNullOrEmpty(_searchQuery)) {
+            Status = total > 0
+                ? $"{shown} of {total} items match \"{_searchQuery}\""
+                : $"{shown} items";
+        } else if (_hiddenCount > 0) {
+            Status = $"{shown} items ({_hiddenCount} hidden)";
+        } else {
+            Status = $"{shown} items";
         }
     }
 
@@ -607,8 +769,9 @@ public sealed class MainViewModel : ObservableObject {
             Refresh();
         }
 
-        if (e.PropertyName == nameof(SettingsViewModel.ShowBookmarkThisPc) ||
-            e.PropertyName == nameof(SettingsViewModel.ShowBookmarkDownloads)) {
+        if (e.PropertyName == nameof(SettingsViewModel.ShowBookmarkDownloads) ||
+            e.PropertyName == nameof(SettingsViewModel.ShowBookmarkDocuments) ||
+            e.PropertyName == nameof(SettingsViewModel.ShowBookmarkPictures)) {
             BuildBookmarks();
         }
 
@@ -643,15 +806,14 @@ public sealed class MainViewModel : ObservableObject {
         try {
             Bookmarks.Clear();
 
-            if (Settings.ShowBookmarkThisPc) {
-                Bookmarks.Add(BuildThisPcNode());
-            }
-
             if (Settings.ShowBookmarkDownloads) {
-                var downloads = TryBuildDownloadsNode();
-                if (downloads is not null) {
-                    Bookmarks.Add(downloads);
-                }
+                AddSpecialFolderNode("Загрузки", ResolveDownloads());
+            }
+            if (Settings.ShowBookmarkDocuments) {
+                AddSpecialFolderNode("Документы", ResolveDocuments());
+            }
+            if (Settings.ShowBookmarkPictures) {
+                AddSpecialFolderNode("Изображения", ResolvePictures());
             }
 
             foreach (string path in _favorites) {
@@ -673,30 +835,37 @@ public sealed class MainViewModel : ObservableObject {
         }
     }
 
-    private TreeNodeViewModel BuildThisPcNode() {
-        // Synthetic node — FullPath empty so clicking it does not navigate
-        // (Tree_SelectedItemChanged guards against empty paths). Children
-        // share VM instances with Roots so expand/collapse stays in sync
-        // between the two views.
-        var node = new TreeNodeViewModel("Этот компьютер", "", EntryKind.Drive, fs: null, hasChildren: false);
-        foreach (var root in Roots) {
-            node.Children.Add(root);
-        }
-        node.IsExpanded = true;
-        return node;
+    private string? ResolveDownloads() {
+        return ServiceLocator.IsRegistered<IKnownFolders>()
+            ? ServiceLocator.Get<IKnownFolders>().GetDownloads()
+            : null;
     }
 
-    private TreeNodeViewModel? TryBuildDownloadsNode() {
-        string? path = null;
-        if (ServiceLocator.IsRegistered<IKnownFolders>()) {
-            path = ServiceLocator.Get<IKnownFolders>().GetDownloads();
-        }
+    private string? ResolveDocuments() {
+        return ServiceLocator.IsRegistered<IKnownFolders>()
+            ? ServiceLocator.Get<IKnownFolders>().GetDocuments()
+            : null;
+    }
+
+    private string? ResolvePictures() {
+        return ServiceLocator.IsRegistered<IKnownFolders>()
+            ? ServiceLocator.Get<IKnownFolders>().GetPictures()
+            : null;
+    }
+
+    /// <summary>
+    /// Adds one special-folder node to <see cref="Bookmarks"/>. No-op when
+    /// the path can't be resolved or doesn't exist on disk (e.g. user moved
+    /// the folder to a removed drive). The label is a fixed localised name,
+    /// not the on-disk folder name, so the user sees a stable caption.
+    /// </summary>
+    private void AddSpecialFolderNode(string label, string? path) {
         if (string.IsNullOrEmpty(path) || !_fs.DirectoryExists(path)) {
-            return null;
+            return;
         }
-        var node = new TreeNodeViewModel("Загрузки", path, EntryKind.Directory, _fs, _fs.HasSubdirectories(path));
+        var node = new TreeNodeViewModel(label, path, EntryKind.Directory, _fs, _fs.HasSubdirectories(path));
         WireTreeNode(node);
-        return node;
+        Bookmarks.Add(node);
     }
 
     private TreeNodeViewModel? TryBuildFolderNode(string path) {
@@ -858,7 +1027,12 @@ public sealed class MainViewModel : ObservableObject {
         var paths = snapshot.Select(e => e.FullPath).ToList();
         IReadOnlyList<DeleteResult> results;
         try {
-            results = await _ops.DeleteManyAsync(paths, permanent);
+            results = await RunWithProgressDialogAsync(
+                permanent ? "Удаление" : "В корзину",
+                ct => _ops.DeleteManyAsync(paths, permanent, ct));
+        } catch (OperationCanceledException) {
+            Status = "Operation cancelled.";
+            return;
         } catch (Exception ex) {
             _log.Error($"Delete batch failed", ex);
             Status = $"Delete failed: {ex.Message}";
@@ -953,9 +1127,14 @@ public sealed class MainViewModel : ObservableObject {
         var resolver = new DispatcherConflictResolver(new InteractiveConflictResolver());
         IReadOnlyList<BatchItemResult> results;
         try {
-            results = wasCut
-                ? await _ops.MoveManyAsync(sources, target, resolver)
-                : await _ops.CopyManyAsync(sources, target, resolver);
+            results = await RunWithProgressDialogAsync(
+                wasCut ? "Перемещение" : "Копирование",
+                ct => wasCut
+                    ? _ops.MoveManyAsync(sources, target, resolver, ct)
+                    : _ops.CopyManyAsync(sources, target, resolver, ct));
+        } catch (OperationCanceledException) {
+            Status = "Operation cancelled.";
+            return;
         } catch (Exception ex) {
             _log.Error($"Paste failed into {target}", ex);
             Status = $"Paste failed: {ex.Message}";
@@ -1054,6 +1233,27 @@ public sealed class MainViewModel : ObservableObject {
         Raise(nameof(HasActiveOperations));
     }
 
+
+    /// <summary>
+    /// Run an async batch op inside a modal <see cref="Wander.App.Views.ProgressDialog"/>.
+    /// The dialog opens before the await, watches <see cref="_tracker"/> for
+    /// per-item progress, and auto-closes when <paramref name="work"/>
+    /// finishes (success, failure, or user cancel). Returns whatever the
+    /// work returned; rethrows <see cref="OperationCanceledException"/> when
+    /// the user clicks Cancel so callers can show a uniform message.
+    /// </summary>
+    private async Task<TResult> RunWithProgressDialogAsync<TResult>(string headline, Func<CancellationToken, Task<TResult>> work) {
+        var dlg = new Wander.App.Views.ProgressDialog(headline, _tracker) {
+            Owner = Application.Current?.MainWindow,
+        };
+        var task = work(dlg.Token);
+        dlg.TrackTask(task);
+        // ShowDialog blocks this continuation but keeps the dispatcher
+        // pumping — when the task completes, the Dispatcher.BeginInvoke
+        // posted by TrackTask runs and closes the dialog.
+        dlg.ShowDialog();
+        return await task.ConfigureAwait(true);
+    }
 
     private static bool ConfirmMove(IReadOnlyList<string> sources, string target) {
         string message;

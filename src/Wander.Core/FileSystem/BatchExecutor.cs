@@ -272,7 +272,8 @@ public sealed class BatchExecutor {
             ModifiedUtc: DateTime.MinValue,
             IsHidden: false,
             IsReadOnly: false,
-            IsSystem: false);
+            IsSystem: false,
+            LinksToDirectory: false);
     }
 }
 

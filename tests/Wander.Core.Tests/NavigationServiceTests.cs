@@ -110,4 +110,78 @@ public class NavigationServiceTests {
 
         Assert.False(nav.CanGoBack);
     }
+
+
+    // --- Source preservation -------------------------------------------
+
+    [Fact]
+    public void NavigateTo_CarriesSource() {
+        var nav = new NavigationService();
+        nav.NavigateTo(Foo, NavigationSource.Bookmark);
+
+        Assert.Equal(NavigationSource.Bookmark, nav.CurrentSource);
+    }
+
+    [Fact]
+    public void GoBack_RestoresOriginalSource() {
+        var nav = new NavigationService();
+        nav.NavigateTo(Foo, NavigationSource.Drives);
+        nav.NavigateTo(Bar, NavigationSource.Bookmark);
+        nav.NavigateTo(Baz, NavigationSource.Address);
+
+        nav.GoBack();
+        Assert.Equal(Bar, nav.Current);
+        Assert.Equal(NavigationSource.Bookmark, nav.CurrentSource);
+
+        nav.GoBack();
+        Assert.Equal(Foo, nav.Current);
+        Assert.Equal(NavigationSource.Drives, nav.CurrentSource);
+    }
+
+    [Fact]
+    public void GoForward_RestoresOriginalSource() {
+        var nav = new NavigationService();
+        nav.NavigateTo(Foo, NavigationSource.Drives);
+        nav.NavigateTo(Bar, NavigationSource.Bookmark);
+        nav.GoBack();
+
+        nav.GoForward();
+
+        Assert.Equal(Bar, nav.Current);
+        Assert.Equal(NavigationSource.Bookmark, nav.CurrentSource);
+    }
+
+    [Fact]
+    public void GoUp_InheritsCurrentSource() {
+        var nav = new NavigationService();
+        nav.NavigateTo(FooBar, NavigationSource.Bookmark);
+
+        nav.GoUp();
+
+        Assert.Equal(Foo, nav.Current);
+        Assert.Equal(NavigationSource.Bookmark, nav.CurrentSource);
+    }
+
+    [Fact]
+    public void DefaultSource_IsExternal() {
+        var nav = new NavigationService();
+        nav.NavigateTo(Foo);
+
+        Assert.Equal(NavigationSource.External, nav.CurrentSource);
+    }
+
+    [Fact]
+    public void NavigateTo_ForwardEntriesDropped_OnDivergence() {
+        var nav = new NavigationService();
+        nav.NavigateTo(Foo, NavigationSource.Drives);
+        nav.NavigateTo(Bar, NavigationSource.Bookmark);
+        nav.GoBack();
+        nav.NavigateTo(Baz, NavigationSource.Address);
+
+        Assert.False(nav.CanGoForward);
+        Assert.True(nav.CanGoBack);
+        nav.GoBack();
+        Assert.Equal(Foo, nav.Current);
+        Assert.Equal(NavigationSource.Drives, nav.CurrentSource);
+    }
 }

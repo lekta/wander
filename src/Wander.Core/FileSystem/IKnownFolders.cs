@@ -10,4 +10,6 @@ namespace Wander.Core.FileSystem;
 /// </summary>
 public interface IKnownFolders {
     string? GetDownloads();
+    string? GetDocuments();
+    string? GetPictures();
 }

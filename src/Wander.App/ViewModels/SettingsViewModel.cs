@@ -70,16 +70,22 @@ public sealed class SettingsViewModel : ObservableObject {
 
 
     // --- Bookmarks -----------------------------------------------------
-    private bool _showBookmarkThisPc;
-    public bool ShowBookmarkThisPc {
-        get => _showBookmarkThisPc;
-        set => SetField(ref _showBookmarkThisPc, value);
-    }
-
     private bool _showBookmarkDownloads;
     public bool ShowBookmarkDownloads {
         get => _showBookmarkDownloads;
         set => SetField(ref _showBookmarkDownloads, value);
+    }
+
+    private bool _showBookmarkDocuments;
+    public bool ShowBookmarkDocuments {
+        get => _showBookmarkDocuments;
+        set => SetField(ref _showBookmarkDocuments, value);
+    }
+
+    private bool _showBookmarkPictures;
+    public bool ShowBookmarkPictures {
+        get => _showBookmarkPictures;
+        set => SetField(ref _showBookmarkPictures, value);
     }
 
 
@@ -127,8 +133,9 @@ public sealed class SettingsViewModel : ObservableObject {
         LargeIconImageSize = s.LargeIconImageSize;
         LargeIconMargin = s.LargeIconMargin;
         LargeIconLabelFontSize = s.LargeIconLabelFontSize;
-        ShowBookmarkThisPc = s.ShowBookmarkThisPc;
         ShowBookmarkDownloads = s.ShowBookmarkDownloads;
+        ShowBookmarkDocuments = s.ShowBookmarkDocuments;
+        ShowBookmarkPictures = s.ShowBookmarkPictures;
         ShowDebugMenu = s.ShowDebugMenu;
     }
 
@@ -141,8 +148,9 @@ public sealed class SettingsViewModel : ObservableObject {
             LargeIconImageSize = LargeIconImageSize,
             LargeIconMargin = LargeIconMargin,
             LargeIconLabelFontSize = LargeIconLabelFontSize,
-            ShowBookmarkThisPc = ShowBookmarkThisPc,
             ShowBookmarkDownloads = ShowBookmarkDownloads,
+            ShowBookmarkDocuments = ShowBookmarkDocuments,
+            ShowBookmarkPictures = ShowBookmarkPictures,
             ShowDebugMenu = ShowDebugMenu,
         };
     }

@@ -43,11 +43,14 @@ public sealed record AppSettings {
 
 
     // --- Bookmarks -----------------------------------------------------
-    /// <summary>Show the synthetic "This PC" bookmark (parent of all drives).</summary>
-    public bool ShowBookmarkThisPc { get; init; } = true;
-
     /// <summary>Show the user's Downloads folder as a default bookmark.</summary>
     public bool ShowBookmarkDownloads { get; init; } = true;
+
+    /// <summary>Show the user's Documents folder as a default bookmark.</summary>
+    public bool ShowBookmarkDocuments { get; init; } = true;
+
+    /// <summary>Show the user's Pictures folder as a default bookmark.</summary>
+    public bool ShowBookmarkPictures { get; init; } = true;
 
 
     // --- Debug ---------------------------------------------------------
