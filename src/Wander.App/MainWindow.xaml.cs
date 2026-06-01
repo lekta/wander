@@ -156,28 +156,10 @@ public partial class MainWindow : Window {
         }
         ApplyPreviewLayout();
         UpdateCodeEditor();
-
-        // Cap the fitted preview image to its source's native pixel size:
-        // small files must never render above 100 %. StretchDirection=DownOnly
-        // *should* cover this, but it depends on WPF's measure happening with
-        // the source's natural size already known — which isn't always the
-        // case when Source flips between selections. MaxWidth/MaxHeight is a
-        // hard guard that survives those edge cases.
-        var srcDesc = System.ComponentModel.DependencyPropertyDescriptor
-            .FromProperty(Image.SourceProperty, typeof(Image));
-        srcDesc?.AddValueChanged(ImgFit, (_, _) => ApplyNativeSizeCap(ImgFit));
-        // Apply once for whatever's already there.
-        ApplyNativeSizeCap(ImgFit);
-    }
-
-    private static void ApplyNativeSizeCap(Image img) {
-        if (img.Source is BitmapSource bs && bs.PixelWidth > 0 && bs.PixelHeight > 0) {
-            img.MaxWidth = bs.PixelWidth;
-            img.MaxHeight = bs.PixelHeight;
-        } else {
-            img.MaxWidth = double.PositiveInfinity;
-            img.MaxHeight = double.PositiveInfinity;
-        }
+        // Native-size cap (so small images don't stretch above 100 %) is
+        // now done in XAML via BitmapPixelSizeConverter on MaxWidth/MaxHeight
+        // — synchronous with WPF's measure pass instead of an async
+        // DependencyPropertyDescriptor callback that races layout.
     }
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e) {
@@ -973,7 +955,7 @@ public partial class MainWindow : Window {
         }
     }
 
-    private void ImageZoom_RmbDown(object sender, MouseButtonEventArgs e) {
+    private void ImageZoom_LmbDown(object sender, MouseButtonEventArgs e) {
         if (!IsImageDownscaled()) {
             return;
         }
@@ -988,14 +970,14 @@ public partial class MainWindow : Window {
         ImgZoom.Height = src.PixelHeight;
         ImgZoomCanvas.Visibility = Visibility.Visible;
         UpdateZoomPosition(e.GetPosition(ImagePreviewHost));
-        // Capture so we still get the RMB-up if the user lifts the button
+        // Capture so we still get the LMB-up if the user lifts the button
         // outside the host (e.g., over the splitter). LostMouseCapture is
         // our cleanup path.
         ImagePreviewHost.CaptureMouse();
         e.Handled = true;
     }
 
-    private void ImageZoom_RmbUp(object sender, MouseButtonEventArgs e) {
+    private void ImageZoom_LmbUp(object sender, MouseButtonEventArgs e) {
         ExitImageZoom();
         e.Handled = true;
     }
@@ -1004,9 +986,9 @@ public partial class MainWindow : Window {
         if (!_imageZoomActive) {
             return;
         }
-        // Defensive: if RMB was released while we missed an event (e.g.,
+        // Defensive: if LMB was released while we missed an event (e.g.,
         // capture got stolen), drop out of zoom.
-        if (e.RightButton != MouseButtonState.Pressed) {
+        if (e.LeftButton != MouseButtonState.Pressed) {
             ExitImageZoom();
             return;
         }
@@ -1017,6 +999,27 @@ public partial class MainWindow : Window {
         ExitImageZoom();
     }
 
+    // Mirror of the Margin attribute on ImgFit (8,12,8,8) so the zoom view
+    // can match the fit view's placement on the non-panning axis. Keep in
+    // sync if the XAML margin ever changes.
+    private const double PreviewImageMarginTop = 12;
+    // Left/right margins are symmetric — the centering math (hw - srcW)/2
+    // produces the same X whether you account for them or not, so no
+    // constant needed for X.
+
+    /// <summary>
+    /// Positions the 1:1 zoom image so that the image-pixel under the
+    /// cursor stays under the cursor. Pan is per-axis: only the dimension
+    /// that doesn't fit the pane scrolls with the cursor. The other one
+    /// is aligned to match how ImgFit (the fit-mode view) lays it out —
+    /// centred horizontally, top-anchored vertically — so toggling zoom
+    /// on doesn't visually jump the image to the middle.
+    ///
+    /// Mouse coordinates are clamped to the pane rectangle. The mouse
+    /// capture during zoom lets the cursor travel outside the host (e.g.
+    /// over the splitter); without clamping, the formula would extrapolate
+    /// and shove the image past the edge it should be pinned to.
+    /// </summary>
     private void UpdateZoomPosition(Point mouse) {
         if (ImgFit.Source is not BitmapSource src) {
             return;
@@ -1027,13 +1030,33 @@ public partial class MainWindow : Window {
             return;
         }
 
-        // Map cursor position linearly into image-pixel space, then offset
-        // the 1:1 image so that pixel ends up under the cursor.
-        double px = (mouse.X / hw) * src.PixelWidth;
-        double py = (mouse.Y / hh) * src.PixelHeight;
+        double srcW = src.PixelWidth;
+        double srcH = src.PixelHeight;
 
-        Canvas.SetLeft(ImgZoom, mouse.X - px);
-        Canvas.SetTop(ImgZoom, mouse.Y - py);
+        // Clamp to pane interior so leaving the pane doesn't scroll past
+        // the image edges. At mouse.X == 0 we show the image's left edge;
+        // at mouse.X == hw, the right edge.
+        double mx = Math.Clamp(mouse.X, 0, hw);
+        double my = Math.Clamp(mouse.Y, 0, hh);
+
+        // X axis: pan only if image is wider than the pane.
+        // When it fits, centre horizontally — matches ImgFit's
+        // HorizontalAlignment="Center" with symmetric L/R margins.
+        double x = srcW > hw
+            ? mx - (mx / hw) * srcW
+            : (hw - srcW) / 2;
+
+        // Y axis: pan only if image is taller than the pane.
+        // When it fits, anchor to the top with the same margin ImgFit
+        // uses — ImgFit has VerticalAlignment="Top" + Margin="8,12,8,8",
+        // so the fit view places the image at y=12. Centring vertically
+        // here would visibly jump the image down when the user holds LMB.
+        double y = srcH > hh
+            ? my - (my / hh) * srcH
+            : PreviewImageMarginTop;
+
+        Canvas.SetLeft(ImgZoom, x);
+        Canvas.SetTop(ImgZoom, y);
     }
 
     private void ExitImageZoom() {

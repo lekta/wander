@@ -26,16 +26,19 @@ namespace Wander.App.ViewModels;
 /// </summary>
 public sealed class PreviewController : ObservableObject {
     private static readonly HashSet<string> _imageExtensions = new(StringComparer.OrdinalIgnoreCase) {
-        ".png", ".jpg", ".jpeg", ".bmp", ".ico", ".webp", ".tif", ".tiff",
+        ".png", ".jpg", ".jpeg", ".bmp", ".ico", ".tif", ".tiff",
         // RAW (may not render but we still try; metadata works regardless):
         ".cr2", ".cr3", ".nef", ".arw", ".dng", ".raf", ".orf", ".rw2",
     };
 
-    // GIF lives apart from the static-image set because we want to animate it.
-    // Single-frame GIFs still hit this branch; the GifImage control degrades
-    // gracefully to a static display in that case.
+    // Animated formats go through GifImage, which composites multi-frame
+    // streams. WEBP files are usually static, but WIC's WebP codec can
+    // surface multiple frames for animated WEBPs; GifImage handles the
+    // single-frame case by just showing that one frame, so routing all
+    // .webp here costs nothing for static files and unlocks playback for
+    // animated ones.
     private static readonly HashSet<string> _gifExtensions = new(StringComparer.OrdinalIgnoreCase) {
-        ".gif",
+        ".gif", ".webp",
     };
 
     // MediaElement uses Windows Media Foundation, which on Win10/11 supports

@@ -25,6 +25,7 @@
         <conv:IconConverter x:Key="IconConverter"/>
         <conv:EnumToVisibilityConverter x:Key="EnumToVisibility"/>
         <conv:EnumEqualsConverter x:Key="EnumEquals"/>
+        <conv:BitmapPixelSizeConverter x:Key="BitmapPixelSize"/>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
 
         <!--
@@ -600,12 +601,14 @@
                               MouseEnter="ImageZoom_MouseEnter"
                               MouseLeave="ImageZoom_MouseLeave"
                               MouseMove="ImageZoom_MouseMove"
-                              MouseRightButtonDown="ImageZoom_RmbDown"
-                              MouseRightButtonUp="ImageZoom_RmbUp"
+                              MouseLeftButtonDown="ImageZoom_LmbDown"
+                              MouseLeftButtonUp="ImageZoom_LmbUp"
                               LostMouseCapture="ImageZoom_LostCapture">
                             <Image x:Name="ImgFit"
                                    Source="{Binding Preview.Image}"
                                    Stretch="Uniform" StretchDirection="DownOnly"
+                                   MaxWidth="{Binding Source, RelativeSource={RelativeSource Self}, Converter={StaticResource BitmapPixelSize}, ConverterParameter=W}"
+                                   MaxHeight="{Binding Source, RelativeSource={RelativeSource Self}, Converter={StaticResource BitmapPixelSize}, ConverterParameter=H}"
                                    Margin="8,12,8,8"
                                    VerticalAlignment="Top" HorizontalAlignment="Center"
                                    SizeChanged="ImgFit_SizeChanged"/>
@@ -620,9 +623,12 @@
                         </Grid>
 
                         <!-- Animated GIF (also anchored middle-top with same margin). -->
-                        <controls:GifImage GifUri="{Binding Preview.GifUri}"
+                        <controls:GifImage x:Name="GifPreview"
+                                           GifUri="{Binding Preview.GifUri}"
                                            Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Gif}"
                                            Stretch="Uniform" StretchDirection="DownOnly"
+                                           MaxWidth="{Binding Source, RelativeSource={RelativeSource Self}, Converter={StaticResource BitmapPixelSize}, ConverterParameter=W}"
+                                           MaxHeight="{Binding Source, RelativeSource={RelativeSource Self}, Converter={StaticResource BitmapPixelSize}, ConverterParameter=H}"
                                            Margin="8,12,8,8"
                                            VerticalAlignment="Top" HorizontalAlignment="Center"/>
 

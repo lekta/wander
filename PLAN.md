@@ -165,13 +165,25 @@
   переноса `PathSafety` из `Wander.App.Util` в `Wander.Core.FileSystem`
   ради тестируемости — sibling-substring kейс, case-insensitive,
   нормализация trailing slash, и т.д.).
-- **Чистка #2 — после D + G + Settings**. Когда добавится Favorites, Search,
-  SettingsDialog — VM раздуется. Кандидаты:
-  - Разделить `MainViewModel` на specialized VM-ы (NavigationViewModel,
-    ClipboardViewModel, ...) поверх уже выделенного `PreviewController`.
-  - Пересмотреть `AppState` дальше — выделить session-сектор (LastPath,
-    ViewMode, ExpandedPaths, IsPreviewVisible, PreviewWidth) в отдельный
-    подrecord по аналогии с `WindowGeometry`.
+- **Чистка #2 — после D + G + Settings** [**готова к запуску**]. Favorites,
+  Search и SettingsDialog все три закрыты, MainViewModel снова разросся
+  (search, bookmarks, navigation source, progress dialog оркестровка).
+  Кандидаты:
+  - Разделить `MainViewModel` на specialized VM-ы:
+    - `ClipboardController` (cut/copy/paste state, conflict integration).
+    - `NavigationController` (NavigationService обёртка + bookmarks/drives
+      auto-expand).
+    - `SearchController` (SearchQuery + filter pipeline + cancellation).
+  - Пересмотреть `AppState` — выделить **session-сектор** (LastPath,
+    ViewMode, ExpandedPaths, IsPreviewVisible, PreviewWidth, IsBookmarksExpanded,
+    Favorites) в отдельный подrecord по аналогии с `WindowGeometry`.
+    Settings и Window — уже подrecord-ы, session — последний "плоский".
+  - Глянуть на `MainWindow.xaml.cs` — drop handlers + drag init + tree
+    handlers + hotkeys всё в одном файле. Возможны behavior-классы.
+  - Подвинуть `PathSafety` обратно в `Wander.App.Util`? Сейчас он в
+    `Wander.Core.FileSystem` (ради тестируемости), но это App-семантика
+    про DnD. Решение: оставить в Core если в Core есть use-case
+    (например, batch self-drop guard в `BatchExecutor`); иначе вернуть.
 
 При планировании следующих чисток — добавлять сюда новые подзаголовки.
 

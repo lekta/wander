@@ -141,7 +141,24 @@ public sealed class SystemIconProvider : IIconProvider {
     // ------------------------------------------------------------------
 
     private static byte[]? LoadJumboImage(string path) {
-        Bitmap? baseBmp = LoadShellBitmapJumbo(path);
+        // Routing: files with a real thumbnail provider (images, videos, PDFs,
+        // folders with content peek) go through IShellItemImageFactory so we
+        // get true thumbnails. Everything else — text, code, .exe, .lnk — uses
+        // the older SHGetFileInfo + SHIL_JUMBO icon-list path, which extracts
+        // the registered icon directly from the file's resource without
+        // touching the system thumbnail cache (thumbcache_256.db).
+        //
+        // Why this matters: IShellItemImageFactory.GetImage *does* write to
+        // thumbcache_256.db even when shell falls back to an icon for files
+        // without a thumbnail provider. That cache entry persists, and Win11
+        // Explorer reads from the same cache for its own large-icons view —
+        // so a sub-optimal write from us could later make Explorer's display
+        // of the same file look blurrier than before Wander ran. Splitting
+        // the paths keeps icon-only writes out of the shared cache.
+        Bitmap? baseBmp = IsThumbnailable(path)
+            ? LoadShellBitmapJumbo(path)
+            : LoadIconBitmapJumbo(path);
+
         if (baseBmp is null) {
             // Couldn't get a 256-px image at all — fall back to the
             // shell's 32-px icon so the user sees *something* instead
@@ -203,6 +220,86 @@ public sealed class SystemIconProvider : IIconProvider {
             _log = ServiceLocator.IsRegistered<ILogger>() ? ServiceLocator.Get<ILogger>() : null;
         }
         _log?.Info("[icon] " + msg);
+    }
+
+
+    /// <summary>
+    /// Extensions we believe have a real thumbnail provider — i.e. the
+    /// shell can produce a content-based preview. For these, going through
+    /// <c>IShellItemImageFactory</c> is the right thing. Folders also
+    /// qualify (Win11 content peek).
+    ///
+    /// Everything outside this list is icon-only and goes through the
+    /// older <c>SHIL_JUMBO</c> path so we don't pollute the system
+    /// thumbnail cache (see <see cref="LoadJumboImage"/> comment).
+    /// </summary>
+    private static readonly HashSet<string> _thumbnailableExtensions = new(StringComparer.OrdinalIgnoreCase) {
+        // Images
+        ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".tif", ".tiff",
+        ".ico", ".heic", ".heif", ".svg",
+        // RAW
+        ".cr2", ".cr3", ".nef", ".arw", ".dng", ".raf", ".orf", ".rw2",
+        // Video
+        ".mp4", ".m4v", ".mov", ".wmv", ".avi", ".mkv", ".webm", ".mts", ".m2ts",
+        // Documents with shell thumbnail providers
+        ".pdf", ".docx", ".xlsx", ".pptx", ".doc", ".xls", ".ppt",
+    };
+
+    private static bool IsThumbnailable(string path) {
+        if (Directory.Exists(path)) {
+            return true;
+        }
+        return _thumbnailableExtensions.Contains(Path.GetExtension(path));
+    }
+
+
+    /// <summary>
+    /// Icon-only path: <c>SHGetFileInfo(SHGFI_SYSICONINDEX)</c> +
+    /// <c>SHGetImageList(SHIL_JUMBO)</c> + <c>GetIcon</c>. Returns the
+    /// file's registered 256-px icon without going through the modern
+    /// thumbnail pipeline, which means no write to <c>thumbcache_*.db</c>.
+    /// Used for files we know have no thumbnail provider — .txt, .lnk,
+    /// .exe, source code, etc.
+    /// </summary>
+    private static Bitmap? LoadIconBitmapJumbo(string path) {
+        var iidImageList = new Guid("46EB5926-582E-4017-9FDF-E8998DAA0950");
+        int hr = SHGetImageList(SHIL_JUMBO, ref iidImageList, out IImageList list);
+        if (hr != 0 || list is null) {
+            return null;
+        }
+
+        try {
+            uint flags = SHGFI_SYSICONINDEX;
+            bool exists = File.Exists(path) || Directory.Exists(path);
+            if (!exists) {
+                flags |= SHGFI_USEFILEATTRIBUTES;
+            }
+
+            var info = new SHFILEINFO();
+            IntPtr result = SHGetFileInfo(
+                path,
+                FILE_ATTRIBUTE_NORMAL,
+                ref info,
+                (uint)Marshal.SizeOf<SHFILEINFO>(),
+                flags);
+            if (result == IntPtr.Zero) {
+                return null;
+            }
+
+            IntPtr hIcon = IntPtr.Zero;
+            try {
+                if (list.GetIcon(info.iIcon, ILD_TRANSPARENT, ref hIcon) != 0 || hIcon == IntPtr.Zero) {
+                    return null;
+                }
+                return HIconToBitmap(hIcon);
+            } finally {
+                if (hIcon != IntPtr.Zero) {
+                    DestroyIcon(hIcon);
+                }
+            }
+        } finally {
+            Marshal.ReleaseComObject(list);
+        }
     }
 
 
@@ -340,7 +437,11 @@ public sealed class SystemIconProvider : IIconProvider {
                 return null;
             }
 
-            return HIconToBitmap(hIcon, shilSize);
+            var bmp = HIconToBitmap(hIcon);
+            if (bmp is null) {
+                IconLog($"HIconToBitmap failed for overlay (SHIL={shilSize})");
+            }
+            return bmp;
         } finally {
             if (hIcon != IntPtr.Zero) {
                 DestroyIcon(hIcon);
@@ -351,23 +452,22 @@ public sealed class SystemIconProvider : IIconProvider {
 
     /// <summary>
     /// Extracts the colour DIB out of an <c>HICON</c> and returns it as
-    /// a managed 32-bpp ARGB top-down <see cref="Bitmap"/>. See the
-    /// note above for why we don't use <c>Icon.ToBitmap()</c>.
+    /// a managed 32-bpp ARGB top-down <see cref="Bitmap"/>. Generic helper
+    /// used for both base icons (icon-only file path) and overlay icons.
+    /// We don't use <c>Icon.ToBitmap()</c> because it strips the alpha
+    /// channel for HICONs returned by <c>ImageList_GetIcon</c>.
     /// </summary>
-    private static Bitmap? HIconToBitmap(IntPtr hIcon, int shilSize) {
+    private static Bitmap? HIconToBitmap(IntPtr hIcon) {
         var iconInfo = new ICONINFO();
         if (!GetIconInfo(hIcon, ref iconInfo)) {
-            IconLog($"GetIconInfo failed for overlay (SHIL={shilSize})");
             return null;
         }
 
         try {
             if (iconInfo.hbmColor == IntPtr.Zero) {
-                // 1-bit-per-pixel monochrome icon — overlays from
-                // modern shell32 are always 32-bpp ARGB, so this
-                // shouldn't fire in practice. Bail out rather than
-                // synthesising colours from the mask.
-                IconLog($"overlay icon has no colour bitmap (SHIL={shilSize})");
+                // 1-bit-per-pixel monochrome icon — modern shell icons are
+                // always 32-bpp ARGB, so this shouldn't fire in practice.
+                // Bail out rather than synthesising colours from the mask.
                 return null;
             }
             return HBitmapToBitmap(iconInfo.hbmColor);
@@ -504,6 +604,7 @@ public sealed class SystemIconProvider : IIconProvider {
     private const int SHIL_SMALL = 0x1;        // 16 × 16
     private const int SHIL_LARGE = 0x0;        // 32 × 32
     private const int SHIL_EXTRALARGE = 0x2;   // 48 × 48
+    private const int SHIL_JUMBO = 0x4;        // 256 × 256
     private const int ILD_TRANSPARENT = 0x1;
 
     private const int BI_RGB = 0;
