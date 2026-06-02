@@ -407,9 +407,9 @@ Core готов, нужно дотянуть в UI / VM.
   закладок между собой для смены порядка. Сейчас порядок = порядок
   добавления, изменения через ручную правку state.json. Делать
   при первом запросе.
-- ~~**D7. Source-aware авто-разворот дерева.**~~ — **сделано**. Каждая
-  навигация теперь несёт `NavigationSource` (Drives / Bookmark /
-  Address / RightPane / Restore / External). `NavigationService` хранит
+- ~~**D7. Source-aware авто-разворот дерева + persistence.**~~ — **сделано**.
+  Каждая навигация несёт `NavigationSource` (Drives / Bookmark / Address /
+  RightPane / Restore / External). `NavigationService` хранит
   `List<NavigationEntry>` + cursor вместо двух стеков; Back/Forward
   возвращают исходный source. `ExpandTreeToCurrent` для source=Bookmark
   разворачивает только панель закладок (с fallback на drives, если
@@ -417,6 +417,18 @@ Core готов, нужно дотянуть в UI / VM.
   между визитами). Для остальных source — только drives. Заодно
   чистим `IsSelected` на предыдущем узле, чтобы при прыжках между
   панелями не оставалось «двойное выделение».
+  
+  Persistence — отдельный record `NavigationStop(Path, Source)` (живёт в
+  `Wander.Core.Navigation`): `AppState.LastPath` и `AppState.ExpandedPaths`
+  переведены на него. `CollectExpanded` собирает раскрытое отдельно по
+  панелям (Drives для Roots, Bookmark для Bookmarks) — один и тот же путь
+  может быть раскрыт независимо в обеих панелях. `RestoreState`
+  восстанавливает drives-side стопы сразу, bookmark-side — внутри
+  `BuildBookmarks` (после того как закладки построены). `JsonAppStateStore`
+  пишет enum как строку через `JsonStringEnumConverter`, чтобы state.json
+  оставался человекочитаемым. Старый формат state.json теряется
+  (`JsonSerializer.Deserialize` ловится try/catch → дефолтный `AppState`).
+  Слом схемы зафиксирован в TECHDEBT.
 
 ### E. Async операции — [P1, главный фокус]
 

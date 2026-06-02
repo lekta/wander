@@ -1,9 +1,25 @@
+using Wander.Core.Navigation;
+
 namespace Wander.Core.Persistence;
 
 public sealed record AppState {
-    public string? LastPath { get; init; }
+    /// <summary>
+    /// Folder the user was on when the session closed, together with the
+    /// panel context (drives / bookmarks / address / …) so the restored
+    /// session re-expands the right tree. Null on a fresh install.
+    /// </summary>
+    public NavigationStop? LastPath { get; init; }
+
     public string? ViewMode { get; init; }
-    public IReadOnlyList<string> ExpandedPaths { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Tree nodes the user had expanded at close, scoped per panel.
+    /// The same path can live in both panels (e.g. user-favourite that
+    /// also exists deep in the drives subtree) — each ownership is
+    /// recorded separately, so restoring keeps both panels matching
+    /// their last visible state independently.
+    /// </summary>
+    public IReadOnlyList<NavigationStop> ExpandedPaths { get; init; } = Array.Empty<NavigationStop>();
     public bool IsPreviewVisible { get; init; }
     public double PreviewWidth { get; init; } = 280;
 

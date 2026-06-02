@@ -34,3 +34,15 @@ public enum NavigationSource {
 /// gesture that brought the user there.
 /// </summary>
 public sealed record NavigationEntry(string Path, NavigationSource Source);
+
+
+/// <summary>
+/// Persistable pairing of a filesystem path with the panel it "belongs"
+/// to — used both for <c>AppState.LastPath</c> (where the user closed
+/// the session) and each entry in <c>AppState.ExpandedPaths</c> (which
+/// node in which panel was expanded). Same record, two consumers; lets
+/// the restore code re-expand the bookmarks-side and drives-side trees
+/// independently rather than dedup'ing by raw path and losing the
+/// panel context.
+/// </summary>
+public sealed record NavigationStop(string Path, NavigationSource Source);

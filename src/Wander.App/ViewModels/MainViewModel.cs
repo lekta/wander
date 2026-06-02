@@ -47,7 +47,7 @@ public sealed class MainViewModel : ObservableObject {
     private readonly List<string> _favorites = new();
     private bool _isBookmarksExpanded = true;
     private bool _buildingBookmarks;
-    private IReadOnlyList<string> _persistedExpandedPaths = Array.Empty<string>();
+    private IReadOnlyList<NavigationStop> _persistedExpandedPaths = Array.Empty<NavigationStop>();
 
     // Search filter state. _allEntries is the unfiltered post-hidden/system
     // snapshot of the current folder; Entries is the filtered projection
@@ -125,7 +125,6 @@ public sealed class MainViewModel : ObservableObject {
 
         LoadRoots();
         RestoreState();
-        BuildBookmarks();
     }
 
 
@@ -451,17 +450,37 @@ public sealed class MainViewModel : ObservableObject {
             Raise(nameof(IsBookmarksExpanded));
 
             _persistedExpandedPaths = state.ExpandedPaths.ToArray();
-            foreach (string path in _persistedExpandedPaths) {
-                ExpandToPath(path, select: false);
+            // Drives-side expansions are restored immediately. Bookmark-side
+            // ones wait until BuildBookmarks below — Bookmarks collection is
+            // still empty here, and the matching VM instances don't exist yet.
+            // expandTarget:true so the saved node itself is shown as expanded,
+            // not just its ancestors (a saved stop means "this node's children
+            // were visible at close").
+            foreach (var stop in _persistedExpandedPaths) {
+                if (stop.Source == NavigationSource.Bookmark) {
+                    continue;
+                }
+                foreach (var root in Roots) {
+                    if (root.TryExpandToPath(stop.Path, select: false, expandTarget: true)) {
+                        break;
+                    }
+                }
             }
+
+            // Build the bookmarks tree *before* the initial navigation —
+            // OnNavigationChanged → ExpandTreeToCurrent walks Bookmarks
+            // for source=Bookmark, and if it's still empty the expander
+            // falls back to drives, defeating the whole point of the
+            // restored source.
+            BuildBookmarks();
 
             // Honour the RestoreLastFolder preference: when off, ignore
             // LastPath and start at the first drive.
             bool wantRestore = Settings.RestoreLastFolder
-                && !string.IsNullOrEmpty(state.LastPath)
-                && _fs.DirectoryExists(state.LastPath);
+                && state.LastPath is not null
+                && _fs.DirectoryExists(state.LastPath.Path);
             if (wantRestore) {
-                _nav.NavigateTo(state.LastPath!, NavigationSource.Restore);
+                _nav.NavigateTo(state.LastPath!.Path, state.LastPath.Source);
             } else {
                 string? first = Roots.FirstOrDefault()?.FullPath;
                 if (first is not null) {
@@ -483,7 +502,9 @@ public sealed class MainViewModel : ObservableObject {
         // we'd silently wipe those fields on every navigation/preview toggle.
         var current = _stateStore.Load();
         _stateStore.Save(current with {
-            LastPath = _nav.Current,
+            LastPath = _nav.Current is not null
+                ? new NavigationStop(_nav.Current, _nav.CurrentSource ?? NavigationSource.External)
+                : null,
             ViewMode = _viewMode.ToString(),
             ExpandedPaths = CollectExpanded(),
             IsPreviewVisible = _isPreviewVisible,
@@ -494,39 +515,26 @@ public sealed class MainViewModel : ObservableObject {
         });
     }
 
-    private List<string> CollectExpanded() {
-        var result = new List<string>();
+    private List<NavigationStop> CollectExpanded() {
+        var result = new List<NavigationStop>();
         foreach (var root in Roots) {
-            CollectExpandedRecursive(root, result);
+            CollectExpandedRecursive(root, result, NavigationSource.Drives);
         }
         foreach (var bookmark in Bookmarks) {
-            CollectExpandedRecursive(bookmark, result);
+            CollectExpandedRecursive(bookmark, result, NavigationSource.Bookmark);
         }
-        // Dedupe — drives appear in both Roots and (when This PC is shown)
-        // under the synthetic bookmark, but their expansion state is shared
-        // via the VM instance, so the same path can surface twice.
-        return result.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        // Dedupe on (Path, Source). The same path can legitimately appear
+        // in both panels (e.g. a user-favourite that is also reachable via
+        // drives) — those are separate expansion states and both kept.
+        return result.Distinct().ToList();
     }
 
-    private static void CollectExpandedRecursive(TreeNodeViewModel node, List<string> result) {
+    private static void CollectExpandedRecursive(TreeNodeViewModel node, List<NavigationStop> result, NavigationSource source) {
         if (node.IsExpanded && !string.IsNullOrEmpty(node.FullPath)) {
-            result.Add(node.FullPath);
+            result.Add(new NavigationStop(node.FullPath, source));
         }
         foreach (var child in node.Children) {
-            CollectExpandedRecursive(child, result);
-        }
-    }
-
-    private void ExpandToPath(string path, bool select) {
-        foreach (var root in Roots) {
-            if (root.TryExpandToPath(path, select)) {
-                return;
-            }
-        }
-        foreach (var bookmark in Bookmarks) {
-            if (bookmark.TryExpandToPath(path, select)) {
-                return;
-            }
+            CollectExpandedRecursive(child, result, source);
         }
     }
 
@@ -791,15 +799,17 @@ public sealed class MainViewModel : ObservableObject {
         // Capture the *current* expansion state of bookmark folders so it
         // survives the rebuild — BuildBookmarks creates fresh VM instances
         // for the Downloads / user-favourite branches each time. Merge with
-        // the startup-loaded set so a freshly-launched session keeps what
-        // the user had expanded last time too.
-        var expanded = new List<string>();
+        // the startup-loaded set, but only with bookmark-source stops —
+        // drives-side entries describe the lower tree and don't belong here.
+        var live = new List<NavigationStop>();
         foreach (var b in Bookmarks) {
-            CollectExpandedRecursive(b, expanded);
+            CollectExpandedRecursive(b, live, NavigationSource.Bookmark);
         }
-        var expandedSet = new HashSet<string>(expanded, StringComparer.OrdinalIgnoreCase);
-        foreach (var p in _persistedExpandedPaths) {
-            expandedSet.Add(p);
+        var bookmarkStops = new HashSet<NavigationStop>(live);
+        foreach (var stop in _persistedExpandedPaths) {
+            if (stop.Source == NavigationSource.Bookmark) {
+                bookmarkStops.Add(stop);
+            }
         }
 
         _buildingBookmarks = true;
@@ -823,9 +833,9 @@ public sealed class MainViewModel : ObservableObject {
                 }
             }
 
-            foreach (string p in expandedSet) {
+            foreach (var stop in bookmarkStops) {
                 foreach (var b in Bookmarks) {
-                    if (b.TryExpandToPath(p, select: false)) {
+                    if (b.TryExpandToPath(stop.Path, select: false, expandTarget: true)) {
                         break;
                     }
                 }

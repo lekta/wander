@@ -12,6 +12,13 @@
 
 ## Открыто
 
+- **state.json schema break — bookmarks panel-awareness** — `AppState.LastPath`
+  стал `NavigationStop?` (вместо `string?`), `AppState.ExpandedPaths` стал
+  `IReadOnlyList<NavigationStop>` (вместо `IReadOnlyList<string>`). Поле
+  `LastPathSource` удалено (его роль перешла в `NavigationStop.Source`).
+  Старые state.json от предыдущих билдов не загрузятся — `JsonAppStateStore.Load`
+  ловит исключение и возвращает `new AppState()`. Pre-1.0 ОК; миграционный
+  слой можно добавить позже, если понадобится.
 - **Bookmarks: drop INTO bookmark folder = no-op** — сейчас любой drop
   на `BookmarksPanel` (включая прямо на узел существующей закладки)
   трактуется как «добавить в закладки». Drop в Explorer-стиле «скопировать

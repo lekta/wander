@@ -69,7 +69,17 @@ public sealed class TreeNodeViewModel : ObservableObject {
     /// Recursively expands nodes along the way to <paramref name="targetPath"/> and (optionally)
     /// selects the deepest matching node. Returns true if the target was reached.
     /// </summary>
-    public bool TryExpandToPath(string targetPath, bool select = true) {
+    /// <param name="select">
+    /// Set <see cref="IsSelected"/> on the target node — used for "navigate to this folder"
+    /// so the row is highlighted in the tree.
+    /// </param>
+    /// <param name="expandTarget">
+    /// Set <see cref="IsExpanded"/> on the target node itself — used for restoring saved
+    /// expansion state, where "this path was expanded" literally means its children should
+    /// be visible. Default <c>false</c>: walking to a node usually means "show that row",
+    /// not "show its children".
+    /// </param>
+    public bool TryExpandToPath(string targetPath, bool select = true, bool expandTarget = false) {
         if (string.IsNullOrEmpty(FullPath) || string.IsNullOrEmpty(targetPath)) {
             return false;
         }
@@ -79,6 +89,9 @@ public sealed class TreeNodeViewModel : ObservableObject {
         }
 
         if (PathsEqual(targetPath, FullPath)) {
+            if (expandTarget) {
+                IsExpanded = true;
+            }
             if (select) {
                 IsSelected = true;
             }
@@ -88,7 +101,7 @@ public sealed class TreeNodeViewModel : ObservableObject {
         IsExpanded = true;
 
         foreach (var child in Children) {
-            if (child.TryExpandToPath(targetPath, select)) {
+            if (child.TryExpandToPath(targetPath, select, expandTarget)) {
                 return true;
             }
         }
