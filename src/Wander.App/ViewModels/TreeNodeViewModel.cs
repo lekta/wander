@@ -8,16 +8,20 @@ public sealed class TreeNodeViewModel : ObservableObject {
     private static readonly TreeNodeViewModel _placeholder = new("__placeholder__", "", EntryKind.Directory, null, hasChildren: false);
 
     private readonly IFileSystem? _fs;
+    private readonly SettingsViewModel? _settings;
     private bool _isExpanded;
     private bool _isSelected;
     private bool _loaded;
 
 
-    public TreeNodeViewModel(string name, string fullPath, EntryKind kind, IFileSystem? fs, bool hasChildren) {
+    public TreeNodeViewModel(string name, string fullPath, EntryKind kind, IFileSystem? fs, bool hasChildren, SettingsViewModel? settings = null, bool isHidden = false, bool isSystem = false) {
         Name = name;
         FullPath = fullPath;
         Kind = kind;
         _fs = fs;
+        _settings = settings;
+        IsHidden = isHidden;
+        IsSystem = isSystem;
         Children = new ObservableCollection<TreeNodeViewModel>();
 
         // Placeholder so WPF draws the expander chevron before we lazy-load.
@@ -31,6 +35,8 @@ public sealed class TreeNodeViewModel : ObservableObject {
     public string Name { get; }
     public string FullPath { get; }
     public EntryKind Kind { get; }
+    public bool IsHidden { get; }
+    public bool IsSystem { get; }
     public ObservableCollection<TreeNodeViewModel> Children { get; }
 
     /// <summary>
@@ -123,12 +129,57 @@ public sealed class TreeNodeViewModel : ObservableObject {
                 if (entry.Kind != EntryKind.Directory) {
                     continue;
                 }
+                if (!IsAllowedByFilters(entry)) {
+                    continue;
+                }
 
                 bool childHasChildren = _fs.HasSubdirectories(entry.FullPath);
-                Children.Add(new TreeNodeViewModel(entry.Name, entry.FullPath, EntryKind.Directory, _fs, childHasChildren));
+                Children.Add(new TreeNodeViewModel(
+                    entry.Name, entry.FullPath, EntryKind.Directory, _fs, childHasChildren,
+                    _settings, entry.IsHidden, entry.IsSystem));
             }
         } catch {
             // access denied / unavailable — silently skip; UI will show empty
+        }
+    }
+
+    private bool IsAllowedByFilters(FileSystemEntry entry) {
+        if (_settings is null) {
+            return true;
+        }
+        if (!_settings.ShowHidden && entry.IsHidden) {
+            return false;
+        }
+        if (!_settings.ShowSystem && entry.IsSystem) {
+            return false;
+        }
+        return true;
+    }
+
+
+    /// <summary>
+    /// Drop the cached children and re-enumerate using the current settings
+    /// filters. Recurses through already-loaded subtrees so a single toggle of
+    /// ShowHidden/ShowSystem refreshes the whole expanded portion of the tree.
+    /// Unloaded branches stay lazy — they'll re-evaluate filters whenever the
+    /// user expands them next.
+    /// </summary>
+    public void RefreshChildren() {
+        if (!_loaded) {
+            return;
+        }
+
+        _loaded = false;
+        Children.Clear();
+
+        if (_isExpanded) {
+            EnsureLoaded();
+            foreach (var child in Children) {
+                child.RefreshChildren();
+            }
+        } else if (_fs is not null && _fs.HasSubdirectories(FullPath)) {
+            // Collapsed: restore the placeholder so the chevron still renders.
+            Children.Add(_placeholder);
         }
     }
 

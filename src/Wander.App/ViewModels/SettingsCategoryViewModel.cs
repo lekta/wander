@@ -39,6 +39,12 @@ public sealed class SafetySettingsCategory : SettingsCategoryViewModel {
 }
 
 
+public sealed class FileOperationsSettingsCategory : SettingsCategoryViewModel {
+    public FileOperationsSettingsCategory(SettingsViewModel owner)
+        : base("Файловые операции", owner) { }
+}
+
+
 public sealed class LayoutSettingsCategory : SettingsCategoryViewModel {
     public LayoutSettingsCategory(SettingsViewModel owner)
         : base("Вёрстка", owner) { }

@@ -28,6 +28,16 @@ public sealed record AppSettings {
     public bool ShowSystem { get; init; } = false;
 
 
+    // --- File operations ----------------------------------------------
+    /// <summary>
+    /// Ask for confirmation before moving items to the recycle bin.
+    /// When off, Delete (no Shift) just sends the items to the bin straight
+    /// away — Ctrl+Z still restores them, so the safety net remains. Shift+Delete
+    /// (permanent) always confirms regardless.
+    /// </summary>
+    public bool ConfirmRecycle { get; init; } = true;
+
+
     // --- Layout (LargeIcons view) -------------------------------------
     /// <summary>Width of one tile in the LargeIcons grid, in pixels.</summary>
     public int LargeIconCellWidth { get; init; } = 100;
@@ -51,6 +61,9 @@ public sealed record AppSettings {
 
     /// <summary>Show the user's Pictures folder as a default bookmark.</summary>
     public bool ShowBookmarkPictures { get; init; } = true;
+
+    /// <summary>Show the Recycle Bin as a default bookmark (read-only browsing).</summary>
+    public bool ShowBookmarkRecycleBin { get; init; } = true;
 
 
     // --- Debug ---------------------------------------------------------

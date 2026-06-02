@@ -394,15 +394,37 @@ Core готов, нужно дотянуть в UI / VM.
   `AppState.IsBookmarksExpanded`. Раскрытое состояние bookmark-папок
   включено в `ExpandedPaths` (CollectExpanded теперь итерирует и
   `Bookmarks`, и `Roots` с дедупом).
-- **[P1] D5. Корзина внутри Wander.** Нужна абстракция
-  `IShellNamespace` в Core: enumerate shell-items под
-  `FOLDERID_RecycleBinFolder` через `IShellFolder.EnumObjects`,
-  доменный тип `ShellItem` (display name, parsing name, иконка),
-  операции Restore/Delete через `IFileOperation`. После —
-  добавляем `BookmarksSettingsCategory` чекбокс «Показывать
-  «Корзину»» и кнопку-узел в bookmarks. Текущая фаза 1 без неё:
-  чекбокса нет, в тексте категории сказано «добавим отдельным
-  шагом».
+- ~~**D5. Корзина внутри Wander — базовое отображение.**~~ — **сделано
+  частично (фаза 1: read-only)**. Введена абстракция `IShellNamespace`
+  в `Wander.Core.Shell` (`IsShellPath` / `Enumerate` / `GetDisplayName`)
+  и константа-сентинел `ShellPaths.RecycleBin = "shell:RecycleBinFolder"`.
+  Реализация — `WindowsShellNamespace` в `Wander.Platform.Windows.Shell`,
+  enumerate через `Shell.Application` COM с тем же dynamic-паттерном,
+  что в `ShellRecycleBin.Restore`. Каждый item → `FileSystemEntry`
+  с `FullPath` = реальным путём внутри `$Recycle.Bin\…` (иконка
+  ловится system icon provider'ом, shell-launcher может его открыть),
+  `Name` = оригинальное имя, `ModifiedUtc` = дата удаления (из
+  GetDetailsOf column 2 с тем же locale-bound парсером).
+  MainViewModel: `NavigateTo` пропускает `_fs.DirectoryExists` для
+  shell-путей, `Refresh` ходит через `IShellNamespace`, `WindowTitle`
+  берёт display name, `BuildBookmarks` добавляет «Корзину» как четвёртый
+  дефолт. Деструктивные команды (Cut/Copy/Paste/Delete/PermanentDelete/
+  Rename/NewFolder) гейтятся через `IsCurrentShellNamespace` — внутри
+  корзины их CanExecute=false, чтобы пользователь случайно не оперировал
+  по $Recycle.Bin путям в обход shell-восстановления. Чекбокс
+  `AppSettings.ShowBookmarkRecycleBin` в категории «Закладки».
+- **[P1] D5b. Корзина: операции (Restore / Empty / Delete-permanent).**
+  Уже есть `IRecycleBin.Restore(RecycleHandle)` для отката собственных
+  удалений Wander'а, но Restore произвольного item'а из корзины (когда
+  пользователь не помнит handle) и Empty/Permanent-delete по одному
+  файлу требуют отдельных операций. План:
+  - Расширить `IRecycleBin`: `RestoreItem(string binBackingPath)`,
+    `PermanentDelete(string binBackingPath)`, `EmptyAll()`.
+  - В UI: context-menu на entries в правой панели «Восстановить»,
+    «Удалить навсегда»; на самой закладке-Корзине «Очистить корзину».
+  - Обработать drag-out из корзины как «Restore + Move» (Explorer-parity).
+  - Сразу же — exposed-icon для самой Корзины (`shell:RecycleBinFolder`
+    → IIconProvider должен через PIDL вернуть иконку bin'а).
 - **[P3] D6. Drag-reorder bookmarks.** Перетаскивание пользовательских
   закладок между собой для смены порядка. Сейчас порядок = порядок
   добавления, изменения через ручную правку state.json. Делать

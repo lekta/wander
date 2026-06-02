@@ -42,6 +42,18 @@
             on (otherwise the row isn't rendered at all), so the dimmed look
             is the visual cue that "this is technically hidden by Windows".
         -->
+        <!--
+            Hidden vs System visual cue convention:
+              - Hidden:           opacity 0.55 (faded, Explorer parity).
+              - System:           italic       (slants the label; a strong but
+                                                still readable signal that this
+                                                is OS infrastructure).
+              - Hidden + System:  both         (typical "protected OS" file —
+                                                stands out as «не трогать»).
+            Triggers stack additively, so the combined case automatically gets
+            both treatments. Same triggers are applied to the TreeViewItem
+            style so drives/bookmarks panel matches the file list.
+        -->
         <Style TargetType="DataGridRow">
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Style.Triggers>
@@ -49,7 +61,7 @@
                     <Setter Property="Opacity" Value="0.55"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding IsSystem}" Value="True">
-                    <Setter Property="Opacity" Value="0.55"/>
+                    <Setter Property="FontStyle" Value="Italic"/>
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -63,7 +75,24 @@
                     <Setter Property="Opacity" Value="0.55"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding IsSystem}" Value="True">
+                    <Setter Property="FontStyle" Value="Italic"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Shared TreeViewItem style: same Hidden/System visual rules as the
+             file list, plus the two-way bindings for expand/select state.
+             Used by both the bookmarks tree and the drives tree. -->
+        <Style x:Key="WanderTreeViewItem" TargetType="TreeViewItem">
+            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsHidden}" Value="True">
                     <Setter Property="Opacity" Value="0.55"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsSystem}" Value="True">
+                    <Setter Property="FontStyle" Value="Italic"/>
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -337,11 +366,7 @@
                               MaxHeight="280"
                               BorderThickness="0">
                         <TreeView.ItemContainerStyle>
-                            <Style TargetType="TreeViewItem">
-                                <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
-                                <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
-                                <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-                            </Style>
+                            <Style TargetType="TreeViewItem" BasedOn="{StaticResource WanderTreeViewItem}"/>
                         </TreeView.ItemContainerStyle>
                         <TreeView.ItemTemplate>
                             <HierarchicalDataTemplate ItemsSource="{Binding Children}">
@@ -374,11 +399,7 @@
                           DragOver="OnDragOver"
                           Drop="OnDrop">
                     <TreeView.ItemContainerStyle>
-                        <Style TargetType="TreeViewItem">
-                            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
-                            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
-                            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-                        </Style>
+                        <Style TargetType="TreeViewItem" BasedOn="{StaticResource WanderTreeViewItem}"/>
                     </TreeView.ItemContainerStyle>
                     <TreeView.ItemTemplate>
                         <HierarchicalDataTemplate ItemsSource="{Binding Children}">

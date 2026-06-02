@@ -97,12 +97,17 @@ public sealed class MainViewModel : ObservableObject {
         UpCommand = new RelayCommand(_ => GoUp(), _ => _nav.CanGoUp);
         NavigateCommand = new RelayCommand(_ => NavigateToAddress());
         OpenCommand = new RelayCommand(p => OpenEntry(p as FileSystemEntry ?? _selectedEntry), _ => _selectedEntry is not null);
-        DeleteCommand = new RelayCommand(_ => _ = DeleteSelectedAsync(permanent: false), _ => _selectedEntries.Count > 0);
-        RenameCommand = new RelayCommand(p => Rename(p as string), _ => _selectedEntry is not null);
-        CopyCommand = new RelayCommand(_ => Copy(), _ => _selectedEntries.Count > 0);
-        CutCommand = new RelayCommand(_ => Cut(), _ => _selectedEntries.Count > 0);
-        PasteCommand = new RelayCommand(_ => _ = PasteAsync(), _ => _clipboard.Count > 0 && _nav.Current is not null);
-        NewFolderCommand = new RelayCommand(_ => NewFolder(), _ => _nav.Current is not null);
+        // Destructive ops are blocked inside shell namespaces (Recycle Bin):
+        // the entries' FullPaths point at $Recycle.Bin backing files, and
+        // copying / deleting / renaming those would bypass the shell's
+        // restore-tracking and corrupt the bin's state. Read-only browsing
+        // only in this iteration.
+        DeleteCommand = new RelayCommand(_ => _ = DeleteSelectedAsync(permanent: false), _ => _selectedEntries.Count > 0 && !IsCurrentShellNamespace);
+        RenameCommand = new RelayCommand(p => Rename(p as string), _ => _selectedEntry is not null && !IsCurrentShellNamespace);
+        CopyCommand = new RelayCommand(_ => Copy(), _ => _selectedEntries.Count > 0 && !IsCurrentShellNamespace);
+        CutCommand = new RelayCommand(_ => Cut(), _ => _selectedEntries.Count > 0 && !IsCurrentShellNamespace);
+        PasteCommand = new RelayCommand(_ => _ = PasteAsync(), _ => _clipboard.Count > 0 && _nav.Current is not null && !IsCurrentShellNamespace);
+        NewFolderCommand = new RelayCommand(_ => NewFolder(), _ => _nav.Current is not null && !IsCurrentShellNamespace);
         RefreshCommand = new RelayCommand(_ => Refresh());
         SetViewModeCommand = new RelayCommand(p => SetViewMode(p as string));
         ExitCommand = new RelayCommand(_ => Application.Current?.Shutdown());
@@ -110,7 +115,7 @@ public sealed class MainViewModel : ObservableObject {
         PropertiesCommand = new RelayCommand(_ => ShowProperties(), _ => _selectedEntry is not null);
         TogglePreviewCommand = new RelayCommand(_ => IsPreviewVisible = !IsPreviewVisible);
         UndoCommand = new RelayCommand(_ => UndoLast(), _ => _undo.CanUndo);
-        PermanentDeleteCommand = new RelayCommand(_ => _ = DeleteSelectedAsync(permanent: true), _ => _selectedEntries.Count > 0);
+        PermanentDeleteCommand = new RelayCommand(_ => _ = DeleteSelectedAsync(permanent: true), _ => _selectedEntries.Count > 0 && !IsCurrentShellNamespace);
         OpenLogFileCommand = new RelayCommand(_ => OpenLogFile(), _ => ServiceLocator.IsRegistered<ILogFile>());
         ToggleBookmarksCommand = new RelayCommand(_ => IsBookmarksExpanded = !IsBookmarksExpanded);
         AddBookmarkCommand = new RelayCommand(p => AddBookmark(p as string));
@@ -273,6 +278,12 @@ public sealed class MainViewModel : ObservableObject {
             if (string.IsNullOrEmpty(_nav.Current)) {
                 return "Wander";
             }
+            // Shell sentinels (e.g. shell:RecycleBinFolder) don't have a
+            // sensible Path.GetFileName — ask the namespace for its
+            // localised display label.
+            if (TryGetShellNamespace() is { } ns && ns.IsShellPath(_nav.Current)) {
+                return ns.GetDisplayName(_nav.Current) ?? _nav.Current;
+            }
             string trimmed = _nav.Current.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             string name = Path.GetFileName(trimmed);
             return string.IsNullOrEmpty(name) ? _nav.Current : name;
@@ -281,7 +292,7 @@ public sealed class MainViewModel : ObservableObject {
 
 
     public void NavigateTo(string path, NavigationSource source = NavigationSource.External) {
-        if (!_fs.DirectoryExists(path)) {
+        if (!PathIsNavigable(path)) {
             _log.Warn($"Navigate: path not found {path}");
             Status = $"Path not found: {path}";
             return;
@@ -289,6 +300,35 @@ public sealed class MainViewModel : ObservableObject {
         _log.Info($"Navigate ({source}): {path}");
         _nav.NavigateTo(path, source);
     }
+
+    // --- Shell-namespace helpers ---------------------------------------
+    // Centralised checks so Navigate / Refresh / BuildBookmarks all agree
+    // on what counts as a recognised shell location. Caching the lookup
+    // would be premature — IsRegistered + Get are cheap dictionary hits.
+
+    private static IShellNamespace? TryGetShellNamespace() {
+        return ServiceLocator.IsRegistered<IShellNamespace>()
+            ? ServiceLocator.Get<IShellNamespace>()
+            : null;
+    }
+
+    private bool IsShellPath(string? path) {
+        return !string.IsNullOrEmpty(path)
+            && TryGetShellNamespace() is { } ns
+            && ns.IsShellPath(path);
+    }
+
+    private bool PathIsNavigable(string path) {
+        return IsShellPath(path) || _fs.DirectoryExists(path);
+    }
+
+    /// <summary>
+    /// True when the user is currently browsing a shell namespace (e.g.
+    /// the Recycle Bin). Used to gate destructive commands — those would
+    /// operate on raw $Recycle.Bin backing paths and produce surprising
+    /// results.
+    /// </summary>
+    public bool IsCurrentShellNamespace => IsShellPath(_nav.Current);
 
     public void OpenEntry(FileSystemEntry? entry) {
         if (entry is null) {
@@ -635,6 +675,24 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
+        // Shell namespaces (Recycle Bin etc.) route through IShellNamespace
+        // — IFileSystem.Enumerate would throw on shell:RecycleBinFolder.
+        // No Hidden/System filtering: shell items don't carry those flags
+        // and Wander's "what to hide" preference is filesystem-only.
+        if (IsShellPath(_nav.Current) && TryGetShellNamespace() is { } ns) {
+            try {
+                _allEntries = ns.Enumerate(_nav.Current).ToList();
+                _hiddenCount = 0;
+                _ = ApplyFilterAsync();
+            } catch (Exception ex) {
+                _allEntries = new List<FileSystemEntry>();
+                _hiddenCount = 0;
+                Entries.Clear();
+                Status = $"Error: {ex.Message}";
+            }
+            return;
+        }
+
         bool showHidden = Settings.ShowHidden;
         bool showSystem = Settings.ShowSystem;
 
@@ -726,7 +784,7 @@ public sealed class MainViewModel : ObservableObject {
         Roots.Clear();
         foreach (var root in _fs.GetRoots()) {
             bool hasChildren = _fs.HasSubdirectories(root.FullPath);
-            var node = new TreeNodeViewModel(root.Name, root.FullPath, EntryKind.Drive, _fs, hasChildren);
+            var node = new TreeNodeViewModel(root.Name, root.FullPath, EntryKind.Drive, _fs, hasChildren, Settings);
             Roots.Add(node);
             WireTreeNode(node);
         }
@@ -775,11 +833,21 @@ public sealed class MainViewModel : ObservableObject {
         if (e.PropertyName == nameof(SettingsViewModel.ShowHidden) ||
             e.PropertyName == nameof(SettingsViewModel.ShowSystem)) {
             Refresh();
+            // File-list filter is one half; tree (drives + bookmarks) caches
+            // its loaded children, so it needs an explicit reload to drop or
+            // surface hidden / system folders.
+            foreach (var node in Roots) {
+                node.RefreshChildren();
+            }
+            foreach (var node in Bookmarks) {
+                node.RefreshChildren();
+            }
         }
 
         if (e.PropertyName == nameof(SettingsViewModel.ShowBookmarkDownloads) ||
             e.PropertyName == nameof(SettingsViewModel.ShowBookmarkDocuments) ||
-            e.PropertyName == nameof(SettingsViewModel.ShowBookmarkPictures)) {
+            e.PropertyName == nameof(SettingsViewModel.ShowBookmarkPictures) ||
+            e.PropertyName == nameof(SettingsViewModel.ShowBookmarkRecycleBin)) {
             BuildBookmarks();
         }
 
@@ -825,6 +893,9 @@ public sealed class MainViewModel : ObservableObject {
             if (Settings.ShowBookmarkPictures) {
                 AddSpecialFolderNode("Изображения", ResolvePictures());
             }
+            if (Settings.ShowBookmarkRecycleBin && TryGetShellNamespace() is not null) {
+                AddSpecialFolderNode("Корзина", ShellPaths.RecycleBin);
+            }
 
             foreach (string path in _favorites) {
                 var node = TryBuildFolderNode(path);
@@ -868,12 +939,27 @@ public sealed class MainViewModel : ObservableObject {
     /// the path can't be resolved or doesn't exist on disk (e.g. user moved
     /// the folder to a removed drive). The label is a fixed localised name,
     /// not the on-disk folder name, so the user sees a stable caption.
+    /// Shell-namespace paths (Recycle Bin) take a different code path:
+    /// no <see cref="IFileSystem"/> probe and no lazy-load children — the
+    /// node is a clickable leaf, navigated through <see cref="IShellNamespace"/>.
     /// </summary>
     private void AddSpecialFolderNode(string label, string? path) {
-        if (string.IsNullOrEmpty(path) || !_fs.DirectoryExists(path)) {
+        if (string.IsNullOrEmpty(path)) {
             return;
         }
-        var node = new TreeNodeViewModel(label, path, EntryKind.Directory, _fs, _fs.HasSubdirectories(path));
+        if (IsShellPath(path)) {
+            // No tree children for shell namespaces in this iteration —
+            // Recycle Bin is presented as a flat list in the right pane,
+            // not browseable from the bookmarks tree.
+            var shellNode = new TreeNodeViewModel(label, path, EntryKind.Directory, fs: null, hasChildren: false);
+            WireTreeNode(shellNode);
+            Bookmarks.Add(shellNode);
+            return;
+        }
+        if (!_fs.DirectoryExists(path)) {
+            return;
+        }
+        var node = new TreeNodeViewModel(label, path, EntryKind.Directory, _fs, _fs.HasSubdirectories(path), Settings);
         WireTreeNode(node);
         Bookmarks.Add(node);
     }
@@ -887,7 +973,7 @@ public sealed class MainViewModel : ObservableObject {
             // e.g. a drive root — fall back to the trimmed path itself.
             name = path;
         }
-        var node = new TreeNodeViewModel(name, path, EntryKind.Directory, _fs, _fs.HasSubdirectories(path)) {
+        var node = new TreeNodeViewModel(name, path, EntryKind.Directory, _fs, _fs.HasSubdirectories(path), Settings) {
             IsRemovableBookmark = true,
         };
         WireTreeNode(node);
@@ -980,32 +1066,39 @@ public sealed class MainViewModel : ObservableObject {
         }
 
         var snapshot = _selectedEntries.ToList();
-        string verb = permanent ? "Permanently delete" : "Move to recycle bin";
-        string title = permanent ? "Confirm permanent deletion" : "Confirm move to recycle bin";
-        string message;
-        if (snapshot.Count == 1) {
-            var e0 = snapshot[0];
-            string kind = e0.Kind == EntryKind.Directory ? "folder" : "file";
-            message = $"{verb} {kind} '{e0.Name}'?\n\n{e0.FullPath}";
-        } else {
-            message = $"{verb} {snapshot.Count} items?\n\n" +
-                string.Join("\n", snapshot.Take(5).Select(e => "• " + e.Name)) +
-                (snapshot.Count > 5 ? $"\n… and {snapshot.Count - 5} more" : "");
-        }
-        if (permanent) {
-            message += "\n\nThis cannot be undone.";
-        }
 
-        var result = MessageBox.Show(
-            message,
-            title,
-            MessageBoxButton.OKCancel,
-            permanent ? MessageBoxImage.Error : MessageBoxImage.Warning,
-            MessageBoxResult.Cancel);
+        // Permanent (Shift+Delete) always asks. Recycle asks only when the
+        // user kept the "confirm" preference on — Ctrl+Z still restores from
+        // the bin so skipping the prompt is safe by default.
+        bool needsConfirm = permanent || Settings.ConfirmRecycle;
+        if (needsConfirm) {
+            string verb = permanent ? "Permanently delete" : "Move to recycle bin";
+            string title = permanent ? "Confirm permanent deletion" : "Confirm move to recycle bin";
+            string message;
+            if (snapshot.Count == 1) {
+                var e0 = snapshot[0];
+                string kind = e0.Kind == EntryKind.Directory ? "folder" : "file";
+                message = $"{verb} {kind} '{e0.Name}'?\n\n{e0.FullPath}";
+            } else {
+                message = $"{verb} {snapshot.Count} items?\n\n" +
+                    string.Join("\n", snapshot.Take(5).Select(e => "• " + e.Name)) +
+                    (snapshot.Count > 5 ? $"\n… and {snapshot.Count - 5} more" : "");
+            }
+            if (permanent) {
+                message += "\n\nThis cannot be undone.";
+            }
 
-        if (result != MessageBoxResult.OK) {
-            _log.Info($"Delete cancelled by user (permanent={permanent}, items={snapshot.Count})");
-            return;
+            var result = MessageBox.Show(
+                message,
+                title,
+                MessageBoxButton.OKCancel,
+                permanent ? MessageBoxImage.Error : MessageBoxImage.Warning,
+                MessageBoxResult.Cancel);
+
+            if (result != MessageBoxResult.OK) {
+                _log.Info($"Delete cancelled by user (permanent={permanent}, items={snapshot.Count})");
+                return;
+            }
         }
 
         var readOnlys = snapshot.Where(en => en.IsReadOnly).ToList();

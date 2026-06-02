@@ -19,6 +19,24 @@
   Старые state.json от предыдущих билдов не загрузятся — `JsonAppStateStore.Load`
   ловит исключение и возвращает `new AppState()`. Pre-1.0 ОК; миграционный
   слой можно добавить позже, если понадобится.
+- **Корзина: нет иконки на самой закладке** — узел «Корзина» имеет
+  `FullPath="shell:RecycleBinFolder"`, который `SystemIconProvider`
+  через `SHGetFileInfo` не распознаёт (это shell-URI, не реальный путь).
+  В дереве слева пункт показывается без значка. Правильный путь —
+  получить PIDL `FOLDERID_RecycleBinFolder` через `SHGetKnownFolderIDList`
+  и накормить им `SHGetFileInfo` с флагом `SHGFI_PIDL`. Сделать
+  при реализации D5b (там же будет нужна динамическая иконка
+  «пустая/полная корзина»).
+- **Корзина: WindowsShellNamespace кэширует RCW для всей сессии** —
+  каждый `Refresh` пересоздаёт `Shell.Application` через
+  `Activator.CreateInstance`, не освобождая через
+  `Marshal.ReleaseComObject`. Для коротких сессий приемлемо, тот же
+  компромисс что в `ShellRecycleBin`. Пересмотреть если корзина
+  начнёт «утекать».
+- **Корзина: enumerate синхронно на UI-потоке** — `Refresh` зовёт
+  `IShellNamespace.Enumerate` синхронно. Для бакета с тысячами
+  recycled items может фризить UI. Async-обёртка пойдёт в одной
+  пачке с E3 (async thumbnails).
 - **Bookmarks: drop INTO bookmark folder = no-op** — сейчас любой drop
   на `BookmarksPanel` (включая прямо на узел существующей закладки)
   трактуется как «добавить в закладки». Drop в Explorer-стиле «скопировать

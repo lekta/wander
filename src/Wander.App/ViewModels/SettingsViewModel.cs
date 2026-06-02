@@ -43,6 +43,14 @@ public sealed class SettingsViewModel : ObservableObject {
     }
 
 
+    // --- File operations ----------------------------------------------
+    private bool _confirmRecycle;
+    public bool ConfirmRecycle {
+        get => _confirmRecycle;
+        set => SetField(ref _confirmRecycle, value);
+    }
+
+
     // --- Layout (LargeIcons) ------------------------------------------
     private int _largeIconCellWidth;
     public int LargeIconCellWidth {
@@ -88,6 +96,12 @@ public sealed class SettingsViewModel : ObservableObject {
         set => SetField(ref _showBookmarkPictures, value);
     }
 
+    private bool _showBookmarkRecycleBin;
+    public bool ShowBookmarkRecycleBin {
+        get => _showBookmarkRecycleBin;
+        set => SetField(ref _showBookmarkRecycleBin, value);
+    }
+
 
     // --- Debug ---------------------------------------------------------
     private bool _showDebugMenu;
@@ -115,6 +129,7 @@ public sealed class SettingsViewModel : ObservableObject {
         Categories = new ObservableCollection<SettingsCategoryViewModel> {
             new GeneralSettingsCategory(this),
             new SafetySettingsCategory(this),
+            new FileOperationsSettingsCategory(this),
             new LayoutSettingsCategory(this),
             new BookmarksSettingsCategory(this),
             new DebugSettingsCategory(this),
@@ -129,6 +144,7 @@ public sealed class SettingsViewModel : ObservableObject {
         RestoreLastFolder = s.RestoreLastFolder;
         ShowHidden = s.ShowHidden;
         ShowSystem = s.ShowSystem;
+        ConfirmRecycle = s.ConfirmRecycle;
         LargeIconCellWidth = s.LargeIconCellWidth;
         LargeIconImageSize = s.LargeIconImageSize;
         LargeIconMargin = s.LargeIconMargin;
@@ -136,6 +152,7 @@ public sealed class SettingsViewModel : ObservableObject {
         ShowBookmarkDownloads = s.ShowBookmarkDownloads;
         ShowBookmarkDocuments = s.ShowBookmarkDocuments;
         ShowBookmarkPictures = s.ShowBookmarkPictures;
+        ShowBookmarkRecycleBin = s.ShowBookmarkRecycleBin;
         ShowDebugMenu = s.ShowDebugMenu;
     }
 
@@ -144,6 +161,7 @@ public sealed class SettingsViewModel : ObservableObject {
             RestoreLastFolder = RestoreLastFolder,
             ShowHidden = ShowHidden,
             ShowSystem = ShowSystem,
+            ConfirmRecycle = ConfirmRecycle,
             LargeIconCellWidth = LargeIconCellWidth,
             LargeIconImageSize = LargeIconImageSize,
             LargeIconMargin = LargeIconMargin,
@@ -151,6 +169,7 @@ public sealed class SettingsViewModel : ObservableObject {
             ShowBookmarkDownloads = ShowBookmarkDownloads,
             ShowBookmarkDocuments = ShowBookmarkDocuments,
             ShowBookmarkPictures = ShowBookmarkPictures,
+            ShowBookmarkRecycleBin = ShowBookmarkRecycleBin,
             ShowDebugMenu = ShowDebugMenu,
         };
     }
