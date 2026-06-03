@@ -179,6 +179,42 @@
                                   IsCheckable="True"
                                   IsChecked="{Binding ViewMode, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=LargeIcons}"
                                   Command="{Binding SetViewModeCommand}" CommandParameter="LargeIcons"/>
+                        <Separator/>
+                        <!--
+                            Sort by submenu. The four columns mirror the Details
+                            view. Clicking the active column toggles direction
+                            (Explorer parity, handled in MainViewModel.SetSortKey).
+                            Ascending/GroupFoldersFirst sit below as separate
+                            toggles so the user can flip them without changing
+                            the column.
+                        -->
+                        <MenuItem Header="Sort by">
+                            <MenuItem Header="Name"
+                                      IsCheckable="True"
+                                      IsChecked="{Binding Settings.SortKey, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=Name}"
+                                      Command="{Binding SetSortKeyCommand}" CommandParameter="Name"/>
+                            <MenuItem Header="Date modified"
+                                      IsCheckable="True"
+                                      IsChecked="{Binding Settings.SortKey, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=ModifiedDate}"
+                                      Command="{Binding SetSortKeyCommand}" CommandParameter="ModifiedDate"/>
+                            <MenuItem Header="Size"
+                                      IsCheckable="True"
+                                      IsChecked="{Binding Settings.SortKey, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=Size}"
+                                      Command="{Binding SetSortKeyCommand}" CommandParameter="Size"/>
+                            <MenuItem Header="Type"
+                                      IsCheckable="True"
+                                      IsChecked="{Binding Settings.SortKey, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=Type}"
+                                      Command="{Binding SetSortKeyCommand}" CommandParameter="Type"/>
+                            <Separator/>
+                            <MenuItem Header="Ascending"
+                                      IsCheckable="True"
+                                      IsChecked="{Binding Settings.SortAscending, Mode=OneWay}"
+                                      Command="{Binding ToggleSortAscendingCommand}"/>
+                            <MenuItem Header="Folders first"
+                                      IsCheckable="True"
+                                      IsChecked="{Binding Settings.GroupFoldersFirst, Mode=OneWay}"
+                                      Command="{Binding ToggleGroupFoldersFirstCommand}"/>
+                        </MenuItem>
                     </MenuItem>
                 </Menu>
 
@@ -587,6 +623,39 @@
                         </ContextMenu>
                     </ListBox.ContextMenu>
                 </ListBox>
+
+                <!--
+                    Loading overlay for slow list enumerations (shell
+                    namespaces like Recycle Bin go through Shell.Application
+                    COM, which can take a noticeable fraction of a second).
+                    Z-ordered last so it sits on top of the three view
+                    containers; non-hit-testable so the user's clicks fall
+                    through to the empty list rather than the spinner.
+                -->
+                <Grid Visibility="{Binding IsListLoading, Converter={StaticResource BoolToVisibility}}"
+                      Background="#80FAFAFA"
+                      IsHitTestVisible="False">
+                    <Ellipse Width="32" Height="32" StrokeThickness="3"
+                             Stroke="#0078D7" Fill="Transparent"
+                             StrokeDashArray="3,2"
+                             HorizontalAlignment="Center" VerticalAlignment="Center"
+                             RenderTransformOrigin="0.5,0.5">
+                        <Ellipse.RenderTransform>
+                            <RotateTransform x:Name="ListSpinnerRotate" Angle="0"/>
+                        </Ellipse.RenderTransform>
+                        <Ellipse.Triggers>
+                            <EventTrigger RoutedEvent="Loaded">
+                                <BeginStoryboard>
+                                    <Storyboard RepeatBehavior="Forever">
+                                        <DoubleAnimation Storyboard.TargetName="ListSpinnerRotate"
+                                                         Storyboard.TargetProperty="Angle"
+                                                         From="0" To="360" Duration="0:0:1"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                        </Ellipse.Triggers>
+                    </Ellipse>
+                </Grid>
             </Grid>
 
             <!-- Splitter between right pane and preview -->

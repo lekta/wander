@@ -17,24 +17,41 @@ internal sealed class FakeFileSystem : IFileSystem {
     }
 
 
-    public IReadOnlyList<FileSystemEntry> Enumerate(string path) {
-        var entries = new List<FileSystemEntry>();
+    public IReadOnlyList<FileSystemEntry> Enumerate(string path, SortOptions? sort = null) {
+        var options = sort ?? SortOptions.Default;
+        var comparer = EntryComparers.Build(options);
+
+        var folderLikes = new List<FileSystemEntry>();
+        var files = new List<FileSystemEntry>();
 
         foreach (string d in Directories) {
             string? parent = System.IO.Path.GetDirectoryName(d);
             if (string.Equals(parent, path, StringComparison.OrdinalIgnoreCase)) {
-                entries.Add(new FileSystemEntry(System.IO.Path.GetFileName(d), d, EntryKind.Directory, null, DateTime.MinValue, false, false, false, false));
+                folderLikes.Add(new FileSystemEntry(System.IO.Path.GetFileName(d), d, EntryKind.Directory, null, DateTime.MinValue, false, false, false, false));
             }
         }
 
         foreach (string f in Files.Keys) {
             string? parent = System.IO.Path.GetDirectoryName(f);
             if (string.Equals(parent, path, StringComparison.OrdinalIgnoreCase)) {
-                entries.Add(new FileSystemEntry(System.IO.Path.GetFileName(f), f, EntryKind.File, Files[f].Length, DateTime.MinValue, false, false, false, false));
+                files.Add(new FileSystemEntry(System.IO.Path.GetFileName(f), f, EntryKind.File, Files[f].Length, DateTime.MinValue, false, false, false, false));
             }
         }
 
-        return entries;
+        if (options.GroupFoldersFirst) {
+            folderLikes.Sort(comparer);
+            files.Sort(comparer);
+            var result = new List<FileSystemEntry>(folderLikes.Count + files.Count);
+            result.AddRange(folderLikes);
+            result.AddRange(files);
+            return result;
+        }
+
+        var merged = new List<FileSystemEntry>(folderLikes.Count + files.Count);
+        merged.AddRange(folderLikes);
+        merged.AddRange(files);
+        merged.Sort(comparer);
+        return merged;
     }
 
     public IReadOnlyList<FileSystemEntry> GetRoots() {

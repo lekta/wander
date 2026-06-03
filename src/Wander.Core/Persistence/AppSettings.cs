@@ -1,3 +1,5 @@
+using Wander.Core.FileSystem;
+
 namespace Wander.Core.Persistence;
 
 /// <summary>
@@ -36,6 +38,17 @@ public sealed record AppSettings {
     /// (permanent) always confirms regardless.
     /// </summary>
     public bool ConfirmRecycle { get; init; } = true;
+
+
+    // --- Sort ----------------------------------------------------------
+    /// <summary>Which column the folder listing is sorted by.</summary>
+    public SortKey SortKey { get; init; } = SortKey.Name;
+
+    /// <summary>Sort direction: true = A→Z / oldest→newest / smallest→largest.</summary>
+    public bool SortAscending { get; init; } = true;
+
+    /// <summary>Group folders (and folder-like shortcuts) above plain files.</summary>
+    public bool GroupFoldersFirst { get; init; } = true;
 
 
     // --- Layout (LargeIcons view) -------------------------------------

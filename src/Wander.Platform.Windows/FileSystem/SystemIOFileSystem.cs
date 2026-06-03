@@ -15,7 +15,9 @@ public sealed class SystemIOFileSystem : IFileSystem {
     }
 
 
-    public IReadOnlyList<FileSystemEntry> Enumerate(string path) {
+    public IReadOnlyList<FileSystemEntry> Enumerate(string path, SortOptions? sort = null) {
+        var options = sort ?? SortOptions.Default;
+
         // Folder-likes go in one bucket, plain files in another. A
         // ".lnk → directory" is sorted with folders even though it's a
         // file on disk; OpenEntry already treats it as a folder when the
@@ -36,17 +38,33 @@ public sealed class SystemIOFileSystem : IFileSystem {
             }
         }
 
-        // Explorer-style natural sort (numbers, special chars, "_" before letters)
-        // — StrCmpLogicalW is what Explorer itself uses. Folders are listed first.
-        var comparer = Comparer<FileSystemEntry>.Create((a, b) => StrCmpLogicalW(a.Name, b.Name));
-        folderLikes.Sort(comparer);
-        files.Sort(comparer);
+        // Explorer-style natural sort for the Name tiebreaker (numbers,
+        // special chars, "_" before letters). StrCmpLogicalW is what
+        // Explorer itself uses; we hand it to EntryComparers via the
+        // optional name-comparer hook.
+        var comparer = EntryComparers.Build(options, _naturalNameComparer);
 
-        var result = new List<FileSystemEntry>(folderLikes.Count + files.Count);
-        result.AddRange(folderLikes);
-        result.AddRange(files);
-        return result;
+        if (options.GroupFoldersFirst) {
+            folderLikes.Sort(comparer);
+            files.Sort(comparer);
+            var result = new List<FileSystemEntry>(folderLikes.Count + files.Count);
+            result.AddRange(folderLikes);
+            result.AddRange(files);
+            return result;
+        }
+
+        // Single merged stream — folders mingle with files according to
+        // the chosen key (so "newest first" actually puts the newest item
+        // at the top regardless of kind).
+        var merged = new List<FileSystemEntry>(folderLikes.Count + files.Count);
+        merged.AddRange(folderLikes);
+        merged.AddRange(files);
+        merged.Sort(comparer);
+        return merged;
     }
+
+    private static readonly IComparer<string> _naturalNameComparer =
+        Comparer<string>.Create((a, b) => StrCmpLogicalW(a, b));
 
 
     /// <summary>

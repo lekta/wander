@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Wander.Core.FileSystem;
 using Wander.Core.Persistence;
 
 namespace Wander.App.ViewModels;
@@ -48,6 +49,26 @@ public sealed class SettingsViewModel : ObservableObject {
     public bool ConfirmRecycle {
         get => _confirmRecycle;
         set => SetField(ref _confirmRecycle, value);
+    }
+
+
+    // --- Sort ----------------------------------------------------------
+    private SortKey _sortKey;
+    public SortKey SortKey {
+        get => _sortKey;
+        set => SetField(ref _sortKey, value);
+    }
+
+    private bool _sortAscending;
+    public bool SortAscending {
+        get => _sortAscending;
+        set => SetField(ref _sortAscending, value);
+    }
+
+    private bool _groupFoldersFirst;
+    public bool GroupFoldersFirst {
+        get => _groupFoldersFirst;
+        set => SetField(ref _groupFoldersFirst, value);
     }
 
 
@@ -145,6 +166,9 @@ public sealed class SettingsViewModel : ObservableObject {
         ShowHidden = s.ShowHidden;
         ShowSystem = s.ShowSystem;
         ConfirmRecycle = s.ConfirmRecycle;
+        SortKey = s.SortKey;
+        SortAscending = s.SortAscending;
+        GroupFoldersFirst = s.GroupFoldersFirst;
         LargeIconCellWidth = s.LargeIconCellWidth;
         LargeIconImageSize = s.LargeIconImageSize;
         LargeIconMargin = s.LargeIconMargin;
@@ -162,6 +186,9 @@ public sealed class SettingsViewModel : ObservableObject {
             ShowHidden = ShowHidden,
             ShowSystem = ShowSystem,
             ConfirmRecycle = ConfirmRecycle,
+            SortKey = SortKey,
+            SortAscending = SortAscending,
+            GroupFoldersFirst = GroupFoldersFirst,
             LargeIconCellWidth = LargeIconCellWidth,
             LargeIconImageSize = LargeIconImageSize,
             LargeIconMargin = LargeIconMargin,

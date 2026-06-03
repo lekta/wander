@@ -96,6 +96,13 @@ public sealed class WindowsShellNamespace : IShellNamespace {
             }
         }
 
+        // Recycle bin's natural ordering is "newest deletion first" — this
+        // matches Explorer and is what the user expects when looking for
+        // "the file I just deleted by mistake". We do the sort here rather
+        // than per-view because Wander doesn't yet have per-folder sort
+        // overrides; once those exist this can move into the VM.
+        result.Sort((a, b) => b.ModifiedUtc.CompareTo(a.ModifiedUtc));
+
         return result;
     }
 
@@ -135,6 +142,12 @@ public sealed class WindowsShellNamespace : IShellNamespace {
             modifiedUtc = SafeDate(() => (DateTime)item.ModifyDate);
         }
 
+        // GetDetailsOf column 1 = "Original location" (the directory the file
+        // lived in before recycling). Same locale caveat as column 2 — the
+        // *value* is a real path, locale only affects the column heading.
+        string originalDir = SafeStr(() => (string?)bin.GetDetailsOf(item, 1));
+        string? originalLocation = string.IsNullOrEmpty(originalDir) ? null : originalDir;
+
         return new FileSystemEntry(
             Name: name,
             FullPath: fullPath,
@@ -147,7 +160,8 @@ public sealed class WindowsShellNamespace : IShellNamespace {
             // Recycled .lnk-to-folder shouldn't masquerade as a folder in the
             // bin — Wander doesn't navigate into bin entries either way, so
             // this stays false.
-            LinksToDirectory: false);
+            LinksToDirectory: false,
+            OriginalLocation: originalLocation);
     }
 
 

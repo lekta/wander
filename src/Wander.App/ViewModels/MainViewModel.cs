@@ -47,6 +47,9 @@ public sealed class MainViewModel : ObservableObject {
     private bool _buildingBookmarks;
     private IReadOnlyList<NavigationStop> _persistedExpandedPaths = Array.Empty<NavigationStop>();
 
+    private CancellationTokenSource? _listLoadCts;
+    private bool _isListLoading;
+
     // Search filter is owned by SearchController; we only keep the hidden-
     // count separately for the "X items (N hidden)" status-bar message.
     private readonly SearchController _search = new();
@@ -114,6 +117,9 @@ public sealed class MainViewModel : ObservableObject {
         NewFolderCommand = new RelayCommand(_ => NewFolder(), _ => _nav.Current is not null && !IsCurrentShellNamespace);
         RefreshCommand = new RelayCommand(_ => Refresh());
         SetViewModeCommand = new RelayCommand(p => SetViewMode(p as string));
+        SetSortKeyCommand = new RelayCommand(p => SetSortKey(p as string));
+        ToggleSortAscendingCommand = new RelayCommand(_ => Settings.SortAscending = !Settings.SortAscending);
+        ToggleGroupFoldersFirstCommand = new RelayCommand(_ => Settings.GroupFoldersFirst = !Settings.GroupFoldersFirst);
         ExitCommand = new RelayCommand(_ => Application.Current?.Shutdown());
         OptionsCommand = new RelayCommand(_ => OpenSettingsDialog());
         PropertiesCommand = new RelayCommand(_ => ShowProperties(), _ => _selectedEntry is not null);
@@ -192,6 +198,17 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     public bool HasActiveOperations => Operations.Count > 0;
+
+    /// <summary>
+    /// Set during async list enumeration (Recycle Bin and other shell
+    /// namespaces — the Shell.Application COM hop can take a noticeable
+    /// fraction of a second). Bound to a spinner overlay on the right
+    /// pane so the user sees that something is happening.
+    /// </summary>
+    public bool IsListLoading {
+        get => _isListLoading;
+        private set => SetField(ref _isListLoading, value);
+    }
 
     public string? CurrentPath => _nav.Current;
 
@@ -283,6 +300,9 @@ public sealed class MainViewModel : ObservableObject {
     public RelayCommand NewFolderCommand { get; }
     public RelayCommand RefreshCommand { get; }
     public RelayCommand SetViewModeCommand { get; }
+    public RelayCommand SetSortKeyCommand { get; }
+    public RelayCommand ToggleSortAscendingCommand { get; }
+    public RelayCommand ToggleGroupFoldersFirstCommand { get; }
     public RelayCommand ExitCommand { get; }
     public RelayCommand OptionsCommand { get; }
     public RelayCommand PropertiesCommand { get; }
@@ -665,6 +685,15 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     private void Refresh() {
+        // Any in-flight shell enumeration from a previous navigation is
+        // stale now — cancel it so its delayed SetSource doesn't clobber
+        // the new folder's entries. The cancel also drops the spinner if
+        // we're switching from a shell namespace to a real filesystem path.
+        _listLoadCts?.Cancel();
+        if (IsListLoading) {
+            IsListLoading = false;
+        }
+
         if (_nav.Current is null) {
             _hiddenCount = 0;
             _search.SetSource(Array.Empty<FileSystemEntry>());
@@ -673,30 +702,25 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
-        // Shell namespaces (Recycle Bin etc.) route through IShellNamespace
-        // — IFileSystem.Enumerate would throw on shell:RecycleBinFolder.
+        // Shell namespaces (Recycle Bin etc.) route through IShellNamespace.
+        // Enumeration goes through Shell.Application COM, which can take
+        // hundreds of ms with many recycled items, so we hand it off to
+        // Task.Run and show a spinner via IsListLoading until it returns.
         // No Hidden/System filtering: shell items don't carry those flags
         // and Wander's "what to hide" preference is filesystem-only.
         if (IsShellPath(_nav.Current) && TryGetShellNamespace() is { } ns) {
-            try {
-                _hiddenCount = 0;
-                _search.SetSource(ns.Enumerate(_nav.Current).ToList());
-            } catch (Exception ex) {
-                _hiddenCount = 0;
-                _search.SetSource(Array.Empty<FileSystemEntry>());
-                Entries.Clear();
-                Status = $"Error: {ex.Message}";
-            }
+            _ = RefreshShellAsync(ns, _nav.Current);
             return;
         }
 
         bool showHidden = Settings.ShowHidden;
         bool showSystem = Settings.ShowSystem;
+        var sort = new SortOptions(Settings.SortKey, Settings.SortAscending, Settings.GroupFoldersFirst);
 
         try {
             var list = new List<FileSystemEntry>();
             int hidden = 0;
-            foreach (var e in _fs.Enumerate(_nav.Current)) {
+            foreach (var e in _fs.Enumerate(_nav.Current, sort)) {
                 if (!showHidden && e.IsHidden) { hidden++; continue; }
                 if (!showSystem && e.IsSystem) { hidden++; continue; }
                 list.Add(e);
@@ -708,6 +732,50 @@ public sealed class MainViewModel : ObservableObject {
             _search.SetSource(Array.Empty<FileSystemEntry>());
             Entries.Clear();
             Status = $"Error: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Off-UI-thread enumeration of a shell namespace, with cancellation
+    /// when navigation moves on before the COM call returns. The spinner
+    /// (<see cref="IsListLoading"/>) is held until the *winning* load
+    /// finishes — superseded loads return early without clearing the flag
+    /// so the new load owns it seamlessly.
+    /// </summary>
+    private async Task RefreshShellAsync(IShellNamespace ns, string shellPath) {
+        _listLoadCts?.Cancel();
+        _listLoadCts = new CancellationTokenSource();
+        var token = _listLoadCts.Token;
+
+        IsListLoading = true;
+        _hiddenCount = 0;
+        // Clear immediately so the user sees an empty list under the
+        // spinner rather than stale entries from the previous folder.
+        _search.SetSource(Array.Empty<FileSystemEntry>());
+
+        try {
+            IReadOnlyList<FileSystemEntry> items;
+            try {
+                items = await Task.Run(() => ns.Enumerate(shellPath), token);
+            } catch (OperationCanceledException) {
+                return;
+            } catch (Exception ex) {
+                _log.Error($"Shell enumerate failed: {shellPath}", ex);
+                Status = $"Error: {ex.Message}";
+                return;
+            }
+
+            if (token.IsCancellationRequested) {
+                return;
+            }
+            _search.SetSource(items.ToList());
+        } finally {
+            // Only release the spinner if our load is still the active one.
+            // A superseded load (token cancelled) leaves IsListLoading=true
+            // so the next RefreshShellAsync inherits it without flicker.
+            if (!token.IsCancellationRequested) {
+                IsListLoading = false;
+            }
         }
     }
 
@@ -772,6 +840,17 @@ public sealed class MainViewModel : ObservableObject {
         }
     }
 
+    private void SetSortKey(string? name) {
+        if (Enum.TryParse<SortKey>(name, out var key)) {
+            // Click-the-same-column toggles direction; Explorer parity.
+            if (Settings.SortKey == key) {
+                Settings.SortAscending = !Settings.SortAscending;
+            } else {
+                Settings.SortKey = key;
+            }
+        }
+    }
+
     private void OnSettingsChanged(object? sender, PropertyChangedEventArgs e) {
         // Side effects: re-list when filters change, persist always.
         // Switching the Categories list-selection in the dialog should
@@ -792,6 +871,15 @@ public sealed class MainViewModel : ObservableObject {
             foreach (var node in Bookmarks) {
                 node.RefreshChildren();
             }
+        }
+
+        if (e.PropertyName == nameof(SettingsViewModel.SortKey) ||
+            e.PropertyName == nameof(SettingsViewModel.SortAscending) ||
+            e.PropertyName == nameof(SettingsViewModel.GroupFoldersFirst)) {
+            // Sort only affects the file list — tree always uses default
+            // (name asc, folders first). Sort knobs are FS-layer params, not
+            // a re-filter, so the cheap path is enough.
+            Refresh();
         }
 
         if (e.PropertyName == nameof(SettingsViewModel.ShowBookmarkDownloads) ||

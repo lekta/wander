@@ -4,7 +4,14 @@ public interface IFileSystem {
     bool DirectoryExists(string path);
     bool FileExists(string path);
 
-    IReadOnlyList<FileSystemEntry> Enumerate(string path);
+    /// <summary>
+    /// List directory contents. <paramref name="sort"/> picks the column /
+    /// direction / folder-grouping; passing <c>null</c> uses
+    /// <see cref="SortOptions.Default"/> (name A→Z, folders first) — the
+    /// sane default for callers that don't expose sort to the user
+    /// (tree view, tests, ad-hoc enumerations).
+    /// </summary>
+    IReadOnlyList<FileSystemEntry> Enumerate(string path, SortOptions? sort = null);
     IReadOnlyList<FileSystemEntry> GetRoots();
 
     /// <summary>Returns metadata for a single path or null if it doesn't exist.</summary>

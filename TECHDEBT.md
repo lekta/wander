@@ -19,14 +19,14 @@
   Старые state.json от предыдущих билдов не загрузятся — `JsonAppStateStore.Load`
   ловит исключение и возвращает `new AppState()`. Pre-1.0 ОК; миграционный
   слой можно добавить позже, если понадобится.
-- **Корзина: нет иконки на самой закладке** — узел «Корзина» имеет
-  `FullPath="shell:RecycleBinFolder"`, который `SystemIconProvider`
-  через `SHGetFileInfo` не распознаёт (это shell-URI, не реальный путь).
-  В дереве слева пункт показывается без значка. Правильный путь —
-  получить PIDL `FOLDERID_RecycleBinFolder` через `SHGetKnownFolderIDList`
-  и накормить им `SHGetFileInfo` с флагом `SHGFI_PIDL`. Сделать
-  при реализации D5b (там же будет нужна динамическая иконка
-  «пустая/полная корзина»).
+- **Корзина: статичная иконка (нет empty/full overlay)** — в `SystemIconProvider`
+  есть `LoadShellNamespaceIcon` через PIDL `FOLDERID_RecycleBinFolder`,
+  но мы получаем одну иконку и кэшируем её на сессию. Shell возвращает
+  «полную» если в корзине что-то есть на момент первого запроса, иначе
+  «пустую» — после очистки/наполнения иконка не обновляется до рестарта.
+  Чтобы переключать — нужно слушать `SHCNE_UPDATEIMAGE`/`SHCNE_RENAMEFOLDER`
+  через `SHChangeNotifyRegister` или просто инвалидировать кэш при
+  Restore/Empty операциях. Сделать вместе с D5b.
 - **Корзина: WindowsShellNamespace кэширует RCW для всей сессии** —
   каждый `Refresh` пересоздаёт `Shell.Application` через
   `Activator.CreateInstance`, не освобождая через

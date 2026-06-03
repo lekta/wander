@@ -460,9 +460,16 @@ public sealed class PreviewController : ObservableObject {
         }
 
         // 1. Single file selected — show file details + EXIF if image.
+        //    Recycle-bin items (OriginalLocation set) get "Deleted" instead of
+        //    "Modified" and a second line with the source folder so the user
+        //    can decide whether to restore them without context-switching.
         if (_selection.Count == 1 && _selection[0].Kind == EntryKind.File) {
             var e = _selection[0];
-            string summary = $"📄  {e.Name}\nSize: {SizeFormatter.Format(e.Size)}   •   Modified: {FormatModified(e.ModifiedUtc)}";
+            string timeLabel = e.OriginalLocation is not null ? "Deleted" : "Modified";
+            string summary = $"📄  {e.Name}\nSize: {SizeFormatter.Format(e.Size)}   •   {timeLabel}: {FormatModified(e.ModifiedUtc)}";
+            if (e.OriginalLocation is not null) {
+                summary += $"\nDeleted from: {e.OriginalLocation}";
+            }
             if (_imageMetadata is { } m) {
                 summary += "\n" + FormatExif(m);
             }
@@ -471,8 +478,15 @@ public sealed class PreviewController : ObservableObject {
         }
 
         // 2. Single folder selected — recursive count + size, async.
+        //    Recycled folders skip the recursion: their on-disk path under
+        //    $Recycle.Bin\$R… may not be reliably enumerable, and the user
+        //    cares about origin + delete time, not "how many files inside".
         if (_selection.Count == 1 && _selection[0].Kind == EntryKind.Directory) {
             var e = _selection[0];
+            if (e.OriginalLocation is not null) {
+                Summary = $"📁  {e.Name}\nDeleted: {FormatModified(e.ModifiedUtc)}\nDeleted from: {e.OriginalLocation}";
+                return;
+            }
             Summary = $"📁  {e.Name} — calculating…";
             var (count, size) = await Task.Run(() => CountAndSum(new[] { e.FullPath }, ct), ct);
             if (ct.IsCancellationRequested) {

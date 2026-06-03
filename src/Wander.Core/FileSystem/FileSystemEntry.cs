@@ -9,7 +9,13 @@ public sealed record FileSystemEntry(
     bool IsHidden,
     bool IsReadOnly,
     bool IsSystem,
-    bool LinksToDirectory) {
+    bool LinksToDirectory,
+    // Original on-disk location for shell-namespace items (currently only
+    // Recycle Bin contents — set from the "Original location" shell column).
+    // null for ordinary filesystem entries; PreviewController shows it in
+    // the footer when present so the user can see where a recycled file
+    // came from before deciding to restore it.
+    string? OriginalLocation = null) {
 
     // Convenience: a .lnk that points at a directory is "directory-like" for
     // sort/open purposes even though its on-disk Kind is still File. Other

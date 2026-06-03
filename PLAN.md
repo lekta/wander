@@ -94,13 +94,30 @@
     добавить «Корзину» как третий дефолт в bookmarks + третий чекбокс в
     настройках. Влечёт shell-интеграцию, отложили намеренно.
 
-### Спринт 4 — приятное (P2)
-10. **A3 Inline rename**.
-11. **A7 Thumbnails картинок** + **A8 Folder content preview** (требуют E3).
-12. **F2 SettingsDialog: расширить** (Theme, Behavior, Advanced) + **F3 Reset**.
-13. **B2** — content для папки в preview (после согласования вида).
-14. **A1** — применить settings-binding к шаблонам Tiles/Details, перебрать
-    defaults.
+### Спринт 4 (текущий фокус P1 → P2)
+
+Открытые P1 (доделать спринт 3):
+
+1. **A5 Sort menu (UI)** — модель уже готова (A6 закрыт). Только меню в View
+   + сохранение в `AppSettings.SortKey` / `SortAscending` / `GroupFoldersFirst`,
+   применение через comparer в `Enumerate` (сейчас захардкожен natural-sort).
+2. **D5 шаг 2 — Корзина в bookmarks** — фундамент `IShellNamespace` +
+   `WindowsShellNamespace` готов. Нужен bookmark-узел + чекбокс +
+   VM-роутинг `shell:`-путей через `IShellNamespace`.
+3. **Чистка #2 — добить**: либо `ClipboardController`, либо явно решить
+   что он остаётся в MainVM. Session-подrecord в AppState. MainWindow
+   behaviors.
+
+P2 после:
+
+4. **A3 Inline rename**.
+5. **A7 Thumbnails картинок** + **A8 Folder content preview** (требуют E3).
+6. **F2 SettingsDialog: расширить** (Theme, Behavior, Advanced) + **F3 Reset**.
+7. **B2** — content для папки в preview (после согласования вида).
+8. **A1** — применить settings-binding к шаблонам Tiles/Details, перебрать
+   defaults.
+9. **D5 шаг 3 — Restore/Delete в корзине** — операции через `IFileOperation`
+   (Vista shell COM). Без них корзина в Wander — только viewer.
 
 ### Дальше (P3)
 - **G3** Advanced search.
@@ -357,13 +374,18 @@ Core готов, нужно дотянуть в UI / VM.
 - **[P1] A5. Sort menu в View.** После view-modes (Details/Tiles/LargeIcons) —
   разделитель, потом группа "Sort by" → Name / Date modified / Size / Type,
   Asc/Desc как отдельные пункты, "Group folders first" чекбоксом. Применяется
-  ко всем view-modes. Сохранять в `AppState.SortKey` + `AppState.SortAscending` +
-  `AppState.GroupFoldersFirst`.
-- **[P1] A6. Сортировка .lnk-папок рядом с папками.** Сначала Directory + .lnk-на-папку,
-  потом File + .lnk-на-файл. Требует resolve каждого .lnk: добавить
-  `IsFolderShortcut` в `FileSystemEntry`, populate в `SystemIOFileSystem.Enumerate`
-  через `IShortcutService.Resolve`. Делать sync на enumeration (cache не нужен —
-  один Read.lnk быстрый).
+  ко всем view-modes. Сохранять в `AppSettings.SortKey` + `AppSettings.SortAscending` +
+  `AppSettings.GroupFoldersFirst`.
+
+  **Сейчас**: sort захардкожен в `SystemIOFileSystem.Enumerate` —
+  natural-sort (StrCmpLogicalW), папки и folder-shortcuts вверху, файлы внизу.
+  Пользователь не может переключить. Меню остаётся последним P1 пунктом.
+- ~~**[P1] A6. Сортировка .lnk-папок рядом с папками.**~~ — **сделано на
+  уровне ФС**. `FileSystemEntry.LinksToDirectory` populates через
+  `SystemIOFileSystem.IsFolderShortcut` (resolve .lnk + Directory.Exists),
+  `IsFolderLike` computed property. В `Enumerate` folder-shortcuts уходят
+  в группу `folderLikes` рядом с папками и сортируются вместе. Когда
+  появится A5, эта же группировка ляжет под чекбокс "Group folders first".
 - **[P2] A7. Thumbnails для изображений.** Вместо generic file icon — реальный
   превью самого изображения 32-48 px. Через `IShellItemImageFactory.GetImage`.
   Требует async (E3) + cache по path+mtime.
@@ -443,13 +465,21 @@ Core готов, нужно дотянуть в UI / VM.
   удалений Wander'а, но Restore произвольного item'а из корзины (когда
   пользователь не помнит handle) и Empty/Permanent-delete по одному
   файлу требуют отдельных операций. План:
-  - Расширить `IRecycleBin`: `RestoreItem(string binBackingPath)`,
-    `PermanentDelete(string binBackingPath)`, `EmptyAll()`.
-  - В UI: context-menu на entries в правой панели «Восстановить»,
-    «Удалить навсегда»; на самой закладке-Корзине «Очистить корзину».
-  - Обработать drag-out из корзины как «Restore + Move» (Explorer-parity).
-  - Сразу же — exposed-icon для самой Корзины (`shell:RecycleBinFolder`
-    → IIconProvider должен через PIDL вернуть иконку bin'а).
+  - Расширить `IRecycleBin`: `RestoreFromBin(string binBackingPath)`
+    (матчинг по `FolderItem.Path` в `Items()`, invoke локализованного
+    verb'а Restore — reuse `IsRestoreVerb` из `ShellRecycleBin`),
+    `PermanentDelete(string binBackingPath)` (через `SHFileOperation`
+    FO_DELETE без `FOF_ALLOWUNDO`), `EmptyAll()` (через
+    `SHEmptyRecycleBin` с `SHERB_NOCONFIRMATION | NOPROGRESSUI | NOSOUND`,
+    свой confirm-диалог поверх).
+  - UI (решено: только context-menu, без header-бара): на entries в
+    правой панели — «Восстановить» / «Удалить навсегда», `Visibility`
+    через `BoolToVisibility` от `IsCurrentShellNamespace`. На самой
+    закладке-«Корзина» в bookmarks-дереве — отдельный context-menu
+    с «Очистить корзину» (показывать только для этого узла).
+  - Дальше — drag-out из корзины как «Restore + Move» (Explorer-parity),
+    отдельным шагом.
+  - ~~Иконка корзины~~ — **сделано** в этой итерации (см. D5).
 - **[P3] D6. Drag-reorder bookmarks.** Перетаскивание пользовательских
   закладок между собой для смены порядка. Сейчас порядок = порядок
   добавления, изменения через ручную правку state.json. Делать

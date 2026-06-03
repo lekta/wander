@@ -70,6 +70,13 @@ public sealed class SystemIconProvider : IIconProvider {
 
 
     private static string BuildCacheKey(string path, IconSize size) {
+        // Shell-namespace sentinels (shell:RecycleBinFolder, …) have no real
+        // filesystem behind them; key by the full URI lowered so different
+        // sentinels stay distinct but caching still works.
+        if (IsShellNamespacePath(path)) {
+            return $"shell|{path.ToLowerInvariant()}|{size}";
+        }
+
         if (System.IO.Directory.Exists(path)) {
             return $"dir|{path}|{size}";
         }
@@ -93,11 +100,85 @@ public sealed class SystemIconProvider : IIconProvider {
     }
 
     private static byte[]? LoadIcon(string path, IconSize size) {
+        // shell:RecycleBinFolder and similar sentinels can't go through
+        // SHGetFileInfo by path — those calls just fail because there's
+        // no file. Route them through PIDL-based icon lookup instead.
+        if (IsShellNamespacePath(path)) {
+            return LoadShellNamespaceIcon(path, size);
+        }
         return size switch {
             IconSize.Large => LoadJumboImage(path),
             _ => LoadShellIcon(path, size),
         };
     }
+
+    private static bool IsShellNamespacePath(string path) {
+        return path.StartsWith("shell:", StringComparison.OrdinalIgnoreCase);
+    }
+
+
+    // ------------------------------------------------------------------
+    // Shell-namespace icons (Recycle Bin etc.) — PIDL-driven SHGetFileInfo.
+    // ------------------------------------------------------------------
+    //
+    // shell:RecycleBinFolder is not a filesystem path, so SHGetFileInfo
+    // with the URI as pszPath returns nothing. The Windows-documented
+    // pattern for "icon of a known folder" is:
+    //   1. Resolve FOLDERID → ITEMIDLIST (PIDL) via SHGetKnownFolderIDList.
+    //   2. Pass the PIDL to SHGetFileInfo with SHGFI_PIDL.
+    //   3. Free the PIDL with ILFree (CoTaskMemFree works too but ILFree
+    //      is the documented inverse of SHGetKnownFolderIDList).
+    //
+    // For Large size we fall back to the regular icon; jumbo-size
+    // composition for the Recycle Bin would need a different IShellItem
+    // path and isn't worth the bytes for v1 (the bookmark tree only
+    // asks for Small).
+
+    private static byte[]? LoadShellNamespaceIcon(string path, IconSize size) {
+        if (!IsRecycleBinPath(path)) {
+            return null;
+        }
+
+        IntPtr pidl = IntPtr.Zero;
+        try {
+            int hr = SHGetKnownFolderIDList(_folderIdRecycleBin, 0, IntPtr.Zero, out pidl);
+            if (hr != 0 || pidl == IntPtr.Zero) {
+                return null;
+            }
+
+            uint flags = SHGFI_PIDL | SHGFI_ICON |
+                (size == IconSize.Small ? SHGFI_SMALLICON : SHGFI_LARGEICON);
+
+            var info = new SHFILEINFO();
+            IntPtr result = SHGetFileInfoPidl(
+                pidl, 0, ref info,
+                (uint)Marshal.SizeOf<SHFILEINFO>(),
+                flags);
+
+            if (result == IntPtr.Zero || info.hIcon == IntPtr.Zero) {
+                return null;
+            }
+
+            try {
+                return HIconToPng(info.hIcon);
+            } finally {
+                DestroyIcon(info.hIcon);
+            }
+        } finally {
+            if (pidl != IntPtr.Zero) {
+                ILFree(pidl);
+            }
+        }
+    }
+
+    private static bool IsRecycleBinPath(string path) {
+        return string.Equals(path, "shell:RecycleBinFolder", StringComparison.OrdinalIgnoreCase);
+    }
+
+    // FOLDERID_RecycleBinFolder — {B7534046-3ECB-4C18-BE4E-64FD61466250}
+    private static readonly Guid _folderIdRecycleBin = new("B7534046-3ECB-4C18-BE4E-64FD61466250");
+
+    private const uint SHGFI_PIDL = 0x00000008;
 
 
     // ------------------------------------------------------------------
@@ -677,6 +758,30 @@ public sealed class SystemIconProvider : IIconProvider {
         ref SHFILEINFO psfi,
         uint cbSizeFileInfo,
         uint uFlags);
+
+    // Same SHGetFileInfo but the first arg is a PIDL (ITEMIDLIST*) instead
+    // of a string. Required for shell-namespace items that have no path —
+    // see LoadShellNamespaceIcon.
+    [DllImport("shell32.dll", EntryPoint = "SHGetFileInfoW", CharSet = CharSet.Unicode)]
+    private static extern IntPtr SHGetFileInfoPidl(
+        IntPtr pidl,
+        uint dwFileAttributes,
+        ref SHFILEINFO psfi,
+        uint cbSizeFileInfo,
+        uint uFlags);
+
+    // REFKNOWNFOLDERID in COM is a const-GUID pointer; the standard P/Invoke
+    // is `[MarshalAs(UnmanagedType.LPStruct)] Guid`, matching the pattern
+    // used by SHCreateItemFromParsingName above.
+    [DllImport("shell32.dll")]
+    private static extern int SHGetKnownFolderIDList(
+        [MarshalAs(UnmanagedType.LPStruct)] Guid rfid,
+        uint dwFlags,
+        IntPtr hToken,
+        out IntPtr ppidl);
+
+    [DllImport("shell32.dll")]
+    private static extern void ILFree(IntPtr pidl);
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     private static extern int SHCreateItemFromParsingName(
