@@ -160,8 +160,7 @@ public sealed class GifImage : Image {
     private static bool TryComposeFrames(
         BitmapDecoder decoder,
         out List<BitmapSource> frames,
-        out List<int> delaysMs)
-    {
+        out List<int> delaysMs) {
         frames = new List<BitmapSource>(decoder.Frames.Count);
         delaysMs = new List<int>(decoder.Frames.Count);
 
@@ -238,8 +237,7 @@ public sealed class GifImage : Image {
 
     private static void CompositeFrame(
         byte[] canvas, int canvasW, int canvasH,
-        BitmapSource frame, int x, int y)
-    {
+        BitmapSource frame, int x, int y) {
         // Normalise to Pbgra32 so canvas + source share a pixel format —
         // FormatConvertedBitmap handles palette → ARGB and premultiplication
         // for GIF's index-based frames.
@@ -270,7 +268,7 @@ public sealed class GifImage : Image {
                 }
                 int dOff = dstRowOff + dstX * 4;
                 if (sa == 255) {
-                    canvas[dOff]     = srcPixels[sOff];
+                    canvas[dOff] = srcPixels[sOff];
                     canvas[dOff + 1] = srcPixels[sOff + 1];
                     canvas[dOff + 2] = srcPixels[sOff + 2];
                     canvas[dOff + 3] = 255;
@@ -279,10 +277,10 @@ public sealed class GifImage : Image {
                     //   result.rgb = src.rgb + dst.rgb * (1 - src.alpha)
                     //   result.a   = src.a   + dst.a   * (1 - src.alpha)
                     int inv = 255 - sa;
-                    canvas[dOff]     = (byte)(srcPixels[sOff]     + (canvas[dOff]     * inv + 127) / 255);
+                    canvas[dOff] = (byte)(srcPixels[sOff] + (canvas[dOff] * inv + 127) / 255);
                     canvas[dOff + 1] = (byte)(srcPixels[sOff + 1] + (canvas[dOff + 1] * inv + 127) / 255);
                     canvas[dOff + 2] = (byte)(srcPixels[sOff + 2] + (canvas[dOff + 2] * inv + 127) / 255);
-                    canvas[dOff + 3] = (byte)(sa                  + (canvas[dOff + 3] * inv + 127) / 255);
+                    canvas[dOff + 3] = (byte)(sa + (canvas[dOff + 3] * inv + 127) / 255);
                 }
             }
         }
@@ -297,7 +295,7 @@ public sealed class GifImage : Image {
             int rowOff = row * stride;
             for (int col = x0; col < x1; col++) {
                 int o = rowOff + col * 4;
-                canvas[o]     = 0;
+                canvas[o] = 0;
                 canvas[o + 1] = 0;
                 canvas[o + 2] = 0;
                 canvas[o + 3] = 0;

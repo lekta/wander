@@ -2,26 +2,17 @@ using Wander.Core.Navigation;
 
 namespace Wander.Core.Persistence;
 
+/// <summary>
+/// Top-level snapshot persisted to <c>state.json</c>. Four logical buckets:
+/// <see cref="Session"/> (where the user left off), <see cref="Favorites"/>
+/// (their user-defined bookmark list), <see cref="Window"/> (window
+/// placement), and <see cref="Settings"/> (preference toggles). Each
+/// bucket is its own record so it can grow independently without thrashing
+/// the top-level shape.
+/// </summary>
 public sealed record AppState {
-    /// <summary>
-    /// Folder the user was on when the session closed, together with the
-    /// panel context (drives / bookmarks / address / …) so the restored
-    /// session re-expands the right tree. Null on a fresh install.
-    /// </summary>
-    public NavigationStop? LastPath { get; init; }
-
-    public string? ViewMode { get; init; }
-
-    /// <summary>
-    /// Tree nodes the user had expanded at close, scoped per panel.
-    /// The same path can live in both panels (e.g. user-favourite that
-    /// also exists deep in the drives subtree) — each ownership is
-    /// recorded separately, so restoring keeps both panels matching
-    /// their last visible state independently.
-    /// </summary>
-    public IReadOnlyList<NavigationStop> ExpandedPaths { get; init; } = Array.Empty<NavigationStop>();
-    public bool IsPreviewVisible { get; init; }
-    public double PreviewWidth { get; init; } = 280;
+    /// <summary>Where the user left off — folder, expansions, panes, view mode.</summary>
+    public SessionState Session { get; init; } = new();
 
     /// <summary>
     /// User-defined bookmark folders (full paths). Order is preserved as
@@ -29,13 +20,6 @@ public sealed record AppState {
     /// separately and are toggled via <see cref="AppSettings"/>.
     /// </summary>
     public IReadOnlyList<string> Favorites { get; init; } = Array.Empty<string>();
-
-    /// <summary>
-    /// Collapsed state of the bookmarks panel itself (the section above
-    /// the drives tree). Defaults to expanded for new users — discovery
-    /// matters more than chrome conservation on first run.
-    /// </summary>
-    public bool IsBookmarksExpanded { get; init; } = true;
 
     /// <summary>
     /// Window position / size at close. Null on a fresh install (or after a
@@ -52,6 +36,45 @@ public sealed record AppState {
     /// record represents the out-of-the-box settings.
     /// </summary>
     public AppSettings Settings { get; init; } = new();
+}
+
+
+/// <summary>
+/// "Where the user left off" — the session-resume bucket. Distinct from
+/// <see cref="AppSettings"/> (long-term preferences) and
+/// <see cref="WindowGeometry"/> (chrome placement): everything in here is
+/// resetable without surprising the user, and a fresh install starts with
+/// the defaults below.
+/// </summary>
+public sealed record SessionState {
+    /// <summary>
+    /// Folder the user was on when the session closed, together with the
+    /// panel context (drives / bookmarks / address / …) so the restored
+    /// session re-expands the right tree. Null on a fresh install.
+    /// </summary>
+    public NavigationStop? LastPath { get; init; }
+
+    /// <summary>Last view mode (Details / Tiles / LargeIcons) as a string.</summary>
+    public string? ViewMode { get; init; }
+
+    /// <summary>
+    /// Tree nodes the user had expanded at close, scoped per panel.
+    /// The same path can live in both panels (e.g. user-favourite that
+    /// also exists deep in the drives subtree) — each ownership is
+    /// recorded separately, so restoring keeps both panels matching
+    /// their last visible state independently.
+    /// </summary>
+    public IReadOnlyList<NavigationStop> ExpandedPaths { get; init; } = Array.Empty<NavigationStop>();
+
+    public bool IsPreviewVisible { get; init; }
+    public double PreviewWidth { get; init; } = 280;
+
+    /// <summary>
+    /// Collapsed state of the bookmarks panel itself (the section above
+    /// the drives tree). Defaults to expanded for new users — discovery
+    /// matters more than chrome conservation on first run.
+    /// </summary>
+    public bool IsBookmarksExpanded { get; init; } = true;
 }
 
 

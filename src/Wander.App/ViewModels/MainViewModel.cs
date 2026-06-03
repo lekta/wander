@@ -25,14 +25,13 @@ public sealed class MainViewModel : ObservableObject {
     private readonly IShellLauncher _shell;
     private readonly IAppStateStore _stateStore;
     private readonly IFileLockInspector? _lockInspector;
-    private readonly NavigationService _nav = new();
+    private readonly NavigationController _nav;
     private readonly FileOperationService _ops;
     private readonly UndoService _undo;
     private readonly OperationTracker _tracker;
     private readonly Dispatcher _dispatcher;
     private readonly ILogger _log;
 
-    private string _addressText = "";
     private string _status = "";
     private FileSystemEntry? _selectedEntry;
     private IReadOnlyList<FileSystemEntry> _selectedEntries = Array.Empty<FileSystemEntry>();
@@ -41,22 +40,17 @@ public sealed class MainViewModel : ObservableObject {
     private bool _isPreviewVisible;
     private double _previewWidth = 280;
 
-    private List<string> _clipboard = new();
-    private bool _clipboardIsCut;
+    private readonly ClipboardController _clipboard = new();
 
     private readonly List<string> _favorites = new();
     private bool _isBookmarksExpanded = true;
     private bool _buildingBookmarks;
     private IReadOnlyList<NavigationStop> _persistedExpandedPaths = Array.Empty<NavigationStop>();
 
-    // Search filter state. _allEntries is the unfiltered post-hidden/system
-    // snapshot of the current folder; Entries is the filtered projection
-    // shown to the user. _filterCts cancels an in-flight filter when a new
-    // keystroke arrives so rapid typing does not pile up stale results.
-    private List<FileSystemEntry> _allEntries = new();
+    // Search filter is owned by SearchController; we only keep the hidden-
+    // count separately for the "X items (N hidden)" status-bar message.
+    private readonly SearchController _search = new();
     private int _hiddenCount;
-    private string _searchQuery = "";
-    private CancellationTokenSource? _filterCts;
 
     private bool _restoring;
 
@@ -79,6 +73,20 @@ public sealed class MainViewModel : ObservableObject {
                 ? ServiceLocator.Get<IImageMetadataReader>()
                 : null);
 
+        _nav = new NavigationController(
+            new NavigationService(),
+            canNavigate: PathIsNavigable,
+            onInvalidPath: path => {
+                _log.Warn($"Navigate: path not found {path}");
+                Status = $"Path not found: {path}";
+            },
+            resolveDisplayName: path => {
+                if (TryGetShellNamespace() is { } ns && ns.IsShellPath(path)) {
+                    return ns.GetDisplayName(path) ?? path;
+                }
+                return null;
+            });
+
         Entries = new ObservableCollection<FileSystemEntry>();
         Roots = new ObservableCollection<TreeNodeViewModel>();
         Bookmarks = new ObservableCollection<TreeNodeViewModel>();
@@ -92,10 +100,6 @@ public sealed class MainViewModel : ObservableObject {
 
         _tracker.Changed += OnTrackerChanged;
 
-        BackCommand = new RelayCommand(_ => GoBack(), _ => _nav.CanGoBack);
-        ForwardCommand = new RelayCommand(_ => GoForward(), _ => _nav.CanGoForward);
-        UpCommand = new RelayCommand(_ => GoUp(), _ => _nav.CanGoUp);
-        NavigateCommand = new RelayCommand(_ => NavigateToAddress());
         OpenCommand = new RelayCommand(p => OpenEntry(p as FileSystemEntry ?? _selectedEntry), _ => _selectedEntry is not null);
         // Destructive ops are blocked inside shell namespaces (Recycle Bin):
         // the entries' FullPaths point at $Recycle.Bin backing files, and
@@ -106,7 +110,7 @@ public sealed class MainViewModel : ObservableObject {
         RenameCommand = new RelayCommand(p => Rename(p as string), _ => _selectedEntry is not null && !IsCurrentShellNamespace);
         CopyCommand = new RelayCommand(_ => Copy(), _ => _selectedEntries.Count > 0 && !IsCurrentShellNamespace);
         CutCommand = new RelayCommand(_ => Cut(), _ => _selectedEntries.Count > 0 && !IsCurrentShellNamespace);
-        PasteCommand = new RelayCommand(_ => _ = PasteAsync(), _ => _clipboard.Count > 0 && _nav.Current is not null && !IsCurrentShellNamespace);
+        PasteCommand = new RelayCommand(_ => _ = PasteAsync(), _ => _clipboard.HasContent && _nav.Current is not null && !IsCurrentShellNamespace);
         NewFolderCommand = new RelayCommand(_ => NewFolder(), _ => _nav.Current is not null && !IsCurrentShellNamespace);
         RefreshCommand = new RelayCommand(_ => Refresh());
         SetViewModeCommand = new RelayCommand(p => SetViewMode(p as string));
@@ -126,7 +130,35 @@ public sealed class MainViewModel : ObservableObject {
             Raise(nameof(UndoTooltip));
         };
 
+        _clipboard.Changed += (_, _) => PasteCommand.RaiseCanExecuteChanged();
+
+        _search.PropertyChanged += (_, e) => {
+            // SearchController owns the underlying _query; surface the
+            // changes under the names XAML/binding consumers already expect.
+            if (e.PropertyName == nameof(SearchController.Query)) {
+                Raise(nameof(SearchQuery));
+            } else if (e.PropertyName == nameof(SearchController.HasQuery)) {
+                Raise(nameof(HasSearchQuery));
+            }
+        };
+        _search.FilteredChanged += filtered => {
+            ReplaceEntries(filtered);
+            UpdateFilterStatus(filtered.Count, _search.Source.Count);
+        };
+
         _nav.CurrentChanged += (_, _) => OnNavigationChanged();
+        _nav.PropertyChanged += (_, e) => {
+            // Surface AddressText / WindowTitle / CurrentPath changes under
+            // the names XAML already binds to. NavigationController owns the
+            // truth; MainVM is just the shop window.
+            if (e.PropertyName == nameof(NavigationController.AddressText)) {
+                Raise(nameof(AddressText));
+            } else if (e.PropertyName == nameof(NavigationController.WindowTitle)) {
+                Raise(nameof(WindowTitle));
+            } else if (e.PropertyName == nameof(NavigationController.Current)) {
+                Raise(nameof(CurrentPath));
+            }
+        };
 
         LoadRoots();
         RestoreState();
@@ -163,9 +195,10 @@ public sealed class MainViewModel : ObservableObject {
 
     public string? CurrentPath => _nav.Current;
 
+    /// <summary>Address-bar text. Backed by <see cref="NavigationController.AddressText"/>.</summary>
     public string AddressText {
-        get => _addressText;
-        set => SetField(ref _addressText, value);
+        get => _nav.AddressText;
+        set => _nav.AddressText = value;
     }
 
     public string Status {
@@ -193,21 +226,17 @@ public sealed class MainViewModel : ObservableObject {
 
     /// <summary>
     /// Live filter over the current folder. Empty string = no filter.
-    /// Setter triggers an async pass over <see cref="_allEntries"/> on a
-    /// background thread; the previous in-flight filter is cancelled.
+    /// Delegates to <see cref="SearchController"/> which handles the
+    /// async pass + cancellation; we just forward XAML bindings here so
+    /// the existing TextBox binding (<c>{Binding SearchQuery, ...}</c>)
+    /// keeps working.
     /// </summary>
     public string SearchQuery {
-        get => _searchQuery;
-        set {
-            value ??= "";
-            if (SetField(ref _searchQuery, value)) {
-                Raise(nameof(HasSearchQuery));
-                _ = ApplyFilterAsync();
-            }
-        }
+        get => _search.Query;
+        set => _search.Query = value;
     }
 
-    public bool HasSearchQuery => !string.IsNullOrEmpty(_searchQuery);
+    public bool HasSearchQuery => _search.HasQuery;
 
     public ViewMode ViewMode {
         get => _viewMode;
@@ -238,10 +267,13 @@ public sealed class MainViewModel : ObservableObject {
         }
     }
 
-    public RelayCommand BackCommand { get; }
-    public RelayCommand ForwardCommand { get; }
-    public RelayCommand UpCommand { get; }
-    public RelayCommand NavigateCommand { get; }
+    // Navigation commands live on NavigationController; surface them here
+    // so existing XAML bindings (BackCommand / ForwardCommand / ...) keep
+    // working without touching every <KeyBinding> and <Button>.
+    public RelayCommand BackCommand => _nav.BackCommand;
+    public RelayCommand ForwardCommand => _nav.ForwardCommand;
+    public RelayCommand UpCommand => _nav.UpCommand;
+    public RelayCommand NavigateCommand => _nav.NavigateCommand;
     public RelayCommand OpenCommand { get; }
     public RelayCommand DeleteCommand { get; }
     public RelayCommand RenameCommand { get; }
@@ -273,30 +305,10 @@ public sealed class MainViewModel : ObservableObject {
 
     public string UndoTooltip => _undo.NextDescription is { } next ? $"Undo: {next}" : "Nothing to undo";
 
-    public string WindowTitle {
-        get {
-            if (string.IsNullOrEmpty(_nav.Current)) {
-                return "Wander";
-            }
-            // Shell sentinels (e.g. shell:RecycleBinFolder) don't have a
-            // sensible Path.GetFileName — ask the namespace for its
-            // localised display label.
-            if (TryGetShellNamespace() is { } ns && ns.IsShellPath(_nav.Current)) {
-                return ns.GetDisplayName(_nav.Current) ?? _nav.Current;
-            }
-            string trimmed = _nav.Current.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            string name = Path.GetFileName(trimmed);
-            return string.IsNullOrEmpty(name) ? _nav.Current : name;
-        }
-    }
+    public string WindowTitle => _nav.WindowTitle;
 
 
     public void NavigateTo(string path, NavigationSource source = NavigationSource.External) {
-        if (!PathIsNavigable(path)) {
-            _log.Warn($"Navigate: path not found {path}");
-            Status = $"Path not found: {path}";
-            return;
-        }
         _log.Info($"Navigate ({source}): {path}");
         _nav.NavigateTo(path, source);
     }
@@ -463,6 +475,7 @@ public sealed class MainViewModel : ObservableObject {
 
     private void RestoreState() {
         var state = _stateStore.Load();
+        var session = state.Session;
 
         _restoring = true;
         try {
@@ -471,25 +484,25 @@ public sealed class MainViewModel : ObservableObject {
             // Refresh fires via the navigation change below.
             Settings.ApplyFrom(state.Settings);
 
-            if (!string.IsNullOrEmpty(state.ViewMode) && Enum.TryParse<ViewMode>(state.ViewMode, out var mode)) {
+            if (!string.IsNullOrEmpty(session.ViewMode) && Enum.TryParse<ViewMode>(session.ViewMode, out var mode)) {
                 _viewMode = mode;
                 Raise(nameof(ViewMode));
             }
 
-            _isPreviewVisible = state.IsPreviewVisible;
+            _isPreviewVisible = session.IsPreviewVisible;
             Raise(nameof(IsPreviewVisible));
             Preview.SetVisible(_isPreviewVisible);
-            if (state.PreviewWidth >= 120 && state.PreviewWidth <= 900) {
-                _previewWidth = state.PreviewWidth;
+            if (session.PreviewWidth >= 120 && session.PreviewWidth <= 900) {
+                _previewWidth = session.PreviewWidth;
                 Raise(nameof(PreviewWidth));
             }
 
             _favorites.Clear();
             _favorites.AddRange(state.Favorites);
-            _isBookmarksExpanded = state.IsBookmarksExpanded;
+            _isBookmarksExpanded = session.IsBookmarksExpanded;
             Raise(nameof(IsBookmarksExpanded));
 
-            _persistedExpandedPaths = state.ExpandedPaths.ToArray();
+            _persistedExpandedPaths = session.ExpandedPaths.ToArray();
             // Drives-side expansions are restored immediately. Bookmark-side
             // ones wait until BuildBookmarks below — Bookmarks collection is
             // still empty here, and the matching VM instances don't exist yet.
@@ -517,10 +530,10 @@ public sealed class MainViewModel : ObservableObject {
             // Honour the RestoreLastFolder preference: when off, ignore
             // LastPath and start at the first drive.
             bool wantRestore = Settings.RestoreLastFolder
-                && state.LastPath is not null
-                && _fs.DirectoryExists(state.LastPath.Path);
+                && session.LastPath is not null
+                && _fs.DirectoryExists(session.LastPath.Path);
             if (wantRestore) {
-                _nav.NavigateTo(state.LastPath!.Path, state.LastPath.Source);
+                _nav.NavigateTo(session.LastPath!.Path, session.LastPath.Source);
             } else {
                 string? first = Roots.FirstOrDefault()?.FullPath;
                 if (first is not null) {
@@ -537,20 +550,23 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
-        // Read-modify-write: AppState now also carries window geometry, which
-        // the View persists separately. If we replaced the whole record here
-        // we'd silently wipe those fields on every navigation/preview toggle.
+        // Read-modify-write: AppState also carries Window geometry (saved
+        // by MainWindow.xaml.cs) and Settings (edited via the dialog). If
+        // we replaced the whole record here we'd silently wipe those on
+        // every navigation/preview toggle.
         var current = _stateStore.Load();
         _stateStore.Save(current with {
-            LastPath = _nav.Current is not null
-                ? new NavigationStop(_nav.Current, _nav.CurrentSource ?? NavigationSource.External)
-                : null,
-            ViewMode = _viewMode.ToString(),
-            ExpandedPaths = CollectExpanded(),
-            IsPreviewVisible = _isPreviewVisible,
-            PreviewWidth = _previewWidth,
+            Session = new SessionState {
+                LastPath = _nav.Current is not null
+                    ? new NavigationStop(_nav.Current, _nav.CurrentSource ?? NavigationSource.External)
+                    : null,
+                ViewMode = _viewMode.ToString(),
+                ExpandedPaths = CollectExpanded(),
+                IsPreviewVisible = _isPreviewVisible,
+                PreviewWidth = _previewWidth,
+                IsBookmarksExpanded = _isBookmarksExpanded,
+            },
             Favorites = _favorites.ToArray(),
-            IsBookmarksExpanded = _isBookmarksExpanded,
             Settings = Settings.ToRecord(),
         });
     }
@@ -581,30 +597,12 @@ public sealed class MainViewModel : ObservableObject {
 
     // --- Navigation glue -----------------------------------------------
 
-    private void NavigateToAddress() {
-        if (string.IsNullOrWhiteSpace(AddressText)) {
-            return;
-        }
-        NavigateTo(AddressText.Trim(), NavigationSource.Address);
-    }
-
-    private void GoBack() => _nav.GoBack();
-    private void GoForward() => _nav.GoForward();
-    private void GoUp() => _nav.GoUp();
-
     private void OnNavigationChanged() {
-        AddressText = _nav.Current ?? "";
-        Raise(nameof(WindowTitle));
-        Raise(nameof(CurrentPath));
         // Drop any active filter when the user moves to a new folder — the
-        // filter is scoped to "the folder I'm looking at right now". Bypass
-        // the SearchQuery setter so we don't race a stale ApplyFilterAsync
-        // against the Refresh below; Refresh will trigger one fresh pass.
-        if (_searchQuery.Length > 0) {
-            _searchQuery = "";
-            Raise(nameof(SearchQuery));
-            Raise(nameof(HasSearchQuery));
-        }
+        // filter is scoped to "the folder I'm looking at right now".
+        // SearchController.Reset cancels any in-flight pass; the upcoming
+        // Refresh → SetSource will reapply the (now empty) query.
+        _search.Reset();
         Refresh();
         ExpandTreeToCurrent();
         Preview.SetCurrentFolder(_nav.Current, WindowTitle);
@@ -668,8 +666,8 @@ public sealed class MainViewModel : ObservableObject {
 
     private void Refresh() {
         if (_nav.Current is null) {
-            _allEntries = new List<FileSystemEntry>();
             _hiddenCount = 0;
+            _search.SetSource(Array.Empty<FileSystemEntry>());
             Entries.Clear();
             Status = "";
             return;
@@ -681,12 +679,11 @@ public sealed class MainViewModel : ObservableObject {
         // and Wander's "what to hide" preference is filesystem-only.
         if (IsShellPath(_nav.Current) && TryGetShellNamespace() is { } ns) {
             try {
-                _allEntries = ns.Enumerate(_nav.Current).ToList();
                 _hiddenCount = 0;
-                _ = ApplyFilterAsync();
+                _search.SetSource(ns.Enumerate(_nav.Current).ToList());
             } catch (Exception ex) {
-                _allEntries = new List<FileSystemEntry>();
                 _hiddenCount = 0;
+                _search.SetSource(Array.Empty<FileSystemEntry>());
                 Entries.Clear();
                 Status = $"Error: {ex.Message}";
             }
@@ -704,61 +701,14 @@ public sealed class MainViewModel : ObservableObject {
                 if (!showSystem && e.IsSystem) { hidden++; continue; }
                 list.Add(e);
             }
-            _allEntries = list;
             _hiddenCount = hidden;
-            _ = ApplyFilterAsync();
+            _search.SetSource(list);
         } catch (Exception ex) {
-            _allEntries = new List<FileSystemEntry>();
             _hiddenCount = 0;
+            _search.SetSource(Array.Empty<FileSystemEntry>());
             Entries.Clear();
             Status = $"Error: {ex.Message}";
         }
-    }
-
-    /// <summary>
-    /// Re-projects <see cref="_allEntries"/> through the current
-    /// <see cref="SearchQuery"/> into <see cref="Entries"/>. Filtering runs
-    /// on a background thread so the UI stays responsive even when the
-    /// folder is large; a fresh keystroke cancels the previous pass.
-    /// </summary>
-    private async Task ApplyFilterAsync() {
-        _filterCts?.Cancel();
-        _filterCts?.Dispose();
-        _filterCts = new CancellationTokenSource();
-        var token = _filterCts.Token;
-
-        // Snapshot the inputs so a Refresh / new keystroke mid-flight cannot
-        // race us — we either complete with these inputs or get cancelled.
-        string query = _searchQuery;
-        var source = _allEntries;
-
-        if (string.IsNullOrEmpty(query)) {
-            ReplaceEntries(source);
-            UpdateFilterStatus(source.Count, source.Count);
-            return;
-        }
-
-        List<FileSystemEntry> filtered;
-        try {
-            filtered = await Task.Run(() => {
-                var result = new List<FileSystemEntry>();
-                foreach (var e in source) {
-                    token.ThrowIfCancellationRequested();
-                    if (e.Name.Contains(query, StringComparison.OrdinalIgnoreCase)) {
-                        result.Add(e);
-                    }
-                }
-                return result;
-            }, token);
-        } catch (OperationCanceledException) {
-            return;
-        }
-
-        if (token.IsCancellationRequested) {
-            return;
-        }
-        ReplaceEntries(filtered);
-        UpdateFilterStatus(filtered.Count, source.Count);
     }
 
     private void ReplaceEntries(IReadOnlyList<FileSystemEntry> items) {
@@ -769,9 +719,9 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     private void UpdateFilterStatus(int shown, int total) {
-        if (!string.IsNullOrEmpty(_searchQuery)) {
+        if (_search.HasQuery) {
             Status = total > 0
-                ? $"{shown} of {total} items match \"{_searchQuery}\""
+                ? $"{shown} of {total} items match \"{_search.Query}\""
                 : $"{shown} items";
         } else if (_hiddenCount > 0) {
             Status = $"{shown} items ({_hiddenCount} hidden)";
@@ -1191,27 +1141,25 @@ public sealed class MainViewModel : ObservableObject {
         if (_selectedEntries.Count == 0) {
             return;
         }
-        _clipboard = _selectedEntries.Select(e => e.FullPath).ToList();
-        _clipboardIsCut = false;
-        Status = $"Copied {_clipboard.Count} item(s)";
+        _clipboard.Copy(_selectedEntries.Select(e => e.FullPath));
+        Status = $"Copied {_clipboard.Paths.Count} item(s)";
     }
 
     private void Cut() {
         if (_selectedEntries.Count == 0) {
             return;
         }
-        _clipboard = _selectedEntries.Select(e => e.FullPath).ToList();
-        _clipboardIsCut = true;
-        Status = $"Cut {_clipboard.Count} item(s)";
+        _clipboard.Cut(_selectedEntries.Select(e => e.FullPath));
+        Status = $"Cut {_clipboard.Paths.Count} item(s)";
     }
 
     private async Task PasteAsync() {
-        if (_clipboard.Count == 0 || _nav.Current is null) {
+        if (!_clipboard.HasContent || _nav.Current is null) {
             return;
         }
 
         string target = _nav.Current;
-        var sources = _clipboard.ToList();
+        var sources = _clipboard.Paths.ToList();
 
         var reason = PathSafety.DetectSelfDrop(sources, target, out string? offender);
         if (reason == SelfDropReason.IntoOwnDescendant || reason == SelfDropReason.Same) {
@@ -1221,7 +1169,7 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
-        bool wasCut = _clipboardIsCut;
+        bool wasCut = _clipboard.IsCut;
         if (wasCut && !ConfirmMove(sources, target)) {
             return;
         }

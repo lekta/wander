@@ -165,25 +165,50 @@
   переноса `PathSafety` из `Wander.App.Util` в `Wander.Core.FileSystem`
   ради тестируемости — sibling-substring kейс, case-insensitive,
   нормализация trailing slash, и т.д.).
-- **Чистка #2 — после D + G + Settings** [**готова к запуску**]. Favorites,
-  Search и SettingsDialog все три закрыты, MainViewModel снова разросся
-  (search, bookmarks, navigation source, progress dialog оркестровка).
-  Кандидаты:
-  - Разделить `MainViewModel` на specialized VM-ы:
-    - `ClipboardController` (cut/copy/paste state, conflict integration).
-    - `NavigationController` (NavigationService обёртка + bookmarks/drives
-      auto-expand).
-    - `SearchController` (SearchQuery + filter pipeline + cancellation).
-  - Пересмотреть `AppState` — выделить **session-сектор** (LastPath,
-    ViewMode, ExpandedPaths, IsPreviewVisible, PreviewWidth, IsBookmarksExpanded,
-    Favorites) в отдельный подrecord по аналогии с `WindowGeometry`.
-    Settings и Window — уже подrecord-ы, session — последний "плоский".
-  - Глянуть на `MainWindow.xaml.cs` — drop handlers + drag init + tree
-    handlers + hotkeys всё в одном файле. Возможны behavior-классы.
-  - Подвинуть `PathSafety` обратно в `Wander.App.Util`? Сейчас он в
-    `Wander.Core.FileSystem` (ради тестируемости), но это App-семантика
-    про DnD. Решение: оставить в Core если в Core есть use-case
-    (например, batch self-drop guard в `BatchExecutor`); иначе вернуть.
+- ~~**Чистка #2 — после D + G + Settings**~~ — **сделано**.
+  - `ClipboardController` (Core/FileSystem) — забрал Copy/Cut/Paste
+    state (`_paths`, `_isCut`) + событие `Changed` для рефреша
+    `PasteCommand.CanExecute`. MainVM делегирует через тонкий фасад.
+  - `SearchController` (Core/FileSystem) — забрал `SearchQuery` +
+    async-фильтр + кэш `_allEntries` + cancel-on-keystroke. Источник
+    данных — `IReadOnlyList<FileSystemEntry>` от MainVM через
+    `SetSource(...)`; результат назад через `FilteredChanged`.
+    INPC реализован inline (без ObservableObject) — Core-чистота.
+  - `NavigationController` (App/ViewModels) — обернул
+    `NavigationService` + `AddressText` + Back/Forward/Up/NavigateCommand
+    + `WindowTitle` derivation. MainVM держит только side-effects
+    (Refresh / Preview / SaveState) через подписку на `CurrentChanged`.
+    Path-validation и shell-namespace lookup инжектятся как callbacks.
+  - `SessionState` подrecord (Core/Persistence) — поднял из top-level
+    `AppState` (`LastPath`, `ViewMode`, `ExpandedPaths`, `IsPreviewVisible`,
+    `PreviewWidth`, `IsBookmarksExpanded`). Теперь structure:
+    `Session` / `Favorites` / `Window` / `Settings` — четыре чётких
+    бакета. Migration: state.json от старых билдов потеряет session
+    один раз (pre-1.0, ОК).
+  - **MainViewModel** ужался ~1380 → ~1230 строк. Чистые контроллеры
+    тестируются напрямую (`ClipboardControllerTests` 10 кейсов,
+    `SearchControllerTests` 13 кейсов — async race / case-insensitive /
+    cancel-on-keystroke / source rotation). Покрытие: 104 → 126 тестов.
+  - Не вошло (отложено как самостоятельные задачи):
+    - `MainWindow.xaml.cs` — drag/drop / tree handlers / rubber-band
+      / hotkeys всё в одном файле; behavior-классы — кандидат на
+      Чистку #3.
+    - `PathSafety` остался в Core (там реально полезен и без DnD —
+      в planned merge-path для папок).
+
+- **Чистка #3 — после спринта 4** (приятное P2): когда A3 (Inline rename),
+  A7/A8 (Thumbnails) и B2 (Folder preview) приедут. Кандидаты:
+  - Разнести `MainWindow.xaml.cs` (~1400 строк): drag-source + drop-target +
+    rubber-band + tree gestures + image-zoom + video — в behavior-классы.
+  - Унифицировать sync- и async-API `FileOperationService` —
+    sync single-item Copy/Move/Delete сейчас держится только ради тестов,
+    можно убрать в `internal`.
+  - Пересмотреть `TreeNodeViewModel` — он накопил bookmark-флаги,
+    drives-флаги, lazy-load semantics. Возможно `BookmarkNodeViewModel`
+    отдельно.
+  - Тесты на `NavigationController` (сейчас покрытие идёт через
+    `NavigationService` напрямую; обёрточный controller с командами и
+    AddressText стоит покрыть, когда добавим `IDispatcher`-абстракцию).
 
 При планировании следующих чисток — добавлять сюда новые подзаголовки.
 
