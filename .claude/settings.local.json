@@ -15,7 +15,17 @@
       "PowerShell(tools\\\\check.bat)",
       "Bash(tools/check.bat)",
       "Bash(tools/check.bat:*)",
-      "Bash(timeout 8 dotnet run --project src/Wander.App/Wander.App.csproj -c Debug --no-build)"
+      "Bash(timeout 8 dotnet run --project src/Wander.App/Wander.App.csproj -c Debug --no-build)",
+      "Bash(\"C:/Program Files/dotnet/dotnet.exe\" build src/Wander.App/Wander.App.csproj -c Debug --nologo -v q)",
+      "WebFetch(domain:polyformproject.org)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(gh api *)",
+      "Bash(curl -s \"https://api.github.com/repos/polyformproject/polyform-licenses/git/trees/HEAD?recursive=1\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/polyformproject/polyform-licenses/master/PolyForm-Noncommercial-1.0.0.md\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/polyformproject/polyform-licenses/main/PolyForm-Noncommercial-1.0.0.md\")",
+      "Bash(curl -s \"https://api.github.com/repos/polyformproject/polyform-licenses\")",
+      "Bash(curl -s \"https://api.github.com/repos/polyformproject/polyform-licenses/contents/PolyForm-Noncommercial-1.0.0.md\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/polyformproject/polyform-licenses/1.0.0/PolyForm-Noncommercial-1.0.0.md\" -o \"D:/Dev/lekta/Wander/LICENSE\")"
     ]
   }
 }

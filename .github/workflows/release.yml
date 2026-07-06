@@ -1,0 +1,56 @@
+name: Release
+
+# Собирает портативный self-contained exe и публикует его в GitHub Release
+# при пуше тега вида v0.2.0. Билд идёт на раннере GitHub из публичного
+# исходного кода — логи сборки открыты, к артефакту прилагается SHA256.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish (portable single-file)
+        run: |
+          dotnet publish src/Wander.App `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:EnableCompressionInSingleFile=true `
+            -o publish
+
+      - name: Compute checksum
+        run: |
+          $hash = (Get-FileHash publish/Wander.exe -Algorithm SHA256).Hash
+          "$hash  Wander.exe" | Out-File publish/Wander.exe.sha256 -Encoding ascii
+          Write-Host "SHA256: $hash"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" `
+            publish/Wander.exe `
+            publish/Wander.exe.sha256 `
+            --title "Wander ${{ github.ref_name }}" `
+            --generate-notes `
+            --prerelease
