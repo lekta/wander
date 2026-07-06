@@ -752,24 +752,49 @@ public partial class MainWindow : Window {
 
 
     // --- Bookmarks panel drop -------------------------------------------
-    // Any drop onto the bookmarks region (header, empty area, between tree
-    // items) registers the dragged folders as new bookmarks rather than
-    // copying/moving them. Drops onto a specific bookmark folder for
-    // copy-into are intentionally out of scope for now — the user can drop
-    // onto the drives tree below instead. Keeps the gesture unambiguous.
+    //
+    // Two-mode dispatch by hit location:
+    //  • Drop ON an existing bookmark item that is a real filesystem folder
+    //    → copy/move into that folder. We forward the event to the standard
+    //    OnDragOver/OnDrop pair, which re-resolves the target via the tree's
+    //    DataContext and shares all the same self-drop / effect-choice /
+    //    highlight machinery the drives tree uses.
+    //  • Drop on the header, empty tree area, or a shell-namespace bookmark
+    //    (Recycle Bin can't accept drops) → register the dragged folders
+    //    as new bookmarks.
+    // We decide the mode BEFORE delegating; OnDragOver's own ResolveDropTarget
+    // would otherwise fall back to Vm.CurrentPath for empty area, which would
+    // wrongly turn "add bookmark" into "copy into current folder".
+
     private void BookmarksPanel_DragOver(object sender, DragEventArgs e) {
         if (!e.Data.GetDataPresent(DataFormats.FileDrop)) {
             e.Effects = DragDropEffects.None;
             e.Handled = true;
             return;
         }
+
+        if (IsOverDroppableBookmarkFolder(e)) {
+            // Defer to the standard handler — same effect, same highlight,
+            // same self-drop protection as the drives tree.
+            OnDragOver(sender, e);
+            return;
+        }
+
         var paths = (string[])e.Data.GetData(DataFormats.FileDrop);
         bool anyFolder = paths.Any(p => Directory.Exists(p));
         e.Effects = anyFolder ? DragDropEffects.Link : DragDropEffects.None;
+        // Clear any leftover highlight from a previous in-folder hover so
+        // empty-area drops don't look like they're targeting something.
+        SetDropHighlight(null);
         e.Handled = true;
     }
 
     private void BookmarksPanel_Drop(object sender, DragEventArgs e) {
+        if (IsOverDroppableBookmarkFolder(e)) {
+            OnDrop(sender, e);
+            return;
+        }
+
         try {
             if (!e.Data.GetDataPresent(DataFormats.FileDrop)) {
                 return;
@@ -789,6 +814,115 @@ public partial class MainWindow : Window {
         } finally {
             ClearDropHighlight();
         }
+    }
+
+    // --- Bookmark drop-zone (explicit affordance at top of panel) ------
+    //
+    // Sits between the bookmarks header and the tree. Always visible when
+    // the panel is expanded; styled subtly when idle, prominently when a
+    // file-drag is hovering. Drops here always mean "add to bookmarks";
+    // the parent BookmarksPanel still accepts drops on its empty area so
+    // users who learn the gesture aren't forced to aim at the strip.
+
+    private static readonly SolidColorBrush _dropZoneIdleBg = Brushes.Transparent;
+    private static readonly SolidColorBrush _dropZoneIdleBorder = new(Color.FromRgb(0xDD, 0xDD, 0xDD));
+    private static readonly SolidColorBrush _dropZoneIdleText = new(Color.FromRgb(0x88, 0x88, 0x88));
+    private static readonly SolidColorBrush _dropZoneActiveBg = new(Color.FromRgb(0xE5, 0xF1, 0xFB));
+    private static readonly SolidColorBrush _dropZoneActiveBorder = new(Color.FromRgb(0x00, 0x78, 0xD7));
+    private static readonly SolidColorBrush _dropZoneActiveText = new(Color.FromRgb(0x00, 0x55, 0xA8));
+
+    private void BookmarkDropZone_DragEnter(object sender, DragEventArgs e) {
+        if (!CanAcceptBookmarkDrop(e)) {
+            return;
+        }
+        SetBookmarkDropZoneActive(true);
+    }
+
+    private void BookmarkDropZone_DragOver(object sender, DragEventArgs e) {
+        if (!CanAcceptBookmarkDrop(e)) {
+            e.Effects = DragDropEffects.None;
+            e.Handled = true;
+            return;
+        }
+        // Link cursor (arrow with curved-arrow overlay) reads as "make a
+        // reference here" — closest stock cursor to "bookmark".
+        e.Effects = DragDropEffects.Link;
+        e.Handled = true;
+    }
+
+    private void BookmarkDropZone_DragLeave(object sender, DragEventArgs e) {
+        SetBookmarkDropZoneActive(false);
+    }
+
+    private void BookmarkDropZone_Drop(object sender, DragEventArgs e) {
+        try {
+            if (!e.Data.GetDataPresent(DataFormats.FileDrop)) {
+                return;
+            }
+            var paths = (string[])e.Data.GetData(DataFormats.FileDrop);
+            int added = 0;
+            foreach (var p in paths) {
+                if (Directory.Exists(p)) {
+                    Vm.AddBookmark(p);
+                    added++;
+                }
+            }
+            if (added == 0) {
+                Vm.Status = "В закладки можно перетаскивать только папки.";
+            }
+            e.Handled = true;
+        } finally {
+            SetBookmarkDropZoneActive(false);
+        }
+    }
+
+    private static bool CanAcceptBookmarkDrop(DragEventArgs e) {
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop)) {
+            return false;
+        }
+        var paths = (string[])e.Data.GetData(DataFormats.FileDrop);
+        return paths.Any(Directory.Exists);
+    }
+
+    private void SetBookmarkDropZoneActive(bool active) {
+        if (active) {
+            BookmarkDropZone.Background = _dropZoneActiveBg;
+            BookmarkDropZone.BorderBrush = _dropZoneActiveBorder;
+            BookmarkDropZone.BorderThickness = new Thickness(1);
+            BookmarkDropZoneText.Foreground = _dropZoneActiveText;
+            BookmarkDropZoneText.FontWeight = FontWeights.SemiBold;
+            BookmarkDropZoneText.Text = "+  Добавить в закладки";
+        } else {
+            BookmarkDropZone.Background = _dropZoneIdleBg;
+            BookmarkDropZone.BorderBrush = _dropZoneIdleBorder;
+            BookmarkDropZone.BorderThickness = new Thickness(0, 0, 0, 1);
+            BookmarkDropZoneText.Foreground = _dropZoneIdleText;
+            BookmarkDropZoneText.FontWeight = FontWeights.Normal;
+            BookmarkDropZoneText.Text = "+  Перетащите папку сюда";
+        }
+    }
+
+    /// <summary>
+    /// True when the drag is hovering over a TreeViewItem in the bookmarks
+    /// tree whose DataContext is a real on-disk folder bookmark (not a
+    /// shell-namespace sentinel like "shell:RecycleBinFolder", which has
+    /// no backing directory to copy into).
+    /// </summary>
+    private static bool IsOverDroppableBookmarkFolder(DragEventArgs e) {
+        var hit = e.OriginalSource as DependencyObject;
+        while (hit is not null) {
+            if (hit is FrameworkElement fe && fe.DataContext is TreeNodeViewModel node) {
+                if (string.IsNullOrEmpty(node.FullPath)) {
+                    return false;
+                }
+                if (node.FullPath.StartsWith("shell:", StringComparison.OrdinalIgnoreCase)) {
+                    return false;
+                }
+                return true;
+            }
+            hit = VisualTreeHelper.GetParent(hit);
+        }
+        return false;
     }
 
 

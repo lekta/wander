@@ -124,10 +124,20 @@ public sealed class SystemIconProvider : IIconProvider {
     // shell:RecycleBinFolder is not a filesystem path, so SHGetFileInfo
     // with the URI as pszPath returns nothing. The Windows-documented
     // pattern for "icon of a known folder" is:
-    //   1. Resolve FOLDERID → ITEMIDLIST (PIDL) via SHGetKnownFolderIDList.
+    //   1. Resolve the shell URI / FOLDERID → ITEMIDLIST (PIDL).
     //   2. Pass the PIDL to SHGetFileInfo with SHGFI_PIDL.
-    //   3. Free the PIDL with ILFree (CoTaskMemFree works too but ILFree
-    //      is the documented inverse of SHGetKnownFolderIDList).
+    //   3. Free the PIDL with ILFree.
+    //
+    // We try two PIDL-acquisition paths in order:
+    //   • SHParseDisplayName — parses the "shell:" URI string directly;
+    //     it's what Explorer uses when the user types into the address
+    //     bar. Most likely to work for arbitrary shell URIs (Libraries,
+    //     OneDrive, Quick access, …) if we add them later.
+    //   • SHGetKnownFolderIDList — looks up the GUID. Equivalent result
+    //     on healthy systems but a different code path inside shell32.
+    //
+    // Both fail-paths are logged through IconLog so a user reporting
+    // "no icon" can capture the actual HRESULT in the session log.
     //
     // For Large size we fall back to the regular icon; jumbo-size
     // composition for the Recycle Bin would need a different IShellItem
@@ -139,35 +149,84 @@ public sealed class SystemIconProvider : IIconProvider {
             return null;
         }
 
+        byte[]? bytes = TryLoadIconViaParseDisplayName(path, size);
+        if (bytes is not null) {
+            return bytes;
+        }
+        return TryLoadIconViaKnownFolder(size);
+    }
+
+    private static byte[]? TryLoadIconViaParseDisplayName(string shellPath, IconSize size) {
         IntPtr pidl = IntPtr.Zero;
         try {
-            int hr = SHGetKnownFolderIDList(_folderIdRecycleBin, 0, IntPtr.Zero, out pidl);
-            if (hr != 0 || pidl == IntPtr.Zero) {
-                return null;
-            }
-
-            uint flags = SHGFI_PIDL | SHGFI_ICON |
-                (size == IconSize.Small ? SHGFI_SMALLICON : SHGFI_LARGEICON);
-
-            var info = new SHFILEINFO();
-            IntPtr result = SHGetFileInfoPidl(
-                pidl, 0, ref info,
-                (uint)Marshal.SizeOf<SHFILEINFO>(),
-                flags);
-
-            if (result == IntPtr.Zero || info.hIcon == IntPtr.Zero) {
-                return null;
-            }
-
+            int hr;
             try {
-                return HIconToPng(info.hIcon);
-            } finally {
-                DestroyIcon(info.hIcon);
+                hr = SHParseDisplayName(shellPath, IntPtr.Zero, out pidl, 0, out _);
+            } catch (Exception ex) {
+                IconLog($"recycle-icon: SHParseDisplayName threw: {ex.Message}");
+                return null;
             }
+            if (hr != 0 || pidl == IntPtr.Zero) {
+                IconLog($"recycle-icon: SHParseDisplayName hr=0x{hr:X8} pidl={pidl}");
+                return null;
+            }
+            return IconFromPidl(pidl, size, "parse");
         } finally {
             if (pidl != IntPtr.Zero) {
                 ILFree(pidl);
             }
+        }
+    }
+
+    private static byte[]? TryLoadIconViaKnownFolder(IconSize size) {
+        IntPtr pidl = IntPtr.Zero;
+        try {
+            int hr;
+            try {
+                hr = SHGetKnownFolderIDList(_folderIdRecycleBin, 0, IntPtr.Zero, out pidl);
+            } catch (Exception ex) {
+                IconLog($"recycle-icon: SHGetKnownFolderIDList threw: {ex.Message}");
+                return null;
+            }
+            if (hr != 0 || pidl == IntPtr.Zero) {
+                IconLog($"recycle-icon: SHGetKnownFolderIDList hr=0x{hr:X8} pidl={pidl}");
+                return null;
+            }
+            return IconFromPidl(pidl, size, "kfid");
+        } finally {
+            if (pidl != IntPtr.Zero) {
+                ILFree(pidl);
+            }
+        }
+    }
+
+    private static byte[]? IconFromPidl(IntPtr pidl, IconSize size, string trace) {
+        uint flags = SHGFI_PIDL | SHGFI_ICON |
+            (size == IconSize.Small ? SHGFI_SMALLICON : SHGFI_LARGEICON);
+
+        var info = new SHFILEINFO();
+        IntPtr result;
+        try {
+            result = SHGetFileInfoPidl(
+                pidl, 0, ref info,
+                (uint)Marshal.SizeOf<SHFILEINFO>(),
+                flags);
+        } catch (Exception ex) {
+            IconLog($"recycle-icon: SHGetFileInfoPidl ({trace}) threw: {ex.Message}");
+            return null;
+        }
+
+        if (result == IntPtr.Zero || info.hIcon == IntPtr.Zero) {
+            IconLog($"recycle-icon: SHGetFileInfoPidl ({trace}) result={result} hIcon={info.hIcon}");
+            return null;
+        }
+
+        try {
+            byte[]? bytes = HIconToPng(info.hIcon);
+            IconLog($"recycle-icon: ({trace}) OK, bytes={bytes?.Length ?? 0}");
+            return bytes;
+        } finally {
+            DestroyIcon(info.hIcon);
         }
     }
 
@@ -779,6 +838,18 @@ public sealed class SystemIconProvider : IIconProvider {
         uint dwFlags,
         IntPtr hToken,
         out IntPtr ppidl);
+
+    // Parses a display name (including shell URIs like "shell:RecycleBinFolder",
+    // CLSID parse names like "::{645FF040-…}", and regular paths) into a PIDL.
+    // The Unicode-only entry point is the one used by Explorer; the ANSI
+    // variant exists for back-compat with very old code.
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    private static extern int SHParseDisplayName(
+        [MarshalAs(UnmanagedType.LPWStr)] string pszName,
+        IntPtr pbc,
+        out IntPtr ppidl,
+        uint sfgaoIn,
+        out uint psfgaoOut);
 
     [DllImport("shell32.dll")]
     private static extern void ILFree(IntPtr pidl);

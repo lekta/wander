@@ -383,6 +383,36 @@
                     </Button>
 
                     <!--
+                        Explicit drop zone — discoverable affordance for
+                        adding folders to bookmarks by drag&drop. Idle: thin
+                        bottom border + muted hint. Drag-over: filled with
+                        blue tint and bold "+ Add to bookmarks" prompt
+                        (toggled via SetBookmarkDropZoneActive in code-behind).
+                        Dropping anywhere else in the panel still adds a
+                        bookmark too — this zone is the visible cue, not the
+                        only acceptor.
+                    -->
+                    <Border x:Name="BookmarkDropZone"
+                            DockPanel.Dock="Top"
+                            Height="26"
+                            Background="Transparent"
+                            BorderBrush="#DDD"
+                            BorderThickness="0,0,0,1"
+                            AllowDrop="True"
+                            DragEnter="BookmarkDropZone_DragEnter"
+                            DragOver="BookmarkDropZone_DragOver"
+                            DragLeave="BookmarkDropZone_DragLeave"
+                            Drop="BookmarkDropZone_Drop"
+                            Visibility="{Binding IsBookmarksExpanded, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock x:Name="BookmarkDropZoneText"
+                                   Text="+  Перетащите папку сюда"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontSize="11"
+                                   Foreground="#888"/>
+                    </Border>
+
+                    <!--
                         AllowDrop=True so cursor feedback shows correctly,
                         but DragOver/Drop are intentionally NOT attached here:
                         the parent BookmarksPanel handles all drop events so
