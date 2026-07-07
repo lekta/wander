@@ -1,31 +1,33 @@
 ---
-name: Bug report
-about: Create a report to help us improve
+name: Баг-репорт
+about: Сообщить об ошибке в Wander
 title: ''
-labels: ''
+labels: bug
 assignees: ''
-
 ---
 
-**Describe the bug**
-A clear and concise description of what the bug is.
+**Описание**
+Что пошло не так — кратко и по делу.
 
-**To Reproduce**
-Steps to reproduce the behavior:
-1. Go to '...'
-2. Click on '....'
-3. Scroll down to '....'
-4. See error
+**Как воспроизвести**
+1. Открыл '...'
+2. Нажал '...'
+3. Увидел ошибку
 
-**Expected behavior**
-A clear and concise description of what you expected to happen.
+**Ожидаемое поведение**
+Что должно было произойти.
 
-**Screenshots**
-If applicable, add screenshots to help explain your problem.
+**Скриншоты**
+Если уместно — приложи.
 
-**Desktop (please complete the following information):**
- - OS: [e.g. iOS]
- - Version [e.g. 22]
+**Окружение**
+- Версия Wander: [например, 0.2.1-beta]
+- Windows: [например, 11 24H2, сборка 26100]
 
-**Additional context**
-Add any other context about the problem here.
+**Краш-отчёт / лог**
+Если приложение предложило подготовить отчёт об ошибке — приложи полученный
+zip (crash.txt + лог сессии). Проверь, что в нём нет приватных путей, которыми
+не хочешь делиться.
+
+**Дополнительно**
+Любой другой контекст.

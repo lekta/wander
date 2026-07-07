@@ -32,7 +32,9 @@
       "PowerShell(cmd /c \"tools\\\\check.bat format\")",
       "PowerShell(\\(Get-Content tests\\\\Wander.Core.Tests\\\\SystemPathGuardTests.cs -Raw\\) -replace 'WindowsDir\\(?=[,.\\\\\\)\\\\s]\\)','_windowsDir' -replace '\\(?<!_\\)ProgramFiles\\(?=[,.\\\\\\)\\\\s]\\)','_programFiles' -replace '\\(?<!_\\)UserProfile\\(?=[,.\\\\\\)\\\\s]\\)','_userProfile' | Set-Content tests\\\\Wander.Core.Tests\\\\SystemPathGuardTests.cs -Encoding utf8)",
       "PowerShell(cmd /c \"tools\\\\check.bat run\")",
-      "PowerShell($log = Get-ChildItem \"$env:LOCALAPPDATA\\\\Wander\\\\logs\" | Sort-Object LastWriteTime -Descending | Select-Object -First 1; Get-Content $log.FullName -TotalCount 4)"
+      "PowerShell($log = Get-ChildItem \"$env:LOCALAPPDATA\\\\Wander\\\\logs\" | Sort-Object LastWriteTime -Descending | Select-Object -First 1; Get-Content $log.FullName -TotalCount 4)",
+      "WebFetch(domain:github.com)",
+      "PowerShell($g = Get-Command gh -ErrorAction SilentlyContinue; if \\($g\\) { Write-Host \"gh at $\\($g.Source\\)\"; gh auth status 2>&1 } else { Write-Host \"gh NOT found\" })"
     ]
   }
 }

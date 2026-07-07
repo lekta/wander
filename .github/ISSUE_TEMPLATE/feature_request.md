@@ -1,20 +1,19 @@
 ---
-name: Feature request
-about: Suggest an idea for this project
+name: Идея / фича
+about: Предложить улучшение для Wander
 title: ''
-labels: ''
+labels: enhancement
 assignees: ''
-
 ---
 
-**Is your feature request related to a problem? Please describe.**
-A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
+**Проблема**
+Какую задачу или неудобство это решает. Напр.: «неудобно, когда [...]».
 
-**Describe the solution you'd like**
-A clear and concise description of what you want to happen.
+**Предлагаемое решение**
+Что хотелось бы видеть.
 
-**Describe alternatives you've considered**
-A clear and concise description of any alternative solutions or features you've considered.
+**Альтернативы**
+Что ещё рассматривал.
 
-**Additional context**
-Add any other context or screenshots about the feature request here.
+**Дополнительно**
+Контекст, скриншоты, ссылки.

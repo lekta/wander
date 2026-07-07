@@ -1,0 +1,9 @@
+# Пустые issue оставлены включёнными НАМЕРЕННО: краш-репортер приложения
+# (CrashReporter.cs) открывает issues/new с уже заполненным телом в обход
+# шаблонов. Если выставить blank_issues_enabled: false, GitHub перекинет такой
+# URL на /choose и потеряет предзаполненный отчёт.
+blank_issues_enabled: true
+contact_links:
+  - name: Уязвимость безопасности
+    url: https://github.com/lekta/wander/security/policy
+    about: Не открывай публичный issue — сообщи приватно (см. Security Policy).
