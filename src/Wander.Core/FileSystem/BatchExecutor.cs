@@ -82,11 +82,13 @@ public sealed class BatchExecutor {
         CancellationToken ct) {
         using var op = _tracker.Begin(isMove ? "Move" : "Copy", sources.Count);
         return await Task.Run(
-            () => ApplyBatch(sources, targetFolder, isMove, resolver, op),
+            () => ApplyBatch(sources, targetFolder, isMove, resolver, op, ct),
             ct).ConfigureAwait(false);
     }
 
-    private IReadOnlyList<BatchItemResult> ApplyBatch(IReadOnlyList<string> sources, string targetFolder, bool isMove, IConflictResolver resolver, IOperationHandle? progress) {
+    private IReadOnlyList<BatchItemResult> ApplyBatch(
+        IReadOnlyList<string> sources, string targetFolder, bool isMove, IConflictResolver resolver,
+        IOperationHandle? progress, CancellationToken ct = default) {
         using var _ = _undo.BeginOperation();
 
         var pairs = new List<(string src, string dest)>();
@@ -110,6 +112,13 @@ public sealed class BatchExecutor {
         var undoSteps = new List<IUndoableAction>(pairs.Count);
 
         foreach (var (src, originalDest) in pairs) {
+            // The progress dialog's Cancel cancels this token; already-applied
+            // items stay applied (and undoable), the rest are marked Cancelled.
+            if (ct.IsCancellationRequested) {
+                results.Add(new BatchItemResult(src, originalDest, BatchItemStatus.Cancelled, null));
+                continue;
+            }
+
             string dest = originalDest;
             BatchItemStatus statusKind = BatchItemStatus.Ok;
             bool exists = Exists(dest);

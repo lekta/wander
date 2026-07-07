@@ -184,6 +184,13 @@ public sealed class SystemIOFileSystem : IFileSystem {
         }
 
         foreach (var dir in Directory.EnumerateDirectories(source)) {
+            // Junctions / directory symlinks are not descended into: a link
+            // pointing at an ancestor would make this recursion infinite and
+            // flood the destination with nested copies until the disk fills.
+            if ((File.GetAttributes(dir) & FileAttributes.ReparsePoint) != 0) {
+                continue;
+            }
+
             var target = Path.Combine(destination, Path.GetFileName(dir));
             CopyDirectory(dir, target, overwrite);
         }

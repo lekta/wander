@@ -30,10 +30,10 @@ public static class EntryComparers {
             nc.Compare(a.Name, b.Name));
 
         IComparer<FileSystemEntry> primary = options.Key switch {
-            SortKey.Name         => tiebreaker,
+            SortKey.Name => tiebreaker,
             SortKey.ModifiedDate => Comparer<FileSystemEntry>.Create((a, b) => a.ModifiedUtc.CompareTo(b.ModifiedUtc)),
-            SortKey.Size         => Comparer<FileSystemEntry>.Create((a, b) => (a.Size ?? 0L).CompareTo(b.Size ?? 0L)),
-            SortKey.Type         => Comparer<FileSystemEntry>.Create((a, b) => string.Compare(
+            SortKey.Size => Comparer<FileSystemEntry>.Create((a, b) => (a.Size ?? 0L).CompareTo(b.Size ?? 0L)),
+            SortKey.Type => Comparer<FileSystemEntry>.Create((a, b) => string.Compare(
                                         System.IO.Path.GetExtension(a.Name),
                                         System.IO.Path.GetExtension(b.Name),
                                         StringComparison.OrdinalIgnoreCase)),

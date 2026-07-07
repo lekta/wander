@@ -9,12 +9,19 @@ namespace Wander.Core.Undo;
 /// while a long-running op is in flight. <see cref="CanUndo"/> returns
 /// false while busy, so a Ctrl+Z pressed mid-operation is silently
 /// ignored (Explorer parity — it doesn't let you undo a copy in
-/// progress either). For today's synchronous ops the counter is bumped
-/// and dropped before the call returns, so the guard is effectively a
-/// no-op until we go async.
+/// progress either).
+/// </para>
+///
+/// <para>
+/// Thread model: batch executors push from thread-pool workers while the
+/// UI thread reads state and pops, so every stack/busy access goes through
+/// one lock. <see cref="Changed"/> is raised outside the lock and may fire
+/// on a background thread — subscribers marshal to their dispatcher
+/// themselves.
 /// </para>
 /// </summary>
 public sealed class UndoService {
+    private readonly object _gate = new();
     private readonly Stack<IUndoableAction> _stack = new();
     private int _busy;
 
@@ -23,18 +30,44 @@ public sealed class UndoService {
     public event EventHandler? Changed;
 
 
-    public bool CanUndo => _busy == 0 && _stack.Count > 0;
+    public bool CanUndo {
+        get {
+            lock (_gate) {
+                return _busy == 0 && _stack.Count > 0;
+            }
+        }
+    }
 
-    public bool IsBusy => _busy > 0;
+    public bool IsBusy {
+        get {
+            lock (_gate) {
+                return _busy > 0;
+            }
+        }
+    }
 
-    public int Depth => _stack.Count;
+    public int Depth {
+        get {
+            lock (_gate) {
+                return _stack.Count;
+            }
+        }
+    }
 
-    public string? NextDescription => _stack.TryPeek(out var a) ? a.Description : null;
+    public string? NextDescription {
+        get {
+            lock (_gate) {
+                return _stack.TryPeek(out var a) ? a.Description : null;
+            }
+        }
+    }
 
 
     public void Push(IUndoableAction action) {
         ArgumentNullException.ThrowIfNull(action);
-        _stack.Push(action);
+        lock (_gate) {
+            _stack.Push(action);
+        }
         RaiseChanged();
     }
 
@@ -45,10 +78,12 @@ public sealed class UndoService {
     /// or busy.
     /// </summary>
     public IUndoableAction? Undo() {
-        if (!CanUndo) {
-            return null;
+        IUndoableAction action;
+        lock (_gate) {
+            if (_busy > 0 || !_stack.TryPop(out action!)) {
+                return null;
+            }
         }
-        var action = _stack.Pop();
         try {
             action.Undo();
             return action;
@@ -60,10 +95,12 @@ public sealed class UndoService {
 
     /// <summary>Drops the entire history — used after permanent delete.</summary>
     public void Clear() {
-        if (_stack.Count == 0) {
-            return;
+        lock (_gate) {
+            if (_stack.Count == 0) {
+                return;
+            }
+            _stack.Clear();
         }
-        _stack.Clear();
         RaiseChanged();
     }
 
@@ -73,16 +110,21 @@ public sealed class UndoService {
     /// when the op completes so Ctrl+Z becomes available again.
     /// </summary>
     public IDisposable BeginOperation() {
-        _busy++;
+        lock (_gate) {
+            _busy++;
+        }
         RaiseChanged();
         return new Guard(this);
     }
 
     private void EndOperation() {
-        if (_busy > 0) {
+        lock (_gate) {
+            if (_busy == 0) {
+                return;
+            }
             _busy--;
-            RaiseChanged();
         }
+        RaiseChanged();
     }
 
 

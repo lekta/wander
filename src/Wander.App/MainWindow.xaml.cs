@@ -241,10 +241,39 @@ public partial class MainWindow : Window {
             return;
         }
         try {
-            await WebPreview.EnsureCoreWebView2Async();
-            if (WebPreview.CoreWebView2 is not null) {
-                WebPreview.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
-                WebPreview.CoreWebView2.Settings.AreDevToolsEnabled = false;
+            // Explicit user-data folder: the default is "<exe dir>.WebView2",
+            // which fails silently when Wander runs from a read-only location
+            // (portable exe in Program Files, network share).
+            string dataFolder = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Wander", "WebView2");
+            var env = await Microsoft.Web.WebView2.Core.CoreWebView2Environment.CreateAsync(
+                browserExecutableFolder: null, userDataFolder: dataFolder);
+            await WebPreview.EnsureCoreWebView2Async(env);
+
+            if (WebPreview.CoreWebView2 is { } core) {
+                core.Settings.AreDefaultContextMenusEnabled = false;
+                core.Settings.AreDevToolsEnabled = false;
+
+                // The pane renders untrusted local files (any .html the user
+                // clicks), so lock it down: no autofill surfaces, no host
+                // object / postMessage bridge into the app.
+                core.Settings.IsPasswordAutosaveEnabled = false;
+                core.Settings.IsGeneralAutofillEnabled = false;
+                core.Settings.AreHostObjectsAllowed = false;
+                core.Settings.IsWebMessageEnabled = false;
+
+                // No popups, and the pane itself may only display local
+                // content: a previewed page must not be able to redirect the
+                // preview (or the whole session, via window.open) to the web.
+                core.NewWindowRequested += (_, args) => args.Handled = true;
+                core.NavigationStarting += (_, args) => {
+                    bool local = Uri.TryCreate(args.Uri, UriKind.Absolute, out var uri)
+                        && uri.Scheme is "file" or "about" or "data";
+                    if (!local) {
+                        args.Cancel = true;
+                    }
+                };
             }
             _webInitialized = true;
         } catch {

@@ -131,9 +131,19 @@ public sealed class MainViewModel : ObservableObject {
         AddBookmarkCommand = new RelayCommand(p => AddBookmark(p as string));
         RemoveBookmarkCommand = new RelayCommand(p => RemoveBookmark(p as TreeNodeViewModel));
 
+        // Batch executors push undo steps from thread-pool workers, so this
+        // event can arrive off the UI thread; CommandManager requery only
+        // works on the dispatcher thread.
         _undo.Changed += (_, _) => {
-            UndoCommand.RaiseCanExecuteChanged();
-            Raise(nameof(UndoTooltip));
+            if (_dispatcher.CheckAccess()) {
+                UndoCommand.RaiseCanExecuteChanged();
+                Raise(nameof(UndoTooltip));
+            } else {
+                _dispatcher.BeginInvoke(() => {
+                    UndoCommand.RaiseCanExecuteChanged();
+                    Raise(nameof(UndoTooltip));
+                });
+            }
         };
 
         _clipboard.Changed += (_, _) => PasteCommand.RaiseCanExecuteChanged();

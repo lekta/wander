@@ -25,7 +25,11 @@
       "Bash(curl -s \"https://raw.githubusercontent.com/polyformproject/polyform-licenses/main/PolyForm-Noncommercial-1.0.0.md\")",
       "Bash(curl -s \"https://api.github.com/repos/polyformproject/polyform-licenses\")",
       "Bash(curl -s \"https://api.github.com/repos/polyformproject/polyform-licenses/contents/PolyForm-Noncommercial-1.0.0.md\")",
-      "Bash(curl -s \"https://raw.githubusercontent.com/polyformproject/polyform-licenses/1.0.0/PolyForm-Noncommercial-1.0.0.md\" -o \"D:/Dev/lekta/Wander/LICENSE\")"
+      "Bash(curl -s \"https://raw.githubusercontent.com/polyformproject/polyform-licenses/1.0.0/PolyForm-Noncommercial-1.0.0.md\" -o \"D:/Dev/lekta/Wander/LICENSE\")",
+      "Bash(git -C /d/Dev/lekta/Wander ls-files publish)",
+      "Bash(git -C /d/Dev/lekta/Wander ls-files)",
+      "PowerShell(cmd /c \"tools\\\\check.bat\")",
+      "PowerShell(cmd /c \"tools\\\\check.bat format\")"
     ]
   }
 }
