@@ -233,6 +233,9 @@
                                   IsChecked="{Binding IsPreviewVisible, Mode=TwoWay}"/>
                         <Separator/>
                         <MenuItem Header="Options..." Command="{Binding OptionsCommand}"/>
+                        <MenuItem Header="Report an issue or idea..."
+                                  Command="{Binding ReportIssueCommand}"
+                                  ToolTip="Opens a new GitHub issue in the browser (bug report or feature request)"/>
                         <Separator/>
                         <MenuItem Header="Debug"
                                   Visibility="{Binding Settings.ShowDebugMenu, Converter={StaticResource BoolToVisibility}}">

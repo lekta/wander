@@ -1,3 +1,7 @@
+using System.Globalization;
+using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Security.Principal;
 using Wander.Core;
 using Wander.Core.Diagnostics;
 using Wander.Core.FileSystem;
@@ -24,6 +28,12 @@ public static class PlatformBootstrapper {
         ServiceLocator.Register<ILogFile>(logger);
         logger.Info($"=== Wander session start ({DateTime.Now:yyyy-MM-dd HH:mm:ss}) ===");
         logger.Info($"Log file: {logger.FilePath}");
+        // Environment header — makes a lone session log self-sufficient for
+        // bug reports (CrashReporter bundles this log as-is).
+        logger.Info(
+            $"Version {AppVersion()}; {RuntimeInformation.OSDescription} ({RuntimeInformation.OSArchitecture}); " +
+            $"{RuntimeInformation.FrameworkDescription}; culture {CultureInfo.CurrentCulture.Name}/{CultureInfo.CurrentUICulture.Name}; " +
+            $"elevated: {IsElevated()}");
 
         ServiceLocator.Register<IFileSystem>(new SystemIOFileSystem());
         ServiceLocator.Register<IKnownFolders>(new WindowsKnownFolders());
@@ -41,5 +51,22 @@ public static class PlatformBootstrapper {
         ServiceLocator.Register<OperationTracker>(new OperationTracker());
         ServiceLocator.Register<IRecycleBin>(new ShellRecycleBin(logger));
         ServiceLocator.Register<FileOperationService>(new FileOperationService());
+    }
+
+
+    private static string AppVersion() {
+        var asm = Assembly.GetEntryAssembly();
+        return asm?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+            ?? asm?.GetName().Version?.ToString()
+            ?? "unknown";
+    }
+
+    private static string IsElevated() {
+        try {
+            using var identity = WindowsIdentity.GetCurrent();
+            return new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator) ? "yes" : "no";
+        } catch {
+            return "unknown";
+        }
     }
 }

@@ -107,8 +107,8 @@ public class BatchExecutorTests {
     }
 
     [Fact]
-    public void CopyMany_BatchReplaceAll_OverwritesAllConflicts() {
-        var (batch, fs, _, _, _) = Setup();
+    public void CopyMany_BatchReplaceAll_RecyclesTargetsThenCopies() {
+        var (batch, fs, bin, _, _) = Setup();
         fs.Files[SrcA] = new byte[] { 1 };
         fs.Files[SrcB] = new byte[] { 2 };
         fs.Directories.Add(DstFolder);
@@ -119,9 +119,14 @@ public class BatchExecutorTests {
         var results = batch.CopyMany(new[] { SrcA, SrcB }, DstFolder, resolver);
 
         Assert.All(results, r => Assert.Equal(BatchItemStatus.Replaced, r.Status));
-        // CopyFile was called with overwrite=true for each.
-        Assert.Contains($"CopyFile:{SrcA}->{DstA}:True", fs.CallLog);
-        Assert.Contains($"CopyFile:{SrcB}->{DstB}:True", fs.CallLog);
+        // Replaced targets go to the recycle bin (undoable), then a plain
+        // no-overwrite copy lands in their place.
+        Assert.Contains($"Recycle:{DstA}", bin.CallLog);
+        Assert.Contains($"Recycle:{DstB}", bin.CallLog);
+        Assert.Contains($"CopyFile:{SrcA}->{DstA}:False", fs.CallLog);
+        Assert.Contains($"CopyFile:{SrcB}->{DstB}:False", fs.CallLog);
+        Assert.Equal(new byte[] { 1 }, fs.Files[DstA]);
+        Assert.Equal(new byte[] { 2 }, fs.Files[DstB]);
     }
 
     [Fact]
@@ -163,7 +168,8 @@ public class BatchExecutorTests {
         Assert.Equal(BatchItemStatus.Replaced, results[0].Status);
         Assert.Equal(BatchItemStatus.Cancelled, results[1].Status);
         Assert.Equal(BatchItemStatus.Cancelled, results[2].Status);
-        // Replaced item still went through, so undo composite has 1 step.
+        // Replaced item still went through — one undo entry on the stack
+        // (recycle-target + copy steps bundled into a single composite).
         Assert.Equal(1, undo.Depth);
     }
 
@@ -260,8 +266,8 @@ public class BatchExecutorTests {
     }
 
     [Fact]
-    public void MoveMany_ReplaceConflict_DeletesTargetThenMoves() {
-        var (batch, fs, _, _, _) = Setup();
+    public void MoveMany_ReplaceConflict_RecyclesTargetThenMoves() {
+        var (batch, fs, bin, _, _) = Setup();
         fs.Files[SrcA] = new byte[] { 1 };
         fs.Directories.Add(DstFolder);
         fs.Files[DstA] = new byte[] { 9 };
@@ -269,11 +275,65 @@ public class BatchExecutorTests {
 
         batch.MoveMany(new[] { SrcA }, DstFolder, resolver);
 
-        // .NET Move doesn't have overwrite-for-folders; BatchExecutor clears
-        // the target first via DeleteFile, then MoveEntry.
-        int delIdx = fs.CallLog.IndexOf($"DeleteFile:{DstA}");
-        int moveIdx = fs.CallLog.IndexOf($"MoveEntry:{SrcA}->{DstA}");
-        Assert.True(delIdx >= 0 && moveIdx > delIdx, $"expected DeleteFile before MoveEntry, got log: {string.Join(", ", fs.CallLog)}");
+        // The replaced target must go through the recycle bin (undoable),
+        // never a permanent delete.
+        Assert.Contains($"Recycle:{DstA}", bin.CallLog);
+        Assert.DoesNotContain($"DeleteFile:{DstA}", fs.CallLog);
+        Assert.Contains($"MoveEntry:{SrcA}->{DstA}", fs.CallLog);
+        Assert.Equal(new byte[] { 1 }, fs.Files[DstA]);
+        Assert.False(fs.Files.ContainsKey(SrcA));
+    }
+
+    [Fact]
+    public void MoveMany_ReplaceConflict_UndoRestoresBothSides() {
+        var (batch, fs, _, undo, _) = Setup();
+        fs.Files[SrcA] = new byte[] { 1 };
+        fs.Directories.Add(DstFolder);
+        fs.Files[DstA] = new byte[] { 9 };
+        var resolver = new FakeConflictResolver(batchOverride: ConflictResolution.Replace);
+
+        batch.MoveMany(new[] { SrcA }, DstFolder, resolver);
+        var undone = undo.Undo();
+
+        // Undo runs the composite in reverse: move a.txt back to src, then
+        // restore the replaced target from the bin — full original state.
+        Assert.NotNull(undone);
+        Assert.Equal(new byte[] { 1 }, fs.Files[SrcA]);
+        Assert.Equal(new byte[] { 9 }, fs.Files[DstA]);
+    }
+
+
+    // --- System-path guard ----------------------------------------------
+
+    [Fact]
+    public async Task DeleteManyAsync_ProtectedSystemPath_FailsWithoutTouchingAnything() {
+        var (batch, fs, bin, undo, _) = Setup();
+        string protectedPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.Windows), "notepad.exe");
+        fs.Files[RootA] = new byte[] { 1 };
+
+        var results = await batch.DeleteManyAsync(new[] { protectedPath, RootA }, permanent: false, CancellationToken.None);
+
+        Assert.Equal(DeleteStatus.Failed, results[0].Status);
+        Assert.IsType<IOException>(results[0].Error);
+        Assert.DoesNotContain($"Recycle:{protectedPath}", bin.CallLog);
+        // The unprotected item in the same batch still goes through.
+        Assert.Equal(DeleteStatus.Ok, results[1].Status);
+        Assert.Equal(1, undo.Depth);
+    }
+
+    [Fact]
+    public void MoveMany_ProtectedSource_FailsThatItem() {
+        var (batch, fs, _, _, _) = Setup();
+        string protectedSrc = Environment.GetFolderPath(Environment.SpecialFolder.System);
+        fs.Directories.Add(protectedSrc);
+        fs.Directories.Add(DstFolder);
+
+        var results = batch.MoveMany(new[] { protectedSrc }, DstFolder, new FakeConflictResolver());
+
+        Assert.Equal(BatchItemStatus.Failed, results[0].Status);
+        Assert.IsType<IOException>(results[0].Error);
+        Assert.DoesNotContain(fs.CallLog, c => c.StartsWith("MoveEntry"));
     }
 
 

@@ -29,7 +29,10 @@
       "Bash(git -C /d/Dev/lekta/Wander ls-files publish)",
       "Bash(git -C /d/Dev/lekta/Wander ls-files)",
       "PowerShell(cmd /c \"tools\\\\check.bat\")",
-      "PowerShell(cmd /c \"tools\\\\check.bat format\")"
+      "PowerShell(cmd /c \"tools\\\\check.bat format\")",
+      "PowerShell(\\(Get-Content tests\\\\Wander.Core.Tests\\\\SystemPathGuardTests.cs -Raw\\) -replace 'WindowsDir\\(?=[,.\\\\\\)\\\\s]\\)','_windowsDir' -replace '\\(?<!_\\)ProgramFiles\\(?=[,.\\\\\\)\\\\s]\\)','_programFiles' -replace '\\(?<!_\\)UserProfile\\(?=[,.\\\\\\)\\\\s]\\)','_userProfile' | Set-Content tests\\\\Wander.Core.Tests\\\\SystemPathGuardTests.cs -Encoding utf8)",
+      "PowerShell(cmd /c \"tools\\\\check.bat run\")",
+      "PowerShell($log = Get-ChildItem \"$env:LOCALAPPDATA\\\\Wander\\\\logs\" | Sort-Object LastWriteTime -Descending | Select-Object -First 1; Get-Content $log.FullName -TotalCount 4)"
     ]
   }
 }

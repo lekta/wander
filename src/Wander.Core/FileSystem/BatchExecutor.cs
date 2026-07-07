@@ -110,6 +110,7 @@ public sealed class BatchExecutor {
 
         var results = new List<BatchItemResult>(pairs.Count);
         var undoSteps = new List<IUndoableAction>(pairs.Count);
+        int appliedCount = 0;
 
         foreach (var (src, originalDest) in pairs) {
             // The progress dialog's Cancel cancels this token; already-applied
@@ -133,7 +134,7 @@ public sealed class BatchExecutor {
                     foreach (var (rsrc, rdest) in pairs.Skip(results.Count)) {
                         results.Add(new BatchItemResult(rsrc, rdest, BatchItemStatus.Cancelled, null));
                     }
-                    PushComposite(undoSteps, isMove);
+                    PushComposite(undoSteps, isMove, appliedCount);
                     return results;
                 case ConflictResolution.Skip:
                     results.Add(new BatchItemResult(src, dest, BatchItemStatus.Skipped, null));
@@ -151,11 +152,32 @@ public sealed class BatchExecutor {
             }
 
             try {
-                ApplyOne(src, dest, isMove, allowOverwrite: choice == ConflictResolution.Replace);
+                // System-path guard: moving a protected path away is as
+                // destructive as deleting it; replacing a protected target
+                // would recycle a system file.
+                if (isMove && SystemPathGuard.IsProtected(src, out string srcReason)) {
+                    throw new IOException(srcReason);
+                }
+                if (choice == ConflictResolution.Replace && SystemPathGuard.IsProtected(dest, out string destReason)) {
+                    throw new IOException(destReason);
+                }
+
+                if (choice == ConflictResolution.Replace) {
+                    // "Everything undoable" pillar: the replaced target goes
+                    // to the recycle bin, never into oblivion. Its restore
+                    // step lands in the composite before the main action, so
+                    // undo (which runs in reverse) first un-moves/un-copies,
+                    // then brings the old target back. If the op below fails
+                    // the target is still recoverable via the same step.
+                    var replaced = _bin.Send(dest);
+                    undoSteps.Add(new DeleteAction(_bin, replaced));
+                }
+                ApplyOne(src, dest, isMove);
                 results.Add(new BatchItemResult(src, dest, statusKind, null));
                 undoSteps.Add(isMove
                     ? new MoveAction(_fs, src, dest)
                     : new CreateAction(_bin, dest));
+                appliedCount++;
                 _log.Info($"{(isMove ? "Move" : "Copy")}: {src} -> {dest} [{statusKind}]");
             } catch (Exception ex) {
                 results.Add(new BatchItemResult(src, dest, BatchItemStatus.Failed, ex));
@@ -165,7 +187,7 @@ public sealed class BatchExecutor {
             progress?.Advance(src);
         }
 
-        PushComposite(undoSteps, isMove);
+        PushComposite(undoSteps, isMove, appliedCount);
         return results;
     }
 
@@ -183,6 +205,10 @@ public sealed class BatchExecutor {
             }
 
             try {
+                if (SystemPathGuard.IsProtected(path, out string guardReason)) {
+                    throw new IOException(guardReason);
+                }
+
                 if (permanent) {
                     if (_fs.DirectoryExists(path)) {
                         _fs.DeleteDirectory(path, recursive: true);
@@ -212,41 +238,39 @@ public sealed class BatchExecutor {
             // Ctrl+Z past it and think it worked.
             _undo.Clear();
         } else {
-            PushComposite(undoSteps, isMove: false, verbOverride: "delete");
+            PushComposite(undoSteps, isMove: false, undoSteps.Count, verbOverride: "delete");
         }
 
         return results;
     }
 
-    private void PushComposite(IReadOnlyList<IUndoableAction> steps, bool isMove, string? verbOverride = null) {
+    private void PushComposite(IReadOnlyList<IUndoableAction> steps, bool isMove, int itemCount, string? verbOverride = null) {
         if (steps.Count == 0) {
             return;
         }
         string verb = verbOverride ?? (isMove ? "move" : "copy");
-        string desc = steps.Count == 1
-            ? steps[0].Description
-            : $"{verb} of {steps.Count} items";
+        // The user thinks in items, not undo steps (a Replace contributes two
+        // steps: restore-target + un-move); describe single items by their
+        // main — always last — action.
+        string desc = itemCount == 1
+            ? steps[^1].Description
+            : $"{verb} of {itemCount} items";
         _undo.Push(steps.Count == 1 ? steps[0] : new CompositeAction(desc, steps));
     }
 
-    private void ApplyOne(string src, string dest, bool isMove, bool allowOverwrite) {
+    private void ApplyOne(string src, string dest, bool isMove) {
+        // A Replace conflict never reaches here with the target still in
+        // place — ApplyBatch recycles it first — so plain no-overwrite
+        // semantics are enough for both branches.
         if (isMove) {
-            if (allowOverwrite) {
-                // .NET's Move doesn't support overwrite-for-folders; clear target first.
-                if (_fs.FileExists(dest)) {
-                    _fs.DeleteFile(dest);
-                } else if (_fs.DirectoryExists(dest)) {
-                    _fs.DeleteDirectory(dest, recursive: true);
-                }
-            }
             _fs.MoveEntry(src, dest);
             return;
         }
 
         if (_fs.DirectoryExists(src)) {
-            _fs.CopyDirectory(src, dest, overwrite: allowOverwrite);
+            _fs.CopyDirectory(src, dest, overwrite: false);
         } else {
-            _fs.CopyFile(src, dest, overwrite: allowOverwrite);
+            _fs.CopyFile(src, dest, overwrite: false);
         }
     }
 

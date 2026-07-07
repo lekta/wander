@@ -15,14 +15,23 @@ public sealed class FileLogger : ILogger, ILogFile, IDisposable {
 
 
     public FileLogger() {
-        string folder = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Wander", "logs");
-        Directory.CreateDirectory(folder);
+        // Never throw: the logger is constructed first in the bootstrapper,
+        // and a failure here (locked file, read-only profile, two instances
+        // started in the same second) must not prevent app startup. PID in
+        // the name keeps concurrent instances from fighting over one file.
+        try {
+            string folder = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Wander", "logs");
+            Directory.CreateDirectory(folder);
 
-        string fileName = $"session-{DateTime.Now:yyyyMMdd-HHmmss}.log";
-        FilePath = Path.Combine(folder, fileName);
-        _writer = new StreamWriter(FilePath, append: false) { AutoFlush = true };
+            string fileName = $"session-{DateTime.Now:yyyyMMdd-HHmmss}-{Environment.ProcessId}.log";
+            FilePath = Path.Combine(folder, fileName);
+            _writer = new StreamWriter(FilePath, append: false) { AutoFlush = true };
+        } catch {
+            FilePath = "";
+            _writer = StreamWriter.Null;
+        }
     }
 
 

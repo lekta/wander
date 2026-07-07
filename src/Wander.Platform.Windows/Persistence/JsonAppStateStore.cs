@@ -40,8 +40,13 @@ public sealed class JsonAppStateStore : IAppStateStore {
 
     public void Save(AppState state) {
         try {
+            // Write-then-rename so a crash mid-write can't leave a truncated
+            // state.json — the old file stays intact until the new one is
+            // fully on disk.
             string json = JsonSerializer.Serialize(state, _options);
-            File.WriteAllText(_filePath, json);
+            string tmpPath = _filePath + ".tmp";
+            File.WriteAllText(tmpPath, json);
+            File.Move(tmpPath, _filePath, overwrite: true);
         } catch {
             // best-effort: failure to persist must not crash the app
         }

@@ -68,6 +68,7 @@ public sealed class FileOperationService {
     }
 
     public void Move(string source, string destination) {
+        GuardDestructive(source);
         using var _ = _undo.BeginOperation();
         if (!_fs.FileExists(source) && !_fs.DirectoryExists(source)) {
             throw new FileNotFoundException("Source not found", source);
@@ -79,6 +80,7 @@ public sealed class FileOperationService {
 
     /// <summary>Sends the item to the recycle bin so it remains restorable via Ctrl+Z.</summary>
     public void Delete(string path) {
+        GuardDestructive(path);
         using var _ = _undo.BeginOperation();
         var handle = _bin.Send(path);
         _log.Info($"Delete (recycle): {path}");
@@ -91,6 +93,7 @@ public sealed class FileOperationService {
     /// past a permanent action and think it worked.
     /// </summary>
     public void PermanentDelete(string path) {
+        GuardDestructive(path);
         using var _ = _undo.BeginOperation();
         if (_fs.DirectoryExists(path)) {
             _fs.DeleteDirectory(path, recursive: true);
@@ -107,6 +110,7 @@ public sealed class FileOperationService {
         if (string.IsNullOrWhiteSpace(newName)) {
             throw new ArgumentException("New name cannot be empty", nameof(newName));
         }
+        GuardDestructive(path);
         using var _ = _undo.BeginOperation();
         string oldName = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
         _fs.Rename(path, newName);
@@ -122,6 +126,13 @@ public sealed class FileOperationService {
         _fs.CreateDirectory(path);
         _log.Info($"CreateFolder: {path}");
         _undo.Push(new CreateAction(_bin, path));
+    }
+
+
+    private static void GuardDestructive(string path) {
+        if (SystemPathGuard.IsProtected(path, out string reason)) {
+            throw new IOException(reason);
+        }
     }
 
 

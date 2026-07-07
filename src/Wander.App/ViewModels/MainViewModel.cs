@@ -122,6 +122,7 @@ public sealed class MainViewModel : ObservableObject {
         ToggleGroupFoldersFirstCommand = new RelayCommand(_ => Settings.GroupFoldersFirst = !Settings.GroupFoldersFirst);
         ExitCommand = new RelayCommand(_ => Application.Current?.Shutdown());
         OptionsCommand = new RelayCommand(_ => OpenSettingsDialog());
+        ReportIssueCommand = new RelayCommand(_ => ReportIssue());
         PropertiesCommand = new RelayCommand(_ => ShowProperties(), _ => _selectedEntry is not null);
         TogglePreviewCommand = new RelayCommand(_ => IsPreviewVisible = !IsPreviewVisible);
         UndoCommand = new RelayCommand(_ => UndoLast(), _ => _undo.CanUndo);
@@ -315,6 +316,7 @@ public sealed class MainViewModel : ObservableObject {
     public RelayCommand ToggleGroupFoldersFirstCommand { get; }
     public RelayCommand ExitCommand { get; }
     public RelayCommand OptionsCommand { get; }
+    public RelayCommand ReportIssueCommand { get; }
     public RelayCommand PropertiesCommand { get; }
     public RelayCommand TogglePreviewCommand { get; }
     public RelayCommand UndoCommand { get; }
@@ -1075,6 +1077,17 @@ public sealed class MainViewModel : ObservableObject {
             Owner = Application.Current?.MainWindow,
         };
         dlg.ShowDialog();
+    }
+
+    private void ReportIssue() {
+        // GitHub's template chooser lets the user pick "Bug report" or
+        // "Feature request"; nothing is pre-filled, so no session data is
+        // involved — unlike the crash path, which bundles diagnostics.
+        try {
+            _shell.Open(Wander.App.Diagnostics.CrashReporter.IssueChooserUrl);
+        } catch (Exception ex) {
+            Status = $"Could not open the browser: {ex.Message}";
+        }
     }
 
     private void OpenLogFile() {
