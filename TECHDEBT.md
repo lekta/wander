@@ -60,12 +60,14 @@
   если между Delete и Undo пользователь создал файл с тем же именем,
   Shell сейчас молча допишет «(1)» к восстанавливаемому. Доработать
   обработку, когда понадобится (для v1 этого кейса не должно случаться часто).
-- **ShellRecycleBin — STA + COM RCW lifetime** — Shell.Application
-  COM-объекты создаются на UI-потоке (STA, всё ОК пока операции
-  синхронные). При уходе в async для Restore нужен Dispatcher.Invoke
-  или собственный STA-поток. И не освобождаем RCW через
-  `Marshal.ReleaseComObject` — для коротких операций приемлемо, но
-  для долгоживущей сессии стоит добавить.
+- **ShellRecycleBin — STA + COM RCW lifetime** — `Send` (SHFileOperation)
+  уже зовётся с thread-pool потока через DeleteManyAsync — на практике
+  работает, но shell-API формально предпочитает STA; следить. `Restore`
+  (Shell.Application COM) пока зовётся только с UI-потока (STA, ОК) —
+  при уходе undo в async нужен Dispatcher.Invoke или собственный
+  STA-поток. И не освобождаем RCW через `Marshal.ReleaseComObject` —
+  для коротких операций приемлемо, но для долгоживущей сессии стоит
+  добавить.
 - **FileOperationService — async overloads (частично сделано)** —
   батч-операции (CopyManyAsync / MoveManyAsync / DeleteManyAsync) с
   репортингом в OperationTracker уже есть, VM использует их.
@@ -84,12 +86,13 @@
 - **Drag&drop UX** — нет визуального drop-indicator'а на TreeView/списках
   (подсветка узла под курсором), используется только системный курсор
   Copy/Move. Драг-ghost тоже системный по умолчанию.
-- **Долгие файловые операции — cancel + per-file прогресс** — batch-операции
-  теперь async и репортят прогресс в OperationTracker (см. прогресс-бар
-  в статусе). Из коробки нет UI для отмены идущей операции (CancellationToken
-  пробрасывается, но кнопки нет), и прогресс считается по элементам верхнего
+- **Долгие файловые операции — per-file/per-byte прогресс** — Cancel в
+  ProgressDialog теперь реально останавливает copy/move/delete между
+  элементами, но прогресс по-прежнему считается по элементам верхнего
   уровня, не по байтам. Для перекидывания одной 5-Гб папки бар надолго
   встанет на 0% — рендерить per-file/per-byte прогресс отдельной задачей.
+  Отмена тоже гранулярна по top-level элементам: начатое копирование
+  большой папки доработает до конца, прервать «внутри» нельзя.
 - **PromptDialog (Rename)** — не выделяет имя без расширения, нет валидации
   недопустимых символов в имени файла, нет немедленного rename-in-place
   в строке списка (как в Explorer по F2).
@@ -127,6 +130,38 @@
   тумбнэйлов изображений/видео). В папке с 10К+ файлов это N×~30 KB
   PNG в памяти сессии. На v1 терпимо, но стоит добавить LRU bound
   (например, 500 записей) когда станет заметно.
+- **Replace при copy/move уничтожает целевой файл безвозвратно** —
+  `BatchExecutor.ApplyOne` при выборе Replace делает `DeleteFile`/
+  `DeleteDirectory(recursive)` мимо корзины, затем move. Противоречит
+  столпу «всё откатываемо»: Ctrl+Z вернёт source на место, но затёртый
+  target потерян навсегда; при падении move после delete теряем target,
+  не получив source. Вариант: отправлять target в корзину (`IRecycleBin.Send`)
+  и класть `DeleteAction` в composite перед `MoveAction` — тогда undo
+  восстанавливает обе стороны. Решение продуктовое (Explorer в корзину
+  НЕ отправляет) — см. обсуждение в сессии 2026-07-06.
+- **MoveEntry cross-volume fallback — нет уборки при частичном сбое** —
+  copy+delete: если рекурсивная копия упала на середине, частичная копия
+  остаётся в destination; если копия прошла, а delete source не удался
+  (залоченный файл), получаем дубликат данных. Рассмотреть транзакционную
+  уборку/докат и внятное сообщение пользователю.
+- **Превью HTML: JS включён** — WebView2 теперь не пускает превью в сеть
+  (NavigationStarting фильтрует не-file/about/data) и режет попапы, но
+  скрипты внутри локального .html всё ещё исполняются (IsScriptEnabled
+  глобальный, а встроенный PDF-viewer без JS не работает). Вариант:
+  переключать `IsScriptEnabled` per-navigation (выкл для .html/.htm,
+  вкл для .pdf) или рендерить HTML через NavigateToString без скриптов.
+- **Логи не ротируются** — `%LOCALAPPDATA%\Wander\logs` растёт бесконечно
+  (файл на каждую сессию). Добавить retention: чистить старше N дней или
+  оставлять последние N файлов при старте FileLogger.
+- **PreviewController.CountAndSum — идёт по junctions** —
+  `Directory.EnumerateFiles(p, "*", AllDirectories)` с legacy-настройками
+  следует reparse-points: цикл из junction = бесконечный подсчёт до смены
+  выделения, а размеры задваиваются. Перейти на `EnumerationOptions`
+  с `AttributesToSkip = ReparsePoint` + `IgnoreInaccessible = true`.
+- **Recycle длинных путей (>MAX_PATH)** — SHFileOperation не понимает
+  long paths, longPathAware-манифест помогает только System.IO. Удаление
+  в корзину для очень глубоких путей упадёт с IOException. Мигрировать
+  на COM `IFileOperation` (он же снимет locale-зависимость Restore).
 - **SystemIconProvider — синхронный IShellItemImageFactory.GetImage** —
   вызывается из `IconConverter` на UI-потоке при биндинге каждой
   ячейки WrapPanel. Для уже закэшированных файлов мгновенно, но первое

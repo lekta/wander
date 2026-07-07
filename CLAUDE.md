@@ -14,6 +14,18 @@
 Архитектура и структура проектов описаны в разделах «Структура проектов» и
 «Архитектурные правила» в [README.md](README.md).
 
+## Столпы проекта
+
+1. **UX.** Смысл всего проекта — сделать проводник лучше встроенного: убрать
+   лишнее (планшетоориентированные элементы Win11, навязчивые ссылки на
+   OneDrive и 3д-объекты), починить баги Win11 Explorer (самосворачивающиеся ветки дерева,
+   тормоза, потеря фокуса после операций), добавить удобств (навигация через отдельные
+   поддеревья, детальный просмотр информации, чтение множеста форматов).
+2. **Надёжность.** Любая деструктивная операция (удаление, перемещение,
+   перезапись, переименование системных путей) сопровождается диалогом
+   подтверждения с **Cancel по-умолчанию**. Случайно снести системную папку
+   не получится.
+
 ## Кодстиль
 
 Зафиксирован в [`.editorconfig`](.editorconfig). `dotnet format` подхватит
@@ -45,3 +57,46 @@
 - Явная борьба с известными багами Win11 Explorer — стабильное дерево без
   самосворачивания, асинхронная загрузка больших каталогов, сохранение
   выделения после операций.
+
+
+## Структура проектов
+
+```
+Wander.slnx
+├── src
+│   ├── Wander.Core               net10.0          — POCO, интерфейсы, чистая логика
+│   │   ├── FileSystem            IFileSystem, FileSystemEntry, FileOperationService, EntryKind
+│   │   ├── Navigation            NavigationService
+│   │   ├── Shell                 IShellLauncher
+│   │   └── ServiceLocator.cs     простой статический локатор
+│   │
+│   ├── Wander.Platform.Windows   net10.0-windows  — реализации интерфейсов Core
+│   │   ├── FileSystem            SystemIOFileSystem (System.IO)
+│   │   ├── Shell                 ShellLauncher (Process.Start)
+│   │   └── PlatformBootstrapper.cs
+│   │
+│   └── Wander.App                net10.0-windows  — WPF UI (тонкий слой)
+│       ├── ViewModels            MainViewModel, TreeNodeViewModel, ObservableObject
+│       ├── MainWindow.xaml(.cs)  главное окно
+│       ├── App.xaml(.cs)         регистрация платформенных реализаций
+│       ├── RelayCommand.cs
+│       └── PromptDialog.cs
+│
+└── tests
+    └── Wander.Core.Tests         xUnit, тесты только для Core
+        ├── Fakes/FakeFileSystem.cs
+        ├── NavigationServiceTests.cs
+        ├── FileOperationServiceTests.cs
+        └── ServiceLocatorTests.cs
+```
+
+### Архитектурные правила
+
+- `Wander.Core` не зависит от Windows и от UI. Никаких `using System.Windows.*`,
+  никаких COM/PInvoke.
+- Любая платформенная логика (Windows Shell, COM, нетривиальный System.IO)
+  живёт в `Wander.Platform.Windows`.
+- WPF — отвинчиваемый слой: ViewModel'и дёргают сервисы Core через
+  `ServiceLocator`, никакой WPF-специфики в Core.
+- Точка композиции — `App.OnStartup` → `PlatformBootstrapper.RegisterDefaults()`.
+- Тесты используют фейковые реализации интерфейсов Core (см. `Fakes/`).
