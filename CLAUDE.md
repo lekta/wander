@@ -18,6 +18,8 @@
 | **Отложенные конкретные фичи** | [BACKLOG.md](docs/BACKLOG.md) |
 | **Мелкая шероховатость по пути, известные углы** | [TECHDEBT.md](docs/TECHDEBT.md) |
 | **Стратегические направления продукта** | Roadmap ниже |
+| **Как выпустить версию, где живут номера версий** | [RELEASING.md](docs/RELEASING.md) |
+| **Что умеет приложение, хоткеи** | [GUIDE.md](docs/GUIDE.md) |
 | **История релизов** | [CHANGELOG.md](docs/CHANGELOG.md) |
 | **Описание для пользователя, сборка, лицензия** | [README.md](README.md) |
 | **Правила контрибьюта, политика безопасности** | [CONTRIBUTING.md](docs/CONTRIBUTING.md), [SECURITY.md](docs/SECURITY.md) |
@@ -105,6 +107,32 @@ Exit code 0 — всё зелено; иначе код первого упавш
 `SearchControllerTests.Reset_ClearsQuery_WithoutFiringFilteredAgain` —
 **нестабилен** (гонка, а не регрессия): в полном прогоне обычно зелёный, в
 одиночном падает всегда. Разбор и план починки — в [TECHDEBT.md](docs/TECHDEBT.md).
+
+---
+
+## Git — только чтение
+
+**Claude выполняет исключительно читающие и проверяющие git-команды.** Стейдж,
+коммит и вообще всё мутирующее делает человек.
+
+| Можно | Нельзя без явной просьбы |
+|---|---|
+| `git status`, `git log`, `git diff`, `git show` | `git add`, `git stage` |
+| `git ls-files`, `git ls-tree`, `git blame` | `git commit`, `git revert`, `git reset` |
+| `git check-ignore`, `git tag` (список) | `git tag <имя>`, `git push`, `git pull` |
+| | `git mv`, `git rm`, `git checkout`, `git restore` |
+| | `git branch`, `git merge`, `git rebase`, `git stash` |
+
+Это относится и к командам, которые мутируют индекс «заодно»: `git mv` вместо
+переименования файла, `git rm --cached` вместо правки `.gitignore`. Нужно
+переместить файл — обычное перемещение на файловой системе, гит сам увидит
+rename по содержимому.
+
+Результат работы оставляется в рабочем дереве незастейдженным, а в отчёте
+перечисляется, что изменилось — решение, что из этого коммитить, за человеком.
+
+То же касается скриптов в `tools\`: они правят файлы и печатают git-команды
+как следующий шаг, но не выполняют их (см. [RELEASING.md](docs/RELEASING.md)).
 
 ---
 
