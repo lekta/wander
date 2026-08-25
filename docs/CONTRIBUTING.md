@@ -13,10 +13,10 @@
    tools\check.bat
    ```
    Она собирает решение, проверяет форматирование (`dotnet format`) и гоняет
-   тесты. Кодстиль зафиксирован в [`.editorconfig`](.editorconfig).
-4. Держись архитектурных правил из [README](README.md#архитектурные-правила):
-   `Wander.Core` не зависит от Windows и UI, платформенное — в
-   `Wander.Platform.Windows`.
+   тесты. Кодстиль зафиксирован в [`.editorconfig`](../.editorconfig).
+4. Держись архитектурных правил из
+   [ARCHITECTURE.md](ARCHITECTURE.md): `Wander.Core` не зависит от
+   Windows и UI, платформенное — в `Wander.Platform.Windows`.
 
 ## Права на вклад (Contributor License Agreement)
 

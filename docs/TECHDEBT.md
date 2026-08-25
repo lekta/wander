@@ -12,6 +12,22 @@
 
 ## Открыто
 
+- **`SearchController` — `FilteredChanged` может выстрелить после `Reset()`**
+  (найдено 2026-08-25). `ApplyAsync` заканчивается на
+  `if (token.IsCancellationRequested) return; FilteredChanged?.Invoke(filtered);` —
+  это check-then-act: `Reset()` может позвать `Cancel()` ровно между проверкой
+  и `Invoke`, и проекция всё равно опубликуется. `Reset` — это путь «сейчас
+  сменится папка, не стрелять», так что в UI это стухший фильтр от предыдущей
+  папки, мелькнувший в новой. Плюс ранний выход при пустом query
+  (`FilteredChanged?.Invoke(source)`) токен не проверяет вообще.
+  Тест `SearchControllerTests.Reset_ClearsQuery_WithoutFiringFilteredAgain`
+  этот кейс формально покрывает, но **недетерминированно**: он молча полагается
+  на то, что фоновая `Task.Run` не успела завершиться. В одиночном прогоне
+  (`--filter`) падает 8/8, в полном прогоне обычно проходит — там фон
+  притормаживает от конкуренции за CPU. Чинить вместе: сделать публикацию
+  атомарной относительно отмены (например, сверять «поколение» запроса вместо
+  токена) и переписать тест на детерминированную синхронизацию вместо гонки.
+
 - **state.json schema break — bookmarks panel-awareness** — `AppState.LastPath`
   стал `NavigationStop?` (вместо `string?`), `AppState.ExpandedPaths` стал
   `IReadOnlyList<NavigationStop>` (вместо `IReadOnlyList<string>`). Поле

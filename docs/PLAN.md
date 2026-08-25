@@ -7,7 +7,8 @@
 
 - [`TECHDEBT.md`](TECHDEBT.md) — мелкая шероховатость (дальние чистки).
 - [`BACKLOG.md`](BACKLOG.md) — конкретные второстепенные задачи (полезное, но не сейчас).
-- [`README.md`](README.md) Roadmap — стратегические направления продукта.
+- [`CLAUDE.md`](../CLAUDE.md) Roadmap — стратегические направления продукта.
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) — как устроен код и механизмы.
 
 ---
 
@@ -40,7 +41,7 @@
   для отображения. См. секцию E ниже.
 - ProgressDialog (E2) и тест на UndoService busy-guard — **остаются**.
 
-### Спринт 3 — техническая чистка #1 + добить P1 (текущий фокус)
+### ~~Спринт 3 — техническая чистка #1 + добить P1~~ — **закрыт**
 1. ~~**Технические чистки #1**~~ — **сделано**. См. секцию ниже: `BatchExecutor`,
    `PreviewController`, `SelectionController`, `WindowGeometry` подrecord.
 2. ~~**E2 ProgressDialog**~~ — **сделано (базовый)**. Modal-окно
@@ -52,7 +53,12 @@
    batch-операция сама раскладывает Cancelled-результаты, диалог
    авто-закрывается при завершении задачи через `Task.ContinueWith` +
    `Dispatcher.BeginInvoke`. Без Hide-в-статус-бар — это P2-доработка.
-3. **A5 Sort menu** + **A6 .lnk-папки рядом с папками**.
+3. ~~**A5 Sort menu** + **A6 .lnk-папки рядом с папками**~~ — **сделано**.
+   View-меню получило Sort-подменю (Name / Modified / Size / Type +
+   Ascending + Group folders first) через `SetSortKeyCommand` /
+   `ToggleSortAscendingCommand`, состояние в `AppSettings.SortKey` /
+   `SortAscending` / `GroupFoldersFirst`, применение — через
+   `EntryComparers`.
 4. ~~**#4 "Cannot drop here" не пугает внутри окна**~~ — **сделано**.
    `UpdatePreviewForCurrentTarget` теперь прячет `DragPreviewWindow`,
    когда `Effects=None` и нет конкретной `SelfDropReason` —
@@ -87,30 +93,31 @@
    «Документы», «Изображения» — через `IKnownFolders` + `SHGetKnownFolderPath`
    (FOLDERID_Downloads / Documents / Pictures). Каждая — отдельный чекбокс
    в категории «Закладки». Корзина — отдельный шаг ниже.
-10. **D5. Корзина внутри Wander (shell-namespace)** — нужно ввести
+10. ~~**D5. Корзина внутри Wander (shell-namespace)**~~ — **шаги 1-2 сделаны**
+    (viewer готов; Restore / Delete внутри корзины — шаг 3, см. спринт 4). Было:
     `IShellNamespace` в Core: enumerate shell items под `FOLDERID_RecycleBinFolder`,
     маппинг shell-item → `FileSystemEntry`-аналог, операции Restore /
     Empty / Delete-permanent через `IFileOperation` (Vista shell). После —
     добавить «Корзину» как третий дефолт в bookmarks + третий чекбокс в
     настройках. Влечёт shell-интеграцию, отложили намеренно.
 
-### Спринт 4 (текущий фокус P1 → P2)
+### Спринт 4 (текущий фокус — P2)
 
-Открытые P1 (доделать спринт 3):
+Закрытые P1 из спринта 3:
 
-1. **A5 Sort menu (UI)** — модель уже готова (A6 закрыт). Только меню в View
-   + сохранение в `AppSettings.SortKey` / `SortAscending` / `GroupFoldersFirst`,
-   применение через comparer в `Enumerate` (сейчас захардкожен natural-sort).
-2. **D5 шаг 2 — Корзина в bookmarks** — фундамент `IShellNamespace` +
-   `WindowsShellNamespace` готов. Нужен bookmark-узел + чекбокс +
-   VM-роутинг `shell:`-путей через `IShellNamespace`.
-3. **Чистка #2 — добить**: либо `ClipboardController`, либо явно решить
-   что он остаётся в MainVM. Session-подrecord в AppState. MainWindow
-   behaviors.
+1. ~~**A5 Sort menu (UI)**~~ — **сделано**, см. спринт 3 п.3.
+2. ~~**D5 шаг 2 — Корзина в bookmarks**~~ — **сделано**. Bookmark-узел
+   «Корзина» (`ShellPaths.RecycleBin`), чекбокс
+   `AppSettings.ShowBookmarkRecycleBin`, роутинг `shell:`-путей через
+   `NavigationController` → `IShellNamespace`.
+3. ~~**Чистка #2**~~ — **сделано**. `ClipboardController` и
+   `SearchController` уехали в Core, `SessionState` выделен подrecord'ом
+   в `AppState`.
 
-P2 после:
+Открытые P2:
 
-4. **A3 Inline rename**.
+4. **A3 Inline rename** — сейчас только `PromptDialog`; нет rename-in-place
+   в строке списка (как в Explorer по F2).
 5. **A7 Thumbnails картинок** + **A8 Folder content preview** (требуют E3).
 6. **F2 SettingsDialog: расширить** (Theme, Behavior, Advanced) + **F3 Reset**.
 7. **B2** — content для папки в preview (после согласования вида).
@@ -585,7 +592,9 @@ Core готов, нужно дотянуть в UI / VM.
 
 ## Связанные файлы
 
+- [CLAUDE.md](../CLAUDE.md) — точка входа, навигация по всем докам, правила.
+- [ARCHITECTURE.md](ARCHITECTURE.md) — как устроен код и механизмы.
 - [TECHDEBT.md](TECHDEBT.md) — мелкие чистки.
 - [BACKLOG.md](BACKLOG.md) — отложенные задачи.
-- [README.md](README.md) — описание, сборка, roadmap.
-- [.editorconfig](.editorconfig) — codestyle.
+- [README.md](../README.md) — описание для пользователя, сборка, лицензия.
+- [.editorconfig](../.editorconfig) — codestyle.

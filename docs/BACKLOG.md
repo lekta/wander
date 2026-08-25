@@ -5,7 +5,7 @@
 
 - [`TECHDEBT.md`](TECHDEBT.md) — мелкие шероховатости, которые встретили
   по пути и решили не чинить сразу.
-- [`README.md`](README.md) Roadmap — крупные стратегические направления
+- [`CLAUDE.md`](../CLAUDE.md) Roadmap — крупные стратегические направления
   ("тёмная тема", "вкладки").
 
 Сюда идут вещи: **знаем что делать, знаем зачем, но решили не сейчас**.
@@ -14,12 +14,6 @@
 
 ### Файловые операции
 
-- **Shift+Delete (permanent delete)** — отложено до появления корзины по
-  умолчанию и явного предупреждения о невозвратности. Сейчас обычный
-  Delete и так permanent, но через стандартный диалог.
-- **Прогресс долгих операций** — recursive Copy/Move крупной папки идёт
-  синхронно, окно зависает. Нужно: async с `CancellationToken`, прогресс
-  в статусе, кнопка Cancel.
 - **Path too long (>260 без `\\?\`)** — `PathTooLongException`. Включить
   long-path support в манифесте + понятная ошибка как fallback.
 - **Network paths (UNC)** — disconnected share / timeout. Сейчас длинные
@@ -37,4 +31,9 @@
 
 ## Закрыто
 
-(пусто)
+- **Shift+Delete (permanent delete)** — сделано. `KeyBinding` на
+  `PermanentDeleteCommand`, всегда спрашивает подтверждение, затирает
+  undo-стек. Обычный Delete теперь уходит в корзину.
+- **Прогресс долгих операций** — сделано. Async batch через `BatchExecutor`
+  + `OperationTracker`, модальный `ProgressDialog` с кнопкой отмены.
+  Остаётся per-file/per-byte гранулярность — вынесено в TECHDEBT.
