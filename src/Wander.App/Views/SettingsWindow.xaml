@@ -165,6 +165,49 @@
         </DataTemplate>
 
 
+        <!-- Context menu.
+             Two checkbox lists over the same MenuToggleViewModel: what the
+             shell contributes, and what Wander contributes. The first is
+             discovered (it fills in as menus are opened), the second is
+             fixed and comes from ContextMenuCatalog. -->
+        <DataTemplate x:Key="MenuToggleTemplate" DataType="{x:Type vm:MenuToggleViewModel}">
+            <CheckBox Content="{Binding Title}" IsChecked="{Binding IsEnabled}" Margin="0,2,0,2"/>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type vm:ContextMenuSettingsCategory}">
+            <StackPanel>
+                <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
+
+                <CheckBox Content="Показывать пункты сторонних приложений (7-Zip, TortoiseGit…)"
+                          IsChecked="{Binding Owner.ShellExtensionsEnabled}"/>
+                <CheckBox Content="Собирать их в одно подменю «More options»"
+                          IsChecked="{Binding Owner.ShellExtensionsInSubmenu}"
+                          IsEnabled="{Binding Owner.ShellExtensionsEnabled}"/>
+
+                <TextBlock Text="Приложения" FontWeight="SemiBold" Margin="0,14,0,4"/>
+                <ItemsControl ItemsSource="{Binding Owner.ShellExtensionToggles}"
+                              ItemTemplate="{StaticResource MenuToggleTemplate}"
+                              IsEnabled="{Binding Owner.ShellExtensionsEnabled}"/>
+                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,6,0,0">
+                    Список наполняется по мере работы: Wander узнаёт про
+                    расширение только когда шелл сам о нём сообщает — то есть
+                    после первого правого клика в папке, где оно себя
+                    показывает.
+                </TextBlock>
+
+                <TextBlock Text="Пункты Wander" FontWeight="SemiBold" Margin="0,18,0,4"/>
+                <ItemsControl ItemsSource="{Binding Owner.MenuItemToggles}"
+                              ItemTemplate="{StaticResource MenuToggleTemplate}"/>
+                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,6,0,0">
+                    Снятая галочка убирает пункт из меню; хоткей продолжает
+                    работать. Разделители подтягиваются сами — пустых групп
+                    и двойных линий не остаётся. «File» / «View» / «Sort by»
+                    убирают подменю целиком.
+                </TextBlock>
+            </StackPanel>
+        </DataTemplate>
+
+
         <!-- Debug -->
         <DataTemplate DataType="{x:Type vm:DebugSettingsCategory}">
             <StackPanel>

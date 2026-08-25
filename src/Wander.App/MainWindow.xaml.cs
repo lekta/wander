@@ -13,11 +13,13 @@ using ICSharpCode.AvalonEdit.Highlighting;
 using Wander.App.Controls;
 using Wander.App.Converters;
 using Wander.App.DragPreview;
+using Wander.App.Menu;
 using Wander.App.Util;
 using Wander.App.ViewModels;
 using Wander.Core;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
+using Wander.Core.Menu;
 using Wander.Core.Persistence;
 using Wander.Core.Shell;
 // Disambiguate from System.Windows.DragAction (used by QueryContinueDrag).
@@ -154,6 +156,9 @@ public partial class MainWindow : Window {
             vm.PropertyChanged += OnVmPropertyChanged;
             vm.Preview.PropertyChanged += OnPreviewPropertyChanged;
         }
+        // A third-party command can create, rename or delete behind our
+        // back, so a successful one is always followed by a re-listing.
+        _contextMenus = new ContextMenuFactory(BuildMenuBindings(), () => Vm.RefreshCommand.Execute(null));
         ApplyPreviewLayout();
         UpdateCodeEditor();
         // Native-size cap (so small images don't stretch above 100 %) is
@@ -411,6 +416,161 @@ public partial class MainWindow : Window {
         }
 
         Vm.RenameCommand.Execute(input);
+    }
+
+
+    // --- Context menu ---------------------------------------------------
+    // All three list views share one menu. It is assembled per right-click
+    // by ContextMenuBuilder (Core decides the shape) and rendered by
+    // ContextMenuFactory, and it is opened by hand instead of through
+    // ContextMenuService — the contents depend on *what* was clicked, and
+    // the service commits to showing a menu before we can fix the selection.
+
+    private ContextMenuFactory? _contextMenus;
+
+    /// <summary>Set on right-button-down: did the click land on empty space?</summary>
+    private bool _contextIsBackground;
+
+    private void List_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e) {
+        if (sender is not ItemsControl host) {
+            return;
+        }
+
+        var clicked = FindEntryAtSource(e.OriginalSource);
+        _contextIsBackground = clicked is null;
+
+        if (clicked is null) {
+            // Explorer parity: right-clicking empty space drops the
+            // selection and offers the folder's own menu instead.
+            ClearListSelection(host);
+        } else if (!Vm.SelectedEntries.Contains(clicked)) {
+            // Right-clicking outside the selection moves it to the clicked
+            // row; right-clicking inside one keeps the whole multi-selection.
+            SetListSelection(host, new[] { clicked });
+        }
+    }
+
+    private void List_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e) {
+        if (sender is FrameworkElement host) {
+            ShowContextMenu(host, PlacementMode.MousePoint);
+            e.Handled = true;
+        }
+    }
+
+    private void List_PreviewKeyDown(object sender, KeyEventArgs e) {
+        // Shift+F10 arrives as a system key, the dedicated Menu key doesn't.
+        bool menuKey = e.Key == Key.Apps
+            || (e.Key == Key.System && e.SystemKey == Key.F10 && Keyboard.Modifiers == ModifierKeys.Shift);
+        if (!menuKey || sender is not FrameworkElement host) {
+            return;
+        }
+
+        _contextIsBackground = Vm.SelectedEntries.Count == 0;
+        ShowContextMenu(host, PlacementMode.Center);
+        e.Handled = true;
+    }
+
+    private void ShowContextMenu(FrameworkElement host, PlacementMode placement) {
+        if (_contextMenus is null) {
+            return;
+        }
+
+        var vm = Vm;
+        var settings = vm.MenuSettings;
+        var target = new ContextMenuTarget {
+            Selection = _contextIsBackground ? Array.Empty<FileSystemEntry>() : vm.SelectedEntries,
+            FolderPath = vm.CurrentPath,
+            IsBackground = _contextIsBackground,
+            IsReadOnlyLocation = vm.IsCurrentShellNamespace,
+            CanPaste = vm.PasteCommand.CanExecute(null),
+            CanUndo = vm.UndoCommand.CanExecute(null),
+            ViewMode = vm.ViewMode.ToString(),
+            SortKey = vm.Settings.SortKey,
+            SortAscending = vm.Settings.SortAscending,
+            GroupFoldersFirst = vm.Settings.GroupFoldersFirst,
+            IsPreviewVisible = vm.IsPreviewVisible,
+        };
+
+        var session = QueryShellMenu(target, settings);
+        if (session is not null) {
+            // Opening a menu is the only way we ever learn which handlers
+            // are installed, so this is where the settings dialog's
+            // per-extension checkbox list gets its names.
+            vm.Settings.NoteShellExtensions(
+                session.Items.Where(item => !item.IsSeparator).Select(item => item.Header));
+        }
+
+        var model = ContextMenuBuilder.Build(target, settings, session?.Items);
+        if (model.Count == 0) {
+            session?.Dispose();
+
+            return;
+        }
+
+        var menu = _contextMenus.Build(model, session);
+        menu.DataContext = vm;
+        menu.PlacementTarget = host;
+        menu.Placement = placement;
+        menu.IsOpen = true;
+    }
+
+    private static IShellContextMenuSession? QueryShellMenu(ContextMenuTarget target, ContextMenuSettings settings) {
+        if (!settings.ShellExtensionsEnabled
+            || target.IsReadOnlyLocation
+            || string.IsNullOrEmpty(target.FolderPath)
+            || !ServiceLocator.IsRegistered<IShellContextMenu>()) {
+            return null;
+        }
+
+        var paths = target.Selection.Select(entry => entry.FullPath).ToArray();
+
+        return ServiceLocator.Get<IShellContextMenu>().Open(paths, target.FolderPath);
+    }
+
+    /// <summary>
+    /// Maps every built-in menu id onto the command that runs it. Most come
+    /// straight off the ViewModel; Rename is the exception — it needs the
+    /// name prompt, which lives here in the view.
+    /// </summary>
+    private Dictionary<MenuCommandId, MenuBinding> BuildMenuBindings() {
+        var vm = Vm;
+        var rename = new RelayCommand(_ => StartRename(), _ => vm.SelectedEntry is not null);
+
+        return new Dictionary<MenuCommandId, MenuBinding> {
+            [MenuCommandId.Open] = new(vm.OpenCommand),
+            [MenuCommandId.OpenWith] = new(vm.OpenWithCommand),
+            [MenuCommandId.OpenInExplorer] = new(vm.OpenInExplorerCommand),
+            [MenuCommandId.OpenInTerminal] = new(vm.OpenInTerminalCommand),
+
+            [MenuCommandId.Cut] = new(vm.CutCommand),
+            [MenuCommandId.Copy] = new(vm.CopyCommand),
+            [MenuCommandId.Paste] = new(vm.PasteCommand),
+            [MenuCommandId.CopyPath] = new(vm.CopyPathCommand),
+            [MenuCommandId.CopyName] = new(vm.CopyNameCommand),
+            [MenuCommandId.CreateShortcut] = new(vm.CreateShortcutCommand),
+
+            [MenuCommandId.Rename] = new(rename),
+            [MenuCommandId.Delete] = new(vm.DeleteCommand),
+            [MenuCommandId.PermanentDelete] = new(vm.PermanentDeleteCommand),
+            [MenuCommandId.NewFolder] = new(vm.NewFolderCommand),
+
+            [MenuCommandId.ViewDetails] = new(vm.SetViewModeCommand, nameof(ViewMode.Details)),
+            [MenuCommandId.ViewTiles] = new(vm.SetViewModeCommand, nameof(ViewMode.Tiles)),
+            [MenuCommandId.ViewLargeIcons] = new(vm.SetViewModeCommand, nameof(ViewMode.LargeIcons)),
+            [MenuCommandId.TogglePreview] = new(vm.TogglePreviewCommand),
+
+            [MenuCommandId.SortByName] = new(vm.SetSortKeyCommand, nameof(SortKey.Name)),
+            [MenuCommandId.SortByDate] = new(vm.SetSortKeyCommand, nameof(SortKey.ModifiedDate)),
+            [MenuCommandId.SortBySize] = new(vm.SetSortKeyCommand, nameof(SortKey.Size)),
+            [MenuCommandId.SortByType] = new(vm.SetSortKeyCommand, nameof(SortKey.Type)),
+            [MenuCommandId.SortAscending] = new(vm.ToggleSortAscendingCommand),
+            [MenuCommandId.SortFoldersFirst] = new(vm.ToggleGroupFoldersFirstCommand),
+
+            [MenuCommandId.Refresh] = new(vm.RefreshCommand),
+            [MenuCommandId.Undo] = new(vm.UndoCommand),
+            [MenuCommandId.AddBookmark] = new(vm.AddBookmarkCommand),
+            [MenuCommandId.Properties] = new(vm.PropertiesCommand),
+        };
     }
 
 

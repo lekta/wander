@@ -57,6 +57,12 @@ public sealed class BookmarksSettingsCategory : SettingsCategoryViewModel {
 }
 
 
+public sealed class ContextMenuSettingsCategory : SettingsCategoryViewModel {
+    public ContextMenuSettingsCategory(SettingsViewModel owner)
+        : base("Контекстное меню", owner) { }
+}
+
+
 public sealed class DebugSettingsCategory : SettingsCategoryViewModel {
     public DebugSettingsCategory(SettingsViewModel owner)
         : base("Отладка", owner) { }

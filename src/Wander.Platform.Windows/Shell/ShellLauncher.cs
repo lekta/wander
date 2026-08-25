@@ -1,4 +1,6 @@
+using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using Wander.Core.Shell;
 
@@ -14,9 +16,50 @@ public sealed class ShellLauncher : IShellLauncher {
     }
 
     public void ShowProperties(string path) {
+        InvokeVerb("properties", path);
+    }
+
+    public void OpenWith(string path) {
+        // "openas" is the shell's own picker, dialog and "always use this
+        // app" checkbox included — reimplementing it would be strictly worse.
+        InvokeVerb("openas", path);
+    }
+
+    public void RevealInExplorer(string path) {
+        // /select needs the quotes and tolerates a trailing separator badly,
+        // hence the trim.
+        string target = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        Process.Start(new ProcessStartInfo {
+            FileName = "explorer.exe",
+            Arguments = $"/select,\"{target}\"",
+            UseShellExecute = true,
+        });
+    }
+
+    public void OpenTerminal(string folderPath) {
+        // Windows Terminal when it's there, PowerShell when it isn't. wt.exe
+        // is an app-execution alias, so failure surfaces as Win32Exception
+        // rather than as a missing-file check we could do up front.
+        try {
+            Process.Start(new ProcessStartInfo {
+                FileName = "wt.exe",
+                WorkingDirectory = folderPath,
+                UseShellExecute = true,
+            });
+        } catch (Win32Exception) {
+            Process.Start(new ProcessStartInfo {
+                FileName = "powershell.exe",
+                WorkingDirectory = folderPath,
+                UseShellExecute = true,
+            });
+        }
+    }
+
+
+    private static void InvokeVerb(string verb, string path) {
         var info = new SHELLEXECUTEINFO {
             cbSize = Marshal.SizeOf<SHELLEXECUTEINFO>(),
-            lpVerb = "properties",
+            lpVerb = verb,
             lpFile = path,
             nShow = SW_SHOW,
             fMask = SEE_MASK_INVOKEIDLIST,

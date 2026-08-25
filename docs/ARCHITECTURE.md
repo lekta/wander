@@ -17,7 +17,7 @@
 | `Wander.Core` | `net10.0` | Чистая логика и абстракции. Не знает про Windows и про UI. |
 | `Wander.Platform.Windows` | `net10.0-windows` | Реализации интерфейсов Core: Win32, Shell COM, `System.IO`. |
 | `Wander.App` | `net10.0-windows` | WPF UI: окно, ViewModel'и, диалоги, конвертеры. |
-| `Wander.Core.Tests` | `net10.0` | xUnit. Тестирует **только** Core через фейки. 147 тестов. |
+| `Wander.Core.Tests` | `net10.0` | xUnit. Тестирует **только** Core через фейки. 173 теста. |
 
 **Жёсткое правило:** в `Wander.Core` нет `using System.Windows.*`, нет COM,
 нет PInvoke. Если кажется, что нужно — значит нужен новый интерфейс в Core и
@@ -34,10 +34,13 @@ src/
 │   │                   FileSystemEntry, EntryKind, EntryComparers, SortKey
 │   ├── Icons/          IIconProvider, IImageMetadataReader, IconSize, ImageMetadata
 │   ├── Logging/        ILogger, ILogFile, NullLogger
+│   ├── Menu/           ContextMenuBuilder, ContextMenuTarget, ContextMenuSettings,
+│   │                   ContextMenuCatalog, MenuEntry, MenuCommandId
 │   ├── Navigation/     NavigationService, NavigationSource
 │   ├── Operations/     OperationTracker
 │   ├── Persistence/    IAppStateStore, AppState, AppSettings
-│   ├── Shell/          IShellLauncher, IShellNamespace, IShortcutService
+│   ├── Shell/          IShellLauncher, IShellNamespace, IShortcutService,
+│   │                   IShellContextMenu, ShellMenuEntry
 │   ├── Undo/           UndoService, IUndoableAction, UndoableActions
 │   └── ServiceLocator.cs
 │
@@ -47,7 +50,8 @@ src/
 │   ├── Icons/          SystemIconProvider, MetadataExtractorImageReader
 │   ├── Logging/        FileLogger
 │   ├── Persistence/    JsonAppStateStore
-│   ├── Shell/          ShellLauncher, ShellShortcutService, WindowsShellNamespace
+│   ├── Shell/          ShellLauncher, ShellShortcutService, WindowsShellNamespace,
+│   │                   ShellContextMenu, ShellContextMenuInterop, ShellMenuIcons
 │   └── PlatformBootstrapper.cs
 │
 └── Wander.App/
@@ -57,9 +61,11 @@ src/
     ├── Converters/     Icon, EnumEquals, EnumToVisibility, BitmapPixelSize
     ├── Diagnostics/    CrashReporter
     ├── DragPreview/    DragPreviewWindow, DropTargetAdorner, DragAction, NativeMethods
+    ├── Menu/           ContextMenuFactory, MenuBinding
     ├── Util/           SelectionController, SizeFormatter
     ├── ViewModels/     MainViewModel, NavigationController, PreviewController,
-    │                   TreeNodeViewModel, SettingsViewModel, OperationViewModel,
+    │                   TreeNodeViewModel, SettingsViewModel, MenuToggleViewModel,
+    │                   OperationViewModel,
     │                   ObservableObject, ViewMode, PreviewKind, DropEffect
     ├── Views/          SettingsWindow, ProgressDialog
     ├── MainWindow.xaml(.cs)
@@ -83,7 +89,7 @@ src/
    самодостаточен для багрепорта.
 2. Платформенные абстракции: `IFileSystem`, `IKnownFolders`, `IShellLauncher`,
    `IIconProvider`, `IAppStateStore`, `IFileLockInspector`, `IShortcutService`,
-   `IShellNamespace`, `IImageMetadataReader`.
+   `IShellNamespace`, `IShellContextMenu`, `IImageMetadataReader`.
 3. **Общие синглтоны:** `UndoService`, `OperationTracker`, `IRecycleBin`,
    `FileOperationService`. Именно «один на приложение» — иначе undo-стек и
    прогресс расползутся по вызывающим.
@@ -229,6 +235,93 @@ shell-сентинелы: `shell:RecycleBinFolder` уходит через `IShe
 
 ---
 
+## Контекстное меню
+
+Меню списка файлов строится заново на каждый правый клик. Разделение то же,
+что и везде: **что показать** решает Core, **чем нарисовать** — App,
+**откуда взять чужие пункты** — Platform.
+
+```
+правый клик
+     │
+     ├─▶ MainWindow: чинит выделение (клик вне выделения переносит его,
+     │                клик по пустому месту снимает → меню папки)
+     │
+     ├─▶ IShellContextMenu.Open(paths, folder)   ─── Platform.Windows
+     │        │  SHParseDisplayName → IShellFolder
+     │        │  GetUIObjectOf / CreateViewObject → IContextMenu
+     │        │  QueryContextMenu(HMENU) → обход HMENU → ShellMenuEntry[]
+     │        └─ сессия живёт до закрытия меню: id команд валидны
+     │           только внутри неё
+     │
+     ├─▶ ContextMenuBuilder.Build(target, settings, shellItems)  ─── Core
+     │        чистая функция → MenuEntry[]
+     │
+     └─▶ ContextMenuFactory.Build(model, session)  ─── App
+              MenuEntry[] → WPF ContextMenu
+```
+
+**`ContextMenuBuilder`** (Core) — единственное место, где живут правила
+«Rename только на одном элементе», «в корзине ничего деструктивного»,
+«у папки нет Open with». Чистая функция от `ContextMenuTarget` (снапшот
+выделения и состояния вида) и `ContextMenuSettings` — поэтому покрыта
+тестами без всякого UI. Она же схлопывает разделители: группы пишутся
+вместе со своими `---`, а осевшие после скрытия пунктов пустые группы,
+ведущие/двойные/хвостовые линии убираются в `Normalize`.
+
+Два разных меню, а не одно с половиной серых строк:
+
+- **по выделению** — Open / Open with, подменю **File** (весь буфер обмена,
+  `Copy path`, `Copy name`, `Create shortcut`), Rename / Delete /
+  Delete permanently, закладка / Проводник / терминал, пункты расширений,
+  Properties;
+- **по фону** — Paste и New folder первыми (это девять кликов из десяти),
+  подменю View / Sort by, Refresh, путь / закладка / Проводник / терминал,
+  Undo, пункты расширений, Properties папки.
+
+Буфер обмена уехал в подменю намеренно: у `Cut` / `Copy` / `Paste` есть
+хоткеи, а верхний уровень стоит тратить на то, у чего их нет.
+
+**`ShellContextMenu`** (Platform.Windows) читает **классическое** меню
+шелла — то самое, что Win11 прячет под «Показать дополнительные параметры»,
+и куда по-прежнему регистрируются 7-Zip, TortoiseGit, Notepad++, антивирусы.
+Оттуда же бесплатно приезжает системное подменю «Создать» со всеми
+`ShellNew`-шаблонами.
+
+Wander не отдаёт `HMENU` в `TrackPopupMenu`, а обходит его и перерисовывает
+пункты обычными WPF-строками — иначе чужое меню было бы *рядом* с нашим, а не
+*внутри*. Цена этого решения:
+
+- ленивые подменю приходится будить руками — `IContextMenu2::HandleMenuMsg`
+  с `WM_INITMENUPOPUP` перед обходом;
+- owner-drawn строки (текст лежит в `dwItemData` в приватном формате
+  обработчика) прочитать нельзя — они пропускаются и логируются;
+- иконки берутся из `hbmpItem` и конвертируются в PNG (`ShellMenuIcons`),
+  как и всё остальное на границе с Core.
+
+Дубли фильтруются по **каноническому глаголу** (`GetCommandString`,
+`GCS_VERBW`), а не по подписи: подписи локализованы, глаголы — нет. Так из
+чужого меню выпадают `cut` / `copy` / `paste` / `delete` / `rename` /
+`properties` / `link` / `openas` / `copyaspath`, которые Wander рисует сам.
+
+**Расширения выполняются в нашем процессе** — это неизбежная цена их
+поддержки (Explorer делает то же самое). Отсюда три вещи: запрос обёрнут в
+`try/catch` с логом, выключенный `ShellExtensionsEnabled` означает, что
+чужие DLL вообще не грузятся, а сама команда вызывается **после** закрытия
+меню (обработчики любят открывать свои модальные диалоги) и только потом
+сессия диспозится — `IContextMenu` нужен живым до момента вызова.
+
+**Кастомизация** (`AppSettings` → `ContextMenuSettings`): мастер-выключатель
+расширений, чёрный список по имени, сворачивание расширений в одно подменю
+«More options» и список скрытых собственных пунктов. Скрытое хранится как
+«что выключено», по строковым именам `MenuCommandId` — новый пункт в будущем
+релизе появится сам, а переименование enum-члена не воскресит спрятанное
+молча. Имена расширений узнаются только из самого шелла, поэтому
+`KnownShellExtensions` накапливается по мере открытия меню — иначе диалогу
+настроек нечего было бы показать.
+
+---
+
 ## Preview pane
 
 `PreviewController` (App, ~600 строк) — асинхронный конвейер с отменой и
@@ -273,7 +366,10 @@ per-path без ограничения размера — на больших п
 - `Window` — `WindowGeometry` (Left/Top/Width/Height/Maximized).
 - `Settings` — `AppSettings`: `RestoreLastFolder`, `ShowHidden`, `ShowSystem`,
   `ConfirmRecycle`, `SortKey` / `SortAscending` / `GroupFoldersFirst`,
-  геометрия LargeIcons-ячеек, чекбоксы закладок, `ShowDebugMenu`.
+  геометрия LargeIcons-ячеек, чекбоксы закладок, `ShowDebugMenu`,
+  настройки контекстного меню (`ShellExtensionsEnabled`,
+  `ShellExtensionsInSubmenu`, `BlockedShellExtensions`,
+  `KnownShellExtensions`, `HiddenContextMenuItems`).
 
 Миграционного слоя **нет**: `JsonAppStateStore.Load` ловит исключение и
 возвращает `new AppState()`. До 1.0 это осознанный выбор — схема ещё ломается

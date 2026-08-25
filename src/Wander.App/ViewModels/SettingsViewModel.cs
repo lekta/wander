@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using Wander.Core.FileSystem;
+using Wander.Core.Menu;
 using Wander.Core.Persistence;
 
 namespace Wander.App.ViewModels;
@@ -124,6 +125,31 @@ public sealed class SettingsViewModel : ObservableObject {
     }
 
 
+    // --- Context menu ---------------------------------------------------
+    private bool _shellExtensionsEnabled;
+    public bool ShellExtensionsEnabled {
+        get => _shellExtensionsEnabled;
+        set => SetField(ref _shellExtensionsEnabled, value);
+    }
+
+    private bool _shellExtensionsInSubmenu;
+    public bool ShellExtensionsInSubmenu {
+        get => _shellExtensionsInSubmenu;
+        set => SetField(ref _shellExtensionsInSubmenu, value);
+    }
+
+    /// <summary>
+    /// One checkbox per third-party entry Wander has met so far. Populated
+    /// by <see cref="NoteShellExtensions"/> as menus are opened — there is
+    /// no way to enumerate installed handlers up front without walking the
+    /// registry ourselves, and the shell's own answer is the accurate one.
+    /// </summary>
+    public ObservableCollection<MenuToggleViewModel> ShellExtensionToggles { get; } = new();
+
+    /// <summary>One checkbox per hideable built-in entry, in catalog order.</summary>
+    public ObservableCollection<MenuToggleViewModel> MenuItemToggles { get; } = new();
+
+
     // --- Debug ---------------------------------------------------------
     private bool _showDebugMenu;
     public bool ShowDebugMenu {
@@ -153,6 +179,7 @@ public sealed class SettingsViewModel : ObservableObject {
             new FileOperationsSettingsCategory(this),
             new LayoutSettingsCategory(this),
             new BookmarksSettingsCategory(this),
+            new ContextMenuSettingsCategory(this),
             new DebugSettingsCategory(this),
         };
         _selectedCategory = Categories[0];
@@ -177,7 +204,34 @@ public sealed class SettingsViewModel : ObservableObject {
         ShowBookmarkDocuments = s.ShowBookmarkDocuments;
         ShowBookmarkPictures = s.ShowBookmarkPictures;
         ShowBookmarkRecycleBin = s.ShowBookmarkRecycleBin;
+        ShellExtensionsEnabled = s.ShellExtensionsEnabled;
+        ShellExtensionsInSubmenu = s.ShellExtensionsInSubmenu;
+        RebuildMenuToggles(s.HiddenContextMenuItems);
+        RebuildShellToggles(s.KnownShellExtensions, s.BlockedShellExtensions);
         ShowDebugMenu = s.ShowDebugMenu;
+    }
+
+
+    /// <summary>
+    /// Records third-party entry names the shell just reported, so the
+    /// settings dialog can offer them as checkboxes. Names already known
+    /// keep their current state — discovering "7-Zip" again must not
+    /// re-enable a 7-Zip the user switched off.
+    /// </summary>
+    public void NoteShellExtensions(IEnumerable<string> names) {
+        bool added = false;
+        foreach (string raw in names) {
+            string name = ContextMenuSettings.NormalizeName(raw);
+            if (name.Length == 0 || FindShellToggle(name) is not null) {
+                continue;
+            }
+            ShellExtensionToggles.Add(new MenuToggleViewModel(name, name, true, OnMenuToggleChanged));
+            added = true;
+        }
+
+        if (added) {
+            OnMenuToggleChanged();
+        }
     }
 
     public AppSettings ToRecord() {
@@ -197,8 +251,55 @@ public sealed class SettingsViewModel : ObservableObject {
             ShowBookmarkDocuments = ShowBookmarkDocuments,
             ShowBookmarkPictures = ShowBookmarkPictures,
             ShowBookmarkRecycleBin = ShowBookmarkRecycleBin,
+            ShellExtensionsEnabled = ShellExtensionsEnabled,
+            ShellExtensionsInSubmenu = ShellExtensionsInSubmenu,
+            // Persisted as "what is off", so a future Wander release that
+            // adds menu entries shows them by default instead of inheriting
+            // an implicit "not in the saved list = hidden".
+            HiddenContextMenuItems = MenuItemToggles.Where(t => !t.IsEnabled).Select(t => t.Key).ToArray(),
+            BlockedShellExtensions = ShellExtensionToggles.Where(t => !t.IsEnabled).Select(t => t.Key).ToArray(),
+            KnownShellExtensions = ShellExtensionToggles.Select(t => t.Key).ToArray(),
             ShowDebugMenu = ShowDebugMenu,
         };
+    }
+
+
+    private void RebuildMenuToggles(IReadOnlyList<string> hidden) {
+        var off = new HashSet<string>(hidden, StringComparer.OrdinalIgnoreCase);
+        MenuItemToggles.Clear();
+        foreach (var id in ContextMenuCatalog.Hideable) {
+            string key = id.ToString();
+            MenuItemToggles.Add(new MenuToggleViewModel(
+                key, ContextMenuCatalog.Title(id), !off.Contains(key), OnMenuToggleChanged));
+        }
+    }
+
+    private void RebuildShellToggles(IReadOnlyList<string> known, IReadOnlyList<string> blocked) {
+        var off = new HashSet<string>(
+            blocked.Select(ContextMenuSettings.NormalizeName), StringComparer.OrdinalIgnoreCase);
+
+        ShellExtensionToggles.Clear();
+        // A blocked name the "known" cache lost still deserves its checkbox,
+        // otherwise the user could never turn it back on.
+        foreach (string name in known.Concat(blocked).Select(ContextMenuSettings.NormalizeName).Distinct(StringComparer.OrdinalIgnoreCase)) {
+            if (name.Length == 0) {
+                continue;
+            }
+            ShellExtensionToggles.Add(new MenuToggleViewModel(name, name, !off.Contains(name), OnMenuToggleChanged));
+        }
+    }
+
+    private MenuToggleViewModel? FindShellToggle(string name) {
+        return ShellExtensionToggles.FirstOrDefault(
+            t => string.Equals(t.Key, name, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Toggle lists are collections, not properties, so the owner's
+    /// "settings changed → persist" hook needs an explicit nudge.
+    /// </summary>
+    private void OnMenuToggleChanged() {
+        Raise(nameof(MenuItemToggles));
     }
 
 

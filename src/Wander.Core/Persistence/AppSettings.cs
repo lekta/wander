@@ -79,6 +79,41 @@ public sealed record AppSettings {
     public bool ShowBookmarkRecycleBin { get; init; } = true;
 
 
+    // --- Context menu --------------------------------------------------
+    /// <summary>
+    /// Show entries contributed by third-party shell extensions (7-Zip,
+    /// TortoiseGit, …). On by default — parity with Explorer is the point.
+    /// Turning it off also stops Wander from loading those handlers' DLLs
+    /// at all, which is the reason someone might want it off.
+    /// </summary>
+    public bool ShellExtensionsEnabled { get; init; } = true;
+
+    /// <summary>Fold third-party entries under a single "More options" submenu.</summary>
+    public bool ShellExtensionsInSubmenu { get; init; } = false;
+
+    /// <summary>
+    /// Third-party entries the user switched off, by display name. Names
+    /// rather than CLSIDs because <c>IContextMenu</c> never tells us which
+    /// handler produced a given row.
+    /// </summary>
+    public IReadOnlyList<string> BlockedShellExtensions { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Third-party entry names met so far, so the settings dialog can offer
+    /// a checkbox list instead of a free-text field. Grows as the user opens
+    /// menus in different folders; strictly a convenience cache — deleting
+    /// it costs nothing but re-discovery.
+    /// </summary>
+    public IReadOnlyList<string> KnownShellExtensions { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Built-in context-menu entries the user hid, as
+    /// <c>MenuCommandId</c> names. Stored as strings so a reordered or
+    /// extended enum doesn't reinterpret the saved list.
+    /// </summary>
+    public IReadOnlyList<string> HiddenContextMenuItems { get; init; } = Array.Empty<string>();
+
+
     // --- Debug ---------------------------------------------------------
     /// <summary>Whether the "Debug" submenu is visible in the main menu.</summary>
     public bool ShowDebugMenu { get; init; } = true;

@@ -141,6 +141,7 @@
         <KeyBinding Modifiers="Ctrl" Key="C" Command="{Binding CopyCommand}"/>
         <KeyBinding Modifiers="Ctrl" Key="X" Command="{Binding CutCommand}"/>
         <KeyBinding Modifiers="Ctrl" Key="V" Command="{Binding PasteCommand}"/>
+        <KeyBinding Modifiers="Ctrl+Shift" Key="C" Command="{Binding CopyPathCommand}"/>
         <KeyBinding Modifiers="Ctrl+Shift" Key="N" Command="{Binding NewFolderCommand}"/>
         <KeyBinding Modifiers="Alt" Key="Enter" Command="{Binding PropertiesCommand}"/>
     </Window.InputBindings>
@@ -502,6 +503,9 @@
                           PreviewMouseLeftButtonDown="List_PreviewMouseLeftButtonDown"
                           PreviewMouseLeftButtonUp="List_PreviewMouseLeftButtonUp"
                           PreviewMouseMove="List_PreviewMouseMove"
+                          PreviewMouseRightButtonDown="List_PreviewMouseRightButtonDown"
+                          PreviewMouseRightButtonUp="List_PreviewMouseRightButtonUp"
+                          PreviewKeyDown="List_PreviewKeyDown"
                           AllowDrop="True"
                           DragOver="OnDragOver"
                           Drop="OnDrop"
@@ -521,22 +525,6 @@
                         <DataGridTextColumn Header="Size" Binding="{Binding Size}" Width="100"/>
                         <DataGridTextColumn Header="Modified" Binding="{Binding ModifiedUtc, StringFormat=yyyy-MM-dd HH:mm}" Width="140"/>
                     </DataGrid.Columns>
-                    <DataGrid.ContextMenu>
-                        <ContextMenu>
-                            <MenuItem Header="Open" Command="{Binding OpenCommand}"/>
-                            <Separator/>
-                            <MenuItem Header="Cut" Command="{Binding CutCommand}" InputGestureText="Ctrl+X"/>
-                            <MenuItem Header="Copy" Command="{Binding CopyCommand}" InputGestureText="Ctrl+C"/>
-                            <MenuItem Header="Paste" Command="{Binding PasteCommand}" InputGestureText="Ctrl+V"/>
-                            <Separator/>
-                            <MenuItem Header="Delete" Command="{Binding DeleteCommand}" InputGestureText="Del"/>
-                            <MenuItem Header="Rename" Click="Rename_Click" InputGestureText="F2"/>
-                            <Separator/>
-                            <MenuItem Header="New folder" Command="{Binding NewFolderCommand}" InputGestureText="Ctrl+Shift+N"/>
-                            <Separator/>
-                            <MenuItem Header="Properties" Command="{Binding PropertiesCommand}" InputGestureText="Alt+Enter"/>
-                        </ContextMenu>
-                    </DataGrid.ContextMenu>
                 </DataGrid>
 
                 <!-- Tiles -->
@@ -551,6 +539,9 @@
                          PreviewMouseLeftButtonDown="List_PreviewMouseLeftButtonDown"
                          PreviewMouseLeftButtonUp="List_PreviewMouseLeftButtonUp"
                          PreviewMouseMove="List_PreviewMouseMove"
+                         PreviewMouseRightButtonDown="List_PreviewMouseRightButtonDown"
+                         PreviewMouseRightButtonUp="List_PreviewMouseRightButtonUp"
+                         PreviewKeyDown="List_PreviewKeyDown"
                          AllowDrop="True"
                          DragOver="OnDragOver"
                          Drop="OnDrop"
@@ -574,22 +565,6 @@
                             </Border>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
-                    <ListBox.ContextMenu>
-                        <ContextMenu>
-                            <MenuItem Header="Open" Command="{Binding OpenCommand}"/>
-                            <Separator/>
-                            <MenuItem Header="Cut" Command="{Binding CutCommand}" InputGestureText="Ctrl+X"/>
-                            <MenuItem Header="Copy" Command="{Binding CopyCommand}" InputGestureText="Ctrl+C"/>
-                            <MenuItem Header="Paste" Command="{Binding PasteCommand}" InputGestureText="Ctrl+V"/>
-                            <Separator/>
-                            <MenuItem Header="Delete" Command="{Binding DeleteCommand}" InputGestureText="Del"/>
-                            <MenuItem Header="Rename" Click="Rename_Click" InputGestureText="F2"/>
-                            <Separator/>
-                            <MenuItem Header="New folder" Command="{Binding NewFolderCommand}" InputGestureText="Ctrl+Shift+N"/>
-                            <Separator/>
-                            <MenuItem Header="Properties" Command="{Binding PropertiesCommand}" InputGestureText="Alt+Enter"/>
-                        </ContextMenu>
-                    </ListBox.ContextMenu>
                 </ListBox>
 
                 <!-- Large icons -->
@@ -604,6 +579,9 @@
                          PreviewMouseLeftButtonDown="List_PreviewMouseLeftButtonDown"
                          PreviewMouseLeftButtonUp="List_PreviewMouseLeftButtonUp"
                          PreviewMouseMove="List_PreviewMouseMove"
+                         PreviewMouseRightButtonDown="List_PreviewMouseRightButtonDown"
+                         PreviewMouseRightButtonUp="List_PreviewMouseRightButtonUp"
+                         PreviewKeyDown="List_PreviewKeyDown"
                          AllowDrop="True"
                          DragOver="OnDragOver"
                          Drop="OnDrop"
@@ -639,22 +617,6 @@
                             </StackPanel>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
-                    <ListBox.ContextMenu>
-                        <ContextMenu>
-                            <MenuItem Header="Open" Command="{Binding OpenCommand}"/>
-                            <Separator/>
-                            <MenuItem Header="Cut" Command="{Binding CutCommand}" InputGestureText="Ctrl+X"/>
-                            <MenuItem Header="Copy" Command="{Binding CopyCommand}" InputGestureText="Ctrl+C"/>
-                            <MenuItem Header="Paste" Command="{Binding PasteCommand}" InputGestureText="Ctrl+V"/>
-                            <Separator/>
-                            <MenuItem Header="Delete" Command="{Binding DeleteCommand}" InputGestureText="Del"/>
-                            <MenuItem Header="Rename" Click="Rename_Click" InputGestureText="F2"/>
-                            <Separator/>
-                            <MenuItem Header="New folder" Command="{Binding NewFolderCommand}" InputGestureText="Ctrl+Shift+N"/>
-                            <Separator/>
-                            <MenuItem Header="Properties" Command="{Binding PropertiesCommand}" InputGestureText="Alt+Enter"/>
-                        </ContextMenu>
-                    </ListBox.ContextMenu>
                 </ListBox>
 
                 <!--

@@ -43,6 +43,7 @@ public static class PlatformBootstrapper {
         ServiceLocator.Register<IFileLockInspector>(new RestartManagerLockInspector());
         ServiceLocator.Register<IShortcutService>(new ShellShortcutService());
         ServiceLocator.Register<IShellNamespace>(new WindowsShellNamespace(logger));
+        ServiceLocator.Register<IShellContextMenu>(new ShellContextMenu(logger));
         ServiceLocator.Register<IImageMetadataReader>(new MetadataExtractorImageReader());
 
         // Undo + recycle bin + ops are the single shared instances every

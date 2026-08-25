@@ -12,6 +12,7 @@ using Wander.Core.Diagnostics;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
 using Wander.Core.Logging;
+using Wander.Core.Menu;
 using Wander.Core.Navigation;
 using Wander.Core.Operations;
 using Wander.Core.Persistence;
@@ -123,13 +124,28 @@ public sealed class MainViewModel : ObservableObject {
         ExitCommand = new RelayCommand(_ => Application.Current?.Shutdown());
         OptionsCommand = new RelayCommand(_ => OpenSettingsDialog());
         ReportIssueCommand = new RelayCommand(_ => ReportIssue());
-        PropertiesCommand = new RelayCommand(_ => ShowProperties(), _ => _selectedEntry is not null);
+        // Properties falls back to the folder being listed, so a background
+        // right-click (and Alt+Enter with nothing selected) opens the
+        // folder's own sheet — Explorer parity.
+        PropertiesCommand = new RelayCommand(_ => ShowProperties(), _ => PropertiesTarget() is not null);
+        OpenWithCommand = new RelayCommand(_ => OpenWith(), _ => _selectedEntry is not null && !IsCurrentShellNamespace);
+        OpenInExplorerCommand = new RelayCommand(_ => OpenInExplorer(), _ => PropertiesTarget() is not null);
+        OpenInTerminalCommand = new RelayCommand(_ => OpenInTerminal(), _ => TerminalFolder() is not null);
+        CopyPathCommand = new RelayCommand(_ => CopyPathsToClipboard(), _ => PropertiesTarget() is not null);
+        CopyNameCommand = new RelayCommand(_ => CopyNamesToClipboard(), _ => _selectedEntries.Count > 0);
+        CreateShortcutCommand = new RelayCommand(
+            _ => CreateShortcutsForSelection(),
+            _ => _selectedEntries.Count > 0 && _nav.Current is not null && !IsCurrentShellNamespace);
         TogglePreviewCommand = new RelayCommand(_ => IsPreviewVisible = !IsPreviewVisible);
         UndoCommand = new RelayCommand(_ => UndoLast(), _ => _undo.CanUndo);
         PermanentDeleteCommand = new RelayCommand(_ => _ = DeleteSelectedAsync(permanent: true), _ => _selectedEntries.Count > 0 && !IsCurrentShellNamespace);
         OpenLogFileCommand = new RelayCommand(_ => OpenLogFile(), _ => ServiceLocator.IsRegistered<ILogFile>());
         ToggleBookmarksCommand = new RelayCommand(_ => IsBookmarksExpanded = !IsBookmarksExpanded);
-        AddBookmarkCommand = new RelayCommand(p => AddBookmark(p as string));
+        // No parameter means "whatever the context menu was opened over":
+        // the single selected folder, else the folder being listed.
+        AddBookmarkCommand = new RelayCommand(
+            p => AddBookmark(p as string ?? BookmarkTarget()),
+            p => p is string || BookmarkTarget() is not null);
         RemoveBookmarkCommand = new RelayCommand(p => RemoveBookmark(p as TreeNodeViewModel));
 
         // Batch executors push undo steps from thread-pool workers, so this
@@ -325,6 +341,20 @@ public sealed class MainViewModel : ObservableObject {
     public RelayCommand ToggleBookmarksCommand { get; }
     public RelayCommand AddBookmarkCommand { get; }
     public RelayCommand RemoveBookmarkCommand { get; }
+    public RelayCommand OpenWithCommand { get; }
+    public RelayCommand OpenInExplorerCommand { get; }
+    public RelayCommand OpenInTerminalCommand { get; }
+    public RelayCommand CopyPathCommand { get; }
+    public RelayCommand CopyNameCommand { get; }
+    public RelayCommand CreateShortcutCommand { get; }
+
+
+    /// <summary>
+    /// Context-menu preferences in the shape <c>ContextMenuBuilder</c> wants.
+    /// Rebuilt per right-click rather than cached — the settings dialog is
+    /// live-applied, so a cache would only be a way to show a stale menu.
+    /// </summary>
+    public ContextMenuSettings MenuSettings => ContextMenuSettings.From(Settings.ToRecord());
 
     public bool IsBookmarksExpanded {
         get => _isBookmarksExpanded;
@@ -477,6 +507,8 @@ public sealed class MainViewModel : ObservableObject {
         }
 
         var shortcuts = ServiceLocator.Get<IShortcutService>();
+        var created = new List<IUndoableAction>();
+        var bin = ServiceLocator.Get<IRecycleBin>();
         int ok = 0;
         foreach (string src in sources) {
             string srcName = Path.GetFileNameWithoutExtension(src.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
@@ -490,10 +522,20 @@ public sealed class MainViewModel : ObservableObject {
 
             try {
                 shortcuts.Create(src, dest);
+                created.Add(new CreateAction(bin, dest));
                 ok++;
             } catch (Exception ex) {
+                _log.Error($"Create shortcut failed: {src} -> {dest}", ex);
                 Status = $"Create shortcut failed for {srcName}: {ex.Message}";
             }
+        }
+
+        // One Ctrl+Z undoes the whole batch, same as a paste or a drop.
+        if (created.Count > 0) {
+            _log.Info($"Create shortcut: {created.Count} item(s) in {targetFolder}");
+            _undo.Push(created.Count == 1
+                ? created[0]
+                : new CompositeAction($"Create {created.Count} shortcuts", created));
         }
 
         Refresh();
@@ -1108,14 +1150,122 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     private void ShowProperties() {
+        if (PropertiesTarget() is not string path) {
+            return;
+        }
+        try {
+            _shell.ShowProperties(path);
+        } catch (Exception ex) {
+            Status = $"Properties failed: {ex.Message}";
+        }
+    }
+
+
+    // --- Context-menu verbs ---------------------------------------------
+    // These exist because the context menu needs them; the toolbar and the
+    // hotkey table are unchanged. Each resolves its own target the same way:
+    // the selection if there is one, the listed folder otherwise, so the
+    // same command backs both the item menu and the background menu.
+
+    /// <summary>Selected item, or the folder being listed when nothing is selected.</summary>
+    private string? PropertiesTarget() {
+        return _selectedEntry?.FullPath ?? _nav.Current;
+    }
+
+    /// <summary>Folder a terminal should start in: the selected folder, else the current one.</summary>
+    private string? TerminalFolder() {
+        if (IsCurrentShellNamespace) {
+            return null;
+        }
+        if (_selectedEntries.Count == 1 && _selectedEntries[0].Kind == EntryKind.Directory) {
+            return _selectedEntries[0].FullPath;
+        }
+
+        return _nav.Current;
+    }
+
+    /// <summary>Folder that "Add to bookmarks" with no explicit argument means.</summary>
+    private string? BookmarkTarget() {
+        if (IsCurrentShellNamespace) {
+            return null;
+        }
+        if (_selectedEntries.Count == 1 && _selectedEntries[0].Kind == EntryKind.Directory) {
+            return _selectedEntries[0].FullPath;
+        }
+
+        return _nav.Current;
+    }
+
+    private void OpenWith() {
         if (_selectedEntry is null) {
             return;
         }
         try {
-            _shell.ShowProperties(_selectedEntry.FullPath);
+            _shell.OpenWith(_selectedEntry.FullPath);
         } catch (Exception ex) {
-            Status = $"Properties failed: {ex.Message}";
+            _log.Error($"Open with failed: {_selectedEntry.FullPath}", ex);
+            Status = $"Open with failed: {ex.Message}";
         }
+    }
+
+    private void OpenInExplorer() {
+        if (PropertiesTarget() is not string path) {
+            return;
+        }
+        try {
+            _shell.RevealInExplorer(path);
+        } catch (Exception ex) {
+            _log.Error($"Reveal in Explorer failed: {path}", ex);
+            Status = $"Show in Explorer failed: {ex.Message}";
+        }
+    }
+
+    private void OpenInTerminal() {
+        if (TerminalFolder() is not string folder) {
+            return;
+        }
+        try {
+            _shell.OpenTerminal(folder);
+        } catch (Exception ex) {
+            _log.Error($"Open terminal failed: {folder}", ex);
+            Status = $"Open in Terminal failed: {ex.Message}";
+        }
+    }
+
+    private void CopyPathsToClipboard() {
+        // Quoted, one per line — the shape you can paste straight into a
+        // shell. Explorer's "Copy as path" does the same.
+        var paths = _selectedEntries.Count > 0
+            ? _selectedEntries.Select(e => $"\"{e.FullPath}\"")
+            : new[] { $"\"{_nav.Current}\"" };
+
+        SetClipboardText(string.Join(Environment.NewLine, paths), "path");
+    }
+
+    private void CopyNamesToClipboard() {
+        if (_selectedEntries.Count == 0) {
+            return;
+        }
+        SetClipboardText(string.Join(Environment.NewLine, _selectedEntries.Select(e => e.Name)), "name");
+    }
+
+    private void SetClipboardText(string text, string what) {
+        try {
+            Clipboard.SetText(text);
+            Status = $"Copied {what} to clipboard";
+        } catch (Exception ex) {
+            // The OS clipboard is a shared, lockable resource — another app
+            // holding it turns this into a COMException, not a bug in ours.
+            _log.Warn($"Clipboard copy failed: {ex.Message}");
+            Status = $"Clipboard is busy: {ex.Message}";
+        }
+    }
+
+    private void CreateShortcutsForSelection() {
+        if (_selectedEntries.Count == 0 || _nav.Current is null) {
+            return;
+        }
+        CreateShortcuts(_selectedEntries.Select(e => e.FullPath).ToList(), _nav.Current);
     }
 
 
