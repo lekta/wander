@@ -18,15 +18,14 @@ public enum MenuCommandId {
     None = 0,
 
     // --- Submenu headers ------------------------------------------------
+    OpenSubmenu,
     FileSubmenu,
     ViewSubmenu,
     SortSubmenu,
-    ShellSubmenu,
 
     // --- Open group -----------------------------------------------------
     Open,
     OpenWith,
-    OpenInExplorer,
     OpenInTerminal,
 
     // --- Clipboard / file ops -------------------------------------------
@@ -40,7 +39,6 @@ public enum MenuCommandId {
     // --- Mutations ------------------------------------------------------
     Rename,
     Delete,
-    PermanentDelete,
     NewFolder,
 
     // --- View / sort ----------------------------------------------------
@@ -58,6 +56,5 @@ public enum MenuCommandId {
     // --- Misc -----------------------------------------------------------
     Refresh,
     Undo,
-    AddBookmark,
     Properties,
 }

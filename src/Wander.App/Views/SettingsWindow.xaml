@@ -180,10 +180,6 @@
 
                 <CheckBox Content="Показывать пункты сторонних приложений (7-Zip, TortoiseGit…)"
                           IsChecked="{Binding Owner.ShellExtensionsEnabled}"/>
-                <CheckBox Content="Собирать их в одно подменю «More options»"
-                          IsChecked="{Binding Owner.ShellExtensionsInSubmenu}"
-                          IsEnabled="{Binding Owner.ShellExtensionsEnabled}"/>
-
                 <TextBlock Text="Приложения" FontWeight="SemiBold" Margin="0,14,0,4"/>
                 <ItemsControl ItemsSource="{Binding Owner.ShellExtensionToggles}"
                               ItemTemplate="{StaticResource MenuToggleTemplate}"
@@ -201,7 +197,7 @@
                 <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,6,0,0">
                     Снятая галочка убирает пункт из меню; хоткей продолжает
                     работать. Разделители подтягиваются сами — пустых групп
-                    и двойных линий не остаётся. «File» / «View» / «Sort by»
+                    и двойных линий не остаётся. «Файл» / «Вид» / «Сортировка»
                     убирают подменю целиком.
                 </TextBlock>
             </StackPanel>

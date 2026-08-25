@@ -72,6 +72,8 @@ internal sealed class ShellContextMenuSession : IShellContextMenuSession {
         "cut", "copy", "paste", "pastelink", "delete", "rename", "link",
         "properties", "undo",
         "copyaspath", "windows.copyaspath", "windows.modernshare", "windows.share",
+        // Windows 11 "Add to Favorites" — Wander has its own bookmarks panel.
+        "pintohome", "pintohomefile",
     };
 
     private readonly ILogger _log;
@@ -111,7 +113,10 @@ internal sealed class ShellContextMenuSession : IShellContextMenuSession {
 
 
     public bool Invoke(int commandId) {
-        if (_disposed || _menu is null || commandId < 0) {
+        // The id can only come from our own enumeration, but it crosses a
+        // layer boundary before coming back — bound it rather than hand the
+        // shell an offset it never issued.
+        if (_disposed || _menu is null || commandId < 0 || commandId > IdLast - IdFirst) {
             return false;
         }
 
@@ -320,6 +325,9 @@ internal sealed class ShellContextMenuSession : IShellContextMenuSession {
                     Header = header,
                     IsEnabled = enabled,
                     IconPng = icon,
+                    // A popup has no verb of its own; the closest thing is
+                    // whatever its contents identify it as.
+                    Verb = depth == 0 ? DeriveSubmenuVerb(children) : string.Empty,
                     Children = children,
                 });
                 continue;
@@ -331,9 +339,15 @@ internal sealed class ShellContextMenuSession : IShellContextMenuSession {
             }
 
             int command = id - IdFirst;
+            // Depth 1 too, not just the top level: a popup's placement is
+            // decided by whether *anything* inside it publishes a verb, so
+            // a partial answer there would misfile it. Stopping at the first
+            // verb found was tried and measured — the saving was inside the
+            // noise, and it made the openas lookup depend on child order.
+            string? verb = depth <= 1 ? GetCanonicalVerb(command) : null;
             // Only the top level is de-duplicated: a "Copy" *inside* a
             // handler's own submenu means something else entirely.
-            if (depth == 0 && IsDuplicateVerb(command)) {
+            if (depth == 0 && verb is not null && _duplicateVerbs.Contains(verb)) {
                 continue;
             }
 
@@ -342,6 +356,7 @@ internal sealed class ShellContextMenuSession : IShellContextMenuSession {
                 Header = header,
                 IsEnabled = enabled,
                 IconPng = icon,
+                Verb = verb ?? string.Empty,
             });
         }
 
@@ -363,10 +378,21 @@ internal sealed class ShellContextMenuSession : IShellContextMenuSession {
         }
     }
 
-    private bool IsDuplicateVerb(int command) {
-        string? verb = GetCanonicalVerb(command);
+    /// <summary>
+    /// Best guess at what a nameless popup is. <c>QueryContextMenu</c> gives
+    /// submenu headers no verb at all, so the only handle we have is what
+    /// they contain: the shell's own "Open with" popup is the one holding a
+    /// <c>openas</c> leaf. Callers use this to place the popup rather than
+    /// to invoke it.
+    /// </summary>
+    private static string DeriveSubmenuVerb(List<ShellMenuEntry> children) {
+        foreach (var child in children) {
+            if (string.Equals(child.Verb, "openas", StringComparison.OrdinalIgnoreCase)) {
+                return "openas";
+            }
+        }
 
-        return verb is not null && _duplicateVerbs.Contains(verb);
+        return string.Empty;
     }
 
     private string? GetCanonicalVerb(int command) {

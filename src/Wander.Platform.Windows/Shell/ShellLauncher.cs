@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using System.Diagnostics;
-using System.IO;
 using System.Runtime.InteropServices;
 using Wander.Core.Shell;
 
@@ -23,17 +22,6 @@ public sealed class ShellLauncher : IShellLauncher {
         // "openas" is the shell's own picker, dialog and "always use this
         // app" checkbox included — reimplementing it would be strictly worse.
         InvokeVerb("openas", path);
-    }
-
-    public void RevealInExplorer(string path) {
-        // /select needs the quotes and tolerates a trailing separator badly,
-        // hence the trim.
-        string target = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        Process.Start(new ProcessStartInfo {
-            FileName = "explorer.exe",
-            Arguments = $"/select,\"{target}\"",
-            UseShellExecute = true,
-        });
     }
 
     public void OpenTerminal(string folderPath) {

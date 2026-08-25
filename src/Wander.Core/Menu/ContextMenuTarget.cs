@@ -46,15 +46,15 @@ public sealed record ContextMenuTarget {
     /// <summary>Exactly one item under the cursor — the precondition for Rename / Properties.</summary>
     public bool IsSingle => Selection.Count == 1;
 
-    /// <summary>
-    /// Every selected item is a real directory. Shortcuts that point at one
-    /// deliberately don't count: bookmarking a <c>.lnk</c> would store the
-    /// link's own path, which is not a folder anyone can navigate into.
-    /// </summary>
-    public bool AllFolders => Selection.Count > 0 && Selection.All(e => e.Kind == EntryKind.Directory);
-
     /// <summary>At least one selected item is a folder — blocks "Open with".</summary>
     public bool AnyFolder => Selection.Any(e => e.IsFolderLike);
+
+    /// <summary>
+    /// Every selected item is a real directory. Shortcuts pointing at one
+    /// don't count: "open in terminal" would have to resolve the link
+    /// first, and nothing here does that.
+    /// </summary>
+    public bool AllFolders => Selection.Count > 0 && Selection.All(e => e.Kind == EntryKind.Directory);
 
     /// <summary>Shorthand for "real filesystem verbs are allowed here".</summary>
     public bool IsWritable => !IsReadOnlyLocation;

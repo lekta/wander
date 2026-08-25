@@ -22,6 +22,15 @@ public sealed record ShellMenuEntry {
 
     public bool IsEnabled { get; init; } = true;
 
+    /// <summary>
+    /// The handler's canonical verb ("openas", "sendto", …), or empty when
+    /// it doesn't publish one — which is most of the time for third-party
+    /// entries and always for a submenu header. Unlike
+    /// <see cref="Header"/> this is not localised, so it is the only sound
+    /// basis for deciding where an entry belongs.
+    /// </summary>
+    public string Verb { get; init; } = string.Empty;
+
     /// <summary>PNG bytes of the item's bitmap, when the handler supplied one.</summary>
     public byte[]? IconPng { get; init; }
 

@@ -16,14 +16,6 @@ public sealed record ContextMenuSettings {
     /// <summary>Master switch for third-party handlers (7-Zip, TortoiseGit, …).</summary>
     public bool ShellExtensionsEnabled { get; init; } = true;
 
-    /// <summary>
-    /// Fold every third-party entry under one "More options" submenu instead
-    /// of listing them inline. Off by default — inline is what Windows 10
-    /// does, and it is the layout people have muscle memory for. On is the
-    /// escape hatch for a machine with four shell extensions installed.
-    /// </summary>
-    public bool ShellExtensionsInSubmenu { get; init; }
-
     /// <summary>Built-in entries the user chose not to see.</summary>
     public IReadOnlySet<MenuCommandId> HiddenItems { get; init; } = new HashSet<MenuCommandId>();
 
@@ -55,10 +47,64 @@ public sealed record ContextMenuSettings {
 
         return new ContextMenuSettings {
             ShellExtensionsEnabled = settings.ShellExtensionsEnabled,
-            ShellExtensionsInSubmenu = settings.ShellExtensionsInSubmenu,
             HiddenItems = hidden,
             BlockedShellExtensions = blocked,
         };
+    }
+
+
+    /// <summary>
+    /// How many discovered third-party names are worth remembering. The list
+    /// exists only so the settings dialog has checkboxes to offer, and some
+    /// handlers put volatile text in their top-level label — TortoiseGit
+    /// shows «Git Commit -&gt; "master"...», one row per branch. Left alone
+    /// that grows <c>state.json</c> forever.
+    /// </summary>
+    public const int MaxKnownShellExtensions = 100;
+
+
+    /// <summary>
+    /// Trims the remembered-names list for persistence: normalised,
+    /// de-duplicated, oldest dropped first — but a blocked name is never
+    /// dropped, because losing it would silently switch a handler the user
+    /// turned off back on. If more than <see cref="MaxKnownShellExtensions"/>
+    /// names are blocked, all of them are still kept: an honest list beats a
+    /// tidy one that lies.
+    /// </summary>
+    public static IReadOnlyList<string> TrimKnownExtensions(
+        IEnumerable<string> known, IEnumerable<string> blocked) {
+
+        var blockedNames = new HashSet<string>(blocked.Select(NormalizeName), StringComparer.OrdinalIgnoreCase);
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var names = new List<string>();
+        foreach (string raw in known) {
+            string name = NormalizeName(raw);
+            if (name.Length > 0 && seen.Add(name)) {
+                names.Add(name);
+            }
+        }
+
+        int excess = names.Count - MaxKnownShellExtensions;
+        if (excess <= 0) {
+            return names;
+        }
+
+        // Oldest first — the list is append-ordered, so the front is what
+        // has been sitting around unused the longest.
+        var dropped = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string name in names) {
+            if (excess == 0) {
+                break;
+            }
+            if (blockedNames.Contains(name)) {
+                continue;
+            }
+            dropped.Add(name);
+            excess--;
+        }
+
+        return names.Where(name => !dropped.Contains(name)).ToArray();
     }
 
 

@@ -132,12 +132,6 @@ public sealed class SettingsViewModel : ObservableObject {
         set => SetField(ref _shellExtensionsEnabled, value);
     }
 
-    private bool _shellExtensionsInSubmenu;
-    public bool ShellExtensionsInSubmenu {
-        get => _shellExtensionsInSubmenu;
-        set => SetField(ref _shellExtensionsInSubmenu, value);
-    }
-
     /// <summary>
     /// One checkbox per third-party entry Wander has met so far. Populated
     /// by <see cref="NoteShellExtensions"/> as menus are opened — there is
@@ -205,7 +199,6 @@ public sealed class SettingsViewModel : ObservableObject {
         ShowBookmarkPictures = s.ShowBookmarkPictures;
         ShowBookmarkRecycleBin = s.ShowBookmarkRecycleBin;
         ShellExtensionsEnabled = s.ShellExtensionsEnabled;
-        ShellExtensionsInSubmenu = s.ShellExtensionsInSubmenu;
         RebuildMenuToggles(s.HiddenContextMenuItems);
         RebuildShellToggles(s.KnownShellExtensions, s.BlockedShellExtensions);
         ShowDebugMenu = s.ShowDebugMenu;
@@ -252,13 +245,14 @@ public sealed class SettingsViewModel : ObservableObject {
             ShowBookmarkPictures = ShowBookmarkPictures,
             ShowBookmarkRecycleBin = ShowBookmarkRecycleBin,
             ShellExtensionsEnabled = ShellExtensionsEnabled,
-            ShellExtensionsInSubmenu = ShellExtensionsInSubmenu,
             // Persisted as "what is off", so a future Wander release that
             // adds menu entries shows them by default instead of inheriting
             // an implicit "not in the saved list = hidden".
             HiddenContextMenuItems = MenuItemToggles.Where(t => !t.IsEnabled).Select(t => t.Key).ToArray(),
             BlockedShellExtensions = ShellExtensionToggles.Where(t => !t.IsEnabled).Select(t => t.Key).ToArray(),
-            KnownShellExtensions = ShellExtensionToggles.Select(t => t.Key).ToArray(),
+            KnownShellExtensions = ContextMenuSettings.TrimKnownExtensions(
+                ShellExtensionToggles.Select(t => t.Key),
+                ShellExtensionToggles.Where(t => !t.IsEnabled).Select(t => t.Key)),
             ShowDebugMenu = ShowDebugMenu,
         };
     }

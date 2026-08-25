@@ -129,7 +129,6 @@ public sealed class MainViewModel : ObservableObject {
         // folder's own sheet — Explorer parity.
         PropertiesCommand = new RelayCommand(_ => ShowProperties(), _ => PropertiesTarget() is not null);
         OpenWithCommand = new RelayCommand(_ => OpenWith(), _ => _selectedEntry is not null && !IsCurrentShellNamespace);
-        OpenInExplorerCommand = new RelayCommand(_ => OpenInExplorer(), _ => PropertiesTarget() is not null);
         OpenInTerminalCommand = new RelayCommand(_ => OpenInTerminal(), _ => TerminalFolder() is not null);
         CopyPathCommand = new RelayCommand(_ => CopyPathsToClipboard(), _ => PropertiesTarget() is not null);
         CopyNameCommand = new RelayCommand(_ => CopyNamesToClipboard(), _ => _selectedEntries.Count > 0);
@@ -141,11 +140,7 @@ public sealed class MainViewModel : ObservableObject {
         PermanentDeleteCommand = new RelayCommand(_ => _ = DeleteSelectedAsync(permanent: true), _ => _selectedEntries.Count > 0 && !IsCurrentShellNamespace);
         OpenLogFileCommand = new RelayCommand(_ => OpenLogFile(), _ => ServiceLocator.IsRegistered<ILogFile>());
         ToggleBookmarksCommand = new RelayCommand(_ => IsBookmarksExpanded = !IsBookmarksExpanded);
-        // No parameter means "whatever the context menu was opened over":
-        // the single selected folder, else the folder being listed.
-        AddBookmarkCommand = new RelayCommand(
-            p => AddBookmark(p as string ?? BookmarkTarget()),
-            p => p is string || BookmarkTarget() is not null);
+        AddBookmarkCommand = new RelayCommand(p => AddBookmark(p as string));
         RemoveBookmarkCommand = new RelayCommand(p => RemoveBookmark(p as TreeNodeViewModel));
 
         // Batch executors push undo steps from thread-pool workers, so this
@@ -342,7 +337,6 @@ public sealed class MainViewModel : ObservableObject {
     public RelayCommand AddBookmarkCommand { get; }
     public RelayCommand RemoveBookmarkCommand { get; }
     public RelayCommand OpenWithCommand { get; }
-    public RelayCommand OpenInExplorerCommand { get; }
     public RelayCommand OpenInTerminalCommand { get; }
     public RelayCommand CopyPathCommand { get; }
     public RelayCommand CopyNameCommand { get; }
@@ -1184,18 +1178,6 @@ public sealed class MainViewModel : ObservableObject {
         return _nav.Current;
     }
 
-    /// <summary>Folder that "Add to bookmarks" with no explicit argument means.</summary>
-    private string? BookmarkTarget() {
-        if (IsCurrentShellNamespace) {
-            return null;
-        }
-        if (_selectedEntries.Count == 1 && _selectedEntries[0].Kind == EntryKind.Directory) {
-            return _selectedEntries[0].FullPath;
-        }
-
-        return _nav.Current;
-    }
-
     private void OpenWith() {
         if (_selectedEntry is null) {
             return;
@@ -1205,18 +1187,6 @@ public sealed class MainViewModel : ObservableObject {
         } catch (Exception ex) {
             _log.Error($"Open with failed: {_selectedEntry.FullPath}", ex);
             Status = $"Open with failed: {ex.Message}";
-        }
-    }
-
-    private void OpenInExplorer() {
-        if (PropertiesTarget() is not string path) {
-            return;
-        }
-        try {
-            _shell.RevealInExplorer(path);
-        } catch (Exception ex) {
-            _log.Error($"Reveal in Explorer failed: {path}", ex);
-            Status = $"Show in Explorer failed: {ex.Message}";
         }
     }
 

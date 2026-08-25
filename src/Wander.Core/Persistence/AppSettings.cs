@@ -88,9 +88,6 @@ public sealed record AppSettings {
     /// </summary>
     public bool ShellExtensionsEnabled { get; init; } = true;
 
-    /// <summary>Fold third-party entries under a single "More options" submenu.</summary>
-    public bool ShellExtensionsInSubmenu { get; init; } = false;
-
     /// <summary>
     /// Third-party entries the user switched off, by display name. Names
     /// rather than CLSIDs because <c>IContextMenu</c> never tells us which

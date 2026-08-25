@@ -7,84 +7,79 @@ namespace Wander.Core.Menu;
 /// hides it.
 ///
 /// <para>
-/// Labels are English to match the menu bar and the file list this menu
-/// pops up over; the settings dialog around it is Russian. That split is
-/// pre-existing (see the app's main menu) and not something this catalog
-/// tries to resolve.
+/// Labels are hard-coded Russian, matching the settings dialog and the
+/// entries the shell itself contributes on a Russian Windows. Proper
+/// localisation is a separate, app-wide job (see PLAN.md) — when it lands,
+/// this dictionary is the one place the menu needs to change.
 /// </para>
 /// </summary>
 public static class ContextMenuCatalog {
     private static readonly Dictionary<MenuCommandId, string> _titles = new() {
-        [MenuCommandId.FileSubmenu] = "File",
-        [MenuCommandId.ViewSubmenu] = "View",
-        [MenuCommandId.SortSubmenu] = "Sort by",
-        [MenuCommandId.ShellSubmenu] = "More options",
+        [MenuCommandId.OpenSubmenu] = "Открыть с помощью",
+        [MenuCommandId.FileSubmenu] = "Файл",
+        [MenuCommandId.ViewSubmenu] = "Вид",
+        [MenuCommandId.SortSubmenu] = "Сортировка",
 
-        [MenuCommandId.Open] = "Open",
-        [MenuCommandId.OpenWith] = "Open with...",
-        [MenuCommandId.OpenInExplorer] = "Show in Explorer",
-        [MenuCommandId.OpenInTerminal] = "Open in Terminal",
+        [MenuCommandId.Open] = "Открыть",
+        [MenuCommandId.OpenWith] = "Выбрать приложение...",
+        [MenuCommandId.OpenInTerminal] = "Открыть в терминале",
 
-        [MenuCommandId.Cut] = "Cut",
-        [MenuCommandId.Copy] = "Copy",
-        [MenuCommandId.Paste] = "Paste",
-        [MenuCommandId.CopyPath] = "Copy path",
-        [MenuCommandId.CopyName] = "Copy name",
-        [MenuCommandId.CreateShortcut] = "Create shortcut",
+        [MenuCommandId.Cut] = "Вырезать",
+        [MenuCommandId.Copy] = "Копировать",
+        [MenuCommandId.Paste] = "Вставить",
+        [MenuCommandId.CopyPath] = "Копировать путь",
+        [MenuCommandId.CopyName] = "Копировать имя",
+        [MenuCommandId.CreateShortcut] = "Создать ярлык",
 
-        [MenuCommandId.Rename] = "Rename",
-        [MenuCommandId.Delete] = "Delete",
-        [MenuCommandId.PermanentDelete] = "Delete permanently",
-        [MenuCommandId.NewFolder] = "New folder",
+        [MenuCommandId.Rename] = "Переименовать",
+        [MenuCommandId.Delete] = "Удалить",
+        [MenuCommandId.NewFolder] = "Создать папку",
 
-        [MenuCommandId.ViewDetails] = "Details",
-        [MenuCommandId.ViewTiles] = "Tiles",
-        [MenuCommandId.ViewLargeIcons] = "Large icons",
-        [MenuCommandId.TogglePreview] = "Preview pane",
-        [MenuCommandId.SortByName] = "Name",
-        [MenuCommandId.SortByDate] = "Date modified",
-        [MenuCommandId.SortBySize] = "Size",
-        [MenuCommandId.SortByType] = "Type",
-        [MenuCommandId.SortAscending] = "Ascending",
-        [MenuCommandId.SortFoldersFirst] = "Folders first",
+        [MenuCommandId.ViewDetails] = "Таблица",
+        [MenuCommandId.ViewTiles] = "Плитка",
+        [MenuCommandId.ViewLargeIcons] = "Крупные значки",
+        [MenuCommandId.TogglePreview] = "Область просмотра",
+        [MenuCommandId.SortByName] = "Имя",
+        [MenuCommandId.SortByDate] = "Дата изменения",
+        [MenuCommandId.SortBySize] = "Размер",
+        [MenuCommandId.SortByType] = "Тип",
+        [MenuCommandId.SortAscending] = "По возрастанию",
+        [MenuCommandId.SortFoldersFirst] = "Папки сверху",
 
-        [MenuCommandId.Refresh] = "Refresh",
-        [MenuCommandId.Undo] = "Undo",
-        [MenuCommandId.AddBookmark] = "Add to bookmarks",
-        [MenuCommandId.Properties] = "Properties",
+        [MenuCommandId.Refresh] = "Обновить",
+        [MenuCommandId.Undo] = "Отменить",
+        [MenuCommandId.Properties] = "Свойства",
     };
 
     private static readonly Dictionary<MenuCommandId, string> _gestures = new() {
+        [MenuCommandId.Open] = "Enter",
         [MenuCommandId.Cut] = "Ctrl+X",
         [MenuCommandId.Copy] = "Ctrl+C",
         [MenuCommandId.Paste] = "Ctrl+V",
         [MenuCommandId.CopyPath] = "Ctrl+Shift+C",
         [MenuCommandId.Rename] = "F2",
         [MenuCommandId.Delete] = "Del",
-        [MenuCommandId.PermanentDelete] = "Shift+Del",
         [MenuCommandId.NewFolder] = "Ctrl+Shift+N",
         [MenuCommandId.Refresh] = "F5",
         [MenuCommandId.Undo] = "Ctrl+Z",
         [MenuCommandId.Properties] = "Alt+Enter",
-        [MenuCommandId.Open] = "Enter",
     };
 
     /// <summary>
     /// Entries the settings dialog offers to hide, in the order they should
     /// be listed there. Submenu headers are included on purpose — hiding
-    /// "File" removes the whole clipboard block in one click, which is
+    /// "Файл" removes the whole clipboard block in one click, which is
     /// exactly what a hotkey-only user wants.
     ///
     /// <para>
-    /// Excluded: <see cref="MenuCommandId.ShellSubmenu"/> (governed by the
-    /// separate extensions switch) and the View / Sort leaves (hiding
-    /// individual sort keys is noise — hide the submenu instead).
+    /// Excluded: the View / Sort leaves — hiding individual sort keys is
+    /// noise, hide the submenu instead.
     /// </para>
     /// </summary>
     public static IReadOnlyList<MenuCommandId> Hideable { get; } = new[] {
         MenuCommandId.Open,
+        MenuCommandId.OpenSubmenu,
         MenuCommandId.OpenWith,
-        MenuCommandId.OpenInExplorer,
         MenuCommandId.OpenInTerminal,
         MenuCommandId.FileSubmenu,
         MenuCommandId.Cut,
@@ -95,13 +90,11 @@ public static class ContextMenuCatalog {
         MenuCommandId.CreateShortcut,
         MenuCommandId.Rename,
         MenuCommandId.Delete,
-        MenuCommandId.PermanentDelete,
         MenuCommandId.NewFolder,
         MenuCommandId.ViewSubmenu,
         MenuCommandId.SortSubmenu,
         MenuCommandId.Refresh,
         MenuCommandId.Undo,
-        MenuCommandId.AddBookmark,
         MenuCommandId.Properties,
     };
 

@@ -76,6 +76,9 @@ public partial class MainWindow : Window {
 
     private void OnClosing(object? sender, CancelEventArgs e) {
         SaveWindowGeometry();
+        // Releases the cached IContextMenu, and with it the third-party
+        // handler DLLs it keeps referenced.
+        _shellMenus.Dispose();
     }
 
     private void RestoreWindowGeometry() {
@@ -157,8 +160,15 @@ public partial class MainWindow : Window {
             vm.Preview.PropertyChanged += OnPreviewPropertyChanged;
         }
         // A third-party command can create, rename or delete behind our
-        // back, so a successful one is always followed by a re-listing.
-        _contextMenus = new ContextMenuFactory(BuildMenuBindings(), () => Vm.RefreshCommand.Execute(null));
+        // back, so a successful one invalidates both the listing and the
+        // cached shell answer.
+        _contextMenus = new ContextMenuFactory(BuildMenuBindings(), () => {
+            _shellMenus.Invalidate();
+            Vm.RefreshCommand.Execute(null);
+        });
+        // Any re-listing — navigation, refresh, an operation finishing —
+        // means the cached shell answer describes a folder that has moved on.
+        Vm.Entries.CollectionChanged += (_, _) => _shellMenus.Invalidate();
         ApplyPreviewLayout();
         UpdateCodeEditor();
         // Native-size cap (so small images don't stretch above 100 %) is
@@ -427,6 +437,7 @@ public partial class MainWindow : Window {
     // the service commits to showing a menu before we can fix the selection.
 
     private ContextMenuFactory? _contextMenus;
+    private readonly ShellMenuCache _shellMenus = new();
 
     /// <summary>Set on right-button-down: did the click land on empty space?</summary>
     private bool _contextIsBackground;
@@ -502,8 +513,6 @@ public partial class MainWindow : Window {
 
         var model = ContextMenuBuilder.Build(target, settings, session?.Items);
         if (model.Count == 0) {
-            session?.Dispose();
-
             return;
         }
 
@@ -514,17 +523,16 @@ public partial class MainWindow : Window {
         menu.IsOpen = true;
     }
 
-    private static IShellContextMenuSession? QueryShellMenu(ContextMenuTarget target, ContextMenuSettings settings) {
+    private IShellContextMenuSession? QueryShellMenu(ContextMenuTarget target, ContextMenuSettings settings) {
         if (!settings.ShellExtensionsEnabled
             || target.IsReadOnlyLocation
-            || string.IsNullOrEmpty(target.FolderPath)
-            || !ServiceLocator.IsRegistered<IShellContextMenu>()) {
+            || string.IsNullOrEmpty(target.FolderPath)) {
             return null;
         }
 
         var paths = target.Selection.Select(entry => entry.FullPath).ToArray();
 
-        return ServiceLocator.Get<IShellContextMenu>().Open(paths, target.FolderPath);
+        return _shellMenus.Acquire(paths, target.FolderPath);
     }
 
     /// <summary>
@@ -539,7 +547,6 @@ public partial class MainWindow : Window {
         return new Dictionary<MenuCommandId, MenuBinding> {
             [MenuCommandId.Open] = new(vm.OpenCommand),
             [MenuCommandId.OpenWith] = new(vm.OpenWithCommand),
-            [MenuCommandId.OpenInExplorer] = new(vm.OpenInExplorerCommand),
             [MenuCommandId.OpenInTerminal] = new(vm.OpenInTerminalCommand),
 
             [MenuCommandId.Cut] = new(vm.CutCommand),
@@ -551,7 +558,6 @@ public partial class MainWindow : Window {
 
             [MenuCommandId.Rename] = new(rename),
             [MenuCommandId.Delete] = new(vm.DeleteCommand),
-            [MenuCommandId.PermanentDelete] = new(vm.PermanentDeleteCommand),
             [MenuCommandId.NewFolder] = new(vm.NewFolderCommand),
 
             [MenuCommandId.ViewDetails] = new(vm.SetViewModeCommand, nameof(ViewMode.Details)),
@@ -568,7 +574,6 @@ public partial class MainWindow : Window {
 
             [MenuCommandId.Refresh] = new(vm.RefreshCommand),
             [MenuCommandId.Undo] = new(vm.UndoCommand),
-            [MenuCommandId.AddBookmark] = new(vm.AddBookmarkCommand),
             [MenuCommandId.Properties] = new(vm.PropertiesCommand),
         };
     }

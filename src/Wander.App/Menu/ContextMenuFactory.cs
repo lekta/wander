@@ -26,9 +26,13 @@ public sealed record MenuBinding(ICommand Command, object? Parameter = null);
 /// handler. Handlers routinely open modal dialogs of their own ("Add to
 /// archive…", "Commit…"), and starting one while the popup is still
 /// unwinding leaves the menu painted on top of it. So a click records the
-/// pick, and the invocation happens once the menu has actually closed —
-/// which is also the only safe moment to dispose the session that owns the
-/// COM object the invocation needs.
+/// pick, and the invocation happens once the menu has actually closed.
+/// </para>
+///
+/// <para>
+/// The session itself belongs to <see cref="ShellMenuCache"/>, not to the
+/// menu — it usually outlives one right-click so the next one is instant.
+/// Nothing here disposes it.
 /// </para>
 /// </summary>
 public sealed class ContextMenuFactory {
@@ -39,7 +43,8 @@ public sealed class ContextMenuFactory {
     /// <param name="bindings">Built-in id → command map, assembled by the window.</param>
     /// <param name="afterShellCommand">
     /// Run after a third-party command succeeds — it may have created,
-    /// renamed or deleted files behind our back, so the listing is stale.
+    /// renamed or deleted files behind our back, so both the listing and
+    /// the cached shell answer are stale.
     /// </param>
     public ContextMenuFactory(
         IReadOnlyDictionary<MenuCommandId, MenuBinding> bindings,
@@ -62,12 +67,8 @@ public sealed class ContextMenuFactory {
                 return;
             }
             menu.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => {
-                try {
-                    if (pending.Id >= 0 && session is not null && session.Invoke(pending.Id)) {
-                        _afterShellCommand();
-                    }
-                } finally {
-                    session?.Dispose();
+                if (pending.Id >= 0 && session is not null && session.Invoke(pending.Id)) {
+                    _afterShellCommand();
                 }
             }));
         };
