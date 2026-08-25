@@ -8,6 +8,7 @@ using System.Windows;
 using System.Windows.Threading;
 using Wander.App.Conflict;
 using Wander.Core;
+using Wander.Core.Companions;
 using Wander.Core.Diagnostics;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
@@ -35,6 +36,7 @@ public sealed class MainViewModel : ObservableObject {
     private readonly OperationTracker _tracker;
     private readonly Dispatcher _dispatcher;
     private readonly ILogger _log;
+    private readonly CompanionResolver _companions;
 
     private string _status = "";
     private FileSystemEntry? _selectedEntry;
@@ -74,10 +76,16 @@ public sealed class MainViewModel : ObservableObject {
         _tracker = ServiceLocator.Get<OperationTracker>();
         _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
         _log = ServiceLocator.IsRegistered<ILogger>() ? ServiceLocator.Get<ILogger>() : NullLogger.Instance;
+        _companions = ServiceLocator.IsRegistered<CompanionResolver>()
+            ? ServiceLocator.Get<CompanionResolver>()
+            : CompanionResolver.Default;
 
         Preview = new PreviewController(
             ServiceLocator.IsRegistered<IImageMetadataReader>()
                 ? ServiceLocator.Get<IImageMetadataReader>()
+                : null,
+            ServiceLocator.IsRegistered<CompanionMetadataService>()
+                ? ServiceLocator.Get<CompanionMetadataService>()
                 : null);
 
         _nav = new NavigationController(
@@ -484,6 +492,12 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
+        // Also for a drag that came from outside Wander: dropping a .png
+        // means dropping the asset, and Explorer had no idea about its
+        // sidecar. Wander's own drags arrive pre-expanded; the dedupe in
+        // WithCompanions makes the second pass free.
+        sourcePaths = WithCompanions(sourcePaths);
+
         _log.Info($"Drop: {effect} {sourcePaths.Count} item(s) into {targetFolder}");
         var resolver = new DispatcherConflictResolver(new InteractiveConflictResolver());
         IReadOnlyList<BatchItemResult> results;
@@ -783,7 +797,7 @@ public sealed class MainViewModel : ObservableObject {
         // worker as values — the background pass must not race the settings
         // dialog.
         var sort = new SortOptions(Settings.SortKey, Settings.SortAscending, Settings.GroupFoldersFirst);
-        _ = RefreshFolderAsync(_nav.Current, Settings.ShowHidden, Settings.ShowSystem, sort);
+        _ = RefreshFolderAsync(_nav.Current, Settings.ShowHidden, Settings.ShowSystem, sort, Settings.IntegrateCompanions);
     }
 
     /// <summary>
@@ -793,7 +807,7 @@ public sealed class MainViewModel : ObservableObject {
     /// directory with tens of thousands of entries is not — and blocking
     /// the dispatcher there froze the whole window.
     /// </summary>
-    private async Task RefreshFolderAsync(string path, bool showHidden, bool showSystem, SortOptions sort) {
+    private async Task RefreshFolderAsync(string path, bool showHidden, bool showSystem, SortOptions sort, bool integrate) {
         _listLoadCts?.Cancel();
         _listLoadCts = new CancellationTokenSource();
         var token = _listLoadCts.Token;
@@ -813,7 +827,10 @@ public sealed class MainViewModel : ObservableObject {
                 if (!showSystem && e.IsSystem) { hidden++; continue; }
                 items.Add(e);
             }
-            return (Items: items, Hidden: hidden);
+            // Folding companions happens after the visibility filters, so a
+            // sidecar next to a main file the user chose not to see stays
+            // visible on its own rather than disappearing with it.
+            return (Items: integrate ? _companions.Collapse(items) : items, Hidden: hidden);
         }, token);
 
         // The spinner is a dimming overlay — raising it for the two frames a
@@ -989,6 +1006,12 @@ public sealed class MainViewModel : ObservableObject {
             foreach (var node in Bookmarks) {
                 node.RefreshChildren();
             }
+        }
+
+        if (e.PropertyName == nameof(SettingsViewModel.IntegrateCompanions)) {
+            // Folding sidecars in or out changes the listing itself, so the
+            // cheap re-list is exactly what's needed.
+            Refresh();
         }
 
         if (e.PropertyName == nameof(SettingsViewModel.SortKey) ||
@@ -1317,6 +1340,8 @@ public sealed class MainViewModel : ObservableObject {
         }
 
         var snapshot = _selectedEntries.ToList();
+        var paths = WithCompanions(snapshot.Select(e => e.FullPath));
+        int extras = paths.Count - snapshot.Count;
 
         // Permanent (Shift+Delete) always asks. Recycle asks only when the
         // user kept the "confirm" preference on — Ctrl+Z still restores from
@@ -1334,6 +1359,11 @@ public sealed class MainViewModel : ObservableObject {
                 message = $"{verb} {snapshot.Count} items?\n\n" +
                     string.Join("\n", snapshot.Take(5).Select(e => "• " + e.Name)) +
                     (snapshot.Count > 5 ? $"\n… and {snapshot.Count - 5} more" : "");
+            }
+            // The companions are about to go too; a confirmation that hides
+            // that would be a confirmation of the wrong thing.
+            if (extras > 0) {
+                message += $"\n\nTogether with {extras} companion file(s).";
             }
             if (permanent) {
                 message += "\n\nThis cannot be undone.";
@@ -1378,7 +1408,6 @@ public sealed class MainViewModel : ObservableObject {
             }
         }
 
-        var paths = snapshot.Select(e => e.FullPath).ToList();
         IReadOnlyList<DeleteResult> results;
         try {
             results = await RunWithProgressDialogAsync(
@@ -1415,6 +1444,9 @@ public sealed class MainViewModel : ObservableObject {
             _log.Info($"Undo: {action.Description}");
             Status = $"Undone: {action.Description}";
             Refresh();
+            // A rating undo rewrites a sidecar the footer is already
+            // showing; the listing refresh above wouldn't touch it.
+            Preview.ReloadCompanions();
         } catch (Exception ex) {
             _log.Error("Undo failed", ex);
             Status = $"Undo failed: {ex.Message}";
@@ -1430,8 +1462,17 @@ public sealed class MainViewModel : ObservableObject {
         }
 
         try {
-            _ops.Rename(_selectedEntry.FullPath, newName);
+            // Companions ride along under the matching new name, as one
+            // undo step — renaming Sprite.png and leaving Sprite.png.meta
+            // behind is precisely the breakage this feature exists to stop.
+            IReadOnlyList<(string Path, string NewName)> plan = Settings.IntegrateCompanions
+                ? _companions.RenamePlan(_selectedEntry.FullPath, newName, _fs)
+                : new[] { (_selectedEntry.FullPath, newName) };
+            _ops.RenameMany(plan);
             Refresh();
+            if (plan.Count > 1) {
+                Status = $"Renamed with {plan.Count - 1} companion file(s)";
+            }
         } catch (Exception ex) {
             _log.Error($"Rename failed: {_selectedEntry.FullPath} -> {newName}", ex);
             Status = $"Rename failed: {DescribeError(ex, _selectedEntry.FullPath)}";
@@ -1442,16 +1483,42 @@ public sealed class MainViewModel : ObservableObject {
         if (_selectedEntries.Count == 0) {
             return;
         }
-        _clipboard.Copy(_selectedEntries.Select(e => e.FullPath));
-        Status = $"Copied {_clipboard.Paths.Count} item(s)";
+        _clipboard.Copy(WithCompanions(_selectedEntries.Select(e => e.FullPath)));
+        Status = $"Copied {_selectedEntries.Count} item(s)";
     }
 
     private void Cut() {
         if (_selectedEntries.Count == 0) {
             return;
         }
-        _clipboard.Cut(_selectedEntries.Select(e => e.FullPath));
-        Status = $"Cut {_clipboard.Paths.Count} item(s)";
+        _clipboard.Cut(WithCompanions(_selectedEntries.Select(e => e.FullPath)));
+        Status = $"Cut {_selectedEntries.Count} item(s)";
+    }
+
+
+    /// <summary>
+    /// Expands a set of paths with the companion files that belong to them,
+    /// so every batch op (copy, move, delete, drag-out) carries the whole
+    /// group. Returns the input untouched when the user turned integration
+    /// off, and never lists a path twice.
+    /// </summary>
+    public IReadOnlyList<string> WithCompanions(IEnumerable<string> paths) {
+        var list = paths.ToList();
+        if (!Settings.IntegrateCompanions) {
+            return list;
+        }
+
+        var seen = new HashSet<string>(list, StringComparer.OrdinalIgnoreCase);
+        var expanded = new List<string>(list);
+        foreach (string path in list) {
+            foreach (string companion in _companions.FindCompanions(path, _fs)) {
+                if (seen.Add(companion)) {
+                    expanded.Add(companion);
+                }
+            }
+        }
+
+        return expanded;
     }
 
     private async Task PasteAsync() {

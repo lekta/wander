@@ -120,6 +120,60 @@ public sealed class FileOperationService {
         _undo.Push(new RenameAction(_fs, newPath, oldName));
     }
 
+    /// <summary>
+    /// Renames a group of files as one action — a main file together with
+    /// its companion sidecars. All-or-nothing: a failure part-way through
+    /// puts the already-renamed members back before the exception leaves
+    /// this method, so the user never ends up with <c>Ship.png</c> next to
+    /// <c>Sprite.png.meta</c>.
+    /// </summary>
+    /// <param name="renames">Path → new name, main file first.</param>
+    public void RenameMany(IReadOnlyList<(string Path, string NewName)> renames) {
+        if (renames.Count == 1) {
+            Rename(renames[0].Path, renames[0].NewName);
+
+            return;
+        }
+
+        foreach (var (path, newName) in renames) {
+            if (string.IsNullOrWhiteSpace(newName)) {
+                throw new ArgumentException("New name cannot be empty", nameof(renames));
+            }
+            GuardDestructive(path);
+        }
+
+        using var _ = _undo.BeginOperation();
+        var steps = new List<IUndoableAction>(renames.Count);
+        try {
+            foreach (var (path, newName) in renames) {
+                string oldName = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                _fs.Rename(path, newName);
+                string parent = Path.GetDirectoryName(path) ?? "";
+                steps.Add(new RenameAction(_fs, Path.Combine(parent, newName), oldName));
+                _log.Info($"Rename: {path} -> {newName}");
+            }
+        } catch {
+            Rollback(steps);
+            throw;
+        }
+
+        _undo.Push(new CompositeAction($"Rename to '{renames[0].NewName}'", steps));
+    }
+
+
+    private void Rollback(IReadOnlyList<IUndoableAction> steps) {
+        for (int i = steps.Count - 1; i >= 0; i--) {
+            try {
+                steps[i].Undo();
+            } catch (Exception ex) {
+                // Nothing better to do than say so: the group is now split
+                // and the user has to see which half moved.
+                _log.Error("Rename rollback failed", ex);
+            }
+        }
+    }
+
+
     public void CreateFolder(string parent, string name) {
         using var _ = _undo.BeginOperation();
         var path = Path.Combine(parent, name);

@@ -40,6 +40,17 @@ public sealed record AppSettings {
     public bool ConfirmRecycle { get; init; } = true;
 
 
+    // --- Companions ("integrated items") -------------------------------
+    /// <summary>
+    /// Fold companion files (Unity <c>.meta</c>, RawTherapee <c>.pp3</c>)
+    /// into the file they belong to: one row in the listing, and every
+    /// operation on the main file takes its sidecars along. On by default —
+    /// a sidecar left behind by a rename is a bug from the user's side of
+    /// the screen, whichever tool caused it.
+    /// </summary>
+    public bool IntegrateCompanions { get; init; } = true;
+
+
     // --- Sort ----------------------------------------------------------
     /// <summary>Which column the folder listing is sorted by.</summary>
     public SortKey SortKey { get; init; } = SortKey.Name;

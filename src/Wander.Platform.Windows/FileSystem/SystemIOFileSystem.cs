@@ -223,6 +223,40 @@ public sealed class SystemIOFileSystem : IFileSystem {
         MoveEntry(path, target);
     }
 
+    public byte[] ReadAllBytes(string path) {
+        return File.ReadAllBytes(path);
+    }
+
+    public void ReplaceAtomic(string path, byte[] content) {
+        // Temp file in the same directory so the swap stays on one volume.
+        string temp = path + ".wander-tmp";
+        try {
+            File.WriteAllBytes(temp, content);
+            if (File.Exists(path)) {
+                // File.Replace is the atomic swap; it also carries the
+                // original's attributes over to the replacement. No backup
+                // file — the undo stack is where the old value lives.
+                File.Replace(temp, path, destinationBackupFileName: null, ignoreMetadataErrors: true);
+            } else {
+                File.Move(temp, path);
+            }
+        } catch {
+            TryDelete(temp);
+            throw;
+        }
+    }
+
+    private static void TryDelete(string path) {
+        try {
+            if (File.Exists(path)) {
+                File.Delete(path);
+            }
+        } catch {
+            // Best effort: the write already failed, and a stray temp file
+            // is not worth masking the original exception with.
+        }
+    }
+
 
     private static FileSystemEntry BuildEntry(string path, EntryKind kind) {
         if (kind == EntryKind.Directory) {

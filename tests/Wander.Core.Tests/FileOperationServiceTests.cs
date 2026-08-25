@@ -138,6 +138,75 @@ public class FileOperationServiceTests {
         Assert.Throws<ArgumentException>(() => ops.Rename(FileA, " "));
     }
 
+    // --- RenameMany (a file plus its companion sidecars) ---------------
+
+    private const string MainAsset = @"C:\assets\Sprite.png";
+    private const string MetaAsset = @"C:\assets\Sprite.png.meta";
+
+
+    [Fact]
+    public void RenameMany_RenamesEveryMemberOfTheGroup() {
+        var (ops, fs, _, _) = Setup();
+        fs.Files[MainAsset] = new byte[0];
+        fs.Files[MetaAsset] = new byte[0];
+
+        ops.RenameMany(new[] { (MainAsset, "Ship.png"), (MetaAsset, "Ship.png.meta") });
+
+        Assert.True(fs.Files.ContainsKey(@"C:\assets\Ship.png"));
+        Assert.True(fs.Files.ContainsKey(@"C:\assets\Ship.png.meta"));
+    }
+
+    [Fact]
+    public void RenameMany_LandsAsOneUndoStep() {
+        var (ops, fs, _, undo) = Setup();
+        fs.Files[MainAsset] = new byte[0];
+        fs.Files[MetaAsset] = new byte[0];
+
+        ops.RenameMany(new[] { (MainAsset, "Ship.png"), (MetaAsset, "Ship.png.meta") });
+        Assert.Equal(1, undo.Depth);
+
+        undo.Undo();
+        Assert.True(fs.Files.ContainsKey(MainAsset));
+        Assert.True(fs.Files.ContainsKey(MetaAsset));
+    }
+
+    [Fact]
+    public void RenameMany_RollsBack_WhenAMemberFails() {
+        // Half a renamed group is the exact breakage this feature exists to
+        // prevent — a failure must leave the folder as it was.
+        var (ops, fs, _, undo) = Setup();
+        fs.Files[MainAsset] = new byte[0];
+        fs.Files[MetaAsset] = new byte[0];
+        fs.RenameFailures.Add(MetaAsset);
+
+        Assert.Throws<IOException>(() => ops.RenameMany(new[] { (MainAsset, "Ship.png"), (MetaAsset, "Ship.png.meta") }));
+
+        Assert.True(fs.Files.ContainsKey(MainAsset));
+        Assert.False(fs.Files.ContainsKey(@"C:\assets\Ship.png"));
+        Assert.Equal(0, undo.Depth);
+    }
+
+    [Fact]
+    public void RenameMany_WithOneItem_BehavesLikeRename() {
+        var (ops, fs, _, undo) = Setup();
+        fs.Files[FileA] = new byte[0];
+
+        ops.RenameMany(new[] { (FileA, RenamedNewName) });
+
+        Assert.Contains($"Rename:{FileA}->{RenamedNewName}", fs.CallLog);
+        Assert.Equal(1, undo.Depth);
+    }
+
+    [Fact]
+    public void RenameMany_EmptyName_Throws_BeforeTouchingAnything() {
+        var (ops, fs, _, _) = Setup();
+        fs.Files[MainAsset] = new byte[0];
+
+        Assert.Throws<ArgumentException>(() => ops.RenameMany(new[] { (MainAsset, "Ship.png"), (MetaAsset, " ") }));
+        Assert.Empty(fs.CallLog);
+    }
+
+
     [Fact]
     public void CreateFolder_CombinesPath() {
         var (ops, fs, _, _) = Setup();

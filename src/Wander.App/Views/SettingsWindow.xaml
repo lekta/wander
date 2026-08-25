@@ -92,6 +92,29 @@
         </DataTemplate>
 
 
+        <!-- Companions ("integrated items") -->
+        <DataTemplate DataType="{x:Type vm:CompanionsSettingsCategory}">
+            <StackPanel>
+                <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
+                <CheckBox Content="Показывать файл вместе со спутниками как один элемент"
+                          IsChecked="{Binding Owner.IntegrateCompanions}"/>
+                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0">
+                    Спутник — служебный файл рядом с основным: Unity-шный
+                    «.meta», настройки проявки RawTherapee «.pp3». Когда флаг
+                    включён, такой файл не показывается отдельной строкой, а
+                    основной помечается значком «+». Переименование,
+                    перемещение, копирование и удаление уносят спутников
+                    вместе с основным файлом — одной записью в Ctrl+Z.
+                    Контекстное меню при этом собирается для основного файла.
+                </TextBlock>
+                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0">
+                    Когда выключено — обычное поведение: каждый файл сам по
+                    себе, операции его спутников не касаются.
+                </TextBlock>
+            </StackPanel>
+        </DataTemplate>
+
+
         <!-- Layout -->
         <DataTemplate DataType="{x:Type vm:LayoutSettingsCategory}">
             <StackPanel>

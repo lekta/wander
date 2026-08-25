@@ -45,6 +45,12 @@ public sealed class FileOperationsSettingsCategory : SettingsCategoryViewModel {
 }
 
 
+public sealed class CompanionsSettingsCategory : SettingsCategoryViewModel {
+    public CompanionsSettingsCategory(SettingsViewModel owner)
+        : base("Интегрированные элементы", owner) { }
+}
+
+
 public sealed class LayoutSettingsCategory : SettingsCategoryViewModel {
     public LayoutSettingsCategory(SettingsViewModel owner)
         : base("Вёрстка", owner) { }

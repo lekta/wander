@@ -26,7 +26,33 @@
         <conv:EnumToVisibilityConverter x:Key="EnumToVisibility"/>
         <conv:EnumEqualsConverter x:Key="EnumEquals"/>
         <conv:BitmapPixelSizeConverter x:Key="BitmapPixelSize"/>
+        <conv:RankStarConverter x:Key="RankStar"/>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+
+        <!--
+            One star of the .pp3 rating widget. Five copies of this in the
+            preview footer, each with its own CommandParameter; clicking the
+            star that already marks the rating clears it.
+        -->
+        <Style x:Key="RatingStar" TargetType="Button">
+            <Setter Property="Command" Value="{Binding Preview.SetRankCommand}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="#D08A00"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Padding" Value="1,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="ToolTip" Value="Rating in the .pp3 sidecar"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
         <!--
             Suppress the dashed focus rectangle on selectable row containers.
@@ -636,7 +662,27 @@
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
-                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*"/>
+                        <!--
+                            Name + the "has companions" marker. A template
+                            column rather than a text one only because of
+                            that marker; SortMemberPath keeps the header
+                            behaving exactly as before.
+                        -->
+                        <DataGridTemplateColumn Header="Name" Width="*" SortMemberPath="Name" IsReadOnly="True">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"/>
+                                        <Border Margin="6,0,0,0" Padding="3,0" CornerRadius="2"
+                                                Background="#E8E8E8" VerticalAlignment="Center"
+                                                ToolTip="Integrated: shown as one item together with its companion file(s)"
+                                                Visibility="{Binding HasCompanions, Converter={StaticResource BoolToVisibility}}">
+                                            <TextBlock Text="+" FontSize="10" Foreground="#666"/>
+                                        </Border>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
                         <DataGridTextColumn Header="Type" Binding="{Binding Kind}" Width="80"/>
                         <DataGridTextColumn Header="Size" Binding="{Binding Size}" Width="100"/>
                         <DataGridTextColumn Header="Modified" Binding="{Binding ModifiedUtc, StringFormat=yyyy-MM-dd HH:mm}" Width="140"/>
@@ -943,9 +989,66 @@
                     <Border Grid.Row="1"
                             BorderBrush="#DDD" BorderThickness="0,1,0,0"
                             Padding="8,6" Background="#F3F3F3">
-                        <TextBlock Text="{Binding Preview.Summary}"
-                                   FontSize="11" Foreground="#444"
-                                   TextWrapping="Wrap"/>
+                        <StackPanel>
+                            <TextBlock Text="{Binding Preview.Summary}"
+                                       FontSize="11" Foreground="#444"
+                                       TextWrapping="Wrap"/>
+
+                            <!--
+                                Companion block: what the sidecars next to
+                                this file have to say. Only the two formats
+                                Wander understands so far get a rendering of
+                                their own; the file list above them is shown
+                                for any companion at all.
+                            -->
+                            <StackPanel Margin="0,6,0,0"
+                                        Visibility="{Binding Preview.HasCompanions, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock FontSize="11" Foreground="#888" TextWrapping="Wrap">
+                                    <Run Text="Integrated:"/><Run Text=" "/><Run Text="{Binding Preview.CompanionFiles, Mode=OneWay}"/>
+                                </TextBlock>
+
+                                <!-- Unity .meta — the GUID, and a button to take it away -->
+                                <StackPanel Orientation="Horizontal" Margin="0,3,0,0"
+                                            Visibility="{Binding Preview.HasUnityGuid, Converter={StaticResource BoolToVisibility}}">
+                                    <TextBlock Text="GUID" FontSize="11" Foreground="#444" VerticalAlignment="Center"/>
+                                    <TextBox Text="{Binding Preview.UnityGuid, Mode=OneWay}"
+                                             IsReadOnly="True" IsReadOnlyCaretVisible="True"
+                                             FontFamily="Consolas" FontSize="11"
+                                             BorderThickness="0" Background="Transparent"
+                                             Margin="6,0,0,0" MinWidth="0" Padding="0"
+                                             VerticalAlignment="Center"/>
+                                    <Button Content="Copy" Command="{Binding Preview.CopyGuidCommand}"
+                                            ToolTip="Copy GUID"
+                                            Margin="4,0,0,0" Padding="4,0" FontSize="11"
+                                            VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <TextBlock Text="{Binding Preview.UnityDetail}"
+                                           FontSize="11" Foreground="#888" TextWrapping="Wrap"/>
+
+                                <!-- RawTherapee .pp3 — the rating, editable in place -->
+                                <StackPanel Orientation="Horizontal" Margin="0,3,0,0"
+                                            Visibility="{Binding Preview.HasPp3Rating, Converter={StaticResource BoolToVisibility}}">
+                                    <TextBlock Text="Rating" FontSize="11" Foreground="#444"
+                                               VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <Button Style="{StaticResource RatingStar}" CommandParameter="1"
+                                            Content="{Binding Preview.Pp3Rank, Converter={StaticResource RankStar}, ConverterParameter=1}"/>
+                                    <Button Style="{StaticResource RatingStar}" CommandParameter="2"
+                                            Content="{Binding Preview.Pp3Rank, Converter={StaticResource RankStar}, ConverterParameter=2}"/>
+                                    <Button Style="{StaticResource RatingStar}" CommandParameter="3"
+                                            Content="{Binding Preview.Pp3Rank, Converter={StaticResource RankStar}, ConverterParameter=3}"/>
+                                    <Button Style="{StaticResource RatingStar}" CommandParameter="4"
+                                            Content="{Binding Preview.Pp3Rank, Converter={StaticResource RankStar}, ConverterParameter=4}"/>
+                                    <Button Style="{StaticResource RatingStar}" CommandParameter="5"
+                                            Content="{Binding Preview.Pp3Rank, Converter={StaticResource RankStar}, ConverterParameter=5}"/>
+                                    <TextBlock Text="{Binding Preview.Pp3ColorLabelText}"
+                                               FontSize="11" Foreground="#888"
+                                               VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                </StackPanel>
+
+                                <TextBlock Text="{Binding Preview.CompanionStatus}"
+                                           FontSize="11" Foreground="#888" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </StackPanel>
                     </Border>
                 </Grid>
             </Border>

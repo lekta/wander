@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Wander.App.Util;
+using Wander.Core.Companions;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
 using ImageMetadata = Wander.Core.Icons.ImageMetadata;
@@ -71,6 +72,7 @@ public sealed class PreviewController : ObservableObject {
 
 
     private readonly IImageMetadataReader? _metadataReader;
+    private readonly CompanionMetadataService? _companionMetadata;
 
     private bool _isVisible;
     private FileSystemEntry? _primary;
@@ -94,9 +96,21 @@ public sealed class PreviewController : ObservableObject {
     private ImageMetadata? _imageMetadata;
     private string _summary = "";
 
+    private CancellationTokenSource? _companionCts;
+    private string _companionFiles = "";
+    private string? _unityGuid;
+    private string? _unityDetail;
+    private string? _pp3Path;
+    private int _pp3Rank;
+    private int? _pp3ColorLabel;
 
-    public PreviewController(IImageMetadataReader? metadataReader) {
+
+    public PreviewController(IImageMetadataReader? metadataReader, CompanionMetadataService? companionMetadata) {
         _metadataReader = metadataReader;
+        _companionMetadata = companionMetadata;
+
+        SetRankCommand = new RelayCommand(p => SetRank(p), _ => HasPp3Rating);
+        CopyGuidCommand = new RelayCommand(_ => CopyGuid(), _ => HasUnityGuid);
     }
 
 
@@ -167,6 +181,79 @@ public sealed class PreviewController : ObservableObject {
         private set => SetField(ref _summary, value);
     }
 
+    // --- Companion ("integrated item") block ---------------------------
+    // Everything below describes the sidecars folded into the selected
+    // row. It sits under the summary in the preview footer, which is where
+    // the answer to "what is this file's GUID / how did I rate this shot"
+    // belongs: next to the file, not behind a dialog.
+
+    /// <summary>Names of the companion files, comma-separated. Empty when there are none.</summary>
+    public string CompanionFiles {
+        get => _companionFiles;
+        private set {
+            if (SetField(ref _companionFiles, value)) {
+                Raise(nameof(HasCompanions));
+            }
+        }
+    }
+
+    public bool HasCompanions => _companionFiles.Length > 0;
+
+    /// <summary>Unity asset GUID, or null when the selection has no <c>.meta</c>.</summary>
+    public string? UnityGuid {
+        get => _unityGuid;
+        private set {
+            if (SetField(ref _unityGuid, value)) {
+                Raise(nameof(HasUnityGuid));
+            }
+        }
+    }
+
+    public bool HasUnityGuid => !string.IsNullOrEmpty(_unityGuid);
+
+    /// <summary>Importer name / "folder asset" — context for the GUID above.</summary>
+    public string? UnityDetail {
+        get => _unityDetail;
+        private set => SetField(ref _unityDetail, value);
+    }
+
+    /// <summary>Whether the selection has a <c>.pp3</c> whose rating can be shown and edited.</summary>
+    public bool HasPp3Rating => _pp3Path is not null;
+
+    /// <summary>Stars currently written in the sidecar, 0…5.</summary>
+    public int Pp3Rank {
+        get => _pp3Rank;
+        private set => SetField(ref _pp3Rank, value);
+    }
+
+    /// <summary>RawTherapee colour label, 0 (none) … 5. Null when the file doesn't say.</summary>
+    public int? Pp3ColorLabel {
+        get => _pp3ColorLabel;
+        private set {
+            if (SetField(ref _pp3ColorLabel, value)) {
+                Raise(nameof(Pp3ColorLabelText));
+            }
+        }
+    }
+
+    public string Pp3ColorLabelText =>
+        _pp3ColorLabel is int label && label > 0 ? $"Colour label {label}" : "";
+
+    /// <summary>Writes a new star count into the <c>.pp3</c>. Parameter is the star clicked, 1…5.</summary>
+    public RelayCommand SetRankCommand { get; }
+
+    /// <summary>Puts the Unity GUID on the clipboard — the reason it's shown at all.</summary>
+    public RelayCommand CopyGuidCommand { get; }
+
+    /// <summary>Status line for the last companion write, shown next to the stars.</summary>
+    public string CompanionStatus {
+        get => _companionStatus;
+        private set => SetField(ref _companionStatus, value);
+    }
+
+    private string _companionStatus = "";
+
+
     public bool IsPlaceholderVisible =>
         _isVisible && (_kind == PreviewKind.None || _kind == PreviewKind.Unsupported);
 
@@ -184,6 +271,7 @@ public sealed class PreviewController : ObservableObject {
         Raise(nameof(IsPlaceholderVisible));
         SchedulePreviewUpdate();
         ScheduleSummaryUpdate();
+        ScheduleCompanionUpdate();
     }
 
     public void SetPrimary(FileSystemEntry? entry) {
@@ -193,6 +281,17 @@ public sealed class PreviewController : ObservableObject {
         _primary = entry;
         SchedulePreviewUpdate();
         ScheduleSummaryUpdate();
+        ScheduleCompanionUpdate();
+    }
+
+
+    /// <summary>
+    /// Re-reads the sidecars of the current selection. Needed after a
+    /// Ctrl+Z that put an old rating back: the file changed underneath a
+    /// footer that is otherwise only refreshed by a new selection.
+    /// </summary>
+    public void ReloadCompanions() {
+        ScheduleCompanionUpdate();
     }
 
     public void SetSelection(IReadOnlyList<FileSystemEntry> selection) {
@@ -442,6 +541,125 @@ public sealed class PreviewController : ObservableObject {
         GifUri = null;
         VideoUri = null;
         ImageMetadata = null;
+    }
+
+
+    // --- Companion pipeline --------------------------------------------
+
+    private void ScheduleCompanionUpdate() {
+        _companionCts?.Cancel();
+        _companionCts = new CancellationTokenSource();
+        _ = UpdateCompanionsAsync(_companionCts.Token);
+    }
+
+    private async Task UpdateCompanionsAsync(CancellationToken ct) {
+        ClearCompanionInfo();
+
+        var companions = _primary?.Companions;
+        if (!_isVisible || _companionMetadata is null || companions is null || companions.Count == 0) {
+            return;
+        }
+
+        // Sidecars are tiny, but they still live on the same disk that can
+        // be a sleeping spindle or a network share — off the UI thread like
+        // every other read here.
+        var loaded = await Task.Run(() => Load(companions), ct);
+        if (ct.IsCancellationRequested) {
+            return;
+        }
+
+        CompanionFiles = string.Join(", ", companions.Select(Path.GetFileName));
+        UnityGuid = loaded.Meta?.Guid;
+        UnityDetail = DescribeMeta(loaded.Meta);
+        _pp3Path = loaded.Pp3Path;
+        Pp3Rank = loaded.Rating?.Rank ?? 0;
+        Pp3ColorLabel = loaded.Rating?.ColorLabel;
+        Raise(nameof(HasPp3Rating));
+        SetRankCommand.RaiseCanExecuteChanged();
+        CopyGuidCommand.RaiseCanExecuteChanged();
+    }
+
+    private (UnityMetaInfo? Meta, string? Pp3Path, Pp3Rating? Rating) Load(IReadOnlyList<string> companions) {
+        UnityMetaInfo? meta = null;
+        string? pp3Path = null;
+        Pp3Rating? rating = null;
+
+        foreach (string path in companions) {
+            string ext = Path.GetExtension(path);
+            if (meta is null && ext.Equals(".meta", StringComparison.OrdinalIgnoreCase)) {
+                meta = _companionMetadata!.ReadUnityMeta(path);
+            } else if (pp3Path is null && ext.Equals(".pp3", StringComparison.OrdinalIgnoreCase)) {
+                rating = _companionMetadata!.ReadPp3(path);
+                if (rating is not null) {
+                    pp3Path = path;
+                }
+            }
+        }
+
+        return (meta, pp3Path, rating);
+    }
+
+    private static string? DescribeMeta(UnityMetaInfo? meta) {
+        if (meta is null) {
+            return null;
+        }
+
+        var parts = new List<string>();
+        if (meta.IsFolderAsset) {
+            parts.Add("folder asset");
+        }
+        if (!string.IsNullOrEmpty(meta.Importer)) {
+            parts.Add(meta.Importer!);
+        }
+
+        return parts.Count > 0 ? string.Join("   •   ", parts) : null;
+    }
+
+    private void SetRank(object? parameter) {
+        if (_pp3Path is null || _companionMetadata is null) {
+            return;
+        }
+        if (parameter is not string raw || !int.TryParse(raw, out int star)) {
+            return;
+        }
+
+        // Clicking the star that already marks the rating clears it —
+        // otherwise a mis-click could never be taken back without Ctrl+Z.
+        int target = star == Pp3Rank ? 0 : star;
+        try {
+            _companionMetadata.SetPp3Rank(_pp3Path, target);
+            Pp3Rank = target;
+            CompanionStatus = "";
+        } catch (Exception ex) {
+            CompanionStatus = ex.Message;
+        }
+    }
+
+    private void CopyGuid() {
+        if (string.IsNullOrEmpty(_unityGuid)) {
+            return;
+        }
+        try {
+            System.Windows.Clipboard.SetText(_unityGuid);
+            CompanionStatus = "GUID copied";
+        } catch (Exception ex) {
+            // The clipboard is a shared, lockable OS resource — another app
+            // holding it is not a bug in ours.
+            CompanionStatus = $"Clipboard is busy: {ex.Message}";
+        }
+    }
+
+    private void ClearCompanionInfo() {
+        CompanionFiles = "";
+        UnityGuid = null;
+        UnityDetail = null;
+        _pp3Path = null;
+        Pp3Rank = 0;
+        Pp3ColorLabel = null;
+        CompanionStatus = "";
+        Raise(nameof(HasPp3Rating));
+        SetRankCommand.RaiseCanExecuteChanged();
+        CopyGuidCommand.RaiseCanExecuteChanged();
     }
 
 

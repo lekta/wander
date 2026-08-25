@@ -36,4 +36,19 @@ public interface IFileSystem {
     void CopyDirectory(string source, string destination, bool overwrite);
     void MoveEntry(string source, string destination);
     void Rename(string path, string newName);
+
+    /// <summary>
+    /// Raw bytes of a small file. Bytes rather than text on purpose: the
+    /// companion-sidecar path has to round-trip the original encoding and
+    /// BOM, so decoding is the caller's decision, not the layer's.
+    /// </summary>
+    byte[] ReadAllBytes(string path);
+
+    /// <summary>
+    /// Replace a file's content without ever leaving it half-written: the
+    /// new content goes to a temporary file next to the target, which is
+    /// then swapped in. Used for edits to third-party formats, where a
+    /// truncated file means somebody's lost work.
+    /// </summary>
+    void ReplaceAtomic(string path, byte[] content);
 }

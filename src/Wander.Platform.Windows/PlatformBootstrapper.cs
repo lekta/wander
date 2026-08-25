@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
 using Wander.Core;
+using Wander.Core.Companions;
 using Wander.Core.Diagnostics;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
@@ -52,6 +53,13 @@ public static class PlatformBootstrapper {
         ServiceLocator.Register<OperationTracker>(new OperationTracker());
         ServiceLocator.Register<IRecycleBin>(new ShellRecycleBin(logger));
         ServiceLocator.Register<FileOperationService>(new FileOperationService());
+
+        // Companion ("integrated item") support: the resolver knows which
+        // files belong together, the metadata service reads and writes what
+        // is inside them.
+        ServiceLocator.Register<CompanionResolver>(CompanionResolver.Default);
+        ServiceLocator.Register<CompanionMetadataService>(new CompanionMetadataService(
+            ServiceLocator.Get<IFileSystem>(), ServiceLocator.Get<UndoService>(), logger));
     }
 
 

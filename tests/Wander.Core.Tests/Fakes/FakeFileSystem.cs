@@ -98,6 +98,17 @@ internal sealed class FakeFileSystem : IFileSystem {
         Directories.Remove(path);
     }
 
+    public byte[] ReadAllBytes(string path) {
+        return Files.TryGetValue(path, out byte[]? data)
+            ? data
+            : throw new System.IO.FileNotFoundException("Not found", path);
+    }
+
+    public void ReplaceAtomic(string path, byte[] content) {
+        CallLog.Add($"ReplaceAtomic:{path}");
+        Files[path] = content;
+    }
+
     public void ClearReadOnly(string path) {
         CallLog.Add($"ClearReadOnly:{path}");
     }
@@ -125,8 +136,15 @@ internal sealed class FakeFileSystem : IFileSystem {
         }
     }
 
+    /// <summary>Paths whose rename must fail — for exercising rollback paths.</summary>
+    public HashSet<string> RenameFailures { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+
     public void Rename(string path, string newName) {
         CallLog.Add($"Rename:{path}->{newName}");
+        if (RenameFailures.Contains(path)) {
+            throw new System.IO.IOException($"Rename refused: {path}");
+        }
         string parent = System.IO.Path.GetDirectoryName(path)!;
         MoveEntry(path, System.IO.Path.Combine(parent, newName));
     }

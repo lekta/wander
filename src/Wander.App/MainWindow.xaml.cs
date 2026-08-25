@@ -845,7 +845,10 @@ public partial class MainWindow : Window {
         System.Windows.DragDrop.AddGiveFeedbackHandler(src, feedback);
 
         try {
-            var data = new DataObject(DataFormats.FileDrop, paths);
+            // The payload carries the companions; the preview above still
+            // counts what the user selected, because that is what they
+            // think they are dragging.
+            var data = new DataObject(DataFormats.FileDrop, Vm.WithCompanions(paths).ToArray());
             System.Windows.DragDrop.DoDragDrop(src, data, DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link);
         } catch {
             // drop target may throw on rejection — ignore.

@@ -17,7 +17,7 @@
 | `Wander.Core` | `net10.0` | Чистая логика и абстракции. Не знает про Windows и про UI. |
 | `Wander.Platform.Windows` | `net10.0-windows` | Реализации интерфейсов Core: Win32, Shell COM, `System.IO`. |
 | `Wander.App` | `net10.0-windows` | WPF UI: окно, ViewModel'и, диалоги, конвертеры. |
-| `Wander.Core.Tests` | `net10.0` | xUnit. Тестирует **только** Core через фейки. 179 тестов. |
+| `Wander.Core.Tests` | `net10.0` | xUnit. Тестирует **только** Core через фейки. 260 тестов. |
 
 **Жёсткое правило:** в `Wander.Core` нет `using System.Windows.*`, нет COM,
 нет PInvoke. Если кажется, что нужно — значит нужен новый интерфейс в Core и
@@ -27,6 +27,8 @@
 ```
 src/
 ├── Wander.Core/
+│   ├── Companions/     CompanionRule, CompanionResolver, CompanionMetadataService,
+│   │                   Pp3Sidecar, UnityMetaSidecar
 │   ├── Diagnostics/    IFileLockInspector, FileLockInfo
 │   ├── FileSystem/     IFileSystem, FileOperationService, BatchExecutor,
 │   │                   ClipboardController, SearchController, SystemPathGuard,
@@ -59,7 +61,7 @@ src/
     ├── Conflict/       ConflictDialog, BatchConflictDialog,
     │                   DispatcherConflictResolver, InteractiveConflictResolver
     ├── Controls/       AsyncIcon, GifImage, MagnifierCursor, RubberBandAdorner
-    ├── Converters/     Icon, EnumEquals, EnumToVisibility, BitmapPixelSize
+    ├── Converters/     Icon, EnumEquals, EnumToVisibility, BitmapPixelSize, RankStar
     ├── Diagnostics/    CrashReporter
     ├── DragPreview/    DragPreviewWindow, DropTargetAdorner, DragAction, NativeMethods
     ├── Menu/           ContextMenuFactory, MenuBinding, ShellMenuCache
@@ -94,6 +96,9 @@ src/
 3. **Общие синглтоны:** `UndoService`, `OperationTracker`, `IRecycleBin`,
    `FileOperationService`. Именно «один на приложение» — иначе undo-стек и
    прогресс расползутся по вызывающим.
+4. **Companion-сервисы:** `CompanionResolver` (набор правил) и
+   `CompanionMetadataService` — последний зависит от `IFileSystem` и
+   `UndoService`, поэтому идёт после них.
 
 Тесты вместо этого регистрируют фейки из `tests/Wander.Core.Tests/Fakes/`.
 
@@ -407,6 +412,81 @@ Wander не отдаёт `HMENU` в `TrackPopupMenu`, а обходит его �
 
 ---
 
+## Companion-файлы («интегрированные элементы»)
+
+Служебный файл рядом с основным — Unity `.meta`, RawTherapee `.pp3` — с точки
+зрения пользователя не отдельная сущность, а довесок. Wander показывает пару
+одной строкой и уносит спутника вместе с основным файлом при любой операции.
+Флаг `AppSettings.IntegrateCompanions`, по-умолчанию включён.
+
+Механизм разложен на три куска, и граница между ними — это граница «чистое
+сопоставление имён / чтение-запись содержимого / решение UI».
+
+```
+CompanionRule            суффикс + шаблон имени. Формат — это данные,
+   │                     а не код: новый сайдкар = ещё одна строка
+   ▼
+CompanionResolver        Collapse()      список папки → свёрнутый список
+   │                     FindCompanions() путь → что лежит рядом на диске
+   │                     RenamePlan()     путь + новое имя → план группы
+   │
+   ├──▶ MainViewModel.RefreshFolderAsync  (свёртка листинга, на тредпуле)
+   ├──▶ MainViewModel.WithCompanions()    (расширение путей перед batch-ops)
+   └──▶ FileOperationService.RenameMany() (группа как один undo-шаг)
+
+CompanionMetadataService  чтение/запись содержимого сайдкара
+   ├──▶ UnityMetaSidecar.Read()   GUID, импортёр, folderAsset
+   ├──▶ Pp3Sidecar.Read()         Rank, ColorLabel
+   └──▶ Pp3Sidecar.WithRank()  ─▶ IFileSystem.ReplaceAtomic()
+```
+
+**Два шаблона имён**, оба обязательны — иначе половина форматов отваливается:
+
+| Шаблон | Пример | Кто |
+|---|---|---|
+| `Appended` — дописывается к полному имени | `Sprite.png.meta` | Unity, RawTherapee, Google Takeout |
+| `Replaced` — заменяет расширение | `IMG_1234.xmp` | Adobe/darktable, iPhone `.AAE` |
+
+`Appended` разрешается по точному имени, `Replaced` — по stem'у, и если на
+stem претендует больше одного файла (`IMG.CR2` + `IMG.jpg` при `IMG.xmp`),
+спутник не привязывается ни к кому: угадывать тут хуже, чем ничего не делать.
+
+**Что где происходит:**
+
+- **Свёртка листинга** — в воркере `RefreshFolderAsync`, **после** фильтров
+  Hidden/System. Спутник рядом с отфильтрованным файлом остаётся видимым сам
+  по себе; спутник-сирота — тоже. Ничего не исчезает молча.
+- **`FileSystemEntry.Companions`** — список путей, который свёртка кладёт в
+  основную запись. Пусто у обычного файла и всегда пусто при выключенном
+  флаге. Отсюда бейдж «+» в списке и блок в футере просмотра.
+- **Контекстное меню** ничего про спутников не знает и знать не должно:
+  их нет в выделении, значит меню (включая шелловское) строится для
+  основного файла само собой.
+- **Групповые операции** — `WithCompanions()` расширяет список путей перед
+  `MoveManyAsync` / `CopyManyAsync` / `DeleteManyAsync` / `DoDragDrop`.
+  Undo уже composite, так что группа возвращается одним `Ctrl+Z`.
+  Переименование идёт мимо: спутнику нужно новое **имя**, а не новая папка,
+  поэтому `RenamePlan` + `RenameMany`, и последний откатывает уже сделанное,
+  если упал на середине.
+
+**Запись в чужой формат** — первое, что Wander делает с файлами, которых не
+создавал, поэтому путь узкий намеренно:
+
+- только `[General] Rank` в **уже существующем** `.pp3` — новый сайдкар не
+  создаётся, пустой pp3 меняет поведение RawTherapee;
+- только через `IFileSystem.ReplaceAtomic` (temp рядом → `File.Replace`);
+- правится ровно одна строка, остальные байты переносятся как есть —
+  в `.pp3` лежит вся работа пользователя по проявке;
+- файл ходит байтами: BOM распознаётся и возвращается на место, `\r\n` / `\n`
+  сохраняются построчно;
+- прежнее значение — в `Pp3RankAction` на undo-стеке.
+
+`.meta` **только читается**. Unity владеет этим файлом и перегенерирует его
+на своих условиях; наша перезапись способна отвязать ассет от всех ссылок во
+всех сценах.
+
+---
+
 ## Preview pane
 
 `PreviewController` (App, ~600 строк) — асинхронный конвейер с отменой и
@@ -426,6 +506,11 @@ Footer-summary считает контекст: пустой выбор → те
 count+size, async), файл → name/size/modified + EXIF, папка → count+size,
 мульти → агрегат. EXIF включая RAW (CR2/CR3/NEF/ARW/DNG) через
 `MetadataExtractor`.
+
+Под summary — блок спутников (см. «Companion-файлы» выше): список
+интегрированных файлов, GUID из `.meta` с кнопкой копирования, звёзды
+`Rank` из `.pp3` (кликабельные). Читается своим конвейером с отменой,
+как и остальное в панели.
 
 **WebView2 изолирован:** `NavigationStarting` пропускает только
 `file:` / `about:` / `data:`, попапы режутся. Скрипты внутри локального `.html`
@@ -490,7 +575,7 @@ UI и платформенный слой проверяются smoke-запу�
 
 | Фейк | Что даёт |
 |---|---|
-| `FakeFileSystem` | `IFileSystem` целиком в памяти: `Directories` (`HashSet`), `Files` (`Dictionary<string, byte[]>`), плюс `CallLog` со списком вызовов |
+| `FakeFileSystem` | `IFileSystem` целиком в памяти: `Directories` (`HashSet`), `Files` (`Dictionary<string, byte[]>`), плюс `CallLog` со списком вызовов. `RenameFailures` заставляет отдельный путь падать — для проверки откатов |
 | `FakeConflictResolver` | Сценарий разрешения конфликтов: `batchOverride` на весь батч и `perItem`-очередь на отдельные. Пишет `StartBatchCalls` / `ResolveCalls` |
 | `FakeRecycleBin` | Корзина поверх `FakeFileSystem`, поддерживает `Send` / `Restore` и тоже ведёт `CallLog` |
 
@@ -550,6 +635,10 @@ UI и платформенный слой проверяются smoke-запу�
    в ней нет WPF — выносить **в Core**, чтобы покрылась тестами (так появились
    `BatchExecutor`, `ClipboardController`, `SearchController`,
    `SelectionController`, `PreviewController`, `NavigationController`).
-4. Проверка перед коммитом — `tools\check.bat` (build + `dotnet format
+4. Новый формат сайдкара? Одна строка в `CompanionResolver.Default` —
+   и отображение, и групповые операции заработают сами. Разбор содержимого
+   (как `Pp3Sidecar` / `UnityMetaSidecar`) нужен только если есть что
+   показать в футере просмотра.
+5. Проверка перед коммитом — `tools\check.bat` (build + `dotnet format
    --verify-no-changes` + тесты). `tools\check.bat run` добавляет
    smoke-запуск, `tools\check.bat format` — пишет форматирование.

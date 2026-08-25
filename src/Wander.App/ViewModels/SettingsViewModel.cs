@@ -53,6 +53,14 @@ public sealed class SettingsViewModel : ObservableObject {
     }
 
 
+    // --- Companions ----------------------------------------------------
+    private bool _integrateCompanions;
+    public bool IntegrateCompanions {
+        get => _integrateCompanions;
+        set => SetField(ref _integrateCompanions, value);
+    }
+
+
     // --- Sort ----------------------------------------------------------
     private SortKey _sortKey;
     public SortKey SortKey {
@@ -171,6 +179,7 @@ public sealed class SettingsViewModel : ObservableObject {
             new GeneralSettingsCategory(this),
             new SafetySettingsCategory(this),
             new FileOperationsSettingsCategory(this),
+            new CompanionsSettingsCategory(this),
             new LayoutSettingsCategory(this),
             new BookmarksSettingsCategory(this),
             new ContextMenuSettingsCategory(this),
@@ -187,6 +196,7 @@ public sealed class SettingsViewModel : ObservableObject {
         ShowHidden = s.ShowHidden;
         ShowSystem = s.ShowSystem;
         ConfirmRecycle = s.ConfirmRecycle;
+        IntegrateCompanions = s.IntegrateCompanions;
         SortKey = s.SortKey;
         SortAscending = s.SortAscending;
         GroupFoldersFirst = s.GroupFoldersFirst;
@@ -233,6 +243,7 @@ public sealed class SettingsViewModel : ObservableObject {
             ShowHidden = ShowHidden,
             ShowSystem = ShowSystem,
             ConfirmRecycle = ConfirmRecycle,
+            IntegrateCompanions = IntegrateCompanions,
             SortKey = SortKey,
             SortAscending = SortAscending,
             GroupFoldersFirst = GroupFoldersFirst,
