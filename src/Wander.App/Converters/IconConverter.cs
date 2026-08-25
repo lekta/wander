@@ -27,10 +27,16 @@ public sealed class IconConverter : IValueConverter {
         }
 
         byte[]? bytes = ServiceLocator.Get<IIconProvider>().GetIcon(path, size);
-        if (bytes is null) {
-            return null;
-        }
+        return bytes is null ? null : ToImage(bytes);
+    }
 
+
+    /// <summary>
+    /// Decodes icon bytes into a frozen bitmap. Frozen, so a background
+    /// loader (<c>AsyncIcon</c>) can build it off the UI thread and hand
+    /// the result over.
+    /// </summary>
+    public static BitmapImage ToImage(byte[] bytes) {
         var image = new BitmapImage();
         image.BeginInit();
         image.CacheOption = BitmapCacheOption.OnLoad;

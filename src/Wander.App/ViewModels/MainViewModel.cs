@@ -22,6 +22,9 @@ using Wander.Core.Undo;
 namespace Wander.App.ViewModels;
 
 public sealed class MainViewModel : ObservableObject {
+    /// <summary>How long a folder may take to list before the spinner shows.</summary>
+    private const int SpinnerDelayMs = 150;
+
     private readonly IFileSystem _fs;
     private readonly IShellLauncher _shell;
     private readonly IAppStateStore _stateStore;
@@ -233,6 +236,15 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     public string? CurrentPath => _nav.Current;
+
+    /// <summary>
+    /// Navigation state the address bar binds to directly
+    /// (<c>Nav.Breadcrumbs</c>, <c>Nav.RecentPaths</c>,
+    /// <c>Nav.IsEditingAddress</c>) — same arrangement as
+    /// <see cref="Preview"/>. The Back/Forward/Up/Navigate commands stay
+    /// mirrored below so existing bindings keep working.
+    /// </summary>
+    public NavigationController Nav => _nav;
 
     /// <summary>Address-bar text. Backed by <see cref="NavigationController.AddressText"/>.</summary>
     public string AddressText {
@@ -595,6 +607,11 @@ public sealed class MainViewModel : ObservableObject {
             // restored source.
             BuildBookmarks();
 
+            // Before the first navigation: that navigation pushes the
+            // restored folder onto the list, and it should land on top of
+            // the remembered ones rather than under them.
+            _nav.LoadRecentPaths(session.RecentPaths);
+
             // Honour the RestoreLastFolder preference: when off, ignore
             // LastPath and start at the first drive.
             bool wantRestore = Settings.RestoreLastFolder
@@ -633,6 +650,7 @@ public sealed class MainViewModel : ObservableObject {
                 IsPreviewVisible = _isPreviewVisible,
                 PreviewWidth = _previewWidth,
                 IsBookmarksExpanded = _isBookmarksExpanded,
+                RecentPaths = _nav.RecentPaths.ToArray(),
             },
             Favorites = _favorites.ToArray(),
             Settings = Settings.ToRecord(),
@@ -761,25 +779,77 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
-        bool showHidden = Settings.ShowHidden;
-        bool showSystem = Settings.ShowSystem;
+        // Settings are read here, on the UI thread, and carried into the
+        // worker as values — the background pass must not race the settings
+        // dialog.
         var sort = new SortOptions(Settings.SortKey, Settings.SortAscending, Settings.GroupFoldersFirst);
+        _ = RefreshFolderAsync(_nav.Current, Settings.ShowHidden, Settings.ShowSystem, sort);
+    }
 
-        try {
-            var list = new List<FileSystemEntry>();
+    /// <summary>
+    /// Off-UI-thread folder enumeration, mirroring
+    /// <see cref="RefreshShellAsync"/>. A local folder is usually listed in
+    /// a few milliseconds, but a network share, a sleeping drive or a
+    /// directory with tens of thousands of entries is not — and blocking
+    /// the dispatcher there froze the whole window.
+    /// </summary>
+    private async Task RefreshFolderAsync(string path, bool showHidden, bool showSystem, SortOptions sort) {
+        _listLoadCts?.Cancel();
+        _listLoadCts = new CancellationTokenSource();
+        var token = _listLoadCts.Token;
+
+        // Clear first: leaving the previous folder's entries on screen while
+        // the new one loads invites a double-click on a file that isn't here.
+        _hiddenCount = 0;
+        _search.SetSource(Array.Empty<FileSystemEntry>());
+        string statusBeforeLoad = Status;
+
+        var work = Task.Run(() => {
+            var items = new List<FileSystemEntry>();
             int hidden = 0;
-            foreach (var e in _fs.Enumerate(_nav.Current, sort)) {
+            foreach (var e in _fs.Enumerate(path, sort)) {
+                token.ThrowIfCancellationRequested();
                 if (!showHidden && e.IsHidden) { hidden++; continue; }
                 if (!showSystem && e.IsSystem) { hidden++; continue; }
-                list.Add(e);
+                items.Add(e);
             }
+            return (Items: items, Hidden: hidden);
+        }, token);
+
+        // The spinner is a dimming overlay — raising it for the two frames a
+        // local folder takes would make every navigation flash. Only slow
+        // folders get it.
+        if (await Task.WhenAny(work, Task.Delay(SpinnerDelayMs)) != work && !token.IsCancellationRequested) {
+            IsListLoading = true;
+        }
+
+        try {
+            var (items, hidden) = await work;
+            if (token.IsCancellationRequested) {
+                return;
+            }
+
             _hiddenCount = hidden;
-            _search.SetSource(list);
+            // A file operation may have reported its outcome ("Copied 3
+            // items") while we were enumerating; the listing's own
+            // "N items" must not eat that message.
+            string reported = Status;
+            _search.SetSource(items);
+            if (reported != statusBeforeLoad) {
+                Status = reported;
+            }
+        } catch (OperationCanceledException) {
+            return;
         } catch (Exception ex) {
-            _hiddenCount = 0;
-            _search.SetSource(Array.Empty<FileSystemEntry>());
+            _log.Error($"Enumerate failed: {path}", ex);
             Entries.Clear();
             Status = $"Error: {ex.Message}";
+        } finally {
+            // Same handoff rule as RefreshShellAsync: a superseded load
+            // leaves the flag for the load that replaced it.
+            if (!token.IsCancellationRequested) {
+                IsListLoading = false;
+            }
         }
     }
 

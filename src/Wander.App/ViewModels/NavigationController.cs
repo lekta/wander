@@ -27,7 +27,11 @@ public sealed class NavigationController : ObservableObject {
     private readonly Func<string, bool> _canNavigate;
     private readonly Action<string> _onInvalidPath;
     private readonly Func<string, string?> _resolveDisplayName;
+    private readonly RecentPaths _recent = new();
     private string _addressText = "";
+    private IReadOnlyList<string> _recentPaths = Array.Empty<string>();
+    private IReadOnlyList<PathCrumb> _breadcrumbs = Array.Empty<PathCrumb>();
+    private bool _isEditingAddress;
 
 
     public NavigationController(
@@ -44,9 +48,18 @@ public sealed class NavigationController : ObservableObject {
         ForwardCommand = new RelayCommand(_ => _nav.GoForward(), _ => _nav.CanGoForward);
         UpCommand = new RelayCommand(_ => _nav.GoUp(), _ => _nav.CanGoUp);
         NavigateCommand = new RelayCommand(_ => NavigateToAddress());
+        NavigateToCrumbCommand = new RelayCommand(p => NavigateToCrumb(p as string));
 
         _nav.CurrentChanged += (_, _) => {
             AddressText = _nav.Current ?? "";
+            if (_nav.Current is { } current) {
+                _recent.Add(current);
+                PublishRecentPaths();
+            }
+            RebuildBreadcrumbs();
+            // A completed navigation always hands the strip back to its
+            // breadcrumb face — the typed path has served its purpose.
+            IsEditingAddress = false;
             Raise(nameof(Current));
             Raise(nameof(CurrentSource));
             Raise(nameof(WindowTitle));
@@ -75,6 +88,40 @@ public sealed class NavigationController : ObservableObject {
     }
 
     /// <summary>
+    /// Current path cut into clickable segments, root first. Shell
+    /// sentinels stay a single crumb under their localised display name —
+    /// "Корзина" has no parent folder to walk up to.
+    /// </summary>
+    public IReadOnlyList<PathCrumb> Breadcrumbs {
+        get => _breadcrumbs;
+        private set => SetField(ref _breadcrumbs, value);
+    }
+
+    /// <summary>
+    /// Folders visited most recently, newest first. A fresh snapshot on
+    /// every change, never the live list from <see cref="RecentPaths"/>:
+    /// an ItemsControl bound to a plain list that mutates underneath it
+    /// desyncs its container generator and then throws
+    /// "ItemsControl is inconsistent with its items source" on the next
+    /// layout pass. Handing out a new instance makes WPF rebind cleanly.
+    /// </summary>
+    public IReadOnlyList<string> RecentPaths {
+        get => _recentPaths;
+        private set => SetField(ref _recentPaths, value);
+    }
+
+    /// <summary>
+    /// Which face of the address bar is showing: false = breadcrumb
+    /// buttons (default), true = the raw path in an editable TextBox.
+    /// The view flips it on Ctrl+L / a click on the strip's empty space,
+    /// and back on Esc / focus loss.
+    /// </summary>
+    public bool IsEditingAddress {
+        get => _isEditingAddress;
+        set => SetField(ref _isEditingAddress, value);
+    }
+
+    /// <summary>
     /// Window-chrome title — leaf name of the current path, or the shell
     /// namespace's localised display name when the path is a shell sentinel.
     /// "Wander" on a fresh start.
@@ -98,6 +145,9 @@ public sealed class NavigationController : ObservableObject {
     public RelayCommand UpCommand { get; }
     public RelayCommand NavigateCommand { get; }
 
+    /// <summary>Click on a breadcrumb; parameter is the segment's full path.</summary>
+    public RelayCommand NavigateToCrumbCommand { get; }
+
 
     /// <summary>
     /// Entry point used by every code path that wants to change folder
@@ -114,10 +164,48 @@ public sealed class NavigationController : ObservableObject {
         _nav.NavigateTo(path, source);
     }
 
+    /// <summary>Restores the recent-folders list from <c>state.json</c>.</summary>
+    public void LoadRecentPaths(IEnumerable<string> paths) {
+        _recent.Load(paths);
+        PublishRecentPaths();
+    }
+
+    private void PublishRecentPaths() {
+        RecentPaths = _recent.Items.ToArray();
+    }
+
+    private void NavigateToCrumb(string? path) {
+        if (string.IsNullOrWhiteSpace(path)) {
+            return;
+        }
+        NavigateTo(path, NavigationSource.Address);
+    }
+
+    private void RebuildBreadcrumbs() {
+        if (_nav.Current is not { } current) {
+            Breadcrumbs = Array.Empty<PathCrumb>();
+            return;
+        }
+
+        Breadcrumbs = _resolveDisplayName(current) is { } shellName
+            ? new[] { new PathCrumb(shellName, current) }
+            : PathCrumbs.Split(current);
+    }
+
     private void NavigateToAddress() {
         if (string.IsNullOrWhiteSpace(AddressText)) {
             return;
         }
-        NavigateTo(AddressText.Trim(), NavigationSource.Address);
+
+        string target = AddressText.Trim();
+        NavigateTo(target, NavigationSource.Address);
+
+        // Re-entering the folder we are already in produces no
+        // CurrentChanged to ride back to breadcrumb mode on, so close the
+        // edit here. A rejected path deliberately keeps the box open —
+        // the user is one keystroke away from fixing the typo.
+        if (string.Equals(target, Current, StringComparison.OrdinalIgnoreCase)) {
+            IsEditingAddress = false;
+        }
     }
 }

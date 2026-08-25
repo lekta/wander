@@ -36,7 +36,8 @@ src/
 │   ├── Logging/        ILogger, ILogFile, NullLogger
 │   ├── Menu/           ContextMenuBuilder, ContextMenuTarget, ContextMenuSettings,
 │   │                   ContextMenuCatalog, MenuEntry, MenuCommandId
-│   ├── Navigation/     NavigationService, NavigationSource
+│   ├── Navigation/     NavigationService, NavigationSource, RecentPaths,
+│   │                   PathCrumbs
 │   ├── Operations/     OperationTracker
 │   ├── Persistence/    IAppStateStore, AppState, AppSettings
 │   ├── Shell/          IShellLauncher, IShellNamespace, IShortcutService,
@@ -57,7 +58,7 @@ src/
 └── Wander.App/
     ├── Conflict/       ConflictDialog, BatchConflictDialog,
     │                   DispatcherConflictResolver, InteractiveConflictResolver
-    ├── Controls/       GifImage, MagnifierCursor, RubberBandAdorner
+    ├── Controls/       AsyncIcon, GifImage, MagnifierCursor, RubberBandAdorner
     ├── Converters/     Icon, EnumEquals, EnumToVisibility, BitmapPixelSize
     ├── Diagnostics/    CrashReporter
     ├── DragPreview/    DragPreviewWindow, DropTargetAdorner, DragAction, NativeMethods
@@ -201,11 +202,46 @@ Resolve each. В UI — `ConflictDialog` (одиночный) и `BatchConflictD
 **`NavigationController`** (App) — маршрутизация путей, включая
 shell-сентинелы: `shell:RecycleBinFolder` уходит через `IShellNamespace`,
 а не через `IFileSystem`, и получает человеческий лейбл («Корзина»).
+Он же владеет состоянием адресной строки: `Breadcrumbs`, `RecentPaths`,
+`IsEditingAddress`. XAML биндится к нему напрямую через `Vm.Nav.X` — как
+к `Preview`.
+
+**Адресная строка** — одна полоса с двумя лицами:
+
+- **хлебные крошки** (по умолчанию) — `PathCrumbs.Split` режет текущий путь
+  на сегменты (`D:\` › `Dev` › `Wander`), каждый рисуется плоской кнопкой
+  с подсветкой на hover; клик — переход. Shell-сентинел остаётся одной
+  крошкой под своим display name. Глубокие пути не распирают полосу:
+  крошки живут в `ScrollViewer`, который на каждую навигацию
+  проматывается в хвост.
+- **текстовое поле** — сырой путь для ввода и вставки. Вход: `Ctrl+L` или
+  клик по пустому месту полосы (кнопка-крошка свой клик не пропускает
+  наверх); выход: `Esc`, потеря фокуса или удавшаяся навигация.
+
+**`RecentPaths`** (Core) — MRU последних посещённых папок (20 штук, свежее
+первым, без дублей; регистр и хвостовой разделитель не считаются). Это не
+`NavigationService`: там линейная лента с курсором для Back/Forward, здесь —
+«где я недавно был». Живёт в `AppState.Session.RecentPaths`, показывается
+по кнопке-треугольнику справа в строке (`F4`).
 
 **Дерево** — lazy-load по раскрытию, листовые папки без треугольника,
 раскрытые пути сохраняются в `AppState`, авто-раскрытие на текущую папку.
 Ключевое обещание проекта: **дерево никогда не сворачивается само** — это
 прямой ответ на баг Win11 Explorer.
+
+**Листинг папки — вне UI-потока.** `MainViewModel.RefreshFolderAsync`
+(и `RefreshShellAsync` для shell-неймспейсов) перечисляет содержимое в
+`Task.Run` с отменой по `CancellationTokenSource`: следующая навигация
+отменяет предыдущую, побеждает последняя. Спиннер поднимается только если
+папка не отдалась за 150 мс — иначе он мигал бы на каждом переходе.
+
+**Иконки и тумбнэйлы — тоже в фоне.** `Controls/AsyncIcon` (наследник
+`Image`) отдаёт уже закэшированную иконку синхронно
+(`IIconProvider.TryGetCachedIcon`), а остальные грузит через `Task.Run`
+под семафором на 2 потока и отбрасывает результат, если контейнер за это
+время переехал на другой файл (виртуализация). Иначе папка с RAW-фото
+вешала окно: 256-пиксельная «Large»-иконка — это настоящий тумбнэйл,
+который шелл достаёт из 30-мегабайтного .CR3 сотни миллисекунд.
 
 **Bookmarks-панель** над деревом: drag-add, сворачиваемая, состояние в
 `AppState.Favorites` / `IsBookmarksExpanded`. Три спец-папки по умолчанию

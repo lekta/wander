@@ -127,6 +127,16 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!--
+            Breadcrumb segment: the ToolbarButton look (flat, highlight on
+            hover) at text size, so the path reads as plain text until the
+            mouse says otherwise.
+        -->
+        <Style x:Key="CrumbButton" TargetType="Button" BasedOn="{StaticResource ToolbarButton}">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Padding" Value="5,3"/>
+        </Style>
     </Window.Resources>
     <Window.InputBindings>
         <KeyBinding Key="F5" Command="{Binding RefreshCommand}"/>
@@ -282,13 +292,119 @@
                 </TextBlock>
             </Grid>
 
-            <TextBox x:Name="AddressBox"
-                     VerticalAlignment="Center" Margin="0,4,4,4" Padding="6,4"
-                     Text="{Binding AddressText, UpdateSourceTrigger=PropertyChanged}">
-                <TextBox.InputBindings>
-                    <KeyBinding Key="Enter" Command="{Binding NavigateCommand}"/>
-                </TextBox.InputBindings>
-            </TextBox>
+            <!--
+                Address bar — one strip with two faces:
+                  * breadcrumbs (default): every folder of the current path is
+                    a flat button that lights up on hover, click = go there;
+                  * text box (edit mode): the raw path, for typing or pasting.
+                Entered by Ctrl+L or a click on the empty space of the strip,
+                left by Esc / focus loss / a successful navigation.
+                The chevron on the right drops down the recently visited
+                folders (F4 toggles it — Explorer parity).
+            -->
+            <Border x:Name="AddressBar"
+                    VerticalAlignment="Center" Margin="0,4,4,4" MinHeight="26"
+                    Background="White" BorderBrush="#ABADB3" BorderThickness="1">
+                <DockPanel>
+                    <ToggleButton x:Name="RecentToggle" DockPanel.Dock="Right"
+                                  Width="22" Focusable="False"
+                                  ToolTip="Recently visited folders (F4)"
+                                  Background="Transparent">
+                        <ToggleButton.Template>
+                            <ControlTemplate TargetType="ToggleButton">
+                                <Border x:Name="Bd" Background="{TemplateBinding Background}">
+                                    <TextBlock Text="&#x25BE;" FontSize="10" Foreground="#444"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#E5E5E5"/>
+                                    </Trigger>
+                                    <Trigger Property="IsChecked" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#D0D0D0"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </ToggleButton.Template>
+                    </ToggleButton>
+
+                    <Grid>
+                        <!--
+                            Breadcrumb face. The Border under the ScrollViewer
+                            catches clicks that miss a crumb button (buttons
+                            swallow their own) and switches to edit mode.
+                            ScrollViewer keeps deep paths from pushing the
+                            current folder out of sight — the view scrolls to
+                            the tail on every navigation (see code-behind).
+                        -->
+                        <Border Background="Transparent" MouseLeftButtonDown="CrumbHost_MouseLeftButtonDown">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Nav.IsEditingAddress}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <ScrollViewer x:Name="CrumbScroll"
+                                          HorizontalScrollBarVisibility="Hidden"
+                                          VerticalScrollBarVisibility="Disabled">
+                                <ItemsControl ItemsSource="{Binding Nav.Breadcrumbs}" Margin="3,0">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Orientation="Horizontal"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal">
+                                                <Button Style="{StaticResource CrumbButton}"
+                                                        Content="{Binding Label}"
+                                                        ToolTip="{Binding Path}"
+                                                        Command="{Binding DataContext.Nav.NavigateToCrumbCommand,
+                                                                          RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding Path}"/>
+                                                <TextBlock Text="&#x203A;" Foreground="#888" FontSize="13"
+                                                           Margin="1,0" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Border>
+
+                        <!-- Edit face. Borderless: the outer Border draws the frame. -->
+                        <TextBox x:Name="AddressBox"
+                                 BorderThickness="0" Padding="5,3"
+                                 VerticalContentAlignment="Center"
+                                 Visibility="{Binding Nav.IsEditingAddress, Converter={StaticResource BoolToVisibility}}"
+                                 Text="{Binding AddressText, UpdateSourceTrigger=PropertyChanged}"
+                                 PreviewKeyDown="AddressBox_PreviewKeyDown"
+                                 LostKeyboardFocus="AddressBox_LostKeyboardFocus"/>
+
+                        <Popup PlacementTarget="{Binding ElementName=AddressBar}" Placement="Bottom"
+                               Width="{Binding ActualWidth, ElementName=AddressBar}"
+                               IsOpen="{Binding IsChecked, ElementName=RecentToggle, Mode=TwoWay}"
+                               StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+                            <Border Background="White" BorderBrush="#ABADB3" BorderThickness="1">
+                                <ListBox x:Name="RecentList" MaxHeight="320" BorderThickness="0"
+                                         ItemsSource="{Binding Nav.RecentPaths}"
+                                         SelectionChanged="RecentList_SelectionChanged"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding}" Padding="2,1"
+                                                       TextTrimming="CharacterEllipsis" ToolTip="{Binding}"/>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Border>
+                        </Popup>
+                    </Grid>
+                </DockPanel>
+            </Border>
         </DockPanel>
 
         <StatusBar DockPanel.Dock="Bottom">
@@ -515,8 +631,8 @@
                         <DataGridTemplateColumn Header="" Width="28" IsReadOnly="True">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
-                                    <Image Source="{Binding FullPath, Converter={StaticResource IconConverter}, ConverterParameter=Normal}"
-                                           Width="20" Height="20"/>
+                                    <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Normal"
+                                                        Width="20" Height="20"/>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
@@ -553,8 +669,8 @@
                         <DataTemplate>
                             <Border Width="220" Margin="4" Padding="6" Background="Transparent">
                                 <StackPanel Orientation="Horizontal">
-                                    <Image Source="{Binding FullPath, Converter={StaticResource IconConverter}, ConverterParameter=Normal}"
-                                           Width="32" Height="32" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                    <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Normal"
+                                                        Width="32" Height="32" Margin="0,0,8,0" VerticalAlignment="Center"/>
                                     <StackPanel VerticalAlignment="Center">
                                         <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" MaxWidth="160"/>
                                         <TextBlock FontSize="11" Foreground="#777">
@@ -601,13 +717,13 @@
                             <StackPanel HorizontalAlignment="Center"
                                         Width="{Binding DataContext.Settings.LargeIconCellWidth, RelativeSource={RelativeSource AncestorType=Window}}"
                                         Margin="{Binding DataContext.Settings.LargeIconMargin, RelativeSource={RelativeSource AncestorType=Window}}">
-                                <Image Source="{Binding FullPath, Converter={StaticResource IconConverter}, ConverterParameter=Large}"
-                                       Width="{Binding DataContext.Settings.LargeIconImageSize, RelativeSource={RelativeSource AncestorType=Window}}"
-                                       Height="{Binding DataContext.Settings.LargeIconImageSize, RelativeSource={RelativeSource AncestorType=Window}}"
-                                       Margin="0,2,0,2"
-                                       HorizontalAlignment="Center"
-                                       RenderOptions.BitmapScalingMode="HighQuality"
-                                       UseLayoutRounding="True"/>
+                                <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Large"
+                                                    Width="{Binding DataContext.Settings.LargeIconImageSize, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    Height="{Binding DataContext.Settings.LargeIconImageSize, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    Margin="0,2,0,2"
+                                                    HorizontalAlignment="Center"
+                                                    RenderOptions.BitmapScalingMode="HighQuality"
+                                                    UseLayoutRounding="True"/>
                                 <TextBlock Text="{Binding Name}"
                                            TextAlignment="Center"
                                            TextWrapping="Wrap"

@@ -66,6 +66,13 @@ public sealed record SessionState {
     /// </summary>
     public IReadOnlyList<NavigationStop> ExpandedPaths { get; init; } = Array.Empty<NavigationStop>();
 
+    /// <summary>
+    /// Folders visited most recently, newest first — the address-bar
+    /// dropdown. Capped by <c>RecentPaths.DefaultCapacity</c> on load, so
+    /// a hand-grown list in state.json can't bloat the popup.
+    /// </summary>
+    public IReadOnlyList<string> RecentPaths { get; init; } = Array.Empty<string>();
+
     public bool IsPreviewVisible { get; init; }
     public double PreviewWidth { get; init; } = 280;
 

@@ -20,6 +20,7 @@ using Wander.Core;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
 using Wander.Core.Menu;
+using Wander.Core.Navigation;
 using Wander.Core.Persistence;
 using Wander.Core.Shell;
 // Disambiguate from System.Windows.DragAction (used by QueryContinueDrag).
@@ -158,6 +159,7 @@ public partial class MainWindow : Window {
         if (DataContext is MainViewModel vm) {
             vm.PropertyChanged += OnVmPropertyChanged;
             vm.Preview.PropertyChanged += OnPreviewPropertyChanged;
+            vm.Nav.PropertyChanged += OnNavPropertyChanged;
         }
         // A third-party command can create, rename or delete behind our
         // back, so a successful one invalidates both the listing and the
@@ -308,8 +310,14 @@ public partial class MainWindow : Window {
 
         // Ctrl+L: focus the address bar (parity with browsers / Explorer).
         if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.Control) {
-            AddressBox.Focus();
-            AddressBox.SelectAll();
+            BeginAddressEdit();
+            e.Handled = true;
+            return;
+        }
+
+        // F4: drop down the recently visited folders (Explorer parity).
+        if (e.Key == Key.F4) {
+            RecentToggle.IsChecked = RecentToggle.IsChecked != true;
             e.Handled = true;
             return;
         }
@@ -363,6 +371,78 @@ public partial class MainWindow : Window {
             e.Handled = true;
         }
     }
+
+    // --- Address bar ----------------------------------------------------
+
+    /// <summary>
+    /// Switches the address strip from breadcrumbs to the editable path and
+    /// puts the caret in it. The TextBox is Collapsed until the flag flips
+    /// and a collapsed element cannot take focus, hence the queued
+    /// Focus/SelectAll.
+    /// </summary>
+    private void BeginAddressEdit() {
+        Vm.Nav.IsEditingAddress = true;
+        Dispatcher.BeginInvoke(new Action(() => {
+            AddressBox.Focus();
+            AddressBox.SelectAll();
+        }), DispatcherPriority.Input);
+    }
+
+    private void CrumbHost_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
+        // Only clicks that missed a crumb reach here — a Button handles its
+        // own MouseLeftButtonDown and never lets it bubble.
+        BeginAddressEdit();
+        e.Handled = true;
+    }
+
+    private void AddressBox_PreviewKeyDown(object sender, KeyEventArgs e) {
+        // Esc: abandon the edit, restore the real path, hand focus back to
+        // the file list so the box does not trap the user.
+        if (e.Key == Key.Escape) {
+            Vm.AddressText = Vm.CurrentPath ?? "";
+            Vm.Nav.IsEditingAddress = false;
+            FocusActiveList();
+            e.Handled = true;
+            return;
+        }
+
+        // Enter: navigate. A successful navigation drops edit mode on its
+        // own (NavigationController), so a still-editing strip afterwards
+        // means the path was rejected — stay put and let the user fix it.
+        if (e.Key == Key.Enter) {
+            Vm.NavigateCommand.Execute(null);
+            if (!Vm.Nav.IsEditingAddress) {
+                FocusActiveList();
+            }
+            e.Handled = true;
+        }
+    }
+
+    private void AddressBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e) {
+        Vm.AddressText = Vm.CurrentPath ?? "";
+        Vm.Nav.IsEditingAddress = false;
+    }
+
+    private void RecentList_SelectionChanged(object sender, SelectionChangedEventArgs e) {
+        if (RecentList.SelectedItem is not string path) {
+            return;
+        }
+
+        // Clearing the selection re-enters this handler with a null item
+        // (bailed out above) and lets the same entry be picked next time.
+        RecentList.SelectedItem = null;
+        RecentToggle.IsChecked = false;
+        Vm.NavigateTo(path, NavigationSource.Address);
+    }
+
+    private void OnNavPropertyChanged(object? sender, PropertyChangedEventArgs e) {
+        // Deep paths overflow the strip; showing their tail (the folder the
+        // user is actually in) beats showing the drive letter.
+        if (e.PropertyName == nameof(NavigationController.Breadcrumbs)) {
+            Dispatcher.BeginInvoke(new Action(CrumbScroll.ScrollToRightEnd), DispatcherPriority.Loaded);
+        }
+    }
+
 
     private void FocusActiveList() {
         switch (Vm.ViewMode) {

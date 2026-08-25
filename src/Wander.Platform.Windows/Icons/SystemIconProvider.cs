@@ -69,6 +69,17 @@ public sealed class SystemIconProvider : IIconProvider {
     }
 
 
+    public byte[]? TryGetCachedIcon(string path, IconSize size) {
+        if (string.IsNullOrEmpty(path)) {
+            return null;
+        }
+
+        lock (_lock) {
+            return _cache.TryGetValue(BuildCacheKey(path, size), out byte[]? cached) ? cached : null;
+        }
+    }
+
+
     private static string BuildCacheKey(string path, IconSize size) {
         // Shell-namespace sentinels (shell:RecycleBinFolder, …) have no real
         // filesystem behind them; key by the full URI lowered so different
