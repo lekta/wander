@@ -38,7 +38,19 @@ namespace Wander.Platform.Windows.Icons;
 /// sizes (shared icons) and per-path for Large (each thumbnail is unique).
 /// </summary>
 public sealed class SystemIconProvider : IIconProvider {
+    /// <summary>
+    /// How many per-path thumbnails to keep. Small / Normal icons are keyed
+    /// by extension and so bounded by how many file types exist; Large ones
+    /// are a unique bitmap per file, and a folder of ten thousand photos
+    /// browsed in tile view would otherwise hold every one of them for the
+    /// rest of the session. At roughly 100 KB apiece this caps that at tens
+    /// of megabytes.
+    /// </summary>
+    private const int MaxCachedThumbnails = 512;
+
     private readonly Dictionary<string, byte[]> _cache = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Insertion order of the per-path entries, for evicting the oldest.</summary>
+    private readonly Queue<string> _thumbnailOrder = new();
     private readonly object _lock = new();
 
 
@@ -59,7 +71,7 @@ public sealed class SystemIconProvider : IIconProvider {
             byte[]? bytes = LoadIcon(path, size);
             if (bytes is not null) {
                 lock (_lock) {
-                    _cache[key] = bytes;
+                    Store(key, bytes, size);
                 }
             }
             return bytes;
@@ -76,6 +88,21 @@ public sealed class SystemIconProvider : IIconProvider {
 
         lock (_lock) {
             return _cache.TryGetValue(BuildCacheKey(path, size), out byte[]? cached) ? cached : null;
+        }
+    }
+
+
+    /// <summary>Caller holds the lock. Evicts oldest-first once the thumbnail budget is spent.</summary>
+    private void Store(string key, byte[] bytes, IconSize size) {
+        bool isNew = !_cache.ContainsKey(key);
+        _cache[key] = bytes;
+        if (size != IconSize.Large || !isNew) {
+            return;
+        }
+
+        _thumbnailOrder.Enqueue(key);
+        while (_thumbnailOrder.Count > MaxCachedThumbnails) {
+            _cache.Remove(_thumbnailOrder.Dequeue());
         }
     }
 

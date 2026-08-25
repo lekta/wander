@@ -17,7 +17,7 @@
 | `Wander.Core` | `net10.0` | Чистая логика и абстракции. Не знает про Windows и про UI. |
 | `Wander.Platform.Windows` | `net10.0-windows` | Реализации интерфейсов Core: Win32, Shell COM, `System.IO`. |
 | `Wander.App` | `net10.0-windows` | WPF UI: окно, ViewModel'и, диалоги, конвертеры. |
-| `Wander.Core.Tests` | `net10.0` | xUnit. Тестирует **только** Core через фейки. 260 тестов. |
+| `Wander.Core.Tests` | `net10.0` | xUnit. Тестирует **только** Core через фейки. 313 тестов. |
 
 **Жёсткое правило:** в `Wander.Core` нет `using System.Windows.*`, нет COM,
 нет PInvoke. Если кажется, что нужно — значит нужен новый интерфейс в Core и
@@ -28,13 +28,16 @@
 src/
 ├── Wander.Core/
 │   ├── Companions/     CompanionRule, CompanionResolver, CompanionMetadataService,
-│   │                   Pp3Sidecar, UnityMetaSidecar
+│   │                   SidecarRating, ColorLabels, SidecarText,
+│   │                   Pp3Sidecar, XmpSidecar, UnityMetaSidecar
 │   ├── Diagnostics/    IFileLockInspector, FileLockInfo
 │   ├── FileSystem/     IFileSystem, FileOperationService, BatchExecutor,
 │   │                   ClipboardController, SearchController, SystemPathGuard,
 │   │                   PathSafety, IConflictResolver, IRecycleBin, IKnownFolders,
-│   │                   FileSystemEntry, EntryKind, EntryComparers, SortKey
-│   ├── Icons/          IIconProvider, IImageMetadataReader, IconSize, ImageMetadata
+│   │                   FileSystemEntry, EntryKind, EntryComparers, SortKey,
+│   │                   BatchGroup
+│   ├── Icons/          IIconProvider, IImageMetadataReader, IconSize, ImageMetadata,
+│   │                   RawPreviewExtractor
 │   ├── Logging/        ILogger, ILogFile, NullLogger
 │   ├── Menu/           ContextMenuBuilder, ContextMenuTarget, ContextMenuSettings,
 │   │                   ContextMenuCatalog, MenuEntry, MenuCommandId
@@ -68,7 +71,7 @@ src/
     ├── Util/           SelectionController, SizeFormatter
     ├── ViewModels/     MainViewModel, NavigationController, PreviewController,
     │                   TreeNodeViewModel, SettingsViewModel, MenuToggleViewModel,
-    │                   OperationViewModel,
+    │                   OperationViewModel, ColorLabelViewModel,
     │                   ObservableObject, ViewMode, PreviewKind, DropEffect
     ├── Views/          SettingsWindow, ProgressDialog
     ├── MainWindow.xaml(.cs)
@@ -444,7 +447,7 @@ CompanionMetadataService  чтение/запись содержимого са�
 
 | Шаблон | Пример | Кто |
 |---|---|---|
-| `Appended` — дописывается к полному имени | `Sprite.png.meta` | Unity, RawTherapee, Google Takeout |
+| `Appended` — дописывается к полному имени | `Sprite.png.meta`, `IMG.CR2.pp3` | Unity, RawTherapee, Google Takeout |
 | `Replaced` — заменяет расширение | `IMG_1234.xmp` | Adobe/darktable, iPhone `.AAE` |
 
 `Appended` разрешается по точному имени, `Replaced` — по stem'у, и если на
@@ -462,18 +465,44 @@ stem претендует больше одного файла (`IMG.CR2` + `IMG
 - **Контекстное меню** ничего про спутников не знает и знать не должно:
   их нет в выделении, значит меню (включая шелловское) строится для
   основного файла само собой.
-- **Групповые операции** — `WithCompanions()` расширяет список путей перед
-  `MoveManyAsync` / `CopyManyAsync` / `DeleteManyAsync` / `DoDragDrop`.
-  Undo уже composite, так что группа возвращается одним `Ctrl+Z`.
-  Переименование идёт мимо: спутнику нужно новое **имя**, а не новая папка,
-  поэтому `RenamePlan` + `RenameMany`, и последний откатывает уже сделанное,
-  если упал на середине.
+- **Групповые операции** идут списком `BatchGroup` («основной + спутники»),
+  а не плоским списком путей. Это и есть механизм «один вопрос на группу»:
+  `BatchExecutor` считает конфликты по группам, спрашивает про основной файл
+  и применяет ответ ко всем членам сразу. Undo — composite, группа
+  возвращается одним `Ctrl+Z`.
+- **Откуда берутся группы.** Из выделения — бесплатно, `FileSystemEntry`
+  уже несёт `Companions` (важно: Copy / Cut / Delete / старт перетаскивания
+  живут на UI-потоке, и опрос диска там встал бы поперёк). Из плоского
+  списка путей — буфер обмена, дроп из Explorer — через
+  `CompanionResolver.Group()`, и это уже с обращением к диску, поэтому
+  вызывающие уводят его в `Task.Run`.
+- **Авто-переименование при конфликте** тянет спутников за собой:
+  `Sprite (1).png` → `Sprite (1).png.meta`. Имя выводится подстановкой общей
+  части (полное имя для `Appended`, stem для `Replaced`), поэтому знание
+  форматов в `BatchExecutor` не протекает.
+- **Переименование** идёт мимо batch-механизма: спутнику нужно новое **имя**,
+  а не новая папка, поэтому `RenamePlan` + `RenameMany`, и последний
+  откатывает уже сделанное, если упал на середине.
+
+**Оценки** (`Rank` / `ColorLabel`) читаются и пишутся через один тип
+`SidecarRating` — формат прячется за `CompanionMetadataService`, который
+выбирает парсер по расширению. Цветовые метки нумерованы одинаково в обоих
+форматах (`ColorLabels`), поэтому один ряд кружков правит и `.pp3`, и `.xmp`;
+XMP при этом хранит имя (`Red`), а pp3 — номер. Общая байтовая обвязка
+(BOM, переводы строк) — в `SidecarText`.
 
 **Запись в чужой формат** — первое, что Wander делает с файлами, которых не
 создавал, поэтому путь узкий намеренно:
 
-- только `[General] Rank` в **уже существующем** `.pp3` — новый сайдкар не
-  создаётся, пустой pp3 меняет поведение RawTherapee;
+- только поля оценки в **уже существующем** сайдкаре — новый не создаётся,
+  пустой pp3 меняет поведение RawTherapee;
+- XMP правится строковой хирургией, а не через `XDocument`: round-trip через
+  XML-парсер переписал бы порядок атрибутов, префиксы неймспейсов и
+  `<?xpacket?>` с его padding'ом — то есть вернул бы другим программам
+  переформатированный пакет. Если нужного свойства в пакете нет, оно
+  добавляется атрибутом в `rdf:Description`, но **только** когда неймспейс
+  `xmp:` уже объявлен: дописывать чужие объявления мы отказываемся вслух
+  (`NotSupportedException`), а не угадываем;
 - только через `IFileSystem.ReplaceAtomic` (temp рядом → `File.Replace`);
 - правится ровно одна строка, остальные байты переносятся как есть —
   в `.pp3` лежит вся работа пользователя по проявке;
@@ -495,7 +524,7 @@ stem претендует больше одного файла (`IMG.CR2` + `IMG
 
 | Kind | Чем рендерится |
 |---|---|
-| `Image` | `BitmapImage`, `StretchDirection=DownOnly` |
+| `Image` | `BitmapImage`, `StretchDirection=DownOnly`; RAW — через встроенный превью, см. ниже |
 | `Gif` | `Controls/GifImage` — анимация, `BitmapImage` её не умеет |
 | `Video` | WPF `MediaElement` |
 | `Text` | обычный `TextBox` |
@@ -517,10 +546,39 @@ count+size, async), файл → name/size/modified + EXIF, папка → count
 при этом исполняются — `IsScriptEnabled` глобальный, а встроенный
 PDF-viewer без JS не работает (TECHDEBT).
 
+**RAW не декодируется.** Отдавать `.CR3` в WIC значит декодировать сенсорные
+данные: замеряно **~1150 мс** на 33 МБ файле (и ни `DecodePixelWidth`, ни
+`BitmapDecoder.Thumbnail` этого не сокращают — оба в пределах 20 % от полного
+декода). Вместо этого `RawPreviewExtractor` (Core) достаёт из контейнера
+JPEG, который камера туда уже положила: **8–13 мс** на тот же файл, включая
+декод. Два формата контейнера — ISO-BMFF (`uuid`-бокс Canon с `PRVW`) и TIFF
+(IFD с указателем на JPEG: CR2, NEF, ARW, DNG). Ничего не ломается, если
+формат не разобрался: `null` означает «иди обычным путём», то есть в худшем
+случае получаем прежнее поведение. Кандидаты перебираются от большего к
+меньшему с проверкой маркера кадра — в DNG и NEF самый большой JPEG-поток
+внутри это сами raw-данные (lossless JPEG, SOF3), показать его нельзя.
+
+Цена: в панели теперь превью-разрешение (у Canon 1620×1080), а не полный
+кадр, — на лупу это влияет, на «посмотреть, что за снимок» нет. Размеры в
+футере по-прежнему настоящие: они из EXIF, а не из картинки.
+
+**WebView2 не ходит в сеть.** `NavigationStarting` и раньше пропускал только
+`file:` / `about:` / `data:`, но это про навигации; подресурсы шли мимо, и
+локальная `.html` могла позвать домой трекинг-пикселем или `fetch()`.
+`WebResourceRequested` теперь режет всё, что уходит в сеть (`http`, `https`,
+`ws`, `wss`, `ftp`). Запрет **deny-list, а не allow-list** намеренно: свою
+обвязку рендерер (особенно встроенный PDF-viewer) раздаёт по внутренним
+схемам, перечислять которые — не наше дело. Побочный эффект, о котором надо
+знать: в отрендеренном Markdown внешние картинки (те же бейджи в README)
+теперь не грузятся.
+
 **Иконки:** `SystemIconProvider` — системные иконки + `.lnk` overlay-стрелка
 (включая jumbo-композит), thumbnails через `IShellItemImageFactory`. Кэш
-per-path без ограничения размера — на больших папках это заметная память
-(TECHDEBT).
+мелких иконок ключуется по расширению (и поэтому ограничен сам собой),
+тумбнэйлы — по пути, с FIFO-пределом в 512 записей. `AsyncIcon` пропускает
+через семафор две загрузки разом и **перепроверяет актуальность после
+очереди**: при быстром скролле контейнер уже переиспользован под другой файл,
+и делать ради него вызов шелла незачем.
 
 ---
 

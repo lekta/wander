@@ -42,13 +42,43 @@
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="Padding" Value="1,0"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="ToolTip" Value="Rating in the .pp3 sidecar"/>
+            <Setter Property="ToolTip" Value="{Binding Preview.RatingSource, StringFormat='Rating, written to {0}'}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
                             <ContentPresenter/>
                         </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!--
+            One colour-label swatch. The chosen one gets a ring rather than a
+            different fill — the fill *is* the information, so it must not
+            change to indicate selection.
+        -->
+        <Style x:Key="ColorLabelSwatch" TargetType="Button">
+            <Setter Property="Command" Value="{Binding DataContext.Preview.SetColorLabelCommand, RelativeSource={RelativeSource AncestorType=Window}}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="1,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Ring" Width="16" Height="16" CornerRadius="8"
+                                Background="Transparent"
+                                BorderBrush="Transparent" BorderThickness="2">
+                            <Ellipse Width="8" Height="8" Fill="{Binding Brush}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                <Setter TargetName="Ring" Property="BorderBrush" Value="#666"/>
+                            </DataTrigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Ring" Property="Background" Value="#E5E5E5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -1025,22 +1055,37 @@
                                 <TextBlock Text="{Binding Preview.UnityDetail}"
                                            FontSize="11" Foreground="#888" TextWrapping="Wrap"/>
 
-                                <!-- RawTherapee .pp3 — the rating, editable in place -->
+                                <!-- .pp3 / .xmp — rating and colour label, editable in place -->
                                 <StackPanel Orientation="Horizontal" Margin="0,3,0,0"
-                                            Visibility="{Binding Preview.HasPp3Rating, Converter={StaticResource BoolToVisibility}}">
+                                            Visibility="{Binding Preview.HasRating, Converter={StaticResource BoolToVisibility}}">
                                     <TextBlock Text="Rating" FontSize="11" Foreground="#444"
                                                VerticalAlignment="Center" Margin="0,0,6,0"/>
                                     <Button Style="{StaticResource RatingStar}" CommandParameter="1"
-                                            Content="{Binding Preview.Pp3Rank, Converter={StaticResource RankStar}, ConverterParameter=1}"/>
+                                            Content="{Binding Preview.Rank, Converter={StaticResource RankStar}, ConverterParameter=1}"/>
                                     <Button Style="{StaticResource RatingStar}" CommandParameter="2"
-                                            Content="{Binding Preview.Pp3Rank, Converter={StaticResource RankStar}, ConverterParameter=2}"/>
+                                            Content="{Binding Preview.Rank, Converter={StaticResource RankStar}, ConverterParameter=2}"/>
                                     <Button Style="{StaticResource RatingStar}" CommandParameter="3"
-                                            Content="{Binding Preview.Pp3Rank, Converter={StaticResource RankStar}, ConverterParameter=3}"/>
+                                            Content="{Binding Preview.Rank, Converter={StaticResource RankStar}, ConverterParameter=3}"/>
                                     <Button Style="{StaticResource RatingStar}" CommandParameter="4"
-                                            Content="{Binding Preview.Pp3Rank, Converter={StaticResource RankStar}, ConverterParameter=4}"/>
+                                            Content="{Binding Preview.Rank, Converter={StaticResource RankStar}, ConverterParameter=4}"/>
                                     <Button Style="{StaticResource RatingStar}" CommandParameter="5"
-                                            Content="{Binding Preview.Pp3Rank, Converter={StaticResource RankStar}, ConverterParameter=5}"/>
-                                    <TextBlock Text="{Binding Preview.Pp3ColorLabelText}"
+                                            Content="{Binding Preview.Rank, Converter={StaticResource RankStar}, ConverterParameter=5}"/>
+
+                                    <ItemsControl ItemsSource="{Binding Preview.ColorLabelChoices}"
+                                                  Margin="10,0,0,0" VerticalAlignment="Center">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Button Style="{StaticResource ColorLabelSwatch}"
+                                                        CommandParameter="{Binding Index}"
+                                                        ToolTip="{Binding Name}"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <TextBlock Text="{Binding Preview.CustomColorLabel}"
                                                FontSize="11" Foreground="#888"
                                                VerticalAlignment="Center" Margin="8,0,0,0"/>
                                 </StackPanel>

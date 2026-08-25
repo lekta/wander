@@ -26,6 +26,17 @@ namespace Wander.App.ViewModels;
 /// </para>
 /// </summary>
 public sealed class PreviewController : ObservableObject {
+    /// <summary>
+    /// RAW containers: routed through <see cref="RawPreviewExtractor"/>
+    /// first, because handing these to WIC means decoding sensor data —
+    /// about a hundred times slower than the JPEG the file already carries.
+    /// Formats whose container we can't read still fall through to WIC, so
+    /// listing one here is never worse than not listing it.
+    /// </summary>
+    private static readonly HashSet<string> _rawExtensions = new(StringComparer.OrdinalIgnoreCase) {
+        ".cr2", ".cr3", ".nef", ".arw", ".dng", ".raf", ".orf", ".rw2",
+    };
+
     private static readonly HashSet<string> _imageExtensions = new(StringComparer.OrdinalIgnoreCase) {
         ".png", ".jpg", ".jpeg", ".bmp", ".ico", ".tif", ".tiff",
         // RAW (may not render but we still try; metadata works regardless):
@@ -100,16 +111,27 @@ public sealed class PreviewController : ObservableObject {
     private string _companionFiles = "";
     private string? _unityGuid;
     private string? _unityDetail;
-    private string? _pp3Path;
-    private int _pp3Rank;
-    private int? _pp3ColorLabel;
+    private string? _ratingPath;
+    private int _rank;
+    private int _colorLabel;
+    private string _customColorLabel = "";
 
 
     public PreviewController(IImageMetadataReader? metadataReader, CompanionMetadataService? companionMetadata) {
         _metadataReader = metadataReader;
         _companionMetadata = companionMetadata;
 
-        SetRankCommand = new RelayCommand(p => SetRank(p), _ => HasPp3Rating);
+        // Adobe's colour-label palette, in the index order both formats use.
+        ColorLabelChoices = new[] {
+            new ColorLabelViewModel(1, new SolidColorBrush(Color.FromRgb(0xD9, 0x53, 0x4F))),
+            new ColorLabelViewModel(2, new SolidColorBrush(Color.FromRgb(0xE0, 0xB3, 0x2C))),
+            new ColorLabelViewModel(3, new SolidColorBrush(Color.FromRgb(0x5C, 0xA9, 0x4D))),
+            new ColorLabelViewModel(4, new SolidColorBrush(Color.FromRgb(0x3E, 0x7C, 0xC4))),
+            new ColorLabelViewModel(5, new SolidColorBrush(Color.FromRgb(0x8A, 0x5C, 0xB8))),
+        };
+
+        SetRankCommand = new RelayCommand(p => SetRating(RatingField.Rank, p, _rank), _ => HasRating);
+        SetColorLabelCommand = new RelayCommand(p => SetRating(RatingField.ColorLabel, p, _colorLabel), _ => HasRating);
         CopyGuidCommand = new RelayCommand(_ => CopyGuid(), _ => HasUnityGuid);
     }
 
@@ -217,30 +239,39 @@ public sealed class PreviewController : ObservableObject {
         private set => SetField(ref _unityDetail, value);
     }
 
-    /// <summary>Whether the selection has a <c>.pp3</c> whose rating can be shown and edited.</summary>
-    public bool HasPp3Rating => _pp3Path is not null;
+    /// <summary>
+    /// Whether the selection carries a sidecar whose rating can be shown and
+    /// edited — a RawTherapee <c>.pp3</c> or an XMP.
+    /// </summary>
+    public bool HasRating => _ratingPath is not null;
+
+    /// <summary>Name of the file the rating is read from and written to, for the tooltip.</summary>
+    public string RatingSource => _ratingPath is null ? "" : Path.GetFileName(_ratingPath);
 
     /// <summary>Stars currently written in the sidecar, 0…5.</summary>
-    public int Pp3Rank {
-        get => _pp3Rank;
-        private set => SetField(ref _pp3Rank, value);
+    public int Rank {
+        get => _rank;
+        private set => SetField(ref _rank, value);
     }
 
-    /// <summary>RawTherapee colour label, 0 (none) … 5. Null when the file doesn't say.</summary>
-    public int? Pp3ColorLabel {
-        get => _pp3ColorLabel;
-        private set {
-            if (SetField(ref _pp3ColorLabel, value)) {
-                Raise(nameof(Pp3ColorLabelText));
-            }
-        }
+    /// <summary>
+    /// The five colour swatches, always present so the row doesn't change
+    /// shape as the selection moves. Which one reads as chosen is the
+    /// swatch's own <c>IsSelected</c>.
+    /// </summary>
+    public IReadOnlyList<ColorLabelViewModel> ColorLabelChoices { get; }
+
+    /// <summary>Free-text colour label an XMP carried that isn't one of the standard five.</summary>
+    public string CustomColorLabel {
+        get => _customColorLabel;
+        private set => SetField(ref _customColorLabel, value);
     }
 
-    public string Pp3ColorLabelText =>
-        _pp3ColorLabel is int label && label > 0 ? $"Colour label {label}" : "";
-
-    /// <summary>Writes a new star count into the <c>.pp3</c>. Parameter is the star clicked, 1…5.</summary>
+    /// <summary>Writes a new star count into the sidecar. Parameter is the star clicked, 1…5.</summary>
     public RelayCommand SetRankCommand { get; }
+
+    /// <summary>Writes a colour label into the sidecar. Parameter is the swatch index, 1…5.</summary>
+    public RelayCommand SetColorLabelCommand { get; }
 
     /// <summary>Puts the Unity GUID on the clipboard — the reason it's shown at all.</summary>
     public RelayCommand CopyGuidCommand { get; }
@@ -406,18 +437,8 @@ public sealed class PreviewController : ObservableObject {
 
         await Task.Run(() => {
             ct.ThrowIfCancellationRequested();
-            try {
-                var bi = new BitmapImage();
-                bi.BeginInit();
-                bi.CacheOption = BitmapCacheOption.OnLoad;
-                bi.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
-                bi.UriSource = new Uri(path);
-                bi.EndInit();
-                bi.Freeze();
-                image = bi;
-            } catch {
-                // RAW or unsupported codec — image stays null, metadata may still load.
-            }
+            image = _rawExtensions.Contains(Path.GetExtension(path)) ? LoadRawPreview(path) : null;
+            image ??= Decode(bi => bi.UriSource = new Uri(path));
 
             if (_metadataReader is not null) {
                 meta = _metadataReader.Read(path);
@@ -434,6 +455,48 @@ public sealed class PreviewController : ObservableObject {
             Kind = PreviewKind.Image;
         } else {
             Kind = PreviewKind.Unsupported;
+        }
+    }
+
+    /// <summary>
+    /// RAW files get their embedded JPEG preview rather than a full sensor
+    /// decode — measured at ~10 ms against ~1200 ms for a 33 MB CR3. Null
+    /// when the file has no usable preview; the caller then falls back to
+    /// the ordinary decode, so an unrecognised container costs nothing but
+    /// the old behaviour.
+    /// </summary>
+    private static BitmapImage? LoadRawPreview(string path) {
+        byte[]? jpeg;
+        try {
+            using var file = File.OpenRead(path);
+            jpeg = RawPreviewExtractor.Extract(file);
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+            return null;
+        }
+
+        return jpeg is null ? null : Decode(bi => bi.StreamSource = new MemoryStream(jpeg));
+    }
+
+    /// <summary>
+    /// Shared decode settings. <c>OnLoad</c> matters for both callers: it
+    /// makes the bitmap independent of the stream (so the file handle and
+    /// the buffer can go) and lets us freeze it for the UI thread.
+    /// </summary>
+    private static BitmapImage? Decode(Action<BitmapImage> setSource) {
+        try {
+            var bi = new BitmapImage();
+            bi.BeginInit();
+            bi.CacheOption = BitmapCacheOption.OnLoad;
+            bi.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
+            setSource(bi);
+            bi.EndInit();
+            bi.Freeze();
+
+            return bi;
+        } catch {
+            // No codec for this format, truncated file, or a preview whose
+            // bytes turned out not to be a JPEG after all.
+            return null;
         }
     }
 
@@ -571,32 +634,49 @@ public sealed class PreviewController : ObservableObject {
         CompanionFiles = string.Join(", ", companions.Select(Path.GetFileName));
         UnityGuid = loaded.Meta?.Guid;
         UnityDetail = DescribeMeta(loaded.Meta);
-        _pp3Path = loaded.Pp3Path;
-        Pp3Rank = loaded.Rating?.Rank ?? 0;
-        Pp3ColorLabel = loaded.Rating?.ColorLabel;
-        Raise(nameof(HasPp3Rating));
-        SetRankCommand.RaiseCanExecuteChanged();
-        CopyGuidCommand.RaiseCanExecuteChanged();
+        ShowRating(loaded.RatingPath, loaded.Rating);
     }
 
-    private (UnityMetaInfo? Meta, string? Pp3Path, Pp3Rating? Rating) Load(IReadOnlyList<string> companions) {
+    private (UnityMetaInfo? Meta, string? RatingPath, SidecarRating? Rating) Load(IReadOnlyList<string> companions) {
         UnityMetaInfo? meta = null;
-        string? pp3Path = null;
-        Pp3Rating? rating = null;
+        string? ratingPath = null;
+        SidecarRating? rating = null;
 
         foreach (string path in companions) {
-            string ext = Path.GetExtension(path);
-            if (meta is null && ext.Equals(".meta", StringComparison.OrdinalIgnoreCase)) {
+            if (meta is null && Path.GetExtension(path).Equals(".meta", StringComparison.OrdinalIgnoreCase)) {
                 meta = _companionMetadata!.ReadUnityMeta(path);
-            } else if (pp3Path is null && ext.Equals(".pp3", StringComparison.OrdinalIgnoreCase)) {
-                rating = _companionMetadata!.ReadPp3(path);
+            } else if (ratingPath is null && CompanionMetadataService.IsRatingSidecar(path)) {
+                rating = _companionMetadata!.ReadRating(path);
                 if (rating is not null) {
-                    pp3Path = path;
+                    ratingPath = path;
                 }
             }
         }
 
-        return (meta, pp3Path, rating);
+        return (meta, ratingPath, rating);
+    }
+
+    /// <summary>Points the rating row at a sidecar (or at nothing) and refreshes what it shows.</summary>
+    private void ShowRating(string? path, SidecarRating? rating) {
+        _ratingPath = path;
+        _colorLabel = rating?.ColorLabel ?? 0;
+        Rank = rating?.Rank ?? 0;
+
+        // A label an XMP spells its own way ("Client approved") maps to no
+        // swatch, so say it in words instead of dropping it on the floor.
+        CustomColorLabel = _colorLabel == 0 && !string.IsNullOrEmpty(rating?.ColorLabelName)
+            ? rating!.ColorLabelName!
+            : "";
+
+        foreach (var choice in ColorLabelChoices) {
+            choice.IsSelected = choice.Index == _colorLabel;
+        }
+
+        Raise(nameof(HasRating));
+        Raise(nameof(RatingSource));
+        SetRankCommand.RaiseCanExecuteChanged();
+        SetColorLabelCommand.RaiseCanExecuteChanged();
+        CopyGuidCommand.RaiseCanExecuteChanged();
     }
 
     private static string? DescribeMeta(UnityMetaInfo? meta) {
@@ -615,23 +695,44 @@ public sealed class PreviewController : ObservableObject {
         return parts.Count > 0 ? string.Join("   •   ", parts) : null;
     }
 
-    private void SetRank(object? parameter) {
-        if (_pp3Path is null || _companionMetadata is null) {
+    private void SetRating(RatingField field, object? parameter, int current) {
+        if (_ratingPath is null || _companionMetadata is null) {
             return;
         }
-        if (parameter is not string raw || !int.TryParse(raw, out int star)) {
+        if (!TryReadIndex(parameter, out int clicked)) {
             return;
         }
 
-        // Clicking the star that already marks the rating clears it —
-        // otherwise a mis-click could never be taken back without Ctrl+Z.
-        int target = star == Pp3Rank ? 0 : star;
+        // Clicking what is already set clears it — otherwise a mis-click
+        // could never be taken back except through Ctrl+Z.
+        int target = clicked == current ? 0 : clicked;
         try {
-            _companionMetadata.SetPp3Rank(_pp3Path, target);
-            Pp3Rank = target;
+            _companionMetadata.SetRating(_ratingPath, field, target);
             CompanionStatus = "";
         } catch (Exception ex) {
+            // Includes the deliberate refusals: no sidecar to write to, or
+            // an XMP packet we won't add a property to.
             CompanionStatus = ex.Message;
+        }
+
+        // Re-read rather than assume: the write may have been refused, and
+        // the file is the only thing that knows what it now says.
+        ShowRating(_ratingPath, _companionMetadata.ReadRating(_ratingPath));
+    }
+
+    private static bool TryReadIndex(object? parameter, out int index) {
+        index = 0;
+
+        return parameter switch {
+            int i => Set(i, out index),
+            string s when int.TryParse(s, out int parsed) => Set(parsed, out index),
+            _ => false,
+        };
+
+        static bool Set(int value, out int index) {
+            index = value;
+
+            return value is > 0 and <= 5;
         }
     }
 
@@ -653,13 +754,8 @@ public sealed class PreviewController : ObservableObject {
         CompanionFiles = "";
         UnityGuid = null;
         UnityDetail = null;
-        _pp3Path = null;
-        Pp3Rank = 0;
-        Pp3ColorLabel = null;
         CompanionStatus = "";
-        Raise(nameof(HasPp3Rating));
-        SetRankCommand.RaiseCanExecuteChanged();
-        CopyGuidCommand.RaiseCanExecuteChanged();
+        ShowRating(null, null);
     }
 
 

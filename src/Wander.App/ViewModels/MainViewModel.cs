@@ -494,19 +494,20 @@ public sealed class MainViewModel : ObservableObject {
 
         // Also for a drag that came from outside Wander: dropping a .png
         // means dropping the asset, and Explorer had no idea about its
-        // sidecar. Wander's own drags arrive pre-expanded; the dedupe in
-        // WithCompanions makes the second pass free.
-        sourcePaths = WithCompanions(sourcePaths);
+        // sidecar. Wander's own drags arrive pre-expanded, and the dedupe
+        // makes the second pass free. Off the UI thread because this one
+        // does hit the disk, once per rule per dropped path.
+        var groups = await Task.Run(() => GroupPathsWithCompanions(sourcePaths));
 
-        _log.Info($"Drop: {effect} {sourcePaths.Count} item(s) into {targetFolder}");
+        _log.Info($"Drop: {effect} {groups.Count} item(s) into {targetFolder}");
         var resolver = new DispatcherConflictResolver(new InteractiveConflictResolver());
         IReadOnlyList<BatchItemResult> results;
         try {
             results = await RunWithProgressDialogAsync(
                 effect == DropEffect.Move ? "Перемещение" : "Копирование",
                 ct => effect == DropEffect.Move
-                    ? _ops.MoveManyAsync(sourcePaths, targetFolder, resolver, ct)
-                    : _ops.CopyManyAsync(sourcePaths, targetFolder, resolver, ct));
+                    ? _ops.MoveManyAsync(groups, targetFolder, resolver, ct)
+                    : _ops.CopyManyAsync(groups, targetFolder, resolver, ct));
         } catch (OperationCanceledException) {
             Status = "Operation cancelled.";
             return;
@@ -1340,7 +1341,7 @@ public sealed class MainViewModel : ObservableObject {
         }
 
         var snapshot = _selectedEntries.ToList();
-        var paths = WithCompanions(snapshot.Select(e => e.FullPath));
+        var paths = WithCompanions(snapshot);
         int extras = paths.Count - snapshot.Count;
 
         // Permanent (Shift+Delete) always asks. Recycle asks only when the
@@ -1466,7 +1467,7 @@ public sealed class MainViewModel : ObservableObject {
             // undo step — renaming Sprite.png and leaving Sprite.png.meta
             // behind is precisely the breakage this feature exists to stop.
             IReadOnlyList<(string Path, string NewName)> plan = Settings.IntegrateCompanions
-                ? _companions.RenamePlan(_selectedEntry.FullPath, newName, _fs)
+                ? _companions.RenamePlan(_selectedEntry.FullPath, newName, _selectedEntry.Companions)
                 : new[] { (_selectedEntry.FullPath, newName) };
             _ops.RenameMany(plan);
             Refresh();
@@ -1483,7 +1484,7 @@ public sealed class MainViewModel : ObservableObject {
         if (_selectedEntries.Count == 0) {
             return;
         }
-        _clipboard.Copy(WithCompanions(_selectedEntries.Select(e => e.FullPath)));
+        _clipboard.Copy(WithCompanions(_selectedEntries));
         Status = $"Copied {_selectedEntries.Count} item(s)";
     }
 
@@ -1491,26 +1492,62 @@ public sealed class MainViewModel : ObservableObject {
         if (_selectedEntries.Count == 0) {
             return;
         }
-        _clipboard.Cut(WithCompanions(_selectedEntries.Select(e => e.FullPath)));
+        _clipboard.Cut(WithCompanions(_selectedEntries));
         Status = $"Cut {_selectedEntries.Count} item(s)";
     }
 
 
     /// <summary>
-    /// Expands a set of paths with the companion files that belong to them,
-    /// so every batch op (copy, move, delete, drag-out) carries the whole
-    /// group. Returns the input untouched when the user turned integration
-    /// off, and never lists a path twice.
+    /// Every path an operation on <paramref name="entries"/> really touches:
+    /// the entries themselves plus their companions.
+    ///
+    /// <para>
+    /// Selected rows already know their sidecars — the folder listing put
+    /// them there — so this costs nothing. That matters: it runs on the UI
+    /// thread from Copy / Cut / Delete / drag-start, and probing the disk
+    /// once per rule per file would stall the window on a large selection.
+    /// </para>
     /// </summary>
-    public IReadOnlyList<string> WithCompanions(IEnumerable<string> paths) {
-        var list = paths.ToList();
-        if (!Settings.IntegrateCompanions) {
-            return list;
+    public IReadOnlyList<string> WithCompanions(IEnumerable<FileSystemEntry> entries) {
+        var expanded = new List<string>();
+        foreach (var entry in entries) {
+            expanded.Add(entry.FullPath);
+            if (Settings.IntegrateCompanions && entry.Companions is { } companions) {
+                expanded.AddRange(companions);
+            }
         }
 
-        var seen = new HashSet<string>(list, StringComparer.OrdinalIgnoreCase);
-        var expanded = new List<string>(list);
-        foreach (string path in list) {
+        return expanded;
+    }
+
+
+    /// <summary>
+    /// The selection as <see cref="BatchGroup"/>s, so a batch operation
+    /// treats a file and its sidecars as one item: one conflict question,
+    /// one progress step, one line in the status bar.
+    /// </summary>
+    private IReadOnlyList<BatchGroup> GroupWithCompanions(IEnumerable<FileSystemEntry> entries) {
+        return entries
+            .Select(e => Settings.IntegrateCompanions && e.Companions is { Count: > 0 } companions
+                ? new BatchGroup(e.FullPath, companions)
+                : BatchGroup.Single(e.FullPath))
+            .ToList();
+    }
+
+
+    /// <summary>
+    /// Grouping for paths that did not come from our own listing — a drop
+    /// from Explorer, or a clipboard payload. Here the sidecars have to be
+    /// looked for on disk, so callers keep this off the UI thread.
+    /// </summary>
+    private IReadOnlyList<BatchGroup> GroupPathsWithCompanions(IReadOnlyList<string> paths) {
+        if (!Settings.IntegrateCompanions) {
+            return paths.Select(BatchGroup.Single).ToList();
+        }
+
+        var seen = new HashSet<string>(paths, StringComparer.OrdinalIgnoreCase);
+        var expanded = new List<string>(paths);
+        foreach (string path in paths) {
             foreach (string companion in _companions.FindCompanions(path, _fs)) {
                 if (seen.Add(companion)) {
                     expanded.Add(companion);
@@ -1518,7 +1555,7 @@ public sealed class MainViewModel : ObservableObject {
             }
         }
 
-        return expanded;
+        return _companions.Group(expanded);
     }
 
     private async Task PasteAsync() {
@@ -1542,15 +1579,20 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
-        _log.Info($"Paste: {(wasCut ? "move" : "copy")} {sources.Count} item(s) into {target}");
+        // The clipboard holds a flat list (that is all a clipboard can hold);
+        // regrouping it here is what keeps a companion from producing its own
+        // conflict dialog.
+        var groups = await Task.Run(() => GroupPathsWithCompanions(sources));
+
+        _log.Info($"Paste: {(wasCut ? "move" : "copy")} {groups.Count} item(s) into {target}");
         var resolver = new DispatcherConflictResolver(new InteractiveConflictResolver());
         IReadOnlyList<BatchItemResult> results;
         try {
             results = await RunWithProgressDialogAsync(
                 wasCut ? "Перемещение" : "Копирование",
                 ct => wasCut
-                    ? _ops.MoveManyAsync(sources, target, resolver, ct)
-                    : _ops.CopyManyAsync(sources, target, resolver, ct));
+                    ? _ops.MoveManyAsync(groups, target, resolver, ct)
+                    : _ops.CopyManyAsync(groups, target, resolver, ct));
         } catch (OperationCanceledException) {
             Status = "Operation cancelled.";
             return;

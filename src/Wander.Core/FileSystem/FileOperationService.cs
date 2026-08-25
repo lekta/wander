@@ -208,6 +208,19 @@ public sealed class FileOperationService {
         CancellationToken ct = default)
         => _batch.MoveManyAsync(sources, targetFolder, resolver, ct);
 
+    // Group overloads: a main file and its companions count as one item for
+    // conflicts, for progress and for the status bar. See <see cref="BatchGroup"/>.
+
+    public Task<IReadOnlyList<BatchItemResult>> CopyManyAsync(
+        IReadOnlyList<BatchGroup> groups, string targetFolder, IConflictResolver resolver,
+        CancellationToken ct = default)
+        => _batch.CopyManyAsync(groups, targetFolder, resolver, ct);
+
+    public Task<IReadOnlyList<BatchItemResult>> MoveManyAsync(
+        IReadOnlyList<BatchGroup> groups, string targetFolder, IConflictResolver resolver,
+        CancellationToken ct = default)
+        => _batch.MoveManyAsync(groups, targetFolder, resolver, ct);
+
     public Task<IReadOnlyList<DeleteResult>> DeleteManyAsync(
         IReadOnlyList<string> paths, bool permanent, CancellationToken ct = default)
         => _batch.DeleteManyAsync(paths, permanent, ct);

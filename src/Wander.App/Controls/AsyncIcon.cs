@@ -82,15 +82,24 @@ public sealed class AsyncIcon : Image {
         }
 
         Source = null;
-        var image = await LoadAsync(path, size);
+        var image = await LoadAsync(path, size, () => generation == _generation);
         if (generation == _generation) {
             Source = image;
         }
     }
 
-    private static async Task<BitmapImage?> LoadAsync(string path, IconSize size) {
+    private static async Task<BitmapImage?> LoadAsync(string path, IconSize size, Func<bool> stillWanted) {
         await _gate.WaitAsync();
         try {
+            // Re-check after queueing: a fast scroll through a big folder can
+            // park hundreds of loads on this gate, and by the time one gets
+            // through, its container has usually been recycled onto another
+            // file. Doing the shell call anyway would be pure waste — and
+            // shell calls are the expensive part.
+            if (!stillWanted()) {
+                return null;
+            }
+
             return await Task.Run(() => IconConverter.Load(path, size));
         } catch {
             // A missing icon is a cosmetic loss; never let it reach the

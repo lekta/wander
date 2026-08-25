@@ -1,26 +1,15 @@
-using System.Text;
-
 namespace Wander.Core.Companions;
-
-/// <summary>Rating fields Wander reads out of a RawTherapee <c>.pp3</c>.</summary>
-/// <param name="Rank">0…5 stars, null when the file doesn't say.</param>
-/// <param name="ColorLabel">0…5 (0 = none), null when the file doesn't say.</param>
-public sealed record Pp3Rating(int? Rank, int? ColorLabel);
-
 
 /// <summary>
 /// Reads and edits the two rating keys of a RawTherapee sidecar. A
 /// <c>.pp3</c> is an INI file holding the user's entire develop recipe, so
-/// this is written the paranoid way:
+/// this is written the paranoid way: exactly one line changes and every
+/// other byte is copied through. Losing a develop recipe would be losing
+/// the user's work.
 ///
-/// <list type="bullet">
-///   <item>the file is handled as bytes — the original encoding and BOM
-///   survive the round trip;</item>
-///   <item>line endings are preserved per line, mixed endings included;</item>
-///   <item>exactly one line changes, everything else is copied through
-///   byte for byte. Losing a develop recipe would be losing the user's
-///   work.</item>
-/// </list>
+/// <para>
+/// Encoding, BOM and line endings are <see cref="SidecarText"/>'s job.
+/// </para>
 ///
 /// <para>
 /// Nothing here creates a <c>.pp3</c>: an empty sidecar changes how
@@ -37,8 +26,8 @@ public static class Pp3Sidecar {
     public const int MaxRank = 5;
 
 
-    public static Pp3Rating Read(byte[] content) {
-        string text = Decode(content, out _, out _);
+    public static SidecarRating Read(byte[] content) {
+        string text = SidecarText.Decode(content, out _, out _);
         int? rank = null;
         int? color = null;
 
@@ -53,33 +42,41 @@ public static class Pp3Sidecar {
             }
         }
 
-        return new Pp3Rating(rank, color);
+        return new SidecarRating(rank, color, color is int c ? ColorLabels.Name(c) : null);
     }
 
+
+    /// <summary>The same file with <c>[General] Rank</c> set to <paramref name="rank"/>.</summary>
+    public static byte[] WithRank(byte[] content, int rank) {
+        Guard(rank, MaxRank, nameof(rank));
+
+        return SidecarText.Edit(content, text => SetKey(text, RankKey, rank.ToString()));
+    }
+
+
+    /// <summary>The same file with <c>[General] ColorLabel</c> set to <paramref name="label"/>.</summary>
+    public static byte[] WithColorLabel(byte[] content, int label) {
+        Guard(label, ColorLabels.Max, nameof(label));
+
+        return SidecarText.Edit(content, text => SetKey(text, ColorLabelKey, label.ToString()));
+    }
+
+
+    private static void Guard(int value, int max, string name) {
+        if (value < 0 || value > max) {
+            throw new ArgumentOutOfRangeException(name, value, $"Value must be 0..{max}.");
+        }
+    }
+
+
+    // --- INI plumbing --------------------------------------------------
 
     /// <summary>
-    /// The same file with <c>[General] Rank</c> set to <paramref name="rank"/>.
-    /// The key is rewritten in place when present; otherwise it is inserted
-    /// at the top of the <c>[General]</c> section, and that section is
-    /// appended if the file lacks one.
+    /// Rewrites one key in place when it's there, inserts it at the top of
+    /// <c>[General]</c> when it isn't, and appends that section if the file
+    /// has none. Everything else is untouched, including comments, blank
+    /// lines and key order.
     /// </summary>
-    public static byte[] WithRank(byte[] content, int rank) {
-        if (rank < 0 || rank > MaxRank) {
-            throw new ArgumentOutOfRangeException(nameof(rank), rank, $"Rank must be 0..{MaxRank}.");
-        }
-
-        string text = Decode(content, out var encoding, out bool hasBom);
-        string updated = SetKey(text, RankKey, rank.ToString());
-
-        return Encode(updated, encoding, hasBom);
-    }
-
-
-    // --- Text plumbing -------------------------------------------------
-    // Lines are split on '\n' only and the '\r' stays glued to the end of
-    // each piece, so re-joining reproduces the original endings exactly —
-    // including a file that mixes them.
-
     private static string SetKey(string text, string key, string value) {
         var lines = text.Split('\n');
         string? section = null;
@@ -112,7 +109,7 @@ public static class Pp3Sidecar {
             return string.Join('\n', lines);
         }
 
-        string newline = text.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+        string newline = SidecarText.NewlineOf(text);
         if (generalStart >= 0) {
             var withKey = new List<string>(lines);
             withKey.Insert(generalStart + 1, $"{key}={value}{(newline == "\r\n" ? "\r" : "")}");
@@ -145,49 +142,5 @@ public static class Pp3Sidecar {
 
     private static int? ParseInt(string value) {
         return int.TryParse(value, out int parsed) ? parsed : null;
-    }
-
-
-    // --- Encoding ------------------------------------------------------
-
-    private static string Decode(byte[] content, out Encoding encoding, out bool hasBom) {
-        if (content.Length >= 3 && content[0] == 0xEF && content[1] == 0xBB && content[2] == 0xBF) {
-            encoding = new UTF8Encoding(true);
-            hasBom = true;
-
-            return new UTF8Encoding(false).GetString(content, 3, content.Length - 3);
-        }
-        if (content.Length >= 2 && content[0] == 0xFF && content[1] == 0xFE) {
-            encoding = new UnicodeEncoding(false, true);
-            hasBom = true;
-
-            return new UnicodeEncoding(false, false).GetString(content, 2, content.Length - 2);
-        }
-        if (content.Length >= 2 && content[0] == 0xFE && content[1] == 0xFF) {
-            encoding = new UnicodeEncoding(true, true);
-            hasBom = true;
-
-            return new UnicodeEncoding(true, false).GetString(content, 2, content.Length - 2);
-        }
-
-        // RawTherapee writes plain UTF-8 without a BOM.
-        encoding = new UTF8Encoding(false);
-        hasBom = false;
-
-        return encoding.GetString(content);
-    }
-
-    private static byte[] Encode(string text, Encoding encoding, bool hasBom) {
-        byte[] body = encoding.GetBytes(text);
-        if (!hasBom) {
-            return body;
-        }
-
-        byte[] preamble = encoding.GetPreamble();
-        var result = new byte[preamble.Length + body.Length];
-        preamble.CopyTo(result, 0);
-        body.CopyTo(result, preamble.Length);
-
-        return result;
     }
 }

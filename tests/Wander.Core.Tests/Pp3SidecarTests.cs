@@ -103,6 +103,18 @@ public class Pp3SidecarTests {
     }
 
     [Fact]
+    public void WithColorLabel_ChangesOnlyTheColorLabelLine() {
+        string updated = Text(Pp3Sidecar.WithColorLabel(Utf8(Sample), 4));
+
+        Assert.Equal(Sample.Replace("ColorLabel=3", "ColorLabel=4"), updated);
+    }
+
+    [Fact]
+    public void Read_NamesTheColorLabel() {
+        Assert.Equal("Green", Pp3Sidecar.Read(Utf8(Sample)).ColorLabelName);
+    }
+
+    [Fact]
     public void WithRank_RejectsValuesOutsideTheScale() {
         Assert.Throws<ArgumentOutOfRangeException>(() => Pp3Sidecar.WithRank(Utf8(Sample), 6));
         Assert.Throws<ArgumentOutOfRangeException>(() => Pp3Sidecar.WithRank(Utf8(Sample), -1));

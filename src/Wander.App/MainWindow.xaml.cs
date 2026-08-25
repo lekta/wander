@@ -10,6 +10,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using ICSharpCode.AvalonEdit.Highlighting;
+using Microsoft.Web.WebView2.Core;
 using Wander.App.Controls;
 using Wander.App.Converters;
 using Wander.App.DragPreview;
@@ -291,12 +292,39 @@ public partial class MainWindow : Window {
                         args.Cancel = true;
                     }
                 };
+
+                // NavigationStarting only covers navigations. A previewed
+                // .html could still reach the network through a tracking
+                // pixel, a remote script or a fetch() — quietly telling
+                // someone which files this machine looks at. Scripts stay
+                // enabled because the built-in PDF viewer needs them, so the
+                // subresources are where the line gets drawn instead.
+                core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
+                core.WebResourceRequested += (_, args) => {
+                    if (IsRemoteUri(args.Request.Uri)) {
+                        args.Response = core.Environment.CreateWebResourceResponse(
+                            null, 403, "Blocked", "");
+                    }
+                };
             }
             _webInitialized = true;
         } catch {
             // WebView2 runtime not installed — the pane will stay blank
             // for PDF / HTML / Markdown previews. Other previews are unaffected.
         }
+    }
+
+
+    /// <summary>
+    /// Whether a request would leave this machine. Named the negative way
+    /// round on purpose: the renderer serves its own chrome (the PDF viewer
+    /// especially) over internal schemes we have no business enumerating, so
+    /// the rule blocks what reaches the network rather than allowing a list
+    /// of what doesn't.
+    /// </summary>
+    private static bool IsRemoteUri(string uri) {
+        return Uri.TryCreate(uri, UriKind.Absolute, out var parsed)
+            && parsed.Scheme is "http" or "https" or "ws" or "wss" or "ftp" or "ftps";
     }
 
 
@@ -823,10 +851,13 @@ public partial class MainWindow : Window {
             return;
         }
 
-        StartDrag((DependencyObject)sender, paths);
+        // The payload carries the companions; `paths` — what the user
+        // selected — still drives the drag preview, because that is what
+        // they think they are dragging.
+        StartDrag((DependencyObject)sender, paths, Vm.WithCompanions(Vm.SelectedEntries).ToArray());
     }
 
-    private void StartDrag(DependencyObject src, string[] paths) {
+    private void StartDrag(DependencyObject src, string[] paths, string[] payload) {
         _dragPathCount = paths.Length;
         _dragFirstName = Path.GetFileName(paths[0].TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
         _currentDropTarget = null;
@@ -845,10 +876,7 @@ public partial class MainWindow : Window {
         System.Windows.DragDrop.AddGiveFeedbackHandler(src, feedback);
 
         try {
-            // The payload carries the companions; the preview above still
-            // counts what the user selected, because that is what they
-            // think they are dragging.
-            var data = new DataObject(DataFormats.FileDrop, Vm.WithCompanions(paths).ToArray());
+            var data = new DataObject(DataFormats.FileDrop, payload);
             System.Windows.DragDrop.DoDragDrop(src, data, DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link);
         } catch {
             // drop target may throw on rejection — ignore.

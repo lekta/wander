@@ -1,0 +1,40 @@
+using System.Windows.Media;
+using Wander.Core.Companions;
+
+namespace Wander.App.ViewModels;
+
+/// <summary>
+/// One colour swatch in the preview footer's rating row. Five of these are
+/// created once per <see cref="PreviewController"/> and stay put; only
+/// <see cref="IsSelected"/> moves as the selection changes, so the row never
+/// rebuilds itself under the cursor.
+///
+/// <para>
+/// The index and the name come from <see cref="ColorLabels"/> in Core — the
+/// brush is the only part that belongs to the view layer, because a colour
+/// meaning is shared between formats but a <see cref="Brush"/> is WPF.
+/// </para>
+/// </summary>
+public sealed class ColorLabelViewModel : ObservableObject {
+    private bool _isSelected;
+
+
+    public ColorLabelViewModel(int index, Brush brush) {
+        Index = index;
+        Brush = brush;
+        Name = ColorLabels.Name(index);
+    }
+
+
+    /// <summary>1…5. Index 0 ("none") has no swatch — clicking the selected one clears instead.</summary>
+    public int Index { get; }
+
+    public Brush Brush { get; }
+
+    public string Name { get; }
+
+    public bool IsSelected {
+        get => _isSelected;
+        set => SetField(ref _isSelected, value);
+    }
+}
