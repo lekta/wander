@@ -7,6 +7,7 @@
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         xmlns:ae="http://icsharpcode.net/sharpdevelop/avalonedit"
         xmlns:controls="clr-namespace:Wander.App.Controls"
+        xmlns:res="clr-namespace:Wander.App.Resources"
         Title="{Binding WindowTitle}"
         Icon="Assets\app.ico"
         Height="700" Width="1100"
@@ -28,6 +29,31 @@
         <conv:BitmapPixelSizeConverter x:Key="BitmapPixelSize"/>
         <conv:RankStarConverter x:Key="RankStar"/>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+        <conv:RenameEditorVisibilityConverter x:Key="RenameVisibility"/>
+
+        <!--
+            Inline rename editor (A3). Every row template carries one of
+            these, collapsed; MainViewModel.RenamingPath makes exactly one
+            visible. Focus, the initial text and the "select the name, not
+            the extension" selection are done from code-behind when the
+            edit starts - a collapsed TextBox cannot take focus, so it has
+            to happen after the visibility flips.
+        -->
+        <Style x:Key="RenameEditor" TargetType="TextBox">
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="MinWidth" Value="60"/>
+            <Setter Property="Visibility">
+                <Setter.Value>
+                    <MultiBinding Converter="{StaticResource RenameVisibility}">
+                        <Binding Path="FullPath"/>
+                        <Binding Path="DataContext.RenamingPath" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                    </MultiBinding>
+                </Setter.Value>
+            </Setter>
+            <EventSetter Event="PreviewKeyDown" Handler="RenameBox_PreviewKeyDown"/>
+            <EventSetter Event="PreviewTextInput" Handler="RenameBox_PreviewTextInput"/>
+            <EventSetter Event="LostKeyboardFocus" Handler="RenameBox_LostKeyboardFocus"/>
+        </Style>
 
         <!--
             One star of the .pp3 rating widget. Five copies of this in the
@@ -215,13 +241,13 @@
         <DockPanel DockPanel.Dock="Top" Background="#F3F3F3">
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" Margin="4,4,8,4">
                 <Button Style="{StaticResource ToolbarButton}"
-                        Command="{Binding BackCommand}" ToolTip="Back (Alt+Left)"
+                        Command="{Binding BackCommand}" ToolTip="{x:Static res:Strings.NavBack}"
                         Width="28" Height="28" Margin="2,0" Content="&#x2190;"/>
                 <Button Style="{StaticResource ToolbarButton}"
-                        Command="{Binding ForwardCommand}" ToolTip="Forward (Alt+Right)"
+                        Command="{Binding ForwardCommand}" ToolTip="{x:Static res:Strings.NavForward}"
                         Width="28" Height="28" Margin="2,0" Content="&#x2192;"/>
                 <Button Style="{StaticResource ToolbarButton}"
-                        Command="{Binding UpCommand}" ToolTip="Up (Alt+Up / Backspace)"
+                        Command="{Binding UpCommand}" ToolTip="{x:Static res:Strings.NavUp}"
                         Width="28" Height="28" Margin="2,0" Content="&#x2191;"/>
             </StackPanel>
 
@@ -230,19 +256,19 @@
                     <MenuItem Padding="8,4">
                         <MenuItem.Header>
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="View"/>
+                                <TextBlock Text="{x:Static res:Strings.MenuView}"/>
                                 <TextBlock Text="&#x25BE;" FontSize="10" Margin="4,0,0,0" VerticalAlignment="Center"/>
                             </StackPanel>
                         </MenuItem.Header>
-                        <MenuItem Header="Details"
+                        <MenuItem Header="{x:Static res:Strings.MenuViewDetails}"
                                   IsCheckable="True"
                                   IsChecked="{Binding ViewMode, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=Details}"
                                   Command="{Binding SetViewModeCommand}" CommandParameter="Details"/>
-                        <MenuItem Header="Tiles"
+                        <MenuItem Header="{x:Static res:Strings.MenuViewTiles}"
                                   IsCheckable="True"
                                   IsChecked="{Binding ViewMode, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=Tiles}"
                                   Command="{Binding SetViewModeCommand}" CommandParameter="Tiles"/>
-                        <MenuItem Header="Large icons"
+                        <MenuItem Header="{x:Static res:Strings.MenuViewLargeIcons}"
                                   IsCheckable="True"
                                   IsChecked="{Binding ViewMode, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=LargeIcons}"
                                   Command="{Binding SetViewModeCommand}" CommandParameter="LargeIcons"/>
@@ -255,29 +281,29 @@
                             toggles so the user can flip them without changing
                             the column.
                         -->
-                        <MenuItem Header="Sort by">
-                            <MenuItem Header="Name"
+                        <MenuItem Header="{x:Static res:Strings.MenuSortBy}">
+                            <MenuItem Header="{x:Static res:Strings.MenuSortName}"
                                       IsCheckable="True"
                                       IsChecked="{Binding Settings.SortKey, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=Name}"
                                       Command="{Binding SetSortKeyCommand}" CommandParameter="Name"/>
-                            <MenuItem Header="Date modified"
+                            <MenuItem Header="{x:Static res:Strings.MenuSortDate}"
                                       IsCheckable="True"
                                       IsChecked="{Binding Settings.SortKey, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=ModifiedDate}"
                                       Command="{Binding SetSortKeyCommand}" CommandParameter="ModifiedDate"/>
-                            <MenuItem Header="Size"
+                            <MenuItem Header="{x:Static res:Strings.MenuSortSize}"
                                       IsCheckable="True"
                                       IsChecked="{Binding Settings.SortKey, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=Size}"
                                       Command="{Binding SetSortKeyCommand}" CommandParameter="Size"/>
-                            <MenuItem Header="Type"
+                            <MenuItem Header="{x:Static res:Strings.MenuSortType}"
                                       IsCheckable="True"
                                       IsChecked="{Binding Settings.SortKey, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=Type}"
                                       Command="{Binding SetSortKeyCommand}" CommandParameter="Type"/>
                             <Separator/>
-                            <MenuItem Header="Ascending"
+                            <MenuItem Header="{x:Static res:Strings.MenuSortAscending}"
                                       IsCheckable="True"
                                       IsChecked="{Binding Settings.SortAscending, Mode=OneWay}"
                                       Command="{Binding ToggleSortAscendingCommand}"/>
-                            <MenuItem Header="Folders first"
+                            <MenuItem Header="{x:Static res:Strings.MenuSortFoldersFirst}"
                                       IsCheckable="True"
                                       IsChecked="{Binding Settings.GroupFoldersFirst, Mode=OneWay}"
                                       Command="{Binding ToggleGroupFoldersFirstCommand}"/>
@@ -292,26 +318,26 @@
                         <MenuItem.Header>
                             <TextBlock Text="&#x22EF;" FontSize="16" Margin="0,-4,0,0"/>
                         </MenuItem.Header>
-                        <MenuItem Header="Refresh" Command="{Binding RefreshCommand}" InputGestureText="F5"/>
-                        <MenuItem Header="New folder" Command="{Binding NewFolderCommand}" InputGestureText="Ctrl+Shift+N"/>
+                        <MenuItem Header="{x:Static res:Strings.MenuRefresh}" Command="{Binding RefreshCommand}" InputGestureText="F5"/>
+                        <MenuItem Header="{x:Static res:Strings.MenuNewFolder}" Command="{Binding NewFolderCommand}" InputGestureText="Ctrl+Shift+N"/>
                         <Separator/>
-                        <MenuItem Header="Quick preview"
+                        <MenuItem Header="{x:Static res:Strings.MenuQuickPreview}"
                                   IsCheckable="True"
                                   IsChecked="{Binding IsPreviewVisible, Mode=TwoWay}"/>
                         <Separator/>
-                        <MenuItem Header="Options..." Command="{Binding OptionsCommand}"/>
-                        <MenuItem Header="Report an issue or idea..."
+                        <MenuItem Header="{x:Static res:Strings.MenuOptions}" Command="{Binding OptionsCommand}"/>
+                        <MenuItem Header="{x:Static res:Strings.MenuReportIssue}"
                                   Command="{Binding ReportIssueCommand}"
-                                  ToolTip="Opens a new GitHub issue in the browser (bug report or feature request)"/>
+                                  ToolTip="{x:Static res:Strings.MenuReportIssueHint}"/>
                         <Separator/>
-                        <MenuItem Header="Debug"
+                        <MenuItem Header="{x:Static res:Strings.MenuDebug}"
                                   Visibility="{Binding Settings.ShowDebugMenu, Converter={StaticResource BoolToVisibility}}">
-                            <MenuItem Header="Logs"
+                            <MenuItem Header="{x:Static res:Strings.MenuLogs}"
                                       Command="{Binding OpenLogFileCommand}"
-                                      ToolTip="Open the current session log file"/>
+                                      ToolTip="{x:Static res:Strings.MenuLogsHint}"/>
                         </MenuItem>
                         <Separator Visibility="{Binding Settings.ShowDebugMenu, Converter={StaticResource BoolToVisibility}}"/>
-                        <MenuItem Header="Exit" Command="{Binding ExitCommand}"/>
+                        <MenuItem Header="{x:Static res:Strings.MenuExit}" Command="{Binding ExitCommand}"/>
                     </MenuItem>
                 </Menu>
             </StackPanel>
@@ -328,9 +354,9 @@
                 <TextBox x:Name="SearchBox"
                          Padding="6,4"
                          Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
-                         ToolTip="Filter current folder (Ctrl+F, Esc to clear)"
+                         ToolTip="{x:Static res:Strings.SearchHint}"
                          PreviewKeyDown="SearchBox_PreviewKeyDown"/>
-                <TextBlock Text="Search in this folder"
+                <TextBlock Text="{x:Static res:Strings.SearchPlaceholder}"
                            Foreground="#999"
                            Margin="8,0,8,0"
                            VerticalAlignment="Center"
@@ -364,7 +390,7 @@
                 <DockPanel>
                     <ToggleButton x:Name="RecentToggle" DockPanel.Dock="Right"
                                   Width="22" Focusable="False"
-                                  ToolTip="Recently visited folders (F4)"
+                                  ToolTip="{x:Static res:Strings.RecentFoldersHint}"
                                   Background="Transparent">
                         <ToggleButton.Template>
                             <ControlTemplate TargetType="ToggleButton">
@@ -537,7 +563,7 @@
                             BorderBrush="#DDD"
                             BorderThickness="0,0,0,1"
                             Cursor="Hand"
-                            ToolTip="Свернуть / развернуть закладки">
+                            ToolTip="{x:Static res:Strings.BookmarksToggleHint}">
                         <DockPanel>
                             <TextBlock DockPanel.Dock="Left"
                                        Margin="0,0,6,0"
@@ -554,7 +580,7 @@
                                     </Style>
                                 </TextBlock.Style>
                             </TextBlock>
-                            <TextBlock Text="Закладки" FontWeight="SemiBold"/>
+                            <TextBlock Text="{x:Static res:Strings.BookmarksHeader}" FontWeight="SemiBold"/>
                         </DockPanel>
                     </Button>
 
@@ -615,7 +641,7 @@
                                 <StackPanel Orientation="Horizontal">
                                     <StackPanel.ContextMenu>
                                         <ContextMenu>
-                                            <MenuItem Header="Убрать из закладок"
+                                            <MenuItem Header="{x:Static res:Strings.BookmarksRemove}"
                                                       IsEnabled="{Binding PlacementTarget.DataContext.IsRemovableBookmark, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                       Command="{Binding DataContext.RemoveBookmarkCommand, ElementName=WanderWindow}"
                                                       CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
@@ -698,24 +724,26 @@
                             that marker; SortMemberPath keeps the header
                             behaving exactly as before.
                         -->
-                        <DataGridTemplateColumn Header="Name" Width="*" SortMemberPath="Name" IsReadOnly="True">
+                        <DataGridTemplateColumn Header="{x:Static res:Strings.ColumnName}" Width="*" SortMemberPath="Name" IsReadOnly="True">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"/>
-                                        <Border Margin="6,0,0,0" Padding="3,0" CornerRadius="2"
-                                                Background="#E8E8E8" VerticalAlignment="Center"
-                                                ToolTip="Integrated: shown as one item together with its companion file(s)"
-                                                Visibility="{Binding HasCompanions, Converter={StaticResource BoolToVisibility}}">
-                                            <TextBlock Text="+" FontSize="10" Foreground="#666"/>
-                                        </Border>
-                                    </StackPanel>
+                                    <Grid>
+                                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis">
+                                            <TextBlock.Visibility>
+                                                <MultiBinding Converter="{StaticResource RenameVisibility}" ConverterParameter="Inverse">
+                                                    <Binding Path="FullPath"/>
+                                                    <Binding Path="DataContext.RenamingPath" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                </MultiBinding>
+                                            </TextBlock.Visibility>
+                                        </TextBlock>
+                                        <TextBox Style="{StaticResource RenameEditor}"/>
+                                    </Grid>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
-                        <DataGridTextColumn Header="Type" Binding="{Binding Kind}" Width="80"/>
-                        <DataGridTextColumn Header="Size" Binding="{Binding Size}" Width="100"/>
-                        <DataGridTextColumn Header="Modified" Binding="{Binding ModifiedUtc, StringFormat=yyyy-MM-dd HH:mm}" Width="140"/>
+                        <DataGridTextColumn Header="{x:Static res:Strings.ColumnType}" Binding="{Binding Kind}" Width="80"/>
+                        <DataGridTextColumn Header="{x:Static res:Strings.ColumnSize}" Binding="{Binding Size}" Width="100"/>
+                        <DataGridTextColumn Header="{x:Static res:Strings.ColumnModified}" Binding="{Binding ModifiedUtc, StringFormat=yyyy-MM-dd HH:mm}" Width="140"/>
                     </DataGrid.Columns>
                 </DataGrid>
 
@@ -748,7 +776,17 @@
                                     <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Normal"
                                                         Width="32" Height="32" Margin="0,0,8,0" VerticalAlignment="Center"/>
                                     <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" MaxWidth="160"/>
+                                        <Grid>
+                                            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" MaxWidth="160">
+                                                <TextBlock.Visibility>
+                                                    <MultiBinding Converter="{StaticResource RenameVisibility}" ConverterParameter="Inverse">
+                                                        <Binding Path="FullPath"/>
+                                                        <Binding Path="DataContext.RenamingPath" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                    </MultiBinding>
+                                                </TextBlock.Visibility>
+                                            </TextBlock>
+                                            <TextBox Style="{StaticResource RenameEditor}" MaxWidth="180"/>
+                                        </Grid>
                                         <TextBlock FontSize="11" Foreground="#777">
                                             <Run Text="{Binding Kind, Mode=OneWay}"/>
                                         </TextBlock>
@@ -800,12 +838,23 @@
                                                     HorizontalAlignment="Center"
                                                     RenderOptions.BitmapScalingMode="HighQuality"
                                                     UseLayoutRounding="True"/>
-                                <TextBlock Text="{Binding Name}"
-                                           TextAlignment="Center"
-                                           TextWrapping="Wrap"
-                                           MaxHeight="32"
-                                           FontSize="{Binding DataContext.Settings.LargeIconLabelFontSize, RelativeSource={RelativeSource AncestorType=Window}}"
-                                           TextTrimming="CharacterEllipsis"/>
+                                <Grid>
+                                    <TextBlock Text="{Binding Name}"
+                                               TextAlignment="Center"
+                                               TextWrapping="Wrap"
+                                               MaxHeight="32"
+                                               FontSize="{Binding DataContext.Settings.LargeIconLabelFontSize, RelativeSource={RelativeSource AncestorType=Window}}"
+                                               TextTrimming="CharacterEllipsis">
+                                        <TextBlock.Visibility>
+                                            <MultiBinding Converter="{StaticResource RenameVisibility}" ConverterParameter="Inverse">
+                                                <Binding Path="FullPath"/>
+                                                <Binding Path="DataContext.RenamingPath" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                            </MultiBinding>
+                                        </TextBlock.Visibility>
+                                    </TextBlock>
+                                    <TextBox Style="{StaticResource RenameEditor}"
+                                             FontSize="{Binding DataContext.Settings.LargeIconLabelFontSize, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                </Grid>
                             </StackPanel>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
@@ -937,7 +986,7 @@
                                         Content="▶" Width="32" Padding="0,2"
                                         Grid.Column="0"
                                         Click="VideoPlayPause_Click"
-                                        ToolTip="Space"/>
+                                        ToolTip="{x:Static res:Strings.PreviewPlayPause}"/>
                                 <TextBlock x:Name="VideoTimeText"
                                            Grid.Column="1"
                                            VerticalAlignment="Center"
@@ -980,6 +1029,73 @@
                         <wv2:WebView2 x:Name="WebPreview"
                                       Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Web}"
                                       DefaultBackgroundColor="White"/>
+
+                        <!--
+                            Folder census (B2). Shown when the selection is a
+                            folder, or when nothing is selected: "what is in
+                            here and what is eating the space" is the question
+                            a folder raises, and a wall of thumbnails does not
+                            answer it.
+                        -->
+                        <ScrollViewer Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Folder}"
+                                      VerticalScrollBarVisibility="Auto" Padding="12,10,12,10">
+                            <StackPanel>
+                                <TextBlock Text="{Binding Preview.FolderTitle}"
+                                           FontSize="14" FontWeight="SemiBold"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="{Binding Preview.FolderHeadline}"
+                                           Foreground="#666" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding Preview.FolderNote}"
+                                           Foreground="#A05000" FontSize="11"
+                                           Margin="0,4,0,0" TextWrapping="Wrap"
+                                           Visibility="{Binding Preview.HasFolderNote, Converter={StaticResource BoolToVisibility}}"/>
+
+                                <TextBlock Text="{x:Static res:Strings.PreviewFolderTypes}"
+                                           FontWeight="SemiBold" Margin="0,16,0,6"/>
+
+                                <!-- Empty folder: say so instead of leaving a blank panel. -->
+                                <TextBlock Text="{x:Static res:Strings.PreviewFolderEmpty}" Foreground="#888">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Preview.FolderTypes.Count}" Value="0">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+
+                                <ItemsControl ItemsSource="{Binding Preview.FolderTypes}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <!-- Bars are scaled against the biggest bucket,
+                                                 not the total: with a long tail every bar
+                                                 would otherwise be a hairline. -->
+                                            <Grid Margin="0,3,0,3">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="64"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{Binding Extension}"
+                                                           FontFamily="Consolas" TextTrimming="CharacterEllipsis"
+                                                           VerticalAlignment="Center"/>
+                                                <Border Grid.Column="1" Height="10" CornerRadius="2"
+                                                        HorizontalAlignment="Left" VerticalAlignment="Center"
+                                                        Width="{Binding BarWidth}"
+                                                        Background="#0078D7" Opacity="0.5"/>
+                                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding SizeText}" Foreground="#444"/>
+                                                    <TextBlock Text="{Binding CountText}" Foreground="#999" Margin="10,0,0,0"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </ScrollViewer>
 
                         <!-- Placeholder (None / Unsupported) -->
                         <TextBlock Text="{Binding Preview.PlaceholderText}"
@@ -1034,7 +1150,7 @@
                             <StackPanel Margin="0,6,0,0"
                                         Visibility="{Binding Preview.HasCompanions, Converter={StaticResource BoolToVisibility}}">
                                 <TextBlock FontSize="11" Foreground="#888" TextWrapping="Wrap">
-                                    <Run Text="Integrated:"/><Run Text=" "/><Run Text="{Binding Preview.CompanionFiles, Mode=OneWay}"/>
+                                    <Run Text="{x:Static res:Strings.PreviewIntegrated}"/><Run Text=" "/><Run Text="{Binding Preview.CompanionFiles, Mode=OneWay}"/>
                                 </TextBlock>
 
                                 <!-- Unity .meta — the GUID, and a button to take it away -->
@@ -1047,8 +1163,8 @@
                                              BorderThickness="0" Background="Transparent"
                                              Margin="6,0,0,0" MinWidth="0" Padding="0"
                                              VerticalAlignment="Center"/>
-                                    <Button Content="Copy" Command="{Binding Preview.CopyGuidCommand}"
-                                            ToolTip="Copy GUID"
+                                    <Button Content="{x:Static res:Strings.ActionCopy}" Command="{Binding Preview.CopyGuidCommand}"
+                                            ToolTip="{x:Static res:Strings.PreviewCopyGuid}"
                                             Margin="4,0,0,0" Padding="4,0" FontSize="11"
                                             VerticalAlignment="Center"/>
                                 </StackPanel>
@@ -1058,7 +1174,7 @@
                                 <!-- .pp3 / .xmp — rating and colour label, editable in place -->
                                 <StackPanel Orientation="Horizontal" Margin="0,3,0,0"
                                             Visibility="{Binding Preview.HasRating, Converter={StaticResource BoolToVisibility}}">
-                                    <TextBlock Text="Rating" FontSize="11" Foreground="#444"
+                                    <TextBlock Text="{x:Static res:Strings.PreviewRating}" FontSize="11" Foreground="#444"
                                                VerticalAlignment="Center" Margin="0,0,6,0"/>
                                     <Button Style="{StaticResource RatingStar}" CommandParameter="1"
                                             Content="{Binding Preview.Rank, Converter={StaticResource RankStar}, ConverterParameter=1}"/>

@@ -152,10 +152,16 @@ public class SearchControllerTests {
     // --- Reset --------------------------------------------------------
 
     [Fact]
-    public void Reset_ClearsQuery_WithoutFiringFilteredAgain() {
+    public async Task Reset_ClearsQuery_WithoutFiringFilteredAgain() {
         var sc = new SearchController();
         sc.SetSource(new[] { _apple });
+        // Let the "apple" pass land before counting: subscribing while it is
+        // still in flight measured the race, not Reset. Under load it drained
+        // first and the test went green; run alone it always fired once.
+        var settled = WaitForNextFilteredAsync(sc);
         sc.Query = "apple";
+        await settled;
+
         int filteredFires = 0;
         sc.FilteredChanged += _ => filteredFires++;
 

@@ -8,6 +8,7 @@ using System.Security.Principal;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using Wander.App.Resources;
 using Wander.Core;
 using Wander.Core.Logging;
 
@@ -82,9 +83,8 @@ public static class CrashReporter {
             // teardown) — fall back to a bare MessageBox. Without a way to
             // ask about the log separately, leave it out (privacy-safe default).
             var choice = MessageBox.Show(
-                $"Wander has encountered an unexpected error.\n\n{ex.GetType().Name}: {Truncate(ex.Message, 300)}\n\n" +
-                "Prepare a crash report (error details only, no session log)?",
-                "Wander — crash report",
+                string.Format(Strings.CrashFallbackPrompt, ex.GetType().Name, Truncate(ex.Message, 300)),
+                Strings.CrashTitle,
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Error,
                 MessageBoxResult.Yes);
@@ -94,7 +94,7 @@ public static class CrashReporter {
 
     private static (bool Send, bool IncludeLog) ShowOfferDialog(Exception ex, bool fatal) {
         var window = new Window {
-            Title = "Wander — crash report",
+            Title = Strings.CrashTitle,
             Width = 480,
             SizeToContent = SizeToContent.Height,
             WindowStartupLocation = WindowStartupLocation.CenterScreen,
@@ -114,9 +114,7 @@ public static class CrashReporter {
 
         var stack = new StackPanel { Margin = new Thickness(14) };
         stack.Children.Add(new TextBlock {
-            Text = fatal
-                ? "Wander has crashed and needs to close."
-                : "Wander has encountered an unexpected error.",
+            Text = fatal ? Strings.CrashFatal : Strings.CrashNonFatal,
             FontWeight = FontWeights.SemiBold,
             TextWrapping = TextWrapping.Wrap,
         });
@@ -127,17 +125,14 @@ public static class CrashReporter {
             Margin = new Thickness(0, 6, 0, 0),
         });
         stack.Children.Add(new TextBlock {
-            Text = "Wander can save a report bundle (zip), show it in Explorer and open " +
-                   "a pre-filled GitHub issue in your browser. Nothing is sent anywhere " +
-                   "until you review and submit the issue yourself.",
+            Text = Strings.CrashExplain,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 10, 0, 0),
         });
 
         var includeLog = new CheckBox {
             Content = new TextBlock {
-                Text = "Include this session's log in the bundle — helps a lot with diagnosis, " +
-                       "but it contains paths of files you worked with",
+                Text = Strings.CrashIncludeLog,
                 TextWrapping = TextWrapping.Wrap,
             },
             IsChecked = true,
@@ -150,8 +145,8 @@ public static class CrashReporter {
             HorizontalAlignment = HorizontalAlignment.Right,
             Margin = new Thickness(0, 14, 0, 0),
         };
-        var report = new Button { Content = "Prepare report", Padding = new Thickness(10, 2, 10, 2), IsDefault = true };
-        var close = new Button { Content = "Close", Padding = new Thickness(10, 2, 10, 2), IsCancel = true, Margin = new Thickness(6, 0, 0, 0) };
+        var report = new Button { Content = Strings.CrashPrepare, Padding = new Thickness(10, 2, 10, 2), IsDefault = true };
+        var close = new Button { Content = Strings.CrashClose, Padding = new Thickness(10, 2, 10, 2), IsCancel = true, Margin = new Thickness(6, 0, 0, 0) };
         buttons.Children.Add(report);
         buttons.Children.Add(close);
         stack.Children.Add(buttons);

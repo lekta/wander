@@ -1,7 +1,9 @@
 using System.Windows;
 using System.Windows.Threading;
 using Wander.App.Diagnostics;
+using Wander.App.Resources;
 using Wander.Core;
+using Wander.Core.Localization;
 using Wander.Core.Logging;
 using Wander.Platform.Windows;
 
@@ -10,6 +12,11 @@ namespace Wander.App;
 public partial class App : Application {
     protected override void OnStartup(StartupEventArgs e) {
         PlatformBootstrapper.RegisterDefaults();
+        // The string table lives in this assembly, so Core cannot reach it
+        // directly. Registering the source here — before anything builds a
+        // menu — is what makes ContextMenuCatalog and PathSafety speak
+        // Russian instead of returning resource keys.
+        ServiceLocator.Register<ITextSource>(new AppTextSource());
         HookCrashLogging();
         base.OnStartup(e);
     }

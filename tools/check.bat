@@ -2,7 +2,7 @@
 rem ===========================================================
 rem  Wander - combined verification entry point.
 rem
-rem    tools\check.bat            build + format verify + tests
+rem    tools\check.bat            build + format verify + strings + tests
 rem    tools\check.bat run        + smoke launch of the app
 rem    tools\check.bat format     apply dotnet format (writes files)
 rem
@@ -27,6 +27,14 @@ if errorlevel 1 exit /b 1
 echo.
 echo === format verify ===
 %DOTNET% format %SLN% --verify-no-changes --no-restore
+if errorlevel 1 exit /b 1
+
+echo.
+echo === strings ===
+rem Resource keys against Strings.resx. The tests cannot reach this (they
+rem cover Wander.Core only), and a typo in a key shows up nowhere except as
+rem the key itself appearing in the UI in place of a label.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0check-strings.ps1"
 if errorlevel 1 exit /b 1
 
 echo.

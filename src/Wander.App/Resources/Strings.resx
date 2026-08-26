@@ -1,0 +1,852 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!--
+    Все пользовательские строки Wander. Отдельно от кода намеренно: чтобы
+    добавить язык, достаточно положить рядом Strings.<culture>.resx с теми
+    же ключами — правки в коде не нужны.
+
+    Типизированный доступ — Resources/Strings.cs, одна строка на ключ.
+    Ключи именуются по месту: Menu*, Status*, Preview*, Settings*, Dialog*.
+  -->
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="PreviewSelectFile" xml:space="preserve">
+    <value>Выберите файл для просмотра</value>
+  </data>
+  <data name="PreviewUnsupported" xml:space="preserve">
+    <value>Для этого файла просмотр недоступен</value>
+  </data>
+  <data name="PreviewCounting" xml:space="preserve">
+    <value>Считаем…</value>
+  </data>
+  <data name="PreviewFolderHeadline" xml:space="preserve">
+    <value>{0} файлов · {1} папок · {2}</value>
+    <comment>{0} — файлов, {1} — папок, {2} — общий размер</comment>
+  </data>
+  <data name="PreviewFolderTruncated" xml:space="preserve">
+    <value>Папка слишком велика — показано не всё, числа снизу неполные</value>
+  </data>
+  <data name="PreviewFolderTypeCount" xml:space="preserve">
+    <value>{0} шт.</value>
+    <comment>{0} — количество файлов этого типа</comment>
+  </data>
+  <data name="PreviewFolderTypes" xml:space="preserve">
+    <value>Что внутри</value>
+  </data>
+  <data name="PreviewFolderEmpty" xml:space="preserve">
+    <value>Папка пуста</value>
+  </data>
+  <data name="PreviewIntegrated" xml:space="preserve">
+    <value>Вместе с файлом:</value>
+  </data>
+  <data name="PreviewCopyGuid" xml:space="preserve">
+    <value>Скопировать GUID</value>
+  </data>
+  <data name="PreviewRating" xml:space="preserve">
+    <value>Оценка</value>
+  </data>
+  <data name="SummaryDeleted" xml:space="preserve">
+    <value>Удалён</value>
+  </data>
+  <data name="SummaryDeletedFrom" xml:space="preserve">
+    <value>Откуда</value>
+  </data>
+  <data name="SummaryModified" xml:space="preserve">
+    <value>Изменён</value>
+  </data>
+  <data name="SummarySize" xml:space="preserve">
+    <value>Размер</value>
+  </data>
+  <data name="SummarySelectedCounting" xml:space="preserve">
+    <value>Выбрано: {0} — считаем…</value>
+    <comment>{0} — количество выбранных элементов</comment>
+  </data>
+  <data name="SummarySelected" xml:space="preserve">
+    <value>Выбрано: {0} — внутри {1} файлов, {2}</value>
+    <comment>{0} — выбрано элементов, {1} — файлов внутри, {2} — размер</comment>
+  </data>
+  <data name="NavBack" xml:space="preserve">
+    <value>Назад (Alt+←)</value>
+  </data>
+  <data name="NavForward" xml:space="preserve">
+    <value>Вперёд (Alt+→)</value>
+  </data>
+  <data name="NavUp" xml:space="preserve">
+    <value>Вверх (Alt+↑ / Backspace)</value>
+  </data>
+  <data name="MenuView" xml:space="preserve">
+    <value>Вид</value>
+  </data>
+  <data name="MenuViewDetails" xml:space="preserve">
+    <value>Таблица</value>
+  </data>
+  <data name="MenuViewTiles" xml:space="preserve">
+    <value>Плитка</value>
+  </data>
+  <data name="MenuViewLargeIcons" xml:space="preserve">
+    <value>Крупные значки</value>
+  </data>
+  <data name="MenuSortBy" xml:space="preserve">
+    <value>Сортировка</value>
+  </data>
+  <data name="MenuSortName" xml:space="preserve">
+    <value>Имя</value>
+  </data>
+  <data name="MenuSortDate" xml:space="preserve">
+    <value>Дата изменения</value>
+  </data>
+  <data name="MenuSortSize" xml:space="preserve">
+    <value>Размер</value>
+  </data>
+  <data name="MenuSortType" xml:space="preserve">
+    <value>Тип</value>
+  </data>
+  <data name="MenuSortAscending" xml:space="preserve">
+    <value>По возрастанию</value>
+  </data>
+  <data name="MenuSortFoldersFirst" xml:space="preserve">
+    <value>Папки сверху</value>
+  </data>
+  <data name="MenuRefresh" xml:space="preserve">
+    <value>Обновить</value>
+  </data>
+  <data name="MenuNewFolder" xml:space="preserve">
+    <value>Создать папку</value>
+  </data>
+  <data name="MenuQuickPreview" xml:space="preserve">
+    <value>Область просмотра</value>
+  </data>
+  <data name="MenuOptions" xml:space="preserve">
+    <value>Настройки...</value>
+  </data>
+  <data name="MenuReportIssue" xml:space="preserve">
+    <value>Сообщить о проблеме или идее...</value>
+  </data>
+  <data name="MenuReportIssueHint" xml:space="preserve">
+    <value>Откроет в браузере новую задачу на GitHub — баг или пожелание</value>
+  </data>
+  <data name="MenuDebug" xml:space="preserve">
+    <value>Отладка</value>
+  </data>
+  <data name="MenuLogs" xml:space="preserve">
+    <value>Журнал</value>
+  </data>
+  <data name="MenuLogsHint" xml:space="preserve">
+    <value>Открыть файл журнала текущего сеанса</value>
+  </data>
+  <data name="MenuExit" xml:space="preserve">
+    <value>Выход</value>
+  </data>
+  <data name="SearchHint" xml:space="preserve">
+    <value>Фильтр по текущей папке (Ctrl+F, Esc — очистить)</value>
+  </data>
+  <data name="SearchPlaceholder" xml:space="preserve">
+    <value>Поиск в этой папке</value>
+  </data>
+  <data name="RecentFoldersHint" xml:space="preserve">
+    <value>Недавние папки (F4)</value>
+  </data>
+  <data name="ColumnName" xml:space="preserve">
+    <value>Имя</value>
+  </data>
+  <data name="ColumnType" xml:space="preserve">
+    <value>Тип</value>
+  </data>
+  <data name="ColumnSize" xml:space="preserve">
+    <value>Размер</value>
+  </data>
+  <data name="ColumnModified" xml:space="preserve">
+    <value>Изменён</value>
+  </data>
+  <data name="ActionCopy" xml:space="preserve">
+    <value>Копировать</value>
+  </data>
+  <data name="StatusPathNotFound" xml:space="preserve">
+    <value>Путь не найден: {0}</value>
+  </data>
+  <data name="StatusOpenFailed" xml:space="preserve">
+    <value>Не удалось открыть: {0}</value>
+  </data>
+  <data name="StatusNoDropTarget" xml:space="preserve">
+    <value>Некуда перетаскивать: целевая папка не определена.</value>
+  </data>
+  <data name="StatusDropFailed" xml:space="preserve">
+    <value>Перетаскивание не удалось: {0}</value>
+  </data>
+  <data name="StatusShortcutsUnsupported" xml:space="preserve">
+    <value>Ярлыки на этой платформе не поддерживаются.</value>
+  </data>
+  <data name="StatusShortcutFailed" xml:space="preserve">
+    <value>Не удалось создать ярлык для «{0}»: {1}</value>
+  </data>
+  <data name="StatusShortcutsCreated" xml:space="preserve">
+    <value>Создано ярлыков: {0} в {1}</value>
+  </data>
+  <data name="StatusBrowserFailed" xml:space="preserve">
+    <value>Не удалось открыть браузер: {0}</value>
+  </data>
+  <data name="StatusNoLogging" xml:space="preserve">
+    <value>Журнал не настроен.</value>
+  </data>
+  <data name="StatusNoLogFile" xml:space="preserve">
+    <value>Файл журнала не найден.</value>
+  </data>
+  <data name="StatusOpenLogFailed" xml:space="preserve">
+    <value>Не удалось открыть журнал: {0}</value>
+  </data>
+  <data name="StatusPropertiesFailed" xml:space="preserve">
+    <value>Не удалось показать свойства: {0}</value>
+  </data>
+  <data name="StatusOpenWithFailed" xml:space="preserve">
+    <value>Не удалось открыть с помощью: {0}</value>
+  </data>
+  <data name="StatusTerminalFailed" xml:space="preserve">
+    <value>Не удалось открыть терминал: {0}</value>
+  </data>
+  <data name="StatusCopiedToClipboard" xml:space="preserve">
+    <value>Скопировано в буфер обмена: {0}</value>
+  </data>
+  <data name="StatusClipboardBusy" xml:space="preserve">
+    <value>Буфер обмена занят: {0}</value>
+  </data>
+  <data name="StatusDeleteFailed" xml:space="preserve">
+    <value>Удаление не удалось: {0}</value>
+  </data>
+  <data name="StatusUndone" xml:space="preserve">
+    <value>Отменено: {0}</value>
+  </data>
+  <data name="StatusUndoFailed" xml:space="preserve">
+    <value>Не удалось отменить: {0}</value>
+  </data>
+  <data name="StatusRenamedWithCompanions" xml:space="preserve">
+    <value>Переименовано вместе со спутниками: {0}</value>
+  </data>
+  <data name="StatusRenameFailed" xml:space="preserve">
+    <value>Переименование не удалось: {0}</value>
+  </data>
+  <data name="StatusCopied" xml:space="preserve">
+    <value>Скопировано элементов: {0}</value>
+  </data>
+  <data name="StatusCut" xml:space="preserve">
+    <value>Вырезано элементов: {0}</value>
+  </data>
+  <data name="StatusPasteFailed" xml:space="preserve">
+    <value>Вставка не удалась: {0}</value>
+  </data>
+  <data name="StatusCreateFailed" xml:space="preserve">
+    <value>Не удалось создать: {0}</value>
+  </data>
+  <data name="StatusError" xml:space="preserve">
+    <value>Ошибка: {0}</value>
+  </data>
+  <data name="StatusCancelled" xml:space="preserve">
+    <value>Операция отменена.</value>
+  </data>
+  <data name="StatusAlreadyBookmarked" xml:space="preserve">
+    <value>Папка уже в закладках.</value>
+  </data>
+  <data name="StatusBookmarkAdded" xml:space="preserve">
+    <value>Добавлено в закладки: {0}</value>
+  </data>
+  <data name="StatusItems" xml:space="preserve">
+    <value>Элементов: {0}</value>
+  </data>
+  <data name="StatusItemsWithHidden" xml:space="preserve">
+    <value>Элементов: {0} (скрыто: {1})</value>
+  </data>
+  <data name="StatusFilterMatches" xml:space="preserve">
+    <value>Подходит {0} из {1} по запросу «{2}»</value>
+  </data>
+  <data name="StatusDeleted" xml:space="preserve">
+    <value>Удалено безвозвратно: {0}</value>
+  </data>
+  <data name="StatusDeletedPartly" xml:space="preserve">
+    <value>Удалено безвозвратно: {0}, с ошибкой: {1}{2}</value>
+  </data>
+  <data name="StatusRecycled" xml:space="preserve">
+    <value>В корзину отправлено: {0}</value>
+  </data>
+  <data name="StatusRecycledPartly" xml:space="preserve">
+    <value>В корзину отправлено: {0}, с ошибкой: {1}{2}</value>
+  </data>
+  <data name="StatusBatchDone" xml:space="preserve">
+    <value>{0} {1} элем. в {2}</value>
+    <comment>{0} — глагол операции, {1} — сколько, {2} — куда</comment>
+  </data>
+  <data name="StatusBatchSkipped" xml:space="preserve">
+    <value>пропущено {0}</value>
+  </data>
+  <data name="StatusBatchCancelled" xml:space="preserve">
+    <value>отменено {0}</value>
+  </data>
+  <data name="StatusBatchFailed" xml:space="preserve">
+    <value>с ошибкой {0}{1}</value>
+  </data>
+  <data name="StatusRestored" xml:space="preserve">
+    <value>Восстановлено: {0}</value>
+    <comment>{0} — сколько элементов вернули из корзины</comment>
+  </data>
+  <data name="StatusRestoredPartly" xml:space="preserve">
+    <value>Восстановлено: {0}, не удалось: {1} (например, «{2}»)</value>
+    <comment>{0} — успешно, {1} — с ошибкой, {2} — имя первого сбойного</comment>
+  </data>
+  <data name="VerbCopied" xml:space="preserve">
+    <value>Скопировано</value>
+  </data>
+  <data name="VerbMoved" xml:space="preserve">
+    <value>Перемещено</value>
+  </data>
+  <data name="NewFolderName" xml:space="preserve">
+    <value>Новая папка</value>
+  </data>
+  <data name="KindFile" xml:space="preserve">
+    <value>файл</value>
+  </data>
+  <data name="KindFolder" xml:space="preserve">
+    <value>папку</value>
+  </data>
+  <data name="AndMore" xml:space="preserve">
+    <value>… и ещё {0}</value>
+  </data>
+  <data name="ConfirmDeleteTitle" xml:space="preserve">
+    <value>Удалить безвозвратно?</value>
+  </data>
+  <data name="ConfirmRecycleTitle" xml:space="preserve">
+    <value>Отправить в корзину?</value>
+  </data>
+  <data name="ConfirmDeleteOne" xml:space="preserve">
+    <value>Удалить безвозвратно {0} «{1}»?
+
+{2}</value>
+  </data>
+  <data name="ConfirmRecycleOne" xml:space="preserve">
+    <value>Отправить в корзину {0} «{1}»?
+
+{2}</value>
+  </data>
+  <data name="ConfirmDeleteMany" xml:space="preserve">
+    <value>Удалить безвозвратно {0} элем.?
+
+{1}</value>
+  </data>
+  <data name="ConfirmRecycleMany" xml:space="preserve">
+    <value>Отправить в корзину {0} элем.?
+
+{1}</value>
+  </data>
+  <data name="ConfirmWithCompanions" xml:space="preserve">
+    <value>Вместе с ними уедут файлы-спутники: {0}.</value>
+  </data>
+  <data name="ConfirmIrreversible" xml:space="preserve">
+    <value>Это действие нельзя отменить.</value>
+  </data>
+  <data name="ConfirmReadOnlyTitle" xml:space="preserve">
+    <value>Только для чтения</value>
+  </data>
+  <data name="ConfirmReadOnlyOne" xml:space="preserve">
+    <value>Элемент помечен «только для чтения»:
+
+{0}
+
+Всё равно удалить?</value>
+  </data>
+  <data name="ConfirmReadOnlyMany" xml:space="preserve">
+    <value>Эти элементы помечены «только для чтения»:
+
+{0}
+
+Всё равно удалить все?</value>
+  </data>
+  <data name="CannotPasteTitle" xml:space="preserve">
+    <value>Нельзя вставить</value>
+  </data>
+  <data name="ConfirmMoveTitle" xml:space="preserve">
+    <value>Переместить?</value>
+  </data>
+  <data name="ConfirmMoveOne" xml:space="preserve">
+    <value>Переместить элемент?
+
+Откуда: {0}
+Куда:   {1}</value>
+  </data>
+  <data name="ConfirmMoveMany" xml:space="preserve">
+    <value>Переместить {0} элем. в:
+{1}?</value>
+  </data>
+  <data name="ConflictTitle" xml:space="preserve">
+    <value>Заменить или пропустить</value>
+  </data>
+  <data name="ConflictHeader" xml:space="preserve">
+    <value>Здесь уже есть файл с именем «{0}».</value>
+  </data>
+  <data name="ConflictSource" xml:space="preserve">
+    <value>Что копируем</value>
+  </data>
+  <data name="ConflictTarget" xml:space="preserve">
+    <value>Что уже на месте</value>
+  </data>
+  <data name="ConflictReplace" xml:space="preserve">
+    <value>Заменить</value>
+  </data>
+  <data name="ConflictSkip" xml:space="preserve">
+    <value>Пропустить</value>
+  </data>
+  <data name="ConflictKeepBoth" xml:space="preserve">
+    <value>Оставить оба</value>
+  </data>
+  <data name="ConflictKeepBothHint" xml:space="preserve">
+    <value>Сохранить копию с номером в имени, например «имя (1).txt»</value>
+  </data>
+  <data name="BatchConflictTitle" xml:space="preserve">
+    <value>Совпадения имён</value>
+  </data>
+  <data name="BatchConflictHeader" xml:space="preserve">
+    <value>Совпадений: {0}</value>
+  </data>
+  <data name="BatchConflictPrompt" xml:space="preserve">
+    <value>Что сделать с файлами, которые уже есть на месте:</value>
+  </data>
+  <data name="BatchReplaceAll" xml:space="preserve">
+    <value>Заменить все</value>
+  </data>
+  <data name="BatchSkipAll" xml:space="preserve">
+    <value>Пропустить все</value>
+  </data>
+  <data name="BatchResolveEach" xml:space="preserve">
+    <value>Решать по каждому</value>
+  </data>
+  <data name="KindFolderNoun" xml:space="preserve">
+    <value>Папка</value>
+  </data>
+  <data name="ActionOk" xml:space="preserve">
+    <value>ОК</value>
+  </data>
+  <data name="ActionCancel" xml:space="preserve">
+    <value>Отмена</value>
+  </data>
+  <data name="RenameTitle" xml:space="preserve">
+    <value>Переименовать</value>
+  </data>
+  <data name="RenamePrompt" xml:space="preserve">
+    <value>Новое имя:</value>
+  </data>
+  <data name="InvalidFileNameChars" xml:space="preserve">
+    <value>В имени файла нельзя использовать символы: </value>
+  </data>
+  <data name="DragMove" xml:space="preserve">
+    <value>Переместить</value>
+  </data>
+  <data name="DragCopy" xml:space="preserve">
+    <value>Копировать</value>
+  </data>
+  <data name="DragLink" xml:space="preserve">
+    <value>Создать ярлык на</value>
+  </data>
+  <data name="DragItems" xml:space="preserve">
+    <value>{0} элем.</value>
+  </data>
+  <data name="DragTarget" xml:space="preserve">
+    <value>в {0}</value>
+  </data>
+  <data name="CrashTitle" xml:space="preserve">
+    <value>Wander — отчёт об ошибке</value>
+  </data>
+  <data name="CrashFatal" xml:space="preserve">
+    <value>Wander аварийно завершается.</value>
+  </data>
+  <data name="CrashNonFatal" xml:space="preserve">
+    <value>В Wander произошла неожиданная ошибка.</value>
+  </data>
+  <data name="CrashFallbackPrompt" xml:space="preserve">
+    <value>В Wander произошла неожиданная ошибка.
+
+{0}: {1}
+
+Подготовить отчёт (только детали ошибки, без журнала сеанса)?</value>
+    <comment>{0} — тип исключения, {1} — сообщение</comment>
+  </data>
+  <data name="CrashExplain" xml:space="preserve">
+    <value>Wander может собрать архив с отчётом (zip), показать его в проводнике и открыть в браузере заготовку задачи на GitHub. Ничего не уходит наружу, пока ты сам не отправишь задачу.</value>
+  </data>
+  <data name="CrashIncludeLog" xml:space="preserve">
+    <value>Приложить журнал этого сеанса — с ним разбираться гораздо проще, но в нём есть пути к файлам, с которыми ты работал</value>
+  </data>
+  <data name="CrashPrepare" xml:space="preserve">
+    <value>Подготовить отчёт</value>
+  </data>
+  <data name="CrashClose" xml:space="preserve">
+    <value>Закрыть</value>
+  </data>
+  <data name="ErrorFileInUse" xml:space="preserve">
+    <value>файл открыт в: {0}</value>
+    <comment>{0} — список процессов</comment>
+  </data>
+  <data name="MenuCmdOpenSubmenu" xml:space="preserve">
+    <value>Открыть с помощью</value>
+  </data>
+  <data name="MenuCmdFileSubmenu" xml:space="preserve">
+    <value>Файл</value>
+  </data>
+  <data name="MenuCmdViewSubmenu" xml:space="preserve">
+    <value>Вид</value>
+  </data>
+  <data name="MenuCmdSortSubmenu" xml:space="preserve">
+    <value>Сортировка</value>
+  </data>
+  <data name="MenuCmdOpen" xml:space="preserve">
+    <value>Открыть</value>
+  </data>
+  <data name="MenuCmdOpenWith" xml:space="preserve">
+    <value>Выбрать приложение...</value>
+  </data>
+  <data name="MenuCmdOpenInTerminal" xml:space="preserve">
+    <value>Открыть в терминале</value>
+  </data>
+  <data name="MenuCmdCut" xml:space="preserve">
+    <value>Вырезать</value>
+  </data>
+  <data name="MenuCmdCopy" xml:space="preserve">
+    <value>Копировать</value>
+  </data>
+  <data name="MenuCmdPaste" xml:space="preserve">
+    <value>Вставить</value>
+  </data>
+  <data name="MenuCmdCopyPath" xml:space="preserve">
+    <value>Копировать путь</value>
+  </data>
+  <data name="MenuCmdCopyName" xml:space="preserve">
+    <value>Копировать имя</value>
+  </data>
+  <data name="MenuCmdCreateShortcut" xml:space="preserve">
+    <value>Создать ярлык</value>
+  </data>
+  <data name="MenuCmdRename" xml:space="preserve">
+    <value>Переименовать</value>
+  </data>
+  <data name="MenuCmdDelete" xml:space="preserve">
+    <value>Удалить</value>
+  </data>
+  <data name="MenuCmdNewFolder" xml:space="preserve">
+    <value>Создать папку</value>
+  </data>
+  <data name="MenuCmdViewDetails" xml:space="preserve">
+    <value>Таблица</value>
+  </data>
+  <data name="MenuCmdViewTiles" xml:space="preserve">
+    <value>Плитка</value>
+  </data>
+  <data name="MenuCmdViewLargeIcons" xml:space="preserve">
+    <value>Крупные значки</value>
+  </data>
+  <data name="MenuCmdTogglePreview" xml:space="preserve">
+    <value>Область просмотра</value>
+  </data>
+  <data name="MenuCmdSortByName" xml:space="preserve">
+    <value>Имя</value>
+  </data>
+  <data name="MenuCmdSortByDate" xml:space="preserve">
+    <value>Дата изменения</value>
+  </data>
+  <data name="MenuCmdSortBySize" xml:space="preserve">
+    <value>Размер</value>
+  </data>
+  <data name="MenuCmdSortByType" xml:space="preserve">
+    <value>Тип</value>
+  </data>
+  <data name="MenuCmdSortAscending" xml:space="preserve">
+    <value>По возрастанию</value>
+  </data>
+  <data name="MenuCmdSortFoldersFirst" xml:space="preserve">
+    <value>Папки сверху</value>
+  </data>
+  <data name="MenuCmdRestore" xml:space="preserve">
+    <value>Восстановить</value>
+  </data>
+  <data name="MenuCmdRefresh" xml:space="preserve">
+    <value>Обновить</value>
+  </data>
+  <data name="MenuCmdUndo" xml:space="preserve">
+    <value>Отменить</value>
+  </data>
+  <data name="MenuCmdProperties" xml:space="preserve">
+    <value>Свойства</value>
+  </data>
+  <data name="DropThis" xml:space="preserve">
+    <value>это</value>
+    <comment>Подстановка вместо имени, когда виновник неизвестен</comment>
+  </data>
+  <data name="DropOntoItself" xml:space="preserve">
+    <value>Нельзя переместить «{0}» сам в себя</value>
+  </data>
+  <data name="DropAlreadyThere" xml:space="preserve">
+    <value>«{0}» уже лежит в «{1}»</value>
+  </data>
+  <data name="DropIntoOwnSubfolder" xml:space="preserve">
+    <value>Нельзя переместить «{0}» в собственную подпапку «{1}»</value>
+  </data>
+  <data name="DropNotAllowed" xml:space="preserve">
+    <value>Сюда перетащить нельзя</value>
+  </data>
+  <data name="SettingsTitle" xml:space="preserve">
+    <value>Настройки Wander</value>
+  </data>
+  <data name="ActionApply" xml:space="preserve">
+    <value>Применить</value>
+  </data>
+  <data name="SettingsCategoryGeneral" xml:space="preserve">
+    <value>Основное</value>
+  </data>
+  <data name="SettingsCategorySafety" xml:space="preserve">
+    <value>Безопасность</value>
+  </data>
+  <data name="SettingsCategoryFileOps" xml:space="preserve">
+    <value>Файловые операции</value>
+  </data>
+  <data name="SettingsCategoryCompanions" xml:space="preserve">
+    <value>Интегрированные элементы</value>
+  </data>
+  <data name="SettingsCategoryLayout" xml:space="preserve">
+    <value>Вёрстка</value>
+  </data>
+  <data name="SettingsCategoryThumbnails" xml:space="preserve">
+    <value>Миниатюры</value>
+  </data>
+  <data name="SettingsCategoryBookmarks" xml:space="preserve">
+    <value>Закладки</value>
+  </data>
+  <data name="SettingsCategoryContextMenu" xml:space="preserve">
+    <value>Контекстное меню</value>
+  </data>
+  <data name="SettingsCategoryDebug" xml:space="preserve">
+    <value>Отладка</value>
+  </data>
+  <data name="SettingsRestoreLastFolder" xml:space="preserve">
+    <value>Восстанавливать последнюю папку при запуске</value>
+  </data>
+  <data name="SettingsRestoreLastFolderHint" xml:space="preserve">
+    <value>Когда выключено, Wander открывает первый доступный диск вместо папки, в которой пользователь был перед закрытием.</value>
+  </data>
+  <data name="SettingsShowHidden" xml:space="preserve">
+    <value>Показывать скрытые файлы и папки</value>
+  </data>
+  <data name="SettingsShowSystem" xml:space="preserve">
+    <value>Показывать системные файлы и папки</value>
+  </data>
+  <data name="SettingsHiddenHint" xml:space="preserve">
+    <value>Изменения применяются мгновенно: список файлов в текущей папке перестраивается с учётом новых фильтров.</value>
+  </data>
+  <data name="SettingsConfirmRecycle" xml:space="preserve">
+    <value>Спрашивать подтверждение при удалении в корзину</value>
+  </data>
+  <data name="SettingsConfirmRecycleHint" xml:space="preserve">
+    <value>Когда выключено, Delete отправляет элементы в корзину сразу без диалога. Ctrl+Z всё равно восстанавливает их, так что откат остаётся доступен. Shift+Delete (безвозвратное) подтверждение спрашивает всегда независимо от этого флага.</value>
+  </data>
+  <data name="SettingsIntegrateCompanions" xml:space="preserve">
+    <value>Показывать файл вместе со спутниками как один элемент</value>
+  </data>
+  <data name="SettingsCompanionsHint" xml:space="preserve">
+    <value>Спутник — служебный файл рядом с основным: Unity-шный «.meta», настройки проявки RawTherapee «.pp3». Когда флаг включён, такой файл не показывается отдельной строкой. Переименование, перемещение, копирование и удаление уносят спутников вместе с основным файлом — одной записью в Ctrl+Z. Контекстное меню при этом собирается для основного файла.</value>
+  </data>
+  <data name="SettingsCompanionsOffHint" xml:space="preserve">
+    <value>Когда выключено — обычное поведение: каждый файл сам по себе, операции его спутников не касаются.</value>
+  </data>
+  <data name="SettingsLargeIconsGroup" xml:space="preserve">
+    <value>Режим «Крупные значки»</value>
+  </data>
+  <data name="SettingsCellWidth" xml:space="preserve">
+    <value>Ширина ячейки (px)</value>
+  </data>
+  <data name="SettingsIconSize" xml:space="preserve">
+    <value>Размер иконки (px)</value>
+  </data>
+  <data name="SettingsCellMargin" xml:space="preserve">
+    <value>Отступ между ячейками (px)</value>
+  </data>
+  <data name="SettingsLabelFontSize" xml:space="preserve">
+    <value>Размер шрифта подписи</value>
+  </data>
+  <data name="SettingsLayoutHint" xml:space="preserve">
+    <value>Значения зажимаются в разумные пределы автоматически. Стандартные: 100 / 72 / 2 / 12.</value>
+  </data>
+  <data name="SettingsThumbnailDiskCache" xml:space="preserve">
+    <value>Хранить миниатюры на диске между запусками</value>
+  </data>
+  <data name="SettingsThumbnailDiskMb" xml:space="preserve">
+    <value>Кэш на диске, не больше (МБ)</value>
+  </data>
+  <data name="SettingsThumbnailMemory" xml:space="preserve">
+    <value>Кэш в памяти (миниатюр)</value>
+  </data>
+  <data name="SettingsClearCache" xml:space="preserve">
+    <value>Очистить кэш</value>
+  </data>
+  <data name="SettingsThumbnailsHint" xml:space="preserve">
+    <value>Миниатюра строится один раз на файл и переиспользуется, пока файл не изменится: в ключ входят путь, размер и время правки, так что устаревшую картинку показать нельзя в принципе. Папку кэша можно удалить руками в любой момент — Wander соберёт её заново.</value>
+  </data>
+  <data name="SettingsThumbnailsLimitsHint" xml:space="preserve">
+    <value>Значения зажимаются в разумные пределы автоматически: 16…8192 МБ на диске, 64…8192 миниатюр в памяти. Стандартные: 256 МБ и 512.</value>
+  </data>
+  <data name="SettingsCacheOff" xml:space="preserve">
+    <value>Кэш на диске выключен.</value>
+  </data>
+  <data name="SettingsCacheUsage" xml:space="preserve">
+    <value>Сейчас занято: {0}
+{1}</value>
+    <comment>{0} — размер, {1} — путь к папке кэша</comment>
+  </data>
+  <data name="SettingsBookmarkDownloads" xml:space="preserve">
+    <value>Показывать «Загрузки»</value>
+  </data>
+  <data name="SettingsBookmarkDocuments" xml:space="preserve">
+    <value>Показывать «Документы»</value>
+  </data>
+  <data name="SettingsBookmarkPictures" xml:space="preserve">
+    <value>Показывать «Изображения»</value>
+  </data>
+  <data name="SettingsBookmarkRecycleBin" xml:space="preserve">
+    <value>Показывать «Корзину»</value>
+  </data>
+  <data name="SettingsBookmarksHint" xml:space="preserve">
+    <value>Спец-папки появляются в верхней панели слева. Любую папку можно добавить туда перетаскиванием. В корзине доступно восстановление удалённого; остальные операции над её содержимым намеренно закрыты.</value>
+  </data>
+  <data name="SettingsShellExtensions" xml:space="preserve">
+    <value>Показывать пункты сторонних приложений (7-Zip, TortoiseGit…)</value>
+  </data>
+  <data name="SettingsShellExtensionsGroup" xml:space="preserve">
+    <value>Приложения</value>
+  </data>
+  <data name="SettingsShellExtensionsHint" xml:space="preserve">
+    <value>Список наполняется по мере работы: Wander узнаёт про расширение только когда шелл сам о нём сообщает — то есть после первого правого клика в папке, где оно себя показывает.</value>
+  </data>
+  <data name="SettingsOwnItemsGroup" xml:space="preserve">
+    <value>Пункты Wander</value>
+  </data>
+  <data name="SettingsOwnItemsHint" xml:space="preserve">
+    <value>Снятая галочка убирает пункт из меню; хоткей продолжает работать. Разделители подтягиваются сами — пустых групп и двойных линий не остаётся. «Файл» / «Вид» / «Сортировка» убирают подменю целиком.</value>
+  </data>
+  <data name="SettingsShowDebugMenu" xml:space="preserve">
+    <value>Показывать меню «Отладка» в главном меню</value>
+  </data>
+  <data name="SettingsDebugHint" xml:space="preserve">
+    <value>Когда выключено, в основном меню больше не появится пункт «Отладка» (включая «Журнал»). Чтобы вернуть, открой этот раздел настроек снова — он остаётся доступен независимо от состояния флажка.</value>
+  </data>
+  <data name="SettingsResetGroup" xml:space="preserve">
+    <value>Сброс настроек</value>
+  </data>
+  <data name="SettingsResetAll" xml:space="preserve">
+    <value>Сбросить всё</value>
+  </data>
+  <data name="SettingsResetHint" xml:space="preserve">
+    <value>Вернёт все настройки к стандартным значениям и спросит подтверждение перед этим. «Отмена» в диалоге откатит и сам сброс, пока он не подтверждён кнопкой «ОК» или «Применить».</value>
+  </data>
+  <data name="SettingsResetConfirm" xml:space="preserve">
+    <value>Сбросить все настройки к стандартным значениям?
+
+Вернутся выключенные пункты контекстного меню и скрытые расширения, размеры значков и закладки-спецпапки станут исходными.</value>
+  </data>
+  <data name="BookmarksHeader" xml:space="preserve">
+    <value>Закладки</value>
+  </data>
+  <data name="BookmarksToggleHint" xml:space="preserve">
+    <value>Свернуть / развернуть закладки</value>
+  </data>
+  <data name="BookmarksRemove" xml:space="preserve">
+    <value>Убрать из закладок</value>
+  </data>
+  <data name="BookmarksFoldersOnly" xml:space="preserve">
+    <value>В закладки можно перетаскивать только папки.</value>
+  </data>
+  <data name="SpecialFolderDownloads" xml:space="preserve">
+    <value>Загрузки</value>
+  </data>
+  <data name="SpecialFolderDocuments" xml:space="preserve">
+    <value>Документы</value>
+  </data>
+  <data name="SpecialFolderPictures" xml:space="preserve">
+    <value>Изображения</value>
+  </data>
+  <data name="SpecialFolderRecycleBin" xml:space="preserve">
+    <value>Корзина</value>
+  </data>
+  <data name="ProgressCopying" xml:space="preserve">
+    <value>Копирование</value>
+  </data>
+  <data name="ProgressMoving" xml:space="preserve">
+    <value>Перемещение</value>
+  </data>
+  <data name="ProgressDeleting" xml:space="preserve">
+    <value>Удаление</value>
+  </data>
+  <data name="ProgressRecycling" xml:space="preserve">
+    <value>В корзину</value>
+  </data>
+  <data name="ProgressCancelling" xml:space="preserve">
+    <value>Отмена…</value>
+  </data>
+  <data name="PreviewVideoUnavailable" xml:space="preserve">
+    <value>Воспроизведение недоступно</value>
+  </data>
+  <data name="DragOneItem" xml:space="preserve">
+    <value>«{0}»</value>
+    <comment>{0} — имя единственного перетаскиваемого файла</comment>
+  </data>
+  <data name="PreviewPlayPause" xml:space="preserve">
+    <value>Воспроизведение / пауза (Пробел)</value>
+  </data>
+</root>

@@ -107,6 +107,37 @@ public sealed class SettingsViewModel : ObservableObject {
     }
 
 
+    // --- Thumbnail cache ------------------------------------------------
+    private bool _thumbnailDiskCacheEnabled;
+    public bool ThumbnailDiskCacheEnabled {
+        get => _thumbnailDiskCacheEnabled;
+        set => SetField(ref _thumbnailDiskCacheEnabled, value);
+    }
+
+    private int _thumbnailDiskCacheMb;
+    public int ThumbnailDiskCacheMb {
+        get => _thumbnailDiskCacheMb;
+        set => SetField(ref _thumbnailDiskCacheMb, ClampInt(value, 16, 8192));
+    }
+
+    private int _thumbnailMemoryEntries;
+    public int ThumbnailMemoryEntries {
+        get => _thumbnailMemoryEntries;
+        set => SetField(ref _thumbnailMemoryEntries, ClampInt(value, 64, 8192));
+    }
+
+    /// <summary>
+    /// Where the cache lives and how big it is right now, refreshed when the
+    /// dialog opens and after a clear. Plain text rather than two properties
+    /// because it is one sentence on screen.
+    /// </summary>
+    private string _thumbnailCacheStatus = "";
+    public string ThumbnailCacheStatus {
+        get => _thumbnailCacheStatus;
+        set => SetField(ref _thumbnailCacheStatus, value);
+    }
+
+
     // --- Bookmarks -----------------------------------------------------
     private bool _showBookmarkDownloads;
     public bool ShowBookmarkDownloads {
@@ -181,6 +212,7 @@ public sealed class SettingsViewModel : ObservableObject {
             new FileOperationsSettingsCategory(this),
             new CompanionsSettingsCategory(this),
             new LayoutSettingsCategory(this),
+            new ThumbnailsSettingsCategory(this),
             new BookmarksSettingsCategory(this),
             new ContextMenuSettingsCategory(this),
             new DebugSettingsCategory(this),
@@ -204,6 +236,9 @@ public sealed class SettingsViewModel : ObservableObject {
         LargeIconImageSize = s.LargeIconImageSize;
         LargeIconMargin = s.LargeIconMargin;
         LargeIconLabelFontSize = s.LargeIconLabelFontSize;
+        ThumbnailDiskCacheEnabled = s.ThumbnailDiskCacheEnabled;
+        ThumbnailDiskCacheMb = s.ThumbnailDiskCacheMb;
+        ThumbnailMemoryEntries = s.ThumbnailMemoryEntries;
         ShowBookmarkDownloads = s.ShowBookmarkDownloads;
         ShowBookmarkDocuments = s.ShowBookmarkDocuments;
         ShowBookmarkPictures = s.ShowBookmarkPictures;
@@ -251,6 +286,9 @@ public sealed class SettingsViewModel : ObservableObject {
             LargeIconImageSize = LargeIconImageSize,
             LargeIconMargin = LargeIconMargin,
             LargeIconLabelFontSize = LargeIconLabelFontSize,
+            ThumbnailDiskCacheEnabled = ThumbnailDiskCacheEnabled,
+            ThumbnailDiskCacheMb = ThumbnailDiskCacheMb,
+            ThumbnailMemoryEntries = ThumbnailMemoryEntries,
             ShowBookmarkDownloads = ShowBookmarkDownloads,
             ShowBookmarkDocuments = ShowBookmarkDocuments,
             ShowBookmarkPictures = ShowBookmarkPictures,

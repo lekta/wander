@@ -2,7 +2,8 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:Wander.App.ViewModels"
-        Title="Настройки Wander"
+        xmlns:res="clr-namespace:Wander.App.Resources"
+        Title="{x:Static res:Strings.SettingsTitle}"
         Width="640" Height="460"
         MinWidth="520" MinHeight="360"
         WindowStartupLocation="CenterOwner"
@@ -50,12 +51,10 @@
         <DataTemplate DataType="{x:Type vm:GeneralSettingsCategory}">
             <StackPanel>
                 <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
-                <CheckBox Content="Восстанавливать последнюю папку при запуске"
+                <CheckBox Content="{x:Static res:Strings.SettingsRestoreLastFolder}"
                           IsChecked="{Binding Owner.RestoreLastFolder}"/>
-                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0">
-                    Когда выключено, Wander открывает первый доступный диск
-                    вместо папки, в которой пользователь был перед закрытием.
-                </TextBlock>
+                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0"
+                           Text="{x:Static res:Strings.SettingsRestoreLastFolderHint}"/>
             </StackPanel>
         </DataTemplate>
 
@@ -64,14 +63,12 @@
         <DataTemplate DataType="{x:Type vm:SafetySettingsCategory}">
             <StackPanel>
                 <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
-                <CheckBox Content="Показывать скрытые файлы и папки"
+                <CheckBox Content="{x:Static res:Strings.SettingsShowHidden}"
                           IsChecked="{Binding Owner.ShowHidden}"/>
-                <CheckBox Content="Показывать системные файлы и папки"
+                <CheckBox Content="{x:Static res:Strings.SettingsShowSystem}"
                           IsChecked="{Binding Owner.ShowSystem}"/>
-                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0">
-                    Изменения применяются мгновенно: список файлов в текущей
-                    папке перестраивается с учётом новых фильтров.
-                </TextBlock>
+                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0"
+                           Text="{x:Static res:Strings.SettingsHiddenHint}"/>
             </StackPanel>
         </DataTemplate>
 
@@ -80,14 +77,10 @@
         <DataTemplate DataType="{x:Type vm:FileOperationsSettingsCategory}">
             <StackPanel>
                 <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
-                <CheckBox Content="Спрашивать подтверждение при удалении в корзину"
+                <CheckBox Content="{x:Static res:Strings.SettingsConfirmRecycle}"
                           IsChecked="{Binding Owner.ConfirmRecycle}"/>
-                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0">
-                    Когда выключено, Delete отправляет элементы в корзину сразу
-                    без диалога. Ctrl+Z всё равно восстанавливает их, так что
-                    откат остаётся доступен. Shift+Delete (безвозвратное)
-                    подтверждение спрашивает всегда независимо от этого флага.
-                </TextBlock>
+                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0"
+                           Text="{x:Static res:Strings.SettingsConfirmRecycleHint}"/>
             </StackPanel>
         </DataTemplate>
 
@@ -96,21 +89,12 @@
         <DataTemplate DataType="{x:Type vm:CompanionsSettingsCategory}">
             <StackPanel>
                 <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
-                <CheckBox Content="Показывать файл вместе со спутниками как один элемент"
+                <CheckBox Content="{x:Static res:Strings.SettingsIntegrateCompanions}"
                           IsChecked="{Binding Owner.IntegrateCompanions}"/>
-                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0">
-                    Спутник — служебный файл рядом с основным: Unity-шный
-                    «.meta», настройки проявки RawTherapee «.pp3». Когда флаг
-                    включён, такой файл не показывается отдельной строкой, а
-                    основной помечается значком «+». Переименование,
-                    перемещение, копирование и удаление уносят спутников
-                    вместе с основным файлом — одной записью в Ctrl+Z.
-                    Контекстное меню при этом собирается для основного файла.
-                </TextBlock>
-                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0">
-                    Когда выключено — обычное поведение: каждый файл сам по
-                    себе, операции его спутников не касаются.
-                </TextBlock>
+                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0"
+                           Text="{x:Static res:Strings.SettingsCompanionsHint}"/>
+                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0"
+                           Text="{x:Static res:Strings.SettingsCompanionsOffHint}"/>
             </StackPanel>
         </DataTemplate>
 
@@ -120,14 +104,14 @@
             <StackPanel>
                 <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
 
-                <TextBlock Text="Режим «Крупные значки»" FontWeight="SemiBold" Margin="{StaticResource GroupHeader}"/>
+                <TextBlock Text="{x:Static res:Strings.SettingsLargeIconsGroup}" FontWeight="SemiBold" Margin="{StaticResource GroupHeader}"/>
 
                 <Grid Margin="{StaticResource Row}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="180"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="Ширина ячейки (px)" Style="{StaticResource FieldLabel}" Grid.Column="0"/>
+                    <TextBlock Text="{x:Static res:Strings.SettingsCellWidth}" Style="{StaticResource FieldLabel}" Grid.Column="0"/>
                     <TextBox Text="{Binding Owner.LargeIconCellWidth, UpdateSourceTrigger=PropertyChanged}" Grid.Column="1" HorizontalAlignment="Left"/>
                 </Grid>
 
@@ -136,7 +120,7 @@
                         <ColumnDefinition Width="180"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="Размер иконки (px)" Style="{StaticResource FieldLabel}" Grid.Column="0"/>
+                    <TextBlock Text="{x:Static res:Strings.SettingsIconSize}" Style="{StaticResource FieldLabel}" Grid.Column="0"/>
                     <TextBox Text="{Binding Owner.LargeIconImageSize, UpdateSourceTrigger=PropertyChanged}" Grid.Column="1" HorizontalAlignment="Left"/>
                 </Grid>
 
@@ -145,7 +129,7 @@
                         <ColumnDefinition Width="180"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="Отступ между ячейками (px)" Style="{StaticResource FieldLabel}" Grid.Column="0"/>
+                    <TextBlock Text="{x:Static res:Strings.SettingsCellMargin}" Style="{StaticResource FieldLabel}" Grid.Column="0"/>
                     <TextBox Text="{Binding Owner.LargeIconMargin, UpdateSourceTrigger=PropertyChanged}" Grid.Column="1" HorizontalAlignment="Left"/>
                 </Grid>
 
@@ -154,14 +138,56 @@
                         <ColumnDefinition Width="180"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="Размер шрифта подписи" Style="{StaticResource FieldLabel}" Grid.Column="0"/>
+                    <TextBlock Text="{x:Static res:Strings.SettingsLabelFontSize}" Style="{StaticResource FieldLabel}" Grid.Column="0"/>
                     <TextBox Text="{Binding Owner.LargeIconLabelFontSize, UpdateSourceTrigger=PropertyChanged}" Grid.Column="1" HorizontalAlignment="Left"/>
                 </Grid>
 
-                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,12,0,0">
-                    Значения зажимаются в разумные пределы автоматически.
-                    Стандартные: 100 / 72 / 2 / 12.
-                </TextBlock>
+                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,12,0,0"
+                           Text="{x:Static res:Strings.SettingsLayoutHint}"/>
+            </StackPanel>
+        </DataTemplate>
+
+
+        <!-- Thumbnails -->
+        <DataTemplate DataType="{x:Type vm:ThumbnailsSettingsCategory}">
+            <StackPanel>
+                <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
+
+                <CheckBox Content="{x:Static res:Strings.SettingsThumbnailDiskCache}"
+                          IsChecked="{Binding Owner.ThumbnailDiskCacheEnabled}"/>
+
+                <Grid Margin="{StaticResource Row}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="220"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{x:Static res:Strings.SettingsThumbnailDiskMb}" Style="{StaticResource FieldLabel}" Grid.Column="0"/>
+                    <TextBox Text="{Binding Owner.ThumbnailDiskCacheMb, UpdateSourceTrigger=PropertyChanged}"
+                             Grid.Column="1" HorizontalAlignment="Left"
+                             IsEnabled="{Binding Owner.ThumbnailDiskCacheEnabled}"/>
+                </Grid>
+
+                <Grid Margin="{StaticResource Row}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="220"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{x:Static res:Strings.SettingsThumbnailMemory}" Style="{StaticResource FieldLabel}" Grid.Column="0"/>
+                    <TextBox Text="{Binding Owner.ThumbnailMemoryEntries, UpdateSourceTrigger=PropertyChanged}"
+                             Grid.Column="1" HorizontalAlignment="Left"/>
+                </Grid>
+
+                <TextBlock Text="{Binding Owner.ThumbnailCacheStatus}"
+                           Foreground="#666" TextWrapping="Wrap" Margin="0,12,0,0"/>
+
+                <Button Content="{x:Static res:Strings.SettingsClearCache}" Padding="14,4" Width="140"
+                        HorizontalAlignment="Left" Margin="0,8,0,0"
+                        Click="ClearThumbnails_Click"/>
+
+                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,12,0,0"
+                           Text="{x:Static res:Strings.SettingsThumbnailsHint}"/>
+                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0"
+                           Text="{x:Static res:Strings.SettingsThumbnailsLimitsHint}"/>
             </StackPanel>
         </DataTemplate>
 
@@ -170,20 +196,16 @@
         <DataTemplate DataType="{x:Type vm:BookmarksSettingsCategory}">
             <StackPanel>
                 <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
-                <CheckBox Content="Показывать «Загрузки»"
+                <CheckBox Content="{x:Static res:Strings.SettingsBookmarkDownloads}"
                           IsChecked="{Binding Owner.ShowBookmarkDownloads}"/>
-                <CheckBox Content="Показывать «Документы»"
+                <CheckBox Content="{x:Static res:Strings.SettingsBookmarkDocuments}"
                           IsChecked="{Binding Owner.ShowBookmarkDocuments}"/>
-                <CheckBox Content="Показывать «Изображения»"
+                <CheckBox Content="{x:Static res:Strings.SettingsBookmarkPictures}"
                           IsChecked="{Binding Owner.ShowBookmarkPictures}"/>
-                <CheckBox Content="Показывать «Корзину»"
+                <CheckBox Content="{x:Static res:Strings.SettingsBookmarkRecycleBin}"
                           IsChecked="{Binding Owner.ShowBookmarkRecycleBin}"/>
-                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0">
-                    Спец-папки появляются в верхней панели слева. Любую папку
-                    можно добавить туда перетаскиванием. «Корзина» сейчас в
-                    режиме только-просмотр — восстановление и очистка добавим
-                    отдельным шагом.
-                </TextBlock>
+                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0"
+                           Text="{x:Static res:Strings.SettingsBookmarksHint}"/>
             </StackPanel>
         </DataTemplate>
 
@@ -201,28 +223,20 @@
             <StackPanel>
                 <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
 
-                <CheckBox Content="Показывать пункты сторонних приложений (7-Zip, TortoiseGit…)"
+                <CheckBox Content="{x:Static res:Strings.SettingsShellExtensions}"
                           IsChecked="{Binding Owner.ShellExtensionsEnabled}"/>
-                <TextBlock Text="Приложения" FontWeight="SemiBold" Margin="0,14,0,4"/>
+                <TextBlock Text="{x:Static res:Strings.SettingsShellExtensionsGroup}" FontWeight="SemiBold" Margin="0,14,0,4"/>
                 <ItemsControl ItemsSource="{Binding Owner.ShellExtensionToggles}"
                               ItemTemplate="{StaticResource MenuToggleTemplate}"
                               IsEnabled="{Binding Owner.ShellExtensionsEnabled}"/>
-                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,6,0,0">
-                    Список наполняется по мере работы: Wander узнаёт про
-                    расширение только когда шелл сам о нём сообщает — то есть
-                    после первого правого клика в папке, где оно себя
-                    показывает.
-                </TextBlock>
+                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,6,0,0"
+                           Text="{x:Static res:Strings.SettingsShellExtensionsHint}"/>
 
-                <TextBlock Text="Пункты Wander" FontWeight="SemiBold" Margin="0,18,0,4"/>
+                <TextBlock Text="{x:Static res:Strings.SettingsOwnItemsGroup}" FontWeight="SemiBold" Margin="0,18,0,4"/>
                 <ItemsControl ItemsSource="{Binding Owner.MenuItemToggles}"
                               ItemTemplate="{StaticResource MenuToggleTemplate}"/>
-                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,6,0,0">
-                    Снятая галочка убирает пункт из меню; хоткей продолжает
-                    работать. Разделители подтягиваются сами — пустых групп
-                    и двойных линий не остаётся. «Файл» / «Вид» / «Сортировка»
-                    убирают подменю целиком.
-                </TextBlock>
+                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,6,0,0"
+                           Text="{x:Static res:Strings.SettingsOwnItemsHint}"/>
             </StackPanel>
         </DataTemplate>
 
@@ -231,14 +245,19 @@
         <DataTemplate DataType="{x:Type vm:DebugSettingsCategory}">
             <StackPanel>
                 <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
-                <CheckBox Content="Показывать меню «Debug» в главном меню"
+                <CheckBox Content="{x:Static res:Strings.SettingsShowDebugMenu}"
                           IsChecked="{Binding Owner.ShowDebugMenu}"/>
-                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0">
-                    Когда выключено, в основном меню больше не появится пункт
-                    «Debug» (включая «Logs»). Чтобы вернуть, открой этот
-                    раздел настроек снова — он остаётся доступен независимо
-                    от состояния флажка.
-                </TextBlock>
+                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0"
+                           Text="{x:Static res:Strings.SettingsDebugHint}"/>
+
+                <!-- Сброс живёт здесь, а не в строке кнопок диалога: он нужен
+                     раз в год, а места рядом с ОК / Применить / Отмена
+                     занимал столько же, сколько они. -->
+                <TextBlock Text="{x:Static res:Strings.SettingsResetGroup}" FontWeight="SemiBold" Margin="0,24,0,4"/>
+                <Button Content="{x:Static res:Strings.SettingsResetAll}" Padding="14,4" Width="140"
+                        HorizontalAlignment="Left" Click="Reset_Click"/>
+                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,8,0,0"
+                           Text="{x:Static res:Strings.SettingsResetHint}"/>
             </StackPanel>
         </DataTemplate>
 
@@ -251,11 +270,11 @@
              Baseline для отката снимается в Loaded в code-behind. -->
         <Border DockPanel.Dock="Bottom" BorderBrush="#DDD" BorderThickness="0,1,0,0" Padding="12,8">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button Content="ОК" Padding="14,4" Width="92" Margin="0,0,8,0"
+                <Button Content="{x:Static res:Strings.ActionOk}" Padding="14,4" Width="92" Margin="0,0,8,0"
                         IsDefault="True" Click="Ok_Click"/>
-                <Button Content="Применить" Padding="14,4" Width="92" Margin="0,0,8,0"
+                <Button Content="{x:Static res:Strings.ActionApply}" Padding="14,4" Width="92" Margin="0,0,8,0"
                         Click="Apply_Click"/>
-                <Button Content="Отмена" Padding="14,4" Width="92"
+                <Button Content="{x:Static res:Strings.ActionCancel}" Padding="14,4" Width="92"
                         IsCancel="True" Click="Cancel_Click"/>
             </StackPanel>
         </Border>

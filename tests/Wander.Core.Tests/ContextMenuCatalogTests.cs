@@ -5,20 +5,27 @@ namespace Wander.Core.Tests;
 
 /// <summary>
 /// Drift guards. The catalog is a hand-written dictionary keyed by an enum,
-/// so the failure mode is silent: add a menu entry, forget the label, and
-/// the menu shows "SortByType" to the user. These tests make that loud.
+/// so the failure mode is silent: add a menu entry, forget its resource key,
+/// and the menu shows "SortByType" to the user. These tests make that loud.
+///
+/// <para>
+/// No text source is registered here, so <c>Title</c> returns the resource
+/// key itself. That is exactly what these tests need — they check that every
+/// entry has a key and that keys do not collide; whether the key resolves to
+/// Russian is the app layer's business.
+/// </para>
 /// </summary>
 public class ContextMenuCatalogTests {
 
     [Fact]
-    public void EveryHideableEntryHasALabel() {
+    public void EveryHideableEntryHasAKey() {
         foreach (var id in ContextMenuCatalog.Hideable) {
             Assert.NotEqual(id.ToString(), ContextMenuCatalog.Title(id));
         }
     }
 
     [Fact]
-    public void EveryEntryTheBuilderEmitsHasALabel() {
+    public void EveryEntryTheBuilderEmitsHasAKey() {
         foreach (var entry in AllBuiltInEntries()) {
             Assert.NotEqual(entry.Id.ToString(), entry.Header);
             Assert.NotEmpty(entry.Header);
@@ -39,9 +46,10 @@ public class ContextMenuCatalogTests {
 
     [Fact]
     public void NoTwoTopLevelEntriesShareALabel() {
-        // Two identical rows in one menu is always a bug. This covers the
-        // built-in half; the shell half — our "Открыть с помощью" against
-        // the system's own — is pinned by
+        // Two identical rows in one menu is always a bug. Distinct keys are
+        // the half that can be checked here; that two keys do not translate
+        // to the same words is the string table's business. The shell half —
+        // our "open with" against the system's own — is pinned by
         // ContextMenuBuilderTests.ShellOpenWithPopup_IsPouredIntoOurOpenSubmenu.
         foreach (var menu in BothMenus()) {
             var headers = menu.Where(e => !e.IsSeparator).Select(e => e.Header).ToList();

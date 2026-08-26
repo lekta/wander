@@ -53,6 +53,20 @@ public sealed class SystemIconProvider : IIconProvider {
     private readonly Queue<string> _thumbnailOrder = new();
     private readonly object _lock = new();
 
+    /// <summary>
+    /// Second tier behind the in-memory one: survives a restart, so the
+    /// first walk through a folder of RAW files is slow once instead of
+    /// once per launch. Only large (per-file) thumbnails go through it —
+    /// the smaller sizes are keyed by extension and cost nothing to rebuild.
+    /// </summary>
+    private readonly ThumbnailDiskCache? _disk;
+    private int _memoryBudget = MaxCachedThumbnails;
+
+
+    public SystemIconProvider(ThumbnailDiskCache? disk = null) {
+        _disk = disk;
+    }
+
 
     public byte[]? GetIcon(string path, IconSize size) {
         if (string.IsNullOrEmpty(path)) {
@@ -67,17 +81,52 @@ public sealed class SystemIconProvider : IIconProvider {
             }
         }
 
+        // Disk tier, for per-file thumbnails only.
+        bool cacheable = size == IconSize.Large && _disk is not null;
+        if (cacheable && _disk!.TryRead(path) is { } fromDisk) {
+            lock (_lock) {
+                Store(key, fromDisk, size);
+            }
+            return fromDisk;
+        }
+
         try {
             byte[]? bytes = LoadIcon(path, size);
             if (bytes is not null) {
                 lock (_lock) {
                     Store(key, bytes, size);
                 }
+                if (cacheable) {
+                    _disk!.Write(path, bytes);
+                }
             }
             return bytes;
         } catch {
             return null;
         }
+    }
+
+
+    public void ConfigureCache(ThumbnailCacheOptions options) {
+        lock (_lock) {
+            _memoryBudget = Math.Max(1, options.MemoryEntries);
+            TrimMemory();
+        }
+        _disk?.Configure(options.DiskEnabled, options.DiskBudgetBytes);
+    }
+
+
+    public void ClearCache() {
+        lock (_lock) {
+            _cache.Clear();
+            _thumbnailOrder.Clear();
+        }
+        _disk?.Clear();
+    }
+
+
+    public (string? Directory, long SizeBytes) DescribeCache() {
+        return _disk is null ? (null, 0) : (_disk.Directory, _disk.CurrentSizeBytes());
     }
 
 
@@ -101,7 +150,13 @@ public sealed class SystemIconProvider : IIconProvider {
         }
 
         _thumbnailOrder.Enqueue(key);
-        while (_thumbnailOrder.Count > MaxCachedThumbnails) {
+        TrimMemory();
+    }
+
+
+    /// <summary>Caller holds the lock.</summary>
+    private void TrimMemory() {
+        while (_thumbnailOrder.Count > _memoryBudget) {
             _cache.Remove(_thumbnailOrder.Dequeue());
         }
     }

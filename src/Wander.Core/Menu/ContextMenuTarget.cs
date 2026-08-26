@@ -58,4 +58,10 @@ public sealed record ContextMenuTarget {
 
     /// <summary>Shorthand for "real filesystem verbs are allowed here".</summary>
     public bool IsWritable => !IsReadOnlyLocation;
+
+    /// <summary>
+    /// The listing is the Recycle Bin. Read-only like any shell namespace,
+    /// but with one thing you *can* do to its contents — put them back.
+    /// </summary>
+    public bool IsRecycleBin { get; init; }
 }

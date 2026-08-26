@@ -1,9 +1,12 @@
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Wander.App.Resources;
 using Wander.App.Util;
+using Wander.Core;
 using Wander.Core.Companions;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
@@ -289,7 +292,46 @@ public sealed class PreviewController : ObservableObject {
         _isVisible && (_kind == PreviewKind.None || _kind == PreviewKind.Unsupported);
 
     public string PlaceholderText =>
-        _kind == PreviewKind.None ? "Select a file to preview" : "No preview available";
+        _kind == PreviewKind.None ? Strings.PreviewSelectFile : Strings.PreviewUnsupported;
+
+
+    // --- Folder census (B2) --------------------------------------------
+    // What the content area shows when the selection is a folder, or when
+    // nothing is selected and the current folder is the subject. A grid of
+    // thumbnails was the alternative; the census answers "what is in here
+    // and what is eating the space", which is the question a folder
+    // actually raises.
+
+    /// <summary>Headline over the type table: file / folder counts and total size.</summary>
+    public string FolderHeadline {
+        get => _folderHeadline;
+        private set => SetField(ref _folderHeadline, value);
+    }
+
+    /// <summary>Name of the folder being described.</summary>
+    public string FolderTitle {
+        get => _folderTitle;
+        private set => SetField(ref _folderTitle, value);
+    }
+
+    /// <summary>Non-empty when the walk hit its budget and the numbers are a floor.</summary>
+    public string FolderNote {
+        get => _folderNote;
+        private set {
+            if (SetField(ref _folderNote, value)) {
+                Raise(nameof(HasFolderNote));
+            }
+        }
+    }
+
+    public bool HasFolderNote => _folderNote.Length > 0;
+
+    /// <summary>Biggest file types first, with a bar proportional to their share.</summary>
+    public ObservableCollection<FolderTypeRow> FolderTypes { get; } = new();
+
+    private string _folderHeadline = "";
+    private string _folderTitle = "";
+    private string _folderNote = "";
 
 
     // --- Inputs from MainViewModel -------------------------------------
@@ -351,7 +393,25 @@ public sealed class PreviewController : ObservableObject {
     private async Task UpdatePreviewAsync(CancellationToken ct) {
         ClearPreviewContent();
 
-        if (!_isVisible || _primary is null || _primary.Kind != EntryKind.File) {
+        if (!_isVisible) {
+            Kind = PreviewKind.None;
+            IsLoading = false;
+            return;
+        }
+
+        // A folder — or an empty selection with a folder open — gets the
+        // census instead of "Select a file to preview". Recycled folders do
+        // not: their backing path under $Recycle.Bin is not reliably
+        // walkable, and the footer already says where they came from.
+        if (_primary is null || _primary.Kind != EntryKind.File) {
+            string? folder = _primary?.Kind == EntryKind.Directory && _primary.OriginalLocation is null
+                ? _primary.FullPath
+                : _primary is null ? _currentFolderPath : null;
+            if (folder is not null) {
+                await ShowFolderCensusAsync(folder, ct);
+                return;
+            }
+
             Kind = PreviewKind.None;
             IsLoading = false;
             return;
@@ -746,7 +806,7 @@ public sealed class PreviewController : ObservableObject {
         } catch (Exception ex) {
             // The clipboard is a shared, lockable OS resource — another app
             // holding it is not a bug in ours.
-            CompanionStatus = $"Clipboard is busy: {ex.Message}";
+            CompanionStatus = string.Format(Strings.StatusClipboardBusy, ex.Message);
         }
     }
 
@@ -760,6 +820,58 @@ public sealed class PreviewController : ObservableObject {
 
 
     // --- Footer summary -----------------------------------------------
+
+    private async Task ShowFolderCensusAsync(string folder, CancellationToken ct) {
+        FolderTitle = Path.GetFileName(folder.TrimEnd(Path.DirectorySeparatorChar));
+        if (FolderTitle.Length == 0) {
+            FolderTitle = folder;
+        }
+        FolderHeadline = Strings.PreviewCounting;
+        FolderNote = "";
+        FolderTypes.Clear();
+        Kind = PreviewKind.Folder;
+        IsLoading = true;
+
+        FolderStats stats;
+        try {
+            var fs = ServiceLocator.Get<IFileSystem>();
+            stats = await Task.Run(() => FolderStatistics.Collect(fs, folder, ct: ct), ct);
+        } catch (OperationCanceledException) {
+            // Superseded by a newer selection, which owns the spinner now —
+            // clearing it here would blink the pane between the two.
+            return;
+        } catch {
+            stats = FolderStats.Empty;
+        }
+
+        if (ct.IsCancellationRequested) {
+            return;
+        }
+
+        FolderHeadline = string.Format(
+            Strings.PreviewFolderHeadline,
+            stats.Files,
+            stats.Folders,
+            SizeFormatter.Format(stats.TotalSize));
+        // Deliberately vague about *which* budget stopped the walk (file
+        // count, depth or folder count): the user needs to know the numbers
+        // are a floor, and naming one limit when another one fired lies.
+        FolderNote = stats.Truncated ? Strings.PreviewFolderTruncated : "";
+
+        // Bars are relative to the biggest bucket, not to the total: with a
+        // long tail every bar would otherwise be a hairline.
+        long biggest = stats.Types.Count > 0 ? Math.Max(1, stats.Types[0].Size) : 1;
+        foreach (var type in stats.Types) {
+            FolderTypes.Add(new FolderTypeRow(
+                type.Extension,
+                string.Format(Strings.PreviewFolderTypeCount, type.Count),
+                SizeFormatter.Format(type.Size),
+                Math.Max(2, 90.0 * type.Size / biggest)));
+        }
+
+        IsLoading = false;
+    }
+
 
     private void ScheduleSummaryUpdate() {
         _summaryCts?.Cancel();
@@ -779,10 +891,10 @@ public sealed class PreviewController : ObservableObject {
         //    can decide whether to restore them without context-switching.
         if (_selection.Count == 1 && _selection[0].Kind == EntryKind.File) {
             var e = _selection[0];
-            string timeLabel = e.OriginalLocation is not null ? "Deleted" : "Modified";
-            string summary = $"📄  {e.Name}\nSize: {SizeFormatter.Format(e.Size)}   •   {timeLabel}: {FormatModified(e.ModifiedUtc)}";
+            string timeLabel = e.OriginalLocation is not null ? Strings.SummaryDeleted : Strings.SummaryModified;
+            string summary = $"📄  {e.Name}\n{Strings.SummarySize}: {SizeFormatter.Format(e.Size)}   •   {timeLabel}: {FormatModified(e.ModifiedUtc)}";
             if (e.OriginalLocation is not null) {
-                summary += $"\nDeleted from: {e.OriginalLocation}";
+                summary += $"\n{Strings.SummaryDeletedFrom}: {e.OriginalLocation}";
             }
             if (_imageMetadata is { } m) {
                 summary += "\n" + FormatExif(m);
@@ -791,47 +903,36 @@ public sealed class PreviewController : ObservableObject {
             return;
         }
 
-        // 2. Single folder selected — recursive count + size, async.
-        //    Recycled folders skip the recursion: their on-disk path under
-        //    $Recycle.Bin\$R… may not be reliably enumerable, and the user
-        //    cares about origin + delete time, not "how many files inside".
+        // 2. Single folder selected. Counts and sizes are the census
+        //    panel's job now (it walks the tree once); repeating them here
+        //    meant walking it twice and printing the same numbers twice.
         if (_selection.Count == 1 && _selection[0].Kind == EntryKind.Directory) {
             var e = _selection[0];
-            if (e.OriginalLocation is not null) {
-                Summary = $"📁  {e.Name}\nDeleted: {FormatModified(e.ModifiedUtc)}\nDeleted from: {e.OriginalLocation}";
-                return;
-            }
-            Summary = $"📁  {e.Name} — calculating…";
-            var (count, size) = await Task.Run(() => CountAndSum(new[] { e.FullPath }, ct), ct);
-            if (ct.IsCancellationRequested) {
-                return;
-            }
-            Summary = $"📁  {e.Name} — {count} files, {SizeFormatter.Format(size)}";
+            Summary = e.OriginalLocation is not null
+                ? $"📁  {e.Name}\n{Strings.SummaryDeleted}: {FormatModified(e.ModifiedUtc)}\n{Strings.SummaryDeletedFrom}: {e.OriginalLocation}"
+                : $"📁  {e.Name}";
             return;
         }
 
-        // 3. Multiple items selected.
+        // 3. Multiple items selected. No census panel for a mixed
+        //    selection, so the aggregate stays here.
         if (_selection.Count > 1) {
-            Summary = $"{_selection.Count} items selected — calculating…";
+            Summary = string.Format(Strings.SummarySelectedCounting, _selection.Count);
             var paths = _selection.Select(en => en.FullPath).ToArray();
             var (count, size) = await Task.Run(() => CountAndSum(paths, ct), ct);
             if (ct.IsCancellationRequested) {
                 return;
             }
-            Summary = $"{_selection.Count} items selected — {count} files inside, {SizeFormatter.Format(size)}";
+            Summary = string.Format(
+                Strings.SummarySelected, _selection.Count, count, SizeFormatter.Format(size));
             return;
         }
 
-        // 4. Nothing selected — summary of current folder.
+        // 4. Nothing selected — the census panel above describes the folder
+        //    we are standing in, so the footer only names it.
         if (!string.IsNullOrEmpty(_currentFolderPath)) {
             string name = string.IsNullOrEmpty(_currentFolderName) ? _currentFolderPath! : _currentFolderName;
-            Summary = $"📁  {name} — calculating…";
-            string cur = _currentFolderPath!;
-            var (count, size) = await Task.Run(() => CountAndSum(new[] { cur }, ct), ct);
-            if (ct.IsCancellationRequested) {
-                return;
-            }
-            Summary = $"📁  {name} — {count} files, {SizeFormatter.Format(size)}";
+            Summary = $"📁  {name}";
             return;
         }
 

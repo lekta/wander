@@ -53,6 +53,9 @@ public enum MenuCommandId {
     SortAscending,
     SortFoldersFirst,
 
+    // --- Recycle bin ----------------------------------------------------
+    RestoreFromRecycleBin,
+
     // --- Misc -----------------------------------------------------------
     Refresh,
     Undo,

@@ -15,6 +15,7 @@ using Wander.App.Controls;
 using Wander.App.Converters;
 using Wander.App.DragPreview;
 using Wander.App.Menu;
+using Wander.App.Resources;
 using Wander.App.Util;
 using Wander.App.ViewModels;
 using Wander.Core;
@@ -33,6 +34,13 @@ public partial class MainWindow : Window {
     // --- Tree expand/collapse gesture state -----------------------------
     private bool _userClickedExpander;
     private bool _altWasHeld;
+
+    // --- Inline rename ---------------------------------------------------
+    // A committed rename re-lists the folder asynchronously, so the row to
+    // put the keyboard on does not exist yet when the editor closes. This
+    // says "the next selection restore is mine" — undo and refresh must not
+    // steal focus from wherever the user actually is.
+    private bool _focusRowAfterRestore;
 
     // --- Drag source state ---------------------------------------------
     private Point _dragOrigin;
@@ -161,6 +169,7 @@ public partial class MainWindow : Window {
             vm.PropertyChanged += OnVmPropertyChanged;
             vm.Preview.PropertyChanged += OnPreviewPropertyChanged;
             vm.Nav.PropertyChanged += OnNavPropertyChanged;
+            vm.SelectionRestoreRequested += RestoreListSelection;
         }
         // A third-party command can create, rename or delete behind our
         // back, so a successful one invalidates both the listing and the
@@ -336,6 +345,15 @@ public partial class MainWindow : Window {
             return;
         }
 
+        // While a name is being edited the editor owns the keyboard, and the
+        // window's own shortcuts do not apply — the same as anywhere else in
+        // Windows while a text field has focus. This is a tunnelling handler,
+        // so without the guard it runs *before* the editor's: Esc cleared the
+        // whole selection here and only then reached the editor to cancel.
+        if (Vm.RenamingPath is not null) {
+            return;
+        }
+
         // Ctrl+L: focus the address bar (parity with browsers / Explorer).
         if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.Control) {
             BeginAddressEdit();
@@ -372,7 +390,9 @@ public partial class MainWindow : Window {
         // Esc: clear selection in whichever right-pane list is active.
         if (e.Key == Key.Escape) {
             ClearActiveSelection();
-            // Don't mark handled — let TextBoxes etc. still get Esc if they want it.
+            // Don't mark handled — the search box and the address bar want
+            // Esc too. The rename editor is handled by the guard above,
+            // because clearing the selection first would be destructive.
         }
     }
 
@@ -472,7 +492,17 @@ public partial class MainWindow : Window {
     }
 
 
+    /// <summary>
+    /// Hands the keyboard back to the file list — to the selected row when
+    /// there is one. Focusing the list control itself is not enough: a list
+    /// with focus but no focused item leaves the arrow keys resuming from
+    /// wherever the cursor was last, which is usually the top.
+    /// </summary>
     private void FocusActiveList() {
+        if (Vm.SelectedEntry is { } entry && FocusRow(entry)) {
+            return;
+        }
+
         switch (Vm.ViewMode) {
             case ViewMode.Details: Grid.Focus(); break;
             case ViewMode.Tiles: TilesView.Focus(); break;
@@ -481,14 +511,67 @@ public partial class MainWindow : Window {
     }
 
 
+    /// <summary>
+    /// Puts the keyboard on one row. Returns false when the row has no
+    /// realised container (virtualised away), so the caller can fall back
+    /// to focusing the list itself.
+    /// </summary>
+    private bool FocusRow(FileSystemEntry entry) {
+        switch (ActiveList()) {
+            case DataGrid dg:
+                dg.ScrollIntoView(entry);
+                dg.UpdateLayout();
+                // Arrow keys in a DataGrid follow the *current cell*, not the
+                // selection. Leaving it stale is what made the next arrow
+                // press jump to a row near the top instead of the neighbour.
+                if (dg.Columns.Count > 0) {
+                    dg.CurrentCell = new DataGridCellInfo(entry, dg.Columns[0]);
+                }
+                if (dg.ItemContainerGenerator.ContainerFromItem(entry) is DataGridRow row
+                    && FindDescendant<DataGridCell>(row) is { } cell) {
+                    return cell.Focus();
+                }
+                return false;
+
+            case ListBox lb:
+                lb.ScrollIntoView(entry);
+                lb.UpdateLayout();
+                return lb.ItemContainerGenerator.ContainerFromItem(entry) is ListBoxItem item
+                    && item.Focus();
+
+            default:
+                return false;
+        }
+    }
+
+
     // --- File list selection / opening ---------------------------------
 
     private void Grid_MouseDoubleClick(object sender, MouseButtonEventArgs e) {
+        // Double-clicking a word inside the rename editor must not open the
+        // file that is being renamed.
+        if (IsInsideRenameEditor(e.OriginalSource)) {
+            return;
+        }
         OpenSelected();
     }
 
     private void Tiles_MouseDoubleClick(object sender, MouseButtonEventArgs e) {
+        if (IsInsideRenameEditor(e.OriginalSource)) {
+            return;
+        }
         OpenSelected();
+    }
+
+    private static bool IsInsideRenameEditor(object originalSource) {
+        var hit = originalSource as DependencyObject;
+        while (hit is not null) {
+            if (hit is TextBox) {
+                return true;
+            }
+            hit = VisualTreeHelper.GetParent(hit);
+        }
+        return false;
     }
 
     private void Rename_Click(object sender, RoutedEventArgs e) {
@@ -523,17 +606,213 @@ public partial class MainWindow : Window {
         }
     }
 
+    // --- Rename ----------------------------------------------------------
+    // In-place editing (A3) is the normal path: the row template carries a
+    // collapsed TextBox and MainViewModel.RenamingPath makes it visible.
+    // PromptDialog stays as the fallback for the case the inline editor
+    // cannot be reached — a row that virtualisation has not realised.
+
     private void StartRename() {
         if (Vm.SelectedEntry is not FileSystemEntry entry) {
             return;
         }
 
-        string? input = PromptDialog.Show("Rename", "New name:", entry.Name, filenameMode: true);
+        if (TryStartInlineRename(entry)) {
+            return;
+        }
+
+        string? input = PromptDialog.Show(Strings.RenameTitle, Strings.RenamePrompt, entry.Name, filenameMode: true);
         if (input is null || input == entry.Name) {
             return;
         }
 
         Vm.RenameCommand.Execute(input);
+    }
+
+    private bool TryStartInlineRename(FileSystemEntry entry) {
+        var list = ActiveList();
+        if (list is null) {
+            return false;
+        }
+
+        // The row has to exist as a visual before its editor can be focused,
+        // and a row scrolled out of a virtualising panel does not.
+        ScrollIntoView(list, entry);
+        list.UpdateLayout();
+        if (list.ItemContainerGenerator.ContainerFromItem(entry) is not FrameworkElement container) {
+            return false;
+        }
+
+        Vm.BeginRename(entry);
+        if (Vm.RenamingPath is null) {
+            return false;
+        }
+
+        container.UpdateLayout();
+        var box = FindDescendant<TextBox>(container);
+        if (box is null) {
+            Vm.CancelRename();
+            return false;
+        }
+
+        box.Text = entry.Name;
+        box.Focus();
+        SelectNameWithoutExtension(box, entry);
+
+        return true;
+    }
+
+    private ItemsControl? ActiveList() {
+        return Vm.ViewMode switch {
+            ViewMode.Details => Grid,
+            ViewMode.Tiles => TilesView,
+            ViewMode.LargeIcons => IconsView,
+            _ => null,
+        };
+    }
+
+    private static void ScrollIntoView(ItemsControl list, FileSystemEntry entry) {
+        switch (list) {
+            case DataGrid dg: dg.ScrollIntoView(entry); break;
+            case ListBox lb: lb.ScrollIntoView(entry); break;
+        }
+    }
+
+    /// <summary>
+    /// Explorer parity: the extension stays out of the initial selection, so
+    /// typing replaces the name and leaves ".png" alone. Folders and
+    /// dot-files ("<c>.gitignore</c>") select whole — there is no extension
+    /// to protect there.
+    /// </summary>
+    private static void SelectNameWithoutExtension(TextBox box, FileSystemEntry entry) {
+        int dot = entry.Kind == EntryKind.Directory ? -1 : entry.Name.LastIndexOf('.');
+        if (dot > 0) {
+            box.Select(0, dot);
+        } else {
+            box.SelectAll();
+        }
+    }
+
+    private static T? FindDescendant<T>(DependencyObject root) where T : DependencyObject {
+        int count = VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < count; i++) {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is T match) {
+                return match;
+            }
+            if (FindDescendant<T>(child) is T deeper) {
+                return deeper;
+            }
+        }
+        return null;
+    }
+
+
+    // --- Inline rename editor -------------------------------------------
+
+    /// <summary>
+    /// Puts the selection back after a refresh reconciled the list. Only the
+    /// controls know about multi-selection (SelectedItems is theirs, not the
+    /// view model's), so the VM asks and this does it.
+    /// </summary>
+    private void RestoreListSelection(IReadOnlyList<FileSystemEntry> items) {
+        bool takeFocus = _focusRowAfterRestore;
+        _focusRowAfterRestore = false;
+
+        if (items.Count == 0) {
+            return;
+        }
+
+        switch (ActiveList()) {
+            case DataGrid dg:
+                dg.SelectedItems.Clear();
+                foreach (var entry in items) {
+                    dg.SelectedItems.Add(entry);
+                }
+                dg.CurrentItem = items[0];
+                dg.ScrollIntoView(items[0]);
+                break;
+            case ListBox lb:
+                lb.SelectedItems.Clear();
+                foreach (var entry in items) {
+                    lb.SelectedItems.Add(entry);
+                }
+                lb.ScrollIntoView(items[0]);
+                break;
+        }
+
+        // Only after a rename: the row the user was just editing is the row
+        // the keyboard belongs on. A refresh or an undo triggered from
+        // somewhere else must leave focus where it is.
+        if (takeFocus) {
+            FocusRow(items[0]);
+        }
+    }
+
+
+    private void RenameBox_PreviewKeyDown(object sender, KeyEventArgs e) {
+        // Enter and Escape both have window-level KeyBindings (Open / clear
+        // selection), so they must be swallowed here or renaming a file
+        // would open it. Delete and Backspace need no such guard — the
+        // TextBox marks those handled itself.
+        if (e.Key == Key.Enter) {
+            CommitInlineRename((TextBox)sender, takeFocus: true);
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Escape) {
+            // The row comes from the editor's own DataContext, not from the
+            // selection: this is the row the user was editing, whatever the
+            // selection happens to be by now.
+            var edited = ((FrameworkElement)sender).DataContext as FileSystemEntry;
+            Vm.CancelRename();
+            if (edited is null || !FocusRow(edited)) {
+                FocusActiveList();
+            }
+            e.Handled = true;
+        }
+    }
+
+    private void RenameBox_PreviewTextInput(object sender, TextCompositionEventArgs e) {
+        // Refuse the characters Windows will not accept in a name at input
+        // time, the way PromptDialog does — a rejected rename after the fact
+        // would just lose what the user typed.
+        if (e.Text.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) {
+            e.Handled = true;
+            Vm.Status = Strings.InvalidFileNameChars + "\\ / : * ? \" < > |";
+        }
+    }
+
+    private void RenameBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e) {
+        // Clicking away commits, matching Explorer. Escape has already
+        // cleared RenamingPath by the time focus leaves, so a cancelled edit
+        // falls out of CommitInlineRename on its own. No focus grab here:
+        // the user has just clicked somewhere and that is where focus
+        // belongs.
+        CommitInlineRename((TextBox)sender, takeFocus: false);
+    }
+
+    /// <summary>
+    /// Applies the edited name. <paramref name="takeFocus"/> separates the
+    /// two ways an edit ends: Enter means the user is still working in the
+    /// list and the keyboard belongs there, while a click elsewhere means
+    /// they have already moved on and focus must stay where they put it.
+    /// </summary>
+    private void CommitInlineRename(TextBox box, bool takeFocus) {
+        if (Vm.RenamingPath is null) {
+            return;
+        }
+
+        // The re-listing that follows is asynchronous, so the renamed row is
+        // focused twice over: now (it is still there under its old name,
+        // which keeps the keyboard inside the list) and again when the new
+        // listing lands and the selection is restored onto the new name.
+        _focusRowAfterRestore = takeFocus;
+        Vm.CommitRename(box.Text);
+        if (takeFocus) {
+            FocusActiveList();
+        }
     }
 
 
@@ -601,6 +880,7 @@ public partial class MainWindow : Window {
             FolderPath = vm.CurrentPath,
             IsBackground = _contextIsBackground,
             IsReadOnlyLocation = vm.IsCurrentShellNamespace,
+            IsRecycleBin = vm.IsCurrentRecycleBin,
             CanPaste = vm.PasteCommand.CanExecute(null),
             CanUndo = vm.UndoCommand.CanExecute(null),
             ViewMode = vm.ViewMode.ToString(),
@@ -679,6 +959,8 @@ public partial class MainWindow : Window {
             [MenuCommandId.SortByType] = new(vm.SetSortKeyCommand, nameof(SortKey.Type)),
             [MenuCommandId.SortAscending] = new(vm.ToggleSortAscendingCommand),
             [MenuCommandId.SortFoldersFirst] = new(vm.ToggleGroupFoldersFirstCommand),
+
+            [MenuCommandId.RestoreFromRecycleBin] = new(vm.RestoreFromRecycleBinCommand),
 
             [MenuCommandId.Refresh] = new(vm.RefreshCommand),
             [MenuCommandId.Undo] = new(vm.UndoCommand),
@@ -777,6 +1059,12 @@ public partial class MainWindow : Window {
     private void List_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
         _dragArmed = false;
         _dragOrigin = e.GetPosition(this);
+
+        // A click inside the inline rename editor is a caret move, not a
+        // selection change and not the start of a drag.
+        if (IsInsideRenameEditor(e.OriginalSource)) {
+            return;
+        }
 
         var clicked = FindEntryAtSource(e.OriginalSource);
         if (clicked is null) {
@@ -933,13 +1221,15 @@ public partial class MainWindow : Window {
                 _ => DragAction.Copy,
             };
             string verb = action switch {
-                DragAction.Move => "Move",
-                DragAction.Link => "Create shortcut to",
-                _ => "Copy",
+                DragAction.Move => Strings.DragMove,
+                DragAction.Link => Strings.DragLink,
+                _ => Strings.DragCopy,
             };
-            string what = count == 1 ? $"'{_dragFirstName}'" : $"{count} items";
+            string what = count == 1
+                ? string.Format(Strings.DragOneItem, _dragFirstName)
+                : string.Format(Strings.DragItems, count);
             desc = $"{verb} {what}";
-            targetText = "to " + FormatTarget(_currentDropTarget);
+            targetText = string.Format(Strings.DragTarget, FormatTarget(_currentDropTarget));
         }
 
         _dragPreview.SetAction(action, desc, targetText);
@@ -1113,7 +1403,7 @@ public partial class MainWindow : Window {
                 }
             }
             if (added == 0) {
-                Vm.Status = "В закладки можно перетаскивать только папки.";
+                Vm.Status = Strings.BookmarksFoldersOnly;
             }
             e.Handled = true;
         } finally {
@@ -1173,7 +1463,7 @@ public partial class MainWindow : Window {
                 }
             }
             if (added == 0) {
-                Vm.Status = "В закладки можно перетаскивать только папки.";
+                Vm.Status = Strings.BookmarksFoldersOnly;
             }
             e.Handled = true;
         } finally {
@@ -1558,7 +1848,7 @@ public partial class MainWindow : Window {
     private void VideoPreview_MediaFailed(object sender, ExceptionRoutedEventArgs e) {
         // Codec not installed (e.g. .webm without the Web Media Extensions)
         // or corrupt file. Surface a minimal hint in the slider area.
-        VideoTimeText.Text = "Воспроизведение недоступно";
+        VideoTimeText.Text = Strings.PreviewVideoUnavailable;
     }
 
     private void EnsureVideoTimer() {

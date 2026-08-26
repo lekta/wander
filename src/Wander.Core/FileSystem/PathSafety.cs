@@ -1,3 +1,5 @@
+using Wander.Core.Localization;
+
 namespace Wander.Core.FileSystem;
 
 public enum SelfDropReason {
@@ -46,21 +48,37 @@ public static class PathSafety {
         return SelfDropReason.None;
     }
 
-    public static string FormatReason(SelfDropReason reason, string? offender, string target) {
-        string offenderName = offender is null ? "this" : Path.GetFileName(Normalize(offender));
+    /// <summary>
+    /// Human-readable reason a drop was refused. <paramref name="text"/> is
+    /// for tests, which pass their own templates rather than depend on a
+    /// process-wide registration: the string table is global state, and a
+    /// test that mutates it races every other test class.
+    /// </summary>
+    public static string FormatReason(
+        SelfDropReason reason, string? offender, string target, ITextSource? text = null) {
+
+        string Say(string key) => text is null ? Text.Get(key) : text.Get(key);
+        string Fill(string key, params object[] args) {
+            try {
+                return string.Format(Say(key), args);
+            } catch (FormatException) {
+                return Say(key);
+            }
+        }
+
+        string offenderName = offender is null ? Say("DropThis") : Path.GetFileName(Normalize(offender));
         string targetName = Path.GetFileName(Normalize(target));
         if (string.IsNullOrEmpty(targetName)) {
             targetName = target;
         }
 
+        // Text comes from the app's string table through ITextSource —
+        // Core has no reference to it by design.
         return reason switch {
-            SelfDropReason.Same =>
-                $"Cannot move '{offenderName}' onto itself",
-            SelfDropReason.AlreadyInTarget =>
-                $"'{offenderName}' is already in '{targetName}'",
-            SelfDropReason.IntoOwnDescendant =>
-                $"Cannot move '{offenderName}' into its own subfolder '{targetName}'",
-            _ => "Cannot drop here",
+            SelfDropReason.Same => Fill("DropOntoItself", offenderName),
+            SelfDropReason.AlreadyInTarget => Fill("DropAlreadyThere", offenderName, targetName),
+            SelfDropReason.IntoOwnDescendant => Fill("DropIntoOwnSubfolder", offenderName, targetName),
+            _ => Say("DropNotAllowed"),
         };
     }
 

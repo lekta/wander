@@ -1,4 +1,5 @@
 using System.Windows;
+using Wander.App.Resources;
 using Wander.Core.FileSystem;
 
 namespace Wander.App.Conflict;
@@ -7,7 +8,7 @@ public partial class ConflictDialog : Window {
     private ConflictDialog(FileConflictInfo conflict) {
         InitializeComponent();
 
-        HeaderText.Text = $"There is already a file named '{conflict.ExistingTarget.Name}' in this location.";
+        HeaderText.Text = string.Format(Strings.ConflictHeader, conflict.ExistingTarget.Name);
 
         SourceName.Text = conflict.Source.Name;
         SourceSize.Text = FormatSize(conflict.Source.Size);
@@ -33,7 +34,7 @@ public partial class ConflictDialog : Window {
 
     private static string FormatSize(long? size) {
         if (size is null) {
-            return "Folder";
+            return Strings.KindFolderNoun;
         }
         long value = size.Value;
         return value switch {

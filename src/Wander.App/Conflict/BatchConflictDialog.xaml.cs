@@ -1,4 +1,5 @@
 using System.Windows;
+using Wander.App.Resources;
 using Wander.Core.FileSystem;
 
 namespace Wander.App.Conflict;
@@ -6,9 +7,7 @@ namespace Wander.App.Conflict;
 public partial class BatchConflictDialog : Window {
     private BatchConflictDialog(int conflictCount) {
         InitializeComponent();
-        HeaderText.Text = conflictCount == 1
-            ? "1 file conflict"
-            : $"{conflictCount} file conflicts";
+        HeaderText.Text = string.Format(Strings.BatchConflictHeader, conflictCount);
     }
 
     public ConflictResolution? Result { get; private set; }

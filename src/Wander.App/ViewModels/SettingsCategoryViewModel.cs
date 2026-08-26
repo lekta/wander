@@ -1,3 +1,5 @@
+using Wander.App.Resources;
+
 namespace Wander.App.ViewModels;
 
 /// <summary>
@@ -29,47 +31,53 @@ public abstract class SettingsCategoryViewModel : ObservableObject {
 
 public sealed class GeneralSettingsCategory : SettingsCategoryViewModel {
     public GeneralSettingsCategory(SettingsViewModel owner)
-        : base("Основное", owner) { }
+        : base(Strings.SettingsCategoryGeneral, owner) { }
 }
 
 
 public sealed class SafetySettingsCategory : SettingsCategoryViewModel {
     public SafetySettingsCategory(SettingsViewModel owner)
-        : base("Безопасность", owner) { }
+        : base(Strings.SettingsCategorySafety, owner) { }
 }
 
 
 public sealed class FileOperationsSettingsCategory : SettingsCategoryViewModel {
     public FileOperationsSettingsCategory(SettingsViewModel owner)
-        : base("Файловые операции", owner) { }
+        : base(Strings.SettingsCategoryFileOps, owner) { }
 }
 
 
 public sealed class CompanionsSettingsCategory : SettingsCategoryViewModel {
     public CompanionsSettingsCategory(SettingsViewModel owner)
-        : base("Интегрированные элементы", owner) { }
+        : base(Strings.SettingsCategoryCompanions, owner) { }
 }
 
 
 public sealed class LayoutSettingsCategory : SettingsCategoryViewModel {
     public LayoutSettingsCategory(SettingsViewModel owner)
-        : base("Вёрстка", owner) { }
+        : base(Strings.SettingsCategoryLayout, owner) { }
+}
+
+
+public sealed class ThumbnailsSettingsCategory : SettingsCategoryViewModel {
+    public ThumbnailsSettingsCategory(SettingsViewModel owner)
+        : base(Strings.SettingsCategoryThumbnails, owner) { }
 }
 
 
 public sealed class BookmarksSettingsCategory : SettingsCategoryViewModel {
     public BookmarksSettingsCategory(SettingsViewModel owner)
-        : base("Закладки", owner) { }
+        : base(Strings.SettingsCategoryBookmarks, owner) { }
 }
 
 
 public sealed class ContextMenuSettingsCategory : SettingsCategoryViewModel {
     public ContextMenuSettingsCategory(SettingsViewModel owner)
-        : base("Контекстное меню", owner) { }
+        : base(Strings.SettingsCategoryContextMenu, owner) { }
 }
 
 
 public sealed class DebugSettingsCategory : SettingsCategoryViewModel {
     public DebugSettingsCategory(SettingsViewModel owner)
-        : base("Отладка", owner) { }
+        : base(Strings.SettingsCategoryDebug, owner) { }
 }

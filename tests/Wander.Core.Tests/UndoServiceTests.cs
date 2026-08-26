@@ -231,31 +231,28 @@ public class UndoServiceTests {
         var svc = new UndoService();
         svc.Push(new TrackingAction("a"));
 
-        using var startGate = new ManualResetEventSlim(false);
         using var releaseA = new ManualResetEventSlim(false);
         using var releaseB = new ManualResetEventSlim(false);
+        // Each op announces that its guard is engaged. Awaiting both signals
+        // is what makes the busy-counter observation deterministic: a timed
+        // spin here passed or failed depending on how loaded the thread pool
+        // was when the second op got scheduled.
+        var enteredA = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var enteredB = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         Task opA = Task.Run(() => {
-            startGate.Wait();
             using var _ = svc.BeginOperation();
+            enteredA.SetResult();
             releaseA.Wait();
         });
         Task opB = Task.Run(() => {
-            startGate.Wait();
             using var _ = svc.BeginOperation();
+            enteredB.SetResult();
             releaseB.Wait();
         });
 
-        startGate.Set();
-        // Spin until both ops have called Begin (busy-counter ≥ 2).
-        // 200 ms is way more than enough on any reasonable machine.
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        while (svc.IsBusy == false || svc.CanUndo == true) {
-            if (sw.ElapsedMilliseconds > 200) {
-                break;
-            }
-            await Task.Delay(1);
-        }
+        // Both guards are engaged from here on (busy-counter == 2).
+        await Task.WhenAll(enteredA.Task, enteredB.Task);
         Assert.True(svc.IsBusy);
         Assert.False(svc.CanUndo);
 

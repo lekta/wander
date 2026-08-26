@@ -1,8 +1,23 @@
 using Wander.Core.FileSystem;
+using Wander.Core.Localization;
+using Wander.Core.Tests.Fakes;
 
 namespace Wander.Core.Tests;
 
 public class PathSafetyTests {
+    /// <summary>
+    /// Structural templates instead of the real Russian copy: what these
+    /// tests are for is which name lands in which slot, and asserting the
+    /// wording would only mean re-typing it here every time it is edited.
+    /// </summary>
+    private static readonly FakeTextSource _text = new(new Dictionary<string, string> {
+        ["DropThis"] = "<unnamed>",
+        ["DropOntoItself"] = "same({0})",
+        ["DropAlreadyThere"] = "already({0}|{1})",
+        ["DropIntoOwnSubfolder"] = "descendant({0}|{1})",
+        ["DropNotAllowed"] = "generic",
+    });
+
     // --- Paths reused across cases ------------------------------------
     // PhotosRoot/PhotosYear/PhotosYearTrip form a parent/child/grandchild
     // chain so the same fixture covers Same, AlreadyInTarget, and
@@ -128,45 +143,45 @@ public class PathSafetyTests {
 
     [Fact]
     public void FormatReason_Same_UsesOffenderLeafName() {
-        string text = PathSafety.FormatReason(SelfDropReason.Same, PhotosYear, PhotosYear);
+        string text = PathSafety.FormatReason(SelfDropReason.Same, PhotosYear, PhotosYear, _text);
 
-        Assert.Equal("Cannot move '2024' onto itself", text);
+        Assert.Equal("same(2024)", text);
     }
 
     [Fact]
     public void FormatReason_AlreadyInTarget_NamesBothEnds() {
-        string text = PathSafety.FormatReason(SelfDropReason.AlreadyInTarget, PhotosYear, PhotosRoot);
+        string text = PathSafety.FormatReason(SelfDropReason.AlreadyInTarget, PhotosYear, PhotosRoot, _text);
 
-        Assert.Equal("'2024' is already in 'photos'", text);
+        Assert.Equal("already(2024|photos)", text);
     }
 
     [Fact]
     public void FormatReason_IntoOwnDescendant_NamesSubfolder() {
-        string text = PathSafety.FormatReason(SelfDropReason.IntoOwnDescendant, PhotosRoot, PhotosYear);
+        string text = PathSafety.FormatReason(SelfDropReason.IntoOwnDescendant, PhotosRoot, PhotosYear, _text);
 
-        Assert.Equal("Cannot move 'photos' into its own subfolder '2024'", text);
+        Assert.Equal("descendant(photos|2024)", text);
     }
 
     [Fact]
     public void FormatReason_None_GenericFallback() {
-        string text = PathSafety.FormatReason(SelfDropReason.None, null, TargetRoot);
+        string text = PathSafety.FormatReason(SelfDropReason.None, null, TargetRoot, _text);
 
-        Assert.Equal("Cannot drop here", text);
+        Assert.Equal("generic", text);
     }
 
     [Fact]
-    public void FormatReason_NullOffender_UsesThisPlaceholder() {
-        string text = PathSafety.FormatReason(SelfDropReason.Same, null, TargetRoot);
+    public void FormatReason_NullOffender_UsesAPlaceholderName() {
+        string text = PathSafety.FormatReason(SelfDropReason.Same, null, TargetRoot, _text);
 
-        Assert.Equal("Cannot move 'this' onto itself", text);
+        Assert.Equal("same(<unnamed>)", text);
     }
 
     [Fact]
     public void FormatReason_TargetIsDriveRoot_FallsBackToFullPath() {
         // Path.GetFileName(@"C:\") is empty — the formatter should fall back to
         // the raw target string so the message doesn't read "in ''".
-        string text = PathSafety.FormatReason(SelfDropReason.AlreadyInTarget, PhotosRoot, DriveCRoot);
+        string text = PathSafety.FormatReason(SelfDropReason.AlreadyInTarget, PhotosRoot, DriveCRoot, _text);
 
-        Assert.Equal($"'photos' is already in '{DriveCRoot}'", text);
+        Assert.Equal($"already(photos|{DriveCRoot})", text);
     }
 }

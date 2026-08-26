@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using Wander.App.Resources;
 using Wander.Core.Operations;
 
 namespace Wander.App.Views;
@@ -115,7 +116,7 @@ public partial class ProgressDialog : Window {
 
     private void CancelButton_Click(object sender, RoutedEventArgs e) {
         CancelButton.IsEnabled = false;
-        CancelButton.Content = "Отмена…";
+        CancelButton.Content = Strings.ProgressCancelling;
         _cts.Cancel();
     }
 

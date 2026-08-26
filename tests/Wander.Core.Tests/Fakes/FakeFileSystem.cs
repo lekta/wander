@@ -2,7 +2,9 @@ using Wander.Core.FileSystem;
 
 namespace Wander.Core.Tests.Fakes;
 
-internal sealed class FakeFileSystem : IFileSystem {
+// Not sealed: FolderStatisticsTests needs a variant that refuses to list one
+// particular folder, and overriding Enumerate is cheaper than a second fake.
+internal class FakeFileSystem : IFileSystem {
     public HashSet<string> Directories { get; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, byte[]> Files { get; } = new(StringComparer.OrdinalIgnoreCase);
     public List<string> CallLog { get; } = new();
@@ -17,7 +19,7 @@ internal sealed class FakeFileSystem : IFileSystem {
     }
 
 
-    public IReadOnlyList<FileSystemEntry> Enumerate(string path, SortOptions? sort = null) {
+    public virtual IReadOnlyList<FileSystemEntry> Enumerate(string path, SortOptions? sort = null) {
         var options = sort ?? SortOptions.Default;
         var comparer = EntryComparers.Build(options);
 

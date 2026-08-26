@@ -12,4 +12,19 @@ public interface IIconProvider {
     /// its icons on every pass.
     /// </summary>
     byte[]? TryGetCachedIcon(string path, IconSize size);
+
+    /// <summary>
+    /// Applies the user's cache limits. Called at startup and whenever the
+    /// settings change, so the provider never has to read settings itself.
+    /// </summary>
+    void ConfigureCache(ThumbnailCacheOptions options);
+
+    /// <summary>Throws away every cached thumbnail, in memory and on disk.</summary>
+    void ClearCache();
+
+    /// <summary>
+    /// Where cached thumbnails are kept and how much room they take, for
+    /// the settings dialog to show. Null directory = no disk cache.
+    /// </summary>
+    (string? Directory, long SizeBytes) DescribeCache();
 }

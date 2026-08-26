@@ -1,5 +1,6 @@
 using System.Globalization;
 using Wander.Core.FileSystem;
+using Wander.Core.Localization;
 using Wander.Core.Logging;
 using Wander.Core.Shell;
 
@@ -31,7 +32,7 @@ public sealed class WindowsShellNamespace : IShellNamespace {
     }
 
     public string? GetDisplayName(string shellPath) {
-        return IsRecycleBin(shellPath) ? "Корзина" : null;
+        return IsRecycleBin(shellPath) ? Text.Get("SpecialFolderRecycleBin") : null;
     }
 
     public IReadOnlyList<FileSystemEntry> Enumerate(string shellPath) {

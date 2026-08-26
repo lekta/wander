@@ -73,9 +73,16 @@ public static class ContextMenuBuilder {
                 ? new[] { Cmd(MenuCommandId.OpenWith) }
                 : Array.Empty<MenuEntry>();
 
-        var items = new List<MenuEntry> {
-            Cmd(MenuCommandId.Open, t.IsSingle, isDefault: true),
-        };
+        var items = new List<MenuEntry>();
+
+        // In the bin, restoring is the reason the menu was opened at all, so
+        // it goes first and is the default action.
+        if (t.IsRecycleBin) {
+            items.Add(Cmd(MenuCommandId.RestoreFromRecycleBin, isDefault: true));
+            items.Add(MenuEntry.Divider);
+        }
+
+        items.Add(Cmd(MenuCommandId.Open, t.IsSingle, isDefault: !t.IsRecycleBin));
 
         if (openWith.Count > 0) {
             items.Add(Sub(MenuCommandId.OpenSubmenu, openWith));

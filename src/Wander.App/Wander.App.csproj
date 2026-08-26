@@ -21,6 +21,13 @@
     <Resource Include="Assets\app.ico" />
   </ItemGroup>
 
+  <!--
+    Пользовательские строки живут в Resources/Strings.resx и попадают в
+    сборку как встроенный ресурс; типизированный доступ к ним —
+    Resources/Strings.cs. Второй язык — это Strings.<culture>.resx рядом,
+    без единой правки в коде.
+  -->
+
   <ItemGroup>
     <PackageReference Include="AvalonEdit" Version="6.3.1.120" />
     <PackageReference Include="Markdig" Version="1.2.0" />

@@ -8,6 +8,9 @@ namespace Wander.Core.Undo;
 public sealed record RenameAction(IFileSystem Fs, string NewPath, string OldName) : IUndoableAction {
     public string Description => $"Rename to '{Path.GetFileName(NewPath)}'";
     public void Undo() => Fs.Rename(NewPath, OldName);
+
+    public IReadOnlyList<string> PathsAfterUndo =>
+        new[] { Path.Combine(Path.GetDirectoryName(NewPath) ?? "", OldName) };
 }
 
 /// <summary>
@@ -16,6 +19,8 @@ public sealed record RenameAction(IFileSystem Fs, string NewPath, string OldName
 public sealed record MoveAction(IFileSystem Fs, string OldPath, string NewPath) : IUndoableAction {
     public string Description => $"Move '{Path.GetFileName(OldPath)}'";
     public void Undo() => Fs.MoveEntry(NewPath, OldPath);
+
+    public IReadOnlyList<string> PathsAfterUndo => new[] { OldPath };
 }
 
 /// <summary>
@@ -27,6 +32,9 @@ public sealed record MoveAction(IFileSystem Fs, string OldPath, string NewPath) 
 public sealed record CreateAction(IRecycleBin Bin, string CreatedPath) : IUndoableAction {
     public string Description => $"Create '{Path.GetFileName(CreatedPath)}'";
     public void Undo() => Bin.Send(CreatedPath);
+
+    /// <summary>Nothing to select: undoing a create takes the item away.</summary>
+    public IReadOnlyList<string> PathsAfterUndo => Array.Empty<string>();
 }
 
 /// <summary>
@@ -36,6 +44,8 @@ public sealed record CreateAction(IRecycleBin Bin, string CreatedPath) : IUndoab
 public sealed record DeleteAction(IRecycleBin Bin, RecycleHandle Handle) : IUndoableAction {
     public string Description => $"Delete '{Path.GetFileName(Handle.OriginalPath)}'";
     public void Undo() => Bin.Restore(Handle);
+
+    public IReadOnlyList<string> PathsAfterUndo => new[] { Handle.OriginalPath };
 }
 
 /// <summary>
@@ -61,4 +71,9 @@ public sealed class CompositeAction : IUndoableAction {
             _actions[i].Undo();
         }
     }
+
+
+    /// <summary>Everything the members put back, in their original order.</summary>
+    public IReadOnlyList<string> PathsAfterUndo =>
+        _actions.SelectMany(a => a.PathsAfterUndo).ToArray();
 }

@@ -128,4 +128,62 @@ public class UndoableActionsTests {
         Assert.Contains($"Restore:{GonePath}", bin.CallLog);
         Assert.True(fs.FileExists(GonePath));
     }
+
+
+    // --- PathsAfterUndo ------------------------------------------------
+    // What the UI re-selects after Ctrl+Z. Wrong answers here are not a
+    // crash, they are the selection quietly landing on the wrong file.
+
+    [Fact]
+    public void RenameAction_PathsAfterUndo_IsTheOldNameInTheSameFolder() {
+        var action = new RenameAction(new FakeFileSystem(), NewPath, OldName);
+
+        Assert.Equal(new[] { @"C:\old.txt" }, action.PathsAfterUndo);
+    }
+
+    [Fact]
+    public void MoveAction_PathsAfterUndo_IsWhereItCameFrom() {
+        var action = new MoveAction(new FakeFileSystem(), MoveOld, MoveNew);
+
+        Assert.Equal(new[] { MoveOld }, action.PathsAfterUndo);
+    }
+
+    [Fact]
+    public void DeleteAction_PathsAfterUndo_IsTheOriginalLocation() {
+        var fs = new FakeFileSystem();
+        fs.Files[GonePath] = new byte[] { 7 };
+        var bin = new FakeRecycleBin(fs);
+        var action = new DeleteAction(bin, bin.Send(GonePath));
+
+        Assert.Equal(new[] { GonePath }, action.PathsAfterUndo);
+    }
+
+    [Fact]
+    public void CreateAction_PathsAfterUndo_IsEmpty_BecauseUndoRemovesIt() {
+        var action = new CreateAction(new FakeRecycleBin(new FakeFileSystem()), NewPath);
+
+        Assert.Empty(action.PathsAfterUndo);
+    }
+
+    [Fact]
+    public void Composite_PathsAfterUndo_CollectsEveryMember() {
+        var fs = new FakeFileSystem();
+        var composite = new CompositeAction("2 ops", new IUndoableAction[] {
+            new MoveAction(fs, MoveOld, MoveNew),
+            new RenameAction(fs, NewPath, OldName),
+        });
+
+        Assert.Equal(new[] { MoveOld, @"C:\old.txt" }, composite.PathsAfterUndo);
+    }
+
+    [Fact]
+    public void Composite_PathsAfterUndo_SkipsMembersThatHaveNone() {
+        var fs = new FakeFileSystem();
+        var composite = new CompositeAction("2 ops", new IUndoableAction[] {
+            new CreateAction(new FakeRecycleBin(fs), NewPath),
+            new MoveAction(fs, MoveOld, MoveNew),
+        });
+
+        Assert.Equal(new[] { MoveOld }, composite.PathsAfterUndo);
+    }
 }

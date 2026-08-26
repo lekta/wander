@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
 using Wander.App.Conflict;
+using Wander.App.Resources;
 using Wander.Core;
 using Wander.Core.Companions;
 using Wander.Core.Diagnostics;
@@ -40,6 +41,7 @@ public sealed class MainViewModel : ObservableObject {
 
     private string _status = "";
     private FileSystemEntry? _selectedEntry;
+    private string? _renamingPath;
     private IReadOnlyList<FileSystemEntry> _selectedEntries = Array.Empty<FileSystemEntry>();
     private ViewMode _viewMode = ViewMode.Details;
 
@@ -55,6 +57,16 @@ public sealed class MainViewModel : ObservableObject {
 
     private CancellationTokenSource? _listLoadCts;
     private bool _isListLoading;
+
+    // Which folder the rows currently in Entries belong to. A refresh of the
+    // same folder reconciles the list in place; only a move to a *different*
+    // folder empties it first.
+    private string? _listedPath;
+
+    // Paths to re-select once the pending listing lands. Set by whoever knows
+    // better than "whatever was selected before" — a rename knows the new
+    // name, an undo knows what it put back.
+    private string[] _restoreSelection = Array.Empty<string>();
 
     // Search filter is owned by SearchController; we only keep the hidden-
     // count separately for the "X items (N hidden)" status-bar message.
@@ -93,7 +105,7 @@ public sealed class MainViewModel : ObservableObject {
             canNavigate: PathIsNavigable,
             onInvalidPath: path => {
                 _log.Warn($"Navigate: path not found {path}");
-                Status = $"Path not found: {path}";
+                Status = string.Format(Strings.StatusPathNotFound, path);
             },
             resolveDisplayName: path => {
                 if (TryGetShellNamespace() is { } ns && ns.IsShellPath(path)) {
@@ -122,11 +134,14 @@ public sealed class MainViewModel : ObservableObject {
         // restore-tracking and corrupt the bin's state. Read-only browsing
         // only in this iteration.
         DeleteCommand = new RelayCommand(_ => _ = DeleteSelectedAsync(permanent: false), _ => _selectedEntries.Count > 0 && !IsCurrentShellNamespace);
-        RenameCommand = new RelayCommand(p => Rename(p as string), _ => _selectedEntry is not null && !IsCurrentShellNamespace);
+        RenameCommand = new RelayCommand(p => Rename(_selectedEntry, p as string), _ => _selectedEntry is not null && !IsCurrentShellNamespace);
         CopyCommand = new RelayCommand(_ => Copy(), _ => _selectedEntries.Count > 0 && !IsCurrentShellNamespace);
         CutCommand = new RelayCommand(_ => Cut(), _ => _selectedEntries.Count > 0 && !IsCurrentShellNamespace);
         PasteCommand = new RelayCommand(_ => _ = PasteAsync(), _ => _clipboard.HasContent && _nav.Current is not null && !IsCurrentShellNamespace);
         NewFolderCommand = new RelayCommand(_ => NewFolder(), _ => _nav.Current is not null && !IsCurrentShellNamespace);
+        RestoreFromRecycleBinCommand = new RelayCommand(
+            _ => RestoreFromRecycleBin(),
+            _ => IsCurrentRecycleBin && _selectedEntries.Count > 0);
         RefreshCommand = new RelayCommand(_ => Refresh());
         SetViewModeCommand = new RelayCommand(p => SetViewMode(p as string));
         SetSortKeyCommand = new RelayCommand(p => SetSortKey(p as string));
@@ -181,8 +196,9 @@ public sealed class MainViewModel : ObservableObject {
             }
         };
         _search.FilteredChanged += filtered => {
-            ReplaceEntries(filtered);
+            SyncEntries(filtered);
             UpdateFilterStatus(filtered.Count, _search.Source.Count);
+            ApplyRestoreSelection();
         };
 
         _nav.CurrentChanged += (_, _) => OnNavigationChanged();
@@ -201,7 +217,19 @@ public sealed class MainViewModel : ObservableObject {
 
         LoadRoots();
         RestoreState();
+        // Restored settings decide how big the thumbnail caches may be; the
+        // provider starts idle until it is told.
+        ApplyThumbnailCacheSettings();
     }
+
+
+    /// <summary>
+    /// Raised after a refresh has reconciled <see cref="Entries"/>, carrying
+    /// the rows that should be selected again. The view owns multi-selection
+    /// (SelectedItems lives on the controls, not here), so it does the actual
+    /// selecting.
+    /// </summary>
+    public event Action<IReadOnlyList<FileSystemEntry>>? SelectionRestoreRequested;
 
 
     public ObservableCollection<FileSystemEntry> Entries { get; }
@@ -341,6 +369,7 @@ public sealed class MainViewModel : ObservableObject {
     public RelayCommand PasteCommand { get; }
     public RelayCommand NewFolderCommand { get; }
     public RelayCommand RefreshCommand { get; }
+    public RelayCommand RestoreFromRecycleBinCommand { get; }
     public RelayCommand SetViewModeCommand { get; }
     public RelayCommand SetSortKeyCommand { get; }
     public RelayCommand ToggleSortAscendingCommand { get; }
@@ -418,6 +447,14 @@ public sealed class MainViewModel : ObservableObject {
     /// </summary>
     public bool IsCurrentShellNamespace => IsShellPath(_nav.Current);
 
+    /// <summary>
+    /// True in the Recycle Bin specifically. Read-only like any shell
+    /// namespace, but with one thing you can still do to its contents —
+    /// put them back.
+    /// </summary>
+    public bool IsCurrentRecycleBin =>
+        string.Equals(_nav.Current, ShellPaths.RecycleBin, StringComparison.OrdinalIgnoreCase);
+
     public void OpenEntry(FileSystemEntry? entry) {
         if (entry is null) {
             return;
@@ -435,7 +472,7 @@ public sealed class MainViewModel : ObservableObject {
             try {
                 _shell.Open(entry.FullPath);
             } catch (Exception ex) {
-                Status = $"Open failed: {ex.Message}";
+                Status = string.Format(Strings.StatusOpenFailed, ex.Message);
             }
             return;
         }
@@ -479,7 +516,7 @@ public sealed class MainViewModel : ObservableObject {
 
         targetFolder ??= _nav.Current;
         if (string.IsNullOrEmpty(targetFolder) || !_fs.DirectoryExists(targetFolder)) {
-            Status = "No target folder for drop.";
+            Status = Strings.StatusNoDropTarget;
             return;
         }
 
@@ -504,26 +541,26 @@ public sealed class MainViewModel : ObservableObject {
         IReadOnlyList<BatchItemResult> results;
         try {
             results = await RunWithProgressDialogAsync(
-                effect == DropEffect.Move ? "Перемещение" : "Копирование",
+                effect == DropEffect.Move ? Strings.ProgressMoving : Strings.ProgressCopying,
                 ct => effect == DropEffect.Move
                     ? _ops.MoveManyAsync(groups, targetFolder, resolver, ct)
                     : _ops.CopyManyAsync(groups, targetFolder, resolver, ct));
         } catch (OperationCanceledException) {
-            Status = "Operation cancelled.";
+            Status = Strings.StatusCancelled;
             return;
         } catch (Exception ex) {
             _log.Error($"Drop failed: {effect} -> {targetFolder}", ex);
-            Status = $"Drop failed: {ex.Message}";
+            Status = string.Format(Strings.StatusDropFailed, ex.Message);
             return;
         }
 
         Refresh();
-        ReportBatchResults(results, effect == DropEffect.Move ? "Moved" : "Copied", targetFolder);
+        ReportBatchResults(results, effect == DropEffect.Move ? Strings.VerbMoved : Strings.VerbCopied, targetFolder);
     }
 
     private void CreateShortcuts(IReadOnlyList<string> sources, string targetFolder) {
         if (!ServiceLocator.IsRegistered<IShortcutService>()) {
-            Status = "Shortcuts are not supported on this platform.";
+            Status = Strings.StatusShortcutsUnsupported;
             return;
         }
 
@@ -547,7 +584,7 @@ public sealed class MainViewModel : ObservableObject {
                 ok++;
             } catch (Exception ex) {
                 _log.Error($"Create shortcut failed: {src} -> {dest}", ex);
-                Status = $"Create shortcut failed for {srcName}: {ex.Message}";
+                Status = string.Format(Strings.StatusShortcutFailed, srcName, ex.Message);
             }
         }
 
@@ -561,7 +598,7 @@ public sealed class MainViewModel : ObservableObject {
 
         Refresh();
         if (ok > 0) {
-            Status = $"Created {ok} shortcut(s) in {targetFolder}";
+            Status = string.Format(Strings.StatusShortcutsCreated, ok, targetFolder);
         }
     }
 
@@ -766,6 +803,17 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     private void Refresh() {
+        // A rebuild of the list drops the row the editor was sitting on, so
+        // the editor goes with it.
+        RenamingPath = null;
+
+        // Default intent: whatever is selected now stays selected once the
+        // new listing lands. Callers that know better (rename, undo) have
+        // already filled this in.
+        if (_restoreSelection.Length == 0) {
+            _restoreSelection = _selectedEntries.Select(e => e.FullPath).ToArray();
+        }
+
         // Any in-flight shell enumeration from a previous navigation is
         // stale now — cancel it so its delayed SetSource doesn't clobber
         // the new folder's entries. The cancel also drops the spinner if
@@ -777,6 +825,7 @@ public sealed class MainViewModel : ObservableObject {
 
         if (_nav.Current is null) {
             _hiddenCount = 0;
+            _listedPath = null;
             _search.SetSource(Array.Empty<FileSystemEntry>());
             Entries.Clear();
             Status = "";
@@ -813,10 +862,17 @@ public sealed class MainViewModel : ObservableObject {
         _listLoadCts = new CancellationTokenSource();
         var token = _listLoadCts.Token;
 
-        // Clear first: leaving the previous folder's entries on screen while
-        // the new one loads invites a double-click on a file that isn't here.
-        _hiddenCount = 0;
-        _search.SetSource(Array.Empty<FileSystemEntry>());
+        // Emptying the list first is right when we are *leaving* a folder:
+        // stale rows on screen invite a double-click on a file that is not
+        // here any more. Refreshing the folder already on screen is the
+        // opposite case — clearing it there is what made every rename,
+        // delete and F5 blink and drop the selection, so that listing is
+        // reconciled in place once the new one arrives.
+        if (!IsSamePath(path, _listedPath)) {
+            _hiddenCount = 0;
+            _listedPath = null;
+            _search.SetSource(Array.Empty<FileSystemEntry>());
+        }
         string statusBeforeLoad = Status;
 
         var work = Task.Run(() => {
@@ -848,6 +904,7 @@ public sealed class MainViewModel : ObservableObject {
             }
 
             _hiddenCount = hidden;
+            _listedPath = path;
             // A file operation may have reported its outcome ("Copied 3
             // items") while we were enumerating; the listing's own
             // "N items" must not eat that message.
@@ -860,8 +917,9 @@ public sealed class MainViewModel : ObservableObject {
             return;
         } catch (Exception ex) {
             _log.Error($"Enumerate failed: {path}", ex);
+            _listedPath = null;
             Entries.Clear();
-            Status = $"Error: {ex.Message}";
+            Status = string.Format(Strings.StatusError, ex.Message);
         } finally {
             // Same handoff rule as RefreshShellAsync: a superseded load
             // leaves the flag for the load that replaced it.
@@ -885,9 +943,13 @@ public sealed class MainViewModel : ObservableObject {
 
         IsListLoading = true;
         _hiddenCount = 0;
-        // Clear immediately so the user sees an empty list under the
-        // spinner rather than stale entries from the previous folder.
-        _search.SetSource(Array.Empty<FileSystemEntry>());
+        // Same rule as the filesystem path: clear when arriving from
+        // somewhere else, reconcile in place when re-listing what is
+        // already on screen.
+        if (!IsSamePath(shellPath, _listedPath)) {
+            _listedPath = null;
+            _search.SetSource(Array.Empty<FileSystemEntry>());
+        }
 
         try {
             IReadOnlyList<FileSystemEntry> items;
@@ -897,13 +959,14 @@ public sealed class MainViewModel : ObservableObject {
                 return;
             } catch (Exception ex) {
                 _log.Error($"Shell enumerate failed: {shellPath}", ex);
-                Status = $"Error: {ex.Message}";
+                Status = string.Format(Strings.StatusError, ex.Message);
                 return;
             }
 
             if (token.IsCancellationRequested) {
                 return;
             }
+            _listedPath = shellPath;
             _search.SetSource(items.ToList());
         } finally {
             // Only release the spinner if our load is still the active one.
@@ -915,22 +978,151 @@ public sealed class MainViewModel : ObservableObject {
         }
     }
 
-    private void ReplaceEntries(IReadOnlyList<FileSystemEntry> items) {
-        Entries.Clear();
-        foreach (var e in items) {
-            Entries.Add(e);
+    /// <summary>
+    /// Reconciles <see cref="Entries"/> with a fresh listing instead of
+    /// clearing and refilling it. Rows that did not change keep their
+    /// containers — that is what stops the list blinking on every refresh
+    /// and what lets the selection survive a rename or a delete.
+    /// </summary>
+    private void SyncEntries(IReadOnlyList<FileSystemEntry> items) {
+        // A wholesale reorder (flipping the sort on a large folder) moves
+        // every row anyway, so the straight rebuild is both cheaper and no
+        // more disruptive than shuffling the collection item by item.
+        if (IsWholesaleChange(items)) {
+            Entries.Clear();
+            foreach (var e in items) {
+                Entries.Add(e);
+            }
+            return;
         }
+
+        var wanted = new HashSet<string>(items.Select(e => e.FullPath), StringComparer.OrdinalIgnoreCase);
+        for (int i = Entries.Count - 1; i >= 0; i--) {
+            if (!wanted.Contains(Entries[i].FullPath)) {
+                Entries.RemoveAt(i);
+            }
+        }
+
+        for (int i = 0; i < items.Count; i++) {
+            var want = items[i];
+            int at = IndexOfPath(want.FullPath, i);
+            if (at < 0) {
+                Entries.Insert(i, want);
+                continue;
+            }
+            if (at != i) {
+                Entries.Move(at, i);
+            }
+            // Same file, different facts (size, timestamp, sidecars): the row
+            // has to show the new ones. This is the only case where a
+            // surviving row loses its container.
+            if (!SameRow(Entries[i], want)) {
+                Entries[i] = want;
+            }
+        }
+    }
+
+
+    /// <summary>
+    /// Whether two listings of the same file say the same thing. Record
+    /// equality is not usable here: <see cref="FileSystemEntry.Companions"/>
+    /// is a list, and two enumerations of the same folder produce two
+    /// instances of it — so every row with a sidecar would count as changed
+    /// and lose its container on every single refresh.
+    /// </summary>
+    private static bool SameRow(FileSystemEntry a, FileSystemEntry b) {
+        return a.Name == b.Name
+            && a.Kind == b.Kind
+            && a.Size == b.Size
+            && a.ModifiedUtc == b.ModifiedUtc
+            && a.IsHidden == b.IsHidden
+            && a.IsReadOnly == b.IsReadOnly
+            && a.IsSystem == b.IsSystem
+            && a.LinksToDirectory == b.LinksToDirectory
+            && a.OriginalLocation == b.OriginalLocation
+            && SameCompanions(a.Companions, b.Companions);
+    }
+
+    private static bool SameCompanions(IReadOnlyList<string>? a, IReadOnlyList<string>? b) {
+        if (a is null || a.Count == 0) {
+            return b is null || b.Count == 0;
+        }
+        if (b is null || a.Count != b.Count) {
+            return false;
+        }
+
+        for (int i = 0; i < a.Count; i++) {
+            if (!string.Equals(a[i], b[i], StringComparison.OrdinalIgnoreCase)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// True when so little of the incoming listing lines up with what is on
+    /// screen that reconciling it row by row is pointless.
+    /// </summary>
+    private bool IsWholesaleChange(IReadOnlyList<FileSystemEntry> items) {
+        if (Entries.Count == 0 || items.Count == 0) {
+            return true;
+        }
+
+        int aligned = 0;
+        int common = Math.Min(Entries.Count, items.Count);
+        for (int i = 0; i < common; i++) {
+            if (IsSamePath(Entries[i].FullPath, items[i].FullPath)) {
+                aligned++;
+            }
+        }
+
+        return aligned * 2 < Math.Max(Entries.Count, items.Count);
+    }
+
+    private int IndexOfPath(string path, int from) {
+        for (int i = from; i < Entries.Count; i++) {
+            if (IsSamePath(Entries[i].FullPath, path)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static bool IsSamePath(string? a, string? b) {
+        return a is not null && b is not null && string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Puts the selection back on the rows the last operation asked for.
+    /// Consumed once: the next filter keystroke must not re-select anything.
+    /// </summary>
+    private void ApplyRestoreSelection() {
+        if (_restoreSelection.Length == 0) {
+            return;
+        }
+
+        var wanted = new HashSet<string>(_restoreSelection, StringComparer.OrdinalIgnoreCase);
+        _restoreSelection = Array.Empty<string>();
+
+        var found = Entries.Where(e => wanted.Contains(e.FullPath)).ToList();
+        if (found.Count == 0) {
+            return;
+        }
+
+        SelectedEntry = found[0];
+        SelectedEntries = found;
+        SelectionRestoreRequested?.Invoke(found);
     }
 
     private void UpdateFilterStatus(int shown, int total) {
         if (_search.HasQuery) {
             Status = total > 0
-                ? $"{shown} of {total} items match \"{_search.Query}\""
-                : $"{shown} items";
+                ? string.Format(Strings.StatusFilterMatches, shown, total, _search.Query)
+                : string.Format(Strings.StatusItems, shown);
         } else if (_hiddenCount > 0) {
-            Status = $"{shown} items ({_hiddenCount} hidden)";
+            Status = string.Format(Strings.StatusItemsWithHidden, shown, _hiddenCount);
         } else {
-            Status = $"{shown} items";
+            Status = string.Format(Strings.StatusItems, shown);
         }
     }
 
@@ -1035,6 +1227,23 @@ public sealed class MainViewModel : ObservableObject {
     }
 
 
+    /// <summary>
+    /// Pushes the user's cache limits into the icon provider. Called on every
+    /// relevant settings change and once at startup — the provider deliberately
+    /// knows nothing about <see cref="AppSettings"/>.
+    /// </summary>
+    private void ApplyThumbnailCacheSettings() {
+        if (!ServiceLocator.IsRegistered<IIconProvider>()) {
+            return;
+        }
+
+        ServiceLocator.Get<IIconProvider>().ConfigureCache(new ThumbnailCacheOptions(
+            Settings.ThumbnailMemoryEntries,
+            Settings.ThumbnailDiskCacheEnabled,
+            Settings.ThumbnailDiskCacheMb * 1024L * 1024L));
+    }
+
+
     // --- Bookmarks ------------------------------------------------------
 
     /// <summary>
@@ -1065,16 +1274,16 @@ public sealed class MainViewModel : ObservableObject {
             Bookmarks.Clear();
 
             if (Settings.ShowBookmarkDownloads) {
-                AddSpecialFolderNode("Загрузки", ResolveDownloads());
+                AddSpecialFolderNode(Strings.SpecialFolderDownloads, ResolveDownloads());
             }
             if (Settings.ShowBookmarkDocuments) {
-                AddSpecialFolderNode("Документы", ResolveDocuments());
+                AddSpecialFolderNode(Strings.SpecialFolderDocuments, ResolveDocuments());
             }
             if (Settings.ShowBookmarkPictures) {
-                AddSpecialFolderNode("Изображения", ResolvePictures());
+                AddSpecialFolderNode(Strings.SpecialFolderPictures, ResolvePictures());
             }
             if (Settings.ShowBookmarkRecycleBin && TryGetShellNamespace() is not null) {
-                AddSpecialFolderNode("Корзина", ShellPaths.RecycleBin);
+                AddSpecialFolderNode(Strings.SpecialFolderRecycleBin, ShellPaths.RecycleBin);
             }
 
             foreach (string path in _favorites) {
@@ -1165,12 +1374,12 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
         if (_favorites.Any(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase))) {
-            Status = "Папка уже в закладках.";
+            Status = Strings.StatusAlreadyBookmarked;
             return;
         }
         _favorites.Add(path);
         _log.Info($"Bookmark added: {path}");
-        Status = $"Добавлено в закладки: {Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))}";
+        Status = string.Format(Strings.StatusBookmarkAdded, Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)));
         BuildBookmarks();
         SaveState();
     }
@@ -1216,24 +1425,24 @@ public sealed class MainViewModel : ObservableObject {
         try {
             _shell.Open(Wander.App.Diagnostics.CrashReporter.IssueChooserUrl);
         } catch (Exception ex) {
-            Status = $"Could not open the browser: {ex.Message}";
+            Status = string.Format(Strings.StatusBrowserFailed, ex.Message);
         }
     }
 
     private void OpenLogFile() {
         if (!ServiceLocator.IsRegistered<ILogFile>()) {
-            Status = "Logging is not configured.";
+            Status = Strings.StatusNoLogging;
             return;
         }
         string path = ServiceLocator.Get<ILogFile>().FilePath;
         if (string.IsNullOrEmpty(path) || !File.Exists(path)) {
-            Status = "Log file not found.";
+            Status = Strings.StatusNoLogFile;
             return;
         }
         try {
             _shell.Open(path);
         } catch (Exception ex) {
-            Status = $"Open log failed: {ex.Message}";
+            Status = string.Format(Strings.StatusOpenLogFailed, ex.Message);
         }
     }
 
@@ -1244,7 +1453,7 @@ public sealed class MainViewModel : ObservableObject {
         try {
             _shell.ShowProperties(path);
         } catch (Exception ex) {
-            Status = $"Properties failed: {ex.Message}";
+            Status = string.Format(Strings.StatusPropertiesFailed, ex.Message);
         }
     }
 
@@ -1280,7 +1489,7 @@ public sealed class MainViewModel : ObservableObject {
             _shell.OpenWith(_selectedEntry.FullPath);
         } catch (Exception ex) {
             _log.Error($"Open with failed: {_selectedEntry.FullPath}", ex);
-            Status = $"Open with failed: {ex.Message}";
+            Status = string.Format(Strings.StatusOpenWithFailed, ex.Message);
         }
     }
 
@@ -1292,7 +1501,7 @@ public sealed class MainViewModel : ObservableObject {
             _shell.OpenTerminal(folder);
         } catch (Exception ex) {
             _log.Error($"Open terminal failed: {folder}", ex);
-            Status = $"Open in Terminal failed: {ex.Message}";
+            Status = string.Format(Strings.StatusTerminalFailed, ex.Message);
         }
     }
 
@@ -1316,12 +1525,12 @@ public sealed class MainViewModel : ObservableObject {
     private void SetClipboardText(string text, string what) {
         try {
             Clipboard.SetText(text);
-            Status = $"Copied {what} to clipboard";
+            Status = string.Format(Strings.StatusCopiedToClipboard, what);
         } catch (Exception ex) {
             // The OS clipboard is a shared, lockable resource — another app
             // holding it turns this into a COMException, not a bug in ours.
             _log.Warn($"Clipboard copy failed: {ex.Message}");
-            Status = $"Clipboard is busy: {ex.Message}";
+            Status = string.Format(Strings.StatusClipboardBusy, ex.Message);
         }
     }
 
@@ -1349,25 +1558,28 @@ public sealed class MainViewModel : ObservableObject {
         // the bin so skipping the prompt is safe by default.
         bool needsConfirm = permanent || Settings.ConfirmRecycle;
         if (needsConfirm) {
-            string verb = permanent ? "Permanently delete" : "Move to recycle bin";
-            string title = permanent ? "Confirm permanent deletion" : "Confirm move to recycle bin";
+            string title = permanent ? Strings.ConfirmDeleteTitle : Strings.ConfirmRecycleTitle;
             string message;
             if (snapshot.Count == 1) {
                 var e0 = snapshot[0];
-                string kind = e0.Kind == EntryKind.Directory ? "folder" : "file";
-                message = $"{verb} {kind} '{e0.Name}'?\n\n{e0.FullPath}";
+                string kind = e0.Kind == EntryKind.Directory ? Strings.KindFolder : Strings.KindFile;
+                message = string.Format(
+                    permanent ? Strings.ConfirmDeleteOne : Strings.ConfirmRecycleOne,
+                    kind, e0.Name, e0.FullPath);
             } else {
-                message = $"{verb} {snapshot.Count} items?\n\n" +
-                    string.Join("\n", snapshot.Take(5).Select(e => "• " + e.Name)) +
-                    (snapshot.Count > 5 ? $"\n… and {snapshot.Count - 5} more" : "");
+                message = string.Format(
+                    permanent ? Strings.ConfirmDeleteMany : Strings.ConfirmRecycleMany,
+                    snapshot.Count,
+                    string.Join("\n", snapshot.Take(5).Select(e => "• " + e.Name))
+                        + (snapshot.Count > 5 ? "\n" + string.Format(Strings.AndMore, snapshot.Count - 5) : ""));
             }
             // The companions are about to go too; a confirmation that hides
             // that would be a confirmation of the wrong thing.
             if (extras > 0) {
-                message += $"\n\nTogether with {extras} companion file(s).";
+                message += "\n\n" + string.Format(Strings.ConfirmWithCompanions, extras);
             }
             if (permanent) {
-                message += "\n\nThis cannot be undone.";
+                message += "\n\n" + Strings.ConfirmIrreversible;
             }
 
             var result = MessageBox.Show(
@@ -1386,14 +1598,13 @@ public sealed class MainViewModel : ObservableObject {
         var readOnlys = snapshot.Where(en => en.IsReadOnly).ToList();
         if (readOnlys.Count > 0) {
             string list = string.Join("\n", readOnlys.Take(5).Select(en => "• " + en.Name)) +
-                (readOnlys.Count > 5 ? $"\n… and {readOnlys.Count - 5} more" : "");
-            string roMsg = readOnlys.Count == 1
-                ? $"The item is read-only:\n\n{list}\n\nDelete anyway?"
-                : $"These items are read-only:\n\n{list}\n\nDelete all anyway?";
+                (readOnlys.Count > 5 ? "\n" + string.Format(Strings.AndMore, readOnlys.Count - 5) : "");
+            string roMsg = string.Format(
+                readOnlys.Count == 1 ? Strings.ConfirmReadOnlyOne : Strings.ConfirmReadOnlyMany, list);
 
             var roResult = MessageBox.Show(
                 roMsg,
-                "Read-only",
+                Strings.ConfirmReadOnlyTitle,
                 MessageBoxButton.OKCancel,
                 MessageBoxImage.Warning,
                 MessageBoxResult.Cancel);
@@ -1412,14 +1623,14 @@ public sealed class MainViewModel : ObservableObject {
         IReadOnlyList<DeleteResult> results;
         try {
             results = await RunWithProgressDialogAsync(
-                permanent ? "Удаление" : "В корзину",
+                permanent ? Strings.ProgressDeleting : Strings.ProgressRecycling,
                 ct => _ops.DeleteManyAsync(paths, permanent, ct));
         } catch (OperationCanceledException) {
-            Status = "Operation cancelled.";
+            Status = Strings.StatusCancelled;
             return;
         } catch (Exception ex) {
             _log.Error($"Delete batch failed", ex);
-            Status = $"Delete failed: {ex.Message}";
+            Status = string.Format(Strings.StatusDeleteFailed, ex.Message);
             return;
         }
 
@@ -1430,9 +1641,10 @@ public sealed class MainViewModel : ObservableObject {
         if (failed > 0) {
             var firstFail = results.First(r => r.Status == DeleteStatus.Failed);
             string detail = firstFail.Error is null ? "" : ": " + DescribeError(firstFail.Error, firstFail.Path);
-            Status = $"{(permanent ? "Deleted" : "Recycled")} {ok}, {failed} failed{detail}";
+            Status = string.Format(
+                permanent ? Strings.StatusDeletedPartly : Strings.StatusRecycledPartly, ok, failed, detail);
         } else {
-            Status = $"{(permanent ? "Deleted" : "Recycled")} {ok} item(s)";
+            Status = string.Format(permanent ? Strings.StatusDeleted : Strings.StatusRecycled, ok);
         }
     }
 
@@ -1443,22 +1655,25 @@ public sealed class MainViewModel : ObservableObject {
                 return;
             }
             _log.Info($"Undo: {action.Description}");
-            Status = $"Undone: {action.Description}";
+            Status = string.Format(Strings.StatusUndone, action.Description);
+            // Point the user at what came back, not at wherever the
+            // selection happened to be.
+            _restoreSelection = action.PathsAfterUndo.ToArray();
             Refresh();
             // A rating undo rewrites a sidecar the footer is already
             // showing; the listing refresh above wouldn't touch it.
             Preview.ReloadCompanions();
         } catch (Exception ex) {
             _log.Error("Undo failed", ex);
-            Status = $"Undo failed: {ex.Message}";
+            Status = string.Format(Strings.StatusUndoFailed, ex.Message);
         }
     }
 
-    private void Rename(string? newName) {
-        if (_selectedEntry is null || string.IsNullOrWhiteSpace(newName)) {
+    private void Rename(FileSystemEntry? entry, string? newName) {
+        if (entry is null || string.IsNullOrWhiteSpace(newName)) {
             return;
         }
-        if (newName == _selectedEntry.Name) {
+        if (newName == entry.Name) {
             return;
         }
 
@@ -1467,25 +1682,117 @@ public sealed class MainViewModel : ObservableObject {
             // undo step — renaming Sprite.png and leaving Sprite.png.meta
             // behind is precisely the breakage this feature exists to stop.
             IReadOnlyList<(string Path, string NewName)> plan = Settings.IntegrateCompanions
-                ? _companions.RenamePlan(_selectedEntry.FullPath, newName, _selectedEntry.Companions)
-                : new[] { (_selectedEntry.FullPath, newName) };
+                ? _companions.RenamePlan(entry.FullPath, newName, entry.Companions)
+                : new[] { (entry.FullPath, newName) };
             _ops.RenameMany(plan);
+            // Keep the file the user just renamed selected: its path changed,
+            // so "whatever was selected" would no longer match anything.
+            _restoreSelection = new[] {
+                Path.Combine(Path.GetDirectoryName(entry.FullPath) ?? "", newName),
+            };
             Refresh();
             if (plan.Count > 1) {
-                Status = $"Renamed with {plan.Count - 1} companion file(s)";
+                Status = string.Format(Strings.StatusRenamedWithCompanions, plan.Count - 1);
             }
         } catch (Exception ex) {
-            _log.Error($"Rename failed: {_selectedEntry.FullPath} -> {newName}", ex);
-            Status = $"Rename failed: {DescribeError(ex, _selectedEntry.FullPath)}";
+            _log.Error($"Rename failed: {entry.FullPath} -> {newName}", ex);
+            Status = string.Format(Strings.StatusRenameFailed, DescribeError(ex, entry.FullPath));
         }
     }
+
+
+    // --- Inline rename ---------------------------------------------------
+    // The list templates carry a hidden TextBox per row; RenamingPath is what
+    // makes exactly one of them visible. The VM owns the flag (rather than the
+    // window) because a refresh, a navigation or a failed rename all have to
+    // put the editor away, and those all happen here.
+
+    /// <summary>Full path of the row currently showing its rename editor.</summary>
+    public string? RenamingPath {
+        get => _renamingPath;
+        private set => SetField(ref _renamingPath, value);
+    }
+
+    public void BeginRename(FileSystemEntry entry) {
+        if (IsCurrentShellNamespace) {
+            return;
+        }
+        RenamingPath = entry.FullPath;
+    }
+
+    /// <summary>
+    /// Applies the edited name to whichever row the editor belongs to. The
+    /// entry is looked up by path rather than taken from the selection: a
+    /// commit on lost focus can arrive after the selection has moved on.
+    /// </summary>
+    public void CommitRename(string? newName) {
+        string? path = RenamingPath;
+        RenamingPath = null;
+        if (path is null) {
+            return;
+        }
+
+        var entry = Entries.FirstOrDefault(
+            e => string.Equals(e.FullPath, path, StringComparison.OrdinalIgnoreCase));
+        Rename(entry, newName);
+    }
+
+    public void CancelRename() {
+        RenamingPath = null;
+    }
+
+    /// <summary>
+    /// Puts the selected recycle-bin items back where they came from. The
+    /// shell does the work through <see cref="IRecycleBin.Restore"/> — the
+    /// same call <c>Ctrl+Z</c> after a delete already uses, matched by
+    /// original path plus deletion time.
+    ///
+    /// <para>
+    /// Deliberately not undoable: Explorer does not offer it either, and
+    /// "undo a restore" means deleting a file the user has just asked to
+    /// get back. Recording it would make <c>Ctrl+Z</c> destructive.
+    /// </para>
+    /// </summary>
+    private void RestoreFromRecycleBin() {
+        if (!ServiceLocator.IsRegistered<IRecycleBin>()) {
+            return;
+        }
+
+        var bin = ServiceLocator.Get<IRecycleBin>();
+        int restored = 0;
+        var failures = new List<string>();
+
+        foreach (var entry in _selectedEntries.ToList()) {
+            if (entry.OriginalLocation is null) {
+                failures.Add(entry.Name);
+                continue;
+            }
+
+            try {
+                // ModifiedUtc carries the deletion time for bin entries —
+                // that is what the enumerator puts there.
+                bin.Restore(new RecycleHandle(
+                    Path.Combine(entry.OriginalLocation, entry.Name), entry.ModifiedUtc));
+                restored++;
+            } catch (Exception ex) {
+                _log.Error($"Restore failed: {entry.Name}", ex);
+                failures.Add(entry.Name);
+            }
+        }
+
+        Refresh();
+        Status = failures.Count == 0
+            ? string.Format(Strings.StatusRestored, restored)
+            : string.Format(Strings.StatusRestoredPartly, restored, failures.Count, failures[0]);
+    }
+
 
     private void Copy() {
         if (_selectedEntries.Count == 0) {
             return;
         }
         _clipboard.Copy(WithCompanions(_selectedEntries));
-        Status = $"Copied {_selectedEntries.Count} item(s)";
+        Status = string.Format(Strings.StatusCopied, _selectedEntries.Count);
     }
 
     private void Cut() {
@@ -1493,7 +1800,7 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
         _clipboard.Cut(WithCompanions(_selectedEntries));
-        Status = $"Cut {_selectedEntries.Count} item(s)";
+        Status = string.Format(Strings.StatusCut, _selectedEntries.Count);
     }
 
 
@@ -1569,7 +1876,7 @@ public sealed class MainViewModel : ObservableObject {
         var reason = PathSafety.DetectSelfDrop(sources, target, out string? offender);
         if (reason == SelfDropReason.IntoOwnDescendant || reason == SelfDropReason.Same) {
             string text = PathSafety.FormatReason(reason, offender, target);
-            MessageBox.Show(text, "Cannot paste", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(text, Strings.CannotPasteTitle, MessageBoxButton.OK, MessageBoxImage.Warning);
             Status = text;
             return;
         }
@@ -1589,16 +1896,16 @@ public sealed class MainViewModel : ObservableObject {
         IReadOnlyList<BatchItemResult> results;
         try {
             results = await RunWithProgressDialogAsync(
-                wasCut ? "Перемещение" : "Копирование",
+                wasCut ? Strings.ProgressMoving : Strings.ProgressCopying,
                 ct => wasCut
                     ? _ops.MoveManyAsync(groups, target, resolver, ct)
                     : _ops.CopyManyAsync(groups, target, resolver, ct));
         } catch (OperationCanceledException) {
-            Status = "Operation cancelled.";
+            Status = Strings.StatusCancelled;
             return;
         } catch (Exception ex) {
             _log.Error($"Paste failed into {target}", ex);
-            Status = $"Paste failed: {ex.Message}";
+            Status = string.Format(Strings.StatusPasteFailed, ex.Message);
             return;
         }
 
@@ -1606,7 +1913,7 @@ public sealed class MainViewModel : ObservableObject {
             _clipboard.Clear();
         }
         Refresh();
-        ReportBatchResults(results, wasCut ? "Moved" : "Copied", target);
+        ReportBatchResults(results, wasCut ? Strings.VerbMoved : Strings.VerbCopied, target);
     }
 
     private void ReportBatchResults(IReadOnlyList<BatchItemResult> results, string verb, string target) {
@@ -1619,21 +1926,21 @@ public sealed class MainViewModel : ObservableObject {
         int cancelled = results.Count(r => r.Status == BatchItemStatus.Cancelled);
 
         if (ok == 0 && skipped == 0 && failed == 0 && cancelled == results.Count) {
-            Status = "Operation cancelled.";
+            Status = Strings.StatusCancelled;
             return;
         }
 
-        var parts = new List<string> { $"{verb} {ok} item(s) to {target}" };
+        var parts = new List<string> { string.Format(Strings.StatusBatchDone, verb, ok, target) };
         if (skipped > 0) {
-            parts.Add($"skipped {skipped}");
+            parts.Add(string.Format(Strings.StatusBatchSkipped, skipped));
         }
         if (cancelled > 0) {
-            parts.Add($"cancelled {cancelled}");
+            parts.Add(string.Format(Strings.StatusBatchCancelled, cancelled));
         }
         if (failed > 0) {
             var firstFail = results.First(r => r.Status == BatchItemStatus.Failed);
             string detail = firstFail.Error is null ? "" : ": " + DescribeError(firstFail.Error, firstFail.Source);
-            parts.Add($"{failed} failed{detail}");
+            parts.Add(string.Format(Strings.StatusBatchFailed, failed, detail));
         }
         Status = string.Join(", ", parts);
     }
@@ -1643,7 +1950,7 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
-        string baseName = "New folder";
+        string baseName = Strings.NewFolderName;
         string name = baseName;
         int i = 2;
         while (_fs.DirectoryExists(Path.Combine(_nav.Current, name))) {
@@ -1655,7 +1962,7 @@ public sealed class MainViewModel : ObservableObject {
             Refresh();
         } catch (Exception ex) {
             _log.Error($"CreateFolder failed in {_nav.Current}: {name}", ex);
-            Status = $"Create failed: {ex.Message}";
+            Status = string.Format(Strings.StatusCreateFailed, ex.Message);
         }
     }
 
@@ -1664,7 +1971,7 @@ public sealed class MainViewModel : ObservableObject {
             var lockers = _lockInspector.WhoIsLocking(path);
             if (lockers.Count > 0) {
                 string procs = string.Join(", ", lockers.Select(l => $"{l.ProcessName} (PID {l.ProcessId})"));
-                return $"file is open in: {procs}";
+                return string.Format(Strings.ErrorFileInUse, procs);
             }
         }
         return ex.Message;
@@ -1719,14 +2026,17 @@ public sealed class MainViewModel : ObservableObject {
     private static bool ConfirmMove(IReadOnlyList<string> sources, string target) {
         string message;
         if (sources.Count == 1) {
-            message = $"Move this entry?\n\nFrom: {sources[0]}\nTo:   {Path.Combine(target, Path.GetFileName(sources[0].TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)))}";
+            message = string.Format(
+                Strings.ConfirmMoveOne,
+                sources[0],
+                Path.Combine(target, Path.GetFileName(sources[0].TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))));
         } else {
-            message = $"Move {sources.Count} items to:\n{target}?";
+            message = string.Format(Strings.ConfirmMoveMany, sources.Count, target);
         }
 
         var result = MessageBox.Show(
             message,
-            "Confirm move",
+            Strings.ConfirmMoveTitle,
             MessageBoxButton.OKCancel,
             MessageBoxImage.Warning,
             MessageBoxResult.Cancel);

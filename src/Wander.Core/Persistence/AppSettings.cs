@@ -76,6 +76,29 @@ public sealed record AppSettings {
     public int LargeIconLabelFontSize { get; init; } = 12;
 
 
+    // --- Thumbnail cache ------------------------------------------------
+    /// <summary>
+    /// Keep generated thumbnails in <c>%LocalAppData%\Wander\thumbs</c> so
+    /// they survive a restart. On by default: the folder that hurts without
+    /// it is a folder of RAW photos, and there the difference is seconds
+    /// per visit.
+    /// </summary>
+    public bool ThumbnailDiskCacheEnabled { get; init; } = true;
+
+    /// <summary>
+    /// Ceiling on that folder, in megabytes. 256 MB holds a few thousand
+    /// thumbnails — enough for the folders someone actually revisits,
+    /// small enough that nobody notices it on a system drive.
+    /// </summary>
+    public int ThumbnailDiskCacheMb { get; init; } = 256;
+
+    /// <summary>
+    /// How many thumbnails to hold in RAM. At roughly 100 KB apiece, 512 is
+    /// tens of megabytes — a full screen of tiles many times over.
+    /// </summary>
+    public int ThumbnailMemoryEntries { get; init; } = 512;
+
+
     // --- Bookmarks -----------------------------------------------------
     /// <summary>Show the user's Downloads folder as a default bookmark.</summary>
     public bool ShowBookmarkDownloads { get; init; } = true;

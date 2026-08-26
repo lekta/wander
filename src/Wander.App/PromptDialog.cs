@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using Wander.App.Resources;
 
 namespace Wander.App;
 
@@ -40,8 +41,8 @@ internal static class PromptDialog {
             HorizontalAlignment = HorizontalAlignment.Right,
             Margin = new Thickness(0, 12, 0, 0),
         };
-        var ok = new Button { Content = "OK", Width = 70, IsDefault = true };
-        var cancel = new Button { Content = "Cancel", Width = 70, IsCancel = true, Margin = new Thickness(6, 0, 0, 0) };
+        var ok = new Button { Content = Strings.ActionOk, Width = 70, IsDefault = true };
+        var cancel = new Button { Content = Strings.ActionCancel, Width = 90, IsCancel = true, Margin = new Thickness(6, 0, 0, 0) };
         buttons.Children.Add(ok);
         buttons.Children.Add(cancel);
         stack.Children.Add(buttons);
@@ -99,7 +100,7 @@ internal static class PromptDialog {
 
         if (hasInvalid) {
             box.BorderBrush = Brushes.IndianRed;
-            errorBlock.Text = "A file name can't contain any of these characters: " + _invalidCharsDisplay;
+            errorBlock.Text = Strings.InvalidFileNameChars + _invalidCharsDisplay;
             errorBlock.Visibility = Visibility.Visible;
             ok.IsEnabled = false;
             return;
@@ -111,7 +112,7 @@ internal static class PromptDialog {
     }
 
     private static void FlashError(TextBlock errorBlock) {
-        errorBlock.Text = "A file name can't contain any of these characters: " + _invalidCharsDisplay;
+        errorBlock.Text = Strings.InvalidFileNameChars + _invalidCharsDisplay;
         errorBlock.Visibility = Visibility.Visible;
     }
 }

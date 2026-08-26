@@ -1,3 +1,5 @@
+using Wander.Core.Localization;
+
 namespace Wander.Core.Menu;
 
 /// <summary>
@@ -7,48 +9,58 @@ namespace Wander.Core.Menu;
 /// hides it.
 ///
 /// <para>
-/// Labels are hard-coded Russian, matching the settings dialog and the
-/// entries the shell itself contributes on a Russian Windows. Proper
-/// localisation is a separate, app-wide job (see PLAN.md) — when it lands,
-/// this dictionary is the one place the menu needs to change.
+/// What lives here is the *structure* — which entry exists, what hotkey it
+/// advertises, which ones the settings dialog may hide — plus the resource
+/// key of each label. The label text itself is in the app's string table
+/// (<c>Resources/Strings.resx</c>) and is fetched through
+/// <see cref="Text"/>: Core has no reference to the app layer, and adding
+/// a language must not mean editing Core.
+/// </para>
+///
+/// <para>
+/// With no text source registered (which is the case in tests) a key comes
+/// back as itself. The drift guards still work — a key is visibly not a
+/// label — without every test having to set up localisation.
 /// </para>
 /// </summary>
 public static class ContextMenuCatalog {
-    private static readonly Dictionary<MenuCommandId, string> _titles = new() {
-        [MenuCommandId.OpenSubmenu] = "Открыть с помощью",
-        [MenuCommandId.FileSubmenu] = "Файл",
-        [MenuCommandId.ViewSubmenu] = "Вид",
-        [MenuCommandId.SortSubmenu] = "Сортировка",
+    private static readonly Dictionary<MenuCommandId, string> _titleKeys = new() {
+        [MenuCommandId.OpenSubmenu] = "MenuCmdOpenSubmenu",
+        [MenuCommandId.FileSubmenu] = "MenuCmdFileSubmenu",
+        [MenuCommandId.ViewSubmenu] = "MenuCmdViewSubmenu",
+        [MenuCommandId.SortSubmenu] = "MenuCmdSortSubmenu",
 
-        [MenuCommandId.Open] = "Открыть",
-        [MenuCommandId.OpenWith] = "Выбрать приложение...",
-        [MenuCommandId.OpenInTerminal] = "Открыть в терминале",
+        [MenuCommandId.Open] = "MenuCmdOpen",
+        [MenuCommandId.OpenWith] = "MenuCmdOpenWith",
+        [MenuCommandId.OpenInTerminal] = "MenuCmdOpenInTerminal",
 
-        [MenuCommandId.Cut] = "Вырезать",
-        [MenuCommandId.Copy] = "Копировать",
-        [MenuCommandId.Paste] = "Вставить",
-        [MenuCommandId.CopyPath] = "Копировать путь",
-        [MenuCommandId.CopyName] = "Копировать имя",
-        [MenuCommandId.CreateShortcut] = "Создать ярлык",
+        [MenuCommandId.Cut] = "MenuCmdCut",
+        [MenuCommandId.Copy] = "MenuCmdCopy",
+        [MenuCommandId.Paste] = "MenuCmdPaste",
+        [MenuCommandId.CopyPath] = "MenuCmdCopyPath",
+        [MenuCommandId.CopyName] = "MenuCmdCopyName",
+        [MenuCommandId.CreateShortcut] = "MenuCmdCreateShortcut",
 
-        [MenuCommandId.Rename] = "Переименовать",
-        [MenuCommandId.Delete] = "Удалить",
-        [MenuCommandId.NewFolder] = "Создать папку",
+        [MenuCommandId.Rename] = "MenuCmdRename",
+        [MenuCommandId.Delete] = "MenuCmdDelete",
+        [MenuCommandId.NewFolder] = "MenuCmdNewFolder",
 
-        [MenuCommandId.ViewDetails] = "Таблица",
-        [MenuCommandId.ViewTiles] = "Плитка",
-        [MenuCommandId.ViewLargeIcons] = "Крупные значки",
-        [MenuCommandId.TogglePreview] = "Область просмотра",
-        [MenuCommandId.SortByName] = "Имя",
-        [MenuCommandId.SortByDate] = "Дата изменения",
-        [MenuCommandId.SortBySize] = "Размер",
-        [MenuCommandId.SortByType] = "Тип",
-        [MenuCommandId.SortAscending] = "По возрастанию",
-        [MenuCommandId.SortFoldersFirst] = "Папки сверху",
+        [MenuCommandId.ViewDetails] = "MenuCmdViewDetails",
+        [MenuCommandId.ViewTiles] = "MenuCmdViewTiles",
+        [MenuCommandId.ViewLargeIcons] = "MenuCmdViewLargeIcons",
+        [MenuCommandId.TogglePreview] = "MenuCmdTogglePreview",
+        [MenuCommandId.SortByName] = "MenuCmdSortByName",
+        [MenuCommandId.SortByDate] = "MenuCmdSortByDate",
+        [MenuCommandId.SortBySize] = "MenuCmdSortBySize",
+        [MenuCommandId.SortByType] = "MenuCmdSortByType",
+        [MenuCommandId.SortAscending] = "MenuCmdSortAscending",
+        [MenuCommandId.SortFoldersFirst] = "MenuCmdSortFoldersFirst",
 
-        [MenuCommandId.Refresh] = "Обновить",
-        [MenuCommandId.Undo] = "Отменить",
-        [MenuCommandId.Properties] = "Свойства",
+        [MenuCommandId.RestoreFromRecycleBin] = "MenuCmdRestore",
+
+        [MenuCommandId.Refresh] = "MenuCmdRefresh",
+        [MenuCommandId.Undo] = "MenuCmdUndo",
+        [MenuCommandId.Properties] = "MenuCmdProperties",
     };
 
     private static readonly Dictionary<MenuCommandId, string> _gestures = new() {
@@ -99,8 +111,13 @@ public static class ContextMenuCatalog {
     };
 
 
+    /// <summary>
+    /// Label for one entry. Unknown ids fall back to the enum name — an
+    /// entry that reaches the menu without a key should be visible, not
+    /// silently blank.
+    /// </summary>
     public static string Title(MenuCommandId id) {
-        return _titles.TryGetValue(id, out string? title) ? title : id.ToString();
+        return _titleKeys.TryGetValue(id, out string? key) ? Text.Get(key) : id.ToString();
     }
 
     public static string? Gesture(MenuCommandId id) {

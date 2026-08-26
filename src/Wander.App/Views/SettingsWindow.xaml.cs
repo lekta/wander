@@ -1,5 +1,9 @@
 using System.Windows;
+using Wander.App.Resources;
+using Wander.App.Util;
 using Wander.App.ViewModels;
+using Wander.Core;
+using Wander.Core.Icons;
 using Wander.Core.Persistence;
 
 namespace Wander.App.Views;
@@ -34,6 +38,7 @@ public partial class SettingsWindow : Window {
     private void OnLoaded(object sender, RoutedEventArgs e) {
         if (DataContext is SettingsViewModel vm) {
             _baseline = vm.ToRecord();
+            RefreshCacheStatus(vm);
         }
     }
 
@@ -46,6 +51,64 @@ public partial class SettingsWindow : Window {
     private void Apply_Click(object sender, RoutedEventArgs e) {
         CommitBaseline();
     }
+
+    /// <summary>
+    /// Reset to defaults. Destructive in the same sense a file operation is
+    /// — it discards choices the user cannot get back — so it asks first, with
+    /// Cancel as the default button. The reset applies live like any other
+    /// change; Cancel still rolls it back, because the baseline snapshot is
+    /// deliberately left alone here.
+    /// </summary>
+    private void Reset_Click(object sender, RoutedEventArgs e) {
+        if (DataContext is not SettingsViewModel vm) {
+            return;
+        }
+
+        var answer = MessageBox.Show(
+            this,
+            Strings.SettingsResetConfirm,
+            Strings.SettingsResetGroup,
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Warning,
+            MessageBoxResult.Cancel);
+
+        if (answer == MessageBoxResult.OK) {
+            vm.ApplyFrom(new AppSettings());
+        }
+    }
+
+    /// <summary>
+    /// Drops every cached thumbnail. Not guarded by a confirmation: nothing
+    /// is lost that Wander cannot rebuild on the next visit to the folder.
+    /// </summary>
+    private void ClearThumbnails_Click(object sender, RoutedEventArgs e) {
+        if (DataContext is not SettingsViewModel vm) {
+            return;
+        }
+
+        if (ServiceLocator.IsRegistered<IIconProvider>()) {
+            ServiceLocator.Get<IIconProvider>().ClearCache();
+        }
+        RefreshCacheStatus(vm);
+    }
+
+
+    /// <summary>
+    /// Reads the cache folder's real size. Cheap (a directory listing), and
+    /// only ever done when the dialog opens or right after a clear.
+    /// </summary>
+    private static void RefreshCacheStatus(SettingsViewModel vm) {
+        if (!ServiceLocator.IsRegistered<IIconProvider>()) {
+            vm.ThumbnailCacheStatus = "";
+            return;
+        }
+
+        var (directory, size) = ServiceLocator.Get<IIconProvider>().DescribeCache();
+        vm.ThumbnailCacheStatus = directory is null
+            ? Strings.SettingsCacheOff
+            : string.Format(Strings.SettingsCacheUsage, SizeFormatter.Format(size), directory);
+    }
+
 
     private void Cancel_Click(object sender, RoutedEventArgs e) {
         if (DataContext is SettingsViewModel vm) {

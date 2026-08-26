@@ -1,10 +1,12 @@
 # Wander — план
 
-Список **обязательных целей** проекта и их детализация. Снапшот сделанного
-здесь же — поэтому при старте новой сессии этот файл читается первым.
+Список **обязательных целей** проекта и их детализация — что делаем и
+в каком порядке. Снапшот уже сделанного переехал в [DONE.md](DONE.md).
 
 В отличие от соседей:
 
+- [`DONE.md`](DONE.md) — снапшот того, что уже работает.
+- [`REJECTED.md`](REJECTED.md) — что обсудили и решили не брать, с причиной.
 - [`TECHDEBT.md`](TECHDEBT.md) — мелкая шероховатость (дальние чистки).
 - [`BACKLOG.md`](BACKLOG.md) — конкретные второстепенные задачи (полезное, но не сейчас).
 - [`CLAUDE.md`](../CLAUDE.md) Roadmap — стратегические направления продукта.
@@ -17,6 +19,11 @@
 1. **UX** — убрать лишнее из Win11 Explorer, починить его баги, добавить удобств.
 2. **Надёжность** — деструктивные операции всегда требуют подтверждения с Cancel
    по-умолчанию; явные ошибки вместо тихих сбоев; обратимость через `Ctrl+Z`.
+3. **Интеграция с системой** — по-умолчанию выбираем вариант, при котором обмен
+   с системой и другими приложениями работает (буфер обмена, drag & drop,
+   ассоциации, хоткеи). Своя изолированная реализация — осознанная уступка,
+   которая выносится на обсуждение и записывается в
+   [BACKLOG.md](BACKLOG.md), а не принимается молча.
 
 ---
 
@@ -101,58 +108,51 @@
     добавить «Корзину» как третий дефолт в bookmarks + третий чекбокс в
     настройках. Влечёт shell-интеграцию, отложили намеренно.
 
-### Спринт 4 (текущий фокус — P2)
+### ~~Спринт 4 — добить P2~~ — **закрыт** (2026-08-26)
 
-Закрытые P1 из спринта 3:
+Что закрыто, подробности — в [DONE.md](DONE.md):
 
-1. ~~**A5 Sort menu (UI)**~~ — **сделано**, см. спринт 3 п.3.
-2. ~~**D5 шаг 2 — Корзина в bookmarks**~~ — **сделано**. Bookmark-узел
-   «Корзина» (`ShellPaths.RecycleBin`), чекбокс
-   `AppSettings.ShowBookmarkRecycleBin`, роутинг `shell:`-путей через
-   `NavigationController` → `IShellNamespace`.
-3. ~~**Чистка #2**~~ — **сделано**. `ClipboardController` и
-   `SearchController` уехали в Core, `SessionState` выделен подrecord'ом
-   в `AppState`.
+- **A3** — переименование прямо в строке, во всех трёх режимах.
+- **B2** — перепись папки в панели просмотра вместо заглушки.
+- **E3** — двухуровневый кэш миниатюр с лимитами в настройках.
+- **D5b** — восстановление из корзины.
+- **F3** — сброс настроек (**F2**, расширение категорий, остаётся открытым).
+- **M** — русский интерфейс целиком, строки в ресурсах.
+- **Список без мерцания и с сохранением выделения** — не планировалось,
+  всплыло при доводке A3 и оказалось важнее самой A3.
 
-4. ~~**L. Контекстное меню**~~ — **сделано**. Меню в духе Win10, буфер обмена
-   в подменю «File», пункты сторонних приложений (7-Zip / TortoiseGit /
-   Notepad++ / системное «Создать») с иконками и подменю, страница настроек
-   с выключением по одному. Детали — секция **L** ниже и
-   [ARCHITECTURE.md](ARCHITECTURE.md).
+Отклонено по ходу: бейдж «+» у файла со спутниками — см.
+[REJECTED.md](REJECTED.md).
 
-Открытые P2:
+### Спринт 5 (текущий фокус)
 
-5. **A3 Inline rename** — сейчас только `PromptDialog`; нет rename-in-place
-   в строке списка (как в Explorer по F2).
-6. **A7 Thumbnails картинок** + **A8 Folder content preview** (требуют E3).
-7. **F2 SettingsDialog: расширить** (Theme, Behavior, Advanced) + **F3 Reset**.
-8. **B2** — content для папки в preview (после согласования вида).
-9. **A1** — применить settings-binding к шаблонам Tiles/Details, перебрать
-   defaults.
-10. **D5 шаг 3 — Restore/Delete в корзине** — операции через `IFileOperation`
-   (Vista shell COM). Без них корзина в Wander — только viewer.
+1. **Буфер обмена — связать свой с системным.** Единственное явное
+   нарушение третьего столпа: `Ctrl+C` в Wander не виден в Explorer и
+   наоборот. Разбор, выбранный вариант (B2 — перечитывать буфер
+   в `Window.Activated`) и список подводных камней уже лежат
+   в [BACKLOG.md](BACKLOG.md). Делаем **отдельным заходом**.
+2. **A7 / A8 — миниатюры в самом списке.** Вместо generic-иконки —
+   настоящее превью изображения и содержимого папки. Кэш под это (**E3**)
+   готов, осталось рисование.
+3. **A1 — вёрстка.** Базовые размеры настраиваемые **у каждого вида
+   отдельно** (Details / Tiles / LargeIcons). Конкретные поля и новые
+   defaults — когда все нужные виды будут на месте.
+4. **F2 — расширить SettingsDialog** (Theme, Behavior, Advanced).
+5. **Чистка #3** — см. «Технические чистки» ниже. После A3 / A7 / A8 / B2
+   как раз наступает её условие.
 
 ### Дальше (P3)
 - **G3** Advanced search.
 - **H1** desktop.ini.
 - **H2** ~~Unity .meta-партнёрство~~ → поглощено секцией **I** (companion-файлы).
 
-### M. Локализация — [P2]
+### ~~M. Локализация~~ — **сделано** (2026-08-26)
 
-Приложение двуязычно по факту: контекстное меню и настройки — по-русски,
-главное меню и статус-бар — по-английски. Это накопилось само и выглядит
-неряшливо.
-
-- **M1.** Свести все пользовательские строки в один слой (ресурсы или
-  простой словарь — по духу проекта скорее второе). Сейчас строки
-  разбросаны по XAML, `ContextMenuCatalog` и `Status`-сообщениям в VM.
-- **M2.** Выбрать язык по умолчанию: русский интерфейс целиком, или
-  английский целиком. Смешение — не вариант.
-- **M3.** Переключатель языка в настройках — только если M1 сделан;
-  без него это не имеет смысла.
-
-Контекстное меню уже целиком на русском (`ContextMenuCatalog` — единственное
-место, где лежат его подписи), так что для него M1 наполовину сделан.
+Интерфейс русский целиком, все 248 строк — в
+`src/Wander.App/Resources/Strings.resx`, включая те, что отдаёт `Wander.Core`
+(через `ITextSource`). Устройство и почему accessor написан руками —
+в [DONE.md](DONE.md) и [ARCHITECTURE.md](ARCHITECTURE.md). Переключатель
+языка сознательно не делали — в [BACKLOG.md](BACKLOG.md).
 
 ### Новые направления (добавлены 2026-08-25)
 
@@ -273,146 +273,6 @@
 
 ---
 
-## Что готово (фактически)
-
-### Архитектура
-- 4 проекта на .NET 10: `Wander.Core` (логика, abstractions), `Wander.Platform.Windows`
-  (Win32/Shell/COM), `Wander.App` (WPF UI), `Wander.Core.Tests` (xUnit).
-- Service Locator как точка композиции, без DI-контейнеров.
-- File-scoped namespaces, 1TBS, `.editorconfig` соблюдается `dotnet format`-ом.
-- Tests зелёные на все ключевые abstractions.
-
-### Core-инфраструктура
-- `IFileSystem` / `SystemIOFileSystem` — все базовые ops + `HasSubdirectories` + `GetEntry` + `ClearReadOnly`.
-- `IShortcutService` / `ShellShortcutService` — создание и resolve `.lnk` через COM IShellLinkW.
-- `IRecycleBin` / `ShellRecycleBin` — корзина через Shell. `RecycleHandle` для restore.
-- `UndoService` — общий LIFO-стек, `IUndoableAction` (Move / Rename / Delete / Create / Composite).
-  `BeginOperation()`-guard уже готов под будущие async-операции.
-- `ILogger` / `NullLogger` — минимальный лог-контракт.
-- `IConflictResolver` — стратегия для batch copy/move (Replace all / Skip all / Resolve each).
-- `IFileLockInspector` / `RestartManagerLockInspector` — кто держит файл открытым.
-- `IIconProvider` / `SystemIconProvider` — system icons + .lnk overlay, jumbo size.
-- `IImageMetadataReader` / `MetadataExtractorImageReader` — EXIF включая RAW.
-- `IAppStateStore` / `JsonAppStateStore` — `%LocalAppData%\Wander\state.json`.
-
-### Файловые операции
-- `FileOperationService` — единая точка входа, пушит `IUndoableAction` в `UndoService`,
-  логирует через `ILogger`. `Delete` отправляет в корзину; `PermanentDelete` обходит
-  её и затирает undo-стек.
-- `CopyMany`/`MoveMany` с conflict resolver и agregated `BatchItemResult[]`.
-- Cross-device move папок: fallback `CopyDirectory + DeleteDirectory`.
-- Read-only delete: явный список + второй вопрос; снятие атрибута перед удалением.
-- Self-drop защита с понятным текстом ("Cannot move 'photos' into its own subfolder '2024'").
-- Locked files: RestartManager → текст вида "file is open in: Word (PID 1234)".
-
-### UI / Навигация
-- Дерево дисков и папок, lazy-load, листовые папки без треугольника, сохранение
-  раскрытых путей, авто-раскрытие на текущую папку, никогда не сворачивается само.
-- Alt+click по шеврону: на свёрнутом — раскрывает узел + прямых детей; на раскрытом —
-  рекурсивно сворачивает потомков.
-- Toolbar: borderless навигационные кнопки, адресная строка, View-меню с галочками
-  (Details / Tiles / Large icons), главное меню (⋯) c Refresh / New folder / Quick preview /
-  Options (stub) / Exit. Заголовок окна = имя текущей папки.
-
-### Контекстное меню
-- Строится заново на каждый правый клик: `ContextMenuBuilder` (Core, чистая
-  функция) → `ContextMenuFactory` (App, WPF). Разметки меню в XAML нет —
-  три вьюхи (Details / Tiles / LargeIcons) зовут один код.
-- Правый клик по элементу вне выделения переносит выделение на него, внутри —
-  сохраняет группу; по пустому месту снимает выделение и даёт меню папки.
-  `Menu` / `Shift+F10` открывают то же меню с клавиатуры.
-- Порядок по частоте: сверху `Открыть`, подменю `Открыть с помощью` и пункты
-  сторонних приложений; свои файловые операции — внизу в подменю «Файл».
-  В фоновом меню первыми `Вставить` и `Создать папку`.
-- Пункты сторонних приложений (7-Zip, TortoiseGit, Notepad++, антивирусы,
-  системное «Создать») — через классический `IContextMenu`, с иконками и
-  вложенными подменю. Дубли режутся по каноническому глаголу, включая
-  системное подменю «Открыть с помощью».
-- `ShellMenuCache` — повторный клик по тому же выделению не ходит в шелл.
-- Настройки → «Контекстное меню»: мастер-выключатель расширений, чёрный
-  список по одному, галочка на каждый свой пункт. Разделители схлопываются
-  сами.
-- Новые команды: `Выбрать приложение...`, `Открыть в терминале` (папка и
-  фон), `Копировать путь` (`Ctrl+Shift+C`), `Копировать имя`,
-  `Создать ярлык`. `Alt+Enter` без выделения открывает свойства текущей
-  папки.
-
-### Drag & drop
-- Внутри окна и внешний (FileDrop). Effect: same-drive Move / cross-drive Copy /
-  Shift=Move / Ctrl=Copy / Alt=Shortcut.
-- Drag preview: иконка файла + бейдж `+N`, action-индикатор (↪/＋/↗/⊘), текст
-  с именем и целью. DPI-correction.
-- Drop target highlight (Adorner). Drop в `.lnk` папки → drop в реальную папку.
-- Подтверждения с Cancel по-умолчанию для Delete и Move (включая DnD).
-
-### Multi-select + clipboard
-- Extended во всех трёх режимах. Deferred selection при click-and-drag сохраняет
-  multi-selection. `SelectedEntries` обновляется из всех списков.
-- Cut/Copy/Paste/Delete работают со множеством; одно общее подтверждение Move/Delete.
-- Hotkeys: `Ctrl+A`, `Ctrl+C/X/V`, `Del`, `F2`, `Enter`, `Backspace`,
-  `Ctrl+Shift+N`, `Ctrl+L`, `Esc`, `Alt+Enter`, `Alt+←/→/↑`, `F5`.
-
-### Preview pane
-- Toggle через главное меню, ширина настраивается splitter-ом, состояние сохраняется.
-- Контент: Image, Text, Code (AvalonEdit с подсветкой), Web (WebView2 для PDF/HTML/Markdown).
-- Все загрузки async с cancellation и спиннером.
-- Footer summary: пустой выбор → текущая папка (рекурсивный count+size, async),
-  файл → name/size/modified (+ EXIF для картинки), папка → count+size, multi → агрегат.
-- EXIF включая RAW (CR2/CR3/NEF/ARW/DNG/...) через MetadataExtractor.
-
----
-
-## Незавершённое из готового
-
-Core готов, нужно дотянуть в UI / VM.
-
-- ~~**[P0] `UndoService` → UI**~~ — **сделано**. `UndoCommand` в VM,
-  `Ctrl+Z` в Window.InputBindings (видно из grep).
-- ~~**[P0] `Shift+Delete` → `PermanentDelete`**~~ — **сделано**. VM
-  использует `_ops.PermanentDelete` для permanent path, async версия
-  `DeleteManyAsync(permanent: true)` для batch.
-- ~~**[P0] Лог в файл**~~ — **сделано**. `FileLogger` пишет в
-  `%LocalAppData%\Wander\logs\session-yyyymmdd-hhmmss.log`, регистрируется
-  первым в `PlatformBootstrapper`. Заодно зарегистрирован как `ILogFile`
-  (новый интерфейс).
-
----
-
-## Багфиксы (P0)
-
-### 1. ~~[P0] Ссылка не создаётся в ту же папку~~ — **сделано**
-- В `OnDrop` стояла безусловная `PathSafety.DetectSelfDrop` → при Alt+drag
-  в ту же папку early-return. В `OnDragOver` self-drop уже пропускался при Alt,
-  но в `OnDrop` забыл сделать то же. Добавил `isLink` check симметрично.
-
-### 2. ~~[P0] У ссылки не отображается значок-overlay (стрелочка)~~ — **частично сделано**
-- Добавил `SHGFI_LINKOVERLAY` в `LoadShellIcon` для `.lnk` — Tree (Small),
-  Details (Normal), Tiles (Normal) теперь рисуют overlay-стрелочку.
-- **Остаётся** LargeIcons (jumbo через `SHGetImageList`) — system overlay
-  там не накладывается. Запись в [TECHDEBT.md](TECHDEBT.md) про composite
-  arrow поверх jumbo PNG.
-
-### 3. ~~[P0] Drop highlight расширяется на всё раскрытое содержимое~~ — **сделано**
-- В `FindHighlightElement` для TreeViewItem теперь возвращается `Bd`-part
-  (Border в default Aero2 template) через `tvi.Template.FindName`. Подсветка
-  накрывает только строку узла, не subtree. Fallback на сам TreeViewItem
-  если шаблон без `Bd`.
-
-### 4. ~~[P1] "Cannot drop here" пугает при drag внутри окна~~ — **сделано**
-- Внутри окна при `Effects=None` без конкретной `SelfDropReason`
-  `DragPreviewWindow` теперь `Visibility=Hidden` — пользователь видит
-  только системный no-drop-курсор. Self-drop с причиной по-прежнему
-  показывается громко (см. `UpdatePreviewForCurrentTarget`).
-
-### 5. ~~[P0] "Двойное выделение" = focus rectangle + selection background~~ — **сделано**
-- Добавил implicit `Style` для `DataGridRow`/`DataGridCell`/`ListBoxItem`
-  с `FocusVisualStyle = {x:Null}`. Для `TreeViewItem` тот же setter
-  добавлен в существующий ItemContainerStyle. Focus всё ещё трекается
-  семантически (клавиатурная навигация работает), но пунктирная рамка
-  не рисуется поверх selection-фона.
-
----
-
 ## Обязательные цели
 
 ### A. Вёрстка / UI
@@ -421,15 +281,22 @@ Core готов, нужно дотянуть в UI / VM.
   плитки 120 px / иконка 96 px. Пересмотреть отступы между плитками, размеры
   самой плитки, дать побольше воздуха.
   **Частично сделано** для LargeIcons: значения вынесены в `AppSettings`
-  (`LargeIconCellWidth`/`Image`/`Margin`/`LabelFontSize`) — пользователь
-  может менять. Остаётся: применить эти binding-и в XAML LargeIcons, плюс
-  то же самое для Tiles и Details, плюс перевыбрать defaults.
+  (`LargeIconCellWidth`/`Image`/`Margin`/`LabelFontSize`), применены в XAML
+  и настраиваются вживую.
+
+  **Договорённость 2026-08-26**: базовые размеры нужны настраиваемыми
+  **у каждого вида отдельно** — Details (высота строки, размер значка),
+  Tiles (ширина плитки, значок, шрифт), LargeIcons (как сейчас). Конкретные
+  поля и новые defaults выбираем не сейчас, а когда все нужные виды будут
+  на месте: перебирать числа под вид, который ещё поменяется, — работа
+  дважды.
 - ~~**[P1] A2. Чуть затемнить область дерева.**~~ — **сделано**.
   `Background="#F8F8F8"` на левой колонке (обёртка над bookmarks-панелью
   и деревом дисков).
-- **[P2] A3. Inline rename "на иконке".** F2 / клик-задержка превращает имя
-  в TextBox прямо в строке/плитке (как в Explorer). PromptDialog оставить
-  fallback'ом, когда primary selection отсутствует.
+- ~~**[P2] A3. Inline rename "на иконке".**~~ — **сделано** (2026-08-26).
+  `F2` и пункт «Переименовать» открывают редактор прямо в строке во всех трёх
+  режимах. Устройство, краевые случаи и поведение фокуса — в [DONE.md](DONE.md).
+  Медленный второй клик как второй способ начать — в [BACKLOG.md](BACKLOG.md).
 - ~~**[P1] A4. Toggle "Show hidden" + opacity.**~~ — **сделано**.
   `Settings.ShowHidden` / `Settings.ShowSystem` фильтруют `Entries` в
   MainViewModel, по умолчанию обе скрыты (Explorer-parity). Когда тогглы
@@ -471,10 +338,10 @@ Core готов, нужно дотянуть в UI / VM.
 
 - ~~**[P0] B1. `Image.StretchDirection=DownOnly`.**~~ — **сделано**. Маленькие
   картинки больше не растягиваются на контейнер.
-- **[P2] B2. Папка в preview.** Когда выбрана папка или ничего, content-area
-  должна показывать что-то лучше чем placeholder. Варианты для обсуждения:
-  список первых N файлов с превью / grid миниатюр / компактная статистика
-  типов. Уточним при подходе.
+- ~~**[P2] B2. Папка в preview.**~~ — **сделано** (2026-08-26). Вид выбран:
+  компактная статистика (grid миниатюр и список первых N файлов отклонены —
+  они показывают «что попалось первым», а не «что здесь есть»). Что именно
+  показывается и как считается — в [DONE.md](DONE.md).
 - **[P1] B3. Под content общая инфа уже есть в summary footer** — проверить
   что для image/text она пишется корректно. Скорее всего обернётся в smoke-check.
 
@@ -525,26 +392,13 @@ Core готов, нужно дотянуть в UI / VM.
   корзины их CanExecute=false, чтобы пользователь случайно не оперировал
   по $Recycle.Bin путям в обход shell-восстановления. Чекбокс
   `AppSettings.ShowBookmarkRecycleBin` в категории «Закладки».
-- **[P1] D5b. Корзина: операции (Restore / Empty / Delete-permanent).**
-  Уже есть `IRecycleBin.Restore(RecycleHandle)` для отката собственных
-  удалений Wander'а, но Restore произвольного item'а из корзины (когда
-  пользователь не помнит handle) и Empty/Permanent-delete по одному
-  файлу требуют отдельных операций. План:
-  - Расширить `IRecycleBin`: `RestoreFromBin(string binBackingPath)`
-    (матчинг по `FolderItem.Path` в `Items()`, invoke локализованного
-    verb'а Restore — reuse `IsRestoreVerb` из `ShellRecycleBin`),
-    `PermanentDelete(string binBackingPath)` (через `SHFileOperation`
-    FO_DELETE без `FOF_ALLOWUNDO`), `EmptyAll()` (через
-    `SHEmptyRecycleBin` с `SHERB_NOCONFIRMATION | NOPROGRESSUI | NOSOUND`,
-    свой confirm-диалог поверх).
-  - UI (решено: только context-menu, без header-бара): на entries в
-    правой панели — «Восстановить» / «Удалить навсегда», `Visibility`
-    через `BoolToVisibility` от `IsCurrentShellNamespace`. На самой
-    закладке-«Корзина» в bookmarks-дереве — отдельный context-menu
-    с «Очистить корзину» (показывать только для этого узла).
-  - Дальше — drag-out из корзины как «Restore + Move» (Explorer-parity),
-    отдельным шагом.
-  - ~~Иконка корзины~~ — **сделано** в этой итерации (см. D5).
+- ~~**[P1] D5b. Корзина: восстановление.**~~ — **сделано** (2026-08-26).
+  Пункт «Восстановить» первым в контекстном меню корзины, работает на пачке.
+  Отката нет намеренно, как в Explorer. Как это устроено без новой COM-возни
+  и почему `Ctrl+Z` тут был бы деструктивным — в [DONE.md](DONE.md)
+  и [ARCHITECTURE.md](ARCHITECTURE.md).
+  **Удаление внутри корзины не делаем** — «Дальний прицел»
+  в [BACKLOG.md](BACKLOG.md).
 - **[P3] D6. Drag-reorder bookmarks.** Перетаскивание пользовательских
   закладок между собой для смены порядка. Сейчас порядок = порядок
   добавления, изменения через ручную правку state.json. Делать
@@ -588,8 +442,11 @@ Core готов, нужно дотянуть в UI / VM.
   раскладывает Cancelled-результаты. `MainViewModel.RunWithProgressDialogAsync`
   оборачивает Copy/Move/Delete batch — три точки вызова (HandleDrop /
   Paste / DeleteSelected). Hide-в-статус-бар отложено (P2-доработка).
-- **[P2] E3. Async thumbnails.** A7 / A8 поверх async-инфраструктуры. Cache в памяти
-  + опционально на диске (`%LocalAppData%\Wander\thumbs\`) с ключом по path+mtime.
+- ~~**[P2] E3. Кэш миниатюр.**~~ — **сделано** (2026-08-26). Двухуровневый,
+  память плюс диск, лимиты и очистка — в настройках. Устройство ключа,
+  подрезки и запись без битых файлов — в [DONE.md](DONE.md)
+  и [ARCHITECTURE.md](ARCHITECTURE.md). **Осталось от A7/A8**: рисовать
+  миниатюру вместо generic-иконки в самом списке — кэш под это готов.
 - ~~**E4.**~~ — **сделано в Core**. `UndoService.BeginOperation()` ловит
   busy-period, `CanUndo` ложится при наличии активной операции. Покрытие
   тестом проверить можно отдельно.
@@ -607,8 +464,10 @@ Core готов, нужно дотянуть в UI / VM.
   иерархия, `SettingsWindow.xaml`. Открытие из главного меню — проверить
   что пункт Options теперь зовёт реальный диалог, а не stub. Расширение
   категорий (Theme, Behavior, Advanced) — по мере роста скоупа.
-- **[P2] F3. Reset to defaults.** Кнопка в SettingsDialog —
-  `new AppSettings()` + save. Не подтверждено существование.
+- ~~**[P2] F3. Reset to defaults.**~~ — **сделано** (2026-08-26). Кнопка
+  «Сбросить всё» на странице «Отладка», отдельно от кнопок диалога:
+  нужна раз в год, а места в основном ряду занимала столько же, сколько ОК.
+  Подтверждение с Cancel по-умолчанию; «Отмена» откатывает и сам сброс.
 
 ### G. Поиск — [P1 для базы, P3 для advanced]
 
@@ -655,8 +514,8 @@ Core готов, нужно дотянуть в UI / VM.
 `AppSettings.IntegrateCompanions`, **по-умолчанию включён**. Когда включён:
 
 - В списке файлов показывается только основной файл, спутники скрыты.
-- Признак наличия спутника — бейдж «+» справа от имени в режиме Details,
-  тултип объясняет, что это.
+- Признак наличия спутника в списке пробовали значком «+» и убрали —
+  см. [REJECTED.md](REJECTED.md). Спутники видно в панели просмотра.
 - Выключенный флаг = прежнее поведение, всё видно как есть; переключение
   применяется мгновенно (re-list текущей папки).
 
@@ -685,8 +544,8 @@ Core готов, нужно дотянуть в UI / VM.
 - Неоднозначный спутник по шаблону «заменяет» (`IMG.xmp` при наличии
   `IMG.CR2` и `IMG.jpg`) не привязывается ни к кому.
 
-**Осталось:** бейдж есть только в режиме Details — в Tiles / LargeIcons
-маркера нет.
+~~**Осталось:** бейдж есть только в режиме Details~~ — снято: значок
+убран совсем, причина в [REJECTED.md](REJECTED.md).
 
 #### I2. Групповые операции — ~~[P2, сразу за I1]~~ — **сделано**
 
@@ -948,6 +807,8 @@ Bash, Notepad++, «Восстановить прежнюю версию» и с�
 
 - [CLAUDE.md](../CLAUDE.md) — точка входа, навигация по всем докам, правила.
 - [ARCHITECTURE.md](ARCHITECTURE.md) — как устроен код и механизмы.
+- [DONE.md](DONE.md) — что уже реализовано.
+- [REJECTED.md](REJECTED.md) — что решили не делать и почему.
 - [TECHDEBT.md](TECHDEBT.md) — мелкие чистки.
 - [BACKLOG.md](BACKLOG.md) — отложенные задачи.
 - [README.md](../README.md) — описание для пользователя, сборка, лицензия.

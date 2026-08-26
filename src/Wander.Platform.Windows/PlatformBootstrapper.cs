@@ -39,7 +39,16 @@ public static class PlatformBootstrapper {
         ServiceLocator.Register<IFileSystem>(new SystemIOFileSystem());
         ServiceLocator.Register<IKnownFolders>(new WindowsKnownFolders());
         ServiceLocator.Register<IShellLauncher>(new ShellLauncher());
-        ServiceLocator.Register<IIconProvider>(new SystemIconProvider());
+        // Thumbnails get a disk tier next to the logs and state.json:
+        // %LocalAppData%\Wander	humbs. Limits arrive from the settings
+        // once the view model is up; until then the cache stays idle.
+        var thumbs = new ThumbnailDiskCache(
+            Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Wander",
+                "thumbs"),
+            logger);
+        ServiceLocator.Register<IIconProvider>(new SystemIconProvider(thumbs));
         ServiceLocator.Register<IAppStateStore>(new JsonAppStateStore());
         ServiceLocator.Register<IFileLockInspector>(new RestartManagerLockInspector());
         ServiceLocator.Register<IShortcutService>(new ShellShortcutService());
