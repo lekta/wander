@@ -101,6 +101,8 @@ public sealed class PreviewController : ObservableObject {
     private bool _isLoading;
     private string? _text;
     private ImageSource? _image;
+    private bool _isRawImage;
+    private bool _showRawDecode;
     private string? _codeText;
     private string? _codeExtension;
     private Uri? _webUri;
@@ -164,6 +166,32 @@ public sealed class PreviewController : ObservableObject {
     public ImageSource? Image {
         get => _image;
         private set => SetField(ref _image, value);
+    }
+
+    /// <summary>
+    /// The file on screen is a RAW — the only case where there are two
+    /// pictures to choose between, so the only case that shows the switch.
+    /// </summary>
+    public bool IsRawImage {
+        get => _isRawImage;
+        private set => SetField(ref _isRawImage, value);
+    }
+
+    /// <summary>
+    /// Show the sensor decode instead of the preview the camera embedded.
+    /// The embedded one is what makes the pane instant (~10 ms against
+    /// ~1150 ms) but it is a small JPEG the camera baked with its own
+    /// rendering; the sensor decode is the actual frame. A mode rather than
+    /// a per-file choice — someone comparing shots wants it to stay on —
+    /// and the button stays lit to say why the pane got slow.
+    /// </summary>
+    public bool ShowRawDecode {
+        get => _showRawDecode;
+        set {
+            if (SetField(ref _showRawDecode, value)) {
+                SchedulePreviewUpdate();
+            }
+        }
     }
 
     public string? CodeText {
@@ -492,17 +520,35 @@ public sealed class PreviewController : ObservableObject {
     }
 
     private async Task LoadImageAsync(string path, CancellationToken ct) {
-        BitmapImage? image = null;
+        BitmapSource? image = null;
         ImageMetadata? meta = null;
+        bool isRaw = false;
 
         await Task.Run(() => {
             ct.ThrowIfCancellationRequested();
-            image = _rawExtensions.Contains(Path.GetExtension(path)) ? LoadRawPreview(path) : null;
-            image ??= Decode(bi => bi.UriSource = new Uri(path));
-
             if (_metadataReader is not null) {
                 meta = _metadataReader.Read(path);
             }
+
+            // RAW comes out of its container unrotated, whichever way we
+            // read it: the embedded preview carries no EXIF of its own, and
+            // WIC's own RAW decode ignores the orientation tag too. A camera
+            // set to "rotate on the computer only" records the rotation in
+            // the container's IFD0 and leaves the pixels alone — so this is
+            // the one branch that has to apply it, and it applies to the
+            // full-decode fallback as well.
+            //
+            // JPEG and PNG are deliberately left as they are: what they look
+            // like everywhere else is what the user expects to see here.
+            if (_rawExtensions.Contains(Path.GetExtension(path))) {
+                isRaw = true;
+                var raw = _showRawDecode ? DecodeFile(path) : LoadRawPreview(path) ?? DecodeFile(path);
+                image = raw is null ? null : ApplyOrientation(raw, meta?.Orientation);
+
+                return;
+            }
+
+            image = DecodeFile(path);
         }, ct);
 
         if (ct.IsCancellationRequested) {
@@ -510,12 +556,49 @@ public sealed class PreviewController : ObservableObject {
         }
 
         ImageMetadata = meta;
+        IsRawImage = isRaw;
         if (image is not null) {
             Image = image;
             Kind = PreviewKind.Image;
         } else {
             Kind = PreviewKind.Unsupported;
         }
+    }
+
+
+    /// <summary>
+    /// Turns an EXIF orientation value (1..8) into the rotation and mirror
+    /// it stands for. Values Wander cannot act on — and the identity value
+    /// 1 — return the bitmap untouched.
+    /// </summary>
+    private static BitmapSource ApplyOrientation(BitmapSource source, int? orientation) {
+        var transform = orientation switch {
+            2 => Mirror(0),
+            3 => new RotateTransform(180),
+            4 => Mirror(180),
+            5 => Mirror(90),
+            6 => new RotateTransform(90),
+            7 => Mirror(270),
+            8 => new RotateTransform(270),
+            _ => (Transform?)null,
+        };
+        if (transform is null) {
+            return source;
+        }
+
+        var rotated = new TransformedBitmap(source, transform);
+        rotated.Freeze();
+
+        return rotated;
+    }
+
+    /// <summary>Horizontal flip, then <paramref name="degrees"/> of rotation.</summary>
+    private static Transform Mirror(double degrees) {
+        var group = new TransformGroup();
+        group.Children.Add(new ScaleTransform(-1, 1));
+        group.Children.Add(new RotateTransform(degrees));
+
+        return group;
     }
 
     /// <summary>
@@ -534,7 +617,38 @@ public sealed class PreviewController : ObservableObject {
             return null;
         }
 
-        return jpeg is null ? null : Decode(bi => bi.StreamSource = new MemoryStream(jpeg));
+        return jpeg is null ? null : DecodeStream(jpeg);
+    }
+
+    /// <summary>
+    /// Decodes a file by path. <c>IgnoreImageCache</c> is what keeps a
+    /// re-opened file from showing its previous contents — WPF's image
+    /// cache is keyed by URI and does not notice the bytes changed.
+    /// </summary>
+    private static BitmapImage? DecodeFile(string path) {
+        return Decode(bi => {
+            bi.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
+            bi.UriSource = new Uri(path);
+        });
+    }
+
+    /// <summary>
+    /// Decodes bytes already in memory — the preview pulled out of a RAW
+    /// container.
+    ///
+    /// <para>
+    /// Deliberately without <c>IgnoreImageCache</c>: that flag makes
+    /// <c>BitmapImage.FinalizeCreation</c> evict the URI it was loaded
+    /// from, and a stream-sourced bitmap has no URI — on .NET 10 that is an
+    /// <c>ArgumentNullException</c> from inside WPF. It cost the whole RAW
+    /// fast path: the decode threw, the caller read the <c>null</c> as "no
+    /// embedded preview" and quietly fell back to a full sensor decode.
+    /// The flag is meaningless here anyway — there is no cache entry to
+    /// bypass when the source is a private <c>MemoryStream</c>.
+    /// </para>
+    /// </summary>
+    private static BitmapImage? DecodeStream(byte[] bytes) {
+        return Decode(bi => bi.StreamSource = new MemoryStream(bytes));
     }
 
     /// <summary>
@@ -547,7 +661,6 @@ public sealed class PreviewController : ObservableObject {
             var bi = new BitmapImage();
             bi.BeginInit();
             bi.CacheOption = BitmapCacheOption.OnLoad;
-            bi.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
             setSource(bi);
             bi.EndInit();
             bi.Freeze();
@@ -664,6 +777,7 @@ public sealed class PreviewController : ObservableObject {
         GifUri = null;
         VideoUri = null;
         ImageMetadata = null;
+        IsRawImage = false;
     }
 
 

@@ -89,6 +89,9 @@ public partial class SettingsWindow : Window {
         if (ServiceLocator.IsRegistered<IIconProvider>()) {
             ServiceLocator.Get<IIconProvider>().ClearCache();
         }
+        // Decoded copies live a tier above the provider's; leaving them
+        // would make the button look like it did nothing.
+        Controls.IconImageCache.Clear();
         RefreshCacheStatus(vm);
     }
 

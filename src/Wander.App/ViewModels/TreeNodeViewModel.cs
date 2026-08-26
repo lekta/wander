@@ -144,16 +144,7 @@ public sealed class TreeNodeViewModel : ObservableObject {
     }
 
     private bool IsAllowedByFilters(FileSystemEntry entry) {
-        if (_settings is null) {
-            return true;
-        }
-        if (!_settings.ShowHidden && entry.IsHidden) {
-            return false;
-        }
-        if (!_settings.ShowSystem && entry.IsSystem) {
-            return false;
-        }
-        return true;
+        return _settings is null || _settings.Visibility.Allows(entry);
     }
 
 

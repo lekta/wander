@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using Wander.Core.FileSystem;
+using Wander.Core.Layout;
 using Wander.Core.Menu;
 using Wander.Core.Persistence;
 
@@ -44,6 +45,19 @@ public sealed class SettingsViewModel : ObservableObject {
         set => SetField(ref _showSystem, value);
     }
 
+    private bool _hideSystemRootFolders;
+    public bool HideSystemRootFolders {
+        get => _hideSystemRootFolders;
+        set => SetField(ref _hideSystemRootFolders, value);
+    }
+
+    /// <summary>
+    /// The three visibility switches as one value, for handing to a
+    /// background enumeration — reading them one by one off the worker
+    /// thread would race the settings dialog.
+    /// </summary>
+    public EntryVisibility Visibility => new(ShowHidden, ShowSystem, HideSystemRootFolders);
+
 
     // --- File operations ----------------------------------------------
     private bool _confirmRecycle;
@@ -81,30 +95,63 @@ public sealed class SettingsViewModel : ObservableObject {
     }
 
 
-    // --- Layout (LargeIcons) ------------------------------------------
+    // --- Layout (tile views) -------------------------------------------
     private int _largeIconCellWidth;
     public int LargeIconCellWidth {
         get => _largeIconCellWidth;
-        set => SetField(ref _largeIconCellWidth, ClampInt(value, 60, 320));
+        set {
+            if (SetField(ref _largeIconCellWidth, ClampInt(value, 60, 320))) {
+                Raise(nameof(IconsMetrics));
+            }
+        }
     }
 
     private int _largeIconImageSize;
     public int LargeIconImageSize {
         get => _largeIconImageSize;
-        set => SetField(ref _largeIconImageSize, ClampInt(value, 24, 256));
+        set {
+            if (SetField(ref _largeIconImageSize, ClampInt(value, 24, 256))) {
+                Raise(nameof(IconsMetrics));
+            }
+        }
     }
 
     private int _largeIconMargin;
     public int LargeIconMargin {
         get => _largeIconMargin;
-        set => SetField(ref _largeIconMargin, ClampInt(value, 0, 32));
+        set {
+            if (SetField(ref _largeIconMargin, ClampInt(value, 0, 32))) {
+                Raise(nameof(IconsMetrics));
+            }
+        }
     }
 
     private int _largeIconLabelFontSize;
     public int LargeIconLabelFontSize {
         get => _largeIconLabelFontSize;
-        set => SetField(ref _largeIconLabelFontSize, ClampInt(value, 8, 24));
+        set {
+            if (SetField(ref _largeIconLabelFontSize, ClampInt(value, 8, 24))) {
+                Raise(nameof(IconsMetrics));
+            }
+        }
     }
+
+    /// <summary>
+    /// Cell geometry of the LargeIcons grid. Both the panel and the item
+    /// template bind to this one value, so the grid and the tile drawn in it
+    /// are the same arithmetic — see <see cref="TileMetrics"/> for why that
+    /// matters. Recomputed on read and re-raised whenever one of the four
+    /// knobs above moves, which is what makes the dialog resize tiles live.
+    /// </summary>
+    public TileMetrics IconsMetrics => TileMetrics.ForLargeIcons(
+        LargeIconCellWidth, LargeIconImageSize, LargeIconMargin, LargeIconLabelFontSize);
+
+    /// <summary>
+    /// The same for Tiles, whose geometry is not user-tunable yet (PLAN A1)
+    /// — a constant, but one the panel and the template still read from a
+    /// single place.
+    /// </summary>
+    public TileMetrics TilesMetrics => TileMetrics.ForTiles();
 
 
     // --- Thumbnail cache ------------------------------------------------
@@ -227,6 +274,7 @@ public sealed class SettingsViewModel : ObservableObject {
         RestoreLastFolder = s.RestoreLastFolder;
         ShowHidden = s.ShowHidden;
         ShowSystem = s.ShowSystem;
+        HideSystemRootFolders = s.HideSystemRootFolders;
         ConfirmRecycle = s.ConfirmRecycle;
         IntegrateCompanions = s.IntegrateCompanions;
         SortKey = s.SortKey;
@@ -277,6 +325,7 @@ public sealed class SettingsViewModel : ObservableObject {
             RestoreLastFolder = RestoreLastFolder,
             ShowHidden = ShowHidden,
             ShowSystem = ShowSystem,
+            HideSystemRootFolders = HideSystemRootFolders,
             ConfirmRecycle = ConfirmRecycle,
             IntegrateCompanions = IntegrateCompanions,
             SortKey = SortKey,

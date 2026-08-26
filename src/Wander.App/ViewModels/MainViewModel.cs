@@ -47,6 +47,7 @@ public sealed class MainViewModel : ObservableObject {
 
     private bool _isPreviewVisible;
     private double _previewWidth = 280;
+    private double _bookmarksHeight = 200;
 
     private readonly ClipboardController _clipboard = new();
 
@@ -67,6 +68,11 @@ public sealed class MainViewModel : ObservableObject {
     // better than "whatever was selected before" — a rename knows the new
     // name, an undo knows what it put back.
     private string[] _restoreSelection = Array.Empty<string>();
+
+    // A folder picked in the tree or the bookmarks. Applied once its own
+    // listing has landed: doing it before would only be overwritten, because
+    // rebuilding the list clears whatever the containers had selected.
+    private string? _selectFolderAfterListing;
 
     // Search filter is owned by SearchController; we only keep the hidden-
     // count separately for the "X items (N hidden)" status-bar message.
@@ -114,7 +120,7 @@ public sealed class MainViewModel : ObservableObject {
                 return null;
             });
 
-        Entries = new ObservableCollection<FileSystemEntry>();
+        Entries = new BulkObservableCollection<FileSystemEntry>();
         Roots = new ObservableCollection<TreeNodeViewModel>();
         Bookmarks = new ObservableCollection<TreeNodeViewModel>();
         Operations = new ObservableCollection<OperationViewModel>();
@@ -199,6 +205,7 @@ public sealed class MainViewModel : ObservableObject {
             SyncEntries(filtered);
             UpdateFilterStatus(filtered.Count, _search.Source.Count);
             ApplyRestoreSelection();
+            ApplyPendingFolderSelection();
         };
 
         _nav.CurrentChanged += (_, _) => OnNavigationChanged();
@@ -232,7 +239,7 @@ public sealed class MainViewModel : ObservableObject {
     public event Action<IReadOnlyList<FileSystemEntry>>? SelectionRestoreRequested;
 
 
-    public ObservableCollection<FileSystemEntry> Entries { get; }
+    public BulkObservableCollection<FileSystemEntry> Entries { get; }
     public ObservableCollection<TreeNodeViewModel> Roots { get; }
     public ObservableCollection<TreeNodeViewModel> Bookmarks { get; }
     public ObservableCollection<OperationViewModel> Operations { get; }
@@ -354,6 +361,22 @@ public sealed class MainViewModel : ObservableObject {
         }
     }
 
+    /// <summary>
+    /// Height of the bookmarks region, in pixels — where the user left the
+    /// divider in the left pane. Same arrangement as
+    /// <see cref="PreviewWidth"/>: the window applies it to the grid, the
+    /// view model persists it.
+    /// </summary>
+    public double BookmarksHeight {
+        get => _bookmarksHeight;
+        set {
+            double clamped = Math.Max(44, Math.Min(900, value));
+            if (SetField(ref _bookmarksHeight, clamped)) {
+                SaveState();
+            }
+        }
+    }
+
     // Navigation commands live on NavigationController; surface them here
     // so existing XAML bindings (BackCommand / ForwardCommand / ...) keep
     // working without touching every <KeyBinding> and <Button>.
@@ -384,6 +407,7 @@ public sealed class MainViewModel : ObservableObject {
     public RelayCommand OpenLogFileCommand { get; }
     public RelayCommand ToggleBookmarksCommand { get; }
     public RelayCommand AddBookmarkCommand { get; }
+
     public RelayCommand RemoveBookmarkCommand { get; }
     public RelayCommand OpenWithCommand { get; }
     public RelayCommand OpenInTerminalCommand { get; }
@@ -628,6 +652,10 @@ public sealed class MainViewModel : ObservableObject {
                 _previewWidth = session.PreviewWidth;
                 Raise(nameof(PreviewWidth));
             }
+            if (session.BookmarksHeight >= 44 && session.BookmarksHeight <= 900) {
+                _bookmarksHeight = session.BookmarksHeight;
+                Raise(nameof(BookmarksHeight));
+            }
 
             _favorites.Clear();
             _favorites.AddRange(state.Favorites);
@@ -701,6 +729,7 @@ public sealed class MainViewModel : ObservableObject {
                 ExpandedPaths = CollectExpanded(),
                 IsPreviewVisible = _isPreviewVisible,
                 PreviewWidth = _previewWidth,
+                BookmarksHeight = _bookmarksHeight,
                 IsBookmarksExpanded = _isBookmarksExpanded,
                 RecentPaths = _nav.RecentPaths.ToArray(),
             },
@@ -847,7 +876,7 @@ public sealed class MainViewModel : ObservableObject {
         // worker as values — the background pass must not race the settings
         // dialog.
         var sort = new SortOptions(Settings.SortKey, Settings.SortAscending, Settings.GroupFoldersFirst);
-        _ = RefreshFolderAsync(_nav.Current, Settings.ShowHidden, Settings.ShowSystem, sort, Settings.IntegrateCompanions);
+        _ = RefreshFolderAsync(_nav.Current, Settings.Visibility, sort, Settings.IntegrateCompanions);
     }
 
     /// <summary>
@@ -857,7 +886,7 @@ public sealed class MainViewModel : ObservableObject {
     /// directory with tens of thousands of entries is not — and blocking
     /// the dispatcher there froze the whole window.
     /// </summary>
-    private async Task RefreshFolderAsync(string path, bool showHidden, bool showSystem, SortOptions sort, bool integrate) {
+    private async Task RefreshFolderAsync(string path, EntryVisibility visibility, SortOptions sort, bool integrate) {
         _listLoadCts?.Cancel();
         _listLoadCts = new CancellationTokenSource();
         var token = _listLoadCts.Token;
@@ -880,8 +909,10 @@ public sealed class MainViewModel : ObservableObject {
             int hidden = 0;
             foreach (var e in _fs.Enumerate(path, sort)) {
                 token.ThrowIfCancellationRequested();
-                if (!showHidden && e.IsHidden) { hidden++; continue; }
-                if (!showSystem && e.IsSystem) { hidden++; continue; }
+                if (!visibility.Allows(e)) {
+                    hidden++;
+                    continue;
+                }
                 items.Add(e);
             }
             // Folding companions happens after the visibility filters, so a
@@ -985,14 +1016,19 @@ public sealed class MainViewModel : ObservableObject {
     /// and what lets the selection survive a rename or a delete.
     /// </summary>
     private void SyncEntries(IReadOnlyList<FileSystemEntry> items) {
+        // The moment a folder's listing lands on the UI thread — the one
+        // hitch a person notices when opening a folder.
+        using var applying = PerfLog.Measure("list.apply");
+
         // A wholesale reorder (flipping the sort on a large folder) moves
         // every row anyway, so the straight rebuild is both cheaper and no
         // more disruptive than shuffling the collection item by item.
         if (IsWholesaleChange(items)) {
-            Entries.Clear();
-            foreach (var e in items) {
-                Entries.Add(e);
-            }
+            // One notification, not one per file. Filling item by item made
+            // the tile panel re-measure five thousand times against a list
+            // that was still growing — see BulkObservableCollection.
+            Entries.ReplaceAll(items);
+
             return;
         }
 
@@ -1187,6 +1223,14 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
+        // Tile geometry is a projection of the four LargeIcon* settings, not
+        // a setting of its own: the knob that moved has already come through
+        // here and saved. Falling through would just save the same state a
+        // second time on every keystroke in the settings dialog.
+        if (e.PropertyName == nameof(SettingsViewModel.IconsMetrics)) {
+            return;
+        }
+
         if (e.PropertyName == nameof(SettingsViewModel.ShowHidden) ||
             e.PropertyName == nameof(SettingsViewModel.ShowSystem)) {
             Refresh();
@@ -1369,6 +1413,64 @@ public sealed class MainViewModel : ObservableObject {
         return node;
     }
 
+    /// <summary>
+    /// Makes one path — a folder picked in the tree or the bookmarks — the
+    /// current selection: the commands that read
+    /// <see cref="SelectedEntries"/> act on it, and the preview pane shows
+    /// its census.
+    ///
+    /// <para>
+    /// <see cref="SelectedEntry"/> is deliberately left alone and the
+    /// preview is told directly. That property is two-way bound to the
+    /// list's <c>SelectedItem</c>, and assigning an item the list does not
+    /// contain makes the list push <c>null</c> straight back — which is
+    /// exactly the case here, since a folder is never inside its own
+    /// listing.
+    /// </para>
+    /// </summary>
+    public void SelectExternalPath(string path) {
+        var entry = _fs.GetEntry(path);
+        SelectedEntries = entry is null ? Array.Empty<FileSystemEntry>() : new[] { entry };
+        Preview.SetPrimary(entry);
+    }
+
+
+    /// <summary>
+    /// Navigates into a folder and, once its listing lands, selects the
+    /// folder itself — what clicking a row in the tree or the bookmarks
+    /// means: go there, and show me what is there.
+    /// </summary>
+    public void NavigateAndSelectFolder(string path, NavigationSource source) {
+        _selectFolderAfterListing = path;
+        NavigateTo(path, source);
+    }
+
+
+    private void ApplyPendingFolderSelection() {
+        if (_selectFolderAfterListing is not { } path) {
+            return;
+        }
+        _selectFolderAfterListing = null;
+
+        // The listing that just landed has to be the one that was asked
+        // for. A rejected path, or a navigation that overtook this one,
+        // would otherwise select a folder the user is not looking at.
+        if (IsSamePath(path, _nav.Current)) {
+            SelectExternalPath(path);
+        }
+    }
+
+
+    /// <summary>
+    /// Already in the bookmarks? The drop strip asks before offering to
+    /// take a folder: dropping one that is in the list does nothing, and a
+    /// target that lights up for a no-op is a lie.
+    /// </summary>
+    public bool IsBookmarked(string path) {
+        return _favorites.Any(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
+    }
+
+
     public void AddBookmark(string? path) {
         if (string.IsNullOrEmpty(path) || !_fs.DirectoryExists(path)) {
             return;
@@ -1506,20 +1608,35 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     private void CopyPathsToClipboard() {
-        // Quoted, one per line — the shape you can paste straight into a
-        // shell. Explorer's "Copy as path" does the same.
         var paths = _selectedEntries.Count > 0
-            ? _selectedEntries.Select(e => $"\"{e.FullPath}\"")
-            : new[] { $"\"{_nav.Current}\"" };
+            ? _selectedEntries.Select(e => e.FullPath).ToArray()
+            : new[] { _nav.Current ?? "" };
 
-        SetClipboardText(string.Join(Environment.NewLine, paths), "path");
+        // Quoted, one per line — the shape you can paste straight into a
+        // shell. Explorer's "Copy as path" does the same. The status line
+        // gets the bare paths instead: it is there to show *what* landed in
+        // the clipboard, and quotes only get in the way of reading it.
+        SetClipboardText(
+            string.Join(Environment.NewLine, paths.Select(p => $"\"{p}\"")),
+            Summarize(paths));
     }
 
     private void CopyNamesToClipboard() {
         if (_selectedEntries.Count == 0) {
             return;
         }
-        SetClipboardText(string.Join(Environment.NewLine, _selectedEntries.Select(e => e.Name)), "name");
+        var names = _selectedEntries.Select(e => e.Name).ToArray();
+
+        SetClipboardText(string.Join(Environment.NewLine, names), Summarize(names));
+    }
+
+    /// <summary>
+    /// One line naming what was copied. The status bar trims to its width,
+    /// so a long multi-select degrades to "first, second, …" on its own —
+    /// but the first entries stay readable, which is the point.
+    /// </summary>
+    private static string Summarize(IReadOnlyList<string> items) {
+        return string.Join(", ", items);
     }
 
     private void SetClipboardText(string text, string what) {

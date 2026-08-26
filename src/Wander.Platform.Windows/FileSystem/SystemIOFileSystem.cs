@@ -26,11 +26,19 @@ public sealed class SystemIOFileSystem : IFileSystem {
         var folderLikes = new List<FileSystemEntry>();
         var files = new List<FileSystemEntry>();
 
-        foreach (var dir in Directory.EnumerateDirectories(path)) {
-            folderLikes.Add(BuildEntry(dir, EntryKind.Directory));
-        }
-        foreach (var file in Directory.EnumerateFiles(path)) {
-            var entry = BuildEntry(file, EntryKind.File);
+        // EnumerateFileSystemInfos, not EnumerateDirectories + a fresh
+        // DirectoryInfo/FileInfo per hit: the enumerator already carries
+        // attributes, size and timestamps from the directory scan, while
+        // constructing an info object by path makes every property access
+        // pay for its own stat call. On a folder of tens of thousands of
+        // files that difference is the second or two the list spent blank.
+        foreach (var info in new DirectoryInfo(path).EnumerateFileSystemInfos()) {
+            if (info is DirectoryInfo dir) {
+                folderLikes.Add(BuildEntry(dir, EntryKind.Directory));
+                continue;
+            }
+
+            var entry = BuildEntry(info, EntryKind.File);
             if (entry.LinksToDirectory) {
                 folderLikes.Add(entry);
             } else {
@@ -259,31 +267,39 @@ public sealed class SystemIOFileSystem : IFileSystem {
 
 
     private static FileSystemEntry BuildEntry(string path, EntryKind kind) {
-        if (kind == EntryKind.Directory) {
-            var info = new DirectoryInfo(path);
-            return new FileSystemEntry(
-                Name: info.Name,
-                FullPath: info.FullName,
-                Kind: EntryKind.Directory,
-                Size: null,
-                ModifiedUtc: SafeUtc(() => info.LastWriteTimeUtc),
-                IsHidden: info.Attributes.HasFlag(FileAttributes.Hidden),
-                IsReadOnly: info.Attributes.HasFlag(FileAttributes.ReadOnly),
-                IsSystem: info.Attributes.HasFlag(FileAttributes.System),
-                LinksToDirectory: false);
-        }
+        return kind == EntryKind.Directory
+            ? BuildEntry(new DirectoryInfo(path), EntryKind.Directory)
+            : BuildEntry(new FileInfo(path), EntryKind.File);
+    }
 
-        var fileInfo = new FileInfo(path);
+    /// <summary>
+    /// Builds an entry from an already-populated <see cref="FileSystemInfo"/>.
+    /// Enumeration hands in objects the directory scan filled for free;
+    /// the by-path overload above constructs one and pays a stat call.
+    /// </summary>
+    private static FileSystemEntry BuildEntry(FileSystemInfo info, EntryKind kind) {
+        var attributes = SafeAttributes(info);
+
         return new FileSystemEntry(
-            Name: fileInfo.Name,
-            FullPath: fileInfo.FullName,
-            Kind: EntryKind.File,
-            Size: SafeLong(() => fileInfo.Length),
-            ModifiedUtc: SafeUtc(() => fileInfo.LastWriteTimeUtc),
-            IsHidden: fileInfo.Attributes.HasFlag(FileAttributes.Hidden),
-            IsReadOnly: fileInfo.Attributes.HasFlag(FileAttributes.ReadOnly),
-            IsSystem: fileInfo.Attributes.HasFlag(FileAttributes.System),
-            LinksToDirectory: IsFolderShortcut(fileInfo.FullName));
+            Name: info.Name,
+            FullPath: info.FullName,
+            Kind: kind,
+            Size: info is FileInfo file ? SafeLong(() => file.Length) : null,
+            ModifiedUtc: SafeUtc(() => info.LastWriteTimeUtc),
+            IsHidden: attributes.HasFlag(FileAttributes.Hidden),
+            IsReadOnly: attributes.HasFlag(FileAttributes.ReadOnly),
+            IsSystem: attributes.HasFlag(FileAttributes.System),
+            LinksToDirectory: kind == EntryKind.File && IsFolderShortcut(info.FullName));
+    }
+
+    private static FileAttributes SafeAttributes(FileSystemInfo info) {
+        try {
+            return info.Attributes;
+        } catch {
+            // Deleted between the scan and this read, or a path the process
+            // may enumerate but not stat. No attributes = no special styling.
+            return FileAttributes.None;
+        }
     }
 
     private static DateTime SafeUtc(Func<DateTime> f) {

@@ -18,6 +18,7 @@ using Wander.App.Menu;
 using Wander.App.Resources;
 using Wander.App.Util;
 using Wander.App.ViewModels;
+using Wander.App.Views;
 using Wander.Core;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
@@ -35,32 +36,14 @@ public partial class MainWindow : Window {
     private bool _userClickedExpander;
     private bool _altWasHeld;
 
-    // --- Inline rename ---------------------------------------------------
-    // A committed rename re-lists the folder asynchronously, so the row to
-    // put the keyboard on does not exist yet when the editor closes. This
-    // says "the next selection restore is mine" — undo and refresh must not
-    // steal focus from wherever the user actually is.
-    private bool _focusRowAfterRestore;
+    // --- Tree as drag source / operation target -------------------------
+    private TreeNodeViewModel? _treeDragNode;
+    private Point _treeDragOrigin;
+    private TreeNodeViewModel? _treeMenuNode;
 
     // --- Drag source state ---------------------------------------------
-    private Point _dragOrigin;
-    private bool _dragArmed;
     private int _dragPathCount;
     private string? _dragFirstName;
-
-    // --- Selection gestures (deferred collapse, active-list clear) ----
-    private readonly SelectionController _selection = new();
-
-    // --- Rubber-band (marquee) selection state ------------------------
-    // Active when the user clicks empty space in a list and drags. Tracks
-    // the host control, the starting selection (so Ctrl-additive can layer
-    // on top), and the adorner used to paint the marquee.
-    private bool _rubberBandActive;
-    private ItemsControl? _rubberBandHost;
-    private AdornerLayer? _rubberBandLayer;
-    private RubberBandAdorner? _rubberBandAdorner;
-    private HashSet<FileSystemEntry>? _rubberBandBaseSelection;
-    private Point _rubberBandOrigin;
 
     // --- Drag preview + drop indicator state ---------------------------
     private DragPreviewWindow? _dragPreview;
@@ -70,6 +53,13 @@ public partial class MainWindow : Window {
     private DragDropEffects _currentDragEffect;
     private SelfDropReason _currentSelfDropReason;
     private string? _currentSelfDropOffender;
+
+    /// <summary>
+    /// The cursor is over the bookmarks region, so the drop would add a
+    /// bookmark rather than copy or move anything. The drag plaque reads
+    /// this instead of the last file-operation it computed.
+    /// </summary>
+    private bool _bookmarkDropActive;
 
 
     public MainWindow() {
@@ -89,6 +79,8 @@ public partial class MainWindow : Window {
         // Releases the cached IContextMenu, and with it the third-party
         // handler DLLs it keeps referenced.
         _shellMenus.Dispose();
+        // Whatever the last, unfinished second of measurements holds.
+        Wander.Core.Diagnostics.PerfLog.Flush();
     }
 
     private void RestoreWindowGeometry() {
@@ -159,17 +151,13 @@ public partial class MainWindow : Window {
     private MainViewModel Vm => (MainViewModel)DataContext;
 
 
-    // --- Preview pane layout + content wiring --------------------------
-
-    private bool _webInitialized;
+    // --- Preview pane layout --------------------------------------------
 
 
     private void OnLoaded(object sender, RoutedEventArgs e) {
         if (DataContext is MainViewModel vm) {
             vm.PropertyChanged += OnVmPropertyChanged;
-            vm.Preview.PropertyChanged += OnPreviewPropertyChanged;
             vm.Nav.PropertyChanged += OnNavPropertyChanged;
-            vm.SelectionRestoreRequested += RestoreListSelection;
         }
         // A third-party command can create, rename or delete behind our
         // back, so a successful one invalidates both the listing and the
@@ -181,8 +169,14 @@ public partial class MainWindow : Window {
         // Any re-listing — navigation, refresh, an operation finishing —
         // means the cached shell answer describes a folder that has moved on.
         Vm.Entries.CollectionChanged += (_, _) => _shellMenus.Invalidate();
+        // Quiet unless something is slow: what the UI thread spends time
+        // on lands in the session log — see Core/Diagnostics/PerfLog.
+        if (ServiceLocator.IsRegistered<Wander.Core.Logging.ILogger>()) {
+            Wander.Core.Diagnostics.PerfLog.Start(ServiceLocator.Get<Wander.Core.Logging.ILogger>());
+        }
+        Diagnostics.UiStallWatch.Start(Dispatcher);
         ApplyPreviewLayout();
-        UpdateCodeEditor();
+        ApplyBookmarksLayout();
         // Native-size cap (so small images don't stretch above 100 %) is
         // now done in XAML via BitmapPixelSizeConverter on MaxWidth/MaxHeight
         // — synchronous with WPF's measure pass instead of an async
@@ -195,47 +189,38 @@ public partial class MainWindow : Window {
             case nameof(MainViewModel.PreviewWidth):
                 ApplyPreviewLayout();
                 break;
-        }
-    }
 
-    private async void OnPreviewPropertyChanged(object? sender, PropertyChangedEventArgs e) {
-        switch (e.PropertyName) {
-            case nameof(PreviewController.CodeText):
-            case nameof(PreviewController.CodeExtension):
-                UpdateCodeEditor();
-                break;
-
-            case nameof(PreviewController.WebUri):
-                if (Vm.Preview.WebUri is { } uri) {
-                    await EnsureWebViewReadyAsync();
-                    try { WebPreview.Source = uri; } catch { /* webview not ready */ }
-                }
-                break;
-
-            case nameof(PreviewController.WebHtml):
-                if (Vm.Preview.WebHtml is { } html) {
-                    await EnsureWebViewReadyAsync();
-                    try { WebPreview.NavigateToString(html); } catch { /* webview not ready */ }
-                }
-                break;
-
-            case nameof(PreviewController.Kind):
-                // Bail out of any in-flight image-zoom state when the user
-                // switches to a different file (e.g., RMB held when changing
-                // selection). Also reset the video transport so a freshly
-                // opened video starts paused with the play button correct.
-                ExitImageZoom();
-                ResetVideoTransport();
-                break;
-
-            case nameof(PreviewController.VideoUri):
-                // MediaElement reloads on Source change via the binding; we
-                // just reset the slider / play button so the UI matches.
-                ResetVideoTransport();
+            case nameof(MainViewModel.IsBookmarksExpanded):
+                ApplyBookmarksLayout();
                 break;
         }
     }
 
+
+    /// <summary>
+    /// The bookmarks region owns a fixed pixel height that the divider
+    /// changes. Collapsed, it falls back to Auto — the header row is all
+    /// that is left, and everything below it moves up.
+    /// </summary>
+    private void ApplyBookmarksLayout() {
+        if (Vm.IsBookmarksExpanded) {
+            BookmarksRow.MinHeight = 44;
+            BookmarksRow.Height = new GridLength(Vm.BookmarksHeight);
+        } else {
+            BookmarksRow.MinHeight = 0;
+            BookmarksRow.Height = GridLength.Auto;
+        }
+    }
+
+    private void BookmarksSplitter_DragCompleted(object sender, DragCompletedEventArgs e) {
+        Vm.BookmarksHeight = BookmarksRow.ActualHeight;
+    }
+
+    /// <summary>
+    /// Layout only — how much room the preview pane gets, and whether it
+    /// gets any. What is drawn inside it belongs to
+    /// <see cref="Views.PreviewPane"/>.
+    /// </summary>
     private void ApplyPreviewLayout() {
         if (Vm.IsPreviewVisible) {
             PreviewSplitterColumn.Width = new GridLength(4);
@@ -248,92 +233,6 @@ public partial class MainWindow : Window {
 
     private void PreviewSplitter_DragCompleted(object sender, DragCompletedEventArgs e) {
         Vm.PreviewWidth = PreviewColumn.ActualWidth;
-    }
-
-    private void UpdateCodeEditor() {
-        if (string.IsNullOrEmpty(Vm.Preview.CodeText)) {
-            CodeEditor.Clear();
-            CodeEditor.SyntaxHighlighting = null;
-            return;
-        }
-
-        string ext = Vm.Preview.CodeExtension ?? "";
-        // AvalonEdit ships highlighting for: C#, C++, Java, JS, TS, CSS, HTML, XML, JSON, Python, PHP, SQL, Markdown, ...
-        CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinitionByExtension(ext);
-        CodeEditor.Text = Vm.Preview.CodeText;
-    }
-
-    private async Task EnsureWebViewReadyAsync() {
-        if (_webInitialized) {
-            return;
-        }
-        try {
-            // Explicit user-data folder: the default is "<exe dir>.WebView2",
-            // which fails silently when Wander runs from a read-only location
-            // (portable exe in Program Files, network share).
-            string dataFolder = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Wander", "WebView2");
-            var env = await Microsoft.Web.WebView2.Core.CoreWebView2Environment.CreateAsync(
-                browserExecutableFolder: null, userDataFolder: dataFolder);
-            await WebPreview.EnsureCoreWebView2Async(env);
-
-            if (WebPreview.CoreWebView2 is { } core) {
-                core.Settings.AreDefaultContextMenusEnabled = false;
-                core.Settings.AreDevToolsEnabled = false;
-
-                // The pane renders untrusted local files (any .html the user
-                // clicks), so lock it down: no autofill surfaces, no host
-                // object / postMessage bridge into the app.
-                core.Settings.IsPasswordAutosaveEnabled = false;
-                core.Settings.IsGeneralAutofillEnabled = false;
-                core.Settings.AreHostObjectsAllowed = false;
-                core.Settings.IsWebMessageEnabled = false;
-
-                // No popups, and the pane itself may only display local
-                // content: a previewed page must not be able to redirect the
-                // preview (or the whole session, via window.open) to the web.
-                core.NewWindowRequested += (_, args) => args.Handled = true;
-                core.NavigationStarting += (_, args) => {
-                    bool local = Uri.TryCreate(args.Uri, UriKind.Absolute, out var uri)
-                        && uri.Scheme is "file" or "about" or "data";
-                    if (!local) {
-                        args.Cancel = true;
-                    }
-                };
-
-                // NavigationStarting only covers navigations. A previewed
-                // .html could still reach the network through a tracking
-                // pixel, a remote script or a fetch() — quietly telling
-                // someone which files this machine looks at. Scripts stay
-                // enabled because the built-in PDF viewer needs them, so the
-                // subresources are where the line gets drawn instead.
-                core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
-                core.WebResourceRequested += (_, args) => {
-                    if (IsRemoteUri(args.Request.Uri)) {
-                        args.Response = core.Environment.CreateWebResourceResponse(
-                            null, 403, "Blocked", "");
-                    }
-                };
-            }
-            _webInitialized = true;
-        } catch {
-            // WebView2 runtime not installed — the pane will stay blank
-            // for PDF / HTML / Markdown previews. Other previews are unaffected.
-        }
-    }
-
-
-    /// <summary>
-    /// Whether a request would leave this machine. Named the negative way
-    /// round on purpose: the renderer serves its own chrome (the PDF viewer
-    /// especially) over internal schemes we have no business enumerating, so
-    /// the rule blocks what reaches the network rather than allowing a list
-    /// of what doesn't.
-    /// </summary>
-    private static bool IsRemoteUri(string uri) {
-        return Uri.TryCreate(uri, UriKind.Absolute, out var parsed)
-            && parsed.Scheme is "http" or "https" or "ws" or "wss" or "ftp" or "ftps";
     }
 
 
@@ -372,7 +271,7 @@ public partial class MainWindow : Window {
         // the code preview — AvalonEdit owns Ctrl+F there for its own search
         // panel, and stealing it would be surprising.
         if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control) {
-            if (!CodeEditor.IsKeyboardFocusWithin) {
+            if (!Preview.IsCodeEditorFocused) {
                 SearchBox.Focus();
                 SearchBox.SelectAll();
                 e.Handled = true;
@@ -382,22 +281,18 @@ public partial class MainWindow : Window {
 
         // F2: rename the primary selected entry.
         if (e.Key == Key.F2 && Vm.SelectedEntry is FileSystemEntry) {
-            StartRename();
+            FileList.StartRename();
             e.Handled = true;
             return;
         }
 
         // Esc: clear selection in whichever right-pane list is active.
         if (e.Key == Key.Escape) {
-            ClearActiveSelection();
+            FileList.ClearSelection();
             // Don't mark handled — the search box and the address bar want
             // Esc too. The rename editor is handled by the guard above,
             // because clearing the selection first would be destructive.
         }
-    }
-
-    private void ClearActiveSelection() {
-        SelectionController.ClearActive(Vm.ViewMode, Grid, TilesView, IconsView);
     }
 
     private void SearchBox_PreviewKeyDown(object sender, KeyEventArgs e) {
@@ -409,13 +304,13 @@ public partial class MainWindow : Window {
             if (!string.IsNullOrEmpty(Vm.SearchQuery)) {
                 Vm.SearchQuery = "";
             } else {
-                FocusActiveList();
+                FileList.FocusList();
             }
             e.Handled = true;
             return;
         }
         if (e.Key == Key.Enter) {
-            FocusActiveList();
+            FileList.FocusList();
             e.Handled = true;
         }
     }
@@ -436,11 +331,32 @@ public partial class MainWindow : Window {
         }), DispatcherPriority.Input);
     }
 
-    private void CrumbHost_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
-        // Only clicks that missed a crumb reach here — a Button handles its
-        // own MouseLeftButtonDown and never lets it bubble.
+    /// <summary>
+    /// A click anywhere on the address strip that is not a control switches
+    /// it to the editable path. Tunnelling, so the empty space around the
+    /// crumbs counts too — the buttons, the chevron and the text box itself
+    /// are excluded by hit test rather than by relying on them to swallow
+    /// the event, which is what left most of the strip inert before.
+    /// </summary>
+    private void AddressBar_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
+        if (Vm.Nav.IsEditingAddress || IsInsideControl(e.OriginalSource)) {
+            return;
+        }
+
         BeginAddressEdit();
         e.Handled = true;
+    }
+
+    private static bool IsInsideControl(object originalSource) {
+        var hit = originalSource as DependencyObject;
+        while (hit is not null) {
+            if (hit is ButtonBase or TextBoxBase) {
+                return true;
+            }
+            hit = VisualTreeHelper.GetParent(hit);
+        }
+
+        return false;
     }
 
     private void AddressBox_PreviewKeyDown(object sender, KeyEventArgs e) {
@@ -449,7 +365,7 @@ public partial class MainWindow : Window {
         if (e.Key == Key.Escape) {
             Vm.AddressText = Vm.CurrentPath ?? "";
             Vm.Nav.IsEditingAddress = false;
-            FocusActiveList();
+            FileList.FocusList();
             e.Handled = true;
             return;
         }
@@ -460,7 +376,7 @@ public partial class MainWindow : Window {
         if (e.Key == Key.Enter) {
             Vm.NavigateCommand.Execute(null);
             if (!Vm.Nav.IsEditingAddress) {
-                FocusActiveList();
+                FileList.FocusList();
             }
             e.Handled = true;
         }
@@ -492,330 +408,6 @@ public partial class MainWindow : Window {
     }
 
 
-    /// <summary>
-    /// Hands the keyboard back to the file list — to the selected row when
-    /// there is one. Focusing the list control itself is not enough: a list
-    /// with focus but no focused item leaves the arrow keys resuming from
-    /// wherever the cursor was last, which is usually the top.
-    /// </summary>
-    private void FocusActiveList() {
-        if (Vm.SelectedEntry is { } entry && FocusRow(entry)) {
-            return;
-        }
-
-        switch (Vm.ViewMode) {
-            case ViewMode.Details: Grid.Focus(); break;
-            case ViewMode.Tiles: TilesView.Focus(); break;
-            case ViewMode.LargeIcons: IconsView.Focus(); break;
-        }
-    }
-
-
-    /// <summary>
-    /// Puts the keyboard on one row. Returns false when the row has no
-    /// realised container (virtualised away), so the caller can fall back
-    /// to focusing the list itself.
-    /// </summary>
-    private bool FocusRow(FileSystemEntry entry) {
-        switch (ActiveList()) {
-            case DataGrid dg:
-                dg.ScrollIntoView(entry);
-                dg.UpdateLayout();
-                // Arrow keys in a DataGrid follow the *current cell*, not the
-                // selection. Leaving it stale is what made the next arrow
-                // press jump to a row near the top instead of the neighbour.
-                if (dg.Columns.Count > 0) {
-                    dg.CurrentCell = new DataGridCellInfo(entry, dg.Columns[0]);
-                }
-                if (dg.ItemContainerGenerator.ContainerFromItem(entry) is DataGridRow row
-                    && FindDescendant<DataGridCell>(row) is { } cell) {
-                    return cell.Focus();
-                }
-                return false;
-
-            case ListBox lb:
-                lb.ScrollIntoView(entry);
-                lb.UpdateLayout();
-                return lb.ItemContainerGenerator.ContainerFromItem(entry) is ListBoxItem item
-                    && item.Focus();
-
-            default:
-                return false;
-        }
-    }
-
-
-    // --- File list selection / opening ---------------------------------
-
-    private void Grid_MouseDoubleClick(object sender, MouseButtonEventArgs e) {
-        // Double-clicking a word inside the rename editor must not open the
-        // file that is being renamed.
-        if (IsInsideRenameEditor(e.OriginalSource)) {
-            return;
-        }
-        OpenSelected();
-    }
-
-    private void Tiles_MouseDoubleClick(object sender, MouseButtonEventArgs e) {
-        if (IsInsideRenameEditor(e.OriginalSource)) {
-            return;
-        }
-        OpenSelected();
-    }
-
-    private static bool IsInsideRenameEditor(object originalSource) {
-        var hit = originalSource as DependencyObject;
-        while (hit is not null) {
-            if (hit is TextBox) {
-                return true;
-            }
-            hit = VisualTreeHelper.GetParent(hit);
-        }
-        return false;
-    }
-
-    private void Rename_Click(object sender, RoutedEventArgs e) {
-        StartRename();
-    }
-
-    private void List_SelectionChanged(object sender, SelectionChangedEventArgs e) {
-        var entries = new List<FileSystemEntry>();
-        switch (sender) {
-            case DataGrid dg:
-                foreach (var item in dg.SelectedItems) {
-                    if (item is FileSystemEntry fe) {
-                        entries.Add(fe);
-                    }
-                }
-                break;
-            case ListBox lb:
-                foreach (var item in lb.SelectedItems) {
-                    if (item is FileSystemEntry fe) {
-                        entries.Add(fe);
-                    }
-                }
-                break;
-        }
-        Vm.SelectedEntries = entries;
-    }
-
-
-    private void OpenSelected() {
-        if (Vm.SelectedEntry is FileSystemEntry entry) {
-            Vm.OpenEntry(entry);
-        }
-    }
-
-    // --- Rename ----------------------------------------------------------
-    // In-place editing (A3) is the normal path: the row template carries a
-    // collapsed TextBox and MainViewModel.RenamingPath makes it visible.
-    // PromptDialog stays as the fallback for the case the inline editor
-    // cannot be reached — a row that virtualisation has not realised.
-
-    private void StartRename() {
-        if (Vm.SelectedEntry is not FileSystemEntry entry) {
-            return;
-        }
-
-        if (TryStartInlineRename(entry)) {
-            return;
-        }
-
-        string? input = PromptDialog.Show(Strings.RenameTitle, Strings.RenamePrompt, entry.Name, filenameMode: true);
-        if (input is null || input == entry.Name) {
-            return;
-        }
-
-        Vm.RenameCommand.Execute(input);
-    }
-
-    private bool TryStartInlineRename(FileSystemEntry entry) {
-        var list = ActiveList();
-        if (list is null) {
-            return false;
-        }
-
-        // The row has to exist as a visual before its editor can be focused,
-        // and a row scrolled out of a virtualising panel does not.
-        ScrollIntoView(list, entry);
-        list.UpdateLayout();
-        if (list.ItemContainerGenerator.ContainerFromItem(entry) is not FrameworkElement container) {
-            return false;
-        }
-
-        Vm.BeginRename(entry);
-        if (Vm.RenamingPath is null) {
-            return false;
-        }
-
-        container.UpdateLayout();
-        var box = FindDescendant<TextBox>(container);
-        if (box is null) {
-            Vm.CancelRename();
-            return false;
-        }
-
-        box.Text = entry.Name;
-        box.Focus();
-        SelectNameWithoutExtension(box, entry);
-
-        return true;
-    }
-
-    private ItemsControl? ActiveList() {
-        return Vm.ViewMode switch {
-            ViewMode.Details => Grid,
-            ViewMode.Tiles => TilesView,
-            ViewMode.LargeIcons => IconsView,
-            _ => null,
-        };
-    }
-
-    private static void ScrollIntoView(ItemsControl list, FileSystemEntry entry) {
-        switch (list) {
-            case DataGrid dg: dg.ScrollIntoView(entry); break;
-            case ListBox lb: lb.ScrollIntoView(entry); break;
-        }
-    }
-
-    /// <summary>
-    /// Explorer parity: the extension stays out of the initial selection, so
-    /// typing replaces the name and leaves ".png" alone. Folders and
-    /// dot-files ("<c>.gitignore</c>") select whole — there is no extension
-    /// to protect there.
-    /// </summary>
-    private static void SelectNameWithoutExtension(TextBox box, FileSystemEntry entry) {
-        int dot = entry.Kind == EntryKind.Directory ? -1 : entry.Name.LastIndexOf('.');
-        if (dot > 0) {
-            box.Select(0, dot);
-        } else {
-            box.SelectAll();
-        }
-    }
-
-    private static T? FindDescendant<T>(DependencyObject root) where T : DependencyObject {
-        int count = VisualTreeHelper.GetChildrenCount(root);
-        for (int i = 0; i < count; i++) {
-            var child = VisualTreeHelper.GetChild(root, i);
-            if (child is T match) {
-                return match;
-            }
-            if (FindDescendant<T>(child) is T deeper) {
-                return deeper;
-            }
-        }
-        return null;
-    }
-
-
-    // --- Inline rename editor -------------------------------------------
-
-    /// <summary>
-    /// Puts the selection back after a refresh reconciled the list. Only the
-    /// controls know about multi-selection (SelectedItems is theirs, not the
-    /// view model's), so the VM asks and this does it.
-    /// </summary>
-    private void RestoreListSelection(IReadOnlyList<FileSystemEntry> items) {
-        bool takeFocus = _focusRowAfterRestore;
-        _focusRowAfterRestore = false;
-
-        if (items.Count == 0) {
-            return;
-        }
-
-        switch (ActiveList()) {
-            case DataGrid dg:
-                dg.SelectedItems.Clear();
-                foreach (var entry in items) {
-                    dg.SelectedItems.Add(entry);
-                }
-                dg.CurrentItem = items[0];
-                dg.ScrollIntoView(items[0]);
-                break;
-            case ListBox lb:
-                lb.SelectedItems.Clear();
-                foreach (var entry in items) {
-                    lb.SelectedItems.Add(entry);
-                }
-                lb.ScrollIntoView(items[0]);
-                break;
-        }
-
-        // Only after a rename: the row the user was just editing is the row
-        // the keyboard belongs on. A refresh or an undo triggered from
-        // somewhere else must leave focus where it is.
-        if (takeFocus) {
-            FocusRow(items[0]);
-        }
-    }
-
-
-    private void RenameBox_PreviewKeyDown(object sender, KeyEventArgs e) {
-        // Enter and Escape both have window-level KeyBindings (Open / clear
-        // selection), so they must be swallowed here or renaming a file
-        // would open it. Delete and Backspace need no such guard — the
-        // TextBox marks those handled itself.
-        if (e.Key == Key.Enter) {
-            CommitInlineRename((TextBox)sender, takeFocus: true);
-            e.Handled = true;
-            return;
-        }
-
-        if (e.Key == Key.Escape) {
-            // The row comes from the editor's own DataContext, not from the
-            // selection: this is the row the user was editing, whatever the
-            // selection happens to be by now.
-            var edited = ((FrameworkElement)sender).DataContext as FileSystemEntry;
-            Vm.CancelRename();
-            if (edited is null || !FocusRow(edited)) {
-                FocusActiveList();
-            }
-            e.Handled = true;
-        }
-    }
-
-    private void RenameBox_PreviewTextInput(object sender, TextCompositionEventArgs e) {
-        // Refuse the characters Windows will not accept in a name at input
-        // time, the way PromptDialog does — a rejected rename after the fact
-        // would just lose what the user typed.
-        if (e.Text.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) {
-            e.Handled = true;
-            Vm.Status = Strings.InvalidFileNameChars + "\\ / : * ? \" < > |";
-        }
-    }
-
-    private void RenameBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e) {
-        // Clicking away commits, matching Explorer. Escape has already
-        // cleared RenamingPath by the time focus leaves, so a cancelled edit
-        // falls out of CommitInlineRename on its own. No focus grab here:
-        // the user has just clicked somewhere and that is where focus
-        // belongs.
-        CommitInlineRename((TextBox)sender, takeFocus: false);
-    }
-
-    /// <summary>
-    /// Applies the edited name. <paramref name="takeFocus"/> separates the
-    /// two ways an edit ends: Enter means the user is still working in the
-    /// list and the keyboard belongs there, while a click elsewhere means
-    /// they have already moved on and focus must stay where they put it.
-    /// </summary>
-    private void CommitInlineRename(TextBox box, bool takeFocus) {
-        if (Vm.RenamingPath is null) {
-            return;
-        }
-
-        // The re-listing that follows is asynchronous, so the renamed row is
-        // focused twice over: now (it is still there under its old name,
-        // which keeps the keyboard inside the list) and again when the new
-        // listing lands and the selection is restored onto the new name.
-        _focusRowAfterRestore = takeFocus;
-        Vm.CommitRename(box.Text);
-        if (takeFocus) {
-            FocusActiveList();
-        }
-    }
-
-
     // --- Context menu ---------------------------------------------------
     // All three list views share one menu. It is assembled per right-click
     // by ContextMenuBuilder (Core decides the shape) and rendered by
@@ -826,49 +418,12 @@ public partial class MainWindow : Window {
     private ContextMenuFactory? _contextMenus;
     private readonly ShellMenuCache _shellMenus = new();
 
-    /// <summary>Set on right-button-down: did the click land on empty space?</summary>
-    private bool _contextIsBackground;
 
-    private void List_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e) {
-        if (sender is not ItemsControl host) {
-            return;
-        }
-
-        var clicked = FindEntryAtSource(e.OriginalSource);
-        _contextIsBackground = clicked is null;
-
-        if (clicked is null) {
-            // Explorer parity: right-clicking empty space drops the
-            // selection and offers the folder's own menu instead.
-            ClearListSelection(host);
-        } else if (!Vm.SelectedEntries.Contains(clicked)) {
-            // Right-clicking outside the selection moves it to the clicked
-            // row; right-clicking inside one keeps the whole multi-selection.
-            SetListSelection(host, new[] { clicked });
-        }
+    private void FileList_ContextMenuRequested(object? sender, FileListMenuRequest e) {
+        ShowContextMenu(e.Host, e.Placement, e.IsBackground);
     }
 
-    private void List_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e) {
-        if (sender is FrameworkElement host) {
-            ShowContextMenu(host, PlacementMode.MousePoint);
-            e.Handled = true;
-        }
-    }
-
-    private void List_PreviewKeyDown(object sender, KeyEventArgs e) {
-        // Shift+F10 arrives as a system key, the dedicated Menu key doesn't.
-        bool menuKey = e.Key == Key.Apps
-            || (e.Key == Key.System && e.SystemKey == Key.F10 && Keyboard.Modifiers == ModifierKeys.Shift);
-        if (!menuKey || sender is not FrameworkElement host) {
-            return;
-        }
-
-        _contextIsBackground = Vm.SelectedEntries.Count == 0;
-        ShowContextMenu(host, PlacementMode.Center);
-        e.Handled = true;
-    }
-
-    private void ShowContextMenu(FrameworkElement host, PlacementMode placement) {
+    private void ShowContextMenu(FrameworkElement host, PlacementMode placement, bool isBackground, string? folderPath = null) {
         if (_contextMenus is null) {
             return;
         }
@@ -876,9 +431,9 @@ public partial class MainWindow : Window {
         var vm = Vm;
         var settings = vm.MenuSettings;
         var target = new ContextMenuTarget {
-            Selection = _contextIsBackground ? Array.Empty<FileSystemEntry>() : vm.SelectedEntries,
-            FolderPath = vm.CurrentPath,
-            IsBackground = _contextIsBackground,
+            Selection = isBackground ? Array.Empty<FileSystemEntry>() : vm.SelectedEntries,
+            FolderPath = folderPath ?? vm.CurrentPath,
+            IsBackground = isBackground,
             IsReadOnlyLocation = vm.IsCurrentShellNamespace,
             IsRecycleBin = vm.IsCurrentRecycleBin,
             CanPaste = vm.PasteCommand.CanExecute(null),
@@ -930,7 +485,7 @@ public partial class MainWindow : Window {
     /// </summary>
     private Dictionary<MenuCommandId, MenuBinding> BuildMenuBindings() {
         var vm = Vm;
-        var rename = new RelayCommand(_ => StartRename(), _ => vm.SelectedEntry is not null);
+        var rename = new RelayCommand(_ => FileList.StartRename(), _ => vm.SelectedEntry is not null);
 
         return new Dictionary<MenuCommandId, MenuBinding> {
             [MenuCommandId.Open] = new(vm.OpenCommand),
@@ -973,13 +528,52 @@ public partial class MainWindow : Window {
 
     private void Tree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e) {
         if (e.NewValue is TreeNodeViewModel node && !string.IsNullOrEmpty(node.FullPath)) {
-            Vm.NavigateTo(node.FullPath, Wander.Core.Navigation.NavigationSource.Drives);
+            Vm.NavigateAndSelectFolder(node.FullPath, Wander.Core.Navigation.NavigationSource.Drives);
+        }
+    }
+
+    /// <summary>
+    /// The bookmark row menu — one item, "remove from bookmarks". Built here
+    /// rather than declared in the row template: a ContextMenu inside a
+    /// DataTemplate gets its own name scope and its own visual tree, so a
+    /// binding that reaches out to the window by name silently never
+    /// resolves, and the menu item does nothing when clicked.
+    /// </summary>
+    private void ShowBookmarkMenu(FrameworkElement placement, TreeNodeViewModel node) {
+        if (!node.IsRemovableBookmark) {
+            return;
+        }
+
+        var remove = new MenuItem { Header = Strings.BookmarksRemove };
+        remove.Click += (_, _) => Vm.RemoveBookmarkCommand.Execute(node);
+
+        var menu = new ContextMenu {
+            PlacementTarget = placement,
+            Placement = PlacementMode.Bottom,
+        };
+        menu.Items.Add(remove);
+        menu.IsOpen = true;
+    }
+
+    /// <summary>The "…" button on a bookmark row.</summary>
+    private void BookmarkRowMenu_Click(object sender, RoutedEventArgs e) {
+        if (sender is FrameworkElement { DataContext: TreeNodeViewModel node } button) {
+            ShowBookmarkMenu(button, node);
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>The same menu, from the right mouse button.</summary>
+    private void BookmarksTree_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e) {
+        if (NodeAt(e.OriginalSource) is { } node && sender is FrameworkElement host) {
+            ShowBookmarkMenu(host, node);
+            e.Handled = true;
         }
     }
 
     private void Bookmarks_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e) {
         if (e.NewValue is TreeNodeViewModel node && !string.IsNullOrEmpty(node.FullPath)) {
-            Vm.NavigateTo(node.FullPath, Wander.Core.Navigation.NavigationSource.Bookmark);
+            Vm.NavigateAndSelectFolder(node.FullPath, Wander.Core.Navigation.NavigationSource.Bookmark);
         }
     }
 
@@ -990,10 +584,101 @@ public partial class MainWindow : Window {
         if (HitTestExpander(e.OriginalSource as DependencyObject)) {
             _userClickedExpander = true;
             _altWasHeld = (Keyboard.Modifiers & ModifierKeys.Alt) != 0;
-        } else {
-            _userClickedExpander = false;
-            _altWasHeld = false;
+            _treeDragNode = null;
+
+            return;
         }
+
+        _userClickedExpander = false;
+        _altWasHeld = false;
+
+        // A button inside the row — the bookmark's "…" — is a control, not
+        // a grip: pressing it must not arm a drag of the folder.
+        if (IsInsideControl(e.OriginalSource)) {
+            _treeDragNode = null;
+
+            return;
+        }
+
+        // Arm a drag from the row under the cursor. The tree is a drag
+        // source in Explorer and users reach for it — the panel is where
+        // the folder you want to move *to* is visible, so it is also where
+        // the folder you want to move *from* often is.
+        _treeDragNode = NodeAt(e.OriginalSource);
+        _treeDragOrigin = e.GetPosition(this);
+    }
+
+    private void Tree_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e) {
+        _treeDragNode = null;
+    }
+
+    private void Tree_PreviewMouseMove(object sender, MouseEventArgs e) {
+        if (_treeDragNode is not { } node || e.LeftButton != MouseButtonState.Pressed) {
+            return;
+        }
+
+        var pos = e.GetPosition(this);
+        if (Math.Abs(pos.X - _treeDragOrigin.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(pos.Y - _treeDragOrigin.Y) < SystemParameters.MinimumVerticalDragDistance) {
+            return;
+        }
+
+        _treeDragNode = null;
+        var paths = new[] { node.FullPath };
+        StartDrag((DependencyObject)sender, paths, paths);
+    }
+
+    private void Tree_PreviewMouseWheel(object sender, MouseWheelEventArgs e) {
+        if (ListVisuals.TryShiftScrollHorizontally((DependencyObject)sender, e)) {
+            e.Handled = true;
+        }
+    }
+
+
+    /// <summary>
+    /// Right-clicking a folder in the drives tree targets that folder —
+    /// without navigating to it, the way Explorer behaves. The tree is a
+    /// second selection source: the clicked node becomes the selection the
+    /// menu (and Ctrl+C, Delete, Alt+Enter after it) operates on, so the
+    /// file list's own selection is dropped first to keep exactly one
+    /// highlighted set on screen.
+    /// </summary>
+    private void Tree_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e) {
+        _treeMenuNode = NodeAt(e.OriginalSource);
+        if (_treeMenuNode is null) {
+            return;
+        }
+
+        FileList.ClearSelection();
+        Vm.SelectExternalPath(_treeMenuNode.FullPath);
+        e.Handled = true;
+    }
+
+    private void Tree_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e) {
+        if (_treeMenuNode is not { } node || sender is not FrameworkElement host) {
+            return;
+        }
+
+        // FolderPath is the clicked folder rather than the open one: "Paste"
+        // and "New folder" in this menu mean "into what I right-clicked".
+        ShowContextMenu(host, PlacementMode.MousePoint, isBackground: false, folderPath: node.FullPath);
+        e.Handled = true;
+    }
+
+
+    /// <summary>The tree node a hit belongs to, if it has a real path.</summary>
+    private static TreeNodeViewModel? NodeAt(object originalSource) {
+        var hit = originalSource as DependencyObject;
+        while (hit is not null) {
+            if (hit is FrameworkElement fe && fe.DataContext is TreeNodeViewModel node) {
+                return string.IsNullOrEmpty(node.FullPath) || node.FullPath.StartsWith("shell:", StringComparison.OrdinalIgnoreCase)
+                    ? null
+                    : node;
+            }
+            hit = VisualTreeHelper.GetParent(hit);
+        }
+
+        return null;
     }
 
     private void TreeViewItem_Expanded(object sender, RoutedEventArgs e) {
@@ -1055,94 +740,13 @@ public partial class MainWindow : Window {
 
 
     // --- Drag source ----------------------------------------------------
+    // The gesture that starts a drag belongs to whatever the user grabbed —
+    // the file list or a tree row. Running the drag does not: the preview
+    // window, the drop-target highlight and the effect calculation are one
+    // shared pipeline, and it lives here.
 
-    private void List_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
-        _dragArmed = false;
-        _dragOrigin = e.GetPosition(this);
-
-        // A click inside the inline rename editor is a caret move, not a
-        // selection change and not the start of a drag.
-        if (IsInsideRenameEditor(e.OriginalSource)) {
-            return;
-        }
-
-        var clicked = FindEntryAtSource(e.OriginalSource);
-        if (clicked is null) {
-            // Empty area: start a rubber-band lasso. The drag-source path
-            // doesn't apply here (no source items), so we skip its arming
-            // and own the gesture end-to-end via MouseMove / MouseUp.
-            _selection.TryArmDeferred(sender, null, Vm.SelectedEntries, Keyboard.Modifiers);
-            if (sender is ItemsControl host) {
-                StartRubberBand(host, e);
-            }
-            return;
-        }
-        _dragArmed = true;
-
-        if (_selection.TryArmDeferred(sender, clicked, Vm.SelectedEntries, Keyboard.Modifiers)) {
-            e.Handled = true;
-        }
-    }
-
-    private void List_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e) {
-        if (_rubberBandActive) {
-            EndRubberBand();
-            e.Handled = true;
-            return;
-        }
-        _selection.CommitOnMouseUp();
-        _dragArmed = false;
-    }
-
-    private static FileSystemEntry? FindEntryAtSource(object originalSource) {
-        var hit = originalSource as DependencyObject;
-        while (hit is not null) {
-            if (hit is FrameworkElement fe && fe.DataContext is FileSystemEntry entry) {
-                return entry;
-            }
-            hit = VisualTreeHelper.GetParent(hit);
-        }
-        return null;
-    }
-
-    private void List_PreviewMouseMove(object sender, MouseEventArgs e) {
-        // Rubber-band wins over drag-source: if we started a marquee on
-        // empty space, every subsequent mouse-move is selection-update,
-        // not drag-arming.
-        if (_rubberBandActive && _rubberBandHost == sender) {
-            // Defensive: if we missed the MouseUp (capture stolen, window
-            // alt-tab, …), bail out cleanly the moment we see LMB up.
-            if (e.LeftButton != MouseButtonState.Pressed) {
-                EndRubberBand();
-                return;
-            }
-            UpdateRubberBand(e.GetPosition(_rubberBandHost));
-            e.Handled = true;
-            return;
-        }
-
-        if (!_dragArmed || e.LeftButton != MouseButtonState.Pressed) {
-            return;
-        }
-
-        var pos = e.GetPosition(this);
-        if (Math.Abs(pos.X - _dragOrigin.X) < SystemParameters.MinimumHorizontalDragDistance &&
-            Math.Abs(pos.Y - _dragOrigin.Y) < SystemParameters.MinimumVerticalDragDistance) {
-            return;
-        }
-
-        _dragArmed = false;
-        _selection.NotifyDragStarted(); // drag started — keep the full selection
-
-        var paths = Vm.SelectedEntries.Select(en => en.FullPath).ToArray();
-        if (paths.Length == 0) {
-            return;
-        }
-
-        // The payload carries the companions; `paths` — what the user
-        // selected — still drives the drag preview, because that is what
-        // they think they are dragging.
-        StartDrag((DependencyObject)sender, paths, Vm.WithCompanions(Vm.SelectedEntries).ToArray());
+    private void FileList_DragStartRequested(object? sender, FileListDragRequest e) {
+        StartDrag(e.Source, e.Paths, e.Payload);
     }
 
     private void StartDrag(DependencyObject src, string[] paths, string[] payload) {
@@ -1171,6 +775,7 @@ public partial class MainWindow : Window {
         } finally {
             System.Windows.DragDrop.RemoveGiveFeedbackHandler(src, feedback);
             ClearDropHighlight();
+            SetBookmarkDropZoneActive(false);
             preview.Close();
             _dragPreview = null;
         }
@@ -1195,6 +800,17 @@ public partial class MainWindow : Window {
         string desc;
         string? targetText = null;
         int count = _dragPathCount;
+
+        // Dropping into the bookmarks region is not a file operation at all,
+        // so none of the copy/move/link vocabulary applies. Without this the
+        // plaque kept showing whatever the last real target had offered —
+        // "Переместить … в Downloads" while hovering the bookmarks strip.
+        if (_bookmarkDropActive) {
+            ShowDragPreview();
+            _dragPreview.SetAction(DragAction.Link, FormatBookmarkDesc(count), null);
+
+            return;
+        }
 
         if (_currentDragEffect == DragDropEffects.None || _currentDropTarget is null) {
             // "Forbidden" branch. Two sub-cases:
@@ -1253,10 +869,22 @@ public partial class MainWindow : Window {
         return string.IsNullOrEmpty(name) ? path : name;
     }
 
+    private string FormatBookmarkDesc(int count) {
+        string what = count == 1
+            ? string.Format(Strings.DragOneItem, _dragFirstName)
+            : string.Format(Strings.DragItems, count);
+
+        return string.Format(Strings.DragAddToBookmarks, what);
+    }
+
 
     // --- Drop target ----------------------------------------------------
 
     private void OnDragOver(object sender, DragEventArgs e) {
+        // Reaching the ordinary pipeline means the cursor is over a real
+        // drop target again, whatever it was over a moment ago.
+        _bookmarkDropActive = false;
+
         if (!e.Data.GetDataPresent(DataFormats.FileDrop)) {
             e.Effects = DragDropEffects.None;
             e.Handled = true;
@@ -1339,6 +967,7 @@ public partial class MainWindow : Window {
     }
 
     private void ResetDropState() {
+        _bookmarkDropActive = false;
         _currentDragEffect = DragDropEffects.None;
         _currentDropTarget = null;
         _currentSelfDropReason = SelfDropReason.None;
@@ -1375,12 +1004,12 @@ public partial class MainWindow : Window {
             return;
         }
 
-        var paths = (string[])e.Data.GetData(DataFormats.FileDrop);
-        bool anyFolder = paths.Any(p => Directory.Exists(p));
-        e.Effects = anyFolder ? DragDropEffects.Link : DragDropEffects.None;
+        bool acceptable = CanAcceptBookmarkDrop(e);
+        e.Effects = acceptable ? DragDropEffects.Link : DragDropEffects.None;
         // Clear any leftover highlight from a previous in-folder hover so
         // empty-area drops don't look like they're targeting something.
         SetDropHighlight(null);
+        SetBookmarkDropZoneActive(acceptable);
         e.Handled = true;
     }
 
@@ -1411,20 +1040,17 @@ public partial class MainWindow : Window {
         }
     }
 
-    // --- Bookmark drop-zone (explicit affordance at top of panel) ------
+    // --- Bookmark "+" strip -------------------------------------------
     //
-    // Sits between the bookmarks header and the tree. Always visible when
-    // the panel is expanded; styled subtly when idle, prominently when a
-    // file-drag is hovering. Drops here always mean "add to bookmarks";
-    // the parent BookmarksPanel still accepts drops on its empty area so
-    // users who learn the gesture aren't forced to aim at the strip.
+    // Sits at the bottom of the bookmarks region, above the divider.
+    // Click adds the folder that is open; a drop adds what was dropped.
+    // The parent BookmarksPanel still accepts drops on its empty area, so
+    // users who learned that gesture are not forced to aim at the strip.
 
-    private static readonly SolidColorBrush _dropZoneIdleBg = Brushes.Transparent;
-    private static readonly SolidColorBrush _dropZoneIdleBorder = new(Color.FromRgb(0xDD, 0xDD, 0xDD));
-    private static readonly SolidColorBrush _dropZoneIdleText = new(Color.FromRgb(0x88, 0x88, 0x88));
-    private static readonly SolidColorBrush _dropZoneActiveBg = new(Color.FromRgb(0xE5, 0xF1, 0xFB));
-    private static readonly SolidColorBrush _dropZoneActiveBorder = new(Color.FromRgb(0x00, 0x78, 0xD7));
-    private static readonly SolidColorBrush _dropZoneActiveText = new(Color.FromRgb(0x00, 0x55, 0xA8));
+    private static readonly SolidColorBrush _dropZoneIdleFill = new(Color.FromRgb(0xEC, 0xEC, 0xEC));
+    private static readonly SolidColorBrush _dropZoneIdleGlyph = new(Color.FromRgb(0x88, 0x88, 0x88));
+    private static readonly SolidColorBrush _dropZoneActiveFill = new(Color.FromRgb(0xCC, 0xE8, 0xFF));
+    private static readonly SolidColorBrush _dropZoneActiveGlyph = new(Color.FromRgb(0x00, 0x55, 0xA8));
 
     private void BookmarkDropZone_DragEnter(object sender, DragEventArgs e) {
         if (!CanAcceptBookmarkDrop(e)) {
@@ -1471,30 +1097,31 @@ public partial class MainWindow : Window {
         }
     }
 
-    private static bool CanAcceptBookmarkDrop(DragEventArgs e) {
+    /// <summary>
+    /// A drag is worth reacting to when it carries at least one folder that
+    /// is not bookmarked already — dropping a folder that is in the list
+    /// would do nothing, so the strip should not promise otherwise.
+    /// </summary>
+    private bool CanAcceptBookmarkDrop(DragEventArgs e) {
         if (!e.Data.GetDataPresent(DataFormats.FileDrop)) {
             return false;
         }
         var paths = (string[])e.Data.GetData(DataFormats.FileDrop);
-        return paths.Any(Directory.Exists);
+
+        return paths.Any(p => Directory.Exists(p) && !Vm.IsBookmarked(p));
     }
 
+    /// <summary>
+    /// Lights the drop strip while a drag it can accept is over the
+    /// bookmarks. This is the strip's only reactive state — it is not a
+    /// button, so an idle mouse passing over it changes nothing.
+    /// </summary>
     private void SetBookmarkDropZoneActive(bool active) {
-        if (active) {
-            BookmarkDropZone.Background = _dropZoneActiveBg;
-            BookmarkDropZone.BorderBrush = _dropZoneActiveBorder;
-            BookmarkDropZone.BorderThickness = new Thickness(1);
-            BookmarkDropZoneText.Foreground = _dropZoneActiveText;
-            BookmarkDropZoneText.FontWeight = FontWeights.SemiBold;
-            BookmarkDropZoneText.Text = "+  Добавить в закладки";
-        } else {
-            BookmarkDropZone.Background = _dropZoneIdleBg;
-            BookmarkDropZone.BorderBrush = _dropZoneIdleBorder;
-            BookmarkDropZone.BorderThickness = new Thickness(0, 0, 0, 1);
-            BookmarkDropZoneText.Foreground = _dropZoneIdleText;
-            BookmarkDropZoneText.FontWeight = FontWeights.Normal;
-            BookmarkDropZoneText.Text = "+  Перетащите папку сюда";
-        }
+        _bookmarkDropActive = active;
+        BookmarkDropZone.Background = active ? _dropZoneActiveFill : _dropZoneIdleFill;
+        BookmarkDropZoneGlyph.Foreground = active ? _dropZoneActiveGlyph : _dropZoneIdleGlyph;
+        BookmarkDropZoneGlyph.FontWeight = active ? FontWeights.Bold : FontWeights.Normal;
+        UpdatePreviewForCurrentTarget();
     }
 
     /// <summary>
@@ -1632,498 +1259,6 @@ public partial class MainWindow : Window {
     }
 
 
-    // ======================================================================
-    // Preview pane: image zoom (FastStone-style RMB-hold pan zoom).
-    // ======================================================================
-    //
-    // When the previewed image is downscaled to fit the pane:
-    //   • the cursor turns into a magnifier glyph,
-    //   • holding the right mouse button shows the image at native 1:1 with
-    //     the pixel under the cursor anchored to the cursor's screen position,
-    //   • moving the mouse pans the 1:1 view — release RMB to return.
-    //
-    // Geometry: as the cursor moves from (0,0) to (host.W, host.H) we map
-    // linearly onto (0,0)..(src.W, src.H) image-pixel space, then position
-    // the 1:1 image so that mapped pixel sits under the cursor. This
-    // matches FastStone / IrfanView "navigator" zoom.
-
-    private bool _imageZoomActive;
-
-    private bool IsImageDownscaled() {
-        if (ImgFit.Source is not BitmapSource src) {
-            return false;
-        }
-        // A few pixels of slop avoid jitter exactly at break-even. If the
-        // source is already smaller than the available render area there's
-        // nothing useful to zoom into, so we don't switch the cursor.
-        return src.PixelWidth > ImgFit.ActualWidth + 1
-            || src.PixelHeight > ImgFit.ActualHeight + 1;
-    }
-
-    private void UpdateImageCursor() {
-        ImagePreviewHost.Cursor = IsImageDownscaled() ? MagnifierCursor.Instance : null;
-    }
-
-    private void ImgFit_SizeChanged(object sender, SizeChangedEventArgs e) {
-        // The fitted image's rendered size changes when the user resizes
-        // the pane or selects a differently-sized image. Refresh the
-        // cursor decision accordingly.
-        UpdateImageCursor();
-    }
-
-    private void ImageZoom_MouseEnter(object sender, MouseEventArgs e) {
-        UpdateImageCursor();
-    }
-
-    private void ImageZoom_MouseLeave(object sender, MouseEventArgs e) {
-        // Don't kill an active zoom on Leave — Mouse.Capture means we keep
-        // getting events anyway, and the user is probably panning to an
-        // image edge. Just restore the cursor.
-        if (!_imageZoomActive) {
-            ImagePreviewHost.Cursor = null;
-        }
-    }
-
-    private void ImageZoom_LmbDown(object sender, MouseButtonEventArgs e) {
-        if (!IsImageDownscaled()) {
-            return;
-        }
-        if (ImgFit.Source is not BitmapSource src) {
-            return;
-        }
-
-        _imageZoomActive = true;
-        // 1 DIP = 1 image pixel (no DPI compensation — matches FastStone's
-        // "100 %" semantics on the user's currently configured DPI).
-        ImgZoom.Width = src.PixelWidth;
-        ImgZoom.Height = src.PixelHeight;
-        ImgZoomCanvas.Visibility = Visibility.Visible;
-        UpdateZoomPosition(e.GetPosition(ImagePreviewHost));
-        // Capture so we still get the LMB-up if the user lifts the button
-        // outside the host (e.g., over the splitter). LostMouseCapture is
-        // our cleanup path.
-        ImagePreviewHost.CaptureMouse();
-        e.Handled = true;
-    }
-
-    private void ImageZoom_LmbUp(object sender, MouseButtonEventArgs e) {
-        ExitImageZoom();
-        e.Handled = true;
-    }
-
-    private void ImageZoom_MouseMove(object sender, MouseEventArgs e) {
-        if (!_imageZoomActive) {
-            return;
-        }
-        // Defensive: if LMB was released while we missed an event (e.g.,
-        // capture got stolen), drop out of zoom.
-        if (e.LeftButton != MouseButtonState.Pressed) {
-            ExitImageZoom();
-            return;
-        }
-        UpdateZoomPosition(e.GetPosition(ImagePreviewHost));
-    }
-
-    private void ImageZoom_LostCapture(object sender, MouseEventArgs e) {
-        ExitImageZoom();
-    }
-
-    // Mirror of the Margin attribute on ImgFit (8,12,8,8) so the zoom view
-    // can match the fit view's placement on the non-panning axis. Keep in
-    // sync if the XAML margin ever changes.
-    private const double PreviewImageMarginTop = 12;
-    // Left/right margins are symmetric — the centering math (hw - srcW)/2
-    // produces the same X whether you account for them or not, so no
-    // constant needed for X.
-
-    /// <summary>
-    /// Positions the 1:1 zoom image so that the image-pixel under the
-    /// cursor stays under the cursor. Pan is per-axis: only the dimension
-    /// that doesn't fit the pane scrolls with the cursor. The other one
-    /// is aligned to match how ImgFit (the fit-mode view) lays it out —
-    /// centred horizontally, top-anchored vertically — so toggling zoom
-    /// on doesn't visually jump the image to the middle.
-    ///
-    /// Mouse coordinates are clamped to the pane rectangle. The mouse
-    /// capture during zoom lets the cursor travel outside the host (e.g.
-    /// over the splitter); without clamping, the formula would extrapolate
-    /// and shove the image past the edge it should be pinned to.
-    /// </summary>
-    private void UpdateZoomPosition(Point mouse) {
-        if (ImgFit.Source is not BitmapSource src) {
-            return;
-        }
-        double hw = ImagePreviewHost.ActualWidth;
-        double hh = ImagePreviewHost.ActualHeight;
-        if (hw <= 0 || hh <= 0) {
-            return;
-        }
-
-        double srcW = src.PixelWidth;
-        double srcH = src.PixelHeight;
-
-        // Clamp to pane interior so leaving the pane doesn't scroll past
-        // the image edges. At mouse.X == 0 we show the image's left edge;
-        // at mouse.X == hw, the right edge.
-        double mx = Math.Clamp(mouse.X, 0, hw);
-        double my = Math.Clamp(mouse.Y, 0, hh);
-
-        // X axis: pan only if image is wider than the pane.
-        // When it fits, centre horizontally — matches ImgFit's
-        // HorizontalAlignment="Center" with symmetric L/R margins.
-        double x = srcW > hw
-            ? mx - (mx / hw) * srcW
-            : (hw - srcW) / 2;
-
-        // Y axis: pan only if image is taller than the pane.
-        // When it fits, anchor to the top with the same margin ImgFit
-        // uses — ImgFit has VerticalAlignment="Top" + Margin="8,12,8,8",
-        // so the fit view places the image at y=12. Centring vertically
-        // here would visibly jump the image down when the user holds LMB.
-        double y = srcH > hh
-            ? my - (my / hh) * srcH
-            : PreviewImageMarginTop;
-
-        Canvas.SetLeft(ImgZoom, x);
-        Canvas.SetTop(ImgZoom, y);
-    }
-
-    private void ExitImageZoom() {
-        if (!_imageZoomActive) {
-            return;
-        }
-        _imageZoomActive = false;
-        ImgZoomCanvas.Visibility = Visibility.Collapsed;
-        if (ImagePreviewHost.IsMouseCaptured) {
-            ImagePreviewHost.ReleaseMouseCapture();
-        }
-        UpdateImageCursor();
-    }
 
 
-    // ======================================================================
-    // Preview pane: video transport (MediaElement + Play/Pause + seek).
-    // ======================================================================
-
-    private DispatcherTimer? _videoTimer;
-    private bool _videoIsPlaying;
-    private bool _videoSliderDragging;
-    private bool _suppressVideoSliderChanged;
-
-    private void VideoPreview_MediaOpened(object sender, RoutedEventArgs e) {
-        // Cap the video preview to native pixel size — same rationale as
-        // for images: a 320×240 clip shouldn't stretch to fill a giant
-        // preview pane. Done here because NaturalVideoWidth/Height aren't
-        // known until MediaElement has actually opened the file.
-        if (VideoPreview.NaturalVideoWidth > 0 && VideoPreview.NaturalVideoHeight > 0) {
-            VideoPreview.MaxWidth = VideoPreview.NaturalVideoWidth;
-            VideoPreview.MaxHeight = VideoPreview.NaturalVideoHeight;
-        } else {
-            VideoPreview.MaxWidth = double.PositiveInfinity;
-            VideoPreview.MaxHeight = double.PositiveInfinity;
-        }
-
-        if (!VideoPreview.NaturalDuration.HasTimeSpan) {
-            return;
-        }
-        double total = VideoPreview.NaturalDuration.TimeSpan.TotalSeconds;
-        _suppressVideoSliderChanged = true;
-        VideoSlider.Maximum = total;
-        VideoSlider.Value = 0;
-        _suppressVideoSliderChanged = false;
-
-        UpdateVideoTimeText();
-        EnsureVideoTimer();
-    }
-
-    private void VideoPreview_MediaEnded(object sender, RoutedEventArgs e) {
-        // Rewind to start, leave paused — same convention as Explorer's
-        // preview pane and most desktop video viewers.
-        VideoPreview.Position = TimeSpan.Zero;
-        VideoPreview.Pause();
-        _videoIsPlaying = false;
-        VideoPlayPauseButton.Content = "▶";
-    }
-
-    private void VideoPreview_MediaFailed(object sender, ExceptionRoutedEventArgs e) {
-        // Codec not installed (e.g. .webm without the Web Media Extensions)
-        // or corrupt file. Surface a minimal hint in the slider area.
-        VideoTimeText.Text = Strings.PreviewVideoUnavailable;
-    }
-
-    private void EnsureVideoTimer() {
-        if (_videoTimer is not null) {
-            return;
-        }
-        // 200 ms is responsive enough for a progress bar and cheap on CPU.
-        _videoTimer = new DispatcherTimer(DispatcherPriority.Background) {
-            Interval = TimeSpan.FromMilliseconds(200),
-        };
-        _videoTimer.Tick += VideoTimer_Tick;
-        _videoTimer.Start();
-    }
-
-    private void VideoTimer_Tick(object? sender, EventArgs e) {
-        if (_videoSliderDragging) {
-            return;
-        }
-        if (!VideoPreview.NaturalDuration.HasTimeSpan) {
-            return;
-        }
-        // Avoid feedback: setting Slider.Value programmatically would
-        // otherwise re-fire ValueChanged and try to seek us back.
-        _suppressVideoSliderChanged = true;
-        VideoSlider.Value = VideoPreview.Position.TotalSeconds;
-        _suppressVideoSliderChanged = false;
-        UpdateVideoTimeText();
-    }
-
-    private void VideoPlayPause_Click(object sender, RoutedEventArgs e) {
-        if (_videoIsPlaying) {
-            VideoPreview.Pause();
-            _videoIsPlaying = false;
-            VideoPlayPauseButton.Content = "▶";
-        } else {
-            VideoPreview.Play();
-            _videoIsPlaying = true;
-            VideoPlayPauseButton.Content = "⏸";
-        }
-    }
-
-    private void VideoSlider_PreviewMouseDown(object sender, MouseButtonEventArgs e) {
-        _videoSliderDragging = true;
-    }
-
-    private void VideoSlider_PreviewMouseUp(object sender, MouseButtonEventArgs e) {
-        _videoSliderDragging = false;
-        // Final seek to the slider's resting value — ValueChanged during the
-        // drag already kept Position roughly synced with ScrubbingEnabled,
-        // but a final commit handles the last pointer position cleanly.
-        if (VideoPreview.NaturalDuration.HasTimeSpan) {
-            VideoPreview.Position = TimeSpan.FromSeconds(VideoSlider.Value);
-            UpdateVideoTimeText();
-        }
-    }
-
-    private void VideoSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) {
-        if (_suppressVideoSliderChanged) {
-            return;
-        }
-        if (!VideoPreview.NaturalDuration.HasTimeSpan) {
-            return;
-        }
-        // ScrubbingEnabled lets MediaElement show frames while we seek
-        // mid-drag, so we apply Position on every tick — feels responsive.
-        VideoPreview.Position = TimeSpan.FromSeconds(e.NewValue);
-        UpdateVideoTimeText();
-    }
-
-    private void UpdateVideoTimeText() {
-        TimeSpan pos = VideoPreview.Position;
-        TimeSpan dur = VideoPreview.NaturalDuration.HasTimeSpan
-            ? VideoPreview.NaturalDuration.TimeSpan
-            : TimeSpan.Zero;
-        VideoTimeText.Text = $"{FormatTimecode(pos)} / {FormatTimecode(dur)}";
-    }
-
-    private static string FormatTimecode(TimeSpan t) {
-        return t.TotalHours >= 1
-            ? $"{(int)t.TotalHours}:{t.Minutes:D2}:{t.Seconds:D2}"
-            : $"{t.Minutes}:{t.Seconds:D2}";
-    }
-
-    private void ResetVideoTransport() {
-        // Explicitly pause: WPF's Visibility=Collapsed doesn't tear the
-        // MediaElement down, so audio would otherwise keep playing in the
-        // background after the user selects another file.
-        try { VideoPreview.Pause(); } catch { /* not yet loaded */ }
-        _videoIsPlaying = false;
-        VideoPlayPauseButton.Content = "▶";
-        _suppressVideoSliderChanged = true;
-        try {
-            VideoSlider.Value = 0;
-            VideoSlider.Maximum = 1;
-        } finally {
-            _suppressVideoSliderChanged = false;
-        }
-        VideoTimeText.Text = "0:00 / 0:00";
-        // Drop the native-size cap so a fresh video isn't constrained by
-        // the previous clip's resolution until MediaOpened reconfigures it.
-        VideoPreview.MaxWidth = double.PositiveInfinity;
-        VideoPreview.MaxHeight = double.PositiveInfinity;
-    }
-
-
-    // ======================================================================
-    // Rubber-band / marquee selection in the file list.
-    // ======================================================================
-    //
-    // Gesture: click on empty space in the right-pane list and drag. A
-    // translucent rectangle follows the cursor; every item whose container
-    // bounding box intersects the rectangle becomes selected. With Ctrl
-    // held, items in the rectangle are added to the existing selection
-    // (Explorer parity); without Ctrl the rectangle replaces selection.
-    //
-    // Implementation notes:
-    //   • The marquee is a single Adorner painted on the host's AdornerLayer
-    //     (RubberBandAdorner). InvalidateVisual on each mouse move repaints.
-    //   • Hit-testing iterates the host's items; for each one we ask
-    //     ItemContainerGenerator for the realised container and transform
-    //     its bounds back into the host's coordinate system. Virtualised
-    //     (not-yet-realised) items are skipped — they're off-screen anyway
-    //     and can't be intersected by a visible rectangle.
-    //   • Mouse capture on the host ensures we receive MouseUp even if the
-    //     cursor leaves the control mid-drag; LostMouseCapture is the
-    //     cleanup safety net.
-
-    private void StartRubberBand(ItemsControl host, MouseButtonEventArgs e) {
-        // If a previous gesture didn't clean up (shouldn't happen, but be
-        // robust), drop it first.
-        EndRubberBand();
-
-        bool additive = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
-        _rubberBandBaseSelection = additive
-            ? new HashSet<FileSystemEntry>(Vm.SelectedEntries)
-            : new HashSet<FileSystemEntry>();
-        if (!additive) {
-            ClearListSelection(host);
-        }
-
-        _rubberBandHost = host;
-        _rubberBandOrigin = e.GetPosition(host);
-        _rubberBandLayer = AdornerLayer.GetAdornerLayer(host);
-        if (_rubberBandLayer is null) {
-            // No adorner layer (extremely rare) — proceed without visuals,
-            // hit-testing still works.
-            _rubberBandAdorner = null;
-        } else {
-            _rubberBandAdorner = new RubberBandAdorner(host) {
-                StartPoint = _rubberBandOrigin,
-                CurrentPoint = _rubberBandOrigin,
-            };
-            _rubberBandLayer.Add(_rubberBandAdorner);
-        }
-
-        _rubberBandActive = true;
-        host.CaptureMouse();
-        host.LostMouseCapture += RubberBandHost_LostCapture;
-        e.Handled = true;
-    }
-
-    private void RubberBandHost_LostCapture(object sender, MouseEventArgs e) {
-        // Some other element grabbed the mouse — wrap things up so we don't
-        // leave a phantom marquee on screen.
-        EndRubberBand();
-    }
-
-    private void UpdateRubberBand(Point current) {
-        if (_rubberBandHost is null || _rubberBandBaseSelection is null) {
-            return;
-        }
-
-        if (_rubberBandAdorner is not null) {
-            _rubberBandAdorner.CurrentPoint = current;
-            _rubberBandAdorner.InvalidateVisual();
-        }
-        var rect = new Rect(_rubberBandOrigin, current);
-
-        // Build the new selection: base (already-selected at gesture start,
-        // empty in non-additive mode) ∪ items intersecting the rectangle.
-        var newSelection = new HashSet<FileSystemEntry>(_rubberBandBaseSelection);
-        foreach (var entry in Vm.Entries) {
-            if (TryGetContainerRect(_rubberBandHost, entry, out Rect itemRect)
-                && rect.IntersectsWith(itemRect)) {
-                newSelection.Add(entry);
-            }
-        }
-
-        SetListSelection(_rubberBandHost, newSelection);
-    }
-
-    private void EndRubberBand() {
-        if (!_rubberBandActive) {
-            return;
-        }
-        _rubberBandActive = false;
-
-        if (_rubberBandHost is { } host) {
-            host.LostMouseCapture -= RubberBandHost_LostCapture;
-            if (host.IsMouseCaptured) {
-                host.ReleaseMouseCapture();
-            }
-        }
-        if (_rubberBandAdorner is not null && _rubberBandLayer is not null) {
-            _rubberBandLayer.Remove(_rubberBandAdorner);
-        }
-        _rubberBandHost = null;
-        _rubberBandLayer = null;
-        _rubberBandAdorner = null;
-        _rubberBandBaseSelection = null;
-    }
-
-    /// <summary>
-    /// Returns the on-screen rectangle of the given entry's item container
-    /// in the host's coordinate space, or false if the item isn't realised
-    /// (virtualised away off-screen).
-    /// </summary>
-    private static bool TryGetContainerRect(ItemsControl host, FileSystemEntry entry, out Rect rect) {
-        rect = default;
-        if (host.ItemContainerGenerator.ContainerFromItem(entry) is not FrameworkElement fe) {
-            return false;
-        }
-        if (fe.ActualWidth <= 0 || fe.ActualHeight <= 0) {
-            return false;
-        }
-        try {
-            var transform = fe.TransformToAncestor(host);
-            var topLeft = transform.Transform(new Point(0, 0));
-            rect = new Rect(topLeft, new Size(fe.ActualWidth, fe.ActualHeight));
-            return true;
-        } catch {
-            // TransformToAncestor throws if the container has been detached
-            // from the visual tree mid-iteration; skip.
-            return false;
-        }
-    }
-
-    private static void ClearListSelection(ItemsControl host) {
-        if (host is ListBox lb) {
-            lb.UnselectAll();
-        } else if (host is DataGrid dg) {
-            dg.UnselectAll();
-        }
-    }
-
-    private static void SetListSelection(ItemsControl host, IEnumerable<FileSystemEntry> items) {
-        // Set the selection by delta — clearing+adding everything would
-        // collapse and re-expand the control's selection, causing visible
-        // flicker on ListBox and unnecessary SelectionChanged churn.
-        if (host is ListBox lb) {
-            ApplyDelta(lb.SelectedItems, items);
-        } else if (host is DataGrid dg) {
-            ApplyDelta(dg.SelectedItems, items);
-        }
-    }
-
-    private static void ApplyDelta(System.Collections.IList currentSelection, IEnumerable<FileSystemEntry> targetItems) {
-        var target = new HashSet<FileSystemEntry>(targetItems);
-        // Remove anything no longer in the target set.
-        for (int i = currentSelection.Count - 1; i >= 0; i--) {
-            if (currentSelection[i] is FileSystemEntry existing && !target.Contains(existing)) {
-                currentSelection.RemoveAt(i);
-            }
-        }
-        // Add anything missing.
-        var present = new HashSet<FileSystemEntry>();
-        foreach (var o in currentSelection) {
-            if (o is FileSystemEntry fe) {
-                present.Add(fe);
-            }
-        }
-        foreach (var entry in target) {
-            if (!present.Contains(entry)) {
-                currentSelection.Add(entry);
-            }
-        }
-    }
 }

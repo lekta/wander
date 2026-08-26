@@ -66,6 +66,12 @@ public static class Strings {
     /// <summary>Скопировать GUID</summary>
     public static string PreviewCopyGuid => Get(nameof(PreviewCopyGuid));
 
+    /// <summary>Полный кадр RAW</summary>
+    public static string PreviewRawToggle => Get(nameof(PreviewRawToggle));
+
+    /// <summary>Показать полный кадр RAW вместо встроенного превью …</summary>
+    public static string PreviewRawToggleHint => Get(nameof(PreviewRawToggleHint));
+
     /// <summary>Оценка</summary>
     public static string PreviewRating => Get(nameof(PreviewRating));
 
@@ -447,6 +453,9 @@ public static class Strings {
     /// <summary>в {0}</summary>
     public static string DragTarget => Get(nameof(DragTarget));
 
+    /// <summary>Добавить {0} в закладки</summary>
+    public static string DragAddToBookmarks => Get(nameof(DragAddToBookmarks));
+
     /// <summary>Wander — отчёт об ошибке</summary>
     public static string CrashTitle => Get(nameof(CrashTitle));
 
@@ -624,6 +633,12 @@ public static class Strings {
     /// <summary>Показывать системные файлы и папки</summary>
     public static string SettingsShowSystem => Get(nameof(SettingsShowSystem));
 
+    /// <summary>Не показывать системные папки в корне дисков</summary>
+    public static string SettingsHideSystemRootFolders => Get(nameof(SettingsHideSystemRootFolders));
+
+    /// <summary>$RECYCLE.BIN, System Volume Information, Recovery, …</summary>
+    public static string SettingsHideSystemRootFoldersHint => Get(nameof(SettingsHideSystemRootFoldersHint));
+
     /// <summary>Изменения применяются мгновенно: список файлов в текущей …</summary>
     public static string SettingsHiddenHint => Get(nameof(SettingsHiddenHint));
 
@@ -740,6 +755,12 @@ public static class Strings {
 
     /// <summary>Убрать из закладок</summary>
     public static string BookmarksRemove => Get(nameof(BookmarksRemove));
+
+    /// <summary>Перетащите сюда папку, чтобы добавить её в закладки</summary>
+    public static string BookmarksAddHint => Get(nameof(BookmarksAddHint));
+
+    /// <summary>Действия с закладкой</summary>
+    public static string BookmarksRowMenuHint => Get(nameof(BookmarksRowMenuHint));
 
     /// <summary>В закладки можно перетаскивать только папки.</summary>
     public static string BookmarksFoldersOnly => Get(nameof(BookmarksFoldersOnly));

@@ -67,6 +67,9 @@
                           IsChecked="{Binding Owner.ShowHidden}"/>
                 <CheckBox Content="{x:Static res:Strings.SettingsShowSystem}"
                           IsChecked="{Binding Owner.ShowSystem}"/>
+                <CheckBox Content="{x:Static res:Strings.SettingsHideSystemRootFolders}"
+                          ToolTip="{x:Static res:Strings.SettingsHideSystemRootFoldersHint}"
+                          IsChecked="{Binding Owner.HideSystemRootFolders}"/>
                 <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0"
                            Text="{x:Static res:Strings.SettingsHiddenHint}"/>
             </StackPanel>

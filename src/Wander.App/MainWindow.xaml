@@ -7,6 +7,7 @@
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         xmlns:ae="http://icsharpcode.net/sharpdevelop/avalonedit"
         xmlns:controls="clr-namespace:Wander.App.Controls"
+        xmlns:views="clr-namespace:Wander.App.Views"
         xmlns:res="clr-namespace:Wander.App.Resources"
         Title="{Binding WindowTitle}"
         Icon="Assets\app.ico"
@@ -28,32 +29,8 @@
         <conv:EnumEqualsConverter x:Key="EnumEquals"/>
         <conv:BitmapPixelSizeConverter x:Key="BitmapPixelSize"/>
         <conv:RankStarConverter x:Key="RankStar"/>
+        <conv:TreeIndentConverter x:Key="TreeIndent"/>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
-        <conv:RenameEditorVisibilityConverter x:Key="RenameVisibility"/>
-
-        <!--
-            Inline rename editor (A3). Every row template carries one of
-            these, collapsed; MainViewModel.RenamingPath makes exactly one
-            visible. Focus, the initial text and the "select the name, not
-            the extension" selection are done from code-behind when the
-            edit starts - a collapsed TextBox cannot take focus, so it has
-            to happen after the visibility flips.
-        -->
-        <Style x:Key="RenameEditor" TargetType="TextBox">
-            <Setter Property="Padding" Value="0"/>
-            <Setter Property="MinWidth" Value="60"/>
-            <Setter Property="Visibility">
-                <Setter.Value>
-                    <MultiBinding Converter="{StaticResource RenameVisibility}">
-                        <Binding Path="FullPath"/>
-                        <Binding Path="DataContext.RenamingPath" RelativeSource="{RelativeSource AncestorType=Window}"/>
-                    </MultiBinding>
-                </Setter.Value>
-            </Setter>
-            <EventSetter Event="PreviewKeyDown" Handler="RenameBox_PreviewKeyDown"/>
-            <EventSetter Event="PreviewTextInput" Handler="RenameBox_PreviewTextInput"/>
-            <EventSetter Event="LostKeyboardFocus" Handler="RenameBox_LostKeyboardFocus"/>
-        </Style>
 
         <!--
             One star of the .pp3 rating widget. Five copies of this in the
@@ -111,64 +88,126 @@
         </Style>
 
         <!--
-            Suppress the dashed focus rectangle on selectable row containers.
-            Default WPF draws it on top of the selection background, producing
-            "double selection" visuals. Selection state remains driven by the
-            normal background brushes; focus is still tracked semantically
-            (keyboard navigation works).
+            The file list's own row styles moved with it into
+            Views/FileListView.xaml. What stays here is the tree's, because
+            the drives and bookmarks panels must match it: Hidden rows fade
+            to 0.55 opacity (Explorer parity), System rows go italic, and a
+            row that is both gets both.
         -->
         <!--
-            Implicit row styles: kill the focus rectangle (see comment above),
-            and fade rows whose underlying entry has the Hidden / System
-            attribute. Fading only kicks in when the corresponding toggle is
-            on (otherwise the row isn't rendered at all), so the dimmed look
-            is the visual cue that "this is technically hidden by Windows".
+            The expander chevron. Its own style so the row template can put
+            it in a fixed-width column and the hit test in code-behind can
+            keep recognising it by type (ToggleButton).
         -->
-        <!--
-            Hidden vs System visual cue convention:
-              - Hidden:           opacity 0.55 (faded, Explorer parity).
-              - System:           italic       (slants the label; a strong but
-                                                still readable signal that this
-                                                is OS infrastructure).
-              - Hidden + System:  both         (typical "protected OS" file —
-                                                stands out as «не трогать»).
-            Triggers stack additively, so the combined case automatically gets
-            both treatments. Same triggers are applied to the TreeViewItem
-            style so drives/bookmarks panel matches the file list.
-        -->
-        <Style TargetType="DataGridRow">
-            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding IsHidden}" Value="True">
-                    <Setter Property="Opacity" Value="0.55"/>
-                </DataTrigger>
-                <DataTrigger Binding="{Binding IsSystem}" Value="True">
-                    <Setter Property="FontStyle" Value="Italic"/>
-                </DataTrigger>
-            </Style.Triggers>
-        </Style>
-        <Style TargetType="DataGridCell">
-            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-        </Style>
-        <Style TargetType="ListBoxItem">
-            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding IsHidden}" Value="True">
-                    <Setter Property="Opacity" Value="0.55"/>
-                </DataTrigger>
-                <DataTrigger Binding="{Binding IsSystem}" Value="True">
-                    <Setter Property="FontStyle" Value="Italic"/>
-                </DataTrigger>
-            </Style.Triggers>
+        <Style x:Key="TreeExpander" TargetType="ToggleButton">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Width" Value="16"/>
+            <Setter Property="Height" Value="16"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border Background="Transparent" Width="16" Height="16">
+                            <Path x:Name="Arrow"
+                                  Data="M 0,0 L 5,4.5 L 0,9 Z"
+                                  Fill="#606060"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Arrow" Property="Data" Value="M 0,0 L 9,0 L 4.5,5 Z"/>
+                                <Setter TargetName="Arrow" Property="Fill" Value="#1B1B1B"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Arrow" Property="Fill" Value="#0078D7"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
-        <!-- Shared TreeViewItem style: same Hidden/System visual rules as the
-             file list, plus the two-way bindings for expand/select state.
-             Used by both the bookmarks tree and the drives tree. -->
+        <!--
+            Shared TreeViewItem style for the bookmarks and drives panels.
+
+            Retemplated rather than restyled, because the stock template
+            cannot do the one thing that matters here: highlight and accept
+            clicks across the *whole row*, the way Explorer does. Nesting is
+            what indents the stock template, so its highlight starts at the
+            label; here the row border spans the full width and only its
+            content is indented (TreeIndentConverter).
+
+            Colours are Explorer's: #E5F3FB on hover, #CCE8FF selected,
+            #E8E8E8 for a selection in a panel that lost focus.
+
+            The Hidden/System cues match the file list — Hidden fades to
+            0.55 opacity, System goes italic, both stack.
+        -->
         <Style x:Key="WanderTreeViewItem" TargetType="TreeViewItem">
             <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
             <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TreeViewItem">
+                        <StackPanel>
+                            <Border x:Name="Row"
+                                    Background="Transparent"
+                                    MinHeight="22"
+                                    SnapsToDevicePixels="True">
+                                <Grid Margin="{Binding RelativeSource={RelativeSource AncestorType=TreeViewItem}, Converter={StaticResource TreeIndent}}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="16"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <ToggleButton x:Name="Expander"
+                                                  Grid.Column="0"
+                                                  Style="{StaticResource TreeExpander}"
+                                                  ClickMode="Press"
+                                                  IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"/>
+                                    <!--
+                                        Alignment comes from the item style,
+                                        not baked in: the drives tree keeps
+                                        its rows only as wide as their names
+                                        (so long paths scroll sideways),
+                                        while the bookmarks tree stretches
+                                        them so the "…" menu can sit at the
+                                        right edge.
+                                    -->
+                                    <ContentPresenter x:Name="PART_Header"
+                                                      Grid.Column="1"
+                                                      ContentSource="Header"
+                                                      HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                      VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                            <ItemsPresenter x:Name="ItemsHost"/>
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsExpanded" Value="False">
+                                <Setter TargetName="ItemsHost" Property="Visibility" Value="Collapsed"/>
+                            </Trigger>
+                            <Trigger Property="HasItems" Value="False">
+                                <Setter TargetName="Expander" Property="Visibility" Value="Hidden"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" SourceName="Row" Value="True">
+                                <Setter TargetName="Row" Property="Background" Value="#E5F3FB"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Row" Property="Background" Value="#CCE8FF"/>
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsSelected" Value="True"/>
+                                    <Condition Property="IsSelectionActive" Value="False"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="Row" Property="Background" Value="#E8E8E8"/>
+                            </MultiTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsHidden}" Value="True">
                     <Setter Property="Opacity" Value="0.55"/>
@@ -384,9 +423,17 @@
                 The chevron on the right drops down the recently visited
                 folders (F4 toggles it — Explorer parity).
             -->
+            <!--
+                The whole strip switches to the editable path on a click
+                that misses a crumb — handled here, on the outer border, in
+                the tunnelling phase. It used to hang off the inner border
+                behind the breadcrumbs, which left the strip's own padding
+                and the gap under the crumb row dead to the click.
+            -->
             <Border x:Name="AddressBar"
                     VerticalAlignment="Center" Margin="0,4,4,4" MinHeight="26"
-                    Background="White" BorderBrush="#ABADB3" BorderThickness="1">
+                    Background="White" BorderBrush="#ABADB3" BorderThickness="1"
+                    PreviewMouseLeftButtonDown="AddressBar_PreviewMouseLeftButtonDown">
                 <DockPanel>
                     <ToggleButton x:Name="RecentToggle" DockPanel.Dock="Right"
                                   Width="22" Focusable="False"
@@ -419,7 +466,7 @@
                             current folder out of sight — the view scrolls to
                             the tail on every navigation (see code-behind).
                         -->
-                        <Border Background="Transparent" MouseLeftButtonDown="CrumbHost_MouseLeftButtonDown">
+                        <Border Background="Transparent">
                             <Border.Style>
                                 <Style TargetType="Border">
                                     <Setter Property="Visibility" Value="Visible"/>
@@ -536,17 +583,32 @@
 
             <!--
                 Left pane = vertical stack:
-                  • bookmarks panel (collapsible header + tree of favourites + special folders)
-                  • drives tree (the original, unchanged behaviour)
-                Drops onto an empty area of the bookmarks panel add the dragged
-                folder(s) as bookmarks; drops onto a specific bookmark folder
-                inside the bookmarks tree go through the normal OnDragOver/OnDrop
-                pipeline (copy/move into that folder).
+                  • bookmarks (collapsible header, tree of favourites, "+" strip)
+                  • a draggable divider
+                  • drives tree
+                The divider is a real GridSplitter: how much room bookmarks
+                deserve depends on how many the user keeps, and a fixed cap
+                was always wrong for somebody. Its position is remembered in
+                AppState the same way the preview pane's width is.
+
+                Drops onto an empty area of the bookmarks region add the
+                dragged folder(s) as bookmarks; drops onto a specific
+                bookmark folder inside the tree go through the normal
+                OnDragOver/OnDrop pipeline (copy/move into that folder).
             -->
             <Grid Grid.Column="0" Background="#F8F8F8">
                 <Grid.RowDefinitions>
+                    <!--
+                        Header, tree and the "+" strip share one row, so the
+                        divider has a single height to move. Splitting them
+                        across rows is what made dragging the divider grow the
+                        "+" strip instead of the bookmarks: a splitter with
+                        PreviousAndNext resizes the rows it sits between, and
+                        the row above it was the strip's, not the tree's.
+                    -->
+                    <RowDefinition x:Name="BookmarksRow" Height="200" MinHeight="56"/>
                     <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="*" MinHeight="80"/>
                 </Grid.RowDefinitions>
 
                 <DockPanel Grid.Row="0"
@@ -585,33 +647,36 @@
                     </Button>
 
                     <!--
-                        Explicit drop zone — discoverable affordance for
-                        adding folders to bookmarks by drag&drop. Idle: thin
-                        bottom border + muted hint. Drag-over: filled with
-                        blue tint and bold "+ Add to bookmarks" prompt
-                        (toggled via SetBookmarkDropZoneActive in code-behind).
-                        Dropping anywhere else in the panel still adds a
-                        bookmark too — this zone is the visible cue, not the
-                        only acceptor.
+                        Drop zone for new bookmarks. Sits at the bottom of
+                        the bookmarks region, right above the divider, and is
+                        deliberately narrower than the panel so it reads as a
+                        target rather than as another row of the tree.
+
+                        Not a button: nothing happens on a click, so it must
+                        not offer a hand cursor or light up under an idle
+                        mouse. It answers only to a drag carrying a folder
+                        that is not bookmarked yet — see
+                        SetBookmarkDropZoneActive.
                     -->
                     <Border x:Name="BookmarkDropZone"
-                            DockPanel.Dock="Top"
-                            Height="26"
-                            Background="Transparent"
-                            BorderBrush="#DDD"
-                            BorderThickness="0,0,0,1"
+                            DockPanel.Dock="Bottom"
+                            Height="20"
+                            Margin="12,2,12,2"
+                            Background="#ECECEC"
+                            CornerRadius="2"
+                            ToolTip="{x:Static res:Strings.BookmarksAddHint}"
                             AllowDrop="True"
                             DragEnter="BookmarkDropZone_DragEnter"
                             DragOver="BookmarkDropZone_DragOver"
                             DragLeave="BookmarkDropZone_DragLeave"
                             Drop="BookmarkDropZone_Drop"
                             Visibility="{Binding IsBookmarksExpanded, Converter={StaticResource BoolToVisibility}}">
-                        <TextBlock x:Name="BookmarkDropZoneText"
-                                   Text="+  Перетащите папку сюда"
+                        <TextBlock x:Name="BookmarkDropZoneGlyph"
+                                   Text="+"
+                                   FontSize="13"
+                                   Foreground="#888"
                                    HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   FontSize="11"
-                                   Foreground="#888"/>
+                                   VerticalAlignment="Center"/>
                     </Border>
 
                     <!--
@@ -623,47 +688,150 @@
                         bookmarks rather than copying into the current folder.
                     -->
                     <TreeView x:Name="BookmarksTree"
-                              DockPanel.Dock="Top"
                               ItemsSource="{Binding Bookmarks}"
                               SelectedItemChanged="Bookmarks_SelectedItemChanged"
                               PreviewMouseLeftButtonDown="Tree_PreviewMouseLeftButtonDown"
+                              PreviewMouseLeftButtonUp="Tree_PreviewMouseLeftButtonUp"
+                              PreviewMouseMove="Tree_PreviewMouseMove"
+                              PreviewMouseWheel="Tree_PreviewMouseWheel"
+                              PreviewMouseRightButtonUp="BookmarksTree_PreviewMouseRightButtonUp"
                               TreeViewItem.Expanded="TreeViewItem_Expanded"
                               TreeViewItem.Collapsed="TreeViewItem_Collapsed"
                               AllowDrop="True"
                               Visibility="{Binding IsBookmarksExpanded, Converter={StaticResource BoolToVisibility}}"
-                              MaxHeight="280"
-                              BorderThickness="0">
+                              BorderThickness="0"
+                              Background="Transparent">
                         <TreeView.ItemContainerStyle>
-                            <Style TargetType="TreeViewItem" BasedOn="{StaticResource WanderTreeViewItem}"/>
+                            <!--
+                                Stretched rows, unlike the drives tree: the
+                                "…" menu button lives at the right edge, so
+                                the row has to reach it. Bookmark names are
+                                short, so nothing is lost by giving up the
+                                horizontal scroll here.
+                            -->
+                            <Style TargetType="TreeViewItem" BasedOn="{StaticResource WanderTreeViewItem}">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            </Style>
                         </TreeView.ItemContainerStyle>
                         <TreeView.ItemTemplate>
                             <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                                <StackPanel Orientation="Horizontal">
-                                    <StackPanel.ContextMenu>
-                                        <ContextMenu>
-                                            <MenuItem Header="{x:Static res:Strings.BookmarksRemove}"
-                                                      IsEnabled="{Binding PlacementTarget.DataContext.IsRemovableBookmark, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                                      Command="{Binding DataContext.RemoveBookmarkCommand, ElementName=WanderWindow}"
-                                                      CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
-                                        </ContextMenu>
-                                    </StackPanel.ContextMenu>
-                                    <Image Source="{Binding FullPath, Converter={StaticResource IconConverter}, ConverterParameter=Small}"
+                                <!--
+                                    The row's menu is built in code-behind
+                                    (BookmarkRowMenu_Click), not declared
+                                    here. A ContextMenu declared inside a
+                                    DataTemplate lives in its own name scope
+                                    and its own visual tree, so the
+                                    ElementName binding that used to reach
+                                    the window for the command never
+                                    resolved — the menu opened and the item
+                                    did nothing.
+                                -->
+                                <DockPanel Background="Transparent">
+                                    <!--
+                                        The row's own menu, reachable without
+                                        the right mouse button. Only the
+                                        user's own bookmarks get it — the
+                                        special folders are toggled in
+                                        settings and have nothing to remove.
+                                        It opens the same menu the right
+                                        click does.
+
+                                        Always visible rather than on hover:
+                                        a TreeViewItem's IsMouseOver covers
+                                        its whole subtree, so hovering a child
+                                        would light the parent's button too,
+                                        and there is no way to reach the row
+                                        border's own hover state from inside
+                                        the item template. A muted glyph on
+                                        the handful of rows that have one is
+                                        the cheaper trade.
+                                    -->
+                                    <Button DockPanel.Dock="Right"
+                                            Width="18" Height="18"
+                                            Margin="4,0,2,0"
+                                            Padding="0"
+                                            Content="&#x22EF;"
+                                            FontSize="13"
+                                            Foreground="#555"
+                                            Focusable="False"
+                                            Cursor="Hand"
+                                            ToolTip="{x:Static res:Strings.BookmarksRowMenuHint}"
+                                            Click="BookmarkRowMenu_Click">
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border x:Name="Bd" Background="Transparent" CornerRadius="2">
+                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="Bd" Property="Background" Value="#C4E0F4"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsRemovableBookmark}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+
+                                    <Image DockPanel.Dock="Left"
+                                           Source="{Binding FullPath, Converter={StaticResource IconConverter}, ConverterParameter=Small}"
                                            Width="16" Height="16" Margin="0,0,4,0"/>
-                                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
-                                </StackPanel>
+                                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis"/>
+                                </DockPanel>
                             </HierarchicalDataTemplate>
                         </TreeView.ItemTemplate>
                     </TreeView>
                 </DockPanel>
 
-                <TreeView x:Name="Tree" Grid.Row="1"
-                          Margin="0,12,0,0"
+                <!--
+                    "Add bookmark" strip. It sits at the bottom of the
+                    bookmarks region, right above the divider, and is
+                    deliberately narrower than the panel so it reads as a
+                    control rather than as another row of the tree. No
+                    caption — a "+" and a tooltip; the text that used to be
+                    here was a permanent instruction for something the user
+                    learns once. Flat fill, no border, no gradient.
+
+                    Two ways in: click adds the folder that is currently
+                    open, drag-and-drop adds whatever is dropped on it.
+                -->
+
+
+                <GridSplitter x:Name="BookmarksSplitter"
+                              Grid.Row="1"
+                              Height="6"
+                              HorizontalAlignment="Stretch"
+                              VerticalAlignment="Center"
+                              ResizeDirection="Rows"
+                              ResizeBehavior="PreviousAndNext"
+                              Background="#DDD"
+                              Visibility="{Binding IsBookmarksExpanded, Converter={StaticResource BoolToVisibility}}"
+                              DragCompleted="BookmarksSplitter_DragCompleted"/>
+
+                <TreeView x:Name="Tree" Grid.Row="2"
+                          Margin="0,4,0,0"
                           ItemsSource="{Binding Roots}"
                           SelectedItemChanged="Tree_SelectedItemChanged"
                           PreviewMouseLeftButtonDown="Tree_PreviewMouseLeftButtonDown"
+                          PreviewMouseLeftButtonUp="Tree_PreviewMouseLeftButtonUp"
+                          PreviewMouseMove="Tree_PreviewMouseMove"
+                          PreviewMouseRightButtonDown="Tree_PreviewMouseRightButtonDown"
+                          PreviewMouseRightButtonUp="Tree_PreviewMouseRightButtonUp"
+                          PreviewMouseWheel="Tree_PreviewMouseWheel"
                           TreeViewItem.Expanded="TreeViewItem_Expanded"
                           TreeViewItem.Collapsed="TreeViewItem_Collapsed"
                           AllowDrop="True"
+                          Background="Transparent"
+                          BorderThickness="0"
                           DragOver="OnDragOver"
                           Drop="OnDrop">
                     <TreeView.ItemContainerStyle>
@@ -671,7 +839,7 @@
                     </TreeView.ItemContainerStyle>
                     <TreeView.ItemTemplate>
                         <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                            <StackPanel Orientation="Horizontal">
+                            <StackPanel Orientation="Horizontal" Background="Transparent">
                                 <Image Source="{Binding FullPath, Converter={StaticResource IconConverter}, ConverterParameter=Small}"
                                        Width="16" Height="16" Margin="0,0,4,0"/>
                                 <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
@@ -683,216 +851,13 @@
 
             <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" Background="#DDD"/>
 
-            <Grid Grid.Column="2"
-                  AllowDrop="True"
-                  DragOver="OnDragOver"
-                  Drop="OnDrop"
-                  Background="Transparent">
-                <!-- Details -->
-                <DataGrid x:Name="Grid"
-                          Visibility="{Binding ViewMode, Converter={StaticResource EnumToVisibility}, ConverterParameter=Details}"
-                          ItemsSource="{Binding Entries}"
-                          SelectedItem="{Binding SelectedEntry}"
-                          AutoGenerateColumns="False" IsReadOnly="True"
-                          SelectionMode="Extended" SelectionUnit="FullRow"
-                          ClipboardCopyMode="None"
-                          MouseDoubleClick="Grid_MouseDoubleClick"
-                          SelectionChanged="List_SelectionChanged"
-                          PreviewMouseLeftButtonDown="List_PreviewMouseLeftButtonDown"
-                          PreviewMouseLeftButtonUp="List_PreviewMouseLeftButtonUp"
-                          PreviewMouseMove="List_PreviewMouseMove"
-                          PreviewMouseRightButtonDown="List_PreviewMouseRightButtonDown"
-                          PreviewMouseRightButtonUp="List_PreviewMouseRightButtonUp"
-                          PreviewKeyDown="List_PreviewKeyDown"
-                          AllowDrop="True"
-                          DragOver="OnDragOver"
-                          Drop="OnDrop"
-                          GridLinesVisibility="None" AlternatingRowBackground="#F7F7F7"
-                          HeadersVisibility="Column" RowHeight="24">
-                    <DataGrid.Columns>
-                        <DataGridTemplateColumn Header="" Width="28" IsReadOnly="True">
-                            <DataGridTemplateColumn.CellTemplate>
-                                <DataTemplate>
-                                    <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Normal"
-                                                        Width="20" Height="20"/>
-                                </DataTemplate>
-                            </DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-                        <!--
-                            Name + the "has companions" marker. A template
-                            column rather than a text one only because of
-                            that marker; SortMemberPath keeps the header
-                            behaving exactly as before.
-                        -->
-                        <DataGridTemplateColumn Header="{x:Static res:Strings.ColumnName}" Width="*" SortMemberPath="Name" IsReadOnly="True">
-                            <DataGridTemplateColumn.CellTemplate>
-                                <DataTemplate>
-                                    <Grid>
-                                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis">
-                                            <TextBlock.Visibility>
-                                                <MultiBinding Converter="{StaticResource RenameVisibility}" ConverterParameter="Inverse">
-                                                    <Binding Path="FullPath"/>
-                                                    <Binding Path="DataContext.RenamingPath" RelativeSource="{RelativeSource AncestorType=Window}"/>
-                                                </MultiBinding>
-                                            </TextBlock.Visibility>
-                                        </TextBlock>
-                                        <TextBox Style="{StaticResource RenameEditor}"/>
-                                    </Grid>
-                                </DataTemplate>
-                            </DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-                        <DataGridTextColumn Header="{x:Static res:Strings.ColumnType}" Binding="{Binding Kind}" Width="80"/>
-                        <DataGridTextColumn Header="{x:Static res:Strings.ColumnSize}" Binding="{Binding Size}" Width="100"/>
-                        <DataGridTextColumn Header="{x:Static res:Strings.ColumnModified}" Binding="{Binding ModifiedUtc, StringFormat=yyyy-MM-dd HH:mm}" Width="140"/>
-                    </DataGrid.Columns>
-                </DataGrid>
-
-                <!-- Tiles -->
-                <ListBox x:Name="TilesView"
-                         Visibility="{Binding ViewMode, Converter={StaticResource EnumToVisibility}, ConverterParameter=Tiles}"
-                         ItemsSource="{Binding Entries}"
-                         SelectedItem="{Binding SelectedEntry}"
-                         SelectionMode="Extended"
-                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                         MouseDoubleClick="Tiles_MouseDoubleClick"
-                         SelectionChanged="List_SelectionChanged"
-                         PreviewMouseLeftButtonDown="List_PreviewMouseLeftButtonDown"
-                         PreviewMouseLeftButtonUp="List_PreviewMouseLeftButtonUp"
-                         PreviewMouseMove="List_PreviewMouseMove"
-                         PreviewMouseRightButtonDown="List_PreviewMouseRightButtonDown"
-                         PreviewMouseRightButtonUp="List_PreviewMouseRightButtonUp"
-                         PreviewKeyDown="List_PreviewKeyDown"
-                         AllowDrop="True"
-                         DragOver="OnDragOver"
-                         Drop="OnDrop"
-                         BorderThickness="0">
-                    <ListBox.ItemsPanel>
-                        <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
-                    </ListBox.ItemsPanel>
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <Border Width="220" Margin="4" Padding="6" Background="Transparent">
-                                <StackPanel Orientation="Horizontal">
-                                    <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Normal"
-                                                        Width="32" Height="32" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <Grid>
-                                            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" MaxWidth="160">
-                                                <TextBlock.Visibility>
-                                                    <MultiBinding Converter="{StaticResource RenameVisibility}" ConverterParameter="Inverse">
-                                                        <Binding Path="FullPath"/>
-                                                        <Binding Path="DataContext.RenamingPath" RelativeSource="{RelativeSource AncestorType=Window}"/>
-                                                    </MultiBinding>
-                                                </TextBlock.Visibility>
-                                            </TextBlock>
-                                            <TextBox Style="{StaticResource RenameEditor}" MaxWidth="180"/>
-                                        </Grid>
-                                        <TextBlock FontSize="11" Foreground="#777">
-                                            <Run Text="{Binding Kind, Mode=OneWay}"/>
-                                        </TextBlock>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Border>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-
-                <!-- Large icons -->
-                <ListBox x:Name="IconsView"
-                         Visibility="{Binding ViewMode, Converter={StaticResource EnumToVisibility}, ConverterParameter=LargeIcons}"
-                         ItemsSource="{Binding Entries}"
-                         SelectedItem="{Binding SelectedEntry}"
-                         SelectionMode="Extended"
-                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                         MouseDoubleClick="Tiles_MouseDoubleClick"
-                         SelectionChanged="List_SelectionChanged"
-                         PreviewMouseLeftButtonDown="List_PreviewMouseLeftButtonDown"
-                         PreviewMouseLeftButtonUp="List_PreviewMouseLeftButtonUp"
-                         PreviewMouseMove="List_PreviewMouseMove"
-                         PreviewMouseRightButtonDown="List_PreviewMouseRightButtonDown"
-                         PreviewMouseRightButtonUp="List_PreviewMouseRightButtonUp"
-                         PreviewKeyDown="List_PreviewKeyDown"
-                         AllowDrop="True"
-                         DragOver="OnDragOver"
-                         Drop="OnDrop"
-                         BorderThickness="0">
-                    <ListBox.ItemsPanel>
-                        <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
-                    </ListBox.ItemsPanel>
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <!--
-                                Live-bound to Settings.LargeIcon* so the Settings dialog
-                                can resize tiles on the fly. The ItemTemplate's own
-                                DataContext is the FileSystemEntry, so each binding
-                                hops back up to the Window's DataContext (MainViewModel)
-                                via RelativeSource.
-                            -->
-                            <StackPanel HorizontalAlignment="Center"
-                                        Width="{Binding DataContext.Settings.LargeIconCellWidth, RelativeSource={RelativeSource AncestorType=Window}}"
-                                        Margin="{Binding DataContext.Settings.LargeIconMargin, RelativeSource={RelativeSource AncestorType=Window}}">
-                                <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Large"
-                                                    Width="{Binding DataContext.Settings.LargeIconImageSize, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                    Height="{Binding DataContext.Settings.LargeIconImageSize, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                    Margin="0,2,0,2"
-                                                    HorizontalAlignment="Center"
-                                                    RenderOptions.BitmapScalingMode="HighQuality"
-                                                    UseLayoutRounding="True"/>
-                                <Grid>
-                                    <TextBlock Text="{Binding Name}"
-                                               TextAlignment="Center"
-                                               TextWrapping="Wrap"
-                                               MaxHeight="32"
-                                               FontSize="{Binding DataContext.Settings.LargeIconLabelFontSize, RelativeSource={RelativeSource AncestorType=Window}}"
-                                               TextTrimming="CharacterEllipsis">
-                                        <TextBlock.Visibility>
-                                            <MultiBinding Converter="{StaticResource RenameVisibility}" ConverterParameter="Inverse">
-                                                <Binding Path="FullPath"/>
-                                                <Binding Path="DataContext.RenamingPath" RelativeSource="{RelativeSource AncestorType=Window}"/>
-                                            </MultiBinding>
-                                        </TextBlock.Visibility>
-                                    </TextBlock>
-                                    <TextBox Style="{StaticResource RenameEditor}"
-                                             FontSize="{Binding DataContext.Settings.LargeIconLabelFontSize, RelativeSource={RelativeSource AncestorType=Window}}"/>
-                                </Grid>
-                            </StackPanel>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-
-                <!--
-                    Loading overlay for slow list enumerations (shell
-                    namespaces like Recycle Bin go through Shell.Application
-                    COM, which can take a noticeable fraction of a second).
-                    Z-ordered last so it sits on top of the three view
-                    containers; non-hit-testable so the user's clicks fall
-                    through to the empty list rather than the spinner.
-                -->
-                <Grid Visibility="{Binding IsListLoading, Converter={StaticResource BoolToVisibility}}"
-                      Background="#80FAFAFA"
-                      IsHitTestVisible="False">
-                    <Ellipse Width="32" Height="32" StrokeThickness="3"
-                             Stroke="#0078D7" Fill="Transparent"
-                             StrokeDashArray="3,2"
-                             HorizontalAlignment="Center" VerticalAlignment="Center"
-                             RenderTransformOrigin="0.5,0.5">
-                        <Ellipse.RenderTransform>
-                            <RotateTransform x:Name="ListSpinnerRotate" Angle="0"/>
-                        </Ellipse.RenderTransform>
-                        <Ellipse.Triggers>
-                            <EventTrigger RoutedEvent="Loaded">
-                                <BeginStoryboard>
-                                    <Storyboard RepeatBehavior="Forever">
-                                        <DoubleAnimation Storyboard.TargetName="ListSpinnerRotate"
-                                                         Storyboard.TargetProperty="Angle"
-                                                         From="0" To="360" Duration="0:0:1"/>
-                                    </Storyboard>
-                                </BeginStoryboard>
-                            </EventTrigger>
-                        </Ellipse.Triggers>
-                    </Ellipse>
-                </Grid>
-            </Grid>
+            <views:FileListView x:Name="FileList"
+                                Grid.Column="2"
+                                AllowDrop="True"
+                                DragOver="OnDragOver"
+                                Drop="OnDrop"
+                                DragStartRequested="FileList_DragStartRequested"
+                                ContextMenuRequested="FileList_ContextMenuRequested"/>
 
             <!-- Splitter between right pane and preview -->
             <GridSplitter x:Name="PreviewSplitter"
@@ -902,317 +867,9 @@
                           DragCompleted="PreviewSplitter_DragCompleted"/>
 
             <!-- Preview pane -->
-            <Border Grid.Column="4"
-                    BorderBrush="#DDD" BorderThickness="1,0,0,0"
-                    Background="#FAFAFA"
-                    Visibility="{Binding IsPreviewVisible, Converter={StaticResource BoolToVisibility}}">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-
-                    <!-- Content area -->
-                    <Grid Grid.Row="0">
-                        <!--
-                            Image preview. The fitted image stays in ImgFit; a
-                            transparent canvas overlays it for the FastStone-style
-                            "hold RMB to zoom 1:1" interaction. Everything is wired
-                            in code-behind (ImageZoom_* handlers).
-                        -->
-                        <Grid x:Name="ImagePreviewHost"
-                              Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Image}"
-                              ClipToBounds="True"
-                              Background="Transparent"
-                              MouseEnter="ImageZoom_MouseEnter"
-                              MouseLeave="ImageZoom_MouseLeave"
-                              MouseMove="ImageZoom_MouseMove"
-                              MouseLeftButtonDown="ImageZoom_LmbDown"
-                              MouseLeftButtonUp="ImageZoom_LmbUp"
-                              LostMouseCapture="ImageZoom_LostCapture">
-                            <Image x:Name="ImgFit"
-                                   Source="{Binding Preview.Image}"
-                                   Stretch="Uniform" StretchDirection="DownOnly"
-                                   MaxWidth="{Binding Source, RelativeSource={RelativeSource Self}, Converter={StaticResource BitmapPixelSize}, ConverterParameter=W}"
-                                   MaxHeight="{Binding Source, RelativeSource={RelativeSource Self}, Converter={StaticResource BitmapPixelSize}, ConverterParameter=H}"
-                                   Margin="8,12,8,8"
-                                   VerticalAlignment="Top" HorizontalAlignment="Center"
-                                   SizeChanged="ImgFit_SizeChanged"/>
-                            <!-- Zoom view: visible only while the user holds RMB. -->
-                            <Canvas x:Name="ImgZoomCanvas"
-                                    Background="White"
-                                    Visibility="Collapsed"
-                                    IsHitTestVisible="False">
-                                <Image x:Name="ImgZoom"
-                                       Source="{Binding Source, ElementName=ImgFit}"/>
-                            </Canvas>
-                        </Grid>
-
-                        <!-- Animated GIF (also anchored middle-top with same margin). -->
-                        <controls:GifImage x:Name="GifPreview"
-                                           GifUri="{Binding Preview.GifUri}"
-                                           Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Gif}"
-                                           Stretch="Uniform" StretchDirection="DownOnly"
-                                           MaxWidth="{Binding Source, RelativeSource={RelativeSource Self}, Converter={StaticResource BitmapPixelSize}, ConverterParameter=W}"
-                                           MaxHeight="{Binding Source, RelativeSource={RelativeSource Self}, Converter={StaticResource BitmapPixelSize}, ConverterParameter=H}"
-                                           Margin="8,12,8,8"
-                                           VerticalAlignment="Top" HorizontalAlignment="Center"/>
-
-                        <!-- Video: MediaElement + simple transport (Play/Pause + seek slider). -->
-                        <Grid Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Video}">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="*"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-                            <MediaElement x:Name="VideoPreview"
-                                          Grid.Row="0"
-                                          Source="{Binding Preview.VideoUri}"
-                                          LoadedBehavior="Manual"
-                                          UnloadedBehavior="Stop"
-                                          ScrubbingEnabled="True"
-                                          Stretch="Uniform" StretchDirection="DownOnly"
-                                          Margin="8,12,8,4"
-                                          VerticalAlignment="Top" HorizontalAlignment="Center"
-                                          MediaOpened="VideoPreview_MediaOpened"
-                                          MediaEnded="VideoPreview_MediaEnded"
-                                          MediaFailed="VideoPreview_MediaFailed"/>
-                            <Grid Grid.Row="1" Margin="8,4,8,8">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <Button x:Name="VideoPlayPauseButton"
-                                        Content="▶" Width="32" Padding="0,2"
-                                        Grid.Column="0"
-                                        Click="VideoPlayPause_Click"
-                                        ToolTip="{x:Static res:Strings.PreviewPlayPause}"/>
-                                <TextBlock x:Name="VideoTimeText"
-                                           Grid.Column="1"
-                                           VerticalAlignment="Center"
-                                           Margin="8,0"
-                                           FontFamily="Consolas" FontSize="11"
-                                           Text="0:00 / 0:00"/>
-                                <Slider x:Name="VideoSlider"
-                                        Grid.Column="2"
-                                        VerticalAlignment="Center"
-                                        Minimum="0" Maximum="1"
-                                        SmallChange="0.5" LargeChange="5"
-                                        IsMoveToPointEnabled="True"
-                                        PreviewMouseLeftButtonDown="VideoSlider_PreviewMouseDown"
-                                        PreviewMouseLeftButtonUp="VideoSlider_PreviewMouseUp"
-                                        ValueChanged="VideoSlider_ValueChanged"/>
-                            </Grid>
-                        </Grid>
-
-                        <!-- Plain text -->
-                        <TextBox Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Text}"
-                                 Text="{Binding Preview.Text, Mode=OneWay}"
-                                 IsReadOnly="True"
-                                 FontFamily="Consolas" FontSize="11"
-                                 Background="Transparent" BorderThickness="0"
-                                 AcceptsReturn="True" TextWrapping="NoWrap"
-                                 VerticalScrollBarVisibility="Auto"
-                                 HorizontalScrollBarVisibility="Auto"
-                                 Padding="6"/>
-
-                        <!-- Code with syntax highlighting -->
-                        <ae:TextEditor x:Name="CodeEditor"
-                                       Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Code}"
-                                       IsReadOnly="True"
-                                       ShowLineNumbers="True"
-                                       FontFamily="Consolas" FontSize="11"
-                                       Background="Transparent"
-                                       Padding="4"/>
-
-                        <!-- PDF / HTML / Markdown via WebView2 -->
-                        <wv2:WebView2 x:Name="WebPreview"
-                                      Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Web}"
-                                      DefaultBackgroundColor="White"/>
-
-                        <!--
-                            Folder census (B2). Shown when the selection is a
-                            folder, or when nothing is selected: "what is in
-                            here and what is eating the space" is the question
-                            a folder raises, and a wall of thumbnails does not
-                            answer it.
-                        -->
-                        <ScrollViewer Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Folder}"
-                                      VerticalScrollBarVisibility="Auto" Padding="12,10,12,10">
-                            <StackPanel>
-                                <TextBlock Text="{Binding Preview.FolderTitle}"
-                                           FontSize="14" FontWeight="SemiBold"
-                                           TextTrimming="CharacterEllipsis"/>
-                                <TextBlock Text="{Binding Preview.FolderHeadline}"
-                                           Foreground="#666" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                                <TextBlock Text="{Binding Preview.FolderNote}"
-                                           Foreground="#A05000" FontSize="11"
-                                           Margin="0,4,0,0" TextWrapping="Wrap"
-                                           Visibility="{Binding Preview.HasFolderNote, Converter={StaticResource BoolToVisibility}}"/>
-
-                                <TextBlock Text="{x:Static res:Strings.PreviewFolderTypes}"
-                                           FontWeight="SemiBold" Margin="0,16,0,6"/>
-
-                                <!-- Empty folder: say so instead of leaving a blank panel. -->
-                                <TextBlock Text="{x:Static res:Strings.PreviewFolderEmpty}" Foreground="#888">
-                                    <TextBlock.Style>
-                                        <Style TargetType="TextBlock">
-                                            <Setter Property="Visibility" Value="Collapsed"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding Preview.FolderTypes.Count}" Value="0">
-                                                    <Setter Property="Visibility" Value="Visible"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </TextBlock.Style>
-                                </TextBlock>
-
-                                <ItemsControl ItemsSource="{Binding Preview.FolderTypes}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <!-- Bars are scaled against the biggest bucket,
-                                                 not the total: with a long tail every bar
-                                                 would otherwise be a hairline. -->
-                                            <Grid Margin="0,3,0,3">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="64"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0" Text="{Binding Extension}"
-                                                           FontFamily="Consolas" TextTrimming="CharacterEllipsis"
-                                                           VerticalAlignment="Center"/>
-                                                <Border Grid.Column="1" Height="10" CornerRadius="2"
-                                                        HorizontalAlignment="Left" VerticalAlignment="Center"
-                                                        Width="{Binding BarWidth}"
-                                                        Background="#0078D7" Opacity="0.5"/>
-                                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <TextBlock Text="{Binding SizeText}" Foreground="#444"/>
-                                                    <TextBlock Text="{Binding CountText}" Foreground="#999" Margin="10,0,0,0"/>
-                                                </StackPanel>
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </StackPanel>
-                        </ScrollViewer>
-
-                        <!-- Placeholder (None / Unsupported) -->
-                        <TextBlock Text="{Binding Preview.PlaceholderText}"
-                                   Foreground="#888"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   Visibility="{Binding Preview.IsPlaceholderVisible, Converter={StaticResource BoolToVisibility}}"/>
-
-                        <!-- Loading spinner — overlays content while content loads -->
-                        <Grid Visibility="{Binding Preview.IsLoading, Converter={StaticResource BoolToVisibility}}"
-                              Background="#80FAFAFA"
-                              IsHitTestVisible="False">
-                            <Ellipse Width="32" Height="32" StrokeThickness="3"
-                                     Stroke="#0078D7" Fill="Transparent"
-                                     StrokeDashArray="3,2"
-                                     HorizontalAlignment="Center" VerticalAlignment="Center"
-                                     RenderTransformOrigin="0.5,0.5">
-                                <Ellipse.RenderTransform>
-                                    <RotateTransform x:Name="SpinnerRotate" Angle="0"/>
-                                </Ellipse.RenderTransform>
-                                <Ellipse.Triggers>
-                                    <EventTrigger RoutedEvent="Loaded">
-                                        <BeginStoryboard>
-                                            <Storyboard RepeatBehavior="Forever">
-                                                <DoubleAnimation Storyboard.TargetName="SpinnerRotate"
-                                                                 Storyboard.TargetProperty="Angle"
-                                                                 From="0" To="360" Duration="0:0:1"/>
-                                            </Storyboard>
-                                        </BeginStoryboard>
-                                    </EventTrigger>
-                                </Ellipse.Triggers>
-                            </Ellipse>
-                        </Grid>
-                    </Grid>
-
-                    <!-- Summary footer -->
-                    <Border Grid.Row="1"
-                            BorderBrush="#DDD" BorderThickness="0,1,0,0"
-                            Padding="8,6" Background="#F3F3F3">
-                        <StackPanel>
-                            <TextBlock Text="{Binding Preview.Summary}"
-                                       FontSize="11" Foreground="#444"
-                                       TextWrapping="Wrap"/>
-
-                            <!--
-                                Companion block: what the sidecars next to
-                                this file have to say. Only the two formats
-                                Wander understands so far get a rendering of
-                                their own; the file list above them is shown
-                                for any companion at all.
-                            -->
-                            <StackPanel Margin="0,6,0,0"
-                                        Visibility="{Binding Preview.HasCompanions, Converter={StaticResource BoolToVisibility}}">
-                                <TextBlock FontSize="11" Foreground="#888" TextWrapping="Wrap">
-                                    <Run Text="{x:Static res:Strings.PreviewIntegrated}"/><Run Text=" "/><Run Text="{Binding Preview.CompanionFiles, Mode=OneWay}"/>
-                                </TextBlock>
-
-                                <!-- Unity .meta — the GUID, and a button to take it away -->
-                                <StackPanel Orientation="Horizontal" Margin="0,3,0,0"
-                                            Visibility="{Binding Preview.HasUnityGuid, Converter={StaticResource BoolToVisibility}}">
-                                    <TextBlock Text="GUID" FontSize="11" Foreground="#444" VerticalAlignment="Center"/>
-                                    <TextBox Text="{Binding Preview.UnityGuid, Mode=OneWay}"
-                                             IsReadOnly="True" IsReadOnlyCaretVisible="True"
-                                             FontFamily="Consolas" FontSize="11"
-                                             BorderThickness="0" Background="Transparent"
-                                             Margin="6,0,0,0" MinWidth="0" Padding="0"
-                                             VerticalAlignment="Center"/>
-                                    <Button Content="{x:Static res:Strings.ActionCopy}" Command="{Binding Preview.CopyGuidCommand}"
-                                            ToolTip="{x:Static res:Strings.PreviewCopyGuid}"
-                                            Margin="4,0,0,0" Padding="4,0" FontSize="11"
-                                            VerticalAlignment="Center"/>
-                                </StackPanel>
-                                <TextBlock Text="{Binding Preview.UnityDetail}"
-                                           FontSize="11" Foreground="#888" TextWrapping="Wrap"/>
-
-                                <!-- .pp3 / .xmp — rating and colour label, editable in place -->
-                                <StackPanel Orientation="Horizontal" Margin="0,3,0,0"
-                                            Visibility="{Binding Preview.HasRating, Converter={StaticResource BoolToVisibility}}">
-                                    <TextBlock Text="{x:Static res:Strings.PreviewRating}" FontSize="11" Foreground="#444"
-                                               VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                    <Button Style="{StaticResource RatingStar}" CommandParameter="1"
-                                            Content="{Binding Preview.Rank, Converter={StaticResource RankStar}, ConverterParameter=1}"/>
-                                    <Button Style="{StaticResource RatingStar}" CommandParameter="2"
-                                            Content="{Binding Preview.Rank, Converter={StaticResource RankStar}, ConverterParameter=2}"/>
-                                    <Button Style="{StaticResource RatingStar}" CommandParameter="3"
-                                            Content="{Binding Preview.Rank, Converter={StaticResource RankStar}, ConverterParameter=3}"/>
-                                    <Button Style="{StaticResource RatingStar}" CommandParameter="4"
-                                            Content="{Binding Preview.Rank, Converter={StaticResource RankStar}, ConverterParameter=4}"/>
-                                    <Button Style="{StaticResource RatingStar}" CommandParameter="5"
-                                            Content="{Binding Preview.Rank, Converter={StaticResource RankStar}, ConverterParameter=5}"/>
-
-                                    <ItemsControl ItemsSource="{Binding Preview.ColorLabelChoices}"
-                                                  Margin="10,0,0,0" VerticalAlignment="Center">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <Button Style="{StaticResource ColorLabelSwatch}"
-                                                        CommandParameter="{Binding Index}"
-                                                        ToolTip="{Binding Name}"/>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-
-                                    <TextBlock Text="{Binding Preview.CustomColorLabel}"
-                                               FontSize="11" Foreground="#888"
-                                               VerticalAlignment="Center" Margin="8,0,0,0"/>
-                                </StackPanel>
-
-                                <TextBlock Text="{Binding Preview.CompanionStatus}"
-                                           FontSize="11" Foreground="#888" TextWrapping="Wrap"/>
-                            </StackPanel>
-                        </StackPanel>
-                    </Border>
-                </Grid>
-            </Border>
+            <views:PreviewPane x:Name="Preview"
+                               Grid.Column="4"
+                               Visibility="{Binding IsPreviewVisible, Converter={StaticResource BoolToVisibility}}"/>
         </Grid>
     </DockPanel>
 </Window>

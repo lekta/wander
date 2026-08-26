@@ -37,7 +37,9 @@ public sealed class MetadataExtractorImageReader : IImageMetadataReader {
             int? height = null;
             ReadDimensions(dirs, ref width, ref height);
 
-            return new ImageMetadata(make, model, iso, aperture, shutter, focal, taken, width, height);
+            int? orientation = ifd0?.TryGetInt32(ExifDirectoryBase.TagOrientation, out int o) == true ? o : null;
+
+            return new ImageMetadata(make, model, iso, aperture, shutter, focal, taken, width, height, orientation);
         } catch {
             return null;
         }

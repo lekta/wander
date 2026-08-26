@@ -98,6 +98,12 @@
   <data name="PreviewCopyGuid" xml:space="preserve">
     <value>Скопировать GUID</value>
   </data>
+  <data name="PreviewRawToggle" xml:space="preserve">
+    <value>RAW</value>
+  </data>
+  <data name="PreviewRawToggleHint" xml:space="preserve">
+    <value>Показать полный кадр RAW вместо встроенного превью — медленнее, но это настоящее изображение с матрицы</value>
+  </data>
   <data name="PreviewRating" xml:space="preserve">
     <value>Оценка</value>
   </data>
@@ -504,6 +510,10 @@
   <data name="DragTarget" xml:space="preserve">
     <value>в {0}</value>
   </data>
+  <data name="DragAddToBookmarks" xml:space="preserve">
+    <value>Добавить {0} в закладки</value>
+    <comment>{0} — «имя» одного элемента или «N элем.»</comment>
+  </data>
   <data name="CrashTitle" xml:space="preserve">
     <value>Wander — отчёт об ошибке</value>
   </data>
@@ -688,6 +698,12 @@
   <data name="SettingsShowSystem" xml:space="preserve">
     <value>Показывать системные файлы и папки</value>
   </data>
+  <data name="SettingsHideSystemRootFolders" xml:space="preserve">
+    <value>Не показывать системные папки в корне дисков</value>
+  </data>
+  <data name="SettingsHideSystemRootFoldersHint" xml:space="preserve">
+    <value>$RECYCLE.BIN, System Volume Information, Recovery, $WinREAgent, Config.Msi, $Windows.~BT и подобные. Внутрь них всё равно нет доступа, а изменение ломает точки восстановления и корзину.</value>
+  </data>
   <data name="SettingsHiddenHint" xml:space="preserve">
     <value>Изменения применяются мгновенно: список файлов в текущей папке перестраивается с учётом новых фильтров.</value>
   </data>
@@ -805,6 +821,12 @@
   </data>
   <data name="BookmarksToggleHint" xml:space="preserve">
     <value>Свернуть / развернуть закладки</value>
+  </data>
+  <data name="BookmarksAddHint" xml:space="preserve">
+    <value>Перетащите сюда папку, чтобы добавить её в закладки</value>
+  </data>
+  <data name="BookmarksRowMenuHint" xml:space="preserve">
+    <value>Действия с закладкой</value>
   </data>
   <data name="BookmarksRemove" xml:space="preserve">
     <value>Убрать из закладок</value>

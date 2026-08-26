@@ -82,6 +82,12 @@ public sealed record SessionState {
     /// matters more than chrome conservation on first run.
     /// </summary>
     public bool IsBookmarksExpanded { get; init; } = true;
+
+    /// <summary>
+    /// Height of the bookmarks region in the left pane, in pixels — where
+    /// the user last dragged the divider between bookmarks and drives.
+    /// </summary>
+    public double BookmarksHeight { get; init; } = 200;
 }
 
 

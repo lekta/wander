@@ -4,6 +4,7 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
 using Wander.Core;
+using Wander.Core.Diagnostics;
 using Wander.Core.Icons;
 using Wander.Core.Logging;
 
@@ -81,9 +82,15 @@ public sealed class SystemIconProvider : IIconProvider {
             }
         }
 
-        // Disk tier, for per-file thumbnails only.
+        // Disk tier, for per-file thumbnails only. Both tiers are timed:
+        // when tiles are slow to fill in, the question is always whether the
+        // cache is answering slowly or the shell is being asked at all.
         bool cacheable = size == IconSize.Large && _disk is not null;
-        if (cacheable && _disk!.TryRead(path) is { } fromDisk) {
+        byte[]? fromDisk;
+        using (PerfLog.Measure("bg.thumb-disk")) {
+            fromDisk = cacheable ? _disk!.TryRead(path) : null;
+        }
+        if (fromDisk is not null) {
             lock (_lock) {
                 Store(key, fromDisk, size);
             }
@@ -91,13 +98,18 @@ public sealed class SystemIconProvider : IIconProvider {
         }
 
         try {
-            byte[]? bytes = LoadIcon(path, size);
+            byte[]? bytes;
+            using (PerfLog.Measure("bg.thumb-shell")) {
+                bytes = LoadIcon(path, size);
+            }
             if (bytes is not null) {
                 lock (_lock) {
                     Store(key, bytes, size);
                 }
                 if (cacheable) {
-                    _disk!.Write(path, bytes);
+                    using (PerfLog.Measure("bg.thumb-disk-write")) {
+                        _disk!.Write(path, bytes);
+                    }
                 }
             }
             return bytes;

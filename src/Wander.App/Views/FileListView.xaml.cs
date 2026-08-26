@@ -1,0 +1,578 @@
+using System.IO;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
+using Wander.App.Resources;
+using Wander.App.Util;
+using Wander.App.ViewModels;
+using Wander.Core.FileSystem;
+
+namespace Wander.App.Views;
+
+/// <summary>
+/// Hosts the folder listing in every display mode and owns the gestures
+/// they share. See the comment at the top of <c>FileListView.xaml</c> for
+/// the split against <see cref="MainWindow"/>.
+///
+/// <para>
+/// The control reads its data from the inherited <see cref="MainViewModel"/>
+/// and reports the two things it cannot finish on its own upwards:
+/// <see cref="DragStartRequested"/> (the drag preview window and the
+/// drop pipeline live in the window) and <see cref="ContextMenuRequested"/>
+/// (the menu is assembled from Core's model plus the shell's, both wired
+/// in the window).
+/// </para>
+/// </summary>
+public partial class FileListView : UserControl {
+    private readonly SelectionController _selection = new();
+    private readonly RubberBandController _rubberBand;
+
+    // --- Drag source arming --------------------------------------------
+    private Point _dragOrigin;
+    private bool _dragArmed;
+
+    // A committed rename re-lists the folder asynchronously, so the row to
+    // put the keyboard on does not exist yet when the editor closes. This
+    // says "the next selection restore is mine" — undo and refresh must not
+    // steal focus from wherever the user actually is.
+    private bool _focusRowAfterRestore;
+
+    /// <summary>Set on right-button-down: did the click land on empty space?</summary>
+    private bool _contextIsBackground;
+
+
+    public FileListView() {
+        InitializeComponent();
+        _rubberBand = new RubberBandController(
+            () => Vm.Entries,
+            SetListSelection,
+            ClearListSelection);
+        DataContextChanged += OnDataContextChanged;
+    }
+
+
+    /// <summary>
+    /// The user started dragging the current selection out of the list. The
+    /// window answers by running the drag loop with its preview window.
+    /// </summary>
+    public event EventHandler<FileListDragRequest>? DragStartRequested;
+
+    /// <summary>The list wants its context menu shown.</summary>
+    public event EventHandler<FileListMenuRequest>? ContextMenuRequested;
+
+
+    private MainViewModel Vm => (MainViewModel)DataContext;
+
+
+    private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e) {
+        if (e.OldValue is MainViewModel old) {
+            old.SelectionRestoreRequested -= RestoreListSelection;
+        }
+        if (e.NewValue is MainViewModel vm) {
+            vm.SelectionRestoreRequested += RestoreListSelection;
+        }
+    }
+
+
+    // --- Public surface used by MainWindow -----------------------------
+    // Just FocusList; everything else here is this control's own business.
+
+    /// <summary>The container backing the current view mode.</summary>
+    private ItemsControl? ActiveList() {
+        return Vm.ViewMode switch {
+            ViewMode.Details => DetailsView,
+            ViewMode.Tiles => TilesView,
+            ViewMode.LargeIcons => IconsView,
+            _ => null,
+        };
+    }
+
+
+    /// <summary>
+    /// Hands the keyboard back to the list — to the selected row when there
+    /// is one. Focusing the container itself is not enough: a list with
+    /// focus but no focused item leaves the arrow keys resuming from
+    /// wherever the cursor was last, which is usually the top.
+    /// </summary>
+    public void FocusList() {
+        if (Vm.SelectedEntry is { } entry && FocusRow(entry)) {
+            return;
+        }
+
+        ActiveList()?.Focus();
+    }
+
+
+    /// <summary>
+    /// Puts the keyboard on one row. Returns false when the row has no
+    /// realised container (virtualised away), so the caller can fall back
+    /// to focusing the list itself.
+    /// </summary>
+    private bool FocusRow(FileSystemEntry entry) {
+        switch (ActiveList()) {
+            case DataGrid dg:
+                dg.ScrollIntoView(entry);
+                dg.UpdateLayout();
+                // Arrow keys in a DataGrid follow the *current cell*, not the
+                // selection. Leaving it stale is what made the next arrow
+                // press jump to a row near the top instead of the neighbour.
+                if (dg.Columns.Count > 0) {
+                    dg.CurrentCell = new DataGridCellInfo(entry, dg.Columns[0]);
+                }
+                if (dg.ItemContainerGenerator.ContainerFromItem(entry) is DataGridRow row
+                    && ListVisuals.FindDescendant<DataGridCell>(row) is { } cell) {
+                    return cell.Focus();
+                }
+
+                return false;
+
+            case ListBox lb:
+                lb.ScrollIntoView(entry);
+                lb.UpdateLayout();
+
+                return lb.ItemContainerGenerator.ContainerFromItem(entry) is ListBoxItem item
+                    && item.Focus();
+
+            default:
+                return false;
+        }
+    }
+
+
+    /// <summary>Clears the selection in whichever container is on screen.</summary>
+    public void ClearSelection() {
+        SelectionController.ClearActive(Vm.ViewMode, DetailsView, TilesView, IconsView);
+    }
+
+
+    // --- Selection ------------------------------------------------------
+
+    private void List_SelectionChanged(object sender, SelectionChangedEventArgs e) {
+        // Containers can raise this while the control is still being wired
+        // up, before the view model has been inherited down the tree.
+        if (DataContext is not MainViewModel) {
+            return;
+        }
+
+        var entries = new List<FileSystemEntry>();
+        switch (sender) {
+            case DataGrid dg:
+                foreach (var item in dg.SelectedItems) {
+                    if (item is FileSystemEntry fe) {
+                        entries.Add(fe);
+                    }
+                }
+                break;
+            case ListBox lb:
+                foreach (var item in lb.SelectedItems) {
+                    if (item is FileSystemEntry fe) {
+                        entries.Add(fe);
+                    }
+                }
+                break;
+        }
+        Vm.SelectedEntries = entries;
+    }
+
+
+    /// <summary>
+    /// Puts the selection back after a refresh reconciled the list. Only the
+    /// controls know about multi-selection (SelectedItems is theirs, not the
+    /// view model's), so the VM asks and this does it.
+    /// </summary>
+    private void RestoreListSelection(IReadOnlyList<FileSystemEntry> items) {
+        bool takeFocus = _focusRowAfterRestore;
+        _focusRowAfterRestore = false;
+
+        if (items.Count == 0) {
+            return;
+        }
+
+        switch (ActiveList()) {
+            case DataGrid dg:
+                dg.SelectedItems.Clear();
+                foreach (var entry in items) {
+                    dg.SelectedItems.Add(entry);
+                }
+                dg.CurrentItem = items[0];
+                dg.ScrollIntoView(items[0]);
+                break;
+            case ListBox lb:
+                lb.SelectedItems.Clear();
+                foreach (var entry in items) {
+                    lb.SelectedItems.Add(entry);
+                }
+                lb.ScrollIntoView(items[0]);
+                break;
+        }
+
+        // Only after a rename: the row the user was just editing is the row
+        // the keyboard belongs on. A refresh or an undo triggered from
+        // somewhere else must leave focus where it is.
+        if (takeFocus) {
+            FocusRow(items[0]);
+        }
+    }
+
+
+    private static void ClearListSelection(ItemsControl host) {
+        switch (host) {
+            case ListBox lb: lb.UnselectAll(); break;
+            case DataGrid dg: dg.UnselectAll(); break;
+        }
+    }
+
+    private static void SetListSelection(ItemsControl host, IEnumerable<FileSystemEntry> items) {
+        // Set the selection by delta — clearing+adding everything would
+        // collapse and re-expand the control's selection, causing visible
+        // flicker on ListBox and unnecessary SelectionChanged churn.
+        switch (host) {
+            case ListBox lb: ApplyDelta(lb.SelectedItems, items); break;
+            case DataGrid dg: ApplyDelta(dg.SelectedItems, items); break;
+        }
+    }
+
+    private static void ApplyDelta(System.Collections.IList currentSelection, IEnumerable<FileSystemEntry> targetItems) {
+        var target = new HashSet<FileSystemEntry>(targetItems);
+        for (int i = currentSelection.Count - 1; i >= 0; i--) {
+            if (currentSelection[i] is FileSystemEntry existing && !target.Contains(existing)) {
+                currentSelection.RemoveAt(i);
+            }
+        }
+
+        var present = new HashSet<FileSystemEntry>();
+        foreach (var o in currentSelection) {
+            if (o is FileSystemEntry fe) {
+                present.Add(fe);
+            }
+        }
+        foreach (var entry in target) {
+            if (!present.Contains(entry)) {
+                currentSelection.Add(entry);
+            }
+        }
+    }
+
+
+    // --- Mouse gestures --------------------------------------------------
+
+    private void List_MouseDoubleClick(object sender, MouseButtonEventArgs e) {
+        // Double-clicking a word inside the rename editor must not open the
+        // file that is being renamed.
+        if (ListVisuals.IsInsideTextBox(e.OriginalSource) || ListVisuals.IsChrome(e.OriginalSource)) {
+            return;
+        }
+
+        if (Vm.SelectedEntry is { } entry) {
+            Vm.OpenEntry(entry);
+        }
+    }
+
+
+    private void List_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
+        _dragArmed = false;
+        _dragOrigin = e.GetPosition(this);
+
+        // A click inside the inline rename editor is a caret move, not a
+        // selection change and not the start of a drag.
+        if (ListVisuals.IsInsideTextBox(e.OriginalSource)) {
+            return;
+        }
+
+        // The scroll bar and the column headers are the list's own chrome:
+        // they are not "empty space", and treating them as such is what
+        // turned dragging the scroll thumb into a selection sweep.
+        if (ListVisuals.IsChrome(e.OriginalSource)) {
+            return;
+        }
+
+        var clicked = ListVisuals.EntryAt(e.OriginalSource);
+        if (clicked is null) {
+            // Empty area: start a rubber-band lasso. The drag-source path
+            // doesn't apply here (no source items), so we skip its arming
+            // and own the gesture end-to-end via MouseMove / MouseUp.
+            _selection.TryArmDeferred(sender, null, Vm.SelectedEntries, Keyboard.Modifiers);
+            if (sender is ItemsControl host) {
+                _rubberBand.Start(host, e, Vm.SelectedEntries);
+                e.Handled = true;
+            }
+
+            return;
+        }
+        _dragArmed = true;
+
+        if (_selection.TryArmDeferred(sender, clicked, Vm.SelectedEntries, Keyboard.Modifiers)) {
+            e.Handled = true;
+        }
+    }
+
+
+    private void List_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e) {
+        if (_rubberBand.IsActive) {
+            _rubberBand.End();
+            e.Handled = true;
+
+            return;
+        }
+
+        _selection.CommitOnMouseUp();
+        _dragArmed = false;
+    }
+
+
+    private void List_PreviewMouseMove(object sender, MouseEventArgs e) {
+        // Rubber-band wins over drag-source: if we started a marquee on
+        // empty space, every subsequent mouse-move is selection-update,
+        // not drag-arming.
+        if (_rubberBand.IsHost(sender)) {
+            // Defensive: if we missed the MouseUp (capture stolen, window
+            // alt-tab, …), bail out cleanly the moment we see LMB up.
+            if (e.LeftButton != MouseButtonState.Pressed) {
+                _rubberBand.End();
+
+                return;
+            }
+
+            _rubberBand.Update(e);
+            e.Handled = true;
+
+            return;
+        }
+
+        if (!_dragArmed || e.LeftButton != MouseButtonState.Pressed) {
+            return;
+        }
+
+        var pos = e.GetPosition(this);
+        if (Math.Abs(pos.X - _dragOrigin.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(pos.Y - _dragOrigin.Y) < SystemParameters.MinimumVerticalDragDistance) {
+            return;
+        }
+
+        _dragArmed = false;
+        _selection.NotifyDragStarted(); // drag started — keep the full selection
+
+        var paths = Vm.SelectedEntries.Select(en => en.FullPath).ToArray();
+        if (paths.Length == 0) {
+            return;
+        }
+
+        // The payload carries the companions; `paths` — what the user
+        // selected — still drives the drag preview, because that is what
+        // they think they are dragging.
+        DragStartRequested?.Invoke(this, new FileListDragRequest(
+            (DependencyObject)sender,
+            paths,
+            Vm.WithCompanions(Vm.SelectedEntries).ToArray()));
+    }
+
+
+    private void List_PreviewMouseWheel(object sender, MouseWheelEventArgs e) {
+        if (ListVisuals.TryShiftScrollHorizontally((DependencyObject)sender, e)) {
+            e.Handled = true;
+        }
+    }
+
+
+    // --- Context menu ----------------------------------------------------
+
+    private void List_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e) {
+        if (sender is not ItemsControl host || ListVisuals.IsChrome(e.OriginalSource)) {
+            return;
+        }
+
+        var clicked = ListVisuals.EntryAt(e.OriginalSource);
+        _contextIsBackground = clicked is null;
+
+        if (clicked is null) {
+            // Explorer parity: right-clicking empty space drops the
+            // selection and offers the folder's own menu instead.
+            ClearListSelection(host);
+        } else if (!Vm.SelectedEntries.Contains(clicked)) {
+            // Right-clicking outside the selection moves it to the clicked
+            // row; right-clicking inside one keeps the whole multi-selection.
+            SetListSelection(host, new[] { clicked });
+        }
+    }
+
+    private void List_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e) {
+        if (sender is FrameworkElement host && !ListVisuals.IsChrome(e.OriginalSource)) {
+            ContextMenuRequested?.Invoke(this, new FileListMenuRequest(host, PlacementMode.MousePoint, _contextIsBackground));
+            e.Handled = true;
+        }
+    }
+
+    private void List_PreviewKeyDown(object sender, KeyEventArgs e) {
+        // Shift+F10 arrives as a system key, the dedicated Menu key doesn't.
+        bool menuKey = e.Key == Key.Apps
+            || (e.Key == Key.System && e.SystemKey == Key.F10 && Keyboard.Modifiers == ModifierKeys.Shift);
+        if (!menuKey || sender is not FrameworkElement host) {
+            return;
+        }
+
+        _contextIsBackground = Vm.SelectedEntries.Count == 0;
+        ContextMenuRequested?.Invoke(this, new FileListMenuRequest(host, PlacementMode.Center, _contextIsBackground));
+        e.Handled = true;
+    }
+
+
+    // --- Rename ----------------------------------------------------------
+    // In-place editing (A3) is the normal path: the row template carries a
+    // collapsed TextBox and MainViewModel.RenamingPath makes it visible.
+    // PromptDialog stays as the fallback for the case the inline editor
+    // cannot be reached — a row that virtualisation has not realised.
+
+    public void StartRename() {
+        if (Vm.SelectedEntry is not FileSystemEntry entry) {
+            return;
+        }
+
+        if (TryStartInlineRename(entry)) {
+            return;
+        }
+
+        string? input = PromptDialog.Show(Strings.RenameTitle, Strings.RenamePrompt, entry.Name, filenameMode: true);
+        if (input is null || input == entry.Name) {
+            return;
+        }
+
+        Vm.RenameCommand.Execute(input);
+    }
+
+
+    private bool TryStartInlineRename(FileSystemEntry entry) {
+        var list = ActiveList();
+        if (list is null) {
+            return false;
+        }
+
+        // The row has to exist as a visual before its editor can be focused,
+        // and a row scrolled out of a virtualising panel does not.
+        ScrollIntoView(list, entry);
+        list.UpdateLayout();
+        if (list.ItemContainerGenerator.ContainerFromItem(entry) is not FrameworkElement container) {
+            return false;
+        }
+
+        Vm.BeginRename(entry);
+        if (Vm.RenamingPath is null) {
+            return false;
+        }
+
+        container.UpdateLayout();
+        var box = ListVisuals.FindDescendant<TextBox>(container);
+        if (box is null) {
+            Vm.CancelRename();
+
+            return false;
+        }
+
+        box.Text = entry.Name;
+        box.Focus();
+        SelectNameWithoutExtension(box, entry);
+
+        return true;
+    }
+
+
+    private static void ScrollIntoView(ItemsControl list, FileSystemEntry entry) {
+        switch (list) {
+            case DataGrid dg: dg.ScrollIntoView(entry); break;
+            case ListBox lb: lb.ScrollIntoView(entry); break;
+        }
+    }
+
+
+    /// <summary>
+    /// Explorer parity: the extension stays out of the initial selection, so
+    /// typing replaces the name and leaves ".png" alone. Folders and
+    /// dot-files ("<c>.gitignore</c>") select whole — there is no extension
+    /// to protect there.
+    /// </summary>
+    private static void SelectNameWithoutExtension(TextBox box, FileSystemEntry entry) {
+        int dot = entry.Kind == EntryKind.Directory ? -1 : entry.Name.LastIndexOf('.');
+        if (dot > 0) {
+            box.Select(0, dot);
+        } else {
+            box.SelectAll();
+        }
+    }
+
+
+    private void RenameBox_PreviewKeyDown(object sender, KeyEventArgs e) {
+        // Enter and Escape both have window-level KeyBindings (Open / clear
+        // selection), so they must be swallowed here or renaming a file
+        // would open it. Delete and Backspace need no such guard — the
+        // TextBox marks those handled itself.
+        if (e.Key == Key.Enter) {
+            CommitInlineRename((TextBox)sender, takeFocus: true);
+            e.Handled = true;
+
+            return;
+        }
+
+        if (e.Key == Key.Escape) {
+            // The row comes from the editor's own DataContext, not from the
+            // selection: this is the row the user was editing, whatever the
+            // selection happens to be by now.
+            var edited = ((FrameworkElement)sender).DataContext as FileSystemEntry;
+            Vm.CancelRename();
+            if (edited is null || !FocusRow(edited)) {
+                FocusList();
+            }
+            e.Handled = true;
+        }
+    }
+
+    private void RenameBox_PreviewTextInput(object sender, TextCompositionEventArgs e) {
+        // Refuse the characters Windows will not accept in a name at input
+        // time, the way PromptDialog does — a rejected rename after the fact
+        // would just lose what the user typed.
+        if (e.Text.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) {
+            e.Handled = true;
+            Vm.Status = Strings.InvalidFileNameChars + "\\ / : * ? \" < > |";
+        }
+    }
+
+    private void RenameBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e) {
+        // Clicking away commits, matching Explorer. Escape has already
+        // cleared RenamingPath by the time focus leaves, so a cancelled edit
+        // falls out of CommitInlineRename on its own. No focus grab here:
+        // the user has just clicked somewhere and that is where focus
+        // belongs.
+        CommitInlineRename((TextBox)sender, takeFocus: false);
+    }
+
+    /// <summary>
+    /// Applies the edited name. <paramref name="takeFocus"/> separates the
+    /// two ways an edit ends: Enter means the user is still working in the
+    /// list and the keyboard belongs there, while a click elsewhere means
+    /// they have already moved on and focus must stay where they put it.
+    /// </summary>
+    private void CommitInlineRename(TextBox box, bool takeFocus) {
+        if (Vm.RenamingPath is null) {
+            return;
+        }
+
+        // The re-listing that follows is asynchronous, so the renamed row is
+        // focused twice over: now (it is still there under its old name,
+        // which keeps the keyboard inside the list) and again when the new
+        // listing lands and the selection is restored onto the new name.
+        _focusRowAfterRestore = takeFocus;
+        Vm.CommitRename(box.Text);
+        if (takeFocus) {
+            FocusList();
+        }
+    }
+}
+
+
+/// <summary>What the window needs to run a drag started in the list.</summary>
+/// <param name="Source">The control the drag originated from.</param>
+/// <param name="Paths">What the user selected — drives the drag preview.</param>
+/// <param name="Payload">What actually travels, companions included.</param>
+public sealed record FileListDragRequest(DependencyObject Source, string[] Paths, string[] Payload);
+
+/// <summary>Where and in what mode the list wants its context menu.</summary>
+public sealed record FileListMenuRequest(FrameworkElement Host, PlacementMode Placement, bool IsBackground);

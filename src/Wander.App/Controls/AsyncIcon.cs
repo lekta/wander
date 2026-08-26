@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Media.Imaging;
 using Wander.App.Converters;
 using Wander.Core;
+using Wander.Core.Diagnostics;
 using Wander.Core.Icons;
 
 namespace Wander.App.Controls;
@@ -40,6 +41,7 @@ public sealed class AsyncIcon : Image {
     // Shell thumbnail extraction is disk- and CPU-heavy; two at a time keeps
     // the pool free for the rest of the app while still overlapping I/O.
     private static readonly SemaphoreSlim _gate = new(2);
+
 
     private int _generation;
 
@@ -77,7 +79,12 @@ public sealed class AsyncIcon : Image {
 
         byte[]? cached = ServiceLocator.Get<IIconProvider>().TryGetCachedIcon(path, size);
         if (cached is not null) {
-            Source = IconConverter.ToImage(cached);
+            // The only thumbnail work left on the UI thread, and only for a
+            // file this session has not drawn before — see IconImageCache.
+            using (PerfLog.Measure("icon.decode-ui")) {
+                Source = IconImageCache.Get(path, size, cached);
+            }
+
             return;
         }
 
@@ -100,7 +107,17 @@ public sealed class AsyncIcon : Image {
                 return null;
             }
 
-            return await Task.Run(() => IconConverter.Load(path, size));
+            return await Task.Run(() => {
+                using (PerfLog.Measure("bg.icon-load")) {
+                    byte[]? bytes = ServiceLocator.Get<IIconProvider>().GetIcon(path, size);
+
+                    // Decoded here rather than in IconConverter so the result
+                    // lands in the decoded cache: the same tile scrolled back
+                    // to then costs nothing at all, instead of a decode on the
+                    // UI thread the first time it comes round again.
+                    return bytes is null ? null : IconImageCache.Get(path, size, bytes);
+                }
+            });
         } catch {
             // A missing icon is a cosmetic loss; never let it reach the
             // dispatcher's unhandled-exception handler.

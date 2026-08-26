@@ -29,6 +29,16 @@ public sealed record AppSettings {
     /// <summary>Show files / folders with the <c>System</c> attribute.</summary>
     public bool ShowSystem { get; init; } = false;
 
+    /// <summary>
+    /// Hide the volume-root bookkeeping folders (<c>$RECYCLE.BIN</c>,
+    /// <c>System Volume Information</c>, …) listed in
+    /// <see cref="SystemRootFolders"/>, even when <see cref="ShowSystem"/>
+    /// is on. Someone who switches system files on wants to see their own
+    /// hidden files, not Windows' per-volume plumbing they cannot open
+    /// anyway.
+    /// </summary>
+    public bool HideSystemRootFolders { get; init; } = true;
+
 
     // --- File operations ----------------------------------------------
     /// <summary>
