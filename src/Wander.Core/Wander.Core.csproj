@@ -6,4 +6,15 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <!--
+    Внутренности Core видны тестам. Нужно ровно для одного: одиночные
+    операции FileOperationService (Copy / Move / Delete / Rename) больше не
+    вызываются приложением — всё идёт через batch, — но остаются как шаги,
+    из которых batch собран, и проверяются по одному. Публичными они были бы
+    вторым способом сделать то же самое.
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Wander.Core.Tests" />
+  </ItemGroup>
+
 </Project>

@@ -801,4 +801,39 @@ public static class Strings {
     /// <summary>Воспроизведение / пауза (Пробел)</summary>
     public static string PreviewPlayPause => Get(nameof(PreviewPlayPause));
 
+    /// <summary>В буфере обмена файл, которого нет на диске (вложение письма, файл внутри архива) — вставить его Wander не может</summary>
+    public static string StatusClipboardVirtualFiles => Get(nameof(StatusClipboardVirtualFiles));
+
+    /// <summary>Скопировано внутри Wander: системный буфер обмена сейчас занят другим приложением</summary>
+    public static string StatusClipboardNotShared => Get(nameof(StatusClipboardNotShared));
+    /// <summary>Выбрано: {0} — {1}</summary>
+    public static string StatusSelection => Get(nameof(StatusSelection));
+
+    /// <summary> (папок: {0}, размер не считается)</summary>
+    public static string StatusSelectionFolders => Get(nameof(StatusSelectionFolders));
+    /// <summary>Обновлять список автоматически</summary>
+    public static string SettingsAutoRefresh => Get(nameof(SettingsAutoRefresh));
+
+    /// <summary>Wander следит за открытой папкой и перерисовывает список, когда файлы в ней меняет кто-то другой — программа, загрузка, Проводник. Когда выключено, список обновляется только по F5.</summary>
+    public static string SettingsAutoRefreshHint => Get(nameof(SettingsAutoRefreshHint));
+
+    /// <summary>Режим «Таблица»</summary>
+    public static string SettingsDetailsGroup => Get(nameof(SettingsDetailsGroup));
+
+    /// <summary>Режим «Плитки»</summary>
+    public static string SettingsTilesGroup => Get(nameof(SettingsTilesGroup));
+
+    /// <summary>Высота строки (px)</summary>
+    public static string SettingsRowHeight => Get(nameof(SettingsRowHeight));
+
+    /// <summary>Ширина плитки (px)</summary>
+    public static string SettingsTileWidth => Get(nameof(SettingsTileWidth));
+
+    /// <summary>То же самое делает Ctrl + колесо мыши прямо в списке — каждый вид меняется отдельно, и то, что накрутили колесом, попадает в эти же поля.</summary>
+    public static string SettingsZoomHint => Get(nameof(SettingsZoomHint));
+    /// <summary>{0}: {1} px · Ctrl + нажать колёсико — вернуть {2} px</summary>
+    public static string StatusViewSize => Get(nameof(StatusViewSize));
+
+    /// <summary>{0}: {1} px (стандартный)</summary>
+    public static string StatusViewSizeDefault => Get(nameof(StatusViewSizeDefault));
 }

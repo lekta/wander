@@ -22,6 +22,18 @@ public sealed record AppSettings {
     public bool RestoreLastFolder { get; init; } = true;
 
 
+    // --- Behaviour -----------------------------------------------------
+    /// <summary>
+    /// Re-list the current folder by itself when something changes it from
+    /// outside — another application saving a file, a download finishing, a
+    /// copy done in Explorer. On by default: a listing that quietly lies
+    /// until F5 is one of the things this project exists to fix. Off is for
+    /// the rare folder where the churn is constant and the re-listing is
+    /// more distracting than the staleness.
+    /// </summary>
+    public bool AutoRefresh { get; init; } = true;
+
+
     // --- Safety --------------------------------------------------------
     /// <summary>Show files / folders with the <c>Hidden</c> attribute.</summary>
     public bool ShowHidden { get; init; } = false;
@@ -72,12 +84,46 @@ public sealed record AppSettings {
     public bool GroupFoldersFirst { get; init; } = true;
 
 
+    // --- Layout (Details view) ----------------------------------------
+    //
+    // Each view owns its own sizes: what makes a comfortable table is not
+    // what makes a comfortable grid of photographs, and a single "icon size"
+    // shared between them would be wrong in at least one of them. The three
+    // groups below are independent on purpose.
+    //
+    // The numbers are Explorer's, per view — the point of the project is to
+    // be a better Explorer, not a differently-proportioned one, and someone
+    // switching between the two should not have to re-learn how much fits on
+    // a screen.
+
+    /// <summary>Height of one row in the Details table, in pixels.</summary>
+    public int DetailsRowHeight { get; init; } = 22;
+
+    /// <summary>Side of the icon in the Details table's first column, in pixels.</summary>
+    public int DetailsIconSize { get; init; } = 16;
+
+
+    // --- Layout (Tiles view) ------------------------------------------
+    /// <summary>Width of one tile in the Tiles grid, in pixels.</summary>
+    public int TileCellWidth { get; init; } = 260;
+
+    /// <summary>Side of the icon inside a tile, in pixels.</summary>
+    public int TileIconSize { get; init; } = 48;
+
+    /// <summary>Font size of the file-name line inside a tile.</summary>
+    public int TileLabelFontSize { get; init; } = 12;
+
+
     // --- Layout (LargeIcons view) -------------------------------------
-    /// <summary>Width of one tile in the LargeIcons grid, in pixels.</summary>
-    public int LargeIconCellWidth { get; init; } = 100;
+    /// <summary>
+    /// Width of one tile in the LargeIcons grid, in pixels. The 36 px it
+    /// leaves around a 96 px icon is the air Explorer leaves — wider looks
+    /// sparse, narrower starts cutting names that would otherwise fit.
+    /// </summary>
+    public int LargeIconCellWidth { get; init; } = 132;
 
     /// <summary>Side length of the icon image inside a tile, in pixels.</summary>
-    public int LargeIconImageSize { get; init; } = 72;
+    public int LargeIconImageSize { get; init; } = 96;
 
     /// <summary>Margin around each tile (all four sides), in pixels.</summary>
     public int LargeIconMargin { get; init; } = 2;

@@ -116,8 +116,12 @@
             <EventSetter Event="PreviewMouseRightButtonDown" Handler="List_PreviewMouseRightButtonDown"/>
             <EventSetter Event="PreviewMouseRightButtonUp" Handler="List_PreviewMouseRightButtonUp"/>
             <EventSetter Event="PreviewKeyDown" Handler="List_PreviewKeyDown"/>
+            <EventSetter Event="PreviewTextInput" Handler="List_PreviewTextInput"/>
             <EventSetter Event="MouseDoubleClick" Handler="List_MouseDoubleClick"/>
             <EventSetter Event="PreviewMouseWheel" Handler="List_PreviewMouseWheel"/>
+            <!-- Только средняя кнопка: левая и правая разбираются выше
+                 своими обработчиками, этот их не трогает. -->
+            <EventSetter Event="PreviewMouseDown" Handler="List_PreviewMouseDown"/>
         </Style>
 
         <!--
@@ -162,13 +166,29 @@
                   ScrollViewer.HorizontalScrollBarVisibility="Auto"
                   ScrollViewer.VerticalScrollBarVisibility="Auto"
                   GridLinesVisibility="None" AlternatingRowBackground="#F7F7F7"
-                  HeadersVisibility="Column" RowHeight="24">
+                  HeadersVisibility="Column"
+                  Sorting="Details_Sorting"
+                  RowHeight="{Binding Settings.DetailsRowHeight}">
             <DataGrid.Columns>
-                <DataGridTemplateColumn Header="" Width="28" IsReadOnly="True">
+                <!--
+                    Row height and icon size are this view's own settings
+                    (PLAN A1) — Ctrl + wheel writes the same two fields, so
+                    the gesture and the dialog cannot disagree. The column's
+                    width is derived from the icon rather than settable: a
+                    column narrower than its icon would just clip it.
+
+                    That width is set from code-behind, not bound: a
+                    DataGridColumn is not part of the visual tree, has no
+                    DataContext of its own, and a RelativeSource binding on it
+                    silently resolves to nothing. The bindings *inside*
+                    CellTemplate are fine — those live in a realised cell.
+                -->
+                <DataGridTemplateColumn x:Name="IconColumn" Header="" IsReadOnly="True" CanUserSort="False">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Normal"
-                                                Width="20" Height="20"/>
+                                                Width="{Binding DataContext.Settings.DetailsIconSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                Height="{Binding DataContext.Settings.DetailsIconSize, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
@@ -195,9 +215,15 @@
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTextColumn Header="{x:Static res:Strings.ColumnType}" Binding="{Binding Kind}" Width="80"/>
-                <DataGridTextColumn Header="{x:Static res:Strings.ColumnSize}" Binding="{Binding Size}" Width="100"/>
-                <DataGridTextColumn Header="{x:Static res:Strings.ColumnModified}" Binding="{Binding ModifiedUtc, StringFormat=yyyy-MM-dd HH:mm}" Width="140"/>
+                <!--
+                    SortMemberPath carries the SortKey name rather than the
+                    bound property: the grid never sorts anything itself
+                    (Details_Sorting refuses), so this field is free to be
+                    the identifier the view model understands.
+                -->
+                <DataGridTextColumn Header="{x:Static res:Strings.ColumnType}" Binding="{Binding Kind}" Width="80" SortMemberPath="Type"/>
+                <DataGridTextColumn Header="{x:Static res:Strings.ColumnSize}" Binding="{Binding Size}" Width="100" SortMemberPath="Size"/>
+                <DataGridTextColumn Header="{x:Static res:Strings.ColumnModified}" Binding="{Binding ModifiedUtc, StringFormat=yyyy-MM-dd HH:mm}" Width="140" SortMemberPath="ModifiedDate"/>
             </DataGrid.Columns>
         </DataGrid>
 
@@ -237,14 +263,37 @@
                             Height="{Binding DataContext.Settings.TilesMetrics.ContentHeight, RelativeSource={RelativeSource AncestorType=UserControl}}"
                             Margin="{Binding DataContext.Settings.TilesMetrics.Margin, RelativeSource={RelativeSource AncestorType=UserControl}}"
                             Padding="6" Background="Transparent">
-                        <StackPanel Orientation="Horizontal">
-                            <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Normal"
+                        <!--
+                            Icon in a fixed column, text in what is left:
+                            the name then trims against the tile's real
+                            width, whatever the user set it to, instead of
+                            against a magic number that only matched the
+                            default width.
+                        -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <!--
+                                Medium, not Normal: a real thumbnail of the
+                                picture / the folder's contents where the
+                                shell has one, the plain extension icon where
+                                it has not. Details stays on Normal — at 20 px
+                                a photo is a smudge, and a folder of source
+                                would pay a per-file shell call for nothing.
+                            -->
+                            <controls:AsyncIcon Grid.Column="0"
+                                                IconPath="{Binding FullPath}" IconSize="Medium"
                                                 Width="{Binding DataContext.Settings.TilesMetrics.ImageSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                 Height="{Binding DataContext.Settings.TilesMetrics.ImageSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                Margin="0,0,8,0" VerticalAlignment="Center"/>
-                            <StackPanel VerticalAlignment="Center">
+                                                Margin="0,0,8,0" VerticalAlignment="Center"
+                                                RenderOptions.BitmapScalingMode="HighQuality"
+                                                UseLayoutRounding="True"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                 <Grid>
-                                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" MaxWidth="160">
+                                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"
+                                               FontSize="{Binding DataContext.Settings.TilesMetrics.LabelFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}">
                                         <TextBlock.Visibility>
                                             <MultiBinding Converter="{StaticResource RenameVisibility}" ConverterParameter="Inverse">
                                                 <Binding Path="FullPath"/>
@@ -252,13 +301,15 @@
                                             </MultiBinding>
                                         </TextBlock.Visibility>
                                     </TextBlock>
-                                    <TextBox Style="{StaticResource RenameEditor}" MaxWidth="180"/>
+                                    <TextBox Style="{StaticResource RenameEditor}"
+                                             FontSize="{Binding DataContext.Settings.TilesMetrics.LabelFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
                                 </Grid>
-                                <TextBlock FontSize="11" Foreground="#777">
+                                <TextBlock Foreground="#777" TextTrimming="CharacterEllipsis"
+                                           FontSize="{Binding DataContext.Settings.TilesMetrics.SecondaryFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}">
                                     <Run Text="{Binding Kind, Mode=OneWay}"/>
                                 </TextBlock>
                             </StackPanel>
-                        </StackPanel>
+                        </Grid>
                     </Border>
                 </DataTemplate>
             </ListBox.ItemTemplate>

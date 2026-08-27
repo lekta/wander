@@ -4,7 +4,6 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
-using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -45,26 +44,26 @@ public partial class MainWindow : Window {
     private int _dragPathCount;
     private string? _dragFirstName;
 
-    // --- Drag preview + drop indicator state ---------------------------
+    // --- Drag preview ---------------------------------------------------
     private DragPreviewWindow? _dragPreview;
-    private DropTargetAdorner? _dropAdorner;
-    private AdornerLayer? _dropAdornerLayer;
-    private string? _currentDropTarget;
-    private DragDropEffects _currentDragEffect;
-    private SelfDropReason _currentSelfDropReason;
-    private string? _currentSelfDropOffender;
 
     /// <summary>
-    /// The cursor is over the bookmarks region, so the drop would add a
-    /// bookmark rather than copy or move anything. The drag plaque reads
-    /// this instead of the last file-operation it computed.
+    /// Where a drop would land and what it would do — see
+    /// <see cref="DropTargetController"/>. The plaque that follows the
+    /// cursor is drawn here from what it reports.
     /// </summary>
-    private bool _bookmarkDropActive;
+    private DropTargetController _drops = null!;
 
 
     public MainWindow() {
         InitializeComponent();
         Loaded += OnLoaded;
+        // The OS clipboard is re-read here rather than watched: reading it is
+        // a cross-process call on an exclusively-opened resource, and
+        // PasteCommand.CanExecute runs dozens of times a second. Activation
+        // is the one moment the answer has to be right — to paste, the user
+        // has to come back to this window anyway.
+        Activated += (_, _) => (DataContext as MainViewModel)?.SyncClipboardFromSystem();
     }
 
 
@@ -159,6 +158,10 @@ public partial class MainWindow : Window {
             vm.PropertyChanged += OnVmPropertyChanged;
             vm.Nav.PropertyChanged += OnNavPropertyChanged;
         }
+        // Built here rather than in the constructor: the folder it falls
+        // back to is the one the view model is listing, and there is no view
+        // model yet when the window is constructed.
+        _drops = new DropTargetController(() => Vm.CurrentPath);
         // A third-party command can create, rename or delete behind our
         // back, so a successful one invalidates both the listing and the
         // cached shell answer.
@@ -348,12 +351,13 @@ public partial class MainWindow : Window {
     }
 
     private static bool IsInsideControl(object originalSource) {
-        var hit = originalSource as DependencyObject;
-        while (hit is not null) {
+        // Through ListVisuals.Ancestors, not VisualTreeHelper directly: a
+        // click can land on a Run, which is not a visual and throws when
+        // asked for its visual parent. Same for the three walks below.
+        foreach (var hit in ListVisuals.Ancestors(originalSource)) {
             if (hit is ButtonBase or TextBoxBase) {
                 return true;
             }
-            hit = VisualTreeHelper.GetParent(hit);
         }
 
         return false;
@@ -668,14 +672,12 @@ public partial class MainWindow : Window {
 
     /// <summary>The tree node a hit belongs to, if it has a real path.</summary>
     private static TreeNodeViewModel? NodeAt(object originalSource) {
-        var hit = originalSource as DependencyObject;
-        while (hit is not null) {
+        foreach (var hit in ListVisuals.Ancestors(originalSource)) {
             if (hit is FrameworkElement fe && fe.DataContext is TreeNodeViewModel node) {
                 return string.IsNullOrEmpty(node.FullPath) || node.FullPath.StartsWith("shell:", StringComparison.OrdinalIgnoreCase)
                     ? null
                     : node;
             }
-            hit = VisualTreeHelper.GetParent(hit);
         }
 
         return null;
@@ -710,13 +712,13 @@ public partial class MainWindow : Window {
     }
 
 
-    private static bool HitTestExpander(DependencyObject? hit) {
-        while (hit is not null) {
+    private static bool HitTestExpander(DependencyObject? source) {
+        foreach (var hit in ListVisuals.Ancestors(source)) {
             if (hit is ToggleButton) {
                 return true;
             }
-            hit = VisualTreeHelper.GetParent(hit);
         }
+
         return false;
     }
 
@@ -752,8 +754,7 @@ public partial class MainWindow : Window {
     private void StartDrag(DependencyObject src, string[] paths, string[] payload) {
         _dragPathCount = paths.Length;
         _dragFirstName = Path.GetFileName(paths[0].TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-        _currentDropTarget = null;
-        _currentDragEffect = DragDropEffects.None;
+        _drops.Clear();
 
         var preview = new DragPreviewWindow();
         preview.SetIcon(IconConverter.Load(paths[0], IconSize.Normal));
@@ -774,7 +775,7 @@ public partial class MainWindow : Window {
             // drop target may throw on rejection — ignore.
         } finally {
             System.Windows.DragDrop.RemoveGiveFeedbackHandler(src, feedback);
-            ClearDropHighlight();
+            _drops.Clear();
             SetBookmarkDropZoneActive(false);
             preview.Close();
             _dragPreview = null;
@@ -805,14 +806,14 @@ public partial class MainWindow : Window {
         // so none of the copy/move/link vocabulary applies. Without this the
         // plaque kept showing whatever the last real target had offered —
         // "Переместить … в Downloads" while hovering the bookmarks strip.
-        if (_bookmarkDropActive) {
+        if (_drops.IsBookmarkTarget) {
             ShowDragPreview();
             _dragPreview.SetAction(DragAction.Link, FormatBookmarkDesc(count), null);
 
             return;
         }
 
-        if (_currentDragEffect == DragDropEffects.None || _currentDropTarget is null) {
+        if (_drops.Effect == DragDropEffects.None || _drops.Target is null) {
             // "Forbidden" branch. Two sub-cases:
             //  • Self-drop with a specific reason ("into own subfolder", …) —
             //    we want to surface that reason loudly so the user knows
@@ -821,17 +822,17 @@ public partial class MainWindow : Window {
             //    splitter) — the system's no-drop cursor is enough, and a
             //    red "Cannot drop here" plaque hovering over a perfectly
             //    valid neighbouring folder is just noise. Hide the preview.
-            if (_currentSelfDropReason != SelfDropReason.None && _currentDropTarget is not null) {
+            if (_drops.SelfDropReason != SelfDropReason.None && _drops.Target is not null) {
                 ShowDragPreview();
                 action = DragAction.Forbidden;
-                desc = PathSafety.FormatReason(_currentSelfDropReason, _currentSelfDropOffender, _currentDropTarget);
+                desc = PathSafety.FormatReason(_drops.SelfDropReason, _drops.SelfDropOffender, _drops.Target);
             } else {
                 HideDragPreview();
                 return;
             }
         } else {
             ShowDragPreview();
-            action = _currentDragEffect switch {
+            action = _drops.Effect switch {
                 DragDropEffects.Move => DragAction.Move,
                 DragDropEffects.Link => DragAction.Link,
                 _ => DragAction.Copy,
@@ -845,7 +846,7 @@ public partial class MainWindow : Window {
                 ? string.Format(Strings.DragOneItem, _dragFirstName)
                 : string.Format(Strings.DragItems, count);
             desc = $"{verb} {what}";
-            targetText = string.Format(Strings.DragTarget, FormatTarget(_currentDropTarget));
+            targetText = string.Format(Strings.DragTarget, FormatTarget(_drops.Target));
         }
 
         _dragPreview.SetAction(action, desc, targetText);
@@ -879,99 +880,27 @@ public partial class MainWindow : Window {
 
 
     // --- Drop target ----------------------------------------------------
+    //
+    // Working out where a drop would land, whether it is allowed and what it
+    // would do lives in DropTargetController; the window is left with the
+    // two ends the controller deliberately does not have — the XAML event
+    // handlers, and running the plan through the view model.
 
     private void OnDragOver(object sender, DragEventArgs e) {
-        // Reaching the ordinary pipeline means the cursor is over a real
-        // drop target again, whatever it was over a moment ago.
-        _bookmarkDropActive = false;
-
-        if (!e.Data.GetDataPresent(DataFormats.FileDrop)) {
-            e.Effects = DragDropEffects.None;
-            e.Handled = true;
-            ResetDropState();
-            SetDropHighlight(null);
-            return;
-        }
-
-        var paths = (string[])e.Data.GetData(DataFormats.FileDrop);
-        string? target = ResolveDropTarget(e);
-
-        if (target is null) {
-            e.Effects = DragDropEffects.None;
-            ResetDropState();
-            SetDropHighlight(null);
-        } else {
-            // Self-drop checks don't apply to Link — Explorer happily makes a
-            // shortcut next to the original.
-            bool isLink = (Keyboard.Modifiers & ModifierKeys.Alt) != 0;
-            var reason = isLink
-                ? SelfDropReason.None
-                : PathSafety.DetectSelfDrop(paths, target, out _);
-            string? offender = null;
-            if (!isLink) {
-                PathSafety.DetectSelfDrop(paths, target, out offender);
-            }
-
-            if (reason != SelfDropReason.None) {
-                e.Effects = DragDropEffects.None;
-                _currentDragEffect = DragDropEffects.None;
-                _currentDropTarget = target;
-                _currentSelfDropReason = reason;
-                _currentSelfDropOffender = offender;
-                SetDropHighlight(null);
-            } else {
-                e.Effects = ChooseEffect(paths, target);
-                _currentDragEffect = e.Effects;
-                _currentDropTarget = target;
-                _currentSelfDropReason = SelfDropReason.None;
-                _currentSelfDropOffender = null;
-                SetDropHighlight(FindHighlightElement(e));
-            }
-        }
-        e.Handled = true;
+        _drops.DragOver(e);
     }
 
     private void OnDrop(object sender, DragEventArgs e) {
         try {
-            if (!e.Data.GetDataPresent(DataFormats.FileDrop)) {
+            if (_drops.PlanDrop(e) is not { } plan) {
                 return;
             }
 
-            var paths = ((string[])e.Data.GetData(DataFormats.FileDrop)).ToList();
-            string? target = ResolveDropTarget(e);
-            if (target is null) {
-                return;
-            }
-
-            // Self-drop checks don't apply to Link — Explorer happily makes a
-            // shortcut next to the original, including into the source folder.
-            bool isLink = (Keyboard.Modifiers & ModifierKeys.Alt) != 0;
-            if (!isLink) {
-                var reason = PathSafety.DetectSelfDrop(paths, target, out _);
-                if (reason != SelfDropReason.None) {
-                    return;
-                }
-            }
-
-            var wpfEffect = ChooseEffect(paths, target);
-            var effect = wpfEffect switch {
-                DragDropEffects.Move => DropEffect.Move,
-                DragDropEffects.Link => DropEffect.Link,
-                _ => DropEffect.Copy,
-            };
-            Vm.HandleDrop(paths, target, effect);
+            Vm.HandleDrop(plan.Paths, plan.Target, plan.Effect);
             e.Handled = true;
         } finally {
-            ClearDropHighlight();
+            _drops.Clear();
         }
-    }
-
-    private void ResetDropState() {
-        _bookmarkDropActive = false;
-        _currentDragEffect = DragDropEffects.None;
-        _currentDropTarget = null;
-        _currentSelfDropReason = SelfDropReason.None;
-        _currentSelfDropOffender = null;
     }
 
 
@@ -997,7 +926,7 @@ public partial class MainWindow : Window {
             return;
         }
 
-        if (IsOverDroppableBookmarkFolder(e)) {
+        if (DropTargetController.IsOverDroppableBookmarkFolder(e)) {
             // Defer to the standard handler — same effect, same highlight,
             // same self-drop protection as the drives tree.
             OnDragOver(sender, e);
@@ -1008,13 +937,13 @@ public partial class MainWindow : Window {
         e.Effects = acceptable ? DragDropEffects.Link : DragDropEffects.None;
         // Clear any leftover highlight from a previous in-folder hover so
         // empty-area drops don't look like they're targeting something.
-        SetDropHighlight(null);
+        _drops.SetHighlight(null);
         SetBookmarkDropZoneActive(acceptable);
         e.Handled = true;
     }
 
     private void BookmarksPanel_Drop(object sender, DragEventArgs e) {
-        if (IsOverDroppableBookmarkFolder(e)) {
+        if (DropTargetController.IsOverDroppableBookmarkFolder(e)) {
             OnDrop(sender, e);
             return;
         }
@@ -1036,7 +965,7 @@ public partial class MainWindow : Window {
             }
             e.Handled = true;
         } finally {
-            ClearDropHighlight();
+            _drops.Clear();
         }
     }
 
@@ -1117,148 +1046,11 @@ public partial class MainWindow : Window {
     /// button, so an idle mouse passing over it changes nothing.
     /// </summary>
     private void SetBookmarkDropZoneActive(bool active) {
-        _bookmarkDropActive = active;
+        _drops.IsBookmarkTarget = active;
         BookmarkDropZone.Background = active ? _dropZoneActiveFill : _dropZoneIdleFill;
         BookmarkDropZoneGlyph.Foreground = active ? _dropZoneActiveGlyph : _dropZoneIdleGlyph;
         BookmarkDropZoneGlyph.FontWeight = active ? FontWeights.Bold : FontWeights.Normal;
         UpdatePreviewForCurrentTarget();
     }
-
-    /// <summary>
-    /// True when the drag is hovering over a TreeViewItem in the bookmarks
-    /// tree whose DataContext is a real on-disk folder bookmark (not a
-    /// shell-namespace sentinel like "shell:RecycleBinFolder", which has
-    /// no backing directory to copy into).
-    /// </summary>
-    private static bool IsOverDroppableBookmarkFolder(DragEventArgs e) {
-        var hit = e.OriginalSource as DependencyObject;
-        while (hit is not null) {
-            if (hit is FrameworkElement fe && fe.DataContext is TreeNodeViewModel node) {
-                if (string.IsNullOrEmpty(node.FullPath)) {
-                    return false;
-                }
-                if (node.FullPath.StartsWith("shell:", StringComparison.OrdinalIgnoreCase)) {
-                    return false;
-                }
-                return true;
-            }
-            hit = VisualTreeHelper.GetParent(hit);
-        }
-        return false;
-    }
-
-
-    private string? ResolveDropTarget(DragEventArgs e) {
-        var hit = e.OriginalSource as DependencyObject;
-        while (hit is not null) {
-            if (hit is FrameworkElement fe) {
-                if (fe.DataContext is FileSystemEntry entry) {
-                    if (entry.Kind == EntryKind.Directory) {
-                        return entry.FullPath;
-                    }
-                    // .lnk pointing at a directory = drop into the real folder.
-                    if (entry.FullPath.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)) {
-                        string? resolved = ResolveShortcutTarget(entry.FullPath);
-                        if (resolved is not null && Directory.Exists(resolved)) {
-                            return resolved;
-                        }
-                    }
-                }
-                if (fe.DataContext is TreeNodeViewModel node && !string.IsNullOrEmpty(node.FullPath)) {
-                    return node.FullPath;
-                }
-            }
-            hit = VisualTreeHelper.GetParent(hit);
-        }
-        return Vm.CurrentPath;
-    }
-
-    private static string? ResolveShortcutTarget(string lnkPath) {
-        if (!ServiceLocator.IsRegistered<IShortcutService>()) {
-            return null;
-        }
-        try {
-            return ServiceLocator.Get<IShortcutService>().Resolve(lnkPath);
-        } catch {
-            return null;
-        }
-    }
-
-    private static UIElement? FindHighlightElement(DragEventArgs e) {
-        var hit = e.OriginalSource as DependencyObject;
-        while (hit is not null) {
-            if (hit is TreeViewItem tvi && tvi.DataContext is TreeNodeViewModel) {
-                // RenderSize of a TreeViewItem includes its expanded children —
-                // adorning that would paint the highlight over the whole subtree.
-                // The default WPF template names the row container "Bd" (Aero2);
-                // adorn that if available, otherwise fall back to the row itself.
-                if (tvi.Template?.FindName("Bd", tvi) is UIElement header) {
-                    return header;
-                }
-                return tvi;
-            }
-            if (hit is ListBoxItem lbi && lbi.DataContext is FileSystemEntry fe1 && fe1.Kind == EntryKind.Directory) {
-                return lbi;
-            }
-            if (hit is DataGridRow dgr && dgr.DataContext is FileSystemEntry fe2 && fe2.Kind == EntryKind.Directory) {
-                return dgr;
-            }
-            hit = VisualTreeHelper.GetParent(hit);
-        }
-        return null;
-    }
-
-    private void SetDropHighlight(UIElement? target) {
-        if (_dropAdorner is not null && _dropAdornerLayer is not null) {
-            _dropAdornerLayer.Remove(_dropAdorner);
-            _dropAdorner = null;
-            _dropAdornerLayer = null;
-        }
-
-        if (target is null) {
-            return;
-        }
-
-        var layer = AdornerLayer.GetAdornerLayer(target);
-        if (layer is null) {
-            return;
-        }
-
-        _dropAdorner = new DropTargetAdorner(target);
-        _dropAdornerLayer = layer;
-        layer.Add(_dropAdorner);
-    }
-
-    private void ClearDropHighlight() {
-        SetDropHighlight(null);
-        ResetDropState();
-    }
-
-
-    private static DragDropEffects ChooseEffect(IReadOnlyList<string> paths, string target) {
-        var mods = Keyboard.Modifiers;
-        // Alt → make a shortcut (Explorer parity).
-        if (mods.HasFlag(ModifierKeys.Alt)) {
-            return DragDropEffects.Link;
-        }
-        if (mods.HasFlag(ModifierKeys.Shift)) {
-            return DragDropEffects.Move;
-        }
-        if (mods.HasFlag(ModifierKeys.Control)) {
-            return DragDropEffects.Copy;
-        }
-        return paths.Count > 0 && IsSameDrive(paths[0], target)
-            ? DragDropEffects.Move
-            : DragDropEffects.Copy;
-    }
-
-    private static bool IsSameDrive(string a, string b) {
-        string? ra = Path.GetPathRoot(a);
-        string? rb = Path.GetPathRoot(b);
-        return string.Equals(ra, rb, StringComparison.OrdinalIgnoreCase);
-    }
-
-
-
 
 }

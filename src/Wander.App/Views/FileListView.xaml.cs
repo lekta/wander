@@ -1,3 +1,5 @@
+using System.Collections.Specialized;
+using System.ComponentModel;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -41,6 +43,9 @@ public partial class FileListView : UserControl {
     /// <summary>Set on right-button-down: did the click land on empty space?</summary>
     private bool _contextIsBackground;
 
+    /// <summary>Jump-to-name from the keyboard; see <see cref="List_PreviewTextInput"/>.</summary>
+    private readonly TypeAheadController _typeAhead = new();
+
 
     public FileListView() {
         InitializeComponent();
@@ -68,9 +73,88 @@ public partial class FileListView : UserControl {
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e) {
         if (e.OldValue is MainViewModel old) {
             old.SelectionRestoreRequested -= RestoreListSelection;
+            old.Settings.PropertyChanged -= OnSettingsChanged;
+            old.Entries.CollectionChanged -= OnEntriesChanged;
         }
         if (e.NewValue is MainViewModel vm) {
             vm.SelectionRestoreRequested += RestoreListSelection;
+            vm.Settings.PropertyChanged += OnSettingsChanged;
+            vm.Entries.CollectionChanged += OnEntriesChanged;
+            ShowSortIndicator();
+            ApplyIconColumnWidth();
+        }
+    }
+
+    /// <summary>
+    /// A new listing means the half-typed name belongs to a folder that is
+    /// no longer on screen.
+    /// </summary>
+    private void OnEntriesChanged(object? sender, NotifyCollectionChangedEventArgs e) {
+        _typeAhead.Reset();
+    }
+
+
+    // --- Sorting from the column headers --------------------------------
+
+    /// <summary>
+    /// A click on a column header. The grid's own sort is refused
+    /// (<c>e.Handled</c>) and the request goes to the view model instead:
+    /// the order is produced by the enumerator, once, for every view — a
+    /// second sort applied to the Details rows on top of it would leave
+    /// Tiles and LargeIcons showing a different order than the table.
+    ///
+    /// <para>
+    /// Clicking the column that is already sorted flips the direction; that
+    /// part lives in <c>SetSortKey</c>, which the View menu shares.
+    /// </para>
+    /// </summary>
+    private void Details_Sorting(object sender, DataGridSortingEventArgs e) {
+        e.Handled = true;
+        Vm.SetSortKeyCommand.Execute(e.Column.SortMemberPath);
+    }
+
+    private void OnSettingsChanged(object? sender, PropertyChangedEventArgs e) {
+        switch (e.PropertyName) {
+            case nameof(SettingsViewModel.SortKey):
+            case nameof(SettingsViewModel.SortAscending):
+                ShowSortIndicator();
+                break;
+
+            case nameof(SettingsViewModel.DetailsIconSize):
+                ApplyIconColumnWidth();
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Keeps the icon column as wide as the icon in it. Assigned rather than
+    /// bound: a <see cref="System.Windows.Controls.DataGridColumn"/> is not
+    /// in the visual tree and has no DataContext, so a binding on its Width
+    /// resolves to nothing at all — silently, which is the worst way for a
+    /// binding to fail.
+    /// </summary>
+    private void ApplyIconColumnWidth() {
+        if (DataContext is MainViewModel vm) {
+            IconColumn.Width = new DataGridLength(vm.Settings.DetailsIconColumnWidth);
+        }
+    }
+
+    /// <summary>
+    /// Puts the little arrow on the column that is actually sorted. The
+    /// grid would normally do this as part of sorting, which is exactly what
+    /// we refused above — so the indicator is driven from the settings
+    /// instead, and the View menu moves it too.
+    /// </summary>
+    private void ShowSortIndicator() {
+        if (DataContext is not MainViewModel vm) {
+            return;
+        }
+
+        string active = vm.Settings.SortKey.ToString();
+        foreach (var column in DetailsView.Columns) {
+            column.SortDirection = column.SortMemberPath == active
+                ? (vm.Settings.SortAscending ? ListSortDirection.Ascending : ListSortDirection.Descending)
+                : null;
         }
     }
 
@@ -368,7 +452,31 @@ public partial class FileListView : UserControl {
     }
 
 
+    /// <summary>
+    /// <c>Ctrl</c> + the wheel pressed puts the current view back to its
+    /// standard size. The same finger that changed the size undoes it, which
+    /// is the only reason this is a mouse gesture and not a hotkey.
+    /// </summary>
+    private void List_PreviewMouseDown(object sender, MouseButtonEventArgs e) {
+        if (e.ChangedButton == MouseButton.Middle && Keyboard.Modifiers == ModifierKeys.Control) {
+            Vm.ResetListSize();
+            e.Handled = true;
+        }
+    }
+
+
     private void List_PreviewMouseWheel(object sender, MouseWheelEventArgs e) {
+        // Ctrl + wheel resizes the current view (Explorer parity). One notch
+        // of the wheel is one step; a free-spinning wheel can report a
+        // fraction of a notch, so the division is what keeps a slow scroll
+        // from doing nothing at all.
+        if (Keyboard.Modifiers == ModifierKeys.Control) {
+            int steps = e.Delta / Mouse.MouseWheelDeltaForOneLine;
+            Vm.ZoomList(steps != 0 ? steps : Math.Sign(e.Delta));
+            e.Handled = true;
+            return;
+        }
+
         if (ListVisuals.TryShiftScrollHorizontally((DependencyObject)sender, e)) {
             e.Handled = true;
         }
@@ -413,6 +521,50 @@ public partial class FileListView : UserControl {
 
         _contextIsBackground = Vm.SelectedEntries.Count == 0;
         ContextMenuRequested?.Invoke(this, new FileListMenuRequest(host, PlacementMode.Center, _contextIsBackground));
+        e.Handled = true;
+    }
+
+
+    // --- Type-ahead ------------------------------------------------------
+
+    /// <summary>
+    /// Letters typed into the list jump to the file whose name starts with
+    /// them (Explorer parity). The prefix and the "same letter cycles"
+    /// behaviour live in <see cref="TypeAheadController"/>; this end only
+    /// decides whether the keystroke is meant for the list at all, and
+    /// moves the selection when it is.
+    ///
+    /// <para>
+    /// The handler is a tunnelling one on the container, so it sees input
+    /// destined for the inline rename editor inside a row before the editor
+    /// does — hence the explicit stand-down while a name is being edited.
+    /// </para>
+    /// </summary>
+    private void List_PreviewTextInput(object sender, TextCompositionEventArgs e) {
+        if (Vm.RenamingPath is not null || Keyboard.Modifiers is ModifierKeys.Control or ModifierKeys.Alt) {
+            return;
+        }
+
+        // Space is how the keyboard toggles the current row's selection;
+        // taking it for a search that starts with a space helps nobody.
+        if (e.Text == " ") {
+            return;
+        }
+
+        var entries = Vm.Entries;
+        int current = Vm.SelectedEntry is { } selected ? entries.IndexOf(selected) : -1;
+        int target = _typeAhead.Type(e.Text, entries.Select(x => x.Name).ToList(), current);
+        if (target < 0) {
+            // Nothing matches — swallow it anyway, so the keystroke doesn't
+            // fall through to whatever else might act on a letter.
+            e.Handled = true;
+            return;
+        }
+
+        if (sender is ItemsControl host) {
+            SetListSelection(host, new[] { entries[target] });
+            FocusRow(entries[target]);
+        }
         e.Handled = true;
     }
 

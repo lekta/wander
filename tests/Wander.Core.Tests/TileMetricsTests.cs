@@ -1,4 +1,5 @@
 using Wander.Core.Layout;
+using Wander.Core.Persistence;
 
 namespace Wander.Core.Tests;
 
@@ -11,6 +12,10 @@ namespace Wander.Core.Tests;
 public class TileMetricsTests {
     private static TileMetrics Icons(int cellWidth = 100, int imageSize = 72, int margin = 2, int fontSize = 12) {
         return TileMetrics.ForLargeIcons(cellWidth, imageSize, margin, fontSize);
+    }
+
+    private static TileMetrics Tiles(int cellWidth = 220, int iconSize = 32, int fontSize = 12) {
+        return TileMetrics.ForTiles(cellWidth, iconSize, fontSize);
     }
 
 
@@ -40,18 +45,18 @@ public class TileMetricsTests {
 
 
     /// <summary>
-    /// The icon, the air around it and two lines of label all have to fit,
-    /// or the label is clipped — which is what a hard-coded 32 px label box
-    /// did to the largest font the settings dialog offers.
+    /// The icon, the air around it and the wrapped label all have to fit, or
+    /// the label is clipped — which is what a hard-coded 32 px label box did
+    /// to the largest font the settings dialog offers.
     /// </summary>
     [Theory]
     [InlineData(8)]
     [InlineData(12)]
     [InlineData(24)]
-    public void Content_HoldsTheIconAndTwoLinesOfLabel(int fontSize) {
+    public void Content_HoldsTheIconAndItsLabelLines(int fontSize) {
         var metrics = Icons(imageSize: 72, fontSize: fontSize);
 
-        Assert.True(metrics.LabelHeight >= 2 * fontSize);
+        Assert.True(metrics.LabelHeight >= 3 * fontSize);
         Assert.Equal(72 + (2 * TileMetrics.ImageGap) + metrics.LabelHeight, metrics.ContentHeight);
     }
 
@@ -82,16 +87,61 @@ public class TileMetricsTests {
 
 
     /// <summary>
+    /// The shipped sizes are Explorer's, and that is a decision worth
+    /// pinning: they are easy to nudge by accident (a settings default is
+    /// one number in a record) and hard to notice afterwards — the grid just
+    /// slowly stops looking like the thing it is meant to replace.
+    /// </summary>
+    [Fact]
+    public void DefaultLargeIcons_KeepExplorersProportions() {
+        var settings = new AppSettings();
+        var metrics = TileMetrics.ForLargeIcons(
+            settings.LargeIconCellWidth, settings.LargeIconImageSize,
+            settings.LargeIconMargin, settings.LargeIconLabelFontSize);
+
+        Assert.Equal(96, metrics.ImageSize);
+        // 36 px of air around the picture.
+        Assert.Equal(36, metrics.ContentWidth - metrics.ImageSize);
+        // Three lines of name under it, at 17 px a line.
+        Assert.Equal(51, metrics.LabelHeight);
+    }
+
+
+    /// <summary>
     /// Tiles are a row: the icon on the left, two lines of text on the right.
     /// So the box has to clear whichever of the two is taller.
     /// </summary>
     [Fact]
     public void Tiles_ClearTheIconAndTheTwoTextLines() {
-        var metrics = TileMetrics.ForTiles();
+        var metrics = Tiles();
 
         Assert.True(metrics.ContentHeight > metrics.ImageSize);
         Assert.True(metrics.ContentHeight > metrics.LabelHeight);
         Assert.True(metrics.CellWidth > metrics.ContentWidth);
+    }
+
+    /// <summary>
+    /// A tile big enough for a 96-px icon has to be taller than one built
+    /// for a 32-px one — the same "settings drive the geometry" property the
+    /// icon grid has, now that Tiles has its own settings too.
+    /// </summary>
+    [Fact]
+    public void Tiles_GrowWithTheirIcon() {
+        var small = Tiles(iconSize: 32);
+        var large = Tiles(iconSize: 96);
+
+        Assert.True(large.CellHeight > small.CellHeight);
+        Assert.Equal(small.CellWidth, large.CellWidth);
+    }
+
+    /// <summary>
+    /// The second line is derived from the name's size, never independent of
+    /// it, and never shrinks below legible.
+    /// </summary>
+    [Fact]
+    public void Tiles_SecondLineFollowsTheNameSize() {
+        Assert.True(Tiles(fontSize: 16).SecondaryFontSize < 16);
+        Assert.True(Tiles(fontSize: 8).SecondaryFontSize >= 8);
     }
 
 
@@ -102,6 +152,6 @@ public class TileMetricsTests {
     [Fact]
     public void SameSettings_GiveTheSameCell() {
         Assert.Equal(Icons(), Icons());
-        Assert.Equal(TileMetrics.ForTiles(), TileMetrics.ForTiles());
+        Assert.Equal(Tiles(), Tiles());
     }
 }

@@ -38,6 +38,8 @@ public static class PlatformBootstrapper {
 
         ServiceLocator.Register<IFileSystem>(new SystemIOFileSystem());
         ServiceLocator.Register<IKnownFolders>(new WindowsKnownFolders());
+        ServiceLocator.Register<ISystemClipboard>(new WindowsClipboard(logger));
+        ServiceLocator.Register<IDirectoryWatcher>(new WindowsDirectoryWatcher(logger));
         ServiceLocator.Register<IShellLauncher>(new ShellLauncher());
         // Thumbnails get a disk tier next to the logs and state.json:
         // %LocalAppData%\Wander	humbs. Limits arrive from the settings

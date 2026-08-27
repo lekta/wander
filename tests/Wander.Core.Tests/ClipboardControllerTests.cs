@@ -1,4 +1,5 @@
 using Wander.Core.FileSystem;
+using Wander.Core.Tests.Fakes;
 
 namespace Wander.Core.Tests;
 
@@ -121,5 +122,140 @@ public class ClipboardControllerTests {
 
         Assert.False(clip.HasContent);
         Assert.False(clip.IsCut);
+    }
+
+
+    // --- Mirroring onto the OS clipboard --------------------------------
+
+    [Fact]
+    public void Copy_MirrorsPathsOntoTheSystemClipboard() {
+        var system = new FakeSystemClipboard();
+        var clip = new ClipboardController(system);
+
+        clip.Copy(new[] { FileA, FileB });
+
+        Assert.Equal(new[] { FileA, FileB }, system.Content!.Value.Paths);
+        Assert.False(system.Content!.Value.IsCut);
+        Assert.Null(clip.LastSystemIssue);
+    }
+
+    [Fact]
+    public void Cut_MirrorsTheMoveFlagToo() {
+        var system = new FakeSystemClipboard();
+        var clip = new ClipboardController(system);
+
+        clip.Cut(new[] { FileA });
+
+        Assert.True(system.Content!.Value.IsCut);
+    }
+
+    [Fact]
+    public void Copy_WhenClipboardIsBusy_KeepsWorkingLocally_AndSaysSo() {
+        var system = new FakeSystemClipboard { Fails = true };
+        var clip = new ClipboardController(system);
+
+        clip.Copy(new[] { FileA });
+
+        Assert.Equal(new[] { FileA }, clip.Paths);
+        Assert.Equal(ClipboardController.SystemIssue.WriteFailed, clip.LastSystemIssue);
+    }
+
+    [Fact]
+    public void Clear_EmptiesTheSystemClipboardToo() {
+        var system = new FakeSystemClipboard();
+        var clip = new ClipboardController(system);
+        clip.Cut(new[] { FileA });
+
+        clip.Clear();
+
+        Assert.False(system.Content!.Value.HasContent);
+    }
+
+    [Fact]
+    public void Sync_AdoptsWhatAnotherApplicationCopied() {
+        var system = new FakeSystemClipboard {
+            Content = new ClipboardFiles(new[] { FileC }, IsCut: true),
+        };
+        var clip = new ClipboardController(system);
+
+        bool changed = clip.SyncFromSystem();
+
+        Assert.True(changed);
+        Assert.Equal(new[] { FileC }, clip.Paths);
+        Assert.True(clip.IsCut);
+    }
+
+    [Fact]
+    public void Sync_WithOurOwnContentStillThere_ReportsNoChange() {
+        var system = new FakeSystemClipboard();
+        var clip = new ClipboardController(system);
+        clip.Copy(new[] { FileA, FileB });
+
+        Assert.False(clip.SyncFromSystem());
+    }
+
+    [Fact]
+    public void Sync_IsCaseInsensitiveAboutPaths() {
+        // Windows paths are case-insensitive; the same list in another case
+        // is the same list, and adopting it would fire Changed for nothing.
+        var system = new FakeSystemClipboard();
+        var clip = new ClipboardController(system);
+        clip.Copy(new[] { FileA });
+        system.Content = new ClipboardFiles(new[] { FileA.ToUpperInvariant() }, IsCut: false);
+
+        Assert.False(clip.SyncFromSystem());
+    }
+
+    [Fact]
+    public void Sync_WhenClipboardHoldsSomethingElse_DropsOurPaths() {
+        // The user copied text somewhere. Paste has to grey out rather than
+        // paste what they copied ten minutes ago.
+        var system = new FakeSystemClipboard();
+        var clip = new ClipboardController(system);
+        clip.Copy(new[] { FileA });
+        system.Content = ClipboardFiles.Empty;
+
+        Assert.True(clip.SyncFromSystem());
+        Assert.False(clip.HasContent);
+    }
+
+    [Fact]
+    public void Sync_WhenClipboardCannotBeRead_KeepsWhatWeHave() {
+        var system = new FakeSystemClipboard();
+        var clip = new ClipboardController(system);
+        clip.Copy(new[] { FileA });
+        system.Fails = true;
+
+        Assert.False(clip.SyncFromSystem());
+        Assert.Equal(new[] { FileA }, clip.Paths);
+    }
+
+    [Fact]
+    public void Sync_NotesFilesThatAreNotOnDisk() {
+        var system = new FakeSystemClipboard();
+        var clip = new ClipboardController(system);
+        clip.Copy(new[] { FileA });
+
+        // Now the user copies an attachment out of a mail client: files, but
+        // not files that exist anywhere Wander could reach them.
+        system.Content = new ClipboardFiles(Array.Empty<string>(), IsCut: false, HasUnsupportedFiles: true);
+        clip.SyncFromSystem();
+
+        Assert.Equal(ClipboardController.SystemIssue.VirtualFiles, clip.LastSystemIssue);
+        Assert.False(clip.HasContent);
+    }
+
+    [Fact]
+    public void Sync_FiresChanged_SoPasteCanRefresh() {
+        var system = new FakeSystemClipboard {
+            Content = new ClipboardFiles(new[] { FileC }, IsCut: false),
+        };
+        var clip = new ClipboardController(system);
+        int fired = 0;
+        clip.Changed += (_, _) => fired++;
+
+        clip.SyncFromSystem();
+
+        Assert.Equal(1, fired);
     }
 }

@@ -32,6 +32,14 @@ public sealed class SettingsViewModel : ObservableObject {
     }
 
 
+    // --- Behaviour ------------------------------------------------------
+    private bool _autoRefresh;
+    public bool AutoRefresh {
+        get => _autoRefresh;
+        set => SetField(ref _autoRefresh, value);
+    }
+
+
     // --- Safety --------------------------------------------------------
     private bool _showHidden;
     public bool ShowHidden {
@@ -95,7 +103,69 @@ public sealed class SettingsViewModel : ObservableObject {
     }
 
 
-    // --- Layout (tile views) -------------------------------------------
+    // --- Layout (Details) ----------------------------------------------
+    //
+    // Every view keeps its own sizes. The clamps are the whole validation
+    // story for these: the fields are plain text boxes, and a row height of
+    // 0 or 5000 typed by hand must not be able to break the list.
+
+    private int _detailsRowHeight;
+    public int DetailsRowHeight {
+        get => _detailsRowHeight;
+        set => SetField(ref _detailsRowHeight, ClampInt(value, 16, 96));
+    }
+
+    private int _detailsIconSize;
+    public int DetailsIconSize {
+        get => _detailsIconSize;
+        set {
+            if (SetField(ref _detailsIconSize, ClampInt(value, 12, 64))) {
+                Raise(nameof(DetailsIconColumnWidth));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Width of the Details table's icon column — the icon plus the air
+    /// around it. Derived rather than settable: a column narrower than its
+    /// icon clips it, and nobody would want to tune the two separately.
+    /// </summary>
+    public double DetailsIconColumnWidth => DetailsIconSize + 8;
+
+
+    // --- Layout (Tiles) -------------------------------------------------
+    private int _tileCellWidth;
+    public int TileCellWidth {
+        get => _tileCellWidth;
+        set {
+            if (SetField(ref _tileCellWidth, ClampInt(value, 120, 480))) {
+                Raise(nameof(TilesMetrics));
+            }
+        }
+    }
+
+    private int _tileIconSize;
+    public int TileIconSize {
+        get => _tileIconSize;
+        set {
+            if (SetField(ref _tileIconSize, ClampInt(value, 16, 96))) {
+                Raise(nameof(TilesMetrics));
+            }
+        }
+    }
+
+    private int _tileLabelFontSize;
+    public int TileLabelFontSize {
+        get => _tileLabelFontSize;
+        set {
+            if (SetField(ref _tileLabelFontSize, ClampInt(value, 8, 24))) {
+                Raise(nameof(TilesMetrics));
+            }
+        }
+    }
+
+
+    // --- Layout (LargeIcons) -------------------------------------------
     private int _largeIconCellWidth;
     public int LargeIconCellWidth {
         get => _largeIconCellWidth;
@@ -146,12 +216,9 @@ public sealed class SettingsViewModel : ObservableObject {
     public TileMetrics IconsMetrics => TileMetrics.ForLargeIcons(
         LargeIconCellWidth, LargeIconImageSize, LargeIconMargin, LargeIconLabelFontSize);
 
-    /// <summary>
-    /// The same for Tiles, whose geometry is not user-tunable yet (PLAN A1)
-    /// — a constant, but one the panel and the template still read from a
-    /// single place.
-    /// </summary>
-    public TileMetrics TilesMetrics => TileMetrics.ForTiles();
+    /// <summary>The same for Tiles, from that view's own three knobs.</summary>
+    public TileMetrics TilesMetrics => TileMetrics.ForTiles(
+        TileCellWidth, TileIconSize, TileLabelFontSize);
 
 
     // --- Thumbnail cache ------------------------------------------------
@@ -272,6 +339,7 @@ public sealed class SettingsViewModel : ObservableObject {
         // Bulk update without raising for unchanged values; bindings only
         // refresh when something actually shifted.
         RestoreLastFolder = s.RestoreLastFolder;
+        AutoRefresh = s.AutoRefresh;
         ShowHidden = s.ShowHidden;
         ShowSystem = s.ShowSystem;
         HideSystemRootFolders = s.HideSystemRootFolders;
@@ -280,6 +348,11 @@ public sealed class SettingsViewModel : ObservableObject {
         SortKey = s.SortKey;
         SortAscending = s.SortAscending;
         GroupFoldersFirst = s.GroupFoldersFirst;
+        DetailsRowHeight = s.DetailsRowHeight;
+        DetailsIconSize = s.DetailsIconSize;
+        TileCellWidth = s.TileCellWidth;
+        TileIconSize = s.TileIconSize;
+        TileLabelFontSize = s.TileLabelFontSize;
         LargeIconCellWidth = s.LargeIconCellWidth;
         LargeIconImageSize = s.LargeIconImageSize;
         LargeIconMargin = s.LargeIconMargin;
@@ -323,6 +396,7 @@ public sealed class SettingsViewModel : ObservableObject {
     public AppSettings ToRecord() {
         return new AppSettings {
             RestoreLastFolder = RestoreLastFolder,
+            AutoRefresh = AutoRefresh,
             ShowHidden = ShowHidden,
             ShowSystem = ShowSystem,
             HideSystemRootFolders = HideSystemRootFolders,
@@ -331,6 +405,11 @@ public sealed class SettingsViewModel : ObservableObject {
             SortKey = SortKey,
             SortAscending = SortAscending,
             GroupFoldersFirst = GroupFoldersFirst,
+            DetailsRowHeight = DetailsRowHeight,
+            DetailsIconSize = DetailsIconSize,
+            TileCellWidth = TileCellWidth,
+            TileIconSize = TileIconSize,
+            TileLabelFontSize = TileLabelFontSize,
             LargeIconCellWidth = LargeIconCellWidth,
             LargeIconImageSize = LargeIconImageSize,
             LargeIconMargin = LargeIconMargin,

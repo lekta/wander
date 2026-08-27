@@ -8,6 +8,7 @@ using System.Windows;
 using System.Windows.Threading;
 using Wander.App.Conflict;
 using Wander.App.Resources;
+using Wander.App.Util;
 using Wander.Core;
 using Wander.Core.Companions;
 using Wander.Core.Diagnostics;
@@ -26,6 +27,15 @@ namespace Wander.App.ViewModels;
 public sealed class MainViewModel : ObservableObject {
     /// <summary>How long a folder may take to list before the spinner shows.</summary>
     private const int SpinnerDelayMs = 150;
+
+    /// <summary>
+    /// How often an outside change to the current folder may cost a
+    /// re-listing. Half a second: fast enough that a file saved by another
+    /// application appears while the user is still looking at the folder,
+    /// slow enough that unpacking an archive into it does not re-list a
+    /// thousand times.
+    /// </summary>
+    private const int WatchIntervalMs = 500;
 
     private readonly IFileSystem _fs;
     private readonly IShellLauncher _shell;
@@ -49,7 +59,7 @@ public sealed class MainViewModel : ObservableObject {
     private double _previewWidth = 280;
     private double _bookmarksHeight = 200;
 
-    private readonly ClipboardController _clipboard = new();
+    private readonly ClipboardController _clipboard;
 
     private readonly List<string> _favorites = new();
     private bool _isBookmarksExpanded = true;
@@ -58,6 +68,15 @@ public sealed class MainViewModel : ObservableObject {
 
     private CancellationTokenSource? _listLoadCts;
     private bool _isListLoading;
+
+    // --- Auto-refresh ---------------------------------------------------
+    // The watcher says "something changed" from a background thread, often
+    // many times in a row; the timer turns that into at most one re-listing
+    // per interval. See OnWatchTick for why it is a repeating timer rather
+    // than a one-shot restarted on every event.
+    private readonly IDirectoryWatcher? _watcher;
+    private readonly DispatcherTimer? _watchTimer;
+    private bool _folderChangedOutside;
 
     // Which folder the rows currently in Entries belong to. A refresh of the
     // same folder reconciles the list in place; only a move to a *different*
@@ -97,6 +116,21 @@ public sealed class MainViewModel : ObservableObject {
         _companions = ServiceLocator.IsRegistered<CompanionResolver>()
             ? ServiceLocator.Get<CompanionResolver>()
             : CompanionResolver.Default;
+        // Without a system clipboard registered the controller keeps its
+        // paths to itself, exactly as it did before the mirroring existed.
+        _clipboard = new ClipboardController(
+            ServiceLocator.IsRegistered<ISystemClipboard>()
+                ? ServiceLocator.Get<ISystemClipboard>()
+                : null);
+
+        if (ServiceLocator.IsRegistered<IDirectoryWatcher>()) {
+            _watcher = ServiceLocator.Get<IDirectoryWatcher>();
+            _watcher.Changed += (_, _) => _dispatcher.BeginInvoke(NoteFolderChangedOutside);
+            _watchTimer = new DispatcherTimer(DispatcherPriority.Background, _dispatcher) {
+                Interval = TimeSpan.FromMilliseconds(WatchIntervalMs),
+            };
+            _watchTimer.Tick += OnWatchTick;
+        }
 
         Preview = new PreviewController(
             ServiceLocator.IsRegistered<IImageMetadataReader>()
@@ -314,7 +348,46 @@ public sealed class MainViewModel : ObservableObject {
         set {
             if (SetField(ref _selectedEntries, value)) {
                 Preview.SetSelection(value);
+                Raise(nameof(SelectionSummary));
             }
+        }
+    }
+
+    /// <summary>
+    /// "Выбрано: 3 · 1.2 MB" — what the selection amounts to, for the status
+    /// bar. Empty when nothing is selected, so the field disappears rather
+    /// than showing a zero.
+    ///
+    /// <para>
+    /// Folders count as objects but not as bytes: their real size needs a
+    /// recursive walk, and doing one on every click is exactly the kind of
+    /// thing that makes a file manager feel slow. The count says how many of
+    /// them were left out of the total, so the number on screen is never
+    /// quietly wrong.
+    /// </para>
+    /// </summary>
+    public string SelectionSummary {
+        get {
+            if (_selectedEntries.Count == 0) {
+                return "";
+            }
+
+            long bytes = 0;
+            int folders = 0;
+            foreach (var entry in _selectedEntries) {
+                if (entry.IsFolderLike) {
+                    folders++;
+                } else {
+                    bytes += entry.Size ?? 0;
+                }
+            }
+
+            string text = string.Format(
+                Strings.StatusSelection, _selectedEntries.Count, SizeFormatter.Format(bytes));
+
+            return folders == 0
+                ? text
+                : text + string.Format(Strings.StatusSelectionFolders, folders);
         }
     }
 
@@ -773,7 +846,63 @@ public sealed class MainViewModel : ObservableObject {
         Refresh();
         ExpandTreeToCurrent();
         Preview.SetCurrentFolder(_nav.Current, WindowTitle);
+        UpdateFolderWatch();
         SaveState();
+    }
+
+
+    // --- Auto-refresh ----------------------------------------------------
+
+    /// <summary>
+    /// Points the watcher at the folder on screen. Shell namespaces (the
+    /// Recycle Bin) are not real directories and are simply left unwatched —
+    /// there is nothing to hand <c>FileSystemWatcher</c>.
+    /// </summary>
+    private void UpdateFolderWatch() {
+        if (_watcher is null) {
+            return;
+        }
+
+        bool watchable = Settings.AutoRefresh && _nav.Current is not null && !IsCurrentShellNamespace;
+        _watcher.Watch(watchable ? _nav.Current : null);
+
+        if (!watchable) {
+            _folderChangedOutside = false;
+            _watchTimer?.Stop();
+        }
+    }
+
+    private void NoteFolderChangedOutside() {
+        _folderChangedOutside = true;
+        if (_watchTimer is { IsEnabled: false }) {
+            _watchTimer.Start();
+        }
+    }
+
+    /// <summary>
+    /// The throttle. A repeating timer rather than a one-shot restarted on
+    /// every event: a folder receiving a steady stream of changes (an archive
+    /// being unpacked into it) would restart a one-shot for as long as the
+    /// stream lasts and never actually refresh. This way the listing is at
+    /// most one interval behind, whatever is happening. The timer stops
+    /// itself on the first idle tick, so a quiet folder costs nothing.
+    /// </summary>
+    private void OnWatchTick(object? sender, EventArgs e) {
+        if (!_folderChangedOutside) {
+            _watchTimer?.Stop();
+            return;
+        }
+
+        // Two things must not be interrupted by a re-listing: a name being
+        // edited in place (the editor lives in a row that would be rebuilt)
+        // and our own file operation (which re-lists when it finishes
+        // anyway, and would otherwise re-list on every file it copies).
+        if (RenamingPath is not null || HasActiveOperations) {
+            return;
+        }
+
+        _folderChangedOutside = false;
+        Refresh();
     }
 
     private TreeNodeViewModel? _lastSelectedTreeNode;
@@ -1204,6 +1333,103 @@ public sealed class MainViewModel : ObservableObject {
         }
     }
 
+    /// <summary>
+    /// Ctrl + wheel over the file list: makes the current view bigger or
+    /// smaller by <paramref name="steps"/> notches.
+    ///
+    /// <para>
+    /// It writes the same settings the dialog edits — there is no separate
+    /// "zoom level" to fall out of step with them, and the size the user
+    /// scrolled to is the size that persists. Each view is stepped by what
+    /// actually reads as "bigger" in it: the row and its icon in the table,
+    /// the icon in the tiles, and in the icon grid the picture together with
+    /// the cell around it, so the proportions the user chose survive the
+    /// zoom instead of the tiles drifting apart or crowding together.
+    /// </para>
+    /// </summary>
+    public void ZoomList(int steps) {
+        if (steps == 0) {
+            return;
+        }
+
+        switch (ViewMode) {
+            case ViewMode.Details:
+                Settings.DetailsRowHeight += 2 * steps;
+                Settings.DetailsIconSize += 2 * steps;
+                break;
+
+            case ViewMode.Tiles:
+                Settings.TileIconSize += 4 * steps;
+                break;
+
+            case ViewMode.LargeIcons:
+                // The cell follows the picture keeping the **gap** it had,
+                // not the ratio. Scaling proportionally is the obvious thing
+                // and it is wrong: at twice the icon the air around it also
+                // doubles, and a grid of large photographs ends up mostly
+                // empty space. What the user chose when they set these two
+                // numbers is how much room there is around the picture.
+                int gap = Settings.LargeIconCellWidth - Settings.LargeIconImageSize;
+                Settings.LargeIconImageSize += 8 * steps;
+                Settings.LargeIconCellWidth = Settings.LargeIconImageSize + gap;
+                break;
+        }
+
+        ReportViewSize();
+    }
+
+
+    /// <summary>
+    /// Back to the size this view ships with — <c>Ctrl</c> + the wheel
+    /// pressed, in the same list the wheel resizes. There is no other way
+    /// home once the wheel has been turned: the numbers are settings, not a
+    /// zoom level with a neutral position, and hunting for "96" by ear is
+    /// not a thing anyone should have to do.
+    /// </summary>
+    public void ResetListSize() {
+        var defaults = new AppSettings();
+        switch (ViewMode) {
+            case ViewMode.Details:
+                Settings.DetailsRowHeight = defaults.DetailsRowHeight;
+                Settings.DetailsIconSize = defaults.DetailsIconSize;
+                break;
+
+            case ViewMode.Tiles:
+                Settings.TileCellWidth = defaults.TileCellWidth;
+                Settings.TileIconSize = defaults.TileIconSize;
+                Settings.TileLabelFontSize = defaults.TileLabelFontSize;
+                break;
+
+            case ViewMode.LargeIcons:
+                Settings.LargeIconCellWidth = defaults.LargeIconCellWidth;
+                Settings.LargeIconImageSize = defaults.LargeIconImageSize;
+                Settings.LargeIconMargin = defaults.LargeIconMargin;
+                Settings.LargeIconLabelFontSize = defaults.LargeIconLabelFontSize;
+                break;
+        }
+
+        ReportViewSize();
+    }
+
+
+    /// <summary>
+    /// Says in the status bar what size the view is now, and how to get the
+    /// default back. Without it the wheel changes something with no number
+    /// attached to it and no way back — the two complaints this answers.
+    /// </summary>
+    private void ReportViewSize() {
+        var defaults = new AppSettings();
+        (string name, int now, int standard) = ViewMode switch {
+            ViewMode.Details => (Strings.MenuViewDetails, Settings.DetailsRowHeight, defaults.DetailsRowHeight),
+            ViewMode.Tiles => (Strings.MenuViewTiles, Settings.TileIconSize, defaults.TileIconSize),
+            _ => (Strings.MenuViewLargeIcons, Settings.LargeIconImageSize, defaults.LargeIconImageSize),
+        };
+
+        Status = now == standard
+            ? string.Format(Strings.StatusViewSizeDefault, name, now)
+            : string.Format(Strings.StatusViewSize, name, now, standard);
+    }
+
     private void SetSortKey(string? name) {
         if (Enum.TryParse<SortKey>(name, out var key)) {
             // Click-the-same-column toggles direction; Explorer parity.
@@ -1223,11 +1449,14 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
-        // Tile geometry is a projection of the four LargeIcon* settings, not
-        // a setting of its own: the knob that moved has already come through
-        // here and saved. Falling through would just save the same state a
-        // second time on every keystroke in the settings dialog.
-        if (e.PropertyName == nameof(SettingsViewModel.IconsMetrics)) {
+        // Tile geometry and the icon column's width are projections of the
+        // size settings, not settings of their own: the knob that moved has
+        // already come through here and saved. Falling through would just
+        // save the same state a second time on every keystroke in the
+        // settings dialog.
+        if (e.PropertyName == nameof(SettingsViewModel.IconsMetrics) ||
+            e.PropertyName == nameof(SettingsViewModel.TilesMetrics) ||
+            e.PropertyName == nameof(SettingsViewModel.DetailsIconColumnWidth)) {
             return;
         }
 
@@ -1265,6 +1494,12 @@ public sealed class MainViewModel : ObservableObject {
             e.PropertyName == nameof(SettingsViewModel.ShowBookmarkPictures) ||
             e.PropertyName == nameof(SettingsViewModel.ShowBookmarkRecycleBin)) {
             BuildBookmarks();
+        }
+
+        if (e.PropertyName == nameof(SettingsViewModel.AutoRefresh)) {
+            // Switching it on has to start watching the folder already on
+            // screen, not only the next one navigated to.
+            UpdateFolderWatch();
         }
 
         SaveState();
@@ -1909,7 +2144,8 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
         _clipboard.Copy(WithCompanions(_selectedEntries));
-        Status = string.Format(Strings.StatusCopied, _selectedEntries.Count);
+        Status = ClipboardWriteIssue()
+            ?? string.Format(Strings.StatusCopied, _selectedEntries.Count);
     }
 
     private void Cut() {
@@ -1917,7 +2153,41 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
         _clipboard.Cut(WithCompanions(_selectedEntries));
-        Status = string.Format(Strings.StatusCut, _selectedEntries.Count);
+        Status = ClipboardWriteIssue()
+            ?? string.Format(Strings.StatusCut, _selectedEntries.Count);
+    }
+
+
+    /// <summary>
+    /// Re-reads the OS clipboard so <c>Ctrl+V</c> pastes what the user
+    /// copied in another application. Called when the window is activated:
+    /// to paste, they have to come back here anyway, so that is the moment
+    /// the answer has to be right. The gap — the clipboard changing while
+    /// Wander is already the active window — closes itself on the next
+    /// activation.
+    /// </summary>
+    public void SyncClipboardFromSystem() {
+        if (!_clipboard.SyncFromSystem()) {
+            return;
+        }
+
+        if (_clipboard.LastSystemIssue == ClipboardController.SystemIssue.VirtualFiles) {
+            // The user did copy something; it just isn't a file on disk (an
+            // Outlook attachment, something inside an open .zip). Saying so
+            // beats a Paste that is silently greyed out.
+            Status = Strings.StatusClipboardVirtualFiles;
+        }
+    }
+
+    /// <summary>
+    /// The message to show when a copy could not reach the OS clipboard, or
+    /// null when it did. The copy itself always worked — only the hand-off
+    /// to other applications was lost.
+    /// </summary>
+    private string? ClipboardWriteIssue() {
+        return _clipboard.LastSystemIssue == ClipboardController.SystemIssue.WriteFailed
+            ? Strings.StatusClipboardNotShared
+            : null;
     }
 
 

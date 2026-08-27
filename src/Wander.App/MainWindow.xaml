@@ -545,6 +545,16 @@
             <StatusBarItem DockPanel.Dock="Left">
                 <TextBlock Text="{Binding Status}" TextTrimming="CharacterEllipsis"/>
             </StatusBarItem>
+            <!--
+                Selection summary sits on the right, in its own field: the
+                left one carries transient messages ("скопировано…", errors),
+                and the two would otherwise overwrite each other on every
+                click.
+            -->
+            <StatusBarItem DockPanel.Dock="Right" Margin="12,0,0,0">
+                <TextBlock Text="{Binding SelectionSummary}" Foreground="#555"
+                           TextTrimming="CharacterEllipsis"/>
+            </StatusBarItem>
             <StatusBarItem DockPanel.Dock="Right"
                            Visibility="{Binding HasActiveOperations, Converter={StaticResource BoolToVisibility}}">
                 <ProgressBar Width="140" Height="14"

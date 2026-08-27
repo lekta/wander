@@ -39,30 +39,42 @@ public readonly record struct TileMetrics {
     /// </summary>
     private const double LineSpacing = 1.35;
 
-    /// <summary>The name label is two lines in both tile modes.</summary>
-    private const int LabelLines = 2;
+    /// <summary>
+    /// How many lines the name under a large icon may wrap to before it is
+    /// cut. Three, like Explorer: two is enough for a photograph out of a
+    /// camera and not enough for anything a human named, and a name cut at
+    /// «Снимок экрана 2026-05-28…» is exactly the case where the rest of it
+    /// was the useful part.
+    /// </summary>
+    private const int LabelLines = 3;
 
-    // Tiles: not user-tunable (yet — PLAN A1), but they live here rather
-    // than in the template so that the box and the panel read one number.
-    // The font sizes mirror the Tiles template's own: the name line uses
-    // the default 12, the "kind" line under it 11.
-    private const double TilesContentWidth = 220;
+    // Tiles: the width, the icon and the name's font size come from the
+    // settings; the rest is the shape of the template itself and stays here,
+    // where the box and the panel read one number.
     private const double TilesPadding = 6;
     private const double TilesMargin = 4;
-    private const double TilesIconSize = 32;
-    private const double TilesNameFontSize = 12;
-    private const double TilesKindFontSize = 11;
+
+    /// <summary>
+    /// The "kind" line under the name is a step smaller than the name, and
+    /// never smaller than legible. Derived rather than settable: two font
+    /// sizes for one tile is a knob nobody would turn.
+    /// </summary>
+    private static double TilesKindFontSize(double nameFontSize) {
+        return Math.Max(8, nameFontSize - 1);
+    }
 
 
     private TileMetrics(
         double contentWidth, double contentHeight, double margin,
-        double imageSize, double labelHeight, double labelFontSize) {
+        double imageSize, double labelHeight, double labelFontSize,
+        double secondaryFontSize) {
         ContentWidth = contentWidth;
         ContentHeight = contentHeight;
         Margin = margin;
         ImageSize = imageSize;
         LabelHeight = labelHeight;
         LabelFontSize = labelFontSize;
+        SecondaryFontSize = secondaryFontSize;
     }
 
 
@@ -83,6 +95,13 @@ public readonly record struct TileMetrics {
 
     public double LabelFontSize { get; }
 
+    /// <summary>
+    /// Font size of the second line under the name — the file's kind in the
+    /// Tiles template. Equal to <see cref="LabelFontSize"/> in the modes that
+    /// have no second line.
+    /// </summary>
+    public double SecondaryFontSize { get; }
+
     /// <summary>What the panel lays out on — the box plus its margin.</summary>
     public double CellWidth => ContentWidth + (2 * Margin);
 
@@ -99,7 +118,8 @@ public readonly record struct TileMetrics {
             margin: margin,
             imageSize: imageSize,
             labelHeight: label,
-            labelFontSize: labelFontSize);
+            labelFontSize: labelFontSize,
+            secondaryFontSize: labelFontSize);
     }
 
 
@@ -107,16 +127,17 @@ public readonly record struct TileMetrics {
     /// The Tiles grid — a row of icon plus two lines of text, so its height
     /// is whichever of the two is taller plus the padding inside the tile.
     /// </summary>
-    public static TileMetrics ForTiles() {
-        double label = TextLine(TilesNameFontSize) + TextLine(TilesKindFontSize);
+    public static TileMetrics ForTiles(double cellWidth, double iconSize, double labelFontSize) {
+        double label = TextLine(labelFontSize) + TextLine(TilesKindFontSize(labelFontSize));
 
         return new TileMetrics(
-            contentWidth: TilesContentWidth,
-            contentHeight: Math.Max(TilesIconSize, label) + (2 * TilesPadding),
+            contentWidth: cellWidth,
+            contentHeight: Math.Max(iconSize, label) + (2 * TilesPadding),
             margin: TilesMargin,
-            imageSize: TilesIconSize,
+            imageSize: iconSize,
             labelHeight: label,
-            labelFontSize: TilesNameFontSize);
+            labelFontSize: labelFontSize,
+            secondaryFontSize: TilesKindFontSize(labelFontSize));
     }
 
 

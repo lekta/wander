@@ -55,6 +55,11 @@
                           IsChecked="{Binding Owner.RestoreLastFolder}"/>
                 <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0"
                            Text="{x:Static res:Strings.SettingsRestoreLastFolderHint}"/>
+
+                <CheckBox Content="{x:Static res:Strings.SettingsAutoRefresh}"
+                          IsChecked="{Binding Owner.AutoRefresh}" Margin="0,18,0,4"/>
+                <TextBlock Foreground="#888" TextWrapping="Wrap"
+                           Text="{x:Static res:Strings.SettingsAutoRefreshHint}"/>
             </StackPanel>
         </DataTemplate>
 
@@ -102,50 +107,93 @@
         </DataTemplate>
 
 
-        <!-- Layout -->
+        <!-- Layout.
+             One group per view: each one owns its own sizes, because what
+             makes a comfortable table is not what makes a comfortable grid
+             of photographs. Ctrl + wheel over the list writes these same
+             fields, so the gesture and the dialog cannot drift apart. -->
         <DataTemplate DataType="{x:Type vm:LayoutSettingsCategory}">
             <StackPanel>
                 <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
 
-                <TextBlock Text="{x:Static res:Strings.SettingsLargeIconsGroup}" FontWeight="SemiBold" Margin="{StaticResource GroupHeader}"/>
-
-                <Grid Margin="{StaticResource Row}">
+                <TextBlock Text="{x:Static res:Strings.SettingsDetailsGroup}" FontWeight="SemiBold" Margin="{StaticResource GroupHeader}"/>
+                <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="180"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="{x:Static res:Strings.SettingsCellWidth}" Style="{StaticResource FieldLabel}" Grid.Column="0"/>
-                    <TextBox Text="{Binding Owner.LargeIconCellWidth, UpdateSourceTrigger=PropertyChanged}" Grid.Column="1" HorizontalAlignment="Left"/>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Grid.Column="0" Margin="{StaticResource Row}"
+                               Text="{x:Static res:Strings.SettingsRowHeight}" Style="{StaticResource FieldLabel}"/>
+                    <TextBox Grid.Row="0" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
+                             Text="{Binding Owner.DetailsRowHeight, UpdateSourceTrigger=PropertyChanged}"/>
+                    <TextBlock Grid.Row="1" Grid.Column="0" Margin="{StaticResource Row}"
+                               Text="{x:Static res:Strings.SettingsIconSize}" Style="{StaticResource FieldLabel}"/>
+                    <TextBox Grid.Row="1" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
+                             Text="{Binding Owner.DetailsIconSize, UpdateSourceTrigger=PropertyChanged}"/>
                 </Grid>
 
-                <Grid Margin="{StaticResource Row}">
+                <TextBlock Text="{x:Static res:Strings.SettingsTilesGroup}" FontWeight="SemiBold" Margin="0,18,0,8"/>
+                <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="180"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="{x:Static res:Strings.SettingsIconSize}" Style="{StaticResource FieldLabel}" Grid.Column="0"/>
-                    <TextBox Text="{Binding Owner.LargeIconImageSize, UpdateSourceTrigger=PropertyChanged}" Grid.Column="1" HorizontalAlignment="Left"/>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Grid.Column="0" Margin="{StaticResource Row}"
+                               Text="{x:Static res:Strings.SettingsTileWidth}" Style="{StaticResource FieldLabel}"/>
+                    <TextBox Grid.Row="0" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
+                             Text="{Binding Owner.TileCellWidth, UpdateSourceTrigger=PropertyChanged}"/>
+                    <TextBlock Grid.Row="1" Grid.Column="0" Margin="{StaticResource Row}"
+                               Text="{x:Static res:Strings.SettingsIconSize}" Style="{StaticResource FieldLabel}"/>
+                    <TextBox Grid.Row="1" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
+                             Text="{Binding Owner.TileIconSize, UpdateSourceTrigger=PropertyChanged}"/>
+                    <TextBlock Grid.Row="2" Grid.Column="0" Margin="{StaticResource Row}"
+                               Text="{x:Static res:Strings.SettingsLabelFontSize}" Style="{StaticResource FieldLabel}"/>
+                    <TextBox Grid.Row="2" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
+                             Text="{Binding Owner.TileLabelFontSize, UpdateSourceTrigger=PropertyChanged}"/>
                 </Grid>
 
-                <Grid Margin="{StaticResource Row}">
+                <TextBlock Text="{x:Static res:Strings.SettingsLargeIconsGroup}" FontWeight="SemiBold" Margin="0,18,0,8"/>
+                <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="180"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="{x:Static res:Strings.SettingsCellMargin}" Style="{StaticResource FieldLabel}" Grid.Column="0"/>
-                    <TextBox Text="{Binding Owner.LargeIconMargin, UpdateSourceTrigger=PropertyChanged}" Grid.Column="1" HorizontalAlignment="Left"/>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Grid.Column="0" Margin="{StaticResource Row}"
+                               Text="{x:Static res:Strings.SettingsCellWidth}" Style="{StaticResource FieldLabel}"/>
+                    <TextBox Grid.Row="0" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
+                             Text="{Binding Owner.LargeIconCellWidth, UpdateSourceTrigger=PropertyChanged}"/>
+                    <TextBlock Grid.Row="1" Grid.Column="0" Margin="{StaticResource Row}"
+                               Text="{x:Static res:Strings.SettingsIconSize}" Style="{StaticResource FieldLabel}"/>
+                    <TextBox Grid.Row="1" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
+                             Text="{Binding Owner.LargeIconImageSize, UpdateSourceTrigger=PropertyChanged}"/>
+                    <TextBlock Grid.Row="2" Grid.Column="0" Margin="{StaticResource Row}"
+                               Text="{x:Static res:Strings.SettingsCellMargin}" Style="{StaticResource FieldLabel}"/>
+                    <TextBox Grid.Row="2" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
+                             Text="{Binding Owner.LargeIconMargin, UpdateSourceTrigger=PropertyChanged}"/>
+                    <TextBlock Grid.Row="3" Grid.Column="0" Margin="{StaticResource Row}"
+                               Text="{x:Static res:Strings.SettingsLabelFontSize}" Style="{StaticResource FieldLabel}"/>
+                    <TextBox Grid.Row="3" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
+                             Text="{Binding Owner.LargeIconLabelFontSize, UpdateSourceTrigger=PropertyChanged}"/>
                 </Grid>
 
-                <Grid Margin="{StaticResource Row}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="180"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="{x:Static res:Strings.SettingsLabelFontSize}" Style="{StaticResource FieldLabel}" Grid.Column="0"/>
-                    <TextBox Text="{Binding Owner.LargeIconLabelFontSize, UpdateSourceTrigger=PropertyChanged}" Grid.Column="1" HorizontalAlignment="Left"/>
-                </Grid>
-
-                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,12,0,0"
+                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,16,0,0"
+                           Text="{x:Static res:Strings.SettingsZoomHint}"/>
+                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0"
                            Text="{x:Static res:Strings.SettingsLayoutHint}"/>
             </StackPanel>
         </DataTemplate>

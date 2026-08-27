@@ -18,6 +18,13 @@ namespace Wander.Platform.Windows.Icons;
 ///    link-overlay arrow in at these sizes for free
 ///    (<c>SHGFI_LINKOVERLAY</c>).
 ///
+///  - <b>Medium (96 px)</b>: a real thumbnail for anything the shell can
+///    preview (pictures, RAW, video, PDF, and a folder's peek-inside), the
+///    plain registered icon for everything else — the split is
+///    <c>IsThumbnailable</c>, the same one the large tier uses. This is what
+///    the tile view draws, so a folder of source code keeps costing one
+///    cheap <c>SHGetFileInfo</c> per <i>extension</i>, not per file.
+///
 ///  - <b>Large (256 px)</b>: a two-step compose, the same way Explorer does
 ///    its "Large icons" view —
 ///      1. base image via <c>IShellItemImageFactory.GetImage</c>; this
@@ -35,8 +42,10 @@ namespace Wander.Platform.Windows.Icons;
 ///    (<c>SHIL_JUMBO</c>) also doesn't reliably contain overlay icons at
 ///    256 px; the smaller image lists do.
 ///
-/// Caching is in-memory only and keyed by extension for the small / normal
-/// sizes (shared icons) and per-path for Large (each thumbnail is unique).
+/// Caching is keyed by extension where the image is shared by a whole file
+/// type (small / normal, and medium for files with no preview) and per-path
+/// where it is that one file's own picture. Only the per-path entries count
+/// against the memory budget; only the 256-px ones also go to disk.
 /// </summary>
 public sealed class SystemIconProvider : IIconProvider {
     /// <summary>
@@ -74,7 +83,7 @@ public sealed class SystemIconProvider : IIconProvider {
             return null;
         }
 
-        string key = BuildCacheKey(path, size);
+        var (key, perPath) = BuildCacheKey(path, size);
 
         lock (_lock) {
             if (_cache.TryGetValue(key, out byte[]? cached)) {
@@ -82,9 +91,15 @@ public sealed class SystemIconProvider : IIconProvider {
             }
         }
 
-        // Disk tier, for per-file thumbnails only. Both tiers are timed:
+        // Disk tier, for the 256-px thumbnails only. Both tiers are timed:
         // when tiles are slow to fill in, the question is always whether the
         // cache is answering slowly or the shell is being asked at all.
+        //
+        // Medium deliberately stays memory-only. Its entries are a quarter
+        // of the size and quick to rebuild (the shell's own thumbcache
+        // answers most of them), while on disk they would compete with the
+        // large ones for the same budget — and the disk key has no size in
+        // it, so the two would collide outright.
         bool cacheable = size == IconSize.Large && _disk is not null;
         byte[]? fromDisk;
         using (PerfLog.Measure("bg.thumb-disk")) {
@@ -92,7 +107,7 @@ public sealed class SystemIconProvider : IIconProvider {
         }
         if (fromDisk is not null) {
             lock (_lock) {
-                Store(key, fromDisk, size);
+                Store(key, fromDisk, perPath);
             }
             return fromDisk;
         }
@@ -104,7 +119,7 @@ public sealed class SystemIconProvider : IIconProvider {
             }
             if (bytes is not null) {
                 lock (_lock) {
-                    Store(key, bytes, size);
+                    Store(key, bytes, perPath);
                 }
                 if (cacheable) {
                     using (PerfLog.Measure("bg.thumb-disk-write")) {
@@ -148,16 +163,21 @@ public sealed class SystemIconProvider : IIconProvider {
         }
 
         lock (_lock) {
-            return _cache.TryGetValue(BuildCacheKey(path, size), out byte[]? cached) ? cached : null;
+            return _cache.TryGetValue(BuildCacheKey(path, size).Key, out byte[]? cached) ? cached : null;
         }
     }
 
 
-    /// <summary>Caller holds the lock. Evicts oldest-first once the thumbnail budget is spent.</summary>
-    private void Store(string key, byte[] bytes, IconSize size) {
+    /// <summary>
+    /// Caller holds the lock. Evicts oldest-first once the thumbnail budget
+    /// is spent. Only per-path entries count against it: the ones keyed by
+    /// extension are bounded by how many file types exist on the machine and
+    /// cost a few kilobytes each.
+    /// </summary>
+    private void Store(string key, byte[] bytes, bool perPath) {
         bool isNew = !_cache.ContainsKey(key);
         _cache[key] = bytes;
-        if (size != IconSize.Large || !isNew) {
+        if (!perPath || !isNew) {
             return;
         }
 
@@ -174,34 +194,46 @@ public sealed class SystemIconProvider : IIconProvider {
     }
 
 
-    private static string BuildCacheKey(string path, IconSize size) {
+    /// <summary>
+    /// Where this request lands in the cache, and whether that slot belongs
+    /// to this one file (a thumbnail) or is shared by every file of its type
+    /// (an icon). The second half is what the memory budget is counted on.
+    /// </summary>
+    private static (string Key, bool PerPath) BuildCacheKey(string path, IconSize size) {
         // Shell-namespace sentinels (shell:RecycleBinFolder, …) have no real
         // filesystem behind them; key by the full URI lowered so different
         // sentinels stay distinct but caching still works.
         if (IsShellNamespacePath(path)) {
-            return $"shell|{path.ToLowerInvariant()}|{size}";
+            return ($"shell|{path.ToLowerInvariant()}|{size}", true);
         }
 
         if (System.IO.Directory.Exists(path)) {
-            return $"dir|{path}|{size}";
+            return ($"dir|{path}|{size}", true);
         }
 
         string ext = Path.GetExtension(path);
 
         // Shortcuts (.lnk) get a unique composite per file → cache per path.
         if (ext.Equals(".lnk", StringComparison.OrdinalIgnoreCase)) {
-            return $"lnk|{path}|{size}";
+            return ($"lnk|{path}|{size}", true);
         }
 
         // Large = jumbo path with thumbnails → unique per file.
         if (size == IconSize.Large) {
-            return $"thumb|{path}";
+            return ($"thumb|{path}", true);
+        }
+
+        // Medium is a thumbnail only for the files that have one; the rest
+        // fall back to the shared per-extension icon, exactly as Normal does.
+        if (size == IconSize.Medium && IsThumbnailable(path)) {
+            return ($"thumb96|{path}", true);
         }
 
         if (string.IsNullOrEmpty(ext)) {
-            return $"file|noext|{size}";
+            return ($"file|noext|{size}", false);
         }
-        return $"ext|{ext.ToLowerInvariant()}|{size}";
+
+        return ($"ext|{ext.ToLowerInvariant()}|{size}", false);
     }
 
     private static byte[]? LoadIcon(string path, IconSize size) {
@@ -211,10 +243,50 @@ public sealed class SystemIconProvider : IIconProvider {
         if (IsShellNamespacePath(path)) {
             return LoadShellNamespaceIcon(path, size);
         }
+
         return size switch {
             IconSize.Large => LoadJumboImage(path),
+            IconSize.Medium => LoadMediumImage(path),
             _ => LoadShellIcon(path, size),
         };
+    }
+
+
+    /// <summary>
+    /// The tile-sized thumbnail: real content for anything the shell can
+    /// preview, the plain registered icon for everything else.
+    ///
+    /// <para>
+    /// The same split as <see cref="LoadJumboImage"/>, and for the same
+    /// reason — asking <c>IShellItemImageFactory</c> about a file with no
+    /// thumbnail provider writes an icon into the system's shared
+    /// <c>thumbcache</c>, which Explorer then reads back. Files outside
+    /// <see cref="IsThumbnailable"/> keep the cheap
+    /// <c>SHGetFileInfo</c> path, which is also what makes a folder of
+    /// source code scroll at the speed it did before thumbnails existed.
+    /// </para>
+    ///
+    /// <para>
+    /// Overlays (the shortcut arrow) are not composed here: at this size the
+    /// only files that reach the thumbnail branch are pictures and folders,
+    /// and <c>.lnk</c> goes down the icon branch, where the shell bakes the
+    /// arrow in itself.
+    /// </para>
+    /// </summary>
+    private static byte[]? LoadMediumImage(string path) {
+        if (!IsThumbnailable(path)) {
+            return LoadShellIcon(path, IconSize.Normal);
+        }
+
+        using Bitmap? bmp = LoadShellBitmap(path, MediumSize);
+        if (bmp is null) {
+            return LoadShellIcon(path, IconSize.Normal);
+        }
+
+        using var ms = new MemoryStream();
+        bmp.Save(ms, ImageFormat.Png);
+
+        return ms.ToArray();
     }
 
     private static bool IsShellNamespacePath(string path) {
@@ -401,7 +473,7 @@ public sealed class SystemIconProvider : IIconProvider {
         // of the same file look blurrier than before Wander ran. Splitting
         // the paths keeps icon-only writes out of the shared cache.
         Bitmap? baseBmp = IsThumbnailable(path)
-            ? LoadShellBitmapJumbo(path)
+            ? LoadShellBitmap(path, JumboSize)
             : LoadIconBitmapJumbo(path);
 
         if (baseBmp is null) {
@@ -549,11 +621,12 @@ public sealed class SystemIconProvider : IIconProvider {
 
 
     /// <summary>
-    /// Gets a 256-px base image (thumbnail-if-available, otherwise icon),
-    /// without overlays. Returns a managed <see cref="Bitmap"/> in
-    /// top-down 32-bpp ARGB so the caller can paint over it safely.
+    /// Gets a base image of the requested side (thumbnail-if-available,
+    /// otherwise icon), without overlays. Returns a managed
+    /// <see cref="Bitmap"/> in top-down 32-bpp ARGB so the caller can paint
+    /// over it safely.
     /// </summary>
-    private static Bitmap? LoadShellBitmapJumbo(string path) {
+    private static Bitmap? LoadShellBitmap(string path, int side) {
         IShellItem? item = null;
         try {
             int hr;
@@ -570,7 +643,7 @@ public sealed class SystemIconProvider : IIconProvider {
                 return null;
             }
 
-            var size = new SIZE { cx = JumboSize, cy = JumboSize };
+            var size = new SIZE { cx = side, cy = side };
             int hrImg = factory.GetImage(size, SIIGBF_RESIZETOFIT, out IntPtr hBitmap);
             if (hrImg != 0 || hBitmap == IntPtr.Zero) {
                 return null;
@@ -844,6 +917,14 @@ public sealed class SystemIconProvider : IIconProvider {
     private const uint FILE_ATTRIBUTE_NORMAL = 0x00000080;
 
     private const int JumboSize = 256;
+
+    /// <summary>
+    /// Side of a <see cref="IconSize.Medium"/> thumbnail. Big enough that a
+    /// tile drawn at 32–64 px stays crisp (and survives a display scaled to
+    /// 150 %), small enough that a folder of photographs costs a quarter of
+    /// what the jumbo tier costs to decode and hold.
+    /// </summary>
+    private const int MediumSize = 96;
     private const int SIIGBF_RESIZETOFIT = 0x00000000;
 
     private const int SHIL_SMALL = 0x1;        // 16 × 16

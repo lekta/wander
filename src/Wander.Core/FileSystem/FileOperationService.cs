@@ -19,6 +19,15 @@ namespace Wander.Core.FileSystem;
 /// </para>
 ///
 /// <para>
+/// From outside Core the surface is deliberately the batch API plus
+/// <c>RenameMany</c> and <c>CreateFolder</c>: everything a user can do
+/// applies to a multi-selection, and a file with sidecars is a group even
+/// when one row was selected. The single-item ops are internal — the steps
+/// the batch path is built from, kept visible to the tests that pin down
+/// their guards, logging and undo records.
+/// </para>
+///
+/// <para>
 /// Each successful op also lands as an <see cref="IUndoableAction"/> on the
 /// shared <see cref="UndoService"/>. Pure read paths still live on
 /// <see cref="IFileSystem"/> and bypass this service.
@@ -52,9 +61,9 @@ public sealed class FileOperationService {
     }
 
 
-    // --- Single-item ops -----------------------------------------------
+    // --- Single-item ops (internal — see the note on the class) ---------
 
-    public void Copy(string source, string destination, bool overwrite = false) {
+    internal void Copy(string source, string destination, bool overwrite = false) {
         using var _ = _undo.BeginOperation();
         if (_fs.DirectoryExists(source)) {
             _fs.CopyDirectory(source, destination, overwrite);
@@ -67,7 +76,7 @@ public sealed class FileOperationService {
         _undo.Push(new CreateAction(_bin, destination));
     }
 
-    public void Move(string source, string destination) {
+    internal void Move(string source, string destination) {
         GuardDestructive(source);
         using var _ = _undo.BeginOperation();
         if (!_fs.FileExists(source) && !_fs.DirectoryExists(source)) {
@@ -79,7 +88,7 @@ public sealed class FileOperationService {
     }
 
     /// <summary>Sends the item to the recycle bin so it remains restorable via Ctrl+Z.</summary>
-    public void Delete(string path) {
+    internal void Delete(string path) {
         GuardDestructive(path);
         using var _ = _undo.BeginOperation();
         var handle = _bin.Send(path);
@@ -92,7 +101,7 @@ public sealed class FileOperationService {
     /// clears the existing undo stack so the user can't accidentally Ctrl+Z
     /// past a permanent action and think it worked.
     /// </summary>
-    public void PermanentDelete(string path) {
+    internal void PermanentDelete(string path) {
         GuardDestructive(path);
         using var _ = _undo.BeginOperation();
         if (_fs.DirectoryExists(path)) {
@@ -106,7 +115,7 @@ public sealed class FileOperationService {
         _undo.Clear();
     }
 
-    public void Rename(string path, string newName) {
+    internal void Rename(string path, string newName) {
         if (string.IsNullOrWhiteSpace(newName)) {
             throw new ArgumentException("New name cannot be empty", nameof(newName));
         }
@@ -192,10 +201,10 @@ public sealed class FileOperationService {
 
     // --- Batch ops (delegate to BatchExecutor) -------------------------
 
-    public IReadOnlyList<BatchItemResult> CopyMany(IReadOnlyList<string> sources, string targetFolder, IConflictResolver resolver)
+    internal IReadOnlyList<BatchItemResult> CopyMany(IReadOnlyList<string> sources, string targetFolder, IConflictResolver resolver)
         => _batch.CopyMany(sources, targetFolder, resolver);
 
-    public IReadOnlyList<BatchItemResult> MoveMany(IReadOnlyList<string> sources, string targetFolder, IConflictResolver resolver)
+    internal IReadOnlyList<BatchItemResult> MoveMany(IReadOnlyList<string> sources, string targetFolder, IConflictResolver resolver)
         => _batch.MoveMany(sources, targetFolder, resolver);
 
     public Task<IReadOnlyList<BatchItemResult>> CopyManyAsync(

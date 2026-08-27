@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!--
     Все пользовательские строки Wander. Отдельно от кода намеренно: чтобы
@@ -738,7 +738,7 @@
     <value>Размер шрифта подписи</value>
   </data>
   <data name="SettingsLayoutHint" xml:space="preserve">
-    <value>Значения зажимаются в разумные пределы автоматически. Стандартные: 100 / 72 / 2 / 12.</value>
+    <value>Значения зажимаются в разумные пределы автоматически. Стандартные — как в Проводнике: таблица 22 / 16, плитки 260 / 48 / 12, крупные значки 132 / 96 / 2 / 12.</value>
   </data>
   <data name="SettingsThumbnailDiskCache" xml:space="preserve">
     <value>Хранить миниатюры на диске между запусками</value>
@@ -870,5 +870,48 @@
   </data>
   <data name="PreviewPlayPause" xml:space="preserve">
     <value>Воспроизведение / пауза (Пробел)</value>
+  </data>
+  <data name="StatusClipboardVirtualFiles" xml:space="preserve">
+    <value>В буфере обмена файл, которого нет на диске (вложение письма, файл внутри архива) — вставить его Wander не может</value>
+  </data>
+  <data name="StatusClipboardNotShared" xml:space="preserve">
+    <value>Скопировано внутри Wander: системный буфер обмена сейчас занят другим приложением</value>
+  </data>
+  <data name="StatusSelection" xml:space="preserve">
+    <value>Выбрано: {0} · {1}</value>
+    <comment>{0} — число объектов, {1} — суммарный размер</comment>
+  </data>
+  <data name="StatusSelectionFolders" xml:space="preserve">
+    <value> · папок: {0} (размер не считается)</value>
+    <comment>{0} — сколько папок в выделении</comment>
+  </data>
+  <data name="SettingsAutoRefresh" xml:space="preserve">
+    <value>Обновлять список автоматически</value>
+  </data>
+  <data name="SettingsAutoRefreshHint" xml:space="preserve">
+    <value>Wander следит за открытой папкой и перерисовывает список, когда файлы в ней меняет кто-то другой — программа, загрузка, Проводник. Когда выключено, список обновляется только по F5.</value>
+  </data>
+  <data name="SettingsDetailsGroup" xml:space="preserve">
+    <value>Режим «Таблица»</value>
+  </data>
+  <data name="SettingsTilesGroup" xml:space="preserve">
+    <value>Режим «Плитки»</value>
+  </data>
+  <data name="SettingsRowHeight" xml:space="preserve">
+    <value>Высота строки (px)</value>
+  </data>
+  <data name="SettingsTileWidth" xml:space="preserve">
+    <value>Ширина плитки (px)</value>
+  </data>
+  <data name="SettingsZoomHint" xml:space="preserve">
+    <value>То же самое делает Ctrl + колесо мыши прямо в списке — каждый вид меняется отдельно, и то, что накрутили колесом, попадает в эти же поля.</value>
+  </data>
+  <data name="StatusViewSize" xml:space="preserve">
+    <value>{0}: {1} px · Ctrl + нажать колёсико — вернуть {2} px</value>
+    <comment>{0} — название вида, {1} — текущий размер, {2} — стандартный</comment>
+  </data>
+  <data name="StatusViewSizeDefault" xml:space="preserve">
+    <value>{0}: {1} px (стандартный)</value>
+    <comment>{0} — название вида, {1} — размер</comment>
   </data>
 </root>

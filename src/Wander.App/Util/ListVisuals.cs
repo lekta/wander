@@ -14,14 +14,42 @@ namespace Wander.App.Util;
 /// on the tree that happens to need a walk.
 /// </summary>
 public static class ListVisuals {
-    /// <summary>The entry a click landed on, or null when it missed every row.</summary>
-    public static FileSystemEntry? EntryAt(object originalSource) {
+    /// <summary>
+    /// The element a mouse event landed on and everything above it, up to
+    /// the root — the walk every question below is built on.
+    ///
+    /// <para>
+    /// The step upwards is not always the visual parent, and that is the
+    /// whole reason this exists. A click can land on a <c>Run</c> inside a
+    /// <c>TextBlock</c> (the "kind" line of a tile is one), and a Run is a
+    /// content element, not a visual: <see cref="VisualTreeHelper.GetParent"/>
+    /// throws «"System.Windows.Documents.Run" is not a Visual or Visual3D»
+    /// on it rather than returning null. Text elements are walked through
+    /// the logical tree instead, which lands on the TextBlock that hosts
+    /// them and rejoins the visual tree from there.
+    /// </para>
+    /// </summary>
+    public static IEnumerable<DependencyObject> Ancestors(object? originalSource) {
         var hit = originalSource as DependencyObject;
         while (hit is not null) {
+            yield return hit;
+            hit = ParentOf(hit);
+        }
+    }
+
+    private static DependencyObject? ParentOf(DependencyObject node) {
+        return node is Visual or System.Windows.Media.Media3D.Visual3D
+            ? VisualTreeHelper.GetParent(node)
+            : LogicalTreeHelper.GetParent(node);
+    }
+
+
+    /// <summary>The entry a click landed on, or null when it missed every row.</summary>
+    public static FileSystemEntry? EntryAt(object originalSource) {
+        foreach (var hit in Ancestors(originalSource)) {
             if (hit is FrameworkElement fe && fe.DataContext is FileSystemEntry entry) {
                 return entry;
             }
-            hit = VisualTreeHelper.GetParent(hit);
         }
 
         return null;
@@ -41,8 +69,7 @@ public static class ListVisuals {
     /// </para>
     /// </summary>
     public static bool IsChrome(object originalSource) {
-        var hit = originalSource as DependencyObject;
-        while (hit is not null) {
+        foreach (var hit in Ancestors(originalSource)) {
             switch (hit) {
                 case ScrollBar:
                 case DataGridColumnHeader:
@@ -50,7 +77,6 @@ public static class ListVisuals {
                 case Thumb:
                     return true;
             }
-            hit = VisualTreeHelper.GetParent(hit);
         }
 
         return false;
@@ -59,12 +85,10 @@ public static class ListVisuals {
 
     /// <summary>True when the click landed inside the inline rename editor.</summary>
     public static bool IsInsideTextBox(object originalSource) {
-        var hit = originalSource as DependencyObject;
-        while (hit is not null) {
+        foreach (var hit in Ancestors(originalSource)) {
             if (hit is TextBox) {
                 return true;
             }
-            hit = VisualTreeHelper.GetParent(hit);
         }
 
         return false;

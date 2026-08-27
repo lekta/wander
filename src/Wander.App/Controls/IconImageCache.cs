@@ -20,11 +20,14 @@ namespace Wander.App.Controls;
 /// </para>
 ///
 /// <para>
-/// Bounded by count, oldest-first, and only large (per-file) thumbnails are
-/// counted: the small sizes are keyed by extension, so there are as many of
-/// them as there are file types on the machine and they cost a few
-/// kilobytes each. A large one is around a quarter of a megabyte decoded,
-/// which is what <see cref="LargeBudget"/> is sized against.
+/// Bounded by count, oldest-first, and only the thumbnail sizes (Medium and
+/// Large — one image per file) are counted: Small and Normal are keyed by
+/// extension, so there are as many of them as there are file types on the
+/// machine and they cost a few kilobytes each. A large one is around a
+/// quarter of a megabyte decoded, which is what
+/// <see cref="ThumbnailBudget"/> is sized against; a medium one is a
+/// sixteenth of that, so counting the two together is deliberately generous
+/// rather than exact.
 /// </para>
 /// </summary>
 internal static class IconImageCache {
@@ -33,13 +36,13 @@ internal static class IconImageCache {
     /// tiles at the largest sensible size, so scrolling back over what was
     /// just seen is free, at a few tens of megabytes.
     /// </summary>
-    private const int LargeBudget = 256;
+    private const int ThumbnailBudget = 256;
 
     // Keyed by a tuple rather than a formatted string: this is asked once
     // per tile appearing, and a string built per lookup is garbage produced
     // by the very code that exists to stop the hot path costing anything.
     private static readonly Dictionary<(IconSize Size, string Path), BitmapImage> _images = new();
-    private static readonly Queue<(IconSize Size, string Path)> _largeOrder = new();
+    private static readonly Queue<(IconSize Size, string Path)> _thumbOrder = new();
     private static readonly object _lock = new();
 
 
@@ -65,10 +68,10 @@ internal static class IconImageCache {
             if (!_images.TryAdd(key, image)) {
                 return _images[key];
             }
-            if (size == IconSize.Large) {
-                _largeOrder.Enqueue(key);
-                while (_largeOrder.Count > LargeBudget) {
-                    _images.Remove(_largeOrder.Dequeue());
+            if (size is IconSize.Large or IconSize.Medium) {
+                _thumbOrder.Enqueue(key);
+                while (_thumbOrder.Count > ThumbnailBudget) {
+                    _images.Remove(_thumbOrder.Dequeue());
                 }
             }
         }
@@ -85,7 +88,7 @@ internal static class IconImageCache {
     public static void Clear() {
         lock (_lock) {
             _images.Clear();
-            _largeOrder.Clear();
+            _thumbOrder.Clear();
         }
     }
 }
