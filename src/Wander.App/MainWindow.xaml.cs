@@ -77,12 +77,32 @@ public partial class MainWindow : Window {
         }
 
         Loaded += OnLoaded;
+        ContentRendered += OnFirstFrame;
         // The OS clipboard is re-read here rather than watched: reading it is
         // a cross-process call on an exclusively-opened resource, and
         // PasteCommand.CanExecute runs dozens of times a second. Activation
         // is the one moment the answer has to be right — to paste, the user
         // has to come back to this window anyway.
         Activated += (_, _) => (DataContext as MainViewModel)?.SyncClipboardFromSystem();
+    }
+
+
+    /// <summary>
+    /// The first frame on screen — the only startup number that matches what
+    /// the user feels, and the one a session log could not answer before.
+    /// Measured from process start, so it counts the runtime bootstrap that
+    /// happens before any of our code runs: for a compressed single-file
+    /// build that is a third of the total.
+    /// </summary>
+    private void OnFirstFrame(object? sender, EventArgs e) {
+        ContentRendered -= OnFirstFrame;
+        if (!ServiceLocator.IsRegistered<Wander.Core.Logging.ILogger>()) {
+            return;
+        }
+
+        using var self = System.Diagnostics.Process.GetCurrentProcess();
+        double ms = (DateTime.Now - self.StartTime).TotalMilliseconds;
+        ServiceLocator.Get<Wander.Core.Logging.ILogger>().Info($"Startup: first frame {ms:F0} ms after process start");
     }
 
 
@@ -103,6 +123,15 @@ public partial class MainWindow : Window {
         if (!App.IsSmokeRun) {
             SaveWindowGeometry();
         }
+
+        // Off the screen before the slow part, and only after the geometry
+        // has been read off it. Releasing the cached IContextMenu runs
+        // third-party shell-extension code, and the runtime spends about
+        // another second on its own teardown after this handler returns —
+        // all of it with the window still painted, which is what made
+        // closing Wander read as a freeze. Nothing below needs the window.
+        Hide();
+
         // Releases the cached IContextMenu, and with it the third-party
         // handler DLLs it keeps referenced.
         _shellMenus.Dispose();
@@ -405,6 +434,19 @@ public partial class MainWindow : Window {
         if (e.Key == Key.F2 && Vm.SelectedEntry is FileSystemEntry) {
             FileList.StartRename();
             e.Handled = true;
+            return;
+        }
+
+        // Esc anywhere in the address strip hands the keyboard back to the
+        // list. Not just inside the text box: Tab and a click can leave the
+        // focus on a breadcrumb button, and Esc there used to do nothing at
+        // all — the strip kept the keyboard with no way out but the mouse.
+        if (e.Key == Key.Escape && ZoneOf(Keyboard.FocusedElement) == Zone.Address) {
+            Vm.AddressText = Vm.CurrentPath ?? "";
+            Vm.Nav.IsEditingAddress = false;
+            FileList.FocusList();
+            e.Handled = true;
+
             return;
         }
 
@@ -717,15 +759,9 @@ public partial class MainWindow : Window {
     }
 
     private void AddressBox_PreviewKeyDown(object sender, KeyEventArgs e) {
-        // Esc: abandon the edit, restore the real path, hand focus back to
-        // the file list so the box does not trap the user.
-        if (e.Key == Key.Escape) {
-            Vm.AddressText = Vm.CurrentPath ?? "";
-            Vm.Nav.IsEditingAddress = false;
-            FileList.FocusList();
-            e.Handled = true;
-            return;
-        }
+        // Esc is not here: it abandons the edit for the whole strip, so it
+        // lives in OnPreviewKeyDown, which tunnels through this box on its
+        // way down and covers the breadcrumb buttons too.
 
         // Enter: navigate. A successful navigation drops edit mode on its
         // own (NavigationController), so a still-editing strip afterwards

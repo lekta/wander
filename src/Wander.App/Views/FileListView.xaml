@@ -169,6 +169,16 @@
             container cannot silently miss half of them.
         -->
         <Style x:Key="ListGestures" TargetType="Control">
+            <!--
+                Пунктирная рамка вокруг всей области — это фокус на самом
+                списке, а не на строке. WPF ставит его туда, когда строку
+                сфокусировать не удалось (пустая папка, снятое выделение,
+                перестроенный листинг). Что зона активна, и так видно по
+                рамке FileListZone, а системный пунктир вокруг половины окна
+                читается как поломка. Стрелки в этом состоянии оживляет
+                TryEnterList в code-behind.
+            -->
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <EventSetter Event="Selector.SelectionChanged" Handler="List_SelectionChanged"/>
             <EventSetter Event="PreviewMouseLeftButtonDown" Handler="List_PreviewMouseLeftButtonDown"/>
             <EventSetter Event="PreviewMouseLeftButtonUp" Handler="List_PreviewMouseLeftButtonUp"/>

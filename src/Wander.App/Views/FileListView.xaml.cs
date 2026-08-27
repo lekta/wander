@@ -271,7 +271,16 @@ public partial class FileListView : UserControl {
         // Two reasons to take the keyboard back: a rename that just ended
         // (the row is the one the user was editing) and an operation that
         // ran behind a modal dialog, which left focus on the window.
-        bool takeFocus = _focusRowAfterRestore || Vm.FocusListAfterRestore;
+        // Third reason, and the one no caller can predict: the listing that
+        // just landed replaced the row that had the keyboard, so focus fell
+        // back onto the list itself. That is the dotted rectangle round the
+        // whole area after Alt+Left — and, because a list with focus but no
+        // focused row resumes from the top, the reason the next arrow press
+        // jumped to the first item. The restored selection takes the
+        // keyboard back to where the user was.
+        bool focusFellToTheList = ActiveList() is { } focused
+            && ReferenceEquals(Keyboard.FocusedElement, focused);
+        bool takeFocus = _focusRowAfterRestore || Vm.FocusListAfterRestore || focusFellToTheList;
         _focusRowAfterRestore = false;
         Vm.FocusListAfterRestore = false;
 
@@ -385,6 +394,10 @@ public partial class FileListView : UserControl {
             // and own the gesture end-to-end via MouseMove / MouseUp.
             _selection.TryArmDeferred(sender, null, Vm.SelectedEntries, Keyboard.Modifiers);
             if (sender is ItemsControl host) {
+                // Onto the list itself rather than onto a row: the click
+                // means "the folder, not a file in it", and the first arrow
+                // key enters the rows from there (see TryEnterList).
+                TakeKeyboardOnClick(host, null);
                 _rubberBand.Start(host, e, Vm.SelectedEntries);
                 e.Handled = true;
             }
@@ -394,7 +407,33 @@ public partial class FileListView : UserControl {
         _dragArmed = true;
 
         if (_selection.TryArmDeferred(sender, clicked, Vm.SelectedEntries, Keyboard.Modifiers)) {
+            TakeKeyboardOnClick(sender as ItemsControl, clicked);
             e.Handled = true;
+        }
+    }
+
+
+    /// <summary>
+    /// Brings the keyboard along with a click the list decided to handle
+    /// itself.
+    ///
+    /// <para>
+    /// Both branches above mark the press handled — one to own the lasso,
+    /// the other to hold a multi-selection together until the button comes
+    /// back up — and a handled press never reaches the control, so the list
+    /// never focuses itself. The click then landed in the file area while
+    /// the keyboard stayed in whichever panel it came from. Only when the
+    /// keyboard is somewhere else: with it already inside the list, the
+    /// caret is where the user put it and must not be moved.
+    /// </para>
+    /// </summary>
+    private void TakeKeyboardOnClick(ItemsControl? host, FileSystemEntry? row) {
+        if (host is null || host.IsKeyboardFocusWithin) {
+            return;
+        }
+
+        if (row is null || !FocusRow(row)) {
+            host.Focus();
         }
     }
 
@@ -530,9 +569,55 @@ public partial class FileListView : UserControl {
             return;
         }
 
+        if (sender is Selector target && TryEnterList(target, e.Key)) {
+            e.Handled = true;
+
+            return;
+        }
+
         if (sender is ListBox list && TryGridStep(list, e.Key, Keyboard.Modifiers)) {
             e.Handled = true;
         }
+    }
+
+
+    /// <summary>
+    /// The first arrow key pressed with the keyboard on the list itself
+    /// rather than on one of its rows.
+    ///
+    /// <para>
+    /// That state is where <c>Ctrl+1</c> and a click on empty space both
+    /// leave the focus, and WPF answers an arrow key there with nothing at
+    /// all — there is no caret to move from, so the list is dead until the
+    /// mouse rescues it. Down and Right enter at the top, Up and Left at the
+    /// bottom, which is what Explorer does from the same state. With a
+    /// selection still standing the caret goes back onto it instead: the
+    /// press means "put me back in the list", not "jump to the end of it".
+    /// </para>
+    /// </summary>
+    private bool TryEnterList(Selector list, Key key) {
+        if (Vm.RenamingPath is not null || Keyboard.Modifiers != ModifierKeys.None) {
+            return false;
+        }
+
+        // A row that already has the keyboard handles its own arrows.
+        if (Keyboard.FocusedElement is ListBoxItem or DataGridCell) {
+            return false;
+        }
+
+        var entries = Vm.Entries;
+        if (entries.Count == 0 || key is not (Key.Up or Key.Down or Key.Left or Key.Right)) {
+            return false;
+        }
+
+        if (Vm.SelectedEntry is { } selected && entries.Contains(selected)) {
+            return FocusRow(selected);
+        }
+
+        var entry = key is Key.Down or Key.Right ? entries[0] : entries[^1];
+        SetListSelection(list, new[] { entry });
+
+        return FocusRow(entry);
     }
 
 

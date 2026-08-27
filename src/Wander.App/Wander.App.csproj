@@ -16,6 +16,19 @@
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Description>Windows 11 alternative file manager</Description>
+    <!--
+        XML-документация из пакетов не нужна ни в рантайме, ни в бандле:
+        Microsoft.Web.WebView2.*.xml — 766 КБ, которые иначе едут внутрь
+        одного портативного exe.
+    -->
+    <CopyDocumentationFilesFromPackages>false</CopyDocumentationFilesFromPackages>
+    <!--
+        Локализации рантайма: только русская. Тексты исключений .NET доходят
+        до пользователя (статусная строка, диалоги ошибок, CrashReporter),
+        поэтому ru остаётся; остальные 12 языков — 5.3 МБ в сжатом exe,
+        которые никто в этой сборке не увидит.
+    -->
+    <SatelliteResourceLanguages>en;ru</SatelliteResourceLanguages>
   </PropertyGroup>
 
   <ItemGroup>
