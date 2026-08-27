@@ -11,6 +11,14 @@ public enum SortKey {
     ModifiedDate,
     Size,
     Type,
+
+    /// <summary>
+    /// Stars from the photo's sidecar. Unlike the four above, this one is
+    /// not something a directory scan knows: the rating arrives with the
+    /// pass that reads the sidecars, which is why the listing re-sorts once
+    /// that pass lands (see <c>MainViewModel.LoadRatingsAsync</c>).
+    /// </summary>
+    Rating,
 }
 
 

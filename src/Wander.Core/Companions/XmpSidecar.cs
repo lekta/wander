@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace Wander.Core.Companions;
 
 /// <summary>
@@ -31,6 +33,63 @@ public static class XmpSidecar {
 
     /// <summary>Star range XMP defines. (It also allows -1 for "rejected"; Wander doesn't set that.)</summary>
     public const int MaxRating = 5;
+
+    /// <summary>
+    /// The byte-order mark the <c>&lt;?xpacket?&gt;</c> header carries in its
+    /// <c>begin</c> attribute. It is there so a reader scanning a binary file
+    /// for an embedded packet can tell the encoding from the first bytes; in
+    /// a standalone sidecar it is pure convention, and the convention is what
+    /// other tools look for.
+    /// </summary>
+    private const string PacketBom = "\ufeff";
+
+
+    /// <summary>
+    /// A brand-new sidecar packet carrying nothing but the two rating
+    /// properties. Deliberately minimal: every property written here is one
+    /// more thing another program has to agree with us about, and the point
+    /// of the file is the star.
+    ///
+    /// <para>
+    /// This is the format Wander creates by default (see
+    /// <see cref="SidecarFormat"/>). Unlike a <c>.pp3</c>, an XMP sidecar
+    /// makes no claim about how a raw file should be developed — it is
+    /// metadata beside the photo, so bringing one into existence cannot
+    /// change how the photo looks in anybody's editor.
+    /// </para>
+    ///
+    /// <para>
+    /// <c>xmp:Label</c> is written even when the colour is "none", as an
+    /// empty value: that is how Adobe spells no-colour, and having both
+    /// properties present means every later edit takes
+    /// <see cref="SetProperty"/>'s in-place path instead of its insert path.
+    /// </para>
+    /// </summary>
+    public static byte[] Create(int rating, int colorLabel) {
+        if (rating < 0 || rating > MaxRating) {
+            throw new ArgumentOutOfRangeException(nameof(rating), rating, $"Rating must be 0..{MaxRating}.");
+        }
+        if (colorLabel < 0 || colorLabel > ColorLabels.Max) {
+            throw new ArgumentOutOfRangeException(nameof(colorLabel), colorLabel, $"Label must be 0..{ColorLabels.Max}.");
+        }
+
+        string label = colorLabel == 0 ? "" : ColorLabels.Name(colorLabel);
+        string text = $"""
+            <?xpacket begin="{PacketBom}" id="W5M0MpCehiHzreSzNTczkc9d"?>
+            <x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Wander">
+             <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+              <rdf:Description rdf:about=""
+                xmlns:xmp="http://ns.adobe.com/xap/1.0/"
+                xmp:Rating="{rating}"
+                xmp:Label="{label}"/>
+             </rdf:RDF>
+            </x:xmpmeta>
+            <?xpacket end="w"?>
+
+            """;
+
+        return SidecarText.Encode(text, new UTF8Encoding(false), hasBom: false);
+    }
 
 
     public static SidecarRating Read(byte[] content) {

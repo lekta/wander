@@ -59,6 +59,12 @@ public sealed class LayoutSettingsCategory : SettingsCategoryViewModel {
 }
 
 
+public sealed class GallerySettingsCategory : SettingsCategoryViewModel {
+    public GallerySettingsCategory(SettingsViewModel owner)
+        : base(Strings.SettingsCategoryGallery, owner) { }
+}
+
+
 public sealed class ThumbnailsSettingsCategory : SettingsCategoryViewModel {
     public ThumbnailsSettingsCategory(SettingsViewModel owner)
         : base(Strings.SettingsCategoryThumbnails, owner) { }

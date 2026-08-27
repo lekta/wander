@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Wander.Core.Companions;
 using Wander.Core.FileSystem;
 using Wander.Core.Layout;
 using Wander.Core.Menu;
@@ -221,6 +222,72 @@ public sealed class SettingsViewModel : ObservableObject {
         TileCellWidth, TileIconSize, TileLabelFontSize);
 
 
+    // --- Layout (Gallery) ----------------------------------------------
+    private int _galleryCellWidth;
+    public int GalleryCellWidth {
+        get => _galleryCellWidth;
+        set {
+            if (SetField(ref _galleryCellWidth, ClampInt(value, 80, 640))) {
+                Raise(nameof(GalleryMetrics));
+            }
+        }
+    }
+
+    private int _galleryImageSize;
+    public int GalleryImageSize {
+        get => _galleryImageSize;
+        set {
+            if (SetField(ref _galleryImageSize, ClampInt(value, 64, 600))) {
+                Raise(nameof(GalleryMetrics));
+            }
+        }
+    }
+
+    private int _galleryMargin;
+    public int GalleryMargin {
+        get => _galleryMargin;
+        set {
+            if (SetField(ref _galleryMargin, ClampInt(value, 0, 32))) {
+                Raise(nameof(GalleryMetrics));
+            }
+        }
+    }
+
+    private int _galleryLabelFontSize;
+    public int GalleryLabelFontSize {
+        get => _galleryLabelFontSize;
+        set {
+            if (SetField(ref _galleryLabelFontSize, ClampInt(value, 8, 24))) {
+                Raise(nameof(GalleryMetrics));
+            }
+        }
+    }
+
+    /// <summary>Cell geometry of the gallery grid — same contract as <see cref="IconsMetrics"/>.</summary>
+    public TileMetrics GalleryMetrics => TileMetrics.ForGallery(
+        GalleryCellWidth, GalleryImageSize, GalleryMargin, GalleryLabelFontSize);
+
+    private GalleryBackground _galleryBackground;
+    public GalleryBackground GalleryBackground {
+        get => _galleryBackground;
+        set => SetField(ref _galleryBackground, value);
+    }
+
+    private bool _autoGallery;
+    public bool AutoGallery {
+        get => _autoGallery;
+        set => SetField(ref _autoGallery, value);
+    }
+
+
+    // --- Ratings --------------------------------------------------------
+    private SidecarFormat _rawRatingFormat;
+    public SidecarFormat RawRatingFormat {
+        get => _rawRatingFormat;
+        set => SetField(ref _rawRatingFormat, value);
+    }
+
+
     // --- Thumbnail cache ------------------------------------------------
     private bool _thumbnailDiskCacheEnabled;
     public bool ThumbnailDiskCacheEnabled {
@@ -326,6 +393,7 @@ public sealed class SettingsViewModel : ObservableObject {
             new FileOperationsSettingsCategory(this),
             new CompanionsSettingsCategory(this),
             new LayoutSettingsCategory(this),
+            new GallerySettingsCategory(this),
             new ThumbnailsSettingsCategory(this),
             new BookmarksSettingsCategory(this),
             new ContextMenuSettingsCategory(this),
@@ -357,6 +425,13 @@ public sealed class SettingsViewModel : ObservableObject {
         LargeIconImageSize = s.LargeIconImageSize;
         LargeIconMargin = s.LargeIconMargin;
         LargeIconLabelFontSize = s.LargeIconLabelFontSize;
+        GalleryCellWidth = s.GalleryCellWidth;
+        GalleryImageSize = s.GalleryImageSize;
+        GalleryMargin = s.GalleryMargin;
+        GalleryLabelFontSize = s.GalleryLabelFontSize;
+        GalleryBackground = s.GalleryBackground;
+        AutoGallery = s.AutoGallery;
+        RawRatingFormat = s.RawRatingFormat;
         ThumbnailDiskCacheEnabled = s.ThumbnailDiskCacheEnabled;
         ThumbnailDiskCacheMb = s.ThumbnailDiskCacheMb;
         ThumbnailMemoryEntries = s.ThumbnailMemoryEntries;
@@ -414,6 +489,13 @@ public sealed class SettingsViewModel : ObservableObject {
             LargeIconImageSize = LargeIconImageSize,
             LargeIconMargin = LargeIconMargin,
             LargeIconLabelFontSize = LargeIconLabelFontSize,
+            GalleryCellWidth = GalleryCellWidth,
+            GalleryImageSize = GalleryImageSize,
+            GalleryMargin = GalleryMargin,
+            GalleryLabelFontSize = GalleryLabelFontSize,
+            GalleryBackground = GalleryBackground,
+            AutoGallery = AutoGallery,
+            RawRatingFormat = RawRatingFormat,
             ThumbnailDiskCacheEnabled = ThumbnailDiskCacheEnabled,
             ThumbnailDiskCacheMb = ThumbnailDiskCacheMb,
             ThumbnailMemoryEntries = ThumbnailMemoryEntries,

@@ -175,4 +175,53 @@ public class XmpSidecarTests {
         Assert.Throws<ArgumentOutOfRangeException>(() => XmpSidecar.WithRating(Utf8(Attributes), 6));
         Assert.Throws<ArgumentOutOfRangeException>(() => XmpSidecar.WithRating(Utf8(Attributes), -1));
     }
+
+
+    // --- Creating one from scratch --------------------------------------
+
+    [Fact]
+    public void Create_RoundTripsThroughRead() {
+        var rating = XmpSidecar.Read(XmpSidecar.Create(rating: 5, colorLabel: 3));
+
+        Assert.Equal(5, rating.Rank);
+        Assert.Equal(3, rating.ColorLabel);
+        Assert.Equal("Green", rating.ColorLabelName);
+    }
+
+    [Fact]
+    public void Create_WithNoColour_LeavesTheLabelEmpty() {
+        var rating = XmpSidecar.Read(XmpSidecar.Create(rating: 2, colorLabel: 0));
+
+        Assert.Equal(2, rating.Rank);
+        Assert.Equal(0, rating.ColorLabel);
+        Assert.Null(rating.ColorLabelName);
+    }
+
+    [Fact]
+    public void Create_ThenEdit_TakesTheInPlacePath() {
+        // Both properties are written at creation precisely so that later
+        // edits never have to insert an attribute into somebody's packet.
+        byte[] created = XmpSidecar.Create(rating: 1, colorLabel: 0);
+
+        var rating = XmpSidecar.Read(XmpSidecar.WithColorLabel(created, 4));
+
+        Assert.Equal(1, rating.Rank);
+        Assert.Equal(4, rating.ColorLabel);
+    }
+
+    [Fact]
+    public void Create_ProducesAWellFormedPacket() {
+        string text = System.Text.Encoding.UTF8.GetString(XmpSidecar.Create(3, 1));
+
+        Assert.Contains("<?xpacket begin=", text);
+        Assert.Contains("xmlns:xmp=", text);
+        Assert.Contains("<?xpacket end=", text);
+        System.Xml.Linq.XDocument.Parse(text[(text.IndexOf("<x:xmpmeta", StringComparison.Ordinal))..text.IndexOf("<?xpacket end", StringComparison.Ordinal)]);
+    }
+
+    [Fact]
+    public void Create_RejectsOutOfRangeValues() {
+        Assert.Throws<ArgumentOutOfRangeException>(() => XmpSidecar.Create(6, 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => XmpSidecar.Create(0, 9));
+    }
 }

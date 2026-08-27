@@ -49,26 +49,16 @@ public sealed class SystemIOFileSystem : IFileSystem {
         // Explorer-style natural sort for the Name tiebreaker (numbers,
         // special chars, "_" before letters). StrCmpLogicalW is what
         // Explorer itself uses; we hand it to EntryComparers via the
-        // optional name-comparer hook.
-        var comparer = EntryComparers.Build(options, _naturalNameComparer);
+        // optional name-comparer hook. The folders-first split (and the
+        // single merged stream when it is off, so "newest first" really
+        // does put the newest item on top regardless of kind) lives in
+        // EntryComparers.Sort — the pass that re-sorts a listing once its
+        // ratings have been read goes through the same code.
+        var all = new List<FileSystemEntry>(folderLikes.Count + files.Count);
+        all.AddRange(folderLikes);
+        all.AddRange(files);
 
-        if (options.GroupFoldersFirst) {
-            folderLikes.Sort(comparer);
-            files.Sort(comparer);
-            var result = new List<FileSystemEntry>(folderLikes.Count + files.Count);
-            result.AddRange(folderLikes);
-            result.AddRange(files);
-            return result;
-        }
-
-        // Single merged stream — folders mingle with files according to
-        // the chosen key (so "newest first" actually puts the newest item
-        // at the top regardless of kind).
-        var merged = new List<FileSystemEntry>(folderLikes.Count + files.Count);
-        merged.AddRange(folderLikes);
-        merged.AddRange(files);
-        merged.Sort(comparer);
-        return merged;
+        return EntryComparers.Sort(all, options, _naturalNameComparer);
     }
 
     private static readonly IComparer<string> _naturalNameComparer =

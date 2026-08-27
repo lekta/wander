@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:Wander.App.ViewModels"
+        xmlns:conv="clr-namespace:Wander.App.Converters"
         xmlns:res="clr-namespace:Wander.App.Resources"
         Title="{x:Static res:Strings.SettingsTitle}"
         Width="640" Height="460"
@@ -20,6 +21,8 @@
         to change.
     -->
     <Window.Resources>
+
+        <conv:EnumRadioConverter x:Key="EnumRadio"/>
 
         <!-- Reusable spacing values so the four sections look uniform. -->
         <Thickness x:Key="Row">0,4,0,4</Thickness>
@@ -195,6 +198,77 @@
                            Text="{x:Static res:Strings.SettingsZoomHint}"/>
                 <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0"
                            Text="{x:Static res:Strings.SettingsLayoutHint}"/>
+            </StackPanel>
+        </DataTemplate>
+
+
+        <!-- Gallery.
+             Its own page rather than a fourth group under Layout: only half
+             of what is here is a size. The background is a viewing decision
+             and the sidecar format is a decision about other programs'
+             files, and neither belongs under a heading that says "layout". -->
+        <DataTemplate DataType="{x:Type vm:GallerySettingsCategory}">
+            <StackPanel>
+                <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
+
+                <CheckBox Content="{x:Static res:Strings.SettingsAutoGallery}"
+                          IsChecked="{Binding Owner.AutoGallery}"/>
+                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,6,0,0"
+                           Text="{x:Static res:Strings.SettingsAutoGalleryHint}"/>
+
+                <TextBlock Text="{x:Static res:Strings.SettingsGalleryBackground}" FontWeight="SemiBold" Margin="0,18,0,8"/>
+                <StackPanel Orientation="Horizontal">
+                    <RadioButton GroupName="GalleryBackground" Margin="0,0,16,0"
+                                 Content="{x:Static res:Strings.GalleryBackgroundLight}"
+                                 IsChecked="{Binding Owner.GalleryBackground, Converter={StaticResource EnumRadio}, ConverterParameter=Light}"/>
+                    <RadioButton GroupName="GalleryBackground" Margin="0,0,16,0"
+                                 Content="{x:Static res:Strings.GalleryBackgroundGrey}"
+                                 IsChecked="{Binding Owner.GalleryBackground, Converter={StaticResource EnumRadio}, ConverterParameter=Grey}"/>
+                    <RadioButton GroupName="GalleryBackground"
+                                 Content="{x:Static res:Strings.GalleryBackgroundDark}"
+                                 IsChecked="{Binding Owner.GalleryBackground, Converter={StaticResource EnumRadio}, ConverterParameter=Dark}"/>
+                </StackPanel>
+
+                <TextBlock Text="{x:Static res:Strings.SettingsGalleryGroup}" FontWeight="SemiBold" Margin="0,18,0,8"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="180"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Grid.Column="0" Margin="{StaticResource Row}"
+                               Text="{x:Static res:Strings.SettingsCellWidth}" Style="{StaticResource FieldLabel}"/>
+                    <TextBox Grid.Row="0" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
+                             Text="{Binding Owner.GalleryCellWidth, UpdateSourceTrigger=PropertyChanged}"/>
+                    <TextBlock Grid.Row="1" Grid.Column="0" Margin="{StaticResource Row}"
+                               Text="{x:Static res:Strings.SettingsIconSize}" Style="{StaticResource FieldLabel}"/>
+                    <TextBox Grid.Row="1" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
+                             Text="{Binding Owner.GalleryImageSize, UpdateSourceTrigger=PropertyChanged}"/>
+                    <TextBlock Grid.Row="2" Grid.Column="0" Margin="{StaticResource Row}"
+                               Text="{x:Static res:Strings.SettingsCellMargin}" Style="{StaticResource FieldLabel}"/>
+                    <TextBox Grid.Row="2" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
+                             Text="{Binding Owner.GalleryMargin, UpdateSourceTrigger=PropertyChanged}"/>
+                    <TextBlock Grid.Row="3" Grid.Column="0" Margin="{StaticResource Row}"
+                               Text="{x:Static res:Strings.SettingsLabelFontSize}" Style="{StaticResource FieldLabel}"/>
+                    <TextBox Grid.Row="3" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
+                             Text="{Binding Owner.GalleryLabelFontSize, UpdateSourceTrigger=PropertyChanged}"/>
+                </Grid>
+
+                <TextBlock Text="{x:Static res:Strings.SettingsRatingGroup}" FontWeight="SemiBold" Margin="0,18,0,8"/>
+                <TextBlock Text="{x:Static res:Strings.SettingsRawRatingFormat}" Margin="0,0,0,6"/>
+                <RadioButton GroupName="RawRatingFormat" Margin="0,0,0,4"
+                             Content="{x:Static res:Strings.SettingsRawRatingFormatXmp}"
+                             IsChecked="{Binding Owner.RawRatingFormat, Converter={StaticResource EnumRadio}, ConverterParameter=Xmp}"/>
+                <RadioButton GroupName="RawRatingFormat"
+                             Content="{x:Static res:Strings.SettingsRawRatingFormatPp3}"
+                             IsChecked="{Binding Owner.RawRatingFormat, Converter={StaticResource EnumRadio}, ConverterParameter=Pp3}"/>
+                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0"
+                           Text="{x:Static res:Strings.SettingsRawRatingFormatHint}"/>
             </StackPanel>
         </DataTemplate>
 

@@ -119,4 +119,42 @@ public class Pp3SidecarTests {
         Assert.Throws<ArgumentOutOfRangeException>(() => Pp3Sidecar.WithRank(Utf8(Sample), 6));
         Assert.Throws<ArgumentOutOfRangeException>(() => Pp3Sidecar.WithRank(Utf8(Sample), -1));
     }
+
+
+    // --- Creating one from scratch --------------------------------------
+
+    [Fact]
+    public void Create_RoundTripsThroughRead() {
+        var rating = Pp3Sidecar.Read(Pp3Sidecar.Create(rank: 4, colorLabel: 2));
+
+        Assert.Equal(4, rating.Rank);
+        Assert.Equal(2, rating.ColorLabel);
+    }
+
+    [Fact]
+    public void Create_WritesOnlyTheGeneralSection() {
+        // The file exists to hold a star. Anything else in it would be a
+        // develop setting Wander invented on the user's behalf.
+        string text = System.Text.Encoding.UTF8.GetString(Pp3Sidecar.Create(3, 0));
+
+        Assert.Contains("[General]", text);
+        Assert.DoesNotContain("[Version]", text);
+        Assert.DoesNotContain("[Exposure]", text);
+    }
+
+    [Fact]
+    public void Create_ThenEdit_KeepsTheOtherField() {
+        byte[] created = Pp3Sidecar.Create(rank: 1, colorLabel: 5);
+
+        var rating = Pp3Sidecar.Read(Pp3Sidecar.WithRank(created, 3));
+
+        Assert.Equal(3, rating.Rank);
+        Assert.Equal(5, rating.ColorLabel);
+    }
+
+    [Fact]
+    public void Create_RejectsOutOfRangeValues() {
+        Assert.Throws<ArgumentOutOfRangeException>(() => Pp3Sidecar.Create(6, 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => Pp3Sidecar.Create(0, 9));
+    }
 }

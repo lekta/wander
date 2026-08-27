@@ -22,7 +22,90 @@
     <UserControl.Resources>
         <conv:EnumToVisibilityConverter x:Key="EnumToVisibility"/>
         <conv:RenameEditorVisibilityConverter x:Key="RenameVisibility"/>
+        <conv:RankStarConverter x:Key="RankStar"/>
+        <conv:RankTextConverter x:Key="RankText"/>
+        <conv:ColorLabelBrushConverter x:Key="ColorLabelBrush"/>
+        <conv:NotNullToVisibilityConverter x:Key="NotNullToVisibility"/>
+        <conv:GalleryPaletteConverter x:Key="GalleryPalette"/>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+
+        <!--
+            One star of the filter bar. Same shape as the preview footer's
+            rating widget and deliberately so: the row that says "this photo
+            has three stars" and the row that says "show me three stars"
+            read the same because they are the same alphabet.
+        -->
+        <Style x:Key="FilterStar" TargetType="Button">
+            <Setter Property="Command" Value="{Binding SetFilterRankCommand}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="#D08A00"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Padding" Value="1,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="ToolTip" Value="{x:Static res:Strings.FilterRatingHint}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- One colour swatch of the filter bar; the ring marks the chosen one. -->
+        <Style x:Key="FilterSwatch" TargetType="Button">
+            <Setter Property="Command" Value="{Binding DataContext.SetFilterColorCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Margin" Value="1,0"/>
+            <Setter Property="ToolTip" Value="{x:Static res:Strings.FilterColorHint}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Ring" Width="16" Height="16" CornerRadius="8"
+                                Background="Transparent"
+                                BorderBrush="Transparent" BorderThickness="2">
+                            <Ellipse Width="8" Height="8" Fill="{Binding Brush}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                <Setter TargetName="Ring" Property="BorderBrush" Value="#666"/>
+                            </DataTrigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Ring" Property="Background" Value="#E5E5E5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!--
+            The caption under a gallery picture. It needs a style of its own
+            for one reason: its colour comes from the gallery background, but
+            the highlight behind a selected or hovered cell is light in every
+            theme (Explorer's #CCE8FF / #E8E8E8, shared with the other tile
+            views). Light-on-light is unreadable, so the caption goes dark
+            whenever the cell is lit, whatever the background is.
+        -->
+        <Style x:Key="GalleryCaption" TargetType="TextBlock">
+            <Setter Property="TextAlignment" Value="Center"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+            <Setter Property="Foreground"
+                    Value="{Binding DataContext.Settings.GalleryBackground, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource GalleryPalette}, ConverterParameter=Foreground}"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                    <Setter Property="Foreground" Value="#111111"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                    <Setter Property="Foreground" Value="#111111"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
 
         <!--
             Inline rename editor (A3). Every row template carries one of
@@ -222,7 +305,66 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid>
+    <DockPanel>
+        <!--
+            Rating filter (PLAN J3). A strip rather than a menu item, and
+            visible only in folders where something is actually rated.
+
+            Both halves of that are deliberate. A filter is state that
+            removes rows, and state that removes rows has to be visible from
+            the screen it is removing them from — a filter left on inside a
+            menu is the "why is this folder empty" bug, and every photo
+            browser that hides one eventually grows a warning strip to
+            compensate. And a bar that appeared over every folder of source
+            code would be a permanent row of stars nobody can use, so it
+            follows MainViewModel.HasRatings, which the sidecar pass sets.
+
+            It filters in every view, not only the gallery: "three stars and
+            up" is as good a question in the table as it is in the grid.
+        -->
+        <Border DockPanel.Dock="Top"
+                Background="#F7F7F7" BorderBrush="#DDD" BorderThickness="0,0,0,1"
+                Padding="6,3"
+                Visibility="{Binding HasRatings, Converter={StaticResource BoolToVisibility}}">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{x:Static res:Strings.FilterRatingLabel}"
+                           FontSize="11" Foreground="#444"
+                           VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <Button Style="{StaticResource FilterStar}" CommandParameter="1"
+                        Content="{Binding FilterMinRank, Converter={StaticResource RankStar}, ConverterParameter=1}"/>
+                <Button Style="{StaticResource FilterStar}" CommandParameter="2"
+                        Content="{Binding FilterMinRank, Converter={StaticResource RankStar}, ConverterParameter=2}"/>
+                <Button Style="{StaticResource FilterStar}" CommandParameter="3"
+                        Content="{Binding FilterMinRank, Converter={StaticResource RankStar}, ConverterParameter=3}"/>
+                <Button Style="{StaticResource FilterStar}" CommandParameter="4"
+                        Content="{Binding FilterMinRank, Converter={StaticResource RankStar}, ConverterParameter=4}"/>
+                <Button Style="{StaticResource FilterStar}" CommandParameter="5"
+                        Content="{Binding FilterMinRank, Converter={StaticResource RankStar}, ConverterParameter=5}"/>
+
+                <ItemsControl ItemsSource="{Binding FilterColorChoices}"
+                              Margin="12,0,0,0" VerticalAlignment="Center">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Style="{StaticResource FilterSwatch}"
+                                    CommandParameter="{Binding Index}"
+                                    ToolTip="{Binding Name}"/>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <Button Content="{x:Static res:Strings.FilterClear}"
+                        Command="{Binding ClearRatingFilterCommand}"
+                        Visibility="{Binding HasRatingFilter, Converter={StaticResource BoolToVisibility}}"
+                        Margin="12,0,0,0" Padding="6,0" FontSize="11"
+                        Focusable="False"
+                        VerticalAlignment="Center"/>
+            </StackPanel>
+        </Border>
+
+        <Grid>
         <!-- Details -->
         <DataGrid x:Name="DetailsView"
                   Style="{StaticResource ListGestures}"
@@ -294,6 +436,34 @@
                 <DataGridTextColumn Header="{x:Static res:Strings.ColumnType}" Binding="{Binding Kind}" Width="80" SortMemberPath="Type"/>
                 <DataGridTextColumn Header="{x:Static res:Strings.ColumnSize}" Binding="{Binding Size}" Width="100" SortMemberPath="Size"/>
                 <DataGridTextColumn Header="{x:Static res:Strings.ColumnModified}" Binding="{Binding ModifiedUtc, StringFormat=yyyy-MM-dd HH:mm}" Width="140" SortMemberPath="ModifiedDate"/>
+                <!--
+                    Rating. Collapsed until the folder has one (see
+                    ShowRatingColumn) - an always-present column of nothing
+                    is a column everyone learns to look past, and this one
+                    only means something next to photographs.
+
+                    Sorting by it is the reason it is a column at all rather
+                    than a badge: the header goes through Details_Sorting
+                    like every other, which routes to SortKey.Rating. The
+                    order it produces arrives a moment after the listing,
+                    because the stars do.
+                -->
+                <DataGridTemplateColumn x:Name="RatingColumn"
+                                        Header="{x:Static res:Strings.ColumnRating}"
+                                        Width="90" SortMemberPath="Rating" IsReadOnly="True">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Ellipse Width="8" Height="8" Margin="0,0,5,0"
+                                         VerticalAlignment="Center"
+                                         Fill="{Binding Rating, Converter={StaticResource ColorLabelBrush}}"/>
+                                <TextBlock Text="{Binding Rating, Converter={StaticResource RankText}}"
+                                           Foreground="#D08A00"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
             </DataGrid.Columns>
         </DataGrid>
 
@@ -450,6 +620,107 @@
         </ListBox>
 
         <!--
+            Gallery (PLAN J). Structurally the LargeIcons grid with bigger
+            cells, its own background and a rating badge - deliberately so:
+            the arithmetic, the virtualising panel and the whole gesture set
+            are the ones that were already debugged, and a second
+            implementation of a wrapping grid is a second set of the same
+            bugs.
+
+            What is actually different is the surround. The background is
+            not decoration: a photograph looks darker against white and
+            lighter against black, so judging one means choosing what sits
+            around it. Everything that has to move with that choice - the
+            caption colour included - comes out of GalleryPaletteConverter,
+            so a background can never end up with text nobody can read.
+        -->
+        <ListBox x:Name="GalleryView"
+                 Style="{StaticResource TilePanel}"
+                 Visibility="{Binding ViewMode, Converter={StaticResource EnumToVisibility}, ConverterParameter=Gallery}"
+                 Background="{Binding Settings.GalleryBackground, Converter={StaticResource GalleryPalette}, ConverterParameter=Background}"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                 ScrollViewer.CanContentScroll="True">
+            <ListBox.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <controls:VirtualizingWrapPanel CellWidth="{Binding Settings.GalleryMetrics.CellWidth}"
+                                                    CellHeight="{Binding Settings.GalleryMetrics.CellHeight}"/>
+                </ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <Grid HorizontalAlignment="Center"
+                          Width="{Binding DataContext.Settings.GalleryMetrics.ContentWidth, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                          Height="{Binding DataContext.Settings.GalleryMetrics.ContentHeight, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                          Margin="{Binding DataContext.Settings.GalleryMetrics.Margin, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                          ToolTip="{Binding Name}">
+                        <Border Style="{StaticResource TileHighlight}"/>
+                        <StackPanel>
+                            <Grid Width="{Binding DataContext.Settings.GalleryMetrics.ImageSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                  Height="{Binding DataContext.Settings.GalleryMetrics.ImageSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                  Margin="0,2,0,2">
+                                <!--
+                                    Sized explicitly, like the LargeIcons
+                                    template, rather than left to fill the
+                                    Grid: an Image left to measure itself
+                                    reports its source's natural size, and
+                                    the cell size is an input to layout here
+                                    (see TileMetrics) precisely so that
+                                    nothing about a folder's contents can
+                                    move the grid. The Grid around it is for
+                                    the badge, not for sizing.
+                                -->
+                                <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Large"
+                                                    Width="{Binding DataContext.Settings.GalleryMetrics.ImageSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    Height="{Binding DataContext.Settings.GalleryMetrics.ImageSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                    RenderOptions.BitmapScalingMode="HighQuality"
+                                                    UseLayoutRounding="True"/>
+                                <!--
+                                    Rating badge: stars and the colour label
+                                    over the corner of the picture. On the
+                                    picture rather than under it because the
+                                    caption line is already spoken for, and
+                                    a folder of photographs is exactly where
+                                    "which ones did I mark" has to be
+                                    answerable at a glance.
+                                -->
+                                <Border HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                                        Background="#99000000" CornerRadius="2"
+                                        Padding="3,0" Margin="2"
+                                        Visibility="{Binding Rating, Converter={StaticResource NotNullToVisibility}}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Ellipse Width="7" Height="7" Margin="0,0,3,0"
+                                                 VerticalAlignment="Center"
+                                                 Fill="{Binding Rating, Converter={StaticResource ColorLabelBrush}}"/>
+                                        <TextBlock Text="{Binding Rating, Converter={StaticResource RankText}}"
+                                                   FontSize="10" Foreground="#FFD37A"
+                                                   VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                            <Grid>
+                                <TextBlock Text="{Binding Name}"
+                                           Style="{StaticResource GalleryCaption}"
+                                           Height="{Binding DataContext.Settings.GalleryMetrics.LabelHeight, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                           FontSize="{Binding DataContext.Settings.GalleryMetrics.LabelFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                    <TextBlock.Visibility>
+                                        <MultiBinding Converter="{StaticResource RenameVisibility}" ConverterParameter="Inverse">
+                                            <Binding Path="FullPath"/>
+                                            <Binding Path="DataContext.RenamingPath" RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                                        </MultiBinding>
+                                    </TextBlock.Visibility>
+                                </TextBlock>
+                                <TextBox Style="{StaticResource RenameEditor}"
+                                         FontSize="{Binding DataContext.Settings.GalleryMetrics.LabelFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                            </Grid>
+                        </StackPanel>
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <!--
             Loading overlay for slow list enumerations (shell
             namespaces like Recycle Bin go through Shell.Application
             COM, which can take a noticeable fraction of a second).
@@ -481,5 +752,6 @@
                 </Ellipse.Triggers>
             </Ellipse>
         </Grid>
-    </Grid>
+        </Grid>
+    </DockPanel>
 </UserControl>

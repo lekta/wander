@@ -280,6 +280,7 @@
             sit at the positions of the ones they match. Binding the spare
             digits as well would promise icon sizes we do not have.
         -->
+        <KeyBinding Modifiers="Ctrl+Shift" Key="D1" Command="{Binding SetViewModeCommand}" CommandParameter="Gallery"/>
         <KeyBinding Modifiers="Ctrl+Shift" Key="D2" Command="{Binding SetViewModeCommand}" CommandParameter="LargeIcons"/>
         <KeyBinding Modifiers="Ctrl+Shift" Key="D6" Command="{Binding SetViewModeCommand}" CommandParameter="Details"/>
         <KeyBinding Modifiers="Ctrl+Shift" Key="D7" Command="{Binding SetViewModeCommand}" CommandParameter="Tiles"/>
@@ -322,6 +323,41 @@
                                   IsCheckable="True"
                                   IsChecked="{Binding ViewMode, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=LargeIcons}"
                                   Command="{Binding SetViewModeCommand}" CommandParameter="LargeIcons"/>
+                        <!--
+                            Gallery takes Ctrl+Shift+1, the slot Explorer
+                            gives its extra-large icons: it is the same end
+                            of the same scale, and the digits stay a scale
+                            rather than an arbitrary list.
+                        -->
+                        <MenuItem Header="{x:Static res:Strings.MenuViewGallery}"
+                                  InputGestureText="Ctrl+Shift+1"
+                                  IsCheckable="True"
+                                  IsChecked="{Binding ViewMode, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=Gallery}"
+                                  Command="{Binding SetViewModeCommand}" CommandParameter="Gallery"/>
+                        <Separator/>
+                        <!--
+                            The gallery background lives in the View menu and
+                            not in a gallery-only menu of its own: it is one
+                            three-way choice, and a whole menu that appears
+                            and disappears with the view is more furniture
+                            than the choice is worth. The filter, which is
+                            state that removes rows, gets a visible strip
+                            instead - see FileListView.
+                        -->
+                        <MenuItem Header="{x:Static res:Strings.MenuGalleryBackground}">
+                            <MenuItem Header="{x:Static res:Strings.GalleryBackgroundLight}"
+                                      IsCheckable="True"
+                                      IsChecked="{Binding Settings.GalleryBackground, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=Light}"
+                                      Command="{Binding SetGalleryBackgroundCommand}" CommandParameter="Light"/>
+                            <MenuItem Header="{x:Static res:Strings.GalleryBackgroundGrey}"
+                                      IsCheckable="True"
+                                      IsChecked="{Binding Settings.GalleryBackground, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=Grey}"
+                                      Command="{Binding SetGalleryBackgroundCommand}" CommandParameter="Grey"/>
+                            <MenuItem Header="{x:Static res:Strings.GalleryBackgroundDark}"
+                                      IsCheckable="True"
+                                      IsChecked="{Binding Settings.GalleryBackground, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=Dark}"
+                                      Command="{Binding SetGalleryBackgroundCommand}" CommandParameter="Dark"/>
+                        </MenuItem>
                         <Separator/>
                         <!--
                             Sort by submenu. The four columns mirror the Details
@@ -348,6 +384,10 @@
                                       IsCheckable="True"
                                       IsChecked="{Binding Settings.SortKey, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=Type}"
                                       Command="{Binding SetSortKeyCommand}" CommandParameter="Type"/>
+                            <MenuItem Header="{x:Static res:Strings.MenuSortRating}"
+                                      IsCheckable="True"
+                                      IsChecked="{Binding Settings.SortKey, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=Rating}"
+                                      Command="{Binding SetSortKeyCommand}" CommandParameter="Rating"/>
                             <Separator/>
                             <MenuItem Header="{x:Static res:Strings.MenuSortAscending}"
                                       IsCheckable="True"

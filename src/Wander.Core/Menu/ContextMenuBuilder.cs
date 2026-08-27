@@ -142,6 +142,7 @@ public static class ContextMenuBuilder {
                 Check(MenuCommandId.ViewDetails, t.ViewMode == "Details"),
                 Check(MenuCommandId.ViewTiles, t.ViewMode == "Tiles"),
                 Check(MenuCommandId.ViewLargeIcons, t.ViewMode == "LargeIcons"),
+                Check(MenuCommandId.ViewGallery, t.ViewMode == "Gallery"),
                 MenuEntry.Divider,
                 Check(MenuCommandId.TogglePreview, t.IsPreviewVisible),
             }),

@@ -37,6 +37,12 @@ public static class EntryComparers {
                                         System.IO.Path.GetExtension(a.Name),
                                         System.IO.Path.GetExtension(b.Name),
                                         StringComparison.OrdinalIgnoreCase)),
+            // Unrated sorts as zero rather than below it: "no stars" and
+            // "explicitly zero stars" are the same statement about a photo,
+            // and a folder half-way through its rating pass must not jump
+            // its rows around as nulls turn into zeroes.
+            SortKey.Rating => Comparer<FileSystemEntry>.Create((a, b) =>
+                                        (a.Rating?.Rank ?? 0).CompareTo(b.Rating?.Rank ?? 0)),
             _ => tiebreaker,
         };
 
@@ -50,6 +56,40 @@ public static class EntryComparers {
 
         return options.Ascending ? composed : Reverse(composed);
     }
+
+    /// <summary>
+    /// Sorts a whole listing: the folders-first split plus
+    /// <see cref="Build"/> inside each bucket. Both the enumerating
+    /// filesystem and the pass that re-sorts after ratings arrive go
+    /// through here, so a listing ordered once and re-ordered later cannot
+    /// end up in two different orders.
+    /// </summary>
+    public static IReadOnlyList<FileSystemEntry> Sort(
+        IReadOnlyList<FileSystemEntry> entries, SortOptions options, IComparer<string>? nameComparer = null) {
+        var comparer = Build(options, nameComparer);
+
+        if (!options.GroupFoldersFirst) {
+            var merged = new List<FileSystemEntry>(entries);
+            merged.Sort(comparer);
+
+            return merged;
+        }
+
+        var folderLikes = new List<FileSystemEntry>();
+        var files = new List<FileSystemEntry>();
+        foreach (var entry in entries) {
+            (entry.IsFolderLike ? folderLikes : files).Add(entry);
+        }
+        folderLikes.Sort(comparer);
+        files.Sort(comparer);
+
+        var result = new List<FileSystemEntry>(folderLikes.Count + files.Count);
+        result.AddRange(folderLikes);
+        result.AddRange(files);
+
+        return result;
+    }
+
 
     private static IComparer<T> Reverse<T>(IComparer<T> inner) {
         return Comparer<T>.Create((a, b) => inner.Compare(b, a));

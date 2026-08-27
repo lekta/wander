@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
+using Wander.Core.Companions;
 
 namespace Wander.Core.FileSystem;
 
@@ -23,6 +24,7 @@ namespace Wander.Core.FileSystem;
 /// </summary>
 public sealed class SearchController : INotifyPropertyChanged {
     private string _query = "";
+    private RatingFilter _rating = RatingFilter.None;
     private IReadOnlyList<FileSystemEntry> _source = Array.Empty<FileSystemEntry>();
     private CancellationTokenSource? _cts;
 
@@ -58,6 +60,29 @@ public sealed class SearchController : INotifyPropertyChanged {
 
     public bool HasQuery => _query.Length > 0;
 
+    /// <summary>
+    /// Stars and colour label the rows have to carry. Lives here rather
+    /// than beside the name filter because there is only one projection of
+    /// the folder onto the screen, and two independent filters racing to
+    /// produce it is exactly the bug this class was extracted to avoid.
+    /// Same fire-and-forget setter as <see cref="Query"/>.
+    /// </summary>
+    public RatingFilter RatingFilter {
+        get => _rating;
+        set {
+            value ??= RatingFilter.None;
+            if (_rating == value) {
+                return;
+            }
+            _rating = value;
+            Raise();
+            Raise(nameof(HasRatingFilter));
+            _ = ApplyAsync();
+        }
+    }
+
+    public bool HasRatingFilter => _rating.IsActive;
+
     /// <summary>Most recent unfiltered source. Tests assert on it; UI doesn't bind here.</summary>
     public IReadOnlyList<FileSystemEntry> Source => _source;
 
@@ -85,6 +110,11 @@ public sealed class SearchController : INotifyPropertyChanged {
             Raise(nameof(Query));
             Raise(nameof(HasQuery));
         }
+        if (_rating.IsActive) {
+            _rating = RatingFilter.None;
+            Raise(nameof(RatingFilter));
+            Raise(nameof(HasRatingFilter));
+        }
     }
 
 
@@ -97,9 +127,10 @@ public sealed class SearchController : INotifyPropertyChanged {
         // Snapshot the inputs so a Refresh / new keystroke mid-flight cannot
         // race us — we either complete with these inputs or get cancelled.
         string query = _query;
+        var rating = _rating;
         var source = _source;
 
-        if (string.IsNullOrEmpty(query)) {
+        if (string.IsNullOrEmpty(query) && !rating.IsActive) {
             FilteredChanged?.Invoke(source);
             return;
         }
@@ -110,9 +141,17 @@ public sealed class SearchController : INotifyPropertyChanged {
                 var result = new List<FileSystemEntry>();
                 foreach (var e in source) {
                     token.ThrowIfCancellationRequested();
-                    if (e.Name.Contains(query, StringComparison.OrdinalIgnoreCase)) {
-                        result.Add(e);
+                    if (query.Length > 0 && !e.Name.Contains(query, StringComparison.OrdinalIgnoreCase)) {
+                        continue;
                     }
+                    // Folders are never filtered out by a rating: a folder
+                    // has no stars, and hiding the way back out of a folder
+                    // of three-star photos is not what "show me three stars"
+                    // asked for.
+                    if (!e.IsFolderLike && !rating.Matches(e)) {
+                        continue;
+                    }
+                    result.Add(e);
                 }
                 return result;
             }, token);

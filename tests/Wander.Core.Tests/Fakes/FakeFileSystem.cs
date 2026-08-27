@@ -21,7 +21,6 @@ internal class FakeFileSystem : IFileSystem {
 
     public virtual IReadOnlyList<FileSystemEntry> Enumerate(string path, SortOptions? sort = null) {
         var options = sort ?? SortOptions.Default;
-        var comparer = EntryComparers.Build(options);
 
         var folderLikes = new List<FileSystemEntry>();
         var files = new List<FileSystemEntry>();
@@ -40,20 +39,11 @@ internal class FakeFileSystem : IFileSystem {
             }
         }
 
-        if (options.GroupFoldersFirst) {
-            folderLikes.Sort(comparer);
-            files.Sort(comparer);
-            var result = new List<FileSystemEntry>(folderLikes.Count + files.Count);
-            result.AddRange(folderLikes);
-            result.AddRange(files);
-            return result;
-        }
+        var all = new List<FileSystemEntry>(folderLikes.Count + files.Count);
+        all.AddRange(folderLikes);
+        all.AddRange(files);
 
-        var merged = new List<FileSystemEntry>(folderLikes.Count + files.Count);
-        merged.AddRange(folderLikes);
-        merged.AddRange(files);
-        merged.Sort(comparer);
-        return merged;
+        return EntryComparers.Sort(all, options);
     }
 
     public IReadOnlyList<FileSystemEntry> GetRoots() {

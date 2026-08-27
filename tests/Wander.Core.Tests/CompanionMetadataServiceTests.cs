@@ -1,5 +1,6 @@
 using System.Text;
 using Wander.Core.Companions;
+using Wander.Core.FileSystem;
 using Wander.Core.Logging;
 using Wander.Core.Tests.Fakes;
 using Wander.Core.Undo;
@@ -172,5 +173,125 @@ public class CompanionMetadataServiceTests {
         undo.Undo();
 
         Assert.Equal(0, undo.Depth);
+    }
+
+
+    // --- Ratings across a whole listing ---------------------------------
+
+    private static FileSystemEntry Row(string name, params string[] companions) {
+        return new FileSystemEntry(
+            Name: name,
+            FullPath: @"C:\photos\" + name,
+            Kind: EntryKind.File,
+            Size: 0,
+            ModifiedUtc: DateTime.MinValue,
+            IsHidden: false,
+            IsReadOnly: false,
+            IsSystem: false,
+            LinksToDirectory: false,
+            Companions: companions.Length == 0 ? null : companions);
+    }
+
+
+    [Fact]
+    public void WithRatings_FillsInWhatTheSidecarSays() {
+        var (service, _, _) = Build();
+        var rows = new[] { Row("IMG_1234.CR2", Pp3Path) };
+
+        var rated = service.WithRatings(rows);
+
+        Assert.Equal(2, rated[0].Rating!.Rank);
+        Assert.Equal(1, rated[0].Rating!.ColorLabel);
+    }
+
+    [Fact]
+    public void WithRatings_ReturnsTheSameListWhenNothingIsRated() {
+        // The caller skips the whole UI pass on reference equality, so this
+        // is the contract and not an implementation detail.
+        var (service, _, _) = Build(pp3: null);
+        var rows = new[] { Row("notes.txt"), Row("Sprite.png", MetaPath) };
+
+        Assert.Same(rows, service.WithRatings(rows));
+    }
+
+    [Fact]
+    public void WithRatings_LeavesRowsWithoutCompanionsAlone() {
+        var (service, _, _) = Build();
+        var rows = new[] { Row("plain.jpg"), Row("IMG_1234.CR2", Pp3Path) };
+
+        var rated = service.WithRatings(rows);
+
+        Assert.Null(rated[0].Rating);
+        Assert.NotNull(rated[1].Rating);
+    }
+
+    [Fact]
+    public void WithRatings_IgnoresCompanionsThatHoldNoRating() {
+        var (service, _, _) = Build(pp3: null);
+        var rows = new[] { Row("Sprite.png", MetaPath) };
+
+        var rated = service.WithRatings(rows);
+
+        Assert.Null(rated[0].Rating);
+    }
+
+
+    // --- Creating a sidecar ---------------------------------------------
+
+    [Fact]
+    public void SidecarPathFor_AppendsForPp3AndReplacesForXmp() {
+        var (service, _, _) = Build(pp3: null);
+
+        Assert.Equal(Pp3Path, service.SidecarPathFor(@"C:\photos\IMG_1234.CR2", SidecarFormat.Pp3));
+        Assert.Equal(XmpPath, service.SidecarPathFor(@"C:\photos\IMG_1234.CR2", SidecarFormat.Xmp));
+    }
+
+    [Fact]
+    public void CreateRatingSidecar_WritesAnXmpThatReadsBack() {
+        var (service, fs, _) = Build(pp3: null);
+
+        string created = service.CreateRatingSidecar(
+            @"C:\photos\IMG_1234.CR2", SidecarFormat.Xmp, RatingField.Rank, 4);
+
+        Assert.Equal(XmpPath, created);
+        Assert.True(fs.FileExists(created));
+        Assert.Equal(4, service.ReadRating(created)!.Rank);
+    }
+
+    [Fact]
+    public void CreateRatingSidecar_WritesAPp3ThatReadsBack() {
+        var (service, fs, _) = Build(pp3: null);
+
+        string created = service.CreateRatingSidecar(
+            @"C:\photos\IMG_1234.CR2", SidecarFormat.Pp3, RatingField.ColorLabel, 3);
+
+        Assert.Equal(Pp3Path, created);
+        var rating = service.ReadRating(created);
+        Assert.Equal(3, rating!.ColorLabel);
+        Assert.Equal(0, rating.Rank);
+        Assert.Contains("[General]", Text(fs.Files[created]));
+    }
+
+    [Fact]
+    public void CreateRatingSidecar_RefusesWhenTheFileIsAlreadyThere() {
+        // An existing sidecar is an edit, and an edit has to go through the
+        // path that preserves every other byte of somebody's develop recipe.
+        var (service, _, _) = Build();
+
+        Assert.Throws<InvalidOperationException>(
+            () => service.CreateRatingSidecar(@"C:\photos\IMG_1234.CR2", SidecarFormat.Pp3, RatingField.Rank, 1));
+    }
+
+    [Fact]
+    public void CreateRatingSidecar_IsUndoneByDeletingTheFile() {
+        var (service, fs, undo) = Build(pp3: null);
+
+        string created = service.CreateRatingSidecar(
+            @"C:\photos\IMG_1234.CR2", SidecarFormat.Xmp, RatingField.Rank, 5);
+        Assert.True(fs.FileExists(created));
+
+        undo.Undo();
+
+        Assert.False(fs.FileExists(created));
     }
 }

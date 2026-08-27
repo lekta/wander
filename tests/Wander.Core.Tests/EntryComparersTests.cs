@@ -1,10 +1,12 @@
+using Wander.Core.Companions;
 using Wander.Core.FileSystem;
 
 namespace Wander.Core.Tests;
 
 public class EntryComparersTests {
 
-    private static FileSystemEntry Entry(string name, long? size = null, DateTime? modified = null, EntryKind kind = EntryKind.File) {
+    private static FileSystemEntry Entry(
+        string name, long? size = null, DateTime? modified = null, EntryKind kind = EntryKind.File, int? rank = null) {
         return new FileSystemEntry(
             Name: name,
             FullPath: @"C:\" + name,
@@ -14,7 +16,8 @@ public class EntryComparersTests {
             IsHidden: false,
             IsReadOnly: false,
             IsSystem: false,
-            LinksToDirectory: false);
+            LinksToDirectory: false,
+            Rating: rank is null ? null : new SidecarRating(rank, null));
     }
 
 
@@ -107,5 +110,87 @@ public class EntryComparersTests {
         var items = new List<FileSystemEntry> { Entry("c"), Entry("a"), Entry("b") };
         items.Sort(EntryComparers.Build(SortOptions.Default));
         Assert.Equal(new[] { "a", "b", "c" }, items.Select(e => e.Name));
+    }
+
+
+    // --- Rating ---------------------------------------------------------
+
+    [Fact]
+    public void Rating_OrdersByStars() {
+        var items = new List<FileSystemEntry> {
+            Entry("b.jpg", rank: 1),
+            Entry("a.jpg", rank: 5),
+            Entry("c.jpg", rank: 3),
+        };
+        items.Sort(EntryComparers.Build(new SortOptions(SortKey.Rating, Ascending: false, GroupFoldersFirst: false)));
+
+        Assert.Equal(new[] { "a.jpg", "c.jpg", "b.jpg" }, items.Select(e => e.Name));
+    }
+
+    [Fact]
+    public void Rating_UnratedSortsAsZero() {
+        // Not below zero: "no sidecar" and "zero stars" are the same
+        // statement about a photo, and the pass that reads sidecars turns
+        // one into the other halfway through a folder.
+        var items = new List<FileSystemEntry> {
+            Entry("rated.jpg", rank: 2),
+            Entry("explicit.jpg", rank: 0),
+            Entry("unrated.jpg"),
+        };
+        items.Sort(EntryComparers.Build(new SortOptions(SortKey.Rating, Ascending: true, GroupFoldersFirst: false)));
+
+        Assert.Equal("rated.jpg", items[^1].Name);
+        Assert.Equal(new[] { "explicit.jpg", "unrated.jpg" }, items.Take(2).Select(e => e.Name));
+    }
+
+    [Fact]
+    public void Rating_BreaksTiesByName() {
+        var items = new List<FileSystemEntry> {
+            Entry("c.jpg", rank: 3),
+            Entry("a.jpg", rank: 3),
+            Entry("b.jpg", rank: 3),
+        };
+        items.Sort(EntryComparers.Build(new SortOptions(SortKey.Rating, Ascending: true, GroupFoldersFirst: false)));
+
+        Assert.Equal(new[] { "a.jpg", "b.jpg", "c.jpg" }, items.Select(e => e.Name));
+    }
+
+
+    // --- Sort (the folders-first split both filesystems share) -----------
+
+    [Fact]
+    public void Sort_GroupFoldersFirst_PutsFoldersOnTop() {
+        var items = new[] {
+            Entry("z.txt"),
+            Entry("beta", kind: EntryKind.Directory),
+            Entry("a.txt"),
+            Entry("alpha", kind: EntryKind.Directory),
+        };
+
+        var sorted = EntryComparers.Sort(items, new SortOptions(SortKey.Name, Ascending: true, GroupFoldersFirst: true));
+
+        Assert.Equal(new[] { "alpha", "beta", "a.txt", "z.txt" }, sorted.Select(e => e.Name));
+    }
+
+    [Fact]
+    public void Sort_WithoutGrouping_MergesFoldersAndFiles() {
+        var items = new[] {
+            Entry("z.txt"),
+            Entry("beta", kind: EntryKind.Directory),
+            Entry("a.txt"),
+        };
+
+        var sorted = EntryComparers.Sort(items, new SortOptions(SortKey.Name, Ascending: true, GroupFoldersFirst: false));
+
+        Assert.Equal(new[] { "a.txt", "beta", "z.txt" }, sorted.Select(e => e.Name));
+    }
+
+    [Fact]
+    public void Sort_LeavesTheInputAlone() {
+        var items = new[] { Entry("b.txt"), Entry("a.txt") };
+
+        EntryComparers.Sort(items, SortOptions.Default);
+
+        Assert.Equal("b.txt", items[0].Name);
     }
 }

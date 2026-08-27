@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!--
     Все пользовательские строки Wander. Отдельно от кода намеренно: чтобы
@@ -958,5 +958,91 @@
   </data>
   <data name="VolumeKindUnknown" xml:space="preserve">
     <value>Диск</value>
+  </data>
+  <data name="MenuViewGallery" xml:space="preserve">
+    <value>Галерея</value>
+  </data>
+  <data name="MenuCmdViewGallery" xml:space="preserve">
+    <value>Галерея</value>
+  </data>
+  <data name="MenuSortRating" xml:space="preserve">
+    <value>Оценка</value>
+  </data>
+  <data name="ColumnRating" xml:space="preserve">
+    <value>Оценка</value>
+  </data>
+  <data name="MenuGalleryBackground" xml:space="preserve">
+    <value>Фон галереи</value>
+  </data>
+  <data name="GalleryBackgroundLight" xml:space="preserve">
+    <value>Светлый</value>
+  </data>
+  <data name="GalleryBackgroundGrey" xml:space="preserve">
+    <value>Серый</value>
+  </data>
+  <data name="GalleryBackgroundDark" xml:space="preserve">
+    <value>Тёмный</value>
+  </data>
+  <data name="FilterRatingLabel" xml:space="preserve">
+    <value>Оценка</value>
+  </data>
+  <data name="FilterRatingHint" xml:space="preserve">
+    <value>Показывать только снимки с оценкой не ниже этой. Повторный щелчок по той же звезде снимает фильтр.</value>
+  </data>
+  <data name="FilterColorHint" xml:space="preserve">
+    <value>Показывать только снимки с этой цветовой меткой. Повторный щелчок снимает фильтр.</value>
+  </data>
+  <data name="FilterClear" xml:space="preserve">
+    <value>Сбросить фильтр</value>
+  </data>
+  <data name="StatusRatingFilterMatches" xml:space="preserve">
+    <value>Подходит {0} из {1} по фильтру оценок</value>
+  </data>
+  <data name="ConfirmCreateSidecarTitle" xml:space="preserve">
+    <value>Создать файл оценки?</value>
+  </data>
+  <data name="ConfirmCreateSidecar" xml:space="preserve">
+    <value>У снимка «{1}» нет файла с оценкой. Рядом будет создан «{0}» — в нём и сохранится оценка.
+
+Отменить создание можно через Ctrl+Z.</value>
+  </data>
+  <data name="ConfirmCreateSidecarPp3Warning" xml:space="preserve">
+    <value>Внимание: RawTherapee применяет профиль по-умолчанию (Auto-Matched Curve) только к снимкам без .pp3. Как только .pp3 появится, снимок начнёт открываться в RawTherapee с нейтральных значений, а не с автоподбора. Формат меняется в настройках, раздел «Галерея».</value>
+  </data>
+  <data name="StatusSidecarCreated" xml:space="preserve">
+    <value>Создан файл оценки: {0}</value>
+  </data>
+  <data name="PreviewRatingUnsaved" xml:space="preserve">
+    <value>Оценки пока нет. Щелчок по звезде создаст файл рядом со снимком — с подтверждением.</value>
+  </data>
+  <data name="SettingsCategoryGallery" xml:space="preserve">
+    <value>Галерея</value>
+  </data>
+  <data name="SettingsGalleryGroup" xml:space="preserve">
+    <value>Режим «Галерея»</value>
+  </data>
+  <data name="SettingsGalleryBackground" xml:space="preserve">
+    <value>Фон</value>
+  </data>
+  <data name="SettingsAutoGallery" xml:space="preserve">
+    <value>Включать галерею в папках со снимками</value>
+  </data>
+  <data name="SettingsAutoGalleryHint" xml:space="preserve">
+    <value>Если больше половины содержательных файлов в папке — изображения, вид переключается на галерею сам. Сайдкары (.pp3, .xmp, .meta) и резервные копии в счёт не идут. Стоит выбрать вид в папке вручную — и в ней автоматика больше не вмешивается.</value>
+  </data>
+  <data name="SettingsRatingGroup" xml:space="preserve">
+    <value>Оценки</value>
+  </data>
+  <data name="SettingsRawRatingFormat" xml:space="preserve">
+    <value>Формат оценки, если сайдкара нет</value>
+  </data>
+  <data name="SettingsRawRatingFormatXmp" xml:space="preserve">
+    <value>.xmp — Adobe, darktable, RawTherapee 5.11+</value>
+  </data>
+  <data name="SettingsRawRatingFormatPp3" xml:space="preserve">
+    <value>.pp3 — RawTherapee</value>
+  </data>
+  <data name="SettingsRawRatingFormatHint" xml:space="preserve">
+    <value>Wander не создаёт файлы, о которых не просили: первая оценка снимка без сайдкара спрашивает подтверждение. Формат по-умолчанию — .xmp, потому что он ни на что, кроме оценки, не влияет. Появившийся .pp3 отменяет применение профиля по-умолчанию в RawTherapee.</value>
   </data>
 </root>

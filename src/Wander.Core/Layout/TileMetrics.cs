@@ -48,6 +48,15 @@ public readonly record struct TileMetrics {
     /// </summary>
     private const int LabelLines = 3;
 
+    /// <summary>
+    /// How many lines the caption under a gallery cell may use. One: the
+    /// picture is the content there, and a three-line caption under every
+    /// photograph turns a wall of photographs into a wall of file names.
+    /// A name that does not fit is trimmed, and the full one is in the
+    /// tooltip and in the preview pane.
+    /// </summary>
+    private const int GalleryLabelLines = 1;
+
     // Tiles: the width, the icon and the name's font size come from the
     // settings; the rest is the shape of the template itself and stays here,
     // where the box and the panel read one number.
@@ -110,7 +119,7 @@ public readonly record struct TileMetrics {
 
     /// <summary>The LargeIcons grid, from the four knobs the settings dialog offers.</summary>
     public static TileMetrics ForLargeIcons(double cellWidth, double imageSize, double margin, double labelFontSize) {
-        double label = LabelBox(labelFontSize);
+        double label = LabelBox(labelFontSize, LabelLines);
 
         return new TileMetrics(
             contentWidth: cellWidth,
@@ -141,8 +150,29 @@ public readonly record struct TileMetrics {
     }
 
 
-    private static double LabelBox(double fontSize) {
-        return TextLine(fontSize) * LabelLines;
+    /// <summary>
+    /// The gallery grid. Same shape as LargeIcons — a picture with a
+    /// caption under it — and a separate factory rather than a parameter on
+    /// that one because the two views are sized for different jobs: a grid
+    /// of icons you read the names of, and a grid of photographs you look
+    /// at.
+    /// </summary>
+    public static TileMetrics ForGallery(double cellWidth, double imageSize, double margin, double labelFontSize) {
+        double label = LabelBox(labelFontSize, GalleryLabelLines);
+
+        return new TileMetrics(
+            contentWidth: cellWidth,
+            contentHeight: imageSize + (2 * ImageGap) + label,
+            margin: margin,
+            imageSize: imageSize,
+            labelHeight: label,
+            labelFontSize: labelFontSize,
+            secondaryFontSize: labelFontSize);
+    }
+
+
+    private static double LabelBox(double fontSize, int lines) {
+        return TextLine(fontSize) * lines;
     }
 
     private static double TextLine(double fontSize) {

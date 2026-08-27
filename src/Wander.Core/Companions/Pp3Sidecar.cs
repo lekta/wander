@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace Wander.Core.Companions;
 
 /// <summary>
@@ -24,6 +26,36 @@ public static class Pp3Sidecar {
 
     /// <summary>Highest star count RawTherapee's browser shows.</summary>
     public const int MaxRank = 5;
+
+
+    /// <summary>
+    /// A brand-new <c>.pp3</c> holding nothing but the rating fields.
+    ///
+    /// <para>
+    /// Read the warning on <see cref="SidecarFormat.Pp3"/> before calling
+    /// this: RawTherapee applies its default processing profile only to
+    /// photos with no sidecar, so bringing one into existence — even one
+    /// this empty — is a statement about how the photo develops, not only
+    /// about how many stars it has. Nothing here decides that a file may be
+    /// created; <see cref="CompanionMetadataService.CreateRatingSidecar"/>
+    /// asks first.
+    /// </para>
+    ///
+    /// <para>
+    /// No <c>[Version]</c> section: the only honest value would be the
+    /// version of a RawTherapee we are not, and a wrong one sends RT down
+    /// its compatibility paths for a file that has nothing to be
+    /// compatible about.
+    /// </para>
+    /// </summary>
+    public static byte[] Create(int rank, int colorLabel) {
+        Guard(rank, MaxRank, nameof(rank));
+        Guard(colorLabel, ColorLabels.Max, nameof(colorLabel));
+
+        string text = $"[{GeneralSection}]\r\n{RankKey}={rank}\r\n{ColorLabelKey}={colorLabel}\r\n";
+
+        return SidecarText.Encode(text, new UTF8Encoding(false), hasBom: false);
+    }
 
 
     public static SidecarRating Read(byte[] content) {

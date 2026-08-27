@@ -878,4 +878,88 @@ public static class Strings {
 
     /// <summary>{0}: {1} px (стандартный)</summary>
     public static string StatusViewSizeDefault => Get(nameof(StatusViewSizeDefault));
+
+    /// <summary>Галерея</summary>
+    public static string MenuViewGallery => Get(nameof(MenuViewGallery));
+
+    /// <summary>Галерея</summary>
+    public static string MenuCmdViewGallery => Get(nameof(MenuCmdViewGallery));
+
+    /// <summary>Оценка</summary>
+    public static string MenuSortRating => Get(nameof(MenuSortRating));
+
+    /// <summary>Оценка</summary>
+    public static string ColumnRating => Get(nameof(ColumnRating));
+
+    /// <summary>Фон галереи</summary>
+    public static string MenuGalleryBackground => Get(nameof(MenuGalleryBackground));
+
+    /// <summary>Светлый</summary>
+    public static string GalleryBackgroundLight => Get(nameof(GalleryBackgroundLight));
+
+    /// <summary>Серый</summary>
+    public static string GalleryBackgroundGrey => Get(nameof(GalleryBackgroundGrey));
+
+    /// <summary>Тёмный</summary>
+    public static string GalleryBackgroundDark => Get(nameof(GalleryBackgroundDark));
+
+    /// <summary>Оценка</summary>
+    public static string FilterRatingLabel => Get(nameof(FilterRatingLabel));
+
+    /// <summary>Показывать только снимки с оценкой не ниже этой. Повторный щелчок по той же звезде снимает фильтр.</summary>
+    public static string FilterRatingHint => Get(nameof(FilterRatingHint));
+
+    /// <summary>Показывать только снимки с этой цветовой меткой. Повторный щелчок снимает фильтр.</summary>
+    public static string FilterColorHint => Get(nameof(FilterColorHint));
+
+    /// <summary>Сбросить фильтр</summary>
+    public static string FilterClear => Get(nameof(FilterClear));
+
+    /// <summary>Подходит {0} из {1} по фильтру оценок</summary>
+    public static string StatusRatingFilterMatches => Get(nameof(StatusRatingFilterMatches));
+
+    /// <summary>Создать файл оценки?</summary>
+    public static string ConfirmCreateSidecarTitle => Get(nameof(ConfirmCreateSidecarTitle));
+
+    /// <summary>У снимка «{1}» нет файла с оценкой. Рядом будет создан «{0}» — в нём и сохранится оценка.  Отменить создание можно через Ctrl+Z.</summary>
+    public static string ConfirmCreateSidecar => Get(nameof(ConfirmCreateSidecar));
+
+    /// <summary>Внимание: RawTherapee применяет профиль по-умолчанию (Auto-Matched Curve) только к снимкам без .pp3. Как только .pp3 появится, снимок начнёт открываться в RawTherapee с нейтральных значений, а не с автоподбора. Формат меняется в настройках, раздел «Галерея».</summary>
+    public static string ConfirmCreateSidecarPp3Warning => Get(nameof(ConfirmCreateSidecarPp3Warning));
+
+    /// <summary>Создан файл оценки: {0}</summary>
+    public static string StatusSidecarCreated => Get(nameof(StatusSidecarCreated));
+
+    /// <summary>Оценки пока нет. Щелчок по звезде создаст файл рядом со снимком — с подтверждением.</summary>
+    public static string PreviewRatingUnsaved => Get(nameof(PreviewRatingUnsaved));
+
+    /// <summary>Галерея</summary>
+    public static string SettingsCategoryGallery => Get(nameof(SettingsCategoryGallery));
+
+    /// <summary>Режим «Галерея»</summary>
+    public static string SettingsGalleryGroup => Get(nameof(SettingsGalleryGroup));
+
+    /// <summary>Фон</summary>
+    public static string SettingsGalleryBackground => Get(nameof(SettingsGalleryBackground));
+
+    /// <summary>Включать галерею в папках со снимками</summary>
+    public static string SettingsAutoGallery => Get(nameof(SettingsAutoGallery));
+
+    /// <summary>Если больше половины содержательных файлов в папке — изображения, вид переключается на галерею сам. Сайдкары (.pp3, .xmp, .meta) и резервные копии в счёт не идут. Стоит выбрать вид в папке вручную — и в ней автоматика больше не вмешивается.</summary>
+    public static string SettingsAutoGalleryHint => Get(nameof(SettingsAutoGalleryHint));
+
+    /// <summary>Оценки</summary>
+    public static string SettingsRatingGroup => Get(nameof(SettingsRatingGroup));
+
+    /// <summary>Формат оценки, если сайдкара нет</summary>
+    public static string SettingsRawRatingFormat => Get(nameof(SettingsRawRatingFormat));
+
+    /// <summary>.xmp — Adobe, darktable, RawTherapee 5.11+</summary>
+    public static string SettingsRawRatingFormatXmp => Get(nameof(SettingsRawRatingFormatXmp));
+
+    /// <summary>.pp3 — RawTherapee</summary>
+    public static string SettingsRawRatingFormatPp3 => Get(nameof(SettingsRawRatingFormatPp3));
+
+    /// <summary>Wander не создаёт файлы, о которых не просили: первая оценка снимка без сайдкара спрашивает подтверждение. Формат по-умолчанию — .xmp, потому что он ни на что, кроме оценки, не влияет. Появившийся .pp3 отменяет применение профиля по-умолчанию в RawTherapee.</summary>
+    public static string SettingsRawRatingFormatHint => Get(nameof(SettingsRawRatingFormatHint));
 }

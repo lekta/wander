@@ -154,4 +154,32 @@ public class TileMetricsTests {
         Assert.Equal(Icons(), Icons());
         Assert.Equal(Tiles(), Tiles());
     }
+
+
+    // --- Gallery ---------------------------------------------------------
+
+    [Fact]
+    public void Gallery_CellIsTheContentPlusItsMargin() {
+        var metrics = TileMetrics.ForGallery(cellWidth: 216, imageSize: 200, margin: 4, labelFontSize: 11);
+
+        Assert.Equal(216 + 8, metrics.CellWidth);
+        Assert.Equal(metrics.ContentHeight + 8, metrics.CellHeight);
+    }
+
+    [Fact]
+    public void Gallery_LeavesRoomForOneCaptionLine() {
+        var metrics = TileMetrics.ForGallery(cellWidth: 216, imageSize: 200, margin: 4, labelFontSize: 11);
+
+        // One line, where LargeIcons allows three: a wall of photographs
+        // must not turn into a wall of file names.
+        Assert.Equal(Math.Ceiling(11 * 1.35), metrics.LabelHeight);
+        Assert.Equal(200 + (2 * TileMetrics.ImageGap) + metrics.LabelHeight, metrics.ContentHeight);
+    }
+
+    [Fact]
+    public void Gallery_HasNoSecondTextSize() {
+        var metrics = TileMetrics.ForGallery(cellWidth: 216, imageSize: 200, margin: 4, labelFontSize: 11);
+
+        Assert.Equal(metrics.LabelFontSize, metrics.SecondaryFontSize);
+    }
 }

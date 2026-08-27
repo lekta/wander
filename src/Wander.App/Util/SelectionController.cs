@@ -1,6 +1,5 @@
 using System.Windows.Controls;
 using System.Windows.Input;
-using Wander.App.ViewModels;
 using Wander.Core.FileSystem;
 
 namespace Wander.App.Util;
@@ -80,16 +79,20 @@ public sealed class SelectionController {
     /// Clear the selection in whichever right-pane list is active for the
     /// current view mode. Called from Esc handling in the window.
     /// </summary>
-    public static void ClearActive(ViewMode mode, DataGrid details, ListBox tiles, ListBox icons) {
-        switch (mode) {
-            case ViewMode.Details:
+    /// <summary>
+    /// Clears the selection in the container that is on screen. Takes the
+    /// container rather than the view mode: the caller already knows which
+    /// one that is, and a per-mode list here would have to grow a case
+    /// every time a view is added — silently doing nothing until somebody
+    /// noticed.
+    /// </summary>
+    public static void ClearActive(ItemsControl? active) {
+        switch (active) {
+            case DataGrid details:
                 details.UnselectAll();
                 break;
-            case ViewMode.Tiles:
-                tiles.UnselectAll();
-                break;
-            case ViewMode.LargeIcons:
-                icons.UnselectAll();
+            case ListBox list:
+                list.UnselectAll();
                 break;
         }
     }

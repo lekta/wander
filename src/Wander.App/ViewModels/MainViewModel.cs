@@ -53,7 +53,19 @@ public sealed class MainViewModel : ObservableObject {
     private FileSystemEntry? _selectedEntry;
     private string? _renamingPath;
     private IReadOnlyList<FileSystemEntry> _selectedEntries = Array.Empty<FileSystemEntry>();
+    // Two view modes, not one. _viewMode is what is on screen; _userViewMode
+    // is what the user last asked for, and it is the one that persists. The
+    // gallery switching itself on in a folder of photographs must not
+    // rewrite the choice the user made — otherwise one visit to a photo
+    // folder turns every folder into a gallery for good.
     private ViewMode _viewMode = ViewMode.Details;
+    private ViewMode _userViewMode = ViewMode.Details;
+
+    // Folders where the user picked a view by hand: the automatic choice
+    // stays out of those. Session-scoped on purpose — a preference that
+    // outlives the session is a per-folder setting, which is a different
+    // feature (PLAN H1) with a file format attached to it.
+    private readonly HashSet<string> _manualViewModeFolders = new(StringComparer.OrdinalIgnoreCase);
 
     private bool _isPreviewVisible;
     private double _previewWidth = 280;
@@ -68,6 +80,16 @@ public sealed class MainViewModel : ObservableObject {
 
     private CancellationTokenSource? _listLoadCts;
     private bool _isListLoading;
+
+    // --- Ratings --------------------------------------------------------
+    // Read after the listing has landed, never as part of it: the folder
+    // has to appear at once, and the stars a moment later. Cancelled the
+    // same way the listing is, because a pass that finishes after the user
+    // has walked into another folder would push that folder's rows over
+    // this one's.
+    private readonly CompanionMetadataService? _companionMetadata;
+    private CancellationTokenSource? _ratingCts;
+    private bool _hasRatings;
 
     // --- Auto-refresh ---------------------------------------------------
     // The watcher says "something changed" from a background thread, often
@@ -141,13 +163,16 @@ public sealed class MainViewModel : ObservableObject {
             _watchTimer.Tick += OnWatchTick;
         }
 
+        _companionMetadata = ServiceLocator.IsRegistered<CompanionMetadataService>()
+            ? ServiceLocator.Get<CompanionMetadataService>()
+            : null;
+
         Preview = new PreviewController(
             ServiceLocator.IsRegistered<IImageMetadataReader>()
                 ? ServiceLocator.Get<IImageMetadataReader>()
                 : null,
-            ServiceLocator.IsRegistered<CompanionMetadataService>()
-                ? ServiceLocator.Get<CompanionMetadataService>()
-                : null,
+            _companionMetadata,
+            CreateRatingSidecar,
             RevealPath);
 
         _nav = new NavigationController(
@@ -194,6 +219,11 @@ public sealed class MainViewModel : ObservableObject {
             _ => IsCurrentRecycleBin && _selectedEntries.Count > 0);
         RefreshCommand = new RelayCommand(_ => Refresh());
         SetViewModeCommand = new RelayCommand(p => SetViewMode(p as string));
+        SetGalleryBackgroundCommand = new RelayCommand(p => SetGalleryBackground(p as string));
+        FilterColorChoices = ColorLabelViewModel.CreateChoices();
+        SetFilterRankCommand = new RelayCommand(p => SetFilterRank(p as string));
+        SetFilterColorCommand = new RelayCommand(p => SetFilterColor(p as string));
+        ClearRatingFilterCommand = new RelayCommand(_ => ClearRatingFilter(), _ => HasRatingFilter);
         SetSortKeyCommand = new RelayCommand(p => SetSortKey(p as string));
         ToggleSortAscendingCommand = new RelayCommand(_ => Settings.SortAscending = !Settings.SortAscending);
         ToggleGroupFoldersFirstCommand = new RelayCommand(_ => Settings.GroupFoldersFirst = !Settings.GroupFoldersFirst);
@@ -243,6 +273,13 @@ public sealed class MainViewModel : ObservableObject {
                 Raise(nameof(SearchQuery));
             } else if (e.PropertyName == nameof(SearchController.HasQuery)) {
                 Raise(nameof(HasSearchQuery));
+            } else if (e.PropertyName == nameof(SearchController.RatingFilter)) {
+                Raise(nameof(FilterMinRank));
+                Raise(nameof(FilterColorLabel));
+                SyncFilterChoices();
+            } else if (e.PropertyName == nameof(SearchController.HasRatingFilter)) {
+                Raise(nameof(HasRatingFilter));
+                ClearRatingFilterCommand.RaiseCanExecuteChanged();
             }
         };
         _search.FilteredChanged += filtered => {
@@ -427,13 +464,15 @@ public sealed class MainViewModel : ObservableObject {
 
     public bool HasSearchQuery => _search.HasQuery;
 
+    /// <summary>
+    /// The view on screen. Written both by the user (through
+    /// <see cref="SetViewModeCommand"/>, which also remembers the choice)
+    /// and by <see cref="AutoSelectViewMode"/>; persistence hangs off the
+    /// former only, which is why this setter saves nothing.
+    /// </summary>
     public ViewMode ViewMode {
         get => _viewMode;
-        set {
-            if (SetField(ref _viewMode, value)) {
-                SaveState();
-            }
-        }
+        set => SetField(ref _viewMode, value);
     }
 
     public bool IsPreviewVisible {
@@ -489,6 +528,7 @@ public sealed class MainViewModel : ObservableObject {
     public RelayCommand RefreshCommand { get; }
     public RelayCommand RestoreFromRecycleBinCommand { get; }
     public RelayCommand SetViewModeCommand { get; }
+    public RelayCommand SetGalleryBackgroundCommand { get; }
     public RelayCommand SetSortKeyCommand { get; }
     public RelayCommand ToggleSortAscendingCommand { get; }
     public RelayCommand ToggleGroupFoldersFirstCommand { get; }
@@ -736,6 +776,7 @@ public sealed class MainViewModel : ObservableObject {
             Settings.ApplyFrom(state.Settings);
 
             if (!string.IsNullOrEmpty(session.ViewMode) && Enum.TryParse<ViewMode>(session.ViewMode, out var mode)) {
+                _userViewMode = mode;
                 _viewMode = mode;
                 Raise(nameof(ViewMode));
             }
@@ -820,7 +861,7 @@ public sealed class MainViewModel : ObservableObject {
                 LastPath = _nav.Current is not null
                     ? new NavigationStop(_nav.Current, _nav.CurrentSource ?? NavigationSource.External)
                     : null,
-                ViewMode = _viewMode.ToString(),
+                ViewMode = _userViewMode.ToString(),
                 ExpandedPaths = CollectExpanded(),
                 IsPreviewVisible = _isPreviewVisible,
                 PreviewWidth = _previewWidth,
@@ -1149,7 +1190,11 @@ public sealed class MainViewModel : ObservableObject {
         // opposite case — clearing it there is what made every rename,
         // delete and F5 blink and drop the selection, so that listing is
         // reconciled in place once the new one arrives.
-        if (!IsSamePath(path, _listedPath)) {
+        // "Arriving" as opposed to re-listing what is already on screen —
+        // the view mode is chosen for a folder the user walks into, not
+        // every time F5 or a rename re-reads the one they are standing in.
+        bool arriving = !IsSamePath(path, _listedPath);
+        if (arriving) {
             _hiddenCount = 0;
             _listedPath = null;
             _search.SetSource(Array.Empty<FileSystemEntry>());
@@ -1188,6 +1233,9 @@ public sealed class MainViewModel : ObservableObject {
 
             _hiddenCount = hidden;
             _listedPath = path;
+            if (arriving) {
+                AutoSelectViewMode(items, path);
+            }
             // A file operation may have reported its outcome ("Copied 3
             // items") while we were enumerating; the listing's own
             // "N items" must not eat that message.
@@ -1196,6 +1244,7 @@ public sealed class MainViewModel : ObservableObject {
             if (reported != statusBeforeLoad) {
                 Status = reported;
             }
+            StartRatingPass(items, path, sort);
         } catch (OperationCanceledException) {
             return;
         } catch (Exception ex) {
@@ -1250,6 +1299,11 @@ public sealed class MainViewModel : ObservableObject {
                 return;
             }
             _listedPath = shellPath;
+            // No sidecars in a shell namespace, and no picture-folder
+            // guessing either: the Recycle Bin is a list of things to
+            // decide about, not a folder to look at.
+            _ratingCts?.Cancel();
+            HasRatings = false;
             _search.SetSource(items.ToList());
         } finally {
             // Only release the spinner if our load is still the active one.
@@ -1328,6 +1382,11 @@ public sealed class MainViewModel : ObservableObject {
             && a.IsSystem == b.IsSystem
             && a.LinksToDirectory == b.LinksToDirectory
             && a.OriginalLocation == b.OriginalLocation
+            // Rating is a plain record of two ints, so equality is the real
+            // question here — and it has to be asked, because the pass that
+            // reads sidecars produces exactly this difference and nothing
+            // else. Without it the stars would never reach the screen.
+            && a.Rating == b.Rating
             && SameCompanions(a.Companions, b.Companions);
     }
 
@@ -1412,8 +1471,185 @@ public sealed class MainViewModel : ObservableObject {
         SelectionRestoreRequested?.Invoke(found);
     }
 
+    // --- Ratings and the rating filter ---------------------------------
+
+    /// <summary>
+    /// True when something in the folder on screen carries a rating. The
+    /// filter bar and the Details rating column hang off this: neither has
+    /// anything to say in a folder of source code, and a permanently empty
+    /// star column would be one more thing to look past in every other
+    /// folder.
+    /// </summary>
+    public bool HasRatings {
+        get => _hasRatings;
+        private set => SetField(ref _hasRatings, value);
+    }
+
+    /// <summary>Lowest star count the filter lets through; 0 = no star filter.</summary>
+    public int FilterMinRank => _search.RatingFilter.MinRank;
+
+    /// <summary>Colour the filter lets through, or null for any.</summary>
+    public int? FilterColorLabel => _search.RatingFilter.ColorLabel;
+
+    public bool HasRatingFilter => _search.HasRatingFilter;
+
+    /// <summary>The five swatches of the filter bar. Their own instances — see <see cref="ColorLabelViewModel"/>.</summary>
+    public IReadOnlyList<ColorLabelViewModel> FilterColorChoices { get; }
+
+    public RelayCommand SetFilterRankCommand { get; }
+    public RelayCommand SetFilterColorCommand { get; }
+    public RelayCommand ClearRatingFilterCommand { get; }
+
+
+    /// <summary>
+    /// Reads the sidecars of the rows that have one and pushes the listing
+    /// back through the filter with the ratings attached.
+    ///
+    /// <para>
+    /// Deliberately a second pass rather than part of the listing: a folder
+    /// of five hundred RAW files is five hundred small reads, and making
+    /// the folder appear is worth more than making it appear complete. The
+    /// rows are already on screen when this lands, and
+    /// <see cref="SyncEntries"/> replaces only the ones that gained a
+    /// rating.
+    /// </para>
+    /// </summary>
+    private void StartRatingPass(IReadOnlyList<FileSystemEntry> items, string path, SortOptions sort) {
+        _ratingCts?.Cancel();
+        _ratingCts = null;
+        HasRatings = false;
+
+        if (_companionMetadata is null || !items.Any(e => e.HasCompanions)) {
+            return;
+        }
+
+        _ratingCts = new CancellationTokenSource();
+        _ = LoadRatingsAsync(items, path, sort, _ratingCts.Token);
+    }
+
+    private async Task LoadRatingsAsync(
+        IReadOnlyList<FileSystemEntry> items, string path, SortOptions sort, CancellationToken token) {
+        IReadOnlyList<FileSystemEntry> rated;
+        try {
+            rated = await Task.Run(() => {
+                var withRatings = _companionMetadata!.WithRatings(items, token);
+
+                // Sorting by rating is the one key a directory scan cannot
+                // answer, so the order it produced was a placeholder. Only
+                // this key needs redoing; the other four were right the
+                // first time.
+                //
+                // The name tiebreaker here is the ordinal one rather than
+                // Explorer's natural order — it only decides between photos
+                // with the same number of stars, and reaching the platform
+                // comparer from up here would mean a new abstraction across
+                // the whole filesystem interface for that.
+                return sort.Key == SortKey.Rating
+                    ? EntryComparers.Sort(withRatings, sort)
+                    : withRatings;
+            }, token);
+        } catch (OperationCanceledException) {
+            return;
+        } catch (Exception ex) {
+            _log.Warn($"Rating pass failed: {path} ({ex.Message})");
+            return;
+        }
+
+        if (token.IsCancellationRequested || !IsSamePath(path, _listedPath)) {
+            return;
+        }
+
+        HasRatings = rated.Any(e => e.Rating is not null);
+        if (!ReferenceEquals(rated, items)) {
+            _search.SetSource(rated);
+        }
+    }
+
+
+    /// <summary>
+    /// Creates the sidecar behind the first star clicked on a photo that
+    /// has none, and returns its path — or null if the user said no.
+    ///
+    /// <para>
+    /// Wander does not create files nobody asked for, so this asks, with
+    /// Cancel as the default answer. For a <c>.pp3</c> the question carries
+    /// the part the user cannot be expected to know: RawTherapee applies
+    /// its default processing profile only to photos <em>without</em> a
+    /// sidecar, so the file about to be created changes how the photo opens
+    /// there. That is the whole reason the format is a setting and its
+    /// default is XMP.
+    /// </para>
+    /// </summary>
+    private string? CreateRatingSidecar(string mainPath, RatingField field, int value) {
+        if (_companionMetadata is null) {
+            return null;
+        }
+
+        var format = Settings.RawRatingFormat;
+        string sidecar = _companionMetadata.SidecarPathFor(mainPath, format);
+        string question = string.Format(
+            Strings.ConfirmCreateSidecar, Path.GetFileName(sidecar), Path.GetFileName(mainPath));
+        if (format == SidecarFormat.Pp3) {
+            question += Environment.NewLine + Environment.NewLine + Strings.ConfirmCreateSidecarPp3Warning;
+        }
+
+        var answer = MessageBox.Show(
+            question, Strings.ConfirmCreateSidecarTitle,
+            MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No);
+        if (answer != MessageBoxResult.Yes) {
+            return null;
+        }
+
+        string created = _companionMetadata.CreateRatingSidecar(mainPath, format, field, value);
+        Status = string.Format(Strings.StatusSidecarCreated, Path.GetFileName(created));
+
+        // The new file is a companion of the photo, so the row it belongs to
+        // has to be rebuilt for it to fold in — and the rating pass has to
+        // run again for the stars to reach the list and the filter bar.
+        Refresh();
+
+        return created;
+    }
+
+
+    /// <summary>
+    /// A star in the filter bar: clicking the one that is already the
+    /// threshold clears the star filter, the way clicking the current
+    /// rating in the preview footer clears the rating.
+    /// </summary>
+    private void SetFilterRank(string? parameter) {
+        if (!int.TryParse(parameter, out int rank)) {
+            return;
+        }
+
+        int target = rank == _search.RatingFilter.MinRank ? 0 : rank;
+        _search.RatingFilter = _search.RatingFilter with { MinRank = target };
+    }
+
+    private void SetFilterColor(string? parameter) {
+        if (!int.TryParse(parameter, out int color)) {
+            return;
+        }
+
+        int? target = color == _search.RatingFilter.ColorLabel ? null : color;
+        _search.RatingFilter = _search.RatingFilter with { ColorLabel = target };
+    }
+
+    private void ClearRatingFilter() {
+        _search.RatingFilter = RatingFilter.None;
+    }
+
+    private void SyncFilterChoices() {
+        foreach (var choice in FilterColorChoices) {
+            choice.IsSelected = choice.Index == _search.RatingFilter.ColorLabel;
+        }
+    }
+
+
     private void UpdateFilterStatus(int shown, int total) {
-        if (_search.HasQuery) {
+        if (_search.HasRatingFilter && !_search.HasQuery) {
+            Status = string.Format(Strings.StatusRatingFilterMatches, shown, total);
+        } else if (_search.HasQuery) {
             Status = total > 0
                 ? string.Format(Strings.StatusFilterMatches, shown, total, _search.Query)
                 : string.Format(Strings.StatusItems, shown);
@@ -1460,10 +1696,58 @@ public sealed class MainViewModel : ObservableObject {
 
     // --- View modes ----------------------------------------------------
 
+    /// <summary>
+    /// The user picking a view, as opposed to Wander picking one. Both
+    /// halves matter: the choice becomes the one that persists, and the
+    /// folder it was made in is marked as spoken for, so the gallery does
+    /// not switch itself back on the next time the user walks in.
+    /// </summary>
     private void SetViewMode(string? name) {
-        if (Enum.TryParse<ViewMode>(name, out var mode)) {
-            ViewMode = mode;
+        if (!Enum.TryParse<ViewMode>(name, out var mode)) {
+            return;
         }
+
+        _userViewMode = mode;
+        ViewMode = mode;
+        if (_nav.Current is { Length: > 0 } here) {
+            _manualViewModeFolders.Add(here);
+        }
+        SaveState();
+    }
+
+
+    private void SetGalleryBackground(string? name) {
+        if (Enum.TryParse<GalleryBackground>(name, out var background)) {
+            Settings.GalleryBackground = background;
+        }
+    }
+
+
+    /// <summary>
+    /// Picks the view for a folder we have just arrived in: the gallery
+    /// when the folder is mostly pictures, otherwise whatever the user
+    /// chose last.
+    ///
+    /// <para>
+    /// The second half is as important as the first. Without it the gallery
+    /// would be sticky — one photo folder and every text folder afterwards
+    /// is a wall of generic icons — so leaving a folder of photographs puts
+    /// the user's own view back.
+    /// </para>
+    ///
+    /// <para>
+    /// Silent in a folder where the user has chosen a view by hand this
+    /// session, and silent altogether when the setting is off.
+    /// </para>
+    /// </summary>
+    private void AutoSelectViewMode(IReadOnlyList<FileSystemEntry> items, string path) {
+        if (!Settings.AutoGallery || _manualViewModeFolders.Contains(path)) {
+            return;
+        }
+
+        ViewMode = ImageFolderProbe.IsImageFolder(items, _companions)
+            ? ViewMode.Gallery
+            : _userViewMode;
     }
 
     /// <summary>
@@ -1506,6 +1790,15 @@ public sealed class MainViewModel : ObservableObject {
                 Settings.LargeIconImageSize += 8 * steps;
                 Settings.LargeIconCellWidth = Settings.LargeIconImageSize + gap;
                 break;
+
+            case ViewMode.Gallery:
+                // Same rule as LargeIcons, in bigger steps: the gallery
+                // starts where that view ends, and 8 px a notch would make
+                // getting from 200 to 400 a wrist exercise.
+                int galleryGap = Settings.GalleryCellWidth - Settings.GalleryImageSize;
+                Settings.GalleryImageSize += 16 * steps;
+                Settings.GalleryCellWidth = Settings.GalleryImageSize + galleryGap;
+                break;
         }
 
         ReportViewSize();
@@ -1539,6 +1832,13 @@ public sealed class MainViewModel : ObservableObject {
                 Settings.LargeIconMargin = defaults.LargeIconMargin;
                 Settings.LargeIconLabelFontSize = defaults.LargeIconLabelFontSize;
                 break;
+
+            case ViewMode.Gallery:
+                Settings.GalleryCellWidth = defaults.GalleryCellWidth;
+                Settings.GalleryImageSize = defaults.GalleryImageSize;
+                Settings.GalleryMargin = defaults.GalleryMargin;
+                Settings.GalleryLabelFontSize = defaults.GalleryLabelFontSize;
+                break;
         }
 
         ReportViewSize();
@@ -1555,6 +1855,7 @@ public sealed class MainViewModel : ObservableObject {
         (string name, int now, int standard) = ViewMode switch {
             ViewMode.Details => (Strings.MenuViewDetails, Settings.DetailsRowHeight, defaults.DetailsRowHeight),
             ViewMode.Tiles => (Strings.MenuViewTiles, Settings.TileIconSize, defaults.TileIconSize),
+            ViewMode.Gallery => (Strings.MenuViewGallery, Settings.GalleryImageSize, defaults.GalleryImageSize),
             _ => (Strings.MenuViewLargeIcons, Settings.LargeIconImageSize, defaults.LargeIconImageSize),
         };
 
@@ -1589,6 +1890,7 @@ public sealed class MainViewModel : ObservableObject {
         // settings dialog.
         if (e.PropertyName == nameof(SettingsViewModel.IconsMetrics) ||
             e.PropertyName == nameof(SettingsViewModel.TilesMetrics) ||
+            e.PropertyName == nameof(SettingsViewModel.GalleryMetrics) ||
             e.PropertyName == nameof(SettingsViewModel.DetailsIconColumnWidth)) {
             return;
         }

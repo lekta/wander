@@ -32,23 +32,14 @@ namespace Wander.App.ViewModels;
 /// </para>
 /// </summary>
 public sealed class PreviewController : ObservableObject {
-    /// <summary>
-    /// RAW containers: routed through <see cref="RawPreviewExtractor"/>
-    /// first, because handing these to WIC means decoding sensor data —
-    /// about a hundred times slower than the JPEG the file already carries.
-    /// Formats whose container we can't read still fall through to WIC, so
-    /// listing one here is never worse than not listing it.
-    /// </summary>
-    private static readonly HashSet<string> _rawExtensions = new(StringComparer.OrdinalIgnoreCase) {
-        ".cr2", ".cr3", ".nef", ".arw", ".dng", ".raf", ".orf", ".rw2",
-    };
-
-    private static readonly HashSet<string> _imageExtensions = new(StringComparer.OrdinalIgnoreCase) {
-        ".png", ".jpg", ".jpeg", ".bmp", ".ico", ".tif", ".tiff",
-        // RAW (may not render but we still try; metadata works regardless):
-        ".cr2", ".cr3", ".nef", ".arw", ".dng", ".raf", ".orf", ".rw2",
-    };
-
+    // What counts as a picture is Core's table (ImageFormats): the gallery
+    // decides whether a folder is a folder of photographs from it, and two
+    // tables that must agree eventually do not. RAW is a subset of it —
+    // routed through RawPreviewExtractor first, because handing sensor data
+    // to WIC is about a hundred times slower than the JPEG the file already
+    // carries. Formats whose container we can't read still fall through to
+    // WIC, so being on that list is never worse than not being on it.
+    //
     // Animated formats go through GifImage, which composites multi-frame
     // streams. WEBP files are usually static, but WIC's WebP codec can
     // surface multiple frames for animated WEBPs; GifImage handles the
@@ -122,6 +113,7 @@ public sealed class PreviewController : ObservableObject {
 
     private readonly IImageMetadataReader? _metadataReader;
     private readonly CompanionMetadataService? _companionMetadata;
+    private readonly Func<string, RatingField, int, string?>? _createRatingSidecar;
     private readonly Action<string>? _reveal;
 
     private bool _isVisible;
@@ -157,11 +149,24 @@ public sealed class PreviewController : ObservableObject {
     private string? _unityGuid;
     private string? _unityDetail;
     private string? _ratingPath;
+
+    // The photo a star would have to create a sidecar for. Set only when
+    // there is no sidecar yet; the two are never both meaningful.
+    private string? _ratingTarget;
     private int _rank;
     private int _colorLabel;
     private string _customColorLabel = "";
 
 
+    /// <param name="createRatingSidecar">
+    /// How to bring a sidecar into existence for a photo that has none:
+    /// given the photo, the field and the value, returns the path of the
+    /// file that was created, or null if it wasn't. The whole policy around
+    /// that — which format, asking the user first, re-listing the folder
+    /// afterwards — belongs to the view model, because dialogs and the
+    /// folder listing do. The pane only knows that the star it was handed
+    /// has nowhere to go yet.
+    /// </param>
     /// <param name="reveal">
     /// How to take the user to a path — navigate to its folder, select it,
     /// scroll it into view. Owned by the view model, because navigation is;
@@ -170,20 +175,15 @@ public sealed class PreviewController : ObservableObject {
     public PreviewController(
         IImageMetadataReader? metadataReader,
         CompanionMetadataService? companionMetadata,
+        Func<string, RatingField, int, string?>? createRatingSidecar = null,
         Action<string>? reveal = null) {
 
         _metadataReader = metadataReader;
         _companionMetadata = companionMetadata;
+        _createRatingSidecar = createRatingSidecar;
         _reveal = reveal;
 
-        // Adobe's colour-label palette, in the index order both formats use.
-        ColorLabelChoices = new[] {
-            new ColorLabelViewModel(1, new SolidColorBrush(Color.FromRgb(0xD9, 0x53, 0x4F))),
-            new ColorLabelViewModel(2, new SolidColorBrush(Color.FromRgb(0xE0, 0xB3, 0x2C))),
-            new ColorLabelViewModel(3, new SolidColorBrush(Color.FromRgb(0x5C, 0xA9, 0x4D))),
-            new ColorLabelViewModel(4, new SolidColorBrush(Color.FromRgb(0x3E, 0x7C, 0xC4))),
-            new ColorLabelViewModel(5, new SolidColorBrush(Color.FromRgb(0x8A, 0x5C, 0xB8))),
-        };
+        ColorLabelChoices = ColorLabelViewModel.CreateChoices();
 
         SetRankCommand = new RelayCommand(p => SetRating(RatingField.Rank, p, _rank), _ => HasRating);
         SetColorLabelCommand = new RelayCommand(p => SetRating(RatingField.ColorLabel, p, _colorLabel), _ => HasRating);
@@ -358,13 +358,22 @@ public sealed class PreviewController : ObservableObject {
     }
 
     /// <summary>
-    /// Whether the selection carries a sidecar whose rating can be shown and
-    /// edited — a RawTherapee <c>.pp3</c> or an XMP.
+    /// Whether the rating row has anything to do: the selection carries a
+    /// sidecar whose rating can be shown and edited (a RawTherapee
+    /// <c>.pp3</c> or an XMP), or it is a picture that could have one.
     /// </summary>
-    public bool HasRating => _ratingPath is not null;
+    public bool HasRating => _ratingPath is not null || _ratingTarget is not null;
+
+    /// <summary>
+    /// True for a picture with no rating sidecar yet: the stars are there
+    /// to be clicked, and the first click creates the file. Shown differently
+    /// from a real rating — five hollow stars that mean "not rated" and five
+    /// that mean "no file to rate into" are not the same statement.
+    /// </summary>
+    public bool IsRatingUnsaved => _ratingPath is null && _ratingTarget is not null;
 
     /// <summary>Name of the file the rating is read from and written to, for the tooltip.</summary>
-    public string RatingSource => _ratingPath is null ? "" : Path.GetFileName(_ratingPath);
+    public string RatingSource => _ratingPath is not null ? Path.GetFileName(_ratingPath) : "";
 
     /// <summary>Stars currently written in the sidecar, 0…5.</summary>
     public int Rank {
@@ -661,7 +670,7 @@ public sealed class PreviewController : ObservableObject {
             return;
         }
 
-        if (_imageExtensions.Contains(ext)) {
+        if (ImageFormats.All.Contains(ext)) {
             await LoadImageAsync(path, ct);
 
             return;
@@ -797,7 +806,7 @@ public sealed class PreviewController : ObservableObject {
             //
             // JPEG and PNG are deliberately left as they are: what they look
             // like everywhere else is what the user expects to see here.
-            if (_rawExtensions.Contains(Path.GetExtension(path))) {
+            if (ImageFormats.IsRaw(path)) {
                 isRaw = true;
                 var raw = _showRawDecode ? DecodeFile(path) : LoadRawPreview(path) ?? DecodeFile(path);
                 image = raw is null ? null : ApplyOrientation(raw, meta?.Orientation);
@@ -1206,8 +1215,17 @@ public sealed class PreviewController : ObservableObject {
     private async Task UpdateCompanionsAsync(CancellationToken ct) {
         ClearCompanionInfo();
 
-        var companions = _primary?.Companions;
-        if (!_isVisible || _companionMetadata is null || companions is null || companions.Count == 0) {
+        if (!_isVisible || _companionMetadata is null || _primary is null) {
+            return;
+        }
+
+        var companions = _primary.Companions;
+        if (companions is null || companions.Count == 0) {
+            // Nothing beside the file — but if it is a photograph, the stars
+            // still appear, because "rate this raw" should not mean "go and
+            // make it a sidecar first in another program".
+            OfferRating(_primary);
+
             return;
         }
 
@@ -1223,6 +1241,12 @@ public sealed class PreviewController : ObservableObject {
         UnityGuid = loaded.Meta?.Guid;
         UnityDetail = DescribeMeta(loaded.Meta);
         ShowRating(loaded.RatingPath, loaded.Rating);
+
+        // A photo can have companions and still no place for a rating — a
+        // Unity .meta next to a PNG is the everyday case.
+        if (loaded.RatingPath is null) {
+            OfferRating(_primary);
+        }
     }
 
     private (UnityMetaInfo? Meta, string? RatingPath, SidecarRating? Rating) Load(IReadOnlyList<string> companions) {
@@ -1244,6 +1268,23 @@ public sealed class PreviewController : ObservableObject {
         return (meta, ratingPath, rating);
     }
 
+    /// <summary>
+    /// Offers the rating row for a picture that has no sidecar yet. Only
+    /// pictures: a rating on a spreadsheet is a file nobody asked for, and
+    /// the sidecar formats Wander writes are photo formats.
+    /// </summary>
+    private void OfferRating(FileSystemEntry entry) {
+        if (_createRatingSidecar is null || entry.IsFolderLike || !ImageFormats.IsImage(entry.Name)) {
+            return;
+        }
+
+        _ratingTarget = entry.FullPath;
+        Raise(nameof(HasRating));
+        Raise(nameof(IsRatingUnsaved));
+        SetRankCommand.RaiseCanExecuteChanged();
+        SetColorLabelCommand.RaiseCanExecuteChanged();
+    }
+
     /// <summary>Points the rating row at a sidecar (or at nothing) and refreshes what it shows.</summary>
     private void ShowRating(string? path, SidecarRating? rating) {
         _ratingPath = path;
@@ -1261,6 +1302,7 @@ public sealed class PreviewController : ObservableObject {
         }
 
         Raise(nameof(HasRating));
+        Raise(nameof(IsRatingUnsaved));
         Raise(nameof(RatingSource));
         SetRankCommand.RaiseCanExecuteChanged();
         SetColorLabelCommand.RaiseCanExecuteChanged();
@@ -1284,16 +1326,20 @@ public sealed class PreviewController : ObservableObject {
     }
 
     private void SetRating(RatingField field, object? parameter, int current) {
-        if (_ratingPath is null || _companionMetadata is null) {
-            return;
-        }
-        if (!TryReadIndex(parameter, out int clicked)) {
+        if (_companionMetadata is null || !TryReadIndex(parameter, out int clicked)) {
             return;
         }
 
         // Clicking what is already set clears it — otherwise a mis-click
         // could never be taken back except through Ctrl+Z.
         int target = clicked == current ? 0 : clicked;
+
+        if (_ratingPath is null) {
+            CreateAndRate(field, target);
+
+            return;
+        }
+
         try {
             _companionMetadata.SetRating(_ratingPath, field, target);
             CompanionStatus = "";
@@ -1306,6 +1352,37 @@ public sealed class PreviewController : ObservableObject {
         // Re-read rather than assume: the write may have been refused, and
         // the file is the only thing that knows what it now says.
         ShowRating(_ratingPath, _companionMetadata.ReadRating(_ratingPath));
+    }
+
+
+    /// <summary>
+    /// First star on a photo with no sidecar: the file has to exist before
+    /// anything can be written into it. Clearing a rating that was never
+    /// saved does nothing — creating a file to record "no stars" is exactly
+    /// the file nobody wanted.
+    /// </summary>
+    private void CreateAndRate(RatingField field, int target) {
+        if (_ratingTarget is null || _createRatingSidecar is null || target == 0) {
+            return;
+        }
+
+        string? created;
+        try {
+            created = _createRatingSidecar(_ratingTarget, field, target);
+        } catch (Exception ex) {
+            CompanionStatus = ex.Message;
+
+            return;
+        }
+
+        if (created is null) {
+            // Declined, which is an answer and not an error.
+            return;
+        }
+
+        CompanionStatus = "";
+        _ratingTarget = null;
+        ShowRating(created, _companionMetadata!.ReadRating(created));
     }
 
     private static bool TryReadIndex(object? parameter, out int index) {
@@ -1343,6 +1420,7 @@ public sealed class PreviewController : ObservableObject {
         UnityGuid = null;
         UnityDetail = null;
         CompanionStatus = "";
+        _ratingTarget = null;
         ShowRating(null, null);
     }
 

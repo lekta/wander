@@ -71,7 +71,8 @@ public static class PlatformBootstrapper {
         // is inside them.
         ServiceLocator.Register<CompanionResolver>(CompanionResolver.Default);
         ServiceLocator.Register<CompanionMetadataService>(new CompanionMetadataService(
-            ServiceLocator.Get<IFileSystem>(), ServiceLocator.Get<UndoService>(), logger));
+            ServiceLocator.Get<IFileSystem>(), ServiceLocator.Get<UndoService>(), logger,
+            ServiceLocator.Get<CompanionResolver>()));
     }
 
 

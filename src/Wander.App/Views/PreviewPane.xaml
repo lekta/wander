@@ -49,6 +49,20 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+            <Style.Triggers>
+                <!--
+                    A photo with no sidecar yet. The stars are live - the
+                    first click creates the file, after asking - but they are
+                    dimmed, because five hollow stars that mean "not rated"
+                    and five that mean "there is nowhere to write a rating
+                    yet" are not the same statement, and the difference is
+                    exactly the one the click is about to resolve.
+                -->
+                <DataTrigger Binding="{Binding Preview.IsRatingUnsaved}" Value="True">
+                    <Setter Property="Opacity" Value="0.55"/>
+                    <Setter Property="ToolTip" Value="{x:Static res:Strings.PreviewRatingUnsaved}"/>
+                </DataTrigger>
+            </Style.Triggers>
         </Style>
 
         <!--

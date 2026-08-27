@@ -1,3 +1,5 @@
+using Wander.Core.Companions;
+
 namespace Wander.Core.FileSystem;
 
 public sealed record FileSystemEntry(
@@ -20,7 +22,12 @@ public sealed record FileSystemEntry(
     // for Sprite.png, IMG.CR2.pp3 for IMG.CR2. Empty for an ordinary entry
     // and always empty when the integration setting is off — the folder
     // listing is what fills this in, via CompanionResolver.Collapse.
-    IReadOnlyList<string>? Companions = null) {
+    IReadOnlyList<string>? Companions = null,
+    // How the photo is marked up, read out of one of those companions
+    // (.pp3 / .xmp) by a pass that runs after the listing has landed — see
+    // CompanionMetadataService.WithRatings. null means "not looked at yet"
+    // as well as "nothing to say"; the two are the same to everyone above.
+    SidecarRating? Rating = null) {
 
     /// <summary>True when this row stands for a file plus its sidecar(s).</summary>
     public bool HasCompanions => Companions is { Count: > 0 };

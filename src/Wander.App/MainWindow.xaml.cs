@@ -899,6 +899,7 @@ public partial class MainWindow : Window {
             [MenuCommandId.ViewDetails] = new(vm.SetViewModeCommand, nameof(ViewMode.Details)),
             [MenuCommandId.ViewTiles] = new(vm.SetViewModeCommand, nameof(ViewMode.Tiles)),
             [MenuCommandId.ViewLargeIcons] = new(vm.SetViewModeCommand, nameof(ViewMode.LargeIcons)),
+            [MenuCommandId.ViewGallery] = new(vm.SetViewModeCommand, nameof(ViewMode.Gallery)),
             [MenuCommandId.TogglePreview] = new(vm.TogglePreviewCommand),
 
             [MenuCommandId.SortByName] = new(vm.SetSortKeyCommand, nameof(SortKey.Name)),

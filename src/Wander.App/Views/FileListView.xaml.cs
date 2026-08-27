@@ -75,15 +75,18 @@ public partial class FileListView : UserControl {
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e) {
         if (e.OldValue is MainViewModel old) {
             old.SelectionRestoreRequested -= RestoreListSelection;
+            old.PropertyChanged -= OnViewModelChanged;
             old.Settings.PropertyChanged -= OnSettingsChanged;
             old.Entries.CollectionChanged -= OnEntriesChanged;
         }
         if (e.NewValue is MainViewModel vm) {
             vm.SelectionRestoreRequested += RestoreListSelection;
+            vm.PropertyChanged += OnViewModelChanged;
             vm.Settings.PropertyChanged += OnSettingsChanged;
             vm.Entries.CollectionChanged += OnEntriesChanged;
             ShowSortIndicator();
             ApplyIconColumnWidth();
+            ShowRatingColumn();
         }
     }
 
@@ -113,6 +116,25 @@ public partial class FileListView : UserControl {
     private void Details_Sorting(object sender, DataGridSortingEventArgs e) {
         e.Handled = true;
         Vm.SetSortKeyCommand.Execute(e.Column.SortMemberPath);
+    }
+
+    private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e) {
+        if (e.PropertyName == nameof(MainViewModel.HasRatings)) {
+            ShowRatingColumn();
+        }
+    }
+
+    /// <summary>
+    /// The rating column appears only in folders where something is rated.
+    /// Assigned from here rather than bound for the same reason the icon
+    /// column's width is: a <see cref="System.Windows.Controls.DataGridColumn"/>
+    /// is not in the visual tree, so a binding on it resolves to nothing —
+    /// silently.
+    /// </summary>
+    private void ShowRatingColumn() {
+        if (DataContext is MainViewModel vm) {
+            RatingColumn.Visibility = vm.HasRatings ? Visibility.Visible : Visibility.Collapsed;
+        }
     }
 
     private void OnSettingsChanged(object? sender, PropertyChangedEventArgs e) {
@@ -170,6 +192,7 @@ public partial class FileListView : UserControl {
             ViewMode.Details => DetailsView,
             ViewMode.Tiles => TilesView,
             ViewMode.LargeIcons => IconsView,
+            ViewMode.Gallery => GalleryView,
             _ => null,
         };
     }
@@ -228,7 +251,7 @@ public partial class FileListView : UserControl {
 
     /// <summary>Clears the selection in whichever container is on screen.</summary>
     public void ClearSelection() {
-        SelectionController.ClearActive(Vm.ViewMode, DetailsView, TilesView, IconsView);
+        SelectionController.ClearActive(ActiveList());
     }
 
 

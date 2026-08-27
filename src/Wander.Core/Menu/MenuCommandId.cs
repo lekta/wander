@@ -45,6 +45,7 @@ public enum MenuCommandId {
     ViewDetails,
     ViewTiles,
     ViewLargeIcons,
+    ViewGallery,
     TogglePreview,
     SortByName,
     SortByDate,

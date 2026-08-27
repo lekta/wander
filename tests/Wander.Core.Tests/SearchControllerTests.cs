@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Wander.Core.Companions;
 using Wander.Core.FileSystem;
 
 namespace Wander.Core.Tests;
@@ -230,5 +231,105 @@ public class SearchControllerTests {
         Assert.NotEmpty(lastResults);
         var final = lastResults.Last();
         Assert.Equal(new[] { _apple, _pineapple }, final);
+    }
+
+
+    // --- Rating filter ------------------------------------------------
+
+    private static FileSystemEntry Photo(string name, int? rank = null, int? color = null, EntryKind kind = EntryKind.File) {
+        return new FileSystemEntry(
+            Name: name,
+            FullPath: @"C:\folder\" + name,
+            Kind: kind,
+            Size: 0,
+            ModifiedUtc: DateTime.MinValue,
+            IsHidden: false,
+            IsReadOnly: false,
+            IsSystem: false,
+            LinksToDirectory: false,
+            Rating: rank is null && color is null ? null : new SidecarRating(rank, color));
+    }
+
+
+    [Fact]
+    public async Task RatingFilter_KeepsWhatReachesTheThreshold() {
+        var keep = Photo("keep.jpg", rank: 4);
+        var drop = Photo("drop.jpg", rank: 1);
+        var unrated = Photo("unrated.jpg");
+        var sc = new SearchController();
+        sc.SetSource(new[] { keep, drop, unrated });
+
+        var next = WaitForNextFilteredAsync(sc);
+        sc.RatingFilter = new RatingFilter(3, null);
+
+        Assert.Equal(new[] { keep }, await next);
+    }
+
+    [Fact]
+    public async Task RatingFilter_KeepsFoldersRegardless() {
+        // Hiding the way back out of a folder of three-star photos is not
+        // what "show me three stars" asked for.
+        var folder = Photo("selects", kind: EntryKind.Directory);
+        var photo = Photo("a.jpg", rank: 1);
+        var sc = new SearchController();
+        sc.SetSource(new[] { folder, photo });
+
+        var next = WaitForNextFilteredAsync(sc);
+        sc.RatingFilter = new RatingFilter(3, null);
+
+        Assert.Equal(new[] { folder }, await next);
+    }
+
+    [Fact]
+    public async Task RatingFilter_AndTheNameFilter_BothApply() {
+        var match = Photo("beach-1.jpg", rank: 5);
+        var wrongName = Photo("forest-1.jpg", rank: 5);
+        var wrongRank = Photo("beach-2.jpg", rank: 1);
+        var sc = new SearchController();
+        sc.SetSource(new[] { match, wrongName, wrongRank });
+        sc.Query = "beach";
+
+        var next = WaitForNextFilteredAsync(sc);
+        sc.RatingFilter = new RatingFilter(3, null);
+
+        Assert.Equal(new[] { match }, await next);
+    }
+
+    [Fact]
+    public async Task RatingFilter_ClearedBackToNone_PublishesEverythingAgain() {
+        var sc = new SearchController();
+        sc.SetSource(new[] { Photo("a.jpg", rank: 5), Photo("b.jpg") });
+        sc.RatingFilter = new RatingFilter(3, null);
+
+        var next = WaitForNextFilteredAsync(sc);
+        sc.RatingFilter = RatingFilter.None;
+
+        Assert.Equal(2, (await next).Count);
+        Assert.False(sc.HasRatingFilter);
+    }
+
+    [Fact]
+    public void Reset_ClearsTheRatingFilterToo() {
+        // Navigation calls Reset; a filter that survived the move would hide
+        // rows in a folder the user has not looked at yet.
+        var sc = new SearchController();
+        sc.RatingFilter = new RatingFilter(4, 2);
+
+        sc.Reset();
+
+        Assert.Equal(RatingFilter.None, sc.RatingFilter);
+        Assert.False(sc.HasRatingFilter);
+    }
+
+    [Fact]
+    public void RatingFilter_RaisesItsProperties() {
+        var sc = new SearchController();
+        var seen = new List<string?>();
+        sc.PropertyChanged += (_, e) => seen.Add(e.PropertyName);
+
+        sc.RatingFilter = new RatingFilter(2, null);
+
+        Assert.Contains(nameof(SearchController.RatingFilter), seen);
+        Assert.Contains(nameof(SearchController.HasRatingFilter), seen);
     }
 }

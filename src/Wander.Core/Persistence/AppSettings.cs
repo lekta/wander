@@ -1,3 +1,4 @@
+using Wander.Core.Companions;
 using Wander.Core.FileSystem;
 
 namespace Wander.Core.Persistence;
@@ -136,6 +137,48 @@ public sealed record AppSettings {
 
     /// <summary>Font size of the file-name label under each tile.</summary>
     public int LargeIconLabelFontSize { get; init; } = 12;
+
+
+    // --- Layout (Gallery view) -----------------------------------------
+    /// <summary>
+    /// Width of one gallery cell, in pixels. The 16 px it leaves around a
+    /// 200 px picture is deliberately tighter than the LargeIcons grid: a
+    /// wall of photographs reads as a wall when the gaps are thin, and as a
+    /// list of framed items when they are not.
+    /// </summary>
+    public int GalleryCellWidth { get; init; } = 216;
+
+    /// <summary>Side of the square a gallery picture is drawn in, in pixels.</summary>
+    public int GalleryImageSize { get; init; } = 200;
+
+    /// <summary>Margin around each gallery cell (all four sides), in pixels.</summary>
+    public int GalleryMargin { get; init; } = 4;
+
+    /// <summary>Font size of the name under a gallery picture.</summary>
+    public int GalleryLabelFontSize { get; init; } = 11;
+
+    /// <summary>What the gallery draws behind the pictures.</summary>
+    public GalleryBackground GalleryBackground { get; init; } = GalleryBackground.Grey;
+
+    /// <summary>
+    /// Switch to the gallery by itself on entering a folder that is mostly
+    /// pictures (see <see cref="Wander.Core.FileSystem.ImageFolderProbe"/>).
+    /// On by default: the whole point is not having to ask for the right
+    /// view in the folder where it is obvious. Choosing a view by hand in a
+    /// folder turns the automation off for that folder permanently — an
+    /// automatic choice that overrules an explicit one is not a convenience.
+    /// </summary>
+    public bool AutoGallery { get; init; } = true;
+
+
+    // --- Ratings --------------------------------------------------------
+    /// <summary>
+    /// Which sidecar to create when the user rates a photo that has none.
+    /// XMP by default, and the choice is not cosmetic — see
+    /// <see cref="SidecarFormat.Pp3"/> for what creating a <c>.pp3</c> does
+    /// to how RawTherapee develops the photo.
+    /// </summary>
+    public SidecarFormat RawRatingFormat { get; init; } = SidecarFormat.Xmp;
 
 
     // --- Thumbnail cache ------------------------------------------------

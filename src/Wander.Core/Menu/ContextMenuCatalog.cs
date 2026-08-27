@@ -48,6 +48,7 @@ public static class ContextMenuCatalog {
         [MenuCommandId.ViewDetails] = "MenuCmdViewDetails",
         [MenuCommandId.ViewTiles] = "MenuCmdViewTiles",
         [MenuCommandId.ViewLargeIcons] = "MenuCmdViewLargeIcons",
+        [MenuCommandId.ViewGallery] = "MenuCmdViewGallery",
         [MenuCommandId.TogglePreview] = "MenuCmdTogglePreview",
         [MenuCommandId.SortByName] = "MenuCmdSortByName",
         [MenuCommandId.SortByDate] = "MenuCmdSortByDate",
