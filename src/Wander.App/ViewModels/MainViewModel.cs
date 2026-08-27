@@ -93,6 +93,13 @@ public sealed class MainViewModel : ObservableObject {
     // rebuilding the list clears whatever the containers had selected.
     private string? _selectFolderAfterListing;
 
+    // Where the user was in each folder they have been in, so coming back
+    // lands on the same row. Capped and oldest-first: a long session walks
+    // through a lot of folders, and none of this is worth keeping forever.
+    private readonly Dictionary<string, string> _selectionMemory = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Queue<string> _selectionMemoryOrder = new();
+    private const int SelectionMemoryLimit = 64;
+
     // Search filter is owned by SearchController; we only keep the hidden-
     // count separately for the "X items (N hidden)" status-bar message.
     private readonly SearchController _search = new();
@@ -342,6 +349,17 @@ public sealed class MainViewModel : ObservableObject {
             }
         }
     }
+
+    /// <summary>
+    /// Set by an operation that ran behind a modal dialog: by the time the
+    /// dialog closes, the row that had the keyboard has been rebuilt out of
+    /// existence and focus is left sitting on the window. The list takes it
+    /// back together with the restored selection — losing the keyboard after
+    /// every operation is one of the Explorer habits this project exists to
+    /// avoid. Consumed once, by <c>FileListView.RestoreListSelection</c>.
+    /// </summary>
+    public bool FocusListAfterRestore { get; set; }
+
 
     public IReadOnlyList<FileSystemEntry> SelectedEntries {
         get => _selectedEntries;
@@ -838,6 +856,12 @@ public sealed class MainViewModel : ObservableObject {
     // --- Navigation glue -----------------------------------------------
 
     private void OnNavigationChanged() {
+        // The rows on screen still belong to the folder being left, so this
+        // is the last moment its selection can be noted — and the last
+        // moment the folder we came out of is known.
+        RememberSelection();
+        PlanArrivalSelection();
+
         // Drop any active filter when the user moves to a new folder — the
         // filter is scoped to "the folder I'm looking at right now".
         // SearchController.Reset cancels any in-flight pass; the upcoming
@@ -848,6 +872,66 @@ public sealed class MainViewModel : ObservableObject {
         Preview.SetCurrentFolder(_nav.Current, WindowTitle);
         UpdateFolderWatch();
         SaveState();
+    }
+
+
+    /// <summary>
+    /// Notes where the user was in the folder currently on screen, so that
+    /// coming back to it — Back, Forward, or simply walking in again —
+    /// lands on the same row instead of at the top.
+    /// </summary>
+    private void RememberSelection() {
+        if (_listedPath is not { } path || _selectedEntry is not { } entry) {
+            return;
+        }
+
+        if (!_selectionMemory.ContainsKey(path)) {
+            _selectionMemoryOrder.Enqueue(path);
+            if (_selectionMemoryOrder.Count > SelectionMemoryLimit) {
+                _selectionMemory.Remove(_selectionMemoryOrder.Dequeue());
+            }
+        }
+
+        _selectionMemory[path] = entry.FullPath;
+    }
+
+
+    /// <summary>
+    /// What to select once the folder being moved into has listed.
+    ///
+    /// <para>
+    /// Going up highlights the folder we came out of, which is what makes
+    /// Backspace a way to look around rather than a way to lose your place;
+    /// anything else falls back to whatever was selected there last time.
+    /// Callers that already know better are left alone: a rename, an undo
+    /// and a click in the tree have each filled in their own intent.
+    /// </para>
+    /// </summary>
+    private void PlanArrivalSelection() {
+        // Whatever was pending belongs to the folder being left — including
+        // an intent that an empty folder never got to consume.
+        _restoreSelection = Array.Empty<string>();
+
+        if (_selectFolderAfterListing is not null || _nav.Current is not { } arriving) {
+            return;
+        }
+
+        if (_listedPath is { } left && IsSamePath(arriving, ParentOf(left))) {
+            _restoreSelection = new[] { left };
+
+            return;
+        }
+
+        if (_selectionMemory.TryGetValue(arriving, out string? remembered)) {
+            _restoreSelection = new[] { remembered };
+        }
+    }
+
+
+    /// <summary>The folder one level up, or null at a drive root.</summary>
+    private static string? ParentOf(string path) {
+        return Path.GetDirectoryName(
+            path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
     }
 
 
@@ -936,6 +1020,39 @@ public sealed class MainViewModel : ObservableObject {
             TryExpandAndSelectIn(Roots, _nav.Current);
         }
     }
+
+    /// <summary>
+    /// Expands one of the two folder panels down to the folder on screen and
+    /// selects its node — what Ctrl+2 and Ctrl+Shift+E point the keyboard
+    /// at. False when the folder is not reachable in that panel (a path
+    /// outside every bookmark, typically); the highlight is then put back
+    /// where it was rather than leaving both panels blank.
+    /// </summary>
+    public bool RevealCurrentIn(NavigationSource panel) {
+        if (_nav.Current is null) {
+            return false;
+        }
+
+        var previous = _lastSelectedTreeNode;
+        if (previous is not null) {
+            // Cleared before the search: FindSelectedDescendant looks for a
+            // selected node and would otherwise find this one.
+            previous.IsSelected = false;
+            _lastSelectedTreeNode = null;
+        }
+
+        if (TryExpandAndSelectIn(panel == NavigationSource.Bookmark ? Bookmarks : Roots, _nav.Current)) {
+            return true;
+        }
+
+        if (previous is not null) {
+            previous.IsSelected = true;
+            _lastSelectedTreeNode = previous;
+        }
+
+        return false;
+    }
+
 
     private bool TryExpandAndSelectIn(IEnumerable<TreeNodeViewModel> nodes, string path) {
         foreach (var node in nodes) {
@@ -1262,7 +1379,12 @@ public sealed class MainViewModel : ObservableObject {
     /// Consumed once: the next filter keystroke must not re-select anything.
     /// </summary>
     private void ApplyRestoreSelection() {
-        if (_restoreSelection.Length == 0) {
+        // An empty list is not an answer, it is the gap between leaving one
+        // folder and the next one listing: arriving somewhere new empties
+        // the rows first (see RefreshFolderAsync), and consuming the intent
+        // there is what stopped "up one level" from highlighting the folder
+        // it came out of.
+        if (_restoreSelection.Length == 0 || Entries.Count == 0) {
             return;
         }
 
@@ -1271,6 +1393,11 @@ public sealed class MainViewModel : ObservableObject {
 
         var found = Entries.Where(e => wanted.Contains(e.FullPath)).ToList();
         if (found.Count == 0) {
+            // Nothing to land on — and nothing for the list to take the
+            // keyboard back onto, so the request does not carry over to
+            // whichever restore happens next.
+            FocusListAfterRestore = false;
+
             return;
         }
 
@@ -1986,10 +2113,19 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
-        Refresh();
-
         int ok = results.Count(r => r.Status == DeleteStatus.Ok);
         int failed = results.Count(r => r.Status == DeleteStatus.Failed);
+
+        // Point the keyboard at what will be under it once the rows are
+        // gone, and take it back from the progress dialog. Only when
+        // something actually went: a delete that failed outright leaves the
+        // rows on screen, and moving off them would hide what went wrong.
+        if (ok > 0) {
+            _restoreSelection = NextAfterRemoval(snapshot);
+            FocusListAfterRestore = _restoreSelection.Length > 0;
+        }
+        Refresh();
+
         if (failed > 0) {
             var firstFail = results.First(r => r.Status == DeleteStatus.Failed);
             string detail = firstFail.Error is null ? "" : ": " + DescribeError(firstFail.Error, firstFail.Path);
@@ -1999,6 +2135,41 @@ public sealed class MainViewModel : ObservableObject {
             Status = string.Format(permanent ? Strings.StatusDeleted : Strings.StatusRecycled, ok);
         }
     }
+
+    /// <summary>
+    /// The row the selection should land on once <paramref name="removed"/>
+    /// is gone: the first survivor after the last of them, or — when they
+    /// were at the end of the folder — the last survivor before the first.
+    /// Empty when the folder is being emptied outright, and there is nothing
+    /// to land on.
+    /// </summary>
+    private string[] NextAfterRemoval(IReadOnlyList<FileSystemEntry> removed) {
+        var gone = new HashSet<string>(removed.Select(e => e.FullPath), StringComparer.OrdinalIgnoreCase);
+
+        int last = -1;
+        for (int i = 0; i < Entries.Count; i++) {
+            if (gone.Contains(Entries[i].FullPath)) {
+                last = i;
+            }
+        }
+        if (last < 0) {
+            return Array.Empty<string>();
+        }
+
+        for (int i = last + 1; i < Entries.Count; i++) {
+            if (!gone.Contains(Entries[i].FullPath)) {
+                return new[] { Entries[i].FullPath };
+            }
+        }
+        for (int i = last - 1; i >= 0; i--) {
+            if (!gone.Contains(Entries[i].FullPath)) {
+                return new[] { Entries[i].FullPath };
+            }
+        }
+
+        return Array.Empty<string>();
+    }
+
 
     private void UndoLast() {
         try {
@@ -2299,6 +2470,13 @@ public sealed class MainViewModel : ObservableObject {
         if (wasCut) {
             _clipboard.Clear();
         }
+        // Select what just arrived — the whole point of the operation is now
+        // on screen, and the keyboard should already be on it.
+        _restoreSelection = results
+            .Where(r => r.Status is BatchItemStatus.Ok or BatchItemStatus.Replaced or BatchItemStatus.Renamed)
+            .Select(r => r.FinalDestination)
+            .ToArray();
+        FocusListAfterRestore = _restoreSelection.Length > 0;
         Refresh();
         ReportBatchResults(results, wasCut ? Strings.VerbMoved : Strings.VerbCopied, target);
     }

@@ -5,10 +5,12 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using Wander.App.Controls;
 using Wander.App.Resources;
 using Wander.App.Util;
 using Wander.App.ViewModels;
 using Wander.Core.FileSystem;
+using Wander.Core.Layout;
 
 namespace Wander.App.Views;
 
@@ -266,8 +268,12 @@ public partial class FileListView : UserControl {
     /// view model's), so the VM asks and this does it.
     /// </summary>
     private void RestoreListSelection(IReadOnlyList<FileSystemEntry> items) {
-        bool takeFocus = _focusRowAfterRestore;
+        // Two reasons to take the keyboard back: a rename that just ended
+        // (the row is the one the user was editing) and an operation that
+        // ran behind a modal dialog, which left focus on the window.
+        bool takeFocus = _focusRowAfterRestore || Vm.FocusListAfterRestore;
         _focusRowAfterRestore = false;
+        Vm.FocusListAfterRestore = false;
 
         if (items.Count == 0) {
             return;
@@ -515,13 +521,155 @@ public partial class FileListView : UserControl {
         // Shift+F10 arrives as a system key, the dedicated Menu key doesn't.
         bool menuKey = e.Key == Key.Apps
             || (e.Key == Key.System && e.SystemKey == Key.F10 && Keyboard.Modifiers == ModifierKeys.Shift);
-        if (!menuKey || sender is not FrameworkElement host) {
+        if (menuKey && sender is FrameworkElement host) {
+            _contextIsBackground = Vm.SelectedEntries.Count == 0;
+            ContextMenuRequested?.Invoke(this, new FileListMenuRequest(host, PlacementMode.Center, _contextIsBackground));
+            e.Handled = true;
+
             return;
         }
 
-        _contextIsBackground = Vm.SelectedEntries.Count == 0;
-        ContextMenuRequested?.Invoke(this, new FileListMenuRequest(host, PlacementMode.Center, _contextIsBackground));
-        e.Handled = true;
+        if (sender is ListBox list && TryGridStep(list, e.Key, Keyboard.Modifiers)) {
+            e.Handled = true;
+        }
+    }
+
+
+    // --- Arrow keys at the edge of a wrap layout -------------------------
+
+    /// <summary>
+    /// WPF moves the selection to the nearest container in the direction
+    /// pressed and does nothing when there is none — which is every row end,
+    /// the whole top row and the whole bottom row. <see cref="GridNavigation"/>
+    /// says where those presses belong: the grid is one list folded into
+    /// rows, so Right runs off the end of a row into the next one, and Up /
+    /// Down at the outer rows reach the first / last item.
+    ///
+    /// <para>
+    /// `Shift` extends across the edge the same way it extends inside the
+    /// grid — the selection grows from the anchor to wherever the caret
+    /// lands. `Ctrl` (move without selecting) is left to the control:
+    /// standing in for it means owning the caret separately from the
+    /// selection, and the edges are not worth that. Details has a single
+    /// column and is left alone entirely: there is no row to wrap into, and
+    /// Left / Right there belong to the grid's own cell navigation.
+    /// </para>
+    /// </summary>
+    private bool TryGridStep(ListBox list, Key key, ModifierKeys modifiers) {
+        bool extend = modifiers == ModifierKeys.Shift;
+        if ((modifiers != ModifierKeys.None && !extend) || Vm.RenamingPath is not null) {
+            return false;
+        }
+
+        GridStep? step = key switch {
+            Key.Left => GridStep.Left,
+            Key.Right => GridStep.Right,
+            Key.Up => GridStep.Up,
+            Key.Down => GridStep.Down,
+            _ => null,
+        };
+        if (step is null) {
+            return false;
+        }
+
+        // The panel is the only thing that knows how many cells fit a row,
+        // and it knows it only after a layout pass.
+        if (ListVisuals.FindDescendant<VirtualizingWrapPanel>(list) is not { Columns: > 0 } panel) {
+            return false;
+        }
+
+        var entries = Vm.Entries;
+        int index = CaretIndex(list, entries);
+        if (!IsAtEdge(index, step.Value, panel.Columns, entries.Count)) {
+            return false;
+        }
+
+        int target = GridNavigation.Move(index, step.Value, panel.Columns, entries.Count);
+        if (target < 0) {
+            // An edge with nothing beyond it — the first item pressing Up,
+            // the last pressing Down. Left for WPF to do nothing about.
+            return false;
+        }
+
+        SetListSelection(list, extend
+            ? Range(entries, AnchorIndex(list, entries, index), target)
+            : new[] { entries[target] });
+        FocusRow(entries[target]);
+
+        return true;
+    }
+
+
+    /// <summary>
+    /// Where the caret is — the focused row, not the selected one. With
+    /// Shift held the two part company (the selection is a run, the caret
+    /// is one end of it), and an arrow key moves the caret.
+    /// </summary>
+    private int CaretIndex(ListBox list, IList<FileSystemEntry> entries) {
+        if (Keyboard.FocusedElement is ListBoxItem row) {
+            int focused = list.ItemContainerGenerator.IndexFromContainer(row);
+            if (focused >= 0) {
+                return focused;
+            }
+        }
+
+        return Vm.SelectedEntry is { } selected ? entries.IndexOf(selected) : -1;
+    }
+
+
+    /// <summary>
+    /// The row a Shift-extension grows from. WPF keeps its own anchor
+    /// privately, so this reads it back off the selection instead: what
+    /// Shift builds is a run, and the anchor is the end the caret is not
+    /// sitting on.
+    /// </summary>
+    private static int AnchorIndex(ListBox list, IList<FileSystemEntry> entries, int caret) {
+        var selected = new HashSet<FileSystemEntry>(list.SelectedItems.OfType<FileSystemEntry>());
+        int first = -1;
+        int last = -1;
+        for (int i = 0; i < entries.Count; i++) {
+            if (selected.Contains(entries[i])) {
+                if (first < 0) {
+                    first = i;
+                }
+                last = i;
+            }
+        }
+
+        if (first < 0) {
+            return caret;
+        }
+
+        return caret == last ? first : last;
+    }
+
+
+    private static IEnumerable<FileSystemEntry> Range(IList<FileSystemEntry> entries, int a, int b) {
+        var run = new List<FileSystemEntry>();
+        for (int i = Math.Min(a, b); i <= Math.Max(a, b); i++) {
+            run.Add(entries[i]);
+        }
+
+        return run;
+    }
+
+
+    /// <summary>
+    /// Is this the press WPF cannot answer? Anything in the middle of the
+    /// grid has a neighbour in that direction and is none of our business.
+    /// </summary>
+    private static bool IsAtEdge(int index, GridStep step, int columns, int count) {
+        if (index < 0) {
+            return false;
+        }
+
+        return step switch {
+            GridStep.Left => index % columns == 0,
+            GridStep.Right => index % columns == columns - 1 || index == count - 1,
+            GridStep.Up => index < columns,
+            GridStep.Down => index + columns >= count,
+            _ => false,
+        };
     }
 
 

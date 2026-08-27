@@ -46,13 +46,27 @@ if /i "%MODE%"=="run" (
     echo.
     echo === smoke run ===
     set EXE=src\Wander.App\bin\Debug\net10.0-windows\Wander.exe
-    start "" "!EXE!"
-    rem `timeout` needs an interactive console; under redirected stdin it
-    rem prints "Input redirection is not supported". `ping` is the classic
-    rem workaround that always sleeps without touching stdin.
-    ping 127.0.0.1 -n 6 > nul
-    taskkill /f /im Wander.exe > nul 2>&1
-    echo   smoke launch ok
+    rem --smoke keeps the window off-screen and closes it after a couple of
+    rem seconds, and the exit code is the answer. Called directly rather than
+    rem through `start`, so this batch waits for it and can read that code —
+    rem the previous version launched, slept and killed, and printed "ok"
+    rem even when the app had already died on startup.
+    "!EXE!" --smoke
+    rem `if errorlevel 1` compares as signed and misses a .NET crash, which
+    rem exits with 0xE0434352 — negative as an int32. `neq 0` catches both.
+    if !errorlevel! neq 0 (
+        set SMOKE_FAILED=1
+    ) else (
+        echo   smoke launch ok
+    )
+)
+
+rem Reported out here, not inside the block above: `exit /b` from within a
+rem parenthesised block leaves cmd's own exit code at whatever the last
+rem command in it set — the echo — and check.bat is judged by that code.
+if defined SMOKE_FAILED (
+    echo   smoke launch FAILED - see %LOCALAPPDATA%\Wander\logs
+    exit /b 1
 )
 
 echo.

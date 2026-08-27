@@ -95,6 +95,8 @@ public sealed class ContextMenuFactory {
 
         if (entry.IconPng is { } png && ToImageSource(png) is { } icon) {
             item.Icon = new Image { Source = icon, Width = 16, Height = 16 };
+        } else if (entry.Id == MenuCommandId.OpenInTerminal) {
+            item.Icon = TerminalGlyph();
         }
         if (entry.IsDefault) {
             item.FontWeight = FontWeights.SemiBold;
@@ -145,6 +147,30 @@ public sealed class ContextMenuFactory {
     /// swallows it. Shell entries quote real file names ("Add to
     /// my_archive.7z"), so every underscore has to be doubled.
     /// </summary>
+    /// <summary>
+    /// The one built-in row with an icon of its own. It sits among the
+    /// third-party rows, which all carry their application's icon, and what
+    /// it opens *is* another application — the gap next to it read as a
+    /// picture that failed to load rather than as a plain item.
+    ///
+    /// <para>
+    /// Segoe MDL2 Assets is the shell's own icon font: nothing to ship, and
+    /// it is drawn at whatever DPI the rest of the menu is. A bitmap from
+    /// the terminal's own exe would have been the other option, but it means
+    /// a shell call on every menu build for a picture that never changes —
+    /// and nothing to draw at all where Windows Terminal is not installed.
+    /// </para>
+    /// </summary>
+    private static TextBlock TerminalGlyph() {
+        return new TextBlock {
+            Text = "\uE756",
+            FontFamily = new FontFamily("Segoe MDL2 Assets"),
+            FontSize = 14,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+    }
+
+
     private static string EscapeHeader(string header) {
         return header.Replace("_", "__");
     }

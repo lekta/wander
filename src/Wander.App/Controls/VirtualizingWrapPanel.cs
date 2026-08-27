@@ -109,6 +109,13 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo {
     }
 
 
+    /// <summary>
+    /// Cells per row as of the last layout pass — what arrow keys need to
+    /// know to step by a whole row. Zero until the panel has been measured.
+    /// </summary>
+    public int Columns => _layout.Columns;
+
+
     // --- IScrollInfo: wiring ------------------------------------------
 
     public bool CanHorizontallyScroll { get; set; }

@@ -36,6 +36,12 @@ public partial class MainWindow : Window {
     private bool _altWasHeld;
 
     // --- Tree as drag source / operation target -------------------------
+    /// <summary>
+    /// Set for the duration of a click on a tree row: only a click opens the
+    /// folder it lands on. See <see cref="OnTreeSelectionChanged"/>.
+    /// </summary>
+    private bool _treeClickNavigates;
+
     private TreeNodeViewModel? _treeDragNode;
     private Point _treeDragOrigin;
     private TreeNodeViewModel? _treeMenuNode;
@@ -57,6 +63,19 @@ public partial class MainWindow : Window {
 
     public MainWindow() {
         InitializeComponent();
+        // Here rather than anywhere later: the window is shown by
+        // StartupUri the moment the constructor returns, and ShowActivated
+        // only counts before that. A smoke run must not take the keyboard
+        // away from whoever is working on this desktop, and parking it
+        // off-screen alone would not stop it doing that.
+        if (App.IsSmokeRun) {
+            WindowStartupLocation = WindowStartupLocation.Manual;
+            Left = -32000;
+            Top = -32000;
+            ShowActivated = false;
+            ShowInTaskbar = false;
+        }
+
         Loaded += OnLoaded;
         // The OS clipboard is re-read here rather than watched: reading it is
         // a cross-process call on an exclusively-opened resource, and
@@ -70,11 +89,20 @@ public partial class MainWindow : Window {
     // --- Window geometry persistence -----------------------------------
 
     private void OnSourceInitialized(object? sender, EventArgs e) {
+        // A smoke run is parked off-screen on purpose — restoring the saved
+        // geometry would drag it onto the desktop, and saving it on the way
+        // out would leave the real session pointing at (-32000, -32000).
+        if (App.IsSmokeRun) {
+            return;
+        }
+
         RestoreWindowGeometry();
     }
 
     private void OnClosing(object? sender, CancelEventArgs e) {
-        SaveWindowGeometry();
+        if (!App.IsSmokeRun) {
+            SaveWindowGeometry();
+        }
         // Releases the cached IContextMenu, and with it the third-party
         // handler DLLs it keeps referenced.
         _shellMenus.Dispose();
@@ -178,6 +206,11 @@ public partial class MainWindow : Window {
             Wander.Core.Diagnostics.PerfLog.Start(ServiceLocator.Get<Wander.Core.Logging.ILogger>());
         }
         Diagnostics.UiStallWatch.Start(Dispatcher);
+        // Bubbling, so it sees focus landing anywhere in the window.
+        GotKeyboardFocus += OnZoneFocusChanged;
+        if (App.IsSmokeRun) {
+            StartSmokeCountdown();
+        }
         ApplyPreviewLayout();
         ApplyBookmarksLayout();
         // Native-size cap (so small images don't stretch above 100 %) is
@@ -185,6 +218,25 @@ public partial class MainWindow : Window {
         // — synchronous with WPF's measure pass instead of an async
         // DependencyPropertyDescriptor callback that races layout.
     }
+
+    /// <summary>
+    /// Ends a <c>--smoke</c> run. The delay is not a guess at how long
+    /// startup takes — the window is already loaded by the time this is
+    /// armed — it is room for the work startup hands off: the first folder
+    /// listing, the first icons, the watchers. Whatever throws in that
+    /// window still reaches the crash hook, and the exit code still says so.
+    /// </summary>
+    private void StartSmokeCountdown() {
+        var timer = new DispatcherTimer(DispatcherPriority.Background) {
+            Interval = TimeSpan.FromSeconds(2),
+        };
+        timer.Tick += (_, _) => {
+            timer.Stop();
+            Application.Current.Shutdown(0);
+        };
+        timer.Start();
+    }
+
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e) {
         switch (e.PropertyName) {
@@ -263,6 +315,46 @@ public partial class MainWindow : Window {
             return;
         }
 
+        // Alt+D: the same thing under the name the rest of Windows uses for
+        // it. An Alt chord arrives as Key.System with the real key parked in
+        // SystemKey.
+        if (e.Key == Key.System && e.SystemKey == Key.D && Keyboard.Modifiers == ModifierKeys.Alt) {
+            BeginAddressEdit();
+            e.Handled = true;
+            return;
+        }
+
+        // Tab / Shift+Tab move between zones, not between the controls
+        // inside them — see CycleZone.
+        if (e.Key == Key.Tab) {
+            CycleZone(Keyboard.Modifiers == ModifierKeys.Shift ? -1 : 1);
+            e.Handled = true;
+            return;
+        }
+
+        // Ctrl+1: back to the list, from wherever the keyboard wandered off.
+        if (e.Key == Key.D1 && Keyboard.Modifiers == ModifierKeys.Control) {
+            FocusZone(Zone.FileList);
+            e.Handled = true;
+            return;
+        }
+
+        // Ctrl+2: the folder panel, on the current folder's own node.
+        // Pressed again, the other panel.
+        if (e.Key == Key.D2 && Keyboard.Modifiers == ModifierKeys.Control) {
+            FocusFolderPane(toggle: true);
+            e.Handled = true;
+            return;
+        }
+
+        // Ctrl+Shift+E: the same reveal without the toggle — always the
+        // panel the current folder was opened from (Explorer parity).
+        if (e.Key == Key.E && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift)) {
+            FocusFolderPane(toggle: false);
+            e.Handled = true;
+            return;
+        }
+
         // F4: drop down the recently visited folders (Explorer parity).
         if (e.Key == Key.F4) {
             RecentToggle.IsChecked = RecentToggle.IsChecked != true;
@@ -289,12 +381,14 @@ public partial class MainWindow : Window {
             return;
         }
 
-        // Esc: clear selection in whichever right-pane list is active.
-        if (e.Key == Key.Escape) {
+        // Esc: clear the selection — but only with the keyboard actually in
+        // the list. Everywhere else Esc means "leave this zone", and each
+        // zone handles its own: the search box, the address bar, the trees.
+        // Don't mark handled — those handlers run after this one. The rename
+        // editor is handled by the guard above, because clearing the
+        // selection first would be destructive.
+        if (e.Key == Key.Escape && ZoneOf(Keyboard.FocusedElement) is Zone.FileList or null) {
             FileList.ClearSelection();
-            // Don't mark handled — the search box and the address bar want
-            // Esc too. The rename editor is handled by the guard above,
-            // because clearing the selection first would be destructive.
         }
     }
 
@@ -317,6 +411,238 @@ public partial class MainWindow : Window {
             e.Handled = true;
         }
     }
+
+    // --- Keyboard zones --------------------------------------------------
+    // Tab walks the window a zone at a time rather than a control at a time:
+    // one press lands on the toolbar, arrows pick the button. The zones are
+    // listed in reading order — the top strip left to right, then the left
+    // pane top to bottom, then the list. The preview pane is deliberately
+    // not among them: it has no keyboard behaviour yet, so a stop there
+    // would be a dead end (see BACKLOG, "клавиатура в панели просмотра").
+
+    private enum Zone { Toolbar, Address, Search, Bookmarks, Drives, FileList }
+
+    private static readonly Zone[] _zoneOrder = {
+        Zone.Toolbar, Zone.Address, Zone.Search, Zone.Bookmarks, Zone.Drives, Zone.FileList,
+    };
+
+    /// <summary>
+    /// The outline that says where the keyboard is. Muted grey rather than
+    /// the system accent: it is on screen the whole time, and a bright frame
+    /// around whatever you are working in reads as an alarm.
+    /// </summary>
+    private static readonly Brush _activeZoneBrush = new SolidColorBrush(Color.FromArgb(0x99, 0x8A, 0x8A, 0x8A));
+
+    /// <summary>
+    /// Which folder panel Ctrl+2 opens when the current folder came from
+    /// neither of them — the address bar, a double click, a restored
+    /// session. The last one the keyboard was in wins.
+    /// </summary>
+    private NavigationSource _lastFolderPane = NavigationSource.Drives;
+
+
+    /// <summary>Which zone an element belongs to, or null for the chrome between them.</summary>
+    private Zone? ZoneOf(object? source) {
+        foreach (var hit in ListVisuals.Ancestors(source)) {
+            if (ReferenceEquals(hit, NavToolbar)) {
+                return Zone.Toolbar;
+            }
+            if (ReferenceEquals(hit, AddressBar)) {
+                return Zone.Address;
+            }
+            if (ReferenceEquals(hit, SearchBox)) {
+                return Zone.Search;
+            }
+            if (ReferenceEquals(hit, BookmarksTree)) {
+                return Zone.Bookmarks;
+            }
+            if (ReferenceEquals(hit, Tree)) {
+                return Zone.Drives;
+            }
+            if (ReferenceEquals(hit, FileListZone)) {
+                return Zone.FileList;
+            }
+        }
+
+        return null;
+    }
+
+
+    /// <summary>
+    /// Moves the keyboard one zone on, skipping the ones that are not on
+    /// screen (collapsed bookmarks) or have nothing to focus (all three
+    /// toolbar buttons disabled on a fresh start).
+    /// </summary>
+    private void CycleZone(int delta) {
+        int from = Array.IndexOf(_zoneOrder, ZoneOf(Keyboard.FocusedElement) ?? Zone.FileList);
+        int count = _zoneOrder.Length;
+        for (int step = 1; step <= count; step++) {
+            int next = ((from + (delta * step)) % count + count) % count;
+            if (FocusZone(_zoneOrder[next])) {
+                return;
+            }
+        }
+    }
+
+
+    /// <summary>Puts the keyboard in one zone. False when the zone cannot take it.</summary>
+    private bool FocusZone(Zone zone) {
+        switch (zone) {
+            case Zone.Toolbar:
+                foreach (UIElement child in NavToolbar.Children) {
+                    if (child.Focusable && child.IsEnabled && child.Focus()) {
+                        return true;
+                    }
+                }
+
+                return false;
+
+            case Zone.Address:
+                // The strip turns into the editable path with everything
+                // selected — what Explorer does on the same stop, and what
+                // makes it useful rather than decorative.
+                BeginAddressEdit();
+
+                return true;
+
+            case Zone.Search:
+                return SearchBox.Focus();
+
+            case Zone.Bookmarks:
+                return Vm.IsBookmarksExpanded && BookmarksTree.HasItems && FocusTree(BookmarksTree);
+
+            case Zone.Drives:
+                return FocusTree(Tree);
+
+            case Zone.FileList:
+                FileList.FocusList();
+
+                return true;
+
+            default:
+                return false;
+        }
+    }
+
+
+    /// <summary>
+    /// The keyboard belongs on a row, not on the tree: a TreeView with focus
+    /// and no focused item resumes the arrow keys from wherever the cursor
+    /// happened to be. Same reasoning as FileListView.FocusList.
+    /// </summary>
+    private static bool FocusTree(TreeView tree) {
+        if (tree.SelectedItem is { } selected && ContainerFor(tree, selected) is { } container) {
+            return container.Focus();
+        }
+
+        if (tree.Items.Count > 0 && tree.ItemContainerGenerator.ContainerFromIndex(0) is TreeViewItem first) {
+            return first.Focus();
+        }
+
+        return false;
+    }
+
+
+    /// <summary>
+    /// The TreeViewItem showing one node. Only expanded branches are walked
+    /// — a collapsed one has no realised containers, and nothing inside it
+    /// can be what we are looking for.
+    /// </summary>
+    private static TreeViewItem? ContainerFor(ItemsControl root, object item) {
+        for (int i = 0; i < root.Items.Count; i++) {
+            if (root.ItemContainerGenerator.ContainerFromIndex(i) is not TreeViewItem container) {
+                continue;
+            }
+            if (ReferenceEquals(root.Items[i], item)) {
+                return container;
+            }
+            if (container.IsExpanded) {
+                container.UpdateLayout();
+                if (ContainerFor(container, item) is { } deeper) {
+                    return deeper;
+                }
+            }
+        }
+
+        return null;
+    }
+
+
+    /// <summary>
+    /// Ctrl+2 and Ctrl+Shift+E. Both expand a folder panel down to the
+    /// folder on screen and put the keyboard on its node — so the shortcut
+    /// answers "where am I" as well as "take me there".
+    ///
+    /// <para>
+    /// <paramref name="toggle"/> is what separates them: Ctrl+2 pressed
+    /// while already in a panel swaps to the other one, which is the whole
+    /// point of one key for two panels. Ctrl+Shift+E always lands in the
+    /// panel the current folder was opened from.
+    /// </para>
+    /// </summary>
+    private void FocusFolderPane(bool toggle) {
+        var owner = Vm.Nav.CurrentSource == NavigationSource.Bookmark
+            ? NavigationSource.Bookmark
+            : NavigationSource.Drives;
+
+        var target = owner;
+        if (toggle) {
+            target = ZoneOf(Keyboard.FocusedElement) switch {
+                Zone.Bookmarks => NavigationSource.Drives,
+                Zone.Drives => NavigationSource.Bookmark,
+                // From anywhere else: the panel the folder was opened from,
+                // falling back to the last panel the keyboard was in when it
+                // was opened from neither.
+                _ => Vm.Nav.CurrentSource is NavigationSource.Bookmark or NavigationSource.Drives
+                    ? owner
+                    : _lastFolderPane,
+            };
+        }
+
+        // A panel with nothing in it (every default bookmark switched off,
+        // and none added) is not somewhere to send the keyboard.
+        if (target == NavigationSource.Bookmark && !BookmarksTree.HasItems) {
+            target = NavigationSource.Drives;
+        }
+
+        if (target == NavigationSource.Bookmark) {
+            // Put away, the tree is Collapsed and cannot take focus; a
+            // shortcut that silently did nothing would read as broken.
+            Vm.IsBookmarksExpanded = true;
+            UpdateLayout();
+        }
+
+        _lastFolderPane = target;
+        var tree = target == NavigationSource.Bookmark ? BookmarksTree : Tree;
+        Vm.RevealCurrentIn(target);
+        tree.UpdateLayout();
+        FocusTree(tree);
+    }
+
+
+    /// <summary>
+    /// Repaints the "you are here" outline. Hung off the window rather than
+    /// the individual controls because focus can land anywhere, including on
+    /// chrome that belongs to no zone at all.
+    /// </summary>
+    private void OnZoneFocusChanged(object sender, KeyboardFocusChangedEventArgs e) {
+        var zone = ZoneOf(e.NewFocus);
+        BookmarksTree.BorderBrush = zone == Zone.Bookmarks ? _activeZoneBrush : Brushes.Transparent;
+        Tree.BorderBrush = zone == Zone.Drives ? _activeZoneBrush : Brushes.Transparent;
+        FileListZone.BorderBrush = zone == Zone.FileList ? _activeZoneBrush : Brushes.Transparent;
+
+        // Arriving in a folder panel moves the operation target with the
+        // keyboard, so the first Delete after Tab is about the folder the
+        // user is looking at and not about the list they just left.
+        if (zone == Zone.Bookmarks) {
+            _lastFolderPane = NavigationSource.Bookmark;
+            TargetTreeNode(BookmarksTree);
+        } else if (zone == Zone.Drives) {
+            _lastFolderPane = NavigationSource.Drives;
+            TargetTreeNode(Tree);
+        }
+    }
+
 
     // --- Address bar ----------------------------------------------------
 
@@ -531,8 +857,88 @@ public partial class MainWindow : Window {
     // --- Tree: selection -----------------------------------------------
 
     private void Tree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e) {
-        if (e.NewValue is TreeNodeViewModel node && !string.IsNullOrEmpty(node.FullPath)) {
-            Vm.NavigateAndSelectFolder(node.FullPath, Wander.Core.Navigation.NavigationSource.Drives);
+        OnTreeSelectionChanged(sender, e.NewValue, NavigationSource.Drives);
+    }
+
+
+    /// <summary>
+    /// A click on a row goes into the folder; the arrow keys only move the
+    /// cursor, and Enter is what opens (see <see cref="Tree_PreviewKeyDown"/>).
+    ///
+    /// <para>
+    /// Explorer navigates on every selection change, so arrowing past ten
+    /// folders on the way to the eleventh lists all ten — each one a
+    /// directory read, a thumbnail pass and a lost list position. The rule
+    /// here is the one the mouse already follows: moving is free, opening is
+    /// deliberate.
+    /// </para>
+    /// </summary>
+    private void OnTreeSelectionChanged(object sender, object? item, NavigationSource source) {
+        if (item is not TreeNodeViewModel node || string.IsNullOrEmpty(node.FullPath)) {
+            return;
+        }
+
+        if (_treeClickNavigates) {
+            Vm.NavigateAndSelectFolder(node.FullPath, source);
+
+            return;
+        }
+
+        // Moved with the keyboard: no navigation, but the folder the cursor
+        // is on becomes what the file operations act on.
+        if (sender is TreeView { IsKeyboardFocusWithin: true } tree) {
+            TargetTreeNode(tree);
+        }
+    }
+
+
+    /// <summary>
+    /// With the keyboard in a folder panel, the folder under the cursor is
+    /// what `Delete`, `Ctrl+C` and `Alt+Enter` act on — the same targeting
+    /// the right mouse button has always done in the tree.
+    ///
+    /// <para>
+    /// The file list gives up its selection for it, deliberately: exactly
+    /// one highlighted set on screen is what tells the user which of the two
+    /// the next `Delete` is about. Coming back with `Ctrl+1` leaves the
+    /// caret where it was, only unselected.
+    /// </para>
+    /// </summary>
+    private void TargetTreeNode(TreeView tree) {
+        if (tree.SelectedItem is not TreeNodeViewModel node || string.IsNullOrEmpty(node.FullPath)) {
+            return;
+        }
+
+        FileList.ClearSelection();
+        Vm.SelectExternalPath(node.FullPath);
+    }
+
+
+    /// <summary>
+    /// Enter opens the folder under the cursor, Esc hands the keyboard back
+    /// to the list. Both have to be caught here: the window's own bindings
+    /// would otherwise open whatever the <em>file list</em> has selected and
+    /// clear its selection, neither of which is what the user is pointing at.
+    /// </summary>
+    private void Tree_PreviewKeyDown(object sender, KeyEventArgs e) {
+        if (sender is not TreeView tree) {
+            return;
+        }
+
+        if (e.Key == Key.Enter) {
+            if (tree.SelectedItem is TreeNodeViewModel node && !string.IsNullOrEmpty(node.FullPath)) {
+                Vm.NavigateAndSelectFolder(
+                    node.FullPath,
+                    ReferenceEquals(tree, BookmarksTree) ? NavigationSource.Bookmark : NavigationSource.Drives);
+            }
+            e.Handled = true;
+
+            return;
+        }
+
+        if (e.Key == Key.Escape) {
+            FileList.FocusList();
+            e.Handled = true;
         }
     }
 
@@ -576,15 +982,17 @@ public partial class MainWindow : Window {
     }
 
     private void Bookmarks_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e) {
-        if (e.NewValue is TreeNodeViewModel node && !string.IsNullOrEmpty(node.FullPath)) {
-            Vm.NavigateAndSelectFolder(node.FullPath, Wander.Core.Navigation.NavigationSource.Bookmark);
-        }
+        OnTreeSelectionChanged(sender, e.NewValue, NavigationSource.Bookmark);
     }
 
 
     // --- Tree: custom expand/collapse semantics ------------------------
 
     private void Tree_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
+        // Cleared first: every path out of this handler that is not "the
+        // user pressed a row" must leave the selection change silent.
+        _treeClickNavigates = false;
+
         if (HitTestExpander(e.OriginalSource as DependencyObject)) {
             _userClickedExpander = true;
             _altWasHeld = (Keyboard.Modifiers & ModifierKeys.Alt) != 0;
@@ -610,10 +1018,14 @@ public partial class MainWindow : Window {
         // the folder you want to move *from* often is.
         _treeDragNode = NodeAt(e.OriginalSource);
         _treeDragOrigin = e.GetPosition(this);
+        // The row selects itself on this same press, so the selection change
+        // that follows is this click's.
+        _treeClickNavigates = _treeDragNode is not null;
     }
 
     private void Tree_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e) {
         _treeDragNode = null;
+        _treeClickNavigates = false;
     }
 
     private void Tree_PreviewMouseMove(object sender, MouseEventArgs e) {
@@ -628,6 +1040,10 @@ public partial class MainWindow : Window {
         }
 
         _treeDragNode = null;
+        // The drag swallows the button release, so the click flag would
+        // otherwise stay armed and the next arrow key in the tree would
+        // navigate.
+        _treeClickNavigates = false;
         var paths = new[] { node.FullPath };
         StartDrag((DependencyObject)sender, paths, paths);
     }

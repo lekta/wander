@@ -31,7 +31,12 @@ public sealed class ShellLauncher : IShellLauncher {
         try {
             Process.Start(new ProcessStartInfo {
                 FileName = "wt.exe",
-                WorkingDirectory = folderPath,
+                // -d, not the working directory it inherits: Windows Terminal
+                // opens every tab in its *profile's* startingDirectory
+                // (%USERPROFILE% out of the box) and ignores the directory it
+                // was launched from. That is what put the shell in the user's
+                // home folder instead of the folder on screen.
+                Arguments = $"-d \"{WtPath(folderPath)}\"",
                 UseShellExecute = true,
             });
         } catch (Win32Exception) {
@@ -41,6 +46,24 @@ public sealed class ShellLauncher : IShellLauncher {
                 UseShellExecute = true,
             });
         }
+    }
+
+
+    /// <summary>
+    /// A folder path as wt.exe needs to see it on a command line.
+    ///
+    /// <para>
+    /// Two characters bite. A trailing backslash — every drive root, "D:\" —
+    /// escapes the quote that follows it and swallows the rest of the line;
+    /// doubling it is the documented way out. And a semicolon separates
+    /// commands in wt's own grammar even inside quotes, so a folder named
+    /// "a;b" would be read as two commands unless it is escaped.
+    /// </para>
+    /// </summary>
+    private static string WtPath(string folderPath) {
+        string escaped = folderPath.Replace(";", "\\;");
+
+        return escaped.EndsWith('\\') ? escaped + '\\' : escaped;
     }
 
 

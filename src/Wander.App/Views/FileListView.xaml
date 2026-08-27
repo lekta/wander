@@ -94,6 +94,23 @@
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
             <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+            <!--
+                Bare presenter, no chrome. The default template paints the
+                selection across the whole container — and the container is
+                the whole cell, so a run of selected files came out as one
+                unbroken blue slab and you could not see how many files were
+                in it. The highlight moves inside, onto the tile itself
+                (TileHighlight), which is the cell minus its margin and
+                therefore stops between neighbours the way Explorer's does.
+            -->
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsHidden}" Value="True">
                     <Setter Property="Opacity" Value="0.55"/>
@@ -101,6 +118,56 @@
                 <DataTrigger Binding="{Binding IsSystem}" Value="True">
                     <Setter Property="FontStyle" Value="Italic"/>
                 </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!--
+            Hover and selection for one tile, drawn behind its content as a
+            sibling rather than around it: an outline that took part in
+            layout would eat two units off a cell whose size TileMetrics has
+            already budgeted down to the pixel.
+
+            Colours follow Explorer (#E5F3FB hover, #CCE8FF selected, #E8E8E8
+            for a selection in a pane that lost focus — the same three the
+            tree uses), the outlines a shade lighter than its: at tile size
+            there are a lot of them on screen at once.
+        -->
+        <Style x:Key="TileHighlight" TargetType="Border">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="3"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                    <Setter Property="Background" Value="#E5F3FB"/>
+                    <Setter Property="BorderBrush" Value="#D2ECF8"/>
+                </DataTrigger>
+                <!--
+                    Selected, but the keyboard is somewhere else. Kept from
+                    the default template we replaced above, and it doubles as
+                    the answer to "which pane does the next Delete mean".
+                -->
+                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                    <Setter Property="Background" Value="#E8E8E8"/>
+                    <Setter Property="BorderBrush" Value="#DCDCDC"/>
+                </DataTrigger>
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True"/>
+                        <Condition Binding="{Binding (Selector.IsSelectionActive), RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True"/>
+                    </MultiDataTrigger.Conditions>
+                    <Setter Property="Background" Value="#CCE8FF"/>
+                    <Setter Property="BorderBrush" Value="#AFD9F2"/>
+                </MultiDataTrigger>
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True"/>
+                        <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True"/>
+                    </MultiDataTrigger.Conditions>
+                    <Setter Property="Background" Value="#BFE0FA"/>
+                    <Setter Property="BorderBrush" Value="#A5D3EE"/>
+                </MultiDataTrigger>
             </Style.Triggers>
         </Style>
 
@@ -259,58 +326,60 @@
                         two have to stay equal, or the text loses a couple of
                         units to clipping.
                     -->
-                    <Border Width="{Binding DataContext.Settings.TilesMetrics.ContentWidth, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                            Height="{Binding DataContext.Settings.TilesMetrics.ContentHeight, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                            Margin="{Binding DataContext.Settings.TilesMetrics.Margin, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                            Padding="6" Background="Transparent">
-                        <!--
-                            Icon in a fixed column, text in what is left:
-                            the name then trims against the tile's real
-                            width, whatever the user set it to, instead of
-                            against a magic number that only matched the
-                            default width.
-                        -->
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
+                    <Grid Width="{Binding DataContext.Settings.TilesMetrics.ContentWidth, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                          Height="{Binding DataContext.Settings.TilesMetrics.ContentHeight, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                          Margin="{Binding DataContext.Settings.TilesMetrics.Margin, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                        <Border Style="{StaticResource TileHighlight}"/>
+                        <Border Padding="6" Background="Transparent">
                             <!--
-                                Medium, not Normal: a real thumbnail of the
-                                picture / the folder's contents where the
-                                shell has one, the plain extension icon where
-                                it has not. Details stays on Normal — at 20 px
-                                a photo is a smudge, and a folder of source
-                                would pay a per-file shell call for nothing.
+                                Icon in a fixed column, text in what is left:
+                                the name then trims against the tile's real
+                                width, whatever the user set it to, instead of
+                                against a magic number that only matched the
+                                default width.
                             -->
-                            <controls:AsyncIcon Grid.Column="0"
-                                                IconPath="{Binding FullPath}" IconSize="Medium"
-                                                Width="{Binding DataContext.Settings.TilesMetrics.ImageSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                Height="{Binding DataContext.Settings.TilesMetrics.ImageSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                Margin="0,0,8,0" VerticalAlignment="Center"
-                                                RenderOptions.BitmapScalingMode="HighQuality"
-                                                UseLayoutRounding="True"/>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                <Grid>
-                                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"
-                                               FontSize="{Binding DataContext.Settings.TilesMetrics.LabelFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}">
-                                        <TextBlock.Visibility>
-                                            <MultiBinding Converter="{StaticResource RenameVisibility}" ConverterParameter="Inverse">
-                                                <Binding Path="FullPath"/>
-                                                <Binding Path="DataContext.RenamingPath" RelativeSource="{RelativeSource AncestorType=UserControl}"/>
-                                            </MultiBinding>
-                                        </TextBlock.Visibility>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <!--
+                                    Medium, not Normal: a real thumbnail of the
+                                    picture / the folder's contents where the
+                                    shell has one, the plain extension icon where
+                                    it has not. Details stays on Normal — at 20 px
+                                    a photo is a smudge, and a folder of source
+                                    would pay a per-file shell call for nothing.
+                                -->
+                                <controls:AsyncIcon Grid.Column="0"
+                                                    IconPath="{Binding FullPath}" IconSize="Medium"
+                                                    Width="{Binding DataContext.Settings.TilesMetrics.ImageSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    Height="{Binding DataContext.Settings.TilesMetrics.ImageSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    Margin="0,0,8,0" VerticalAlignment="Center"
+                                                    RenderOptions.BitmapScalingMode="HighQuality"
+                                                    UseLayoutRounding="True"/>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <Grid>
+                                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"
+                                                   FontSize="{Binding DataContext.Settings.TilesMetrics.LabelFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                            <TextBlock.Visibility>
+                                                <MultiBinding Converter="{StaticResource RenameVisibility}" ConverterParameter="Inverse">
+                                                    <Binding Path="FullPath"/>
+                                                    <Binding Path="DataContext.RenamingPath" RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                                                </MultiBinding>
+                                            </TextBlock.Visibility>
+                                        </TextBlock>
+                                        <TextBox Style="{StaticResource RenameEditor}"
+                                                 FontSize="{Binding DataContext.Settings.TilesMetrics.LabelFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                                    </Grid>
+                                    <TextBlock Foreground="#777" TextTrimming="CharacterEllipsis"
+                                               FontSize="{Binding DataContext.Settings.TilesMetrics.SecondaryFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                        <Run Text="{Binding Kind, Mode=OneWay}"/>
                                     </TextBlock>
-                                    <TextBox Style="{StaticResource RenameEditor}"
-                                             FontSize="{Binding DataContext.Settings.TilesMetrics.LabelFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
-                                </Grid>
-                                <TextBlock Foreground="#777" TextTrimming="CharacterEllipsis"
-                                           FontSize="{Binding DataContext.Settings.TilesMetrics.SecondaryFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}">
-                                    <Run Text="{Binding Kind, Mode=OneWay}"/>
-                                </TextBlock>
-                            </StackPanel>
-                        </Grid>
-                    </Border>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </Grid>
                 </DataTemplate>
             </ListBox.ItemTemplate>
         </ListBox>
@@ -341,35 +410,38 @@
                         hops back up to the control's DataContext
                         (MainViewModel) via RelativeSource.
                     -->
-                    <StackPanel HorizontalAlignment="Center"
-                                Width="{Binding DataContext.Settings.IconsMetrics.ContentWidth, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                Height="{Binding DataContext.Settings.IconsMetrics.ContentHeight, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                Margin="{Binding DataContext.Settings.IconsMetrics.Margin, RelativeSource={RelativeSource AncestorType=UserControl}}">
-                        <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Large"
-                                            Width="{Binding DataContext.Settings.IconsMetrics.ImageSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                            Height="{Binding DataContext.Settings.IconsMetrics.ImageSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                            Margin="0,2,0,2"
-                                            HorizontalAlignment="Center"
-                                            RenderOptions.BitmapScalingMode="HighQuality"
-                                            UseLayoutRounding="True"/>
-                        <Grid>
-                            <TextBlock Text="{Binding Name}"
-                                       TextAlignment="Center"
-                                       TextWrapping="Wrap"
-                                       Height="{Binding DataContext.Settings.IconsMetrics.LabelHeight, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                       FontSize="{Binding DataContext.Settings.IconsMetrics.LabelFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                       TextTrimming="CharacterEllipsis">
-                                <TextBlock.Visibility>
-                                    <MultiBinding Converter="{StaticResource RenameVisibility}" ConverterParameter="Inverse">
-                                        <Binding Path="FullPath"/>
-                                        <Binding Path="DataContext.RenamingPath" RelativeSource="{RelativeSource AncestorType=UserControl}"/>
-                                    </MultiBinding>
-                                </TextBlock.Visibility>
-                            </TextBlock>
-                            <TextBox Style="{StaticResource RenameEditor}"
-                                     FontSize="{Binding DataContext.Settings.IconsMetrics.LabelFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
-                        </Grid>
-                    </StackPanel>
+                    <Grid HorizontalAlignment="Center"
+                          Width="{Binding DataContext.Settings.IconsMetrics.ContentWidth, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                          Height="{Binding DataContext.Settings.IconsMetrics.ContentHeight, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                          Margin="{Binding DataContext.Settings.IconsMetrics.Margin, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                        <Border Style="{StaticResource TileHighlight}"/>
+                        <StackPanel>
+                            <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Large"
+                                                Width="{Binding DataContext.Settings.IconsMetrics.ImageSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                Height="{Binding DataContext.Settings.IconsMetrics.ImageSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                Margin="0,2,0,2"
+                                                HorizontalAlignment="Center"
+                                                RenderOptions.BitmapScalingMode="HighQuality"
+                                                UseLayoutRounding="True"/>
+                            <Grid>
+                                <TextBlock Text="{Binding Name}"
+                                           TextAlignment="Center"
+                                           TextWrapping="Wrap"
+                                           Height="{Binding DataContext.Settings.IconsMetrics.LabelHeight, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                           FontSize="{Binding DataContext.Settings.IconsMetrics.LabelFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                           TextTrimming="CharacterEllipsis">
+                                    <TextBlock.Visibility>
+                                        <MultiBinding Converter="{StaticResource RenameVisibility}" ConverterParameter="Inverse">
+                                            <Binding Path="FullPath"/>
+                                            <Binding Path="DataContext.RenamingPath" RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                                        </MultiBinding>
+                                    </TextBlock.Visibility>
+                                </TextBlock>
+                                <TextBox Style="{StaticResource RenameEditor}"
+                                         FontSize="{Binding DataContext.Settings.IconsMetrics.LabelFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                            </Grid>
+                        </StackPanel>
+                    </Grid>
                 </DataTemplate>
             </ListBox.ItemTemplate>
         </ListBox>
