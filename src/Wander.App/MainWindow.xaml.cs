@@ -324,6 +324,33 @@ public partial class MainWindow : Window {
             return;
         }
 
+        // The rest of the Alt chords, caught here for the same reason and
+        // one more: the toolbar holds a real Menu, so Alt puts the window
+        // into menu mode and the chord is spent navigating the menu bar
+        // before command routing gets a look. A KeyBinding in
+        // Window.InputBindings therefore never fires once the keyboard is
+        // anywhere but the toolbar — which is what left Back dead in the
+        // file list. Tunnelling from the window is ahead of both.
+        if (e.Key == Key.System && Keyboard.Modifiers == ModifierKeys.Alt) {
+            var chord = e.SystemKey switch {
+                Key.Left => Vm.BackCommand,
+                Key.Right => Vm.ForwardCommand,
+                Key.Up => Vm.UpCommand,
+                Key.Enter => Vm.PropertiesCommand,
+                _ => null,
+            };
+            if (chord is not null) {
+                if (chord.CanExecute(null)) {
+                    chord.Execute(null);
+                }
+                // Handled either way: the chord is ours, and letting a
+                // disabled Back fall through to menu mode would open the
+                // view menu instead of doing nothing.
+                e.Handled = true;
+                return;
+            }
+        }
+
         // Tab / Shift+Tab move between zones, not between the controls
         // inside them — see CycleZone.
         if (e.Key == Key.Tab) {
@@ -1021,6 +1048,20 @@ public partial class MainWindow : Window {
         // The row selects itself on this same press, so the selection change
         // that follows is this click's.
         _treeClickNavigates = _treeDragNode is not null;
+
+        // Unless the row is already the selected one. Arrow keys move the
+        // tree cursor without navigating (see OnTreeSelectionChanged), so
+        // clicking the folder the cursor is standing on produces no
+        // selection change to ride on — and the click, which always means
+        // "open this", has to do the navigating itself.
+        if (_treeDragNode is { } clicked
+            && sender is TreeView tree
+            && ReferenceEquals(tree.SelectedItem, clicked)) {
+
+            Vm.NavigateAndSelectFolder(
+                clicked.FullPath,
+                ReferenceEquals(tree, BookmarksTree) ? NavigationSource.Bookmark : NavigationSource.Drives);
+        }
     }
 
     private void Tree_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e) {
@@ -1199,13 +1240,38 @@ public partial class MainWindow : Window {
     }
 
     private void OnGiveFeedback(object sender, GiveFeedbackEventArgs e) {
-        // Keep the system's Copy/Move/None cursor in addition to our preview.
-        e.UseDefaultCursors = true;
+        // Keep the system's Copy/Move/None cursor in addition to our
+        // preview — except while the cursor is still over the list the drag
+        // started in. There the system would draw the "no entry" sign,
+        // which is a verdict on a gesture nobody has made yet: let go and
+        // the file simply stays where it was. Plain arrow instead.
+        if (IsNeutralDropTarget()) {
+            e.UseDefaultCursors = false;
+            Mouse.SetCursor(Cursors.Arrow);
+            e.Handled = true;
+        } else {
+            e.UseDefaultCursors = true;
+        }
+
         if (_dragPreview is null) {
             return;
         }
         _dragPreview.MoveToCursor();
         UpdatePreviewForCurrentTarget();
+    }
+
+
+    /// <summary>
+    /// The cursor is over a drop surface that would refuse, but only
+    /// because the target fell back to the folder already being listed —
+    /// dragging across a file's own neighbours. Nothing is wrong, nothing
+    /// is offered, and neither the cursor nor the plaque should say
+    /// otherwise.
+    /// </summary>
+    private bool IsNeutralDropTarget() {
+        return _drops.SelfDropReason != SelfDropReason.None
+            && _drops.Target is not null
+            && _drops.TargetIsFallback;
     }
 
     private void UpdatePreviewForCurrentTarget() {
@@ -1230,15 +1296,25 @@ public partial class MainWindow : Window {
         }
 
         if (_drops.Effect == DragDropEffects.None || _drops.Target is null) {
-            // "Forbidden" branch. Two sub-cases:
-            //  • Self-drop with a specific reason ("into own subfolder", …) —
-            //    we want to surface that reason loudly so the user knows
-            //    *why* the drop is refused.
+            // Nothing would happen on release. Three sub-cases:
+            //  • Self-drop with a specific reason ("into own subfolder", …)
+            //    *and* a folder the user actually aimed at — that reason is
+            //    worth saying loudly, because they pointed at that folder.
+            //  • The refusal is against the fallback target, i.e. the folder
+            //    already being listed. Dragging a file across its own list
+            //    passes over its neighbours, not over a drop target, and
+            //    "… уже лежит в …" there is scolding someone for a gesture
+            //    they have not made yet. The plaque stays — you have to be
+            //    able to see what you picked up — but it only names it.
             //  • Nothing useful under the cursor (column header, scrollbar,
             //    splitter) — the system's no-drop cursor is enough, and a
             //    red "Cannot drop here" plaque hovering over a perfectly
             //    valid neighbouring folder is just noise. Hide the preview.
-            if (_drops.SelfDropReason != SelfDropReason.None && _drops.Target is not null) {
+            if (IsNeutralDropTarget()) {
+                ShowDragPreview();
+                action = DragAction.None;
+                desc = DescribeDragged(count);
+            } else if (_drops.SelfDropReason != SelfDropReason.None && _drops.Target is not null) {
                 ShowDragPreview();
                 action = DragAction.Forbidden;
                 desc = PathSafety.FormatReason(_drops.SelfDropReason, _drops.SelfDropOffender, _drops.Target);
@@ -1258,10 +1334,7 @@ public partial class MainWindow : Window {
                 DragAction.Link => Strings.DragLink,
                 _ => Strings.DragCopy,
             };
-            string what = count == 1
-                ? string.Format(Strings.DragOneItem, _dragFirstName)
-                : string.Format(Strings.DragItems, count);
-            desc = $"{verb} {what}";
+            desc = $"{verb} {DescribeDragged(count)}";
             targetText = string.Format(Strings.DragTarget, FormatTarget(_drops.Target));
         }
 
@@ -1286,12 +1359,15 @@ public partial class MainWindow : Window {
         return string.IsNullOrEmpty(name) ? path : name;
     }
 
-    private string FormatBookmarkDesc(int count) {
-        string what = count == 1
+    /// <summary>What is in hand: the file's name, or how many of them.</summary>
+    private string DescribeDragged(int count) {
+        return count == 1
             ? string.Format(Strings.DragOneItem, _dragFirstName)
             : string.Format(Strings.DragItems, count);
+    }
 
-        return string.Format(Strings.DragAddToBookmarks, what);
+    private string FormatBookmarkDesc(int count) {
+        return string.Format(Strings.DragAddToBookmarks, DescribeDragged(count));
     }
 
 

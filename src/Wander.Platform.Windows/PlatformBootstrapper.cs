@@ -37,6 +37,7 @@ public static class PlatformBootstrapper {
             $"elevated: {IsElevated()}");
 
         ServiceLocator.Register<IFileSystem>(new SystemIOFileSystem());
+        ServiceLocator.Register<IVolumeInfoProvider>(new WindowsVolumeInfo());
         ServiceLocator.Register<IKnownFolders>(new WindowsKnownFolders());
         ServiceLocator.Register<ISystemClipboard>(new WindowsClipboard(logger));
         ServiceLocator.Register<IDirectoryWatcher>(new WindowsDirectoryWatcher(logger));

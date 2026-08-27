@@ -49,16 +49,15 @@
         </Style>
 
         <!--
-            Hidden vs System visual cue convention:
-              - Hidden:           opacity 0.55 (faded, Explorer parity).
-              - System:           italic       (slants the label; a strong but
-                                                still readable signal that this
-                                                is OS infrastructure).
-              - Hidden + System:  both         (typical "protected OS" file —
-                                                stands out as «не трогать»).
-            Triggers stack additively, so the combined case automatically gets
-            both treatments. The same triggers are applied to the TreeViewItem
-            style in MainWindow so drives/bookmarks match the file list.
+            Hidden entries are faded to opacity 0.55 — Explorer parity, and
+            the same trigger is on the TreeViewItem style in MainWindow so
+            drives and bookmarks match the file list.
+
+            The System attribute deliberately gets no treatment of its own.
+            It used to slant the label, and that turned out to say the wrong
+            thing far too often: Windows sets +S on any folder carrying a
+            desktop.ini, so an ordinary folder with a custom icon came out
+            italic while Explorer showed it as the plain folder it is.
 
             FocusVisualStyle is nulled on every row container: WPF's default
             dashed rectangle draws on top of the selection background and
@@ -70,9 +69,6 @@
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsHidden}" Value="True">
                     <Setter Property="Opacity" Value="0.55"/>
-                </DataTrigger>
-                <DataTrigger Binding="{Binding IsSystem}" Value="True">
-                    <Setter Property="FontStyle" Value="Italic"/>
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -114,9 +110,6 @@
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsHidden}" Value="True">
                     <Setter Property="Opacity" Value="0.55"/>
-                </DataTrigger>
-                <DataTrigger Binding="{Binding IsSystem}" Value="True">
-                    <Setter Property="FontStyle" Value="Italic"/>
                 </DataTrigger>
             </Style.Triggers>
         </Style>

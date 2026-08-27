@@ -212,9 +212,6 @@
                 <DataTrigger Binding="{Binding IsHidden}" Value="True">
                     <Setter Property="Opacity" Value="0.55"/>
                 </DataTrigger>
-                <DataTrigger Binding="{Binding IsSystem}" Value="True">
-                    <Setter Property="FontStyle" Value="Italic"/>
-                </DataTrigger>
             </Style.Triggers>
         </Style>
 
@@ -266,15 +263,16 @@
         <KeyBinding Modifiers="Ctrl" Key="Z" Command="{Binding UndoCommand}"/>
         <KeyBinding Key="Enter" Command="{Binding OpenCommand}"/>
         <KeyBinding Key="Back" Command="{Binding UpCommand}"/>
-        <KeyBinding Modifiers="Alt" Key="Left" Command="{Binding BackCommand}"/>
-        <KeyBinding Modifiers="Alt" Key="Right" Command="{Binding ForwardCommand}"/>
-        <KeyBinding Modifiers="Alt" Key="Up" Command="{Binding UpCommand}"/>
         <KeyBinding Modifiers="Ctrl" Key="C" Command="{Binding CopyCommand}"/>
         <KeyBinding Modifiers="Ctrl" Key="X" Command="{Binding CutCommand}"/>
         <KeyBinding Modifiers="Ctrl" Key="V" Command="{Binding PasteCommand}"/>
         <KeyBinding Modifiers="Ctrl+Shift" Key="C" Command="{Binding CopyPathCommand}"/>
         <KeyBinding Modifiers="Ctrl+Shift" Key="N" Command="{Binding NewFolderCommand}"/>
-        <KeyBinding Modifiers="Alt" Key="Enter" Command="{Binding PropertiesCommand}"/>
+        <!--
+            The Alt chords (Alt+←/→/↑, Alt+Enter, Alt+D) are not here: the
+            Menu in the toolbar swallows them before command routing, so
+            they live in MainWindow.OnPreviewKeyDown instead.
+        -->
         <KeyBinding Modifiers="Ctrl" Key="Q" Command="{Binding TogglePreviewCommand}"/>
         <!--
             View modes on the digits Explorer uses for them: its list runs

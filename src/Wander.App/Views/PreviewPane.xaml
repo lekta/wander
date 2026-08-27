@@ -201,7 +201,22 @@
                                    Background="Transparent"
                                    Padding="4"/>
 
-                    <!-- PDF / HTML / Markdown via WebView2 -->
+                    <!--
+                        Rich text (.rtf). WPF reads the format itself, so
+                        this is a real document rather than a text dump —
+                        fonts, tables and images intact. Read-only, and
+                        loaded in code-behind because TextRange.Load is the
+                        only way in and it is not a bindable property.
+                    -->
+                    <RichTextBox x:Name="DocumentPreview"
+                                 Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Document}"
+                                 IsReadOnly="True" IsDocumentEnabled="True"
+                                 Background="White" BorderThickness="0"
+                                 VerticalScrollBarVisibility="Auto"
+                                 HorizontalScrollBarVisibility="Auto"
+                                 Padding="6"/>
+
+                    <!-- PDF / HTML / MHTML / Markdown / FB2 via WebView2 -->
                     <wv2:WebView2 x:Name="WebPreview"
                                   Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Web}"
                                   DefaultBackgroundColor="White"/>
@@ -216,6 +231,43 @@
                     <ScrollViewer Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Folder}"
                                   VerticalScrollBarVisibility="Auto" Padding="12,10,12,10">
                         <StackPanel>
+                            <!--
+                                Drive header. Only appears at the root of a
+                                volume: "how full is it" is a question about
+                                a disk, and printing capacity above the
+                                census of an ordinary folder would be
+                                answering about the disk while showing
+                                numbers about the folder.
+
+                                The bar is a ProgressBar rather than two
+                                nested Borders because a percentage maps
+                                onto it directly — no converter, no star
+                                arithmetic — and it already knows how to
+                                stay honest at 0 and 100.
+                            -->
+                            <StackPanel Margin="0,0,0,14"
+                                        Visibility="{Binding Preview.HasVolume, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="{Binding Preview.VolumeLabel}"
+                                           FontSize="14" FontWeight="SemiBold"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="{Binding Preview.VolumeDetail}"
+                                           Foreground="#666" FontSize="11" Margin="0,2,0,0"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <ProgressBar Height="12" Margin="0,8,0,0"
+                                             Minimum="0" Maximum="100"
+                                             Value="{Binding Preview.VolumeUsedPercent, Mode=OneWay}"
+                                             Foreground="{Binding Preview.VolumeBarColor}"
+                                             Background="#E6E6E6" BorderBrush="#CCC" BorderThickness="1"/>
+                                <Grid Margin="0,4,0,0">
+                                    <TextBlock Text="{Binding Preview.VolumeUsage}"
+                                               FontSize="11" Foreground="#444"
+                                               HorizontalAlignment="Left"/>
+                                    <TextBlock Text="{Binding Preview.VolumeFree}"
+                                               FontSize="11" Foreground="#444"
+                                               HorizontalAlignment="Right"/>
+                                </Grid>
+                            </StackPanel>
+
                             <TextBlock Text="{Binding Preview.FolderTitle}"
                                        FontSize="14" FontWeight="SemiBold"
                                        TextTrimming="CharacterEllipsis"/>
@@ -347,6 +399,28 @@
                                           IsChecked="{Binding Preview.ShowRawDecode, Mode=TwoWay}"
                                           Visibility="{Binding Preview.IsRawImage, Converter={StaticResource BoolToVisibility}}"/>
                         </Grid>
+
+                        <!--
+                            Shortcut row. What is drawn above belongs to the
+                            file the .lnk points at, so the footer has to say
+                            whose content that is — and, since the answer is
+                            "somebody else's", offer the way over to it.
+                        -->
+                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0"
+                                    Visibility="{Binding Preview.HasLinkTarget, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="{x:Static res:Strings.PreviewLinkTarget}"
+                                       FontSize="11" Foreground="#888" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding Preview.LinkTargetName}"
+                                       FontSize="11" Foreground="#444" VerticalAlignment="Center"
+                                       Margin="4,0,0,0" MaxWidth="220"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip="{Binding Preview.LinkTarget}"/>
+                            <Button Content="{x:Static res:Strings.PreviewGoToTarget}"
+                                    Command="{Binding Preview.GoToLinkTargetCommand}"
+                                    ToolTip="{x:Static res:Strings.PreviewGoToTargetHint}"
+                                    Margin="8,0,0,0" Padding="6,0" FontSize="11"
+                                    VerticalAlignment="Center"/>
+                        </StackPanel>
 
                         <!--
                             Companion block: what the sidecars next to

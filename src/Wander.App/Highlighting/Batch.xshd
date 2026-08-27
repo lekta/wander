@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Windows batch. AvalonEdit ships nothing for .bat / .cmd, and a build
+    script read as one grey block is exactly the file where the eye needs
+    help: the difference between %VAR% and !VAR! is the difference between
+    a script that works inside a loop and one that does not.
+-->
+<SyntaxDefinition name="Batch" xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
+  <Color name="Comment" foreground="#008000" />
+  <Color name="String" foreground="#A31515" />
+  <Color name="Keyword" foreground="#0000FF" fontWeight="bold" />
+  <Color name="Command" foreground="#0451A5" />
+  <Color name="Variable" foreground="#7A3E9D" />
+  <Color name="Label" foreground="#B05000" fontWeight="bold" />
+  <Color name="Redirect" foreground="#808080" />
+
+  <RuleSet ignoreCase="true">
+    <!-- Both comment spellings. ":: " is a label the parser skips, but
+         every batch file in the world uses it as a comment. -->
+    <Span color="Comment" begin="^\s*::" />
+    <Span color="Comment" begin="\brem\b" />
+
+    <Span color="String" multiline="false">
+      <Begin>"</Begin>
+      <End>"</End>
+    </Span>
+
+    <!-- %VAR%, %1, %%i and the delayed-expansion !VAR! -->
+    <Rule color="Variable">%[%~]?[^%\s]*%?|![^!\s]+!</Rule>
+
+    <Rule color="Label">^\s*:[A-Za-z_][\w.\-]*</Rule>
+
+    <Keywords color="Keyword">
+      <Word>if</Word>
+      <Word>else</Word>
+      <Word>for</Word>
+      <Word>in</Word>
+      <Word>do</Word>
+      <Word>goto</Word>
+      <Word>call</Word>
+      <Word>exit</Word>
+      <Word>setlocal</Word>
+      <Word>endlocal</Word>
+      <Word>set</Word>
+      <Word>defined</Word>
+      <Word>not</Word>
+      <Word>errorlevel</Word>
+      <Word>equ</Word>
+      <Word>neq</Word>
+      <Word>lss</Word>
+      <Word>leq</Word>
+      <Word>gtr</Word>
+      <Word>geq</Word>
+    </Keywords>
+
+    <Keywords color="Command">
+      <Word>echo</Word>
+      <Word>pushd</Word>
+      <Word>popd</Word>
+      <Word>cd</Word>
+      <Word>copy</Word>
+      <Word>xcopy</Word>
+      <Word>robocopy</Word>
+      <Word>move</Word>
+      <Word>del</Word>
+      <Word>erase</Word>
+      <Word>md</Word>
+      <Word>mkdir</Word>
+      <Word>rd</Word>
+      <Word>rmdir</Word>
+      <Word>dir</Word>
+      <Word>type</Word>
+      <Word>find</Word>
+      <Word>findstr</Word>
+      <Word>pause</Word>
+      <Word>start</Word>
+      <Word>title</Word>
+      <Word>shift</Word>
+      <Word>timeout</Word>
+      <Word>where</Word>
+      <Word>attrib</Word>
+      <Word>tasklist</Word>
+      <Word>taskkill</Word>
+    </Keywords>
+
+    <Rule color="Redirect">(2&gt;&amp;1|&gt;&gt;|&gt;|&lt;|\|\||&amp;&amp;|\|)</Rule>
+  </RuleSet>
+</SyntaxDefinition>

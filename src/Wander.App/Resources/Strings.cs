@@ -75,6 +75,48 @@ public static class Strings {
     /// <summary>Оценка</summary>
     public static string PreviewRating => Get(nameof(PreviewRating));
 
+    /// <summary>Показано начало книги — дальше не разбиралось</summary>
+    public static string PreviewBookTruncated => Get(nameof(PreviewBookTruncated));
+
+    /// <summary>Ярлык на:</summary>
+    public static string PreviewLinkTarget => Get(nameof(PreviewLinkTarget));
+
+    /// <summary>Перейти к оригиналу</summary>
+    public static string PreviewGoToTarget => Get(nameof(PreviewGoToTarget));
+
+    /// <summary>Открыть папку с оригиналом и выделить его</summary>
+    public static string PreviewGoToTargetHint => Get(nameof(PreviewGoToTargetHint));
+
+    /// <summary>Оригинал не найден — ярлык ведёт в никуда</summary>
+    public static string PreviewLinkBroken => Get(nameof(PreviewLinkBroken));
+
+    /// <summary>Занято {0} из {1}</summary>
+    public static string PreviewVolumeUsage => Get(nameof(PreviewVolumeUsage));
+
+    /// <summary>Свободно {0}</summary>
+    public static string PreviewVolumeFree => Get(nameof(PreviewVolumeFree));
+
+    /// <summary>Устройство не готово</summary>
+    public static string PreviewVolumeNotReady => Get(nameof(PreviewVolumeNotReady));
+
+    /// <summary>Локальный диск</summary>
+    public static string VolumeKindFixed => Get(nameof(VolumeKindFixed));
+
+    /// <summary>Съёмный диск</summary>
+    public static string VolumeKindRemovable => Get(nameof(VolumeKindRemovable));
+
+    /// <summary>Сетевой диск</summary>
+    public static string VolumeKindNetwork => Get(nameof(VolumeKindNetwork));
+
+    /// <summary>Оптический привод</summary>
+    public static string VolumeKindOptical => Get(nameof(VolumeKindOptical));
+
+    /// <summary>Диск в памяти</summary>
+    public static string VolumeKindRam => Get(nameof(VolumeKindRam));
+
+    /// <summary>Диск</summary>
+    public static string VolumeKindUnknown => Get(nameof(VolumeKindUnknown));
+
     /// <summary>Удалён</summary>
     public static string SummaryDeleted => Get(nameof(SummaryDeleted));
 
@@ -630,7 +672,7 @@ public static class Strings {
     /// <summary>Показывать скрытые файлы и папки</summary>
     public static string SettingsShowHidden => Get(nameof(SettingsShowHidden));
 
-    /// <summary>Показывать системные файлы и папки</summary>
+    /// <summary>Показывать защищённые системные файлы</summary>
     public static string SettingsShowSystem => Get(nameof(SettingsShowSystem));
 
     /// <summary>Не показывать системные папки в корне дисков</summary>

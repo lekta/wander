@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    YAML — .yaml / .yml, and the Unity serialised formats that are YAML
+    underneath (.asset, .prefab, .unity, .mat, .meta). Unity's dialect adds
+    the "!u!114 &11400000" class/anchor headers, which get their own colour
+    because they are what tells one object in the file from the next.
+-->
+<SyntaxDefinition name="YAML" xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
+  <Color name="Comment" foreground="#008000" />
+  <Color name="String" foreground="#A31515" />
+  <Color name="Key" foreground="#0451A5" />
+  <Color name="Directive" foreground="#B05000" fontWeight="bold" />
+  <Color name="Anchor" foreground="#7A3E9D" />
+  <Color name="Literal" foreground="#0000FF" />
+  <Color name="Number" foreground="#098658" />
+
+  <RuleSet>
+    <Span color="Comment" begin="#" />
+
+    <Span color="String" multiline="false">
+      <Begin>"</Begin>
+      <End>"</End>
+    </Span>
+    <Span color="String" multiline="false">
+      <Begin>'</Begin>
+      <End>'</End>
+    </Span>
+
+    <!-- Document markers and the %YAML / %TAG directives, plus Unity's
+         "!u!114" class tag on the line above each object. -->
+    <Rule color="Directive">^(---|\.\.\.|%\S+).*$</Rule>
+    <Rule color="Directive">!u!\d+</Rule>
+
+    <Rule color="Anchor">[&amp;*][A-Za-z0-9_.\-]+</Rule>
+
+    <!-- The key half of "key: value", including the leading "- " of a
+         sequence entry. -->
+    <Rule color="Key">^\s*(-\s+)?[A-Za-z_][\w .\-]*(?=\s*:)</Rule>
+
+    <Keywords color="Literal">
+      <Word>true</Word>
+      <Word>false</Word>
+      <Word>yes</Word>
+      <Word>no</Word>
+      <Word>on</Word>
+      <Word>off</Word>
+      <Word>null</Word>
+      <Word>~</Word>
+    </Keywords>
+
+    <Rule color="Number">\b\d+(\.\d*)?([eE][+-]?\d+)?\b</Rule>
+  </RuleSet>
+</SyntaxDefinition>

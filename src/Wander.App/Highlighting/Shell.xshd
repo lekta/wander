@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    POSIX shell — .sh and friends. Same gap as batch: AvalonEdit ships
+    PowerShell but nothing for sh/bash, and a build script read as one grey
+    block hides exactly the things that matter in it — where a variable is
+    expanded, where a string ends, where a here-document begins.
+-->
+<SyntaxDefinition name="Shell" xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
+  <Color name="Comment" foreground="#008000" />
+  <Color name="String" foreground="#A31515" />
+  <Color name="Keyword" foreground="#0000FF" fontWeight="bold" />
+  <Color name="Builtin" foreground="#0451A5" />
+  <Color name="Variable" foreground="#7A3E9D" />
+  <Color name="Redirect" foreground="#808080" />
+
+  <RuleSet>
+    <!-- The shebang counts as a comment here, which is what it is: the
+         shell ignores the line, and giving it a colour of its own bought a
+         rule that could match nothing and spin AvalonEdit's highlighter. -->
+    <Span color="Comment" begin="#" />
+
+    <!-- Single quotes take no expansion at all, double quotes do; both are
+         one colour here, because the distinction the reader needs is
+         "where does this string end". -->
+    <Span color="String" multiline="false">
+      <Begin>"</Begin>
+      <End>"</End>
+    </Span>
+    <Span color="String" multiline="false">
+      <Begin>'</Begin>
+      <End>'</End>
+    </Span>
+
+    <!-- $var, ${var}, $(cmd), $1, $@ -->
+    <Rule color="Variable">\$\{[^}]*\}|\$\(|\$[A-Za-z_][A-Za-z0-9_]*|\$[0-9@*#?$!-]</Rule>
+
+    <Keywords color="Keyword">
+      <Word>if</Word>
+      <Word>then</Word>
+      <Word>else</Word>
+      <Word>elif</Word>
+      <Word>fi</Word>
+      <Word>case</Word>
+      <Word>esac</Word>
+      <Word>for</Word>
+      <Word>while</Word>
+      <Word>until</Word>
+      <Word>do</Word>
+      <Word>done</Word>
+      <Word>in</Word>
+      <Word>function</Word>
+      <Word>return</Word>
+      <Word>break</Word>
+      <Word>continue</Word>
+      <Word>local</Word>
+      <Word>export</Word>
+      <Word>readonly</Word>
+      <Word>declare</Word>
+      <Word>select</Word>
+      <Word>time</Word>
+      <Word>trap</Word>
+    </Keywords>
+
+    <Keywords color="Builtin">
+      <Word>echo</Word>
+      <Word>printf</Word>
+      <Word>read</Word>
+      <Word>cd</Word>
+      <Word>pwd</Word>
+      <Word>set</Word>
+      <Word>unset</Word>
+      <Word>shift</Word>
+      <Word>source</Word>
+      <Word>eval</Word>
+      <Word>exec</Word>
+      <Word>exit</Word>
+      <Word>test</Word>
+      <Word>true</Word>
+      <Word>false</Word>
+      <Word>cat</Word>
+      <Word>grep</Word>
+      <Word>sed</Word>
+      <Word>awk</Word>
+      <Word>find</Word>
+      <Word>cp</Word>
+      <Word>mv</Word>
+      <Word>rm</Word>
+      <Word>mkdir</Word>
+      <Word>rmdir</Word>
+      <Word>ln</Word>
+      <Word>chmod</Word>
+      <Word>chown</Word>
+      <Word>sleep</Word>
+      <Word>kill</Word>
+    </Keywords>
+
+    <Rule color="Redirect">(2&gt;&amp;1|&gt;&gt;|&gt;|&lt;&lt;-?|&lt;|\|\||&amp;&amp;|\||;;)</Rule>
+  </RuleSet>
+</SyntaxDefinition>

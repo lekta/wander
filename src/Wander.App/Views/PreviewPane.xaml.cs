@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -11,6 +12,7 @@ using System.Windows.Threading;
 using ICSharpCode.AvalonEdit.Highlighting;
 using Microsoft.Web.WebView2.Core;
 using Wander.App.Controls;
+using Wander.App.Highlighting;
 using Wander.App.Resources;
 using Wander.App.ViewModels;
 
@@ -31,6 +33,9 @@ namespace Wander.App.Views;
 public partial class PreviewPane : UserControl {
     public PreviewPane() {
         InitializeComponent();
+        // Wander's own .xshd definitions (batch, ShaderLab, YAML) have to be
+        // in the manager before the first file asks for one.
+        HighlightingCatalog.EnsureRegistered();
         DataContextChanged += OnDataContextChanged;
     }
 
@@ -81,6 +86,10 @@ public partial class PreviewPane : UserControl {
                 }
                 break;
 
+            case nameof(PreviewController.DocumentPath):
+                await LoadDocumentAsync(Vm.Preview.DocumentPath);
+                break;
+
             case nameof(PreviewController.Kind):
                 // Bail out of any in-flight image-zoom state when the user
                 // switches to a different file (e.g., RMB held when changing
@@ -111,6 +120,55 @@ public partial class PreviewPane : UserControl {
         CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinitionByExtension(ext);
         CodeEditor.Text = Vm.Preview.CodeText;
     }
+
+    /// <summary>
+    /// Fills the rich-text viewer from an <c>.rtf</c> file. WPF's own RTF
+    /// reader does the work — the format has been in the framework since
+    /// the beginning — so this is a read off the disk and a handover.
+    ///
+    /// <para>
+    /// The bytes are pulled on a worker thread and parsed on the UI one:
+    /// <c>TextRange.Load</c> builds a <c>FlowDocument</c>, which is a
+    /// DispatcherObject and cannot be built anywhere else. Parsing an RTF
+    /// is fast; waiting on a sleeping disk is not, and that half is what
+    /// gets moved off.
+    /// </para>
+    /// </summary>
+    private async Task LoadDocumentAsync(string? path) {
+        if (string.IsNullOrEmpty(path)) {
+            DocumentPreview.Document = new FlowDocument();
+
+            return;
+        }
+
+        byte[] bytes;
+        try {
+            bytes = await File.ReadAllBytesAsync(path);
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+            DocumentPreview.Document = new FlowDocument();
+
+            return;
+        }
+
+        // The selection may have moved on while the file was being read.
+        if (!string.Equals(Vm.Preview.DocumentPath, path, StringComparison.OrdinalIgnoreCase)) {
+            return;
+        }
+
+        var document = new FlowDocument();
+        try {
+            using var stream = new MemoryStream(bytes);
+            var range = new TextRange(document.ContentStart, document.ContentEnd);
+            range.Load(stream, DataFormats.Rtf);
+        } catch (ArgumentException) {
+            // Not actually RTF, or RTF the reader refuses. An empty page
+            // says that better than a half-parsed one.
+            document = new FlowDocument();
+        }
+
+        DocumentPreview.Document = document;
+    }
+
 
     private async Task EnsureWebViewReadyAsync() {
         if (_webInitialized) {

@@ -279,20 +279,21 @@ public partial class FileListView : UserControl {
             return;
         }
 
+        // By delta, like every other selection change here. Clearing first
+        // takes SelectedItem to null on the way, and SelectedItem is bound
+        // two-way to SelectedEntry — so a refresh that put the selection
+        // back exactly where it was still told the preview pane the file
+        // had gone and come back, and it reloaded. Writing a rating into a
+        // sidecar is enough to cause one of those refreshes, which is how a
+        // click on a star ended up re-decoding a RAW.
         switch (ActiveList()) {
             case DataGrid dg:
-                dg.SelectedItems.Clear();
-                foreach (var entry in items) {
-                    dg.SelectedItems.Add(entry);
-                }
+                SetListSelection(dg, items);
                 dg.CurrentItem = items[0];
                 dg.ScrollIntoView(items[0]);
                 break;
             case ListBox lb:
-                lb.SelectedItems.Clear();
-                foreach (var entry in items) {
-                    lb.SelectedItems.Add(entry);
-                }
+                SetListSelection(lb, items);
                 lb.ScrollIntoView(items[0]);
                 break;
         }

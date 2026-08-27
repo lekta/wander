@@ -45,6 +45,11 @@ public partial class DragPreviewWindow : Window {
                 ActionIcon.Text = "↗"; // ↗ (link/shortcut)
                 ActionIcon.Foreground = _linkBrush;
                 break;
+            case DragAction.None:
+                // No glyph at all: every one of them is a claim about what
+                // would happen, and here nothing would.
+                ActionIcon.Text = "";
+                break;
             default:
                 ActionIcon.Text = "⊘"; // ⊘
                 ActionIcon.Foreground = _forbiddenBrush;

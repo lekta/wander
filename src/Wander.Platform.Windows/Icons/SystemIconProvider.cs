@@ -7,6 +7,8 @@ using Wander.Core;
 using Wander.Core.Diagnostics;
 using Wander.Core.Icons;
 using Wander.Core.Logging;
+using Wander.Core.Preview;
+using Wander.Core.Shell;
 
 namespace Wander.Platform.Windows.Icons;
 
@@ -218,6 +220,14 @@ public sealed class SystemIconProvider : IIconProvider {
             return ($"lnk|{path}|{size}", true);
         }
 
+        // A book drawn from its own cover is that one book's picture, so it
+        // cannot share the per-extension slot the other .fb2 files use. The
+        // two small sizes are left out: a cover shrunk to 16 px is a smudge,
+        // and the registered icon says "book" more clearly there.
+        if (size is IconSize.Medium or IconSize.Large && HasOwnCover(path)) {
+            return ($"book|{path}|{size}", true);
+        }
+
         // Large = jumbo path with thumbnails → unique per file.
         if (size == IconSize.Large) {
             return ($"thumb|{path}", true);
@@ -274,19 +284,178 @@ public sealed class SystemIconProvider : IIconProvider {
     /// </para>
     /// </summary>
     private static byte[]? LoadMediumImage(string path) {
-        if (!IsThumbnailable(path)) {
+        if (TryRenderBookCover(path, MediumSize) is { } cover) {
+            return cover;
+        }
+
+        // A shortcut shows its target's picture, the way Explorer does —
+        // a folder of shortcuts to photographs is otherwise a folder of
+        // identical arrows.
+        string? linkTarget = LinkThumbnailTarget(path);
+        string source = linkTarget ?? path;
+        if (!IsThumbnailable(source)) {
             return LoadShellIcon(path, IconSize.Normal);
         }
 
-        using Bitmap? bmp = LoadShellBitmap(path, MediumSize);
+        using Bitmap? bmp = LoadShellBitmap(source, MediumSize);
         if (bmp is null) {
             return LoadShellIcon(path, IconSize.Normal);
+        }
+
+        // The shell bakes the arrow into the icons it hands out, but not
+        // into a thumbnail it was asked for by a different path — so when
+        // the picture came from the target, the badge is ours to draw.
+        if (linkTarget is not null) {
+            DrawLinkOverlay(bmp, path);
         }
 
         using var ms = new MemoryStream();
         bmp.Save(ms, ImageFormat.Png);
 
         return ms.ToArray();
+    }
+
+
+    /// <summary>
+    /// The file a shortcut's picture should come from: the target, when
+    /// <paramref name="path"/> is a <c>.lnk</c> and the target still exists
+    /// and has a thumbnail of its own. Null in every other case, which
+    /// means "draw this file the ordinary way".
+    /// </summary>
+    private static string? LinkThumbnailTarget(string path) {
+        if (!path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)) {
+            return null;
+        }
+
+        string? target = ResolveShortcut(path);
+
+        return target is not null && File.Exists(target) && IsThumbnailable(target)
+            ? target
+            : null;
+    }
+
+    private static string? ResolveShortcut(string path) {
+        if (!ServiceLocator.IsRegistered<IShortcutService>()) {
+            return null;
+        }
+
+        try {
+            string? target = ServiceLocator.Get<IShortcutService>().Resolve(path);
+
+            return string.IsNullOrEmpty(target) ? null : target;
+        } catch {
+            // A .lnk pointing at a shell namespace, or a malformed one.
+            return null;
+        }
+    }
+
+    /// <summary>Composites the shortcut badge for <paramref name="linkPath"/> onto a bitmap.</summary>
+    private static void DrawLinkOverlay(Bitmap canvas, string linkPath) {
+        int overlayIndex = GetOverlayIndex(linkPath);
+        if (overlayIndex == 0) {
+            // Same safety net as the jumbo path: some builds skip overlay
+            // computation, and a shortcut with no arrow is a lie.
+            overlayIndex = 1;
+        }
+
+        using Bitmap? overlay = LoadOverlayBitmap(overlayIndex);
+        if (overlay is not null) {
+            CompositeOverlay(canvas, overlay);
+        }
+    }
+
+
+    // ------------------------------------------------------------------
+    // Book covers.
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Whether this file's tile is drawn from its own cover rather than
+    /// from the shell. Books carry one inside them; a PDF's first page
+    /// stands in for one.
+    /// </summary>
+    private static bool HasOwnCover(string path) {
+        return BookCover.Supports(path) || PdfPageImage.Supports(path);
+    }
+
+    /// <summary>
+    /// A book's own cover, drawn as a plate on the tile, or null when the
+    /// file is not a book or carries no cover — the caller then falls back
+    /// to whatever the shell offers.
+    /// </summary>
+    private static byte[]? TryRenderBookCover(string path, int side) {
+        if (!HasOwnCover(path)) {
+            return null;
+        }
+
+        byte[]? bytes;
+        using (PerfLog.Measure("bg.book-cover")) {
+            bytes = PdfPageImage.Supports(path)
+                ? PdfPageImage.RenderFirstPage(path, side)
+                : BookCover.TryRead(path);
+        }
+        if (bytes is null) {
+            return null;
+        }
+
+        try {
+            using var buffer = new MemoryStream(bytes);
+            using var cover = new Bitmap(buffer);
+            using var framed = RenderFramedCover(cover, side);
+            using var png = new MemoryStream();
+            framed.Save(png, ImageFormat.Png);
+
+            return png.ToArray();
+        } catch (Exception ex) when (ex is ArgumentException or OutOfMemoryException) {
+            // GDI+ throws both of these for "these bytes are not an image
+            // I know" — a cover in a format without a codec, or a truncated
+            // one.
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Fits <paramref name="cover"/> into a square canvas as a book plate:
+    /// centred, white-backed, thin border, a soft shadow down and to the
+    /// right. The frame is what makes a tile read as a book rather than as
+    /// a picture that happens to be portrait — and the white backing keeps
+    /// a cover with transparency from dissolving into the tile.
+    /// </summary>
+    private static Bitmap RenderFramedCover(Image cover, int side) {
+        var canvas = new Bitmap(side, side, PixelFormat.Format32bppArgb);
+
+        using var g = Graphics.FromImage(canvas);
+        g.Clear(Color.Transparent);
+        g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+        g.SmoothingMode = SmoothingMode.HighQuality;
+        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+
+        int margin = Math.Max(2, side / 12);
+        double scale = Math.Min(
+            (double)(side - margin * 2) / cover.Width,
+            (double)(side - margin * 2) / cover.Height);
+        int w = Math.Max(1, (int)Math.Round(cover.Width * scale));
+        int h = Math.Max(1, (int)Math.Round(cover.Height * scale));
+        int x = (side - w) / 2;
+        int y = (side - h) / 2;
+
+        // Shadow: a few offset rectangles rather than a blur, because at
+        // 96 px the difference is invisible and a blur is a filter pass per
+        // file in the listing.
+        int depth = Math.Max(1, side / 32);
+        using (var shadow = new SolidBrush(Color.FromArgb(20, 0, 0, 0))) {
+            for (int i = depth; i >= 1; i--) {
+                g.FillRectangle(shadow, x + i, y + i, w, h);
+            }
+        }
+
+        g.FillRectangle(Brushes.White, x, y, w, h);
+        g.DrawImage(cover, new Rectangle(x, y, w, h));
+
+        using var border = new Pen(Color.FromArgb(140, 0, 0, 0));
+        g.DrawRectangle(border, x, y, w - 1, h - 1);
+
+        return canvas;
     }
 
     private static bool IsShellNamespacePath(string path) {
@@ -472,8 +641,15 @@ public sealed class SystemIconProvider : IIconProvider {
         // so a sub-optimal write from us could later make Explorer's display
         // of the same file look blurrier than before Wander ran. Splitting
         // the paths keeps icon-only writes out of the shared cache.
-        Bitmap? baseBmp = IsThumbnailable(path)
-            ? LoadShellBitmap(path, JumboSize)
+        if (TryRenderBookCover(path, JumboSize) is { } cover) {
+            return cover;
+        }
+
+        // A shortcut is drawn from its target's thumbnail when the target
+        // has one; the arrow is composited below either way.
+        string source = LinkThumbnailTarget(path) ?? path;
+        Bitmap? baseBmp = IsThumbnailable(source)
+            ? LoadShellBitmap(source, JumboSize)
             : LoadIconBitmapJumbo(path);
 
         if (baseBmp is null) {

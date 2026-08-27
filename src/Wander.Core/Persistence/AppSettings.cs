@@ -38,7 +38,13 @@ public sealed record AppSettings {
     /// <summary>Show files / folders with the <c>Hidden</c> attribute.</summary>
     public bool ShowHidden { get; init; } = false;
 
-    /// <summary>Show files / folders with the <c>System</c> attribute.</summary>
+    /// <summary>
+    /// Show protected operating system files: the ones carrying
+    /// <c>Hidden</c> and <c>System</c> together, which is what Windows
+    /// means by the phrase and what Explorer's own checkbox covers. The
+    /// <c>System</c> attribute alone is not enough — see
+    /// <see cref="EntryVisibility.Allows"/>.
+    /// </summary>
     public bool ShowSystem { get; init; } = false;
 
     /// <summary>

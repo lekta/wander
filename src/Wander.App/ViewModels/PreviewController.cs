@@ -4,12 +4,15 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Markdig;
 using Wander.App.Resources;
 using Wander.App.Util;
 using Wander.Core;
 using Wander.Core.Companions;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
+using Wander.Core.Preview;
+using Wander.Core.Shell;
 using ImageMetadata = Wander.Core.Icons.ImageMetadata;
 
 namespace Wander.App.ViewModels;
@@ -75,18 +78,51 @@ public sealed class PreviewController : ObservableObject {
         ".py", ".rb", ".go", ".rs", ".java", ".kt", ".swift", ".php",
         ".c", ".cpp", ".cc", ".cxx", ".h", ".hpp", ".m", ".mm",
         ".css", ".scss", ".less",
-        ".sh", ".ps1", ".bat", ".cmd",
+        ".sh", ".bash", ".zsh", ".ps1", ".bat", ".cmd",
         ".sql",
         ".xml", ".xaml", ".svg",
         ".json", ".yaml", ".yml",
+        // Patches — AvalonEdit's own "Patch" definition colours these, so
+        // routing them here is the whole feature.
+        ".diff", ".patch",
+        // Unity shaders and their includes; highlighting comes from
+        // Highlighting/ShaderLab.xshd.
+        ".shader", ".cginc", ".hlsl", ".compute",
+    };
+
+    /// <summary>
+    /// Extensions that mean text in one project and an opaque blob in the
+    /// next — Unity's serialised assets, which are YAML only when the
+    /// project forces text serialization. The bytes decide; see
+    /// <see cref="TextProbe"/>.
+    /// </summary>
+    private static readonly HashSet<string> _maybeTextExtensions = new(StringComparer.OrdinalIgnoreCase) {
+        ".asset", ".prefab", ".unity", ".mat",
+    };
+
+    /// <summary>
+    /// Handed straight to WebView2 by path. PDF and HTML have always been
+    /// here; MHTML joins them because Chromium reads the format natively,
+    /// which is the whole reason a saved web page can be previewed at all.
+    /// </summary>
+    private static readonly HashSet<string> _webExtensions = new(StringComparer.OrdinalIgnoreCase) {
+        ".pdf", ".html", ".htm", ".mht", ".mhtml",
     };
 
     private const long PreviewMaxFileSize = 1_048_576;     // 1 MB
     private const int PreviewMaxChars = 200_000;
 
+    /// <summary>
+    /// Books get a budget of their own: a novel is legitimately tens of
+    /// megabytes once its illustrations are counted, and the 1 MB ceiling
+    /// the text preview uses would refuse most of a shelf.
+    /// </summary>
+    private const long BookMaxFileSize = 64L * 1024 * 1024;
+
 
     private readonly IImageMetadataReader? _metadataReader;
     private readonly CompanionMetadataService? _companionMetadata;
+    private readonly Action<string>? _reveal;
 
     private bool _isVisible;
     private FileSystemEntry? _primary;
@@ -109,8 +145,12 @@ public sealed class PreviewController : ObservableObject {
     private string? _webHtml;
     private Uri? _gifUri;
     private Uri? _videoUri;
+    private string? _documentPath;
     private ImageMetadata? _imageMetadata;
     private string _summary = "";
+    private string? _linkTarget;
+    private bool _linkBroken;
+    private VolumeInfo? _volume;
 
     private CancellationTokenSource? _companionCts;
     private string _companionFiles = "";
@@ -122,9 +162,19 @@ public sealed class PreviewController : ObservableObject {
     private string _customColorLabel = "";
 
 
-    public PreviewController(IImageMetadataReader? metadataReader, CompanionMetadataService? companionMetadata) {
+    /// <param name="reveal">
+    /// How to take the user to a path — navigate to its folder, select it,
+    /// scroll it into view. Owned by the view model, because navigation is;
+    /// the pane only knows which path the button should point at.
+    /// </param>
+    public PreviewController(
+        IImageMetadataReader? metadataReader,
+        CompanionMetadataService? companionMetadata,
+        Action<string>? reveal = null) {
+
         _metadataReader = metadataReader;
         _companionMetadata = companionMetadata;
+        _reveal = reveal;
 
         // Adobe's colour-label palette, in the index order both formats use.
         ColorLabelChoices = new[] {
@@ -138,6 +188,7 @@ public sealed class PreviewController : ObservableObject {
         SetRankCommand = new RelayCommand(p => SetRating(RatingField.Rank, p, _rank), _ => HasRating);
         SetColorLabelCommand = new RelayCommand(p => SetRating(RatingField.ColorLabel, p, _colorLabel), _ => HasRating);
         CopyGuidCommand = new RelayCommand(_ => CopyGuid(), _ => HasUnityGuid);
+        GoToLinkTargetCommand = new RelayCommand(_ => GoToLinkTarget(), _ => HasLinkTarget);
     }
 
 
@@ -223,6 +274,42 @@ public sealed class PreviewController : ObservableObject {
         get => _videoUri;
         private set => SetField(ref _videoUri, value);
     }
+
+    /// <summary>
+    /// File for the rich-text viewer (<c>.rtf</c>). A path rather than a
+    /// document: WPF parses RTF itself, but only into a
+    /// <c>FlowDocument</c>, which is a UI object and belongs on the other
+    /// side of the binding.
+    /// </summary>
+    public string? DocumentPath {
+        get => _documentPath;
+        private set => SetField(ref _documentPath, value);
+    }
+
+    /// <summary>
+    /// What the previewed <c>.lnk</c> points at, when the selection is a
+    /// shortcut and its target still exists. The pane shows the target's
+    /// content, so the footer has to say whose content it is — and offer
+    /// the way over to it.
+    /// </summary>
+    public string? LinkTarget {
+        get => _linkTarget;
+        private set {
+            if (SetField(ref _linkTarget, value)) {
+                Raise(nameof(HasLinkTarget));
+                Raise(nameof(LinkTargetName));
+                GoToLinkTargetCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+    public bool HasLinkTarget => !string.IsNullOrEmpty(_linkTarget);
+
+    /// <summary>Target's file name, for the button caption.</summary>
+    public string LinkTargetName => _linkTarget is null ? "" : Path.GetFileName(_linkTarget.TrimEnd(Path.DirectorySeparatorChar));
+
+    /// <summary>Goes to the file the shortcut points at: its folder, selected and scrolled to.</summary>
+    public RelayCommand GoToLinkTargetCommand { get; }
 
     public ImageMetadata? ImageMetadata {
         get => _imageMetadata;
@@ -320,7 +407,9 @@ public sealed class PreviewController : ObservableObject {
         _isVisible && (_kind == PreviewKind.None || _kind == PreviewKind.Unsupported);
 
     public string PlaceholderText =>
-        _kind == PreviewKind.None ? Strings.PreviewSelectFile : Strings.PreviewUnsupported;
+        _kind == PreviewKind.None ? Strings.PreviewSelectFile
+        : _linkBroken ? Strings.PreviewLinkBroken
+        : Strings.PreviewUnsupported;
 
 
     // --- Folder census (B2) --------------------------------------------
@@ -360,6 +449,69 @@ public sealed class PreviewController : ObservableObject {
     private string _folderHeadline = "";
     private string _folderTitle = "";
     private string _folderNote = "";
+
+
+    // --- Volume block ---------------------------------------------------
+    // A drive root is a folder like any other as far as the census goes,
+    // but "what is in here" is the wrong first question about a disk. The
+    // one the user is actually asking — how full is it, and what is it —
+    // is answered above the census, from the volume itself rather than
+    // from a walk.
+
+    /// <summary>True when the folder on screen is the root of a volume.</summary>
+    public bool HasVolume => _volume is not null;
+
+    /// <summary>Volume label, or the drive letter when the volume is unnamed.</summary>
+    public string VolumeLabel => _volume is null
+        ? ""
+        : _volume.Label.Length > 0 ? _volume.Label : _volume.Root;
+
+    /// <summary>File system and kind: "NTFS · Локальный диск".</summary>
+    public string VolumeDetail {
+        get {
+            if (_volume is null) {
+                return "";
+            }
+            if (!_volume.IsReady) {
+                return Strings.PreviewVolumeNotReady;
+            }
+
+            var parts = new List<string>();
+            if (_volume.FileSystem.Length > 0) {
+                parts.Add(_volume.FileSystem);
+            }
+            parts.Add(DescribeKind(_volume.Kind));
+
+            return string.Join("   •   ", parts);
+        }
+    }
+
+    /// <summary>"Занято 412 GB из 931 GB" — the headline number for a disk.</summary>
+    public string VolumeUsage => _volume is not { IsReady: true, TotalBytes: > 0 }
+        ? ""
+        : string.Format(
+            Strings.PreviewVolumeUsage,
+            SizeFormatter.Format(_volume.UsedBytes),
+            SizeFormatter.Format(_volume.TotalBytes));
+
+    /// <summary>"Свободно 519 GB" — the number people actually go looking for.</summary>
+    public string VolumeFree => _volume is not { IsReady: true, TotalBytes: > 0 }
+        ? ""
+        : string.Format(Strings.PreviewVolumeFree, SizeFormatter.Format(_volume.FreeBytes));
+
+    /// <summary>Width of the filled part of the capacity bar, as a percentage of the track.</summary>
+    public double VolumeUsedPercent => (_volume?.UsedFraction ?? 0) * 100;
+
+    /// <summary>
+    /// The bar turns amber and then red as the disk fills. Explorer does
+    /// the same thing and it is the one piece of colour on this panel that
+    /// carries information rather than decoration.
+    /// </summary>
+    public string VolumeBarColor => (_volume?.UsedFraction ?? 0) switch {
+        >= 0.95 => "#D13438",
+        >= 0.85 => "#CA8A00",
+        _ => "#0078D7",
+    };
 
 
     // --- Inputs from MainViewModel -------------------------------------
@@ -448,48 +600,36 @@ public sealed class PreviewController : ObservableObject {
         IsLoading = true;
         try {
             string path = _primary.FullPath;
-            string ext = Path.GetExtension(path);
 
-            if (_gifExtensions.Contains(ext)) {
-                LoadGif(path);
-                return;
+            // A shortcut is a file about another file. Nobody opens the
+            // preview pane to look at a .lnk, so it stands aside and the
+            // target is previewed in its place — with the footer saying
+            // whose content is on screen and offering the way over.
+            if (Path.GetExtension(path).Equals(".lnk", StringComparison.OrdinalIgnoreCase)) {
+                string? resolved = ResolveShortcut(path);
+                if (resolved is null) {
+                    Kind = PreviewKind.Unsupported;
+                    return;
+                }
+
+                LinkTarget = resolved;
+                if (Directory.Exists(resolved)) {
+                    await ShowFolderCensusAsync(resolved, ct);
+                    return;
+                }
+                if (!File.Exists(resolved)) {
+                    // A shortcut whose target has been moved or deleted.
+                    // Worth saying in those words: "no preview for this
+                    // file" would blame the wrong file.
+                    _linkBroken = true;
+                    Kind = PreviewKind.Unsupported;
+                    return;
+                }
+
+                path = resolved;
             }
 
-            if (_videoExtensions.Contains(ext)) {
-                LoadVideo(path);
-                return;
-            }
-
-            if (_imageExtensions.Contains(ext)) {
-                await LoadImageAsync(path, ct);
-                return;
-            }
-
-            if (ext.Equals(".pdf", StringComparison.OrdinalIgnoreCase) ||
-                ext.Equals(".html", StringComparison.OrdinalIgnoreCase) ||
-                ext.Equals(".htm", StringComparison.OrdinalIgnoreCase)) {
-                WebUri = new Uri(path);
-                Kind = PreviewKind.Web;
-                return;
-            }
-
-            if (ext.Equals(".md", StringComparison.OrdinalIgnoreCase) ||
-                ext.Equals(".markdown", StringComparison.OrdinalIgnoreCase)) {
-                await LoadMarkdownAsync(path, ct);
-                return;
-            }
-
-            if (_codeExtensions.Contains(ext)) {
-                await LoadCodeAsync(path, ext, ct);
-                return;
-            }
-
-            if (_textExtensions.Contains(ext) || string.IsNullOrEmpty(ext)) {
-                await LoadTextAsync(path, ct);
-                return;
-            }
-
-            Kind = PreviewKind.Unsupported;
+            await LoadFileAsync(path, ct);
         } catch (OperationCanceledException) {
             // newer selection won — ignore
         } finally {
@@ -499,6 +639,123 @@ public sealed class PreviewController : ObservableObject {
             }
         }
     }
+
+    /// <summary>
+    /// Picks a renderer for one file. Split out of the update pass because
+    /// it is also where a shortcut's target lands — the dispatch has to be
+    /// the same whether the user selected the file or something pointing
+    /// at it.
+    /// </summary>
+    private async Task LoadFileAsync(string path, CancellationToken ct) {
+        string ext = Path.GetExtension(path);
+
+        if (_gifExtensions.Contains(ext)) {
+            LoadGif(path);
+
+            return;
+        }
+
+        if (_videoExtensions.Contains(ext)) {
+            LoadVideo(path);
+
+            return;
+        }
+
+        if (_imageExtensions.Contains(ext)) {
+            await LoadImageAsync(path, ct);
+
+            return;
+        }
+
+        if (_webExtensions.Contains(ext)) {
+            WebUri = new Uri(path);
+            Kind = PreviewKind.Web;
+
+            return;
+        }
+
+        if (ext.Equals(".fb2", StringComparison.OrdinalIgnoreCase)) {
+            await LoadBookAsync(path, ct);
+
+            return;
+        }
+
+        if (ext.Equals(".rtf", StringComparison.OrdinalIgnoreCase)) {
+            DocumentPath = path;
+            Kind = PreviewKind.Document;
+
+            return;
+        }
+
+        if (ext.Equals(".md", StringComparison.OrdinalIgnoreCase) ||
+            ext.Equals(".markdown", StringComparison.OrdinalIgnoreCase)) {
+            await LoadMarkdownAsync(path, ct);
+
+            return;
+        }
+
+        if (_codeExtensions.Contains(ext)) {
+            await LoadCodeAsync(path, ext, ct);
+
+            return;
+        }
+
+        // Unity's serialised assets: text only when the project says so,
+        // so the bytes are asked before the pane commits to showing them.
+        if (_maybeTextExtensions.Contains(ext)) {
+            if (await LooksLikeTextAsync(path, ct)) {
+                await LoadCodeAsync(path, ext, ct);
+            } else {
+                Kind = PreviewKind.Unsupported;
+            }
+
+            return;
+        }
+
+        if (_textExtensions.Contains(ext) || string.IsNullOrEmpty(ext)) {
+            await LoadTextAsync(path, ct);
+
+            return;
+        }
+
+        Kind = PreviewKind.Unsupported;
+    }
+
+
+    /// <summary>
+    /// Where a <c>.lnk</c> points, or null when there is no shortcut
+    /// service registered or the file cannot be resolved.
+    /// </summary>
+    private static string? ResolveShortcut(string path) {
+        if (!ServiceLocator.IsRegistered<IShortcutService>()) {
+            return null;
+        }
+
+        try {
+            string? target = ServiceLocator.Get<IShortcutService>().Resolve(path);
+
+            return string.IsNullOrEmpty(target) ? null : target;
+        } catch {
+            // A .lnk to a shell namespace ("This PC"), or a malformed one.
+            return null;
+        }
+    }
+
+
+    private static async Task<bool> LooksLikeTextAsync(string path, CancellationToken ct) {
+        try {
+            using var file = File.OpenRead(path);
+            var head = new byte[TextProbe.SampleSize];
+            int read = await file.ReadAsync(head.AsMemory(), ct);
+
+            return TextProbe.LooksLikeText(head.AsSpan(0, read));
+        } catch (OperationCanceledException) {
+            return false;
+        } catch {
+            return false;
+        }
+    }
+
 
     private void LoadGif(string path) {
         // GifImage decodes the file lazily on the UI thread; we just set the URI.
@@ -673,18 +930,51 @@ public sealed class PreviewController : ObservableObject {
         }
     }
 
+    /// <summary>
+    /// The file's own size, not the selected row's: when the selection is a
+    /// shortcut, the row is a two-kilobyte <c>.lnk</c> and the thing about
+    /// to be read is whatever it points at.
+    /// </summary>
+    private static bool TooBigForText(string path) {
+        try {
+            return new FileInfo(path).Length > PreviewMaxFileSize;
+        } catch {
+            // Gone, or unreadable — the read below will say so properly.
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Reads a text file, working out its encoding rather than assuming
+    /// UTF-8. Assuming turns every byte of a codepaged file into
+    /// <c>U+FFFD</c>, and a folder of old notes reads as a wall of black
+    /// diamonds — see <see cref="EncodingProbe"/>.
+    /// </summary>
+    private static async Task<string?> ReadTextAsync(string path, CancellationToken ct) {
+        try {
+            byte[] bytes = await File.ReadAllBytesAsync(path, ct);
+
+            return EncodingProbe.Decode(bytes);
+        } catch (OperationCanceledException) {
+            throw;
+        } catch {
+            return null;
+        }
+    }
+
     private async Task LoadTextAsync(string path, CancellationToken ct) {
-        if ((_primary?.Size ?? 0) > PreviewMaxFileSize) {
+        if (TooBigForText(path)) {
             Kind = PreviewKind.Unsupported;
             return;
         }
 
-        string text;
+        string? text;
         try {
-            text = await File.ReadAllTextAsync(path, ct);
+            text = await ReadTextAsync(path, ct);
         } catch (OperationCanceledException) {
             return;
-        } catch {
+        }
+        if (text is null) {
             Kind = PreviewKind.Unsupported;
             return;
         }
@@ -701,17 +991,18 @@ public sealed class PreviewController : ObservableObject {
     }
 
     private async Task LoadCodeAsync(string path, string ext, CancellationToken ct) {
-        if ((_primary?.Size ?? 0) > PreviewMaxFileSize) {
+        if (TooBigForText(path)) {
             Kind = PreviewKind.Unsupported;
             return;
         }
 
-        string text;
+        string? text;
         try {
-            text = await File.ReadAllTextAsync(path, ct);
+            text = await ReadTextAsync(path, ct);
         } catch (OperationCanceledException) {
             return;
-        } catch {
+        }
+        if (text is null) {
             Kind = PreviewKind.Unsupported;
             return;
         }
@@ -729,17 +1020,18 @@ public sealed class PreviewController : ObservableObject {
     }
 
     private async Task LoadMarkdownAsync(string path, CancellationToken ct) {
-        if ((_primary?.Size ?? 0) > PreviewMaxFileSize) {
+        if (TooBigForText(path)) {
             Kind = PreviewKind.Unsupported;
             return;
         }
 
-        string md;
+        string? md;
         try {
-            md = await File.ReadAllTextAsync(path, ct);
+            md = await ReadTextAsync(path, ct);
         } catch (OperationCanceledException) {
             return;
-        } catch {
+        }
+        if (md is null) {
             Kind = PreviewKind.Unsupported;
             return;
         }
@@ -748,22 +1040,128 @@ public sealed class PreviewController : ObservableObject {
             return;
         }
 
-        string html = await Task.Run(() => Markdig.Markdown.ToHtml(md), ct);
+        string html = await Task.Run(() => Markdown.ToHtml(md, _markdownPipeline), ct);
         string wrapped = WrapHtml(html);
         WebHtml = wrapped;
         Kind = PreviewKind.Web;
     }
 
-    private static string WrapHtml(string body) {
+
+    /// <summary>
+    /// Markdig speaks plain CommonMark unless told otherwise, and CommonMark
+    /// has no tables — a <c>| … | … |</c> block came out as one run-on
+    /// paragraph of pipes and dashes. Which is most of what a README's
+    /// tables are for.
+    ///
+    /// <para>
+    /// Listed one by one rather than through <c>UseAdvancedExtensions()</c>:
+    /// that bundle also turns YouTube links into iframes and reads
+    /// <c>{#id .class}</c> out of the text as markup, neither of which a
+    /// preview pane wants — least of all one that blocks the network and
+    /// would show the iframe as an empty box.
+    /// </para>
+    /// </summary>
+    private static readonly MarkdownPipeline _markdownPipeline =
+        new MarkdownPipelineBuilder()
+            .UsePipeTables()
+            .UseGridTables()
+            .UseEmphasisExtras()      // ~~strikethrough~~, ++inserted++
+            .UseTaskLists()           // - [x] done
+            .UseAutoLinks()           // bare https://… as a link
+            .UseFootnotes()
+            .Build();
+
+
+    /// <summary>
+    /// FictionBook. Parsed in Core into an HTML fragment and shown through
+    /// the same WebView2 the PDF and Markdown previews use — the format is
+    /// XML, so there is nothing to install and nothing to shell out to.
+    /// </summary>
+    private async Task LoadBookAsync(string path, CancellationToken ct) {
+        long size;
+        try {
+            size = new FileInfo(path).Length;
+        } catch {
+            Kind = PreviewKind.Unsupported;
+
+            return;
+        }
+        if (size > BookMaxFileSize) {
+            Kind = PreviewKind.Unsupported;
+
+            return;
+        }
+
+        Fb2Preview? book;
+        try {
+            book = await Task.Run(() => {
+                using var file = File.OpenRead(path);
+
+                return Fb2Document.Read(file);
+            }, ct);
+        } catch (OperationCanceledException) {
+            return;
+        } catch {
+            Kind = PreviewKind.Unsupported;
+
+            return;
+        }
+
+        if (ct.IsCancellationRequested) {
+            return;
+        }
+        if (book is null) {
+            Kind = PreviewKind.Unsupported;
+
+            return;
+        }
+
+        string body = book.Truncated
+            ? book.BodyHtml + $"<p class='fb2-cut'>{Strings.PreviewBookTruncated}</p>"
+            : book.BodyHtml;
+
+        WebHtml = WrapHtml(body, BookCss);
+        Kind = PreviewKind.Web;
+    }
+
+
+    /// <summary>
+    /// Book-specific rules on top of the shared ones: a cover that sits at
+    /// a plate's size rather than filling the pane, and the indented,
+    /// centred shapes FB2 uses for verse and epigraphs.
+    /// </summary>
+    private const string BookCss = @"
+        .fb2-head { text-align: center; margin-bottom: 1.5em; }
+        .fb2-cover { max-width: 220px; max-height: 320px; box-shadow: 0 1px 6px rgba(0,0,0,.35); margin-bottom: 10px; }
+        .fb2-head h1 { font-size: 18px; margin: 0.2em 0; }
+        .fb2-author { color: #555; margin: 0.2em 0 0; }
+        .fb2-annotation { text-align: left; font-size: 12px; color: #444; border-top: 1px solid #DDD; margin-top: 12px; padding-top: 8px; }
+        .fb2-title { font-size: 15px; font-weight: 600; margin: 1.2em 0 0.5em; }
+        .fb2-title p { margin: 0; }
+        .fb2-empty { height: 0.8em; }
+        .fb2-poem { margin: 1em 2em; font-style: italic; }
+        .fb2-stanza { margin-bottom: 0.8em; }
+        .fb2-text-author { text-align: right; color: #555; font-style: italic; }
+        .fb2-image { display: block; margin: 1em auto; max-width: 100%; }
+        .fb2-cut { color: #A05000; border-top: 1px solid #DDD; padding-top: 8px; }
+        p { text-indent: 1.2em; margin: 0.2em 0; text-align: justify; }
+        blockquote p { text-indent: 0; }";
+
+    private static string WrapHtml(string body, string extraCss = "") {
         return $@"<!doctype html><html><head><meta charset='utf-8'><style>
             body {{ font-family: 'Segoe UI', sans-serif; font-size: 13px; padding: 10px; color: #222; }}
             pre, code {{ font-family: Consolas, monospace; background: #f4f4f4; padding: 2px 4px; border-radius: 3px; }}
             pre {{ padding: 8px; overflow-x: auto; }}
             h1, h2, h3 {{ margin: 0.6em 0 0.3em; }}
             blockquote {{ border-left: 3px solid #ccc; margin: 0; padding-left: 10px; color: #555; }}
-            table {{ border-collapse: collapse; }}
-            th, td {{ border: 1px solid #ccc; padding: 4px 8px; }}
+            /* display:block so a table wider than the pane scrolls inside
+               itself instead of pushing the whole page sideways. */
+            table {{ border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; }}
+            th, td {{ border: 1px solid #ccc; padding: 4px 8px; text-align: left; }}
+            th {{ background: #F0F0F0; }}
             img {{ max-width: 100%; }}
+            ul.contains-task-list {{ list-style: none; padding-left: 1.2em; }}
+            {extraCss}
         </style></head><body>{body}</body></html>";
     }
 
@@ -776,8 +1174,24 @@ public sealed class PreviewController : ObservableObject {
         WebHtml = null;
         GifUri = null;
         VideoUri = null;
+        DocumentPath = null;
         ImageMetadata = null;
         IsRawImage = false;
+        LinkTarget = null;
+        _linkBroken = false;
+        SetVolume(null);
+    }
+
+
+    /// <summary>
+    /// Takes the user to the file the previewed shortcut points at. The
+    /// pane can already show it; this is for when looking is not enough and
+    /// they want to be standing next to it.
+    /// </summary>
+    private void GoToLinkTarget() {
+        if (_linkTarget is { } target) {
+            _reveal?.Invoke(target);
+        }
     }
 
 
@@ -943,6 +1357,7 @@ public sealed class PreviewController : ObservableObject {
         FolderHeadline = Strings.PreviewCounting;
         FolderNote = "";
         FolderTypes.Clear();
+        SetVolume(DescribeVolume(folder));
         Kind = PreviewKind.Folder;
         IsLoading = true;
 
@@ -984,6 +1399,48 @@ public sealed class PreviewController : ObservableObject {
         }
 
         IsLoading = false;
+    }
+
+
+    /// <summary>
+    /// The volume behind a folder, but only when the folder <em>is</em> the
+    /// volume. A drive's capacity above the census of C:\Users would be
+    /// answering about the disk while showing numbers about a folder.
+    /// </summary>
+    private static VolumeInfo? DescribeVolume(string folder) {
+        if (!ServiceLocator.IsRegistered<IVolumeInfoProvider>()) {
+            return null;
+        }
+
+        var volumes = ServiceLocator.Get<IVolumeInfoProvider>();
+
+        return volumes.IsVolumeRoot(folder) ? volumes.Describe(folder) : null;
+    }
+
+    private void SetVolume(VolumeInfo? volume) {
+        if (_volume == volume) {
+            return;
+        }
+
+        _volume = volume;
+        Raise(nameof(HasVolume));
+        Raise(nameof(VolumeLabel));
+        Raise(nameof(VolumeDetail));
+        Raise(nameof(VolumeUsage));
+        Raise(nameof(VolumeFree));
+        Raise(nameof(VolumeUsedPercent));
+        Raise(nameof(VolumeBarColor));
+    }
+
+    private static string DescribeKind(VolumeKind kind) {
+        return kind switch {
+            VolumeKind.Fixed => Strings.VolumeKindFixed,
+            VolumeKind.Removable => Strings.VolumeKindRemovable,
+            VolumeKind.Network => Strings.VolumeKindNetwork,
+            VolumeKind.Optical => Strings.VolumeKindOptical,
+            VolumeKind.Ram => Strings.VolumeKindRam,
+            _ => Strings.VolumeKindUnknown,
+        };
     }
 
 

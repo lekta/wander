@@ -696,7 +696,8 @@
     <value>Показывать скрытые файлы и папки</value>
   </data>
   <data name="SettingsShowSystem" xml:space="preserve">
-    <value>Показывать системные файлы и папки</value>
+    <value>Показывать защищённые системные файлы</value>
+    <comment>Как в Проводнике: скрытый + системный атрибут вместе</comment>
   </data>
   <data name="SettingsHideSystemRootFolders" xml:space="preserve">
     <value>Не показывать системные папки в корне дисков</value>
@@ -913,5 +914,49 @@
   <data name="StatusViewSizeDefault" xml:space="preserve">
     <value>{0}: {1} px (стандартный)</value>
     <comment>{0} — название вида, {1} — размер</comment>
+  </data>
+  <data name="PreviewBookTruncated" xml:space="preserve">
+    <value>Показано начало книги — дальше не разбиралось</value>
+  </data>
+  <data name="PreviewLinkTarget" xml:space="preserve">
+    <value>Ярлык на:</value>
+  </data>
+  <data name="PreviewGoToTarget" xml:space="preserve">
+    <value>Перейти к оригиналу</value>
+  </data>
+  <data name="PreviewGoToTargetHint" xml:space="preserve">
+    <value>Открыть папку с оригиналом и выделить его</value>
+  </data>
+  <data name="PreviewLinkBroken" xml:space="preserve">
+    <value>Оригинал не найден — ярлык ведёт в никуда</value>
+  </data>
+  <data name="PreviewVolumeUsage" xml:space="preserve">
+    <value>Занято {0} из {1}</value>
+    <comment>{0} — занято, {1} — всего</comment>
+  </data>
+  <data name="PreviewVolumeFree" xml:space="preserve">
+    <value>Свободно {0}</value>
+    <comment>{0} — свободное место</comment>
+  </data>
+  <data name="PreviewVolumeNotReady" xml:space="preserve">
+    <value>Устройство не готово</value>
+  </data>
+  <data name="VolumeKindFixed" xml:space="preserve">
+    <value>Локальный диск</value>
+  </data>
+  <data name="VolumeKindRemovable" xml:space="preserve">
+    <value>Съёмный диск</value>
+  </data>
+  <data name="VolumeKindNetwork" xml:space="preserve">
+    <value>Сетевой диск</value>
+  </data>
+  <data name="VolumeKindOptical" xml:space="preserve">
+    <value>Оптический привод</value>
+  </data>
+  <data name="VolumeKindRam" xml:space="preserve">
+    <value>Диск в памяти</value>
+  </data>
+  <data name="VolumeKindUnknown" xml:space="preserve">
+    <value>Диск</value>
   </data>
 </root>

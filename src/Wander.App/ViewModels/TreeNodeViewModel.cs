@@ -14,14 +14,13 @@ public sealed class TreeNodeViewModel : ObservableObject {
     private bool _loaded;
 
 
-    public TreeNodeViewModel(string name, string fullPath, EntryKind kind, IFileSystem? fs, bool hasChildren, SettingsViewModel? settings = null, bool isHidden = false, bool isSystem = false) {
+    public TreeNodeViewModel(string name, string fullPath, EntryKind kind, IFileSystem? fs, bool hasChildren, SettingsViewModel? settings = null, bool isHidden = false) {
         Name = name;
         FullPath = fullPath;
         Kind = kind;
         _fs = fs;
         _settings = settings;
         IsHidden = isHidden;
-        IsSystem = isSystem;
         Children = new ObservableCollection<TreeNodeViewModel>();
 
         // Placeholder so WPF draws the expander chevron before we lazy-load.
@@ -36,7 +35,6 @@ public sealed class TreeNodeViewModel : ObservableObject {
     public string FullPath { get; }
     public EntryKind Kind { get; }
     public bool IsHidden { get; }
-    public bool IsSystem { get; }
     public ObservableCollection<TreeNodeViewModel> Children { get; }
 
     /// <summary>
@@ -136,7 +134,7 @@ public sealed class TreeNodeViewModel : ObservableObject {
                 bool childHasChildren = _fs.HasSubdirectories(entry.FullPath);
                 Children.Add(new TreeNodeViewModel(
                     entry.Name, entry.FullPath, EntryKind.Directory, _fs, childHasChildren,
-                    _settings, entry.IsHidden, entry.IsSystem));
+                    _settings, entry.IsHidden));
             }
         } catch {
             // access denied / unavailable — silently skip; UI will show empty

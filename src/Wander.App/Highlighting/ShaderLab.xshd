@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Unity .shader — ShaderLab on the outside, HLSL/Cg in the blocks between
+    CGPROGRAM/ENDCG and HLSLPROGRAM/ENDHLSL. One rule set covers both: the
+    two vocabularies do not collide, and telling them apart would buy
+    nothing a reader of the file does not already know.
+-->
+<SyntaxDefinition name="ShaderLab" xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
+  <Color name="Comment" foreground="#008000" />
+  <Color name="String" foreground="#A31515" />
+  <Color name="ShaderLabKeyword" foreground="#0000FF" fontWeight="bold" />
+  <Color name="ProgramBlock" foreground="#B05000" fontWeight="bold" />
+  <Color name="Preprocessor" foreground="#808080" />
+  <Color name="HlslKeyword" foreground="#0000FF" />
+  <Color name="HlslType" foreground="#2B91AF" />
+  <Color name="Semantic" foreground="#7A3E9D" />
+  <Color name="Number" foreground="#098658" />
+
+  <RuleSet>
+    <Span color="Comment" begin="//" />
+    <Span color="Comment" multiline="true" begin="/\*" end="\*/" />
+
+    <Span color="String" multiline="false">
+      <Begin>"</Begin>
+      <End>"</End>
+    </Span>
+
+    <Span color="Preprocessor" begin="^\s*#" />
+
+    <Keywords color="ProgramBlock">
+      <Word>CGPROGRAM</Word>
+      <Word>ENDCG</Word>
+      <Word>CGINCLUDE</Word>
+      <Word>HLSLPROGRAM</Word>
+      <Word>ENDHLSL</Word>
+      <Word>HLSLINCLUDE</Word>
+      <Word>GLSLPROGRAM</Word>
+      <Word>ENDGLSL</Word>
+    </Keywords>
+
+    <Keywords color="ShaderLabKeyword">
+      <Word>Shader</Word>
+      <Word>Properties</Word>
+      <Word>SubShader</Word>
+      <Word>Pass</Word>
+      <Word>Category</Word>
+      <Word>Fallback</Word>
+      <Word>CustomEditor</Word>
+      <Word>Tags</Word>
+      <Word>LOD</Word>
+      <Word>Cull</Word>
+      <Word>ZWrite</Word>
+      <Word>ZTest</Word>
+      <Word>Blend</Word>
+      <Word>BlendOp</Word>
+      <Word>ColorMask</Word>
+      <Word>Offset</Word>
+      <Word>Stencil</Word>
+      <Word>Ref</Word>
+      <Word>Comp</Word>
+      <Word>Fail</Word>
+      <Word>ZFail</Word>
+      <Word>Lighting</Word>
+      <Word>AlphaTest</Word>
+      <Word>Name</Word>
+      <Word>UsePass</Word>
+      <Word>GrabPass</Word>
+      <Word>PackageRequirements</Word>
+    </Keywords>
+
+    <Keywords color="HlslKeyword">
+      <Word>struct</Word>
+      <Word>return</Word>
+      <Word>if</Word>
+      <Word>else</Word>
+      <Word>for</Word>
+      <Word>while</Word>
+      <Word>do</Word>
+      <Word>break</Word>
+      <Word>continue</Word>
+      <Word>discard</Word>
+      <Word>switch</Word>
+      <Word>case</Word>
+      <Word>default</Word>
+      <Word>const</Word>
+      <Word>static</Word>
+      <Word>inline</Word>
+      <Word>uniform</Word>
+      <Word>in</Word>
+      <Word>out</Word>
+      <Word>inout</Word>
+      <Word>cbuffer</Word>
+      <Word>register</Word>
+      <Word>true</Word>
+      <Word>false</Word>
+    </Keywords>
+
+    <Keywords color="HlslType">
+      <Word>void</Word>
+      <Word>bool</Word>
+      <Word>int</Word>
+      <Word>uint</Word>
+      <Word>half</Word>
+      <Word>float</Word>
+      <Word>double</Word>
+      <Word>fixed</Word>
+      <Word>half2</Word>
+      <Word>half3</Word>
+      <Word>half4</Word>
+      <Word>float2</Word>
+      <Word>float3</Word>
+      <Word>float4</Word>
+      <Word>fixed2</Word>
+      <Word>fixed3</Word>
+      <Word>fixed4</Word>
+      <Word>int2</Word>
+      <Word>int3</Word>
+      <Word>int4</Word>
+      <Word>float2x2</Word>
+      <Word>float3x3</Word>
+      <Word>float4x4</Word>
+      <Word>sampler2D</Word>
+      <Word>sampler3D</Word>
+      <Word>samplerCUBE</Word>
+      <Word>SamplerState</Word>
+      <Word>Texture2D</Word>
+      <Word>Texture3D</Word>
+      <Word>TextureCube</Word>
+      <Word>Texture2DArray</Word>
+    </Keywords>
+
+    <!-- : POSITION, : SV_Target, : TEXCOORD0 — the bindings that decide
+         what a field actually is. -->
+    <Rule color="Semantic">:\s*(SV_[A-Za-z0-9_]+|POSITION\d*|NORMAL\d*|TANGENT\d*|COLOR\d*|TEXCOORD\d*|VFACE|PSIZE)\b</Rule>
+
+    <Rule color="Number">\b0[xX][0-9a-fA-F]+|\b\d+(\.\d*)?([eE][+-]?\d+)?[fh]?</Rule>
+  </RuleSet>
+</SyntaxDefinition>

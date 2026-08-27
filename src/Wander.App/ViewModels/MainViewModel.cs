@@ -92,6 +92,8 @@ public sealed class MainViewModel : ObservableObject {
     // listing has landed: doing it before would only be overwritten, because
     // rebuilding the list clears whatever the containers had selected.
     private string? _selectFolderAfterListing;
+    /// <summary>Path a <see cref="RevealPath"/> is waiting to select once its folder lists.</summary>
+    private string? _revealPathAfterListing;
 
     // Where the user was in each folder they have been in, so coming back
     // lands on the same row. Capped and oldest-first: a long session walks
@@ -145,7 +147,8 @@ public sealed class MainViewModel : ObservableObject {
                 : null,
             ServiceLocator.IsRegistered<CompanionMetadataService>()
                 ? ServiceLocator.Get<CompanionMetadataService>()
-                : null);
+                : null,
+            RevealPath);
 
         _nav = new NavigationController(
             new NavigationService(),
@@ -247,6 +250,7 @@ public sealed class MainViewModel : ObservableObject {
             UpdateFilterStatus(filtered.Count, _search.Source.Count);
             ApplyRestoreSelection();
             ApplyPendingFolderSelection();
+            ApplyPendingReveal();
         };
 
         _nav.CurrentChanged += (_, _) => OnNavigationChanged();
@@ -912,7 +916,9 @@ public sealed class MainViewModel : ObservableObject {
         // an intent that an empty folder never got to consume.
         _restoreSelection = Array.Empty<string>();
 
-        if (_selectFolderAfterListing is not null || _nav.Current is not { } arriving) {
+        if (_selectFolderAfterListing is not null
+            || _revealPathAfterListing is not null
+            || _nav.Current is not { } arriving) {
             return;
         }
 
@@ -1805,6 +1811,68 @@ public sealed class MainViewModel : ObservableObject {
     public void NavigateAndSelectFolder(string path, NavigationSource source) {
         _selectFolderAfterListing = path;
         NavigateTo(path, source);
+    }
+
+
+    /// <summary>
+    /// "Show me where that actually is": goes to the folder holding
+    /// <paramref name="path"/>, selects the row and scrolls it into view.
+    /// What the preview pane's button for a shortcut's target does, and the
+    /// same move Explorer calls "Open file location".
+    ///
+    /// <para>
+    /// Works for a folder as well as a file — the target is selected in its
+    /// parent's listing either way, rather than opened, because the point
+    /// is to be shown the item, not to walk into it.
+    /// </para>
+    /// </summary>
+    public void RevealPath(string path) {
+        if (string.IsNullOrEmpty(path)) {
+            return;
+        }
+
+        string? folder = Path.GetDirectoryName(
+            path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        if (string.IsNullOrEmpty(folder)) {
+            return;
+        }
+
+        // Already there: no navigation will happen, so no listing will land
+        // to consume the intent — select right away instead.
+        if (IsSamePath(folder, _nav.Current)) {
+            _restoreSelection = new[] { path };
+            FocusListAfterRestore = true;
+            ApplyRestoreSelection();
+
+            return;
+        }
+
+        _revealPathAfterListing = path;
+        NavigateTo(folder, NavigationSource.External);
+    }
+
+
+    /// <summary>
+    /// Selects the row a <see cref="RevealPath"/> was asking for, now that
+    /// its folder has listed. Guarded by the same "is this the listing that
+    /// was asked for" check as the folder case: a navigation that overtook
+    /// this one must not drag the selection along with it.
+    /// </summary>
+    private void ApplyPendingReveal() {
+        if (_revealPathAfterListing is not { } path) {
+            return;
+        }
+
+        string? folder = Path.GetDirectoryName(
+            path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        if (!IsSamePath(folder, _nav.Current)) {
+            return;
+        }
+
+        _revealPathAfterListing = null;
+        _restoreSelection = new[] { path };
+        FocusListAfterRestore = true;
+        ApplyRestoreSelection();
     }
 
 

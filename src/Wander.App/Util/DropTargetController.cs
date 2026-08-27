@@ -69,6 +69,16 @@ public sealed class DropTargetController {
     public string? SelfDropOffender { get; private set; }
 
     /// <summary>
+    /// The target is the folder being listed rather than something the
+    /// cursor is actually pointing at — empty space in the list, or a row
+    /// that is a file. The drop still works (that is what makes "drop into
+    /// this window" a thing), but the user has not aimed at anything yet, so
+    /// refusing out loud here would be shouting at someone who has only just
+    /// picked the file up.
+    /// </summary>
+    public bool TargetIsFallback { get; private set; }
+
+    /// <summary>
     /// The cursor is over the bookmarks strip, where a drop adds a bookmark
     /// rather than moving anything. Set by the window's own strip handlers
     /// and cleared here the moment the cursor is back over a real folder —
@@ -97,7 +107,7 @@ public sealed class DropTargetController {
         }
 
         var paths = (string[])e.Data.GetData(DataFormats.FileDrop);
-        string? target = ResolveTarget(e);
+        string? target = ResolveTarget(e, out bool aimed);
         if (target is null) {
             e.Effects = DragDropEffects.None;
             Reset();
@@ -119,6 +129,7 @@ public sealed class DropTargetController {
             Target = target;
             SelfDropReason = reason;
             SelfDropOffender = offender;
+            TargetIsFallback = !aimed;
             SetHighlight(null);
 
             return;
@@ -129,6 +140,7 @@ public sealed class DropTargetController {
         Target = target;
         SelfDropReason = SelfDropReason.None;
         SelfDropOffender = null;
+        TargetIsFallback = !aimed;
         SetHighlight(FindHighlightElement(e));
     }
 
@@ -146,7 +158,7 @@ public sealed class DropTargetController {
         }
 
         var paths = ((string[])e.Data.GetData(DataFormats.FileDrop)).ToList();
-        string? target = ResolveTarget(e);
+        string? target = ResolveTarget(e, out _);
         if (target is null) {
             return null;
         }
@@ -199,7 +211,12 @@ public sealed class DropTargetController {
     /// tiles — means the folder being listed, which is what makes dropping
     /// "into this window" work at all.
     /// </summary>
-    private string? ResolveTarget(DragEventArgs e) {
+    /// <param name="aimed">
+    /// True when the target is the thing under the cursor, false when it is
+    /// the fallback — see <see cref="TargetIsFallback"/>.
+    /// </param>
+    private string? ResolveTarget(DragEventArgs e, out bool aimed) {
+        aimed = true;
         foreach (var element in Ancestors(e)) {
             if (element.DataContext is FileSystemEntry entry) {
                 if (entry.Kind == EntryKind.Directory) {
@@ -217,6 +234,8 @@ public sealed class DropTargetController {
                 return node.FullPath;
             }
         }
+
+        aimed = false;
 
         return _currentFolder();
     }
@@ -284,6 +303,7 @@ public sealed class DropTargetController {
         Target = null;
         SelfDropReason = SelfDropReason.None;
         SelfDropOffender = null;
+        TargetIsFallback = false;
     }
 
 
