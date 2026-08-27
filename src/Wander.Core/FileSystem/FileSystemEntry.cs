@@ -27,10 +27,25 @@ public sealed record FileSystemEntry(
     // (.pp3 / .xmp) by a pass that runs after the listing has landed — see
     // CompanionMetadataService.WithRatings. null means "not looked at yet"
     // as well as "nothing to say"; the two are the same to everyone above.
-    SidecarRating? Rating = null) {
+    SidecarRating? Rating = null,
+    // The line this file matched a content search on, already trimmed for
+    // display — see Search/ContentMatcher. null in every ordinary listing,
+    // and null for a search hit that matched by name only. Carried on the
+    // entry rather than in a side table for the same reason
+    // OriginalLocation is: the row on screen is the only place it is ever
+    // read, and a parallel dictionary keyed by path would have to be kept
+    // in step with a collection that already knows how to carry it.
+    string? MatchSnippet = null) {
 
     /// <summary>True when this row stands for a file plus its sidecar(s).</summary>
     public bool HasCompanions => Companions is { Count: > 0 };
+
+    /// <summary>
+    /// Folder this entry lives in. Only interesting in a search result
+    /// list, where rows come from many folders at once and the name alone
+    /// no longer says which file is which.
+    /// </summary>
+    public string? ParentFolder => Path.GetDirectoryName(FullPath);
 
     // Convenience: a .lnk that points at a directory is "directory-like" for
     // sort/open purposes even though its on-disk Kind is still File. Other

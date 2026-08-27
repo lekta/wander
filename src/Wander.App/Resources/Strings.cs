@@ -962,4 +962,64 @@ public static class Strings {
 
     /// <summary>Wander не создаёт файлы, о которых не просили: первая оценка снимка без сайдкара спрашивает подтверждение. Формат по-умолчанию — .xmp, потому что он ни на что, кроме оценки, не влияет. Появившийся .pp3 отменяет применение профиля по-умолчанию в RawTherapee.</summary>
     public static string SettingsRawRatingFormatHint => Get(nameof(SettingsRawRatingFormatHint));
+
+    /// <summary>Поиск: найдено {0}, просмотрено {1}</summary>
+    public static string StatusSearching => Get(nameof(StatusSearching));
+
+    /// <summary>Найдено {0} по запросу «{1}» (просмотрено файлов: {2})</summary>
+    public static string StatusSearchFound => Get(nameof(StatusSearchFound));
+
+    /// <summary>Ничего не найдено по запросу «{0}»</summary>
+    public static string StatusSearchNothing => Get(nameof(StatusSearchNothing));
+
+    /// <summary>Поиск остановлен, найдено: {0}</summary>
+    public static string StatusSearchStopped => Get(nameof(StatusSearchStopped));
+
+    /// <summary> — показаны первые {0}</summary>
+    public static string StatusSearchTruncated => Get(nameof(StatusSearchTruncated));
+
+    /// <summary> — не удалось прочитать файлов: {0}</summary>
+    public static string StatusSearchUnreadable => Get(nameof(StatusSearchUnreadable));
+
+    /// <summary>Параметры поиска</summary>
+    public static string SearchOptions => Get(nameof(SearchOptions));
+
+    /// <summary>Искать в содержимом файлов</summary>
+    public static string SearchInContents => Get(nameof(SearchInContents));
+
+    /// <summary>Текст внутри файлов: заметки, исходники, .docx, .epub, а также .doc, .rtf и .pdf — если в системе есть их обработчик</summary>
+    public static string SearchInContentsHint => Get(nameof(SearchInContentsHint));
+
+    /// <summary>В этой папке</summary>
+    public static string SearchScopeFolder => Get(nameof(SearchScopeFolder));
+
+    /// <summary>С подпапками</summary>
+    public static string SearchScopeSubfolders => Get(nameof(SearchScopeSubfolders));
+
+    /// <summary>Весь компьютер</summary>
+    public static string SearchScopeComputer => Get(nameof(SearchScopeComputer));
+
+    /// <summary>Через индекс Windows: отвечает мгновенно, но знает только то, что Windows успел проиндексировать</summary>
+    public static string SearchScopeComputerHint => Get(nameof(SearchScopeComputerHint));
+
+    /// <summary>Индекс Windows недоступен — служба поиска выключена</summary>
+    public static string SearchIndexUnavailable => Get(nameof(SearchIndexUnavailable));
+
+    /// <summary>Enter — искать, Esc — очистить</summary>
+    public static string SearchRunHint => Get(nameof(SearchRunHint));
+
+    /// <summary>Остановить поиск</summary>
+    public static string SearchStop => Get(nameof(SearchStop));
+
+    /// <summary>Очистить поиск</summary>
+    public static string SearchClear => Get(nameof(SearchClear));
+
+    /// <summary>Недавние запросы</summary>
+    public static string SearchHistory => Get(nameof(SearchHistory));
+
+    /// <summary>Папка</summary>
+    public static string ColumnFolder => Get(nameof(ColumnFolder));
+
+    /// <summary>Совпадение</summary>
+    public static string ColumnMatch => Get(nameof(ColumnMatch));
 }

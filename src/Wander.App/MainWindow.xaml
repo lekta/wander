@@ -255,6 +255,62 @@
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Padding" Value="5,3"/>
         </Style>
+
+        <!--
+            The glyphs that sit inside the search box. Templated flat rather
+            than merely restyled: an ordinary WPF button dropped into a text
+            field reads as a second control with its own border, and the box
+            has to look like one field with affordances in it.
+        -->
+        <Style x:Key="BoxGlyphButton" TargetType="Button">
+            <Setter Property="Width" Value="22"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#555"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="2">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#E5E5E5"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="BoxGlyphToggle" TargetType="ToggleButton">
+            <Setter Property="Width" Value="22"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#555"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="2">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#E5E5E5"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#D0D0D0"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
     <Window.InputBindings>
         <KeyBinding Key="F5" Command="{Binding RefreshCommand}"/>
@@ -440,16 +496,24 @@
                 TextBox; the placeholder's visibility flips on HasSearchQuery.
             -->
             <Grid DockPanel.Dock="Right"
-                  Width="200" VerticalAlignment="Center"
+                  Width="250" VerticalAlignment="Center"
                   Margin="0,4,4,4">
+                <!--
+                    The two glyphs overlay the box rather than sitting in
+                    columns beside it: the field has to keep the whole width
+                    so it still looks like one control, and the TextBox's
+                    right padding is what keeps the caret out from under
+                    them.
+                -->
                 <TextBox x:Name="SearchBox"
-                         Padding="6,4"
+                         Padding="6,4,48,4"
                          Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
                          ToolTip="{x:Static res:Strings.SearchHint}"
                          PreviewKeyDown="SearchBox_PreviewKeyDown"/>
                 <TextBlock Text="{x:Static res:Strings.SearchPlaceholder}"
                            Foreground="#999"
-                           Margin="8,0,8,0"
+                           Margin="8,0,50,0"
+                           TextTrimming="CharacterEllipsis"
                            VerticalAlignment="Center"
                            IsHitTestVisible="False">
                     <TextBlock.Style>
@@ -463,6 +527,121 @@
                         </Style>
                     </TextBlock.Style>
                 </TextBlock>
+
+                <StackPanel Orientation="Horizontal"
+                            HorizontalAlignment="Right" VerticalAlignment="Center"
+                            Margin="0,0,3,0">
+                    <!--
+                        Stop replaces Clear while a pass is walking the disk:
+                        the same spot, because they answer the same impulse —
+                        "that is not what I meant, undo it".
+                    -->
+                    <Button Content="&#x25A0;" Style="{StaticResource BoxGlyphButton}"
+                            Command="{Binding StopSearchCommand}"
+                            ToolTip="{x:Static res:Strings.SearchStop}"
+                            Visibility="{Binding ContentSearch.IsRunning, Converter={StaticResource BoolToVisibility}}"/>
+                    <Button Content="&#x2715;"
+                            Command="{Binding ClearSearchCommand}"
+                            ToolTip="{x:Static res:Strings.SearchClear}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource BoxGlyphButton}">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <MultiDataTrigger>
+                                        <MultiDataTrigger.Conditions>
+                                            <Condition Binding="{Binding HasSearchQuery}" Value="True"/>
+                                            <Condition Binding="{Binding ContentSearch.IsRunning}" Value="False"/>
+                                        </MultiDataTrigger.Conditions>
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </MultiDataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                    <ToggleButton x:Name="SearchOptionsToggle"
+                                  Content="&#x22EE;"
+                                  Style="{StaticResource BoxGlyphToggle}"
+                                  ToolTip="{x:Static res:Strings.SearchOptions}"/>
+                </StackPanel>
+
+                <!--
+                    Advanced search (PLAN G3). Deliberately two switches and
+                    a scope rather than a form: every one of them changes what
+                    the box costs to use, and a panel of things that do not
+                    is a panel nobody reads. Filters by type, date and size
+                    join it when the same form is needed for J3.
+                -->
+                <Popup PlacementTarget="{Binding ElementName=SearchBox}" Placement="Bottom"
+                       IsOpen="{Binding IsChecked, ElementName=SearchOptionsToggle, Mode=TwoWay}"
+                       StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+                    <Border Background="White" BorderBrush="#ABADB3" BorderThickness="1"
+                            Padding="10,8" MinWidth="260">
+                        <StackPanel>
+                            <CheckBox Content="{x:Static res:Strings.SearchInContents}"
+                                      ToolTip="{x:Static res:Strings.SearchInContentsHint}"
+                                      IsChecked="{Binding ContentSearch.SearchInContents}"/>
+
+                            <Separator Margin="0,8"/>
+
+                            <RadioButton GroupName="SearchScope" Margin="0,0,0,4"
+                                         Content="{x:Static res:Strings.SearchScopeFolder}"
+                                         IsChecked="{Binding ContentSearch.IsScopeCurrentFolder}"/>
+                            <RadioButton GroupName="SearchScope" Margin="0,0,0,4"
+                                         Content="{x:Static res:Strings.SearchScopeSubfolders}"
+                                         IsChecked="{Binding ContentSearch.IsScopeSubfolders}"/>
+                            <RadioButton GroupName="SearchScope"
+                                         Content="{x:Static res:Strings.SearchScopeComputer}"
+                                         IsChecked="{Binding ContentSearch.IsScopeComputer}"
+                                         IsEnabled="{Binding ContentSearch.CanSearchComputer}"
+                                         ToolTip="{x:Static res:Strings.SearchScopeComputerHint}"/>
+                            <TextBlock Text="{x:Static res:Strings.SearchIndexUnavailable}"
+                                       Foreground="#A05000" FontSize="11" Margin="18,2,0,0"
+                                       TextWrapping="Wrap">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding ContentSearch.CanSearchComputer}" Value="False">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+
+                            <TextBlock Text="{x:Static res:Strings.SearchRunHint}"
+                                       Foreground="#777" FontSize="11" Margin="0,10,0,0">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding ContentSearch.IsDeep}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+
+                            <StackPanel Visibility="{Binding ContentSearch.HasHistory, Converter={StaticResource BoolToVisibility}}">
+                                <Separator Margin="0,8"/>
+                                <TextBlock Text="{x:Static res:Strings.SearchHistory}"
+                                           Foreground="#777" FontSize="11" Margin="0,0,0,3"/>
+                                <ListBox x:Name="SearchHistoryList" MaxHeight="140" BorderThickness="0"
+                                         ItemsSource="{Binding ContentSearch.History}"
+                                         SelectionChanged="SearchHistoryList_SelectionChanged"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding}" Padding="2,1"
+                                                       TextTrimming="CharacterEllipsis" ToolTip="{Binding}"/>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </Popup>
             </Grid>
 
             <!--

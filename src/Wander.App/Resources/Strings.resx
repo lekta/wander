@@ -1045,4 +1045,64 @@
   <data name="SettingsRawRatingFormatHint" xml:space="preserve">
     <value>Wander не создаёт файлы, о которых не просили: первая оценка снимка без сайдкара спрашивает подтверждение. Формат по-умолчанию — .xmp, потому что он ни на что, кроме оценки, не влияет. Появившийся .pp3 отменяет применение профиля по-умолчанию в RawTherapee.</value>
   </data>
+  <data name="StatusSearching" xml:space="preserve">
+    <value>Поиск: найдено {0}, просмотрено {1}</value>
+  </data>
+  <data name="StatusSearchFound" xml:space="preserve">
+    <value>Найдено {0} по запросу «{1}» (просмотрено файлов: {2})</value>
+  </data>
+  <data name="StatusSearchNothing" xml:space="preserve">
+    <value>Ничего не найдено по запросу «{0}»</value>
+  </data>
+  <data name="StatusSearchStopped" xml:space="preserve">
+    <value>Поиск остановлен, найдено: {0}</value>
+  </data>
+  <data name="StatusSearchTruncated" xml:space="preserve">
+    <value> — показаны первые {0}</value>
+  </data>
+  <data name="StatusSearchUnreadable" xml:space="preserve">
+    <value> — не удалось прочитать файлов: {0}</value>
+  </data>
+  <data name="SearchOptions" xml:space="preserve">
+    <value>Параметры поиска</value>
+  </data>
+  <data name="SearchInContents" xml:space="preserve">
+    <value>Искать в содержимом файлов</value>
+  </data>
+  <data name="SearchInContentsHint" xml:space="preserve">
+    <value>Текст внутри файлов: заметки, исходники, .docx, .epub, а также .doc, .rtf и .pdf — если в системе есть их обработчик</value>
+  </data>
+  <data name="SearchScopeFolder" xml:space="preserve">
+    <value>В этой папке</value>
+  </data>
+  <data name="SearchScopeSubfolders" xml:space="preserve">
+    <value>С подпапками</value>
+  </data>
+  <data name="SearchScopeComputer" xml:space="preserve">
+    <value>Весь компьютер</value>
+  </data>
+  <data name="SearchScopeComputerHint" xml:space="preserve">
+    <value>Через индекс Windows: отвечает мгновенно, но знает только то, что Windows успел проиндексировать</value>
+  </data>
+  <data name="SearchIndexUnavailable" xml:space="preserve">
+    <value>Индекс Windows недоступен — служба поиска выключена</value>
+  </data>
+  <data name="SearchRunHint" xml:space="preserve">
+    <value>Enter — искать, Esc — очистить</value>
+  </data>
+  <data name="SearchStop" xml:space="preserve">
+    <value>Остановить поиск</value>
+  </data>
+  <data name="SearchClear" xml:space="preserve">
+    <value>Очистить поиск</value>
+  </data>
+  <data name="SearchHistory" xml:space="preserve">
+    <value>Недавние запросы</value>
+  </data>
+  <data name="ColumnFolder" xml:space="preserve">
+    <value>Папка</value>
+  </data>
+  <data name="ColumnMatch" xml:space="preserve">
+    <value>Совпадение</value>
+  </data>
 </root>

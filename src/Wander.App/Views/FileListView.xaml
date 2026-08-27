@@ -433,6 +433,28 @@
                     (Details_Sorting refuses), so this field is free to be
                     the identifier the view model understands.
                 -->
+                <!--
+                    Where the file is, and what it matched on. Both are
+                    meaningless in a folder listing — every row shares the
+                    folder, and nothing matched anything — so both are
+                    collapsed until the list is showing search results (see
+                    ShowSearchColumns), for the same reason the rating column
+                    is: an always-present column of nothing is a column
+                    everyone learns to look past.
+
+                    Neither is sortable. Sorting exists here for the columns
+                    the view model knows a SortKey for; these two would need
+                    keys of their own, and "sort my results by the line they
+                    matched on" is not a thing anybody has asked for.
+                -->
+                <DataGridTextColumn x:Name="FolderColumn"
+                                    Header="{x:Static res:Strings.ColumnFolder}"
+                                    Binding="{Binding ParentFolder}"
+                                    Width="220" CanUserSort="False"/>
+                <DataGridTextColumn x:Name="MatchColumn"
+                                    Header="{x:Static res:Strings.ColumnMatch}"
+                                    Binding="{Binding MatchSnippet}"
+                                    Width="*" CanUserSort="False"/>
                 <DataGridTextColumn Header="{x:Static res:Strings.ColumnType}" Binding="{Binding Kind}" Width="80" SortMemberPath="Type"/>
                 <DataGridTextColumn Header="{x:Static res:Strings.ColumnSize}" Binding="{Binding Size}" Width="100" SortMemberPath="Size"/>
                 <DataGridTextColumn Header="{x:Static res:Strings.ColumnModified}" Binding="{Binding ModifiedUtc, StringFormat=yyyy-MM-dd HH:mm}" Width="140" SortMemberPath="ModifiedDate"/>
@@ -545,9 +567,27 @@
                                         <TextBox Style="{StaticResource RenameEditor}"
                                                  FontSize="{Binding DataContext.Settings.TilesMetrics.LabelFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
                                     </Grid>
+                                    <!--
+                                        The second line is the file's kind in
+                                        a folder and its folder in a result
+                                        list: in results the rows come from
+                                        everywhere, and "File" repeated down
+                                        the column tells the user nothing that
+                                        the path would not tell them better.
+                                    -->
                                     <TextBlock Foreground="#777" TextTrimming="CharacterEllipsis"
                                                FontSize="{Binding DataContext.Settings.TilesMetrics.SecondaryFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}">
-                                        <Run Text="{Binding Kind, Mode=OneWay}"/>
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Text" Value="{Binding Kind, Mode=OneWay}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding DataContext.IsSearchResults, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
+                                                        <Setter Property="Text" Value="{Binding ParentFolder, Mode=OneWay}"/>
+                                                        <Setter Property="ToolTip" Value="{Binding MatchSnippet, Mode=OneWay}"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
                                     </TextBlock>
                                 </StackPanel>
                             </Grid>

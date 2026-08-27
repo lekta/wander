@@ -87,6 +87,7 @@ public partial class FileListView : UserControl {
             ShowSortIndicator();
             ApplyIconColumnWidth();
             ShowRatingColumn();
+            ShowSearchColumns();
         }
     }
 
@@ -121,7 +122,27 @@ public partial class FileListView : UserControl {
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e) {
         if (e.PropertyName == nameof(MainViewModel.HasRatings)) {
             ShowRatingColumn();
+        } else if (e.PropertyName == nameof(MainViewModel.IsSearchResults)) {
+            ShowSearchColumns();
         }
+    }
+
+
+    /// <summary>
+    /// "Folder" and "Match" appear only while the list is showing search
+    /// results. Assigned from code rather than bound for the same reason
+    /// <see cref="ShowRatingColumn"/> is: a
+    /// <see cref="System.Windows.Controls.DataGridColumn"/> is not in the
+    /// visual tree, so a binding on it resolves to nothing — silently.
+    /// </summary>
+    private void ShowSearchColumns() {
+        if (DataContext is not MainViewModel vm) {
+            return;
+        }
+
+        var visibility = vm.IsSearchResults ? Visibility.Visible : Visibility.Collapsed;
+        FolderColumn.Visibility = visibility;
+        MatchColumn.Visibility = visibility;
     }
 
     /// <summary>

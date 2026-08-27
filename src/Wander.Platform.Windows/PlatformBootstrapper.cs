@@ -10,6 +10,7 @@ using Wander.Core.Icons;
 using Wander.Core.Logging;
 using Wander.Core.Operations;
 using Wander.Core.Persistence;
+using Wander.Core.Search;
 using Wander.Core.Shell;
 using Wander.Core.Undo;
 using Wander.Platform.Windows.Diagnostics;
@@ -17,6 +18,7 @@ using Wander.Platform.Windows.FileSystem;
 using Wander.Platform.Windows.Icons;
 using Wander.Platform.Windows.Logging;
 using Wander.Platform.Windows.Persistence;
+using Wander.Platform.Windows.Search;
 using Wander.Platform.Windows.Shell;
 
 namespace Wander.Platform.Windows;
@@ -58,6 +60,29 @@ public static class PlatformBootstrapper {
         ServiceLocator.Register<IShellNamespace>(new WindowsShellNamespace(logger));
         ServiceLocator.Register<IShellContextMenu>(new ShellContextMenu(logger));
         ServiceLocator.Register<IImageMetadataReader>(new MetadataExtractorImageReader());
+
+        // Search inside files. The extractors are tried in this order, and
+        // the order is the whole design: the zip-based documents first
+        // because Core reads them without leaving the process, the system's
+        // own document filters next for the formats nothing else here can
+        // open (.doc, .rtf, .pdf where a reader is installed), and
+        // "anything that turns out to be text" last, since it is willing to
+        // try every file it is offered.
+        var searchFs = ServiceLocator.Get<IFileSystem>();
+        var searchCache = new ExtractedTextCache();
+        var searchIndex = new WindowsSearchIndex(logger);
+        ServiceLocator.Register<ExtractedTextCache>(searchCache);
+        ServiceLocator.Register<IIndexedSearch>(searchIndex);
+        ServiceLocator.Register<ContentSearchService>(new ContentSearchService(
+            searchFs,
+            new IContentExtractor[] {
+                new ZipDocumentExtractor(searchFs),
+                new FilterTextExtractor(logger),
+                new PlainTextExtractor(searchFs),
+            },
+            searchCache,
+            searchIndex,
+            logger));
 
         // Undo + recycle bin + ops are the single shared instances every
         // caller (VM, drop handlers, future scripting) must reach for.

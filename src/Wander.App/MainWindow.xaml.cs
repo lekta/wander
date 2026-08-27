@@ -464,21 +464,53 @@ public partial class MainWindow : Window {
     private void SearchBox_PreviewKeyDown(object sender, KeyEventArgs e) {
         // Esc: clear the filter on the first press, then hand focus back to
         // the active file list on the second press (so the box doesn't trap
-        // the user). Enter also hands focus to the list so arrow keys work
-        // straight away on the filtered results.
+        // the user). A running search is stopped first — Esc means "stop
+        // what I started" before it means "clear what I typed".
         if (e.Key == Key.Escape) {
-            if (!string.IsNullOrEmpty(Vm.SearchQuery)) {
-                Vm.SearchQuery = "";
+            if (Vm.ContentSearch.IsRunning) {
+                Vm.StopSearchCommand.Execute(null);
+            } else if (!string.IsNullOrEmpty(Vm.SearchQuery) || Vm.ContentSearch.IsShowingResults) {
+                Vm.ClearSearchCommand.Execute(null);
             } else {
                 FileList.FocusList();
             }
             e.Handled = true;
+
             return;
         }
+
+        // Enter: with a deep search set up (subfolders / contents / the
+        // whole computer) this is what starts it, and the keyboard stays in
+        // the box so the query can be corrected. Otherwise the filter has
+        // already been applied letter by letter and Enter only moves the
+        // keyboard to the results.
         if (e.Key == Key.Enter) {
-            FileList.FocusList();
+            if (Vm.ContentSearch.IsDeep) {
+                Vm.SearchCommand.Execute(null);
+            } else {
+                FileList.FocusList();
+            }
             e.Handled = true;
         }
+    }
+
+
+    /// <summary>
+    /// A query picked out of the history. Runs it rather than only filling
+    /// the box: the list is there to repeat a search, and the extra Enter
+    /// would be a step with nothing to decide in it.
+    /// </summary>
+    private void SearchHistoryList_SelectionChanged(object sender, SelectionChangedEventArgs e) {
+        if (SearchHistoryList.SelectedItem is not string query) {
+            return;
+        }
+
+        // Cleared before the search so re-picking the same query works: a
+        // ListBox raises nothing when the selection does not change.
+        SearchHistoryList.SelectedItem = null;
+        SearchOptionsToggle.IsChecked = false;
+        Vm.SearchQuery = query;
+        Vm.SearchCommand.Execute(null);
     }
 
     // --- Keyboard zones --------------------------------------------------
