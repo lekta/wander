@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Wander.Core.Companions;
+using Wander.Core.Search;
 
 namespace Wander.Core.FileSystem;
 
@@ -24,6 +25,7 @@ namespace Wander.Core.FileSystem;
 /// </summary>
 public sealed class SearchController : INotifyPropertyChanged {
     private string _query = "";
+    private NameFilter _name = NameFilter.Empty;
     private RatingFilter _rating = RatingFilter.None;
     private IReadOnlyList<FileSystemEntry> _source = Array.Empty<FileSystemEntry>();
     private CancellationTokenSource? _cts;
@@ -67,6 +69,9 @@ public sealed class SearchController : INotifyPropertyChanged {
                 return;
             }
             _query = value;
+            // Parsed here rather than in the loop: the mask is re-read on
+            // every keystroke and applied to every row of the folder.
+            _name = NameFilter.Parse(value);
             Raise();
             Raise(nameof(HasQuery));
             _ = ApplyAsync();
@@ -122,6 +127,7 @@ public sealed class SearchController : INotifyPropertyChanged {
         _cts?.Cancel();
         if (_query.Length > 0) {
             _query = "";
+            _name = NameFilter.Empty;
             Raise(nameof(Query));
             Raise(nameof(HasQuery));
         }
@@ -191,7 +197,7 @@ public sealed class SearchController : INotifyPropertyChanged {
 
     /// <summary>Whether one row survives the current filters. Cheap enough to run inline.</summary>
     private bool Passes(FileSystemEntry entry) {
-        if (_query.Length > 0 && !entry.Name.Contains(_query, StringComparison.OrdinalIgnoreCase)) {
+        if (!_name.Matches(entry.Name)) {
             return false;
         }
 
@@ -207,11 +213,11 @@ public sealed class SearchController : INotifyPropertyChanged {
 
         // Snapshot the inputs so a Refresh / new keystroke mid-flight cannot
         // race us — we either complete with these inputs or get cancelled.
-        string query = _query;
+        var name = _name;
         var rating = _rating;
         var source = _source;
 
-        if (string.IsNullOrEmpty(query) && !rating.IsActive) {
+        if (name.IsEmpty && !rating.IsActive) {
             FilteredChanged?.Invoke(source);
             return;
         }
@@ -222,7 +228,7 @@ public sealed class SearchController : INotifyPropertyChanged {
                 var result = new List<FileSystemEntry>();
                 foreach (var e in source) {
                     token.ThrowIfCancellationRequested();
-                    if (query.Length > 0 && !e.Name.Contains(query, StringComparison.OrdinalIgnoreCase)) {
+                    if (!name.Matches(e.Name)) {
                         continue;
                     }
                     // Folders are never filtered out by a rating: a folder

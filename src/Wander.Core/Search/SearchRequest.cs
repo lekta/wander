@@ -7,26 +7,54 @@ namespace Wander.Core.Search;
 /// setting changed mid-flight cannot alter a search that is already
 /// running — the same rule the folder listing follows with
 /// <see cref="EntryVisibility"/> and <see cref="SortOptions"/>.
+///
+/// <para>
+/// Two criteria, not one, and they are combined with <em>and</em>. That is
+/// the whole point of splitting them: "every <c>.cs</c> that mentions
+/// <c>ExtractedTextCache</c>" is the question people actually have, and a
+/// single field could only ever answer "name or contents", which returns
+/// every picture in the folder whose name happens to contain the letter
+/// the user was looking for inside documents.
+/// </para>
 /// </summary>
-/// <param name="Query">What the user typed. Never empty — an empty query is not a search.</param>
-/// <param name="Root">Folder the search starts from. Ignored when <paramref name="Scope"/> is <see cref="SearchScope.Computer"/>.</param>
+/// <param name="Name">
+/// Mask on the file name. Empty lets everything through — a search for
+/// text alone is a legitimate search.
+/// </param>
+/// <param name="Text">
+/// Text to look for inside files. Empty means names only, which is also
+/// what makes this the cheap half: contents mean opening every candidate.
+/// </param>
+/// <param name="Root">Folder the search starts from.</param>
 /// <param name="Scope">How far to reach.</param>
-/// <param name="SearchContents">
-/// Also look inside files, not just at their names. Off by default because
-/// it is the expensive half: names come free with the directory listing,
-/// contents mean opening every candidate file.
+/// <param name="SearchBinaries">
+/// Also scan files that are not text, byte for byte — see
+/// <see cref="BinaryTextSearch"/>. Only meaningful together with
+/// <paramref name="Text"/>.
 /// </param>
 /// <param name="Visibility">Which entries may appear, same rules as the folder listing.</param>
 public sealed record SearchRequest(
-    string Query,
+    NameFilter Name,
+    string Text,
     string Root,
     SearchScope Scope,
-    bool SearchContents,
+    bool SearchBinaries,
     EntryVisibility Visibility) {
+    /// <summary>True when files have to be opened to answer this.</summary>
+    public bool HasText => Text.Length > 0;
+
+    /// <summary>
+    /// True when this asks for nothing at all. Such a request is not run:
+    /// "show me every file on the disk" is not a search, it is a mistake
+    /// with a five-thousand-row result.
+    /// </summary>
+    public bool IsEmpty => Name.IsEmpty && Text.Length == 0;
+
     /// <summary>
     /// Files larger than this are not read for content. Not a parser limit:
     /// a floor under how long one row of a folder full of database dumps
-    /// may hold up the pass. Names of oversized files are still matched.
+    /// may hold up the pass. Names of oversized files are still matched,
+    /// unless the search also asks for text — then they cannot qualify.
     /// </summary>
     public long MaxFileSize { get; init; } = 32L * 1024 * 1024;
 

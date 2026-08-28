@@ -1,27 +1,20 @@
 namespace Wander.Core.Search;
 
 /// <summary>
-/// How far a search reaches. The three values are three different costs,
-/// which is why they are a user-facing choice rather than a heuristic:
-/// filtering the folder on screen is free, walking its subtree is seconds,
-/// and the whole machine is only affordable through somebody else's index.
+/// How far a search reaches. The two values are two different costs, which
+/// is why this is a user-facing choice rather than a heuristic: one folder
+/// is bounded by a single listing, a subtree is not bounded by anything.
+/// That difference is also what decides whether a search may start on its
+/// own from a two-character query — see
+/// <c>ContentSearchController.MinAutoRunLength</c>.
 /// </summary>
 public enum SearchScope {
     /// <summary>
-    /// The listing already on screen. No disk access at all — this is the
-    /// live name filter that <see cref="FileSystem.SearchController"/> has
-    /// always done, and it stays the default.
+    /// The folder on screen and nothing else. Cheap enough that a content
+    /// search here runs as freely as the name filter does.
     /// </summary>
     CurrentFolder,
 
-    /// <summary>The current folder and everything under it, walked by us.</summary>
+    /// <summary>The current folder and everything under it.</summary>
     Subfolders,
-
-    /// <summary>
-    /// Everything the Windows Search index knows about. Answered by
-    /// <see cref="IIndexedSearch"/> rather than by walking: an index that
-    /// the operating system already maintains costs us nothing to read and
-    /// nothing to keep up to date.
-    /// </summary>
-    Computer,
 }

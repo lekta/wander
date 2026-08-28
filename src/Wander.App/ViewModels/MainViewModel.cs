@@ -157,12 +157,6 @@ public sealed class MainViewModel : ObservableObject {
     private readonly SearchController _search = new();
     private int _hiddenCount;
 
-    // The box's text lives here rather than in SearchController because the
-    // box drives two different things: the live name filter (which is what
-    // SearchController is) and the query a deep search runs on Enter. Only
-    // the first is forwarded, and only while the search is shallow — see
-    // ContentSearchController.IsDeep.
-    private string _searchText = "";
 
     // Rows the running (or last) search found, in arrival order. Kept apart
     // from Entries so a re-sort has something to sort: Entries is the
@@ -170,6 +164,7 @@ public sealed class MainViewModel : ObservableObject {
     private readonly List<FileSystemEntry> _searchResults = new();
     private DispatcherTimer? _resultFlushTimer;
     private bool _resultsDirty;
+    private bool _isSearchWindowOpen;
 
     private bool _restoring;
 
@@ -309,19 +304,27 @@ public sealed class MainViewModel : ObservableObject {
 
         _clipboard.Changed += (_, _) => PasteCommand.RaiseCanExecuteChanged();
 
+        // The controller decides for itself when to run, so it needs the
+        // two things only the view model knows — where we are and what may
+        // be shown. Handed as callbacks rather than copied, because both
+        // change under it while a search is being set up.
         ContentSearch = new ContentSearchController(
             _dispatcher,
             ServiceLocator.IsRegistered<ContentSearchService>()
                 ? ServiceLocator.Get<ContentSearchService>()
                 : null,
+            () => _nav.Current,
+            () => Settings.Visibility,
             _log);
+        ContentSearch.Started += BeginSearchResults;
         ContentSearch.BatchArrived += AppendSearchResults;
         ContentSearch.Progressed += ShowSearchProgress;
         ContentSearch.Finished += FinishSearch;
+        ContentSearch.ShallowChanged += SyncLiveFilter;
         ContentSearch.PropertyChanged += OnContentSearchChanged;
 
-        SearchCommand = new RelayCommand(_ => StartSearch());
-        StopSearchCommand = new RelayCommand(_ => ContentSearch.Cancel(), _ => ContentSearch.IsRunning);
+        SearchCommand = new RelayCommand(_ => ContentSearch.RunNow());
+        StopSearchCommand = new RelayCommand(_ => ContentSearch.Stop(), _ => ContentSearch.IsRunning);
         ClearSearchCommand = new RelayCommand(_ => ClearSearch(), _ => HasSearchQuery || ContentSearch.IsShowingResults);
 
         _search.PropertyChanged += (_, e) => {
@@ -554,20 +557,11 @@ public sealed class MainViewModel : ObservableObject {
     /// — a disk walk per keystroke is not a filter.
     /// </summary>
     public string SearchQuery {
-        get => _searchText;
-        set {
-            value ??= "";
-            if (_searchText == value) {
-                return;
-            }
-            _searchText = value;
-            Raise();
-            Raise(nameof(HasSearchQuery));
-            _search.Query = ContentSearch.IsDeep ? "" : value;
-        }
+        get => ContentSearch.FilterText;
+        set => ContentSearch.FilterText = value;
     }
 
-    public bool HasSearchQuery => _searchText.Length > 0;
+    public bool HasSearchQuery => ContentSearch.NameQuery.Length > 0 || ContentSearch.TextQuery.Length > 0;
 
     /// <summary>
     /// The deep half of search — subfolders, file contents, the system
@@ -577,6 +571,16 @@ public sealed class MainViewModel : ObservableObject {
 
     /// <summary>True when the list is showing search results rather than a folder.</summary>
     public bool IsSearchResults => ContentSearch.IsShowingResults;
+
+    /// <summary>
+    /// Whether the search window is up. The toolbar box hides while it is:
+    /// the same criteria in two places is how one of them ends up stale,
+    /// and only the window can show all of them.
+    /// </summary>
+    public bool IsSearchWindowOpen {
+        get => _isSearchWindowOpen;
+        set => SetField(ref _isSearchWindowOpen, value);
+    }
 
     /// <summary>
     /// The view on screen. Written both by the user (through
@@ -919,18 +923,6 @@ public sealed class MainViewModel : ObservableObject {
                 Raise(nameof(BookmarksHeight));
             }
 
-            ContentSearch.SearchInContents = session.SearchInContents;
-            if (Enum.TryParse<SearchScope>(session.SearchScope, out var scope)) {
-                // "The whole computer" is only offered while there is an
-                // index behind it; a saved choice from a machine where the
-                // service has since been switched off falls back rather
-                // than leaving the box pointed at nothing.
-                ContentSearch.Scope = scope == SearchScope.Computer && !ContentSearch.CanSearchComputer
-                    ? SearchScope.CurrentFolder
-                    : scope;
-            }
-            ContentSearch.LoadHistory(session.SearchHistory);
-
             _favorites.Clear();
             _favorites.AddRange(state.Favorites);
             _isBookmarksExpanded = session.IsBookmarksExpanded;
@@ -1010,9 +1002,6 @@ public sealed class MainViewModel : ObservableObject {
                 BookmarksHeight = _bookmarksHeight,
                 IsBookmarksExpanded = _isBookmarksExpanded,
                 RecentPaths = _nav.RecentPaths.ToArray(),
-                SearchInContents = ContentSearch.SearchInContents,
-                SearchScope = ContentSearch.Scope.ToString(),
-                SearchHistory = ContentSearch.History.ToArray(),
             },
             Favorites = _favorites.ToArray(),
             Settings = Settings.ToRecord(),
@@ -1057,18 +1046,20 @@ public sealed class MainViewModel : ObservableObject {
         // SearchController.Reset cancels any in-flight pass; the upcoming
         // Refresh → SetSource will reapply the (now empty) query.
         _search.Reset();
-        // Same rule one level up: walking into a folder is leaving the
-        // result list. Done before Refresh, which refuses to run at all
-        // while results are on screen.
-        if (ContentSearch.IsShowingResults) {
-            ContentSearch.ExitResults();
-            StopResultFlushTimer();
-            _searchResults.Clear();
-            _searchText = "";
-            Raise(nameof(SearchQuery));
-            Raise(nameof(HasSearchQuery));
-        }
+        // Same rule one level up, and it has to run every time rather than
+        // only when results are on screen: the box holds its own copy of
+        // the criteria now, so clearing just the filter behind it left the
+        // box claiming a filter the list was not applying. Flags included —
+        // see ContentSearchController.Reset.
+        // Results are dropped before the reset, not after: the reset
+        // raises IsShowingResults, whose handler re-lists the folder when
+        // it still sees rows — and the Refresh below would then be the
+        // second listing of the same folder in one navigation.
+        StopResultFlushTimer();
+        _searchResults.Clear();
+        ContentSearch.Reset();
         Refresh();
+        ContentSearch.NoteRootChanged();
         ExpandTreeToCurrent();
         Preview.SetCurrentFolder(_nav.Current, WindowTitle);
         UpdateFolderWatch();
@@ -2206,27 +2197,13 @@ public sealed class MainViewModel : ObservableObject {
     // its results, and is everything below.
 
     /// <summary>
-    /// Enter in the search box. A no-op while the search is shallow: there
-    /// the filter has already been applied letter by letter, and Enter only
-    /// moves the keyboard to the list.
-    /// </summary>
-    private void StartSearch() {
-        if (!ContentSearch.IsDeep || string.IsNullOrWhiteSpace(_searchText)) {
-            return;
-        }
-
-        RunSearch();
-    }
-
-
-    /// <summary>
     /// F5 while results are on screen. Re-running the search is what
     /// "refresh" means there — re-listing the folder underneath would throw
     /// the results away, which is the opposite of what the key is for.
     /// </summary>
     private void RefreshOrRerunSearch() {
-        if (ContentSearch.IsShowingResults) {
-            RunSearch();
+        if (ContentSearch.IsShowingResults || ContentSearch.IsDeep) {
+            ContentSearch.Rerun();
 
             return;
         }
@@ -2235,14 +2212,12 @@ public sealed class MainViewModel : ObservableObject {
     }
 
 
-    private void RunSearch() {
-        if (string.IsNullOrWhiteSpace(_searchText)) {
-            return;
-        }
-
-        // The folder listing and the rating pass are both about to be
-        // replaced on screen; leaving them running would only let a late
-        // arrival overwrite the results.
+    /// <summary>
+    /// A pass is starting. The folder listing and the rating pass are both
+    /// about to be replaced on screen; leaving them running would only let
+    /// a late arrival overwrite the results.
+    /// </summary>
+    private void BeginSearchResults() {
         _listLoadCts?.Cancel();
         _ratingCts?.Cancel();
         IsListLoading = false;
@@ -2251,26 +2226,42 @@ public sealed class MainViewModel : ObservableObject {
         _searchResults.Clear();
         Entries.Clear();
         Status = string.Format(Strings.StatusSearching, 0, 0);
-
-        ContentSearch.Start(_searchText, _nav.Current, Settings.Visibility);
         StartResultFlushTimer();
     }
 
 
     /// <summary>
-    /// Empties the box and puts the folder back. Bound to the box's own Esc
-    /// and to the clear button.
+    /// Empties both fields and puts the folder back. Bound to the box's own
+    /// Esc, to the clear button and to the search window's Esc.
     /// </summary>
     private void ClearSearch() {
-        SearchQuery = "";
-        if (!ContentSearch.IsShowingResults) {
+        bool hadResults = ContentSearch.IsShowingResults;
+        ContentSearch.Clear();
+        if (!hadResults) {
             return;
         }
 
-        ContentSearch.ExitResults();
         StopResultFlushTimer();
         _searchResults.Clear();
         Refresh();
+    }
+
+
+    /// <summary>
+    /// Points the live name filter at the mask, or takes it off. Only the
+    /// shallow case filters live: once contents or a wider scope are in
+    /// play the folder on screen is not the answer to anything, and
+    /// narrowing it would be a second, contradictory result on the same
+    /// screen.
+    /// </summary>
+    private void SyncLiveFilter() {
+        // The live filter only ever gets the name half: the box may read
+        // "*.cs:budget", but a filter over the folder on screen has no way
+        // to honour the second half, and pretending otherwise would narrow
+        // the list by a rule it is not applying.
+        _search.Query = ContentSearch.IsDeep ? "" : ContentSearch.NameQuery;
+        Raise(nameof(SearchQuery));
+        Raise(nameof(HasSearchQuery));
     }
 
 
@@ -2291,10 +2282,14 @@ public sealed class MainViewModel : ObservableObject {
     }
 
 
+    /// <summary>
+    /// How far along the pass is. The search window has no status strip of
+    /// its own, so this is the only place the counts appear while the walk
+    /// is running — the spinner in the file area says "still going", and
+    /// this says how far.
+    /// </summary>
     private void ShowSearchProgress(SearchProgress progress) {
-        if (ContentSearch.IsRunning) {
-            Status = string.Format(Strings.StatusSearching, progress.Found, progress.FilesScanned);
-        }
+        Status = string.Format(Strings.StatusSearching, progress.Found, progress.FilesScanned);
     }
 
 
@@ -2313,9 +2308,10 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
+        string what = SearchDescription();
         string text = result.Found == 0
-            ? string.Format(Strings.StatusSearchNothing, ContentSearch.ActiveQuery)
-            : string.Format(Strings.StatusSearchFound, result.Found, ContentSearch.ActiveQuery, result.FilesScanned);
+            ? string.Format(Strings.StatusSearchNothing, what)
+            : string.Format(Strings.StatusSearchFound, result.Found, what, result.FilesScanned);
 
         if (result.Truncated) {
             text += string.Format(Strings.StatusSearchTruncated, result.Found);
@@ -2331,32 +2327,42 @@ public sealed class MainViewModel : ObservableObject {
     }
 
 
+    /// <summary>
+    /// The search as one phrase for the status bar. Both halves when both
+    /// were given, because "найдено 3 по запросу «отчёт»" is a different
+    /// claim from "3 файла *.docx со словом «отчёт»".
+    /// </summary>
+    private string SearchDescription() {
+        string name = ContentSearch.NameQuery;
+        string text = ContentSearch.TextQuery;
+
+        if (name.Length > 0 && text.Length > 0) {
+            return string.Format(Strings.SearchDescriptionBoth, name, text);
+        }
+
+        return text.Length > 0
+            ? string.Format(Strings.SearchDescriptionText, text)
+            : name;
+    }
+
+
     private void OnContentSearchChanged(object? sender, PropertyChangedEventArgs e) {
         switch (e.PropertyName) {
             case nameof(ContentSearchController.IsShowingResults):
                 Raise(nameof(IsSearchResults));
-                break;
-
-            case nameof(ContentSearchController.IsDeep):
-                // Switching into the deep mode drops the live filter: the
-                // folder underneath must not stay narrowed by a query that
-                // is now waiting for Enter. Switching back applies it again
-                // — and if results are on screen at that moment, they have
-                // to go, because a live filter has to filter something and
-                // a result list is not a folder.
-                _search.Query = ContentSearch.IsDeep ? "" : _searchText;
-                if (!ContentSearch.IsDeep && ContentSearch.IsShowingResults) {
-                    ContentSearch.ExitResults();
+                if (!ContentSearch.IsShowingResults && _searchResults.Count > 0) {
+                    // Something dropped results without going through
+                    // ClearSearch — a criterion falling back to the shallow
+                    // kind, for instance. The list has to follow.
                     StopResultFlushTimer();
                     _searchResults.Clear();
                     Refresh();
                 }
-                SaveState();
                 break;
 
-            case nameof(ContentSearchController.Scope):
-            case nameof(ContentSearchController.SearchInContents):
-                SaveState();
+            case nameof(ContentSearchController.FilterText):
+                Raise(nameof(SearchQuery));
+                Raise(nameof(HasSearchQuery));
                 break;
         }
     }

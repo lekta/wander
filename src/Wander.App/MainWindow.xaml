@@ -31,6 +31,7 @@
         <conv:RankStarConverter x:Key="RankStar"/>
         <conv:TreeIndentConverter x:Key="TreeIndent"/>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+        <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility"/>
 
         <!--
             One star of the .pp3 rating widget. Five copies of this in the
@@ -287,30 +288,6 @@
             </Setter>
         </Style>
 
-        <Style x:Key="BoxGlyphToggle" TargetType="ToggleButton">
-            <Setter Property="Width" Value="22"/>
-            <Setter Property="Focusable" Value="False"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="#555"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ToggleButton">
-                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="2">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#E5E5E5"/>
-                            </Trigger>
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#D0D0D0"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
     </Window.Resources>
     <Window.InputBindings>
         <KeyBinding Key="F5" Command="{Binding RefreshCommand}"/>
@@ -481,9 +458,15 @@
                 address bar. Grid hosts a placeholder TextBlock overlaid on the
                 TextBox; the placeholder's visibility flips on HasSearchQuery.
             -->
+            <!--
+                Hidden while the search window is open: the same criteria in
+                two places is how one of them ends up stale, and the window
+                is the one that can show all of them.
+            -->
             <Grid DockPanel.Dock="Right"
                   Width="250" VerticalAlignment="Center"
-                  Margin="0,4,4,4">
+                  Margin="0,4,4,4"
+                  Visibility="{Binding IsSearchWindowOpen, Converter={StaticResource InverseBoolToVisibility}}">
                 <!--
                     The two glyphs overlay the box rather than sitting in
                     columns beside it: the field has to keep the whole width
@@ -544,90 +527,30 @@
                             </Style>
                         </Button.Style>
                     </Button>
-                    <ToggleButton x:Name="SearchOptionsToggle"
-                                  Content="&#x22EE;"
-                                  Style="{StaticResource BoxGlyphToggle}"
-                                  ToolTip="{x:Static res:Strings.SearchOptions}"/>
+                    <!--
+                        Marked when the search window holds something other
+                        than the two text criteria — subfolders, the whole
+                        machine, binaries. Those do not fit in the box's own
+                        text, and a list narrowed by a switch set in a window
+                        that is now closed has to say so somewhere.
+                    -->
+                    <Button Content="&#x22EE;"
+                            FontSize="13"
+                            Click="SearchOptions_Click"
+                            ToolTip="{x:Static res:Strings.SearchOptions}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource BoxGlyphButton}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ContentSearch.HasNonDefaultOptions}" Value="True">
+                                        <Setter Property="Foreground" Value="#0078D7"/>
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
                 </StackPanel>
 
-                <!--
-                    Advanced search (PLAN G3). Deliberately two switches and
-                    a scope rather than a form: every one of them changes what
-                    the box costs to use, and a panel of things that do not
-                    is a panel nobody reads. Filters by type, date and size
-                    join it when the same form is needed for J3.
-                -->
-                <Popup PlacementTarget="{Binding ElementName=SearchBox}" Placement="Bottom"
-                       IsOpen="{Binding IsChecked, ElementName=SearchOptionsToggle, Mode=TwoWay}"
-                       StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
-                    <Border Background="White" BorderBrush="#ABADB3" BorderThickness="1"
-                            Padding="10,8" MinWidth="260">
-                        <StackPanel>
-                            <CheckBox Content="{x:Static res:Strings.SearchInContents}"
-                                      ToolTip="{x:Static res:Strings.SearchInContentsHint}"
-                                      IsChecked="{Binding ContentSearch.SearchInContents}"/>
-
-                            <Separator Margin="0,8"/>
-
-                            <RadioButton GroupName="SearchScope" Margin="0,0,0,4"
-                                         Content="{x:Static res:Strings.SearchScopeFolder}"
-                                         IsChecked="{Binding ContentSearch.IsScopeCurrentFolder}"/>
-                            <RadioButton GroupName="SearchScope" Margin="0,0,0,4"
-                                         Content="{x:Static res:Strings.SearchScopeSubfolders}"
-                                         IsChecked="{Binding ContentSearch.IsScopeSubfolders}"/>
-                            <RadioButton GroupName="SearchScope"
-                                         Content="{x:Static res:Strings.SearchScopeComputer}"
-                                         IsChecked="{Binding ContentSearch.IsScopeComputer}"
-                                         IsEnabled="{Binding ContentSearch.CanSearchComputer}"
-                                         ToolTip="{x:Static res:Strings.SearchScopeComputerHint}"/>
-                            <TextBlock Text="{x:Static res:Strings.SearchIndexUnavailable}"
-                                       Foreground="#A05000" FontSize="11" Margin="18,2,0,0"
-                                       TextWrapping="Wrap">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding ContentSearch.CanSearchComputer}" Value="False">
-                                                <Setter Property="Visibility" Value="Visible"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-
-                            <TextBlock Text="{x:Static res:Strings.SearchRunHint}"
-                                       Foreground="#777" FontSize="11" Margin="0,10,0,0">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding ContentSearch.IsDeep}" Value="True">
-                                                <Setter Property="Visibility" Value="Visible"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-
-                            <StackPanel Visibility="{Binding ContentSearch.HasHistory, Converter={StaticResource BoolToVisibility}}">
-                                <Separator Margin="0,8"/>
-                                <TextBlock Text="{x:Static res:Strings.SearchHistory}"
-                                           Foreground="#777" FontSize="11" Margin="0,0,0,3"/>
-                                <ListBox x:Name="SearchHistoryList" MaxHeight="140" BorderThickness="0"
-                                         ItemsSource="{Binding ContentSearch.History}"
-                                         SelectionChanged="SearchHistoryList_SelectionChanged"
-                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                                    <ListBox.ItemTemplate>
-                                        <DataTemplate>
-                                            <TextBlock Text="{Binding}" Padding="2,1"
-                                                       TextTrimming="CharacterEllipsis" ToolTip="{Binding}"/>
-                                        </DataTemplate>
-                                    </ListBox.ItemTemplate>
-                                </ListBox>
-                            </StackPanel>
-                        </StackPanel>
-                    </Border>
-                </Popup>
             </Grid>
 
             <!--

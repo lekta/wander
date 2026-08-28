@@ -90,30 +90,6 @@ public sealed record SessionState {
     public double PreviewWidth { get; init; } = 280;
 
     /// <summary>
-    /// Whether the search box was set to look inside files. Session rather
-    /// than a preference: it is a mode the user turns on for a job and off
-    /// again, like the view mode next to it — and it changes what typing in
-    /// the box does, which is not something to inherit silently from a
-    /// month ago without seeing the panel that says so.
-    /// </summary>
-    public bool SearchInContents { get; init; }
-
-    /// <summary>
-    /// How far search reached, as a <c>SearchScope</c> name. A string for
-    /// the same reason <c>HiddenContextMenuItems</c> is: a reordered enum
-    /// must not silently reinterpret what was saved.
-    /// </summary>
-    public string? SearchScope { get; init; }
-
-    /// <summary>
-    /// Queries run recently, newest first — the dropdown under the search
-    /// box. The queries, not their results: a result list is a snapshot of
-    /// a disk that has moved on, and re-running the query is both cheap and
-    /// honest.
-    /// </summary>
-    public IReadOnlyList<string> SearchHistory { get; init; } = Array.Empty<string>();
-
-    /// <summary>
     /// Collapsed state of the bookmarks panel itself (the section above
     /// the drives tree). Defaults to expanded for new users — discovery
     /// matters more than chrome conservation on first run.

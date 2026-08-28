@@ -53,6 +53,20 @@ public partial class MainWindow : Window {
     // --- Drag preview ---------------------------------------------------
     private DragPreviewWindow? _dragPreview;
 
+    // --- Search window ---------------------------------------------------
+    /// <summary>
+    /// The search criteria window. Created on first use and hidden rather
+    /// than destroyed afterwards, so reopening it finds the last query
+    /// still in it.
+    /// </summary>
+    private SearchWindow? _searchWindow;
+
+    /// <summary>
+    /// Set while the application really is shutting down, so the search
+    /// window's own Closing handler stops cancelling the close.
+    /// </summary>
+    private bool _closingForReal;
+
     /// <summary>
     /// Where a drop would land and what it would do — see
     /// <see cref="DropTargetController"/>. The plaque that follows the
@@ -123,6 +137,12 @@ public partial class MainWindow : Window {
         if (!App.IsSmokeRun) {
             SaveWindowGeometry();
         }
+
+        // The search window refuses ordinary closes so it can be reopened
+        // with its contents intact; this is the one close it must not
+        // refuse, or the process would outlive its window.
+        _closingForReal = true;
+        _searchWindow?.Close();
 
         // Off the screen before the slow part, and only after the geometry
         // has been read off it. Releasing the cached IContextMenu runs
@@ -421,11 +441,26 @@ public partial class MainWindow : Window {
         // Ctrl+F: focus the search box. Skip when the user is typing inside
         // the code preview — AvalonEdit owns Ctrl+F there for its own search
         // panel, and stealing it would be surprising.
+        // Ctrl+Shift+F: the search window, with its own criteria.
+        // Ctrl+F: the box in the toolbar, which is the quick filter.
+        // Both skipped while the user is typing inside the code preview —
+        // AvalonEdit owns Ctrl+F there for its own search panel, and
+        // stealing it would be surprising.
+        if (e.Key == Key.F && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift)) {
+            if (!Preview.IsCodeEditorFocused) {
+                OpenSearchWindow();
+                e.Handled = true;
+
+                return;
+            }
+        }
+
         if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control) {
             if (!Preview.IsCodeEditorFocused) {
                 SearchBox.Focus();
                 SearchBox.SelectAll();
                 e.Handled = true;
+
                 return;
             }
         }
@@ -462,56 +497,76 @@ public partial class MainWindow : Window {
     }
 
     private void SearchBox_PreviewKeyDown(object sender, KeyEventArgs e) {
-        // Esc: clear the filter on the first press, then hand focus back to
-        // the active file list on the second press (so the box doesn't trap
-        // the user). A running search is stopped first — Esc means "stop
-        // what I started" before it means "clear what I typed".
+        // Esc: one press does the lot — stop whatever is running, drop the
+        // filter and the results, and put the keyboard back in the list. A
+        // ladder of three presses meant the user had to know which rung
+        // they were on, and the answer to "what is going on" is never
+        // "press it again".
         if (e.Key == Key.Escape) {
             if (Vm.ContentSearch.IsRunning) {
                 Vm.StopSearchCommand.Execute(null);
-            } else if (!string.IsNullOrEmpty(Vm.SearchQuery) || Vm.ContentSearch.IsShowingResults) {
-                Vm.ClearSearchCommand.Execute(null);
-            } else {
-                FileList.FocusList();
             }
+            Vm.ClearSearchCommand.Execute(null);
+            FileList.FocusList();
             e.Handled = true;
 
             return;
         }
 
-        // Enter: with a deep search set up (subfolders / contents / the
-        // whole computer) this is what starts it, and the keyboard stays in
-        // the box so the query can be corrected. Otherwise the filter has
-        // already been applied letter by letter and Enter only moves the
-        // keyboard to the results.
+        // Enter: the box is the shallow half — the filter has already been
+        // applied letter by letter — so Enter only moves the keyboard to
+        // the results. A deep search is set up in the search window, and
+        // Enter belongs to it there.
         if (e.Key == Key.Enter) {
-            if (Vm.ContentSearch.IsDeep) {
-                Vm.SearchCommand.Execute(null);
-            } else {
-                FileList.FocusList();
-            }
+            FileList.FocusList();
             e.Handled = true;
         }
+    }
+
+
+    private void SearchOptions_Click(object sender, RoutedEventArgs e) {
+        OpenSearchWindow();
     }
 
 
     /// <summary>
-    /// A query picked out of the history. Runs it rather than only filling
-    /// the box: the list is there to repeat a search, and the extra Enter
-    /// would be a step with nothing to decide in it.
+    /// Raises the search window, creating it the first time. Kept alive
+    /// across closes so reopening finds the last query still in it, and so
+    /// the criteria in the view model have exactly one editor.
     /// </summary>
-    private void SearchHistoryList_SelectionChanged(object sender, SelectionChangedEventArgs e) {
-        if (SearchHistoryList.SelectedItem is not string query) {
-            return;
+    private void OpenSearchWindow() {
+        if (_searchWindow is null) {
+            _searchWindow = new SearchWindow {
+                Owner = this,
+                DataContext = Vm,
+            };
+            // Hidden rather than destroyed: closing is "put it away", and
+            // the window is cheap to keep. Cancelling the close is also
+            // what keeps Owner and DataContext wired.
+            _searchWindow.Closing += (_, args) => {
+                if (_closingForReal) {
+                    return;
+                }
+                args.Cancel = true;
+                _searchWindow!.Hide();
+                Vm.IsSearchWindowOpen = false;
+            };
+            // Whatever made the window go away, the keyboard has to land
+            // somewhere the user can act. Without this, Esc left it on a
+            // window that was no longer there and the arrow keys did
+            // nothing.
+            _searchWindow.Dismissed += (_, _) => {
+                if (!_closingForReal) {
+                    Activate();
+                    FileList.FocusList();
+                }
+            };
         }
 
-        // Cleared before the search so re-picking the same query works: a
-        // ListBox raises nothing when the selection does not change.
-        SearchHistoryList.SelectedItem = null;
-        SearchOptionsToggle.IsChecked = false;
-        Vm.SearchQuery = query;
-        Vm.SearchCommand.Execute(null);
+        Vm.IsSearchWindowOpen = true;
+        _searchWindow.ShowAndFocus();
     }
+
 
     // --- Keyboard zones --------------------------------------------------
     // Tab walks the window a zone at a time rather than a control at a time:

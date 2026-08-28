@@ -207,10 +207,10 @@ public static class Strings {
     /// <summary>Выход</summary>
     public static string MenuExit => Get(nameof(MenuExit));
 
-    /// <summary>Фильтр по текущей папке (Ctrl+F, Esc — очистить)</summary>
+    /// <summary>Фильтр: имя, либо имя:текст (Ctrl+F). Окно поиска — Ctrl+Shift+F. Esc — сбросить</summary>
     public static string SearchHint => Get(nameof(SearchHint));
 
-    /// <summary>Поиск в этой папке</summary>
+    /// <summary>Фильтр: имя или имя:текст</summary>
     public static string SearchPlaceholder => Get(nameof(SearchPlaceholder));
 
     /// <summary>Недавние папки (F4)</summary>
@@ -975,41 +975,17 @@ public static class Strings {
     /// <summary> — не удалось прочитать файлов: {0}</summary>
     public static string StatusSearchUnreadable => Get(nameof(StatusSearchUnreadable));
 
-    /// <summary>Параметры поиска</summary>
+    /// <summary>Окно поиска (Ctrl+Shift+F)</summary>
     public static string SearchOptions => Get(nameof(SearchOptions));
 
-    /// <summary>Искать в содержимом файлов</summary>
-    public static string SearchInContents => Get(nameof(SearchInContents));
-
-    /// <summary>Текст внутри файлов: заметки, исходники, .docx, .epub, а также .doc, .rtf и .pdf — если в системе есть их обработчик</summary>
-    public static string SearchInContentsHint => Get(nameof(SearchInContentsHint));
-
-    /// <summary>В этой папке</summary>
-    public static string SearchScopeFolder => Get(nameof(SearchScopeFolder));
-
-    /// <summary>С подпапками</summary>
+    /// <summary>Искать в подпапках</summary>
     public static string SearchScopeSubfolders => Get(nameof(SearchScopeSubfolders));
-
-    /// <summary>Весь компьютер</summary>
-    public static string SearchScopeComputer => Get(nameof(SearchScopeComputer));
-
-    /// <summary>Через индекс Windows: отвечает мгновенно, но знает только то, что Windows успел проиндексировать</summary>
-    public static string SearchScopeComputerHint => Get(nameof(SearchScopeComputerHint));
-
-    /// <summary>Индекс Windows недоступен — служба поиска выключена</summary>
-    public static string SearchIndexUnavailable => Get(nameof(SearchIndexUnavailable));
-
-    /// <summary>Enter — искать, Esc — очистить</summary>
-    public static string SearchRunHint => Get(nameof(SearchRunHint));
 
     /// <summary>Остановить поиск</summary>
     public static string SearchStop => Get(nameof(SearchStop));
 
     /// <summary>Очистить поиск</summary>
     public static string SearchClear => Get(nameof(SearchClear));
-
-    /// <summary>Недавние запросы</summary>
-    public static string SearchHistory => Get(nameof(SearchHistory));
 
     /// <summary>Папка</summary>
     public static string ColumnFolder => Get(nameof(ColumnFolder));
@@ -1042,4 +1018,37 @@ public static class Strings {
 
     /// <summary>Показывать снимки без оценки. С Ctrl — добавить их к уже выбранным оценкам.</summary>
     public static string FilterUnratedHint => Get(nameof(FilterUnratedHint));
+
+    /// <summary>«{0}» с текстом «{1}»</summary>
+    public static string SearchDescriptionBoth => Get(nameof(SearchDescriptionBoth));
+
+    /// <summary>тексту «{0}»</summary>
+    public static string SearchDescriptionText => Get(nameof(SearchDescriptionText));
+
+    /// <summary>Поиск</summary>
+    public static string SearchWindowTitle => Get(nameof(SearchWindowTitle));
+
+    /// <summary>Имя</summary>
+    public static string SearchFieldName => Get(nameof(SearchFieldName));
+
+    /// <summary>Часть имени, либо маска с * и ?: *.cs;*.xaml. Пусто — любое имя</summary>
+    public static string SearchFieldNameHint => Get(nameof(SearchFieldNameHint));
+
+    /// <summary>Текст</summary>
+    public static string SearchFieldText => Get(nameof(SearchFieldText));
+
+    /// <summary>Текст внутри файлов. Пусто — искать только по имени; оба поля заполнены — оба условия должны совпасть</summary>
+    public static string SearchFieldTextHint => Get(nameof(SearchFieldTextHint));
+
+    /// <summary>Искать и в двоичных файлах</summary>
+    public static string SearchBinaries => Get(nameof(SearchBinaries));
+
+    /// <summary>Побайтовый поиск в файлах, которые не являются текстом (exe, dll, ресурсы). Только латиница и цифры: в двоичном файле нечего декодировать, и угадывать кодировку было бы обманом</summary>
+    public static string SearchBinariesHint => Get(nameof(SearchBinariesHint));
+
+    /// <summary>Искать</summary>
+    public static string SearchRun => Get(nameof(SearchRun));
+
+    /// <summary>Папка</summary>
+    public static string SearchFieldFolder => Get(nameof(SearchFieldFolder));
 }

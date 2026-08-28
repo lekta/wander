@@ -944,6 +944,38 @@
                 </Ellipse.Triggers>
             </Ellipse>
         </Grid>
+
+        <!--
+            A search in flight. Deliberately unlike the listing spinner
+            above: no dimming veil and a muted colour, because results keep
+            arriving underneath it and covering them would defeat the point
+            of streaming them at all. It says "still going", nothing more —
+            the counts are in the status bar and in the search window.
+        -->
+        <Grid Visibility="{Binding ContentSearch.IsRunning, Converter={StaticResource BoolToVisibility}}"
+              Background="Transparent"
+              IsHitTestVisible="False">
+            <Ellipse Width="26" Height="26" StrokeThickness="2"
+                     Stroke="#999" Fill="Transparent" Opacity="0.7"
+                     StrokeDashArray="3,2"
+                     HorizontalAlignment="Center" VerticalAlignment="Center"
+                     RenderTransformOrigin="0.5,0.5">
+                <Ellipse.RenderTransform>
+                    <RotateTransform x:Name="SearchSpinnerRotate" Angle="0"/>
+                </Ellipse.RenderTransform>
+                <Ellipse.Triggers>
+                    <EventTrigger RoutedEvent="Loaded">
+                        <BeginStoryboard>
+                            <Storyboard RepeatBehavior="Forever">
+                                <DoubleAnimation Storyboard.TargetName="SearchSpinnerRotate"
+                                                 Storyboard.TargetProperty="Angle"
+                                                 From="0" To="360" Duration="0:0:1.4"/>
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </EventTrigger>
+                </Ellipse.Triggers>
+            </Ellipse>
+        </Grid>
         </Grid>
     </DockPanel>
 </UserControl>

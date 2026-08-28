@@ -1,0 +1,117 @@
+<Window x:Class="Wander.App.Views.SearchWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:res="clr-namespace:Wander.App.Resources"
+        Title="{x:Static res:Strings.SearchWindowTitle}"
+        ShowInTaskbar="False"
+        ResizeMode="CanResize"
+        Width="470" Height="300"
+        MinWidth="380" MinHeight="280"
+        WindowStartupLocation="CenterOwner"
+        UseLayoutRounding="True"
+        SourceInitialized="Window_SourceInitialized"
+        PreviewKeyDown="Window_PreviewKeyDown">
+    <!--
+        A window rather than a panel inside the main one: the criteria no
+        longer fit in a strip without eating the list, and the range filters
+        for dates and sizes are still to come (PLAN G3-хвост, J3). A popup
+        was worse still — it closed on the first click elsewhere, which is
+        how a search ended up running with a switch nobody could see.
+
+        Owner is set from the caller, which keeps it above the main window
+        without Topmost — Topmost would put it above every other application
+        too, which is not what "above its own window" means. The default
+        border style is deliberate: the tool-window caption gives a stunted
+        close button that fills only part of the corner. The minimise and
+        maximise boxes it brings with it are stripped in code-behind, which
+        leaves exactly what a dialog should have — a full close button and a
+        frame that can be dragged.
+    -->
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,8,0"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="12,10,12,12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource FieldLabel}"
+                   Text="{x:Static res:Strings.SearchFieldName}"/>
+        <TextBox x:Name="NameBox" Grid.Row="0" Grid.Column="1" Padding="4,3"
+                 ToolTip="{x:Static res:Strings.SearchFieldNameHint}"
+                 Text="{Binding ContentSearch.NameQuery, UpdateSourceTrigger=PropertyChanged, Delay=0}"/>
+
+        <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,8,8,0"
+                   Style="{StaticResource FieldLabel}"
+                   Text="{x:Static res:Strings.SearchFieldText}"/>
+        <TextBox x:Name="TextQueryBox" Grid.Row="1" Grid.Column="1" Padding="4,3" Margin="0,8,0,0"
+                 ToolTip="{x:Static res:Strings.SearchFieldTextHint}"
+                 Text="{Binding ContentSearch.TextQuery, UpdateSourceTrigger=PropertyChanged, Delay=0}"/>
+
+        <!--
+            Where the search starts from, read-only. It is the folder the
+            list is showing and follows navigation; it is here because the
+            window outlives the moment its criteria were typed, and "in this
+            folder" stops meaning anything once you have forgotten which.
+        -->
+        <TextBlock Grid.Row="2" Grid.Column="0" Margin="0,8,8,0"
+                   Style="{StaticResource FieldLabel}"
+                   Text="{x:Static res:Strings.SearchFieldFolder}"/>
+        <TextBox Grid.Row="2" Grid.Column="1" Padding="4,3" Margin="0,8,0,0"
+                 IsReadOnly="True" Background="#F7F7F7" Foreground="#555"
+                 Text="{Binding ContentSearch.Root, Mode=OneWay}"/>
+
+        <StackPanel Grid.Row="3" Grid.Column="1" Margin="0,10,0,0">
+            <CheckBox Content="{x:Static res:Strings.SearchScopeSubfolders}"
+                      IsChecked="{Binding ContentSearch.SearchSubfolders}"/>
+            <!--
+                Greyed out rather than hidden when it cannot apply: hiding it
+                would make the window jump every time the text field is
+                emptied, and a control that appears and disappears is one
+                nobody learns.
+            -->
+            <CheckBox Margin="0,6,0,0"
+                      Content="{x:Static res:Strings.SearchBinaries}"
+                      ToolTip="{x:Static res:Strings.SearchBinariesHint}"
+                      IsChecked="{Binding ContentSearch.SearchBinaries}"
+                      IsEnabled="{Binding ContentSearch.BinariesApplicable}"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal"
+                    HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,12,0,0">
+            <Button Content="{x:Static res:Strings.SearchClear}" MinWidth="90" Padding="10,4"
+                    Command="{Binding ClearSearchCommand}"/>
+            <Button Content="{x:Static res:Strings.SearchStop}" MinWidth="110" Padding="10,4" Margin="8,0,0,0"
+                    Command="{Binding StopSearchCommand}"
+                    Visibility="{Binding ContentSearch.IsRunning, Converter={StaticResource BoolToVisibility}}"/>
+            <Button Content="{x:Static res:Strings.SearchRun}" MinWidth="110" Padding="10,4" Margin="8,0,0,0"
+                    IsDefault="True"
+                    Command="{Binding SearchCommand}">
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Setter Property="Visibility" Value="Visible"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding ContentSearch.IsRunning}" Value="True">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+        </StackPanel>
+    </Grid>
+</Window>

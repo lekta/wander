@@ -12,7 +12,7 @@ public class ContentSearchServiceTests {
     [Fact]
     public async Task Search_MatchesNames_InCurrentFolderOnly() {
         var fs = Tree();
-        var (hits, outcome) = await Run(fs, Request("report", SearchScope.CurrentFolder));
+        var (hits, outcome) = await Run(fs, ByName("report", SearchScope.CurrentFolder));
 
         Assert.Equal(new[] { @"C:\root\report.txt" }, Paths(hits));
         Assert.False(outcome.Truncated);
@@ -22,11 +22,26 @@ public class ContentSearchServiceTests {
     [Fact]
     public async Task Search_Subfolders_ReachesNestedFiles() {
         var fs = Tree();
-        var (hits, _) = await Run(fs, Request("report", SearchScope.Subfolders));
+        var (hits, _) = await Run(fs, ByName("report", SearchScope.Subfolders));
 
         Assert.Equal(
             new[] { @"C:\root\report.txt", @"C:\root\sub\old-report.txt" },
             Paths(hits).Order(StringComparer.Ordinal).ToArray());
+    }
+
+
+    [Fact]
+    public async Task Search_MatchesOnTheNameOnly_NeverOnThePath() {
+        // The folder is called tmp2; the file inside it is not. A search for
+        // "2" must not drag the file in on its parent's name.
+        var fs = new FakeFileSystem();
+        fs.Directories.Add(@"C:\root");
+        fs.Directories.Add(@"C:\root\tmp2");
+        fs.Files[@"C:\root\tmp2\cat.webp"] = Text("x");
+
+        var (hits, _) = await Run(fs, ByName("2", SearchScope.Subfolders));
+
+        Assert.Equal(new[] { @"C:\root\tmp2" }, Paths(hits));
     }
 
 
@@ -36,9 +51,37 @@ public class ContentSearchServiceTests {
         fs.Directories.Add(@"C:\root");
         fs.Directories.Add(@"C:\root\reports");
 
-        var (hits, _) = await Run(fs, Request("report", SearchScope.CurrentFolder));
+        var (hits, _) = await Run(fs, ByName("report", SearchScope.CurrentFolder));
 
         Assert.Equal(new[] { @"C:\root\reports" }, Paths(hits));
+    }
+
+
+    [Fact]
+    public async Task Search_WithText_DropsFolders() {
+        // A folder has no contents; it cannot satisfy "contains this word".
+        var fs = new FakeFileSystem();
+        fs.Directories.Add(@"C:\root");
+        fs.Directories.Add(@"C:\root\reports");
+        fs.Files[@"C:\root\reports.txt"] = Text("quarterly report");
+
+        var (hits, _) = await Run(fs, Request("report", "quarterly", SearchScope.CurrentFolder));
+
+        Assert.Equal(new[] { @"C:\root\reports.txt" }, Paths(hits));
+    }
+
+
+    [Fact]
+    public async Task Search_Wildcards_ReachTheService() {
+        var fs = new FakeFileSystem();
+        fs.Directories.Add(@"C:\root");
+        fs.Files[@"C:\root\Program.cs"] = Text("x");
+        fs.Files[@"C:\root\Program.cs.bak"] = Text("x");
+        fs.Files[@"C:\root\readme.md"] = Text("x");
+
+        var (hits, _) = await Run(fs, ByName("*.cs", SearchScope.CurrentFolder));
+
+        Assert.Equal(new[] { @"C:\root\Program.cs" }, Paths(hits));
     }
 
 
@@ -50,7 +93,7 @@ public class ContentSearchServiceTests {
         fs.Files[@"C:\root\report.hidden.txt"] = Text("x");
         fs.Hidden.Add(@"C:\root\report.hidden.txt");
 
-        var request = Request("report", SearchScope.CurrentFolder) with {
+        var request = ByName("report", SearchScope.CurrentFolder) with {
             Visibility = new EntryVisibility(ShowHidden: false, ShowSystem: false, HideSystemRootFolders: false),
         };
         var (hits, _) = await Run(fs, request);
@@ -62,9 +105,9 @@ public class ContentSearchServiceTests {
     // --- Contents ------------------------------------------------------
 
     [Fact]
-    public async Task Search_Contents_FindsTextInsideFiles() {
+    public async Task Search_Text_FindsItInsideFiles() {
         var fs = Tree();
-        var (hits, _) = await Run(fs, Request("бюджет", SearchScope.Subfolders, contents: true));
+        var (hits, _) = await Run(fs, ByText("бюджет", SearchScope.Subfolders));
 
         var hit = Assert.Single(hits);
         Assert.Equal(@"C:\root\sub\notes.md", hit.Entry.FullPath);
@@ -76,24 +119,48 @@ public class ContentSearchServiceTests {
 
 
     [Fact]
-    public async Task Search_ContentsOff_DoesNotOpenFiles() {
-        var fs = Tree();
-        var (hits, _) = await Run(fs, Request("бюджет", SearchScope.Subfolders));
+    public async Task Search_NameMatchAlone_IsNotAHit_WhenTextWasAsked() {
+        // The regression this whole shape exists to prevent: a picture whose
+        // name happens to contain the letter being looked for inside
+        // documents used to land in the results.
+        var fs = new FakeFileSystem();
+        fs.Directories.Add(@"C:\root");
+        fs.Files[@"C:\root\budget.png"] = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x00 };
+        fs.Files[@"C:\root\notes.md"] = Text("the budget is fine");
 
-        Assert.Empty(hits);
+        var (hits, _) = await Run(fs, ByText("budget", SearchScope.CurrentFolder));
+
+        Assert.Equal(new[] { @"C:\root\notes.md" }, Paths(hits));
     }
 
 
     [Fact]
-    public async Task Search_NameMatchWins_WhenContentDoesNot() {
-        // A file found by its name is found, whether or not its insides
-        // could be read or matched.
-        var fs = Tree();
-        var (hits, _) = await Run(fs, Request("report", SearchScope.CurrentFolder, contents: true));
+    public async Task Search_TextMatchAlone_IsNotAHit_WhenTheMaskRejects() {
+        var fs = new FakeFileSystem();
+        fs.Directories.Add(@"C:\root");
+        fs.Files[@"C:\root\notes.md"] = Text("the budget is fine");
+        fs.Files[@"C:\root\Program.cs"] = Text("// the budget is fine");
 
-        var hit = Assert.Single(hits);
-        Assert.Equal(@"C:\root\report.txt", hit.Entry.FullPath);
-        Assert.Null(hit.Snippet);
+        var (hits, _) = await Run(fs, Request("*.cs", "budget", SearchScope.CurrentFolder));
+
+        Assert.Equal(new[] { @"C:\root\Program.cs" }, Paths(hits));
+    }
+
+
+    [Fact]
+    public async Task Search_MaskGatesTheRead_SoRejectedFilesAreNotScanned() {
+        // "Every .cs that mentions X" must not open the .png next to it.
+        var fs = new FakeFileSystem();
+        fs.Directories.Add(@"C:\root");
+        fs.Files[@"C:\root\Program.cs"] = Text("nothing");
+        for (int i = 0; i < 10; i++) {
+            fs.Files[$@"C:\root\image{i}.png"] = new byte[] { 0x89, 0x50, 0x4E, 0x47 };
+        }
+
+        var (_, outcome) = await Run(fs, Request("*.cs", "budget", SearchScope.CurrentFolder));
+
+        Assert.Equal(1, outcome.FilesScanned);
+        Assert.Equal(0, outcome.UnreadableFiles);
     }
 
 
@@ -108,10 +175,34 @@ public class ContentSearchServiceTests {
         // which is the right answer and not the case under test.
         fs.Files[@"C:\root\broken.docx"] = new byte[] { 0x50, 0x4B, 0x03, 0x04, 0x00, 0x01, 0x00, 0x02 };
 
-        var (_, outcome) = await Run(fs, Request("anything", SearchScope.CurrentFolder, contents: true));
+        var (_, outcome) = await Run(fs, ByText("anything", SearchScope.CurrentFolder));
 
         Assert.Equal(1, outcome.UnreadableFiles);
         Assert.Equal(1, outcome.FilesScanned);
+    }
+
+
+    [Fact]
+    public async Task Search_FailedDocumentFormat_DoesNotFallThroughToPlainText() {
+        // A PDF has readable ASCII in its header, so the catch-all extractor
+        // will happily call it text and match a query against
+        // "%PDF-1.4 ReportLab Generated PDF". Once a format-specific
+        // extractor has claimed the file and failed, that is the answer.
+        var fs = new FakeFileSystem();
+        fs.Directories.Add(@"C:\root");
+        fs.Files[@"C:\root\report.docx"] = Text("%PDF-1.4 ReportLab Generated PDF document");
+
+        var service = new ContentSearchService(
+            fs,
+            new IContentExtractor[] { new ZipDocumentExtractor(fs), new PlainTextExtractor(fs) },
+            new ExtractedTextCache());
+
+        var hits = new List<SearchHit>();
+        var outcome = await service.RunAsync(
+            ByText("ReportLab", SearchScope.CurrentFolder), batch => hits.AddRange(batch), null, default);
+
+        Assert.Empty(hits);
+        Assert.Equal(1, outcome.UnreadableFiles);
     }
 
 
@@ -124,7 +215,7 @@ public class ContentSearchServiceTests {
         fs.Directories.Add(@"C:\root");
         fs.Files[@"C:\root\image.png"] = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x00, 0x01 };
 
-        var (_, outcome) = await Run(fs, Request("anything", SearchScope.CurrentFolder, contents: true));
+        var (_, outcome) = await Run(fs, ByText("anything", SearchScope.CurrentFolder));
 
         Assert.Equal(0, outcome.UnreadableFiles);
         Assert.Equal(1, outcome.FilesScanned);
@@ -132,34 +223,73 @@ public class ContentSearchServiceTests {
 
 
     [Fact]
-    public async Task Search_OversizedFile_IsNotOpened_ButStillMatchesByName() {
+    public async Task Search_OversizedFile_IsNotOpened_AndDoesNotMatchOnNameAlone() {
         var fs = new FakeFileSystem();
         fs.Directories.Add(@"C:\root");
         fs.Files[@"C:\root\huge-report.log"] = Text("needle");
 
-        var request = Request("report", SearchScope.CurrentFolder, contents: true) with { MaxFileSize = 1 };
+        var request = Request("report", "needle", SearchScope.CurrentFolder) with { MaxFileSize = 1 };
         var (hits, _) = await Run(fs, request);
 
-        var hit = Assert.Single(hits);
-        Assert.Null(hit.Snippet);
+        Assert.Empty(hits);
     }
 
 
     [Fact]
-    public async Task Search_UsesCache_ForExpensiveExtractors() {
+    public async Task Search_OversizedFile_StillMatchesByNameAlone() {
         var fs = new FakeFileSystem();
         fs.Directories.Add(@"C:\root");
-        fs.Files[@"C:\root\a.fake"] = Text("needle");
+        fs.Files[@"C:\root\huge-report.log"] = Text("needle");
 
-        var cache = new ExtractedTextCache();
-        var extractor = new CountingExtractor("needle here");
-        var service = new ContentSearchService(fs, new IContentExtractor[] { extractor }, cache);
-        var request = Request("needle", SearchScope.CurrentFolder, contents: true);
+        var request = ByName("report", SearchScope.CurrentFolder) with { MaxFileSize = 1 };
+        var (hits, _) = await Run(fs, request);
 
-        await service.RunAsync(request, _ => { }, null, default);
-        await service.RunAsync(request, _ => { }, null, default);
+        Assert.Single(hits);
+    }
 
-        Assert.Equal(1, extractor.Calls);
+
+    // --- Binaries ------------------------------------------------------
+
+    [Fact]
+    public async Task Search_Binaries_AreSkippedByDefault() {
+        var fs = new FakeFileSystem();
+        fs.Directories.Add(@"C:\root");
+        fs.Files[@"C:\root\app.exe"] = Binary("FileVersion");
+
+        var (hits, _) = await Run(fs, ByText("FileVersion", SearchScope.CurrentFolder));
+
+        Assert.Empty(hits);
+    }
+
+
+    [Fact]
+    public async Task Search_Binaries_AreScannedWhenAskedFor() {
+        var fs = new FakeFileSystem();
+        fs.Directories.Add(@"C:\root");
+        fs.Files[@"C:\root\app.exe"] = Binary("FileVersion");
+        fs.Files[@"C:\root\other.exe"] = Binary("Something else");
+
+        var request = ByText("fileversion", SearchScope.CurrentFolder) with { SearchBinaries = true };
+        var (hits, _) = await Run(fs, request);
+
+        var hit = Assert.Single(hits);
+        Assert.Equal(@"C:\root\app.exe", hit.Entry.FullPath);
+        // No line, no snippet: a binary has no lines.
+        Assert.Null(hit.Snippet);
+        Assert.Equal(0, hit.Line);
+    }
+
+
+    [Fact]
+    public async Task Search_Binaries_StillObeyTheMask() {
+        var fs = new FakeFileSystem();
+        fs.Directories.Add(@"C:\root");
+        fs.Files[@"C:\root\app.exe"] = Binary("FileVersion");
+
+        var request = Request("*.dll", "FileVersion", SearchScope.CurrentFolder) with { SearchBinaries = true };
+        var (hits, _) = await Run(fs, request);
+
+        Assert.Empty(hits);
     }
 
 
@@ -173,7 +303,7 @@ public class ContentSearchServiceTests {
             fs.Files[$@"C:\root\report{i}.txt"] = Text("x");
         }
 
-        var request = Request("report", SearchScope.CurrentFolder) with { MaxResults = 5 };
+        var request = ByName("report", SearchScope.CurrentFolder) with { MaxResults = 5 };
         var (hits, outcome) = await Run(fs, request);
 
         Assert.Equal(5, hits.Count);
@@ -190,7 +320,7 @@ public class ContentSearchServiceTests {
         fs.Directories.Add(@"C:\root\a\b");
         fs.Files[@"C:\root\a\b\report.txt"] = Text("x");
 
-        var request = Request("report", SearchScope.Subfolders) with { MaxDepth = 1 };
+        var request = ByName("report", SearchScope.Subfolders) with { MaxDepth = 1 };
         var (hits, _) = await Run(fs, request);
 
         Assert.Empty(hits);
@@ -206,7 +336,7 @@ public class ContentSearchServiceTests {
         var service = Service(fs);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => service.RunAsync(Request("report", SearchScope.Subfolders), _ => { }, null, cts.Token));
+            () => service.RunAsync(ByName("report", SearchScope.Subfolders), _ => { }, null, cts.Token));
     }
 
 
@@ -216,7 +346,7 @@ public class ContentSearchServiceTests {
         var seen = new List<SearchProgress>();
         var progress = new SynchronousProgress(seen.Add);
 
-        await Service(fs).RunAsync(Request("report", SearchScope.Subfolders), _ => { }, progress, default);
+        await Service(fs).RunAsync(ByText("о", SearchScope.Subfolders), _ => { }, progress, default);
 
         Assert.NotEmpty(seen);
         Assert.True(seen[^1].FilesScanned >= 3, $"scanned {seen[^1].FilesScanned}");
@@ -231,40 +361,41 @@ public class ContentSearchServiceTests {
         fs.Directories.Add(@"C:\root\open");
         fs.Files[@"C:\root\open\report.txt"] = Text("x");
 
-        var (hits, _) = await Run(fs, Request("report", SearchScope.Subfolders));
+        var (hits, _) = await Run(fs, ByName("report", SearchScope.Subfolders));
 
         Assert.Equal(new[] { @"C:\root\open\report.txt" }, Paths(hits));
     }
 
 
-    // --- System index --------------------------------------------------
-
     [Fact]
-    public async Task Search_Computer_UsesTheIndex() {
+    public async Task Search_EmptyRequest_IsRefused() {
+        // "Everything, anywhere" is not a search. The controllers guard
+        // against it; the service must not depend on them remembering.
         var fs = Tree();
-        var index = new FakeIndex(@"C:\root\report.txt", @"C:\gone\deleted.txt");
-        var service = new ContentSearchService(
-            fs,
-            new IContentExtractor[] { new PlainTextExtractor(fs) },
-            new ExtractedTextCache(),
-            index);
+        var (hits, outcome) = await Run(fs, Request("", "", SearchScope.Subfolders));
 
-        var hits = new List<SearchHit>();
-        await service.RunAsync(
-            Request("report", SearchScope.Computer),
-            batch => hits.AddRange(batch),
-            null,
-            default);
-
-        // The index outlives the files in it — the row that no longer
-        // exists is dropped rather than shown as one that opens nothing.
-        Assert.Equal(new[] { @"C:\root\report.txt" }, Paths(hits));
+        Assert.Empty(hits);
+        Assert.Equal(0, outcome.FilesScanned);
     }
 
 
+    // --- Caching -------------------------------------------------------
+
     [Fact]
-    public void CanSearchComputer_IsFalse_WithoutAnIndex() {
-        Assert.False(Service(new FakeFileSystem()).CanSearchComputer);
+    public async Task Search_UsesCache_ForExpensiveExtractors() {
+        var fs = new FakeFileSystem();
+        fs.Directories.Add(@"C:\root");
+        fs.Files[@"C:\root\a.fake"] = Text("needle");
+
+        var cache = new ExtractedTextCache();
+        var extractor = new CountingExtractor("needle here");
+        var service = new ContentSearchService(fs, new IContentExtractor[] { extractor }, cache);
+        var request = ByText("needle", SearchScope.CurrentFolder);
+
+        await service.RunAsync(request, _ => { }, null, default);
+        await service.RunAsync(request, _ => { }, null, default);
+
+        Assert.Equal(1, extractor.Calls);
     }
 
 
@@ -282,17 +413,27 @@ public class ContentSearchServiceTests {
     }
 
 
-    private static SearchRequest Request(string query, SearchScope scope, bool contents = false) {
-        return new SearchRequest(query, @"C:\root", scope, contents, EntryVisibility.All);
+    private static SearchRequest Request(string name, string text, SearchScope scope) {
+        return new SearchRequest(
+            NameFilter.Parse(name), text, @"C:\root", scope, false, EntryVisibility.All);
     }
 
 
-    private static ContentSearchService Service(IFileSystem fs, IIndexedSearch? index = null) {
+    private static SearchRequest ByName(string name, SearchScope scope) {
+        return Request(name, "", scope);
+    }
+
+
+    private static SearchRequest ByText(string text, SearchScope scope) {
+        return Request("", text, scope);
+    }
+
+
+    private static ContentSearchService Service(IFileSystem fs) {
         return new ContentSearchService(
             fs,
             new IContentExtractor[] { new ZipDocumentExtractor(fs), new PlainTextExtractor(fs) },
-            new ExtractedTextCache(),
-            index);
+            new ExtractedTextCache());
     }
 
 
@@ -311,6 +452,16 @@ public class ContentSearchServiceTests {
 
     private static byte[] Text(string content) {
         return Encoding.UTF8.GetBytes(content);
+    }
+
+
+    /// <summary>ASCII text wrapped in the NUL bytes that make a file binary.</summary>
+    private static byte[] Binary(string embedded) {
+        var bytes = new List<byte> { 0x00, 0x01, 0x02, 0x00 };
+        bytes.AddRange(Encoding.ASCII.GetBytes(embedded));
+        bytes.AddRange(new byte[] { 0x00, 0xFF, 0x00 });
+
+        return bytes.ToArray();
     }
 
 
@@ -375,24 +526,6 @@ public class ContentSearchServiceTests {
             Calls++;
 
             return _text;
-        }
-    }
-
-
-    private sealed class FakeIndex : IIndexedSearch {
-        private readonly string[] _paths;
-
-
-        public FakeIndex(params string[] paths) {
-            _paths = paths;
-        }
-
-
-        public bool IsAvailable => true;
-
-
-        public IReadOnlyList<string> Search(string query, string? scopePath, bool searchContents, int limit, CancellationToken token) {
-            return _paths;
         }
     }
 

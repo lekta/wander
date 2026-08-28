@@ -200,10 +200,10 @@
     <value>Выход</value>
   </data>
   <data name="SearchHint" xml:space="preserve">
-    <value>Фильтр по текущей папке (Ctrl+F, Esc — очистить)</value>
+    <value>Фильтр: имя, либо имя:текст (Ctrl+F). Окно поиска — Ctrl+Shift+F. Esc — сбросить</value>
   </data>
   <data name="SearchPlaceholder" xml:space="preserve">
-    <value>Поиск в этой папке</value>
+    <value>Фильтр: имя или имя:текст</value>
   </data>
   <data name="RecentFoldersHint" xml:space="preserve">
     <value>Недавние папки (F4)</value>
@@ -1055,40 +1055,16 @@
     <value> — не удалось прочитать файлов: {0}</value>
   </data>
   <data name="SearchOptions" xml:space="preserve">
-    <value>Параметры поиска</value>
-  </data>
-  <data name="SearchInContents" xml:space="preserve">
-    <value>Искать в содержимом файлов</value>
-  </data>
-  <data name="SearchInContentsHint" xml:space="preserve">
-    <value>Текст внутри файлов: заметки, исходники, .docx, .epub, а также .doc, .rtf и .pdf — если в системе есть их обработчик</value>
-  </data>
-  <data name="SearchScopeFolder" xml:space="preserve">
-    <value>В этой папке</value>
+    <value>Окно поиска (Ctrl+Shift+F)</value>
   </data>
   <data name="SearchScopeSubfolders" xml:space="preserve">
-    <value>С подпапками</value>
-  </data>
-  <data name="SearchScopeComputer" xml:space="preserve">
-    <value>Весь компьютер</value>
-  </data>
-  <data name="SearchScopeComputerHint" xml:space="preserve">
-    <value>Через индекс Windows: отвечает мгновенно, но знает только то, что Windows успел проиндексировать</value>
-  </data>
-  <data name="SearchIndexUnavailable" xml:space="preserve">
-    <value>Индекс Windows недоступен — служба поиска выключена</value>
-  </data>
-  <data name="SearchRunHint" xml:space="preserve">
-    <value>Enter — искать, Esc — очистить</value>
+    <value>Искать в подпапках</value>
   </data>
   <data name="SearchStop" xml:space="preserve">
     <value>Остановить поиск</value>
   </data>
   <data name="SearchClear" xml:space="preserve">
     <value>Очистить поиск</value>
-  </data>
-  <data name="SearchHistory" xml:space="preserve">
-    <value>Недавние запросы</value>
   </data>
   <data name="ColumnFolder" xml:space="preserve">
     <value>Папка</value>
@@ -1121,5 +1097,38 @@
   </data>
   <data name="FilterUnratedHint" xml:space="preserve">
     <value>Показывать снимки без оценки. С Ctrl — добавить их к уже выбранным оценкам.</value>
+  </data>
+  <data name="SearchDescriptionBoth" xml:space="preserve">
+    <value>«{0}» с текстом «{1}»</value>
+  </data>
+  <data name="SearchDescriptionText" xml:space="preserve">
+    <value>тексту «{0}»</value>
+  </data>
+  <data name="SearchWindowTitle" xml:space="preserve">
+    <value>Поиск</value>
+  </data>
+  <data name="SearchFieldName" xml:space="preserve">
+    <value>Имя</value>
+  </data>
+  <data name="SearchFieldNameHint" xml:space="preserve">
+    <value>Часть имени, либо маска с * и ?: *.cs;*.xaml. Пусто — любое имя</value>
+  </data>
+  <data name="SearchFieldText" xml:space="preserve">
+    <value>Текст</value>
+  </data>
+  <data name="SearchFieldTextHint" xml:space="preserve">
+    <value>Текст внутри файлов. Пусто — искать только по имени; оба поля заполнены — оба условия должны совпасть</value>
+  </data>
+  <data name="SearchBinaries" xml:space="preserve">
+    <value>Искать и в двоичных файлах</value>
+  </data>
+  <data name="SearchBinariesHint" xml:space="preserve">
+    <value>Побайтовый поиск в файлах, которые не являются текстом (exe, dll, ресурсы). Только латиница и цифры: в двоичном файле нечего декодировать, и угадывать кодировку было бы обманом</value>
+  </data>
+  <data name="SearchRun" xml:space="preserve">
+    <value>Искать</value>
+  </data>
+  <data name="SearchFieldFolder" xml:space="preserve">
+    <value>Папка</value>
   </data>
 </root>

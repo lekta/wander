@@ -7,8 +7,8 @@ namespace Wander.Core.Search;
 /// Runs one search and streams what it finds.
 ///
 /// <para>
-/// The shape is a walk, not an index — see <see cref="IIndexedSearch"/>
-/// for the measurements behind that. Directories are walked one at a time
+/// The shape is a walk, not an index — the measurements behind that are in
+/// <c>REJECTED.md</c>. Directories are walked one at a time
 /// so results arrive in a sensible order and memory stays flat; the files
 /// inside each are read in parallel, because that is the part that waits
 /// on the disk.
@@ -34,7 +34,6 @@ public sealed class ContentSearchService {
     private readonly IFileSystem _fs;
     private readonly IReadOnlyList<IContentExtractor> _extractors;
     private readonly ExtractedTextCache _cache;
-    private readonly IIndexedSearch? _index;
     private readonly ILogger _log;
 
 
@@ -43,23 +42,16 @@ public sealed class ContentSearchService {
     /// the format-specific ones go first and <see cref="PlainTextExtractor"/>
     /// — which is willing to try anything — goes last.
     /// </param>
-    /// <param name="index">The system index, when there is one. Null disables <see cref="SearchScope.Computer"/>.</param>
     public ContentSearchService(
         IFileSystem fs,
         IReadOnlyList<IContentExtractor> extractors,
         ExtractedTextCache cache,
-        IIndexedSearch? index = null,
         ILogger? log = null) {
         _fs = fs;
         _extractors = extractors;
         _cache = cache;
-        _index = index;
         _log = log ?? NullLogger.Instance;
     }
-
-
-    /// <summary>True when <see cref="SearchScope.Computer"/> can be offered.</summary>
-    public bool CanSearchComputer => _index is { IsAvailable: true };
 
 
     /// <summary>
@@ -81,8 +73,11 @@ public sealed class ContentSearchService {
         Action<IReadOnlyList<SearchHit>> onBatch,
         IProgress<SearchProgress>? progress,
         CancellationToken token) {
-        if (request.Scope == SearchScope.Computer) {
-            return RunIndexed(request, onBatch, token);
+        // "Everything, anywhere" is not a search, it is a mistake with a
+        // five-thousand-row result. The callers all guard against it; this
+        // is the guard that does not depend on them remembering.
+        if (request.IsEmpty) {
+            return new SearchOutcome(0, 0, false, 0);
         }
 
         var counters = new PassCounters();
@@ -124,8 +119,10 @@ public sealed class ContentSearchService {
                     continue;
                 }
 
-                // A folder has no contents to search, only a name.
-                if (entry.Name.Contains(request.Query, StringComparison.OrdinalIgnoreCase)) {
+                // A folder has no contents, so a search that asks for
+                // text cannot be satisfied by one. Asking for a name only
+                // — it can.
+                if (!request.HasText && request.Name.Matches(entry.Name)) {
                     hits.Add(new SearchHit(entry, null, 0));
                 }
                 if (request.Scope == SearchScope.Subfolders
@@ -156,7 +153,8 @@ public sealed class ContentSearchService {
         }
 
         _log.Info(
-            $"Search '{request.Query}' in {request.Root} ({request.Scope}, contents: {request.SearchContents}): " +
+            $"Search name '{request.Name.Text}' text '{request.Text}' in {request.Root} " +
+            $"({request.Scope}, binaries: {request.SearchBinaries}): " +
             $"{found} hits, {counters.Scanned} files scanned, {counters.Unreadable} unreadable" +
             (truncated ? ", truncated" : ""));
 
@@ -165,9 +163,11 @@ public sealed class ContentSearchService {
 
 
     /// <summary>
-    /// The files of one folder, tested in parallel. The name match is free
-    /// and is settled first; only what the name did not already answer
-    /// costs a read.
+    /// The files of one folder, tested in parallel. The name mask is
+    /// settled first because it is free, and because it is a gate rather
+    /// than an alternative: a file the mask rejects is never opened, which
+    /// is what makes "every .cs that mentions X" cost a fraction of "every
+    /// file that mentions X".
     /// </summary>
     private List<SearchHit> MatchFiles(
         List<FileSystemEntry> files,
@@ -187,21 +187,34 @@ public sealed class ContentSearchService {
 
         Parallel.For(0, files.Count, options, i => {
             var entry = files[i];
+
+            // The mask is a gate. Rejected here, the file is never opened
+            // and never counted as scanned — it was not a candidate.
+            if (!request.Name.Matches(entry.Name)) {
+                return;
+            }
+
             counters.CountScanned();
 
-            bool nameMatches = entry.Name.Contains(request.Query, StringComparison.OrdinalIgnoreCase);
+            if (!request.HasText) {
+                slots[i] = new SearchHit(entry, null, 0);
 
-            if (!request.SearchContents) {
-                if (nameMatches) {
-                    slots[i] = new SearchHit(entry, null, 0);
-                }
+                return;
+            }
 
+            // A file too large to open cannot answer a question about its
+            // contents, so it is out. Passing the mask is not enough when
+            // the mask is only half of what was asked.
+            if (entry.Size > request.MaxFileSize) {
                 return;
             }
 
             string? text = ExtractText(entry, request, token, out bool knownFormat);
             if (text is null) {
-                if (nameMatches) {
+                if (request.SearchBinaries && MatchesRawBytes(entry, request, token)) {
+                    // No snippet: a binary has no lines, and a window of
+                    // mojibake around the hit would be a lie dressed as
+                    // context.
                     slots[i] = new SearchHit(entry, null, 0);
                 } else if (knownFormat) {
                     counters.CountUnreadable();
@@ -210,13 +223,11 @@ public sealed class ContentSearchService {
                 return;
             }
 
-            if (ContentMatcher.TryMatch(text, request.Query, out string snippet, out int line)) {
+            if (ContentMatcher.TryMatch(text, request.Text, out string snippet, out int line)) {
                 // The snippet rides on the entry as well as on the hit: the
                 // list binds to entries, and copying it across here saves
                 // every consumer from carrying a second lookup table.
                 slots[i] = new SearchHit(entry with { MatchSnippet = snippet }, snippet, line);
-            } else if (nameMatches) {
-                slots[i] = new SearchHit(entry, null, 0);
             }
         });
 
@@ -285,6 +296,16 @@ public sealed class ContentSearchService {
             }
 
             if (text is null) {
+                // A format-specific extractor that claimed the file and
+                // failed ends the search for this file. Falling through to
+                // the catch-all would let it decide a PDF is "text" on the
+                // strength of the ASCII in its header — and then match a
+                // query against `%PDF-1.4 ReportLab Generated PDF`, which
+                // is a hit on a document nobody could actually read.
+                if (knownFormat) {
+                    return null;
+                }
+
                 continue;
             }
 
@@ -300,56 +321,24 @@ public sealed class ContentSearchService {
 
 
     /// <summary>
-    /// The whole-machine scope. The index returns paths; turning each back
-    /// into an entry is one stat per result, which is affordable for a few
-    /// thousand and gives the list the size, date and kind it needs to draw
-    /// a row.
+    /// Byte-for-byte scan of a file that is not text, for the opt-in
+    /// binaries mode. A second read of a file the extractors already
+    /// opened, which is the price of keeping the extractor contract to one
+    /// question ("what does this say") instead of two.
     /// </summary>
-    private SearchOutcome RunIndexed(
-        SearchRequest request,
-        Action<IReadOnlyList<SearchHit>> onBatch,
-        CancellationToken token) {
-        if (_index is not { IsAvailable: true }) {
-            return new SearchOutcome(0, 0, false, 0);
+    private bool MatchesRawBytes(FileSystemEntry entry, SearchRequest request, CancellationToken token) {
+        if (!BinaryTextSearch.Supports(request.Text)) {
+            return false;
         }
 
-        IReadOnlyList<string> paths;
         try {
-            paths = _index.Search(request.Query, null, request.SearchContents, request.MaxResults, token);
-        } catch (OperationCanceledException) {
-            throw;
-        } catch (Exception ex) {
-            _log.Error("Indexed search failed", ex);
-
-            return new SearchOutcome(0, 0, false, 0);
-        }
-
-        var hits = new List<SearchHit>(paths.Count);
-        foreach (string path in paths) {
+            byte[] bytes = _fs.ReadAllBytes(entry.FullPath);
             token.ThrowIfCancellationRequested();
 
-            FileSystemEntry? entry;
-            try {
-                entry = _fs.GetEntry(path);
-            } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
-                continue;
-            }
-
-            // The index outlives the files in it: anything deleted since
-            // the last crawl is dropped rather than shown as a row that
-            // opens nothing.
-            if (entry is null || !request.Visibility.Allows(entry)) {
-                continue;
-            }
-            hits.Add(new SearchHit(entry, null, 0));
+            return BinaryTextSearch.Contains(bytes, request.Text);
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException) {
+            return false;
         }
-
-        if (hits.Count > 0) {
-            onBatch(hits);
-        }
-        _log.Info($"Search '{request.Query}' via system index: {hits.Count} hits of {paths.Count} returned");
-
-        return new SearchOutcome(hits.Count, hits.Count, paths.Count >= request.MaxResults, 0);
     }
 
 

@@ -70,9 +70,7 @@ public static class PlatformBootstrapper {
         // try every file it is offered.
         var searchFs = ServiceLocator.Get<IFileSystem>();
         var searchCache = new ExtractedTextCache();
-        var searchIndex = new WindowsSearchIndex(logger);
         ServiceLocator.Register<ExtractedTextCache>(searchCache);
-        ServiceLocator.Register<IIndexedSearch>(searchIndex);
         ServiceLocator.Register<ContentSearchService>(new ContentSearchService(
             searchFs,
             new IContentExtractor[] {
@@ -81,7 +79,6 @@ public static class PlatformBootstrapper {
                 new PlainTextExtractor(searchFs),
             },
             searchCache,
-            searchIndex,
             logger));
 
         // Undo + recycle bin + ops are the single shared instances every
