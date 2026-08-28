@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Windows.Media;
 using Wander.Core.Companions;
 using Wander.Core.FileSystem;
 using Wander.Core.Layout;
@@ -270,13 +271,62 @@ public sealed class SettingsViewModel : ObservableObject {
     private GalleryBackground _galleryBackground;
     public GalleryBackground GalleryBackground {
         get => _galleryBackground;
-        set => SetField(ref _galleryBackground, value);
+        set {
+            if (SetField(ref _galleryBackground, value)) {
+                RaisePalette();
+            }
+        }
     }
+
+    private int _galleryGreyLevel;
+    public int GalleryGreyLevel {
+        get => _galleryGreyLevel;
+        set {
+            if (SetField(ref _galleryGreyLevel, ClampInt(value, 0, 255))) {
+                RaisePalette();
+            }
+        }
+    }
+
+    private int _galleryDarkLevel;
+    public int GalleryDarkLevel {
+        get => _galleryDarkLevel;
+        set {
+            if (SetField(ref _galleryDarkLevel, ClampInt(value, 0, 255))) {
+                RaisePalette();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Every colour the gallery draws, from the chosen background and the
+    /// two brightness knobs. One value the whole view binds to, for the
+    /// same reason <see cref="GalleryMetrics"/> is one value: a background
+    /// and a selection colour chosen independently is how you get a
+    /// highlight nobody can read.
+    /// </summary>
+    public GalleryPalette GalleryPalette => new(GalleryBackground, GalleryGreyLevel, GalleryDarkLevel);
+
+    /// <summary>The three background options as colours, for the strip's buttons.</summary>
+    public Brush GalleryLightSwatch =>
+        ViewModels.GalleryPalette.Swatch(Wander.Core.Persistence.GalleryBackground.Light, GalleryGreyLevel, GalleryDarkLevel);
+
+    public Brush GalleryGreySwatch =>
+        ViewModels.GalleryPalette.Swatch(Wander.Core.Persistence.GalleryBackground.Grey, GalleryGreyLevel, GalleryDarkLevel);
+
+    public Brush GalleryDarkSwatch =>
+        ViewModels.GalleryPalette.Swatch(Wander.Core.Persistence.GalleryBackground.Dark, GalleryGreyLevel, GalleryDarkLevel);
 
     private bool _autoGallery;
     public bool AutoGallery {
         get => _autoGallery;
         set => SetField(ref _autoGallery, value);
+    }
+
+    private int _autoGalleryPercent;
+    public int AutoGalleryPercent {
+        get => _autoGalleryPercent;
+        set => SetField(ref _autoGalleryPercent, ClampInt(value, 1, 100));
     }
 
 
@@ -430,7 +480,10 @@ public sealed class SettingsViewModel : ObservableObject {
         GalleryMargin = s.GalleryMargin;
         GalleryLabelFontSize = s.GalleryLabelFontSize;
         GalleryBackground = s.GalleryBackground;
+        GalleryGreyLevel = s.GalleryGreyLevel;
+        GalleryDarkLevel = s.GalleryDarkLevel;
         AutoGallery = s.AutoGallery;
+        AutoGalleryPercent = s.AutoGalleryPercent;
         RawRatingFormat = s.RawRatingFormat;
         ThumbnailDiskCacheEnabled = s.ThumbnailDiskCacheEnabled;
         ThumbnailDiskCacheMb = s.ThumbnailDiskCacheMb;
@@ -494,7 +547,10 @@ public sealed class SettingsViewModel : ObservableObject {
             GalleryMargin = GalleryMargin,
             GalleryLabelFontSize = GalleryLabelFontSize,
             GalleryBackground = GalleryBackground,
+            GalleryGreyLevel = GalleryGreyLevel,
+            GalleryDarkLevel = GalleryDarkLevel,
             AutoGallery = AutoGallery,
+            AutoGalleryPercent = AutoGalleryPercent,
             RawRatingFormat = RawRatingFormat,
             ThumbnailDiskCacheEnabled = ThumbnailDiskCacheEnabled,
             ThumbnailDiskCacheMb = ThumbnailDiskCacheMb,
@@ -553,6 +609,19 @@ public sealed class SettingsViewModel : ObservableObject {
     /// </summary>
     private void OnMenuToggleChanged() {
         Raise(nameof(MenuItemToggles));
+    }
+
+
+    /// <summary>
+    /// The palette and its three swatches are all projections of the same
+    /// two knobs, so they move together — one call rather than four
+    /// <c>Raise</c>s scattered across the setters that can drift apart.
+    /// </summary>
+    private void RaisePalette() {
+        Raise(nameof(GalleryPalette));
+        Raise(nameof(GalleryLightSwatch));
+        Raise(nameof(GalleryGreySwatch));
+        Raise(nameof(GalleryDarkSwatch));
     }
 
 

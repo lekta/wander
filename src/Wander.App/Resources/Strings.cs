@@ -891,8 +891,6 @@ public static class Strings {
     /// <summary>Оценка</summary>
     public static string ColumnRating => Get(nameof(ColumnRating));
 
-    /// <summary>Фон галереи</summary>
-    public static string MenuGalleryBackground => Get(nameof(MenuGalleryBackground));
 
     /// <summary>Светлый</summary>
     public static string GalleryBackgroundLight => Get(nameof(GalleryBackgroundLight));
@@ -906,8 +904,6 @@ public static class Strings {
     /// <summary>Оценка</summary>
     public static string FilterRatingLabel => Get(nameof(FilterRatingLabel));
 
-    /// <summary>Показывать только снимки с оценкой не ниже этой. Повторный щелчок по той же звезде снимает фильтр.</summary>
-    public static string FilterRatingHint => Get(nameof(FilterRatingHint));
 
     /// <summary>Показывать только снимки с этой цветовой меткой. Повторный щелчок снимает фильтр.</summary>
     public static string FilterColorHint => Get(nameof(FilterColorHint));
@@ -927,8 +923,6 @@ public static class Strings {
     /// <summary>Внимание: RawTherapee применяет профиль по-умолчанию (Auto-Matched Curve) только к снимкам без .pp3. Как только .pp3 появится, снимок начнёт открываться в RawTherapee с нейтральных значений, а не с автоподбора. Формат меняется в настройках, раздел «Галерея».</summary>
     public static string ConfirmCreateSidecarPp3Warning => Get(nameof(ConfirmCreateSidecarPp3Warning));
 
-    /// <summary>Создан файл оценки: {0}</summary>
-    public static string StatusSidecarCreated => Get(nameof(StatusSidecarCreated));
 
     /// <summary>Оценки пока нет. Щелчок по звезде создаст файл рядом со снимком — с подтверждением.</summary>
     public static string PreviewRatingUnsaved => Get(nameof(PreviewRatingUnsaved));
@@ -1022,4 +1016,30 @@ public static class Strings {
 
     /// <summary>Совпадение</summary>
     public static string ColumnMatch => Get(nameof(ColumnMatch));
+
+    /// <summary>У {0} снимков нет файла с оценкой. Рядом с каждым будет создан файл «{1}» — в нём и сохранится оценка.  Отменить создание можно через Ctrl+Z, одним нажатием на всю пачку.</summary>
+    public static string ConfirmCreateSidecarMany => Get(nameof(ConfirmCreateSidecarMany));
+
+
+
+    /// <summary>Яркость серого фона (0–255)</summary>
+    public static string SettingsGalleryGreyLevel => Get(nameof(SettingsGalleryGreyLevel));
+
+    /// <summary>Яркость тёмного фона (0–255)</summary>
+    public static string SettingsGalleryDarkLevel => Get(nameof(SettingsGalleryDarkLevel));
+
+    /// <summary>Доля изображений для включения (%)</summary>
+    public static string SettingsAutoGalleryPercent => Get(nameof(SettingsAutoGalleryPercent));
+
+    /// <summary>Оценка {0} — файлов: {1}</summary>
+    public static string StatusRatingApplied => Get(nameof(StatusRatingApplied));
+
+    /// <summary>Оценка снята — файлов: {0}</summary>
+    public static string StatusRatingCleared => Get(nameof(StatusRatingCleared));
+
+    /// <summary>Показывать снимки с этой оценкой и выше. С Ctrl — добавить или убрать одну оценку. Повторный щелчок снимает фильтр.</summary>
+    public static string FilterRatingHint => Get(nameof(FilterRatingHint));
+
+    /// <summary>Показывать снимки без оценки. С Ctrl — добавить их к уже выбранным оценкам.</summary>
+    public static string FilterUnratedHint => Get(nameof(FilterUnratedHint));
 }

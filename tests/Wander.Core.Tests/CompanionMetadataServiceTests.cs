@@ -294,4 +294,127 @@ public class CompanionMetadataServiceTests {
 
         Assert.False(fs.FileExists(created));
     }
+
+
+    // --- Many photos, one undo step -------------------------------------
+
+    [Fact]
+    public void ApplyRatingToMany_EditsExistingAndCreatesMissing() {
+        var (service, fs, _) = Build();
+        var targets = new[] {
+            new CompanionMetadataService.RatingTarget(@"C:\photos\IMG_1234.CR2", Pp3Path),
+            new CompanionMetadataService.RatingTarget(@"C:\photos\IMG_9999.CR2", null),
+        };
+
+        var results = service.ApplyRatingToMany(targets, RatingField.Rank, 4, SidecarFormat.Xmp);
+
+        Assert.Equal(2, results.Count);
+        Assert.Equal(4, service.ReadRating(Pp3Path)!.Rank);
+        Assert.True(fs.FileExists(@"C:\photos\IMG_9999.xmp"));
+        Assert.Equal(4, service.ReadRating(@"C:\photos\IMG_9999.xmp")!.Rank);
+    }
+
+    [Fact]
+    public void ApplyRatingToMany_IsOneUndoStep() {
+        // Rating a selection is one gesture; taking it back has to be one
+        // press, not one per file.
+        var (service, fs, undo) = Build();
+        var targets = new[] {
+            new CompanionMetadataService.RatingTarget(@"C:\photos\IMG_1234.CR2", Pp3Path),
+            new CompanionMetadataService.RatingTarget(@"C:\photos\IMG_9999.CR2", null),
+        };
+
+        service.ApplyRatingToMany(targets, RatingField.Rank, 5, SidecarFormat.Xmp);
+        Assert.Equal(1, undo.Depth);
+
+        undo.Undo();
+
+        Assert.Equal(2, service.ReadRating(Pp3Path)!.Rank);
+        Assert.False(fs.FileExists(@"C:\photos\IMG_9999.xmp"));
+    }
+
+    [Fact]
+    public void ApplyRatingToMany_WithOneTarget_PushesThePlainStep() {
+        var (service, _, undo) = Build();
+        var targets = new[] {
+            new CompanionMetadataService.RatingTarget(@"C:\photos\IMG_1234.CR2", Pp3Path),
+        };
+
+        service.ApplyRatingToMany(targets, RatingField.ColorLabel, 3, SidecarFormat.Xmp);
+
+        Assert.Equal(1, undo.Depth);
+        undo.Undo();
+        Assert.Equal(1, service.ReadRating(Pp3Path)!.ColorLabel);
+    }
+
+    [Fact]
+    public void ApplyRatingToMany_SkipsWhatItCannotWrite() {
+        // One unwritable photo must not take the rest of the batch down.
+        var (service, fs, _) = Build();
+        var targets = new[] {
+            new CompanionMetadataService.RatingTarget(@"C:\photos\ghost.CR2", @"C:\photos\ghost.CR2.pp3"),
+            new CompanionMetadataService.RatingTarget(@"C:\photos\IMG_1234.CR2", Pp3Path),
+        };
+
+        var results = service.ApplyRatingToMany(targets, RatingField.Rank, 1, SidecarFormat.Xmp);
+
+        Assert.Single(results);
+        Assert.Equal(@"C:\photos\IMG_1234.CR2", results[0].MainPath);
+        Assert.False(fs.FileExists(@"C:\photos\ghost.CR2.pp3"));
+    }
+
+    [Fact]
+    public void ApplyRatingToMany_WithNothingToDo_TouchesNothing() {
+        var (service, _, undo) = Build();
+
+        var results = service.ApplyRatingToMany(
+            Array.Empty<CompanionMetadataService.RatingTarget>(), RatingField.Rank, 3, SidecarFormat.Xmp);
+
+        Assert.Empty(results);
+        Assert.Equal(0, undo.Depth);
+    }
+
+
+    // --- What an undo has to refresh ------------------------------------
+
+    [Fact]
+    public void RatingUndo_NamesThePhotoAndNotTheSidecar() {
+        // The UI answers this by re-reading that one row instead of
+        // re-listing the folder, so naming the sidecar here would point it
+        // at a file that is not in the listing at all.
+        var (service, _, undo) = Build();
+
+        service.SetRating(Pp3Path, RatingField.Rank, 3, @"C:\photos\IMG_1234.CR2");
+
+        Assert.Equal(new[] { @"C:\photos\IMG_1234.CR2" }, undo.Undo()!.MetadataTargets);
+    }
+
+    [Fact]
+    public void BatchUndo_NamesEveryPhotoItTouched() {
+        var (service, _, undo) = Build();
+        var targets = new[] {
+            new CompanionMetadataService.RatingTarget(@"C:\photos\IMG_1234.CR2", Pp3Path),
+            new CompanionMetadataService.RatingTarget(@"C:\photos\IMG_9999.CR2", null),
+        };
+
+        service.ApplyRatingToMany(targets, RatingField.Rank, 2, SidecarFormat.Xmp);
+
+        Assert.Equal(
+            new[] { @"C:\photos\IMG_1234.CR2", @"C:\photos\IMG_9999.CR2" },
+            undo.Undo()!.MetadataTargets);
+    }
+
+    [Fact]
+    public void MixedComposite_ClaimsNoMetadataTargets() {
+        // A composite that also creates a folder changes the listing, and a
+        // caller that took the cheap path on it would leave a folder on
+        // screen that no longer matches the disk.
+        var (service, _, _) = Build();
+        var rating = new SidecarRatingAction(service, Pp3Path, RatingField.Rank, 1, 2, @"C:\photos\IMG_1234.CR2");
+        var somethingElse = new CreateAction(new FakeRecycleBin(new FakeFileSystem()), @"C:\photos\new");
+
+        var composite = new CompositeAction("mixed", new IUndoableAction[] { rating, somethingElse });
+
+        Assert.Empty(composite.MetadataTargets);
+    }
 }

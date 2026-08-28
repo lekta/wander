@@ -213,6 +213,16 @@
 
                 <CheckBox Content="{x:Static res:Strings.SettingsAutoGallery}"
                           IsChecked="{Binding Owner.AutoGallery}"/>
+                <Grid Margin="0,6,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="240"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Margin="{StaticResource Row}"
+                               Text="{x:Static res:Strings.SettingsAutoGalleryPercent}" Style="{StaticResource FieldLabel}"/>
+                    <TextBox Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
+                             Text="{Binding Owner.AutoGalleryPercent, UpdateSourceTrigger=PropertyChanged}"/>
+                </Grid>
                 <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,6,0,0"
                            Text="{x:Static res:Strings.SettingsAutoGalleryHint}"/>
 
@@ -228,6 +238,27 @@
                                  Content="{x:Static res:Strings.GalleryBackgroundDark}"
                                  IsChecked="{Binding Owner.GalleryBackground, Converter={StaticResource EnumRadio}, ConverterParameter=Dark}"/>
                 </StackPanel>
+                <!-- The two darkened options are numbers rather than fixed
+                     colours: the neutral that reads right depends on the
+                     monitor and the room as much as on the photographs. -->
+                <Grid Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="240"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Grid.Column="0" Margin="{StaticResource Row}"
+                               Text="{x:Static res:Strings.SettingsGalleryGreyLevel}" Style="{StaticResource FieldLabel}"/>
+                    <TextBox Grid.Row="0" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
+                             Text="{Binding Owner.GalleryGreyLevel, UpdateSourceTrigger=PropertyChanged}"/>
+                    <TextBlock Grid.Row="1" Grid.Column="0" Margin="{StaticResource Row}"
+                               Text="{x:Static res:Strings.SettingsGalleryDarkLevel}" Style="{StaticResource FieldLabel}"/>
+                    <TextBox Grid.Row="1" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
+                             Text="{Binding Owner.GalleryDarkLevel, UpdateSourceTrigger=PropertyChanged}"/>
+                </Grid>
 
                 <TextBlock Text="{x:Static res:Strings.SettingsGalleryGroup}" FontWeight="SemiBold" Margin="0,18,0,8"/>
                 <Grid>

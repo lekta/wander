@@ -36,7 +36,7 @@ public sealed class WindowsDirectoryWatcher : IDirectoryWatcher {
     }
 
 
-    public event EventHandler? Changed;
+    public event EventHandler<DirectoryChange>? Changed;
 
 
     public void Watch(string? path) {
@@ -59,8 +59,51 @@ public sealed class WindowsDirectoryWatcher : IDirectoryWatcher {
     }
 
 
-    private void OnChanged(object sender, FileSystemEventArgs e) {
-        Changed?.Invoke(this, EventArgs.Empty);
+    /// <summary>
+    /// A file appeared, vanished or was renamed — the folder now holds a
+    /// different set of files than it did.
+    /// </summary>
+    private void OnStructural(object sender, FileSystemEventArgs e) {
+        Report(e.FullPath, structural: true);
+    }
+
+    /// <summary>
+    /// A file that was there before and still is has been written to. The
+    /// listing has the same rows; one of them says something different.
+    /// </summary>
+    private void OnContent(object sender, FileSystemEventArgs e) {
+        Report(e.FullPath, structural: false);
+    }
+
+    /// <summary>
+    /// A rename. Usually that means the folder now holds a different set of
+    /// names — but not always, and the exception is the common case here:
+    /// <see cref="IFileSystem.ReplaceAtomic"/> writes a scratch file and
+    /// renames it onto its target, so every rating written into a sidecar
+    /// arrives as "renamed to a file that was already there". Reporting that
+    /// as structural is what made a single starred photograph re-list the
+    /// whole folder.
+    ///
+    /// <para>
+    /// A rename <em>out of</em> our own scratch file is therefore a content
+    /// change: the name that vanished was never in the listing, and the name
+    /// that appeared was already in it. Every other rename is structural.
+    /// </para>
+    /// </summary>
+    private void OnRenamed(object sender, RenamedEventArgs e) {
+        Report(e.FullPath, structural: !TransientFiles.IsTransient(e.OldFullPath));
+    }
+
+    private void Report(string path, bool structural) {
+        // Our own scratch file, which exists for a few milliseconds in the
+        // middle of an atomic replace. Reporting it would make every write
+        // to a sidecar look like a file appearing and disappearing in the
+        // folder — which is the one thing that forces a full re-listing.
+        if (TransientFiles.IsTransient(path)) {
+            return;
+        }
+
+        Changed?.Invoke(this, new DirectoryChange(path, structural));
     }
 
     /// <summary>
@@ -71,7 +114,7 @@ public sealed class WindowsDirectoryWatcher : IDirectoryWatcher {
     /// </summary>
     private void OnError(object sender, ErrorEventArgs e) {
         _log.Warn($"[watch] watcher error: {e.GetException().Message}");
-        Changed?.Invoke(this, EventArgs.Empty);
+        Changed?.Invoke(this, DirectoryChange.Unknown);
 
         lock (_lock) {
             if (!ReferenceEquals(sender, _watcher)) {
@@ -106,10 +149,10 @@ public sealed class WindowsDirectoryWatcher : IDirectoryWatcher {
                 IncludeSubdirectories = false,
             };
 
-            watcher.Created += OnChanged;
-            watcher.Deleted += OnChanged;
-            watcher.Renamed += OnChanged;
-            watcher.Changed += OnChanged;
+            watcher.Created += OnStructural;
+            watcher.Deleted += OnStructural;
+            watcher.Renamed += OnRenamed;
+            watcher.Changed += OnContent;
             watcher.Error += OnError;
             watcher.EnableRaisingEvents = true;
 
@@ -129,10 +172,10 @@ public sealed class WindowsDirectoryWatcher : IDirectoryWatcher {
 
         try {
             _watcher.EnableRaisingEvents = false;
-            _watcher.Created -= OnChanged;
-            _watcher.Deleted -= OnChanged;
-            _watcher.Renamed -= OnChanged;
-            _watcher.Changed -= OnChanged;
+            _watcher.Created -= OnStructural;
+            _watcher.Deleted -= OnStructural;
+            _watcher.Renamed -= OnRenamed;
+            _watcher.Changed -= OnContent;
             _watcher.Error -= OnError;
             _watcher.Dispose();
         } catch (Exception ex) {

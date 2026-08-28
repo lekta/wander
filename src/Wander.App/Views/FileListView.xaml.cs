@@ -75,12 +75,14 @@ public partial class FileListView : UserControl {
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e) {
         if (e.OldValue is MainViewModel old) {
             old.SelectionRestoreRequested -= RestoreListSelection;
+            old.SelectionRefreshRequested -= RefreshListSelection;
             old.PropertyChanged -= OnViewModelChanged;
             old.Settings.PropertyChanged -= OnSettingsChanged;
             old.Entries.CollectionChanged -= OnEntriesChanged;
         }
         if (e.NewValue is MainViewModel vm) {
             vm.SelectionRestoreRequested += RestoreListSelection;
+            vm.SelectionRefreshRequested += RefreshListSelection;
             vm.PropertyChanged += OnViewModelChanged;
             vm.Settings.PropertyChanged += OnSettingsChanged;
             vm.Entries.CollectionChanged += OnEntriesChanged;
@@ -360,6 +362,33 @@ public partial class FileListView : UserControl {
     }
 
 
+    /// <summary>
+    /// Puts the selection back on rows that were swapped for updated copies.
+    ///
+    /// <para>
+    /// Deliberately thinner than <see cref="RestoreListSelection"/>: no
+    /// scrolling, no <c>CurrentItem</c>, no focus. Nothing moved and nothing
+    /// finished — a number inside a row the user is looking at changed, and
+    /// the only thing to repair is that the list dropped the replaced object
+    /// out of its selection on the way.
+    /// </para>
+    /// </summary>
+    private void RefreshListSelection(IReadOnlyList<FileSystemEntry> items) {
+        if (items.Count == 0) {
+            return;
+        }
+
+        switch (ActiveList()) {
+            case DataGrid dg:
+                SetListSelection(dg, items);
+                break;
+            case ListBox lb:
+                SetListSelection(lb, items);
+                break;
+        }
+    }
+
+
     private static void ClearListSelection(ItemsControl host) {
         switch (host) {
             case ListBox lb: lb.UnselectAll(); break;
@@ -613,6 +642,12 @@ public partial class FileListView : UserControl {
             return;
         }
 
+        if (TryRateFromKeyboard(e.Key)) {
+            e.Handled = true;
+
+            return;
+        }
+
         if (sender is Selector target && TryEnterList(target, e.Key)) {
             e.Handled = true;
 
@@ -622,6 +657,46 @@ public partial class FileListView : UserControl {
         if (sender is ListBox list && TryGridStep(list, e.Key, Keyboard.Modifiers)) {
             e.Handled = true;
         }
+    }
+
+
+    /// <summary>
+    /// <c>0</c>…<c>5</c> in the gallery: set that many stars on everything
+    /// selected. The keys every photo browser uses for it, and the reason
+    /// the gallery exists — going through a shoot means rating without
+    /// taking a hand off the arrow keys.
+    ///
+    /// <para>
+    /// Only in the gallery, and that is a real trade: in the other views
+    /// digits belong to type-ahead, and a folder of files named
+    /// <c>2024-05-…</c> would become unreachable by typing if this were
+    /// global. The gallery is the one view where names are not how you find
+    /// things.
+    /// </para>
+    ///
+    /// <para>
+    /// Modifiers are left alone deliberately — <c>Ctrl</c> + digits are
+    /// window zones and <c>Ctrl</c> + <c>Shift</c> + digits are the view
+    /// modes, so a bare digit is the only shape free to mean this.
+    /// </para>
+    /// </summary>
+    private bool TryRateFromKeyboard(Key key) {
+        if (Vm.ViewMode != ViewMode.Gallery || Keyboard.Modifiers != ModifierKeys.None) {
+            return false;
+        }
+
+        int rank = key switch {
+            >= Key.D0 and <= Key.D5 => key - Key.D0,
+            >= Key.NumPad0 and <= Key.NumPad5 => key - Key.NumPad0,
+            _ => -1,
+        };
+        if (rank < 0 || Vm.SelectedEntries.Count == 0) {
+            return false;
+        }
+
+        Vm.SetRankForSelection(rank.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+        return true;
     }
 
 

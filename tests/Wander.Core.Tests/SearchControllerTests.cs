@@ -260,7 +260,7 @@ public class SearchControllerTests {
         sc.SetSource(new[] { keep, drop, unrated });
 
         var next = WaitForNextFilteredAsync(sc);
-        sc.RatingFilter = new RatingFilter(3, null);
+        sc.RatingFilter = RatingFilter.None.PickRank(3);
 
         Assert.Equal(new[] { keep }, await next);
     }
@@ -275,7 +275,7 @@ public class SearchControllerTests {
         sc.SetSource(new[] { folder, photo });
 
         var next = WaitForNextFilteredAsync(sc);
-        sc.RatingFilter = new RatingFilter(3, null);
+        sc.RatingFilter = RatingFilter.None.PickRank(3);
 
         Assert.Equal(new[] { folder }, await next);
     }
@@ -290,7 +290,7 @@ public class SearchControllerTests {
         sc.Query = "beach";
 
         var next = WaitForNextFilteredAsync(sc);
-        sc.RatingFilter = new RatingFilter(3, null);
+        sc.RatingFilter = RatingFilter.None.PickRank(3);
 
         Assert.Equal(new[] { match }, await next);
     }
@@ -299,7 +299,7 @@ public class SearchControllerTests {
     public async Task RatingFilter_ClearedBackToNone_PublishesEverythingAgain() {
         var sc = new SearchController();
         sc.SetSource(new[] { Photo("a.jpg", rank: 5), Photo("b.jpg") });
-        sc.RatingFilter = new RatingFilter(3, null);
+        sc.RatingFilter = RatingFilter.None.PickRank(3);
 
         var next = WaitForNextFilteredAsync(sc);
         sc.RatingFilter = RatingFilter.None;
@@ -313,7 +313,7 @@ public class SearchControllerTests {
         // Navigation calls Reset; a filter that survived the move would hide
         // rows in a folder the user has not looked at yet.
         var sc = new SearchController();
-        sc.RatingFilter = new RatingFilter(4, 2);
+        sc.RatingFilter = RatingFilter.None.PickRank(4).PickColor(2);
 
         sc.Reset();
 
@@ -327,9 +327,106 @@ public class SearchControllerTests {
         var seen = new List<string?>();
         sc.PropertyChanged += (_, e) => seen.Add(e.PropertyName);
 
-        sc.RatingFilter = new RatingFilter(2, null);
+        sc.RatingFilter = RatingFilter.None.PickRank(2);
 
         Assert.Contains(nameof(SearchController.RatingFilter), seen);
         Assert.Contains(nameof(SearchController.HasRatingFilter), seen);
+    }
+
+
+    // --- Replacing rows in place ----------------------------------------
+
+    /// <summary>Subscribe and await the next <c>ItemsChanged</c> emission.</summary>
+    private static async Task<IReadOnlyList<FileSystemEntry>> WaitForItemsChangedAsync(
+        SearchController sc, Action act, TimeSpan? timeout = null) {
+        var tcs = new TaskCompletionSource<IReadOnlyList<FileSystemEntry>>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        void Handler(IReadOnlyList<FileSystemEntry> result) {
+            sc.ItemsChanged -= Handler;
+            tcs.TrySetResult(result);
+        }
+        sc.ItemsChanged += Handler;
+        act();
+
+        var winner = await Task.WhenAny(tcs.Task, Task.Delay(timeout ?? TimeSpan.FromSeconds(2)));
+        if (winner != tcs.Task) {
+            sc.ItemsChanged -= Handler;
+            throw new TimeoutException("ItemsChanged did not fire in time");
+        }
+
+        return await tcs.Task;
+    }
+
+
+    [Fact]
+    public async Task Replace_WithNoFilter_ReportsOnlyTheChangedRows() {
+        // The whole point: a rating written into one sidecar must not cost
+        // the folder its selection and its scroll position, so the rest of
+        // the projection is not rebuilt at all.
+        var sc = new SearchController();
+        sc.SetSource(new[] { Photo("a.jpg"), Photo("b.jpg"), Photo("c.jpg") });
+
+        var changed = await WaitForItemsChangedAsync(sc, () => sc.Replace(new[] { Photo("b.jpg", rank: 4) }));
+
+        Assert.Single(changed);
+        Assert.Equal("b.jpg", changed[0].Name);
+        Assert.Equal(4, changed[0].Rating!.Rank);
+        Assert.Equal(4, sc.Source.Single(e => e.Name == "b.jpg").Rating!.Rank);
+    }
+
+    [Fact]
+    public async Task Replace_WhileFiltered_ButStillMatching_StaysCheap() {
+        var sc = new SearchController();
+        sc.SetSource(new[] { Photo("a.jpg", rank: 5), Photo("b.jpg", rank: 1) });
+        sc.RatingFilter = RatingFilter.None.PickRank(4);
+        await Task.Delay(50);
+
+        // 5 -> 4 keeps it inside the filter, so nothing has to be reprojected.
+        var changed = await WaitForItemsChangedAsync(sc, () => sc.Replace(new[] { Photo("a.jpg", rank: 4) }));
+
+        Assert.Single(changed);
+    }
+
+    [Fact]
+    public async Task Replace_ThatDropsARowOutOfTheFilter_ReprojectsInstead() {
+        // Here the list genuinely has to change, so the full pass is right.
+        var sc = new SearchController();
+        sc.SetSource(new[] { Photo("a.jpg", rank: 5), Photo("b.jpg", rank: 5) });
+        sc.RatingFilter = RatingFilter.None.PickRank(4);
+        await Task.Delay(50);
+
+        var next = WaitForNextFilteredAsync(sc);
+        sc.Replace(new[] { Photo("a.jpg", rank: 1) });
+
+        var result = await next;
+        Assert.Equal(new[] { "b.jpg" }, result.Select(e => e.Name));
+    }
+
+    [Fact]
+    public void Replace_IgnoresRowsThatAreNotInTheSource() {
+        var sc = new SearchController();
+        sc.SetSource(new[] { Photo("a.jpg") });
+        bool fired = false;
+        sc.ItemsChanged += _ => fired = true;
+
+        sc.Replace(new[] { Photo("gone.jpg", rank: 3) });
+
+        Assert.False(fired);
+    }
+
+    [Fact]
+    public void Replace_WithAnIdenticalRow_ChangesNothing() {
+        // Our own write comes back round through the folder watcher, which
+        // re-reads the row and hands it back. Rebuilding the row for a value
+        // it already has would be a container rebuilt under the cursor for
+        // nothing.
+        var sc = new SearchController();
+        sc.SetSource(new[] { Photo("a.jpg", rank: 3) });
+        bool fired = false;
+        sc.ItemsChanged += _ => fired = true;
+
+        sc.Replace(new[] { Photo("a.jpg", rank: 3) });
+
+        Assert.False(fired);
     }
 }

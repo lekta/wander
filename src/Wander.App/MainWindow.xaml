@@ -390,30 +390,16 @@
                                   IsCheckable="True"
                                   IsChecked="{Binding ViewMode, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=Gallery}"
                                   Command="{Binding SetViewModeCommand}" CommandParameter="Gallery"/>
-                        <Separator/>
                         <!--
-                            The gallery background lives in the View menu and
-                            not in a gallery-only menu of its own: it is one
-                            three-way choice, and a whole menu that appears
-                            and disappears with the view is more furniture
-                            than the choice is worth. The filter, which is
-                            state that removes rows, gets a visible strip
-                            instead - see FileListView.
+                            The gallery background is not here on purpose. It
+                            is the control you reach for while looking at the
+                            photographs — to see the same frame on grey and
+                            then on black — and three clicks into a menu for
+                            something you flip back and forth is three clicks
+                            too many. It lives on the strip above the list,
+                            next to the filter, where both are one click from
+                            the pictures they are about.
                         -->
-                        <MenuItem Header="{x:Static res:Strings.MenuGalleryBackground}">
-                            <MenuItem Header="{x:Static res:Strings.GalleryBackgroundLight}"
-                                      IsCheckable="True"
-                                      IsChecked="{Binding Settings.GalleryBackground, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=Light}"
-                                      Command="{Binding SetGalleryBackgroundCommand}" CommandParameter="Light"/>
-                            <MenuItem Header="{x:Static res:Strings.GalleryBackgroundGrey}"
-                                      IsCheckable="True"
-                                      IsChecked="{Binding Settings.GalleryBackground, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=Grey}"
-                                      Command="{Binding SetGalleryBackgroundCommand}" CommandParameter="Grey"/>
-                            <MenuItem Header="{x:Static res:Strings.GalleryBackgroundDark}"
-                                      IsCheckable="True"
-                                      IsChecked="{Binding Settings.GalleryBackground, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=Dark}"
-                                      Command="{Binding SetGalleryBackgroundCommand}" CommandParameter="Dark"/>
-                        </MenuItem>
                         <Separator/>
                         <!--
                             Sort by submenu. The four columns mirror the Details

@@ -54,8 +54,21 @@ public sealed record SessionState {
     /// </summary>
     public NavigationStop? LastPath { get; init; }
 
-    /// <summary>Last view mode (Details / Tiles / LargeIcons) as a string.</summary>
+    /// <summary>Last view mode (Details / Tiles / LargeIcons / Gallery) as a string.</summary>
     public string? ViewMode { get; init; }
+
+    /// <summary>
+    /// Folders where the user picked a view by hand, and which one. The
+    /// automatic gallery stays out of these.
+    ///
+    /// <para>
+    /// Session-bucket rather than a setting, and capped: this is "where I
+    /// left off in that folder", not a preference, and a list that grew
+    /// with every folder ever visited would be a slow leak in
+    /// <c>state.json</c>. Oldest entries fall off first.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<FolderViewMode> ManualViewModes { get; init; } = Array.Empty<FolderViewMode>();
 
     /// <summary>
     /// Tree nodes the user had expanded at close, scoped per panel.
@@ -113,6 +126,14 @@ public sealed record SessionState {
     /// </summary>
     public double BookmarksHeight { get; init; } = 200;
 }
+
+
+/// <summary>
+/// One folder the user assigned a view to by hand. The mode is a string
+/// for the same reason the session's own is: a reordered enum must not
+/// silently reinterpret what was saved.
+/// </summary>
+public sealed record FolderViewMode(string Path, string Mode);
 
 
 /// <summary>

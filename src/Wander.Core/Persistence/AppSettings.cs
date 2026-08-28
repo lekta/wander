@@ -157,8 +157,27 @@ public sealed record AppSettings {
     /// <summary>Font size of the name under a gallery picture.</summary>
     public int GalleryLabelFontSize { get; init; } = 11;
 
-    /// <summary>What the gallery draws behind the pictures.</summary>
-    public GalleryBackground GalleryBackground { get; init; } = GalleryBackground.Grey;
+    /// <summary>
+    /// What the gallery draws behind the pictures. The window's own
+    /// background by default: a view that opens dark the first time reads
+    /// as a theme somebody turned on, not as a tool the user is about to
+    /// choose. The grey most photographers want is one click away and
+    /// persists once chosen.
+    /// </summary>
+    public GalleryBackground GalleryBackground { get; init; } = GalleryBackground.Light;
+
+    /// <summary>
+    /// Lightness of the "grey" gallery background, 0…255. Settable because
+    /// the right neutral depends on the room and the monitor as much as on
+    /// the photographs; 110 is the usual mid grey.
+    /// </summary>
+    public int GalleryGreyLevel { get; init; } = 110;
+
+    /// <summary>
+    /// Lightness of the "dark" gallery background, 0…255. Not zero on
+    /// purpose: against pure black the edges of a dark photograph vanish.
+    /// </summary>
+    public int GalleryDarkLevel { get; init; } = 30;
 
     /// <summary>
     /// Switch to the gallery by itself on entering a folder that is mostly
@@ -169,6 +188,14 @@ public sealed record AppSettings {
     /// automatic choice that overrules an explicit one is not a convenience.
     /// </summary>
     public bool AutoGallery { get; init; } = true;
+
+    /// <summary>
+    /// How much of a folder has to be pictures before the gallery switches
+    /// itself on, in per cent of the <em>content</em> files (see
+    /// <see cref="Wander.Core.FileSystem.ImageFolderProbe"/> for what does
+    /// not count). Strictly more than this share.
+    /// </summary>
+    public int AutoGalleryPercent { get; init; } = 50;
 
 
     // --- Ratings --------------------------------------------------------

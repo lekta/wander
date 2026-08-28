@@ -19,4 +19,19 @@ public interface IUndoableAction {
     /// (undo of "create") or when the action cannot say.
     /// </summary>
     IReadOnlyList<string> PathsAfterUndo => Array.Empty<string>();
+
+    /// <summary>
+    /// Files whose <em>metadata</em> this action changes — the photographs,
+    /// not the sidecars beside them. Non-empty only for actions that leave
+    /// the folder listing itself alone: nothing appears, disappears or
+    /// changes name, so the UI can re-read those few rows instead of
+    /// re-listing the folder around the user.
+    ///
+    /// <para>
+    /// Empty is the safe answer and the default. A caller that gets an
+    /// empty list refreshes everything, which is always correct and only
+    /// sometimes wasteful.
+    /// </para>
+    /// </summary>
+    IReadOnlyList<string> MetadataTargets => Array.Empty<string>();
 }

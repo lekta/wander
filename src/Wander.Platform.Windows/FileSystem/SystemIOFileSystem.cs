@@ -227,7 +227,7 @@ public sealed class SystemIOFileSystem : IFileSystem {
 
     public void ReplaceAtomic(string path, byte[] content) {
         // Temp file in the same directory so the swap stays on one volume.
-        string temp = path + ".wander-tmp";
+        string temp = path + TransientFiles.ReplaceSuffix;
         try {
             File.WriteAllBytes(temp, content);
             if (File.Exists(path)) {

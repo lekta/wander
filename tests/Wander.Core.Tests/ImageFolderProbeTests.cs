@@ -96,4 +96,39 @@ public class ImageFolderProbeTests {
     public void CodeFolder_IsNot() {
         Assert.False(Probe("Program.cs", "App.xaml", "icon.png", "readme.md"));
     }
+
+
+    // --- The share is settable ------------------------------------------
+
+    [Fact]
+    public void Percent_RaisedAboveTheContent_RefusesTheFolder() {
+        var entries = new[] { Entry("a.jpg"), Entry("b.jpg"), Entry("notes.txt") };
+
+        Assert.True(ImageFolderProbe.IsImageFolder(entries, CompanionResolver.Default, 50));
+        Assert.False(ImageFolderProbe.IsImageFolder(entries, CompanionResolver.Default, 90));
+    }
+
+    [Fact]
+    public void Percent_LoweredBelowTheContent_AcceptsIt() {
+        var entries = new[] { Entry("a.jpg"), Entry("b.txt"), Entry("c.txt") };
+
+        Assert.False(ImageFolderProbe.IsImageFolder(entries, CompanionResolver.Default, 50));
+        Assert.True(ImageFolderProbe.IsImageFolder(entries, CompanionResolver.Default, 30));
+    }
+
+    [Fact]
+    public void Percent_IsStillStrictlyMoreThanTheShare() {
+        var entries = new[] { Entry("a.jpg"), Entry("b.txt") };
+
+        Assert.False(ImageFolderProbe.IsImageFolder(entries, CompanionResolver.Default, 50));
+    }
+
+    [Fact]
+    public void Percent_ZeroStillNeedsOnePicture() {
+        Assert.False(ImageFolderProbe.IsImageFolder(
+            new[] { Entry("a.txt") }, CompanionResolver.Default, 0));
+        Assert.True(ImageFolderProbe.IsImageFolder(
+            new[] { Entry("a.jpg"), Entry("b.txt"), Entry("c.txt"), Entry("d.txt") },
+            CompanionResolver.Default, 0));
+    }
 }

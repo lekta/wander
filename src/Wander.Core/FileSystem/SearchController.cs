@@ -38,6 +38,21 @@ public sealed class SearchController : INotifyPropertyChanged {
     /// </summary>
     public event Action<IReadOnlyList<FileSystemEntry>>? FilteredChanged;
 
+    /// <summary>
+    /// Fires when <see cref="Replace"/> changed rows that were on screen
+    /// and stay on screen — carrying only those rows, not a new projection.
+    ///
+    /// <para>
+    /// The whole point is what it does <b>not</b> do. Rebuilding the
+    /// projection means every row is a new object, which means the list
+    /// drops its selection and rebuilds containers under the cursor. For a
+    /// change that touched two files out of five hundred — a rating written
+    /// into a sidecar — that is a folder that jumps for no reason the user
+    /// can see.
+    /// </para>
+    /// </summary>
+    public event Action<IReadOnlyList<FileSystemEntry>>? ItemsChanged;
+
 
     /// <summary>
     /// Current filter text. Empty string disables the filter and pushes the
@@ -115,6 +130,72 @@ public sealed class SearchController : INotifyPropertyChanged {
             Raise(nameof(RatingFilter));
             Raise(nameof(HasRatingFilter));
         }
+    }
+
+
+    /// <summary>
+    /// Swaps updated versions of rows into the source, matching by path.
+    ///
+    /// <para>
+    /// Takes the cheap route when it can: if none of the replacements
+    /// changes whether the row passes the current filter, only
+    /// <see cref="ItemsChanged"/> fires and the list is left alone apart
+    /// from those rows. If a row's verdict flips — a photo just rated two
+    /// stars while the filter asks for four — the projection genuinely has
+    /// to be rebuilt, and the full pass runs.
+    /// </para>
+    /// </summary>
+    public void Replace(IReadOnlyList<FileSystemEntry> updated) {
+        if (updated.Count == 0) {
+            return;
+        }
+
+        var source = new List<FileSystemEntry>(_source);
+        var landed = new List<FileSystemEntry>(updated.Count);
+        bool membershipChanged = false;
+
+        foreach (var entry in updated) {
+            int at = source.FindIndex(
+                e => string.Equals(e.FullPath, entry.FullPath, StringComparison.OrdinalIgnoreCase));
+            if (at < 0) {
+                continue;
+            }
+
+            // A replacement that says exactly what the row already says is
+            // not a change. Dropping it here is what stops our own write
+            // coming back round through the folder watcher and rebuilding
+            // the row a second time for nothing.
+            if (source[at].SaysTheSameAs(entry)) {
+                continue;
+            }
+
+            membershipChanged |= Passes(source[at]) != Passes(entry);
+            source[at] = entry;
+            landed.Add(entry);
+        }
+
+        if (landed.Count == 0) {
+            return;
+        }
+
+        _source = source;
+        if (membershipChanged) {
+            _ = ApplyAsync();
+
+            return;
+        }
+
+        ItemsChanged?.Invoke(landed);
+    }
+
+
+    /// <summary>Whether one row survives the current filters. Cheap enough to run inline.</summary>
+    private bool Passes(FileSystemEntry entry) {
+        if (_query.Length > 0 && !entry.Name.Contains(_query, StringComparison.OrdinalIgnoreCase)) {
+            return false;
+        }
+
+        return entry.IsFolderLike || _rating.Matches(entry);
     }
 
 

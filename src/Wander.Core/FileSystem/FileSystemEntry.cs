@@ -41,6 +41,51 @@ public sealed record FileSystemEntry(
     public bool HasCompanions => Companions is { Count: > 0 };
 
     /// <summary>
+    /// Whether two readings of the same file say the same thing.
+    ///
+    /// <para>
+    /// Record equality is not usable for this: <see cref="Companions"/> is a
+    /// list, and two enumerations of the same folder produce two instances
+    /// of it, so every row with a sidecar would count as changed on every
+    /// single refresh — losing its container, and with it the selection.
+    /// <see cref="Rating"/> on the other hand is a plain record of two ints
+    /// and compares by value, which is what makes a rating arriving count as
+    /// a change and reach the screen.
+    /// </para>
+    /// </summary>
+    public bool SaysTheSameAs(FileSystemEntry other) {
+        return Name == other.Name
+            && Kind == other.Kind
+            && Size == other.Size
+            && ModifiedUtc == other.ModifiedUtc
+            && IsHidden == other.IsHidden
+            && IsReadOnly == other.IsReadOnly
+            && IsSystem == other.IsSystem
+            && LinksToDirectory == other.LinksToDirectory
+            && OriginalLocation == other.OriginalLocation
+            && Rating == other.Rating
+            && SameCompanions(Companions, other.Companions);
+    }
+
+
+    private static bool SameCompanions(IReadOnlyList<string>? a, IReadOnlyList<string>? b) {
+        if (a is null || a.Count == 0) {
+            return b is null || b.Count == 0;
+        }
+        if (b is null || a.Count != b.Count) {
+            return false;
+        }
+
+        for (int i = 0; i < a.Count; i++) {
+            if (!string.Equals(a[i], b[i], StringComparison.OrdinalIgnoreCase)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Folder this entry lives in. Only interesting in a search result
     /// list, where rows come from many folders at once and the name alone
     /// no longer says which file is which.

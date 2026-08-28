@@ -77,10 +77,53 @@ public sealed class ColorLabelBrushConverter : IValueConverter {
 }
 
 
-/// <summary>Visible when the bound value is not null. Collapsed when it is.</summary>
-public sealed class NotNullToVisibilityConverter : IValueConverter {
+/// <summary>
+/// Whether a piece of the rating badge has anything to say. Parameter picks
+/// which piece: <c>Badge</c> for the badge as a whole, <c>Color</c> for the
+/// colour dot inside it.
+///
+/// <para>
+/// The distinction matters because "has a sidecar" and "has a rating" are
+/// different things, and the first one is not worth a pixel. A photo whose
+/// <c>.pp3</c> exists but says nothing was drawing an empty box in the
+/// corner of its thumbnail; a photo with three stars and no colour label
+/// was drawing three stars with a hole punched to their left.
+/// </para>
+/// </summary>
+public sealed class RatingBadgeVisibilityConverter : IValueConverter {
     public object Convert(object value, Type targetType, object? parameter, CultureInfo culture) {
-        return value is null ? Visibility.Collapsed : Visibility.Visible;
+        var rating = value as SidecarRating;
+        bool show = (parameter as string) == "Color"
+            ? (rating?.ColorLabel ?? 0) > 0
+            : (rating?.Rank ?? 0) > 0 || (rating?.ColorLabel ?? 0) > 0;
+
+        return show ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+
+    public object ConvertBack(object value, Type targetType, object? parameter, CultureInfo culture) {
+        throw new NotSupportedException();
+    }
+}
+
+
+/// <summary>
+/// One star of the filter bar, lit or not. Takes the whole
+/// <see cref="RatingFilter"/> rather than a number because which stars are
+/// lit is a set, not a run: "three and up, but not five" is a thing the bar
+/// can say, and the only way to see that it is saying it is star by star.
+/// </summary>
+public sealed class FilterStarConverter : IValueConverter {
+    private const string Filled = "\u2605";
+    private const string Hollow = "\u2606";
+
+
+    public object Convert(object value, Type targetType, object? parameter, CultureInfo culture) {
+        if (value is not RatingFilter filter || parameter is not string raw || !int.TryParse(raw, out int star)) {
+            return Hollow;
+        }
+
+        return filter.HasRank(star) ? Filled : Hollow;
     }
 
 

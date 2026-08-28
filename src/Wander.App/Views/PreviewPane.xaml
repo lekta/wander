@@ -105,6 +105,31 @@
                 <!-- Content area -->
                 <Grid Grid.Row="0">
                     <!--
+                        The picture surround, same palette as the gallery's.
+                        A photograph judged against a grey wall and then
+                        opened on a white pane is two different photographs
+                        to the eye, so the two surfaces have to agree — and
+                        the surround is only drawn where there is a
+                        photograph in it: text, code and documents bring
+                        their own background and would look broken on this
+                        one.
+                    -->
+                    <Border Background="{Binding Settings.GalleryPalette.Background}">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Preview.Kind}" Value="Image">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Preview.Kind}" Value="Gif">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                    </Border>
+                    <!--
                         Image preview. The fitted image stays in ImgFit; a
                         transparent canvas overlays it for the FastStone-style
                         "hold RMB to zoom 1:1" interaction. Everything is wired
@@ -130,7 +155,7 @@
                                SizeChanged="ImgFit_SizeChanged"/>
                         <!-- Zoom view: visible only while the user holds RMB. -->
                         <Canvas x:Name="ImgZoomCanvas"
-                                Background="White"
+                                Background="{Binding Settings.GalleryPalette.Background}"
                                 Visibility="Collapsed"
                                 IsHitTestVisible="False">
                             <Image x:Name="ImgZoom"

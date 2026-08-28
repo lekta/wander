@@ -5,6 +5,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Threading;
 using Wander.App.Conflict;
 using Wander.App.Resources;
@@ -71,11 +72,16 @@ public sealed class MainViewModel : ObservableObject {
     private ViewMode _viewMode = ViewMode.Details;
     private ViewMode _userViewMode = ViewMode.Details;
 
-    // Folders where the user picked a view by hand: the automatic choice
-    // stays out of those. Session-scoped on purpose — a preference that
-    // outlives the session is a per-folder setting, which is a different
-    // feature (PLAN H1) with a file format attached to it.
-    private readonly HashSet<string> _manualViewModeFolders = new(StringComparer.OrdinalIgnoreCase);
+    // Folders where the user picked a view by hand, and which one. Kept in
+    // insertion order so the cap below drops the oldest, and persisted in
+    // the session bucket of state.json: "the gallery stops guessing here"
+    // has to survive a restart, or the promise lasts until teatime.
+    //
+    // Capped rather than unbounded: this grows one entry per folder the
+    // user ever set a view in, and state.json is loaded on every launch.
+    private readonly Dictionary<string, ViewMode> _manualViewModes = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Queue<string> _manualViewModeOrder = new();
+    private const int ManualViewModeLimit = 128;
 
     private bool _isPreviewVisible;
     private double _previewWidth = 280;
@@ -101,6 +107,12 @@ public sealed class MainViewModel : ObservableObject {
     private CancellationTokenSource? _ratingCts;
     private bool _hasRatings;
 
+    // True while rows are being swapped for updated copies. The list drops
+    // a replaced object out of its selection and says so, and that report
+    // would clear the preview and the status line for the two frames until
+    // the selection is put back. See ReplaceRows.
+    private bool _rowsReplacing;
+
     // --- Auto-refresh ---------------------------------------------------
     // The watcher says "something changed" from a background thread, often
     // many times in a row; the timer turns that into at most one re-listing
@@ -108,7 +120,13 @@ public sealed class MainViewModel : ObservableObject {
     // than a one-shot restarted on every event.
     private readonly IDirectoryWatcher? _watcher;
     private readonly DispatcherTimer? _watchTimer;
-    private bool _folderChangedOutside;
+
+    // What has changed in the folder since the last tick. An accumulator
+    // rather than a flag, because "something changed" can only be answered
+    // by re-listing everything, and that is exactly the answer that makes
+    // the folder jump under the cursor when the something was one number in
+    // one sidecar. See FolderChanges.
+    private readonly FolderChanges _folderChanges = new();
 
     // Which folder the rows currently in Entries belong to. A refresh of the
     // same folder reconciles the list in place; only a move to a *different*
@@ -180,7 +198,7 @@ public sealed class MainViewModel : ObservableObject {
 
         if (ServiceLocator.IsRegistered<IDirectoryWatcher>()) {
             _watcher = ServiceLocator.Get<IDirectoryWatcher>();
-            _watcher.Changed += (_, _) => _dispatcher.BeginInvoke(NoteFolderChangedOutside);
+            _watcher.Changed += (_, change) => _dispatcher.BeginInvoke(() => NoteFolderChanged(change));
             _watchTimer = new DispatcherTimer(DispatcherPriority.Background, _dispatcher) {
                 Interval = TimeSpan.FromMilliseconds(WatchIntervalMs),
             };
@@ -196,7 +214,7 @@ public sealed class MainViewModel : ObservableObject {
                 ? ServiceLocator.Get<IImageMetadataReader>()
                 : null,
             _companionMetadata,
-            CreateRatingSidecar,
+            ApplyRatingToPrimary,
             RevealPath);
 
         _nav = new NavigationController(
@@ -246,6 +264,7 @@ public sealed class MainViewModel : ObservableObject {
         SetGalleryBackgroundCommand = new RelayCommand(p => SetGalleryBackground(p as string));
         FilterColorChoices = ColorLabelViewModel.CreateChoices();
         SetFilterRankCommand = new RelayCommand(p => SetFilterRank(p as string));
+        SetRankForSelectionCommand = new RelayCommand(p => SetRankForSelection(p as string));
         SetFilterColorCommand = new RelayCommand(p => SetFilterColor(p as string));
         ClearRatingFilterCommand = new RelayCommand(_ => ClearRatingFilter(), _ => HasRatingFilter);
         SetSortKeyCommand = new RelayCommand(p => SetSortKey(p as string));
@@ -309,8 +328,8 @@ public sealed class MainViewModel : ObservableObject {
             // SearchController owns the underlying _query; surface the
             // changes under the names XAML/binding consumers already expect.
             if (e.PropertyName == nameof(SearchController.RatingFilter)) {
-                Raise(nameof(FilterMinRank));
-                Raise(nameof(FilterColorLabel));
+                Raise(nameof(RatingFilter));
+                Raise(nameof(FilterIncludesUnrated));
                 SyncFilterChoices();
             } else if (e.PropertyName == nameof(SearchController.HasRatingFilter)) {
                 Raise(nameof(HasRatingFilter));
@@ -326,11 +345,18 @@ public sealed class MainViewModel : ObservableObject {
                 return;
             }
 
-            SyncEntries(filtered);
+            ReconcileEntries(() => SyncEntries(filtered));
             UpdateFilterStatus(filtered.Count, _search.Source.Count);
             ApplyRestoreSelection();
             ApplyPendingFolderSelection();
             ApplyPendingReveal();
+        };
+        _search.ItemsChanged += changed => {
+            if (ContentSearch.IsShowingResults) {
+                return;
+            }
+
+            ReplaceRows(changed);
         };
 
         _nav.CurrentChanged += (_, _) => OnNavigationChanged();
@@ -362,6 +388,16 @@ public sealed class MainViewModel : ObservableObject {
     /// selecting.
     /// </summary>
     public event Action<IReadOnlyList<FileSystemEntry>>? SelectionRestoreRequested;
+
+    /// <summary>
+    /// Raised after rows were swapped for updated copies in place, carrying
+    /// the rows that were selected before. Distinct from
+    /// <see cref="SelectionRestoreRequested"/> in exactly one way, and it is
+    /// the whole reason it exists: this one must not scroll and must not
+    /// move the keyboard. Nothing happened that the user should be taken
+    /// anywhere for — a number changed inside a row they are looking at.
+    /// </summary>
+    public event Action<IReadOnlyList<FileSystemEntry>>? SelectionRefreshRequested;
 
 
     public BulkObservableCollection<FileSystemEntry> Entries { get; }
@@ -428,6 +464,16 @@ public sealed class MainViewModel : ObservableObject {
     public FileSystemEntry? SelectedEntry {
         get => _selectedEntry;
         set {
+            // Nothing the list says about the selection while its rows are
+            // being swapped is the truth. It drops each replaced object as
+            // it goes and moves SelectedItem onto whichever selected row is
+            // still standing, so a plain three-row update walked the preview
+            // through three other photographs before landing back on the
+            // right one. ReconcileEntries assigns the real value when the
+            // swap is over.
+            if (_rowsReplacing) {
+                return;
+            }
             if (SetField(ref _selectedEntry, value)) {
                 Preview.SetPrimary(value);
             }
@@ -448,6 +494,12 @@ public sealed class MainViewModel : ObservableObject {
     public IReadOnlyList<FileSystemEntry> SelectedEntries {
         get => _selectedEntries;
         set {
+            // Same reason as SelectedEntry above: while rows are being
+            // swapped the list reports a selection it is about to get back,
+            // and the status bar must not count that out loud.
+            if (_rowsReplacing) {
+                return;
+            }
             if (SetField(ref _selectedEntries, value)) {
                 Preview.SetSelection(value);
                 Raise(nameof(SelectionSummary));
@@ -846,6 +898,15 @@ public sealed class MainViewModel : ObservableObject {
                 Raise(nameof(ViewMode));
             }
 
+            // A mode name that no longer parses (a renamed enum member in a
+            // future version, a hand-edited file) is dropped rather than
+            // guessed at: the automatic choice is a fine fallback.
+            foreach (var folder in session.ManualViewModes) {
+                if (!string.IsNullOrEmpty(folder.Path) && Enum.TryParse<ViewMode>(folder.Mode, out var saved)) {
+                    RememberManualViewMode(folder.Path, saved);
+                }
+            }
+
             _isPreviewVisible = session.IsPreviewVisible;
             Raise(nameof(IsPreviewVisible));
             Preview.SetVisible(_isPreviewVisible);
@@ -939,6 +1000,10 @@ public sealed class MainViewModel : ObservableObject {
                     ? new NavigationStop(_nav.Current, _nav.CurrentSource ?? NavigationSource.External)
                     : null,
                 ViewMode = _userViewMode.ToString(),
+                ManualViewModes = _manualViewModeOrder
+                    .Where(_manualViewModes.ContainsKey)
+                    .Select(p => new FolderViewMode(p, _manualViewModes[p].ToString()))
+                    .ToArray(),
                 ExpandedPaths = CollectExpanded(),
                 IsPreviewVisible = _isPreviewVisible,
                 PreviewWidth = _previewWidth,
@@ -1089,13 +1154,13 @@ public sealed class MainViewModel : ObservableObject {
         _watcher.Watch(watchable ? _nav.Current : null);
 
         if (!watchable) {
-            _folderChangedOutside = false;
+            _folderChanges.Clear();
             _watchTimer?.Stop();
         }
     }
 
-    private void NoteFolderChangedOutside() {
-        _folderChangedOutside = true;
+    private void NoteFolderChanged(DirectoryChange change) {
+        _folderChanges.Note(change);
         if (_watchTimer is { IsEnabled: false }) {
             _watchTimer.Start();
         }
@@ -1110,21 +1175,48 @@ public sealed class MainViewModel : ObservableObject {
     /// itself on the first idle tick, so a quiet folder costs nothing.
     /// </summary>
     private void OnWatchTick(object? sender, EventArgs e) {
-        if (!_folderChangedOutside) {
+        if (_folderChanges.IsEmpty) {
             _watchTimer?.Stop();
+
             return;
         }
 
-        // Two things must not be interrupted by a re-listing: a name being
-        // edited in place (the editor lives in a row that would be rebuilt)
-        // and our own file operation (which re-lists when it finishes
-        // anyway, and would otherwise re-list on every file it copies).
+        // Two things must not be interrupted: a name being edited in place
+        // (the editor lives in a row that would be rebuilt) and our own file
+        // operation (which re-lists when it finishes anyway, and would
+        // otherwise re-list on every file it copies). The changes stay
+        // pending — they are not dropped — and are answered on a later tick.
         if (RenamingPath is not null || HasActiveOperations) {
             return;
         }
 
-        _folderChangedOutside = false;
-        Refresh();
+        // A file appeared, vanished or was renamed: the folder holds a
+        // different set of files than the one on screen, and only a fresh
+        // listing can say what it is now.
+        if (_folderChanges.NeedsRelisting) {
+            _folderChanges.Clear();
+            Refresh();
+
+            return;
+        }
+
+        // Nothing appeared or vanished — some files were written to. If
+        // every one of them belongs to a row we are showing, those rows are
+        // re-read and swapped in place: no new listing, no rebuilt
+        // containers, no selection to put back. This is the path a rating
+        // written into a sidecar takes, whoever wrote it — us or RawTherapee
+        // in the next window.
+        var touched = FolderChanges.RowsFor(_search.Source, _folderChanges.ChangedPaths);
+        _folderChanges.Clear();
+
+        if (touched is null) {
+            Refresh();
+
+            return;
+        }
+        if (touched.Count > 0) {
+            _ = RefreshMetadataRowsAsync(touched.Select(r => r.FullPath).ToArray());
+        }
     }
 
     private TreeNodeViewModel? _lastSelectedTreeNode;
@@ -1461,53 +1553,12 @@ public sealed class MainViewModel : ObservableObject {
             // Same file, different facts (size, timestamp, sidecars): the row
             // has to show the new ones. This is the only case where a
             // surviving row loses its container.
-            if (!SameRow(Entries[i], want)) {
+            if (!Entries[i].SaysTheSameAs(want)) {
                 Entries[i] = want;
             }
         }
     }
 
-
-    /// <summary>
-    /// Whether two listings of the same file say the same thing. Record
-    /// equality is not usable here: <see cref="FileSystemEntry.Companions"/>
-    /// is a list, and two enumerations of the same folder produce two
-    /// instances of it — so every row with a sidecar would count as changed
-    /// and lose its container on every single refresh.
-    /// </summary>
-    private static bool SameRow(FileSystemEntry a, FileSystemEntry b) {
-        return a.Name == b.Name
-            && a.Kind == b.Kind
-            && a.Size == b.Size
-            && a.ModifiedUtc == b.ModifiedUtc
-            && a.IsHidden == b.IsHidden
-            && a.IsReadOnly == b.IsReadOnly
-            && a.IsSystem == b.IsSystem
-            && a.LinksToDirectory == b.LinksToDirectory
-            && a.OriginalLocation == b.OriginalLocation
-            // Rating is a plain record of two ints, so equality is the real
-            // question here — and it has to be asked, because the pass that
-            // reads sidecars produces exactly this difference and nothing
-            // else. Without it the stars would never reach the screen.
-            && a.Rating == b.Rating
-            && SameCompanions(a.Companions, b.Companions);
-    }
-
-    private static bool SameCompanions(IReadOnlyList<string>? a, IReadOnlyList<string>? b) {
-        if (a is null || a.Count == 0) {
-            return b is null || b.Count == 0;
-        }
-        if (b is null || a.Count != b.Count) {
-            return false;
-        }
-
-        for (int i = 0; i < a.Count; i++) {
-            if (!string.Equals(a[i], b[i], StringComparison.OrdinalIgnoreCase)) {
-                return false;
-            }
-        }
-        return true;
-    }
 
     /// <summary>
     /// True when so little of the incoming listing lines up with what is on
@@ -1588,11 +1639,19 @@ public sealed class MainViewModel : ObservableObject {
         private set => SetField(ref _hasRatings, value);
     }
 
-    /// <summary>Lowest star count the filter lets through; 0 = no star filter.</summary>
-    public int FilterMinRank => _search.RatingFilter.MinRank;
+    /// <summary>
+    /// The whole filter. The star row binds to it rather than to a number:
+    /// which stars are lit is a set now, not a threshold, and only the
+    /// filter itself knows it.
+    /// </summary>
+    public RatingFilter RatingFilter => _search.RatingFilter;
 
-    /// <summary>Colour the filter lets through, or null for any.</summary>
-    public int? FilterColorLabel => _search.RatingFilter.ColorLabel;
+    /// <summary>
+    /// Whether the crossed-out star is lit. A property of its own rather
+    /// than a converter on the filter, because the star is drawn by a
+    /// template trigger and a trigger needs something to compare.
+    /// </summary>
+    public bool FilterIncludesUnrated => _search.RatingFilter.HasRank(RatingFilter.Unrated);
 
     public bool HasRatingFilter => _search.HasRatingFilter;
 
@@ -1600,6 +1659,7 @@ public sealed class MainViewModel : ObservableObject {
     public IReadOnlyList<ColorLabelViewModel> FilterColorChoices { get; }
 
     public RelayCommand SetFilterRankCommand { get; }
+    public RelayCommand SetRankForSelectionCommand { get; }
     public RelayCommand SetFilterColorCommand { get; }
     public RelayCommand ClearRatingFilterCommand { get; }
 
@@ -1683,59 +1743,433 @@ public sealed class MainViewModel : ObservableObject {
     /// default is XMP.
     /// </para>
     /// </summary>
-    private string? CreateRatingSidecar(string mainPath, RatingField field, int value) {
-        if (_companionMetadata is null) {
-            return null;
-        }
+    private SidecarRating? ApplyRatingToPrimary(FileSystemEntry entry, RatingField field, int value) {
+        var results = ApplyRating(new[] { entry }, field, value);
 
-        var format = Settings.RawRatingFormat;
-        string sidecar = _companionMetadata.SidecarPathFor(mainPath, format);
-        string question = string.Format(
-            Strings.ConfirmCreateSidecar, Path.GetFileName(sidecar), Path.GetFileName(mainPath));
-        if (format == SidecarFormat.Pp3) {
-            question += Environment.NewLine + Environment.NewLine + Strings.ConfirmCreateSidecarPp3Warning;
-        }
-
-        var answer = MessageBox.Show(
-            question, Strings.ConfirmCreateSidecarTitle,
-            MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No);
-        if (answer != MessageBoxResult.Yes) {
-            return null;
-        }
-
-        string created = _companionMetadata.CreateRatingSidecar(mainPath, format, field, value);
-        Status = string.Format(Strings.StatusSidecarCreated, Path.GetFileName(created));
-
-        // The new file is a companion of the photo, so the row it belongs to
-        // has to be rebuilt for it to fold in — and the rating pass has to
-        // run again for the stars to reach the list and the filter bar.
-        Refresh();
-
-        return created;
+        return results.Count > 0 ? results[0].Rating : entry.Rating;
     }
 
 
     /// <summary>
-    /// A star in the filter bar: clicking the one that is already the
-    /// threshold clears the star filter, the way clicking the current
-    /// rating in the preview footer clears the rating.
+    /// Sets a rating on the current selection. The gallery's number keys go
+    /// here; so does every star and swatch in the preview footer.
     /// </summary>
-    private void SetFilterRank(string? parameter) {
-        if (!int.TryParse(parameter, out int rank)) {
+    public void SetRankForSelection(string? parameter) {
+        if (!int.TryParse(parameter, out int rank) || rank < 0 || rank > Pp3Sidecar.MaxRank) {
             return;
         }
 
-        int target = rank == _search.RatingFilter.MinRank ? 0 : rank;
-        _search.RatingFilter = _search.RatingFilter with { MinRank = target };
+        var target = _selectedEntries.Count > 0
+            ? _selectedEntries
+            : _selectedEntry is { } single ? new[] { single } : Array.Empty<FileSystemEntry>();
+
+        ApplyRating(target, RatingField.Rank, rank);
     }
 
-    private void SetFilterColor(string? parameter) {
-        if (!int.TryParse(parameter, out int color)) {
+
+    /// <summary>
+    /// The single place a rating is written. Sorts the selection into
+    /// "already has a sidecar" and "would need one", asks about the second
+    /// group <b>once</b>, hands the lot to Core as one undoable step, and
+    /// then updates the affected rows in place.
+    ///
+    /// <para>
+    /// <b>In place is the requirement, not an optimisation.</b> Writing a
+    /// star used to re-list the folder: rows were rebuilt, the selection
+    /// went with them, a sort by rating reordered the grid, and the picture
+    /// the user was looking at moved out from under the cursor — for a
+    /// change they made to one number on one file. Nothing here re-lists.
+    /// The rows that changed are swapped for updated copies, the selection
+    /// is put back without scrolling, and the folder watcher is muted for a
+    /// beat so it does not undo all of that on our behalf.
+    /// </para>
+    ///
+    /// <para>
+    /// The order does not change either, even when the list is sorted by
+    /// rating. Re-sorting under the cursor is precisely the jump this
+    /// avoids; the new order arrives with the next listing.
+    /// </para>
+    /// </summary>
+    private IReadOnlyList<CompanionMetadataService.RatingResult> ApplyRating(
+        IReadOnlyList<FileSystemEntry> entries, RatingField field, int value) {
+        var empty = Array.Empty<CompanionMetadataService.RatingResult>();
+        if (_companionMetadata is null || entries.Count == 0) {
+            return empty;
+        }
+
+        var targets = new List<CompanionMetadataService.RatingTarget>();
+        var wouldNeedSidecar = new List<FileSystemEntry>();
+
+        foreach (var entry in entries) {
+            if (entry.IsFolderLike) {
+                continue;
+            }
+            if (RatingSidecarOf(entry) is { } sidecar) {
+                targets.Add(new CompanionMetadataService.RatingTarget(entry.FullPath, sidecar));
+                continue;
+            }
+            if (ImageFormats.IsImage(entry.Name)) {
+                wouldNeedSidecar.Add(entry);
+            }
+        }
+
+        // Clearing a rating never brings a file into existence: a sidecar
+        // created to record "no stars" is exactly the file nobody wanted.
+        if (value > 0 && wouldNeedSidecar.Count > 0 && ConfirmSidecarCreation(wouldNeedSidecar)) {
+            foreach (var entry in wouldNeedSidecar) {
+                targets.Add(new CompanionMetadataService.RatingTarget(entry.FullPath, null));
+            }
+        }
+
+        if (targets.Count == 0) {
+            return empty;
+        }
+
+        var results = _companionMetadata.ApplyRatingToMany(targets, field, value, Settings.RawRatingFormat);
+        ApplyRatingResults(results);
+
+        return results;
+    }
+
+
+    /// <summary>Path of the companion that holds this row's rating, or null when it has none.</summary>
+    private static string? RatingSidecarOf(FileSystemEntry entry) {
+        if (entry.Companions is not { Count: > 0 } companions) {
+            return null;
+        }
+
+        foreach (string path in companions) {
+            if (CompanionMetadataService.IsRatingSidecar(path)) {
+                return path;
+            }
+        }
+
+        return null;
+    }
+
+
+    /// <summary>
+    /// One question for the whole batch. Rating six selected photos is one
+    /// gesture, and six dialogs would be six answers to a question the user
+    /// asked once.
+    /// </summary>
+    private bool ConfirmSidecarCreation(IReadOnlyList<FileSystemEntry> entries) {
+        if (_companionMetadata is null) {
+            return false;
+        }
+
+        var format = Settings.RawRatingFormat;
+        string question = entries.Count == 1
+            ? string.Format(
+                Strings.ConfirmCreateSidecar,
+                Path.GetFileName(_companionMetadata.SidecarPathFor(entries[0].FullPath, format)),
+                entries[0].Name)
+            : string.Format(Strings.ConfirmCreateSidecarMany, entries.Count, format.Suffix());
+
+        if (format == SidecarFormat.Pp3) {
+            question += Environment.NewLine + Environment.NewLine + Strings.ConfirmCreateSidecarPp3Warning;
+        }
+
+        return MessageBox.Show(
+            question, Strings.ConfirmCreateSidecarTitle,
+            MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) == MessageBoxResult.Yes;
+    }
+
+
+    private void ApplyRatingResults(IReadOnlyList<CompanionMetadataService.RatingResult> results) {
+        if (results.Count == 0) {
             return;
         }
 
-        int? target = color == _search.RatingFilter.ColorLabel ? null : color;
-        _search.RatingFilter = _search.RatingFilter with { ColorLabel = target };
+        var updated = new List<FileSystemEntry>(results.Count);
+        foreach (var result in results) {
+            var row = FindInSource(result.MainPath);
+            if (row is null) {
+                continue;
+            }
+
+            var companions = row.Companions ?? Array.Empty<string>();
+            if (!companions.Any(c => IsSamePath(c, result.SidecarPath))) {
+                companions = companions.Append(result.SidecarPath).ToArray();
+            }
+            updated.Add(row with { Companions = companions, Rating = result.Rating });
+        }
+
+        if (updated.Count == 0) {
+            return;
+        }
+
+        _search.Replace(updated);
+        if (updated.Any(e => e.Rating is not null)) {
+            HasRatings = true;
+        }
+        Preview.ReloadCompanions();
+
+        int rank = results[0].Rating.Rank ?? 0;
+        Status = rank > 0
+            ? string.Format(Strings.StatusRatingApplied, rank, results.Count)
+            : string.Format(Strings.StatusRatingCleared, results.Count);
+    }
+
+    /// <summary>
+    /// Re-reads a few rows from disk — their sidecars and what those say —
+    /// and swaps them in without touching the rest of the listing. The
+    /// answer to an undo that changed metadata and nothing else.
+    ///
+    /// <para>
+    /// The companion lookup goes to the disk once per row, so it runs on a
+    /// worker: undoing a rating applied to two hundred photographs is two
+    /// hundred directory probes, and the folder must not stop for them.
+    /// </para>
+    /// </summary>
+    private async Task RefreshMetadataRowsAsync(IReadOnlyList<string> mainPaths) {
+        if (_companionMetadata is null || mainPaths.Count == 0) {
+            return;
+        }
+
+        var rows = mainPaths
+            .Select(FindInSource)
+            .Where(r => r is not null)
+            .Select(r => r!)
+            .ToArray();
+        if (rows.Length == 0) {
+            return;
+        }
+
+        bool integrate = Settings.IntegrateCompanions;
+        IReadOnlyList<FileSystemEntry> updated;
+        try {
+            updated = await Task.Run(() => rows.Select(row => {
+                var companions = integrate
+                    ? _companions.FindCompanions(row.FullPath, _fs)
+                    : Array.Empty<string>();
+                var refreshed = row with { Companions = companions.Count > 0 ? companions : null };
+
+                return refreshed with { Rating = _companionMetadata.ReadRatingFor(refreshed) };
+            }).ToArray());
+        } catch (Exception ex) {
+            _log.Warn($"Metadata re-read failed: {ex.Message}");
+
+            return;
+        }
+
+        _search.Replace(updated);
+    }
+
+    private FileSystemEntry? FindInSource(string path) {
+        foreach (var entry in _search.Source) {
+            if (IsSamePath(entry.FullPath, path)) {
+                return entry;
+            }
+        }
+
+        return null;
+    }
+
+
+    /// <summary>
+    /// Swaps updated copies of rows into <see cref="Entries"/> without
+    /// touching anything else, and puts the selection back on them.
+    ///
+    /// <para>
+    /// A record cannot be edited in place, so the row has to be replaced —
+    /// and the list drops a replaced object out of its selection on the way.
+    /// <see cref="_rowsReplacing"/> holds the two properties that would
+    /// otherwise broadcast that gap (the preview would clear and reload, the
+    /// status bar would count down and back up) until the selection is
+    /// restored.
+    /// </para>
+    /// </summary>
+    private void ReplaceRows(IReadOnlyList<FileSystemEntry> changed) {
+        ReconcileEntries(() => {
+            foreach (var entry in changed) {
+                for (int i = 0; i < Entries.Count; i++) {
+                    if (IsSamePath(Entries[i].FullPath, entry.FullPath)) {
+                        Entries[i] = entry;
+                        break;
+                    }
+                }
+            }
+        });
+    }
+
+
+    /// <summary>
+    /// Runs a rebuild of <see cref="Entries"/> with the selection held
+    /// steady across it.
+    ///
+    /// <para>
+    /// <b>Why this wraps every rebuild and not just some.</b> A
+    /// <c>FileSystemEntry</c> is a record and cannot be edited in place, so
+    /// any change to a row — a rating arriving, a size changing, a listing
+    /// coming back from disk — replaces the object. The list drops a
+    /// replaced object out of its selection, and unless somebody puts it
+    /// back, the selection is gone. It used to be put back only when a
+    /// caller had filled <see cref="_restoreSelection"/> with intent
+    /// (navigation, rename, undo) — which meant the second rebuild of every
+    /// listing, the one where the ratings arrive, silently dropped whatever
+    /// the user had selected. That is the bug this closes, and it closes it
+    /// for every future rebuild too rather than for the one that was
+    /// noticed.
+    /// </para>
+    ///
+    /// <para>
+    /// When a caller <em>has</em> filled <see cref="_restoreSelection"/>,
+    /// this keeps out of the way: that caller knows something better than
+    /// "whatever was selected before" — the new name after a rename, what
+    /// an undo put back — and <see cref="ApplyRestoreSelection"/> runs right
+    /// after with scrolling and focus, which is right there and wrong here.
+    /// </para>
+    /// </summary>
+    private void ReconcileEntries(Action rebuild) {
+        // A caller that filled _restoreSelection knows something better than
+        // "whatever was selected before" — the new name after a rename, what
+        // an undo put back — and ApplyRestoreSelection runs right after with
+        // scrolling and focus. We still put the view model back in step with
+        // the rows below, so it never holds entries that have left the list;
+        // we just do not tell the view where to go.
+        bool ownsSelection = _restoreSelection.Length == 0;
+        var keep = new HashSet<string>(
+            _selectedEntries.Select(e => e.FullPath), StringComparer.OrdinalIgnoreCase);
+        string? primary = _selectedEntry?.FullPath;
+
+        FileSystemEntry[] found;
+        FileSystemEntry? next = null;
+
+        _rowsReplacing = true;
+        try {
+            rebuild();
+
+            found = keep.Count == 0
+                ? Array.Empty<FileSystemEntry>()
+                : Entries.Where(e => keep.Contains(e.FullPath)).ToArray();
+
+            if (found.Length > 0) {
+                next = found.FirstOrDefault(e => IsSamePath(e.FullPath, primary)) ?? found[0];
+
+                // Order matters, and it is not obvious: SelectedEntry is
+                // bound to the list's SelectedItem, and assigning that
+                // collapses an extended selection down to the single row.
+                // So the primary goes back first and the rest of the set
+                // after it — the other way round throws the set away again.
+                _selectedEntry = next;
+                Raise(nameof(SelectedEntry));
+
+                if (ownsSelection) {
+                    // No scrolling and no focus move: nothing happened that
+                    // the user should be taken anywhere for. Raised inside
+                    // the guard because the view restores the rows one at a
+                    // time, and each step is another report of a selection
+                    // that is still half-built.
+                    SelectionRefreshRequested?.Invoke(found);
+                }
+            }
+        } finally {
+            _rowsReplacing = false;
+        }
+
+        if (keep.Count == 0) {
+            return;
+        }
+
+        if (found.Length == 0) {
+            // Everything that was selected has left the folder. Saying so is
+            // the honest answer; the guard above only held the report back
+            // while the rows were mid-flight.
+            SelectedEntries = Array.Empty<FileSystemEntry>();
+            SelectedEntry = null;
+
+            return;
+        }
+
+        AdoptSelection(found, next!);
+    }
+
+
+    /// <summary>
+    /// Takes the restored selection as the view model's own, without
+    /// pushing any of it back at the list.
+    ///
+    /// <para>
+    /// The fields are assigned directly rather than through the properties
+    /// because the list is already showing exactly this selection — it was
+    /// just put there — and going through <see cref="SelectedEntry"/> would
+    /// send it round again through the binding that collapses an extended
+    /// selection. Everyone who needs telling is told here instead.
+    /// </para>
+    /// </summary>
+    private void AdoptSelection(IReadOnlyList<FileSystemEntry> selection, FileSystemEntry primary) {
+        _selectedEntries = selection;
+        _selectedEntry = primary;
+
+        Raise(nameof(SelectedEntries));
+        Raise(nameof(SelectedEntry));
+        Raise(nameof(SelectionSummary));
+        Preview.SetSelection(selection);
+        Preview.SetPrimary(primary);
+    }
+
+
+    /// <summary>
+    /// A star in the filter bar. A plain click picks it and everything above
+    /// it — "three and up", the question you ask when deciding what to keep.
+    /// <c>Ctrl</c> held adds or removes that one rank, which is how "three
+    /// and up, but not five" gets said. The leftmost star is the crossed-out
+    /// one and stands for unrated; a plain click there picks it alone,
+    /// because "unrated and above" is every photograph in the folder.
+    ///
+    /// <para>
+    /// <c>Alt</c> does nothing at all. It used to mean "exactly this rank",
+    /// which the set of ranks says better and without a modifier nobody can
+    /// see; leaving it inert is better than leaving it doing something the
+    /// bar no longer has a way to show.
+    /// </para>
+    /// </summary>
+    private void SetFilterRank(string? parameter) {
+        if (int.TryParse(parameter, out int rank) && ReadFilterGesture() is { } toggle) {
+            ClickRankFilter(rank, toggle);
+        }
+    }
+
+    /// <summary>A swatch in the filter bar. Same two gestures as the stars.</summary>
+    private void SetFilterColor(string? parameter) {
+        if (int.TryParse(parameter, out int color) && ReadFilterGesture() is { } toggle) {
+            ClickColorFilter(color, toggle);
+        }
+    }
+
+
+    /// <summary>
+    /// Which gesture the modifiers make this click: null for "none, ignore
+    /// it", false for a plain click, true for the toggling one.
+    /// </summary>
+    private static bool? ReadFilterGesture() {
+        var mods = Keyboard.Modifiers;
+
+        return mods.HasFlag(ModifierKeys.Alt) ? null : mods.HasFlag(ModifierKeys.Control);
+    }
+
+
+    /// <summary>
+    /// A click on one of the stars, with the gesture already read off the
+    /// keyboard. Split from the command for one reason: the keyboard is the
+    /// one thing an offscreen harness must not touch — synthesising a held
+    /// <c>Ctrl</c> is real input on somebody's real machine — so what the
+    /// click <em>does</em> has to be reachable without pretending to press
+    /// anything. <paramref name="toggle"/> is the held <c>Ctrl</c>.
+    /// </summary>
+    public void ClickRankFilter(int rank, bool toggle) {
+        _search.RatingFilter = toggle
+            ? _search.RatingFilter.ToggleRank(rank)
+            : _search.RatingFilter.PickRank(rank);
+    }
+
+
+    /// <summary>The same for a colour swatch — see <see cref="ClickRankFilter"/>.</summary>
+    public void ClickColorFilter(int color, bool toggle) {
+        _search.RatingFilter = toggle
+            ? _search.RatingFilter.ToggleColor(color)
+            : _search.RatingFilter.PickColor(color);
     }
 
     private void ClearRatingFilter() {
@@ -1744,7 +2178,7 @@ public sealed class MainViewModel : ObservableObject {
 
     private void SyncFilterChoices() {
         foreach (var choice in FilterColorChoices) {
-            choice.IsSelected = choice.Index == _search.RatingFilter.ColorLabel;
+            choice.IsSelected = _search.RatingFilter.HasColor(choice.Index);
         }
     }
 
@@ -2032,9 +2466,21 @@ public sealed class MainViewModel : ObservableObject {
         _userViewMode = mode;
         ViewMode = mode;
         if (_nav.Current is { Length: > 0 } here) {
-            _manualViewModeFolders.Add(here);
+            RememberManualViewMode(here, mode);
         }
         SaveState();
+    }
+
+
+    private void RememberManualViewMode(string path, ViewMode mode) {
+        if (!_manualViewModes.ContainsKey(path)) {
+            _manualViewModeOrder.Enqueue(path);
+        }
+        _manualViewModes[path] = mode;
+
+        while (_manualViewModeOrder.Count > ManualViewModeLimit) {
+            _manualViewModes.Remove(_manualViewModeOrder.Dequeue());
+        }
     }
 
 
@@ -2063,11 +2509,19 @@ public sealed class MainViewModel : ObservableObject {
     /// </para>
     /// </summary>
     private void AutoSelectViewMode(IReadOnlyList<FileSystemEntry> items, string path) {
-        if (!Settings.AutoGallery || _manualViewModeFolders.Contains(path)) {
+        // A folder the user has assigned a view to keeps it, and keeps it
+        // across restarts. That is what "the automation stays out of this
+        // folder" has to mean to be worth saying.
+        if (_manualViewModes.TryGetValue(path, out var chosen)) {
+            ViewMode = chosen;
+
+            return;
+        }
+        if (!Settings.AutoGallery) {
             return;
         }
 
-        ViewMode = ImageFolderProbe.IsImageFolder(items, _companions)
+        ViewMode = ImageFolderProbe.IsImageFolder(items, _companions, Settings.AutoGalleryPercent)
             ? ViewMode.Gallery
             : _userViewMode;
     }
@@ -2213,6 +2667,10 @@ public sealed class MainViewModel : ObservableObject {
         if (e.PropertyName == nameof(SettingsViewModel.IconsMetrics) ||
             e.PropertyName == nameof(SettingsViewModel.TilesMetrics) ||
             e.PropertyName == nameof(SettingsViewModel.GalleryMetrics) ||
+            e.PropertyName == nameof(SettingsViewModel.GalleryPalette) ||
+            e.PropertyName == nameof(SettingsViewModel.GalleryLightSwatch) ||
+            e.PropertyName == nameof(SettingsViewModel.GalleryGreySwatch) ||
+            e.PropertyName == nameof(SettingsViewModel.GalleryDarkSwatch) ||
             e.PropertyName == nameof(SettingsViewModel.DetailsIconColumnWidth)) {
             return;
         }
@@ -2880,12 +3338,22 @@ public sealed class MainViewModel : ObservableObject {
             }
             _log.Info($"Undo: {action.Description}");
             Status = string.Format(Strings.StatusUndone, action.Description);
-            // Point the user at what came back, not at wherever the
-            // selection happened to be.
-            _restoreSelection = action.PathsAfterUndo.ToArray();
-            Refresh();
+
+            // An undo that only put a rating back leaves the folder exactly
+            // as it was — same files, same names, same order — so re-listing
+            // it would be the same jump the write itself avoids. Only the
+            // rows it touched are re-read.
+            if (action.MetadataTargets.Count > 0) {
+                _ = RefreshMetadataRowsAsync(action.MetadataTargets);
+            } else {
+                // Point the user at what came back, not at wherever the
+                // selection happened to be.
+                _restoreSelection = action.PathsAfterUndo.ToArray();
+                Refresh();
+            }
+
             // A rating undo rewrites a sidecar the footer is already
-            // showing; the listing refresh above wouldn't touch it.
+            // showing; neither path above would touch it.
             Preview.ReloadCompanions();
         } catch (Exception ex) {
             _log.Error("Undo failed", ex);

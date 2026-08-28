@@ -113,7 +113,7 @@ public sealed class PreviewController : ObservableObject {
 
     private readonly IImageMetadataReader? _metadataReader;
     private readonly CompanionMetadataService? _companionMetadata;
-    private readonly Func<string, RatingField, int, string?>? _createRatingSidecar;
+    private readonly Func<FileSystemEntry, RatingField, int, SidecarRating?>? _applyRating;
     private readonly Action<string>? _reveal;
 
     private bool _isVisible;
@@ -158,14 +158,13 @@ public sealed class PreviewController : ObservableObject {
     private string _customColorLabel = "";
 
 
-    /// <param name="createRatingSidecar">
-    /// How to bring a sidecar into existence for a photo that has none:
-    /// given the photo, the field and the value, returns the path of the
-    /// file that was created, or null if it wasn't. The whole policy around
-    /// that — which format, asking the user first, re-listing the folder
-    /// afterwards — belongs to the view model, because dialogs and the
-    /// folder listing do. The pane only knows that the star it was handed
-    /// has nowhere to go yet.
+    /// <param name="applyRating">
+    /// How to write a rating: given the photo, the field and the value,
+    /// returns what its sidecar says afterwards (or null if nothing was
+    /// written). Writing lives in the view model rather than here because
+    /// everything around it does — asking before creating a sidecar,
+    /// choosing the format, updating the row in the list without re-listing
+    /// the folder. The pane only knows which star was clicked.
     /// </param>
     /// <param name="reveal">
     /// How to take the user to a path — navigate to its folder, select it,
@@ -175,12 +174,12 @@ public sealed class PreviewController : ObservableObject {
     public PreviewController(
         IImageMetadataReader? metadataReader,
         CompanionMetadataService? companionMetadata,
-        Func<string, RatingField, int, string?>? createRatingSidecar = null,
+        Func<FileSystemEntry, RatingField, int, SidecarRating?>? applyRating = null,
         Action<string>? reveal = null) {
 
         _metadataReader = metadataReader;
         _companionMetadata = companionMetadata;
-        _createRatingSidecar = createRatingSidecar;
+        _applyRating = applyRating;
         _reveal = reveal;
 
         ColorLabelChoices = ColorLabelViewModel.CreateChoices();
@@ -540,7 +539,24 @@ public sealed class PreviewController : ObservableObject {
         if (ReferenceEquals(_primary, entry)) {
             return;
         }
+
+        // The same file in a new row object. The listing replaces a row
+        // whenever anything about it changes, and a rating written into its
+        // sidecar is the everyday case — nothing the preview shows has moved,
+        // so re-decoding a 30 MB RAW to draw the same picture would be a
+        // second of nothing for no reason. Only the sidecar block is re-read.
+        bool sameFile = entry is not null && _primary is not null
+            && string.Equals(entry.FullPath, _primary.FullPath, StringComparison.OrdinalIgnoreCase)
+            && entry.Size == _primary.Size
+            && entry.ModifiedUtc == _primary.ModifiedUtc;
+
         _primary = entry;
+        if (sameFile) {
+            ScheduleCompanionUpdate();
+
+            return;
+        }
+
         SchedulePreviewUpdate();
         ScheduleSummaryUpdate();
         ScheduleCompanionUpdate();
@@ -1274,7 +1290,7 @@ public sealed class PreviewController : ObservableObject {
     /// the sidecar formats Wander writes are photo formats.
     /// </summary>
     private void OfferRating(FileSystemEntry entry) {
-        if (_createRatingSidecar is null || entry.IsFolderLike || !ImageFormats.IsImage(entry.Name)) {
+        if (_applyRating is null || entry.IsFolderLike || !ImageFormats.IsImage(entry.Name)) {
             return;
         }
 
@@ -1326,7 +1342,7 @@ public sealed class PreviewController : ObservableObject {
     }
 
     private void SetRating(RatingField field, object? parameter, int current) {
-        if (_companionMetadata is null || !TryReadIndex(parameter, out int clicked)) {
+        if (_applyRating is null || _primary is null || !TryReadIndex(parameter, out int clicked)) {
             return;
         }
 
@@ -1334,56 +1350,32 @@ public sealed class PreviewController : ObservableObject {
         // could never be taken back except through Ctrl+Z.
         int target = clicked == current ? 0 : clicked;
 
-        if (_ratingPath is null) {
-            CreateAndRate(field, target);
-
-            return;
-        }
-
+        SidecarRating? rating;
         try {
-            _companionMetadata.SetRating(_ratingPath, field, target);
+            rating = _applyRating(_primary, field, target);
             CompanionStatus = "";
         } catch (Exception ex) {
-            // Includes the deliberate refusals: no sidecar to write to, or
-            // an XMP packet we won't add a property to.
-            CompanionStatus = ex.Message;
-        }
-
-        // Re-read rather than assume: the write may have been refused, and
-        // the file is the only thing that knows what it now says.
-        ShowRating(_ratingPath, _companionMetadata.ReadRating(_ratingPath));
-    }
-
-
-    /// <summary>
-    /// First star on a photo with no sidecar: the file has to exist before
-    /// anything can be written into it. Clearing a rating that was never
-    /// saved does nothing — creating a file to record "no stars" is exactly
-    /// the file nobody wanted.
-    /// </summary>
-    private void CreateAndRate(RatingField field, int target) {
-        if (_ratingTarget is null || _createRatingSidecar is null || target == 0) {
-            return;
-        }
-
-        string? created;
-        try {
-            created = _createRatingSidecar(_ratingTarget, field, target);
-        } catch (Exception ex) {
+            // Includes the deliberate refusals: a sidecar that vanished
+            // underneath us, or an XMP packet we won't add a property to.
             CompanionStatus = ex.Message;
 
             return;
         }
 
-        if (created is null) {
-            // Declined, which is an answer and not an error.
+        if (rating is null) {
+            // Declined, or there was nowhere to write. Either is an answer
+            // and not an error, and the row is unchanged.
             return;
         }
 
-        CompanionStatus = "";
+        // The write went through the view model, which updates the row in
+        // the listing; that comes back here as a new primary and re-reads
+        // the sidecar. Showing the value we were handed keeps the stars
+        // from lagging a frame behind the click in the meantime.
         _ratingTarget = null;
-        ShowRating(created, _companionMetadata!.ReadRating(created));
+        ShowRating(_ratingPath ?? "", rating);
     }
+
 
     private static bool TryReadIndex(object? parameter, out int index) {
         index = 0;

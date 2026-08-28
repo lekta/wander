@@ -167,6 +167,17 @@ public sealed class CompanionMetadataService {
     /// </para>
     /// </summary>
     public string CreateRatingSidecar(string mainPath, SidecarFormat format, RatingField field, int value) {
+        return CreateRatingSidecar(mainPath, format, field, value, pushUndo: true);
+    }
+
+
+    /// <param name="pushUndo">
+    /// False when the caller is assembling a composite of its own — see
+    /// <see cref="ApplyRatingToMany"/>. The step still exists, it is just
+    /// pushed by somebody else.
+    /// </param>
+    private string CreateRatingSidecar(
+        string mainPath, SidecarFormat format, RatingField field, int value, bool pushUndo) {
         string path = SidecarPathFor(mainPath, format);
         if (_fs.FileExists(path)) {
             throw new InvalidOperationException($"Sidecar already exists: {path}");
@@ -190,9 +201,89 @@ public sealed class CompanionMetadataService {
 
         _fs.ReplaceAtomic(path, content);
         _log.Info($"Sidecar created: {path} ({field} = {value})");
-        _undo.Push(new SidecarCreatedAction(this, path));
+        if (pushUndo) {
+            _undo.Push(new SidecarCreatedAction(this, path, mainPath));
+        }
 
         return path;
+    }
+
+
+    /// <summary>
+    /// One photo an edit is about: where it lives, and which sidecar
+    /// already holds its rating (null when it has none yet and one has to
+    /// be created).
+    /// </summary>
+    public readonly record struct RatingTarget(string MainPath, string? SidecarPath);
+
+
+    /// <summary>
+    /// The result for one photo: which file its rating now lives in, and
+    /// what that file now says.
+    /// </summary>
+    public readonly record struct RatingResult(string MainPath, string SidecarPath, SidecarRating Rating);
+
+
+    /// <summary>
+    /// Sets one rating field on many photos at once — writing into the
+    /// sidecars that exist and creating the ones that do not — and puts the
+    /// whole thing on the undo stack as <b>one</b> step.
+    ///
+    /// <para>
+    /// One step is the point. Rating five selected photos with a keypress
+    /// is one gesture, and five presses of <c>Ctrl</c> + <c>Z</c> to take
+    /// it back would be five answers to a question the user asked once.
+    /// Creation and editing land in the same composite for the same reason:
+    /// the user did not distinguish them.
+    /// </para>
+    ///
+    /// <para>
+    /// Whether the ones needing a new file may have one is <em>not</em>
+    /// decided here — the caller asks first and simply leaves out the
+    /// targets it was told no about. See <see cref="SidecarFormat.Pp3"/>
+    /// for why that question is a real one.
+    /// </para>
+    ///
+    /// <para>
+    /// A photo whose write fails is skipped and logged rather than taking
+    /// the rest down with it: half a folder rated is better than a batch
+    /// that stops on the one read-only file in it.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<RatingResult> ApplyRatingToMany(
+        IReadOnlyList<RatingTarget> targets, RatingField field, int value, SidecarFormat createFormat) {
+        var steps = new List<IUndoableAction>();
+        var results = new List<RatingResult>();
+
+        foreach (var target in targets) {
+            try {
+                string path;
+                if (target.SidecarPath is { Length: > 0 } existing) {
+                    int previous = ApplyRating(existing, field, value);
+                    steps.Add(new SidecarRatingAction(this, existing, field, previous, value, target.MainPath));
+                    path = existing;
+                } else {
+                    path = CreateRatingSidecar(target.MainPath, createFormat, field, value, pushUndo: false);
+                    steps.Add(new SidecarCreatedAction(this, path, target.MainPath));
+                }
+
+                var rating = ReadRating(path);
+                if (rating is not null) {
+                    results.Add(new RatingResult(target.MainPath, path, rating));
+                }
+            } catch (Exception ex) {
+                _log.Warn($"Rating {field}={value} failed for {target.MainPath}: {ex.Message}");
+            }
+        }
+
+        if (steps.Count == 1) {
+            _undo.Push(steps[0]);
+        } else if (steps.Count > 1) {
+            string what = field == RatingField.Rank ? $"Rating {value}" : $"Colour {ColorLabels.Name(value)}";
+            _undo.Push(new CompositeAction($"{what} on {steps.Count} items", steps));
+        }
+
+        return results;
     }
 
 
@@ -213,10 +304,26 @@ public sealed class CompanionMetadataService {
     }
 
 
-    /// <summary>Sets a rating field in an existing sidecar and makes it undoable.</summary>
-    public void SetRating(string path, RatingField field, int value) {
+    /// <summary>
+    /// Sets a rating field in an existing sidecar and makes it undoable.
+    ///
+    /// <para>
+    /// Internal: the app writes ratings through
+    /// <see cref="ApplyRatingToMany"/>, which is the same thing for one file
+    /// and the only thing that works for several. This stays as the step
+    /// that one is built from, and as the narrowest surface the tests can
+    /// aim at — the same arrangement the single-file operations on
+    /// <c>FileOperationService</c> ended up in.
+    /// </para>
+    /// </summary>
+    /// <param name="mainPath">
+    /// The photograph this sidecar belongs to. Only undo uses it, and only
+    /// to know which row to re-read; passing the sidecar itself is harmless
+    /// but costs the caller a listing refresh it did not need.
+    /// </param>
+    internal void SetRating(string path, RatingField field, int value, string? mainPath = null) {
         int previous = ApplyRating(path, field, value);
-        _undo.Push(new SidecarRatingAction(this, path, field, previous, value));
+        _undo.Push(new SidecarRatingAction(this, path, field, previous, value, mainPath ?? path));
     }
 
 
@@ -280,8 +387,17 @@ public sealed class CompanionMetadataService {
 /// is kept from it: it held one rating and nothing else, which is exactly
 /// what makes throwing it away the honest inverse.
 /// </summary>
-public sealed record SidecarCreatedAction(CompanionMetadataService Service, string Path) : IUndoableAction {
+public sealed record SidecarCreatedAction(
+    CompanionMetadataService Service, string Path, string MainPath) : IUndoableAction {
+
     public string Description => $"Sidecar '{System.IO.Path.GetFileName(Path)}'";
+
+    /// <summary>
+    /// The photograph, not the file being deleted. Undoing this removes a
+    /// sidecar that was folded into the photo's row, so that row — and only
+    /// that row — has to be re-read.
+    /// </summary>
+    public IReadOnlyList<string> MetadataTargets => new[] { MainPath };
 
 
     public void Undo() {
@@ -295,12 +411,16 @@ public sealed record SidecarCreatedAction(CompanionMetadataService Service, stri
 /// guarded write as setting, so the undo itself stays atomic.
 /// </summary>
 public sealed record SidecarRatingAction(
-    CompanionMetadataService Service, string Path, RatingField Field, int OldValue, int NewValue) : IUndoableAction {
+    CompanionMetadataService Service, string Path, RatingField Field, int OldValue, int NewValue, string MainPath)
+    : IUndoableAction {
 
     public string Description =>
         Field == RatingField.Rank
             ? $"Rating {NewValue} on '{System.IO.Path.GetFileName(Path)}'"
             : $"Colour {ColorLabels.Name(NewValue)} on '{System.IO.Path.GetFileName(Path)}'";
+
+    /// <summary>The photograph the sidecar belongs to — see <see cref="IUndoableAction.MetadataTargets"/>.</summary>
+    public IReadOnlyList<string> MetadataTargets => new[] { MainPath };
 
 
     public void Undo() {

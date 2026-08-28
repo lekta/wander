@@ -22,11 +22,11 @@
     <UserControl.Resources>
         <conv:EnumToVisibilityConverter x:Key="EnumToVisibility"/>
         <conv:RenameEditorVisibilityConverter x:Key="RenameVisibility"/>
-        <conv:RankStarConverter x:Key="RankStar"/>
+        <conv:EnumEqualsConverter x:Key="EnumEquals"/>
         <conv:RankTextConverter x:Key="RankText"/>
         <conv:ColorLabelBrushConverter x:Key="ColorLabelBrush"/>
-        <conv:NotNullToVisibilityConverter x:Key="NotNullToVisibility"/>
-        <conv:GalleryPaletteConverter x:Key="GalleryPalette"/>
+        <conv:RatingBadgeVisibilityConverter x:Key="RatingBadge"/>
+        <conv:FilterStarConverter x:Key="FilterStarGlyph"/>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
 
         <!--
@@ -51,6 +51,42 @@
                         <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
                             <ContentPresenter/>
                         </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!--
+            The crossed-out star: photographs nobody has rated yet.
+
+            It sits to the left of the five because that is where it belongs
+            on the same scale — below one star — and it is struck through
+            rather than merely empty because an empty star already means
+            "this rank is not in the filter". Struck through says "no rank at
+            all", which is a different statement and the one being made.
+
+            A plain click picks it alone: "unrated and above" would be every
+            photograph in the folder, which is not a filter. Ctrl adds it to
+            whatever else is chosen, which is how "the good ones and the ones
+            I have not looked at yet" gets said.
+        -->
+        <Style x:Key="FilterUnratedStar" TargetType="Button" BasedOn="{StaticResource FilterStar}">
+            <Setter Property="ToolTip" Value="{x:Static res:Strings.FilterUnratedHint}"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                            <TextBlock x:Name="Glyph" Text="&#x2605;"
+                                       FontSize="{TemplateBinding FontSize}"
+                                       Foreground="#AAAAAA"
+                                       TextDecorations="Strikethrough"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <DataTrigger Binding="{Binding FilterIncludesUnrated}" Value="True">
+                                <Setter TargetName="Glyph" Property="Foreground" Value="#D08A00"/>
+                            </DataTrigger>
+                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -85,26 +121,83 @@
         </Style>
 
         <!--
-            The caption under a gallery picture. It needs a style of its own
-            for one reason: its colour comes from the gallery background, but
-            the highlight behind a selected or hovered cell is light in every
-            theme (Explorer's #CCE8FF / #E8E8E8, shared with the other tile
-            views). Light-on-light is unreadable, so the caption goes dark
-            whenever the cell is lit, whatever the background is.
+            The caption under a gallery picture. Its colour comes from the
+            palette rather than from the theme, and it does not change when
+            the cell is selected: the highlight is derived from the same
+            background, so it can never be the light-on-light that a fixed
+            Explorer blue behind light text would have been.
         -->
         <Style x:Key="GalleryCaption" TargetType="TextBlock">
             <Setter Property="TextAlignment" Value="Center"/>
             <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
             <Setter Property="Foreground"
-                    Value="{Binding DataContext.Settings.GalleryBackground, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource GalleryPalette}, ConverterParameter=Foreground}"/>
+                    Value="{Binding DataContext.Settings.GalleryPalette.Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+        </Style>
+
+        <!--
+            Selection and hover for a gallery cell. A copy of TileHighlight
+            in shape and a different thing in colour: Explorer's pale blue
+            over a dark surround is brighter than most of the photographs
+            under it, and the eye goes to the frame instead of the picture.
+            Every colour here comes out of GalleryPalette, which derives them
+            from the chosen background — on a dark one the highlight is a
+            lift of the surround rather than a colour laid over it.
+        -->
+        <Style x:Key="GalleryHighlight" TargetType="Border">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="3"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
             <Style.Triggers>
-                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                    <Setter Property="Foreground" Value="#111111"/>
-                </DataTrigger>
                 <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                    <Setter Property="Foreground" Value="#111111"/>
+                    <Setter Property="Background" Value="{Binding DataContext.Settings.GalleryPalette.Hover, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                    <Setter Property="BorderBrush" Value="{Binding DataContext.Settings.GalleryPalette.HoverBorder, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
                 </DataTrigger>
+                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                    <Setter Property="Background" Value="{Binding DataContext.Settings.GalleryPalette.SelectedInactive, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                    <Setter Property="BorderBrush" Value="{Binding DataContext.Settings.GalleryPalette.SelectedInactiveBorder, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                </DataTrigger>
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True"/>
+                        <Condition Binding="{Binding (Selector.IsSelectionActive), RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True"/>
+                    </MultiDataTrigger.Conditions>
+                    <Setter Property="Background" Value="{Binding DataContext.Settings.GalleryPalette.Selected, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                    <Setter Property="BorderBrush" Value="{Binding DataContext.Settings.GalleryPalette.SelectedBorder, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                </MultiDataTrigger>
             </Style.Triggers>
+        </Style>
+
+        <!-- One of the three background buttons on the gallery's own strip. -->
+        <Style x:Key="GalleryBackgroundButton" TargetType="RadioButton">
+            <Setter Property="Command" Value="{Binding SetGalleryBackgroundCommand}"/>
+            <Setter Property="GroupName" Value="GalleryBackgroundStrip"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="2,0,0,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <!-- The swatch *is* the label: the button shows the
+                             colour it sets. A checkmark would need room the
+                             strip does not have, so the chosen one is the
+                             one with the dark ring. -->
+                        <Border x:Name="Ring" Width="18" Height="18" CornerRadius="3"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="#BBB" BorderThickness="1"/>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Ring" Property="BorderBrush" Value="#444"/>
+                                <Setter TargetName="Ring" Property="BorderThickness" Value="2"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Ring" Property="BorderBrush" Value="#888"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <!--
@@ -322,24 +415,79 @@
             It filters in every view, not only the gallery: "three stars and
             up" is as good a question in the table as it is in the grid.
         -->
-        <Border DockPanel.Dock="Top"
+        <Border x:Name="GalleryStrip"
+                DockPanel.Dock="Top"
                 Background="#F7F7F7" BorderBrush="#DDD" BorderThickness="0,0,0,1"
-                Padding="6,3"
-                Visibility="{Binding HasRatings, Converter={StaticResource BoolToVisibility}}">
-            <StackPanel Orientation="Horizontal">
+                Padding="6,3">
+            <!--
+                The strip carries two independent things, each with its own
+                reason to be here rather than in a menu, and each showing
+                only when it applies:
+
+                  * the rating filter, whenever the folder has ratings —
+                    state that removes rows has to be visible from the list
+                    it removes them from;
+                  * the gallery's background, whenever the gallery is on —
+                    it is the control you reach for while looking at the
+                    photographs, and three clicks into a menu is three
+                    clicks too many for a thing you flip to compare.
+
+                Neither of them applying means no strip at all, so an
+                ordinary folder in an ordinary view loses no height to it.
+            -->
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding HasRatings}" Value="True">
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding ViewMode}" Value="Gallery">
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <DockPanel>
+                <!-- Background switcher, right-aligned: it belongs to the
+                     view, not to the folder, so it stays out of the way of
+                     the filter that does. -->
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Visibility="{Binding ViewMode, Converter={StaticResource EnumToVisibility}, ConverterParameter=Gallery}">
+                    <RadioButton Style="{StaticResource GalleryBackgroundButton}"
+                                 CommandParameter="Light"
+                                 Background="{Binding Settings.GalleryLightSwatch}"
+                                 IsChecked="{Binding Settings.GalleryBackground, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=Light}"
+                                 ToolTip="{x:Static res:Strings.GalleryBackgroundLight}"/>
+                    <RadioButton Style="{StaticResource GalleryBackgroundButton}"
+                                 CommandParameter="Grey"
+                                 Background="{Binding Settings.GalleryGreySwatch}"
+                                 IsChecked="{Binding Settings.GalleryBackground, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=Grey}"
+                                 ToolTip="{x:Static res:Strings.GalleryBackgroundGrey}"/>
+                    <RadioButton Style="{StaticResource GalleryBackgroundButton}"
+                                 CommandParameter="Dark"
+                                 Background="{Binding Settings.GalleryDarkSwatch}"
+                                 IsChecked="{Binding Settings.GalleryBackground, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=Dark}"
+                                 ToolTip="{x:Static res:Strings.GalleryBackgroundDark}"/>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal"
+                            Visibility="{Binding HasRatings, Converter={StaticResource BoolToVisibility}}">
                 <TextBlock Text="{x:Static res:Strings.FilterRatingLabel}"
                            FontSize="11" Foreground="#444"
                            VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <Button Style="{StaticResource FilterUnratedStar}" CommandParameter="0"/>
                 <Button Style="{StaticResource FilterStar}" CommandParameter="1"
-                        Content="{Binding FilterMinRank, Converter={StaticResource RankStar}, ConverterParameter=1}"/>
+                            Content="{Binding RatingFilter, Converter={StaticResource FilterStarGlyph}, ConverterParameter=1}"/>
                 <Button Style="{StaticResource FilterStar}" CommandParameter="2"
-                        Content="{Binding FilterMinRank, Converter={StaticResource RankStar}, ConverterParameter=2}"/>
+                            Content="{Binding RatingFilter, Converter={StaticResource FilterStarGlyph}, ConverterParameter=2}"/>
                 <Button Style="{StaticResource FilterStar}" CommandParameter="3"
-                        Content="{Binding FilterMinRank, Converter={StaticResource RankStar}, ConverterParameter=3}"/>
+                            Content="{Binding RatingFilter, Converter={StaticResource FilterStarGlyph}, ConverterParameter=3}"/>
                 <Button Style="{StaticResource FilterStar}" CommandParameter="4"
-                        Content="{Binding FilterMinRank, Converter={StaticResource RankStar}, ConverterParameter=4}"/>
+                            Content="{Binding RatingFilter, Converter={StaticResource FilterStarGlyph}, ConverterParameter=4}"/>
                 <Button Style="{StaticResource FilterStar}" CommandParameter="5"
-                        Content="{Binding FilterMinRank, Converter={StaticResource RankStar}, ConverterParameter=5}"/>
+                            Content="{Binding RatingFilter, Converter={StaticResource FilterStarGlyph}, ConverterParameter=5}"/>
 
                 <ItemsControl ItemsSource="{Binding FilterColorChoices}"
                               Margin="12,0,0,0" VerticalAlignment="Center">
@@ -361,7 +509,8 @@
                         Margin="12,0,0,0" Padding="6,0" FontSize="11"
                         Focusable="False"
                         VerticalAlignment="Center"/>
-            </StackPanel>
+                </StackPanel>
+            </DockPanel>
         </Border>
 
         <Grid>
@@ -671,13 +820,15 @@
             not decoration: a photograph looks darker against white and
             lighter against black, so judging one means choosing what sits
             around it. Everything that has to move with that choice - the
-            caption colour included - comes out of GalleryPaletteConverter,
-            so a background can never end up with text nobody can read.
+            caption, the hover, the selection - is computed from it by
+            GalleryPalette, so a background can never end up with a
+            highlight brighter than the photographs it frames or with text
+            nobody can read.
         -->
         <ListBox x:Name="GalleryView"
                  Style="{StaticResource TilePanel}"
                  Visibility="{Binding ViewMode, Converter={StaticResource EnumToVisibility}, ConverterParameter=Gallery}"
-                 Background="{Binding Settings.GalleryBackground, Converter={StaticResource GalleryPalette}, ConverterParameter=Background}"
+                 Background="{Binding Settings.GalleryPalette.Background}"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                  ScrollViewer.VerticalScrollBarVisibility="Auto"
                  ScrollViewer.CanContentScroll="True">
@@ -694,7 +845,7 @@
                           Height="{Binding DataContext.Settings.GalleryMetrics.ContentHeight, RelativeSource={RelativeSource AncestorType=UserControl}}"
                           Margin="{Binding DataContext.Settings.GalleryMetrics.Margin, RelativeSource={RelativeSource AncestorType=UserControl}}"
                           ToolTip="{Binding Name}">
-                        <Border Style="{StaticResource TileHighlight}"/>
+                        <Border Style="{StaticResource GalleryHighlight}"/>
                         <StackPanel>
                             <Grid Width="{Binding DataContext.Settings.GalleryMetrics.ImageSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                   Height="{Binding DataContext.Settings.GalleryMetrics.ImageSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
@@ -726,12 +877,13 @@
                                     answerable at a glance.
                                 -->
                                 <Border HorizontalAlignment="Left" VerticalAlignment="Bottom"
-                                        Background="#99000000" CornerRadius="2"
+                                        Background="#33000000" CornerRadius="2"
                                         Padding="3,0" Margin="2"
-                                        Visibility="{Binding Rating, Converter={StaticResource NotNullToVisibility}}">
+                                        Visibility="{Binding Rating, Converter={StaticResource RatingBadge}, ConverterParameter=Badge}">
                                     <StackPanel Orientation="Horizontal">
                                         <Ellipse Width="7" Height="7" Margin="0,0,3,0"
                                                  VerticalAlignment="Center"
+                                                 Visibility="{Binding Rating, Converter={StaticResource RatingBadge}, ConverterParameter=Color}"
                                                  Fill="{Binding Rating, Converter={StaticResource ColorLabelBrush}}"/>
                                         <TextBlock Text="{Binding Rating, Converter={StaticResource RankText}}"
                                                    FontSize="10" Foreground="#FFD37A"

@@ -76,4 +76,15 @@ public sealed class CompositeAction : IUndoableAction {
     /// <summary>Everything the members put back, in their original order.</summary>
     public IReadOnlyList<string> PathsAfterUndo =>
         _actions.SelectMany(a => a.PathsAfterUndo).ToArray();
+
+    /// <summary>
+    /// The union — but only when <b>every</b> member is a metadata action.
+    /// A composite that moves a file and edits a rating changes the listing,
+    /// and a caller that took the cheap path on it would be showing a folder
+    /// that no longer exists.
+    /// </summary>
+    public IReadOnlyList<string> MetadataTargets =>
+        _actions.Count > 0 && _actions.All(a => a.MetadataTargets.Count > 0)
+            ? _actions.SelectMany(a => a.MetadataTargets).Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
+            : Array.Empty<string>();
 }

@@ -971,9 +971,6 @@
   <data name="ColumnRating" xml:space="preserve">
     <value>Оценка</value>
   </data>
-  <data name="MenuGalleryBackground" xml:space="preserve">
-    <value>Фон галереи</value>
-  </data>
   <data name="GalleryBackgroundLight" xml:space="preserve">
     <value>Светлый</value>
   </data>
@@ -985,9 +982,6 @@
   </data>
   <data name="FilterRatingLabel" xml:space="preserve">
     <value>Оценка</value>
-  </data>
-  <data name="FilterRatingHint" xml:space="preserve">
-    <value>Показывать только снимки с оценкой не ниже этой. Повторный щелчок по той же звезде снимает фильтр.</value>
   </data>
   <data name="FilterColorHint" xml:space="preserve">
     <value>Показывать только снимки с этой цветовой меткой. Повторный щелчок снимает фильтр.</value>
@@ -1008,9 +1002,6 @@
   </data>
   <data name="ConfirmCreateSidecarPp3Warning" xml:space="preserve">
     <value>Внимание: RawTherapee применяет профиль по-умолчанию (Auto-Matched Curve) только к снимкам без .pp3. Как только .pp3 появится, снимок начнёт открываться в RawTherapee с нейтральных значений, а не с автоподбора. Формат меняется в настройках, раздел «Галерея».</value>
-  </data>
-  <data name="StatusSidecarCreated" xml:space="preserve">
-    <value>Создан файл оценки: {0}</value>
   </data>
   <data name="PreviewRatingUnsaved" xml:space="preserve">
     <value>Оценки пока нет. Щелчок по звезде создаст файл рядом со снимком — с подтверждением.</value>
@@ -1104,5 +1095,31 @@
   </data>
   <data name="ColumnMatch" xml:space="preserve">
     <value>Совпадение</value>
+  </data>
+  <data name="ConfirmCreateSidecarMany" xml:space="preserve">
+    <value>У {0} снимков нет файла с оценкой. Рядом с каждым будет создан файл «{1}» — в нём и сохранится оценка.
+
+Отменить создание можно через Ctrl+Z, одним нажатием на всю пачку.</value>
+  </data>
+  <data name="SettingsGalleryGreyLevel" xml:space="preserve">
+    <value>Яркость серого фона (0–255)</value>
+  </data>
+  <data name="SettingsGalleryDarkLevel" xml:space="preserve">
+    <value>Яркость тёмного фона (0–255)</value>
+  </data>
+  <data name="SettingsAutoGalleryPercent" xml:space="preserve">
+    <value>Доля изображений для включения (%)</value>
+  </data>
+  <data name="StatusRatingApplied" xml:space="preserve">
+    <value>Оценка {0} — файлов: {1}</value>
+  </data>
+  <data name="StatusRatingCleared" xml:space="preserve">
+    <value>Оценка снята — файлов: {0}</value>
+  </data>
+  <data name="FilterRatingHint" xml:space="preserve">
+    <value>Показывать снимки с этой оценкой и выше. С Ctrl — добавить или убрать одну оценку. Повторный щелчок снимает фильтр.</value>
+  </data>
+  <data name="FilterUnratedHint" xml:space="preserve">
+    <value>Показывать снимки без оценки. С Ctrl — добавить их к уже выбранным оценкам.</value>
   </data>
 </root>
