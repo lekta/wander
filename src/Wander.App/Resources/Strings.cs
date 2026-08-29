@@ -180,19 +180,16 @@ public static class Strings {
     /// <summary>Обновить</summary>
     public static string MenuRefresh => Get(nameof(MenuRefresh));
 
-    /// <summary>Создать папку</summary>
-    public static string MenuNewFolder => Get(nameof(MenuNewFolder));
-
     /// <summary>Область просмотра</summary>
     public static string MenuQuickPreview => Get(nameof(MenuQuickPreview));
 
-    /// <summary>Настройки...</summary>
+    /// <summary>Параметры</summary>
     public static string MenuOptions => Get(nameof(MenuOptions));
 
-    /// <summary>Сообщить о проблеме или идее...</summary>
+    /// <summary>Обратная связь</summary>
     public static string MenuReportIssue => Get(nameof(MenuReportIssue));
 
-    /// <summary>Откроет в браузере новую задачу на GitHub — баг или пожел…</summary>
+    /// <summary>Откроет на GitHub форму — баг или пожелание</summary>
     public static string MenuReportIssueHint => Get(nameof(MenuReportIssueHint));
 
     /// <summary>Отладка</summary>
@@ -531,12 +528,6 @@ public static class Strings {
     /// <summary>Файл</summary>
     public static string MenuCmdFileSubmenu => Get(nameof(MenuCmdFileSubmenu));
 
-    /// <summary>Вид</summary>
-    public static string MenuCmdViewSubmenu => Get(nameof(MenuCmdViewSubmenu));
-
-    /// <summary>Сортировка</summary>
-    public static string MenuCmdSortSubmenu => Get(nameof(MenuCmdSortSubmenu));
-
     /// <summary>Открыть</summary>
     public static string MenuCmdOpen => Get(nameof(MenuCmdOpen));
 
@@ -570,47 +561,11 @@ public static class Strings {
     /// <summary>Удалить</summary>
     public static string MenuCmdDelete => Get(nameof(MenuCmdDelete));
 
-    /// <summary>Создать папку</summary>
+    /// <summary>Папка</summary>
     public static string MenuCmdNewFolder => Get(nameof(MenuCmdNewFolder));
-
-    /// <summary>Таблица</summary>
-    public static string MenuCmdViewDetails => Get(nameof(MenuCmdViewDetails));
-
-    /// <summary>Плитка</summary>
-    public static string MenuCmdViewTiles => Get(nameof(MenuCmdViewTiles));
-
-    /// <summary>Крупные значки</summary>
-    public static string MenuCmdViewLargeIcons => Get(nameof(MenuCmdViewLargeIcons));
-
-    /// <summary>Область просмотра</summary>
-    public static string MenuCmdTogglePreview => Get(nameof(MenuCmdTogglePreview));
-
-    /// <summary>Имя</summary>
-    public static string MenuCmdSortByName => Get(nameof(MenuCmdSortByName));
-
-    /// <summary>Дата изменения</summary>
-    public static string MenuCmdSortByDate => Get(nameof(MenuCmdSortByDate));
-
-    /// <summary>Размер</summary>
-    public static string MenuCmdSortBySize => Get(nameof(MenuCmdSortBySize));
-
-    /// <summary>Тип</summary>
-    public static string MenuCmdSortByType => Get(nameof(MenuCmdSortByType));
-
-    /// <summary>По возрастанию</summary>
-    public static string MenuCmdSortAscending => Get(nameof(MenuCmdSortAscending));
-
-    /// <summary>Папки сверху</summary>
-    public static string MenuCmdSortFoldersFirst => Get(nameof(MenuCmdSortFoldersFirst));
 
     /// <summary>Восстановить</summary>
     public static string MenuCmdRestore => Get(nameof(MenuCmdRestore));
-
-    /// <summary>Обновить</summary>
-    public static string MenuCmdRefresh => Get(nameof(MenuCmdRefresh));
-
-    /// <summary>Отменить</summary>
-    public static string MenuCmdUndo => Get(nameof(MenuCmdUndo));
 
     /// <summary>Свойства</summary>
     public static string MenuCmdProperties => Get(nameof(MenuCmdProperties));
@@ -768,7 +723,7 @@ public static class Strings {
     /// <summary>Пункты Wander</summary>
     public static string SettingsOwnItemsGroup => Get(nameof(SettingsOwnItemsGroup));
 
-    /// <summary>Снятая галочка убирает пункт из меню; хоткей продолжает р…</summary>
+    /// <summary>Снятая галочка убирает пункт из меню; хоткей продолжает работать. Разделите…</summary>
     public static string SettingsOwnItemsHint => Get(nameof(SettingsOwnItemsHint));
 
     /// <summary>Показывать меню «Отладка» в главном меню</summary>
@@ -881,9 +836,6 @@ public static class Strings {
 
     /// <summary>Галерея</summary>
     public static string MenuViewGallery => Get(nameof(MenuViewGallery));
-
-    /// <summary>Галерея</summary>
-    public static string MenuCmdViewGallery => Get(nameof(MenuCmdViewGallery));
 
     /// <summary>Оценка</summary>
     public static string MenuSortRating => Get(nameof(MenuSortRating));
@@ -1051,4 +1003,19 @@ public static class Strings {
 
     /// <summary>Папка</summary>
     public static string SearchFieldFolder => Get(nameof(SearchFieldFolder));
+
+    /// <summary>О Wander</summary>
+    public static string MenuAbout => Get(nameof(MenuAbout));
+
+    /// <summary>Проект на GitHub</summary>
+    public static string MenuProjectHome => Get(nameof(MenuProjectHome));
+
+    /// <summary>Откроет страницу проекта в браузере</summary>
+    public static string MenuProjectHomeHint => Get(nameof(MenuProjectHomeHint));
+
+    /// <summary>Версия {0}</summary>
+    public static string MenuVersion => Get(nameof(MenuVersion));
+
+    /// <summary>Создать</summary>
+    public static string MenuCmdNewSubmenu => Get(nameof(MenuCmdNewSubmenu));
 }

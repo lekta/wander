@@ -27,8 +27,7 @@ public static class ContextMenuCatalog {
     private static readonly Dictionary<MenuCommandId, string> _titleKeys = new() {
         [MenuCommandId.OpenSubmenu] = "MenuCmdOpenSubmenu",
         [MenuCommandId.FileSubmenu] = "MenuCmdFileSubmenu",
-        [MenuCommandId.ViewSubmenu] = "MenuCmdViewSubmenu",
-        [MenuCommandId.SortSubmenu] = "MenuCmdSortSubmenu",
+        [MenuCommandId.NewSubmenu] = "MenuCmdNewSubmenu",
 
         [MenuCommandId.Open] = "MenuCmdOpen",
         [MenuCommandId.OpenWith] = "MenuCmdOpenWith",
@@ -45,22 +44,8 @@ public static class ContextMenuCatalog {
         [MenuCommandId.Delete] = "MenuCmdDelete",
         [MenuCommandId.NewFolder] = "MenuCmdNewFolder",
 
-        [MenuCommandId.ViewDetails] = "MenuCmdViewDetails",
-        [MenuCommandId.ViewTiles] = "MenuCmdViewTiles",
-        [MenuCommandId.ViewLargeIcons] = "MenuCmdViewLargeIcons",
-        [MenuCommandId.ViewGallery] = "MenuCmdViewGallery",
-        [MenuCommandId.TogglePreview] = "MenuCmdTogglePreview",
-        [MenuCommandId.SortByName] = "MenuCmdSortByName",
-        [MenuCommandId.SortByDate] = "MenuCmdSortByDate",
-        [MenuCommandId.SortBySize] = "MenuCmdSortBySize",
-        [MenuCommandId.SortByType] = "MenuCmdSortByType",
-        [MenuCommandId.SortAscending] = "MenuCmdSortAscending",
-        [MenuCommandId.SortFoldersFirst] = "MenuCmdSortFoldersFirst",
-
         [MenuCommandId.RestoreFromRecycleBin] = "MenuCmdRestore",
 
-        [MenuCommandId.Refresh] = "MenuCmdRefresh",
-        [MenuCommandId.Undo] = "MenuCmdUndo",
         [MenuCommandId.Properties] = "MenuCmdProperties",
     };
 
@@ -73,8 +58,6 @@ public static class ContextMenuCatalog {
         [MenuCommandId.Rename] = "F2",
         [MenuCommandId.Delete] = "Del",
         [MenuCommandId.NewFolder] = "Ctrl+Shift+N",
-        [MenuCommandId.Refresh] = "F5",
-        [MenuCommandId.Undo] = "Ctrl+Z",
         [MenuCommandId.Properties] = "Alt+Enter",
     };
 
@@ -85,8 +68,9 @@ public static class ContextMenuCatalog {
     /// exactly what a hotkey-only user wants.
     ///
     /// <para>
-    /// Excluded: the View / Sort leaves — hiding individual sort keys is
-    /// noise, hide the submenu instead.
+    /// Everything the builder emits is in here — <c>ContextMenuCatalogTests</c>
+    /// pins that, so an entry can never reach the menu without a switch that
+    /// turns it off.
     /// </para>
     /// </summary>
     public static IReadOnlyList<MenuCommandId> Hideable { get; } = new[] {
@@ -103,11 +87,8 @@ public static class ContextMenuCatalog {
         MenuCommandId.CreateShortcut,
         MenuCommandId.Rename,
         MenuCommandId.Delete,
+        MenuCommandId.NewSubmenu,
         MenuCommandId.NewFolder,
-        MenuCommandId.ViewSubmenu,
-        MenuCommandId.SortSubmenu,
-        MenuCommandId.Refresh,
-        MenuCommandId.Undo,
         MenuCommandId.Properties,
     };
 

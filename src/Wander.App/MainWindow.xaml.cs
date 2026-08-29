@@ -917,12 +917,6 @@ public partial class MainWindow : Window {
             IsReadOnlyLocation = vm.IsCurrentShellNamespace,
             IsRecycleBin = vm.IsCurrentRecycleBin,
             CanPaste = vm.PasteCommand.CanExecute(null),
-            CanUndo = vm.UndoCommand.CanExecute(null),
-            ViewMode = vm.ViewMode.ToString(),
-            SortKey = vm.Settings.SortKey,
-            SortAscending = vm.Settings.SortAscending,
-            GroupFoldersFirst = vm.Settings.GroupFoldersFirst,
-            IsPreviewVisible = vm.IsPreviewVisible,
         };
 
         var session = QueryShellMenu(target, settings);
@@ -983,23 +977,8 @@ public partial class MainWindow : Window {
             [MenuCommandId.Delete] = new(vm.DeleteCommand),
             [MenuCommandId.NewFolder] = new(vm.NewFolderCommand),
 
-            [MenuCommandId.ViewDetails] = new(vm.SetViewModeCommand, nameof(ViewMode.Details)),
-            [MenuCommandId.ViewTiles] = new(vm.SetViewModeCommand, nameof(ViewMode.Tiles)),
-            [MenuCommandId.ViewLargeIcons] = new(vm.SetViewModeCommand, nameof(ViewMode.LargeIcons)),
-            [MenuCommandId.ViewGallery] = new(vm.SetViewModeCommand, nameof(ViewMode.Gallery)),
-            [MenuCommandId.TogglePreview] = new(vm.TogglePreviewCommand),
-
-            [MenuCommandId.SortByName] = new(vm.SetSortKeyCommand, nameof(SortKey.Name)),
-            [MenuCommandId.SortByDate] = new(vm.SetSortKeyCommand, nameof(SortKey.ModifiedDate)),
-            [MenuCommandId.SortBySize] = new(vm.SetSortKeyCommand, nameof(SortKey.Size)),
-            [MenuCommandId.SortByType] = new(vm.SetSortKeyCommand, nameof(SortKey.Type)),
-            [MenuCommandId.SortAscending] = new(vm.ToggleSortAscendingCommand),
-            [MenuCommandId.SortFoldersFirst] = new(vm.ToggleGroupFoldersFirstCommand),
-
             [MenuCommandId.RestoreFromRecycleBin] = new(vm.RestoreFromRecycleBinCommand),
 
-            [MenuCommandId.Refresh] = new(vm.RefreshCommand),
-            [MenuCommandId.Undo] = new(vm.UndoCommand),
             [MenuCommandId.Properties] = new(vm.PropertiesCommand),
         };
     }

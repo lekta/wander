@@ -27,21 +27,6 @@ public sealed record ContextMenuTarget {
 
     public bool CanPaste { get; init; }
 
-    public bool CanUndo { get; init; }
-
-
-    // --- View state, for the checkmarks in View / Sort by ---------------
-
-    public string ViewMode { get; init; } = "Details";
-
-    public SortKey SortKey { get; init; } = SortKey.Name;
-
-    public bool SortAscending { get; init; } = true;
-
-    public bool GroupFoldersFirst { get; init; } = true;
-
-    public bool IsPreviewVisible { get; init; }
-
 
     /// <summary>Exactly one item under the cursor — the precondition for Rename / Properties.</summary>
     public bool IsSingle => Selection.Count == 1;

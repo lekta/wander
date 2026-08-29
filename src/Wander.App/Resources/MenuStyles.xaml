@@ -1,0 +1,263 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        Menu chrome — the toolbar's drop-downs and every context menu the app
+        builds, including the ones ContextMenuFactory assembles in code.
+
+        WPF's stock menu look is the Aero one: a grey gutter strip down the
+        left, square corners, 3D separators. Next to Windows 11's own menus it
+        reads as a dialog from another decade, so the whole thing is templated
+        here rather than patched attribute by attribute at each call site.
+
+        Merged into App.xaml, which is the only way the code-built menus can
+        pick it up: they have no XAML of their own.
+
+        Colours live as brushes at the top on purpose. The dark theme, when it
+        lands, is a second set of these seven values and nothing else — same
+        deal as GalleryPalette.
+    -->
+
+    <SolidColorBrush x:Key="MenuPopupBackground" Color="#FBFBFB"/>
+    <SolidColorBrush x:Key="MenuPopupBorder" Color="#E2E2E2"/>
+    <SolidColorBrush x:Key="MenuForeground" Color="#1A1A1A"/>
+    <SolidColorBrush x:Key="MenuForegroundDisabled" Color="#9A9A9A"/>
+    <SolidColorBrush x:Key="MenuForegroundGesture" Color="#757575"/>
+    <SolidColorBrush x:Key="MenuHighlight" Color="#ECECEC"/>
+    <SolidColorBrush x:Key="MenuSeparator" Color="#E5E5E5"/>
+
+    <!--
+        Segoe UI Variable Text is the shell's own menu face on Windows 11;
+        Segoe UI behind it covers everything older. 14px is what Explorer
+        draws its menus at.
+    -->
+    <FontFamily x:Key="MenuFontFamily">Segoe UI Variable Text, Segoe UI</FontFamily>
+
+    <!--
+        The popup card. Shared by top-level drop-downs, submenus and context
+        menus so all three have the same corner, border and shadow.
+
+        The Margin is the shadow's room to breathe: a Popup is its own window
+        and clips to the content bounds, so a shadow with nowhere to fall is
+        simply not drawn. Every Popup below cancels it again with a matching
+        negative offset, otherwise the menu would sit six pixels off.
+    -->
+    <ControlTemplate x:Key="MenuPopupCard" TargetType="ContentControl">
+        <Border Margin="6,2,6,8"
+                MinWidth="180"
+                Background="{StaticResource MenuPopupBackground}"
+                BorderBrush="{StaticResource MenuPopupBorder}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="0,4,0,4"
+                SnapsToDevicePixels="True">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="14" ShadowDepth="2" Direction="270" Opacity="0.16" Color="#000000"/>
+            </Border.Effect>
+            <ContentPresenter/>
+        </Border>
+    </ControlTemplate>
+
+
+    <!-- One row's inner layout: check/icon gutter, label, gesture, arrow. -->
+    <ControlTemplate x:Key="MenuRowTemplate" TargetType="MenuItem">
+        <Border x:Name="Chrome"
+                Background="Transparent"
+                CornerRadius="4"
+                Margin="4,1,4,1"
+                Padding="0"
+                SnapsToDevicePixels="True">
+            <Grid Height="28">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="30"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!--
+                    One gutter for both the icon a shell handler supplied and
+                    the checkmark of a toggle row. They never coexist: a
+                    checkable row is ours and ours carry no bitmaps.
+                -->
+                <ContentPresenter x:Name="Icon" Grid.Column="0"
+                                  ContentSource="Icon"
+                                  Width="16" Height="16"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                <TextBlock x:Name="Check" Grid.Column="0"
+                           Text="&#xE73E;" FontFamily="Segoe MDL2 Assets" FontSize="12"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Visibility="Collapsed"/>
+
+                <ContentPresenter x:Name="Label" Grid.Column="1"
+                                  ContentSource="Header"
+                                  RecognizesAccessKey="True"
+                                  VerticalAlignment="Center"
+                                  Margin="0,0,12,0"/>
+
+                <TextBlock x:Name="Gesture" Grid.Column="2"
+                           Text="{TemplateBinding InputGestureText}"
+                           Foreground="{StaticResource MenuForegroundGesture}"
+                           VerticalAlignment="Center"
+                           Margin="0,0,12,0"/>
+
+                <TextBlock x:Name="Arrow" Grid.Column="3"
+                           Text="&#xE76C;" FontFamily="Segoe MDL2 Assets" FontSize="10"
+                           Foreground="{StaticResource MenuForegroundGesture}"
+                           VerticalAlignment="Center"
+                           Margin="0,0,10,0"
+                           Visibility="Collapsed"/>
+
+                <Popup x:Name="PART_Popup" Grid.Column="0"
+                       IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}"
+                       Placement="Right" HorizontalOffset="2" VerticalOffset="-10"
+                       AllowsTransparency="True" Focusable="False"
+                       PopupAnimation="{DynamicResource {x:Static SystemParameters.MenuPopupAnimationKey}}">
+                    <ContentControl Template="{StaticResource MenuPopupCard}">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                      MaxHeight="{Binding Source={x:Static SystemParameters.WorkArea}, Path=Height}">
+                            <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                        </ScrollViewer>
+                    </ContentControl>
+                </Popup>
+            </Grid>
+        </Border>
+
+        <ControlTemplate.Triggers>
+            <Trigger Property="Role" Value="SubmenuHeader">
+                <Setter TargetName="Arrow" Property="Visibility" Value="Visible"/>
+            </Trigger>
+            <Trigger Property="Role" Value="TopLevelHeader">
+                <Setter TargetName="Arrow" Property="Visibility" Value="Visible"/>
+            </Trigger>
+            <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="Check" Property="Visibility" Value="Visible"/>
+                <Setter TargetName="Icon" Property="Visibility" Value="Collapsed"/>
+            </Trigger>
+            <Trigger Property="Icon" Value="{x:Null}">
+                <Setter TargetName="Icon" Property="Visibility" Value="Collapsed"/>
+            </Trigger>
+            <Trigger Property="InputGestureText" Value="">
+                <Setter TargetName="Gesture" Property="Visibility" Value="Collapsed"/>
+            </Trigger>
+            <Trigger Property="IsHighlighted" Value="True">
+                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource MenuHighlight}"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Foreground" Value="{StaticResource MenuForegroundDisabled}"/>
+                <Setter TargetName="Gesture" Property="Foreground" Value="{StaticResource MenuForegroundDisabled}"/>
+                <Setter TargetName="Arrow" Property="Foreground" Value="{StaticResource MenuForegroundDisabled}"/>
+                <Setter TargetName="Icon" Property="Opacity" Value="0.4"/>
+            </Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+
+
+    <!--
+        A top-level header is not a menu row but a toolbar button that happens
+        to open one, so it gets its own shape: no gutter, no gesture column,
+        the label centred, and the popup below instead of beside.
+    -->
+    <ControlTemplate x:Key="MenuTopLevelTemplate" TargetType="MenuItem">
+        <Border x:Name="Chrome"
+                Background="Transparent"
+                CornerRadius="4"
+                Padding="{TemplateBinding Padding}"
+                SnapsToDevicePixels="True">
+            <Grid>
+                <ContentPresenter ContentSource="Header"
+                                  RecognizesAccessKey="True"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
+
+                <Popup x:Name="PART_Popup"
+                       IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}"
+                       Placement="Bottom" HorizontalOffset="-6" VerticalOffset="0"
+                       AllowsTransparency="True" Focusable="False"
+                       PopupAnimation="{DynamicResource {x:Static SystemParameters.MenuPopupAnimationKey}}">
+                    <ContentControl Template="{StaticResource MenuPopupCard}">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                      MaxHeight="{Binding Source={x:Static SystemParameters.WorkArea}, Path=Height}">
+                            <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                        </ScrollViewer>
+                    </ContentControl>
+                </Popup>
+            </Grid>
+        </Border>
+
+        <ControlTemplate.Triggers>
+            <Trigger Property="IsHighlighted" Value="True">
+                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource MenuHighlight}"/>
+            </Trigger>
+            <Trigger Property="IsSubmenuOpen" Value="True">
+                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource MenuHighlight}"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Foreground" Value="{StaticResource MenuForegroundDisabled}"/>
+            </Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+
+
+    <Style TargetType="MenuItem">
+        <Setter Property="FontFamily" Value="{StaticResource MenuFontFamily}"/>
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="Foreground" Value="{StaticResource MenuForeground}"/>
+        <Setter Property="Padding" Value="10,5"/>
+        <Setter Property="Template" Value="{StaticResource MenuRowTemplate}"/>
+        <Style.Triggers>
+            <Trigger Property="Role" Value="TopLevelHeader">
+                <Setter Property="Template" Value="{StaticResource MenuTopLevelTemplate}"/>
+            </Trigger>
+            <Trigger Property="Role" Value="TopLevelItem">
+                <Setter Property="Template" Value="{StaticResource MenuTopLevelTemplate}"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+
+    <Style TargetType="ContextMenu">
+        <Setter Property="Foreground" Value="{StaticResource MenuForeground}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ContextMenu">
+                    <ContentControl Template="{StaticResource MenuPopupCard}">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                      MaxHeight="{Binding Source={x:Static SystemParameters.WorkArea}, Path=Height}">
+                            <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                        </ScrollViewer>
+                    </ContentControl>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+
+    <!--
+        Keyed to MenuItem.SeparatorStyleKey rather than to Separator itself:
+        the plain type key would repaint toolbar separators too.
+    -->
+    <Style x:Key="{x:Static MenuItem.SeparatorStyleKey}" TargetType="Separator">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Separator">
+                    <Border Height="1" Margin="10,4,10,4"
+                            Background="{StaticResource MenuSeparator}"
+                            SnapsToDevicePixels="True"/>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+
+    <Style TargetType="Menu">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Menu">
+                    <ItemsPresenter/>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+</ResourceDictionary>

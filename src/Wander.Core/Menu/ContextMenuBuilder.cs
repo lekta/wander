@@ -1,4 +1,3 @@
-using Wander.Core.FileSystem;
 using Wander.Core.Shell;
 
 namespace Wander.Core.Menu;
@@ -18,7 +17,9 @@ namespace Wander.Core.Menu;
 /// <list type="bullet">
 ///   <item>Selection — verbs that act on the clicked items.</item>
 ///   <item>Background — verbs that act on the folder being listed
-///   (paste, view, sort, refresh).</item>
+///   (create, terminal, path). View mode, sorting, refresh and undo are
+///   window state, not folder verbs: they live in the toolbar's «Вид»
+///   menu and on hotkeys.</item>
 /// </list>
 ///
 /// <para>
@@ -131,34 +132,13 @@ public static class ContextMenuBuilder {
         bool fs = t.IsWritable;
 
         var items = new List<MenuEntry> {
-            // Paste and New folder are what a background right-click is for
-            // nine times out of ten, so they get the top slot rather than
-            // sitting inside the File submenu the selection menu uses.
-            Cmd(MenuCommandId.Paste, fs && t.CanPaste),
-            Cmd(MenuCommandId.NewFolder, fs),
-            MenuEntry.Divider,
-
-            Sub(MenuCommandId.ViewSubmenu, new[] {
-                Check(MenuCommandId.ViewDetails, t.ViewMode == "Details"),
-                Check(MenuCommandId.ViewTiles, t.ViewMode == "Tiles"),
-                Check(MenuCommandId.ViewLargeIcons, t.ViewMode == "LargeIcons"),
-                Check(MenuCommandId.ViewGallery, t.ViewMode == "Gallery"),
-                MenuEntry.Divider,
-                Check(MenuCommandId.TogglePreview, t.IsPreviewVisible),
-            }),
-
-            Sub(MenuCommandId.SortSubmenu, new[] {
-                Check(MenuCommandId.SortByName, t.SortKey == SortKey.Name),
-                Check(MenuCommandId.SortByDate, t.SortKey == SortKey.ModifiedDate),
-                Check(MenuCommandId.SortBySize, t.SortKey == SortKey.Size),
-                Check(MenuCommandId.SortByType, t.SortKey == SortKey.Type),
-                MenuEntry.Divider,
-                Check(MenuCommandId.SortAscending, t.SortAscending),
-                Check(MenuCommandId.SortFoldersFirst, t.GroupFoldersFirst),
-            }),
-
-            Cmd(MenuCommandId.Refresh),
-            Cmd(MenuCommandId.Undo, t.CanUndo),
+            // One "Создать", not two: Windows contributes its own — folder,
+            // shortcut, and every registered file template — and it lands
+            // here rather than beside us. Ours leads with the folder row,
+            // because that one goes through Wander's undo and its inline
+            // rename; the shell's copy of it was dropped in SplitShell.
+            Sub(MenuCommandId.NewSubmenu,
+                new[] { Cmd(MenuCommandId.NewFolder, fs) }.Concat(shell.New).ToArray()),
             MenuEntry.Divider,
 
             Cmd(MenuCommandId.OpenInTerminal, fs),
@@ -201,6 +181,7 @@ public static class ContextMenuBuilder {
         var top = new List<MenuEntry>();
         var fileOps = new List<MenuEntry>();
         IReadOnlyList<MenuEntry> openWith = Array.Empty<MenuEntry>();
+        IReadOnlyList<MenuEntry> shellNew = Array.Empty<MenuEntry>();
 
         foreach (var item in shellItems) {
             if (item.IsSeparator) {
@@ -221,6 +202,16 @@ public static class ContextMenuBuilder {
                 continue;
             }
 
+            // Same treatment for the shell's own "Создать": its contents go
+            // into Wander's submenu, minus the folder row Wander already has.
+            if (IsNewPopup(item)) {
+                shellNew = item.Children
+                    .Where(child => !IsShellNewFolder(child))
+                    .Select(ConvertShellEntry)
+                    .ToArray();
+                continue;
+            }
+
             var converted = ConvertShellEntry(item);
             if (IsFileOperation(item)) {
                 fileOps.Add(converted);
@@ -229,11 +220,30 @@ public static class ContextMenuBuilder {
             }
         }
 
-        return new ShellGroups(TrimSeparators(top), TrimSeparators(fileOps), TrimSeparators(openWith));
+        return new ShellGroups(
+            TrimSeparators(top), TrimSeparators(fileOps),
+            TrimSeparators(openWith), TrimSeparators(shellNew));
     }
 
     private static bool IsOpenWithPopup(ShellMenuEntry item) {
         return item.HasChildren && string.Equals(item.Verb, "openas", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// The shell's "Создать" popup. It publishes no verb of its own, so it
+    /// is recognised by what its children publish: the two fixed rows carry
+    /// "NewFolder" / "NewLink" and every template carries its extension.
+    /// Those are canonical and untranslated — matching the header text would
+    /// have broken on the first non-Russian machine.
+    /// </summary>
+    private static bool IsNewPopup(ShellMenuEntry item) {
+        return item.HasChildren
+            && item.Verb.Length == 0
+            && item.Children.Any(IsShellNewFolder);
+    }
+
+    private static bool IsShellNewFolder(ShellMenuEntry item) {
+        return string.Equals(item.Verb, "NewFolder", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -285,10 +295,12 @@ public static class ContextMenuBuilder {
     private sealed record ShellGroups(
         IReadOnlyList<MenuEntry> TopLevel,
         IReadOnlyList<MenuEntry> FileOperations,
-        IReadOnlyList<MenuEntry> OpenWith) {
+        IReadOnlyList<MenuEntry> OpenWith,
+        IReadOnlyList<MenuEntry> New) {
 
         public static readonly ShellGroups Empty = new(
-            Array.Empty<MenuEntry>(), Array.Empty<MenuEntry>(), Array.Empty<MenuEntry>());
+            Array.Empty<MenuEntry>(), Array.Empty<MenuEntry>(),
+            Array.Empty<MenuEntry>(), Array.Empty<MenuEntry>());
     }
 
 
@@ -352,16 +364,6 @@ public static class ContextMenuBuilder {
             Gesture = ContextMenuCatalog.Gesture(id),
             IsEnabled = enabled,
             IsDefault = isDefault,
-        };
-    }
-
-    private static MenuEntry Check(MenuCommandId id, bool isChecked) {
-        return new MenuEntry {
-            Id = id,
-            Header = ContextMenuCatalog.Title(id),
-            Gesture = ContextMenuCatalog.Gesture(id),
-            IsCheckable = true,
-            IsChecked = isChecked,
         };
     }
 

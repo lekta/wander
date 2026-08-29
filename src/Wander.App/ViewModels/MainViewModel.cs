@@ -268,6 +268,7 @@ public sealed class MainViewModel : ObservableObject {
         ExitCommand = new RelayCommand(_ => Application.Current?.Shutdown());
         OptionsCommand = new RelayCommand(_ => OpenSettingsDialog());
         ReportIssueCommand = new RelayCommand(_ => ReportIssue());
+        ProjectHomeCommand = new RelayCommand(_ => OpenUrl(Diagnostics.CrashReporter.ProjectUrl));
         // Properties falls back to the folder being listed, so a background
         // right-click (and Alt+Enter with nothing selected) opens the
         // folder's own sheet — Explorer parity.
@@ -656,6 +657,7 @@ public sealed class MainViewModel : ObservableObject {
     public RelayCommand ExitCommand { get; }
     public RelayCommand OptionsCommand { get; }
     public RelayCommand ReportIssueCommand { get; }
+    public RelayCommand ProjectHomeCommand { get; }
     public RelayCommand PropertiesCommand { get; }
     public RelayCommand TogglePreviewCommand { get; }
     public RelayCommand UndoCommand { get; }
@@ -3047,12 +3049,31 @@ public sealed class MainViewModel : ObservableObject {
         dlg.ShowDialog();
     }
 
+    /// <summary>
+    /// "Версия 0.2.1-beta" for the «О Wander» submenu. The +sha suffix the
+    /// crash bundle carries is cut: it is there so a stack trace can be
+    /// pinned to a commit, and it makes a menu row unreadable.
+    /// </summary>
+    public string VersionLabel {
+        get {
+            string version = Diagnostics.CrashReporter.AppVersion();
+            int plus = version.IndexOf('+');
+
+            return string.Format(Strings.MenuVersion, plus < 0 ? version : version[..plus]);
+        }
+    }
+
+
     private void ReportIssue() {
         // GitHub's template chooser lets the user pick "Bug report" or
         // "Feature request"; nothing is pre-filled, so no session data is
         // involved — unlike the crash path, which bundles diagnostics.
+        OpenUrl(Wander.App.Diagnostics.CrashReporter.IssueChooserUrl);
+    }
+
+    private void OpenUrl(string url) {
         try {
-            _shell.Open(Wander.App.Diagnostics.CrashReporter.IssueChooserUrl);
+            _shell.Open(url);
         } catch (Exception ex) {
             Status = string.Format(Strings.StatusBrowserFailed, ex.Message);
         }

@@ -333,12 +333,13 @@
             </StackPanel>
 
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" Margin="8,4,4,4">
-                <Menu Background="Transparent" VerticalAlignment="Center">
-                    <MenuItem Padding="8,4">
+                <Menu VerticalAlignment="Center">
+                    <MenuItem Padding="10,4">
                         <MenuItem.Header>
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="{x:Static res:Strings.MenuView}"/>
-                                <TextBlock Text="&#x25BE;" FontSize="10" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="&#xE70D;" FontFamily="Segoe MDL2 Assets" FontSize="9"
+                                           Margin="6,1,0,0" VerticalAlignment="Center"/>
                             </StackPanel>
                         </MenuItem.Header>
                         <MenuItem Header="{x:Static res:Strings.MenuViewDetails}"
@@ -417,36 +418,61 @@
                                       IsChecked="{Binding Settings.GroupFoldersFirst, Mode=OneWay}"
                                       Command="{Binding ToggleGroupFoldersFirstCommand}"/>
                         </MenuItem>
+                        <Separator/>
+                        <!--
+                            Preview pane and Refresh live here rather than in
+                            the "..." menu: both are about what the file list
+                            is showing right now, which is what this menu is.
+                        -->
+                        <MenuItem Header="{x:Static res:Strings.MenuQuickPreview}"
+                                  InputGestureText="Ctrl+Q"
+                                  IsCheckable="True"
+                                  IsChecked="{Binding IsPreviewVisible, Mode=TwoWay}"/>
+                        <MenuItem Header="{x:Static res:Strings.MenuRefresh}"
+                                  InputGestureText="F5"
+                                  Command="{Binding RefreshCommand}"/>
                     </MenuItem>
                 </Menu>
 
                 <Border Width="12"/>
 
-                <Menu Background="Transparent" VerticalAlignment="Center">
-                    <MenuItem Padding="8,4" FontSize="16">
+                <!--
+                    The application menu. Four rows and one divider: the two
+                    things that are about the app rather than about the files
+                    (settings, the project itself), the debug drawer, and the
+                    way out. Everything that acts on what is on screen lives
+                    in "Вид" or in the context menu, next to what it acts on.
+                -->
+                <Menu VerticalAlignment="Center">
+                    <MenuItem Padding="10,4">
                         <MenuItem.Header>
-                            <TextBlock Text="&#x22EF;" FontSize="16" Margin="0,-4,0,0"/>
+                            <TextBlock Text="&#xE712;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
                         </MenuItem.Header>
-                        <MenuItem Header="{x:Static res:Strings.MenuRefresh}" Command="{Binding RefreshCommand}" InputGestureText="F5"/>
-                        <MenuItem Header="{x:Static res:Strings.MenuNewFolder}" Command="{Binding NewFolderCommand}" InputGestureText="Ctrl+Shift+N"/>
-                        <Separator/>
-                        <MenuItem Header="{x:Static res:Strings.MenuQuickPreview}"
-                                  InputGestureText="Ctrl+Q"
-                                  IsCheckable="True"
-                                  IsChecked="{Binding IsPreviewVisible, Mode=TwoWay}"/>
-                        <Separator/>
                         <MenuItem Header="{x:Static res:Strings.MenuOptions}" Command="{Binding OptionsCommand}"/>
-                        <MenuItem Header="{x:Static res:Strings.MenuReportIssue}"
-                                  Command="{Binding ReportIssueCommand}"
-                                  ToolTip="{x:Static res:Strings.MenuReportIssueHint}"/>
-                        <Separator/>
+                        <MenuItem Header="{x:Static res:Strings.MenuAbout}">
+                            <MenuItem Header="{x:Static res:Strings.MenuReportIssue}"
+                                      Command="{Binding ReportIssueCommand}"
+                                      ToolTip="{x:Static res:Strings.MenuReportIssueHint}"/>
+                            <MenuItem Header="{x:Static res:Strings.MenuProjectHome}"
+                                      Command="{Binding ProjectHomeCommand}"
+                                      ToolTip="{x:Static res:Strings.MenuProjectHomeHint}"/>
+                            <Separator/>
+                            <!--
+                                A caption, not a command: greying it out would
+                                read as "broken", so it keeps the label colour
+                                of a gesture hint and simply takes no input.
+                            -->
+                            <MenuItem Header="{Binding VersionLabel}"
+                                      Foreground="{StaticResource MenuForegroundGesture}"
+                                      Focusable="False" IsHitTestVisible="False"/>
+                        </MenuItem>
                         <MenuItem Header="{x:Static res:Strings.MenuDebug}"
                                   Visibility="{Binding Settings.ShowDebugMenu, Converter={StaticResource BoolToVisibility}}">
                             <MenuItem Header="{x:Static res:Strings.MenuLogs}"
                                       Command="{Binding OpenLogFileCommand}"
                                       ToolTip="{x:Static res:Strings.MenuLogsHint}"/>
                         </MenuItem>
-                        <Separator Visibility="{Binding Settings.ShowDebugMenu, Converter={StaticResource BoolToVisibility}}"/>
+                        <Separator/>
                         <MenuItem Header="{x:Static res:Strings.MenuExit}" Command="{Binding ExitCommand}"/>
                     </MenuItem>
                 </Menu>

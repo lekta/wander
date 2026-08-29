@@ -168,11 +168,30 @@ public class ContextMenuBuilderTests {
     // --- Background menu ------------------------------------------------
 
     [Fact]
-    public void BackgroundMenu_LeadsWithPasteAndNewFolder() {
+    public void BackgroundMenu_LeadsWithTheNewSubmenu() {
+        var menu = ContextMenuBuilder.Build(Background(), ContextMenuSettings.Default);
+
+        Assert.Equal(MenuCommandId.NewSubmenu, menu[0].Id);
+        Assert.Equal(MenuCommandId.NewFolder, menu[0].Children[0].Id);
+    }
+
+    [Fact]
+    public void BackgroundMenu_IsFolderVerbsOnly() {
+        // View mode, sorting, refresh, undo and paste were all here once.
+        // They are window-wide state, they live in the toolbar's "Вид" menu
+        // and on hotkeys, and a right-click on a folder is not where anyone
+        // goes looking for them. What is left acts on the folder itself.
         var menu = ContextMenuBuilder.Build(Background() with { CanPaste = true }, ContextMenuSettings.Default);
 
-        Assert.Equal(MenuCommandId.Paste, menu[0].Id);
-        Assert.Equal(MenuCommandId.NewFolder, menu[1].Id);
+        Assert.Equal(
+            new[] {
+                MenuCommandId.NewSubmenu,
+                MenuCommandId.OpenInTerminal,
+                MenuCommandId.CopyPath,
+                MenuCommandId.Properties,
+            },
+            menu.Where(e => !e.IsSeparator).Select(e => e.Id).ToArray());
+        Assert.DoesNotContain(Flatten(menu), e => e.Id == MenuCommandId.Paste);
     }
 
     [Fact]
@@ -194,24 +213,6 @@ public class ContextMenuBuilderTests {
     }
 
     [Fact]
-    public void BackgroundMenu_ChecksTheActiveViewModeAndSortKey() {
-        var target = Background() with {
-            ViewMode = "Tiles",
-            SortKey = SortKey.Size,
-            SortAscending = false,
-        };
-
-        var menu = ContextMenuBuilder.Build(target, ContextMenuSettings.Default);
-        var view = Find(menu, MenuCommandId.ViewSubmenu)!.Children;
-        var sort = Find(menu, MenuCommandId.SortSubmenu)!.Children;
-
-        Assert.True(Find(view, MenuCommandId.ViewTiles)!.IsChecked);
-        Assert.False(Find(view, MenuCommandId.ViewDetails)!.IsChecked);
-        Assert.True(Find(sort, MenuCommandId.SortBySize)!.IsChecked);
-        Assert.False(Find(sort, MenuCommandId.SortAscending)!.IsChecked);
-    }
-
-    [Fact]
     public void BackgroundMenu_RendersShellFileVerbsInline() {
         // There is no File submenu on the background menu, so the folder's
         // own shell verbs stay at the top level rather than getting a
@@ -227,12 +228,61 @@ public class ContextMenuBuilderTests {
     }
 
     [Fact]
-    public void BackgroundMenu_UndoFollowsTheUndoStack() {
-        Assert.False(Enabled(
-            ContextMenuBuilder.Build(Background(), ContextMenuSettings.Default), MenuCommandId.Undo));
-        Assert.True(Enabled(
-            ContextMenuBuilder.Build(Background() with { CanUndo = true }, ContextMenuSettings.Default),
-            MenuCommandId.Undo));
+    public void ShellNewPopup_IsPouredIntoOurCreateSubmenu() {
+        // Windows contributes its own "Создать" for a folder background. Left
+        // alone it sits next to ours and the menu shows the word twice, so it
+        // is folded in — and its folder row, which duplicates ours, is cut.
+        var shellNew = new ShellMenuEntry {
+            Header = "Создать",
+            Children = new[] {
+                new ShellMenuEntry { CommandId = 1, Header = "Папку", Verb = "NewFolder" },
+                new ShellMenuEntry { CommandId = 2, Header = "Ярлык", Verb = "NewLink" },
+                new ShellMenuEntry { IsSeparator = true },
+                new ShellMenuEntry { CommandId = 3, Header = "Текстовый документ", Verb = ".txt" },
+            },
+        };
+
+        var menu = ContextMenuBuilder.Build(Background(), ContextMenuSettings.Default, new[] { shellNew });
+
+        // One container, ours, and the shell's is gone from the top level.
+        Assert.Single(menu.Where(e => !e.IsSeparator), e => e.Id == MenuCommandId.NewSubmenu);
+        Assert.Equal(-1, IndexOfHeader(menu, "Создать"));
+
+        var create = Find(menu, MenuCommandId.NewSubmenu)!.Children;
+        Assert.Equal(MenuCommandId.NewFolder, create[0].Id);
+        Assert.True(IndexOfHeader(create, "Ярлык") > 0);
+        Assert.True(IndexOfHeader(create, "Текстовый документ") > 0);
+        // The shell's own folder row is the one thing dropped.
+        Assert.Equal(-1, IndexOfHeader(create, "Папку"));
+    }
+
+    [Fact]
+    public void ShellPopupWithoutTheNewFolderVerb_StaysWhereItWas() {
+        // The signature is the canonical verb, not the word "Создать": a
+        // third-party submenu that happens to be called that must not have
+        // its contents swallowed.
+        var impostor = new ShellMenuEntry {
+            Header = "Создать",
+            Children = new[] {
+                new ShellMenuEntry { CommandId = 1, Header = "Архив", Verb = "compress" },
+            },
+        };
+
+        var menu = ContextMenuBuilder.Build(Background(), ContextMenuSettings.Default, new[] { impostor });
+
+        Assert.True(IndexOfHeader(menu, "Создать") > 0);
+        Assert.Equal(-1, IndexOfHeader(Find(menu, MenuCommandId.NewSubmenu)!.Children, "Архив"));
+    }
+
+    [Fact]
+    public void BackgroundMenu_DropsTheNewSubmenuWhereNothingCanBeCreated() {
+        // Read-only location: "Создать" would hold one disabled row, which is
+        // a submenu that exists to say no. Normalize takes it out instead.
+        var menu = ContextMenuBuilder.Build(
+            Background() with { IsReadOnlyLocation = true },
+            ContextMenuSettings.Default with { HiddenItems = new HashSet<MenuCommandId> { MenuCommandId.NewFolder } });
+
+        Assert.Null(Find(menu, MenuCommandId.NewSubmenu));
     }
 
 

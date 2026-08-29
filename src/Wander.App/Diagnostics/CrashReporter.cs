@@ -28,10 +28,13 @@ namespace Wander.App.Diagnostics;
 /// </para>
 /// </summary>
 public static class CrashReporter {
-    private const string NewIssueUrl = "https://github.com/lekta/wander/issues/new";
+    /// <summary>Project home — the "О Wander" menu links here.</summary>
+    public const string ProjectUrl = "https://github.com/lekta/wander";
+
+    private const string NewIssueUrl = ProjectUrl + "/issues/new";
 
     /// <summary>Template chooser (bug report / feature request) — used by the in-app "Report an issue" menu.</summary>
-    public const string IssueChooserUrl = "https://github.com/lekta/wander/issues/new/choose";
+    public const string IssueChooserUrl = NewIssueUrl + "/choose";
 
     /// <summary>Stack excerpt cap for the issue URL — browsers/GitHub reject overlong URLs.</summary>
     private const int MaxStackChars = 1800;
@@ -236,7 +239,12 @@ public static class CrashReporter {
         return sb.ToString();
     }
 
-    private static string AppVersion() {
+    /// <summary>
+    /// "0.2.1-beta+&lt;sha&gt;" — the informational version, build metadata and
+    /// all. The crash bundle wants every character of it; the "О Wander"
+    /// menu trims at the "+".
+    /// </summary>
+    public static string AppVersion() {
         var asm = Assembly.GetEntryAssembly();
         return asm?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
             ?? asm?.GetName().Version?.ToString()

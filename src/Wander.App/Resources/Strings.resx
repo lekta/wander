@@ -172,20 +172,17 @@
   <data name="MenuRefresh" xml:space="preserve">
     <value>Обновить</value>
   </data>
-  <data name="MenuNewFolder" xml:space="preserve">
-    <value>Создать папку</value>
-  </data>
   <data name="MenuQuickPreview" xml:space="preserve">
     <value>Область просмотра</value>
   </data>
   <data name="MenuOptions" xml:space="preserve">
-    <value>Настройки...</value>
+    <value>Параметры</value>
   </data>
   <data name="MenuReportIssue" xml:space="preserve">
-    <value>Сообщить о проблеме или идее...</value>
+    <value>Обратная связь</value>
   </data>
   <data name="MenuReportIssueHint" xml:space="preserve">
-    <value>Откроет в браузере новую задачу на GitHub — баг или пожелание</value>
+    <value>Откроет на GitHub форму — баг или пожелание</value>
   </data>
   <data name="MenuDebug" xml:space="preserve">
     <value>Отладка</value>
@@ -553,12 +550,6 @@
   <data name="MenuCmdFileSubmenu" xml:space="preserve">
     <value>Файл</value>
   </data>
-  <data name="MenuCmdViewSubmenu" xml:space="preserve">
-    <value>Вид</value>
-  </data>
-  <data name="MenuCmdSortSubmenu" xml:space="preserve">
-    <value>Сортировка</value>
-  </data>
   <data name="MenuCmdOpen" xml:space="preserve">
     <value>Открыть</value>
   </data>
@@ -593,46 +584,10 @@
     <value>Удалить</value>
   </data>
   <data name="MenuCmdNewFolder" xml:space="preserve">
-    <value>Создать папку</value>
-  </data>
-  <data name="MenuCmdViewDetails" xml:space="preserve">
-    <value>Таблица</value>
-  </data>
-  <data name="MenuCmdViewTiles" xml:space="preserve">
-    <value>Плитка</value>
-  </data>
-  <data name="MenuCmdViewLargeIcons" xml:space="preserve">
-    <value>Крупные значки</value>
-  </data>
-  <data name="MenuCmdTogglePreview" xml:space="preserve">
-    <value>Область просмотра</value>
-  </data>
-  <data name="MenuCmdSortByName" xml:space="preserve">
-    <value>Имя</value>
-  </data>
-  <data name="MenuCmdSortByDate" xml:space="preserve">
-    <value>Дата изменения</value>
-  </data>
-  <data name="MenuCmdSortBySize" xml:space="preserve">
-    <value>Размер</value>
-  </data>
-  <data name="MenuCmdSortByType" xml:space="preserve">
-    <value>Тип</value>
-  </data>
-  <data name="MenuCmdSortAscending" xml:space="preserve">
-    <value>По возрастанию</value>
-  </data>
-  <data name="MenuCmdSortFoldersFirst" xml:space="preserve">
-    <value>Папки сверху</value>
+    <value>Папка</value>
   </data>
   <data name="MenuCmdRestore" xml:space="preserve">
     <value>Восстановить</value>
-  </data>
-  <data name="MenuCmdRefresh" xml:space="preserve">
-    <value>Обновить</value>
-  </data>
-  <data name="MenuCmdUndo" xml:space="preserve">
-    <value>Отменить</value>
   </data>
   <data name="MenuCmdProperties" xml:space="preserve">
     <value>Свойства</value>
@@ -795,7 +750,7 @@
     <value>Пункты Wander</value>
   </data>
   <data name="SettingsOwnItemsHint" xml:space="preserve">
-    <value>Снятая галочка убирает пункт из меню; хоткей продолжает работать. Разделители подтягиваются сами — пустых групп и двойных линий не остаётся. «Файл» / «Вид» / «Сортировка» убирают подменю целиком.</value>
+    <value>Снятая галочка убирает пункт из меню; хоткей продолжает работать. Разделители подтягиваются сами — пустых групп и двойных линий не остаётся. «Открыть» / «Файл» / «Создать» убирают подменю целиком.</value>
   </data>
   <data name="SettingsShowDebugMenu" xml:space="preserve">
     <value>Показывать меню «Отладка» в главном меню</value>
@@ -960,9 +915,6 @@
     <value>Диск</value>
   </data>
   <data name="MenuViewGallery" xml:space="preserve">
-    <value>Галерея</value>
-  </data>
-  <data name="MenuCmdViewGallery" xml:space="preserve">
     <value>Галерея</value>
   </data>
   <data name="MenuSortRating" xml:space="preserve">
@@ -1130,5 +1082,20 @@
   </data>
   <data name="SearchFieldFolder" xml:space="preserve">
     <value>Папка</value>
+  </data>
+  <data name="MenuAbout" xml:space="preserve">
+    <value>О Wander</value>
+  </data>
+  <data name="MenuProjectHome" xml:space="preserve">
+    <value>Проект на GitHub</value>
+  </data>
+  <data name="MenuProjectHomeHint" xml:space="preserve">
+    <value>Откроет страницу проекта в браузере</value>
+  </data>
+  <data name="MenuVersion" xml:space="preserve">
+    <value>Версия {0}</value>
+  </data>
+  <data name="MenuCmdNewSubmenu" xml:space="preserve">
+    <value>Создать</value>
   </data>
 </root>

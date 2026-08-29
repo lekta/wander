@@ -13,6 +13,14 @@ namespace Wander.Core.Menu;
 /// Third-party (shell-extension) entries are not in this enum; they carry
 /// <see cref="MenuEntry.ShellCommand"/> instead and are identified by their
 /// header text.
+///
+/// <para>
+/// View mode, sorting, refresh and undo are deliberately absent: they are
+/// window-wide state, they live in the toolbar's «Вид» menu and on hotkeys,
+/// and a right-click on a folder is not where you go looking for them.
+/// Names dropped from this enum are ignored on load rather than rejected —
+/// see <c>ContextMenuSettings.From</c>.
+/// </para>
 /// </summary>
 public enum MenuCommandId {
     None = 0,
@@ -20,8 +28,7 @@ public enum MenuCommandId {
     // --- Submenu headers ------------------------------------------------
     OpenSubmenu,
     FileSubmenu,
-    ViewSubmenu,
-    SortSubmenu,
+    NewSubmenu,
 
     // --- Open group -----------------------------------------------------
     Open,
@@ -41,24 +48,9 @@ public enum MenuCommandId {
     Delete,
     NewFolder,
 
-    // --- View / sort ----------------------------------------------------
-    ViewDetails,
-    ViewTiles,
-    ViewLargeIcons,
-    ViewGallery,
-    TogglePreview,
-    SortByName,
-    SortByDate,
-    SortBySize,
-    SortByType,
-    SortAscending,
-    SortFoldersFirst,
-
     // --- Recycle bin ----------------------------------------------------
     RestoreFromRecycleBin,
 
     // --- Misc -----------------------------------------------------------
-    Refresh,
-    Undo,
     Properties,
 }
