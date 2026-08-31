@@ -6,9 +6,9 @@
     <Product>Wander</Product>
     <Copyright>© Lekta 2026</Copyright>
     <NeutralLanguage>en</NeutralLanguage>
-    <Version>0.2.1</Version>
-    <InformationalVersion>0.2.1-beta</InformationalVersion>
-    <FileVersion>0.2.1.0</FileVersion>
+    <Version>0.3.0</Version>
+    <InformationalVersion>0.3.0-beta</InformationalVersion>
+    <FileVersion>0.3.0.0</FileVersion>
     <!-- AssemblyVersion намеренно зафиксирован: это binding-идентичность сборки,
          по релизам двигаем Version / FileVersion / InformationalVersion. -->
     <AssemblyVersion>0.0.0.0</AssemblyVersion>
