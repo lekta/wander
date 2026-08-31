@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Media.Media3D;
 using Markdig;
 using Wander.App.Resources;
 using Wander.App.Util;
@@ -31,6 +32,13 @@ namespace Wander.App.ViewModels;
 /// content load, the summary, or both.
 /// </para>
 /// </summary>
+/// <summary>
+/// One drawable of a model: the triangles of a single material, and the
+/// colour they are painted in front and behind.
+/// </summary>
+public sealed record ModelPart(MeshGeometry3D Geometry, Brush Front, Brush Back);
+
+
 public sealed class PreviewController : ObservableObject {
     // What counts as a picture is Core's table (ImageFormats): the gallery
     // decides whether a folder is a folder of photographs from it, and two
@@ -61,6 +69,10 @@ public sealed class PreviewController : ObservableObject {
         ".txt", ".log", ".csv", ".tsv",
         ".ini", ".cfg", ".conf", ".toml", ".env", ".gitignore", ".gitattributes",
         ".editorconfig",
+        // A .mtl is not a model, it is the short text file that names a
+        // model's materials and their texture maps — and reading it is
+        // usually the reason anyone opens one.
+        ".mtl",
     };
 
     private static readonly HashSet<string> _codeExtensions = new(StringComparer.OrdinalIgnoreCase) {
@@ -100,6 +112,15 @@ public sealed class PreviewController : ObservableObject {
         ".pdf", ".html", ".htm", ".mht", ".mhtml",
     };
 
+    /// <summary>
+    /// Width a cover is decoded at. Twice what the card draws, so it stays
+    /// sharp on a 200 % display without decoding a sleeve scan in full.
+    /// </summary>
+    private const int CoverDecodeWidth = 520;
+
+    /// <summary>What a model with no stated colour is drawn in.</summary>
+    private const float ModelGrey = 0.76f;
+
     private const long PreviewMaxFileSize = 1_048_576;     // 1 MB
     private const int PreviewMaxChars = 200_000;
 
@@ -136,7 +157,13 @@ public sealed class PreviewController : ObservableObject {
     private Uri? _webUri;
     private string? _webHtml;
     private Uri? _gifUri;
-    private Uri? _videoUri;
+    private Uri? _mediaUri;
+    private AudioTrackInfo? _audio;
+    private IReadOnlyList<ModelPart> _modelParts = Array.Empty<ModelPart>();
+    private Point3D _modelCenter;
+    private double _modelRadius = 1;
+    private string _modelDetail = "";
+    private ImageSource? _audioCover;
     private string? _documentPath;
     private ImageMetadata? _imageMetadata;
     private string _summary = "";
@@ -269,9 +296,139 @@ public sealed class PreviewController : ObservableObject {
         private set => SetField(ref _gifUri, value);
     }
 
-    public Uri? VideoUri {
-        get => _videoUri;
-        private set => SetField(ref _videoUri, value);
+    /// <summary>
+    /// What the transport plays. One property for video and for audio,
+    /// because it is one <c>MediaElement</c> and one set of play / pause /
+    /// seek controls underneath both — an audio file is a video with
+    /// nothing to draw, and giving it a transport of its own would have
+    /// been a second copy of the same state machine.
+    /// </summary>
+    public Uri? MediaUri {
+        get => _mediaUri;
+        private set => SetField(ref _mediaUri, value);
+    }
+
+    /// <summary>
+    /// What the file's tags say about the track. Null for everything that
+    /// is not music, so the whole card binds its visibility to this.
+    /// </summary>
+    public AudioTrackInfo? Audio {
+        get => _audio;
+        private set {
+            SetField(ref _audio, value);
+            Raise(nameof(HasAudioText));
+            Raise(nameof(AudioTitle));
+            Raise(nameof(AudioArtist));
+            Raise(nameof(AudioAlbum));
+            Raise(nameof(AudioDetail));
+            Raise(nameof(HasAudioArtist));
+            Raise(nameof(HasAudioAlbum));
+        }
+    }
+
+    /// <summary>The cover the file carries, decoded. Null when it carries none.</summary>
+    public ImageSource? AudioCover {
+        get => _audioCover;
+        private set {
+            SetField(ref _audioCover, value);
+            Raise(nameof(HasAudioCover));
+        }
+    }
+
+    public bool HasAudioCover => _audioCover is not null;
+
+    public bool HasAudioText => _audio is not null;
+
+    /// <summary>
+    /// The title, falling back to the file name. A track whose tags were
+    /// never filled in is still a track, and an empty headline over a
+    /// transport says less than the name the user is looking at in the
+    /// list.
+    /// </summary>
+    public string AudioTitle =>
+        _audio?.Title ?? (_primary is null ? "" : Path.GetFileNameWithoutExtension(_primary.Name));
+
+    public string AudioArtist => _audio?.Artist ?? "";
+
+    public bool HasAudioArtist => !string.IsNullOrEmpty(_audio?.Artist);
+
+    /// <summary>Album and year on one line — they are one fact about the release.</summary>
+    public string AudioAlbum {
+        get {
+            if (_audio is null) {
+                return "";
+            }
+
+            return _audio.Year is null
+                ? _audio.Album ?? ""
+                : _audio.Album is null ? _audio.Year : $"{_audio.Album} · {_audio.Year}";
+        }
+    }
+
+    public bool HasAudioAlbum => AudioAlbum.Length > 0;
+
+    /// <summary>
+    /// The technical line under the name: bitrate, sampling rate, channels.
+    /// Whatever of it the container actually stated — a missing figure is
+    /// left out rather than printed as a zero.
+    /// </summary>
+    public string AudioDetail {
+        get {
+            if (_audio is null) {
+                return "";
+            }
+
+            var parts = new List<string>();
+            if (_audio.BitrateKbps is { } kbps and > 0) {
+                parts.Add(string.Format(Strings.PreviewAudioBitrate, kbps));
+            }
+            if (_audio.SampleRate is { } rate and > 0) {
+                parts.Add(string.Format(Strings.PreviewAudioSampleRate, rate / 1000.0));
+            }
+            if (_audio.Channels is { } channels and > 0) {
+                parts.Add(channels == 1 ? Strings.PreviewAudioMono : Strings.PreviewAudioStereo);
+            }
+
+            return string.Join(" · ", parts);
+        }
+    }
+
+
+    /// <summary>
+    /// The model, ready for a <c>Viewport3D</c>: one drawable per material.
+    /// Everything in it is frozen, because it is built on a worker thread
+    /// and a live WPF object cannot cross to the dispatcher.
+    /// </summary>
+    public IReadOnlyList<ModelPart> ModelParts {
+        get => _modelParts;
+        private set {
+            SetField(ref _modelParts, value);
+            Raise(nameof(HasModel));
+        }
+    }
+
+    public bool HasModel => _modelParts.Count > 0;
+
+    /// <summary>Middle of the model's bounding box — what the camera looks at.</summary>
+    public Point3D ModelCenter {
+        get => _modelCenter;
+        private set => SetField(ref _modelCenter, value);
+    }
+
+    /// <summary>
+    /// Half the model's longest side. The camera distance and the lights
+    /// are both scaled by it, so a model in millimetres and the same model
+    /// in metres frame identically.
+    /// </summary>
+    public double ModelRadius {
+        get => _modelRadius;
+        private set => SetField(ref _modelRadius, value);
+    }
+
+    /// <summary>Triangle and vertex counts, for the footer under the viewport.</summary>
+    public string ModelDetail {
+        get => _modelDetail;
+        private set => SetField(ref _modelDetail, value);
     }
 
     /// <summary>
@@ -686,6 +843,18 @@ public sealed class PreviewController : ObservableObject {
             return;
         }
 
+        if (AudioTags.Extensions.Contains(ext)) {
+            await LoadAudioAsync(path, ct);
+
+            return;
+        }
+
+        if (MeshFile.Extensions.Contains(ext)) {
+            await LoadModelAsync(path, ct);
+
+            return;
+        }
+
         if (ImageFormats.All.Contains(ext)) {
             await LoadImageAsync(path, ct);
 
@@ -797,8 +966,176 @@ public sealed class PreviewController : ObservableObject {
         // MediaElement does its own threaded decode; we just hand it the URI.
         // No metadata extraction (MetadataExtractor's container support varies
         // by format; not worth the bytes here for v1).
-        VideoUri = new Uri(path);
+        //
+        // Kind first, then the URI. The view picks which player to hand the
+        // file to from the kind, so setting the URI while the kind still
+        // says "folder" hands a track to the video element — which opens
+        // it, reports its length and then never plays it.
         Kind = PreviewKind.Video;
+        MediaUri = new Uri(path);
+    }
+
+    /// <summary>
+    /// A music file: the same transport the video preview uses, plus what
+    /// the container says about the track.
+    ///
+    /// <para>
+    /// The playback itself needs nothing but the URI — Media Foundation
+    /// reads both MP3 and FLAC on Windows 10 and later. The tags are ours
+    /// to read (see <see cref="AudioTags"/>), which is why this one is
+    /// async where <see cref="LoadVideo"/> is not: a cover can be a
+    /// megabyte of JPEG, and that is a decode, on a file that may be on a
+    /// network share.
+    /// </para>
+    /// </summary>
+    private async Task LoadAudioAsync(string path, CancellationToken ct) {
+        // Kind before the URI — see LoadVideo for why the order matters.
+        Kind = PreviewKind.Audio;
+        MediaUri = new Uri(path);
+
+        AudioTrackInfo? info = null;
+        BitmapImage? cover = null;
+
+        await Task.Run(() => {
+            ct.ThrowIfCancellationRequested();
+            info = AudioTags.Read(path);
+
+            if (info?.Cover is { Length: > 0 } bytes) {
+                cover = DecodeStream(bytes);
+            } else if (AudioTags.CoverBeside(path) is { } beside) {
+                // A sleeve scan next to the tracks is regularly several
+                // megabytes, and it is about to be drawn at 260 px — so it
+                // is decoded at that size rather than in full and thrown
+                // away.
+                cover = DecodeFile(beside, CoverDecodeWidth);
+            }
+        }, ct);
+
+        if (ct.IsCancellationRequested) {
+            return;
+        }
+
+        Audio = info;
+        AudioCover = cover;
+    }
+
+
+    /// <summary>
+    /// A 3D model. Parsed in Core (see <see cref="MeshFile"/>) and turned
+    /// into WPF geometry here, on the worker thread, because building a
+    /// mesh of a million triangles on the dispatcher is a frozen window.
+    ///
+    /// <para>
+    /// No normals are supplied: WPF computes per-face ones for a mesh that
+    /// has none, which is exactly the faceted shading a preview of an
+    /// untextured solid wants, and it halves what the readers have to get
+    /// right.
+    /// </para>
+    /// </summary>
+    private async Task LoadModelAsync(string path, CancellationToken ct) {
+        IReadOnlyList<ModelPart> parts = Array.Empty<ModelPart>();
+        MeshBounds? bounds = null;
+        int triangles = 0, vertices = 0;
+
+        await Task.Run(() => {
+            ct.ThrowIfCancellationRequested();
+            var mesh = MeshFile.Read(path);
+            if (mesh is null) {
+                return;
+            }
+
+            ct.ThrowIfCancellationRequested();
+            var points = new Point3DCollection(mesh.VertexCount);
+            for (int i = 0; i + 2 < mesh.Positions.Length; i += 3) {
+                points.Add(new Point3D(mesh.Positions[i], mesh.Positions[i + 1], mesh.Positions[i + 2]));
+            }
+            // Frozen once and shared by every part: the parts differ in
+            // which triangles they draw, not in where the points are, and
+            // a copy per material would multiply a large model's memory by
+            // however many materials it happens to have.
+            points.Freeze();
+
+            var built = new List<ModelPart>(mesh.Parts.Count);
+            foreach (var part in mesh.Parts) {
+                ct.ThrowIfCancellationRequested();
+
+                var geometry = new MeshGeometry3D {
+                    Positions = points,
+                    TriangleIndices = new Int32Collection(part.Indices),
+                };
+                geometry.Freeze();
+                built.Add(new ModelPart(geometry, Paint(part.Color), Paint(part.Color, back: true)));
+            }
+
+            parts = built;
+            bounds = mesh.Bounds();
+            triangles = mesh.TriangleCount;
+            vertices = mesh.VertexCount;
+        }, ct);
+
+        if (ct.IsCancellationRequested) {
+            return;
+        }
+        if (parts.Count == 0 || bounds is not { } box) {
+            Kind = PreviewKind.Unsupported;
+
+            return;
+        }
+
+        ModelCenter = new Point3D(box.CenterX, box.CenterY, box.CenterZ);
+
+        // The bounding *sphere*, not half the longest side. The model spins
+        // under the mouse, and a box's diagonal is what swings into frame
+        // when it turns — framing against the side instead lets a cube grow
+        // past the edges of the pane as soon as it is rotated off-axis.
+        // The floor keeps a degenerate model (one flat face) from putting
+        // the camera inside itself.
+        ModelRadius = Math.Max(
+            Math.Sqrt(
+                (box.SizeX * (double)box.SizeX)
+                + (box.SizeY * (double)box.SizeY)
+                + (box.SizeZ * (double)box.SizeZ)) / 2.0,
+            0.0001);
+        ModelDetail = string.Format(Strings.PreviewModelDetail, triangles, vertices);
+        ModelParts = parts;
+        Kind = PreviewKind.Model;
+    }
+
+
+    /// <summary>
+    /// The brush for one part.
+    ///
+    /// <para>
+    /// Colours come from the file where it states one — <c>Kd</c> in an
+    /// OBJ's material library, <c>baseColorFactor</c> in a glTF — and a
+    /// model that states none stays the neutral grey it always was.
+    /// Textures are still not read; this is the part of a material that
+    /// costs nothing and takes a model from uniformly grey to
+    /// recognisable, and the rest is a scope of its own (see BACKLOG.md).
+    /// </para>
+    ///
+    /// <para>
+    /// <paramref name="back"/> darkens it for the reverse of a face.
+    /// Meshes with inconsistent winding are routine in exported OBJ and
+    /// STL, and without a back material those faces are simply missing;
+    /// with a darker one they read as the inside of a solid.
+    /// </para>
+    /// </summary>
+    private static Brush Paint(MeshColor? colour, bool back = false) {
+        const double BackFactor = 0.72;
+
+        var (r, g, b) = colour is { } c
+            ? (c.R, c.G, c.B)
+            : (ModelGrey, ModelGrey, ModelGrey);
+
+        double shade = back ? BackFactor : 1.0;
+        var brush = new SolidColorBrush(Color.FromRgb(
+            (byte)Math.Round(r * 255 * shade),
+            (byte)Math.Round(g * 255 * shade),
+            (byte)Math.Round(b * 255 * shade)));
+        brush.Freeze();
+
+        return brush;
     }
 
     private async Task LoadImageAsync(string path, CancellationToken ct) {
@@ -915,6 +1252,20 @@ public sealed class PreviewController : ObservableObject {
     }
 
     /// <summary>
+    /// Same, but decoded down to <paramref name="width"/> pixels. A JPEG
+    /// decoder asked for a smaller result does less work rather than the
+    /// same work followed by a resize, which is the difference between
+    /// reading a cover and reading a photograph.
+    /// </summary>
+    private static BitmapImage? DecodeFile(string path, int width) {
+        return Decode(bi => {
+            bi.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
+            bi.DecodePixelWidth = width;
+            bi.UriSource = new Uri(path);
+        });
+    }
+
+    /// <summary>
     /// Decodes bytes already in memory — the preview pulled out of a RAW
     /// container.
     ///
@@ -956,30 +1307,46 @@ public sealed class PreviewController : ObservableObject {
     }
 
     /// <summary>
-    /// The file's own size, not the selected row's: when the selection is a
-    /// shortcut, the row is a two-kilobyte <c>.lnk</c> and the thing about
-    /// to be read is whatever it points at.
-    /// </summary>
-    private static bool TooBigForText(string path) {
-        try {
-            return new FileInfo(path).Length > PreviewMaxFileSize;
-        } catch {
-            // Gone, or unreadable — the read below will say so properly.
-            return false;
-        }
-    }
-
-    /// <summary>
     /// Reads a text file, working out its encoding rather than assuming
     /// UTF-8. Assuming turns every byte of a codepaged file into
     /// <c>U+FFFD</c>, and a folder of old notes reads as a wall of black
     /// diamonds — see <see cref="EncodingProbe"/>.
+    ///
+    /// <para>
+    /// A file past <see cref="PreviewMaxFileSize"/> is read up to that
+    /// budget and reported as clipped, rather than refused. Refusing was
+    /// the old behaviour and it was the wrong answer to the question the
+    /// pane exists to answer: a two-megabyte log is still a log, and its
+    /// first megabyte says what it is. <c>Clipped</c> is what the caller
+    /// turns into the note at the bottom, so the reader is never left
+    /// thinking they have seen the end of the file.
+    /// </para>
     /// </summary>
-    private static async Task<string?> ReadTextAsync(string path, CancellationToken ct) {
+    private static async Task<(string Text, bool Clipped, long Size)?> ReadTextAsync(
+        string path, CancellationToken ct) {
         try {
-            byte[] bytes = await File.ReadAllBytesAsync(path, ct);
+            await using var file = new FileStream(
+                path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite,
+                bufferSize: 64 * 1024, useAsync: true);
 
-            return EncodingProbe.Decode(bytes);
+            long size = file.Length;
+            int budget = (int)Math.Min(size, PreviewMaxFileSize);
+            byte[] bytes = new byte[budget];
+            await file.ReadExactlyAsync(bytes, ct);
+
+            string text = EncodingProbe.Decode(bytes);
+            bool clipped = size > budget;
+            if (clipped) {
+                // The cut lands wherever the budget ran out, which for
+                // anything but ASCII is regularly the middle of a
+                // character. The decoder turns that stump into U+FFFD;
+                // dropping the tail is nicer than ending the preview on a
+                // black diamond that is an artefact of where we stopped
+                // reading, not of the file.
+                text = text.TrimEnd('�');
+            }
+
+            return (text, clipped, size);
         } catch (OperationCanceledException) {
             throw;
         } catch {
@@ -987,19 +1354,25 @@ public sealed class PreviewController : ObservableObject {
         }
     }
 
-    private async Task LoadTextAsync(string path, CancellationToken ct) {
-        if (TooBigForText(path)) {
-            Kind = PreviewKind.Unsupported;
-            return;
-        }
+    /// <summary>
+    /// The line that closes a preview which does not reach the end of the
+    /// file — either because the file is bigger than the read budget, or
+    /// because it holds more characters than the pane will render.
+    /// <paramref name="prefix"/> makes it a comment where the view expects
+    /// code.
+    /// </summary>
+    private static string ClippedNote(long size, string prefix = "") {
+        return "\n\n" + prefix + string.Format(Strings.PreviewClipped, SizeFormatter.Format(size));
+    }
 
-        string? text;
+    private async Task LoadTextAsync(string path, CancellationToken ct) {
+        (string Text, bool Clipped, long Size)? read;
         try {
-            text = await ReadTextAsync(path, ct);
+            read = await ReadTextAsync(path, ct);
         } catch (OperationCanceledException) {
             return;
         }
-        if (text is null) {
+        if (read is not { } file) {
             Kind = PreviewKind.Unsupported;
             return;
         }
@@ -1008,26 +1381,24 @@ public sealed class PreviewController : ObservableObject {
             return;
         }
 
+        string text = file.Text;
+        bool clipped = file.Clipped;
         if (text.Length > PreviewMaxChars) {
-            text = text.Substring(0, PreviewMaxChars) + "\n\n… (truncated)";
+            text = text.Substring(0, PreviewMaxChars);
+            clipped = true;
         }
-        Text = text;
+        Text = clipped ? text + ClippedNote(file.Size) : text;
         Kind = PreviewKind.Text;
     }
 
     private async Task LoadCodeAsync(string path, string ext, CancellationToken ct) {
-        if (TooBigForText(path)) {
-            Kind = PreviewKind.Unsupported;
-            return;
-        }
-
-        string? text;
+        (string Text, bool Clipped, long Size)? read;
         try {
-            text = await ReadTextAsync(path, ct);
+            read = await ReadTextAsync(path, ct);
         } catch (OperationCanceledException) {
             return;
         }
-        if (text is null) {
+        if (read is not { } file) {
             Kind = PreviewKind.Unsupported;
             return;
         }
@@ -1036,30 +1407,35 @@ public sealed class PreviewController : ObservableObject {
             return;
         }
 
+        string text = file.Text;
+        bool clipped = file.Clipped;
         if (text.Length > PreviewMaxChars) {
-            text = text.Substring(0, PreviewMaxChars) + "\n\n// … (truncated)";
+            text = text.Substring(0, PreviewMaxChars);
+            clipped = true;
         }
-        CodeText = text;
+        CodeText = clipped ? text + ClippedNote(file.Size, "// ") : text;
         CodeExtension = ext;
         Kind = PreviewKind.Code;
     }
 
     private async Task LoadMarkdownAsync(string path, CancellationToken ct) {
-        if (TooBigForText(path)) {
+        (string Text, bool Clipped, long Size)? read;
+        try {
+            read = await ReadTextAsync(path, ct);
+        } catch (OperationCanceledException) {
+            return;
+        }
+        if (read is not { } file) {
             Kind = PreviewKind.Unsupported;
             return;
         }
 
-        string? md;
-        try {
-            md = await ReadTextAsync(path, ct);
-        } catch (OperationCanceledException) {
-            return;
-        }
-        if (md is null) {
-            Kind = PreviewKind.Unsupported;
-            return;
-        }
+        // Rendered, so the note has to be Markdown too — a rule and an
+        // emphasised line, which is what "the file goes on past here" looks
+        // like in a rendered document.
+        string md = file.Clipped
+            ? file.Text + "\n\n---\n\n*" + string.Format(Strings.PreviewClipped, SizeFormatter.Format(file.Size)) + "*"
+            : file.Text;
 
         if (ct.IsCancellationRequested) {
             return;
@@ -1198,7 +1574,11 @@ public sealed class PreviewController : ObservableObject {
         WebUri = null;
         WebHtml = null;
         GifUri = null;
-        VideoUri = null;
+        MediaUri = null;
+        Audio = null;
+        AudioCover = null;
+        ModelParts = Array.Empty<ModelPart>();
+        ModelDetail = "";
         DocumentPath = null;
         ImageMetadata = null;
         IsRawImage = false;

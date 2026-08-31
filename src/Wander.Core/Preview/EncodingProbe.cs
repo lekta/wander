@@ -87,8 +87,22 @@ public static class EncodingProbe {
     /// invisible first character.
     /// </summary>
     public static string Decode(ReadOnlySpan<byte> bytes) {
-        var kind = Detect(bytes);
+        return Decode(bytes, Detect(bytes));
+    }
 
+
+    /// <summary>
+    /// Decodes with an encoding already decided elsewhere.
+    ///
+    /// <para>
+    /// For callers that hold several short strings which must share one
+    /// verdict. An ID3 tag is the case this exists for: its fields are a
+    /// few words each — too little text to guess a codepage from one at a
+    /// time — but they were all written by one tagger in one encoding, so
+    /// the guess is made once over all of them and applied here.
+    /// </para>
+    /// </summary>
+    public static string Decode(ReadOnlySpan<byte> bytes, TextEncodingKind kind) {
         return kind switch {
             TextEncodingKind.Utf8 => new UTF8Encoding(false).GetString(StripBom(bytes, kind)),
             TextEncodingKind.Utf16LittleEndian => Encoding.Unicode.GetString(StripBom(bytes, kind)),

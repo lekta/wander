@@ -398,6 +398,57 @@
 
 
         <!-- Debug -->
+        <!--
+            The keyboard reference. A read-only list, and it says so: five
+            groups in the order the guide uses them, gesture on the left,
+            what it does on the right.
+
+            Not a fixed-width column but a shared-size one, so the widest
+            gesture in a group sets the column and "Esc в поле фильтра"
+            does not wrap under "Ctrl + F".
+        -->
+        <DataTemplate DataType="{x:Type vm:HotkeysSettingsCategory}">
+            <StackPanel>
+                <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
+                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,0,0,12"
+                           Text="{x:Static res:Strings.SettingsHotkeysHint}"/>
+
+                <ItemsControl ItemsSource="{Binding Groups}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Margin="0,0,0,14">
+                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                <ItemsControl ItemsSource="{Binding Rows}"
+                                              Grid.IsSharedSizeScope="True">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,2,0,2">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" SharedSizeGroup="Gesture"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0"
+                                                        Background="#F0F0F0" BorderBrush="#DDD" BorderThickness="1"
+                                                        CornerRadius="3" Padding="6,1" Margin="0,0,10,0"
+                                                        VerticalAlignment="Top">
+                                                    <TextBlock Text="{Binding Gesture}"
+                                                               FontFamily="Consolas" FontSize="11"/>
+                                                </Border>
+                                                <TextBlock Grid.Column="1"
+                                                           Text="{Binding Description}"
+                                                           TextWrapping="Wrap"
+                                                           VerticalAlignment="Center"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </DataTemplate>
+
         <DataTemplate DataType="{x:Type vm:DebugSettingsCategory}">
             <StackPanel>
                 <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>

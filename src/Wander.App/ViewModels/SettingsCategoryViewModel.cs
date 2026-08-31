@@ -83,6 +83,19 @@ public sealed class ContextMenuSettingsCategory : SettingsCategoryViewModel {
 }
 
 
+/// <summary>
+/// The keyboard reference. Reads rather than edits — see
+/// <see cref="HotkeyCatalog"/> for why the two are different tasks.
+/// </summary>
+public sealed class HotkeysSettingsCategory : SettingsCategoryViewModel {
+    public HotkeysSettingsCategory(SettingsViewModel owner)
+        : base(Strings.SettingsCategoryHotkeys, owner) { }
+
+
+    public IReadOnlyList<HotkeyGroup> Groups => HotkeyCatalog.Groups;
+}
+
+
 public sealed class DebugSettingsCategory : SettingsCategoryViewModel {
     public DebugSettingsCategory(SettingsViewModel owner)
         : base(Strings.SettingsCategoryDebug, owner) { }

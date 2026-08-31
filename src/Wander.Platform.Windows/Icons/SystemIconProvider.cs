@@ -146,6 +146,7 @@ public sealed class SystemIconProvider : IIconProvider {
 
 
     public void ClearCache() {
+        AudioCover.Forget();
         lock (_lock) {
             _cache.Clear();
             _thumbnailOrder.Clear();
@@ -297,6 +298,13 @@ public sealed class SystemIconProvider : IIconProvider {
             return LoadShellIcon(path, IconSize.Normal);
         }
 
+        // Same RAW shortcut as the jumbo tier, for the same reason — the
+        // tile view of a folder of photographs is the other place where
+        // the shell's per-file cost is felt.
+        if (linkTarget is null && RawThumbnail.Render(path, MediumSize) is { } rawThumb) {
+            return rawThumb;
+        }
+
         using Bitmap? bmp = LoadShellBitmap(source, MediumSize);
         if (bmp is null) {
             return LoadShellIcon(path, IconSize.Normal);
@@ -375,13 +383,20 @@ public sealed class SystemIconProvider : IIconProvider {
     /// stands in for one.
     /// </summary>
     private static bool HasOwnCover(string path) {
-        return BookCover.Supports(path) || PdfPageImage.Supports(path);
+        return BookCover.Supports(path) || PdfPageImage.Supports(path) || AudioCover.Supports(path);
     }
 
     /// <summary>
-    /// A book's own cover, drawn as a plate on the tile, or null when the
-    /// file is not a book or carries no cover — the caller then falls back
-    /// to whatever the shell offers.
+    /// The file's own cover, drawn as a plate on the tile, or null when it
+    /// has none — the caller then falls back to whatever the shell offers.
+    ///
+    /// <para>
+    /// Three sources, one plate: a book carries a cover, a PDF's first page
+    /// stands in for one, and a track has the album art in its tag or in a
+    /// picture beside it. The shell answers for none of these the way we
+    /// want — it does not read FLAC art at all, and it never looks beside
+    /// the file.
+    /// </para>
     /// </summary>
     private static byte[]? TryRenderBookCover(string path, int side) {
         if (!HasOwnCover(path)) {
@@ -390,8 +405,8 @@ public sealed class SystemIconProvider : IIconProvider {
 
         byte[]? bytes;
         using (PerfLog.Measure("bg.book-cover")) {
-            bytes = PdfPageImage.Supports(path)
-                ? PdfPageImage.RenderFirstPage(path, side)
+            bytes = PdfPageImage.Supports(path) ? PdfPageImage.RenderFirstPage(path, side)
+                : AudioCover.Supports(path) ? AudioCover.Read(path)
                 : BookCover.TryRead(path);
         }
         if (bytes is null) {
@@ -647,7 +662,20 @@ public sealed class SystemIconProvider : IIconProvider {
 
         // A shortcut is drawn from its target's thumbnail when the target
         // has one; the arrow is composited below either way.
-        string source = LinkThumbnailTarget(path) ?? path;
+        string? linkTarget = LinkThumbnailTarget(path);
+        string source = linkTarget ?? path;
+
+        // RAW containers carry a display JPEG, and pulling it out beats
+        // asking the shell by more than an order of magnitude — see
+        // RawThumbnail. Only for the file itself: a .lnk pointing at a RAW
+        // still needs its arrow composited, and that happens below on a
+        // Bitmap this path never produces. Overlays on the RAW itself are
+        // not a case that occurs — the arrow is the only overlay Wander has
+        // ever seen — so returning here loses nothing.
+        if (linkTarget is null && RawThumbnail.Render(path, JumboSize) is { } rawThumb) {
+            return rawThumb;
+        }
+
         Bitmap? baseBmp = IsThumbnailable(source)
             ? LoadShellBitmap(source, JumboSize)
             : LoadIconBitmapJumbo(path);

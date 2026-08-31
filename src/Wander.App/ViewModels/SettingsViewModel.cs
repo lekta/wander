@@ -447,6 +447,7 @@ public sealed class SettingsViewModel : ObservableObject {
             new ThumbnailsSettingsCategory(this),
             new BookmarksSettingsCategory(this),
             new ContextMenuSettingsCategory(this),
+            new HotkeysSettingsCategory(this),
             new DebugSettingsCategory(this),
         };
         _selectedCategory = Categories[0];

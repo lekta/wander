@@ -37,6 +37,14 @@ public sealed class MainViewModel : ObservableObject {
     /// slow enough that unpacking an archive into it does not re-list a
     /// thousand times.
     /// </summary>
+    /// <summary>
+    /// How slow an arrival has to be before it is worth a line in the log.
+    /// A third of a second is where "it opened" turns into "it took a
+    /// moment" — below that there is nothing to investigate and a line per
+    /// folder would bury what matters.
+    /// </summary>
+    private const int SlowFolderMs = 300;
+
     private const int WatchIntervalMs = 500;
 
     /// <summary>
@@ -349,7 +357,9 @@ public sealed class MainViewModel : ObservableObject {
                 return;
             }
 
-            ReconcileEntries(() => SyncEntries(filtered));
+            using (PerfLog.Measure("ui.rows")) {
+                ReconcileEntries(() => SyncEntries(filtered));
+            }
             UpdateFilterStatus(filtered.Count, _search.Source.Count);
             ApplyRestoreSelection();
             ApplyPendingFolderSelection();
@@ -591,8 +601,33 @@ public sealed class MainViewModel : ObservableObject {
     /// </summary>
     public ViewMode ViewMode {
         get => _viewMode;
-        set => SetField(ref _viewMode, value);
+        set {
+            if (SetField(ref _viewMode, value)) {
+                Raise(nameof(ContentPalette));
+            }
+        }
     }
+
+    /// <summary>
+    /// The colours of the area the files are shown in — which is the
+    /// gallery's palette <em>only while the gallery is on screen</em>.
+    ///
+    /// <para>
+    /// The distinction matters because the surround is a gallery setting,
+    /// not an application theme: the table, the tiles and the icons are
+    /// drawn on the window's own background whatever it is set to. The
+    /// preview pane follows the area it sits next to, so it has to ask this
+    /// rather than ask the setting — asking the setting put a black pane
+    /// beside a white file list.
+    /// </para>
+    ///
+    /// <para>
+    /// The gallery itself still binds the setting directly: it is only ever
+    /// visible in the one mode where the two agree.
+    /// </para>
+    /// </summary>
+    public GalleryPalette ContentPalette =>
+        ViewMode == ViewMode.Gallery ? Settings.GalleryPalette : GalleryPalette.Plain;
 
     public bool IsPreviewVisible {
         get => _isPreviewVisible;
@@ -1388,22 +1423,37 @@ public sealed class MainViewModel : ObservableObject {
             _search.SetSource(Array.Empty<FileSystemEntry>());
         }
         string statusBeforeLoad = Status;
+        var started = System.Diagnostics.Stopwatch.StartNew();
 
         var work = Task.Run(() => {
             var items = new List<FileSystemEntry>();
             int hidden = 0;
-            foreach (var e in _fs.Enumerate(path, sort)) {
-                token.ThrowIfCancellationRequested();
-                if (!visibility.Allows(e)) {
-                    hidden++;
-                    continue;
+
+            // Timed separately from the fold below it: "the folder was slow
+            // to open" has two quite different answers — the disk was slow
+            // to list it, or we were slow to arrange what it listed — and a
+            // single figure cannot tell them apart.
+            using (PerfLog.Measure("bg.enumerate")) {
+                foreach (var e in _fs.Enumerate(path, sort)) {
+                    token.ThrowIfCancellationRequested();
+                    if (!visibility.Allows(e)) {
+                        hidden++;
+                        continue;
+                    }
+                    items.Add(e);
                 }
-                items.Add(e);
             }
+
             // Folding companions happens after the visibility filters, so a
             // sidecar next to a main file the user chose not to see stays
             // visible on its own rather than disappearing with it.
-            return (Items: integrate ? _companions.Collapse(items) : items, Hidden: hidden);
+            if (!integrate) {
+                return (Items: (IReadOnlyList<FileSystemEntry>)items, Hidden: hidden);
+            }
+
+            using (PerfLog.Measure("bg.companions")) {
+                return (Items: _companions.Collapse(items), Hidden: hidden);
+            }
         }, token);
 
         // The spinner is a dimming overlay — raising it for the two frames a
@@ -1423,6 +1473,15 @@ public sealed class MainViewModel : ObservableObject {
             _listedPath = path;
             if (arriving) {
                 AutoSelectViewMode(items, path);
+            }
+            // One line per slow arrival, with what it cost and how much
+            // there was — enough to tell "a folder of forty thousand files"
+            // from "a folder of forty that took two seconds", which is the
+            // difference between expected and a bug.
+            if (started.Elapsed.TotalMilliseconds >= SlowFolderMs) {
+                _log.Info(
+                    $"Folder listed in {started.ElapsedMilliseconds} ms: {items.Count} shown, " +
+                    $"{hidden} hidden — {path}");
             }
             // A file operation may have reported its outcome ("Copied 3
             // items") while we were enumerating; the listing's own
@@ -1688,6 +1747,7 @@ public sealed class MainViewModel : ObservableObject {
         IReadOnlyList<FileSystemEntry> rated;
         try {
             rated = await Task.Run(() => {
+                using var pass = PerfLog.Measure("bg.ratings");
                 var withRatings = _companionMetadata!.WithRatings(items, token);
 
                 // Sorting by rating is the one key a directory scan cannot
@@ -2672,10 +2732,17 @@ public sealed class MainViewModel : ObservableObject {
         // already come through here and saved. Falling through would just
         // save the same state a second time on every keystroke in the
         // settings dialog.
+        if (e.PropertyName == nameof(SettingsViewModel.GalleryPalette)) {
+            // Cosmetic like the metrics below, but the pane derives its own
+            // colours from it, so the derived property has to be told.
+            Raise(nameof(ContentPalette));
+
+            return;
+        }
+
         if (e.PropertyName == nameof(SettingsViewModel.IconsMetrics) ||
             e.PropertyName == nameof(SettingsViewModel.TilesMetrics) ||
             e.PropertyName == nameof(SettingsViewModel.GalleryMetrics) ||
-            e.PropertyName == nameof(SettingsViewModel.GalleryPalette) ||
             e.PropertyName == nameof(SettingsViewModel.GalleryLightSwatch) ||
             e.PropertyName == nameof(SettingsViewModel.GalleryGreySwatch) ||
             e.PropertyName == nameof(SettingsViewModel.GalleryDarkSwatch) ||

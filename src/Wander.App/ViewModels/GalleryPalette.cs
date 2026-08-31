@@ -52,9 +52,17 @@ public sealed class GalleryPalette {
 
         Background = Frozen(surface);
 
+        // Both text tones are measured against the surface rather than
+        // picked from a pair of constants. The constants worked at the ends
+        // of the range and failed in the middle: on the mid grey — the
+        // default, and the one photographers actually use — #AAA measured
+        // 2.2:1, which is not dim text, it is absent text. A mid tone is
+        // the hard case for exactly this reason, and it is the one a fixed
+        // pair cannot cover.
         bool onDark = Luminance(surface) < 0.55;
-        Foreground = Frozen(onDark ? Grey(0xEE) : Grey(0x11));
-        Dim = Frozen(onDark ? Grey(0xAA) : Grey(0x77));
+        Color ink = onDark ? Grey(0xFF) : Grey(0x00);
+        Foreground = Frozen(Quietest(ink, surface, PrimaryContrast));
+        Dim = Frozen(Quietest(ink, surface, SecondaryContrast));
 
         if (!onDark) {
             Hover = Frozen(_explorerHover);
@@ -79,6 +87,15 @@ public sealed class GalleryPalette {
         SelectedInactive = Frozen(Lift(surface, 22));
         SelectedInactiveBorder = Frozen(Lift(surface, 38));
     }
+
+
+    /// <summary>
+    /// The untinted palette: the window's own background and text on it.
+    /// What every view except the gallery is drawn on, and therefore what
+    /// the preview pane follows outside the gallery — see
+    /// <c>MainViewModel.ContentPalette</c>.
+    /// </summary>
+    public static GalleryPalette Plain { get; } = new(GalleryBackground.Light, 0, 0);
 
 
     /// <summary>
@@ -114,6 +131,66 @@ public sealed class GalleryPalette {
     public Brush SelectedInactive { get; }
 
     public Brush SelectedInactiveBorder { get; }
+
+
+    /// <summary>
+    /// Contrast the caption tone has to clear. 4.5:1 is the usual floor for
+    /// text this size.
+    /// </summary>
+    private const double PrimaryContrast = 4.5;
+
+    /// <summary>
+    /// …and for the quieter tone. Lower on purpose: it is meant to recede,
+    /// and holding it to the same figure as the caption makes the two the
+    /// same colour on a mid-toned surface, which loses the distinction the
+    /// second tone exists for.
+    /// </summary>
+    private const double SecondaryContrast = 3.4;
+
+
+    /// <summary>
+    /// The most restrained tone between <paramref name="ink"/> and the
+    /// surface that still reads at <paramref name="target"/>. Steps toward
+    /// the surface as far as it can and stops; on a surface where even
+    /// undiluted ink cannot reach the target, it returns the ink, which is
+    /// the best available.
+    /// </summary>
+    private static Color Quietest(Color ink, Color surface, double target) {
+        for (int percent = 60; percent > 0; percent -= 4) {
+            var candidate = Mix(ink, surface, percent / 100.0);
+            if (Contrast(candidate, surface) >= target) {
+                return candidate;
+            }
+        }
+
+        return ink;
+    }
+
+    /// <summary><paramref name="amount"/> of the way from <paramref name="to"/> to <paramref name="from"/>.</summary>
+    private static Color Mix(Color from, Color to, double amount) {
+        return Color.FromRgb(
+            (byte)Math.Round((to.R * amount) + (from.R * (1 - amount))),
+            (byte)Math.Round((to.G * amount) + (from.G * (1 - amount))),
+            (byte)Math.Round((to.B * amount) + (from.B * (1 - amount))));
+    }
+
+    /// <summary>WCAG contrast ratio, 1:1 to 21:1.</summary>
+    private static double Contrast(Color a, Color b) {
+        double la = RelativeLuminance(a);
+        double lb = RelativeLuminance(b);
+
+        return (Math.Max(la, lb) + 0.05) / (Math.Min(la, lb) + 0.05);
+    }
+
+    private static double RelativeLuminance(Color c) {
+        return (0.2126 * Linear(c.R)) + (0.7152 * Linear(c.G)) + (0.0722 * Linear(c.B));
+    }
+
+    private static double Linear(byte value) {
+        double v = value / 255.0;
+
+        return v <= 0.03928 ? v / 12.92 : Math.Pow((v + 0.055) / 1.055, 2.4);
+    }
 
 
     private static Color Grey(int level) {

@@ -27,6 +27,36 @@
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
 
         <!--
+            Text drawn on the content surround, which is the gallery's
+            background rather than a colour of our own. Two weights, both
+            out of GalleryPalette: the caption colour and the quieter one.
+
+            These exist because the surround stopped being an
+            image-only affair. The folder census and the "nothing selected"
+            line sit on it now, and near-black text on the dark surround is
+            not text — the palette already computes a legible pair for
+            whichever background is chosen, so the pane uses it instead of
+            re-deciding.
+        -->
+        <!--
+            `DataContext.` is not decoration. A RelativeSource binding
+            resolves its path against the *element* it found, so without it
+            the path is looked up on the UserControl itself, which has no
+            such property — the binding then quietly yields nothing and the
+            text keeps its inherited black. Which is invisible on the very
+            background these styles exist for.
+        -->
+        <Style x:Key="PaneText" TargetType="TextBlock">
+            <Setter Property="Foreground"
+                    Value="{Binding DataContext.ContentPalette.Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+        </Style>
+
+        <Style x:Key="PaneDim" TargetType="TextBlock">
+            <Setter Property="Foreground"
+                    Value="{Binding DataContext.ContentPalette.Dim, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+        </Style>
+
+        <!--
             One star of the .pp3 rating widget. Five copies of this in the
             footer, each with its own CommandParameter; clicking the star
             that already marks the rating clears it.
@@ -105,16 +135,25 @@
                 <!-- Content area -->
                 <Grid Grid.Row="0">
                     <!--
-                        The picture surround, same palette as the gallery's.
+                        The content surround, same palette as the gallery's.
                         A photograph judged against a grey wall and then
                         opened on a white pane is two different photographs
-                        to the eye, so the two surfaces have to agree — and
-                        the surround is only drawn where there is a
-                        photograph in it: text, code and documents bring
-                        their own background and would look broken on this
-                        one.
+                        to the eye, so the two surfaces have to agree.
+
+                        It is drawn for everything the pane renders itself:
+                        pictures, the folder census, and the empty state.
+                        Those last two were the odd ones out — walking off a
+                        photograph onto a folder used to blink the pane from
+                        the chosen surround to a hard-coded near-white and
+                        back, which is the one thing a surround chosen to
+                        stay out of the way must not do.
+
+                        Text, code and documents keep their own background:
+                        they are pages, they come with one, and a page on a
+                        dark surround is a light rectangle with a border,
+                        not a dark page.
                     -->
-                    <Border Background="{Binding Settings.GalleryPalette.Background}">
+                    <Border Background="{Binding ContentPalette.Background}">
                         <Border.Style>
                             <Style TargetType="Border">
                                 <Setter Property="Visibility" Value="Collapsed"/>
@@ -123,6 +162,18 @@
                                         <Setter Property="Visibility" Value="Visible"/>
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding Preview.Kind}" Value="Gif">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Preview.Kind}" Value="Audio">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Preview.Kind}" Value="Folder">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Preview.Kind}" Value="None">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Preview.Kind}" Value="Unsupported">
                                         <Setter Property="Visibility" Value="Visible"/>
                                     </DataTrigger>
                                 </Style.Triggers>
@@ -155,7 +206,7 @@
                                SizeChanged="ImgFit_SizeChanged"/>
                         <!-- Zoom view: visible only while the user holds RMB. -->
                         <Canvas x:Name="ImgZoomCanvas"
-                                Background="{Binding Settings.GalleryPalette.Background}"
+                                Background="{Binding ContentPalette.Background}"
                                 Visibility="Collapsed"
                                 IsHitTestVisible="False">
                             <Image x:Name="ImgZoom"
@@ -173,15 +224,56 @@
                                        Margin="8,12,8,8"
                                        VerticalAlignment="Top" HorizontalAlignment="Center"/>
 
-                    <!-- Video: MediaElement + simple transport (Play/Pause + seek slider). -->
-                    <Grid Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Video}">
+                    <!--
+                        Video and audio: one MediaElement, one transport.
+
+                        Music is a video with nothing to draw — Media
+                        Foundation reads MP3 and FLAC on Windows 10 and
+                        later without anything installed — so the play
+                        button, the clock and the seek bar are the ones
+                        already debugged for video rather than a second
+                        copy of the same little state machine. What differs
+                        is only what fills the space above them: the
+                        picture for a clip, the track's own card for a
+                        song.
+                    -->
+                    <Grid>
+                        <Grid.Style>
+                            <Style TargetType="Grid">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Preview.Kind}" Value="Video">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Preview.Kind}" Value="Audio">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Grid.Style>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="*"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
+                        <!--
+                            Video only. Audio is played by a MediaPlayer in
+                            the code-behind instead, because a MediaElement
+                            that is not drawn does not play: with nothing to
+                            render it measures to nothing, and a
+                            MediaElement with no rendered area opens the
+                            file, reports its duration, accepts Play() — and
+                            leaves Position at zero for ever. Measured: the
+                            same file in an element sized 200x120 plays, at
+                            1x1 it is silent.
+
+                            Source is assigned in code rather than bound,
+                            so that an audio file does not get opened twice
+                            (once here and once by the player that will
+                            actually play it).
+                        -->
                         <MediaElement x:Name="VideoPreview"
                                       Grid.Row="0"
-                                      Source="{Binding Preview.VideoUri}"
+                                      Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Video}"
                                       LoadedBehavior="Manual"
                                       UnloadedBehavior="Stop"
                                       ScrubbingEnabled="True"
@@ -191,6 +283,52 @@
                                       MediaOpened="VideoPreview_MediaOpened"
                                       MediaEnded="VideoPreview_MediaEnded"
                                       MediaFailed="VideoPreview_MediaFailed"/>
+
+                        <!--
+                            The track's card. The cover gets the room it can
+                            have and no more: a sleeve is square, a pane is
+                            not, and a 1500-px scan blown up to fill the
+                            height would push the name off the bottom.
+                        -->
+                        <StackPanel Grid.Row="0"
+                                    Margin="16,20,16,8"
+                                    VerticalAlignment="Top" HorizontalAlignment="Center"
+                                    Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Audio}">
+                            <Border MaxWidth="260" MaxHeight="260"
+                                    HorizontalAlignment="Center"
+                                    BorderBrush="{Binding ContentPalette.Dim}" BorderThickness="1"
+                                    Visibility="{Binding Preview.HasAudioCover, Converter={StaticResource BoolToVisibility}}">
+                                <Image Source="{Binding Preview.AudioCover}"
+                                       Stretch="Uniform" StretchDirection="DownOnly"
+                                       RenderOptions.BitmapScalingMode="HighQuality"/>
+                            </Border>
+
+                            <TextBlock Text="{Binding Preview.AudioTitle}"
+                                       Style="{StaticResource PaneText}"
+                                       Margin="0,12,0,0"
+                                       FontSize="15" FontWeight="SemiBold"
+                                       TextAlignment="Center" TextWrapping="Wrap"
+                                       MaxWidth="320"/>
+                            <TextBlock Text="{Binding Preview.AudioArtist}"
+                                       Style="{StaticResource PaneText}"
+                                       Margin="0,3,0,0"
+                                       FontSize="12"
+                                       TextAlignment="Center" TextWrapping="Wrap"
+                                       MaxWidth="320"
+                                       Visibility="{Binding Preview.HasAudioArtist, Converter={StaticResource BoolToVisibility}}"/>
+                            <TextBlock Text="{Binding Preview.AudioAlbum}"
+                                       Style="{StaticResource PaneDim}"
+                                       Margin="0,2,0,0"
+                                       FontSize="11"
+                                       TextAlignment="Center" TextWrapping="Wrap"
+                                       MaxWidth="320"
+                                       Visibility="{Binding Preview.HasAudioAlbum, Converter={StaticResource BoolToVisibility}}"/>
+                            <TextBlock Text="{Binding Preview.AudioDetail}"
+                                       Style="{StaticResource PaneDim}"
+                                       Margin="0,8,0,0"
+                                       FontSize="11"
+                                       TextAlignment="Center"/>
+                        </StackPanel>
                         <Grid Grid.Row="1" Margin="8,4,8,8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
@@ -202,7 +340,16 @@
                                     Grid.Column="0"
                                     Click="VideoPlayPause_Click"
                                     ToolTip="{x:Static res:Strings.PreviewPlayPause}"/>
+                            <!--
+                                Palette-coloured because for a track the
+                                transport stands on the surround, and on the
+                                dark one a default-black clock is a clock
+                                nobody can read. For a clip the surround is
+                                not drawn and the palette is the plain one,
+                                so this is the same near-black it was.
+                            -->
                             <TextBlock x:Name="VideoTimeText"
+                                       Style="{StaticResource PaneText}"
                                        Grid.Column="1"
                                        VerticalAlignment="Center"
                                        Margin="8,0"
@@ -218,6 +365,90 @@
                                     PreviewMouseLeftButtonUp="VideoSlider_PreviewMouseUp"
                                     ValueChanged="VideoSlider_ValueChanged"/>
                         </Grid>
+                    </Grid>
+
+                    <!--
+                        3D model. A plain WPF Viewport3D — the format
+                        readers live in Core and hand over geometry, and
+                        drawing a shaded solid is something WPF has done
+                        since it shipped, so no library is involved on
+                        either side.
+
+                        The camera is placed in code-behind: where it
+                        belongs depends on how big the model is, and that
+                        is not known until the file has been read. Orbit is
+                        left-drag, zoom is the wheel — the two gestures a
+                        viewer has to have, and no more, because this is a
+                        preview and not a viewport.
+                    -->
+                    <Grid Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Model}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Border Grid.Row="0"
+                                Background="{Binding ContentPalette.Background}"
+                                ClipToBounds="True"
+                                MouseLeftButtonDown="Model_MouseDown"
+                                MouseLeftButtonUp="Model_MouseUp"
+                                MouseMove="Model_MouseMove"
+                                MouseWheel="Model_MouseWheel">
+                            <Viewport3D x:Name="ModelViewport" ClipToBounds="True"
+                                        SizeChanged="Model_SizeChanged">
+                                <Viewport3D.Camera>
+                                    <PerspectiveCamera x:Name="ModelCamera" FieldOfView="45"/>
+                                </Viewport3D.Camera>
+                                <ModelVisual3D>
+                                    <ModelVisual3D.Content>
+                                        <Model3DGroup>
+                                            <!--
+                                                One directional light plus a
+                                                dim ambient one: a single
+                                                light leaves everything
+                                                facing away from it pure
+                                                black, which on an
+                                                untextured solid reads as a
+                                                hole in the model.
+                                            -->
+                                            <AmbientLight Color="#404040"/>
+                                            <DirectionalLight x:Name="ModelKeyLight" Color="#C8C8C8" Direction="-0.5,-1,-1"/>
+                                            <DirectionalLight Color="#505050" Direction="1,0.5,0.8"/>
+                                            <!--
+                                                The model's drawables, filled
+                                                from code-behind: how many
+                                                there are and what colour
+                                                each one is depends on the
+                                                file's materials, which XAML
+                                                cannot know. The rotation
+                                                sits on the group so every
+                                                part turns together.
+                                            -->
+                                            <Model3DGroup x:Name="ModelParts">
+                                                <Model3DGroup.Transform>
+                                                    <Transform3DGroup>
+                                                        <RotateTransform3D>
+                                                            <RotateTransform3D.Rotation>
+                                                                <AxisAngleRotation3D x:Name="ModelSpin" Axis="0,1,0" Angle="0"/>
+                                                            </RotateTransform3D.Rotation>
+                                                        </RotateTransform3D>
+                                                        <RotateTransform3D>
+                                                            <RotateTransform3D.Rotation>
+                                                                <AxisAngleRotation3D x:Name="ModelTilt" Axis="1,0,0" Angle="0"/>
+                                                            </RotateTransform3D.Rotation>
+                                                        </RotateTransform3D>
+                                                    </Transform3DGroup>
+                                                </Model3DGroup.Transform>
+                                            </Model3DGroup>
+                                        </Model3DGroup>
+                                    </ModelVisual3D.Content>
+                                </ModelVisual3D>
+                            </Viewport3D>
+                        </Border>
+                        <TextBlock Grid.Row="1"
+                                   Text="{Binding Preview.ModelDetail}"
+                                   Margin="8,4,8,6"
+                                   FontSize="11" Foreground="#888"
+                                   HorizontalAlignment="Center"/>
                     </Grid>
 
                     <!-- Plain text -->
@@ -287,10 +518,12 @@
                             <StackPanel Margin="0,0,0,14"
                                         Visibility="{Binding Preview.HasVolume, Converter={StaticResource BoolToVisibility}}">
                                 <TextBlock Text="{Binding Preview.VolumeLabel}"
+                                           Style="{StaticResource PaneText}"
                                            FontSize="14" FontWeight="SemiBold"
                                            TextTrimming="CharacterEllipsis"/>
                                 <TextBlock Text="{Binding Preview.VolumeDetail}"
-                                           Foreground="#666" FontSize="11" Margin="0,2,0,0"
+                                           Style="{StaticResource PaneDim}"
+                                           FontSize="11" Margin="0,2,0,0"
                                            TextTrimming="CharacterEllipsis"/>
                                 <ProgressBar Height="12" Margin="0,8,0,0"
                                              Minimum="0" Maximum="100"
@@ -299,31 +532,36 @@
                                              Background="#E6E6E6" BorderBrush="#CCC" BorderThickness="1"/>
                                 <Grid Margin="0,4,0,0">
                                     <TextBlock Text="{Binding Preview.VolumeUsage}"
-                                               FontSize="11" Foreground="#444"
+                                               Style="{StaticResource PaneText}"
+                                               FontSize="11"
                                                HorizontalAlignment="Left"/>
                                     <TextBlock Text="{Binding Preview.VolumeFree}"
-                                               FontSize="11" Foreground="#444"
+                                               Style="{StaticResource PaneText}"
+                                               FontSize="11"
                                                HorizontalAlignment="Right"/>
                                 </Grid>
                             </StackPanel>
 
                             <TextBlock Text="{Binding Preview.FolderTitle}"
+                                       Style="{StaticResource PaneText}"
                                        FontSize="14" FontWeight="SemiBold"
                                        TextTrimming="CharacterEllipsis"/>
                             <TextBlock Text="{Binding Preview.FolderHeadline}"
-                                       Foreground="#666" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                       Style="{StaticResource PaneDim}"
+                                       Margin="0,4,0,0" TextWrapping="Wrap"/>
                             <TextBlock Text="{Binding Preview.FolderNote}"
                                        Foreground="#A05000" FontSize="11"
                                        Margin="0,4,0,0" TextWrapping="Wrap"
                                        Visibility="{Binding Preview.HasFolderNote, Converter={StaticResource BoolToVisibility}}"/>
 
                             <TextBlock Text="{x:Static res:Strings.PreviewFolderTypes}"
+                                       Style="{StaticResource PaneText}"
                                        FontWeight="SemiBold" Margin="0,16,0,6"/>
 
                             <!-- Empty folder: say so instead of leaving a blank panel. -->
-                            <TextBlock Text="{x:Static res:Strings.PreviewFolderEmpty}" Foreground="#888">
+                            <TextBlock Text="{x:Static res:Strings.PreviewFolderEmpty}">
                                 <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
+                                    <Style TargetType="TextBlock" BasedOn="{StaticResource PaneDim}">
                                         <Setter Property="Visibility" Value="Collapsed"/>
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding Preview.FolderTypes.Count}" Value="0">
@@ -347,6 +585,7 @@
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
                                             <TextBlock Grid.Column="0" Text="{Binding Extension}"
+                                                       Style="{StaticResource PaneText}"
                                                        FontFamily="Consolas" TextTrimming="CharacterEllipsis"
                                                        VerticalAlignment="Center"/>
                                             <Border Grid.Column="1" Height="10" CornerRadius="2"
@@ -354,8 +593,8 @@
                                                     Width="{Binding BarWidth}"
                                                     Background="#0078D7" Opacity="0.5"/>
                                             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding SizeText}" Foreground="#444"/>
-                                                <TextBlock Text="{Binding CountText}" Foreground="#999" Margin="10,0,0,0"/>
+                                                <TextBlock Text="{Binding SizeText}" Style="{StaticResource PaneText}"/>
+                                                <TextBlock Text="{Binding CountText}" Style="{StaticResource PaneDim}" Margin="10,0,0,0"/>
                                             </StackPanel>
                                         </Grid>
                                     </DataTemplate>
@@ -366,7 +605,7 @@
 
                     <!-- Placeholder (None / Unsupported) -->
                     <TextBlock Text="{Binding Preview.PlaceholderText}"
-                               Foreground="#888"
+                               Style="{StaticResource PaneDim}"
                                HorizontalAlignment="Center"
                                VerticalAlignment="Center"
                                Visibility="{Binding Preview.IsPlaceholderVisible, Converter={StaticResource BoolToVisibility}}"/>
@@ -491,45 +730,66 @@
                             </StackPanel>
                             <TextBlock Text="{Binding Preview.UnityDetail}"
                                        FontSize="11" Foreground="#888" TextWrapping="Wrap"/>
-
-                            <!-- .pp3 / .xmp — rating and colour label, editable in place -->
-                            <StackPanel Orientation="Horizontal" Margin="0,3,0,0"
-                                        Visibility="{Binding Preview.HasRating, Converter={StaticResource BoolToVisibility}}">
-                                <TextBlock Text="{x:Static res:Strings.PreviewRating}" FontSize="11" Foreground="#444"
-                                           VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <Button Style="{StaticResource RatingStar}" CommandParameter="1"
-                                        Content="{Binding Preview.Rank, Converter={StaticResource RankStar}, ConverterParameter=1}"/>
-                                <Button Style="{StaticResource RatingStar}" CommandParameter="2"
-                                        Content="{Binding Preview.Rank, Converter={StaticResource RankStar}, ConverterParameter=2}"/>
-                                <Button Style="{StaticResource RatingStar}" CommandParameter="3"
-                                        Content="{Binding Preview.Rank, Converter={StaticResource RankStar}, ConverterParameter=3}"/>
-                                <Button Style="{StaticResource RatingStar}" CommandParameter="4"
-                                        Content="{Binding Preview.Rank, Converter={StaticResource RankStar}, ConverterParameter=4}"/>
-                                <Button Style="{StaticResource RatingStar}" CommandParameter="5"
-                                        Content="{Binding Preview.Rank, Converter={StaticResource RankStar}, ConverterParameter=5}"/>
-
-                                <ItemsControl ItemsSource="{Binding Preview.ColorLabelChoices}"
-                                              Margin="10,0,0,0" VerticalAlignment="Center">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Button Style="{StaticResource ColorLabelSwatch}"
-                                                    CommandParameter="{Binding Index}"
-                                                    ToolTip="{Binding Name}"/>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-
-                                <TextBlock Text="{Binding Preview.CustomColorLabel}"
-                                           FontSize="11" Foreground="#888"
-                                           VerticalAlignment="Center" Margin="8,0,0,0"/>
-                            </StackPanel>
-
-                            <TextBlock Text="{Binding Preview.CompanionStatus}"
-                                       FontSize="11" Foreground="#888" TextWrapping="Wrap"/>
                         </StackPanel>
+
+                        <!--
+                            Rating and colour label, editable in place.
+
+                            Deliberately *outside* the companion block. It
+                            used to be inside it, which meant the stars only
+                            appeared for a photograph that already had a
+                            sidecar — and the everyday case is the opposite
+                            one: a RAW straight off the card, with nothing
+                            beside it, is exactly the file the first star
+                            gets clicked on. PreviewController already
+                            offers the row for such a file
+                            (OfferRating → IsRatingUnsaved, which dims the
+                            stars to say "there is nowhere to write this
+                            yet"); the block above was hiding the offer.
+                        -->
+                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0"
+                                    Visibility="{Binding Preview.HasRating, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="{x:Static res:Strings.PreviewRating}" FontSize="11" Foreground="#444"
+                                       VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <Button Style="{StaticResource RatingStar}" CommandParameter="1"
+                                    Content="{Binding Preview.Rank, Converter={StaticResource RankStar}, ConverterParameter=1}"/>
+                            <Button Style="{StaticResource RatingStar}" CommandParameter="2"
+                                    Content="{Binding Preview.Rank, Converter={StaticResource RankStar}, ConverterParameter=2}"/>
+                            <Button Style="{StaticResource RatingStar}" CommandParameter="3"
+                                    Content="{Binding Preview.Rank, Converter={StaticResource RankStar}, ConverterParameter=3}"/>
+                            <Button Style="{StaticResource RatingStar}" CommandParameter="4"
+                                    Content="{Binding Preview.Rank, Converter={StaticResource RankStar}, ConverterParameter=4}"/>
+                            <Button Style="{StaticResource RatingStar}" CommandParameter="5"
+                                    Content="{Binding Preview.Rank, Converter={StaticResource RankStar}, ConverterParameter=5}"/>
+
+                            <ItemsControl ItemsSource="{Binding Preview.ColorLabelChoices}"
+                                          Margin="10,0,0,0" VerticalAlignment="Center">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Style="{StaticResource ColorLabelSwatch}"
+                                                CommandParameter="{Binding Index}"
+                                                ToolTip="{Binding Name}"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <TextBlock Text="{Binding Preview.CustomColorLabel}"
+                                       FontSize="11" Foreground="#888"
+                                       VerticalAlignment="Center" Margin="8,0,0,0"/>
+                        </StackPanel>
+
+                        <!--
+                            What just happened to the sidecar ("created
+                            IMG_0001.xmp"). Out of the companion block for
+                            the same reason as the stars above it: the
+                            message that matters most is the one about a
+                            file that had no companions a moment ago.
+                        -->
+                        <TextBlock Text="{Binding Preview.CompanionStatus}"
+                                   FontSize="11" Foreground="#888" TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>
             </Grid>

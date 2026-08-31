@@ -8,6 +8,7 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Media.Media3D;
 using System.Windows.Threading;
 using ICSharpCode.AvalonEdit.Highlighting;
 using Microsoft.Web.WebView2.Core;
@@ -37,6 +38,13 @@ public partial class PreviewPane : UserControl {
         // in the manager before the first file asks for one.
         HighlightingCatalog.EnsureRegistered();
         DataContextChanged += OnDataContextChanged;
+
+        // The audio player has the same three events as the MediaElement,
+        // just not as routed ones, so they are hooked here rather than in
+        // XAML and land in the same handlers.
+        _audioPlayer.MediaOpened += (_, _) => MediaOpened();
+        _audioPlayer.MediaEnded += (_, _) => MediaEnded();
+        _audioPlayer.MediaFailed += (_, _) => VideoTimeText.Text = Strings.PreviewVideoUnavailable;
     }
 
 
@@ -97,12 +105,17 @@ public partial class PreviewPane : UserControl {
                 // opened video starts paused with the play button correct.
                 ExitImageZoom();
                 ResetVideoTransport();
+                ResetModelView();
                 break;
 
-            case nameof(PreviewController.VideoUri):
-                // MediaElement reloads on Source change via the binding; we
-                // just reset the slider / play button so the UI matches.
-                ResetVideoTransport();
+            case nameof(PreviewController.MediaUri):
+                // The controller sets Kind before MediaUri precisely so
+                // that this can tell a track from a clip.
+                OpenMedia(Vm.Preview.MediaUri);
+                break;
+
+            case nameof(PreviewController.ModelParts):
+                ShowModel();
                 break;
         }
     }
@@ -422,6 +435,81 @@ public partial class PreviewPane : UserControl {
     private bool _videoSliderDragging;
     private bool _suppressVideoSliderChanged;
 
+    /// <summary>
+    /// What plays a music file. Not the <see cref="MediaElement"/> above
+    /// it: that one only works while it is being drawn, and a track has
+    /// nothing to draw. <see cref="MediaPlayer"/> is the same engine
+    /// without the element, which is exactly what audio needs.
+    /// </summary>
+    private readonly MediaPlayer _audioPlayer = new();
+
+    /// <summary>Which of the two the transport is driving right now.</summary>
+    private bool _transportIsAudio;
+
+
+    // --- one transport, two players -------------------------------------
+
+    private TimeSpan TransportPosition {
+        get => _transportIsAudio ? _audioPlayer.Position : VideoPreview.Position;
+        set {
+            if (_transportIsAudio) {
+                _audioPlayer.Position = value;
+            } else {
+                VideoPreview.Position = value;
+            }
+        }
+    }
+
+    /// <summary>How long the track or clip runs, or null while that is still unknown.</summary>
+    private TimeSpan? TransportDuration {
+        get {
+            var duration = _transportIsAudio ? _audioPlayer.NaturalDuration : VideoPreview.NaturalDuration;
+
+            return duration.HasTimeSpan ? duration.TimeSpan : null;
+        }
+    }
+
+    private void TransportPlay() {
+        if (_transportIsAudio) {
+            _audioPlayer.Play();
+        } else {
+            VideoPreview.Play();
+        }
+    }
+
+    private void TransportPause() {
+        if (_transportIsAudio) {
+            _audioPlayer.Pause();
+        } else {
+            VideoPreview.Pause();
+        }
+    }
+
+    /// <summary>
+    /// Points the transport at a new file. Both players are stopped first:
+    /// walking from a clip to a track and back must not leave the previous
+    /// one running behind the new one.
+    /// </summary>
+    private void OpenMedia(Uri? uri) {
+        try { VideoPreview.Stop(); } catch { /* not yet loaded */ }
+        try { _audioPlayer.Stop(); } catch { /* nothing open */ }
+
+        _transportIsAudio = Vm.Preview.Kind == PreviewKind.Audio;
+
+        if (uri is null) {
+            VideoPreview.Source = null;
+            _audioPlayer.Close();
+        } else if (_transportIsAudio) {
+            VideoPreview.Source = null;
+            _audioPlayer.Open(uri);
+        } else {
+            _audioPlayer.Close();
+            VideoPreview.Source = uri;
+        }
+
+        ResetVideoTransport();
+    }
+
     private void VideoPreview_MediaOpened(object sender, RoutedEventArgs e) {
         // Cap the video preview to native pixel size — same rationale as
         // for images: a 320×240 clip shouldn't stretch to fill a giant
@@ -435,10 +523,19 @@ public partial class PreviewPane : UserControl {
             VideoPreview.MaxHeight = double.PositiveInfinity;
         }
 
-        if (!VideoPreview.NaturalDuration.HasTimeSpan) {
+        MediaOpened();
+    }
+
+    /// <summary>
+    /// A file has opened and its length is known: size the seek bar to it
+    /// and start the clock. Shared, because "how long is this" is the same
+    /// question for a clip and for a track.
+    /// </summary>
+    private void MediaOpened() {
+        if (TransportDuration is not { } natural) {
             return;
         }
-        double total = VideoPreview.NaturalDuration.TimeSpan.TotalSeconds;
+        double total = natural.TotalSeconds;
         _suppressVideoSliderChanged = true;
         VideoSlider.Maximum = total;
         VideoSlider.Value = 0;
@@ -449,12 +546,19 @@ public partial class PreviewPane : UserControl {
     }
 
     private void VideoPreview_MediaEnded(object sender, RoutedEventArgs e) {
-        // Rewind to start, leave paused — same convention as Explorer's
-        // preview pane and most desktop video viewers.
-        VideoPreview.Position = TimeSpan.Zero;
-        VideoPreview.Pause();
+        MediaEnded();
+    }
+
+    /// <summary>
+    /// Rewind to start, leave paused — same convention as Explorer's
+    /// preview pane and most desktop video viewers.
+    /// </summary>
+    private void MediaEnded() {
+        TransportPosition = TimeSpan.Zero;
+        TransportPause();
         _videoIsPlaying = false;
         VideoPlayPauseButton.Content = "▶";
+        UpdateVideoTimeText();
     }
 
     private void VideoPreview_MediaFailed(object sender, ExceptionRoutedEventArgs e) {
@@ -476,29 +580,30 @@ public partial class PreviewPane : UserControl {
     }
 
     private void VideoTimer_Tick(object? sender, EventArgs e) {
-        if (_videoSliderDragging) {
-            return;
-        }
-        if (!VideoPreview.NaturalDuration.HasTimeSpan) {
+        if (_videoSliderDragging || TransportDuration is null) {
             return;
         }
         // Avoid feedback: setting Slider.Value programmatically would
         // otherwise re-fire ValueChanged and try to seek us back.
         _suppressVideoSliderChanged = true;
-        VideoSlider.Value = VideoPreview.Position.TotalSeconds;
+        VideoSlider.Value = TransportPosition.TotalSeconds;
         _suppressVideoSliderChanged = false;
         UpdateVideoTimeText();
     }
 
     private void VideoPlayPause_Click(object sender, RoutedEventArgs e) {
         if (_videoIsPlaying) {
-            VideoPreview.Pause();
+            TransportPause();
             _videoIsPlaying = false;
             VideoPlayPauseButton.Content = "▶";
         } else {
-            VideoPreview.Play();
+            TransportPlay();
             _videoIsPlaying = true;
             VideoPlayPauseButton.Content = "⏸";
+            // The clock only starts once something is playing; for a track
+            // opened and played straight away, MediaOpened may already have
+            // been and gone.
+            EnsureVideoTimer();
         }
     }
 
@@ -511,8 +616,8 @@ public partial class PreviewPane : UserControl {
         // Final seek to the slider's resting value — ValueChanged during the
         // drag already kept Position roughly synced with ScrubbingEnabled,
         // but a final commit handles the last pointer position cleanly.
-        if (VideoPreview.NaturalDuration.HasTimeSpan) {
-            VideoPreview.Position = TimeSpan.FromSeconds(VideoSlider.Value);
+        if (TransportDuration is not null) {
+            TransportPosition = TimeSpan.FromSeconds(VideoSlider.Value);
             UpdateVideoTimeText();
         }
     }
@@ -521,21 +626,18 @@ public partial class PreviewPane : UserControl {
         if (_suppressVideoSliderChanged) {
             return;
         }
-        if (!VideoPreview.NaturalDuration.HasTimeSpan) {
+        if (TransportDuration is null) {
             return;
         }
         // ScrubbingEnabled lets MediaElement show frames while we seek
         // mid-drag, so we apply Position on every tick — feels responsive.
-        VideoPreview.Position = TimeSpan.FromSeconds(e.NewValue);
+        TransportPosition = TimeSpan.FromSeconds(e.NewValue);
         UpdateVideoTimeText();
     }
 
     private void UpdateVideoTimeText() {
-        TimeSpan pos = VideoPreview.Position;
-        TimeSpan dur = VideoPreview.NaturalDuration.HasTimeSpan
-            ? VideoPreview.NaturalDuration.TimeSpan
-            : TimeSpan.Zero;
-        VideoTimeText.Text = $"{FormatTimecode(pos)} / {FormatTimecode(dur)}";
+        VideoTimeText.Text =
+            $"{FormatTimecode(TransportPosition)} / {FormatTimecode(TransportDuration ?? TimeSpan.Zero)}";
     }
 
     private static string FormatTimecode(TimeSpan t) {
@@ -549,6 +651,7 @@ public partial class PreviewPane : UserControl {
         // MediaElement down, so audio would otherwise keep playing in the
         // background after the user selects another file.
         try { VideoPreview.Pause(); } catch { /* not yet loaded */ }
+        try { _audioPlayer.Pause(); } catch { /* nothing open */ }
         _videoIsPlaying = false;
         VideoPlayPauseButton.Content = "▶";
         _suppressVideoSliderChanged = true;
@@ -563,5 +666,183 @@ public partial class PreviewPane : UserControl {
         // the previous clip's resolution until MediaOpened reconfigures it.
         VideoPreview.MaxWidth = double.PositiveInfinity;
         VideoPreview.MaxHeight = double.PositiveInfinity;
+    }
+
+
+    // ======================================================================
+    // Preview pane: the 3D viewport (camera framing + orbit + zoom).
+    // ======================================================================
+
+    /// <summary>
+    /// Slack around the model once it has been fitted to the pane. Ten per
+    /// cent: enough that the silhouette does not touch the edges, not so
+    /// much that the model sits in a field of grey.
+    /// </summary>
+    private const double ModelFitMargin = 1.1;
+
+    private const double ModelMinZoom = 0.3;
+    private const double ModelMaxZoom = 8.0;
+
+    private Point _modelDragFrom;
+    private bool _modelDragging;
+    private double _modelZoom = 1.0;
+
+    /// <summary>
+    /// Points the camera at the model that has just been read.
+    ///
+    /// <para>
+    /// Framing cannot be done in XAML because it depends on the file: a
+    /// printer part is tens of millimetres across and a scanned building is
+    /// tens of metres, and a camera placed at a fixed distance shows one of
+    /// them as a dot and puts the other one behind it. Everything here is
+    /// in units of the model's own radius, so both frame the same.
+    /// </para>
+    /// </summary>
+    private void ShowModel() {
+        ModelParts.Children.Clear();
+        foreach (var part in Vm.Preview.ModelParts) {
+            ModelParts.Children.Add(new GeometryModel3D {
+                Geometry = part.Geometry,
+                Material = new DiffuseMaterial(part.Front),
+                BackMaterial = new DiffuseMaterial(part.Back),
+            });
+        }
+
+        if (ModelParts.Children.Count == 0) {
+            return;
+        }
+
+        ResetModelView();
+    }
+
+    private void ResetModelView() {
+        _modelDragging = false;
+        _modelZoom = 1.0;
+        ModelSpin.Angle = 0;
+        ModelTilt.Angle = 0;
+        PlaceModelCamera();
+    }
+
+    private void PlaceModelCamera() {
+        if (!Vm.Preview.HasModel) {
+            return;
+        }
+
+        var centre = Vm.Preview.ModelCenter;
+        double radius = Vm.Preview.ModelRadius;
+        double distance = FitDistance(radius) * _modelZoom;
+
+        // Down the Z axis and slightly above, which is the three-quarter
+        // view every modelling tool opens on — a model seen dead-on
+        // reads as a flat silhouette.
+        var offset = new Vector3D(0, radius * 0.55, distance);
+
+        ModelCamera.Position = centre + offset;
+        ModelCamera.LookDirection = -offset;
+        ModelCamera.UpDirection = new Vector3D(0, 1, 0);
+
+        // The clip planes travel with the model too: leaving them at their
+        // defaults makes anything much smaller than a metre disappear into
+        // the near plane.
+        ModelCamera.NearPlaneDistance = Math.Max(radius * 0.01, 1e-5);
+        ModelCamera.FarPlaneDistance = (distance + (radius * 4)) * 4;
+    }
+
+    /// <summary>
+    /// How far the camera has to stand for a sphere of
+    /// <paramref name="radius"/> to fit inside the frame.
+    ///
+    /// <para>
+    /// Worked out rather than guessed at, because a guess is wrong in one
+    /// direction or the other for every pane width. WPF states
+    /// <c>FieldOfView</c> horizontally, so the vertical angle depends on
+    /// the pane's shape — and a preview pane is a tall narrow strip, where
+    /// the vertical angle is the tight one. Fitting against the wider of
+    /// the two is what let a cube hang off the top and bottom edges.
+    /// </para>
+    /// </summary>
+    private double FitDistance(double radius) {
+        double width = ModelViewport.ActualWidth;
+        double height = ModelViewport.ActualHeight;
+
+        // Before the first layout pass there is no shape to fit to; 4:3 is
+        // as good a guess as any, and the next resize corrects it.
+        double aspect = width > 0 && height > 0 ? height / width : 0.75;
+
+        double halfHorizontal = ModelCamera.FieldOfView / 2 * Math.PI / 180;
+        double halfVertical = Math.Atan(Math.Tan(halfHorizontal) * aspect);
+        double tight = Math.Max(Math.Min(halfHorizontal, halfVertical), 0.01);
+
+        return radius / Math.Sin(tight) * ModelFitMargin;
+    }
+
+    /// <summary>
+    /// The model spins about its own centre, not the origin — the two are
+    /// rarely the same, and rotating about the origin swings a model that
+    /// sits away from it right out of frame.
+    /// </summary>
+    private void ApplyModelRotationCentre() {
+        var centre = Vm.Preview.ModelCenter;
+        ModelSpin.Axis = new Vector3D(0, 1, 0);
+        ModelTilt.Axis = new Vector3D(1, 0, 0);
+
+        if (ModelParts.Transform is Transform3DGroup group) {
+            foreach (var transform in group.Children) {
+                if (transform is RotateTransform3D rotate) {
+                    rotate.CenterX = centre.X;
+                    rotate.CenterY = centre.Y;
+                    rotate.CenterZ = centre.Z;
+                }
+            }
+        }
+    }
+
+    private void Model_MouseDown(object sender, MouseButtonEventArgs e) {
+        if (!Vm.Preview.HasModel) {
+            return;
+        }
+
+        _modelDragging = true;
+        _modelDragFrom = e.GetPosition((IInputElement)sender);
+        ApplyModelRotationCentre();
+        ((UIElement)sender).CaptureMouse();
+    }
+
+    private void Model_MouseUp(object sender, MouseButtonEventArgs e) {
+        _modelDragging = false;
+        ((UIElement)sender).ReleaseMouseCapture();
+    }
+
+    private void Model_MouseMove(object sender, MouseEventArgs e) {
+        if (!_modelDragging) {
+            return;
+        }
+
+        var now = e.GetPosition((IInputElement)sender);
+        ModelSpin.Angle += (now.X - _modelDragFrom.X) * 0.4;
+
+        // Clamped rather than free: past the poles the model appears
+        // upside down and every further drag moves it the wrong way.
+        ModelTilt.Angle = Math.Clamp(ModelTilt.Angle + ((now.Y - _modelDragFrom.Y) * 0.4), -89, 89);
+        _modelDragFrom = now;
+    }
+
+    /// <summary>
+    /// Re-fits on resize. The camera distance is derived from the pane's
+    /// shape, so dragging the splitter narrower has to move the camera or
+    /// the model starts overflowing the sides.
+    /// </summary>
+    private void Model_SizeChanged(object sender, SizeChangedEventArgs e) {
+        PlaceModelCamera();
+    }
+
+    private void Model_MouseWheel(object sender, MouseWheelEventArgs e) {
+        if (!Vm.Preview.HasModel) {
+            return;
+        }
+
+        _modelZoom = Math.Clamp(_modelZoom * (e.Delta > 0 ? 0.85 : 1.0 / 0.85), ModelMinZoom, ModelMaxZoom);
+        PlaceModelCamera();
+        e.Handled = true;
     }
 }

@@ -1098,4 +1098,172 @@
   <data name="MenuCmdNewSubmenu" xml:space="preserve">
     <value>Создать</value>
   </data>
+  <data name="PreviewClipped" xml:space="preserve">
+    <value>… показано начало файла, всего {0}</value>
+  </data>
+  <data name="PreviewAudioBitrate" xml:space="preserve">
+    <value>{0} кбит/с</value>
+  </data>
+  <data name="PreviewAudioSampleRate" xml:space="preserve">
+    <value>{0:0.#} кГц</value>
+  </data>
+  <data name="PreviewAudioMono" xml:space="preserve">
+    <value>моно</value>
+  </data>
+  <data name="PreviewAudioStereo" xml:space="preserve">
+    <value>стерео</value>
+  </data>
+  <data name="PreviewModelDetail" xml:space="preserve">
+    <value>{0:N0} треугольников · {1:N0} вершин</value>
+  </data>
+  <data name="HotkeyGroupNavigation" xml:space="preserve">
+    <value>Навигация</value>
+  </data>
+  <data name="HotkeyBack" xml:space="preserve">
+    <value>Назад</value>
+  </data>
+  <data name="HotkeyForward" xml:space="preserve">
+    <value>Вперёд</value>
+  </data>
+  <data name="HotkeyUp" xml:space="preserve">
+    <value>На уровень вверх</value>
+  </data>
+  <data name="HotkeyUpBackspace" xml:space="preserve">
+    <value>На уровень вверх</value>
+  </data>
+  <data name="HotkeyOpen" xml:space="preserve">
+    <value>Открыть выбранное: папку — войти, файл — системной ассоциацией</value>
+  </data>
+  <data name="HotkeyAddressBar" xml:space="preserve">
+    <value>Правка пути в адресной строке, текст выделяется целиком</value>
+  </data>
+  <data name="HotkeyRecent" xml:space="preserve">
+    <value>Список последних посещённых папок</value>
+  </data>
+  <data name="HotkeyAddressGo" xml:space="preserve">
+    <value>Перейти по введённому пути</value>
+  </data>
+  <data name="HotkeyAddressCancel" xml:space="preserve">
+    <value>Отменить правку, вернуть крошки и фокус в список</value>
+  </data>
+  <data name="HotkeyRefresh" xml:space="preserve">
+    <value>Обновить содержимое папки</value>
+  </data>
+  <data name="HotkeyGroupPanes" xml:space="preserve">
+    <value>Перемещение по окну</value>
+  </data>
+  <data name="HotkeyNextPane" xml:space="preserve">
+    <value>Следующая / предыдущая область окна</value>
+  </data>
+  <data name="HotkeyToList" xml:space="preserve">
+    <value>В список файлов</value>
+  </data>
+  <data name="HotkeyToTree" xml:space="preserve">
+    <value>В панель папок, на узел текущей папки. Повторное нажатие — в другую панель (закладки ↔ компьютер)</value>
+  </data>
+  <data name="HotkeyRevealInTree" xml:space="preserve">
+    <value>Показать текущую папку в дереве и встать на неё</value>
+  </data>
+  <data name="HotkeyTogglePreview" xml:space="preserve">
+    <value>Показать или убрать панель быстрого просмотра</value>
+  </data>
+  <data name="HotkeyTreeExpand" xml:space="preserve">
+    <value>Свернуть или раскрыть ветку</value>
+  </data>
+  <data name="HotkeyTreeEnter" xml:space="preserve">
+    <value>Перейти в папку под курсором</value>
+  </data>
+  <data name="HotkeyTreeEscape" xml:space="preserve">
+    <value>Вернуть фокус в список</value>
+  </data>
+  <data name="HotkeyGroupFileOps" xml:space="preserve">
+    <value>Файловые операции</value>
+  </data>
+  <data name="HotkeyCopy" xml:space="preserve">
+    <value>Копировать</value>
+  </data>
+  <data name="HotkeyCopyPath" xml:space="preserve">
+    <value>Копировать полный путь в буфер обмена</value>
+  </data>
+  <data name="HotkeyCut" xml:space="preserve">
+    <value>Вырезать</value>
+  </data>
+  <data name="HotkeyPaste" xml:space="preserve">
+    <value>Вставить</value>
+  </data>
+  <data name="HotkeyDelete" xml:space="preserve">
+    <value>Удалить в корзину</value>
+  </data>
+  <data name="HotkeyDeleteForever" xml:space="preserve">
+    <value>Удалить безвозвратно: всегда спрашивает, не откатывается</value>
+  </data>
+  <data name="HotkeyRename" xml:space="preserve">
+    <value>Переименовать прямо в строке списка: Enter — применить, Esc — отменить</value>
+  </data>
+  <data name="HotkeyNewFolder" xml:space="preserve">
+    <value>Создать папку</value>
+  </data>
+  <data name="HotkeyUndo" xml:space="preserve">
+    <value>Отменить последнюю операцию</value>
+  </data>
+  <data name="HotkeyGroupSearch" xml:space="preserve">
+    <value>Выделение и поиск</value>
+  </data>
+  <data name="HotkeySelectAll" xml:space="preserve">
+    <value>Выделить всё</value>
+  </data>
+  <data name="HotkeyFilter" xml:space="preserve">
+    <value>Фокус в поле фильтра</value>
+  </data>
+  <data name="HotkeySearchWindow" xml:space="preserve">
+    <value>Открыть окно поиска</value>
+  </data>
+  <data name="HotkeySearchNow" xml:space="preserve">
+    <value>Искать сразу, не дожидаясь паузы и не считая символы</value>
+  </data>
+  <data name="HotkeySearchClose" xml:space="preserve">
+    <value>Закрыть окно, клавиатура возвращается в список файлов</value>
+  </data>
+  <data name="HotkeyFilterEscape" xml:space="preserve">
+    <value>Одним нажатием: остановить поиск, сбросить фильтр, вернуть клавиатуру в список</value>
+  </data>
+  <data name="HotkeySearchRepeat" xml:space="preserve">
+    <value>Повторить поиск</value>
+  </data>
+  <data name="HotkeyClearSelection" xml:space="preserve">
+    <value>Снять выделение</value>
+  </data>
+  <data name="HotkeyTypeAhead" xml:space="preserve">
+    <value>Перейти к файлу, имя которого с них начинается. Пауза в секунду начинает набор заново, повтор той же буквы перебирает файлы на неё</value>
+  </data>
+  <data name="HotkeyGridArrows" xml:space="preserve">
+    <value>Обычное перемещение, плюс переходы через край строки: → справа — на следующую строку, ← слева — на предыдущую, ↑ в верхней — к первому файлу, ↓ в нижней — к последнему. С Shift выделение растягивается</value>
+  </data>
+  <data name="HotkeyProperties" xml:space="preserve">
+    <value>Свойства выбранного</value>
+  </data>
+  <data name="HotkeyGroupView" xml:space="preserve">
+    <value>Вид</value>
+  </data>
+  <data name="HotkeyViewGallery" xml:space="preserve">
+    <value>Галерея</value>
+  </data>
+  <data name="HotkeyRateInGallery" xml:space="preserve">
+    <value>Оценка выделенным файлам, 0 — снять</value>
+  </data>
+  <data name="HotkeyViewLargeIcons" xml:space="preserve">
+    <value>Крупные значки</value>
+  </data>
+  <data name="HotkeyViewDetails" xml:space="preserve">
+    <value>Таблица</value>
+  </data>
+  <data name="HotkeyViewTiles" xml:space="preserve">
+    <value>Плитки</value>
+  </data>
+  <data name="SettingsCategoryHotkeys" xml:space="preserve">
+    <value>Клавиатура</value>
+  </data>
+  <data name="SettingsHotkeysHint" xml:space="preserve">
+    <value>Полный список сочетаний. Переназначение пока не поддерживается — сочетания заданы приложением.</value>
+  </data>
 </root>

@@ -38,9 +38,15 @@ public sealed class AsyncIcon : Image {
             nameof(IconSize), typeof(IconSize), typeof(AsyncIcon),
             new PropertyMetadata(IconSize.Normal, OnIconRequestChanged));
 
-    // Shell thumbnail extraction is disk- and CPU-heavy; two at a time keeps
-    // the pool free for the rest of the app while still overlapping I/O.
-    private static readonly SemaphoreSlim _gate = new(2);
+    // Thumbnail extraction is disk- and CPU-heavy, so it is metered rather
+    // than let loose on the thread pool. Four rather than two: two was
+    // sized against the shell call, which does not parallelise, and it
+    // became the ceiling once RAW files stopped going through it — a
+    // screenful of photographs measured 75 ms per file through the shell
+    // and 3 ms per file decoded here (see RawThumbnail), at which point the
+    // gate, not the work, was what the user was waiting for. Four still
+    // leaves the pool to the rest of the app.
+    private static readonly SemaphoreSlim _gate = new(4);
 
 
     private int _generation;
