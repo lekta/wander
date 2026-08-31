@@ -76,6 +76,7 @@ public partial class FileListView : UserControl {
         if (e.OldValue is MainViewModel old) {
             old.SelectionRestoreRequested -= RestoreListSelection;
             old.SelectionRefreshRequested -= RefreshListSelection;
+            old.InlineRenameRequested -= StartRenameOn;
             old.PropertyChanged -= OnViewModelChanged;
             old.Settings.PropertyChanged -= OnSettingsChanged;
             old.Entries.CollectionChanged -= OnEntriesChanged;
@@ -83,6 +84,7 @@ public partial class FileListView : UserControl {
         if (e.NewValue is MainViewModel vm) {
             vm.SelectionRestoreRequested += RestoreListSelection;
             vm.SelectionRefreshRequested += RefreshListSelection;
+            vm.InlineRenameRequested += StartRenameOn;
             vm.PropertyChanged += OnViewModelChanged;
             vm.Settings.PropertyChanged += OnSettingsChanged;
             vm.Entries.CollectionChanged += OnEntriesChanged;
@@ -927,6 +929,20 @@ public partial class FileListView : UserControl {
     // collapsed TextBox and MainViewModel.RenamingPath makes it visible.
     // PromptDialog stays as the fallback for the case the inline editor
     // cannot be reached — a row that virtualisation has not realised.
+
+    /// <summary>
+    /// The view model asked for the editor on a row it just put the
+    /// selection on — a folder that has only this second been created.
+    /// Checked against the selection rather than trusted: the restore that
+    /// carried the request is what set it, and anything that overtook it
+    /// means the row is no longer the one to edit.
+    /// </summary>
+    private void StartRenameOn(FileSystemEntry entry) {
+        if (ReferenceEquals(Vm.SelectedEntry, entry)) {
+            StartRename();
+        }
+    }
+
 
     public void StartRename() {
         if (Vm.SelectedEntry is not FileSystemEntry entry) {

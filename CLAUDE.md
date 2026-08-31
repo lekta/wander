@@ -22,6 +22,7 @@
 | **Стратегические направления продукта** | Roadmap ниже |
 | **Вес, скорость запуска, форма поставки — замеры и выводы** | [PERFORMANCE.md](docs/PERFORMANCE.md) |
 | **Что сделать, когда кусок работы закончен** | [FINALIZING.md](docs/FINALIZING.md) |
+| **Что проверяется руками, потому что тестами не покрыто** | [MANUAL-CHECKS.md](docs/MANUAL-CHECKS.md) |
 | **Как выпустить версию, где живут номера версий** | [RELEASING.md](docs/RELEASING.md) |
 | **Что умеет приложение, хоткеи** | [GUIDE.md](docs/GUIDE.md) |
 | **История релизов** | [CHANGELOG.md](docs/CHANGELOG.md) |

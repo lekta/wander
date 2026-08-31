@@ -141,6 +141,22 @@ public sealed class TreeNodeViewModel : ObservableObject {
 
         _loaded = true;
         Children.Clear();
+        foreach (var child in ReadChildFolders()) {
+            Children.Add(child);
+        }
+    }
+
+
+    /// <summary>
+    /// The subfolders this node should be showing right now, as fresh view
+    /// models. Enumeration failure (access denied, drive pulled out) is not
+    /// an error to report here — the node simply has no children to draw.
+    /// </summary>
+    private List<TreeNodeViewModel> ReadChildFolders() {
+        var result = new List<TreeNodeViewModel>();
+        if (_fs is null) {
+            return result;
+        }
 
         try {
             foreach (var entry in _fs.Enumerate(FullPath)) {
@@ -152,13 +168,15 @@ public sealed class TreeNodeViewModel : ObservableObject {
                 }
 
                 bool childHasChildren = _fs.HasSubdirectories(entry.FullPath);
-                Children.Add(new TreeNodeViewModel(
+                result.Add(new TreeNodeViewModel(
                     entry.Name, entry.FullPath, EntryKind.Directory, _fs, childHasChildren,
                     _settings, entry.IsHidden));
             }
         } catch {
             // access denied / unavailable — silently skip; UI will show empty
         }
+
+        return result;
     }
 
     private bool IsAllowedByFilters(FileSystemEntry entry) {
@@ -167,29 +185,63 @@ public sealed class TreeNodeViewModel : ObservableObject {
 
 
     /// <summary>
-    /// Drop the cached children and re-enumerate using the current settings
-    /// filters. Recurses through already-loaded subtrees so a single toggle of
-    /// ShowHidden/ShowSystem refreshes the whole expanded portion of the tree.
-    /// Unloaded branches stay lazy — they'll re-evaluate filters whenever the
-    /// user expands them next.
+    /// Re-reads this node's subfolders and recurses through the already-loaded
+    /// subtree, so one call brings the whole expanded portion of the panel back
+    /// in line with the disk. Unloaded branches stay lazy — they enumerate
+    /// whenever the user expands them next.
+    ///
+    /// <para>
+    /// Reconciles rather than rebuilds, and that is the whole point: rows that
+    /// are still there keep their view models, so what was expanded stays
+    /// expanded and what was selected stays selected. Clearing and re-filling
+    /// would collapse every branch below this one, which is exactly the Win11
+    /// Explorer behaviour Wander exists to not have.
+    /// </para>
     /// </summary>
     public void RefreshChildren() {
         if (!_loaded) {
             return;
         }
 
-        _loaded = false;
-        Children.Clear();
-
-        if (_isExpanded) {
-            EnsureLoaded();
-            foreach (var child in Children) {
-                child.RefreshChildren();
+        if (!_isExpanded) {
+            // Collapsed: nothing is on screen to keep, so drop the cache and
+            // leave the placeholder that draws the chevron.
+            _loaded = false;
+            Children.Clear();
+            if (_fs is not null && _fs.HasSubdirectories(FullPath)) {
+                Children.Add(_placeholder);
             }
-        } else if (_fs is not null && _fs.HasSubdirectories(FullPath)) {
-            // Collapsed: restore the placeholder so the chevron still renders.
-            Children.Add(_placeholder);
+
+            return;
         }
+
+        var fresh = ReadChildFolders();
+        for (int i = 0; i < fresh.Count; i++) {
+            int existing = IndexOfChild(fresh[i].FullPath, i);
+            if (existing < 0) {
+                Children.Insert(i, fresh[i]);
+            } else if (existing != i) {
+                Children.Move(existing, i);
+            }
+        }
+        while (Children.Count > fresh.Count) {
+            Children.RemoveAt(Children.Count - 1);
+        }
+
+        foreach (var child in Children) {
+            child.RefreshChildren();
+        }
+    }
+
+
+    private int IndexOfChild(string path, int from) {
+        for (int i = from; i < Children.Count; i++) {
+            if (PathsEqual(Children[i].FullPath, path)) {
+                return i;
+            }
+        }
+
+        return -1;
     }
 
 

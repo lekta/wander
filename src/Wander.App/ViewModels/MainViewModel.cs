@@ -146,6 +146,7 @@ public sealed class MainViewModel : ObservableObject {
     // better than "whatever was selected before" — a rename knows the new
     // name, an undo knows what it put back.
     private string[] _restoreSelection = Array.Empty<string>();
+    private string? _renameAfterRestore;
 
     // A folder picked in the tree or the bookmarks. Applied once its own
     // listing has landed: doing it before would only be overwritten, because
@@ -423,6 +424,14 @@ public sealed class MainViewModel : ObservableObject {
     /// anywhere for — a number changed inside a row they are looking at.
     /// </summary>
     public event Action<IReadOnlyList<FileSystemEntry>>? SelectionRefreshRequested;
+
+    /// <summary>
+    /// Raised when the row a restore just landed on is one the user is
+    /// expected to name — a folder that has only just been created. The
+    /// in-place editor lives in the row template, so opening it is the
+    /// view's job; the view model only says which row and when.
+    /// </summary>
+    public event Action<FileSystemEntry>? InlineRenameRequested;
 
 
     public BulkObservableCollection<FileSystemEntry> Entries { get; }
@@ -1310,6 +1319,11 @@ public sealed class MainViewModel : ObservableObject {
         if (_folderChanges.NeedsRelisting) {
             _folderChanges.Clear();
             Refresh();
+            // Subfolders are rows in the panels as well as in the list, and
+            // the composition that changed is theirs too.
+            if (_nav.Current is { Length: > 0 } here) {
+                RefreshTreeNodesFor(here);
+            }
 
             return;
         }
@@ -1782,6 +1796,7 @@ public sealed class MainViewModel : ObservableObject {
             // keyboard back onto, so the request does not carry over to
             // whichever restore happens next.
             FocusListAfterRestore = false;
+            _renameAfterRestore = null;
 
             return;
         }
@@ -1789,6 +1804,16 @@ public sealed class MainViewModel : ObservableObject {
         SelectedEntry = found[0];
         SelectedEntries = found;
         SelectionRestoreRequested?.Invoke(found);
+
+        // Consumed with the selection it rides on, and only for the row it
+        // was asked for: a listing that landed for some other reason must
+        // not open an editor under the user's hands.
+        if (_renameAfterRestore is { } pending) {
+            _renameAfterRestore = null;
+            if (IsSamePath(found[0].FullPath, pending)) {
+                InlineRenameRequested?.Invoke(found[0]);
+            }
+        }
     }
 
     // --- Ratings and the rating filter ---------------------------------
@@ -2378,6 +2403,12 @@ public sealed class MainViewModel : ObservableObject {
     /// the results away, which is the opposite of what the key is for.
     /// </summary>
     private void RefreshOrRerunSearch() {
+        // The panels are part of "what is on screen": a folder expanded
+        // there caches its subfolders from the moment it was opened, and
+        // nothing else re-reads them. F5 is where the whole window catches
+        // up with the disk, not just the middle of it.
+        RefreshTrees();
+
         if (ContentSearch.IsShowingResults || ContentSearch.IsDeep) {
             ContentSearch.Rerun();
 
@@ -2706,6 +2737,52 @@ public sealed class MainViewModel : ObservableObject {
         }
     }
 
+    /// <summary>
+    /// Re-reads every expanded branch of both panels. What is expanded stays
+    /// expanded — <see cref="TreeNodeViewModel.RefreshChildren"/> reconciles
+    /// rather than rebuilds — so this is safe to hang off F5.
+    /// </summary>
+    private void RefreshTrees() {
+        foreach (var node in Roots) {
+            node.RefreshChildren();
+        }
+        foreach (var node in Bookmarks) {
+            node.RefreshChildren();
+        }
+    }
+
+
+    /// <summary>
+    /// The narrow version: one folder gained or lost a subfolder, so only the
+    /// rows standing on that folder are re-read. Both panels can be showing
+    /// the same path, and a path can appear twice within one of them, so this
+    /// does not stop at the first hit at the top level.
+    /// </summary>
+    private void RefreshTreeNodesFor(string path) {
+        foreach (var node in Roots) {
+            RefreshTreeNode(node, path);
+        }
+        foreach (var node in Bookmarks) {
+            RefreshTreeNode(node, path);
+        }
+    }
+
+
+    private static void RefreshTreeNode(TreeNodeViewModel node, string path) {
+        if (IsSamePath(node.FullPath, path)) {
+            node.RefreshChildren();
+
+            return;
+        }
+
+        // Snapshot: a match further down rebuilds its own Children, never
+        // this level's, but the enumerator is cheap enough not to argue with.
+        foreach (var child in node.Children.ToArray()) {
+            RefreshTreeNode(child, path);
+        }
+    }
+
+
     private void OnTreeChildrenChanged(object? sender, NotifyCollectionChangedEventArgs e) {
         if (e.NewItems is null) {
             return;
@@ -2960,12 +3037,7 @@ public sealed class MainViewModel : ObservableObject {
             // File-list filter is one half; tree (drives + bookmarks) caches
             // its loaded children, so it needs an explicit reload to drop or
             // surface hidden / system folders.
-            foreach (var node in Roots) {
-                node.RefreshChildren();
-            }
-            foreach (var node in Bookmarks) {
-                node.RefreshChildren();
-            }
+            RefreshTrees();
         }
 
         if (e.PropertyName == nameof(SettingsViewModel.IntegrateCompanions)) {
@@ -4155,11 +4227,27 @@ public sealed class MainViewModel : ObservableObject {
 
         try {
             _ops.CreateFolder(_nav.Current, name);
-            Refresh();
         } catch (Exception ex) {
             _log.Error($"CreateFolder failed in {_nav.Current}: {name}", ex);
             Status = string.Format(Strings.StatusCreateFailed, ex.Message);
+
+            return;
         }
+
+        // "New folder" is never the name anyone wanted, so the next thing
+        // the user does is type over it. Both intents are for the listing
+        // Refresh is about to start — the row does not exist to select, let
+        // alone edit, until it lands.
+        _restoreSelection = new[] { Path.Combine(_nav.Current, name) };
+        FocusListAfterRestore = true;
+        _renameAfterRestore = _restoreSelection[0];
+        Refresh();
+
+        // The panels beside the list show folders too, and the folder they
+        // are standing on just gained one. Leaving it to the watcher would
+        // not do: its tick is held for as long as the editor we just opened
+        // is up.
+        RefreshTreeNodesFor(_nav.Current);
     }
 
     private string DescribeError(Exception ex, string path) {
