@@ -10,6 +10,7 @@ using System.Windows;
 using System.Windows.Controls;
 using Wander.App.Resources;
 using Wander.Core;
+using Wander.Core.Diagnostics;
 using Wander.Core.Logging;
 
 namespace Wander.App.Diagnostics;
@@ -232,7 +233,8 @@ public static class CrashReporter {
 
     private static string EnvironmentSummary() {
         var sb = new StringBuilder();
-        sb.AppendLine($"Version:  {AppVersion()}");
+        sb.AppendLine($"Version:  {BuildInfo.Line}");
+        sb.AppendLine($"Full:     {AppVersion()}");
         sb.AppendLine($"OS:       {RuntimeInformation.OSDescription} ({RuntimeInformation.OSArchitecture})");
         sb.AppendLine($"Runtime:  {RuntimeInformation.FrameworkDescription}");
         sb.AppendLine($"Culture:  {CultureInfo.CurrentCulture.Name} / UI {CultureInfo.CurrentUICulture.Name}");
@@ -244,46 +246,11 @@ public static class CrashReporter {
 
     /// <summary>
     /// "0.2.1-beta+&lt;sha&gt;" — the informational version, build metadata and
-    /// all. The crash bundle wants every character of it; the "О Wander"
-    /// menu splits it into version and short hash.
+    /// all. The crash bundle wants every character of it; everything that
+    /// wants it readable asks <see cref="BuildInfo.Line"/> instead.
     /// </summary>
     public static string AppVersion() {
-        var asm = Assembly.GetEntryAssembly();
-        return asm?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
-            ?? asm?.GetName().Version?.ToString()
-            ?? "unknown";
-    }
-
-    /// <summary>
-    /// The commit the build came from, shortened to the seven characters
-    /// everyone actually pastes. Empty when the SDK found no git metadata —
-    /// a source drop, or a build from a tarball.
-    /// </summary>
-    public static string CommitHash() {
-        string version = AppVersion();
-        int plus = version.IndexOf('+');
-        if (plus < 0 || plus + 1 >= version.Length) {
-            return string.Empty;
-        }
-        string sha = version[(plus + 1)..];
-
-        return sha.Length > 7 ? sha[..7] : sha;
-    }
-
-    /// <summary>
-    /// Build date (UTC, ISO), stamped by the csproj. Version and hash alone
-    /// do not answer "is this the build from before or after that fix" for
-    /// anyone running off master.
-    /// </summary>
-    public static string BuildDate() {
-        var asm = Assembly.GetEntryAssembly();
-        foreach (var meta in asm?.GetCustomAttributes<AssemblyMetadataAttribute>() ?? []) {
-            if (meta.Key == "BuildDate") {
-                return meta.Value ?? string.Empty;
-            }
-        }
-
-        return string.Empty;
+        return BuildInfo.InformationalVersion;
     }
 
     private static string IsElevated() {

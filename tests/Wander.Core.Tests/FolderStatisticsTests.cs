@@ -185,6 +185,39 @@ public class FolderStatisticsTests {
     }
 
     [Fact]
+    public void Collect_ReportsRunningTotals() {
+        var seen = new List<FolderProgress>();
+
+        var stats = FolderStatistics.Collect(Tree(), Root, progress: new Recorder(seen));
+
+        // A walk always says something: the first report goes out on the
+        // first folder, so even a fast tree is not silent.
+        Assert.NotEmpty(seen);
+        // And it never claims more than it ended up with.
+        Assert.All(seen, p => {
+            Assert.True(p.Files <= stats.Files);
+            Assert.True(p.Folders <= stats.Folders);
+            Assert.True(p.TotalSize <= stats.TotalSize);
+        });
+    }
+
+    [Fact]
+    public void Collect_ByDefault_WalksToTheEnd() {
+        // No file or folder budget any more: a wide folder is counted
+        // whole, not up to a ceiling that then has to be apologised for.
+        var fs = new FakeFileSystem();
+        fs.Directories.Add(Root);
+        for (int i = 0; i < 500; i++) {
+            fs.Files[Root + @"\f" + i + ".txt"] = new byte[1];
+        }
+
+        var stats = FolderStatistics.Collect(fs, Root);
+
+        Assert.Equal(500, stats.Files);
+        Assert.False(stats.Truncated);
+    }
+
+    [Fact]
     public void Collect_HonoursCancellation() {
         using var cts = new CancellationTokenSource();
         cts.Cancel();
@@ -212,6 +245,24 @@ public class FolderStatisticsTests {
                     IsSystem: false,
                     LinksToDirectory: false),
             };
+        }
+    }
+
+
+    /// <summary>
+    /// Records progress reports on the calling thread. Not
+    /// <see cref="Progress{T}"/>: that one posts to a synchronization
+    /// context, and a test has none to post to.
+    /// </summary>
+    private sealed class Recorder : IProgress<FolderProgress> {
+        private readonly List<FolderProgress> _seen;
+
+        public Recorder(List<FolderProgress> seen) {
+            _seen = seen;
+        }
+
+        public void Report(FolderProgress value) {
+            _seen.Add(value);
         }
     }
 

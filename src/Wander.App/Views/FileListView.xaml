@@ -976,6 +976,45 @@
                 </Ellipse.Triggers>
             </Ellipse>
         </Grid>
+
+        <!--
+            The folder is not there any more. Opaque rather than a veil:
+            the rows underneath belong to a listing that failed, and
+            leaving them half-visible invites a double-click on a file
+            that is gone with the folder.
+
+            The two buttons appear only when the path is one of the user's
+            bookmarks — for any other vanished folder there is nothing to
+            offer beyond saying so.
+        -->
+        <Grid Visibility="{Binding IsMissingFolder, Converter={StaticResource BoolToVisibility}}"
+              Background="#FDFDFD">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="420">
+                <TextBlock Text="{x:Static res:Strings.MissingFolderTitle}"
+                           FontSize="14" FontWeight="SemiBold"
+                           Foreground="#333"
+                           HorizontalAlignment="Center"
+                           TextWrapping="Wrap"/>
+                <TextBlock Text="{Binding MissingFolderPath}"
+                           Margin="0,6,0,0"
+                           FontSize="11"
+                           Foreground="#888"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center"
+                           TextWrapping="Wrap"/>
+                <StackPanel Orientation="Horizontal"
+                            Margin="0,16,0,0"
+                            HorizontalAlignment="Center"
+                            Visibility="{Binding IsMissingBookmark, Converter={StaticResource BoolToVisibility}}">
+                    <Button Content="{x:Static res:Strings.BookmarksLocate}"
+                            Command="{Binding RelocateMissingBookmarkCommand}"
+                            Padding="10,4" Margin="0,0,8,0"/>
+                    <Button Content="{x:Static res:Strings.BookmarksRemove}"
+                            Command="{Binding RemoveMissingBookmarkCommand}"
+                            Padding="10,4"/>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
         </Grid>
     </DockPanel>
 </UserControl>

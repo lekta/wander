@@ -1,6 +1,13 @@
 # Собирает портативный self-contained Wander.exe (то же, что делает CI).
 # Запускается либо вручную, либо через run-configuration «Publish release exe»
 # в Rider (правый верхний угол → выпадающий список конфигураций).
+#
+# -Run: сразу запустить собранный exe. Это единственный способ пощупать
+# приложение ровно таким, каким его получит пользователь: Debug-сборка из
+# Rider стартует заметно медленнее, и мерить по ней бессмысленно. В Rider
+# для этого есть конфигурация «Run release exe».
+
+param([switch]$Run)
 
 $ErrorActionPreference = 'Stop'
 
@@ -28,3 +35,10 @@ $size = [math]::Round((Get-Item $exe).Length / 1MB, 1)
 Write-Host ""
 Write-Host "OK  -> $exe  (${size} MB)" -ForegroundColor Green
 Write-Host "SHA256: $hash"
+
+if ($Run) {
+    Write-Host ""
+    Write-Host "Starting $exe ..." -ForegroundColor Cyan
+    # Own window, own lifetime: the script is done, the app is not.
+    Start-Process -FilePath $exe
+}

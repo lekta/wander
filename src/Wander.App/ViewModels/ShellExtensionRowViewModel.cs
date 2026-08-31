@@ -22,6 +22,7 @@ public sealed class ShellExtensionRowViewModel : ObservableObject {
 
     public ShellExtensionRowViewModel(ShellExtensionRow row, Action<ShellExtensionRowViewModel> onToggled) {
         Key = row.Key;
+        Keys = row.AllKeys.ToArray();
         Title = row.Title;
         // A dash, not a blank: an empty cell reads as "loading", and the
         // scope column next to it already says "—" for the same reason.
@@ -34,12 +35,32 @@ public sealed class ShellExtensionRowViewModel : ObservableObject {
         ScopesText = row.Scopes.Count > 0
             ? string.Join(", ", row.Scopes.Select(ShellScopes.Title))
             : Strings.SettingsShellScopeUnknown;
-        Description = row.Help.Length > 0 ? row.Help : ScopesText;
+
+        // A row whose caption is the application's own name is the whole
+        // section that application hangs in the menu — 7-Zip's popup, not
+        // one command inside it. Reading "7-Zip / 7-Zip / все файлы" and
+        // wondering what it means is exactly what the note answers; what is
+        // inside the section cannot be listed, because a COM handler
+        // decides that at popup time.
+        string note = row.AppName.Length > 0
+            && string.Equals(row.Title, row.AppName, StringComparison.CurrentCultureIgnoreCase)
+            ? Strings.SettingsShellAppSection
+            : "";
+        string help = row.Help.Length > 0 ? row.Help : ScopesText;
+        Description = note.Length > 0 ? $"{note}\n{help}" : help;
     }
 
 
     /// <summary>What the blocklist stores — see <see cref="ShellEntryKey"/>.</summary>
     public string Key { get; }
+
+    /// <summary>
+    /// Every key the checkbox switches — the row's own plus the aliases it
+    /// folded in. One row on screen can stand for two registry entries that
+    /// look identical; switching off only one of them would leave the item
+    /// in the menu.
+    /// </summary>
+    public IReadOnlyList<string> Keys { get; }
 
     public string Title { get; }
 

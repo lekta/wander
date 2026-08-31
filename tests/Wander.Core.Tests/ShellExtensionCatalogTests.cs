@@ -220,6 +220,73 @@ public class ShellExtensionCatalogTests {
     }
 
 
+    [Fact]
+    public void AClsidKeyedHandler_IsNotOffered_EvenWithAKnownApplication() {
+        // Its DLL's product info gave the row a readable-looking caption
+        // ("Операционная система Microsoft® Windows®") and hid the real
+        // problem: the shell reports verbs and labels, never CLSIDs, so
+        // nothing this checkbox blocks can ever match a drawn row.
+        var rows = Build(handlers: new[] {
+            Handler(
+                "{9F156763-7844-4DC4-B2B1-901F640F5155}",
+                title: "Операционная система Microsoft® Windows®",
+                app: "Операционная система Microsoft® Windows®"),
+            Handler("7-Zip", app: "7-Zip"),
+        });
+
+        Assert.Equal(new[] { "7-Zip" }, rows.Select(r => r.Title));
+    }
+
+    [Fact]
+    public void TwoVerbsThatLookIdentical_AreOneRowSwitchingBoth() {
+        // BitLocker registers two verbs for "Включить BitLocker" on a
+        // drive. On screen they are the same line twice; ticking one of
+        // them and finding the item still in the menu is the bug.
+        var rows = Build(handlers: new[] {
+            Handler("encrypt-bde", title: "Включить BitLocker", app: "Windows", scopes: new[] { ShellScopes.Drive }),
+            Handler("encrypt-bde-elev", title: "Включить BitLocker", app: "Windows", scopes: new[] { ShellScopes.Drive }),
+        }, includeSystem: true);
+
+        var row = Assert.Single(rows);
+        Assert.Equal(new[] { "encrypt-bde", "encrypt-bde-elev" }, row.AllKeys);
+    }
+
+    [Fact]
+    public void BlockingEitherKey_MarksTheFoldedRow() {
+        var rows = Build(
+            handlers: new[] {
+                Handler("encrypt-bde", title: "Включить BitLocker", app: "Windows", scopes: new[] { ShellScopes.Drive }),
+                Handler("encrypt-bde-elev", title: "Включить BitLocker", app: "Windows", scopes: new[] { ShellScopes.Drive }),
+            },
+            blocked: new[] { "encrypt-bde-elev" },
+            includeSystem: true);
+
+        Assert.True(Assert.Single(rows).IsBlocked);
+    }
+
+    [Fact]
+    public void SameCaptionFromDifferentApplications_StaysTwoRows() {
+        // The caption alone does not make two rows one: these are two
+        // switches, and the "Приложение" column is what tells them apart.
+        var rows = Build(handlers: new[] {
+            Handler("scan-a", title: "Проверить", app: "Antivirus A", scopes: new[] { ShellScopes.AllFiles }),
+            Handler("scan-b", title: "Проверить", app: "Antivirus B", scopes: new[] { ShellScopes.AllFiles }),
+        });
+
+        Assert.Equal(2, rows.Count);
+    }
+
+    [Fact]
+    public void SameCaptionOnDifferentScopes_StaysTwoRows() {
+        var rows = Build(handlers: new[] {
+            Handler("a", title: "Проверить", app: "Antivirus", scopes: new[] { ShellScopes.AllFiles }),
+            Handler("b", title: "Проверить", app: "Antivirus", scopes: new[] { ShellScopes.Directory }),
+        });
+
+        Assert.Equal(2, rows.Count);
+    }
+
+
     private static IReadOnlyList<ShellExtensionRow> Build(
         IReadOnlyList<ShellHandler> handlers,
         IReadOnlyList<string>? seen = null,

@@ -46,8 +46,8 @@ public static class HotkeyCatalog {
         }),
         new HotkeyGroup(Strings.HotkeyGroupPanes, new[] {
             new HotkeyRow("Tab / Shift + Tab", Strings.HotkeyNextPane),
-            new HotkeyRow("Ctrl + 1", Strings.HotkeyToList),
-            new HotkeyRow("Ctrl + 2", Strings.HotkeyToTree),
+            new HotkeyRow("Ctrl + 1", Strings.HotkeyToTree),
+            new HotkeyRow("Ctrl + 2", Strings.HotkeyToList),
             new HotkeyRow("Ctrl + Shift + E", Strings.HotkeyRevealInTree),
             new HotkeyRow("Ctrl + Q", Strings.HotkeyTogglePreview),
             new HotkeyRow("← / → в дереве", Strings.HotkeyTreeExpand),

@@ -408,17 +408,18 @@ public partial class MainWindow : Window {
             return;
         }
 
-        // Ctrl+1: back to the list, from wherever the keyboard wandered off.
+        // Ctrl+1: the folder panel, on the current folder's own node.
+        // Pressed again, the other panel. The digits follow the screen:
+        // the folder panels are to the left of the list, so they are 1.
         if (e.Key == Key.D1 && Keyboard.Modifiers == ModifierKeys.Control) {
-            FocusZone(Zone.FileList);
+            FocusFolderPane(toggle: true);
             e.Handled = true;
             return;
         }
 
-        // Ctrl+2: the folder panel, on the current folder's own node.
-        // Pressed again, the other panel.
+        // Ctrl+2: back to the list, from wherever the keyboard wandered off.
         if (e.Key == Key.D2 && Keyboard.Modifiers == ModifierKeys.Control) {
-            FocusFolderPane(toggle: true);
+            FocusZone(Zone.FileList);
             e.Handled = true;
             return;
         }
@@ -590,7 +591,7 @@ public partial class MainWindow : Window {
     private static readonly Brush _activeZoneBrush = new SolidColorBrush(Color.FromArgb(0x99, 0x8A, 0x8A, 0x8A));
 
     /// <summary>
-    /// Which folder panel Ctrl+2 opens when the current folder came from
+    /// Which folder panel Ctrl+1 opens when the current folder came from
     /// neither of them — the address bar, a double click, a restored
     /// session. The last one the keyboard was in wins.
     /// </summary>
@@ -735,12 +736,12 @@ public partial class MainWindow : Window {
 
 
     /// <summary>
-    /// Ctrl+2 and Ctrl+Shift+E. Both expand a folder panel down to the
+    /// Ctrl+1 and Ctrl+Shift+E. Both expand a folder panel down to the
     /// folder on screen and put the keyboard on its node — so the shortcut
     /// answers "where am I" as well as "take me there".
     ///
     /// <para>
-    /// <paramref name="toggle"/> is what separates them: Ctrl+2 pressed
+    /// <paramref name="toggle"/> is what separates them: Ctrl+1 pressed
     /// while already in a panel swaps to the other one, which is the whole
     /// point of one key for two panels. Ctrl+Shift+E always lands in the
     /// panel the current folder was opened from.
@@ -793,7 +794,7 @@ public partial class MainWindow : Window {
     /// </summary>
     private void OnZoneFocusChanged(object sender, KeyboardFocusChangedEventArgs e) {
         var zone = ZoneOf(e.NewFocus);
-        BookmarksTree.BorderBrush = zone == Zone.Bookmarks ? _activeZoneBrush : Brushes.Transparent;
+        BookmarksFrame.BorderBrush = zone == Zone.Bookmarks ? _activeZoneBrush : Brushes.Transparent;
         Tree.BorderBrush = zone == Zone.Drives ? _activeZoneBrush : Brushes.Transparent;
         FileListZone.BorderBrush = zone == Zone.FileList ? _activeZoneBrush : Brushes.Transparent;
 
@@ -1062,7 +1063,7 @@ public partial class MainWindow : Window {
     /// <para>
     /// The file list gives up its selection for it, deliberately: exactly
     /// one highlighted set on screen is what tells the user which of the two
-    /// the next `Delete` is about. Coming back with `Ctrl+1` leaves the
+    /// the next `Delete` is about. Coming back with `Ctrl+2` leaves the
     /// caret where it was, only unselected.
     /// </para>
     /// </summary>
@@ -1098,6 +1099,20 @@ public partial class MainWindow : Window {
             return;
         }
 
+        // Ctrl + arrows reorder the user's own bookmarks. Bookmarks panel
+        // only: the drives tree lists what the machine has, in the order
+        // the machine has it, and there is nothing there to reorder.
+        if (e.Key is Key.Up or Key.Down
+            && Keyboard.Modifiers == ModifierKeys.Control
+            && ReferenceEquals(tree, BookmarksTree)
+            && tree.SelectedItem is TreeNodeViewModel { IsRemovableBookmark: true } bookmark) {
+
+            MoveBookmark(bookmark, e.Key == Key.Up ? -1 : 1);
+            e.Handled = true;
+
+            return;
+        }
+
         if (e.Key == Key.Escape) {
             FileList.FocusList();
             e.Handled = true;
@@ -1105,27 +1120,66 @@ public partial class MainWindow : Window {
     }
 
     /// <summary>
-    /// The bookmark row menu — one item, "remove from bookmarks". Built here
-    /// rather than declared in the row template: a ContextMenu inside a
-    /// DataTemplate gets its own name scope and its own visual tree, so a
-    /// binding that reaches out to the window by name silently never
-    /// resolves, and the menu item does nothing when clicked.
+    /// The bookmark row menu — where it sits in the list, where its folder
+    /// went, and whether it stays at all. Built here rather than declared
+    /// in the row template: a ContextMenu inside a DataTemplate gets its
+    /// own name scope and its own visual tree, so a binding that reaches
+    /// out to the window by name silently never resolves, and the menu
+    /// item does nothing when clicked.
     /// </summary>
     private void ShowBookmarkMenu(FrameworkElement placement, TreeNodeViewModel node) {
         if (!node.IsRemovableBookmark) {
             return;
         }
 
-        var remove = new MenuItem { Header = Strings.BookmarksRemove };
-        remove.Click += (_, _) => Vm.RemoveBookmarkCommand.Execute(node);
-
         var menu = new ContextMenu {
             PlacementTarget = placement,
             Placement = PlacementMode.Bottom,
         };
+
+        // Only for a bookmark whose folder is gone: for a live one there
+        // is nothing to relocate, and offering it would invite pointing a
+        // working bookmark somewhere else by accident.
+        if (node.IsMissing) {
+            var locate = new MenuItem { Header = Strings.BookmarksLocate };
+            locate.Click += (_, _) => Vm.RelocateBookmark(node.FullPath);
+            menu.Items.Add(locate);
+            menu.Items.Add(new Separator());
+        }
+
+        var up = new MenuItem { Header = Strings.BookmarksMoveUp, InputGestureText = "Ctrl+↑" };
+        up.Click += (_, _) => MoveBookmark(node, -1);
+        menu.Items.Add(up);
+
+        var down = new MenuItem { Header = Strings.BookmarksMoveDown, InputGestureText = "Ctrl+↓" };
+        down.Click += (_, _) => MoveBookmark(node, +1);
+        menu.Items.Add(down);
+
+        menu.Items.Add(new Separator());
+
+        var remove = new MenuItem { Header = Strings.BookmarksRemove };
+        remove.Click += (_, _) => Vm.RemoveBookmarkCommand.Execute(node);
         menu.Items.Add(remove);
+
         menu.IsOpen = true;
     }
+
+
+    /// <summary>
+    /// Moves a bookmark and follows it with the keyboard. The panel is
+    /// rebuilt from scratch around the new order, so without putting the
+    /// focus back on the fresh row a second Ctrl+Up would have nothing
+    /// under it to move.
+    /// </summary>
+    private void MoveBookmark(TreeNodeViewModel node, int delta) {
+        if (Vm.MoveBookmark(node, delta) is not { } moved) {
+            return;
+        }
+
+        BookmarksTree.UpdateLayout();
+        ContainerFor(BookmarksTree, moved)?.Focus();
+    }
+
 
     /// <summary>The "…" button on a bookmark row.</summary>
     private void BookmarkRowMenu_Click(object sender, RoutedEventArgs e) {

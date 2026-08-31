@@ -7,6 +7,23 @@ public sealed record ShellExtensionRow {
     /// <summary>What the blocklist stores — see <see cref="ShellEntryKey"/>.</summary>
     public string Key { get; init; } = string.Empty;
 
+    /// <summary>
+    /// The other keys this one row also stands for.
+    ///
+    /// <para>
+    /// Normally empty. It fills up where two registry entries are the same
+    /// row to anyone reading the table — same caption, same application,
+    /// same file types — which is what BitLocker's pairs look like: two
+    /// verbs, one label, and no way to tell from the screen which is which.
+    /// Ticking such a box has to switch off both, or the item stays in the
+    /// menu and the checkbox reads as broken.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<string> Aliases { get; init; } = Array.Empty<string>();
+
+    /// <summary>Everything blocking this row has to switch off.</summary>
+    public IEnumerable<string> AllKeys => Aliases.Count == 0 ? new[] { Key } : Aliases.Prepend(Key);
+
     /// <summary>Label for the "Пункт" column.</summary>
     public string Title { get; init; } = string.Empty;
 
@@ -122,8 +139,8 @@ public static class ShellExtensionCatalog {
             Merge(rows, order, new ShellExtensionRow { Key = key, Title = key });
         }
 
-        return order
-            .Select(key => rows[key] with { IsBlocked = blockedKeys.Contains(rows[key].Key) })
+        return Fold(order.Select(key => rows[key]))
+            .Select(row => row with { IsBlocked = row.AllKeys.Any(blockedKeys.Contains) })
             // Seen first — those are the rows the user has an opinion about —
             // then by application, then by label.
             .OrderByDescending(row => row.IsSeen)
@@ -131,6 +148,72 @@ public static class ShellExtensionCatalog {
             .ThenBy(row => row.AppName, StringComparer.CurrentCultureIgnoreCase)
             .ThenBy(row => row.Title, StringComparer.CurrentCultureIgnoreCase)
             .ToArray();
+    }
+
+
+    /// <summary>
+    /// Collapses rows that are the same row on screen: same caption, same
+    /// application, same file types, different registry key.
+    ///
+    /// <para>
+    /// Merging by key happens first and catches the ordinary case — one
+    /// handler registered on six scopes. This is the other one: Windows
+    /// gives BitLocker two verbs for "Включить BitLocker" on a drive, and
+    /// they arrive as two rows that differ in nothing a reader can see. Two
+    /// identical lines with a checkbox each is worse than one: tick either
+    /// and the item is still in the menu.
+    /// </para>
+    ///
+    /// <para>
+    /// Nothing is lost by it — the second key rides along as an alias and
+    /// the checkbox switches off both. Rows without a caption are left
+    /// alone: two rows nobody can describe are not "the same row", they are
+    /// two rows nobody can describe.
+    /// </para>
+    /// </summary>
+    private static IReadOnlyList<ShellExtensionRow> Fold(IEnumerable<ShellExtensionRow> rows) {
+        var byFace = new Dictionary<string, int>(StringComparer.CurrentCultureIgnoreCase);
+        var folded = new List<ShellExtensionRow>();
+
+        foreach (var row in rows) {
+            string face = Face(row);
+            if (face.Length == 0 || !byFace.TryGetValue(face, out int at)) {
+                if (face.Length > 0) {
+                    byFace[face] = folded.Count;
+                }
+                folded.Add(row);
+
+                continue;
+            }
+
+            var kept = folded[at];
+            folded[at] = kept with {
+                Aliases = kept.AllKeys.Append(row.Key).Skip(1)
+                    .Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+                Help = kept.Help.Length > 0 ? kept.Help : row.Help,
+                IsSeen = kept.IsSeen || row.IsSeen,
+                IsSystem = kept.IsSystem && row.IsSystem,
+            };
+        }
+
+        return folded;
+    }
+
+    /// <summary>
+    /// Everything about a row that shows on screen, as one string. Empty
+    /// for a row whose caption is only a restatement of its key — there is
+    /// no face there to match.
+    /// </summary>
+    private static string Face(ShellExtensionRow row) {
+        if (row.Title.Length == 0 || Same(row.Title, row.Key)) {
+            return string.Empty;
+        }
+
+        return string.Join(
+            '\u0000',
+            ShellEntryKey.Normalize(row.Title),
+            row.AppName,
+            string.Join(',', row.Scopes.OrderBy(s => s, StringComparer.OrdinalIgnoreCase)));
     }
 
 
@@ -159,9 +242,15 @@ public static class ShellExtensionCatalog {
             return true;
         }
 
-        // Nothing to say about it: a bare CLSID whose DLL is gone or carries
-        // no version resource. It cannot be described, so it is not offered.
-        if (handler.AppName.Length == 0 && LooksLikeClsid(handler.Title)) {
+        // A handler registered under its CLSID has no name a drawn row
+        // could ever match: the shell reports verbs and labels, never
+        // CLSIDs, so the checkbox on such a row cannot switch anything off.
+        // Naming the row after the DLL's product info was an attempt to
+        // make it readable, and it produced the worst of both — a line
+        // called «Операционная система Microsoft® Windows®» whose checkbox
+        // does nothing. Blocked and already-drawn rows are pinned above and
+        // never reach this.
+        if (LooksLikeClsid(handler.Key)) {
             return false;
         }
 

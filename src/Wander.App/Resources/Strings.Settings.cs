@@ -252,6 +252,9 @@ public static partial class Strings {
     /// <summary>—</summary>
     public static string SettingsShellScopeUnknown => Get(nameof(SettingsShellScopeUnknown));
 
+    /// <summary>Весь раздел меню этого приложения. Что именно оно нарисует внутри, решается в момент открытия меню — заранее этого не знает никто.</summary>
+    public static string SettingsShellAppSection => Get(nameof(SettingsShellAppSection));
+
     /// <summary>Добавить в таблицу</summary>
     public static string PickerTitle => Get(nameof(PickerTitle));
 

@@ -18,16 +18,16 @@ public static partial class Strings {
     /// <summary>Для этого файла просмотр недоступен</summary>
     public static string PreviewUnsupported => Get(nameof(PreviewUnsupported));
 
-    /// <summary>Считаем…</summary>
+    /// <summary>Анализ содержимого</summary>
     public static string PreviewCounting => Get(nameof(PreviewCounting));
 
-    /// <summary>{0} файлов · {1} папок · {2}</summary>
+    /// <summary>{0:N0} файлов · {1:N0} папок · {2}</summary>
     public static string PreviewFolderHeadline => Get(nameof(PreviewFolderHeadline));
 
-    /// <summary>Папка слишком велика — показано не всё, числа снизу неполные</summary>
+    /// <summary>Слишком глубокая вложенность — вглубь пройдено не всё, числа неполные</summary>
     public static string PreviewFolderTruncated => Get(nameof(PreviewFolderTruncated));
 
-    /// <summary>{0} шт.</summary>
+    /// <summary>{0:N0} шт.</summary>
     public static string PreviewFolderTypeCount => Get(nameof(PreviewFolderTypeCount));
 
     /// <summary>Что внутри</summary>

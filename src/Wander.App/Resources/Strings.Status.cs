@@ -99,13 +99,13 @@ public static partial class Strings {
     /// <summary>Добавлено в закладки: {0}</summary>
     public static string StatusBookmarkAdded => Get(nameof(StatusBookmarkAdded));
 
-    /// <summary>Элементов: {0}</summary>
+    /// <summary>Элементов: {0:N0}</summary>
     public static string StatusItems => Get(nameof(StatusItems));
 
-    /// <summary>Элементов: {0} (скрыто: {1})</summary>
+    /// <summary>Элементов: {0:N0} (скрыто: {1:N0})</summary>
     public static string StatusItemsWithHidden => Get(nameof(StatusItemsWithHidden));
 
-    /// <summary>Подходит {0} из {1} по запросу «{2}»</summary>
+    /// <summary>Подходит {0:N0} из {1:N0} по запросу «{2}»</summary>
     public static string StatusFilterMatches => Get(nameof(StatusFilterMatches));
 
     /// <summary>Удалено безвозвратно: {0}</summary>
@@ -237,19 +237,19 @@ public static partial class Strings {
     /// <summary>Внимание: RawTherapee применяет профиль по-умолчанию (Auto-Matched Curve) только к снимкам без .pp3. Как только .pp3 появится, снимок начнёт открываться в RawTherapee с нейтральных значений, а не с автоподбора. Формат меняется в настройках, раздел «Галерея».</summary>
     public static string ConfirmCreateSidecarPp3Warning => Get(nameof(ConfirmCreateSidecarPp3Warning));
 
-    /// <summary>Поиск: найдено {0}, просмотрено {1}</summary>
+    /// <summary>Поиск: найдено {0:N0}, просмотрено {1:N0}</summary>
     public static string StatusSearching => Get(nameof(StatusSearching));
 
-    /// <summary>Найдено {0} по запросу «{1}» (просмотрено файлов: {2})</summary>
+    /// <summary>Найдено {0:N0} по запросу «{1}» (просмотрено файлов: {2:N0})</summary>
     public static string StatusSearchFound => Get(nameof(StatusSearchFound));
 
     /// <summary>Ничего не найдено по запросу «{0}»</summary>
     public static string StatusSearchNothing => Get(nameof(StatusSearchNothing));
 
-    /// <summary>Поиск остановлен, найдено: {0}</summary>
+    /// <summary>Поиск остановлен, найдено: {0:N0}</summary>
     public static string StatusSearchStopped => Get(nameof(StatusSearchStopped));
 
-    /// <summary> — показаны первые {0}</summary>
+    /// <summary>— показаны первые {0:N0}</summary>
     public static string StatusSearchTruncated => Get(nameof(StatusSearchTruncated));
 
     /// <summary> — не удалось прочитать файлов: {0}</summary>

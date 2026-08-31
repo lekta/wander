@@ -73,17 +73,17 @@
     <value>Для этого файла просмотр недоступен</value>
   </data>
   <data name="PreviewCounting" xml:space="preserve">
-    <value>Считаем…</value>
+    <value>Анализ содержимого</value>
   </data>
   <data name="PreviewFolderHeadline" xml:space="preserve">
-    <value>{0} файлов · {1} папок · {2}</value>
+    <value>{0:N0} файлов · {1:N0} папок · {2}</value>
     <comment>{0} — файлов, {1} — папок, {2} — общий размер</comment>
   </data>
   <data name="PreviewFolderTruncated" xml:space="preserve">
-    <value>Папка слишком велика — показано не всё, числа снизу неполные</value>
+    <value>Слишком глубокая вложенность — вглубь пройдено не всё, числа неполные</value>
   </data>
   <data name="PreviewFolderTypeCount" xml:space="preserve">
-    <value>{0} шт.</value>
+    <value>{0:N0} шт.</value>
     <comment>{0} — количество файлов этого типа</comment>
   </data>
   <data name="PreviewFolderTypes" xml:space="preserve">
@@ -308,13 +308,13 @@
     <value>Добавлено в закладки: {0}</value>
   </data>
   <data name="StatusItems" xml:space="preserve">
-    <value>Элементов: {0}</value>
+    <value>Элементов: {0:N0}</value>
   </data>
   <data name="StatusItemsWithHidden" xml:space="preserve">
-    <value>Элементов: {0} (скрыто: {1})</value>
+    <value>Элементов: {0:N0} (скрыто: {1:N0})</value>
   </data>
   <data name="StatusFilterMatches" xml:space="preserve">
-    <value>Подходит {0} из {1} по запросу «{2}»</value>
+    <value>Подходит {0:N0} из {1:N0} по запросу «{2}»</value>
   </data>
   <data name="StatusDeleted" xml:space="preserve">
     <value>Удалено безвозвратно: {0}</value>
@@ -766,6 +766,21 @@
   <data name="BookmarksRemove" xml:space="preserve">
     <value>Убрать из закладок</value>
   </data>
+  <data name="BookmarksMoveUp" xml:space="preserve">
+    <value>Переместить вверх</value>
+  </data>
+  <data name="BookmarksMoveDown" xml:space="preserve">
+    <value>Переместить вниз</value>
+  </data>
+  <data name="BookmarksLocate" xml:space="preserve">
+    <value>Указать расположение…</value>
+  </data>
+  <data name="BookmarksLocateTitle" xml:space="preserve">
+    <value>Где теперь эта папка?</value>
+  </data>
+  <data name="MissingFolderTitle" xml:space="preserve">
+    <value>Папка была удалена или недоступна</value>
+  </data>
   <data name="BookmarksFoldersOnly" xml:space="preserve">
     <value>В закладки можно перетаскивать только папки.</value>
   </data>
@@ -968,19 +983,19 @@
     <value>Wander не создаёт файлы, о которых не просили: первая оценка снимка без сайдкара спрашивает подтверждение. Формат по-умолчанию — .xmp, потому что он ни на что, кроме оценки, не влияет. Появившийся .pp3 отменяет применение профиля по-умолчанию в RawTherapee.</value>
   </data>
   <data name="StatusSearching" xml:space="preserve">
-    <value>Поиск: найдено {0}, просмотрено {1}</value>
+    <value>Поиск: найдено {0:N0}, просмотрено {1:N0}</value>
   </data>
   <data name="StatusSearchFound" xml:space="preserve">
-    <value>Найдено {0} по запросу «{1}» (просмотрено файлов: {2})</value>
+    <value>Найдено {0:N0} по запросу «{1}» (просмотрено файлов: {2:N0})</value>
   </data>
   <data name="StatusSearchNothing" xml:space="preserve">
     <value>Ничего не найдено по запросу «{0}»</value>
   </data>
   <data name="StatusSearchStopped" xml:space="preserve">
-    <value>Поиск остановлен, найдено: {0}</value>
+    <value>Поиск остановлен, найдено: {0:N0}</value>
   </data>
   <data name="StatusSearchTruncated" xml:space="preserve">
-    <value> — показаны первые {0}</value>
+    <value> — показаны первые {0:N0}</value>
   </data>
   <data name="StatusSearchUnreadable" xml:space="preserve">
     <value> — не удалось прочитать файлов: {0}</value>
@@ -1283,6 +1298,9 @@
   </data>
   <data name="SettingsShellScopeUnknown" xml:space="preserve">
     <value>—</value>
+  </data>
+  <data name="SettingsShellAppSection" xml:space="preserve">
+    <value>Весь раздел меню этого приложения. Что именно оно нарисует внутри, решается в момент открытия меню — заранее этого не знает никто.</value>
   </data>
   <data name="PickerTitle" xml:space="preserve">
     <value>Добавить в таблицу</value>

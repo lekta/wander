@@ -153,6 +153,21 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="TreeViewItem">
                         <StackPanel>
+                            <!--
+                                The thin rule between the special folders
+                                and the user's own bookmarks. It lives in
+                                the row template, above the row, so it
+                                spans the panel's full width — a border on
+                                the row content would start after the
+                                chevron column and read as an indented
+                                underline. Inert in the drives tree: no
+                                node there sets the flag.
+                            -->
+                            <Border x:Name="SectionRule"
+                                    Height="1"
+                                    Margin="4,2,4,2"
+                                    Background="#D6D6D6"
+                                    Visibility="Collapsed"/>
                             <Border x:Name="Row"
                                     Background="Transparent"
                                     MinHeight="22"
@@ -205,6 +220,9 @@
                                 </MultiTrigger.Conditions>
                                 <Setter TargetName="Row" Property="Background" Value="#E8E8E8"/>
                             </MultiTrigger>
+                            <DataTrigger Binding="{Binding StartsUserSection}" Value="True">
+                                <Setter TargetName="SectionRule" Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -821,8 +839,21 @@
                     <RowDefinition Height="*" MinHeight="80"/>
                 </Grid.RowDefinitions>
 
-                <DockPanel Grid.Row="0"
-                           x:Name="BookmarksPanel"
+                <!--
+                    The "keyboard is here" outline belongs to the whole
+                    bookmarks region, not to the tree inside it: the header
+                    and the "+" strip are part of the same panel, and a
+                    frame that starts below the header and stops above the
+                    strip reads as a box around nothing in particular. The
+                    thickness is always 1 and only the brush changes
+                    (OnZoneFocusChanged), so nothing shifts when it lights
+                    up.
+                -->
+                <Border Grid.Row="0"
+                        x:Name="BookmarksFrame"
+                        BorderThickness="1"
+                        BorderBrush="Transparent">
+                <DockPanel x:Name="BookmarksPanel"
                            AllowDrop="True"
                            DragOver="BookmarksPanel_DragOver"
                            Drop="BookmarksPanel_Drop">
@@ -911,8 +942,7 @@
                               TreeViewItem.Collapsed="TreeViewItem_Collapsed"
                               AllowDrop="True"
                               Visibility="{Binding IsBookmarksExpanded, Converter={StaticResource BoolToVisibility}}"
-                              BorderThickness="1"
-                              BorderBrush="Transparent"
+                              BorderThickness="0"
                               Background="Transparent">
                         <TreeView.ItemContainerStyle>
                             <!--
@@ -997,13 +1027,34 @@
                                     <Image DockPanel.Dock="Left"
                                            Source="{Binding FullPath, Converter={StaticResource IconConverter}, ConverterParameter=Small}"
                                            Width="16" Height="16" Margin="0,0,4,0"/>
+                                    <!--
+                                        A bookmark whose folder is gone
+                                        stays in the list, greyed and
+                                        italic. Removing the row would look
+                                        like Wander lost the bookmark; the
+                                        user is the one who decides whether
+                                        it goes.
+                                    -->
                                     <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
-                                               TextTrimming="CharacterEllipsis"/>
+                                               TextTrimming="CharacterEllipsis"
+                                               ToolTip="{Binding FullPath}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsMissing}" Value="True">
+                                                        <Setter Property="Foreground" Value="#9A9A9A"/>
+                                                        <Setter Property="FontStyle" Value="Italic"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
                                 </DockPanel>
                             </HierarchicalDataTemplate>
                         </TreeView.ItemTemplate>
                     </TreeView>
                 </DockPanel>
+                </Border>
 
                 <!--
                     "Add bookmark" strip. It sits at the bottom of the
@@ -1031,8 +1082,13 @@
                               Visibility="{Binding IsBookmarksExpanded, Converter={StaticResource BoolToVisibility}}"
                               DragCompleted="BookmarksSplitter_DragCompleted"/>
 
+                <!--
+                    No top margin: the outline is this panel's own edge, and
+                    a four-pixel gap under the splitter put it where the eye
+                    does not look for it. The rows keep their air from the
+                    row template's MinHeight.
+                -->
                 <TreeView x:Name="Tree" Grid.Row="2"
-                          Margin="0,4,0,0"
                           ContextMenu="{StaticResource PanelSettingsMenu}"
                           ItemsSource="{Binding Roots}"
                           SelectedItemChanged="Tree_SelectedItemChanged"

@@ -34,7 +34,7 @@ public static class PlatformBootstrapper {
         // Environment header — makes a lone session log self-sufficient for
         // bug reports (CrashReporter bundles this log as-is).
         logger.Info(
-            $"Version {AppVersion()}; {RuntimeInformation.OSDescription} ({RuntimeInformation.OSArchitecture}); " +
+            $"{BuildInfo.Line}; {RuntimeInformation.OSDescription} ({RuntimeInformation.OSArchitecture}); " +
             $"{RuntimeInformation.FrameworkDescription}; culture {CultureInfo.CurrentCulture.Name}/{CultureInfo.CurrentUICulture.Name}; " +
             $"elevated: {IsElevated()}");
 
@@ -98,13 +98,6 @@ public static class PlatformBootstrapper {
             ServiceLocator.Get<CompanionResolver>()));
     }
 
-
-    private static string AppVersion() {
-        var asm = Assembly.GetEntryAssembly();
-        return asm?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
-            ?? asm?.GetName().Version?.ToString()
-            ?? "unknown";
-    }
 
     private static string IsElevated() {
         try {

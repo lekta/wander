@@ -148,6 +148,7 @@ public sealed class PreviewController : ObservableObject {
 
     private PreviewKind _kind = PreviewKind.None;
     private bool _isLoading;
+    private bool _isCensusLoading;
     private string? _text;
     private ImageSource? _image;
     private bool _isRawImage;
@@ -233,6 +234,24 @@ public sealed class PreviewController : ObservableObject {
     public bool IsLoading {
         get => _isLoading;
         private set => SetField(ref _isLoading, value);
+    }
+
+    /// <summary>
+    /// The folder census is still walking the tree.
+    ///
+    /// <para>
+    /// Separate from <see cref="IsLoading"/>, which raises a veil over the
+    /// whole pane, because most of what the census pane shows is ready
+    /// before the walk starts: the folder's name, and the drive's capacity
+    /// when it is one. Covering those to say "counting" hides information
+    /// the user already has in order to announce information they do not.
+    /// The spinner goes where the numbers will appear, and says what it is
+    /// waiting for.
+    /// </para>
+    /// </summary>
+    public bool IsCensusLoading {
+        get => _isCensusLoading;
+        private set => SetField(ref _isCensusLoading, value);
     }
 
     public string? Text {
@@ -1804,17 +1823,32 @@ public sealed class PreviewController : ObservableObject {
         if (FolderTitle.Length == 0) {
             FolderTitle = folder;
         }
-        FolderHeadline = Strings.PreviewCounting;
+        // Blank rather than "counting": the spinner below says that, and
+        // the numbers themselves start arriving within the first fraction
+        // of a second, growing until the walk is done.
+        FolderHeadline = "";
         FolderNote = "";
         FolderTypes.Clear();
         SetVolume(DescribeVolume(folder));
         Kind = PreviewKind.Folder;
-        IsLoading = true;
+        IsCensusLoading = true;
+
+        // Built here, on the UI thread, so Progress<T> captures this
+        // dispatcher and marshals the walk's reports back to it by itself.
+        var progress = new Progress<FolderProgress>(p => {
+            // A report posted before the walk was superseded can still be
+            // waiting in the queue; it must not write the old folder's
+            // numbers over the new one's.
+            if (ct.IsCancellationRequested || !IsCensusLoading) {
+                return;
+            }
+            FolderHeadline = FormatHeadline(p.Files, p.Folders, p.TotalSize);
+        });
 
         FolderStats stats;
         try {
             var fs = ServiceLocator.Get<IFileSystem>();
-            stats = await Task.Run(() => FolderStatistics.Collect(fs, folder, ct: ct), ct);
+            stats = await Task.Run(() => FolderStatistics.Collect(fs, folder, progress: progress, ct: ct), ct);
         } catch (OperationCanceledException) {
             // Superseded by a newer selection, which owns the spinner now —
             // clearing it here would blink the pane between the two.
@@ -1827,14 +1861,13 @@ public sealed class PreviewController : ObservableObject {
             return;
         }
 
-        FolderHeadline = string.Format(
-            Strings.PreviewFolderHeadline,
-            stats.Files,
-            stats.Folders,
-            SizeFormatter.Format(stats.TotalSize));
-        // Deliberately vague about *which* budget stopped the walk (file
-        // count, depth or folder count): the user needs to know the numbers
-        // are a floor, and naming one limit when another one fired lies.
+        // Cleared before the final numbers land, so a late progress report
+        // finds the walk finished and stands aside.
+        IsCensusLoading = false;
+
+        FolderHeadline = FormatHeadline(stats.Files, stats.Folders, stats.TotalSize);
+        // The only thing that stops a default walk now is the depth guard,
+        // and that means a reparse-point loop rather than a big folder.
         FolderNote = stats.Truncated ? Strings.PreviewFolderTruncated : "";
 
         // Bars are relative to the biggest bucket, not to the total: with a
@@ -1847,8 +1880,15 @@ public sealed class PreviewController : ObservableObject {
                 SizeFormatter.Format(type.Size),
                 Math.Max(2, 90.0 * type.Size / biggest)));
         }
+    }
 
-        IsLoading = false;
+
+    private static string FormatHeadline(int files, int folders, long totalSize) {
+        return string.Format(
+            Strings.PreviewFolderHeadline,
+            files,
+            folders,
+            SizeFormatter.Format(totalSize));
     }
 
 

@@ -101,6 +101,7 @@ public sealed class MainViewModel : ObservableObject {
     private bool _isBookmarksExpanded = true;
     private bool _buildingBookmarks;
     private IReadOnlyList<NavigationStop> _persistedExpandedPaths = Array.Empty<NavigationStop>();
+    private string? _missingFolderPath;
 
     private CancellationTokenSource? _listLoadCts;
     private bool _isListLoading;
@@ -170,8 +171,16 @@ public sealed class MainViewModel : ObservableObject {
     // from Entries so a re-sort has something to sort: Entries is the
     // projection on screen, this is the result set behind it.
     private readonly List<FileSystemEntry> _searchResults = new();
+    private readonly HashSet<string> _resultPaths = new(StringComparer.OrdinalIgnoreCase);
     private DispatcherTimer? _resultFlushTimer;
     private bool _resultsDirty;
+
+    // The quick filter's own pass seeds the result list with the folder's
+    // matches and then walks underneath it, so the walk re-finds what is
+    // already there — hence the path set above — and the two halves have
+    // to stay apart on screen: here first, below after.
+    private bool _resultsHereFirst;
+    private string? _resultRoot;
     private bool _isSearchWindowOpen;
 
     private bool _restoring;
@@ -295,6 +304,8 @@ public sealed class MainViewModel : ObservableObject {
         ToggleBookmarksCommand = new RelayCommand(_ => IsBookmarksExpanded = !IsBookmarksExpanded);
         AddBookmarkCommand = new RelayCommand(p => AddBookmark(p as string));
         RemoveBookmarkCommand = new RelayCommand(p => RemoveBookmark(p as TreeNodeViewModel));
+        RemoveMissingBookmarkCommand = new RelayCommand(_ => RemoveBookmarkPath(_missingFolderPath), _ => IsMissingBookmark);
+        RelocateMissingBookmarkCommand = new RelayCommand(_ => RelocateBookmark(_missingFolderPath), _ => IsMissingBookmark);
 
         // Batch executors push undo steps from thread-pool workers, so this
         // event can arrive off the UI thread; CommandManager requery only
@@ -702,6 +713,8 @@ public sealed class MainViewModel : ObservableObject {
     public RelayCommand AddBookmarkCommand { get; }
 
     public RelayCommand RemoveBookmarkCommand { get; }
+    public RelayCommand RemoveMissingBookmarkCommand { get; }
+    public RelayCommand RelocateMissingBookmarkCommand { get; }
     public RelayCommand OpenWithCommand { get; }
     public RelayCommand OpenInTerminalCommand { get; }
     public RelayCommand CopyPathCommand { get; }
@@ -794,7 +807,21 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
-        NavigateTo(entry.FullPath, NavigationSource.RightPane);
+        NavigateTo(entry.FullPath, DescendSource());
+    }
+
+
+    /// <summary>
+    /// Walking into a subfolder from the list keeps the panel the current
+    /// folder was opened from — the same inheritance <c>NavigationService.GoUp</c>
+    /// does going the other way. Without it, opening a bookmark and then
+    /// stepping one folder deeper jumped the highlight to the drives tree,
+    /// which is not where the user was reading.
+    /// </summary>
+    private NavigationSource DescendSource() {
+        return _nav.CurrentSource == NavigationSource.Bookmark
+            ? NavigationSource.Bookmark
+            : NavigationSource.RightPane;
     }
 
     private bool TryFollowFolderShortcut(string path) {
@@ -818,7 +845,7 @@ public sealed class MainViewModel : ObservableObject {
         }
 
         _log.Info($"Follow folder shortcut: {path} -> {target}");
-        NavigateTo(target, NavigationSource.RightPane);
+        NavigateTo(target, DescendSource());
         return true;
     }
 
@@ -991,6 +1018,11 @@ public sealed class MainViewModel : ObservableObject {
             // falls back to drives, defeating the whole point of the
             // restored source.
             BuildBookmarks();
+            // Consumed: from here on the panels themselves are the record
+            // of what is expanded. Keeping the startup set around made
+            // every later rebuild (a bookmark added, a special folder
+            // switched on) re-open branches the user had since collapsed.
+            _persistedExpandedPaths = Array.Empty<NavigationStop>();
 
             // Before the first navigation: that navigation pushes the
             // restored folder onto the list, and it should land on top of
@@ -1096,8 +1128,25 @@ public sealed class MainViewModel : ObservableObject {
         return result.Distinct().ToList();
     }
 
+    /// <summary>
+    /// What was <em>visibly</em> expanded, which is why a collapsed branch
+    /// stops the walk instead of being stepped over.
+    ///
+    /// <para>
+    /// Collapsing a row does not clear the flags inside it — reopening it
+    /// in the same session is supposed to show what was open before. Saving
+    /// those hidden descendants, though, made restore expand its way down
+    /// to each of them, and expanding a descendant expands its parents:
+    /// the branch the user had just closed came back open on the next
+    /// start.
+    /// </para>
+    /// </summary>
     private static void CollectExpandedRecursive(TreeNodeViewModel node, List<NavigationStop> result, NavigationSource source) {
-        if (node.IsExpanded && !string.IsNullOrEmpty(node.FullPath)) {
+        if (!node.IsExpanded) {
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(node.FullPath)) {
             result.Add(new NavigationStop(node.FullPath, source));
         }
         foreach (var child in node.Children) {
@@ -1130,7 +1179,7 @@ public sealed class MainViewModel : ObservableObject {
         // it still sees rows — and the Refresh below would then be the
         // second listing of the same folder in one navigation.
         StopResultFlushTimer();
-        _searchResults.Clear();
+        ClearSearchResults();
         ContentSearch.Reset();
         Refresh();
         ContentSearch.NoteRootChanged();
@@ -1359,6 +1408,20 @@ public sealed class MainViewModel : ObservableObject {
         return false;
     }
 
+    /// <summary>
+    /// Moves the tree highlight onto one node. <c>IsSelected</c> is two-way
+    /// bound, so whatever had it has to be told to let go — otherwise two
+    /// rows stay highlighted once the panel is rebuilt underneath them.
+    /// </summary>
+    private void SelectTreeNode(TreeNodeViewModel node) {
+        if (_lastSelectedTreeNode is not null) {
+            _lastSelectedTreeNode.IsSelected = false;
+        }
+        node.IsSelected = true;
+        _lastSelectedTreeNode = node;
+    }
+
+
     private static TreeNodeViewModel? FindSelectedDescendant(TreeNodeViewModel node) {
         if (node.IsSelected) {
             return node;
@@ -1381,6 +1444,9 @@ public sealed class MainViewModel : ObservableObject {
         // done on a result actually leave the list.
         if (ContentSearch.IsShowingResults) {
             PruneMissingResults();
+            // Results are a list of their own, not a folder listing — the
+            // "this folder is gone" panel has nothing to sit on top of.
+            SetMissingFolder(null);
 
             return;
         }
@@ -1411,6 +1477,7 @@ public sealed class MainViewModel : ObservableObject {
             _search.SetSource(Array.Empty<FileSystemEntry>());
             Entries.Clear();
             Status = "";
+            SetMissingFolder(null);
             return;
         }
 
@@ -1508,6 +1575,7 @@ public sealed class MainViewModel : ObservableObject {
 
             _hiddenCount = hidden;
             _listedPath = path;
+            SetMissingFolder(null);
             if (arriving) {
                 AutoSelectViewMode(items, path);
             }
@@ -1531,6 +1599,14 @@ public sealed class MainViewModel : ObservableObject {
             StartRatingPass(items, path, sort);
         } catch (OperationCanceledException) {
             return;
+        } catch (Exception ex) when (ex is DirectoryNotFoundException or DriveNotFoundException) {
+            // Not an error to report in the status bar and forget: the
+            // folder is gone, and the file area says so — with the way out
+            // when the path came from a bookmark.
+            _log.Info($"Folder is gone: {path}");
+            _listedPath = null;
+            _search.SetSource(Array.Empty<FileSystemEntry>());
+            SetMissingFolder(path);
         } catch (Exception ex) {
             _log.Error($"Enumerate failed: {path}", ex);
             _listedPath = null;
@@ -1583,6 +1659,7 @@ public sealed class MainViewModel : ObservableObject {
                 return;
             }
             _listedPath = shellPath;
+            SetMissingFolder(null);
             // No sidecars in a shell namespace, and no picture-folder
             // guessing either: the Recycle Bin is a list of things to
             // decide about, not a folder to look at.
@@ -2323,7 +2400,23 @@ public sealed class MainViewModel : ObservableObject {
         RenamingPath = null;
 
         _searchResults.Clear();
-        Entries.Clear();
+        _resultPaths.Clear();
+        _resultsHereFirst = ContentSearch.IsFilterPass;
+        _resultRoot = _nav.Current;
+
+        if (_resultsHereFirst) {
+            // The quick filter's continuation. What is on screen is the
+            // answer for this folder, already found and already read by the
+            // user — emptying the list to go looking for more of it would
+            // blink that away and put it back a moment later.
+            _searchResults.AddRange(Entries);
+            foreach (var entry in _searchResults) {
+                _resultPaths.Add(entry.FullPath);
+            }
+        } else {
+            Entries.Clear();
+        }
+
         Status = string.Format(Strings.StatusSearching, 0, 0);
         StartResultFlushTimer();
     }
@@ -2341,7 +2434,7 @@ public sealed class MainViewModel : ObservableObject {
         }
 
         StopResultFlushTimer();
-        _searchResults.Clear();
+        ClearSearchResults();
         Refresh();
     }
 
@@ -2376,8 +2469,18 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
-        _searchResults.AddRange(batch);
-        _resultsDirty = true;
+        foreach (var entry in batch) {
+            // The quick filter's pass walks the current folder too, and its
+            // matches are already on the list as the seed. Dropping the
+            // repeats here rather than narrowing the walk keeps the search
+            // service one thing that answers one question.
+            if (!_resultPaths.Add(entry.FullPath)) {
+                continue;
+            }
+
+            _searchResults.Add(entry);
+            _resultsDirty = true;
+        }
     }
 
 
@@ -2407,10 +2510,15 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
+        // The walk's own count leaves out the seed — the folder's matches
+        // were found by the live filter, not by it — so what is on the list
+        // is the honest answer to "how many".
+        int found = _resultsHereFirst ? _searchResults.Count : result.Found;
+
         string what = SearchDescription();
-        string text = result.Found == 0
+        string text = found == 0
             ? string.Format(Strings.StatusSearchNothing, what)
-            : string.Format(Strings.StatusSearchFound, result.Found, what, result.FilesScanned);
+            : string.Format(Strings.StatusSearchFound, found, what, result.FilesScanned);
 
         if (result.Truncated) {
             text += string.Format(Strings.StatusSearchTruncated, result.Found);
@@ -2454,8 +2562,18 @@ public sealed class MainViewModel : ObservableObject {
                     // ClearSearch — a criterion falling back to the shallow
                     // kind, for instance. The list has to follow.
                     StopResultFlushTimer();
-                    _searchResults.Clear();
-                    Refresh();
+                    ClearSearchResults();
+
+                    // The folder was never thrown away: the search only took
+                    // the list over, and the listing it borrowed is still in
+                    // hand. Re-projecting it puts the folder back without
+                    // touching the disk — which matters now that every word
+                    // typed in the quick filter passes through here.
+                    if (IsSamePath(_listedPath, _nav.Current)) {
+                        _search.SetSource(_search.Source);
+                    } else {
+                        Refresh();
+                    }
                 }
                 break;
 
@@ -2480,7 +2598,50 @@ public sealed class MainViewModel : ObservableObject {
         _resultsDirty = false;
 
         var sort = new SortOptions(Settings.SortKey, Settings.SortAscending, Settings.GroupFoldersFirst);
-        Entries.ReplaceAll(EntryComparers.Sort(_searchResults, sort));
+        var sorted = EntryComparers.Sort(_searchResults, sort);
+
+        Entries.ReplaceAll(_resultsHereFirst ? HereFirst(sorted) : sorted);
+    }
+
+
+    /// <summary>
+    /// Splits a sorted result list into "in the folder on screen" and
+    /// "somewhere under it", in that order and keeping the sort inside each
+    /// half.
+    ///
+    /// <para>
+    /// Only for the quick filter's pass, and it is the whole shape of that
+    /// interaction: the user asked about the folder they are standing in
+    /// and got an answer, and the subtree is the extra. Letting the sort
+    /// interleave the two would scatter that answer through rows from
+    /// folders the user never opened.
+    /// </para>
+    /// </summary>
+    private IReadOnlyList<FileSystemEntry> HereFirst(IReadOnlyList<FileSystemEntry> sorted) {
+        var here = new List<FileSystemEntry>(sorted.Count);
+        var below = new List<FileSystemEntry>();
+
+        foreach (var entry in sorted) {
+            string? folder = Path.GetDirectoryName(
+                entry.FullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            if (IsSamePath(folder, _resultRoot)) {
+                here.Add(entry);
+            } else {
+                below.Add(entry);
+            }
+        }
+
+        here.AddRange(below);
+
+        return here;
+    }
+
+
+    private void ClearSearchResults() {
+        _searchResults.Clear();
+        _resultPaths.Clear();
+        _resultsHereFirst = false;
+        _resultRoot = null;
     }
 
 
@@ -2493,8 +2654,14 @@ public sealed class MainViewModel : ObservableObject {
     /// disk again.
     /// </summary>
     private void PruneMissingResults() {
-        int removed = _searchResults.RemoveAll(
-            entry => !_fs.FileExists(entry.FullPath) && !_fs.DirectoryExists(entry.FullPath));
+        int removed = _searchResults.RemoveAll(entry => {
+            if (_fs.FileExists(entry.FullPath) || _fs.DirectoryExists(entry.FullPath)) {
+                return false;
+            }
+            _resultPaths.Remove(entry.FullPath);
+
+            return true;
+        });
         if (removed == 0) {
             return;
         }
@@ -2859,6 +3026,42 @@ public sealed class MainViewModel : ObservableObject {
     }
 
 
+    // --- A folder that is no longer there --------------------------------
+
+    /// <summary>
+    /// The folder the file area could not list because it is not on disk
+    /// any more, or null while the listing is fine. Set by the enumeration
+    /// itself rather than by a probe before it: the answer is already in
+    /// the exception, and one more <c>DirectoryExists</c> on the UI thread
+    /// is one more chance to hang on a dead network share.
+    /// </summary>
+    public string? MissingFolderPath => _missingFolderPath;
+
+    public bool IsMissingFolder => _missingFolderPath is not null;
+
+    /// <summary>
+    /// The missing folder is one of the user's bookmarks — the case where
+    /// the panel can offer to do something about it rather than only
+    /// report it.
+    /// </summary>
+    public bool IsMissingBookmark => _missingFolderPath is not null && IsBookmarked(_missingFolderPath);
+
+
+    private void SetMissingFolder(string? path) {
+        if (string.Equals(_missingFolderPath, path, StringComparison.OrdinalIgnoreCase)) {
+            return;
+        }
+        _missingFolderPath = path;
+        RaiseMissingFolder();
+    }
+
+    private void RaiseMissingFolder() {
+        Raise(nameof(MissingFolderPath));
+        Raise(nameof(IsMissingFolder));
+        Raise(nameof(IsMissingBookmark));
+    }
+
+
     // --- Bookmarks ------------------------------------------------------
 
     /// <summary>
@@ -2910,11 +3113,16 @@ public sealed class MainViewModel : ObservableObject {
                 AddSpecialFolderNode(Strings.SpecialFolderRecycleBin, ShellPaths.RecycleBin);
             }
 
+            // The divider goes on the first user bookmark, and only when
+            // there is a special folder above it to be divided from.
+            bool startsSection = Bookmarks.Count > 0;
             foreach (string path in _favorites) {
-                var node = TryBuildFolderNode(path);
-                if (node is not null) {
-                    Bookmarks.Add(node);
+                var node = TryBuildFolderNode(path, startsSection);
+                if (node is null) {
+                    continue;
                 }
+                Bookmarks.Add(node);
+                startsSection = false;
             }
 
             foreach (var stop in bookmarkStops) {
@@ -2983,8 +3191,16 @@ public sealed class MainViewModel : ObservableObject {
         Bookmarks.Add(node);
     }
 
-    private TreeNodeViewModel? TryBuildFolderNode(string path) {
-        if (string.IsNullOrEmpty(path) || !_fs.DirectoryExists(path)) {
+    /// <summary>
+    /// One user bookmark. A folder that is no longer on disk still gets a
+    /// row — dropping it would look like Wander forgot the bookmark, and
+    /// the user is the one who decides whether it goes. The row is built
+    /// without an <see cref="IFileSystem"/> so it has no chevron and no
+    /// children to enumerate; clicking it lands on the "this folder is
+    /// gone" panel in the file area.
+    /// </summary>
+    private TreeNodeViewModel? TryBuildFolderNode(string path, bool startsSection) {
+        if (string.IsNullOrEmpty(path)) {
             return null;
         }
         string name = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
@@ -2992,8 +3208,16 @@ public sealed class MainViewModel : ObservableObject {
             // e.g. a drive root — fall back to the trimmed path itself.
             name = path;
         }
-        var node = new TreeNodeViewModel(name, path, EntryKind.Directory, _fs, _fs.HasSubdirectories(path), Settings) {
+
+        bool exists = _fs.DirectoryExists(path);
+        var node = new TreeNodeViewModel(
+            name, path, EntryKind.Directory,
+            exists ? _fs : null,
+            exists && _fs.HasSubdirectories(path),
+            Settings) {
             IsRemovableBookmark = true,
+            StartsUserSection = startsSection,
+            IsMissing = !exists,
         };
         WireTreeNode(node);
         return node;
@@ -3135,19 +3359,111 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     public void RemoveBookmark(TreeNodeViewModel? node) {
-        if (node is null || string.IsNullOrEmpty(node.FullPath)) {
+        RemoveBookmarkPath(node?.FullPath);
+    }
+
+
+    /// <summary>
+    /// Drops one user bookmark. Reached from the row menu and from the
+    /// "this folder is gone" panel, which knows the path but has no tree
+    /// node to hand over.
+    /// </summary>
+    public void RemoveBookmarkPath(string? path) {
+        if (string.IsNullOrEmpty(path)) {
             return;
         }
-        int idx = _favorites.FindIndex(p => string.Equals(p, node.FullPath, StringComparison.OrdinalIgnoreCase));
+        int idx = _favorites.FindIndex(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
         if (idx < 0) {
             // Special folder (Downloads / This PC) — not a user favourite;
             // hiding it goes via Settings.
             return;
         }
         _favorites.RemoveAt(idx);
-        _log.Info($"Bookmark removed: {node.FullPath}");
+        _log.Info($"Bookmark removed: {path}");
         BuildBookmarks();
         SaveState();
+        RaiseMissingFolder();
+    }
+
+
+    /// <summary>
+    /// Moves one user bookmark up or down its section of the panel.
+    /// Special folders are not part of <c>_favorites</c>, so the move can
+    /// never carry a bookmark across the divider.
+    ///
+    /// <para>
+    /// Returns the rebuilt node for the moved bookmark — <see cref="BuildBookmarks"/>
+    /// creates fresh instances, and the caller needs the new one to put the
+    /// keyboard back on the row so a second Ctrl+Up keeps working.
+    /// </para>
+    /// </summary>
+    public TreeNodeViewModel? MoveBookmark(TreeNodeViewModel? node, int delta) {
+        if (node is null || string.IsNullOrEmpty(node.FullPath)) {
+            return null;
+        }
+
+        string path = node.FullPath;
+        int from = _favorites.FindIndex(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
+        if (from < 0) {
+            return null;
+        }
+
+        int to = from + delta;
+        if (to < 0 || to >= _favorites.Count) {
+            return null;
+        }
+
+        _favorites.RemoveAt(from);
+        _favorites.Insert(to, path);
+        _log.Info($"Bookmark moved: {path} ({from} -> {to})");
+        BuildBookmarks();
+        SaveState();
+
+        var moved = Bookmarks.FirstOrDefault(b => IsSamePath(b.FullPath, path));
+        if (moved is not null) {
+            SelectTreeNode(moved);
+        }
+
+        return moved;
+    }
+
+
+    /// <summary>
+    /// Points a bookmark at where its folder went. The path is replaced in
+    /// place rather than removed and re-added, so the bookmark keeps its
+    /// position in the list.
+    /// </summary>
+    public void RelocateBookmark(string? oldPath) {
+        if (string.IsNullOrEmpty(oldPath)) {
+            return;
+        }
+        int idx = _favorites.FindIndex(p => string.Equals(p, oldPath, StringComparison.OrdinalIgnoreCase));
+        if (idx < 0) {
+            return;
+        }
+
+        var picker = new Microsoft.Win32.OpenFolderDialog {
+            Title = Strings.BookmarksLocateTitle,
+            Multiselect = false,
+        };
+        if (picker.ShowDialog() != true) {
+            return;
+        }
+
+        string chosen = picker.FolderName;
+        if (string.IsNullOrEmpty(chosen) || !_fs.DirectoryExists(chosen)) {
+            return;
+        }
+        if (_favorites.Any(p => string.Equals(p, chosen, StringComparison.OrdinalIgnoreCase))) {
+            Status = Strings.StatusAlreadyBookmarked;
+            return;
+        }
+
+        _favorites[idx] = chosen;
+        _log.Info($"Bookmark relocated: {oldPath} -> {chosen}");
+        BuildBookmarks();
+        SaveState();
+        NavigateAndSelectFolder(chosen, NavigationSource.Bookmark);
     }
 
     public bool IsUserFavorite(TreeNodeViewModel? node) {
@@ -3174,31 +3490,13 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     /// <summary>
-    /// "Версия 0.2.1-beta · 04f26b0 · 2026-08-31" for the «О Wander»
-    /// submenu — the three things a bug report needs, in the order they get
-    /// read. The raw +sha suffix is not shown: forty hex characters in a
-    /// menu row is not a version, it is a wall.
+    /// "Версия v0.2.1-beta R, 04f26, 31.08.26" for the «О Wander» submenu —
+    /// everything a bug report has to carry, in the order it gets read, and
+    /// the same line the session log opens with. The raw +sha suffix is not
+    /// shown: forty hex characters in a menu row is not a version, it is a
+    /// wall.
     /// </summary>
-    public string VersionLabel {
-        get {
-            string version = Diagnostics.CrashReporter.AppVersion();
-            int plus = version.IndexOf('+');
-            var parts = new List<string> { plus < 0 ? version : version[..plus] };
-
-            // Both are empty in a build with no git metadata; the row then
-            // says just the version rather than trailing empty separators.
-            string commit = Diagnostics.CrashReporter.CommitHash();
-            if (commit.Length > 0) {
-                parts.Add(commit);
-            }
-            string built = Diagnostics.CrashReporter.BuildDate();
-            if (built.Length > 0) {
-                parts.Add(built);
-            }
-
-            return string.Format(Strings.MenuVersion, string.Join(" · ", parts));
-        }
-    }
+    public string VersionLabel => string.Format(Strings.MenuVersion, BuildInfo.Line);
 
 
     private void ReportIssue() {

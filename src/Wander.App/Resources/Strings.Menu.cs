@@ -162,6 +162,21 @@ public static partial class Strings {
     /// <summary>Убрать из закладок</summary>
     public static string BookmarksRemove => Get(nameof(BookmarksRemove));
 
+    /// <summary>Переместить вверх</summary>
+    public static string BookmarksMoveUp => Get(nameof(BookmarksMoveUp));
+
+    /// <summary>Переместить вниз</summary>
+    public static string BookmarksMoveDown => Get(nameof(BookmarksMoveDown));
+
+    /// <summary>Указать расположение…</summary>
+    public static string BookmarksLocate => Get(nameof(BookmarksLocate));
+
+    /// <summary>Где теперь эта папка?</summary>
+    public static string BookmarksLocateTitle => Get(nameof(BookmarksLocateTitle));
+
+    /// <summary>Папка была удалена или недоступна</summary>
+    public static string MissingFolderTitle => Get(nameof(MissingFolderTitle));
+
     /// <summary>Перетащите сюда папку, чтобы добавить её в закладки</summary>
     public static string BookmarksAddHint => Get(nameof(BookmarksAddHint));
 

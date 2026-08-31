@@ -700,23 +700,17 @@ public sealed class SystemIconProvider : IIconProvider {
                 IconLog($"forced overlay=1 for .lnk (shell reported none): {path}");
             }
 
-            if (isLnk) {
-                IconLog($"overlay query: path={path} idx={overlayIndex}");
-            }
-
             if (overlayIndex > 0) {
                 using Bitmap? overlayBmp = LoadOverlayBitmap(overlayIndex);
-                if (isLnk) {
-                    IconLog($"overlay bitmap: loaded={overlayBmp is not null}" +
-                            (overlayBmp is not null
-                                ? $" size={overlayBmp.Width}x{overlayBmp.Height} fmt={overlayBmp.PixelFormat}"
-                                : ""));
+                // Only the failure is worth a line. Three lines per
+                // shortcut on the way that worked buried the rest of the
+                // session under a folder of .lnk files — and the log is
+                // read before every release now (see RELEASING.md).
+                if (overlayBmp is null && isLnk) {
+                    IconLog($"overlay bitmap missing for idx={overlayIndex}: {path}");
                 }
                 if (overlayBmp is not null) {
                     CompositeOverlay(baseBmp, overlayBmp);
-                    if (isLnk) {
-                        IconLog($"overlay composited onto base ({baseBmp.Width}x{baseBmp.Height})");
-                    }
                 }
             }
 

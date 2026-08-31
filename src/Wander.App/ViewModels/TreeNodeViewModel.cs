@@ -68,6 +68,26 @@ public sealed class TreeNodeViewModel : ObservableObject {
     /// </summary>
     public bool IsRemovableBookmark { get; init; }
 
+    /// <summary>
+    /// The first user bookmark under the special folders — the row that
+    /// draws the thin divider between the two halves of the panel.
+    ///
+    /// <para>
+    /// A flag on the row rather than a separator item in the list: a fake
+    /// node would have to be stepped over by every walk of the tree
+    /// (expansion, keyboard, save and restore) and by the drop pipeline.
+    /// </para>
+    /// </summary>
+    public bool StartsUserSection { get; init; }
+
+    /// <summary>
+    /// The bookmark points at a folder that is no longer there. The row
+    /// stays in the panel — a bookmark that silently vanishes reads as
+    /// "Wander lost my bookmark" — but greyed out and without a chevron,
+    /// and clicking it explains itself in the file area.
+    /// </summary>
+    public bool IsMissing { get; init; }
+
 
     /// <summary>
     /// Recursively expands nodes along the way to <paramref name="targetPath"/> and (optionally)

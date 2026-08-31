@@ -13,8 +13,9 @@ public sealed record FolderStats(
     int Folders,
     long TotalSize,
     IReadOnlyList<FolderTypeGroup> Types,
-    // True when the walk stopped on the file budget: totals are a floor,
-    // not the truth, and the UI has to say so rather than lie quietly.
+    // True when the walk refused to go somewhere: totals are a floor, not
+    // the truth, and the UI has to say so rather than lie quietly. By
+    // default only the depth guard can do this — see DefaultMaxDepth.
     bool Truncated) {
 
     public static readonly FolderStats Empty =
@@ -23,13 +24,44 @@ public sealed record FolderStats(
 
 
 /// <summary>
+/// Running totals, handed out while the walk is still going.
+///
+/// <para>
+/// There is no percentage here, and there cannot be: knowing how far along
+/// the walk is would mean knowing how many files the tree holds, and the
+/// only way to learn that is to walk it. Windows keeps no such count for a
+/// folder — the number Explorer shows in Properties is produced by the same
+/// walk, which is why it counts up there too. So the honest report is "this
+/// much so far", not "this much of that much".
+/// </para>
+/// </summary>
+public readonly record struct FolderProgress(int Files, int Folders, long TotalSize);
+
+
+/// <summary>
 /// Recursive folder census, built on <see cref="IFileSystem"/> so it stays
 /// testable and platform-free. Iterative rather than recursive: a deep tree
 /// (or a reparse-point loop) must not take the stack with it.
 /// </summary>
 public static class FolderStatistics {
-    /// <summary>How many files to look at before giving up and reporting partial results.</summary>
-    public const int DefaultFileBudget = 200_000;
+    /// <summary>
+    /// No ceiling: the walk finishes what it started.
+    ///
+    /// <para>
+    /// It used to stop at 200 000 files and say "this folder is too big".
+    /// The budget was never about memory — the walk holds one dictionary of
+    /// extensions and a stack of pending paths — it was about time, and it
+    /// bought that time by lying about the numbers. Reporting progress as
+    /// it goes buys the same time honestly: the user watches the count
+    /// climb and can walk away, which cancels the token. The ceiling stays
+    /// as a parameter because a caller with a different bargain may still
+    /// want one.
+    /// </para>
+    /// </summary>
+    public const int NoBudget = int.MaxValue;
+
+    /// <summary>How often running totals are handed out, at most.</summary>
+    private const long ProgressEveryMs = 150;
 
     /// <summary>
     /// How deep to descend. This is the guard against reparse-point loops:
@@ -40,25 +72,27 @@ public static class FolderStatistics {
     /// </summary>
     public const int DefaultMaxDepth = 64;
 
-    /// <summary>
-    /// How many folders to visit. Bounds a walk that is wide rather than
-    /// deep, and bounds the pending stack with it.
-    /// </summary>
-    public const int DefaultFolderBudget = 100_000;
-
 
     /// <summary>
     /// Walks <paramref name="path"/> and aggregates it. Unreadable subtrees
     /// are skipped rather than aborting the walk — one protected folder
     /// deep inside must not blank the whole panel.
     /// </summary>
+    /// <param name="progress">
+    /// Told the running totals about six times a second, so a big tree can
+    /// show its numbers climbing instead of an unexplained wait. Reported
+    /// from whatever thread the walk runs on — an <see cref="IProgress{T}"/>
+    /// built on the UI thread (<c>Progress&lt;T&gt;</c>) marshals it back by
+    /// itself.
+    /// </param>
     public static FolderStats Collect(
         IFileSystem fs,
         string path,
         int maxTypes = 8,
-        int fileBudget = DefaultFileBudget,
+        int fileBudget = NoBudget,
         int maxDepth = DefaultMaxDepth,
-        int folderBudget = DefaultFolderBudget,
+        int folderBudget = NoBudget,
+        IProgress<FolderProgress>? progress = null,
         CancellationToken ct = default) {
 
         int files = 0;
@@ -69,6 +103,26 @@ public static class FolderStatistics {
 
         var pending = new Stack<(string Path, int Depth)>();
         pending.Push((path, 0));
+
+        // Started only when somebody is listening: the clock is the whole
+        // cost of reporting when nobody is.
+        var clock = progress is null ? null : System.Diagnostics.Stopwatch.StartNew();
+        bool reportedOnce = false;
+
+        // The first one goes out as soon as there is anything to say — even
+        // "nothing yet" — so the panel shows that the walk has started
+        // rather than a blank line for the first sixth of a second.
+        void ReportIfDue() {
+            if (clock is null) {
+                return;
+            }
+            if (reportedOnce && clock.ElapsedMilliseconds < ProgressEveryMs) {
+                return;
+            }
+            reportedOnce = true;
+            clock.Restart();
+            progress!.Report(new FolderProgress(files, folders, total));
+        }
 
         while (pending.Count > 0) {
             ct.ThrowIfCancellationRequested();
@@ -86,7 +140,8 @@ public static class FolderStatistics {
                 if (child.Kind == EntryKind.Directory) {
                     folders++;
                     // Counted either way — it is part of the folder. Whether
-                    // we look *inside* is what the budgets decide.
+                    // we look *inside* is what the depth guard and the
+                    // budgets decide.
                     if (depth + 1 > maxDepth || folders >= folderBudget) {
                         truncated = true;
                         continue;
@@ -103,12 +158,23 @@ public static class FolderStatistics {
                 var bucket = byExtension.TryGetValue(ext, out var found) ? found : default;
                 byExtension[ext] = (bucket.Count + 1, bucket.Size + size);
 
+                // One folder can hold the whole tree, so the check cannot
+                // live only between folders — but reading the clock per file
+                // is a syscall per file, hence the counter in front of it.
+                if ((files & 1023) == 0) {
+                    ReportIfDue();
+                }
+
                 if (files >= fileBudget) {
                     truncated = true;
                     pending.Clear();
                     break;
                 }
             }
+
+            // …and a tree of many small folders never reaches 1024 files in
+            // one of them.
+            ReportIfDue();
         }
 
         // Biggest first: "what is eating this folder" is the question the

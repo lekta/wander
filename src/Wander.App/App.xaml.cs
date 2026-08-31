@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Threading;
 using Wander.App.Diagnostics;
 using Wander.App.Resources;
+using Wander.App.Util;
 using Wander.Core;
 using Wander.Core.Localization;
 using Wander.Core.Logging;
@@ -23,6 +24,10 @@ public partial class App : Application {
 
     protected override void OnStartup(StartupEventArgs e) {
         IsSmokeRun = e.Args.Any(arg => string.Equals(arg, "--smoke", StringComparison.OrdinalIgnoreCase));
+        // Before anything formats a number, and before the thread pool has
+        // been handed any work that might: the culture set here is the one
+        // background passes inherit.
+        NumberFormat.Install();
         PlatformBootstrapper.RegisterDefaults();
         // The string table lives in this assembly, so Core cannot reach it
         // directly. Registering the source here — before anything builds a

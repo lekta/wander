@@ -799,10 +799,15 @@ public sealed class SettingsViewModel : ObservableObject {
     }
 
     private void OnShellRowToggled(ShellExtensionRowViewModel row) {
-        if (row.IsBlocked) {
-            _blockedShellKeys.Add(row.Key);
-        } else {
-            _blockedShellKeys.Remove(row.Key);
+        // Every key the row folded in, not just its own: two registry
+        // entries that look identical on screen are one checkbox, and
+        // leaving the second one unblocked would keep the item in the menu.
+        foreach (string key in row.Keys) {
+            if (row.IsBlocked) {
+                _blockedShellKeys.Add(key);
+            } else {
+                _blockedShellKeys.Remove(key);
+            }
         }
 
         OnMenuToggleChanged();

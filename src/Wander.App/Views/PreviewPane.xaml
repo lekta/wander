@@ -25,6 +25,7 @@
         <conv:BitmapPixelSizeConverter x:Key="BitmapPixelSize"/>
         <conv:RankStarConverter x:Key="RankStar"/>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+        <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility"/>
 
         <!--
             Text drawn on the content surround, which is the gallery's
@@ -554,9 +555,56 @@
                                        Margin="0,4,0,0" TextWrapping="Wrap"
                                        Visibility="{Binding Preview.HasFolderNote, Converter={StaticResource BoolToVisibility}}"/>
 
+                            <!--
+                                Walking a folder takes as long as it takes,
+                                and the spinner for it goes where its
+                                results will land — not over the whole
+                                pane. The name of the folder and the
+                                drive's capacity are already on screen
+                                above, and a veil over them would hide what
+                                the user has in order to announce what they
+                                do not have yet. The caption under it says
+                                which operation is still running.
+                            -->
+                            <StackPanel Margin="0,18,0,0"
+                                        HorizontalAlignment="Center"
+                                        Visibility="{Binding Preview.IsCensusLoading, Converter={StaticResource BoolToVisibility}}">
+                                <Ellipse Width="20" Height="20" StrokeThickness="2"
+                                         Stroke="#0078D7" Fill="Transparent"
+                                         StrokeDashArray="3,2"
+                                         RenderTransformOrigin="0.5,0.5">
+                                    <Ellipse.RenderTransform>
+                                        <RotateTransform x:Name="CensusSpinnerRotate" Angle="0"/>
+                                    </Ellipse.RenderTransform>
+                                    <Ellipse.Triggers>
+                                        <EventTrigger RoutedEvent="Loaded">
+                                            <BeginStoryboard>
+                                                <Storyboard RepeatBehavior="Forever">
+                                                    <DoubleAnimation Storyboard.TargetName="CensusSpinnerRotate"
+                                                                     Storyboard.TargetProperty="Angle"
+                                                                     From="0" To="360" Duration="0:0:1"/>
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </EventTrigger>
+                                    </Ellipse.Triggers>
+                                </Ellipse>
+                                <TextBlock Text="{x:Static res:Strings.PreviewCounting}"
+                                           Style="{StaticResource PaneDim}"
+                                           FontSize="11" Margin="0,8,0,0"
+                                           HorizontalAlignment="Center"/>
+                            </StackPanel>
+
+                            <!--
+                                The heading and the "empty" line stand down
+                                while the walk is running: both describe a
+                                result that is not in yet, and "Папка пуста"
+                                under a spinner is a wrong answer, not a
+                                pending one.
+                            -->
                             <TextBlock Text="{x:Static res:Strings.PreviewFolderTypes}"
                                        Style="{StaticResource PaneText}"
-                                       FontWeight="SemiBold" Margin="0,16,0,6"/>
+                                       FontWeight="SemiBold" Margin="0,16,0,6"
+                                       Visibility="{Binding Preview.IsCensusLoading, Converter={StaticResource InverseBoolToVisibility}}"/>
 
                             <!-- Empty folder: say so instead of leaving a blank panel. -->
                             <TextBlock Text="{x:Static res:Strings.PreviewFolderEmpty}">
@@ -564,9 +612,13 @@
                                     <Style TargetType="TextBlock" BasedOn="{StaticResource PaneDim}">
                                         <Setter Property="Visibility" Value="Collapsed"/>
                                         <Style.Triggers>
-                                            <DataTrigger Binding="{Binding Preview.FolderTypes.Count}" Value="0">
+                                            <MultiDataTrigger>
+                                                <MultiDataTrigger.Conditions>
+                                                    <Condition Binding="{Binding Preview.FolderTypes.Count}" Value="0"/>
+                                                    <Condition Binding="{Binding Preview.IsCensusLoading}" Value="False"/>
+                                                </MultiDataTrigger.Conditions>
                                                 <Setter Property="Visibility" Value="Visible"/>
-                                            </DataTrigger>
+                                            </MultiDataTrigger>
                                         </Style.Triggers>
                                     </Style>
                                 </TextBlock.Style>

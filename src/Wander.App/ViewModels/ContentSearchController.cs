@@ -43,6 +43,16 @@ public enum SearchState {
 /// </para>
 ///
 /// <para>
+/// The two do meet, though, and this is where: a mask typed in the
+/// toolbar narrows the folder live <em>and</em>, once the typing settles,
+/// starts a pass under that folder — see <see cref="IsFilterPass"/>. The
+/// answer for the folder you are standing in is instant, the rest arrives
+/// underneath it. That is the one case where a keystroke does end in a
+/// disk walk, and the pause plus <see cref="MinAutoRunLength"/> are what
+/// keep it to one walk per word rather than one per letter.
+/// </para>
+///
+/// <para>
 /// Two criteria, combined with <em>and</em>: a mask on the name and text
 /// inside the file. Either may be empty. That is what makes "every
 /// <c>*.cs</c> that mentions X" expressible, and it is why there is no
@@ -57,6 +67,14 @@ public sealed class ContentSearchController : ObservableObject {
     /// enough to feel like the list is answering rather than waiting.
     /// </summary>
     private const int DebounceMs = 400;
+
+    /// <summary>
+    /// Shortest mask the quick filter will walk subfolders for on its own.
+    /// One character matches most of a disk, and the walk it starts is
+    /// wasted before it begins. Enter and the search button ignore this —
+    /// an explicit ask is an ask.
+    /// </summary>
+    public const int MinAutoRunLength = 2;
 
     private readonly ContentSearchService? _service;
     private readonly Dispatcher _dispatcher;
@@ -85,6 +103,13 @@ public sealed class ContentSearchController : ObservableObject {
     private bool _searchBinaries;
     private SearchState _state = SearchState.Idle;
     private bool _isShowingResults;
+    private bool _isFilterPass;
+
+    // Where the criteria last came from. Only the toolbar box reaches past
+    // the folder on its own; the search window has a checkbox for that, and
+    // a search that walked subfolders with the box unticked would be lying
+    // about itself.
+    private bool _fromFilterBox;
 
 
     public ContentSearchController(
@@ -165,7 +190,7 @@ public sealed class ContentSearchController : ObservableObject {
             Raise(nameof(TextQuery));
             Raise(nameof(IsDeep));
             Raise(nameof(BinariesApplicable));
-            OnCriteriaChanged(immediate: false);
+            OnCriteriaChanged(immediate: false, fromFilterBox: true);
         }
     }
 
@@ -297,6 +322,25 @@ public sealed class ContentSearchController : ObservableObject {
 
 
     /// <summary>
+    /// The pass that owns the list right now is the quick filter reaching
+    /// past the folder on screen, rather than a search set up in the search
+    /// window.
+    ///
+    /// <para>
+    /// The owner shows the two differently. A search replaces the list; this
+    /// one continues it — the rows the live filter already found stay where
+    /// they are and the deeper ones land under them, because blanking the
+    /// answer the user is reading in order to go looking for more of it is
+    /// not an improvement.
+    /// </para>
+    /// </summary>
+    public bool IsFilterPass {
+        get => _isFilterPass;
+        private set => SetField(ref _isFilterPass, value);
+    }
+
+
+    /// <summary>
     /// Rewrites the box after a field in the window changed. Only from
     /// that direction: typing in the box is the box's own business, and
     /// re-formatting it there is what ate the colon.
@@ -320,7 +364,7 @@ public sealed class ContentSearchController : ObservableObject {
     public void RunNow() {
         _debounce.Stop();
 
-        if (_service is null || !IsDeep) {
+        if (_service is null) {
             return;
         }
 
@@ -334,16 +378,31 @@ public sealed class ContentSearchController : ObservableObject {
             return;
         }
 
+        // Shallow criteria mean the live filter has already answered for
+        // the folder on screen. What the toolbar box starts here is the
+        // continuation of that answer: the same mask, under the same
+        // folder. The window's own shallow search has nothing to add — the
+        // filter already showed it — so it does not run at all.
+        bool filterPass = !IsDeep && _fromFilterBox;
+        if (!IsDeep && !filterPass) {
+            return;
+        }
+
+        var scope = filterPass ? SearchScope.Subfolders : _scope;
+
         Cancel();
         _cts = new CancellationTokenSource();
         var token = _cts.Token;
         int generation = ++_generation;
 
+        // Before Started: the owner reads it to decide whether to empty the
+        // list or to keep what is in it.
+        IsFilterPass = filterPass;
         IsShowingResults = true;
         State = SearchState.Running;
 
         var request = new SearchRequest(
-            name, _textQuery, root, _scope, _searchBinaries, _visibility());
+            name, _textQuery, root, scope, _searchBinaries, _visibility());
 
         Started?.Invoke();
         _ = RunAsync(request, token, generation);
@@ -396,6 +455,7 @@ public sealed class ContentSearchController : ObservableObject {
     public void ExitResults() {
         Cancel();
         IsShowingResults = false;
+        IsFilterPass = false;
         State = SearchState.Idle;
     }
 
@@ -453,22 +513,24 @@ public sealed class ContentSearchController : ObservableObject {
     /// A criterion moved. Decides between "start the clock", "start now"
     /// and "this is not our business at all".
     /// </summary>
-    private void OnCriteriaChanged(bool immediate) {
+    private void OnCriteriaChanged(bool immediate, bool fromFilterBox = false) {
+        _fromFilterBox = fromFilterBox;
+
         // A walk whose answer nobody wants any more is wasted disk, and a
         // pass left running would land on top of the new criteria's state.
         Cancel();
 
+        // Shallow criteria have a cheap answer to fall back on: the live
+        // filter repaints the folder at once, and this class goes looking
+        // under it after the pause. Deep ones do not, so their results stay
+        // on screen until the new pass replaces them — otherwise the search
+        // window would blink back to the folder on every keystroke.
         if (!IsDeep) {
-            // The live name filter takes over from here. Any results still
-            // on screen belong to a question that is no longer being asked.
             if (IsShowingResults) {
                 ExitResults();
             } else {
                 State = SearchState.Idle;
             }
-            ShallowChanged?.Invoke();
-
-            return;
         }
 
         ShallowChanged?.Invoke();
@@ -485,6 +547,21 @@ public sealed class ContentSearchController : ObservableObject {
             RunNow();
 
             return;
+        }
+
+        if (!IsDeep) {
+            // Shallow and not from the box: the live filter is the whole
+            // answer, and there is nothing left to walk for.
+            if (!fromFilterBox) {
+                return;
+            }
+
+            // The floor guards the automatic walk only. One character
+            // matches most of a disk, and the walk it starts is wasted
+            // before it begins.
+            if (_nameQuery.Length < MinAutoRunLength) {
+                return;
+            }
         }
 
         State = SearchState.Pending;
