@@ -25,7 +25,7 @@ namespace Wander.Core.Companions;
 /// are handled; whichever form the file already uses is the form it keeps.
 /// </para>
 /// </summary>
-public static class XmpSidecar {
+internal static class XmpSidecar {
     private const string RatingProperty = "xmp:Rating";
     private const string LabelProperty = "xmp:Label";
     private const string DescriptionElement = "<rdf:Description";

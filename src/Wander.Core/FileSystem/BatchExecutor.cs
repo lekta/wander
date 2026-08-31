@@ -19,7 +19,7 @@ namespace Wander.Core.FileSystem;
 /// <see cref="OperationTracker"/>, and is observable in the status bar.
 /// </para>
 /// </summary>
-public sealed class BatchExecutor {
+internal sealed class BatchExecutor {
     private readonly IFileSystem _fs;
     private readonly IRecycleBin _bin;
     private readonly UndoService _undo;

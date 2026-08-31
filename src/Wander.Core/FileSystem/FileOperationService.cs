@@ -57,7 +57,7 @@ public sealed class FileOperationService {
             ServiceLocator.Get<IRecycleBin>(),
             ServiceLocator.Get<UndoService>(),
             ServiceLocator.Get<OperationTracker>(),
-            ServiceLocator.IsRegistered<ILogger>() ? ServiceLocator.Get<ILogger>() : NullLogger.Instance) {
+            ServiceLocator.TryGet<ILogger>() ?? NullLogger.Instance) {
     }
 
 

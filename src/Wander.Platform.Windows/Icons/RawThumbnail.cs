@@ -1,4 +1,3 @@
-using System.IO;
 using System.Runtime.InteropServices.WindowsRuntime;
 using Wander.Core.Icons;
 using Windows.Graphics.Imaging;

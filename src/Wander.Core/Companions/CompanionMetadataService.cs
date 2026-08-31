@@ -1,4 +1,3 @@
-using System.Threading;
 using Wander.Core.FileSystem;
 using Wander.Core.Logging;
 using Wander.Core.Undo;
@@ -387,7 +386,7 @@ public sealed class CompanionMetadataService {
 /// is kept from it: it held one rating and nothing else, which is exactly
 /// what makes throwing it away the honest inverse.
 /// </summary>
-public sealed record SidecarCreatedAction(
+internal sealed record SidecarCreatedAction(
     CompanionMetadataService Service, string Path, string MainPath) : IUndoableAction {
 
     public string Description => $"Sidecar '{System.IO.Path.GetFileName(Path)}'";
@@ -410,7 +409,7 @@ public sealed record SidecarCreatedAction(
 /// Undo of a rating change — put the old value back. Restoring is the same
 /// guarded write as setting, so the undo itself stays atomic.
 /// </summary>
-public sealed record SidecarRatingAction(
+internal sealed record SidecarRatingAction(
     CompanionMetadataService Service, string Path, RatingField Field, int OldValue, int NewValue, string MainPath)
     : IUndoableAction {
 

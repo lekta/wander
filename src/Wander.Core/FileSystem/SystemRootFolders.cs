@@ -20,7 +20,7 @@ namespace Wander.Core.FileSystem;
 /// called <c>Recovery</c> is ordinary content and stays visible.
 /// </para>
 /// </summary>
-public static class SystemRootFolders {
+internal static class SystemRootFolders {
     private static readonly HashSet<string> _names = new(StringComparer.OrdinalIgnoreCase) {
         // Per-volume recycle bin store.
         "$RECYCLE.BIN",

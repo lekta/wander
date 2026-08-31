@@ -11,7 +11,6 @@ public class FileOperationServiceTests {
     private const string FileA = @"C:\a.txt";
     private const string FileB = @"C:\b.txt";
     private const string FileMissing = @"C:\missing";
-    private const string FileRenamed = @"C:\renamed.txt";
     private const string DirSrc = @"C:\src";
     private const string DirDst = @"C:\dst";
     private const string DirX = @"C:\dir";

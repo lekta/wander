@@ -8,7 +8,6 @@ namespace Wander.Core.Tests;
 
 public class BatchExecutorTests {
     // --- Paths reused across cases ------------------------------------
-    private const string SrcFolder = @"C:\src";
     private const string SrcA = @"C:\src\a.txt";
     private const string SrcB = @"C:\src\b.txt";
     private const string SrcC = @"C:\src\c.txt";

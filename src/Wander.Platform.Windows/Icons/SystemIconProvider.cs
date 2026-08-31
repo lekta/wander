@@ -1,7 +1,6 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
-using System.IO;
 using System.Runtime.InteropServices;
 using Wander.Core;
 using Wander.Core.Diagnostics;
@@ -343,12 +342,12 @@ public sealed class SystemIconProvider : IIconProvider {
     }
 
     private static string? ResolveShortcut(string path) {
-        if (!ServiceLocator.IsRegistered<IShortcutService>()) {
+        if (ServiceLocator.TryGet<IShortcutService>() is not { } shortcuts) {
             return null;
         }
 
         try {
-            string? target = ServiceLocator.Get<IShortcutService>().Resolve(path);
+            string? target = shortcuts.Resolve(path);
 
             return string.IsNullOrEmpty(target) ? null : target;
         } catch {
@@ -732,7 +731,7 @@ public sealed class SystemIconProvider : IIconProvider {
     private static void IconLog(string msg) {
         if (!_logResolved) {
             _logResolved = true;
-            _log = ServiceLocator.IsRegistered<ILogger>() ? ServiceLocator.Get<ILogger>() : null;
+            _log = ServiceLocator.TryGet<ILogger>();
         }
         _log?.Info("[icon] " + msg);
     }

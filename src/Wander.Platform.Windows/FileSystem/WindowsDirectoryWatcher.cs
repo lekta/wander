@@ -1,4 +1,3 @@
-using System.IO;
 using Wander.Core.FileSystem;
 using Wander.Core.Logging;
 

@@ -1,9 +1,7 @@
-using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media.Imaging;
-using Wander.App.Converters;
 using Wander.Core;
 using Wander.Core.Diagnostics;
 using Wander.Core.Icons;
@@ -78,12 +76,12 @@ public sealed class AsyncIcon : Image {
         }
 
         IconSize size = IconSize;
-        if (!ServiceLocator.IsRegistered<IIconProvider>()) {
+        if (ServiceLocator.TryGet<IIconProvider>() is not { } icons) {
             Source = null;
             return;
         }
 
-        byte[]? cached = ServiceLocator.Get<IIconProvider>().TryGetCachedIcon(path, size);
+        byte[]? cached = icons.TryGetCachedIcon(path, size);
         if (cached is not null) {
             // The only thumbnail work left on the UI thread, and only for a
             // file this session has not drawn before — see IconImageCache.

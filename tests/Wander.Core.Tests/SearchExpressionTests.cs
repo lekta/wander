@@ -1,5 +1,4 @@
 using Wander.Core.Search;
-using Xunit;
 
 namespace Wander.Core.Tests;
 

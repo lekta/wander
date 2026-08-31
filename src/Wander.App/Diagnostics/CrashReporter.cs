@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.IO.Compression;
-using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text;
@@ -186,8 +185,8 @@ public static class CrashReporter {
         // shared-read, so a copy taken here contains everything up to the
         // crash itself. Only bundled with the user's explicit consent — the
         // log contains real file paths from the session.
-        if (includeLog && ServiceLocator.IsRegistered<ILogFile>()) {
-            string logPath = ServiceLocator.Get<ILogFile>().FilePath;
+        if (includeLog && ServiceLocator.TryGet<ILogFile>() is { } logFile) {
+            string logPath = logFile.FilePath;
             if (!string.IsNullOrEmpty(logPath) && File.Exists(logPath)) {
                 var logEntry = zip.CreateEntry(Path.GetFileName(logPath));
                 using var source = new FileStream(logPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);

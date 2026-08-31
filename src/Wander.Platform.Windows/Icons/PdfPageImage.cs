@@ -1,4 +1,3 @@
-using System.IO;
 using Windows.Data.Pdf;
 using Windows.Storage;
 using Windows.Storage.Streams;

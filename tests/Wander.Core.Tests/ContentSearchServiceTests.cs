@@ -2,7 +2,6 @@ using System.Text;
 using Wander.Core.FileSystem;
 using Wander.Core.Search;
 using Wander.Core.Tests.Fakes;
-using Xunit;
 
 namespace Wander.Core.Tests;
 

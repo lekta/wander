@@ -36,7 +36,7 @@ public sealed class ShellMenuCache : IDisposable {
     /// what they get back.
     /// </summary>
     public IShellContextMenuSession? Acquire(IReadOnlyList<string> paths, string folderPath) {
-        if (!ServiceLocator.IsRegistered<IShellContextMenu>()) {
+        if (ServiceLocator.TryGet<IShellContextMenu>() is not { } shellMenu) {
             return null;
         }
 
@@ -46,7 +46,7 @@ public sealed class ShellMenuCache : IDisposable {
         }
 
         Drop();
-        _session = ServiceLocator.Get<IShellContextMenu>().Open(paths, folderPath);
+        _session = shellMenu.Open(paths, folderPath);
         _key = key;
 
         return _session;

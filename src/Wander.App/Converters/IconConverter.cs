@@ -22,11 +22,11 @@ public sealed class IconConverter : IValueConverter {
 
 
     public static BitmapImage? Load(string path, IconSize size) {
-        if (string.IsNullOrEmpty(path) || !ServiceLocator.IsRegistered<IIconProvider>()) {
+        if (string.IsNullOrEmpty(path) || ServiceLocator.TryGet<IIconProvider>() is not { } icons) {
             return null;
         }
 
-        byte[]? bytes = ServiceLocator.Get<IIconProvider>().GetIcon(path, size);
+        byte[]? bytes = icons.GetIcon(path, size);
         return bytes is null ? null : ToImage(bytes);
     }
 

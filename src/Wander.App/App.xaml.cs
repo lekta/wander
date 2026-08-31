@@ -1,5 +1,4 @@
 using System.Windows;
-using System.Windows.Threading;
 using Wander.App.Diagnostics;
 using Wander.App.Resources;
 using Wander.App.Util;
@@ -46,7 +45,7 @@ public partial class App : Application {
     /// the whole process down.
     /// </summary>
     private void HookCrashLogging() {
-        var log = ServiceLocator.IsRegistered<ILogger>() ? ServiceLocator.Get<ILogger>() : NullLogger.Instance;
+        var log = ServiceLocator.TryGet<ILogger>() ?? NullLogger.Instance;
 
         DispatcherUnhandledException += (_, args) => {
             log.Error("Unhandled dispatcher exception", args.Exception);

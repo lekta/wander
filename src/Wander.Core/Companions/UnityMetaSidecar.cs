@@ -23,7 +23,7 @@ public sealed record UnityMetaInfo(string? Guid, string? Importer, bool IsFolder
 /// and regenerates it on its own terms; a rewrite of ours could detach an
 /// asset from every reference in every scene.</para>
 /// </summary>
-public static class UnityMetaSidecar {
+internal static class UnityMetaSidecar {
     public static UnityMetaInfo Read(byte[] content) {
         string text = new UTF8Encoding(false).GetString(StripBom(content));
         string? guid = null;

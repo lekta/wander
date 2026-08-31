@@ -2,7 +2,6 @@ using System.IO.Compression;
 using System.Text;
 using Wander.Core.Search;
 using Wander.Core.Tests.Fakes;
-using Xunit;
 
 namespace Wander.Core.Tests;
 

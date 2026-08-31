@@ -3,7 +3,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
-using System.Windows.Media;
 using Wander.App.DragPreview;
 using Wander.App.ViewModels;
 using Wander.Core;
@@ -241,12 +240,12 @@ public sealed class DropTargetController {
     }
 
     private static string? ResolveShortcutTarget(string lnkPath) {
-        if (!ServiceLocator.IsRegistered<IShortcutService>()) {
+        if (ServiceLocator.TryGet<IShortcutService>() is not { } shortcuts) {
             return null;
         }
 
         try {
-            return ServiceLocator.Get<IShortcutService>().Resolve(lnkPath);
+            return shortcuts.Resolve(lnkPath);
         } catch {
             return null;
         }

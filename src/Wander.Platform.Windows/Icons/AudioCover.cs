@@ -1,4 +1,3 @@
-using System.IO;
 using Wander.Core.Preview;
 
 namespace Wander.Platform.Windows.Icons;

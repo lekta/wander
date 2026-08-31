@@ -33,7 +33,7 @@ public enum NavigationSource {
 /// One step in the navigation history: the destination path and the
 /// gesture that brought the user there.
 /// </summary>
-public sealed record NavigationEntry(string Path, NavigationSource Source);
+internal sealed record NavigationEntry(string Path, NavigationSource Source);
 
 
 /// <summary>

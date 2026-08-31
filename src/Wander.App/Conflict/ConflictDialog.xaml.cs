@@ -1,5 +1,6 @@
 using System.Windows;
 using Wander.App.Resources;
+using Wander.App.Util;
 using Wander.Core.FileSystem;
 
 namespace Wander.App.Conflict;
@@ -11,12 +12,12 @@ public partial class ConflictDialog : Window {
         HeaderText.Text = string.Format(Strings.ConflictHeader, conflict.ExistingTarget.Name);
 
         SourceName.Text = conflict.Source.Name;
-        SourceSize.Text = FormatSize(conflict.Source.Size);
-        SourceModified.Text = FormatModified(conflict.Source.ModifiedUtc);
+        SourceSize.Text = DescribeSize(conflict.Source.Size);
+        SourceModified.Text = TimeFormat.FromUtc(conflict.Source.ModifiedUtc);
 
         TargetName.Text = conflict.ExistingTarget.Name;
-        TargetSize.Text = FormatSize(conflict.ExistingTarget.Size);
-        TargetModified.Text = FormatModified(conflict.ExistingTarget.ModifiedUtc);
+        TargetSize.Text = DescribeSize(conflict.ExistingTarget.Size);
+        TargetModified.Text = TimeFormat.FromUtc(conflict.ExistingTarget.ModifiedUtc);
     }
 
 
@@ -32,24 +33,14 @@ public partial class ConflictDialog : Window {
     }
 
 
-    private static string FormatSize(long? size) {
-        if (size is null) {
-            return Strings.KindFolderNoun;
-        }
-        long value = size.Value;
-        return value switch {
-            < 1024 => $"{value} B",
-            < 1024 * 1024 => $"{value / 1024.0:F1} KB",
-            < 1024L * 1024 * 1024 => $"{value / (1024.0 * 1024):F1} MB",
-            _ => $"{value / (1024.0 * 1024 * 1024):F2} GB",
-        };
-    }
-
-    private static string FormatModified(DateTime utc) {
-        if (utc == DateTime.MinValue) {
-            return "—";
-        }
-        return utc.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+    /// <summary>
+    /// Sizes are formatted the same way everywhere; the only thing this
+    /// dialog says differently is what "no size" means. A folder has none,
+    /// and here that is worth saying in words — elsewhere an em dash is
+    /// enough, because the row already shows the kind.
+    /// </summary>
+    private static string DescribeSize(long? size) {
+        return size is { } bytes ? SizeFormatter.Format(bytes) : Strings.KindFolderNoun;
     }
 
 

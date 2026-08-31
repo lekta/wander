@@ -1,8 +1,6 @@
-using System.Collections.ObjectModel;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Threading;
-using Wander.App.Resources;
 using Wander.Core.FileSystem;
 using Wander.Core.Logging;
 using Wander.Core.Search;

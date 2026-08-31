@@ -2,7 +2,6 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.IO;
-using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
@@ -191,26 +190,20 @@ public sealed class MainViewModel : ObservableObject {
         _fs = ServiceLocator.Get<IFileSystem>();
         _shell = ServiceLocator.Get<IShellLauncher>();
         _stateStore = ServiceLocator.Get<IAppStateStore>();
-        _lockInspector = ServiceLocator.IsRegistered<IFileLockInspector>()
-            ? ServiceLocator.Get<IFileLockInspector>()
-            : null;
+        _lockInspector = ServiceLocator.TryGet<IFileLockInspector>();
         _ops = ServiceLocator.Get<FileOperationService>();
         _undo = ServiceLocator.Get<UndoService>();
         _tracker = ServiceLocator.Get<OperationTracker>();
         _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
-        _log = ServiceLocator.IsRegistered<ILogger>() ? ServiceLocator.Get<ILogger>() : NullLogger.Instance;
-        _companions = ServiceLocator.IsRegistered<CompanionResolver>()
-            ? ServiceLocator.Get<CompanionResolver>()
-            : CompanionResolver.Default;
+        _log = ServiceLocator.TryGet<ILogger>() ?? NullLogger.Instance;
+        _companions = ServiceLocator.TryGet<CompanionResolver>() ?? CompanionResolver.Default;
         // Without a system clipboard registered the controller keeps its
         // paths to itself, exactly as it did before the mirroring existed.
         _clipboard = new ClipboardController(
-            ServiceLocator.IsRegistered<ISystemClipboard>()
-                ? ServiceLocator.Get<ISystemClipboard>()
-                : null);
+            ServiceLocator.TryGet<ISystemClipboard>());
 
-        if (ServiceLocator.IsRegistered<IDirectoryWatcher>()) {
-            _watcher = ServiceLocator.Get<IDirectoryWatcher>();
+        if (ServiceLocator.TryGet<IDirectoryWatcher>() is { } watcher) {
+            _watcher = watcher;
             _watcher.Changed += (_, change) => _dispatcher.BeginInvoke(() => NoteFolderChanged(change));
             _watchTimer = new DispatcherTimer(DispatcherPriority.Background, _dispatcher) {
                 Interval = TimeSpan.FromMilliseconds(WatchIntervalMs),
@@ -218,14 +211,10 @@ public sealed class MainViewModel : ObservableObject {
             _watchTimer.Tick += OnWatchTick;
         }
 
-        _companionMetadata = ServiceLocator.IsRegistered<CompanionMetadataService>()
-            ? ServiceLocator.Get<CompanionMetadataService>()
-            : null;
+        _companionMetadata = ServiceLocator.TryGet<CompanionMetadataService>();
 
         Preview = new PreviewController(
-            ServiceLocator.IsRegistered<IImageMetadataReader>()
-                ? ServiceLocator.Get<IImageMetadataReader>()
-                : null,
+            ServiceLocator.TryGet<IImageMetadataReader>(),
             _companionMetadata,
             ApplyRatingToPrimary,
             RevealPath);
@@ -311,17 +300,12 @@ public sealed class MainViewModel : ObservableObject {
         // Batch executors push undo steps from thread-pool workers, so this
         // event can arrive off the UI thread; CommandManager requery only
         // works on the dispatcher thread.
-        _undo.Changed += (_, _) => {
-            if (_dispatcher.CheckAccess()) {
-                UndoCommand.RaiseCanExecuteChanged();
-                Raise(nameof(UndoTooltip));
-            } else {
-                _dispatcher.BeginInvoke(() => {
-                    UndoCommand.RaiseCanExecuteChanged();
-                    Raise(nameof(UndoTooltip));
-                });
-            }
-        };
+        // Arrives from the thread pool when a background operation records
+        // an action, so it goes through Post rather than straight through.
+        _undo.Changed += (_, _) => _dispatcher.Post(() => {
+            UndoCommand.RaiseCanExecuteChanged();
+            Raise(nameof(UndoTooltip));
+        });
 
         _clipboard.Changed += (_, _) => PasteCommand.RaiseCanExecuteChanged();
 
@@ -331,9 +315,7 @@ public sealed class MainViewModel : ObservableObject {
         // change under it while a search is being set up.
         ContentSearch = new ContentSearchController(
             _dispatcher,
-            ServiceLocator.IsRegistered<ContentSearchService>()
-                ? ServiceLocator.Get<ContentSearchService>()
-                : null,
+            ServiceLocator.TryGet<ContentSearchService>(),
             () => _nav.Current,
             () => Settings.Visibility,
             _log);
@@ -760,12 +742,10 @@ public sealed class MainViewModel : ObservableObject {
     // --- Shell-namespace helpers ---------------------------------------
     // Centralised checks so Navigate / Refresh / BuildBookmarks all agree
     // on what counts as a recognised shell location. Caching the lookup
-    // would be premature — IsRegistered + Get are cheap dictionary hits.
+    // would be premature — TryGet is one dictionary hit.
 
     private static IShellNamespace? TryGetShellNamespace() {
-        return ServiceLocator.IsRegistered<IShellNamespace>()
-            ? ServiceLocator.Get<IShellNamespace>()
-            : null;
+        return ServiceLocator.TryGet<IShellNamespace>();
     }
 
     private bool IsShellPath(string? path) {
@@ -837,13 +817,13 @@ public sealed class MainViewModel : ObservableObject {
         if (!path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)) {
             return false;
         }
-        if (!ServiceLocator.IsRegistered<IShortcutService>()) {
+        if (ServiceLocator.TryGet<IShortcutService>() is not { } shortcuts) {
             return false;
         }
 
         string? target;
         try {
-            target = ServiceLocator.Get<IShortcutService>().Resolve(path);
+            target = shortcuts.Resolve(path);
         } catch (Exception ex) {
             _log.Warn($"Resolve shortcut failed: {path} ({ex.Message})");
             return false;
@@ -912,12 +892,11 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     private void CreateShortcuts(IReadOnlyList<string> sources, string targetFolder) {
-        if (!ServiceLocator.IsRegistered<IShortcutService>()) {
+        if (ServiceLocator.TryGet<IShortcutService>() is not { } shortcuts) {
             Status = Strings.StatusShortcutsUnsupported;
             return;
         }
 
-        var shortcuts = ServiceLocator.Get<IShortcutService>();
         var created = new List<IUndoableAction>();
         var bin = ServiceLocator.Get<IRecycleBin>();
         int ok = 0;
@@ -1108,11 +1087,10 @@ public sealed class MainViewModel : ObservableObject {
         }
 
         _log.Info($"Version changed ('{lastVersion}' -> '{current}'), dropping the thumbnail cache");
-        if (!ServiceLocator.IsRegistered<IIconProvider>()) {
+        if (ServiceLocator.TryGet<IIconProvider>() is not { } icons) {
             return;
         }
 
-        var icons = ServiceLocator.Get<IIconProvider>();
         _ = Task.Run(() => {
             try {
                 icons.ClearCache();
@@ -3087,11 +3065,11 @@ public sealed class MainViewModel : ObservableObject {
     /// knows nothing about <see cref="AppSettings"/>.
     /// </summary>
     private void ApplyThumbnailCacheSettings() {
-        if (!ServiceLocator.IsRegistered<IIconProvider>()) {
+        if (ServiceLocator.TryGet<IIconProvider>() is not { } icons) {
             return;
         }
 
-        ServiceLocator.Get<IIconProvider>().ConfigureCache(new ThumbnailCacheOptions(
+        icons.ConfigureCache(new ThumbnailCacheOptions(
             Settings.ThumbnailMemoryEntries,
             Settings.ThumbnailDiskCacheEnabled,
             Settings.ThumbnailDiskCacheMb * 1024L * 1024L));
@@ -3228,9 +3206,7 @@ public sealed class MainViewModel : ObservableObject {
     /// English install and wrong again once the folder has been moved.
     /// </summary>
     private static string? ResolveKnown(Func<IKnownFolders, string?> pick) {
-        return ServiceLocator.IsRegistered<IKnownFolders>()
-            ? pick(ServiceLocator.Get<IKnownFolders>())
-            : null;
+        return ServiceLocator.TryGet<IKnownFolders>() is { } known ? pick(known) : null;
     }
 
     /// <summary>
@@ -3587,11 +3563,11 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     private void OpenLogFile() {
-        if (!ServiceLocator.IsRegistered<ILogFile>()) {
+        if (ServiceLocator.TryGet<ILogFile>() is not { } logFile) {
             Status = Strings.StatusNoLogging;
             return;
         }
-        string path = ServiceLocator.Get<ILogFile>().FilePath;
+        string path = logFile.FilePath;
         if (string.IsNullOrEmpty(path) || !File.Exists(path)) {
             Status = Strings.StatusNoLogFile;
             return;
@@ -3980,11 +3956,10 @@ public sealed class MainViewModel : ObservableObject {
     /// </para>
     /// </summary>
     private void RestoreFromRecycleBin() {
-        if (!ServiceLocator.IsRegistered<IRecycleBin>()) {
+        if (ServiceLocator.TryGet<IRecycleBin>() is not { } bin) {
             return;
         }
 
-        var bin = ServiceLocator.Get<IRecycleBin>();
         int restored = 0;
         var failures = new List<string>();
 
@@ -4086,20 +4061,6 @@ public sealed class MainViewModel : ObservableObject {
         }
 
         return expanded;
-    }
-
-
-    /// <summary>
-    /// The selection as <see cref="BatchGroup"/>s, so a batch operation
-    /// treats a file and its sidecars as one item: one conflict question,
-    /// one progress step, one line in the status bar.
-    /// </summary>
-    private IReadOnlyList<BatchGroup> GroupWithCompanions(IEnumerable<FileSystemEntry> entries) {
-        return entries
-            .Select(e => Settings.IntegrateCompanions && e.Companions is { Count: > 0 } companions
-                ? new BatchGroup(e.FullPath, companions)
-                : BatchGroup.Single(e.FullPath))
-            .ToList();
     }
 
 

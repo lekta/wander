@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using System.IO;
-using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -940,12 +939,12 @@ public sealed class PreviewController : ObservableObject {
     /// service registered or the file cannot be resolved.
     /// </summary>
     private static string? ResolveShortcut(string path) {
-        if (!ServiceLocator.IsRegistered<IShortcutService>()) {
+        if (ServiceLocator.TryGet<IShortcutService>() is not { } shortcuts) {
             return null;
         }
 
         try {
-            string? target = ServiceLocator.Get<IShortcutService>().Resolve(path);
+            string? target = shortcuts.Resolve(path);
 
             return string.IsNullOrEmpty(target) ? null : target;
         } catch {
@@ -1898,11 +1897,9 @@ public sealed class PreviewController : ObservableObject {
     /// answering about the disk while showing numbers about a folder.
     /// </summary>
     private static VolumeInfo? DescribeVolume(string folder) {
-        if (!ServiceLocator.IsRegistered<IVolumeInfoProvider>()) {
+        if (ServiceLocator.TryGet<IVolumeInfoProvider>() is not { } volumes) {
             return null;
         }
-
-        var volumes = ServiceLocator.Get<IVolumeInfoProvider>();
 
         return volumes.IsVolumeRoot(folder) ? volumes.Describe(folder) : null;
     }
@@ -1953,7 +1950,7 @@ public sealed class PreviewController : ObservableObject {
         if (_selection.Count == 1 && _selection[0].Kind == EntryKind.File) {
             var e = _selection[0];
             string timeLabel = e.OriginalLocation is not null ? Strings.SummaryDeleted : Strings.SummaryModified;
-            string summary = $"📄  {e.Name}\n{Strings.SummarySize}: {SizeFormatter.Format(e.Size)}   •   {timeLabel}: {FormatModified(e.ModifiedUtc)}";
+            string summary = $"📄  {e.Name}\n{Strings.SummarySize}: {SizeFormatter.Format(e.Size)}   •   {timeLabel}: {TimeFormat.FromUtc(e.ModifiedUtc)}";
             if (e.OriginalLocation is not null) {
                 summary += $"\n{Strings.SummaryDeletedFrom}: {e.OriginalLocation}";
             }
@@ -1970,7 +1967,7 @@ public sealed class PreviewController : ObservableObject {
         if (_selection.Count == 1 && _selection[0].Kind == EntryKind.Directory) {
             var e = _selection[0];
             Summary = e.OriginalLocation is not null
-                ? $"📁  {e.Name}\n{Strings.SummaryDeleted}: {FormatModified(e.ModifiedUtc)}\n{Strings.SummaryDeletedFrom}: {e.OriginalLocation}"
+                ? $"📁  {e.Name}\n{Strings.SummaryDeleted}: {TimeFormat.FromUtc(e.ModifiedUtc)}\n{Strings.SummaryDeletedFrom}: {e.OriginalLocation}"
                 : $"📁  {e.Name}";
             return;
         }
@@ -2035,10 +2032,6 @@ public sealed class PreviewController : ObservableObject {
         return (count, size);
     }
 
-    private static string FormatModified(DateTime utc) {
-        return utc == DateTime.MinValue ? "—" : utc.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
-    }
-
     private static string FormatExif(ImageMetadata m) {
         var parts = new List<string>();
         string? camera = string.Join(" ", new[] { m.CameraMake, m.CameraModel }.Where(s => !string.IsNullOrWhiteSpace(s)));
@@ -2065,7 +2058,7 @@ public sealed class PreviewController : ObservableObject {
             parts.Add($"{w} × {h}");
         }
         if (m.DateTaken is { } dt) {
-            parts.Add(dt.ToString("yyyy-MM-dd HH:mm"));
+            parts.Add(TimeFormat.Local(dt));
         }
         return string.Join("   •   ", parts);
     }

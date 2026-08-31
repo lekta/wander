@@ -53,12 +53,11 @@ public partial class SettingsWindow : Window {
     /// a wait.
     /// </summary>
     private static void ScanShellHandlers(SettingsViewModel vm) {
-        if (!ServiceLocator.IsRegistered<IShellHandlerRegistry>()) {
+        if (ServiceLocator.TryGet<IShellHandlerRegistry>() is not { } registry) {
             return;
         }
 
         try {
-            var registry = ServiceLocator.Get<IShellHandlerRegistry>();
             vm.SetShellHandlers(registry.Scan(vm.ScannedScopes));
         } catch (Exception) {
             // A registry we cannot read costs the two informational columns,
@@ -101,11 +100,10 @@ public partial class SettingsWindow : Window {
     /// <see cref="ShellScopePicker"/>.
     /// </summary>
     private void AddShellScope_Click(object sender, RoutedEventArgs e) {
-        if (DataContext is not SettingsViewModel vm || !ServiceLocator.IsRegistered<IShellHandlerRegistry>()) {
+        if (DataContext is not SettingsViewModel vm || ServiceLocator.TryGet<IShellHandlerRegistry>() is not { } registry) {
             return;
         }
 
-        var registry = ServiceLocator.Get<IShellHandlerRegistry>();
         var picker = new ShellScopePicker(registry, vm.RecentScopes) { Owner = this };
         if (picker.ShowDialog() != true) {
             return;
@@ -159,8 +157,8 @@ public partial class SettingsWindow : Window {
             return;
         }
 
-        if (ServiceLocator.IsRegistered<IIconProvider>()) {
-            ServiceLocator.Get<IIconProvider>().ClearCache();
+        if (ServiceLocator.TryGet<IIconProvider>() is { } icons) {
+            icons.ClearCache();
         }
         // Decoded copies live a tier above the provider's; leaving them
         // would make the button look like it did nothing.
@@ -174,12 +172,12 @@ public partial class SettingsWindow : Window {
     /// only ever done when the dialog opens or right after a clear.
     /// </summary>
     private static void RefreshCacheStatus(SettingsViewModel vm) {
-        if (!ServiceLocator.IsRegistered<IIconProvider>()) {
+        if (ServiceLocator.TryGet<IIconProvider>() is not { } icons) {
             vm.ThumbnailCacheStatus = "";
             return;
         }
 
-        var (directory, size) = ServiceLocator.Get<IIconProvider>().DescribeCache();
+        var (directory, size) = icons.DescribeCache();
         vm.ThumbnailCacheStatus = directory is null
             ? Strings.SettingsCacheOff
             : string.Format(Strings.SettingsCacheUsage, SizeFormatter.Format(size), directory);

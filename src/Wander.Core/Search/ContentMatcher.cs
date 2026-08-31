@@ -13,7 +13,7 @@ namespace Wander.Core.Search;
 /// content search is for.
 /// </para>
 /// </summary>
-public static class ContentMatcher {
+internal static class ContentMatcher {
     /// <summary>Characters of context around the match. About one line of the status strip.</summary>
     public const int SnippetLength = 160;
 

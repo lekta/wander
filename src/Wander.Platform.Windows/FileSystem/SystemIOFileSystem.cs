@@ -74,11 +74,11 @@ public sealed class SystemIOFileSystem : IFileSystem {
         if (!path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)) {
             return false;
         }
-        if (!ServiceLocator.IsRegistered<IShortcutService>()) {
+        if (ServiceLocator.TryGet<IShortcutService>() is not { } shortcuts) {
             return false;
         }
         try {
-            string? target = ServiceLocator.Get<IShortcutService>().Resolve(path);
+            string? target = shortcuts.Resolve(path);
             return !string.IsNullOrEmpty(target) && Directory.Exists(target);
         } catch {
             // Broken / dangling shortcut — treat as a regular file.

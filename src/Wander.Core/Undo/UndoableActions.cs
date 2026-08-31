@@ -5,7 +5,7 @@ namespace Wander.Core.Undo;
 /// <summary>
 /// Undo: rename <paramref name="NewPath"/> back to <paramref name="OldName"/>.
 /// </summary>
-public sealed record RenameAction(IFileSystem Fs, string NewPath, string OldName) : IUndoableAction {
+internal sealed record RenameAction(IFileSystem Fs, string NewPath, string OldName) : IUndoableAction {
     public string Description => $"Rename to '{Path.GetFileName(NewPath)}'";
     public void Undo() => Fs.Rename(NewPath, OldName);
 
@@ -16,7 +16,7 @@ public sealed record RenameAction(IFileSystem Fs, string NewPath, string OldName
 /// <summary>
 /// Undo: move <paramref name="NewPath"/> back to <paramref name="OldPath"/>.
 /// </summary>
-public sealed record MoveAction(IFileSystem Fs, string OldPath, string NewPath) : IUndoableAction {
+internal sealed record MoveAction(IFileSystem Fs, string OldPath, string NewPath) : IUndoableAction {
     public string Description => $"Move '{Path.GetFileName(OldPath)}'";
     public void Undo() => Fs.MoveEntry(NewPath, OldPath);
 
@@ -41,7 +41,7 @@ public sealed record CreateAction(IRecycleBin Bin, string CreatedPath) : IUndoab
 /// Undo of "I deleted X to recycle bin" — restore X from the bin using the
 /// handle captured at delete time.
 /// </summary>
-public sealed record DeleteAction(IRecycleBin Bin, RecycleHandle Handle) : IUndoableAction {
+internal sealed record DeleteAction(IRecycleBin Bin, RecycleHandle Handle) : IUndoableAction {
     public string Description => $"Delete '{Path.GetFileName(Handle.OriginalPath)}'";
     public void Undo() => Bin.Restore(Handle);
 

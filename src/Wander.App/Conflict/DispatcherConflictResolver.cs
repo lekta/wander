@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Threading;
+using Wander.App.Util;
 using Wander.Core.FileSystem;
 
 namespace Wander.App.Conflict;
@@ -23,14 +24,10 @@ public sealed class DispatcherConflictResolver : IConflictResolver {
 
 
     public ConflictResolution? StartBatch(int conflictCount) {
-        return _dispatcher.CheckAccess()
-            ? _inner.StartBatch(conflictCount)
-            : _dispatcher.Invoke(() => _inner.StartBatch(conflictCount));
+        return _dispatcher.Ask(() => _inner.StartBatch(conflictCount));
     }
 
     public ConflictResolution Resolve(FileConflictInfo conflict) {
-        return _dispatcher.CheckAccess()
-            ? _inner.Resolve(conflict)
-            : _dispatcher.Invoke(() => _inner.Resolve(conflict));
+        return _dispatcher.Ask(() => _inner.Resolve(conflict));
     }
 }

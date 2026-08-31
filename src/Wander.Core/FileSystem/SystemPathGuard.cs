@@ -22,7 +22,7 @@ namespace Wander.Core.FileSystem;
 /// BatchExecutor call it statically and tests hit it directly.
 /// </para>
 /// </summary>
-public static class SystemPathGuard {
+internal static class SystemPathGuard {
     private static readonly Lazy<IReadOnlyList<string>> _protectedRoots = new(BuildProtectedRoots);
     private static readonly Lazy<string?> _windowsTree = new(
         () => NormalizeOrNull(Environment.GetFolderPath(Environment.SpecialFolder.Windows)));

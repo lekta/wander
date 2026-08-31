@@ -24,9 +24,7 @@ public interface ITextSource {
 /// </summary>
 public static class Text {
     public static string Get(string key) {
-        return ServiceLocator.IsRegistered<ITextSource>()
-            ? ServiceLocator.Get<ITextSource>().Get(key)
-            : key;
+        return ServiceLocator.TryGet<ITextSource>() is { } source ? source.Get(key) : key;
     }
 
 
