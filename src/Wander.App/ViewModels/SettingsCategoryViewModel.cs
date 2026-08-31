@@ -35,21 +35,9 @@ public sealed class GeneralSettingsCategory : SettingsCategoryViewModel {
 }
 
 
-public sealed class SafetySettingsCategory : SettingsCategoryViewModel {
-    public SafetySettingsCategory(SettingsViewModel owner)
-        : base(Strings.SettingsCategorySafety, owner) { }
-}
-
-
-public sealed class FileOperationsSettingsCategory : SettingsCategoryViewModel {
-    public FileOperationsSettingsCategory(SettingsViewModel owner)
-        : base(Strings.SettingsCategoryFileOps, owner) { }
-}
-
-
-public sealed class CompanionsSettingsCategory : SettingsCategoryViewModel {
-    public CompanionsSettingsCategory(SettingsViewModel owner)
-        : base(Strings.SettingsCategoryCompanions, owner) { }
+public sealed class VisibilitySettingsCategory : SettingsCategoryViewModel {
+    public VisibilitySettingsCategory(SettingsViewModel owner)
+        : base(Strings.SettingsCategoryVisibility, owner) { }
 }
 
 

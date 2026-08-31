@@ -16,6 +16,12 @@ public sealed class WindowsKnownFolders : IKnownFolders {
     private static readonly Guid _documents = new("FDD39AD0-238F-46AF-ADB4-6C85480369C7");
     // FOLDERID_Pictures — {33E28130-4E1E-4676-835A-98395C3BC3BB}
     private static readonly Guid _pictures = new("33E28130-4E1E-4676-835A-98395C3BC3BB");
+    // FOLDERID_Desktop — {B4BFCC3A-DB2C-424C-B029-7FE99A87C641}
+    private static readonly Guid _desktop = new("B4BFCC3A-DB2C-424C-B029-7FE99A87C641");
+    // FOLDERID_Music — {4BD8D571-6D19-48D3-BE97-422220080E43}
+    private static readonly Guid _music = new("4BD8D571-6D19-48D3-BE97-422220080E43");
+    // FOLDERID_Videos — {18989B1D-99B5-455B-841C-AB7C74E4DDFC}
+    private static readonly Guid _videos = new("18989B1D-99B5-455B-841C-AB7C74E4DDFC");
 
 
     public string? GetDownloads() {
@@ -28,6 +34,18 @@ public sealed class WindowsKnownFolders : IKnownFolders {
 
     public string? GetPictures() {
         return TryGetPath(_pictures);
+    }
+
+    public string? GetDesktop() {
+        return TryGetPath(_desktop);
+    }
+
+    public string? GetMusic() {
+        return TryGetPath(_music);
+    }
+
+    public string? GetVideos() {
+        return TryGetPath(_videos);
     }
 
 

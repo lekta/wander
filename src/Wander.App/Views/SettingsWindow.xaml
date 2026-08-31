@@ -3,10 +3,11 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:Wander.App.ViewModels"
         xmlns:conv="clr-namespace:Wander.App.Converters"
+        xmlns:controls="clr-namespace:Wander.App.Controls"
         xmlns:res="clr-namespace:Wander.App.Resources"
         Title="{x:Static res:Strings.SettingsTitle}"
-        Width="640" Height="460"
-        MinWidth="520" MinHeight="360"
+        Width="780" Height="560"
+        MinWidth="620" MinHeight="400"
         WindowStartupLocation="CenterOwner"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
@@ -23,6 +24,7 @@
     <Window.Resources>
 
         <conv:EnumRadioConverter x:Key="EnumRadio"/>
+        <conv:PixelsToThicknessConverter x:Key="PixelsToThickness"/>
 
         <!-- Reusable spacing values so the four sections look uniform. -->
         <Thickness x:Key="Row">0,4,0,4</Thickness>
@@ -39,9 +41,16 @@
             <Setter Property="Margin" Value="0,0,12,0"/>
         </Style>
 
+        <!--
+            Every text box on this page holds a pixel count, so they all get
+            the number-field behaviour: the clamp stops overwriting what is
+            being typed, and the value can be pulled with the mouse or the
+            wheel. See NumericField for why the first half is needed at all.
+        -->
         <Style TargetType="TextBox">
             <Setter Property="Padding" Value="4,2"/>
             <Setter Property="MinWidth" Value="80"/>
+            <Setter Property="controls:NumericField.Enabled" Value="True"/>
         </Style>
 
         <Style TargetType="CheckBox">
@@ -50,64 +59,107 @@
         </Style>
 
 
-        <!-- General -->
+        <!--
+            General. Four switches about how the window behaves, with the
+            explanations on tooltips: a paragraph under every checkbox turns
+            a settings page into a document, and the reader stops seeing the
+            settings.
+        -->
         <DataTemplate DataType="{x:Type vm:GeneralSettingsCategory}">
             <StackPanel>
                 <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
                 <CheckBox Content="{x:Static res:Strings.SettingsRestoreLastFolder}"
+                          ToolTip="{x:Static res:Strings.SettingsRestoreLastFolderHint}"
                           IsChecked="{Binding Owner.RestoreLastFolder}"/>
-                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0"
-                           Text="{x:Static res:Strings.SettingsRestoreLastFolderHint}"/>
-
                 <CheckBox Content="{x:Static res:Strings.SettingsAutoRefresh}"
-                          IsChecked="{Binding Owner.AutoRefresh}" Margin="0,18,0,4"/>
-                <TextBlock Foreground="#888" TextWrapping="Wrap"
-                           Text="{x:Static res:Strings.SettingsAutoRefreshHint}"/>
+                          ToolTip="{x:Static res:Strings.SettingsAutoRefreshHint}"
+                          IsChecked="{Binding Owner.AutoRefresh}"/>
+                <CheckBox Content="{x:Static res:Strings.SettingsTreeKeyboardNavigates}"
+                          ToolTip="{x:Static res:Strings.SettingsTreeKeyboardNavigatesHint}"
+                          IsChecked="{Binding Owner.TreeKeyboardNavigates}"/>
+                <CheckBox Content="{x:Static res:Strings.SettingsConfirmRecycle}"
+                          ToolTip="{x:Static res:Strings.SettingsConfirmRecycleHint}"
+                          IsChecked="{Binding Owner.ConfirmRecycle}"/>
             </StackPanel>
         </DataTemplate>
 
 
-        <!-- Safety -->
-        <DataTemplate DataType="{x:Type vm:SafetySettingsCategory}">
+        <!--
+            What the listing shows. This page used to be called
+            "Безопасность", which it never was: nothing here protects
+            anything, it decides what appears in the list. Companions moved
+            in from their own page for the same reason — "показывать файл и
+            его спутники одной строкой" is that same question.
+        -->
+        <DataTemplate DataType="{x:Type vm:VisibilitySettingsCategory}">
             <StackPanel>
                 <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
+
+                <!--
+                    No group headings: three rows that all answer "show this?"
+                    do not need to be told apart, and a heading over each pair
+                    is more furniture than content. The third one is stored
+                    inverted (HideSystemRootFolders) and shown the right way up
+                    — see SettingsViewModel.ShowSystemRootFolders.
+                -->
                 <CheckBox Content="{x:Static res:Strings.SettingsShowHidden}"
                           IsChecked="{Binding Owner.ShowHidden}"/>
                 <CheckBox Content="{x:Static res:Strings.SettingsShowSystem}"
                           IsChecked="{Binding Owner.ShowSystem}"/>
-                <CheckBox Content="{x:Static res:Strings.SettingsHideSystemRootFolders}"
+                <CheckBox Content="{x:Static res:Strings.SettingsShowSystemRootFolders}"
                           ToolTip="{x:Static res:Strings.SettingsHideSystemRootFoldersHint}"
-                          IsChecked="{Binding Owner.HideSystemRootFolders}"/>
-                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0"
-                           Text="{x:Static res:Strings.SettingsHiddenHint}"/>
-            </StackPanel>
-        </DataTemplate>
+                          IsChecked="{Binding Owner.ShowSystemRootFolders}"/>
 
-
-        <!-- File operations -->
-        <DataTemplate DataType="{x:Type vm:FileOperationsSettingsCategory}">
-            <StackPanel>
-                <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
-                <CheckBox Content="{x:Static res:Strings.SettingsConfirmRecycle}"
-                          IsChecked="{Binding Owner.ConfirmRecycle}"/>
-                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0"
-                           Text="{x:Static res:Strings.SettingsConfirmRecycleHint}"/>
-            </StackPanel>
-        </DataTemplate>
-
-
-        <!-- Companions ("integrated items") -->
-        <DataTemplate DataType="{x:Type vm:CompanionsSettingsCategory}">
-            <StackPanel>
-                <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
+                <!-- Half a line of air: this one is not about visibility but
+                     about how many items a file counts as. -->
                 <CheckBox Content="{x:Static res:Strings.SettingsIntegrateCompanions}"
-                          IsChecked="{Binding Owner.IntegrateCompanions}"/>
-                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0"
-                           Text="{x:Static res:Strings.SettingsCompanionsHint}"/>
-                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0"
-                           Text="{x:Static res:Strings.SettingsCompanionsOffHint}"/>
+                          ToolTip="{x:Static res:Strings.SettingsCompanionsHint}"
+                          IsChecked="{Binding Owner.IntegrateCompanions}"
+                          Margin="0,14,0,4"/>
             </StackPanel>
         </DataTemplate>
+
+
+        <!--
+            Size previews. Every number on this page is a pixel count, and a
+            pixel count in a text box tells you nothing until you have hit
+            Apply and gone to look. These draw the actual thing at the actual
+            size, straight off the same properties, so the answer arrives
+            while the number is still being typed.
+
+            Nothing here is a real list row: no icon service, no file, no
+            layout code. It is a rectangle where the icon goes and a line of
+            text at the label's size — which is exactly the part the numbers
+            control, and all anyone is checking.
+        -->
+        <SolidColorBrush x:Key="PreviewIcon" Color="#C7D6E8"/>
+        <SolidColorBrush x:Key="PreviewIconEdge" Color="#8FA8C4"/>
+
+        <Style x:Key="PreviewFrame" TargetType="Border">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#DDD"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10"/>
+            <Setter Property="VerticalAlignment" Value="Top"/>
+            <!--
+                Stretched and clipped, not sized to its content: a 260 px tile
+                is wider than the space left beside the fields, and a frame
+                that grows past it loses its own right edge and reads as a
+                drawing bug. Clipped inside a full-width frame it reads as
+                what it is — a window onto a cell that is wider than the box.
+            -->
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="ClipToBounds" Value="True"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+        </Style>
+
+        <Style x:Key="PreviewBox" TargetType="Rectangle">
+            <Setter Property="Fill" Value="{StaticResource PreviewIcon}"/>
+            <Setter Property="Stroke" Value="{StaticResource PreviewIconEdge}"/>
+            <Setter Property="StrokeThickness" Value="1"/>
+            <Setter Property="RadiusX" Value="2"/>
+            <Setter Property="RadiusY" Value="2"/>
+        </Style>
 
 
         <!-- Layout.
@@ -122,82 +174,163 @@
                 <TextBlock Text="{x:Static res:Strings.SettingsDetailsGroup}" FontWeight="SemiBold" Margin="{StaticResource GroupHeader}"/>
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="180"/>
+                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0" Grid.Column="0" Margin="{StaticResource Row}"
-                               Text="{x:Static res:Strings.SettingsRowHeight}" Style="{StaticResource FieldLabel}"/>
-                    <TextBox Grid.Row="0" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
-                             Text="{Binding Owner.DetailsRowHeight, UpdateSourceTrigger=PropertyChanged}"/>
-                    <TextBlock Grid.Row="1" Grid.Column="0" Margin="{StaticResource Row}"
-                               Text="{x:Static res:Strings.SettingsIconSize}" Style="{StaticResource FieldLabel}"/>
-                    <TextBox Grid.Row="1" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
-                             Text="{Binding Owner.DetailsIconSize, UpdateSourceTrigger=PropertyChanged}"/>
+                    <Grid Grid.Column="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="180"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Grid.Column="0" Margin="{StaticResource Row}"
+                                   Text="{x:Static res:Strings.SettingsRowHeight}" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Grid.Row="0" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
+                                 Text="{Binding Owner.DetailsRowHeight, UpdateSourceTrigger=Explicit}"/>
+                        <TextBlock Grid.Row="1" Grid.Column="0" Margin="{StaticResource Row}"
+                                   Text="{x:Static res:Strings.SettingsIconSize}" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Grid.Row="1" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
+                                 Text="{Binding Owner.DetailsIconSize, UpdateSourceTrigger=Explicit}"/>
+                    </Grid>
+
+                    <Border Grid.Column="1" Style="{StaticResource PreviewFrame}" Margin="20,0,0,0">
+                        <StackPanel>
+                            <Grid Height="{Binding Owner.DetailsRowHeight}">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Rectangle Style="{StaticResource PreviewBox}"
+                                               Width="{Binding Owner.DetailsIconSize}"
+                                               Height="{Binding Owner.DetailsIconSize}"/>
+                                    <TextBlock Text="{x:Static res:Strings.SettingsPreviewName}"
+                                               VerticalAlignment="Center" Margin="6,0,0,0"/>
+                                </StackPanel>
+                            </Grid>
+                            <Grid Height="{Binding Owner.DetailsRowHeight}" Background="#F5F5F5">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Rectangle Style="{StaticResource PreviewBox}"
+                                               Width="{Binding Owner.DetailsIconSize}"
+                                               Height="{Binding Owner.DetailsIconSize}"/>
+                                    <TextBlock Text="{x:Static res:Strings.SettingsPreviewName2}"
+                                               VerticalAlignment="Center" Margin="6,0,0,0"/>
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
                 </Grid>
 
                 <TextBlock Text="{x:Static res:Strings.SettingsTilesGroup}" FontWeight="SemiBold" Margin="0,18,0,8"/>
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="180"/>
+                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0" Grid.Column="0" Margin="{StaticResource Row}"
-                               Text="{x:Static res:Strings.SettingsTileWidth}" Style="{StaticResource FieldLabel}"/>
-                    <TextBox Grid.Row="0" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
-                             Text="{Binding Owner.TileCellWidth, UpdateSourceTrigger=PropertyChanged}"/>
-                    <TextBlock Grid.Row="1" Grid.Column="0" Margin="{StaticResource Row}"
-                               Text="{x:Static res:Strings.SettingsIconSize}" Style="{StaticResource FieldLabel}"/>
-                    <TextBox Grid.Row="1" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
-                             Text="{Binding Owner.TileIconSize, UpdateSourceTrigger=PropertyChanged}"/>
-                    <TextBlock Grid.Row="2" Grid.Column="0" Margin="{StaticResource Row}"
-                               Text="{x:Static res:Strings.SettingsLabelFontSize}" Style="{StaticResource FieldLabel}"/>
-                    <TextBox Grid.Row="2" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
-                             Text="{Binding Owner.TileLabelFontSize, UpdateSourceTrigger=PropertyChanged}"/>
+                    <Grid Grid.Column="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="180"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Grid.Column="0" Margin="{StaticResource Row}"
+                                   Text="{x:Static res:Strings.SettingsTileWidth}" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Grid.Row="0" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
+                                 Text="{Binding Owner.TileCellWidth, UpdateSourceTrigger=Explicit}"/>
+                        <TextBlock Grid.Row="1" Grid.Column="0" Margin="{StaticResource Row}"
+                                   Text="{x:Static res:Strings.SettingsIconSize}" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Grid.Row="1" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
+                                 Text="{Binding Owner.TileIconSize, UpdateSourceTrigger=Explicit}"/>
+                        <TextBlock Grid.Row="2" Grid.Column="0" Margin="{StaticResource Row}"
+                                   Text="{x:Static res:Strings.SettingsLabelFontSize}" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Grid.Row="2" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
+                                 Text="{Binding Owner.TileLabelFontSize, UpdateSourceTrigger=Explicit}"/>
+                    </Grid>
+
+                    <Border Grid.Column="1" Style="{StaticResource PreviewFrame}" Margin="20,0,0,0">
+                        <StackPanel Orientation="Horizontal" Width="{Binding Owner.TileCellWidth}">
+                            <Rectangle Style="{StaticResource PreviewBox}"
+                                       Width="{Binding Owner.TileIconSize}"
+                                       Height="{Binding Owner.TileIconSize}"
+                                       VerticalAlignment="Center"/>
+                            <StackPanel VerticalAlignment="Center" Margin="8,0,0,0">
+                                <TextBlock Text="{x:Static res:Strings.SettingsPreviewName}"
+                                           FontSize="{Binding Owner.TileLabelFontSize}" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="{x:Static res:Strings.SettingsPreviewMeta}" Foreground="#888"
+                                           FontSize="{Binding Owner.TileLabelFontSize}" TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
                 </Grid>
 
                 <TextBlock Text="{x:Static res:Strings.SettingsLargeIconsGroup}" FontWeight="SemiBold" Margin="0,18,0,8"/>
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="180"/>
+                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0" Grid.Column="0" Margin="{StaticResource Row}"
-                               Text="{x:Static res:Strings.SettingsCellWidth}" Style="{StaticResource FieldLabel}"/>
-                    <TextBox Grid.Row="0" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
-                             Text="{Binding Owner.LargeIconCellWidth, UpdateSourceTrigger=PropertyChanged}"/>
-                    <TextBlock Grid.Row="1" Grid.Column="0" Margin="{StaticResource Row}"
-                               Text="{x:Static res:Strings.SettingsIconSize}" Style="{StaticResource FieldLabel}"/>
-                    <TextBox Grid.Row="1" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
-                             Text="{Binding Owner.LargeIconImageSize, UpdateSourceTrigger=PropertyChanged}"/>
-                    <TextBlock Grid.Row="2" Grid.Column="0" Margin="{StaticResource Row}"
-                               Text="{x:Static res:Strings.SettingsCellMargin}" Style="{StaticResource FieldLabel}"/>
-                    <TextBox Grid.Row="2" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
-                             Text="{Binding Owner.LargeIconMargin, UpdateSourceTrigger=PropertyChanged}"/>
-                    <TextBlock Grid.Row="3" Grid.Column="0" Margin="{StaticResource Row}"
-                               Text="{x:Static res:Strings.SettingsLabelFontSize}" Style="{StaticResource FieldLabel}"/>
-                    <TextBox Grid.Row="3" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
-                             Text="{Binding Owner.LargeIconLabelFontSize, UpdateSourceTrigger=PropertyChanged}"/>
+                    <Grid Grid.Column="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="180"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Grid.Column="0" Margin="{StaticResource Row}"
+                                   Text="{x:Static res:Strings.SettingsCellWidth}" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Grid.Row="0" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
+                                 Text="{Binding Owner.LargeIconCellWidth, UpdateSourceTrigger=Explicit}"/>
+                        <TextBlock Grid.Row="1" Grid.Column="0" Margin="{StaticResource Row}"
+                                   Text="{x:Static res:Strings.SettingsIconSize}" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Grid.Row="1" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
+                                 Text="{Binding Owner.LargeIconImageSize, UpdateSourceTrigger=Explicit}"/>
+                        <TextBlock Grid.Row="2" Grid.Column="0" Margin="{StaticResource Row}"
+                                   Text="{x:Static res:Strings.SettingsCellMargin}" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Grid.Row="2" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
+                                 Text="{Binding Owner.LargeIconMargin, UpdateSourceTrigger=Explicit}"/>
+                        <TextBlock Grid.Row="3" Grid.Column="0" Margin="{StaticResource Row}"
+                                   Text="{x:Static res:Strings.SettingsLabelFontSize}" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Grid.Row="3" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
+                                 Text="{Binding Owner.LargeIconLabelFontSize, UpdateSourceTrigger=Explicit}"/>
+                    </Grid>
+
+                    <!-- Two cells, so the margin between them is visible: on
+                         its own it would just look like padding. -->
+                    <Border Grid.Column="1" Style="{StaticResource PreviewFrame}" Margin="20,0,0,0">
+                        <StackPanel Orientation="Horizontal">
+                            <StackPanel Width="{Binding Owner.LargeIconCellWidth}"
+                                        Margin="{Binding Owner.LargeIconMargin, Converter={StaticResource PixelsToThickness}}">
+                                <Rectangle Style="{StaticResource PreviewBox}"
+                                           Width="{Binding Owner.LargeIconImageSize}"
+                                           Height="{Binding Owner.LargeIconImageSize}"
+                                           HorizontalAlignment="Center"/>
+                                <TextBlock Text="{x:Static res:Strings.SettingsPreviewName}" HorizontalAlignment="Center"
+                                           Margin="0,4,0,0" TextTrimming="CharacterEllipsis"
+                                           FontSize="{Binding Owner.LargeIconLabelFontSize}"/>
+                            </StackPanel>
+                            <StackPanel Width="{Binding Owner.LargeIconCellWidth}"
+                                        Margin="{Binding Owner.LargeIconMargin, Converter={StaticResource PixelsToThickness}}">
+                                <Rectangle Style="{StaticResource PreviewBox}"
+                                           Width="{Binding Owner.LargeIconImageSize}"
+                                           Height="{Binding Owner.LargeIconImageSize}"
+                                           HorizontalAlignment="Center"/>
+                                <TextBlock Text="{x:Static res:Strings.SettingsPreviewName2}" HorizontalAlignment="Center"
+                                           Margin="0,4,0,0" TextTrimming="CharacterEllipsis"
+                                           FontSize="{Binding Owner.LargeIconLabelFontSize}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
                 </Grid>
 
                 <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,16,0,0"
                            Text="{x:Static res:Strings.SettingsZoomHint}"/>
-                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0"
-                           Text="{x:Static res:Strings.SettingsLayoutHint}"/>
             </StackPanel>
         </DataTemplate>
 
@@ -221,7 +354,7 @@
                     <TextBlock Grid.Column="0" Margin="{StaticResource Row}"
                                Text="{x:Static res:Strings.SettingsAutoGalleryPercent}" Style="{StaticResource FieldLabel}"/>
                     <TextBox Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
-                             Text="{Binding Owner.AutoGalleryPercent, UpdateSourceTrigger=PropertyChanged}"/>
+                             Text="{Binding Owner.AutoGalleryPercent, UpdateSourceTrigger=Explicit}"/>
                 </Grid>
                 <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,6,0,0"
                            Text="{x:Static res:Strings.SettingsAutoGalleryHint}"/>
@@ -253,41 +386,81 @@
                     <TextBlock Grid.Row="0" Grid.Column="0" Margin="{StaticResource Row}"
                                Text="{x:Static res:Strings.SettingsGalleryGreyLevel}" Style="{StaticResource FieldLabel}"/>
                     <TextBox Grid.Row="0" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
-                             Text="{Binding Owner.GalleryGreyLevel, UpdateSourceTrigger=PropertyChanged}"/>
+                             Text="{Binding Owner.GalleryGreyLevel, UpdateSourceTrigger=Explicit}"/>
                     <TextBlock Grid.Row="1" Grid.Column="0" Margin="{StaticResource Row}"
                                Text="{x:Static res:Strings.SettingsGalleryDarkLevel}" Style="{StaticResource FieldLabel}"/>
                     <TextBox Grid.Row="1" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
-                             Text="{Binding Owner.GalleryDarkLevel, UpdateSourceTrigger=PropertyChanged}"/>
+                             Text="{Binding Owner.GalleryDarkLevel, UpdateSourceTrigger=Explicit}"/>
                 </Grid>
 
                 <TextBlock Text="{x:Static res:Strings.SettingsGalleryGroup}" FontWeight="SemiBold" Margin="0,18,0,8"/>
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="180"/>
+                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0" Grid.Column="0" Margin="{StaticResource Row}"
-                               Text="{x:Static res:Strings.SettingsCellWidth}" Style="{StaticResource FieldLabel}"/>
-                    <TextBox Grid.Row="0" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
-                             Text="{Binding Owner.GalleryCellWidth, UpdateSourceTrigger=PropertyChanged}"/>
-                    <TextBlock Grid.Row="1" Grid.Column="0" Margin="{StaticResource Row}"
-                               Text="{x:Static res:Strings.SettingsIconSize}" Style="{StaticResource FieldLabel}"/>
-                    <TextBox Grid.Row="1" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
-                             Text="{Binding Owner.GalleryImageSize, UpdateSourceTrigger=PropertyChanged}"/>
-                    <TextBlock Grid.Row="2" Grid.Column="0" Margin="{StaticResource Row}"
-                               Text="{x:Static res:Strings.SettingsCellMargin}" Style="{StaticResource FieldLabel}"/>
-                    <TextBox Grid.Row="2" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
-                             Text="{Binding Owner.GalleryMargin, UpdateSourceTrigger=PropertyChanged}"/>
-                    <TextBlock Grid.Row="3" Grid.Column="0" Margin="{StaticResource Row}"
-                               Text="{x:Static res:Strings.SettingsLabelFontSize}" Style="{StaticResource FieldLabel}"/>
-                    <TextBox Grid.Row="3" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
-                             Text="{Binding Owner.GalleryLabelFontSize, UpdateSourceTrigger=PropertyChanged}"/>
+                    <Grid Grid.Column="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="180"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Grid.Column="0" Margin="{StaticResource Row}"
+                                   Text="{x:Static res:Strings.SettingsCellWidth}" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Grid.Row="0" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
+                                 Text="{Binding Owner.GalleryCellWidth, UpdateSourceTrigger=Explicit}"/>
+                        <TextBlock Grid.Row="1" Grid.Column="0" Margin="{StaticResource Row}"
+                                   Text="{x:Static res:Strings.SettingsIconSize}" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Grid.Row="1" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
+                                 Text="{Binding Owner.GalleryImageSize, UpdateSourceTrigger=Explicit}"/>
+                        <TextBlock Grid.Row="2" Grid.Column="0" Margin="{StaticResource Row}"
+                                   Text="{x:Static res:Strings.SettingsCellMargin}" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Grid.Row="2" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
+                                 Text="{Binding Owner.GalleryMargin, UpdateSourceTrigger=Explicit}"/>
+                        <TextBlock Grid.Row="3" Grid.Column="0" Margin="{StaticResource Row}"
+                                   Text="{x:Static res:Strings.SettingsLabelFontSize}" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Grid.Row="3" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
+                                 Text="{Binding Owner.GalleryLabelFontSize, UpdateSourceTrigger=Explicit}"/>
+                    </Grid>
+
+                    <!--
+                        Same preview as on the size page, but on the gallery's
+                        own background: half the point of these numbers is how
+                        much air is left between the pictures, and air reads
+                        differently on grey than it does on white.
+                    -->
+                    <Border Grid.Column="1" Style="{StaticResource PreviewFrame}" Margin="20,0,0,0"
+                            Background="{Binding Owner.GalleryPalette.Background}">
+                        <StackPanel Orientation="Horizontal">
+                            <StackPanel Width="{Binding Owner.GalleryCellWidth}"
+                                        Margin="{Binding Owner.GalleryMargin, Converter={StaticResource PixelsToThickness}}">
+                                <Rectangle Style="{StaticResource PreviewBox}"
+                                           Width="{Binding Owner.GalleryImageSize}"
+                                           Height="{Binding Owner.GalleryImageSize}"
+                                           HorizontalAlignment="Center"/>
+                                <TextBlock Text="{x:Static res:Strings.SettingsPreviewName2}" HorizontalAlignment="Center"
+                                           Margin="0,4,0,0" TextTrimming="CharacterEllipsis"
+                                           Foreground="{Binding Owner.GalleryPalette.Foreground}"
+                                           FontSize="{Binding Owner.GalleryLabelFontSize}"/>
+                            </StackPanel>
+                            <StackPanel Width="{Binding Owner.GalleryCellWidth}"
+                                        Margin="{Binding Owner.GalleryMargin, Converter={StaticResource PixelsToThickness}}">
+                                <Rectangle Style="{StaticResource PreviewBox}"
+                                           Width="{Binding Owner.GalleryImageSize}"
+                                           Height="{Binding Owner.GalleryImageSize}"
+                                           HorizontalAlignment="Center"/>
+                                <TextBlock Text="{x:Static res:Strings.SettingsPreviewName}" HorizontalAlignment="Center"
+                                           Margin="0,4,0,0" TextTrimming="CharacterEllipsis"
+                                           Foreground="{Binding Owner.GalleryPalette.Foreground}"
+                                           FontSize="{Binding Owner.GalleryLabelFontSize}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
                 </Grid>
 
                 <TextBlock Text="{x:Static res:Strings.SettingsRatingGroup}" FontWeight="SemiBold" Margin="0,18,0,8"/>
@@ -318,7 +491,7 @@
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Text="{x:Static res:Strings.SettingsThumbnailDiskMb}" Style="{StaticResource FieldLabel}" Grid.Column="0"/>
-                    <TextBox Text="{Binding Owner.ThumbnailDiskCacheMb, UpdateSourceTrigger=PropertyChanged}"
+                    <TextBox Text="{Binding Owner.ThumbnailDiskCacheMb, UpdateSourceTrigger=Explicit}"
                              Grid.Column="1" HorizontalAlignment="Left"
                              IsEnabled="{Binding Owner.ThumbnailDiskCacheEnabled}"/>
                 </Grid>
@@ -329,7 +502,7 @@
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Text="{x:Static res:Strings.SettingsThumbnailMemory}" Style="{StaticResource FieldLabel}" Grid.Column="0"/>
-                    <TextBox Text="{Binding Owner.ThumbnailMemoryEntries, UpdateSourceTrigger=PropertyChanged}"
+                    <TextBox Text="{Binding Owner.ThumbnailMemoryEntries, UpdateSourceTrigger=Explicit}"
                              Grid.Column="1" HorizontalAlignment="Left"/>
                 </Grid>
 
@@ -350,48 +523,176 @@
 
         <!-- Bookmarks -->
         <DataTemplate DataType="{x:Type vm:BookmarksSettingsCategory}">
-            <StackPanel>
+            <StackPanel ToolTip="{x:Static res:Strings.SettingsBookmarksHint}">
                 <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
+                <TextBlock Text="{x:Static res:Strings.SettingsShowGroup}" FontWeight="SemiBold" Margin="{StaticResource GroupHeader}"/>
                 <CheckBox Content="{x:Static res:Strings.SettingsBookmarkDownloads}"
                           IsChecked="{Binding Owner.ShowBookmarkDownloads}"/>
                 <CheckBox Content="{x:Static res:Strings.SettingsBookmarkDocuments}"
                           IsChecked="{Binding Owner.ShowBookmarkDocuments}"/>
                 <CheckBox Content="{x:Static res:Strings.SettingsBookmarkPictures}"
                           IsChecked="{Binding Owner.ShowBookmarkPictures}"/>
+                <CheckBox Content="{x:Static res:Strings.SettingsBookmarkDesktop}"
+                          IsChecked="{Binding Owner.ShowBookmarkDesktop}"/>
+                <CheckBox Content="{x:Static res:Strings.SettingsBookmarkMusic}"
+                          IsChecked="{Binding Owner.ShowBookmarkMusic}"/>
+                <CheckBox Content="{x:Static res:Strings.SettingsBookmarkVideos}"
+                          IsChecked="{Binding Owner.ShowBookmarkVideos}"/>
                 <CheckBox Content="{x:Static res:Strings.SettingsBookmarkRecycleBin}"
                           IsChecked="{Binding Owner.ShowBookmarkRecycleBin}"/>
-                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0"
-                           Text="{x:Static res:Strings.SettingsBookmarksHint}"/>
+                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,14,0,0"
+                           Text="{x:Static res:Strings.SettingsBookmarksAddHint}"/>
             </StackPanel>
         </DataTemplate>
 
 
-        <!-- Context menu.
-             Two checkbox lists over the same MenuToggleViewModel: what the
-             shell contributes, and what Wander contributes. The first is
-             discovered (it fills in as menus are opened), the second is
-             fixed and comes from ContextMenuCatalog. -->
-        <DataTemplate x:Key="MenuToggleTemplate" DataType="{x:Type vm:MenuToggleViewModel}">
-            <CheckBox Content="{Binding Title}" IsChecked="{Binding IsEnabled}" Margin="0,2,0,2"/>
-        </DataTemplate>
+        <!--
+            Context menu. Two tables over the same idea — a checkbox that
+            hides a row, plus the columns that make the row identifiable.
+            They look alike on purpose: the difference between "a pункт of
+            Wander" and "a пункт of 7-Zip" is whose it is, not how it is
+            switched off.
+        -->
+        <Style x:Key="SettingsGrid" TargetType="DataGrid">
+            <Setter Property="AutoGenerateColumns" Value="False"/>
+            <Setter Property="CanUserAddRows" Value="False"/>
+            <Setter Property="CanUserDeleteRows" Value="False"/>
+            <Setter Property="CanUserResizeRows" Value="False"/>
+            <Setter Property="CanUserReorderColumns" Value="False"/>
+            <Setter Property="HeadersVisibility" Value="Column"/>
+            <Setter Property="GridLinesVisibility" Value="Horizontal"/>
+            <Setter Property="HorizontalGridLinesBrush" Value="#EEE"/>
+            <Setter Property="BorderBrush" Value="#DDD"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="RowBackground" Value="White"/>
+            <Setter Property="AlternatingRowBackground" Value="#FAFAFA"/>
+            <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="HorizontalScrollBarVisibility" Value="Auto"/>
+        </Style>
 
         <DataTemplate DataType="{x:Type vm:ContextMenuSettingsCategory}">
             <StackPanel>
                 <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
 
+                <TextBlock Text="{x:Static res:Strings.SettingsShellExtensionsGroup}" FontWeight="SemiBold" Margin="{StaticResource GroupHeader}"/>
                 <CheckBox Content="{x:Static res:Strings.SettingsShellExtensions}"
                           IsChecked="{Binding Owner.ShellExtensionsEnabled}"/>
-                <TextBlock Text="{x:Static res:Strings.SettingsShellExtensionsGroup}" FontWeight="SemiBold" Margin="0,14,0,4"/>
-                <ItemsControl ItemsSource="{Binding Owner.ShellExtensionToggles}"
-                              ItemTemplate="{StaticResource MenuToggleTemplate}"
-                              IsEnabled="{Binding Owner.ShellExtensionsEnabled}"/>
-                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,6,0,0"
+
+                <DataGrid Style="{StaticResource SettingsGrid}"
+                          ItemsSource="{Binding Owner.ShellExtensionRows}"
+                          IsEnabled="{Binding Owner.ShellExtensionsEnabled}"
+                          ToolTip="{x:Static res:Strings.SettingsShellExtensionsTableHint}"
+                          Height="230" Margin="0,8,0,0">
+                    <DataGrid.Columns>
+                        <!--
+                            A template column, not DataGridCheckBoxColumn: that
+                            one puts the box in a cell that has to be selected
+                            before it can be edited, so every tick costs two
+                            clicks. A plain CheckBox in a template is just a
+                            checkbox.
+                        -->
+                        <DataGridTemplateColumn Header="{x:Static res:Strings.SettingsShellColumnHide}" Width="62">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <CheckBox IsChecked="{Binding IsBlocked, UpdateSourceTrigger=PropertyChanged}"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0"/>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <!-- The label takes the slack, but never below the width
+                             that shows a real name: squeezing "TortoiseGit" down
+                             to "Tor" makes the table unreadable long before it
+                             makes it narrow. Below that the grid scrolls. -->
+                        <DataGridTextColumn Header="{x:Static res:Strings.SettingsShellColumnItem}"
+                                            Binding="{Binding Title}" IsReadOnly="True"
+                                            Width="*" MinWidth="160"/>
+                        <DataGridTextColumn Header="{x:Static res:Strings.SettingsShellColumnApp}"
+                                            Binding="{Binding AppName}" IsReadOnly="True" Width="130"/>
+                        <DataGridTextColumn Header="{x:Static res:Strings.SettingsShellColumnScopes}"
+                                            Binding="{Binding ScopesText}" IsReadOnly="True" Width="150"/>
+                    </DataGrid.Columns>
+                    <DataGrid.RowStyle>
+                        <Style TargetType="DataGridRow">
+                            <!-- What the handler says the row does, when it says
+                                 anything: the only place that text exists is
+                                 IContextMenu, so it cannot be a column that is
+                                 always filled. -->
+                            <Setter Property="ToolTip" Value="{Binding Description}"/>
+                            <Style.Triggers>
+                                <!-- Installed but never yet seen in a menu. Dimmed
+                                     rather than hidden — still a switch, just a
+                                     speculative one. -->
+                                <DataTrigger Binding="{Binding IsSeen}" Value="False">
+                                    <Setter Property="Foreground" Value="#777"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGrid.RowStyle>
+                </DataGrid>
+
+                <StackPanel Orientation="Horizontal" Margin="0,8,0,0"
+                            IsEnabled="{Binding Owner.ShellExtensionsEnabled}">
+                    <Button Content="{x:Static res:Strings.SettingsShellAdd}"
+                            Padding="14,5" Click="AddShellScope_Click"/>
+                    <Button Content="{x:Static res:Strings.SettingsShellReset}"
+                            ToolTip="{x:Static res:Strings.SettingsShellResetHint}"
+                            Padding="14,5" Margin="8,0,0,0" Click="ResetShellScopes_Click"/>
+                    <CheckBox Content="{x:Static res:Strings.SettingsShellShowSystem}"
+                              IsChecked="{Binding Owner.ShowSystemShellExtensions}"
+                              VerticalAlignment="Center" Margin="14,0,0,0"/>
+                </StackPanel>
+
+                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0"
                            Text="{x:Static res:Strings.SettingsShellExtensionsHint}"/>
 
-                <TextBlock Text="{x:Static res:Strings.SettingsOwnItemsGroup}" FontWeight="SemiBold" Margin="0,18,0,4"/>
-                <ItemsControl ItemsSource="{Binding Owner.MenuItemToggles}"
-                              ItemTemplate="{StaticResource MenuToggleTemplate}"/>
-                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,6,0,0"
+                <TextBlock Text="{x:Static res:Strings.SettingsOwnItemsGroup}" FontWeight="SemiBold" Margin="0,20,0,8"/>
+                <DataGrid Style="{StaticResource SettingsGrid}"
+                          ItemsSource="{Binding Owner.MenuItemRows}"
+                          Height="230">
+                    <DataGrid.Columns>
+                        <!--
+                            A template column, not DataGridCheckBoxColumn: that
+                            one puts the box in a cell that has to be selected
+                            before it can be edited, so every tick costs two
+                            clicks. A plain CheckBox in a template is just a
+                            checkbox.
+                        -->
+                        <DataGridTemplateColumn Header="{x:Static res:Strings.SettingsShellColumnHide}" Width="62">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <CheckBox IsChecked="{Binding IsHidden, UpdateSourceTrigger=PropertyChanged}"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0"/>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <!-- A template column, not a text one: the indent is what
+                             shows that "Вставить" lives inside "Файл", and a
+                             plain binding has nowhere to put it. -->
+                        <DataGridTemplateColumn Header="{x:Static res:Strings.SettingsShellColumnItem}"
+                                                Width="*" MinWidth="180">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Title}" Margin="{Binding Indent}"
+                                               VerticalAlignment="Center">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsSubmenu}" Value="True">
+                                                        <Setter Property="FontWeight" Value="SemiBold"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTextColumn Header="{x:Static res:Strings.SettingsOwnColumnGesture}"
+                                            Binding="{Binding Gesture}" IsReadOnly="True" Width="120"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+
+                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,8,0,0"
                            Text="{x:Static res:Strings.SettingsOwnItemsHint}"/>
             </StackPanel>
         </DataTemplate>

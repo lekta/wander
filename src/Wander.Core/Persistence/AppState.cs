@@ -36,6 +36,27 @@ public sealed record AppState {
     /// record represents the out-of-the-box settings.
     /// </summary>
     public AppSettings Settings { get; init; } = new();
+
+    /// <summary>
+    /// Informational version of the build that last wrote this file, commit
+    /// hash and all.
+    ///
+    /// <para>
+    /// Read for one thing: dropping the thumbnail cache after an update.
+    /// Thumbnails are keyed by path and file stamps, not by the code that
+    /// produced them, so a fix to decoding or sizing leaves every previously
+    /// cached picture wrong and no key changes to notice. Regenerating a few
+    /// hundred thumbnails once per update is cheap; a wrong thumbnail that
+    /// never expires is a bug report.
+    /// </para>
+    ///
+    /// <para>
+    /// Empty on a fresh install and on files written before this field
+    /// existed — both treated as "different build", which costs one extra
+    /// regeneration and nothing else.
+    /// </para>
+    /// </summary>
+    public string LastRunVersion { get; init; } = string.Empty;
 }
 
 

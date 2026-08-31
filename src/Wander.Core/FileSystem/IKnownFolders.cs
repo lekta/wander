@@ -12,4 +12,7 @@ public interface IKnownFolders {
     string? GetDownloads();
     string? GetDocuments();
     string? GetPictures();
+    string? GetDesktop();
+    string? GetMusic();
+    string? GetVideos();
 }

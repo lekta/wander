@@ -641,6 +641,16 @@ public partial class MainWindow : Window {
     }
 
 
+    /// <summary>
+    /// Puts the keyboard back in the file list. Called after a modal dialog
+    /// closes: WPF hands focus to the owner window and then picks whatever
+    /// focusable element it finds first, which is nowhere the user was.
+    /// </summary>
+    public void FocusWorkArea() {
+        FocusZone(Zone.FileList);
+    }
+
+
     /// <summary>Puts the keyboard in one zone. False when the zone cannot take it.</summary>
     private bool FocusZone(Zone zone) {
         switch (zone) {
@@ -919,13 +929,34 @@ public partial class MainWindow : Window {
             CanPaste = vm.PasteCommand.CanExecute(null),
         };
 
+        // Remember the file type that was right-clicked. The "Добавить"
+        // picker in settings leads with these — of the eight hundred
+        // registered extensions, the five you were just working in are the
+        // only ones with any claim to being first.
+        // Only real file types: the picker's list is a list of extensions,
+        // and "фон папки" is already one of the scopes the table always has.
+        if (!isBackground) {
+            vm.Settings.NoteMenuScope(ShellScopes.ExtensionOf(vm.SelectedEntry?.FullPath));
+        }
+
         var session = QueryShellMenu(target, settings);
         if (session is not null) {
-            // Opening a menu is the only way we ever learn which handlers
-            // are installed, so this is where the settings dialog's
-            // per-extension checkbox list gets its names.
-            vm.Settings.NoteShellExtensions(
-                session.Items.Where(item => !item.IsSeparator).Select(item => item.Header));
+            // Opening a menu is the only way we learn which of the installed
+            // handlers actually draw anything, so this is where the settings
+            // table's "встречали" mark comes from. Keyed the same way the
+            // blocklist is — verb first, label as the fallback.
+            string scope = isBackground
+                ? ShellScopes.DirectoryBackground
+                : ShellScopes.ExtensionOf(vm.SelectedEntry?.FullPath) ?? ShellScopes.Directory;
+
+            vm.Settings.NoteShellExtensions(session.Items
+                .Where(item => !item.IsSeparator)
+                .Select(item => new KnownShellEntry {
+                    Key = ShellEntryKey.For(item.Verb, item.Header),
+                    Title = ShellEntryKey.Normalize(item.Header),
+                    Help = item.Help,
+                    Scope = scope,
+                }));
         }
 
         var model = ContextMenuBuilder.Build(target, settings, session?.Items);
@@ -1000,7 +1031,8 @@ public partial class MainWindow : Window {
     /// folders on the way to the eleventh lists all ten — each one a
     /// directory read, a thumbnail pass and a lost list position. The rule
     /// here is the one the mouse already follows: moving is free, opening is
-    /// deliberate.
+    /// deliberate. <c>AppSettings.TreeKeyboardNavigates</c> puts Explorer's
+    /// habit back for anyone who has it.
     /// </para>
     /// </summary>
     private void OnTreeSelectionChanged(object sender, object? item, NavigationSource source) {
@@ -1008,7 +1040,7 @@ public partial class MainWindow : Window {
             return;
         }
 
-        if (_treeClickNavigates) {
+        if (_treeClickNavigates || Vm.Settings.TreeKeyboardNavigates) {
             Vm.NavigateAndSelectFolder(node.FullPath, source);
 
             return;

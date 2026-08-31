@@ -60,22 +60,6 @@ internal sealed class ShellContextMenuSession : IShellContextMenuSession {
     /// <summary>Submenu nesting we are willing to walk. Real menus use one or two.</summary>
     private const int MaxDepth = 4;
 
-    /// <summary>
-    /// Canonical verbs Wander renders itself. Dropping them is what keeps
-    /// the shell group from repeating Cut / Copy / Delete / Properties two
-    /// inches below Wander's own copies. Matching on the canonical verb
-    /// rather than the label is deliberate: labels are localised, verbs
-    /// are not.
-    /// </summary>
-    private static readonly HashSet<string> _duplicateVerbs = new(StringComparer.OrdinalIgnoreCase) {
-        "open", "opennewwindow", "opennewprocess", "explore", "openas",
-        "cut", "copy", "paste", "pastelink", "delete", "rename", "link",
-        "properties", "undo",
-        "copyaspath", "windows.copyaspath", "windows.modernshare", "windows.share",
-        // Windows 11 "Add to Favorites" — Wander has its own bookmarks panel.
-        "pintohome", "pintohomefile",
-    };
-
     private readonly ILogger _log;
     private readonly string _folderPath;
     private readonly List<IntPtr> _pidls = new();
@@ -347,7 +331,7 @@ internal sealed class ShellContextMenuSession : IShellContextMenuSession {
             string? verb = depth <= 1 ? GetCanonicalVerb(command) : null;
             // Only the top level is de-duplicated: a "Copy" *inside* a
             // handler's own submenu means something else entirely.
-            if (depth == 0 && verb is not null && _duplicateVerbs.Contains(verb)) {
+            if (depth == 0 && ShellVerbs.IsSuppressed(verb)) {
                 continue;
             }
 
@@ -357,6 +341,10 @@ internal sealed class ShellContextMenuSession : IShellContextMenuSession {
                 IsEnabled = enabled,
                 IconPng = icon,
                 Verb = verb ?? string.Empty,
+                // Only for top-level rows: the settings table lists those,
+                // and asking every leaf of a forty-item TortoiseGit submenu
+                // is forty COM calls for text nobody reads.
+                Help = depth == 0 ? GetHelpText(command) : string.Empty,
             });
         }
 
@@ -396,6 +384,20 @@ internal sealed class ShellContextMenuSession : IShellContextMenuSession {
     }
 
     private string? GetCanonicalVerb(int command) {
+        return GetCommandString(command, GCS_VERBW);
+    }
+
+    /// <summary>
+    /// The one-line description a handler publishes for its row — what
+    /// Explorer showed in the status bar before Windows 8 took the status
+    /// bar away. Most handlers still fill it in, and it is the only answer
+    /// there is to "what does this menu item actually do".
+    /// </summary>
+    private string GetHelpText(int command) {
+        return GetCommandString(command, GCS_HELPTEXTW) ?? string.Empty;
+    }
+
+    private string? GetCommandString(int command, uint kind) {
         if (_menu is null) {
             return null;
         }
@@ -403,12 +405,12 @@ internal sealed class ShellContextMenuSession : IShellContextMenuSession {
         const int MaxChars = 260;
         var buffer = new byte[MaxChars * 2];
         try {
-            if (_menu.GetCommandString((IntPtr)command, GCS_VERBW, IntPtr.Zero, buffer, MaxChars) < 0) {
+            if (_menu.GetCommandString((IntPtr)command, kind, IntPtr.Zero, buffer, MaxChars) < 0) {
                 return null;
             }
         } catch (Exception) {
             // Plenty of handlers return E_NOTIMPL here, and a few throw.
-            // Either way we simply don't know the verb.
+            // Either way we simply don't know.
             return null;
         }
 

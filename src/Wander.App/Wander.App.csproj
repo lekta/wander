@@ -36,6 +36,20 @@
   </ItemGroup>
 
   <!--
+    Дата сборки — для строки версии в меню и для отчётов об ошибках.
+    Стоит здесь, а не в Directory.Build.props: читает её только приложение,
+    а свойство меняется раз в сутки и заставляло бы пересобираться и Core,
+    и тесты. Гранулярность — день, поэтому инкрементальная сборка страдает
+    ровно один раз за день.
+  -->
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>BuildDate</_Parameter1>
+      <_Parameter2>$([System.DateTime]::UtcNow.ToString("yyyy-MM-dd"))</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <!--
     Определения подсветки для форматов, которых нет в поставке AvalonEdit
     (bat/cmd, Unity-шейдеры, YAML и сериализованные ассеты Unity).
     Читаются из сборки в Highlighting/HighlightingCatalog.cs.

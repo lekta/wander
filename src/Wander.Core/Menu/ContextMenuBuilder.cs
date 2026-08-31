@@ -190,7 +190,7 @@ public static class ContextMenuBuilder {
             }
             // Blocking is top-level only: the user blocks "7-Zip", not each
             // of the fourteen verbs inside it.
-            if (settings.IsBlocked(item.Header)) {
+            if (settings.IsBlocked(item.Verb, item.Header)) {
                 continue;
             }
 

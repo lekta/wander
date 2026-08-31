@@ -24,9 +24,9 @@ public class ContextMenuSettingsTests {
             BlockedShellExtensions = new[] { "&7-Zip" },
         });
 
-        Assert.True(settings.IsBlocked("7-Zip"));
-        Assert.True(settings.IsBlocked("7-Zip..."));
-        Assert.False(settings.IsBlocked("TortoiseGit"));
+        Assert.True(settings.IsBlocked(null, "7-Zip"));
+        Assert.True(settings.IsBlocked(null, "7-Zip..."));
+        Assert.False(settings.IsBlocked(null, "TortoiseGit"));
     }
 
 
@@ -68,12 +68,16 @@ public class ContextMenuSettingsTests {
     // --- Remembered extension names ---------------------------------------
 
     [Fact]
-    public void TrimKnownExtensions_NormalisesAndDeduplicates() {
+    public void TrimKnownExtensions_DeduplicatesButKeepsKeysVerbatim() {
+        // The list holds ShellEntryKeys, and a key is not a label: a verb
+        // keeps its trailing dots ("Git Commit..."), because that is exactly
+        // the string the shell reports and the blocklist stores. Normalising
+        // here would file it under "Git Commit" and quietly stop matching.
         var trimmed = ContextMenuSettings.TrimKnownExtensions(
-            new[] { "&7-Zip", "7-Zip", "7-Zip...", "", "   ", "TortoiseGit" },
+            new[] { "7-Zip", "7-Zip", "  7-Zip  ", "", "   ", "Git Commit...", "TortoiseGit" },
             Array.Empty<string>());
 
-        Assert.Equal(new[] { "7-Zip", "TortoiseGit" }, trimmed);
+        Assert.Equal(new[] { "7-Zip", "Git Commit...", "TortoiseGit" }, trimmed);
     }
 
     [Fact]
@@ -125,18 +129,16 @@ public class ContextMenuSettingsTests {
     }
 
     [Fact]
-    public void TrimKnownExtensions_SurvivesAnAppSettingsRoundTrip() {
-        var stored = new AppSettings {
-            KnownShellExtensions = new[] { "&7-Zip", "TortoiseGit" },
-            BlockedShellExtensions = new[] { "7-Zip..." },
-        };
+    public void BlocklistsWrittenAsLabels_KeepWorking() {
+        // A file written before the key became verb-first holds decorated
+        // labels. Nothing migrates it, and nothing has to — the lookup checks
+        // the normalised form as well as the stored one.
+        var settings = ContextMenuSettings.From(new AppSettings {
+            BlockedShellExtensions = new[] { "&7-Zip" },
+        });
 
-        var settings = ContextMenuSettings.From(stored);
-        var trimmed = ContextMenuSettings.TrimKnownExtensions(
-            stored.KnownShellExtensions, stored.BlockedShellExtensions);
-
-        Assert.Equal(new[] { "7-Zip", "TortoiseGit" }, trimmed);
-        Assert.True(settings.IsBlocked(trimmed[0]));
-        Assert.False(settings.IsBlocked(trimmed[1]));
+        Assert.True(settings.IsBlocked(null, "7-Zip"));
+        Assert.False(settings.IsBlocked(null, "TortoiseGit"));
     }
+
 }

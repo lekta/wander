@@ -28,6 +28,14 @@ internal static class ShellContextMenuInterop {
     /// <summary>Ask <c>GetCommandString</c> for the canonical (language-neutral) verb.</summary>
     internal const uint GCS_VERBW = 0x00000004;
 
+    /// <summary>
+    /// Ask for the item's help text — the sentence Explorer used to show in
+    /// its status bar. Localised, unlike the verb, and worth exactly nothing
+    /// for identity; it is the only place a handler ever says what its row
+    /// actually does, which is what the settings table wants.
+    /// </summary>
+    internal const uint GCS_HELPTEXTW = 0x00000005;
+
     internal const uint CMIC_MASK_UNICODE = 0x00004000;
 
     internal const int SW_SHOWNORMAL = 1;

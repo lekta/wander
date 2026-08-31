@@ -59,6 +59,7 @@ public static class PlatformBootstrapper {
         ServiceLocator.Register<IShortcutService>(new ShellShortcutService());
         ServiceLocator.Register<IShellNamespace>(new WindowsShellNamespace(logger));
         ServiceLocator.Register<IShellContextMenu>(new ShellContextMenu(logger));
+        ServiceLocator.Register<IShellHandlerRegistry>(new ShellHandlerRegistry(logger));
         ServiceLocator.Register<IImageMetadataReader>(new MetadataExtractorImageReader());
 
         // Search inside files. The extractors are tried in this order, and

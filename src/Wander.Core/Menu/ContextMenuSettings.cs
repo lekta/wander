@@ -1,4 +1,5 @@
 using Wander.Core.Persistence;
+using Wander.Core.Shell;
 
 namespace Wander.Core.Menu;
 
@@ -20,9 +21,11 @@ public sealed record ContextMenuSettings {
     public IReadOnlySet<MenuCommandId> HiddenItems { get; init; } = new HashSet<MenuCommandId>();
 
     /// <summary>
-    /// Third-party entries the user blocked, by normalised header text —
-    /// the only stable handle we have, since shell command ids are
-    /// per-session and CLSIDs aren't exposed through <c>IContextMenu</c>.
+    /// Third-party entries the user blocked, by <see cref="ShellEntryKey"/> —
+    /// the canonical verb where there is one, the normalised label
+    /// otherwise. Command ids are per-session and CLSIDs aren't exposed
+    /// through <c>IContextMenu</c>, so this is the whole of the identity
+    /// available to us.
     /// </summary>
     public IReadOnlySet<string> BlockedShellExtensions { get; init; } =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -42,8 +45,14 @@ public sealed record ContextMenuSettings {
 
         var blocked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (string name in settings.BlockedShellExtensions) {
-            blocked.Add(NormalizeName(name));
+            // Both forms. A verb is stored verbatim, dots and all
+            // ("Git Commit..."), while a label written by an older build
+            // carries Win32 decoration ("&7-Zip") — and the lookup should
+            // not have to know which of the two it is holding.
+            blocked.Add(name.Trim());
+            blocked.Add(ShellEntryKey.Normalize(name));
         }
+        blocked.Remove(string.Empty);
 
         return new ContextMenuSettings {
             ShellExtensionsEnabled = settings.ShellExtensionsEnabled,
@@ -63,23 +72,37 @@ public sealed record ContextMenuSettings {
     public const int MaxKnownShellExtensions = 100;
 
 
+    /// <inheritdoc cref="TrimKnownExtensions"/>
+    public static IReadOnlyList<KnownShellEntry> TrimKnownEntries(
+        IEnumerable<KnownShellEntry> known, IEnumerable<string> blocked) {
+
+        var kept = TrimKnownExtensions(known.Select(e => e.Key), blocked)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        return known
+            .Where(e => kept.Contains(e.Key.Trim()) && seen.Add(e.Key.Trim()))
+            .ToArray();
+    }
+
+
     /// <summary>
-    /// Trims the remembered-names list for persistence: normalised,
-    /// de-duplicated, oldest dropped first — but a blocked name is never
-    /// dropped, because losing it would silently switch a handler the user
-    /// turned off back on. If more than <see cref="MaxKnownShellExtensions"/>
-    /// names are blocked, all of them are still kept: an honest list beats a
-    /// tidy one that lies.
+    /// Trims the remembered list for persistence: de-duplicated, oldest
+    /// dropped first — but a blocked key is never dropped, because losing it
+    /// would silently switch a handler the user turned off back on. If more
+    /// than <see cref="MaxKnownShellExtensions"/> keys are blocked, all of
+    /// them are still kept: an honest list beats a tidy one that lies.
     /// </summary>
     public static IReadOnlyList<string> TrimKnownExtensions(
         IEnumerable<string> known, IEnumerable<string> blocked) {
 
-        var blockedNames = new HashSet<string>(blocked.Select(NormalizeName), StringComparer.OrdinalIgnoreCase);
+        var blockedNames = new HashSet<string>(blocked.Select(k => k.Trim()), StringComparer.OrdinalIgnoreCase);
 
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var names = new List<string>();
         foreach (string raw in known) {
-            string name = NormalizeName(raw);
+            string name = raw.Trim();
             if (name.Length > 0 && seen.Add(name)) {
                 names.Add(name);
             }
@@ -108,24 +131,9 @@ public sealed record ContextMenuSettings {
     }
 
 
-    /// <summary>
-    /// Strips the decoration Win32 menus carry — the <c>&amp;</c> accelerator
-    /// markers and a trailing ellipsis — so "&amp;7-Zip" and "7-Zip" are the
-    /// same blocklist entry.
-    /// </summary>
+    /// <inheritdoc cref="ShellEntryKey.Normalize"/>
     public static string NormalizeName(string header) {
-        if (string.IsNullOrEmpty(header)) {
-            return string.Empty;
-        }
-
-        string text = header.Replace("&", "").Trim();
-        if (text.EndsWith("...", StringComparison.Ordinal)) {
-            text = text[..^3].TrimEnd();
-        } else if (text.EndsWith("…", StringComparison.Ordinal)) {
-            text = text[..^1].TrimEnd();
-        }
-
-        return text;
+        return ShellEntryKey.Normalize(header);
     }
 
 
@@ -133,7 +141,23 @@ public sealed record ContextMenuSettings {
         return id != MenuCommandId.None && HiddenItems.Contains(id);
     }
 
-    public bool IsBlocked(string header) {
-        return BlockedShellExtensions.Contains(NormalizeName(header));
+    /// <summary>
+    /// Whether a row the shell reported was switched off.
+    ///
+    /// <para>
+    /// Both handles are checked, not just the current one: blocklists
+    /// written before the key became verb-first hold labels, and a settings
+    /// file is not worth a migration step when the lookup can simply ask
+    /// twice. The label is also what a user recognises, so a block set from
+    /// a hand-edited <c>state.json</c> keeps working.
+    /// </para>
+    /// </summary>
+    public bool IsBlocked(string? verb, string? header) {
+        if (BlockedShellExtensions.Count == 0) {
+            return false;
+        }
+
+        return BlockedShellExtensions.Contains(ShellEntryKey.For(verb, header))
+            || BlockedShellExtensions.Contains(ShellEntryKey.Normalize(header));
     }
 }

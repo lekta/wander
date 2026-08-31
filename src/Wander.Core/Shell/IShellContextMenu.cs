@@ -31,6 +31,16 @@ public sealed record ShellMenuEntry {
     /// </summary>
     public string Verb { get; init; } = string.Empty;
 
+    /// <summary>
+    /// The handler's own one-line description of what the row does — the
+    /// text Explorer used to put in its status bar. Localised and free-form,
+    /// so it is never used for identity; it exists because it is the only
+    /// answer there is to "what does this menu item actually do", and the
+    /// settings table has that question. Empty for the many handlers that
+    /// do not bother.
+    /// </summary>
+    public string Help { get; init; } = string.Empty;
+
     /// <summary>PNG bytes of the item's bitmap, when the handler supplied one.</summary>
     public byte[]? IconPng { get; init; }
 

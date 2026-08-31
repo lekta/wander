@@ -5,6 +5,7 @@ using Wander.App.ViewModels;
 using Wander.Core;
 using Wander.Core.Icons;
 using Wander.Core.Persistence;
+using Wander.Core.Shell;
 
 namespace Wander.App.Views;
 
@@ -39,7 +40,79 @@ public partial class SettingsWindow : Window {
         if (DataContext is SettingsViewModel vm) {
             _baseline = vm.ToRecord();
             RefreshCacheStatus(vm);
+            ScanShellHandlers(vm);
         }
+    }
+
+
+    /// <summary>
+    /// Fills the context-menu table from the registry. Done on opening the
+    /// dialog rather than on startup — nothing else needs it — and
+    /// synchronously, because the base scopes measure around 50 ms cold and
+    /// under 30 warm; a background task here would buy a flicker instead of
+    /// a wait.
+    /// </summary>
+    private static void ScanShellHandlers(SettingsViewModel vm) {
+        if (!ServiceLocator.IsRegistered<IShellHandlerRegistry>()) {
+            return;
+        }
+
+        try {
+            var registry = ServiceLocator.Get<IShellHandlerRegistry>();
+            vm.SetShellHandlers(registry.Scan(vm.ScannedScopes));
+        } catch (Exception) {
+            // A registry we cannot read costs the two informational columns,
+            // never the dialog: the table still lists everything Wander has
+            // met in menus, which is what the checkboxes used to offer.
+        }
+    }
+
+
+    /// <summary>
+    /// "Сбросить": everything on this page back to defaults. Asks first with
+    /// Cancel as the default button — it throws away choices the user cannot
+    /// get back, which is the same test the file operations use. Cancel on
+    /// the dialog still rolls it back, like any other change here.
+    /// </summary>
+    private void ResetShellScopes_Click(object sender, RoutedEventArgs e) {
+        if (DataContext is not SettingsViewModel vm) {
+            return;
+        }
+
+        var answer = MessageBox.Show(
+            this,
+            Strings.SettingsShellResetConfirm,
+            Strings.SettingsShellReset,
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Warning,
+            MessageBoxResult.Cancel);
+        if (answer != MessageBoxResult.OK) {
+            return;
+        }
+
+        vm.ResetContextMenu();
+        ScanShellHandlers(vm);
+    }
+
+
+    /// <summary>
+    /// "Добавить": pick an application or a file type, and its handlers join
+    /// the table. The picker does its own, wider scan — see
+    /// <see cref="ShellScopePicker"/>.
+    /// </summary>
+    private void AddShellScope_Click(object sender, RoutedEventArgs e) {
+        if (DataContext is not SettingsViewModel vm || !ServiceLocator.IsRegistered<IShellHandlerRegistry>()) {
+            return;
+        }
+
+        var registry = ServiceLocator.Get<IShellHandlerRegistry>();
+        var picker = new ShellScopePicker(registry, vm.RecentScopes) { Owner = this };
+        if (picker.ShowDialog() != true) {
+            return;
+        }
+
+        vm.TrackScopes(picker.SelectedScopes);
+        vm.SetShellHandlers(registry.Scan(vm.ScannedScopes));
     }
 
 

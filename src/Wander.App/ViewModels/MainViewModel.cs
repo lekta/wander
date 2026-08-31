@@ -276,7 +276,7 @@ public sealed class MainViewModel : ObservableObject {
         ExitCommand = new RelayCommand(_ => Application.Current?.Shutdown());
         OptionsCommand = new RelayCommand(_ => OpenSettingsDialog());
         ReportIssueCommand = new RelayCommand(_ => ReportIssue());
-        ProjectHomeCommand = new RelayCommand(_ => OpenUrl(Diagnostics.CrashReporter.ProjectUrl));
+        HelpCommand = new RelayCommand(_ => OpenUrl(Diagnostics.CrashReporter.GuideUrl));
         // Properties falls back to the folder being listed, so a background
         // right-click (and Alt+Enter with nothing selected) opens the
         // folder's own sheet — Explorer parity.
@@ -692,7 +692,7 @@ public sealed class MainViewModel : ObservableObject {
     public RelayCommand ExitCommand { get; }
     public RelayCommand OptionsCommand { get; }
     public RelayCommand ReportIssueCommand { get; }
-    public RelayCommand ProjectHomeCommand { get; }
+    public RelayCommand HelpCommand { get; }
     public RelayCommand PropertiesCommand { get; }
     public RelayCommand TogglePreviewCommand { get; }
     public RelayCommand UndoCommand { get; }
@@ -926,6 +926,8 @@ public sealed class MainViewModel : ObservableObject {
         var state = _stateStore.Load();
         var session = state.Session;
 
+        DropThumbnailCacheOnUpgrade(state.LastRunVersion);
+
         _restoring = true;
         try {
             // Settings before view mode / navigation: ShowHidden affects
@@ -1042,8 +1044,43 @@ public sealed class MainViewModel : ObservableObject {
             },
             Favorites = _favorites.ToArray(),
             Settings = Settings.ToRecord(),
+            LastRunVersion = Diagnostics.CrashReporter.AppVersion(),
         });
     }
+
+    /// <summary>
+    /// Wipes the thumbnail cache when the build that wrote <c>state.json</c>
+    /// is not this one. See <see cref="AppState.LastRunVersion"/> for why:
+    /// nothing in a thumbnail's key says which version drew it, so a decoding
+    /// fix would otherwise never reach the pictures already on disk.
+    ///
+    /// <para>
+    /// Off the UI thread — clearing is thousands of file deletions — and
+    /// entirely best-effort: a cache that will not clear costs stale
+    /// thumbnails, never a failed start.
+    /// </para>
+    /// </summary>
+    private void DropThumbnailCacheOnUpgrade(string lastVersion) {
+        string current = Diagnostics.CrashReporter.AppVersion();
+        if (string.Equals(lastVersion, current, StringComparison.Ordinal)) {
+            return;
+        }
+
+        _log.Info($"Version changed ('{lastVersion}' -> '{current}'), dropping the thumbnail cache");
+        if (!ServiceLocator.IsRegistered<IIconProvider>()) {
+            return;
+        }
+
+        var icons = ServiceLocator.Get<IIconProvider>();
+        _ = Task.Run(() => {
+            try {
+                icons.ClearCache();
+            } catch (Exception ex) {
+                _log.Warn($"Thumbnail cache drop failed: {ex.Message}");
+            }
+        });
+    }
+
 
     private List<NavigationStop> CollectExpanded() {
         var result = new List<NavigationStop>();
@@ -2860,6 +2897,15 @@ public sealed class MainViewModel : ObservableObject {
             if (Settings.ShowBookmarkPictures) {
                 AddSpecialFolderNode(Strings.SpecialFolderPictures, ResolvePictures());
             }
+            if (Settings.ShowBookmarkDesktop) {
+                AddSpecialFolderNode(Strings.SpecialFolderDesktop, ResolveKnown(f => f.GetDesktop()));
+            }
+            if (Settings.ShowBookmarkMusic) {
+                AddSpecialFolderNode(Strings.SpecialFolderMusic, ResolveKnown(f => f.GetMusic()));
+            }
+            if (Settings.ShowBookmarkVideos) {
+                AddSpecialFolderNode(Strings.SpecialFolderVideos, ResolveKnown(f => f.GetVideos()));
+            }
             if (Settings.ShowBookmarkRecycleBin && TryGetShellNamespace() is not null) {
                 AddSpecialFolderNode(Strings.SpecialFolderRecycleBin, ShellPaths.RecycleBin);
             }
@@ -2884,20 +2930,26 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     private string? ResolveDownloads() {
-        return ServiceLocator.IsRegistered<IKnownFolders>()
-            ? ServiceLocator.Get<IKnownFolders>().GetDownloads()
-            : null;
+        return ResolveKnown(f => f.GetDownloads());
     }
 
     private string? ResolveDocuments() {
-        return ServiceLocator.IsRegistered<IKnownFolders>()
-            ? ServiceLocator.Get<IKnownFolders>().GetDocuments()
-            : null;
+        return ResolveKnown(f => f.GetDocuments());
     }
 
     private string? ResolvePictures() {
+        return ResolveKnown(f => f.GetPictures());
+    }
+
+    /// <summary>
+    /// One known folder, or null where the platform layer is absent (tests,
+    /// and any future non-Windows host). <c>SHGetKnownFolderPath</c> is the
+    /// only correct answer for these: "%USERPROFILE%\Музыка" is wrong on an
+    /// English install and wrong again once the folder has been moved.
+    /// </summary>
+    private static string? ResolveKnown(Func<IKnownFolders, string?> pick) {
         return ServiceLocator.IsRegistered<IKnownFolders>()
-            ? ServiceLocator.Get<IKnownFolders>().GetPictures()
+            ? pick(ServiceLocator.Get<IKnownFolders>())
             : null;
     }
 
@@ -3114,19 +3166,37 @@ public sealed class MainViewModel : ObservableObject {
             Owner = Application.Current?.MainWindow,
         };
         dlg.ShowDialog();
+
+        // Closing a modal dialog leaves the keyboard wherever WPF's first-
+        // focusable search happens to land in the owner window. Put it back
+        // on the list, which is where it was when the dialog opened.
+        (Application.Current?.MainWindow as MainWindow)?.FocusWorkArea();
     }
 
     /// <summary>
-    /// "Версия 0.2.1-beta" for the «О Wander» submenu. The +sha suffix the
-    /// crash bundle carries is cut: it is there so a stack trace can be
-    /// pinned to a commit, and it makes a menu row unreadable.
+    /// "Версия 0.2.1-beta · 04f26b0 · 2026-08-31" for the «О Wander»
+    /// submenu — the three things a bug report needs, in the order they get
+    /// read. The raw +sha suffix is not shown: forty hex characters in a
+    /// menu row is not a version, it is a wall.
     /// </summary>
     public string VersionLabel {
         get {
             string version = Diagnostics.CrashReporter.AppVersion();
             int plus = version.IndexOf('+');
+            var parts = new List<string> { plus < 0 ? version : version[..plus] };
 
-            return string.Format(Strings.MenuVersion, plus < 0 ? version : version[..plus]);
+            // Both are empty in a build with no git metadata; the row then
+            // says just the version rather than trailing empty separators.
+            string commit = Diagnostics.CrashReporter.CommitHash();
+            if (commit.Length > 0) {
+                parts.Add(commit);
+            }
+            string built = Diagnostics.CrashReporter.BuildDate();
+            if (built.Length > 0) {
+                parts.Add(built);
+            }
+
+            return string.Format(Strings.MenuVersion, string.Join(" · ", parts));
         }
     }
 

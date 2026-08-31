@@ -28,8 +28,11 @@ namespace Wander.App.Diagnostics;
 /// </para>
 /// </summary>
 public static class CrashReporter {
-    /// <summary>Project home — the "О Wander" menu links here.</summary>
+    /// <summary>Project home — the base every other link is built from.</summary>
     public const string ProjectUrl = "https://github.com/lekta/wander";
+
+    /// <summary>The user guide — what the "Помощь" menu row opens.</summary>
+    public const string GuideUrl = ProjectUrl + "/blob/master/docs/GUIDE.md";
 
     private const string NewIssueUrl = ProjectUrl + "/issues/new";
 
@@ -242,13 +245,45 @@ public static class CrashReporter {
     /// <summary>
     /// "0.2.1-beta+&lt;sha&gt;" — the informational version, build metadata and
     /// all. The crash bundle wants every character of it; the "О Wander"
-    /// menu trims at the "+".
+    /// menu splits it into version and short hash.
     /// </summary>
     public static string AppVersion() {
         var asm = Assembly.GetEntryAssembly();
         return asm?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
             ?? asm?.GetName().Version?.ToString()
             ?? "unknown";
+    }
+
+    /// <summary>
+    /// The commit the build came from, shortened to the seven characters
+    /// everyone actually pastes. Empty when the SDK found no git metadata —
+    /// a source drop, or a build from a tarball.
+    /// </summary>
+    public static string CommitHash() {
+        string version = AppVersion();
+        int plus = version.IndexOf('+');
+        if (plus < 0 || plus + 1 >= version.Length) {
+            return string.Empty;
+        }
+        string sha = version[(plus + 1)..];
+
+        return sha.Length > 7 ? sha[..7] : sha;
+    }
+
+    /// <summary>
+    /// Build date (UTC, ISO), stamped by the csproj. Version and hash alone
+    /// do not answer "is this the build from before or after that fix" for
+    /// anyone running off master.
+    /// </summary>
+    public static string BuildDate() {
+        var asm = Assembly.GetEntryAssembly();
+        foreach (var meta in asm?.GetCustomAttributes<AssemblyMetadataAttribute>() ?? []) {
+            if (meta.Key == "BuildDate") {
+                return meta.Value ?? string.Empty;
+            }
+        }
+
+        return string.Empty;
     }
 
     private static string IsElevated() {

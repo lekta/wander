@@ -95,8 +95,8 @@ public sealed class ContextMenuFactory {
 
         if (entry.IconPng is { } png && ToImageSource(png) is { } icon) {
             item.Icon = new Image { Source = icon, Width = 16, Height = 16 };
-        } else if (entry.Id == MenuCommandId.OpenInTerminal) {
-            item.Icon = TerminalGlyph();
+        } else if (_glyphs.TryGetValue(entry.Id, out string? glyph)) {
+            item.Icon = Glyph(glyph);
         }
         if (entry.IsDefault) {
             item.FontWeight = FontWeights.SemiBold;
@@ -143,15 +143,10 @@ public sealed class ContextMenuFactory {
 
 
     /// <summary>
-    /// WPF reads a lone underscore in a header as an access-key marker and
-    /// swallows it. Shell entries quote real file names ("Add to
-    /// my_archive.7z"), so every underscore has to be doubled.
-    /// </summary>
-    /// <summary>
-    /// The one built-in row with an icon of its own. It sits among the
-    /// third-party rows, which all carry their application's icon, and what
-    /// it opens *is* another application — the gap next to it read as a
-    /// picture that failed to load rather than as a plain item.
+    /// Built-in rows that carry an icon. Both sit among rows that have one —
+    /// the terminal among the third-party entries, "Папка" among the shell's
+    /// own file templates — and the gap next to them read as a picture that
+    /// failed to load rather than as a plain item.
     ///
     /// <para>
     /// Segoe MDL2 Assets is the shell's own icon font: nothing to ship, and
@@ -161,9 +156,18 @@ public sealed class ContextMenuFactory {
     /// and nothing to draw at all where Windows Terminal is not installed.
     /// </para>
     /// </summary>
-    private static TextBlock TerminalGlyph() {
+    private static readonly Dictionary<MenuCommandId, string> _glyphs = new() {
+        [MenuCommandId.OpenInTerminal] = "\uE756",
+        // F12B, not the "Folder" / "NewFolder" codepoints: those two are MDL2
+        // folder shapes drawn edge-on, and at 14 px they read as a folder
+        // tipped on its side. F12B is the plain landscape one.
+        [MenuCommandId.NewFolder] = "\uF12B",
+    };
+
+
+    private static TextBlock Glyph(string text) {
         return new TextBlock {
-            Text = "\uE756",
+            Text = text,
             FontFamily = new FontFamily("Segoe MDL2 Assets"),
             FontSize = 14,
             VerticalAlignment = VerticalAlignment.Center,
@@ -171,9 +175,15 @@ public sealed class ContextMenuFactory {
     }
 
 
+    /// <summary>
+    /// WPF reads a lone underscore in a header as an access-key marker and
+    /// swallows it. Shell entries quote real file names ("Add to
+    /// my_archive.7z"), so every underscore has to be doubled.
+    /// </summary>
     private static string EscapeHeader(string header) {
         return header.Replace("_", "__");
     }
+
 
     private static ImageSource? ToImageSource(byte[] png) {
         try {

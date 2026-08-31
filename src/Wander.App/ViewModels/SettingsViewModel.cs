@@ -5,6 +5,7 @@ using Wander.Core.FileSystem;
 using Wander.Core.Layout;
 using Wander.Core.Menu;
 using Wander.Core.Persistence;
+using Wander.Core.Shell;
 
 namespace Wander.App.ViewModels;
 
@@ -58,7 +59,27 @@ public sealed class SettingsViewModel : ObservableObject {
     private bool _hideSystemRootFolders;
     public bool HideSystemRootFolders {
         get => _hideSystemRootFolders;
-        set => SetField(ref _hideSystemRootFolders, value);
+        set {
+            if (SetField(ref _hideSystemRootFolders, value)) {
+                Raise(nameof(ShowSystemRootFolders));
+            }
+        }
+    }
+
+    /// <summary>
+    /// The same switch the other way up, for the settings dialog.
+    ///
+    /// <para>
+    /// The stored flag is "hide", because that is the behaviour being turned
+    /// on and the default is true. The dialog lists it next to two "show"
+    /// checkboxes, and a column where two boxes mean "show" and the third
+    /// means "hide" is a column that gets misread. Inverting here rather
+    /// than in <c>AppSettings</c> keeps the saved file saying what it means.
+    /// </para>
+    /// </summary>
+    public bool ShowSystemRootFolders {
+        get => !HideSystemRootFolders;
+        set => HideSystemRootFolders = !value;
     }
 
     /// <summary>
@@ -388,10 +409,35 @@ public sealed class SettingsViewModel : ObservableObject {
         set => SetField(ref _showBookmarkPictures, value);
     }
 
+    private bool _showBookmarkDesktop;
+    public bool ShowBookmarkDesktop {
+        get => _showBookmarkDesktop;
+        set => SetField(ref _showBookmarkDesktop, value);
+    }
+
+    private bool _showBookmarkMusic;
+    public bool ShowBookmarkMusic {
+        get => _showBookmarkMusic;
+        set => SetField(ref _showBookmarkMusic, value);
+    }
+
+    private bool _showBookmarkVideos;
+    public bool ShowBookmarkVideos {
+        get => _showBookmarkVideos;
+        set => SetField(ref _showBookmarkVideos, value);
+    }
+
     private bool _showBookmarkRecycleBin;
     public bool ShowBookmarkRecycleBin {
         get => _showBookmarkRecycleBin;
         set => SetField(ref _showBookmarkRecycleBin, value);
+    }
+
+    private bool _treeKeyboardNavigates;
+    /// <inheritdoc cref="AppSettings.TreeKeyboardNavigates"/>
+    public bool TreeKeyboardNavigates {
+        get => _treeKeyboardNavigates;
+        set => SetField(ref _treeKeyboardNavigates, value);
     }
 
 
@@ -403,15 +449,46 @@ public sealed class SettingsViewModel : ObservableObject {
     }
 
     /// <summary>
-    /// One checkbox per third-party entry Wander has met so far. Populated
-    /// by <see cref="NoteShellExtensions"/> as menus are opened — there is
-    /// no way to enumerate installed handlers up front without walking the
-    /// registry ourselves, and the shell's own answer is the accurate one.
+    /// The context-menu table: one row per third-party entry, from the
+    /// registry scan and from what Wander has actually met, merged by
+    /// <see cref="ShellExtensionCatalog"/>.
     /// </summary>
-    public ObservableCollection<MenuToggleViewModel> ShellExtensionToggles { get; } = new();
+    public ObservableCollection<ShellExtensionRowViewModel> ShellExtensionRows { get; } = new();
 
-    /// <summary>One checkbox per hideable built-in entry, in catalog order.</summary>
-    public ObservableCollection<MenuToggleViewModel> MenuItemToggles { get; } = new();
+    private bool _showSystemShellExtensions;
+    public bool ShowSystemShellExtensions {
+        get => _showSystemShellExtensions;
+        set {
+            if (SetField(ref _showSystemShellExtensions, value)) {
+                RebuildShellRows();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Menu rows the shell has reported to us, in discovery order. Not a
+    /// collection property because nothing binds to it — it is an input to
+    /// <see cref="RebuildShellRows"/> and a field of the saved record.
+    /// </summary>
+    private readonly List<KnownShellEntry> _seenShellEntries = new();
+
+    /// <summary>Scopes the user added through "Добавить", beyond the base ones.</summary>
+    private readonly List<string> _trackedScopes = new();
+
+    /// <summary>Most recently right-clicked file types, newest first.</summary>
+    private IReadOnlyList<string> _recentScopes = Array.Empty<string>();
+
+    public IReadOnlyList<string> RecentScopes => _recentScopes;
+
+    /// <summary>Every scope the table is built from: the fixed set plus the user's.</summary>
+    public IReadOnlyList<string> ScannedScopes => ShellScopes.Base.Concat(_trackedScopes).ToArray();
+
+    /// <summary>One row per hideable built-in entry, in menu order and shape.</summary>
+    public ObservableCollection<MenuItemRowViewModel> MenuItemRows { get; } = new();
+
+    private IReadOnlyList<ShellHandler> _handlers = Array.Empty<ShellHandler>();
+
+    private HashSet<string> _blockedShellKeys = new(StringComparer.OrdinalIgnoreCase);
 
 
     // --- Debug ---------------------------------------------------------
@@ -438,10 +515,13 @@ public sealed class SettingsViewModel : ObservableObject {
         ApplyFrom(new AppSettings());
 
         Categories = new ObservableCollection<SettingsCategoryViewModel> {
+            // Nine pages, not eleven. "Безопасность" was never about
+            // security — it is what the listing shows — and two pages
+            // holding one checkbox each cost a click to reach and taught
+            // nobody anything. Their contents moved to the page whose
+            // question they actually answer.
             new GeneralSettingsCategory(this),
-            new SafetySettingsCategory(this),
-            new FileOperationsSettingsCategory(this),
-            new CompanionsSettingsCategory(this),
+            new VisibilitySettingsCategory(this),
             new LayoutSettingsCategory(this),
             new GallerySettingsCategory(this),
             new ThumbnailsSettingsCategory(this),
@@ -492,34 +572,141 @@ public sealed class SettingsViewModel : ObservableObject {
         ShowBookmarkDownloads = s.ShowBookmarkDownloads;
         ShowBookmarkDocuments = s.ShowBookmarkDocuments;
         ShowBookmarkPictures = s.ShowBookmarkPictures;
+        ShowBookmarkDesktop = s.ShowBookmarkDesktop;
+        ShowBookmarkMusic = s.ShowBookmarkMusic;
+        ShowBookmarkVideos = s.ShowBookmarkVideos;
         ShowBookmarkRecycleBin = s.ShowBookmarkRecycleBin;
+        TreeKeyboardNavigates = s.TreeKeyboardNavigates;
         ShellExtensionsEnabled = s.ShellExtensionsEnabled;
+        _showSystemShellExtensions = s.ShowSystemShellExtensions;
+        Raise(nameof(ShowSystemShellExtensions));
         RebuildMenuToggles(s.HiddenContextMenuItems);
-        RebuildShellToggles(s.KnownShellExtensions, s.BlockedShellExtensions);
+        _seenShellEntries.Clear();
+        _seenShellEntries.AddRange(s.KnownShellEntries);
+        _trackedScopes.Clear();
+        _trackedScopes.AddRange(s.TrackedShellScopes);
+        _recentScopes = s.RecentShellScopes;
+        _blockedShellKeys = new HashSet<string>(s.BlockedShellExtensions, StringComparer.OrdinalIgnoreCase);
+        RebuildShellRows();
         ShowDebugMenu = s.ShowDebugMenu;
     }
 
 
     /// <summary>
-    /// Records third-party entry names the shell just reported, so the
-    /// settings dialog can offer them as checkboxes. Names already known
-    /// keep their current state — discovering "7-Zip" again must not
-    /// re-enable a 7-Zip the user switched off.
+    /// Records the rows the shell just drew, so the settings table knows
+    /// which installed handlers actually show up — and what they call
+    /// themselves, which the registry cannot say for a COM handler.
+    ///
+    /// <para>
+    /// Rows already known are left alone: meeting "7-Zip" again must not
+    /// re-enable a 7-Zip the user switched off. An entry whose description
+    /// was empty last time is filled in if the handler published one now.
+    /// </para>
     /// </summary>
-    public void NoteShellExtensions(IEnumerable<string> names) {
-        bool added = false;
-        foreach (string raw in names) {
-            string name = ContextMenuSettings.NormalizeName(raw);
-            if (name.Length == 0 || FindShellToggle(name) is not null) {
+    public void NoteShellExtensions(IEnumerable<KnownShellEntry> entries) {
+        bool changed = false;
+        foreach (var entry in entries) {
+            if (entry.Key.Trim().Length == 0) {
                 continue;
             }
-            ShellExtensionToggles.Add(new MenuToggleViewModel(name, name, true, OnMenuToggleChanged));
+
+            int at = _seenShellEntries.FindIndex(e => Same(e.Key, entry.Key));
+            if (at < 0) {
+                _seenShellEntries.Add(entry);
+                changed = true;
+                continue;
+            }
+
+            var known = _seenShellEntries[at];
+            if (known.Help.Length == 0 && entry.Help.Length > 0) {
+                _seenShellEntries[at] = known with { Help = entry.Help };
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            RebuildShellRows();
+            OnMenuToggleChanged();
+        }
+    }
+
+    private static bool Same(string a, string b) {
+        return string.Equals(a.Trim(), b.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Remembers the file type a context menu was just opened on. Feeds the
+    /// "Добавить" picker and nothing else — see <see cref="Core.Shell.RecentScopes"/>.
+    /// </summary>
+    public void NoteMenuScope(string? scope) {
+        var updated = Core.Shell.RecentScopes.Add(_recentScopes, scope);
+        if (!ReferenceEquals(updated, _recentScopes)) {
+            _recentScopes = updated;
+            OnMenuToggleChanged();
+        }
+    }
+
+    /// <summary>
+    /// Puts the context-menu page back to how it ships: nothing blocked,
+    /// nothing tracked beyond the base scopes, nothing remembered from past
+    /// menus, and Wander's own entries all visible.
+    ///
+    /// <para>
+    /// The seen list goes too, on purpose. It is what makes rows appear that
+    /// no scan produced, so leaving it would reset the switches and keep the
+    /// clutter — and it costs nothing: the next right-click starts filling
+    /// it in again.
+    /// </para>
+    /// </summary>
+    public void ResetContextMenu() {
+        _blockedShellKeys.Clear();
+        _seenShellEntries.Clear();
+        _trackedScopes.Clear();
+        _recentScopes = Array.Empty<string>();
+        ShowSystemShellExtensions = false;
+        ShellExtensionsEnabled = true;
+
+        foreach (var row in MenuItemRows) {
+            row.IsHidden = false;
+        }
+
+        RebuildShellRows();
+        OnMenuToggleChanged();
+    }
+
+
+    /// <summary>
+    /// Adds scopes to the table — the "Добавить" button's whole effect. The
+    /// rows themselves come from re-scanning: a scope is what we can store,
+    /// a handler list is what the registry owns.
+    /// </summary>
+    public void TrackScopes(IEnumerable<string> scopes) {
+        bool added = false;
+        foreach (string scope in scopes) {
+            string trimmed = scope.Trim();
+            if (trimmed.Length == 0
+                || ShellScopes.IsBase(trimmed)
+                || _trackedScopes.Contains(trimmed, StringComparer.OrdinalIgnoreCase)) {
+                continue;
+            }
+            _trackedScopes.Add(trimmed);
             added = true;
         }
 
         if (added) {
+            RebuildShellRows();
             OnMenuToggleChanged();
         }
+    }
+
+    /// <summary>
+    /// Hands the table the handlers a scan turned up. Kept out of the VM's
+    /// own hands on purpose: the registry lives in the platform layer, and
+    /// the dialog is the one that decides when a scan is worth its 50 ms.
+    /// </summary>
+    public void SetShellHandlers(IReadOnlyList<ShellHandler> handlers) {
+        _handlers = handlers;
+        RebuildShellRows();
     }
 
     public AppSettings ToRecord() {
@@ -559,16 +746,21 @@ public sealed class SettingsViewModel : ObservableObject {
             ShowBookmarkDownloads = ShowBookmarkDownloads,
             ShowBookmarkDocuments = ShowBookmarkDocuments,
             ShowBookmarkPictures = ShowBookmarkPictures,
+            ShowBookmarkDesktop = ShowBookmarkDesktop,
+            ShowBookmarkMusic = ShowBookmarkMusic,
+            ShowBookmarkVideos = ShowBookmarkVideos,
             ShowBookmarkRecycleBin = ShowBookmarkRecycleBin,
+            TreeKeyboardNavigates = TreeKeyboardNavigates,
             ShellExtensionsEnabled = ShellExtensionsEnabled,
             // Persisted as "what is off", so a future Wander release that
             // adds menu entries shows them by default instead of inheriting
             // an implicit "not in the saved list = hidden".
-            HiddenContextMenuItems = MenuItemToggles.Where(t => !t.IsEnabled).Select(t => t.Key).ToArray(),
-            BlockedShellExtensions = ShellExtensionToggles.Where(t => !t.IsEnabled).Select(t => t.Key).ToArray(),
-            KnownShellExtensions = ContextMenuSettings.TrimKnownExtensions(
-                ShellExtensionToggles.Select(t => t.Key),
-                ShellExtensionToggles.Where(t => !t.IsEnabled).Select(t => t.Key)),
+            HiddenContextMenuItems = MenuItemRows.Where(r => r.IsHidden).Select(r => r.Key).ToArray(),
+            BlockedShellExtensions = _blockedShellKeys.ToArray(),
+            KnownShellEntries = ContextMenuSettings.TrimKnownEntries(_seenShellEntries, _blockedShellKeys),
+            ShowSystemShellExtensions = ShowSystemShellExtensions,
+            TrackedShellScopes = _trackedScopes.ToArray(),
+            RecentShellScopes = _recentScopes,
             ShowDebugMenu = ShowDebugMenu,
         };
     }
@@ -576,40 +768,52 @@ public sealed class SettingsViewModel : ObservableObject {
 
     private void RebuildMenuToggles(IReadOnlyList<string> hidden) {
         var off = new HashSet<string>(hidden, StringComparer.OrdinalIgnoreCase);
-        MenuItemToggles.Clear();
-        foreach (var id in ContextMenuCatalog.Hideable) {
-            string key = id.ToString();
-            MenuItemToggles.Add(new MenuToggleViewModel(
-                key, ContextMenuCatalog.Title(id), !off.Contains(key), OnMenuToggleChanged));
+        MenuItemRows.Clear();
+        foreach (var node in ContextMenuCatalog.HideableTree) {
+            MenuItemRows.Add(new MenuItemRowViewModel(
+                node, off.Contains(node.Id.ToString()), OnMenuToggleChanged));
         }
-    }
-
-    private void RebuildShellToggles(IReadOnlyList<string> known, IReadOnlyList<string> blocked) {
-        var off = new HashSet<string>(
-            blocked.Select(ContextMenuSettings.NormalizeName), StringComparer.OrdinalIgnoreCase);
-
-        ShellExtensionToggles.Clear();
-        // A blocked name the "known" cache lost still deserves its checkbox,
-        // otherwise the user could never turn it back on.
-        foreach (string name in known.Concat(blocked).Select(ContextMenuSettings.NormalizeName).Distinct(StringComparer.OrdinalIgnoreCase)) {
-            if (name.Length == 0) {
-                continue;
-            }
-            ShellExtensionToggles.Add(new MenuToggleViewModel(name, name, !off.Contains(name), OnMenuToggleChanged));
-        }
-    }
-
-    private MenuToggleViewModel? FindShellToggle(string name) {
-        return ShellExtensionToggles.FirstOrDefault(
-            t => string.Equals(t.Key, name, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
-    /// Toggle lists are collections, not properties, so the owner's
+    /// Rebuilds the table from the last scan plus what has been met.
+    ///
+    /// <para>
+    /// Reads <see cref="_blockedShellKeys"/> and never writes it. That
+    /// direction matters: the rows are a projection, and a rebuild happens
+    /// on Cancel too — recomputing the blocked set from the rows there would
+    /// resurrect exactly the ticks the rollback just discarded. A handler
+    /// whose application has since been uninstalled keeps its entry in the
+    /// set for the same reason, without needing a row to hold it.
+    /// </para>
+    /// </summary>
+    private void RebuildShellRows() {
+        var rows = ShellExtensionCatalog.Build(
+            _handlers, _seenShellEntries, _blockedShellKeys, ShowSystemShellExtensions);
+
+        ShellExtensionRows.Clear();
+        foreach (var row in rows) {
+            ShellExtensionRows.Add(new ShellExtensionRowViewModel(row, OnShellRowToggled));
+        }
+        Raise(nameof(ShellExtensionRows));
+    }
+
+    private void OnShellRowToggled(ShellExtensionRowViewModel row) {
+        if (row.IsBlocked) {
+            _blockedShellKeys.Add(row.Key);
+        } else {
+            _blockedShellKeys.Remove(row.Key);
+        }
+
+        OnMenuToggleChanged();
+    }
+
+    /// <summary>
+    /// Table rows are collections, not properties, so the owner's
     /// "settings changed → persist" hook needs an explicit nudge.
     /// </summary>
     private void OnMenuToggleChanged() {
-        Raise(nameof(MenuItemToggles));
+        Raise(nameof(MenuItemRows));
     }
 
 

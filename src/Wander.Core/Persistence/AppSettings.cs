@@ -69,6 +69,24 @@ public sealed record AppSettings {
     public bool ConfirmRecycle { get; init; } = true;
 
 
+    // --- Navigation ----------------------------------------------------
+    /// <summary>
+    /// Whether moving the tree cursor with the arrow keys also opens the
+    /// folder it lands on.
+    ///
+    /// <para>
+    /// Off by default, which is deliberately not Explorer's behaviour:
+    /// Explorer navigates on every selection change, so arrowing past ten
+    /// folders on the way to the eleventh lists all ten — ten directory
+    /// reads, ten thumbnail passes, and the list position lost each time.
+    /// Wander moves for free and opens on <c>Enter</c> or a click. The
+    /// switch is here because the other habit is a real habit, and someone
+    /// who has it should not have to unlearn it.
+    /// </para>
+    /// </summary>
+    public bool TreeKeyboardNavigates { get; init; } = false;
+
+
     // --- Companions ("integrated items") -------------------------------
     /// <summary>
     /// Fold companion files (Unity <c>.meta</c>, RawTherapee <c>.pp3</c>)
@@ -241,6 +259,15 @@ public sealed record AppSettings {
     /// <summary>Show the user's Pictures folder as a default bookmark.</summary>
     public bool ShowBookmarkPictures { get; init; } = true;
 
+    /// <summary>Show the user's Desktop folder as a default bookmark.</summary>
+    public bool ShowBookmarkDesktop { get; init; } = false;
+
+    /// <summary>Show the user's Music folder as a default bookmark.</summary>
+    public bool ShowBookmarkMusic { get; init; } = false;
+
+    /// <summary>Show the user's Videos folder as a default bookmark.</summary>
+    public bool ShowBookmarkVideos { get; init; } = false;
+
     /// <summary>Show the Recycle Bin as a default bookmark (read-only browsing).</summary>
     public bool ShowBookmarkRecycleBin { get; init; } = true;
 
@@ -255,19 +282,46 @@ public sealed record AppSettings {
     public bool ShellExtensionsEnabled { get; init; } = true;
 
     /// <summary>
-    /// Third-party entries the user switched off, by display name. Names
-    /// rather than CLSIDs because <c>IContextMenu</c> never tells us which
-    /// handler produced a given row.
+    /// Third-party entries the user switched off, by
+    /// <c>ShellEntryKey</c> — the canonical verb where the handler
+    /// publishes one, the normalised label otherwise. Not CLSIDs, because
+    /// <c>IContextMenu</c> never tells us which handler produced a row.
     /// </summary>
     public IReadOnlyList<string> BlockedShellExtensions { get; init; } = Array.Empty<string>();
 
     /// <summary>
-    /// Third-party entry names met so far, so the settings dialog can offer
-    /// a checkbox list instead of a free-text field. Grows as the user opens
-    /// menus in different folders; strictly a convenience cache — deleting
-    /// it costs nothing but re-discovery.
+    /// Menu rows Wander has actually met, with what the row said about
+    /// itself at the time. The registry knows which handlers are installed
+    /// but not what a COM handler will draw; this is the other half, and it
+    /// is the only source for the description column — a handler publishes
+    /// its help text through <c>IContextMenu</c> and nowhere else.
+    /// A convenience cache: deleting it costs nothing but re-discovery.
     /// </summary>
-    public IReadOnlyList<string> KnownShellExtensions { get; init; } = Array.Empty<string>();
+    public IReadOnlyList<KnownShellEntry> KnownShellEntries { get; init; } = Array.Empty<KnownShellEntry>();
+
+    /// <summary>
+    /// Show Windows' own context-menu plumbing in the settings table.
+    /// Off by default: roughly forty of the fifty handlers on a stock
+    /// machine are BitLocker verbs, Defender, Work Folders and the sharing
+    /// menu, and listing them buries the handful anyone came to switch off.
+    /// </summary>
+    public bool ShowSystemShellExtensions { get; init; } = false;
+
+    /// <summary>
+    /// Registry scopes the user added to the table by hand, beyond the base
+    /// ones (<c>ShellScopes.Base</c>) that are always scanned. This is what
+    /// the "Добавить" button writes: pick a file type and its handlers join
+    /// the table; pick an application and every scope it registers on does.
+    /// </summary>
+    public IReadOnlyList<string> TrackedShellScopes { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// The last few file types a context menu was opened on, newest first.
+    /// Feeds one thing only — the "Добавить" picker leads with them instead
+    /// of with eight hundred extensions in alphabetical order. Losing it
+    /// costs a scroll; see <c>RecentScopes</c>.
+    /// </summary>
+    public IReadOnlyList<string> RecentShellScopes { get; init; } = Array.Empty<string>();
 
     /// <summary>
     /// Built-in context-menu entries the user hid, as
@@ -280,4 +334,30 @@ public sealed record AppSettings {
     // --- Debug ---------------------------------------------------------
     /// <summary>Whether the "Debug" submenu is visible in the main menu.</summary>
     public bool ShowDebugMenu { get; init; } = true;
+}
+
+
+/// <summary>
+/// One context-menu row as Wander met it, remembered between sessions.
+///
+/// <para>
+/// Everything except <see cref="Key"/> is display material: it exists so the
+/// settings table can say what a row is called and what it does without
+/// having to open a menu first. None of it is used to match anything —
+/// titles and help are localised and change with the file, which is exactly
+/// why the key is separate.
+/// </para>
+/// </summary>
+public sealed record KnownShellEntry {
+    /// <summary>The blocklist handle — see <c>ShellEntryKey</c>.</summary>
+    public string Key { get; init; } = string.Empty;
+
+    /// <summary>The row's label as drawn, minus Win32 decoration.</summary>
+    public string Title { get; init; } = string.Empty;
+
+    /// <summary>The handler's own description, or empty where it published none.</summary>
+    public string Help { get; init; } = string.Empty;
+
+    /// <summary>Where it was seen: an extension, or one of the base scopes.</summary>
+    public string Scope { get; init; } = string.Empty;
 }

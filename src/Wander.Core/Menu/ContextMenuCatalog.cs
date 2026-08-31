@@ -62,10 +62,17 @@ public static class ContextMenuCatalog {
     };
 
     /// <summary>
-    /// Entries the settings dialog offers to hide, in the order they should
-    /// be listed there. Submenu headers are included on purpose — hiding
-    /// "Файл" removes the whole clipboard block in one click, which is
-    /// exactly what a hotkey-only user wants.
+    /// Entries the settings dialog offers to hide, in menu order and with
+    /// the menu's own shape: a submenu header followed by its children, one
+    /// level in. Flattening it was a small lie — "Вставить" and "Файл" are
+    /// not siblings, and a list that says they are makes the reader wonder
+    /// what unticking the second one does to the first.
+    ///
+    /// <para>
+    /// Submenu headers are switchable themselves, on purpose: hiding "Файл"
+    /// removes the whole clipboard block in one click, which is exactly what
+    /// a hotkey-only user wants.
+    /// </para>
     ///
     /// <para>
     /// Everything the builder emits is in here — <c>ContextMenuCatalogTests</c>
@@ -73,24 +80,28 @@ public static class ContextMenuCatalog {
     /// turns it off.
     /// </para>
     /// </summary>
-    public static IReadOnlyList<MenuCommandId> Hideable { get; } = new[] {
-        MenuCommandId.Open,
-        MenuCommandId.OpenSubmenu,
-        MenuCommandId.OpenWith,
-        MenuCommandId.OpenInTerminal,
-        MenuCommandId.FileSubmenu,
-        MenuCommandId.Cut,
-        MenuCommandId.Copy,
-        MenuCommandId.Paste,
-        MenuCommandId.CopyPath,
-        MenuCommandId.CopyName,
-        MenuCommandId.CreateShortcut,
-        MenuCommandId.Rename,
-        MenuCommandId.Delete,
-        MenuCommandId.NewSubmenu,
-        MenuCommandId.NewFolder,
-        MenuCommandId.Properties,
+    public static IReadOnlyList<MenuNode> HideableTree { get; } = new[] {
+        new MenuNode(MenuCommandId.Open, 0),
+        new MenuNode(MenuCommandId.OpenSubmenu, 0),
+        new MenuNode(MenuCommandId.OpenWith, 1),
+        new MenuNode(MenuCommandId.OpenInTerminal, 0),
+        new MenuNode(MenuCommandId.FileSubmenu, 0),
+        new MenuNode(MenuCommandId.Cut, 1),
+        new MenuNode(MenuCommandId.Copy, 1),
+        new MenuNode(MenuCommandId.Paste, 1),
+        new MenuNode(MenuCommandId.CopyPath, 1),
+        new MenuNode(MenuCommandId.CopyName, 1),
+        new MenuNode(MenuCommandId.Rename, 1),
+        new MenuNode(MenuCommandId.CreateShortcut, 1),
+        new MenuNode(MenuCommandId.Delete, 1),
+        new MenuNode(MenuCommandId.NewSubmenu, 0),
+        new MenuNode(MenuCommandId.NewFolder, 1),
+        new MenuNode(MenuCommandId.Properties, 0),
     };
+
+    /// <summary>The same set, flat, for anything that only needs membership.</summary>
+    public static IReadOnlyList<MenuCommandId> Hideable { get; } =
+        HideableTree.Select(node => node.Id).ToArray();
 
 
     /// <summary>
@@ -106,3 +117,12 @@ public static class ContextMenuCatalog {
         return _gestures.TryGetValue(id, out string? gesture) ? gesture : null;
     }
 }
+
+
+/// <summary>
+/// One row of the settings dialog's list of Wander's own menu entries:
+/// which entry, and how deep it sits in the menu.
+/// </summary>
+/// <param name="Id">The entry.</param>
+/// <param name="Depth">0 for a top-level row, 1 for a row inside a submenu.</param>
+public sealed record MenuNode(MenuCommandId Id, int Depth);

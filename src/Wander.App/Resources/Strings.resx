@@ -617,17 +617,8 @@
   <data name="SettingsCategoryGeneral" xml:space="preserve">
     <value>Основное</value>
   </data>
-  <data name="SettingsCategorySafety" xml:space="preserve">
-    <value>Безопасность</value>
-  </data>
-  <data name="SettingsCategoryFileOps" xml:space="preserve">
-    <value>Файловые операции</value>
-  </data>
-  <data name="SettingsCategoryCompanions" xml:space="preserve">
-    <value>Интегрированные элементы</value>
-  </data>
   <data name="SettingsCategoryLayout" xml:space="preserve">
-    <value>Вёрстка</value>
+    <value>Размеры</value>
   </data>
   <data name="SettingsCategoryThumbnails" xml:space="preserve">
     <value>Миниатюры</value>
@@ -642,41 +633,32 @@
     <value>Отладка</value>
   </data>
   <data name="SettingsRestoreLastFolder" xml:space="preserve">
-    <value>Восстанавливать последнюю папку при запуске</value>
+    <value>Открывать последнюю папку при запуске</value>
   </data>
   <data name="SettingsRestoreLastFolderHint" xml:space="preserve">
-    <value>Когда выключено, Wander открывает первый доступный диск вместо папки, в которой пользователь был перед закрытием.</value>
+    <value>Иначе — первый доступный диск.</value>
   </data>
   <data name="SettingsShowHidden" xml:space="preserve">
-    <value>Показывать скрытые файлы и папки</value>
+    <value>Отображать скрытые файлы и папки</value>
   </data>
   <data name="SettingsShowSystem" xml:space="preserve">
-    <value>Показывать защищённые системные файлы</value>
+    <value>Отображать защищённые системные файлы</value>
     <comment>Как в Проводнике: скрытый + системный атрибут вместе</comment>
   </data>
-  <data name="SettingsHideSystemRootFolders" xml:space="preserve">
-    <value>Не показывать системные папки в корне дисков</value>
-  </data>
   <data name="SettingsHideSystemRootFoldersHint" xml:space="preserve">
-    <value>$RECYCLE.BIN, System Volume Information, Recovery, $WinREAgent, Config.Msi, $Windows.~BT и подобные. Внутрь них всё равно нет доступа, а изменение ломает точки восстановления и корзину.</value>
-  </data>
-  <data name="SettingsHiddenHint" xml:space="preserve">
-    <value>Изменения применяются мгновенно: список файлов в текущей папке перестраивается с учётом новых фильтров.</value>
+    <value>$RECYCLE.BIN, System Volume Information, Recovery и подобные. Внутрь них всё равно нет доступа.</value>
   </data>
   <data name="SettingsConfirmRecycle" xml:space="preserve">
-    <value>Спрашивать подтверждение при удалении в корзину</value>
+    <value>Спрашивать при удалении в корзину</value>
   </data>
   <data name="SettingsConfirmRecycleHint" xml:space="preserve">
-    <value>Когда выключено, Delete отправляет элементы в корзину сразу без диалога. Ctrl+Z всё равно восстанавливает их, так что откат остаётся доступен. Shift+Delete (безвозвратное) подтверждение спрашивает всегда независимо от этого флага.</value>
+    <value>Ctrl+Z возвращает из корзины в любом случае. Shift+Delete спрашивает всегда.</value>
   </data>
   <data name="SettingsIntegrateCompanions" xml:space="preserve">
-    <value>Показывать файл вместе со спутниками как один элемент</value>
+    <value>Объединять файл и его спутники в один элемент</value>
   </data>
   <data name="SettingsCompanionsHint" xml:space="preserve">
-    <value>Спутник — служебный файл рядом с основным: Unity-шный «.meta», настройки проявки RawTherapee «.pp3». Когда флаг включён, такой файл не показывается отдельной строкой. Переименование, перемещение, копирование и удаление уносят спутников вместе с основным файлом — одной записью в Ctrl+Z. Контекстное меню при этом собирается для основного файла.</value>
-  </data>
-  <data name="SettingsCompanionsOffHint" xml:space="preserve">
-    <value>Когда выключено — обычное поведение: каждый файл сам по себе, операции его спутников не касаются.</value>
+    <value>Спутник — служебный файл рядом с основным: Unity-шный «.meta», настройки проявки RawTherapee «.pp3». Переименование, перемещение и удаление уносят спутников вместе с основным файлом, одной записью в Ctrl+Z.</value>
   </data>
   <data name="SettingsLargeIconsGroup" xml:space="preserve">
     <value>Режим «Крупные значки»</value>
@@ -692,9 +674,6 @@
   </data>
   <data name="SettingsLabelFontSize" xml:space="preserve">
     <value>Размер шрифта подписи</value>
-  </data>
-  <data name="SettingsLayoutHint" xml:space="preserve">
-    <value>Значения зажимаются в разумные пределы автоматически. Стандартные — как в Проводнике: таблица 22 / 16, плитки 260 / 48 / 12, крупные значки 132 / 96 / 2 / 12.</value>
   </data>
   <data name="SettingsThumbnailDiskCache" xml:space="preserve">
     <value>Хранить миниатюры на диске между запусками</value>
@@ -723,34 +702,34 @@
     <comment>{0} — размер, {1} — путь к папке кэша</comment>
   </data>
   <data name="SettingsBookmarkDownloads" xml:space="preserve">
-    <value>Показывать «Загрузки»</value>
+    <value>Загрузки</value>
   </data>
   <data name="SettingsBookmarkDocuments" xml:space="preserve">
-    <value>Показывать «Документы»</value>
+    <value>Документы</value>
   </data>
   <data name="SettingsBookmarkPictures" xml:space="preserve">
-    <value>Показывать «Изображения»</value>
+    <value>Изображения</value>
   </data>
   <data name="SettingsBookmarkRecycleBin" xml:space="preserve">
-    <value>Показывать «Корзину»</value>
+    <value>Корзина</value>
   </data>
   <data name="SettingsBookmarksHint" xml:space="preserve">
-    <value>Спец-папки появляются в верхней панели слева. Любую папку можно добавить туда перетаскиванием. В корзине доступно восстановление удалённого; остальные операции над её содержимым намеренно закрыты.</value>
+    <value>Спец-папки берутся у системы: имя зависит от языка Windows, и папку можно перенести на другой диск. Ненайденная просто не показывается.</value>
   </data>
   <data name="SettingsShellExtensions" xml:space="preserve">
-    <value>Показывать пункты сторонних приложений (7-Zip, TortoiseGit…)</value>
+    <value>Показывать пункты сторонних приложений</value>
   </data>
   <data name="SettingsShellExtensionsGroup" xml:space="preserve">
-    <value>Приложения</value>
+    <value>Пункты сторонних приложений</value>
   </data>
   <data name="SettingsShellExtensionsHint" xml:space="preserve">
-    <value>Список наполняется по мере работы: Wander узнаёт про расширение только когда шелл сам о нём сообщает — то есть после первого правого клика в папке, где оно себя показывает.</value>
+    <value>Наведите на строку — увидите, что делает пункт. «Добавить» вытаскивает пункты приложения или типа файлов.</value>
   </data>
   <data name="SettingsOwnItemsGroup" xml:space="preserve">
     <value>Пункты Wander</value>
   </data>
   <data name="SettingsOwnItemsHint" xml:space="preserve">
-    <value>Снятая галочка убирает пункт из меню; хоткей продолжает работать. Разделители подтягиваются сами — пустых групп и двойных линий не остаётся. «Открыть» / «Файл» / «Создать» убирают подменю целиком.</value>
+    <value>Скрытый пункт пропадает из меню, хоткей продолжает работать. Подменю скрывается вместе со всем, что внутри.</value>
   </data>
   <data name="SettingsShowDebugMenu" xml:space="preserve">
     <value>Показывать меню «Отладка» в главном меню</value>
@@ -845,7 +824,7 @@
     <value>Обновлять список автоматически</value>
   </data>
   <data name="SettingsAutoRefreshHint" xml:space="preserve">
-    <value>Wander следит за открытой папкой и перерисовывает список, когда файлы в ней меняет кто-то другой — программа, загрузка, Проводник. Когда выключено, список обновляется только по F5.</value>
+    <value>Список перерисовывается, когда файлы меняет кто-то другой. Выключено — только по F5.</value>
   </data>
   <data name="SettingsDetailsGroup" xml:space="preserve">
     <value>Режим «Таблица»</value>
@@ -1086,11 +1065,11 @@
   <data name="MenuAbout" xml:space="preserve">
     <value>О Wander</value>
   </data>
-  <data name="MenuProjectHome" xml:space="preserve">
-    <value>Проект на GitHub</value>
+  <data name="MenuHelp" xml:space="preserve">
+    <value>Помощь</value>
   </data>
-  <data name="MenuProjectHomeHint" xml:space="preserve">
-    <value>Откроет страницу проекта в браузере</value>
+  <data name="MenuHelpHint" xml:space="preserve">
+    <value>Откроет руководство в браузере: что умеет Wander и какие есть хоткеи</value>
   </data>
   <data name="MenuVersion" xml:space="preserve">
     <value>Версия {0}</value>
@@ -1265,5 +1244,140 @@
   </data>
   <data name="SettingsHotkeysHint" xml:space="preserve">
     <value>Полный список сочетаний. Переназначение пока не поддерживается — сочетания заданы приложением.</value>
+  </data>
+  <data name="ScopeAllFiles" xml:space="preserve">
+    <value>все файлы</value>
+  </data>
+  <data name="ScopeAllObjects" xml:space="preserve">
+    <value>файлы и папки</value>
+  </data>
+  <data name="ScopeDirectory" xml:space="preserve">
+    <value>папки</value>
+  </data>
+  <data name="ScopeBackground" xml:space="preserve">
+    <value>фон папки</value>
+  </data>
+  <data name="ScopeFolder" xml:space="preserve">
+    <value>папки и архивы</value>
+  </data>
+  <data name="ScopeDrive" xml:space="preserve">
+    <value>диски</value>
+  </data>
+  <data name="SettingsShellColumnHide" xml:space="preserve">
+    <value>Скрыть</value>
+  </data>
+  <data name="SettingsShellColumnItem" xml:space="preserve">
+    <value>Пункт</value>
+  </data>
+  <data name="SettingsShellColumnApp" xml:space="preserve">
+    <value>Приложение</value>
+  </data>
+  <data name="SettingsShellColumnScopes" xml:space="preserve">
+    <value>Где показывается</value>
+  </data>
+  <data name="SettingsShellAdd" xml:space="preserve">
+    <value>Добавить...</value>
+  </data>
+  <data name="SettingsShellShowSystem" xml:space="preserve">
+    <value>Показывать системные</value>
+  </data>
+  <data name="SettingsShellScopeUnknown" xml:space="preserve">
+    <value>—</value>
+  </data>
+  <data name="PickerTitle" xml:space="preserve">
+    <value>Добавить в таблицу</value>
+  </data>
+  <data name="PickerHint" xml:space="preserve">
+    <value>Выберите приложение — попадут все его расширения — либо отдельные типы файлов. Найденные пункты добавятся в таблицу, где их можно скрыть по одному.</value>
+  </data>
+  <data name="PickerByApp" xml:space="preserve">
+    <value>Приложение</value>
+  </data>
+  <data name="PickerByType" xml:space="preserve">
+    <value>Тип файла</value>
+  </data>
+  <data name="PickerRecentNote" xml:space="preserve">
+    <value>недавно открывали</value>
+  </data>
+  <data name="SpecialFolderDesktop" xml:space="preserve">
+    <value>Рабочий стол</value>
+  </data>
+  <data name="SpecialFolderMusic" xml:space="preserve">
+    <value>Музыка</value>
+  </data>
+  <data name="SpecialFolderVideos" xml:space="preserve">
+    <value>Видео</value>
+  </data>
+  <data name="SettingsBookmarkDesktop" xml:space="preserve">
+    <value>Рабочий стол</value>
+  </data>
+  <data name="SettingsBookmarkMusic" xml:space="preserve">
+    <value>Музыка</value>
+  </data>
+  <data name="SettingsBookmarkVideos" xml:space="preserve">
+    <value>Видео</value>
+  </data>
+  <data name="SettingsTreeKeyboardNavigates" xml:space="preserve">
+    <value>Стрелки в дереве открывают папку</value>
+  </data>
+  <data name="SettingsTreeKeyboardNavigatesHint" xml:space="preserve">
+    <value>Поведение проводника. Выключено — стрелки двигают курсор, открывает Enter.</value>
+  </data>
+  <data name="PanelShowHidden" xml:space="preserve">
+    <value>Показывать скрытые файлы</value>
+  </data>
+  <data name="PanelShowSystem" xml:space="preserve">
+    <value>Показывать системные файлы</value>
+  </data>
+  <data name="PanelTreeKeyboardNavigates" xml:space="preserve">
+    <value>Стрелки в дереве открывают папку</value>
+  </data>
+  <data name="PanelTreeKeyboardNavigatesHint" xml:space="preserve">
+    <value>Поведение проводника. Выключено — стрелки только двигают курсор, открывает Enter</value>
+  </data>
+  <data name="PanelConfirmRecycle" xml:space="preserve">
+    <value>Спрашивать при удалении в корзину</value>
+  </data>
+  <data name="PanelConfirmRecycleHint" xml:space="preserve">
+    <value>Ctrl+Z возвращает из корзины в любом случае; Shift+Delete спрашивает всегда</value>
+  </data>
+  <data name="PanelAutoRefresh" xml:space="preserve">
+    <value>Обновлять список автоматически</value>
+  </data>
+  <data name="SettingsCategoryVisibility" xml:space="preserve">
+    <value>Отображение</value>
+  </data>
+  <data name="SettingsBookmarksAddHint" xml:space="preserve">
+    <value>Свои закладки добавляются перетаскиванием в панель.</value>
+  </data>
+  <data name="SettingsOwnColumnGesture" xml:space="preserve">
+    <value>Хоткей</value>
+  </data>
+  <data name="SettingsShellExtensionsTableHint" xml:space="preserve">
+    <value>Приложение и «где показывается» приходят из реестра, названия — из самих меню. Чёрным — строки, которые Wander уже встречал; серым — установленные, но пока не показавшиеся. Прочерк в «Приложении» значит, что строку рисует COM-расширение: Windows отдаёт одно склеенное меню и не говорит, чья это строка.</value>
+  </data>
+  <data name="SettingsShowSystemRootFolders" xml:space="preserve">
+    <value>Отображать служебные папки в корне дисков</value>
+  </data>
+  <data name="SettingsShowGroup" xml:space="preserve">
+    <value>Показывать</value>
+  </data>
+  <data name="SettingsPreviewName" xml:space="preserve">
+    <value>Документ.txt</value>
+  </data>
+  <data name="SettingsPreviewName2" xml:space="preserve">
+    <value>Фотография.jpg</value>
+  </data>
+  <data name="SettingsPreviewMeta" xml:space="preserve">
+    <value>14 КБ · Текстовый файл</value>
+  </data>
+  <data name="SettingsShellReset" xml:space="preserve">
+    <value>Сбросить</value>
+  </data>
+  <data name="SettingsShellResetHint" xml:space="preserve">
+    <value>Вернуть настройки контекстного меню к исходным</value>
+  </data>
+  <data name="SettingsShellResetConfirm" xml:space="preserve">
+    <value>Сбросить настройки контекстного меню?&#xA;&#xA;Снимутся все галочки «скрыть», забудутся добавленные типы и всё, что Wander встречал в меню. Пункты Wander снова станут видны. Отмена в окне настроек ещё вернёт всё назад.</value>
   </data>
 </root>

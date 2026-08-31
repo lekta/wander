@@ -288,6 +288,40 @@
             </Setter>
         </Style>
 
+        <!--
+            Right-click on the empty part of a navigation panel. Not the file
+            menu — nothing was clicked — but the handful of settings that get
+            flipped often enough that walking to Параметры for them is the
+            annoying part: what the listing shows, whether the arrow keys
+            open folders, whether deleting asks first.
+
+            One instance shared by both trees. A ContextMenu is not in the
+            visual tree, so its DataContext does not inherit; PlacementTarget
+            is how it reaches the window's own.
+        -->
+        <ContextMenu x:Key="PanelSettingsMenu"
+                     DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+            <MenuItem Header="{x:Static res:Strings.PanelShowHidden}"
+                      IsCheckable="True"
+                      IsChecked="{Binding Settings.ShowHidden}"/>
+            <MenuItem Header="{x:Static res:Strings.PanelShowSystem}"
+                      IsCheckable="True"
+                      IsChecked="{Binding Settings.ShowSystem}"/>
+            <Separator/>
+            <MenuItem Header="{x:Static res:Strings.PanelTreeKeyboardNavigates}"
+                      IsCheckable="True"
+                      IsChecked="{Binding Settings.TreeKeyboardNavigates}"
+                      ToolTip="{x:Static res:Strings.PanelTreeKeyboardNavigatesHint}"/>
+            <MenuItem Header="{x:Static res:Strings.PanelConfirmRecycle}"
+                      IsCheckable="True"
+                      IsChecked="{Binding Settings.ConfirmRecycle}"
+                      ToolTip="{x:Static res:Strings.PanelConfirmRecycleHint}"/>
+            <MenuItem Header="{x:Static res:Strings.PanelAutoRefresh}"
+                      IsCheckable="True"
+                      IsChecked="{Binding Settings.AutoRefresh}"/>
+            <Separator/>
+            <MenuItem Header="{x:Static res:Strings.MenuOptions}" Command="{Binding OptionsCommand}"/>
+        </ContextMenu>
     </Window.Resources>
     <Window.InputBindings>
         <KeyBinding Key="F5" Command="{Binding RefreshCommand}"/>
@@ -453,9 +487,9 @@
                             <MenuItem Header="{x:Static res:Strings.MenuReportIssue}"
                                       Command="{Binding ReportIssueCommand}"
                                       ToolTip="{x:Static res:Strings.MenuReportIssueHint}"/>
-                            <MenuItem Header="{x:Static res:Strings.MenuProjectHome}"
-                                      Command="{Binding ProjectHomeCommand}"
-                                      ToolTip="{x:Static res:Strings.MenuProjectHomeHint}"/>
+                            <MenuItem Header="{x:Static res:Strings.MenuHelp}"
+                                      Command="{Binding HelpCommand}"
+                                      ToolTip="{x:Static res:Strings.MenuHelpHint}"/>
                             <Separator/>
                             <!--
                                 A caption, not a command: greying it out would
@@ -864,6 +898,7 @@
                         bookmarks rather than copying into the current folder.
                     -->
                     <TreeView x:Name="BookmarksTree"
+                              ContextMenu="{StaticResource PanelSettingsMenu}"
                               ItemsSource="{Binding Bookmarks}"
                               SelectedItemChanged="Bookmarks_SelectedItemChanged"
                               PreviewMouseLeftButtonDown="Tree_PreviewMouseLeftButtonDown"
@@ -998,6 +1033,7 @@
 
                 <TreeView x:Name="Tree" Grid.Row="2"
                           Margin="0,4,0,0"
+                          ContextMenu="{StaticResource PanelSettingsMenu}"
                           ItemsSource="{Binding Roots}"
                           SelectedItemChanged="Tree_SelectedItemChanged"
                           PreviewMouseLeftButtonDown="Tree_PreviewMouseLeftButtonDown"
@@ -1066,9 +1102,17 @@
                           Background="#DDD"
                           DragCompleted="PreviewSplitter_DragCompleted"/>
 
-            <!-- Preview pane -->
+            <!--
+                Preview pane. TabNavigation="None" because the keyboard has
+                no business in here yet — zoom, the video transport and the
+                document scroll are mouse-only. Without it the pane is full
+                of focusable controls, and whatever WPF focuses first when a
+                modal dialog hands the window back lands inside it: a caret
+                blinking in a document nobody asked to edit.
+            -->
             <views:PreviewPane x:Name="Preview"
                                Grid.Column="4"
+                               KeyboardNavigation.TabNavigation="None"
                                Visibility="{Binding IsPreviewVisible, Converter={StaticResource BoolToVisibility}}"/>
         </Grid>
     </DockPanel>

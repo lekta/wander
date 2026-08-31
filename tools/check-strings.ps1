@@ -17,7 +17,8 @@
       * Strings.<Key>           - C#;
       * res:Strings.<Key>       - XAML ({x:Static});
       * Text.Get / Text.Format  - Wander.Core, through ITextSource;
-      * "MenuCmd..." values     - the key table in ContextMenuCatalog.
+      * "MenuCmd..." / "Scope..."- the key tables in ContextMenuCatalog
+                                  and ShellScopes.
 
     Output is kept ASCII on purpose: this runs from check.bat under cmd,
     whose console codepage is not UTF-8.
@@ -56,7 +57,7 @@ $used = [System.Collections.Generic.HashSet[string]]::new()
 $sources = Get-ChildItem -Path (Join-Path $Root 'src') -Recurse -Include *.cs, *.xaml |
     Where-Object {
         $_.FullName -notmatch '\\(obj|bin)\\' -and
-        $_.FullName -notmatch '\\Resources\\Strings\.cs$'
+        $_.FullName -notmatch '\\Resources\\Strings(\.[A-Za-z]+)?\.cs$'
     }
 
 foreach ($file in $sources) {
@@ -72,7 +73,9 @@ foreach ($file in $sources) {
     foreach ($m in [regex]::Matches($text, '\b(?:Say|Fill)\("([^"]+)"')) {
         [void] $used.Add($m.Groups[1].Value)
     }
-    foreach ($m in [regex]::Matches($text, '= "(MenuCmd[A-Za-z]+)"')) {
+    # Core's own key tables: a dictionary literal from enum/name to resource
+    # key. Both live in Core, which cannot reference the accessor at all.
+    foreach ($m in [regex]::Matches($text, '= "((?:MenuCmd|Scope)[A-Za-z]+)"')) {
         [void] $used.Add($m.Groups[1].Value)
     }
 }
