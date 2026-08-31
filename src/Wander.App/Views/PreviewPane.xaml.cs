@@ -10,10 +10,12 @@ using System.Windows.Media.Media3D;
 using System.Windows.Threading;
 using ICSharpCode.AvalonEdit.Highlighting;
 using Microsoft.Web.WebView2.Core;
+using Wander.App.Controllers;
 using Wander.App.Controls;
 using Wander.App.Highlighting;
 using Wander.App.Resources;
 using Wander.App.ViewModels;
+
 
 namespace Wander.App.Views;
 

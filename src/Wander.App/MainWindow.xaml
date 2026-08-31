@@ -930,7 +930,7 @@
                     -->
                     <TreeView x:Name="BookmarksTree"
                               ContextMenu="{StaticResource PanelSettingsMenu}"
-                              ItemsSource="{Binding Bookmarks}"
+                              ItemsSource="{Binding Bookmarks.Items}"
                               SelectedItemChanged="Bookmarks_SelectedItemChanged"
                               PreviewMouseLeftButtonDown="Tree_PreviewMouseLeftButtonDown"
                               PreviewMouseLeftButtonUp="Tree_PreviewMouseLeftButtonUp"

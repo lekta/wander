@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
 using Wander.App.Conflict;
+using Wander.App.Controllers;
 using Wander.App.Resources;
 using Wander.App.Util;
 using Wander.Core;
@@ -22,6 +23,7 @@ using Wander.Core.Persistence;
 using Wander.Core.Search;
 using Wander.Core.Shell;
 using Wander.Core.Undo;
+
 
 namespace Wander.App.ViewModels;
 
@@ -96,9 +98,7 @@ public sealed class MainViewModel : ObservableObject {
 
     private readonly ClipboardController _clipboard;
 
-    private readonly List<string> _favorites = new();
     private bool _isBookmarksExpanded = true;
-    private bool _buildingBookmarks;
     private IReadOnlyList<NavigationStop> _persistedExpandedPaths = Array.Empty<NavigationStop>();
     private string? _missingFolderPath;
 
@@ -235,7 +235,6 @@ public sealed class MainViewModel : ObservableObject {
 
         Entries = new BulkObservableCollection<FileSystemEntry>();
         Roots = new ObservableCollection<TreeNodeViewModel>();
-        Bookmarks = new ObservableCollection<TreeNodeViewModel>();
         Operations = new ObservableCollection<OperationViewModel>();
 
         // Settings VM is owned by MainVM and shared with the dialog when it
@@ -243,6 +242,20 @@ public sealed class MainViewModel : ObservableObject {
         // OnSettingsChanged.
         Settings = new SettingsViewModel();
         Settings.PropertyChanged += OnSettingsChanged;
+
+        Shell = new ShellCommandsController(_shell, _log);
+        Shell.StatusReported += (_, text) => Status = text;
+
+        // Wiring a fresh node is the trees' bookkeeping, not the panel's, so
+        // the controller is handed that one operation and owns everything
+        // else about bookmarks itself.
+        Bookmarks = new BookmarksController(_fs, Settings, _log, WireTreeNode);
+        Bookmarks.StatusReported += (_, text) => Status = text;
+        Bookmarks.Changed += (_, _) => {
+            Bookmarks.Build(_persistedExpandedPaths);
+            SaveState();
+            RaiseMissingFolder();
+        };
 
         _tracker.Changed += OnTrackerChanged;
 
@@ -274,27 +287,34 @@ public sealed class MainViewModel : ObservableObject {
         ToggleGroupFoldersFirstCommand = new RelayCommand(_ => Settings.GroupFoldersFirst = !Settings.GroupFoldersFirst);
         ExitCommand = new RelayCommand(_ => Application.Current?.Shutdown());
         OptionsCommand = new RelayCommand(_ => OpenSettingsDialog());
-        ReportIssueCommand = new RelayCommand(_ => ReportIssue());
-        HelpCommand = new RelayCommand(_ => OpenUrl(Diagnostics.CrashReporter.GuideUrl));
+        // GitHub's template chooser lets the user pick "Bug report" or
+        // "Feature request"; nothing is pre-filled, so no session data is
+        // involved — unlike the crash path, which bundles diagnostics.
+        ReportIssueCommand = new RelayCommand(
+            _ => Shell.OpenUrl(Diagnostics.CrashReporter.IssueChooserUrl));
+        HelpCommand = new RelayCommand(_ => Shell.OpenUrl(Diagnostics.CrashReporter.GuideUrl));
         // Properties falls back to the folder being listed, so a background
         // right-click (and Alt+Enter with nothing selected) opens the
         // folder's own sheet — Explorer parity.
         PropertiesCommand = new RelayCommand(_ => ShowProperties(), _ => PropertiesTarget() is not null);
         OpenWithCommand = new RelayCommand(_ => OpenWith(), _ => _selectedEntry is not null && !IsCurrentShellNamespace);
         OpenInTerminalCommand = new RelayCommand(_ => OpenInTerminal(), _ => TerminalFolder() is not null);
-        CopyPathCommand = new RelayCommand(_ => CopyPathsToClipboard(), _ => PropertiesTarget() is not null);
-        CopyNameCommand = new RelayCommand(_ => CopyNamesToClipboard(), _ => _selectedEntries.Count > 0);
+        CopyPathCommand = new RelayCommand(
+            _ => Shell.CopyPaths(SelectedPathsOrCurrent()), _ => PropertiesTarget() is not null);
+        CopyNameCommand = new RelayCommand(
+            _ => Shell.CopyNames(_selectedEntries.Select(e => e.Name).ToArray()),
+            _ => _selectedEntries.Count > 0);
         CreateShortcutCommand = new RelayCommand(
             _ => CreateShortcutsForSelection(),
             _ => _selectedEntries.Count > 0 && _nav.Current is not null && !IsCurrentShellNamespace);
         TogglePreviewCommand = new RelayCommand(_ => IsPreviewVisible = !IsPreviewVisible);
         UndoCommand = new RelayCommand(_ => UndoLast(), _ => _undo.CanUndo);
         PermanentDeleteCommand = new RelayCommand(_ => _ = DeleteSelectedAsync(permanent: true), _ => _selectedEntries.Count > 0 && !IsCurrentShellNamespace);
-        OpenLogFileCommand = new RelayCommand(_ => OpenLogFile(), _ => ServiceLocator.IsRegistered<ILogFile>());
+        OpenLogFileCommand = new RelayCommand(_ => Shell.OpenLogFile(), _ => ServiceLocator.IsRegistered<ILogFile>());
         ToggleBookmarksCommand = new RelayCommand(_ => IsBookmarksExpanded = !IsBookmarksExpanded);
-        AddBookmarkCommand = new RelayCommand(p => AddBookmark(p as string));
-        RemoveBookmarkCommand = new RelayCommand(p => RemoveBookmark(p as TreeNodeViewModel));
-        RemoveMissingBookmarkCommand = new RelayCommand(_ => RemoveBookmarkPath(_missingFolderPath), _ => IsMissingBookmark);
+        AddBookmarkCommand = new RelayCommand(p => Bookmarks.Add(p as string));
+        RemoveBookmarkCommand = new RelayCommand(p => Bookmarks.Remove((p as TreeNodeViewModel)?.FullPath));
+        RemoveMissingBookmarkCommand = new RelayCommand(_ => Bookmarks.Remove(_missingFolderPath), _ => IsMissingBookmark);
         RelocateMissingBookmarkCommand = new RelayCommand(_ => RelocateBookmark(_missingFolderPath), _ => IsMissingBookmark);
 
         // Batch executors push undo steps from thread-pool workers, so this
@@ -418,8 +438,13 @@ public sealed class MainViewModel : ObservableObject {
 
     public BulkObservableCollection<FileSystemEntry> Entries { get; }
     public ObservableCollection<TreeNodeViewModel> Roots { get; }
-    public ObservableCollection<TreeNodeViewModel> Bookmarks { get; }
     public ObservableCollection<OperationViewModel> Operations { get; }
+
+    /// <summary>The left panel's bookmarks — the rows and the list behind them.</summary>
+    public BookmarksController Bookmarks { get; }
+
+    /// <summary>Verbs that hand a path to the system and are done with it.</summary>
+    public ShellCommandsController Shell { get; }
 
     /// <summary>
     /// Owns the preview pane content (kind, image / text / code / web,
@@ -740,7 +765,7 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     // --- Shell-namespace helpers ---------------------------------------
-    // Centralised checks so Navigate / Refresh / BuildBookmarks all agree
+    // Centralised checks so Navigate / Refresh / the bookmarks panel all agree
     // on what counts as a recognised shell location. Caching the lookup
     // would be premature — TryGet is one dictionary hit.
 
@@ -977,15 +1002,14 @@ public sealed class MainViewModel : ObservableObject {
                 Raise(nameof(BookmarksHeight));
             }
 
-            _favorites.Clear();
-            _favorites.AddRange(state.Favorites);
+            Bookmarks.Load(state.Favorites);
             _isBookmarksExpanded = session.IsBookmarksExpanded;
             Raise(nameof(IsBookmarksExpanded));
 
             _persistedExpandedPaths = session.ExpandedPaths.ToArray();
             // Drives-side expansions are restored immediately. Bookmark-side
-            // ones wait until BuildBookmarks below — Bookmarks collection is
-            // still empty here, and the matching VM instances don't exist yet.
+            // ones wait until the bookmarks panel is built below — its rows are
+            // not there yet, and the matching VM instances do not exist either.
             // expandTarget:true so the saved node itself is shown as expanded,
             // not just its ancestors (a saved stop means "this node's children
             // were visible at close").
@@ -1005,7 +1029,7 @@ public sealed class MainViewModel : ObservableObject {
             // for source=Bookmark, and if it's still empty the expander
             // falls back to drives, defeating the whole point of the
             // restored source.
-            BuildBookmarks();
+            Bookmarks.Build(_persistedExpandedPaths);
             // Consumed: from here on the panels themselves are the record
             // of what is expanded. Keeping the startup set around made
             // every later rebuild (a bookmark added, a special folder
@@ -1036,7 +1060,7 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     private void SaveState() {
-        if (_restoring || _buildingBookmarks) {
+        if (_restoring || Bookmarks.IsBuilding) {
             return;
         }
 
@@ -1062,7 +1086,7 @@ public sealed class MainViewModel : ObservableObject {
                 IsBookmarksExpanded = _isBookmarksExpanded,
                 RecentPaths = _nav.RecentPaths.ToArray(),
             },
-            Favorites = _favorites.ToArray(),
+            Favorites = Bookmarks.Paths.ToArray(),
             Settings = Settings.ToRecord(),
             LastRunVersion = Diagnostics.CrashReporter.AppVersion(),
         });
@@ -1104,41 +1128,15 @@ public sealed class MainViewModel : ObservableObject {
     private List<NavigationStop> CollectExpanded() {
         var result = new List<NavigationStop>();
         foreach (var root in Roots) {
-            CollectExpandedRecursive(root, result, NavigationSource.Drives);
+            root.CollectExpanded(result, NavigationSource.Drives);
         }
-        foreach (var bookmark in Bookmarks) {
-            CollectExpandedRecursive(bookmark, result, NavigationSource.Bookmark);
+        foreach (var bookmark in Bookmarks.Items) {
+            bookmark.CollectExpanded(result, NavigationSource.Bookmark);
         }
         // Dedupe on (Path, Source). The same path can legitimately appear
         // in both panels (e.g. a user-favourite that is also reachable via
         // drives) — those are separate expansion states and both kept.
         return result.Distinct().ToList();
-    }
-
-    /// <summary>
-    /// What was <em>visibly</em> expanded, which is why a collapsed branch
-    /// stops the walk instead of being stepped over.
-    ///
-    /// <para>
-    /// Collapsing a row does not clear the flags inside it — reopening it
-    /// in the same session is supposed to show what was open before. Saving
-    /// those hidden descendants, though, made restore expand its way down
-    /// to each of them, and expanding a descendant expands its parents:
-    /// the branch the user had just closed came back open on the next
-    /// start.
-    /// </para>
-    /// </summary>
-    private static void CollectExpandedRecursive(TreeNodeViewModel node, List<NavigationStop> result, NavigationSource source) {
-        if (!node.IsExpanded) {
-            return;
-        }
-
-        if (!string.IsNullOrEmpty(node.FullPath)) {
-            result.Add(new NavigationStop(node.FullPath, source));
-        }
-        foreach (var child in node.Children) {
-            CollectExpandedRecursive(child, result, source);
-        }
     }
 
 
@@ -1350,7 +1348,7 @@ public sealed class MainViewModel : ObservableObject {
         // was recorded.
         bool ok = false;
         if (src == NavigationSource.Bookmark) {
-            ok = TryExpandAndSelectIn(Bookmarks, _nav.Current);
+            ok = TryExpandAndSelectIn(Bookmarks.Items, _nav.Current);
         }
         if (!ok) {
             TryExpandAndSelectIn(Roots, _nav.Current);
@@ -1377,7 +1375,7 @@ public sealed class MainViewModel : ObservableObject {
             _lastSelectedTreeNode = null;
         }
 
-        if (TryExpandAndSelectIn(panel == NavigationSource.Bookmark ? Bookmarks : Roots, _nav.Current)) {
+        if (TryExpandAndSelectIn(panel == NavigationSource.Bookmark ? Bookmarks.Items : Roots, _nav.Current)) {
             return true;
         }
 
@@ -1393,7 +1391,7 @@ public sealed class MainViewModel : ObservableObject {
     private bool TryExpandAndSelectIn(IEnumerable<TreeNodeViewModel> nodes, string path) {
         foreach (var node in nodes) {
             if (node.TryExpandToPath(path, select: true)) {
-                _lastSelectedTreeNode = FindSelectedDescendant(node);
+                _lastSelectedTreeNode = node.FindSelected();
                 return true;
             }
         }
@@ -1413,19 +1411,6 @@ public sealed class MainViewModel : ObservableObject {
         _lastSelectedTreeNode = node;
     }
 
-
-    private static TreeNodeViewModel? FindSelectedDescendant(TreeNodeViewModel node) {
-        if (node.IsSelected) {
-            return node;
-        }
-        foreach (var child in node.Children) {
-            var found = FindSelectedDescendant(child);
-            if (found is not null) {
-                return found;
-            }
-        }
-        return null;
-    }
 
     private void Refresh() {
         // Search results are not a folder listing, and re-listing would
@@ -2724,7 +2709,7 @@ public sealed class MainViewModel : ObservableObject {
         foreach (var node in Roots) {
             node.RefreshChildren();
         }
-        foreach (var node in Bookmarks) {
+        foreach (var node in Bookmarks.Items) {
             node.RefreshChildren();
         }
     }
@@ -2738,25 +2723,10 @@ public sealed class MainViewModel : ObservableObject {
     /// </summary>
     private void RefreshTreeNodesFor(string path) {
         foreach (var node in Roots) {
-            RefreshTreeNode(node, path);
+            node.RefreshBranch(path);
         }
-        foreach (var node in Bookmarks) {
-            RefreshTreeNode(node, path);
-        }
-    }
-
-
-    private static void RefreshTreeNode(TreeNodeViewModel node, string path) {
-        if (IsSamePath(node.FullPath, path)) {
-            node.RefreshChildren();
-
-            return;
-        }
-
-        // Snapshot: a match further down rebuilds its own Children, never
-        // this level's, but the enumerator is cheap enough not to argue with.
-        foreach (var child in node.Children.ToArray()) {
-            RefreshTreeNode(child, path);
+        foreach (var node in Bookmarks.Items) {
+            node.RefreshBranch(path);
         }
     }
 
@@ -3046,7 +3016,7 @@ public sealed class MainViewModel : ObservableObject {
             e.PropertyName == nameof(SettingsViewModel.ShowBookmarkDocuments) ||
             e.PropertyName == nameof(SettingsViewModel.ShowBookmarkPictures) ||
             e.PropertyName == nameof(SettingsViewModel.ShowBookmarkRecycleBin)) {
-            BuildBookmarks();
+            Bookmarks.Build(_persistedExpandedPaths);
         }
 
         if (e.PropertyName == nameof(SettingsViewModel.AutoRefresh)) {
@@ -3094,7 +3064,7 @@ public sealed class MainViewModel : ObservableObject {
     /// the panel can offer to do something about it rather than only
     /// report it.
     /// </summary>
-    public bool IsMissingBookmark => _missingFolderPath is not null && IsBookmarked(_missingFolderPath);
+    public bool IsMissingBookmark => _missingFolderPath is not null && Bookmarks.Contains(_missingFolderPath);
 
 
     private void SetMissingFolder(string? path) {
@@ -3113,163 +3083,49 @@ public sealed class MainViewModel : ObservableObject {
 
 
     // --- Bookmarks ------------------------------------------------------
+    //
+    // The list itself lives in BookmarksController. What stays here is the
+    // part that is a window's job — asking the user where the folder went —
+    // and the navigation that follows a successful answer.
+
 
     /// <summary>
-    /// Rebuilds the left-pane bookmarks list from the current settings
-    /// (enabled special folders) and the user's saved favourites. Idempotent;
-    /// any node currently realised in the visual tree gets a fresh instance,
-    /// so callers should be ready for binding refresh.
+    /// Points a bookmark at where its folder went, and walks into it. Only
+    /// the folder picker and the navigation are here; whether the move is
+    /// allowed and what it does to the list is the panel's own rule.
     /// </summary>
-    private void BuildBookmarks() {
-        // Capture the *current* expansion state of bookmark folders so it
-        // survives the rebuild — BuildBookmarks creates fresh VM instances
-        // for the Downloads / user-favourite branches each time. Merge with
-        // the startup-loaded set, but only with bookmark-source stops —
-        // drives-side entries describe the lower tree and don't belong here.
-        var live = new List<NavigationStop>();
-        foreach (var b in Bookmarks) {
-            CollectExpandedRecursive(b, live, NavigationSource.Bookmark);
-        }
-        var bookmarkStops = new HashSet<NavigationStop>(live);
-        foreach (var stop in _persistedExpandedPaths) {
-            if (stop.Source == NavigationSource.Bookmark) {
-                bookmarkStops.Add(stop);
-            }
-        }
-
-        _buildingBookmarks = true;
-        try {
-            Bookmarks.Clear();
-
-            if (Settings.ShowBookmarkDownloads) {
-                AddSpecialFolderNode(Strings.SpecialFolderDownloads, ResolveDownloads());
-            }
-            if (Settings.ShowBookmarkDocuments) {
-                AddSpecialFolderNode(Strings.SpecialFolderDocuments, ResolveDocuments());
-            }
-            if (Settings.ShowBookmarkPictures) {
-                AddSpecialFolderNode(Strings.SpecialFolderPictures, ResolvePictures());
-            }
-            if (Settings.ShowBookmarkDesktop) {
-                AddSpecialFolderNode(Strings.SpecialFolderDesktop, ResolveKnown(f => f.GetDesktop()));
-            }
-            if (Settings.ShowBookmarkMusic) {
-                AddSpecialFolderNode(Strings.SpecialFolderMusic, ResolveKnown(f => f.GetMusic()));
-            }
-            if (Settings.ShowBookmarkVideos) {
-                AddSpecialFolderNode(Strings.SpecialFolderVideos, ResolveKnown(f => f.GetVideos()));
-            }
-            if (Settings.ShowBookmarkRecycleBin && TryGetShellNamespace() is not null) {
-                AddSpecialFolderNode(Strings.SpecialFolderRecycleBin, ShellPaths.RecycleBin);
-            }
-
-            // The divider goes on the first user bookmark, and only when
-            // there is a special folder above it to be divided from.
-            bool startsSection = Bookmarks.Count > 0;
-            foreach (string path in _favorites) {
-                var node = TryBuildFolderNode(path, startsSection);
-                if (node is null) {
-                    continue;
-                }
-                Bookmarks.Add(node);
-                startsSection = false;
-            }
-
-            foreach (var stop in bookmarkStops) {
-                foreach (var b in Bookmarks) {
-                    if (b.TryExpandToPath(stop.Path, select: false, expandTarget: true)) {
-                        break;
-                    }
-                }
-            }
-        } finally {
-            _buildingBookmarks = false;
-        }
-    }
-
-    private string? ResolveDownloads() {
-        return ResolveKnown(f => f.GetDownloads());
-    }
-
-    private string? ResolveDocuments() {
-        return ResolveKnown(f => f.GetDocuments());
-    }
-
-    private string? ResolvePictures() {
-        return ResolveKnown(f => f.GetPictures());
-    }
-
-    /// <summary>
-    /// One known folder, or null where the platform layer is absent (tests,
-    /// and any future non-Windows host). <c>SHGetKnownFolderPath</c> is the
-    /// only correct answer for these: "%USERPROFILE%\Музыка" is wrong on an
-    /// English install and wrong again once the folder has been moved.
-    /// </summary>
-    private static string? ResolveKnown(Func<IKnownFolders, string?> pick) {
-        return ServiceLocator.TryGet<IKnownFolders>() is { } known ? pick(known) : null;
-    }
-
-    /// <summary>
-    /// Adds one special-folder node to <see cref="Bookmarks"/>. No-op when
-    /// the path can't be resolved or doesn't exist on disk (e.g. user moved
-    /// the folder to a removed drive). The label is a fixed localised name,
-    /// not the on-disk folder name, so the user sees a stable caption.
-    /// Shell-namespace paths (Recycle Bin) take a different code path:
-    /// no <see cref="IFileSystem"/> probe and no lazy-load children — the
-    /// node is a clickable leaf, navigated through <see cref="IShellNamespace"/>.
-    /// </summary>
-    private void AddSpecialFolderNode(string label, string? path) {
-        if (string.IsNullOrEmpty(path)) {
+    public void RelocateBookmark(string? oldPath) {
+        if (string.IsNullOrEmpty(oldPath) || !Bookmarks.Contains(oldPath)) {
             return;
         }
-        if (IsShellPath(path)) {
-            // No tree children for shell namespaces in this iteration —
-            // Recycle Bin is presented as a flat list in the right pane,
-            // not browseable from the bookmarks tree.
-            var shellNode = new TreeNodeViewModel(label, path, EntryKind.Directory, fs: null, hasChildren: false);
-            WireTreeNode(shellNode);
-            Bookmarks.Add(shellNode);
-            return;
-        }
-        if (!_fs.DirectoryExists(path)) {
-            return;
-        }
-        var node = new TreeNodeViewModel(label, path, EntryKind.Directory, _fs, _fs.HasSubdirectories(path), Settings);
-        WireTreeNode(node);
-        Bookmarks.Add(node);
-    }
 
-    /// <summary>
-    /// One user bookmark. A folder that is no longer on disk still gets a
-    /// row — dropping it would look like Wander forgot the bookmark, and
-    /// the user is the one who decides whether it goes. The row is built
-    /// without an <see cref="IFileSystem"/> so it has no chevron and no
-    /// children to enumerate; clicking it lands on the "this folder is
-    /// gone" panel in the file area.
-    /// </summary>
-    private TreeNodeViewModel? TryBuildFolderNode(string path, bool startsSection) {
-        if (string.IsNullOrEmpty(path)) {
-            return null;
-        }
-        string name = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-        if (string.IsNullOrEmpty(name)) {
-            // e.g. a drive root — fall back to the trimmed path itself.
-            name = path;
-        }
-
-        bool exists = _fs.DirectoryExists(path);
-        var node = new TreeNodeViewModel(
-            name, path, EntryKind.Directory,
-            exists ? _fs : null,
-            exists && _fs.HasSubdirectories(path),
-            Settings) {
-            IsRemovableBookmark = true,
-            StartsUserSection = startsSection,
-            IsMissing = !exists,
+        var picker = new Microsoft.Win32.OpenFolderDialog {
+            Title = Strings.BookmarksLocateTitle,
+            Multiselect = false,
         };
-        WireTreeNode(node);
-        return node;
+        if (picker.ShowDialog() != true) {
+            return;
+        }
+
+        if (Bookmarks.Relocate(oldPath, picker.FolderName)) {
+            NavigateAndSelectFolder(picker.FolderName, NavigationSource.Bookmark);
+        }
     }
+
+
+    /// <summary>
+    /// Moves a bookmark and puts the keyboard back on it. The row is a new
+    /// instance after the rebuild, so the caller cannot keep the old one.
+    /// </summary>
+    public TreeNodeViewModel? MoveBookmark(TreeNodeViewModel? node, int delta) {
+        var moved = Bookmarks.Move(node, delta);
+        if (moved is not null) {
+            SelectTreeNode(moved);
+        }
+
+        return moved;
+    }
+
 
     /// <summary>
     /// Makes one path — a folder picked in the tree or the bookmarks — the
@@ -3381,146 +3237,6 @@ public sealed class MainViewModel : ObservableObject {
     }
 
 
-    /// <summary>
-    /// Already in the bookmarks? The drop strip asks before offering to
-    /// take a folder: dropping one that is in the list does nothing, and a
-    /// target that lights up for a no-op is a lie.
-    /// </summary>
-    public bool IsBookmarked(string path) {
-        return _favorites.Any(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
-    }
-
-
-    public void AddBookmark(string? path) {
-        if (string.IsNullOrEmpty(path) || !_fs.DirectoryExists(path)) {
-            return;
-        }
-        if (_favorites.Any(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase))) {
-            Status = Strings.StatusAlreadyBookmarked;
-            return;
-        }
-        _favorites.Add(path);
-        _log.Info($"Bookmark added: {path}");
-        Status = string.Format(Strings.StatusBookmarkAdded, Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)));
-        BuildBookmarks();
-        SaveState();
-    }
-
-    public void RemoveBookmark(TreeNodeViewModel? node) {
-        RemoveBookmarkPath(node?.FullPath);
-    }
-
-
-    /// <summary>
-    /// Drops one user bookmark. Reached from the row menu and from the
-    /// "this folder is gone" panel, which knows the path but has no tree
-    /// node to hand over.
-    /// </summary>
-    public void RemoveBookmarkPath(string? path) {
-        if (string.IsNullOrEmpty(path)) {
-            return;
-        }
-        int idx = _favorites.FindIndex(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
-        if (idx < 0) {
-            // Special folder (Downloads / This PC) — not a user favourite;
-            // hiding it goes via Settings.
-            return;
-        }
-        _favorites.RemoveAt(idx);
-        _log.Info($"Bookmark removed: {path}");
-        BuildBookmarks();
-        SaveState();
-        RaiseMissingFolder();
-    }
-
-
-    /// <summary>
-    /// Moves one user bookmark up or down its section of the panel.
-    /// Special folders are not part of <c>_favorites</c>, so the move can
-    /// never carry a bookmark across the divider.
-    ///
-    /// <para>
-    /// Returns the rebuilt node for the moved bookmark — <see cref="BuildBookmarks"/>
-    /// creates fresh instances, and the caller needs the new one to put the
-    /// keyboard back on the row so a second Ctrl+Up keeps working.
-    /// </para>
-    /// </summary>
-    public TreeNodeViewModel? MoveBookmark(TreeNodeViewModel? node, int delta) {
-        if (node is null || string.IsNullOrEmpty(node.FullPath)) {
-            return null;
-        }
-
-        string path = node.FullPath;
-        int from = _favorites.FindIndex(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
-        if (from < 0) {
-            return null;
-        }
-
-        int to = from + delta;
-        if (to < 0 || to >= _favorites.Count) {
-            return null;
-        }
-
-        _favorites.RemoveAt(from);
-        _favorites.Insert(to, path);
-        _log.Info($"Bookmark moved: {path} ({from} -> {to})");
-        BuildBookmarks();
-        SaveState();
-
-        var moved = Bookmarks.FirstOrDefault(b => IsSamePath(b.FullPath, path));
-        if (moved is not null) {
-            SelectTreeNode(moved);
-        }
-
-        return moved;
-    }
-
-
-    /// <summary>
-    /// Points a bookmark at where its folder went. The path is replaced in
-    /// place rather than removed and re-added, so the bookmark keeps its
-    /// position in the list.
-    /// </summary>
-    public void RelocateBookmark(string? oldPath) {
-        if (string.IsNullOrEmpty(oldPath)) {
-            return;
-        }
-        int idx = _favorites.FindIndex(p => string.Equals(p, oldPath, StringComparison.OrdinalIgnoreCase));
-        if (idx < 0) {
-            return;
-        }
-
-        var picker = new Microsoft.Win32.OpenFolderDialog {
-            Title = Strings.BookmarksLocateTitle,
-            Multiselect = false,
-        };
-        if (picker.ShowDialog() != true) {
-            return;
-        }
-
-        string chosen = picker.FolderName;
-        if (string.IsNullOrEmpty(chosen) || !_fs.DirectoryExists(chosen)) {
-            return;
-        }
-        if (_favorites.Any(p => string.Equals(p, chosen, StringComparison.OrdinalIgnoreCase))) {
-            Status = Strings.StatusAlreadyBookmarked;
-            return;
-        }
-
-        _favorites[idx] = chosen;
-        _log.Info($"Bookmark relocated: {oldPath} -> {chosen}");
-        BuildBookmarks();
-        SaveState();
-        NavigateAndSelectFolder(chosen, NavigationSource.Bookmark);
-    }
-
-    public bool IsUserFavorite(TreeNodeViewModel? node) {
-        if (node is null || string.IsNullOrEmpty(node.FullPath)) {
-            return false;
-        }
-        return _favorites.Any(p => string.Equals(p, node.FullPath, StringComparison.OrdinalIgnoreCase));
-    }
-
     private void OpenSettingsDialog() {
         // Lazy import: the View type lives in Wander.App.Views and is
         // referenced via its full namespace to keep MainViewModel free
@@ -3547,59 +3263,41 @@ public sealed class MainViewModel : ObservableObject {
     public string VersionLabel => string.Format(Strings.MenuVersion, BuildInfo.Line);
 
 
-    private void ReportIssue() {
-        // GitHub's template chooser lets the user pick "Bug report" or
-        // "Feature request"; nothing is pre-filled, so no session data is
-        // involved — unlike the crash path, which bundles diagnostics.
-        OpenUrl(Wander.App.Diagnostics.CrashReporter.IssueChooserUrl);
-    }
-
-    private void OpenUrl(string url) {
-        try {
-            _shell.Open(url);
-        } catch (Exception ex) {
-            Status = string.Format(Strings.StatusBrowserFailed, ex.Message);
-        }
-    }
-
-    private void OpenLogFile() {
-        if (ServiceLocator.TryGet<ILogFile>() is not { } logFile) {
-            Status = Strings.StatusNoLogging;
-            return;
-        }
-        string path = logFile.FilePath;
-        if (string.IsNullOrEmpty(path) || !File.Exists(path)) {
-            Status = Strings.StatusNoLogFile;
-            return;
-        }
-        try {
-            _shell.Open(path);
-        } catch (Exception ex) {
-            Status = string.Format(Strings.StatusOpenLogFailed, ex.Message);
-        }
-    }
-
-    private void ShowProperties() {
-        if (PropertiesTarget() is not string path) {
-            return;
-        }
-        try {
-            _shell.ShowProperties(path);
-        } catch (Exception ex) {
-            Status = string.Format(Strings.StatusPropertiesFailed, ex.Message);
-        }
-    }
-
-
     // --- Context-menu verbs ---------------------------------------------
     // These exist because the context menu needs them; the toolbar and the
-    // hotkey table are unchanged. Each resolves its own target the same way:
+    // hotkey table are unchanged. What is left here is target resolution —
     // the selection if there is one, the listed folder otherwise, so the
-    // same command backs both the item menu and the background menu.
+    // same command backs both the item menu and the background menu. The
+    // call to the system itself is ShellCommandsController's.
 
     /// <summary>Selected item, or the folder being listed when nothing is selected.</summary>
     private string? PropertiesTarget() {
         return _selectedEntry?.FullPath ?? _nav.Current;
+    }
+
+    /// <summary>What "copy path" acts on: the selection, else the current folder.</summary>
+    private IReadOnlyList<string> SelectedPathsOrCurrent() {
+        return _selectedEntries.Count > 0
+            ? _selectedEntries.Select(e => e.FullPath).ToArray()
+            : new[] { _nav.Current ?? "" };
+    }
+
+    private void ShowProperties() {
+        if (PropertiesTarget() is { } path) {
+            Shell.ShowProperties(path);
+        }
+    }
+
+    private void OpenWith() {
+        if (_selectedEntry is { } entry) {
+            Shell.OpenWith(entry.FullPath);
+        }
+    }
+
+    private void OpenInTerminal() {
+        if (TerminalFolder() is { } folder) {
+            Shell.OpenInTerminal(folder);
+        }
     }
 
     /// <summary>Folder a terminal should start in: the selected folder, else the current one.</summary>
@@ -3614,73 +3312,6 @@ public sealed class MainViewModel : ObservableObject {
         return _nav.Current;
     }
 
-    private void OpenWith() {
-        if (_selectedEntry is null) {
-            return;
-        }
-        try {
-            _shell.OpenWith(_selectedEntry.FullPath);
-        } catch (Exception ex) {
-            _log.Error($"Open with failed: {_selectedEntry.FullPath}", ex);
-            Status = string.Format(Strings.StatusOpenWithFailed, ex.Message);
-        }
-    }
-
-    private void OpenInTerminal() {
-        if (TerminalFolder() is not string folder) {
-            return;
-        }
-        try {
-            _shell.OpenTerminal(folder);
-        } catch (Exception ex) {
-            _log.Error($"Open terminal failed: {folder}", ex);
-            Status = string.Format(Strings.StatusTerminalFailed, ex.Message);
-        }
-    }
-
-    private void CopyPathsToClipboard() {
-        var paths = _selectedEntries.Count > 0
-            ? _selectedEntries.Select(e => e.FullPath).ToArray()
-            : new[] { _nav.Current ?? "" };
-
-        // Quoted, one per line — the shape you can paste straight into a
-        // shell. Explorer's "Copy as path" does the same. The status line
-        // gets the bare paths instead: it is there to show *what* landed in
-        // the clipboard, and quotes only get in the way of reading it.
-        SetClipboardText(
-            string.Join(Environment.NewLine, paths.Select(p => $"\"{p}\"")),
-            Summarize(paths));
-    }
-
-    private void CopyNamesToClipboard() {
-        if (_selectedEntries.Count == 0) {
-            return;
-        }
-        var names = _selectedEntries.Select(e => e.Name).ToArray();
-
-        SetClipboardText(string.Join(Environment.NewLine, names), Summarize(names));
-    }
-
-    /// <summary>
-    /// One line naming what was copied. The status bar trims to its width,
-    /// so a long multi-select degrades to "first, second, …" on its own —
-    /// but the first entries stay readable, which is the point.
-    /// </summary>
-    private static string Summarize(IReadOnlyList<string> items) {
-        return string.Join(", ", items);
-    }
-
-    private void SetClipboardText(string text, string what) {
-        try {
-            Clipboard.SetText(text);
-            Status = string.Format(Strings.StatusCopiedToClipboard, what);
-        } catch (Exception ex) {
-            // The OS clipboard is a shared, lockable resource — another app
-            // holding it turns this into a COMException, not a bug in ours.
-            _log.Warn($"Clipboard copy failed: {ex.Message}");
-            Status = string.Format(Strings.StatusClipboardBusy, ex.Message);
-        }
-    }
 
     private void CreateShortcutsForSelection() {
         if (_selectedEntries.Count == 0 || _nav.Current is null) {

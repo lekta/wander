@@ -1,5 +1,7 @@
 using System.Windows.Media;
+using Wander.App.Controllers;
 using Wander.Core.Companions;
+
 
 namespace Wander.App.ViewModels;
 

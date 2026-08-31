@@ -1,11 +1,13 @@
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Threading;
+using Wander.App.ViewModels;
 using Wander.Core.FileSystem;
 using Wander.Core.Logging;
 using Wander.Core.Search;
 
-namespace Wander.App.ViewModels;
+
+namespace Wander.App.Controllers;
 
 /// <summary>Where a search is in its life, for the indicator in the search window.</summary>
 public enum SearchState {

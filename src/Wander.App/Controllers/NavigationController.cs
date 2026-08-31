@@ -1,7 +1,9 @@
 using System.IO;
+using Wander.App.ViewModels;
 using Wander.Core.Navigation;
 
-namespace Wander.App.ViewModels;
+
+namespace Wander.App.Controllers;
 
 /// <summary>
 /// View-model shell around <see cref="NavigationService"/>: owns the address

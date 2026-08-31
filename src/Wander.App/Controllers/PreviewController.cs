@@ -7,6 +7,7 @@ using System.Windows.Media.Media3D;
 using Markdig;
 using Wander.App.Resources;
 using Wander.App.Util;
+using Wander.App.ViewModels;
 using Wander.Core;
 using Wander.Core.Companions;
 using Wander.Core.FileSystem;
@@ -15,7 +16,8 @@ using Wander.Core.Preview;
 using Wander.Core.Shell;
 using ImageMetadata = Wander.Core.Icons.ImageMetadata;
 
-namespace Wander.App.ViewModels;
+
+namespace Wander.App.Controllers;
 
 /// <summary>
 /// Owns everything that renders inside the preview pane: the content-kind

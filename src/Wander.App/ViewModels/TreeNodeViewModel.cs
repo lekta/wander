@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.IO;
 using Wander.Core.FileSystem;
+using Wander.Core.Navigation;
 
 namespace Wander.App.ViewModels;
 
@@ -230,6 +231,102 @@ public sealed class TreeNodeViewModel : ObservableObject {
 
         foreach (var child in Children) {
             child.RefreshChildren();
+        }
+    }
+
+
+    // --- Walks over the branch -------------------------------------------
+    //
+    // Five recursions used to live in two other files — three of them in
+    // MainWindow's code-behind, where a tree walk is not a window's business.
+    // They are here because the shape being walked is this one: a node knows
+    // what its children are, and nobody else should have to.
+
+
+    /// <summary>
+    /// Adds every expanded path in this branch to <paramref name="result"/>,
+    /// tagged with the panel it belongs to.
+    ///
+    /// <para>
+    /// Stops at the first collapsed row rather than walking past it.
+    /// Collapsing a row does not clear the flags inside it — reopening it in
+    /// the same session is supposed to show what was open before. Saving
+    /// those hidden descendants, though, made restore expand its way down to
+    /// each of them, and expanding a descendant expands its parents: the
+    /// branch the user had just closed came back open on the next start.
+    /// </para>
+    /// </summary>
+    public void CollectExpanded(List<NavigationStop> result, NavigationSource source) {
+        if (!IsExpanded) {
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(FullPath)) {
+            result.Add(new NavigationStop(FullPath, source));
+        }
+        foreach (var child in Children) {
+            child.CollectExpanded(result, source);
+        }
+    }
+
+
+    /// <summary>The selected row inside this branch, or null.</summary>
+    public TreeNodeViewModel? FindSelected() {
+        if (IsSelected) {
+            return this;
+        }
+
+        foreach (var child in Children) {
+            if (child.FindSelected() is { } found) {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+
+    /// <summary>
+    /// Re-reads the row standing on <paramref name="path"/> anywhere in this
+    /// branch. A path can appear more than once, so this does not stop at
+    /// the first hit at any one level.
+    /// </summary>
+    public void RefreshBranch(string path) {
+        if (PathsEqual(FullPath, path)) {
+            RefreshChildren();
+
+            return;
+        }
+
+        // Snapshot: a match further down rebuilds its own Children, never
+        // this level's, but the enumerator is cheap enough not to argue with.
+        foreach (var child in Children.ToArray()) {
+            child.RefreshBranch(path);
+        }
+    }
+
+
+    /// <summary>Opens the immediate children, one level and no further.</summary>
+    public void ExpandChildren() {
+        foreach (var child in Children) {
+            if (string.IsNullOrEmpty(child.FullPath)) {
+                continue;
+            }
+            child.IsExpanded = true;
+        }
+    }
+
+
+    /// <summary>
+    /// Closes everything below this row, deepest first, leaving the row
+    /// itself as it is.
+    /// </summary>
+    public void CollapseDescendants() {
+        foreach (var child in Children) {
+            if (child.IsExpanded) {
+                child.CollapseDescendants();
+                child.IsExpanded = false;
+            }
         }
     }
 

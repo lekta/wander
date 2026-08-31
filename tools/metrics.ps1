@@ -302,7 +302,10 @@ function Get-Project([string]$path) {
 # снимается по рабочему дереву, а не по индексу, иначе новый класс попадёт
 # в метрику только после коммита — то есть уже после того, как по ней
 # принимали решение.
-$tracked = @(git ls-files --cached --others --exclude-standard)
+#
+# Test-Path в конце — потому что закоммиченный файл, который переехал, ещё
+# числится в индексе по старому пути. Считать его нельзя: на диске его нет.
+$tracked = @(git ls-files --cached --others --exclude-standard) | Where-Object { Test-Path -LiteralPath $_ }
 $csFiles = $tracked | Where-Object { $_ -like '*.cs' -and $_ -ne 'src/Wander.App/AssemblyInfo.cs' }
 $xamlFiles = $tracked | Where-Object { $_ -like '*.xaml' }
 

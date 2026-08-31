@@ -7,6 +7,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Web.WebView2.Core;
+using Wander.App.Controllers;
 using Wander.App.Controls;
 using Wander.App.Converters;
 using Wander.App.DragPreview;
@@ -24,6 +25,7 @@ using Wander.Core.Persistence;
 using Wander.Core.Shell;
 // Disambiguate from System.Windows.DragAction (used by QueryContinueDrag).
 using DragAction = Wander.App.DragPreview.DragAction;
+
 
 namespace Wander.App;
 
@@ -1335,7 +1337,7 @@ public partial class MainWindow : Window {
         }
 
         if (e.OriginalSource is TreeViewItem tvi && tvi.DataContext is TreeNodeViewModel node) {
-            ExpandDirectChildren(node);
+            node.ExpandChildren();
         }
     }
 
@@ -1349,7 +1351,7 @@ public partial class MainWindow : Window {
         }
 
         if (e.OriginalSource is TreeViewItem tvi && tvi.DataContext is TreeNodeViewModel node) {
-            CollapseRecursively(node);
+            node.CollapseDescendants();
         }
     }
 
@@ -1362,24 +1364,6 @@ public partial class MainWindow : Window {
         }
 
         return false;
-    }
-
-    private static void ExpandDirectChildren(TreeNodeViewModel node) {
-        foreach (var child in node.Children) {
-            if (string.IsNullOrEmpty(child.FullPath)) {
-                continue;
-            }
-            child.IsExpanded = true;
-        }
-    }
-
-    private static void CollapseRecursively(TreeNodeViewModel node) {
-        foreach (var child in node.Children) {
-            if (child.IsExpanded) {
-                CollapseRecursively(child);
-                child.IsExpanded = false;
-            }
-        }
     }
 
 
@@ -1633,7 +1617,7 @@ public partial class MainWindow : Window {
             int added = 0;
             foreach (string p in paths) {
                 if (Directory.Exists(p)) {
-                    Vm.AddBookmark(p);
+                    Vm.Bookmarks.Add(p);
                     added++;
                 }
             }
@@ -1690,7 +1674,7 @@ public partial class MainWindow : Window {
             int added = 0;
             foreach (var p in paths) {
                 if (Directory.Exists(p)) {
-                    Vm.AddBookmark(p);
+                    Vm.Bookmarks.Add(p);
                     added++;
                 }
             }
@@ -1714,7 +1698,7 @@ public partial class MainWindow : Window {
         }
         var paths = (string[])e.Data.GetData(DataFormats.FileDrop);
 
-        return paths.Any(p => Directory.Exists(p) && !Vm.IsBookmarked(p));
+        return paths.Any(p => Directory.Exists(p) && !Vm.Bookmarks.Contains(p));
     }
 
     /// <summary>
