@@ -39,6 +39,13 @@ public sealed class TreeNodeViewModel : ObservableObject {
     public ObservableCollection<TreeNodeViewModel> Children { get; }
 
     /// <summary>
+    /// Whether this node stands on a real filesystem folder — what makes it
+    /// worth including in a <see cref="ProbeForChevrons"/> pass. Shell
+    /// namespaces and missing bookmarks are built without one.
+    /// </summary>
+    internal bool HasFileSystem => _fs is not null;
+
+    /// <summary>
     /// Bound to TreeViewItem.IsExpanded TwoWay. Wander never auto-collapses the tree
     /// without an explicit user gesture — programmatic <c>false</c> only happens
     /// when the user Alt-clicks the chevron (recursive collapse).
@@ -142,9 +149,11 @@ public sealed class TreeNodeViewModel : ObservableObject {
 
         _loaded = true;
         Children.Clear();
-        foreach (var child in ReadChildFolders()) {
+        var children = ReadChildFolders();
+        foreach (var child in children) {
             Children.Add(child);
         }
+        ProbeForChevrons(_fs, children);
     }
 
 
@@ -168,9 +177,12 @@ public sealed class TreeNodeViewModel : ObservableObject {
                     continue;
                 }
 
-                bool childHasChildren = _fs.HasSubdirectories(entry.FullPath);
+                // Every child starts with a chevron; ProbeForChevrons takes
+                // it off the leaves a beat later. Asking the disk here —
+                // one enumeration per child, on the UI thread — is what
+                // made expanding a branch on a slow drive freeze the window.
                 result.Add(new TreeNodeViewModel(
-                    entry.Name, entry.FullPath, EntryKind.Directory, _fs, childHasChildren,
+                    entry.Name, entry.FullPath, EntryKind.Directory, _fs, hasChildren: true,
                     _settings, entry.IsHidden));
             }
         } catch {
@@ -178,6 +190,55 @@ public sealed class TreeNodeViewModel : ObservableObject {
         }
 
         return result;
+    }
+
+
+    /// <summary>
+    /// Finds which of <paramref name="nodes"/> have no subfolders and takes
+    /// their chevrons away — off the UI thread, because the question is one
+    /// disk enumeration per node and the nodes were just drawn assuming
+    /// "yes". The optimistic default is Explorer's own behaviour: a chevron
+    /// that vanishes a moment later is barely visible, a window that stops
+    /// answering while a drive spins up is not.
+    /// </summary>
+    internal static void ProbeForChevrons(IFileSystem fs, IReadOnlyList<TreeNodeViewModel> nodes) {
+        if (nodes.Count == 0) {
+            return;
+        }
+
+        _ = Task.Run(() => {
+            var leaves = new List<TreeNodeViewModel>();
+            foreach (var node in nodes) {
+                if (!fs.HasSubdirectories(node.FullPath)) {
+                    leaves.Add(node);
+                }
+            }
+
+            if (leaves.Count == 0) {
+                return;
+            }
+
+            System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => {
+                foreach (var leaf in leaves) {
+                    leaf.SetLeaf();
+                }
+            });
+        });
+    }
+
+
+    /// <summary>
+    /// The probe's verdict landing: no subfolders, so no chevron. A node
+    /// that loaded for real in the meantime knows better and is left alone.
+    /// </summary>
+    private void SetLeaf() {
+        if (_loaded) {
+            return;
+        }
+
+        if (Children.Count == 1 && ReferenceEquals(Children[0], _placeholder)) {
+            Children.Clear();
+        }
     }
 
     private bool IsAllowedByFilters(FileSystemEntry entry) {
@@ -206,27 +267,36 @@ public sealed class TreeNodeViewModel : ObservableObject {
 
         if (!_isExpanded) {
             // Collapsed: nothing is on screen to keep, so drop the cache and
-            // leave the placeholder that draws the chevron.
+            // leave the placeholder that draws the chevron. Whether the
+            // chevron is still deserved is answered off the UI thread, same
+            // as everywhere else.
             _loaded = false;
             Children.Clear();
-            if (_fs is not null && _fs.HasSubdirectories(FullPath)) {
+            if (_fs is not null) {
                 Children.Add(_placeholder);
+                ProbeForChevrons(_fs, new[] { this });
             }
 
             return;
         }
 
         var fresh = ReadChildFolders();
+        List<TreeNodeViewModel>? added = null;
         for (int i = 0; i < fresh.Count; i++) {
             int existing = IndexOfChild(fresh[i].FullPath, i);
             if (existing < 0) {
                 Children.Insert(i, fresh[i]);
+                (added ??= new List<TreeNodeViewModel>()).Add(fresh[i]);
             } else if (existing != i) {
                 Children.Move(existing, i);
             }
         }
         while (Children.Count > fresh.Count) {
             Children.RemoveAt(Children.Count - 1);
+        }
+
+        if (added is not null && _fs is not null) {
+            ProbeForChevrons(_fs, added);
         }
 
         foreach (var child in Children) {

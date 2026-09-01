@@ -28,6 +28,7 @@
         <conv:ColorLabelBrushConverter x:Key="ColorLabelBrush"/>
         <conv:RatingBadgeVisibilityConverter x:Key="RatingBadge"/>
         <conv:FilterStarConverter x:Key="FilterStarGlyph"/>
+        <conv:CutRowConverter x:Key="IsCutRow"/>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
 
         <!--
@@ -247,6 +248,21 @@
                 <DataTrigger Binding="{Binding IsHidden}" Value="True">
                     <Setter Property="Opacity" Value="0.55"/>
                 </DataTrigger>
+                <!--
+                    Cut, not yet pasted. Explorer fades these the moment
+                    Ctrl+X is pressed, and the fade is the only thing that
+                    says the next paste will move them rather than copy.
+                -->
+                <DataTrigger Value="True">
+                    <DataTrigger.Binding>
+                        <MultiBinding Converter="{StaticResource IsCutRow}">
+                            <Binding Path="FullPath"/>
+                            <Binding Path="DataContext.CutPaths"
+                                     RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                        </MultiBinding>
+                    </DataTrigger.Binding>
+                    <Setter Property="Opacity" Value="0.45"/>
+                </DataTrigger>
             </Style.Triggers>
         </Style>
         <Style TargetType="DataGridCell">
@@ -287,6 +303,21 @@
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsHidden}" Value="True">
                     <Setter Property="Opacity" Value="0.55"/>
+                </DataTrigger>
+                <!--
+                    Cut, not yet pasted. Explorer fades these the moment
+                    Ctrl+X is pressed, and the fade is the only thing that
+                    says the next paste will move them rather than copy.
+                -->
+                <DataTrigger Value="True">
+                    <DataTrigger.Binding>
+                        <MultiBinding Converter="{StaticResource IsCutRow}">
+                            <Binding Path="FullPath"/>
+                            <Binding Path="DataContext.CutPaths"
+                                     RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                        </MultiBinding>
+                    </DataTrigger.Binding>
+                    <Setter Property="Opacity" Value="0.45"/>
                 </DataTrigger>
             </Style.Triggers>
         </Style>

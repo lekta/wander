@@ -47,6 +47,21 @@ internal static class IconImageCache {
 
 
     /// <summary>
+    /// The already-decoded image, if this path and size have been drawn
+    /// before. The distinction matters to <see cref="AsyncIcon"/>: a hit
+    /// here can go on screen synchronously (scrolling back over seen tiles
+    /// must not blink), while a miss means a real decode — work that has no
+    /// business on the UI thread, where a folder revisit used to run
+    /// hundreds of them in one second.
+    /// </summary>
+    public static bool TryGetDecoded(string path, IconSize size, out BitmapImage image) {
+        lock (_lock) {
+            return _images.TryGetValue((size, path), out image!);
+        }
+    }
+
+
+    /// <summary>
     /// The decoded form of <paramref name="bytes"/> for this path and size,
     /// decoding it only if this is the first time it is asked for.
     /// </summary>

@@ -41,6 +41,23 @@ public partial class MainWindow : Window {
     /// </summary>
     private bool _treeClickNavigates;
 
+    // --- Tree keyboard navigation, coalesced ----------------------------
+    // With TreeKeyboardNavigates on, a held arrow key selects several rows
+    // a second and each selection is a full navigation — listing, layout,
+    // thumbnails. Run every one and the window falls seconds behind the
+    // key (measured: ui.stall 3.6–4.9 s in the session log). A lone press
+    // still navigates immediately; only presses arriving on the heels of a
+    // navigation are held until the cursor settles, so a burst costs one
+    // listing — the folder the user stopped on.
+    /// <summary>A press this soon after a navigation is part of a burst.</summary>
+    private const int TreeNavBurstMs = 250;
+    /// <summary>How long the tree cursor has to rest before a burst navigates.</summary>
+    private const int TreeNavSettleMs = 90;
+
+    private DispatcherTimer? _treeNavDebounce;
+    private (TreeView Tree, string Path, NavigationSource Source)? _pendingTreeNav;
+    private long _lastTreeNavAtMs;
+
     private TreeNodeViewModel? _treeDragNode;
     private Point _treeDragOrigin;
     private TreeNodeViewModel? _treeMenuNode;
@@ -136,6 +153,9 @@ public partial class MainWindow : Window {
         if (!App.IsSmokeRun) {
             SaveWindowGeometry();
         }
+        // The session state is saved on a debounce; whatever it is still
+        // holding belongs to this session and goes out with it.
+        Vm.FlushState();
 
         // The search window refuses ordinary closes so it can be reopened
         // with its contents intact; this is the one close it must not
@@ -1039,8 +1059,21 @@ public partial class MainWindow : Window {
             return;
         }
 
-        if (_treeClickNavigates || Vm.Settings.TreeKeyboardNavigates) {
-            Vm.NavigateAndSelectFolder(node.FullPath, source);
+        if (_treeClickNavigates) {
+            NavigateFromTree(node.FullPath, source);
+
+            return;
+        }
+
+        if (Vm.Settings.TreeKeyboardNavigates) {
+            // A lone press navigates now; a press inside a burst waits for
+            // the cursor to settle. See the fields above for why.
+            if (Environment.TickCount64 - _lastTreeNavAtMs >= TreeNavBurstMs) {
+                NavigateFromTree(node.FullPath, source);
+            } else if (sender is TreeView panel) {
+                _pendingTreeNav = (panel, node.FullPath, source);
+                ArmTreeNavDebounce();
+            }
 
             return;
         }
@@ -1076,6 +1109,62 @@ public partial class MainWindow : Window {
 
 
     /// <summary>
+    /// The one door out of the folder panels into navigation. Every
+    /// immediate navigation goes through here so it also cancels whatever a
+    /// coalesced burst still holds — a click must not be followed 90 ms
+    /// later by a stale keyboard destination.
+    /// </summary>
+    private void NavigateFromTree(string path, NavigationSource source) {
+        _pendingTreeNav = null;
+        _treeNavDebounce?.Stop();
+
+        // Already there — nothing to navigate. This is not a corner case:
+        // after every navigation ExpandTo re-selects the row in the tree,
+        // and with TreeKeyboardNavigates on that echo arrives here as a
+        // navigation to the current folder. The controller would no-op it,
+        // but the ArrivalIntent planted first would dangle and be consumed
+        // by the next listing — which is how Backspace stopped highlighting
+        // the folder it came out of: the echo's "select the folder in the
+        // tree" overwrote the arrival's "select the row we left through".
+        if (string.Equals(path, Vm.CurrentPath, StringComparison.OrdinalIgnoreCase)) {
+            return;
+        }
+
+        _lastTreeNavAtMs = Environment.TickCount64;
+        Vm.NavigateAndSelectFolder(path, source);
+    }
+
+
+    private void ArmTreeNavDebounce() {
+        if (_treeNavDebounce is null) {
+            _treeNavDebounce = new DispatcherTimer(DispatcherPriority.Input) {
+                Interval = TimeSpan.FromMilliseconds(TreeNavSettleMs),
+            };
+            _treeNavDebounce.Tick += (_, _) => {
+                _treeNavDebounce!.Stop();
+                if (_pendingTreeNav is not { } pending) {
+                    return;
+                }
+
+                _pendingTreeNav = null;
+                // The keyboard has left the panel — the user moved on
+                // mid-burst, and this destination is not theirs any more.
+                // (A pending path that is already current is dropped by
+                // NavigateFromTree itself.)
+                if (!pending.Tree.IsKeyboardFocusWithin) {
+                    return;
+                }
+
+                NavigateFromTree(pending.Path, pending.Source);
+            };
+        }
+
+        _treeNavDebounce.Stop();
+        _treeNavDebounce.Start();
+    }
+
+
+    /// <summary>
     /// Enter opens the folder under the cursor, Esc hands the keyboard back
     /// to the list. Both have to be caught here: the window's own bindings
     /// would otherwise open whatever the <em>file list</em> has selected and
@@ -1088,7 +1177,7 @@ public partial class MainWindow : Window {
 
         if (e.Key == Key.Enter) {
             if (tree.SelectedItem is TreeNodeViewModel node && !string.IsNullOrEmpty(node.FullPath)) {
-                Vm.NavigateAndSelectFolder(
+                NavigateFromTree(
                     node.FullPath,
                     ReferenceEquals(tree, BookmarksTree) ? NavigationSource.Bookmark : NavigationSource.Drives);
             }
@@ -1245,7 +1334,7 @@ public partial class MainWindow : Window {
             && sender is TreeView tree
             && ReferenceEquals(tree.SelectedItem, clicked)) {
 
-            Vm.NavigateAndSelectFolder(
+            NavigateFromTree(
                 clicked.FullPath,
                 ReferenceEquals(tree, BookmarksTree) ? NavigationSource.Bookmark : NavigationSource.Drives);
         }

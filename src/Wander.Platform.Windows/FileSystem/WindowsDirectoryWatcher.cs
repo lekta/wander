@@ -29,6 +29,11 @@ public sealed class WindowsDirectoryWatcher : IDirectoryWatcher {
 
     private FileSystemWatcher? _watcher;
 
+    // Which Watch() call is the current one. Retargeting runs on the pool,
+    // and two calls can be in flight at once — the check inside Retarget is
+    // what stops the older one clobbering what the newer one built.
+    private int _generation;
+
 
     public WindowsDirectoryWatcher(ILogger log) {
         _log = log;
@@ -38,8 +43,35 @@ public sealed class WindowsDirectoryWatcher : IDirectoryWatcher {
     public event EventHandler<DirectoryChange>? Changed;
 
 
+    /// <summary>
+    /// Never blocks the caller. Pointing <see cref="FileSystemWatcher"/> at
+    /// a folder opens a directory handle, and on a sleeping drive or a slow
+    /// share that open takes seconds — while navigation calls this on the
+    /// UI thread on every step. The handoff runs on the pool; a call that
+    /// is overtaken by a newer one simply stands down.
+    /// </summary>
     public void Watch(string? path) {
+        int gen = Interlocked.Increment(ref _generation);
+        Task.Run(() => Retarget(gen, path));
+    }
+
+
+    public void Dispose() {
+        // Queued retargets see the bumped generation and stand down instead
+        // of resurrecting a watcher after this one is gone.
+        Interlocked.Increment(ref _generation);
         lock (_lock) {
+            Stop();
+        }
+    }
+
+
+    private void Retarget(int gen, string? path) {
+        lock (_lock) {
+            if (gen != Volatile.Read(ref _generation)) {
+                return;
+            }
+
             Stop();
 
             if (string.IsNullOrEmpty(path) || !Directory.Exists(path)) {
@@ -47,13 +79,6 @@ public sealed class WindowsDirectoryWatcher : IDirectoryWatcher {
             }
 
             _watcher = Create(path);
-        }
-    }
-
-
-    public void Dispose() {
-        lock (_lock) {
-            Stop();
         }
     }
 

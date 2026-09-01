@@ -49,13 +49,18 @@ public sealed class MainViewModel : ObservableObject {
     private const int WatchIntervalMs = 500;
 
     /// <summary>
+    /// How long navigation has to stay quiet before state.json is written.
+    /// See the constructor's note at <see cref="_stateSaveTimer"/>.
+    /// </summary>
+    private const int StateSaveDelayMs = 500;
+
+    /// <summary>
     /// How often a running search may repaint the list. Refilling the bound
     /// collection raises one Reset and one full re-layout, and a search over
     /// a deep tree finds something in hundreds of folders — pushing each
     /// batch as it lands would spend the whole search re-laying-out. A fifth
     /// of a second still looks like results streaming in.
     /// </summary>
-    private const int ResultFlushIntervalMs = 200;
 
     private readonly IFileSystem _fs;
     private readonly IShellLauncher _shell;
@@ -112,7 +117,6 @@ public sealed class MainViewModel : ObservableObject {
     // has walked into another folder would push that folder's rows over
     // this one's.
     private readonly CompanionMetadataService? _companionMetadata;
-    private CancellationTokenSource? _ratingCts;
     private bool _hasRatings;
 
     // True while rows are being swapped for updated copies. The list drops
@@ -129,6 +133,9 @@ public sealed class MainViewModel : ObservableObject {
     private readonly IDirectoryWatcher? _watcher;
     private readonly DispatcherTimer? _watchTimer;
 
+    // Debounce for state.json — see the constructor for why.
+    private readonly DispatcherTimer _stateSaveTimer;
+
     // What has changed in the folder since the last tick. An accumulator
     // rather than a flag, because "something changed" can only be answered
     // by re-listing everything, and that is exactly the answer that makes
@@ -141,18 +148,20 @@ public sealed class MainViewModel : ObservableObject {
     // folder empties it first.
     private string? _listedPath;
 
-    // Paths to re-select once the pending listing lands. Set by whoever knows
-    // better than "whatever was selected before" — a rename knows the new
-    // name, an undo knows what it put back.
-    private string[] _restoreSelection = Array.Empty<string>();
-    private string? _renameAfterRestore;
+    // Which listing the rows on screen belong to. Bumped whenever a new one
+    // starts, and captured by every background pass that computes rows for
+    // it — a pass that comes back for an older epoch is answering about a
+    // folder nobody is looking at any more. One question, asked in one way,
+    // instead of a separate "is this still mine" check invented by each
+    // pass. See PublishRows.
+    private int _listingEpoch;
 
-    // A folder picked in the tree or the bookmarks. Applied once its own
-    // listing has landed: doing it before would only be overwritten, because
-    // rebuilding the list clears whatever the containers had selected.
-    private string? _selectFolderAfterListing;
-    /// <summary>Path a <see cref="RevealPath"/> is waiting to select once its folder lists.</summary>
-    private string? _revealPathAfterListing;
+    // What to select once the pending listing lands — one field, because it
+    // is one question. Set by whoever knows better than "whatever was
+    // selected before": a rename knows the new name, an undo knows what it
+    // put back, a click in the tree knows the folder. See ArrivalIntent for
+    // why there is only one.
+    private ArrivalIntent? _arrival;
 
     // Where the user was in each folder they have been in, so coming back
     // lands on the same row. Capped and oldest-first: a long session walks
@@ -170,17 +179,11 @@ public sealed class MainViewModel : ObservableObject {
     // Rows the running (or last) search found, in arrival order. Kept apart
     // from Entries so a re-sort has something to sort: Entries is the
     // projection on screen, this is the result set behind it.
-    private readonly List<FileSystemEntry> _searchResults = new();
-    private readonly HashSet<string> _resultPaths = new(StringComparer.OrdinalIgnoreCase);
-    private DispatcherTimer? _resultFlushTimer;
-    private bool _resultsDirty;
 
     // The quick filter's own pass seeds the result list with the folder's
     // matches and then walks underneath it, so the walk re-finds what is
     // already there — hence the path set above — and the two halves have
     // to stay apart on screen: here first, below after.
-    private bool _resultsHereFirst;
-    private string? _resultRoot;
     private bool _isSearchWindowOpen;
 
     private bool _restoring;
@@ -211,12 +214,37 @@ public sealed class MainViewModel : ObservableObject {
             _watchTimer.Tick += OnWatchTick;
         }
 
+        // One write per quiet moment instead of one per keystroke: holding
+        // an arrow key in the tree navigates several times a second, and
+        // each navigation used to read and rewrite state.json on the UI
+        // thread. The state is a convenience ("open where I left off"), so
+        // the last half-second of it is not worth a disk write per step —
+        // MainWindow flushes on close for the write still pending there.
+        _stateSaveTimer = new DispatcherTimer(DispatcherPriority.Background, _dispatcher) {
+            Interval = TimeSpan.FromMilliseconds(StateSaveDelayMs),
+        };
+        _stateSaveTimer.Tick += (_, _) => {
+            _stateSaveTimer.Stop();
+            WriteStateNow();
+        };
+
         _companionMetadata = ServiceLocator.TryGet<CompanionMetadataService>();
+
+        Ratings = new RatingsController(
+            _fs, _companions, _companionMetadata, _search, Settings, _log,
+            isCurrent: epoch => epoch == _listingEpoch,
+            publish: PublishRows,
+            ask: question => MessageBox.Show(
+                question, Strings.ConfirmCreateSidecarTitle,
+                MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) == MessageBoxResult.Yes);
+        Ratings.HasRatingsChanged += (_, value) => HasRatings = value;
+        Ratings.StatusReported += (_, text) => Status = text;
+        Ratings.CompanionsChanged += (_, _) => Preview.ReloadCompanions();
 
         Preview = new PreviewController(
             ServiceLocator.TryGet<IImageMetadataReader>(),
             _companionMetadata,
-            ApplyRatingToPrimary,
+            Ratings.ApplyToPrimary,
             RevealPath);
 
         _nav = new NavigationController(
@@ -234,7 +262,6 @@ public sealed class MainViewModel : ObservableObject {
             });
 
         Entries = new BulkObservableCollection<FileSystemEntry>();
-        Roots = new ObservableCollection<TreeNodeViewModel>();
         Operations = new ObservableCollection<OperationViewModel>();
 
         // Settings VM is owned by MainVM and shared with the dialog when it
@@ -246,10 +273,17 @@ public sealed class MainViewModel : ObservableObject {
         Shell = new ShellCommandsController(_shell, _log);
         Shell.StatusReported += (_, text) => Status = text;
 
+        // The trees are created first and handed a way to look at the
+        // bookmark rows, because everything that spans both panels lives
+        // with them. The lambda is not called during construction, so the
+        // bookmarks panel being one line away is fine.
+        Trees = new FolderTreesController(_fs, Settings, () => Bookmarks.Items);
+        Trees.ExpansionChanged += (_, _) => SaveState();
+
         // Wiring a fresh node is the trees' bookkeeping, not the panel's, so
         // the controller is handed that one operation and owns everything
         // else about bookmarks itself.
-        Bookmarks = new BookmarksController(_fs, Settings, _log, WireTreeNode);
+        Bookmarks = new BookmarksController(_fs, Settings, _log, Trees.Wire);
         Bookmarks.StatusReported += (_, text) => Status = text;
         Bookmarks.Changed += (_, _) => {
             Bookmarks.Build(_persistedExpandedPaths);
@@ -327,7 +361,10 @@ public sealed class MainViewModel : ObservableObject {
             Raise(nameof(UndoTooltip));
         });
 
-        _clipboard.Changed += (_, _) => PasteCommand.RaiseCanExecuteChanged();
+        _clipboard.Changed += (_, _) => {
+            PasteCommand.RaiseCanExecuteChanged();
+            Raise(nameof(CutPaths));
+        };
 
         // The controller decides for itself when to run, so it needs the
         // two things only the view model knows — where we are and what may
@@ -339,10 +376,15 @@ public sealed class MainViewModel : ObservableObject {
             () => _nav.Current,
             () => Settings.Visibility,
             _log);
+
+        SearchResults = new SearchResultsController(ContentSearch, _fs, Settings, _dispatcher);
+        SearchResults.RowsChanged += (_, rows) => Entries.ReplaceAll(rows);
+        SearchResults.StatusReported += (_, text) => Status = text;
+
         ContentSearch.Started += BeginSearchResults;
-        ContentSearch.BatchArrived += AppendSearchResults;
-        ContentSearch.Progressed += ShowSearchProgress;
-        ContentSearch.Finished += FinishSearch;
+        ContentSearch.BatchArrived += SearchResults.Append;
+        ContentSearch.Progressed += SearchResults.ReportProgress;
+        ContentSearch.Finished += SearchResults.Finish;
         ContentSearch.ShallowChanged += SyncLiveFilter;
         ContentSearch.PropertyChanged += OnContentSearchChanged;
 
@@ -375,9 +417,9 @@ public sealed class MainViewModel : ObservableObject {
                 ReconcileEntries(() => SyncEntries(filtered));
             }
             UpdateFilterStatus(filtered.Count, _search.Source.Count);
-            ApplyRestoreSelection();
-            ApplyPendingFolderSelection();
-            ApplyPendingReveal();
+            using (PerfLog.Measure("ui.restore")) {
+                ApplyArrival();
+            }
         };
         _search.ItemsChanged += changed => {
             if (ContentSearch.IsShowingResults) {
@@ -401,7 +443,7 @@ public sealed class MainViewModel : ObservableObject {
             }
         };
 
-        LoadRoots();
+        Trees.LoadRoots();
         RestoreState();
         // Restored settings decide how big the thumbnail caches may be; the
         // provider starts idle until it is told.
@@ -437,11 +479,27 @@ public sealed class MainViewModel : ObservableObject {
 
 
     public BulkObservableCollection<FileSystemEntry> Entries { get; }
-    public ObservableCollection<TreeNodeViewModel> Roots { get; }
     public ObservableCollection<OperationViewModel> Operations { get; }
 
     /// <summary>The left panel's bookmarks — the rows and the list behind them.</summary>
     public BookmarksController Bookmarks { get; }
+
+    /// <summary>The drives tree, and what both folder panels share.</summary>
+    public FolderTreesController Trees { get; }
+
+    /// <summary>Stars and colour labels — reading them, writing them, keeping rows in step.</summary>
+    public RatingsController Ratings { get; }
+
+    /// <summary>The rows a deep search puts on the list, and their bookkeeping.</summary>
+    public SearchResultsController SearchResults { get; }
+
+    /// <summary>
+    /// The files waiting to be moved, so the list can fade them. Empty for a
+    /// copy: a copy leaves the originals exactly where they are, and fading
+    /// them would promise a move that is not going to happen.
+    /// </summary>
+    public IReadOnlyList<string> CutPaths =>
+        _clipboard.IsCut ? _clipboard.Paths : Array.Empty<string>();
 
     /// <summary>Verbs that hand a path to the system and are done with it.</summary>
     public ShellCommandsController Shell { get; }
@@ -1017,7 +1075,7 @@ public sealed class MainViewModel : ObservableObject {
                 if (stop.Source == NavigationSource.Bookmark) {
                     continue;
                 }
-                foreach (var root in Roots) {
+                foreach (var root in Trees.Roots) {
                     if (root.TryExpandToPath(stop.Path, select: false, expandTarget: true)) {
                         break;
                     }
@@ -1025,7 +1083,7 @@ public sealed class MainViewModel : ObservableObject {
             }
 
             // Build the bookmarks tree *before* the initial navigation —
-            // OnNavigationChanged → ExpandTreeToCurrent walks Bookmarks
+            // OnNavigationChanged → Trees.ExpandTo walks the bookmarks
             // for source=Bookmark, and if it's still empty the expander
             // falls back to drives, defeating the whole point of the
             // restored source.
@@ -1049,7 +1107,7 @@ public sealed class MainViewModel : ObservableObject {
             if (wantRestore) {
                 _nav.NavigateTo(session.LastPath!.Path, session.LastPath.Source);
             } else {
-                string? first = Roots.FirstOrDefault()?.FullPath;
+                string? first = Trees.Roots.FirstOrDefault()?.FullPath;
                 if (first is not null) {
                     _nav.NavigateTo(first, NavigationSource.External);
                 }
@@ -1059,11 +1117,39 @@ public sealed class MainViewModel : ObservableObject {
         }
     }
 
+    /// <summary>
+    /// Asks for the session state to be written once the current burst of
+    /// changes is over. Every navigation, expansion and pane resize calls
+    /// this; the actual write happens in <see cref="WriteStateNow"/> when
+    /// the timer runs out.
+    /// </summary>
     private void SaveState() {
         if (_restoring || Bookmarks.IsBuilding) {
             return;
         }
 
+        _stateSaveTimer.Stop();
+        _stateSaveTimer.Start();
+    }
+
+
+    /// <summary>
+    /// Writes a pending save out immediately. The window calls this while
+    /// closing — the debounce would otherwise drop whatever changed in the
+    /// last half-second of the session, which is exactly the state "open
+    /// where I left off" needs.
+    /// </summary>
+    public void FlushState() {
+        if (!_stateSaveTimer.IsEnabled) {
+            return;
+        }
+
+        _stateSaveTimer.Stop();
+        WriteStateNow();
+    }
+
+
+    private void WriteStateNow() {
         // Read-modify-write: AppState also carries Window geometry (saved
         // by MainWindow.xaml.cs) and Settings (edited via the dialog). If
         // we replaced the whole record here we'd silently wipe those on
@@ -1079,7 +1165,7 @@ public sealed class MainViewModel : ObservableObject {
                     .Where(_manualViewModes.ContainsKey)
                     .Select(p => new FolderViewMode(p, _manualViewModes[p].ToString()))
                     .ToArray(),
-                ExpandedPaths = CollectExpanded(),
+                ExpandedPaths = Trees.CollectExpanded(),
                 IsPreviewVisible = _isPreviewVisible,
                 PreviewWidth = _previewWidth,
                 BookmarksHeight = _bookmarksHeight,
@@ -1125,21 +1211,6 @@ public sealed class MainViewModel : ObservableObject {
     }
 
 
-    private List<NavigationStop> CollectExpanded() {
-        var result = new List<NavigationStop>();
-        foreach (var root in Roots) {
-            root.CollectExpanded(result, NavigationSource.Drives);
-        }
-        foreach (var bookmark in Bookmarks.Items) {
-            bookmark.CollectExpanded(result, NavigationSource.Bookmark);
-        }
-        // Dedupe on (Path, Source). The same path can legitimately appear
-        // in both panels (e.g. a user-favourite that is also reachable via
-        // drives) — those are separate expansion states and both kept.
-        return result.Distinct().ToList();
-    }
-
-
     // --- Navigation glue -----------------------------------------------
 
     private void OnNavigationChanged() {
@@ -1147,7 +1218,7 @@ public sealed class MainViewModel : ObservableObject {
         // is the last moment its selection can be noted — and the last
         // moment the folder we came out of is known.
         RememberSelection();
-        PlanArrivalSelection();
+        PlanArrival();
 
         // Drop any active filter when the user moves to a new folder — the
         // filter is scoped to "the folder I'm looking at right now".
@@ -1163,15 +1234,30 @@ public sealed class MainViewModel : ObservableObject {
         // raises IsShowingResults, whose handler re-lists the folder when
         // it still sees rows — and the Refresh below would then be the
         // second listing of the same folder in one navigation.
-        StopResultFlushTimer();
-        ClearSearchResults();
+        SearchResults.Clear();
         ContentSearch.Reset();
-        Refresh();
+
+        // Every step below runs on the dispatcher before the new folder can
+        // be drawn, and some still touch the disk — the tree enumerates
+        // children as it expands. Measured separately because "opening
+        // a folder is slow" has to become "this part of opening a folder is
+        // slow" before it can be fixed; see PerfLog in the session log.
+        using (PerfLog.Measure("nav.refresh")) {
+            Refresh();
+        }
         ContentSearch.NoteRootChanged();
-        ExpandTreeToCurrent();
-        Preview.SetCurrentFolder(_nav.Current, WindowTitle);
-        UpdateFolderWatch();
-        SaveState();
+        using (PerfLog.Measure("nav.trees")) {
+            ExpandCurrentInTrees();
+        }
+        using (PerfLog.Measure("nav.preview")) {
+            Preview.SetCurrentFolder(_nav.Current, WindowTitle);
+        }
+        using (PerfLog.Measure("nav.watch")) {
+            UpdateFolderWatch();
+        }
+        using (PerfLog.Measure("nav.state")) {
+            SaveState();
+        }
     }
 
 
@@ -1207,25 +1293,28 @@ public sealed class MainViewModel : ObservableObject {
     /// and a click in the tree have each filled in their own intent.
     /// </para>
     /// </summary>
-    private void PlanArrivalSelection() {
-        // Whatever was pending belongs to the folder being left — including
-        // an intent that an empty folder never got to consume.
-        _restoreSelection = Array.Empty<string>();
+    private void PlanArrival() {
+        // An intent for another folder belongs to a navigation this one
+        // overtook — including the plain "keep what was selected", which
+        // always names the folder being left.
+        if (_arrival is { } pending && !IsSamePath(pending.ForFolder, _nav.Current)) {
+            _arrival = null;
+        }
 
-        if (_selectFolderAfterListing is not null
-            || _revealPathAfterListing is not null
-            || _nav.Current is not { } arriving) {
+        // A caller that already said what it wants said it about this
+        // navigation, one line before starting it. Nothing to guess.
+        if (_arrival is not null || _nav.Current is not { } arriving) {
             return;
         }
 
         if (_listedPath is { } left && IsSamePath(arriving, ParentOf(left))) {
-            _restoreSelection = new[] { left };
+            _arrival = ArrivalIntent.Rows(arriving, new[] { left });
 
             return;
         }
 
         if (_selectionMemory.TryGetValue(arriving, out string? remembered)) {
-            _restoreSelection = new[] { remembered };
+            _arrival = ArrivalIntent.Rows(arriving, new[] { remembered });
         }
     }
 
@@ -1298,7 +1387,7 @@ public sealed class MainViewModel : ObservableObject {
             // Subfolders are rows in the panels as well as in the list, and
             // the composition that changed is theirs too.
             if (_nav.Current is { Length: > 0 } here) {
-                RefreshTreeNodesFor(here);
+                Trees.RefreshFor(here);
             }
 
             return;
@@ -1319,96 +1408,32 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
         if (touched.Count > 0) {
-            _ = RefreshMetadataRowsAsync(touched.Select(r => r.FullPath).ToArray());
+            _ = Ratings.RefreshRowsAsync(touched.Select(r => r.FullPath).ToArray());
         }
     }
 
-    private TreeNodeViewModel? _lastSelectedTreeNode;
 
-    private void ExpandTreeToCurrent() {
-        if (_nav.Current is null) {
-            return;
-        }
+    // --- Folder panels ---------------------------------------------------
+    // The panels themselves are FolderTreesController's. These two say
+    // *which* folder to open them to, which is the only part that needs to
+    // know where the user is standing.
 
-        // Clear the previously selected tree node. IsSelected is two-way
-        // bound to the VM, so leaving it set keeps the prior bookmark/drive
-        // node visually highlighted when navigation jumps between panels.
-        if (_lastSelectedTreeNode is not null) {
-            _lastSelectedTreeNode.IsSelected = false;
-            _lastSelectedTreeNode = null;
-        }
 
-        var src = _nav.CurrentSource ?? NavigationSource.External;
-
-        // Source-aware expansion: a navigation that originated in the
-        // bookmarks panel (including replayed history) re-expands only the
-        // bookmarks tree, never the drives tree. Falls back to drives when
-        // the path is no longer reachable via any bookmark — typically
-        // because the user removed the bookmark since the history entry
-        // was recorded.
-        bool ok = false;
-        if (src == NavigationSource.Bookmark) {
-            ok = TryExpandAndSelectIn(Bookmarks.Items, _nav.Current);
-        }
-        if (!ok) {
-            TryExpandAndSelectIn(Roots, _nav.Current);
+    private void ExpandCurrentInTrees() {
+        if (_nav.Current is { } here) {
+            Trees.ExpandTo(here, _nav.CurrentSource ?? NavigationSource.External);
         }
     }
+
 
     /// <summary>
-    /// Expands one of the two folder panels down to the folder on screen and
-    /// selects its node — what Ctrl+2 and Ctrl+Shift+E point the keyboard
-    /// at. False when the folder is not reachable in that panel (a path
-    /// outside every bookmark, typically); the highlight is then put back
-    /// where it was rather than leaving both panels blank.
+    /// Opens one named panel down to the folder on screen and puts the
+    /// highlight there — what <c>Ctrl+2</c> and <c>Ctrl+Shift+E</c> point
+    /// the keyboard at. False when the folder is not reachable in that
+    /// panel.
     /// </summary>
     public bool RevealCurrentIn(NavigationSource panel) {
-        if (_nav.Current is null) {
-            return false;
-        }
-
-        var previous = _lastSelectedTreeNode;
-        if (previous is not null) {
-            // Cleared before the search: FindSelectedDescendant looks for a
-            // selected node and would otherwise find this one.
-            previous.IsSelected = false;
-            _lastSelectedTreeNode = null;
-        }
-
-        if (TryExpandAndSelectIn(panel == NavigationSource.Bookmark ? Bookmarks.Items : Roots, _nav.Current)) {
-            return true;
-        }
-
-        if (previous is not null) {
-            previous.IsSelected = true;
-            _lastSelectedTreeNode = previous;
-        }
-
-        return false;
-    }
-
-
-    private bool TryExpandAndSelectIn(IEnumerable<TreeNodeViewModel> nodes, string path) {
-        foreach (var node in nodes) {
-            if (node.TryExpandToPath(path, select: true)) {
-                _lastSelectedTreeNode = node.FindSelected();
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /// <summary>
-    /// Moves the tree highlight onto one node. <c>IsSelected</c> is two-way
-    /// bound, so whatever had it has to be told to let go — otherwise two
-    /// rows stay highlighted once the panel is rebuilt underneath them.
-    /// </summary>
-    private void SelectTreeNode(TreeNodeViewModel node) {
-        if (_lastSelectedTreeNode is not null) {
-            _lastSelectedTreeNode.IsSelected = false;
-        }
-        node.IsSelected = true;
-        _lastSelectedTreeNode = node;
+        return _nav.Current is { } here && Trees.RevealIn(panel, here);
     }
 
 
@@ -1420,7 +1445,7 @@ public sealed class MainViewModel : ObservableObject {
         // whose files are gone. That is what makes a delete or a rename
         // done on a result actually leave the list.
         if (ContentSearch.IsShowingResults) {
-            PruneMissingResults();
+            SearchResults.PruneMissing();
             // Results are a list of their own, not a folder listing — the
             // "this folder is gone" panel has nothing to sit on top of.
             SetMissingFolder(null);
@@ -1433,10 +1458,13 @@ public sealed class MainViewModel : ObservableObject {
         RenamingPath = null;
 
         // Default intent: whatever is selected now stays selected once the
-        // new listing lands. Callers that know better (rename, undo) have
-        // already filled this in.
-        if (_restoreSelection.Length == 0) {
-            _restoreSelection = _selectedEntries.Select(e => e.FullPath).ToArray();
+        // new listing lands. Callers that know better (rename, undo, a click
+        // in the tree) have already filled this in.
+        // Nothing selected means nothing to put back, and an intent that
+        // asks for nothing would only stop ReconcileEntries doing its own
+        // job below.
+        if (_arrival is null && _nav.Current is { } staying && _selectedEntries.Count > 0) {
+            _arrival = ArrivalIntent.Rows(staying, _selectedEntries.Select(e => e.FullPath).ToArray());
         }
 
         // Any in-flight shell enumeration from a previous navigation is
@@ -1487,21 +1515,23 @@ public sealed class MainViewModel : ObservableObject {
         _listLoadCts?.Cancel();
         _listLoadCts = new CancellationTokenSource();
         var token = _listLoadCts.Token;
+        int epoch = ++_listingEpoch;
 
-        // Emptying the list first is right when we are *leaving* a folder:
-        // stale rows on screen invite a double-click on a file that is not
-        // here any more. Refreshing the folder already on screen is the
-        // opposite case — clearing it there is what made every rename,
-        // delete and F5 blink and drop the selection, so that listing is
-        // reconciled in place once the new one arrives.
         // "Arriving" as opposed to re-listing what is already on screen —
         // the view mode is chosen for a folder the user walks into, not
         // every time F5 or a rename re-reads the one they are standing in.
+        // The rows of the folder being left are *not* cleared here: tearing
+        // down a listing is a synchronous Reset the whole window waits for
+        // (90 ms on a folder of thumbnails, measured), and the replacement
+        // is usually a few milliseconds behind. The stale rows stand until
+        // the new listing lands and replaces them in one swap — or until
+        // the load turns out slow, where they are cleared together with
+        // raising the spinner, so nothing invites a double-click on a file
+        // that is not there any more.
         bool arriving = !IsSamePath(path, _listedPath);
         if (arriving) {
             _hiddenCount = 0;
             _listedPath = null;
-            _search.SetSource(Array.Empty<FileSystemEntry>());
         }
         string statusBeforeLoad = Status;
         var started = System.Diagnostics.Stopwatch.StartNew();
@@ -1539,8 +1569,13 @@ public sealed class MainViewModel : ObservableObject {
 
         // The spinner is a dimming overlay — raising it for the two frames a
         // local folder takes would make every navigation flash. Only slow
-        // folders get it.
+        // folders get it — and only then are the stale rows of the folder
+        // being left cleared, because from here on they would be on screen
+        // long enough to be clicked.
         if (await Task.WhenAny(work, Task.Delay(SpinnerDelayMs)) != work && !token.IsCancellationRequested) {
+            if (arriving) {
+                _search.SetSource(Array.Empty<FileSystemEntry>());
+            }
             IsListLoading = true;
         }
 
@@ -1550,11 +1585,24 @@ public sealed class MainViewModel : ObservableObject {
                 return;
             }
 
+            // Landing the rows is the expensive UI moment of a navigation:
+            // one Reset, a teardown of the old containers and a realise of
+            // the new ones. It steps below input priority so that whatever
+            // the user does next — a key, a click, the next navigation —
+            // is served first; a landing made stale while yielding is
+            // dropped by the token here and the epoch check in PublishRows.
+            await Dispatcher.Yield(DispatcherPriority.Background);
+            if (token.IsCancellationRequested) {
+                return;
+            }
+
             _hiddenCount = hidden;
             _listedPath = path;
             SetMissingFolder(null);
             if (arriving) {
-                AutoSelectViewMode(items, path);
+                using (PerfLog.Measure("ui.autoview")) {
+                    AutoSelectViewMode(items, path);
+                }
             }
             // One line per slow arrival, with what it cost and how much
             // there was — enough to tell "a folder of forty thousand files"
@@ -1569,11 +1617,11 @@ public sealed class MainViewModel : ObservableObject {
             // items") while we were enumerating; the listing's own
             // "N items" must not eat that message.
             string reported = Status;
-            _search.SetSource(items);
+            PublishRows(epoch, items);
             if (reported != statusBeforeLoad) {
                 Status = reported;
             }
-            StartRatingPass(items, path, sort);
+            Ratings.StartPass(items, path, sort, epoch, arriving);
         } catch (OperationCanceledException) {
             return;
         } catch (Exception ex) when (ex is DirectoryNotFoundException or DriveNotFoundException) {
@@ -1609,6 +1657,7 @@ public sealed class MainViewModel : ObservableObject {
         _listLoadCts?.Cancel();
         _listLoadCts = new CancellationTokenSource();
         var token = _listLoadCts.Token;
+        int epoch = ++_listingEpoch;
 
         IsListLoading = true;
         _hiddenCount = 0;
@@ -1640,9 +1689,9 @@ public sealed class MainViewModel : ObservableObject {
             // No sidecars in a shell namespace, and no picture-folder
             // guessing either: the Recycle Bin is a list of things to
             // decide about, not a folder to look at.
-            _ratingCts?.Cancel();
+            Ratings.Cancel();
             HasRatings = false;
-            _search.SetSource(items.ToList());
+            PublishRows(epoch, items.ToList());
         } finally {
             // Only release the spinner if our load is still the active one.
             // A superseded load (token cancelled) leaves IsListLoading=true
@@ -1659,6 +1708,28 @@ public sealed class MainViewModel : ObservableObject {
     /// containers — that is what stops the list blinking on every refresh
     /// and what lets the selection survive a rename or a delete.
     /// </summary>
+    /// <summary>
+    /// The one way a computed set of rows reaches the list.
+    ///
+    /// <para>
+    /// Every producer runs off the UI thread and can finish after the folder
+    /// it was reading has been left, refreshed or replaced by search results.
+    /// Each used to answer "is this still mine?" its own way — a cancellation
+    /// token here, a path comparison there — and each new pass arrived with a
+    /// new variation, including one that compared paths and so could not tell
+    /// "the same folder" from "the same folder, listed again". They all carry
+    /// the epoch they were computed for instead, and it is checked here.
+    /// </para>
+    /// </summary>
+    private void PublishRows(int epoch, IReadOnlyList<FileSystemEntry> items) {
+        if (epoch != _listingEpoch) {
+            return;
+        }
+
+        _search.SetSource(items);
+    }
+
+
     private void SyncEntries(IReadOnlyList<FileSystemEntry> items) {
         // The moment a folder's listing lands on the UI thread — the one
         // hitch a person notices when opening a folder.
@@ -1737,45 +1808,66 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     /// <summary>
-    /// Puts the selection back on the rows the last operation asked for.
-    /// Consumed once: the next filter keystroke must not re-select anything.
+    /// Does whatever the pending <see cref="ArrivalIntent"/> asked for, now
+    /// that a listing has landed. The one place an intent is consumed.
     /// </summary>
-    private void ApplyRestoreSelection() {
+    private void ApplyArrival() {
+        if (_arrival is not { } intent) {
+            return;
+        }
+
+        // Somebody else's listing. The intent keeps waiting for its own —
+        // a navigation that overtook this one is dropped in PlanArrival,
+        // not here.
+        if (!IsSamePath(intent.ForFolder, _nav.Current)) {
+            return;
+        }
+
+        if (intent.Action == ArrivalAction.SelectFolderItself) {
+            // A folder is not a row in its own listing, so an empty listing
+            // is no obstacle: there is nothing to look for in it.
+            _arrival = null;
+            SelectExternalPath(intent.Paths[0]);
+
+            return;
+        }
+
         // An empty list is not an answer, it is the gap between leaving one
         // folder and the next one listing: arriving somewhere new empties
         // the rows first (see RefreshFolderAsync), and consuming the intent
         // there is what stopped "up one level" from highlighting the folder
         // it came out of.
-        if (_restoreSelection.Length == 0 || Entries.Count == 0) {
+        if (Entries.Count == 0) {
             return;
         }
 
-        var wanted = new HashSet<string>(_restoreSelection, StringComparer.OrdinalIgnoreCase);
-        _restoreSelection = Array.Empty<string>();
-
+        _arrival = null;
+        var wanted = new HashSet<string>(intent.Paths, StringComparer.OrdinalIgnoreCase);
         var found = Entries.Where(e => wanted.Contains(e.FullPath)).ToList();
         if (found.Count == 0) {
             // Nothing to land on — and nothing for the list to take the
             // keyboard back onto, so the request does not carry over to
             // whichever restore happens next.
             FocusListAfterRestore = false;
-            _renameAfterRestore = null;
 
             return;
         }
 
+        // Added to, never overwritten. The flag also carries a request that
+        // nobody in this listing made — an operation that ran behind a modal
+        // dialog, a view mode that swapped the control out from under the
+        // keyboard — and clearing it here is what left the file area without
+        // focus after walking into a gallery folder, so that the next
+        // Backspace went to whatever had the keyboard instead.
+        FocusListAfterRestore |= intent.TakeFocus;
         SelectedEntry = found[0];
         SelectedEntries = found;
         SelectionRestoreRequested?.Invoke(found);
 
-        // Consumed with the selection it rides on, and only for the row it
-        // was asked for: a listing that landed for some other reason must
-        // not open an editor under the user's hands.
-        if (_renameAfterRestore is { } pending) {
-            _renameAfterRestore = null;
-            if (IsSamePath(found[0].FullPath, pending)) {
-                InlineRenameRequested?.Invoke(found[0]);
-            }
+        // Only for the row it was asked for: a listing that landed for some
+        // other reason must not open an editor under the user's hands.
+        if (intent.RenameTarget is { } pending && IsSamePath(found[0].FullPath, pending)) {
+            InlineRenameRequested?.Invoke(found[0]);
         }
     }
 
@@ -1819,93 +1911,6 @@ public sealed class MainViewModel : ObservableObject {
 
 
     /// <summary>
-    /// Reads the sidecars of the rows that have one and pushes the listing
-    /// back through the filter with the ratings attached.
-    ///
-    /// <para>
-    /// Deliberately a second pass rather than part of the listing: a folder
-    /// of five hundred RAW files is five hundred small reads, and making
-    /// the folder appear is worth more than making it appear complete. The
-    /// rows are already on screen when this lands, and
-    /// <see cref="SyncEntries"/> replaces only the ones that gained a
-    /// rating.
-    /// </para>
-    /// </summary>
-    private void StartRatingPass(IReadOnlyList<FileSystemEntry> items, string path, SortOptions sort) {
-        _ratingCts?.Cancel();
-        _ratingCts = null;
-        HasRatings = false;
-
-        if (_companionMetadata is null || !items.Any(e => e.HasCompanions)) {
-            return;
-        }
-
-        _ratingCts = new CancellationTokenSource();
-        _ = LoadRatingsAsync(items, path, sort, _ratingCts.Token);
-    }
-
-    private async Task LoadRatingsAsync(
-        IReadOnlyList<FileSystemEntry> items, string path, SortOptions sort, CancellationToken token) {
-        IReadOnlyList<FileSystemEntry> rated;
-        try {
-            rated = await Task.Run(() => {
-                using var pass = PerfLog.Measure("bg.ratings");
-                var withRatings = _companionMetadata!.WithRatings(items, token);
-
-                // Sorting by rating is the one key a directory scan cannot
-                // answer, so the order it produced was a placeholder. Only
-                // this key needs redoing; the other four were right the
-                // first time.
-                //
-                // The name tiebreaker here is the ordinal one rather than
-                // Explorer's natural order — it only decides between photos
-                // with the same number of stars, and reaching the platform
-                // comparer from up here would mean a new abstraction across
-                // the whole filesystem interface for that.
-                return sort.Key == SortKey.Rating
-                    ? EntryComparers.Sort(withRatings, sort)
-                    : withRatings;
-            }, token);
-        } catch (OperationCanceledException) {
-            return;
-        } catch (Exception ex) {
-            _log.Warn($"Rating pass failed: {path} ({ex.Message})");
-            return;
-        }
-
-        if (token.IsCancellationRequested || !IsSamePath(path, _listedPath)) {
-            return;
-        }
-
-        HasRatings = rated.Any(e => e.Rating is not null);
-        if (!ReferenceEquals(rated, items)) {
-            _search.SetSource(rated);
-        }
-    }
-
-
-    /// <summary>
-    /// Creates the sidecar behind the first star clicked on a photo that
-    /// has none, and returns its path — or null if the user said no.
-    ///
-    /// <para>
-    /// Wander does not create files nobody asked for, so this asks, with
-    /// Cancel as the default answer. For a <c>.pp3</c> the question carries
-    /// the part the user cannot be expected to know: RawTherapee applies
-    /// its default processing profile only to photos <em>without</em> a
-    /// sidecar, so the file about to be created changes how the photo opens
-    /// there. That is the whole reason the format is a setting and its
-    /// default is XMP.
-    /// </para>
-    /// </summary>
-    private SidecarRating? ApplyRatingToPrimary(FileSystemEntry entry, RatingField field, int value) {
-        var results = ApplyRating(new[] { entry }, field, value);
-
-        return results.Count > 0 ? results[0].Rating : entry.Rating;
-    }
-
-
-    /// <summary>
     /// Sets a rating on the current selection. The gallery's number keys go
     /// here; so does every star and swatch in the preview footer.
     /// </summary>
@@ -1918,207 +1923,7 @@ public sealed class MainViewModel : ObservableObject {
             ? _selectedEntries
             : _selectedEntry is { } single ? new[] { single } : Array.Empty<FileSystemEntry>();
 
-        ApplyRating(target, RatingField.Rank, rank);
-    }
-
-
-    /// <summary>
-    /// The single place a rating is written. Sorts the selection into
-    /// "already has a sidecar" and "would need one", asks about the second
-    /// group <b>once</b>, hands the lot to Core as one undoable step, and
-    /// then updates the affected rows in place.
-    ///
-    /// <para>
-    /// <b>In place is the requirement, not an optimisation.</b> Writing a
-    /// star used to re-list the folder: rows were rebuilt, the selection
-    /// went with them, a sort by rating reordered the grid, and the picture
-    /// the user was looking at moved out from under the cursor — for a
-    /// change they made to one number on one file. Nothing here re-lists.
-    /// The rows that changed are swapped for updated copies, the selection
-    /// is put back without scrolling, and the folder watcher is muted for a
-    /// beat so it does not undo all of that on our behalf.
-    /// </para>
-    ///
-    /// <para>
-    /// The order does not change either, even when the list is sorted by
-    /// rating. Re-sorting under the cursor is precisely the jump this
-    /// avoids; the new order arrives with the next listing.
-    /// </para>
-    /// </summary>
-    private IReadOnlyList<CompanionMetadataService.RatingResult> ApplyRating(
-        IReadOnlyList<FileSystemEntry> entries, RatingField field, int value) {
-        var empty = Array.Empty<CompanionMetadataService.RatingResult>();
-        if (_companionMetadata is null || entries.Count == 0) {
-            return empty;
-        }
-
-        var targets = new List<CompanionMetadataService.RatingTarget>();
-        var wouldNeedSidecar = new List<FileSystemEntry>();
-
-        foreach (var entry in entries) {
-            if (entry.IsFolderLike) {
-                continue;
-            }
-            if (RatingSidecarOf(entry) is { } sidecar) {
-                targets.Add(new CompanionMetadataService.RatingTarget(entry.FullPath, sidecar));
-                continue;
-            }
-            if (ImageFormats.IsImage(entry.Name)) {
-                wouldNeedSidecar.Add(entry);
-            }
-        }
-
-        // Clearing a rating never brings a file into existence: a sidecar
-        // created to record "no stars" is exactly the file nobody wanted.
-        if (value > 0 && wouldNeedSidecar.Count > 0 && ConfirmSidecarCreation(wouldNeedSidecar)) {
-            foreach (var entry in wouldNeedSidecar) {
-                targets.Add(new CompanionMetadataService.RatingTarget(entry.FullPath, null));
-            }
-        }
-
-        if (targets.Count == 0) {
-            return empty;
-        }
-
-        var results = _companionMetadata.ApplyRatingToMany(targets, field, value, Settings.RawRatingFormat);
-        ApplyRatingResults(results);
-
-        return results;
-    }
-
-
-    /// <summary>Path of the companion that holds this row's rating, or null when it has none.</summary>
-    private static string? RatingSidecarOf(FileSystemEntry entry) {
-        if (entry.Companions is not { Count: > 0 } companions) {
-            return null;
-        }
-
-        foreach (string path in companions) {
-            if (CompanionMetadataService.IsRatingSidecar(path)) {
-                return path;
-            }
-        }
-
-        return null;
-    }
-
-
-    /// <summary>
-    /// One question for the whole batch. Rating six selected photos is one
-    /// gesture, and six dialogs would be six answers to a question the user
-    /// asked once.
-    /// </summary>
-    private bool ConfirmSidecarCreation(IReadOnlyList<FileSystemEntry> entries) {
-        if (_companionMetadata is null) {
-            return false;
-        }
-
-        var format = Settings.RawRatingFormat;
-        string question = entries.Count == 1
-            ? string.Format(
-                Strings.ConfirmCreateSidecar,
-                Path.GetFileName(_companionMetadata.SidecarPathFor(entries[0].FullPath, format)),
-                entries[0].Name)
-            : string.Format(Strings.ConfirmCreateSidecarMany, entries.Count, format.Suffix());
-
-        if (format == SidecarFormat.Pp3) {
-            question += Environment.NewLine + Environment.NewLine + Strings.ConfirmCreateSidecarPp3Warning;
-        }
-
-        return MessageBox.Show(
-            question, Strings.ConfirmCreateSidecarTitle,
-            MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) == MessageBoxResult.Yes;
-    }
-
-
-    private void ApplyRatingResults(IReadOnlyList<CompanionMetadataService.RatingResult> results) {
-        if (results.Count == 0) {
-            return;
-        }
-
-        var updated = new List<FileSystemEntry>(results.Count);
-        foreach (var result in results) {
-            var row = FindInSource(result.MainPath);
-            if (row is null) {
-                continue;
-            }
-
-            var companions = row.Companions ?? Array.Empty<string>();
-            if (!companions.Any(c => IsSamePath(c, result.SidecarPath))) {
-                companions = companions.Append(result.SidecarPath).ToArray();
-            }
-            updated.Add(row with { Companions = companions, Rating = result.Rating });
-        }
-
-        if (updated.Count == 0) {
-            return;
-        }
-
-        _search.Replace(updated);
-        if (updated.Any(e => e.Rating is not null)) {
-            HasRatings = true;
-        }
-        Preview.ReloadCompanions();
-
-        int rank = results[0].Rating.Rank ?? 0;
-        Status = rank > 0
-            ? string.Format(Strings.StatusRatingApplied, rank, results.Count)
-            : string.Format(Strings.StatusRatingCleared, results.Count);
-    }
-
-    /// <summary>
-    /// Re-reads a few rows from disk — their sidecars and what those say —
-    /// and swaps them in without touching the rest of the listing. The
-    /// answer to an undo that changed metadata and nothing else.
-    ///
-    /// <para>
-    /// The companion lookup goes to the disk once per row, so it runs on a
-    /// worker: undoing a rating applied to two hundred photographs is two
-    /// hundred directory probes, and the folder must not stop for them.
-    /// </para>
-    /// </summary>
-    private async Task RefreshMetadataRowsAsync(IReadOnlyList<string> mainPaths) {
-        if (_companionMetadata is null || mainPaths.Count == 0) {
-            return;
-        }
-
-        var rows = mainPaths
-            .Select(FindInSource)
-            .Where(r => r is not null)
-            .Select(r => r!)
-            .ToArray();
-        if (rows.Length == 0) {
-            return;
-        }
-
-        bool integrate = Settings.IntegrateCompanions;
-        IReadOnlyList<FileSystemEntry> updated;
-        try {
-            updated = await Task.Run(() => rows.Select(row => {
-                var companions = integrate
-                    ? _companions.FindCompanions(row.FullPath, _fs)
-                    : Array.Empty<string>();
-                var refreshed = row with { Companions = companions.Count > 0 ? companions : null };
-
-                return refreshed with { Rating = _companionMetadata.ReadRatingFor(refreshed) };
-            }).ToArray());
-        } catch (Exception ex) {
-            _log.Warn($"Metadata re-read failed: {ex.Message}");
-
-            return;
-        }
-
-        _search.Replace(updated);
-    }
-
-    private FileSystemEntry? FindInSource(string path) {
-        foreach (var entry in _search.Source) {
-            if (IsSamePath(entry.FullPath, path)) {
-                return entry;
-            }
-        }
-
-        return null;
+        Ratings.Apply(target, RatingField.Rank, rank);
     }
 
 
@@ -2160,7 +1965,7 @@ public sealed class MainViewModel : ObservableObject {
     /// coming back from disk — replaces the object. The list drops a
     /// replaced object out of its selection, and unless somebody puts it
     /// back, the selection is gone. It used to be put back only when a
-    /// caller had filled <see cref="_restoreSelection"/> with intent
+    /// caller had filled in an <see cref="ArrivalIntent"/>
     /// (navigation, rename, undo) — which meant the second rebuild of every
     /// listing, the one where the ratings arrive, silently dropped whatever
     /// the user had selected. That is the bug this closes, and it closes it
@@ -2169,21 +1974,21 @@ public sealed class MainViewModel : ObservableObject {
     /// </para>
     ///
     /// <para>
-    /// When a caller <em>has</em> filled <see cref="_restoreSelection"/>,
+    /// When a caller <em>has</em> left an <see cref="ArrivalIntent"/>,
     /// this keeps out of the way: that caller knows something better than
     /// "whatever was selected before" — the new name after a rename, what
-    /// an undo put back — and <see cref="ApplyRestoreSelection"/> runs right
-    /// after with scrolling and focus, which is right there and wrong here.
+    /// an undo put back — and <see cref="ApplyArrival"/> runs right after
+    /// with scrolling and focus, which is right there and wrong here.
     /// </para>
     /// </summary>
     private void ReconcileEntries(Action rebuild) {
-        // A caller that filled _restoreSelection knows something better than
+        // A caller that left an intent knows something better than
         // "whatever was selected before" — the new name after a rename, what
-        // an undo put back — and ApplyRestoreSelection runs right after with
+        // an undo put back — and ApplyArrival runs right after with
         // scrolling and focus. We still put the view model back in step with
         // the rows below, so it never holds entries that have left the list;
         // we just do not tell the view where to go.
-        bool ownsSelection = _restoreSelection.Length == 0;
+        bool ownsSelection = _arrival is null;
         var keep = new HashSet<string>(
             _selectedEntries.Select(e => e.FullPath), StringComparer.OrdinalIgnoreCase);
         string? primary = _selectedEntry?.FullPath;
@@ -2370,7 +2175,7 @@ public sealed class MainViewModel : ObservableObject {
         // there caches its subfolders from the moment it was opened, and
         // nothing else re-reads them. F5 is where the whole window catches
         // up with the disk, not just the middle of it.
-        RefreshTrees();
+        Trees.RefreshAll();
 
         if (ContentSearch.IsShowingResults || ContentSearch.IsDeep) {
             ContentSearch.Rerun();
@@ -2388,31 +2193,16 @@ public sealed class MainViewModel : ObservableObject {
     /// a late arrival overwrite the results.
     /// </summary>
     private void BeginSearchResults() {
+        // Results are a different listing, not this folder's. Bumping the
+        // epoch is what drops a folder read or a rating pass that is still
+        // in flight for the folder underneath.
         _listLoadCts?.Cancel();
-        _ratingCts?.Cancel();
+        _listingEpoch++;
+        Ratings.Cancel();
         IsListLoading = false;
         RenamingPath = null;
 
-        _searchResults.Clear();
-        _resultPaths.Clear();
-        _resultsHereFirst = ContentSearch.IsFilterPass;
-        _resultRoot = _nav.Current;
-
-        if (_resultsHereFirst) {
-            // The quick filter's continuation. What is on screen is the
-            // answer for this folder, already found and already read by the
-            // user — emptying the list to go looking for more of it would
-            // blink that away and put it back a moment later.
-            _searchResults.AddRange(Entries);
-            foreach (var entry in _searchResults) {
-                _resultPaths.Add(entry.FullPath);
-            }
-        } else {
-            Entries.Clear();
-        }
-
-        Status = string.Format(Strings.StatusSearching, 0, 0);
-        StartResultFlushTimer();
+        SearchResults.Begin(_nav.Current, Entries);
     }
 
 
@@ -2427,8 +2217,7 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
-        StopResultFlushTimer();
-        ClearSearchResults();
+        SearchResults.Clear();
         Refresh();
     }
 
@@ -2451,112 +2240,15 @@ public sealed class MainViewModel : ObservableObject {
     }
 
 
-    /// <summary>
-    /// A folder's worth of results, from the dispatcher. Collected rather
-    /// than pushed straight into <see cref="Entries"/>: a bulk refill raises
-    /// one Reset, and a search over a deep tree produces hundreds of
-    /// batches — one Reset each would make the list re-lay-out hundreds of
-    /// times over a collection that keeps growing.
-    /// </summary>
-    private void AppendSearchResults(IReadOnlyList<FileSystemEntry> batch) {
-        if (!ContentSearch.IsShowingResults) {
-            return;
-        }
-
-        foreach (var entry in batch) {
-            // The quick filter's pass walks the current folder too, and its
-            // matches are already on the list as the seed. Dropping the
-            // repeats here rather than narrowing the walk keeps the search
-            // service one thing that answers one question.
-            if (!_resultPaths.Add(entry.FullPath)) {
-                continue;
-            }
-
-            _searchResults.Add(entry);
-            _resultsDirty = true;
-        }
-    }
-
-
-    /// <summary>
-    /// How far along the pass is. The search window has no status strip of
-    /// its own, so this is the only place the counts appear while the walk
-    /// is running — the spinner in the file area says "still going", and
-    /// this says how far.
-    /// </summary>
-    private void ShowSearchProgress(SearchProgress progress) {
-        Status = string.Format(Strings.StatusSearching, progress.Found, progress.FilesScanned);
-    }
-
-
-    /// <summary>
-    /// End of the pass. A null outcome means the user stopped it — the rows
-    /// already found stay, because a search stopped halfway has still
-    /// answered part of the question.
-    /// </summary>
-    private void FinishSearch(SearchOutcome? outcome) {
-        StopResultFlushTimer();
-        FlushSearchResults();
-
-        if (outcome is not { } result) {
-            Status = string.Format(Strings.StatusSearchStopped, _searchResults.Count);
-
-            return;
-        }
-
-        // The walk's own count leaves out the seed — the folder's matches
-        // were found by the live filter, not by it — so what is on the list
-        // is the honest answer to "how many".
-        int found = _resultsHereFirst ? _searchResults.Count : result.Found;
-
-        string what = SearchDescription();
-        string text = found == 0
-            ? string.Format(Strings.StatusSearchNothing, what)
-            : string.Format(Strings.StatusSearchFound, found, what, result.FilesScanned);
-
-        if (result.Truncated) {
-            text += string.Format(Strings.StatusSearchTruncated, result.Found);
-        }
-        // Worth saying out loud: a folder of PDFs on a machine with no PDF
-        // filter installed otherwise reads as "nothing in these documents"
-        // when the truth is that none of them could be opened.
-        if (result.UnreadableFiles > 0) {
-            text += string.Format(Strings.StatusSearchUnreadable, result.UnreadableFiles);
-        }
-
-        Status = text;
-    }
-
-
-    /// <summary>
-    /// The search as one phrase for the status bar. Both halves when both
-    /// were given, because "найдено 3 по запросу «отчёт»" is a different
-    /// claim from "3 файла *.docx со словом «отчёт»".
-    /// </summary>
-    private string SearchDescription() {
-        string name = ContentSearch.NameQuery;
-        string text = ContentSearch.TextQuery;
-
-        if (name.Length > 0 && text.Length > 0) {
-            return string.Format(Strings.SearchDescriptionBoth, name, text);
-        }
-
-        return text.Length > 0
-            ? string.Format(Strings.SearchDescriptionText, text)
-            : name;
-    }
-
-
     private void OnContentSearchChanged(object? sender, PropertyChangedEventArgs e) {
         switch (e.PropertyName) {
             case nameof(ContentSearchController.IsShowingResults):
                 Raise(nameof(IsSearchResults));
-                if (!ContentSearch.IsShowingResults && _searchResults.Count > 0) {
+                if (!ContentSearch.IsShowingResults && SearchResults.Count > 0) {
                     // Something dropped results without going through
                     // ClearSearch — a criterion falling back to the shallow
                     // kind, for instance. The list has to follow.
-                    StopResultFlushTimer();
-                    ClearSearchResults();
+                    SearchResults.Clear();
 
                     // The folder was never thrown away: the search only took
                     // the list over, and the listing it borrowed is still in
@@ -2575,174 +2267,6 @@ public sealed class MainViewModel : ObservableObject {
                 Raise(nameof(SearchQuery));
                 Raise(nameof(HasSearchQuery));
                 break;
-        }
-    }
-
-
-    /// <summary>
-    /// Pushes what has been found into the bound collection, keeping the
-    /// current sort. Sorted rather than left in discovery order because the
-    /// user's chosen sort is a setting, not a property of one folder — and
-    /// because arrival order changes between two identical searches.
-    /// </summary>
-    private void FlushSearchResults() {
-        if (!_resultsDirty) {
-            return;
-        }
-        _resultsDirty = false;
-
-        var sort = new SortOptions(Settings.SortKey, Settings.SortAscending, Settings.GroupFoldersFirst);
-        var sorted = EntryComparers.Sort(_searchResults, sort);
-
-        Entries.ReplaceAll(_resultsHereFirst ? HereFirst(sorted) : sorted);
-    }
-
-
-    /// <summary>
-    /// Splits a sorted result list into "in the folder on screen" and
-    /// "somewhere under it", in that order and keeping the sort inside each
-    /// half.
-    ///
-    /// <para>
-    /// Only for the quick filter's pass, and it is the whole shape of that
-    /// interaction: the user asked about the folder they are standing in
-    /// and got an answer, and the subtree is the extra. Letting the sort
-    /// interleave the two would scatter that answer through rows from
-    /// folders the user never opened.
-    /// </para>
-    /// </summary>
-    private IReadOnlyList<FileSystemEntry> HereFirst(IReadOnlyList<FileSystemEntry> sorted) {
-        var here = new List<FileSystemEntry>(sorted.Count);
-        var below = new List<FileSystemEntry>();
-
-        foreach (var entry in sorted) {
-            string? folder = Path.GetDirectoryName(
-                entry.FullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-            if (IsSamePath(folder, _resultRoot)) {
-                here.Add(entry);
-            } else {
-                below.Add(entry);
-            }
-        }
-
-        here.AddRange(below);
-
-        return here;
-    }
-
-
-    private void ClearSearchResults() {
-        _searchResults.Clear();
-        _resultPaths.Clear();
-        _resultsHereFirst = false;
-        _resultRoot = null;
-    }
-
-
-    /// <summary>
-    /// Drops result rows whose files no longer exist. One stat per row, and
-    /// only on the paths that asked for a refresh in the first place — a
-    /// completed file operation, the folder watcher, a visibility setting.
-    /// Rows that are still there keep their place: the pass that found them
-    /// is not re-run, because "delete one file" is not a reason to walk the
-    /// disk again.
-    /// </summary>
-    private void PruneMissingResults() {
-        int removed = _searchResults.RemoveAll(entry => {
-            if (_fs.FileExists(entry.FullPath) || _fs.DirectoryExists(entry.FullPath)) {
-                return false;
-            }
-            _resultPaths.Remove(entry.FullPath);
-
-            return true;
-        });
-        if (removed == 0) {
-            return;
-        }
-
-        _resultsDirty = true;
-        FlushSearchResults();
-    }
-
-
-    private void StartResultFlushTimer() {
-        if (_resultFlushTimer is null) {
-            _resultFlushTimer = new DispatcherTimer(DispatcherPriority.Background, _dispatcher) {
-                Interval = TimeSpan.FromMilliseconds(ResultFlushIntervalMs),
-            };
-            _resultFlushTimer.Tick += (_, _) => FlushSearchResults();
-        }
-
-        _resultFlushTimer.Start();
-    }
-
-
-    private void StopResultFlushTimer() {
-        _resultFlushTimer?.Stop();
-    }
-
-
-    private void LoadRoots() {
-        Roots.Clear();
-        foreach (var root in _fs.GetRoots()) {
-            bool hasChildren = _fs.HasSubdirectories(root.FullPath);
-            var node = new TreeNodeViewModel(root.Name, root.FullPath, EntryKind.Drive, _fs, hasChildren, Settings);
-            Roots.Add(node);
-            WireTreeNode(node);
-        }
-    }
-
-    private void WireTreeNode(TreeNodeViewModel node) {
-        node.PropertyChanged += OnTreeNodePropertyChanged;
-        node.Children.CollectionChanged += OnTreeChildrenChanged;
-        foreach (var child in node.Children) {
-            WireTreeNode(child);
-        }
-    }
-
-    /// <summary>
-    /// Re-reads every expanded branch of both panels. What is expanded stays
-    /// expanded — <see cref="TreeNodeViewModel.RefreshChildren"/> reconciles
-    /// rather than rebuilds — so this is safe to hang off F5.
-    /// </summary>
-    private void RefreshTrees() {
-        foreach (var node in Roots) {
-            node.RefreshChildren();
-        }
-        foreach (var node in Bookmarks.Items) {
-            node.RefreshChildren();
-        }
-    }
-
-
-    /// <summary>
-    /// The narrow version: one folder gained or lost a subfolder, so only the
-    /// rows standing on that folder are re-read. Both panels can be showing
-    /// the same path, and a path can appear twice within one of them, so this
-    /// does not stop at the first hit at the top level.
-    /// </summary>
-    private void RefreshTreeNodesFor(string path) {
-        foreach (var node in Roots) {
-            node.RefreshBranch(path);
-        }
-        foreach (var node in Bookmarks.Items) {
-            node.RefreshBranch(path);
-        }
-    }
-
-
-    private void OnTreeChildrenChanged(object? sender, NotifyCollectionChangedEventArgs e) {
-        if (e.NewItems is null) {
-            return;
-        }
-        foreach (TreeNodeViewModel added in e.NewItems) {
-            WireTreeNode(added);
-        }
-    }
-
-    private void OnTreeNodePropertyChanged(object? sender, PropertyChangedEventArgs e) {
-        if (e.PropertyName == nameof(TreeNodeViewModel.IsExpanded)) {
-            SaveState();
         }
     }
 
@@ -2985,7 +2509,7 @@ public sealed class MainViewModel : ObservableObject {
             // File-list filter is one half; tree (drives + bookmarks) caches
             // its loaded children, so it needs an explicit reload to drop or
             // surface hidden / system folders.
-            RefreshTrees();
+            Trees.RefreshAll();
         }
 
         if (e.PropertyName == nameof(SettingsViewModel.IntegrateCompanions)) {
@@ -3005,8 +2529,7 @@ public sealed class MainViewModel : ObservableObject {
             // that found them, not from an enumerator that can be asked
             // again, so the rows already on screen are re-sorted in place.
             if (ContentSearch.IsShowingResults) {
-                _resultsDirty = true;
-                FlushSearchResults();
+                SearchResults.Resort();
             } else {
                 Refresh();
             }
@@ -3120,7 +2643,7 @@ public sealed class MainViewModel : ObservableObject {
     public TreeNodeViewModel? MoveBookmark(TreeNodeViewModel? node, int delta) {
         var moved = Bookmarks.Move(node, delta);
         if (moved is not null) {
-            SelectTreeNode(moved);
+            Trees.Select(moved);
         }
 
         return moved;
@@ -3155,7 +2678,7 @@ public sealed class MainViewModel : ObservableObject {
     /// means: go there, and show me what is there.
     /// </summary>
     public void NavigateAndSelectFolder(string path, NavigationSource source) {
-        _selectFolderAfterListing = path;
+        _arrival = ArrivalIntent.Folder(path);
         NavigateTo(path, source);
     }
 
@@ -3183,57 +2706,17 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
+        _arrival = ArrivalIntent.Rows(folder, new[] { path }, takeFocus: true);
+
         // Already there: no navigation will happen, so no listing will land
-        // to consume the intent — select right away instead.
+        // to consume the intent — apply it right away instead.
         if (IsSamePath(folder, _nav.Current)) {
-            _restoreSelection = new[] { path };
-            FocusListAfterRestore = true;
-            ApplyRestoreSelection();
+            ApplyArrival();
 
             return;
         }
 
-        _revealPathAfterListing = path;
         NavigateTo(folder, NavigationSource.External);
-    }
-
-
-    /// <summary>
-    /// Selects the row a <see cref="RevealPath"/> was asking for, now that
-    /// its folder has listed. Guarded by the same "is this the listing that
-    /// was asked for" check as the folder case: a navigation that overtook
-    /// this one must not drag the selection along with it.
-    /// </summary>
-    private void ApplyPendingReveal() {
-        if (_revealPathAfterListing is not { } path) {
-            return;
-        }
-
-        string? folder = Path.GetDirectoryName(
-            path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-        if (!IsSamePath(folder, _nav.Current)) {
-            return;
-        }
-
-        _revealPathAfterListing = null;
-        _restoreSelection = new[] { path };
-        FocusListAfterRestore = true;
-        ApplyRestoreSelection();
-    }
-
-
-    private void ApplyPendingFolderSelection() {
-        if (_selectFolderAfterListing is not { } path) {
-            return;
-        }
-        _selectFolderAfterListing = null;
-
-        // The listing that just landed has to be the one that was asked
-        // for. A rejected path, or a navigation that overtook this one,
-        // would otherwise select a folder the user is not looking at.
-        if (IsSamePath(path, _nav.Current)) {
-            SelectExternalPath(path);
-        }
     }
 
 
@@ -3420,9 +2903,9 @@ public sealed class MainViewModel : ObservableObject {
         // gone, and take it back from the progress dialog. Only when
         // something actually went: a delete that failed outright leaves the
         // rows on screen, and moving off them would hide what went wrong.
-        if (ok > 0) {
-            _restoreSelection = NextAfterRemoval(snapshot);
-            FocusListAfterRestore = _restoreSelection.Length > 0;
+        if (ok > 0 && _nav.Current is { } folder) {
+            var next = NextAfterRemoval(snapshot);
+            _arrival = ArrivalIntent.Rows(folder, next, takeFocus: next.Length > 0);
         }
         Refresh();
 
@@ -3485,11 +2968,11 @@ public sealed class MainViewModel : ObservableObject {
             // it would be the same jump the write itself avoids. Only the
             // rows it touched are re-read.
             if (action.MetadataTargets.Count > 0) {
-                _ = RefreshMetadataRowsAsync(action.MetadataTargets);
+                _ = Ratings.RefreshRowsAsync(action.MetadataTargets);
             } else {
                 // Point the user at what came back, not at wherever the
                 // selection happened to be.
-                _restoreSelection = action.PathsAfterUndo.ToArray();
+                _arrival = ArrivalIntent.Rows(_nav.Current!, action.PathsAfterUndo.ToArray());
                 Refresh();
             }
 
@@ -3520,9 +3003,8 @@ public sealed class MainViewModel : ObservableObject {
             _ops.RenameMany(plan);
             // Keep the file the user just renamed selected: its path changed,
             // so "whatever was selected" would no longer match anything.
-            _restoreSelection = new[] {
-                Path.Combine(Path.GetDirectoryName(entry.FullPath) ?? "", newName),
-            };
+            string folder = Path.GetDirectoryName(entry.FullPath) ?? "";
+            _arrival = ArrivalIntent.Rows(folder, new[] { Path.Combine(folder, newName) });
             Refresh();
             if (plan.Count > 1) {
                 Status = string.Format(Strings.StatusRenamedWithCompanions, plan.Count - 1);
@@ -3767,11 +3249,11 @@ public sealed class MainViewModel : ObservableObject {
         }
         // Select what just arrived — the whole point of the operation is now
         // on screen, and the keyboard should already be on it.
-        _restoreSelection = results
+        var arrived = results
             .Where(r => r.Status is BatchItemStatus.Ok or BatchItemStatus.Replaced or BatchItemStatus.Renamed)
             .Select(r => r.FinalDestination)
             .ToArray();
-        FocusListAfterRestore = _restoreSelection.Length > 0;
+        _arrival = ArrivalIntent.Rows(target, arrived, takeFocus: arrived.Length > 0);
         Refresh();
         ReportBatchResults(results, wasCut ? Strings.VerbMoved : Strings.VerbCopied, target);
     }
@@ -3827,19 +3309,19 @@ public sealed class MainViewModel : ObservableObject {
         }
 
         // "New folder" is never the name anyone wanted, so the next thing
-        // the user does is type over it. Both intents are for the listing
-        // Refresh is about to start — the row does not exist to select, let
-        // alone edit, until it lands.
-        _restoreSelection = new[] { Path.Combine(_nav.Current, name) };
-        FocusListAfterRestore = true;
-        _renameAfterRestore = _restoreSelection[0];
+        // the user does is type over it. Selecting it and opening the editor
+        // are both for the listing Refresh is about to start — the row does
+        // not exist to select, let alone edit, until it lands.
+        string created = Path.Combine(_nav.Current, name);
+        _arrival = ArrivalIntent.Rows(
+            _nav.Current, new[] { created }, takeFocus: true, renameTarget: created);
         Refresh();
 
         // The panels beside the list show folders too, and the folder they
         // are standing on just gained one. Leaving it to the watcher would
         // not do: its tick is held for as long as the editor we just opened
         // is up.
-        RefreshTreeNodesFor(_nav.Current);
+        Trees.RefreshFor(_nav.Current);
     }
 
     private string DescribeError(Exception ex, string path) {

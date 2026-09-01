@@ -59,7 +59,23 @@ public sealed class SystemIconProvider : IIconProvider {
     /// </summary>
     private const int MaxCachedThumbnails = 512;
 
+    /// <summary>
+    /// A single shell extraction slower than this earns a log line with the
+    /// file's path — see the note at the call site in <see cref="GetIcon"/>.
+    /// </summary>
+    private const int SlowShellLoadMs = 1000;
+
     private readonly Dictionary<string, byte[]> _cache = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Keys the shell had nothing for. Without this the answer "no picture"
+    /// costs a shell call every single time it is asked — and it is asked
+    /// again on every container the list realises, so scrolling a folder of
+    /// files the shell cannot preview turned into hundreds of shell calls a
+    /// second that never stopped and never cached anything. Cleared with the
+    /// rest of the cache, so a thumbnail that appears later is found again.
+    /// </summary>
+    private readonly HashSet<string> _missing = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>Insertion order of the per-path entries, for evicting the oldest.</summary>
     private readonly Queue<string> _thumbnailOrder = new();
     private readonly object _lock = new();
@@ -90,6 +106,9 @@ public sealed class SystemIconProvider : IIconProvider {
             if (_cache.TryGetValue(key, out byte[]? cached)) {
                 return cached;
             }
+            if (_missing.Contains(key)) {
+                return null;
+            }
         }
 
         // Disk tier, for the 256-px thumbnails only. Both tiers are timed:
@@ -115,10 +134,33 @@ public sealed class SystemIconProvider : IIconProvider {
 
         try {
             byte[]? bytes;
+            var asked = System.Diagnostics.Stopwatch.StartNew();
             using (PerfLog.Measure("bg.thumb-shell")) {
                 bytes = LoadIcon(path, size);
             }
-            if (bytes is not null) {
+            // The PERF line says a shell call was slow; only this one says
+            // which file. A single extraction can take seconds (a dead
+            // shortcut target, a broken codec, an antivirus holding the
+            // file) and it occupies one of AsyncIcon's four slots the whole
+            // time — the path is the only way to tell what to blame.
+            if (asked.ElapsedMilliseconds >= SlowShellLoadMs) {
+                IconLog($"slow shell load: {asked.ElapsedMilliseconds} ms ({size}) — {path}");
+            }
+            if (bytes is null) {
+                // Only the thumbnail tiers remember a "no": there "this
+                // file has no preview" is a stable answer that would
+                // otherwise be re-asked on every container realisation.
+                // Small / Normal are different — every file and folder has
+                // *some* icon, so a null there is a transient failure
+                // (SHGetFileInfo flaking under the startup burst, observed
+                // on folders with custom icons), and remembering it kept
+                // the row blank for the whole session.
+                if (size is IconSize.Large or IconSize.Medium) {
+                    lock (_lock) {
+                        _missing.Add(key);
+                    }
+                }
+            } else {
                 lock (_lock) {
                     Store(key, bytes, perPath);
                 }
@@ -149,6 +191,7 @@ public sealed class SystemIconProvider : IIconProvider {
         lock (_lock) {
             _cache.Clear();
             _thumbnailOrder.Clear();
+            _missing.Clear();
         }
         _disk?.Clear();
     }
@@ -159,13 +202,30 @@ public sealed class SystemIconProvider : IIconProvider {
     }
 
 
+    /// <summary>
+    /// The already-decoded bytes for this path, or null. Called from the UI
+    /// thread once per row as a folder draws, so it must not touch the disk:
+    /// <see cref="BuildCacheKey"/> asks <c>Directory.Exists</c> to tell a
+    /// folder from a file, and a few hundred of those land on the dispatcher
+    /// exactly when the folder is trying to appear.
+    ///
+    /// <para>
+    /// Instead both shapes of key are looked up. A path is either a folder
+    /// or a file, so at most one of them was ever stored — checking both is
+    /// two dictionary probes against one stat, and it cannot answer wrong.
+    /// </para>
+    /// </summary>
     public byte[]? TryGetCachedIcon(string path, IconSize size) {
         if (string.IsNullOrEmpty(path)) {
             return null;
         }
 
         lock (_lock) {
-            return _cache.TryGetValue(BuildCacheKey(path, size).Key, out byte[]? cached) ? cached : null;
+            if (_cache.TryGetValue($"dir|{path}|{size}", out byte[]? asFolder)) {
+                return asFolder;
+            }
+
+            return _cache.TryGetValue(BuildFileCacheKey(path, size).Key, out byte[]? asFile) ? asFile : null;
         }
     }
 
@@ -213,6 +273,16 @@ public sealed class SystemIconProvider : IIconProvider {
             return ($"dir|{path}|{size}", true);
         }
 
+        return BuildFileCacheKey(path, size);
+    }
+
+
+    /// <summary>
+    /// The key a <em>file</em> at this path uses. Split out of
+    /// <see cref="BuildCacheKey"/> so the cache can be asked without the
+    /// <c>Directory.Exists</c> probe — see <see cref="TryGetCachedIcon"/>.
+    /// </summary>
+    private static (string Key, bool PerPath) BuildFileCacheKey(string path, IconSize size) {
         string ext = Path.GetExtension(path);
 
         // Shortcuts (.lnk) get a unique composite per file → cache per path.
@@ -604,6 +674,18 @@ public sealed class SystemIconProvider : IIconProvider {
     // Small / Normal — straight SHGetFileInfo.
     // ------------------------------------------------------------------
 
+    /// <summary>
+    /// Serialises <see cref="SHGetFileInfo"/>. The workers ask for several
+    /// icons at once, and under that concurrency the call intermittently
+    /// returns nothing for folders whose icon comes from a handler
+    /// (desktop.ini custom icons, known folders) — which row failed varied
+    /// run to run. One call at a time is cheap at these sizes and made the
+    /// failures stop; the thumbnail tiers go through COM interfaces of
+    /// their own and are not funneled through this.
+    /// </summary>
+    private static readonly object _shellIconLock = new();
+
+
     private static byte[]? LoadShellIcon(string path, IconSize size) {
         uint flags = SHGFI_ICON | (size == IconSize.Small ? SHGFI_SMALLICON : SHGFI_LARGEICON);
 
@@ -617,12 +699,15 @@ public sealed class SystemIconProvider : IIconProvider {
         }
 
         var info = new SHFILEINFO();
-        IntPtr result = SHGetFileInfo(
-            path,
-            FILE_ATTRIBUTE_NORMAL,
-            ref info,
-            (uint)Marshal.SizeOf<SHFILEINFO>(),
-            flags);
+        IntPtr result;
+        lock (_shellIconLock) {
+            result = SHGetFileInfo(
+                path,
+                FILE_ATTRIBUTE_NORMAL,
+                ref info,
+                (uint)Marshal.SizeOf<SHFILEINFO>(),
+                flags);
+        }
 
         if (result == IntPtr.Zero || info.hIcon == IntPtr.Zero) {
             return null;

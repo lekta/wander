@@ -24,7 +24,6 @@
         <vm:MainViewModel/>
     </Window.DataContext>
     <Window.Resources>
-        <conv:IconConverter x:Key="IconConverter"/>
         <conv:EnumToVisibilityConverter x:Key="EnumToVisibility"/>
         <conv:EnumEqualsConverter x:Key="EnumEquals"/>
         <conv:BitmapPixelSizeConverter x:Key="BitmapPixelSize"/>
@@ -1024,9 +1023,17 @@
                                         </Button.Style>
                                     </Button>
 
-                                    <Image DockPanel.Dock="Left"
-                                           Source="{Binding FullPath, Converter={StaticResource IconConverter}, ConverterParameter=Small}"
-                                           Width="16" Height="16" Margin="0,0,4,0"/>
+                                    <!--
+                                        AsyncIcon, not a converter on the
+                                        binding: the converter asks the shell
+                                        on the spot, and a branch of forty
+                                        folders is forty synchronous shell
+                                        calls on the dispatcher, taken while
+                                        the tree is trying to draw.
+                                    -->
+                                    <controls:AsyncIcon DockPanel.Dock="Left"
+                                                        IconPath="{Binding FullPath}" IconSize="Small"
+                                                        Width="16" Height="16" Margin="0,0,4,0"/>
                                     <!--
                                         A bookmark whose folder is gone
                                         stays in the list, greyed and
@@ -1090,7 +1097,7 @@
                 -->
                 <TreeView x:Name="Tree" Grid.Row="2"
                           ContextMenu="{StaticResource PanelSettingsMenu}"
-                          ItemsSource="{Binding Roots}"
+                          ItemsSource="{Binding Trees.Roots}"
                           SelectedItemChanged="Tree_SelectedItemChanged"
                           PreviewMouseLeftButtonDown="Tree_PreviewMouseLeftButtonDown"
                           PreviewMouseLeftButtonUp="Tree_PreviewMouseLeftButtonUp"
@@ -1113,8 +1120,8 @@
                     <TreeView.ItemTemplate>
                         <HierarchicalDataTemplate ItemsSource="{Binding Children}">
                             <StackPanel Orientation="Horizontal" Background="Transparent">
-                                <Image Source="{Binding FullPath, Converter={StaticResource IconConverter}, ConverterParameter=Small}"
-                                       Width="16" Height="16" Margin="0,0,4,0"/>
+                                <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Small"
+                                                    Width="16" Height="16" Margin="0,0,4,0"/>
                                 <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
                             </StackPanel>
                         </HierarchicalDataTemplate>

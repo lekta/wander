@@ -143,6 +143,13 @@ public sealed class BookmarksController {
                     }
                 }
             }
+
+            // One pass for the whole panel: every row above was drawn with
+            // a chevron on faith, and the disk answers off the UI thread.
+            // Shell namespaces and missing bookmarks are built without a
+            // filesystem and there is nothing to ask about them.
+            TreeNodeViewModel.ProbeForChevrons(
+                _fs, Items.Where(b => b.HasFileSystem).ToList());
         } finally {
             IsBuilding = false;
         }
@@ -297,8 +304,10 @@ public sealed class BookmarksController {
             return;
         }
 
+        // Optimistic chevron; Build's ProbeForChevrons pass corrects the
+        // leaves off the UI thread rather than asking the disk here.
         var node = new TreeNodeViewModel(
-            label, path, EntryKind.Directory, _fs, _fs.HasSubdirectories(path), _settings);
+            label, path, EntryKind.Directory, _fs, hasChildren: true, _settings);
         _wire(node);
         Items.Add(node);
     }
@@ -327,7 +336,7 @@ public sealed class BookmarksController {
         var node = new TreeNodeViewModel(
             name, path, EntryKind.Directory,
             exists ? _fs : null,
-            exists && _fs.HasSubdirectories(path),
+            hasChildren: exists,
             _settings) {
             IsRemovableBookmark = true,
             StartsUserSection = startsSection,

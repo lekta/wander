@@ -2,6 +2,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using Wander.Core;
 using Wander.Core.Diagnostics;
 using Wander.Core.Icons;
@@ -65,7 +66,7 @@ public sealed class AsyncIcon : Image {
         ((AsyncIcon)d).Reload();
     }
 
-    private async void Reload() {
+    private void Reload() {
         // Bumping the generation invalidates whatever load is in flight for
         // the previous path — its result will be dropped below.
         int generation = ++_generation;
@@ -83,24 +84,132 @@ public sealed class AsyncIcon : Image {
 
         byte[]? cached = icons.TryGetCachedIcon(path, size);
         if (cached is not null) {
-            // The only thumbnail work left on the UI thread, and only for a
-            // file this session has not drawn before — see IconImageCache.
-            using (PerfLog.Measure("icon.decode-ui")) {
-                Source = IconImageCache.Get(path, size, cached);
+            // Drawn before this session: set synchronously, so scrolling
+            // back over seen tiles doesn't blink.
+            if (IconImageCache.TryGetDecoded(path, size, out var decoded)) {
+                Source = decoded;
+
+                return;
             }
+
+            // A 16-px glyph decodes in microseconds and is what the tree
+            // and the Details column run on — it stays synchronous. The
+            // thumbnail sizes are the expensive decodes (up to 41 ms each,
+            // hundreds per second on a folder revisit — icon.decode-ui in
+            // the session log), and only they take the async road.
+            if (IsLightweight(size)) {
+                using (PerfLog.Measure("icon.decode-ui")) {
+                    Source = IconImageCache.Get(path, size, cached);
+                }
+
+                return;
+            }
+
+            Source = null;
+            _ = DecodeAndApplyAsync(path, size, cached, generation);
 
             return;
         }
 
         Source = null;
-        var image = await LoadAsync(path, size, () => generation == _generation);
-        if (generation == _generation) {
-            Source = image;
+        _ = LoadAndApplyAsync(path, size, generation);
+    }
+
+
+    /// <summary>
+    /// Small and Normal are one glyph per file *type* — cheap to decode,
+    /// few in number, and what the folder panels and the Details view live
+    /// on. They are delivered at Normal priority, ahead of the thumbnail
+    /// stream: a tree whose rows have no icons reads as broken, while a
+    /// tile whose picture arrives a beat later reads as loading. Medium
+    /// and Large are per-file thumbnails — the heavy stream that must
+    /// never starve input, so they land at Background.
+    /// </summary>
+    private static bool IsLightweight(IconSize size) {
+        return size is IconSize.Small or IconSize.Normal;
+    }
+
+
+    /// <summary>
+    /// Decodes bytes the icon cache already had and applies the image the
+    /// same way a fresh load does — below input priority.
+    /// </summary>
+    private async Task DecodeAndApplyAsync(string path, IconSize size, byte[] bytes, int generation) {
+        var image = await Task.Run(() => IconImageCache.Get(path, size, bytes)).ConfigureAwait(false);
+        if (generation != _generation) {
+            return;
         }
+
+        _ = Dispatcher.BeginInvoke(ApplyPriority(size), () => {
+            if (generation == _generation) {
+                Source = image;
+            }
+        });
+    }
+
+    /// <summary>
+    /// The whole pipeline stays off the UI thread, and the finished image
+    /// comes back at <see cref="DispatcherPriority.Background"/> — below
+    /// input. A folder of photographs streams in dozens of thumbnails a
+    /// second, and landing each one at the default (Normal) priority put
+    /// that stream ahead of the user's clicks and keys in the dispatcher
+    /// queue: the window went unresponsive for seconds while it was merely
+    /// filling in pictures (ui.stall 2.5 s in the session log, with no
+    /// navigation in flight at all). Pictures can wait; the user cannot.
+    /// </summary>
+    /// <summary>One second between the two attempts at a failed icon.</summary>
+    private const int RetryDelayMs = 1000;
+
+
+    private async Task LoadAndApplyAsync(string path, IconSize size, int generation) {
+        var image = await LoadAsync(path, size, () => generation == _generation).ConfigureAwait(false);
+
+        // One more try before giving up. The list heals a failed icon by
+        // itself — scrolling realises the container again and re-asks —
+        // but the folder panels build their rows once per session, so a
+        // load that failed there (the shell flaking under the startup
+        // burst) stayed a blank row forever. Legitimate "no preview"
+        // answers are negative-cached by the provider, so for those the
+        // retry costs one dictionary lookup.
+        if (image is null && generation == _generation) {
+            await Task.Delay(RetryDelayMs).ConfigureAwait(false);
+            if (generation == _generation) {
+                image = await LoadAsync(path, size, () => generation == _generation).ConfigureAwait(false);
+            }
+        }
+
+        // A load that is still wanted and got nothing is a provider failure
+        // the retry above did not heal — the one line that told apart "the
+        // shell flaked" from "the delivery was dropped" when tree icons
+        // went missing. It fires only on genuine failures, so it can stay.
+        // Superseded loads are routine and stay silent.
+        if (image is null) {
+            if (generation == _generation) {
+                ServiceLocator.TryGet<Wander.Core.Logging.ILogger>()?.Info(
+                    $"[icon-diag] no icon from provider ({size}) — {path}");
+            }
+
+            return;
+        }
+        if (generation != _generation) {
+            return;
+        }
+
+        _ = Dispatcher.BeginInvoke(ApplyPriority(size), () => {
+            if (generation == _generation) {
+                Source = image;
+            }
+        });
+    }
+
+
+    /// <summary>See <see cref="IsLightweight"/> for why the two classes differ.</summary>
+    private static DispatcherPriority ApplyPriority(IconSize size) {
+        return IsLightweight(size) ? DispatcherPriority.Normal : DispatcherPriority.Background;
     }
 
     private static async Task<BitmapImage?> LoadAsync(string path, IconSize size, Func<bool> stillWanted) {
-        await _gate.WaitAsync();
+        await _gate.WaitAsync().ConfigureAwait(false);
         try {
             // Re-check after queueing: a fast scroll through a big folder can
             // park hundreds of loads on this gate, and by the time one gets
@@ -121,7 +230,7 @@ public sealed class AsyncIcon : Image {
                     // UI thread the first time it comes round again.
                     return bytes is null ? null : IconImageCache.Get(path, size, bytes);
                 }
-            });
+            }).ConfigureAwait(false);
         } catch {
             // A missing icon is a cosmetic loss; never let it reach the
             // dispatcher's unhandled-exception handler.

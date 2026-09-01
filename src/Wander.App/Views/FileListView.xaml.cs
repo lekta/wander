@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Threading;
 using Wander.App.Controls;
 using Wander.App.Resources;
 using Wander.App.Util;
@@ -49,6 +50,14 @@ public partial class FileListView : UserControl {
     private readonly TypeAheadController _typeAhead = new();
 
 
+    /// <summary>
+    /// The keyboard was in here and went nowhere — the row that had it was
+    /// rebuilt out of existence and focus fell back onto the window. See
+    /// <see cref="OnKeyboardFocusWithinChanged"/>.
+    /// </summary>
+    private bool _focusFellOutOfTheList;
+
+
     public FileListView() {
         InitializeComponent();
         _rubberBand = new RubberBandController(
@@ -56,6 +65,30 @@ public partial class FileListView : UserControl {
             SetListSelection,
             ClearListSelection);
         DataContextChanged += OnDataContextChanged;
+        IsKeyboardFocusWithinChanged += OnKeyboardFocusWithinChanged;
+    }
+
+
+    /// <summary>
+    /// Notices the keyboard leaving for nowhere.
+    ///
+    /// <para>
+    /// A rebuild that replaces the focused row leaves WPF with nothing to
+    /// move focus to, so it hands it to the window. That is not the user
+    /// going somewhere — it is the list dropping them — and the next
+    /// selection restore takes it back. Focus landing on a real element (the
+    /// address bar, the tree, the search box) is the user going somewhere,
+    /// and is left alone.
+    /// </para>
+    /// </summary>
+    private void OnKeyboardFocusWithinChanged(object sender, DependencyPropertyChangedEventArgs e) {
+        if (IsKeyboardFocusWithin) {
+            _focusFellOutOfTheList = false;
+
+            return;
+        }
+
+        _focusFellOutOfTheList = Keyboard.FocusedElement is null or Window;
     }
 
 
@@ -128,7 +161,37 @@ public partial class FileListView : UserControl {
             ShowRatingColumn();
         } else if (e.PropertyName == nameof(MainViewModel.IsSearchResults)) {
             ShowSearchColumns();
+        } else if (e.PropertyName == nameof(MainViewModel.ViewMode)) {
+            KeepFocusAcrossViewSwap();
         }
+    }
+
+
+    /// <summary>
+    /// Carries the keyboard from one view to the next when the mode changes.
+    ///
+    /// <para>
+    /// The four views are four controls, and switching mode collapses the one
+    /// that had the keyboard. Focus then falls to the window, and the file
+    /// area is left looking selected but answering to nothing — walk into a
+    /// folder of photographs, which turns the gallery on by itself, and the
+    /// next arrow key went nowhere. Only done when the area already had the
+    /// keyboard: a mode changed from the toolbar or the settings dialog must
+    /// not pull focus out of wherever the user is.
+    /// </para>
+    /// </summary>
+    private void KeepFocusAcrossViewSwap() {
+        if (!IsKeyboardFocusWithin) {
+            return;
+        }
+
+        // After the swap, not during it: the incoming control is still
+        // collapsed at this point and cannot take focus.
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => {
+            if (DataContext is MainViewModel) {
+                FocusList();
+            }
+        }));
     }
 
 
@@ -230,7 +293,15 @@ public partial class FileListView : UserControl {
     /// wherever the cursor was last, which is usually the top.
     /// </summary>
     public void FocusList() {
-        if (Vm.SelectedEntry is { } entry && FocusRow(entry)) {
+        if (Vm.SelectedEntry is { } entry) {
+            // Falling back to the list itself is right only when there is
+            // nothing to stand on. When there *is* a row and its container
+            // simply has not been realised yet, taking the fallback leaves
+            // the keyboard on the list with no row under it — which is the
+            // state where the next arrow key starts from the top instead of
+            // from where the user was.
+            FocusRowWhenReady(entry);
+
             return;
         }
 
@@ -243,6 +314,41 @@ public partial class FileListView : UserControl {
     /// realised container (virtualised away), so the caller can fall back
     /// to focusing the list itself.
     /// </summary>
+    /// <summary>
+    /// Puts the keyboard on a row, waiting for it to exist if it does not yet.
+    ///
+    /// <para>
+    /// <see cref="FocusRow"/> can only focus a container the panel has
+    /// realised, and right after a listing lands there may not be one: the
+    /// rows arrived a moment ago, the panel is still generating containers,
+    /// and a folder that is also loading thumbnails and expanding a tree
+    /// branch gives it plenty of reason to be late. Failing there is silent —
+    /// the row ends up selected but the keyboard stays on the list, and the
+    /// next arrow key resumes from the top instead of the row. One retry
+    /// after the layout pass is enough; anything still missing then is a row
+    /// that genuinely is not in the list.
+    /// </para>
+    /// </summary>
+    private void FocusRowWhenReady(FileSystemEntry entry) {
+        if (FocusRow(entry)) {
+            return;
+        }
+
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => {
+            if (DataContext is not MainViewModel || !Vm.Entries.Contains(entry)) {
+                return;
+            }
+
+            if (!FocusRow(entry)) {
+                // Still nothing to stand on. The list itself is a worse place
+                // for the keyboard than the row, but a better one than the
+                // window — from here Tab and the arrow keys still work.
+                ActiveList()?.Focus();
+            }
+        }));
+    }
+
+
     private bool FocusRow(FileSystemEntry entry) {
         switch (ActiveList()) {
             case DataGrid dg:
@@ -328,8 +434,10 @@ public partial class FileListView : UserControl {
         // keyboard back to where the user was.
         bool focusFellToTheList = ActiveList() is { } focused
             && ReferenceEquals(Keyboard.FocusedElement, focused);
-        bool takeFocus = _focusRowAfterRestore || Vm.FocusListAfterRestore || focusFellToTheList;
+        bool takeFocus = _focusRowAfterRestore || Vm.FocusListAfterRestore
+            || focusFellToTheList || _focusFellOutOfTheList;
         _focusRowAfterRestore = false;
+        _focusFellOutOfTheList = false;
         Vm.FocusListAfterRestore = false;
 
         if (items.Count == 0) {
@@ -359,7 +467,7 @@ public partial class FileListView : UserControl {
         // the keyboard belongs on. A refresh or an undo triggered from
         // somewhere else must leave focus where it is.
         if (takeFocus) {
-            FocusRow(items[0]);
+            FocusRowWhenReady(items[0]);
         }
     }
 
@@ -638,8 +746,17 @@ public partial class FileListView : UserControl {
             || (e.Key == Key.System && e.SystemKey == Key.F10 && Keyboard.Modifiers == ModifierKeys.Shift);
         if (menuKey && sender is FrameworkElement host) {
             _contextIsBackground = Vm.SelectedEntries.Count == 0;
-            ContextMenuRequested?.Invoke(this, new FileListMenuRequest(host, PlacementMode.Center, _contextIsBackground));
             e.Handled = true;
+
+            // Opened after this key event, not inside it. A menu opened
+            // synchronously takes the keyboard while the very key that asked
+            // for it is still being routed, and the menu reads that key as
+            // "close" — which is why it appeared and vanished in the same
+            // press. The mouse path stays direct: there is no key in flight
+            // there to be read twice.
+            Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
+                ContextMenuRequested?.Invoke(
+                    this, new FileListMenuRequest(host, PlacementMode.Center, _contextIsBackground))));
 
             return;
         }

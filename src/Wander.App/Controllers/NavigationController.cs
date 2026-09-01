@@ -154,15 +154,57 @@ public sealed class NavigationController : ObservableObject {
     /// <summary>
     /// Entry point used by every code path that wants to change folder
     /// (right-pane double-click, tree click, drop-target follow, restore).
-    /// Runs the host's navigability check first; on failure delegates to
-    /// the host's "invalid path" handler and returns without pushing
-    /// history.
+    ///
+    /// <para>
+    /// No pre-flight disk check: probing the path here ran
+    /// <c>DirectoryExists</c> on the UI thread, and on a sleeping drive or
+    /// a pulled card reader that single call held the whole window for
+    /// seconds — on every navigation, including ones whose paths came
+    /// straight out of a listing that just succeeded. Navigation itself is
+    /// bookkeeping and must be instant; whether the folder is actually
+    /// there is answered by the async listing, whose failure path already
+    /// shows the "folder is gone" panel. Back/Forward/Up have always
+    /// worked exactly this way.
+    /// </para>
+    ///
+    /// <para>
+    /// The one entry that still gets validated is typed text — the address
+    /// bar and its crumbs (<see cref="NavigationSource.Address"/>) — where
+    /// a typo staying put with a status message is the better answer than
+    /// walking into a "folder is gone" panel. That check runs off the UI
+    /// thread; see <see cref="NavigateWhenValidAsync"/>.
+    /// </para>
     /// </summary>
     public void NavigateTo(string path, NavigationSource source = NavigationSource.External) {
-        if (!_canNavigate(path)) {
-            _onInvalidPath(path);
+        if (source == NavigationSource.Address) {
+            _ = NavigateWhenValidAsync(path, source);
+
             return;
         }
+
+        _nav.NavigateTo(path, source);
+    }
+
+
+    /// <summary>
+    /// The typed-path route: existence is checked on the pool, and the
+    /// navigation happens only if the user has not gone somewhere else
+    /// while the disk was answering — a slow "yes" from a spun-down drive
+    /// must not yank them away from wherever they went meanwhile.
+    /// </summary>
+    private async Task NavigateWhenValidAsync(string path, NavigationSource source) {
+        string? before = _nav.Current;
+        bool ok = await Task.Run(() => _canNavigate(path));
+
+        if (!string.Equals(_nav.Current, before, StringComparison.OrdinalIgnoreCase)) {
+            return;
+        }
+        if (!ok) {
+            _onInvalidPath(path);
+
+            return;
+        }
+
         _nav.NavigateTo(path, source);
     }
 
