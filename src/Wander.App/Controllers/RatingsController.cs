@@ -7,6 +7,7 @@ using Wander.Core.Companions;
 using Wander.Core.Diagnostics;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
+using Wander.Core.Listing;
 using Wander.Core.Logging;
 
 namespace Wander.App.Controllers;
@@ -254,7 +255,7 @@ public sealed class RatingsController {
         try {
             rated = await Task.Run(() => {
                 using var pass = PerfLog.Measure("bg.ratings");
-                var withRatings = _metadata!.WithRatings(items, token);
+                var withRatings = RatedListing.WithRatings(items, _metadata!.ReadRatingFor, token);
 
                 // Sorting by rating is the one key a directory scan cannot
                 // answer, so the order it produced was a placeholder. Only

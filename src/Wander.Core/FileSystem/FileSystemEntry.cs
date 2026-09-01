@@ -25,7 +25,7 @@ public sealed record FileSystemEntry(
     IReadOnlyList<string>? Companions = null,
     // How the photo is marked up, read out of one of those companions
     // (.pp3 / .xmp) by a pass that runs after the listing has landed — see
-    // CompanionMetadataService.WithRatings. null means "not looked at yet"
+    // Listing/RatedListing.WithRatings. null means "not looked at yet"
     // as well as "nothing to say"; the two are the same to everyone above.
     SidecarRating? Rating = null,
     // The line this file matched a content search on, already trimmed for

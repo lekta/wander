@@ -51,6 +51,7 @@ src/
 │   ├── Icons/          IIconProvider, IImageMetadataReader, IconSize, ImageMetadata,
 │   │                   RawPreviewExtractor
 │   ├── Layout/         TileLayout, TileRect, TileMetrics
+│   ├── Listing/        FolderSession, ListingDiff, ArrivalIntent, RatedListing
 │   ├── Logging/        ILogger, ILogFile, NullLogger
 │   ├── Menu/           ContextMenuBuilder, ContextMenuTarget, ContextMenuSettings,
 │   │                   ContextMenuCatalog, MenuEntry, MenuCommandId
@@ -84,8 +85,11 @@ src/
     ├── Converters/     Icon, EnumEquals, EnumToVisibility, BitmapPixelSize, RankStar,
     │                   TreeIndent, RenameEditorVisibility
     ├── Diagnostics/    CrashReporter, UiStallWatch
-    ├── DragPreview/    DragPreviewWindow, DropTargetAdorner, DragAction, NativeMethods
+    ├── DragPreview/    DragPreviewWindow, OutgoingDrag, DropTargetAdorner,
+    │                   DragAction, NativeMethods
     ├── Menu/           ContextMenuFactory, MenuBinding, ShellMenuCache
+    ├── Preview/        ImageDecoder, ModelBuilder + ModelScene, PreviewText,
+    │                   SummaryText — раскодирование для панели просмотра
     ├── Util/           SelectionController, RubberBandController, ListVisuals,
     │                   DropTargetController, SizeFormatter
     ├── ViewModels/     MainViewModel, NavigationController, PreviewController,
@@ -980,8 +984,10 @@ CompanionMetadataService  чтение/запись содержимого са�
    ├──▶ UnityMetaSidecar.Read()   GUID, импортёр, folderAsset
    ├──▶ Pp3Sidecar.Read()         Rank, ColorLabel
    ├──▶ Pp3Sidecar.WithRank()  ─▶ IFileSystem.ReplaceAtomic()
-   ├──▶ WithRatings()             листинг → тот же листинг с Rating
    └──▶ CreateRatingSidecar()     сайдкара нет → создать (по согласию)
+
+Listing/RatedListing      WithRatings()  листинг → тот же листинг с Rating
+                                         (читалка приходит делегатом)
 ```
 
 **Два шаблона имён**, оба обязательны — иначе половина форматов отваливается:
@@ -1174,16 +1180,20 @@ RefreshFolderAsync            листинг + свёртка спутников
    ├──▶ AutoSelectViewMode()  только при входе в папку, не на F5
    ├──▶ _search.SetSource()   строки появляются на экране
    └──▶ StartRatingPass()
-          └──▶ CompanionMetadataService.WithRatings()   (тредпул, с отменой)
+          └──▶ RatedListing.WithRatings()   (тредпул, с отменой)
                  └──▶ _search.SetSource()  ещё раз, уже с Rating
 ```
 
 Почему вторым проходом: папка из пятисот RAW — это пятьсот маленьких чтений,
 и папка должна появиться раньше, чем они закончатся. Почему дёшево: проход
 трогает только строки, у которых **уже есть** `Companions`, поэтому папка без
-сайдкаров не стоит ни одного обращения к диску, а `WithRatings` в этом случае
-возвращает **тот же самый список по ссылке** — вызывающий сравнивает ссылки и
-пропускает весь UI-проход.
+сайдкаров не стоит ни одного обращения к диску, а `RatedListing.WithRatings`
+в этом случае возвращает **тот же самый список по ссылке** — вызывающий
+сравнивает ссылки и пропускает весь UI-проход. Живёт проход в
+`Wander.Core/Listing/`, а не рядом с сайдкарами: прочитать оценку одного
+файла — вопрос про файл, а пройти строки папки и решить, какие из них
+заменить, — вопрос про листинг. Как читается
+оценка, приходит делегатом (`CompanionMetadataService.ReadRatingFor`).
 
 Отмена — та же схема, что у листинга: свой `CancellationTokenSource`,
 проверка `_listedPath` перед публикацией. Проход, добежавший после ухода в
@@ -1333,6 +1343,7 @@ Wander.
 | `Views/FileListView` | Все режимы отображения списка и их общие жесты: выделение, рамка, взведение drag, двойной клик, переименование на месте, набор имени, `Ctrl` + колесо, вызов меню |
 | `Views/PreviewPane` | Всё, что рисуется в панели просмотра, плюс зум по правой кнопке, транспорт видео и инициализация WebView2 |
 | `Util/DropTargetController` | Приём drop'а: какая папка под курсором, разрешён ли туда drop, что он сделает, подсветка цели |
+| `DragPreview/OutgoingDrag` | Перетаскивание наружу, пока оно идёт: плашка у курсора, курсор, формулировка «что и куда» |
 
 **`DropTargetController` решает, но не действует.** Он отвечает планом
 (`DropPlan`: что, куда, каким действием), а выполняет план окно — через
@@ -1348,9 +1359,11 @@ view-model, чтобы файловая операция шла тем же ед
 Граница между окном и списком — два события и несколько методов:
 
 - `FileListView.DragStartRequested` — «пользователь потащил выделение».
-  Сам drag окно запускает у себя: окно рулит плашкой-превью, подсветкой
-  цели и вычислением эффекта, и тот же конвейер обслуживает перетаскивание
-  из дерева.
+  Жест принадлежит тому, за что схватились, — списку или строке дерева, —
+  а сам drag ведёт `OutgoingDrag`: плашка, курсор и формулировка одни на
+  все источники. Куда бы упало, спрашивается у `DropTargetController`;
+  единственное, чего drag не видит сам, — загорание полосы закладок, и о
+  нём ему сообщает окно.
 - `FileListView.ContextMenuRequested` — «покажи меню вот здесь». Модель
   меню собирает Core (`ContextMenuBuilder`), шелловские пункты добавляет
   окно.
@@ -1780,6 +1793,22 @@ Startup: first frame 1583 ms after process start
 ставят первую оценку; `OfferRating` предлагает её и файлу без спутников, а
 блок это предложение прятал.
 
+**Куда файл пойдёт, решает `PreviewRouter`** (Core) — таблица «расширение →
+`PreviewRoute`», без единого чтения с диска. Она отделена от `PreviewKind`
+намеренно: `Kind` говорит, какой контрол рисует результат, а `Route` — каким
+загрузчиком он получен, и это разные вопросы. Markdown, FB2 и PDF приходят в
+один и тот же WebView2 тремя разными путями, а Unity-ассет читается как код
+или отвергается в зависимости от того, чем окажутся его первые байты.
+
+Содержание таблицы — **порядок правил**, а не списки: расширения состоят в
+двух списках сразу. `.webp` — и картинка (`ImageFormats`, по которому галерея
+считает папку папкой снимков), и многокадровый контейнер, который надо
+собирать по кадрам; `.mtl` лежит рядом с моделями и является текстом; `.svg`
+считается исходником, потому что растра в нём нет и показывать надо разметку.
+Побеждает первое подошедшее правило, и перестановка двух строк меняет то, что
+видит пользователь, — поэтому таблица лежит в Core под тестами
+(`PreviewRouterTests`), а не разветвлённым `if` внутри контроллера.
+
 **Разбор форматов живёт в Core, отрисовка — в App.** `Wander.Core/Preview/`
 не знает ни про WPF, ни про Windows и покрыт тестами:
 
@@ -1850,6 +1879,15 @@ Startup: first frame 1583 ms after process start
   выглядит как сплошные NUL), нулевой байт — приговор, а доля управляющих
   символов проверяется пропорцией: одиночный escape в логе не делает файл
   бинарным.
+
+**Отрисовка разложена по `Wander.App/Preview/`**, а не живёт в контроллере:
+`ImageDecoder` (правила декодера — кэш URI, декод обложки сразу в нужный
+размер, встроенный превью RAW, поворот по EXIF), `ModelBuilder` + `ModelScene`
+(геометрия Core → `MeshGeometry3D`, центр и радиус сцены), `PreviewText`
+(чтение с бюджетом и определением кодировки, обрезка с подписью, Markdown,
+общая HTML-обёртка) и `SummaryText` (подпись под содержимым). Контроллеру
+остаётся конвейер: что грузим, в каком порядке, кто отменяет и что показать,
+пока грузится.
 
 **Ярлык прозрачен для панели.** `.lnk` в `UpdatePreviewAsync` резолвится
 через `IShortcutService`, и дальше рисуется цель: папка — переписью, файл —

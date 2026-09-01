@@ -96,42 +96,6 @@ public sealed class CompanionMetadataService {
     }
 
 
-    /// <summary>
-    /// The same listing with <see cref="FileSystemEntry.Rating"/> filled in
-    /// from each row's sidecar. Returns the list it was given, unchanged,
-    /// when nothing in the folder has a rating — that is the common case,
-    /// and it lets the caller skip the whole UI pass rather than reconcile
-    /// a list against an identical copy of itself.
-    ///
-    /// <para>
-    /// Cheap by construction: only rows that already carry a companion are
-    /// touched, so a folder with no sidecars costs no I/O at all, and a
-    /// folder of RAW files costs one small text read per photo. This is
-    /// meant to run on a worker thread after the listing has landed, not as
-    /// part of it — the listing must not wait on it.
-    /// </para>
-    /// </summary>
-    public IReadOnlyList<FileSystemEntry> WithRatings(
-        IReadOnlyList<FileSystemEntry> entries, CancellationToken ct = default) {
-        List<FileSystemEntry>? rated = null;
-
-        for (int i = 0; i < entries.Count; i++) {
-            ct.ThrowIfCancellationRequested();
-
-            var rating = ReadRatingFor(entries[i]);
-            if (rating is null) {
-                rated?.Add(entries[i]);
-                continue;
-            }
-
-            rated ??= new List<FileSystemEntry>(entries.Take(i));
-            rated.Add(entries[i] with { Rating = rating });
-        }
-
-        return rated ?? entries;
-    }
-
-
     /// <summary>What a sidecar of this format would be called next to <paramref name="mainPath"/>.</summary>
     public string SidecarPathFor(string mainPath, SidecarFormat format) {
         string suffix = format.Suffix();

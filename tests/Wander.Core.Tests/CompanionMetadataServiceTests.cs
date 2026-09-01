@@ -1,6 +1,7 @@
 using System.Text;
 using Wander.Core.Companions;
 using Wander.Core.FileSystem;
+using Wander.Core.Listing;
 using Wander.Core.Logging;
 using Wander.Core.Tests.Fakes;
 using Wander.Core.Undo;
@@ -198,7 +199,7 @@ public class CompanionMetadataServiceTests {
         var (service, _, _) = Build();
         var rows = new[] { Row("IMG_1234.CR2", Pp3Path) };
 
-        var rated = service.WithRatings(rows);
+        var rated = RatedListing.WithRatings(rows, service.ReadRatingFor);
 
         Assert.Equal(2, rated[0].Rating!.Rank);
         Assert.Equal(1, rated[0].Rating!.ColorLabel);
@@ -211,7 +212,7 @@ public class CompanionMetadataServiceTests {
         var (service, _, _) = Build(pp3: null);
         var rows = new[] { Row("notes.txt"), Row("Sprite.png", MetaPath) };
 
-        Assert.Same(rows, service.WithRatings(rows));
+        Assert.Same(rows, RatedListing.WithRatings(rows, service.ReadRatingFor));
     }
 
     [Fact]
@@ -219,7 +220,7 @@ public class CompanionMetadataServiceTests {
         var (service, _, _) = Build();
         var rows = new[] { Row("plain.jpg"), Row("IMG_1234.CR2", Pp3Path) };
 
-        var rated = service.WithRatings(rows);
+        var rated = RatedListing.WithRatings(rows, service.ReadRatingFor);
 
         Assert.Null(rated[0].Rating);
         Assert.NotNull(rated[1].Rating);
@@ -230,7 +231,7 @@ public class CompanionMetadataServiceTests {
         var (service, _, _) = Build(pp3: null);
         var rows = new[] { Row("Sprite.png", MetaPath) };
 
-        var rated = service.WithRatings(rows);
+        var rated = RatedListing.WithRatings(rows, service.ReadRatingFor);
 
         Assert.Null(rated[0].Rating);
     }

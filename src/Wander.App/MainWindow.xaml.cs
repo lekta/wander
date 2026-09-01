@@ -9,7 +9,6 @@ using System.Windows.Threading;
 using Microsoft.Web.WebView2.Core;
 using Wander.App.Controllers;
 using Wander.App.Controls;
-using Wander.App.Converters;
 using Wander.App.DragPreview;
 using Wander.App.Menu;
 using Wander.App.Resources;
@@ -18,13 +17,10 @@ using Wander.App.ViewModels;
 using Wander.App.Views;
 using Wander.Core;
 using Wander.Core.FileSystem;
-using Wander.Core.Icons;
 using Wander.Core.Menu;
 using Wander.Core.Navigation;
 using Wander.Core.Persistence;
 using Wander.Core.Shell;
-// Disambiguate from System.Windows.DragAction (used by QueryContinueDrag).
-using DragAction = Wander.App.DragPreview.DragAction;
 
 
 namespace Wander.App;
@@ -62,13 +58,6 @@ public partial class MainWindow : Window {
     private Point _treeDragOrigin;
     private TreeNodeViewModel? _treeMenuNode;
 
-    // --- Drag source state ---------------------------------------------
-    private int _dragPathCount;
-    private string? _dragFirstName;
-
-    // --- Drag preview ---------------------------------------------------
-    private DragPreviewWindow? _dragPreview;
-
     // --- Search window ---------------------------------------------------
     /// <summary>
     /// The search criteria window. Created on first use and hidden rather
@@ -89,6 +78,13 @@ public partial class MainWindow : Window {
     /// cursor is drawn here from what it reports.
     /// </summary>
     private DropTargetController _drops = null!;
+
+    /// <summary>
+    /// The drag currently leaving Wander — the plaque, the cursor and the
+    /// wording. See <see cref="OutgoingDrag"/>; the window keeps only the
+    /// gestures that start one.
+    /// </summary>
+    private OutgoingDrag _outgoing = null!;
 
 
     public MainWindow() {
@@ -257,6 +253,7 @@ public partial class MainWindow : Window {
         // back to is the one the view model is listing, and there is no view
         // model yet when the window is constructed.
         _drops = new DropTargetController(() => Vm.CurrentPath);
+        _outgoing = new OutgoingDrag(_drops, () => SetBookmarkDropZoneActive(false));
         // A third-party command can create, rename or delete behind our
         // back, so a successful one invalidates both the listing and the
         // cached shell answer.
@@ -1362,7 +1359,7 @@ public partial class MainWindow : Window {
         // navigate.
         _treeClickNavigates = false;
         var paths = new[] { node.FullPath };
-        StartDrag((DependencyObject)sender, paths, paths);
+        _outgoing.Run((DependencyObject)sender, paths, paths);
     }
 
     private void Tree_PreviewMouseWheel(object sender, MouseWheelEventArgs e) {
@@ -1458,174 +1455,10 @@ public partial class MainWindow : Window {
 
     // --- Drag source ----------------------------------------------------
     // The gesture that starts a drag belongs to whatever the user grabbed —
-    // the file list or a tree row. Running the drag does not: the preview
-    // window, the drop-target highlight and the effect calculation are one
-    // shared pipeline, and it lives here.
+    // the file list or a tree row. Running it does not: see OutgoingDrag.
 
     private void FileList_DragStartRequested(object? sender, FileListDragRequest e) {
-        StartDrag(e.Source, e.Paths, e.Payload);
-    }
-
-    private void StartDrag(DependencyObject src, string[] paths, string[] payload) {
-        _dragPathCount = paths.Length;
-        _dragFirstName = Path.GetFileName(paths[0].TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-        _drops.Clear();
-
-        var preview = new DragPreviewWindow();
-        preview.SetIcon(IconConverter.Load(paths[0], IconSize.Normal));
-        preview.SetCount(paths.Length);
-        string startDesc = paths.Length == 1 ? $"Drag '{_dragFirstName}'" : $"Drag {paths.Length} items";
-        preview.SetAction(DragAction.Forbidden, startDesc, null);
-        preview.Show();
-        preview.MoveToCursor();
-        _dragPreview = preview;
-
-        var feedback = new GiveFeedbackEventHandler(OnGiveFeedback);
-        System.Windows.DragDrop.AddGiveFeedbackHandler(src, feedback);
-
-        try {
-            var data = new DataObject(DataFormats.FileDrop, payload);
-            System.Windows.DragDrop.DoDragDrop(src, data, DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link);
-        } catch {
-            // drop target may throw on rejection — ignore.
-        } finally {
-            System.Windows.DragDrop.RemoveGiveFeedbackHandler(src, feedback);
-            _drops.Clear();
-            SetBookmarkDropZoneActive(false);
-            preview.Close();
-            _dragPreview = null;
-        }
-    }
-
-    private void OnGiveFeedback(object sender, GiveFeedbackEventArgs e) {
-        // Keep the system's Copy/Move/None cursor in addition to our
-        // preview — except while the cursor is still over the list the drag
-        // started in. There the system would draw the "no entry" sign,
-        // which is a verdict on a gesture nobody has made yet: let go and
-        // the file simply stays where it was. Plain arrow instead.
-        if (IsNeutralDropTarget()) {
-            e.UseDefaultCursors = false;
-            Mouse.SetCursor(Cursors.Arrow);
-            e.Handled = true;
-        } else {
-            e.UseDefaultCursors = true;
-        }
-
-        if (_dragPreview is null) {
-            return;
-        }
-        _dragPreview.MoveToCursor();
-        UpdatePreviewForCurrentTarget();
-    }
-
-
-    /// <summary>
-    /// The cursor is over a drop surface that would refuse, but only
-    /// because the target fell back to the folder already being listed —
-    /// dragging across a file's own neighbours. Nothing is wrong, nothing
-    /// is offered, and neither the cursor nor the plaque should say
-    /// otherwise.
-    /// </summary>
-    private bool IsNeutralDropTarget() {
-        return _drops.SelfDropReason != SelfDropReason.None
-            && _drops.Target is not null
-            && _drops.TargetIsFallback;
-    }
-
-    private void UpdatePreviewForCurrentTarget() {
-        if (_dragPreview is null) {
-            return;
-        }
-
-        DragAction action;
-        string desc;
-        string? targetText = null;
-        int count = _dragPathCount;
-
-        // Dropping into the bookmarks region is not a file operation at all,
-        // so none of the copy/move/link vocabulary applies. Without this the
-        // plaque kept showing whatever the last real target had offered —
-        // "Переместить … в Downloads" while hovering the bookmarks strip.
-        if (_drops.IsBookmarkTarget) {
-            ShowDragPreview();
-            _dragPreview.SetAction(DragAction.Link, FormatBookmarkDesc(count), null);
-
-            return;
-        }
-
-        if (_drops.Effect == DragDropEffects.None || _drops.Target is null) {
-            // Nothing would happen on release. Three sub-cases:
-            //  • Self-drop with a specific reason ("into own subfolder", …)
-            //    *and* a folder the user actually aimed at — that reason is
-            //    worth saying loudly, because they pointed at that folder.
-            //  • The refusal is against the fallback target, i.e. the folder
-            //    already being listed. Dragging a file across its own list
-            //    passes over its neighbours, not over a drop target, and
-            //    "… уже лежит в …" there is scolding someone for a gesture
-            //    they have not made yet. The plaque stays — you have to be
-            //    able to see what you picked up — but it only names it.
-            //  • Nothing useful under the cursor (column header, scrollbar,
-            //    splitter) — the system's no-drop cursor is enough, and a
-            //    red "Cannot drop here" plaque hovering over a perfectly
-            //    valid neighbouring folder is just noise. Hide the preview.
-            if (IsNeutralDropTarget()) {
-                ShowDragPreview();
-                action = DragAction.None;
-                desc = DescribeDragged(count);
-            } else if (_drops.SelfDropReason != SelfDropReason.None && _drops.Target is not null) {
-                ShowDragPreview();
-                action = DragAction.Forbidden;
-                desc = PathSafety.FormatReason(_drops.SelfDropReason, _drops.SelfDropOffender, _drops.Target);
-            } else {
-                HideDragPreview();
-                return;
-            }
-        } else {
-            ShowDragPreview();
-            action = _drops.Effect switch {
-                DragDropEffects.Move => DragAction.Move,
-                DragDropEffects.Link => DragAction.Link,
-                _ => DragAction.Copy,
-            };
-            string verb = action switch {
-                DragAction.Move => Strings.DragMove,
-                DragAction.Link => Strings.DragLink,
-                _ => Strings.DragCopy,
-            };
-            desc = $"{verb} {DescribeDragged(count)}";
-            targetText = string.Format(Strings.DragTarget, FormatTarget(_drops.Target));
-        }
-
-        _dragPreview.SetAction(action, desc, targetText);
-    }
-
-    private void ShowDragPreview() {
-        if (_dragPreview is { Visibility: not Visibility.Visible } p) {
-            p.Visibility = Visibility.Visible;
-        }
-    }
-
-    private void HideDragPreview() {
-        if (_dragPreview is { Visibility: Visibility.Visible } p) {
-            p.Visibility = Visibility.Hidden;
-        }
-    }
-
-    private static string FormatTarget(string path) {
-        string trimmed = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        string name = Path.GetFileName(trimmed);
-        return string.IsNullOrEmpty(name) ? path : name;
-    }
-
-    /// <summary>What is in hand: the file's name, or how many of them.</summary>
-    private string DescribeDragged(int count) {
-        return count == 1
-            ? string.Format(Strings.DragOneItem, _dragFirstName)
-            : string.Format(Strings.DragItems, count);
-    }
-
-    private string FormatBookmarkDesc(int count) {
-        return string.Format(Strings.DragAddToBookmarks, DescribeDragged(count));
+        _outgoing.Run(e.Source, e.Paths, e.Payload);
     }
 
 
@@ -1699,21 +1532,7 @@ public partial class MainWindow : Window {
         }
 
         try {
-            if (!e.Data.GetDataPresent(DataFormats.FileDrop)) {
-                return;
-            }
-            var paths = (string[])e.Data.GetData(DataFormats.FileDrop);
-            int added = 0;
-            foreach (string p in paths) {
-                if (Directory.Exists(p)) {
-                    Vm.Bookmarks.Add(p);
-                    added++;
-                }
-            }
-            if (added == 0) {
-                Vm.Status = Strings.BookmarksFoldersOnly;
-            }
-            e.Handled = true;
+            AddDroppedBookmarks(e);
         } finally {
             _drops.Clear();
         }
@@ -1756,25 +1575,37 @@ public partial class MainWindow : Window {
 
     private void BookmarkDropZone_Drop(object sender, DragEventArgs e) {
         try {
-            if (!e.Data.GetDataPresent(DataFormats.FileDrop)) {
-                return;
-            }
-            var paths = (string[])e.Data.GetData(DataFormats.FileDrop);
-            int added = 0;
-            foreach (var p in paths) {
-                if (Directory.Exists(p)) {
-                    Vm.Bookmarks.Add(p);
-                    added++;
-                }
-            }
-            if (added == 0) {
-                Vm.Status = Strings.BookmarksFoldersOnly;
-            }
-            e.Handled = true;
+            AddDroppedBookmarks(e);
         } finally {
             SetBookmarkDropZoneActive(false);
         }
     }
+
+    /// <summary>
+    /// Bookmarks every folder in the drop, and says so when there were
+    /// none — the strip and the empty area below the bookmarks answer a
+    /// drop the same way, they only differ in what they clean up
+    /// afterwards.
+    /// </summary>
+    private void AddDroppedBookmarks(DragEventArgs e) {
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop)) {
+            return;
+        }
+
+        var paths = (string[])e.Data.GetData(DataFormats.FileDrop);
+        int added = 0;
+        foreach (string p in paths) {
+            if (Directory.Exists(p)) {
+                Vm.Bookmarks.Add(p);
+                added++;
+            }
+        }
+        if (added == 0) {
+            Vm.Status = Strings.BookmarksFoldersOnly;
+        }
+        e.Handled = true;
+    }
+
 
     /// <summary>
     /// A drag is worth reacting to when it carries at least one folder that
@@ -1800,7 +1631,7 @@ public partial class MainWindow : Window {
         BookmarkDropZone.Background = active ? _dropZoneActiveFill : _dropZoneIdleFill;
         BookmarkDropZoneGlyph.Foreground = active ? _dropZoneActiveGlyph : _dropZoneIdleGlyph;
         BookmarkDropZoneGlyph.FontWeight = active ? FontWeights.Bold : FontWeights.Normal;
-        UpdatePreviewForCurrentTarget();
+        _outgoing.UpdateForCurrentTarget();
     }
 
 }

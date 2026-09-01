@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Media.Media3D;
-using Markdig;
+using Wander.App.Preview;
 using Wander.App.Resources;
 using Wander.App.Util;
 using Wander.App.ViewModels;
@@ -33,104 +33,12 @@ namespace Wander.App.Controllers;
 /// content load, the summary, or both.
 /// </para>
 /// </summary>
-/// <summary>
-/// One drawable of a model: the triangles of a single material, and the
-/// colour they are painted in front and behind.
-/// </summary>
-public sealed record ModelPart(MeshGeometry3D Geometry, Brush Front, Brush Back);
-
-
 public sealed class PreviewController : ObservableObject {
-    // What counts as a picture is Core's table (ImageFormats): the gallery
-    // decides whether a folder is a folder of photographs from it, and two
-    // tables that must agree eventually do not. RAW is a subset of it —
-    // routed through RawPreviewExtractor first, because handing sensor data
-    // to WIC is about a hundred times slower than the JPEG the file already
-    // carries. Formats whose container we can't read still fall through to
-    // WIC, so being on that list is never worse than not being on it.
-    //
-    // Animated formats go through GifImage, which composites multi-frame
-    // streams. WEBP files are usually static, but WIC's WebP codec can
-    // surface multiple frames for animated WEBPs; GifImage handles the
-    // single-frame case by just showing that one frame, so routing all
-    // .webp here costs nothing for static files and unlocks playback for
-    // animated ones.
-    private static readonly HashSet<string> _gifExtensions = new(StringComparer.OrdinalIgnoreCase) {
-        ".gif", ".webp",
-    };
-
-    // MediaElement uses Windows Media Foundation, which on Win10/11 supports
-    // these out of the box. MKV / WEBM are listed but may fall back to
-    // "Unsupported" if the user hasn't installed extension packs.
-    private static readonly HashSet<string> _videoExtensions = new(StringComparer.OrdinalIgnoreCase) {
-        ".mp4", ".m4v", ".mov", ".wmv", ".avi", ".mkv", ".webm",
-    };
-
-    private static readonly HashSet<string> _textExtensions = new(StringComparer.OrdinalIgnoreCase) {
-        ".txt", ".log", ".csv", ".tsv",
-        ".ini", ".cfg", ".conf", ".toml", ".env", ".gitignore", ".gitattributes",
-        ".editorconfig",
-        // A .mtl is not a model, it is the short text file that names a
-        // model's materials and their texture maps — and reading it is
-        // usually the reason anyone opens one.
-        ".mtl",
-    };
-
-    private static readonly HashSet<string> _codeExtensions = new(StringComparer.OrdinalIgnoreCase) {
-        ".cs", ".csproj", ".props", ".targets", ".sln", ".slnx",
-        ".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs",
-        ".py", ".rb", ".go", ".rs", ".java", ".kt", ".swift", ".php",
-        ".c", ".cpp", ".cc", ".cxx", ".h", ".hpp", ".m", ".mm",
-        ".css", ".scss", ".less",
-        ".sh", ".bash", ".zsh", ".ps1", ".bat", ".cmd",
-        ".sql",
-        ".xml", ".xaml", ".svg",
-        ".json", ".yaml", ".yml",
-        // Patches — AvalonEdit's own "Patch" definition colours these, so
-        // routing them here is the whole feature.
-        ".diff", ".patch",
-        // Unity shaders and their includes; highlighting comes from
-        // Highlighting/ShaderLab.xshd.
-        ".shader", ".cginc", ".hlsl", ".compute",
-    };
-
-    /// <summary>
-    /// Extensions that mean text in one project and an opaque blob in the
-    /// next — Unity's serialised assets, which are YAML only when the
-    /// project forces text serialization. The bytes decide; see
-    /// <see cref="TextProbe"/>.
-    /// </summary>
-    private static readonly HashSet<string> _maybeTextExtensions = new(StringComparer.OrdinalIgnoreCase) {
-        ".asset", ".prefab", ".unity", ".mat",
-    };
-
-    /// <summary>
-    /// Handed straight to WebView2 by path. PDF and HTML have always been
-    /// here; MHTML joins them because Chromium reads the format natively,
-    /// which is the whole reason a saved web page can be previewed at all.
-    /// </summary>
-    private static readonly HashSet<string> _webExtensions = new(StringComparer.OrdinalIgnoreCase) {
-        ".pdf", ".html", ".htm", ".mht", ".mhtml",
-    };
-
     /// <summary>
     /// Width a cover is decoded at. Twice what the card draws, so it stays
     /// sharp on a 200 % display without decoding a sleeve scan in full.
     /// </summary>
     private const int CoverDecodeWidth = 520;
-
-    /// <summary>What a model with no stated colour is drawn in.</summary>
-    private const float ModelGrey = 0.76f;
-
-    private const long PreviewMaxFileSize = 1_048_576;     // 1 MB
-    private const int PreviewMaxChars = 200_000;
-
-    /// <summary>
-    /// Books get a budget of their own: a novel is legitimately tens of
-    /// megabytes once its illustrations are counted, and the 1 MB ceiling
-    /// the text preview uses would refuse most of a shelf.
-    /// </summary>
-    private const long BookMaxFileSize = 64L * 1024 * 1024;
 
 
     private readonly IImageMetadataReader? _metadataReader;
@@ -807,7 +715,7 @@ public sealed class PreviewController : ObservableObject {
             // preview pane to look at a .lnk, so it stands aside and the
             // target is previewed in its place — with the footer saying
             // whose content is on screen and offering the way over.
-            if (Path.GetExtension(path).Equals(".lnk", StringComparison.OrdinalIgnoreCase)) {
+            if (PreviewRouter.Route(path) is PreviewRoute.Shortcut) {
                 string? resolved = ResolveShortcut(path);
                 if (resolved is null) {
                     Kind = PreviewKind.Unsupported;
@@ -851,88 +759,71 @@ public sealed class PreviewController : ObservableObject {
     private async Task LoadFileAsync(string path, CancellationToken ct) {
         string ext = Path.GetExtension(path);
 
-        if (_gifExtensions.Contains(ext)) {
-            LoadGif(path);
+        switch (PreviewRouter.Route(path)) {
+            case PreviewRoute.Animation:
+                LoadGif(path);
+                break;
 
-            return;
-        }
+            case PreviewRoute.Video:
+                LoadVideo(path);
+                break;
 
-        if (_videoExtensions.Contains(ext)) {
-            LoadVideo(path);
+            case PreviewRoute.Audio:
+                await LoadAudioAsync(path, ct);
+                break;
 
-            return;
-        }
+            case PreviewRoute.Model:
+                await LoadModelAsync(path, ct);
+                break;
 
-        if (AudioTags.Extensions.Contains(ext)) {
-            await LoadAudioAsync(path, ct);
+            case PreviewRoute.Image:
+                await LoadImageAsync(path, ct);
+                break;
 
-            return;
-        }
+            case PreviewRoute.Web:
+                WebUri = new Uri(path);
+                Kind = PreviewKind.Web;
+                break;
 
-        if (MeshFile.Extensions.Contains(ext)) {
-            await LoadModelAsync(path, ct);
+            case PreviewRoute.Book:
+                await LoadBookAsync(path, ct);
+                break;
 
-            return;
-        }
+            case PreviewRoute.Document:
+                DocumentPath = path;
+                Kind = PreviewKind.Document;
+                break;
 
-        if (ImageFormats.All.Contains(ext)) {
-            await LoadImageAsync(path, ct);
+            case PreviewRoute.Markdown:
+                await LoadMarkdownAsync(path, ct);
+                break;
 
-            return;
-        }
-
-        if (_webExtensions.Contains(ext)) {
-            WebUri = new Uri(path);
-            Kind = PreviewKind.Web;
-
-            return;
-        }
-
-        if (ext.Equals(".fb2", StringComparison.OrdinalIgnoreCase)) {
-            await LoadBookAsync(path, ct);
-
-            return;
-        }
-
-        if (ext.Equals(".rtf", StringComparison.OrdinalIgnoreCase)) {
-            DocumentPath = path;
-            Kind = PreviewKind.Document;
-
-            return;
-        }
-
-        if (ext.Equals(".md", StringComparison.OrdinalIgnoreCase) ||
-            ext.Equals(".markdown", StringComparison.OrdinalIgnoreCase)) {
-            await LoadMarkdownAsync(path, ct);
-
-            return;
-        }
-
-        if (_codeExtensions.Contains(ext)) {
-            await LoadCodeAsync(path, ext, ct);
-
-            return;
-        }
-
-        // Unity's serialised assets: text only when the project says so,
-        // so the bytes are asked before the pane commits to showing them.
-        if (_maybeTextExtensions.Contains(ext)) {
-            if (await LooksLikeTextAsync(path, ct)) {
+            case PreviewRoute.Code:
                 await LoadCodeAsync(path, ext, ct);
-            } else {
+                break;
+
+            // Unity's serialised assets: text only when the project says
+            // so, so the bytes are asked before the pane commits to
+            // showing them.
+            case PreviewRoute.MaybeText:
+                if (await LooksLikeTextAsync(path, ct)) {
+                    await LoadCodeAsync(path, ext, ct);
+                } else {
+                    Kind = PreviewKind.Unsupported;
+                }
+                break;
+
+            case PreviewRoute.Text:
+                await LoadTextAsync(path, ct);
+                break;
+
+            // A shortcut is resolved before we get here; one pointing at
+            // another shortcut is where this lands, and there is nothing
+            // to show for it.
+            default:
                 Kind = PreviewKind.Unsupported;
-            }
-
-            return;
+                break;
         }
-
-        if (_textExtensions.Contains(ext) || string.IsNullOrEmpty(ext)) {
-            await LoadTextAsync(path, ct);
-
-            return;
-        }
-
-        Kind = PreviewKind.Unsupported;
     }
 
 
@@ -1021,13 +912,13 @@ public sealed class PreviewController : ObservableObject {
             info = AudioTags.Read(path);
 
             if (info?.Cover is { Length: > 0 } bytes) {
-                cover = DecodeStream(bytes);
+                cover = ImageDecoder.Stream(bytes);
             } else if (AudioTags.CoverBeside(path) is { } beside) {
                 // A sleeve scan next to the tracks is regularly several
                 // megabytes, and it is about to be drawn at 260 px — so it
                 // is decoded at that size rather than in full and thrown
                 // away.
-                cover = DecodeFile(beside, CoverDecodeWidth);
+                cover = ImageDecoder.File(beside, CoverDecodeWidth);
             }
         }, ct);
 
@@ -1042,121 +933,37 @@ public sealed class PreviewController : ObservableObject {
 
     /// <summary>
     /// A 3D model. Parsed in Core (see <see cref="MeshFile"/>) and turned
-    /// into WPF geometry here, on the worker thread, because building a
-    /// mesh of a million triangles on the dispatcher is a frozen window.
-    ///
-    /// <para>
-    /// No normals are supplied: WPF computes per-face ones for a mesh that
-    /// has none, which is exactly the faceted shading a preview of an
-    /// untextured solid wants, and it halves what the readers have to get
-    /// right.
-    /// </para>
+    /// into WPF geometry by <see cref="ModelBuilder"/>, both on the worker
+    /// thread, because building a mesh of a million triangles on the
+    /// dispatcher is a frozen window.
     /// </summary>
     private async Task LoadModelAsync(string path, CancellationToken ct) {
-        IReadOnlyList<ModelPart> parts = Array.Empty<ModelPart>();
-        MeshBounds? bounds = null;
-        int triangles = 0, vertices = 0;
+        ModelScene? scene = null;
 
         await Task.Run(() => {
             ct.ThrowIfCancellationRequested();
             var mesh = MeshFile.Read(path);
-            if (mesh is null) {
-                return;
+            if (mesh is not null) {
+                scene = ModelBuilder.Build(mesh, ct);
             }
-
-            ct.ThrowIfCancellationRequested();
-            var points = new Point3DCollection(mesh.VertexCount);
-            for (int i = 0; i + 2 < mesh.Positions.Length; i += 3) {
-                points.Add(new Point3D(mesh.Positions[i], mesh.Positions[i + 1], mesh.Positions[i + 2]));
-            }
-            // Frozen once and shared by every part: the parts differ in
-            // which triangles they draw, not in where the points are, and
-            // a copy per material would multiply a large model's memory by
-            // however many materials it happens to have.
-            points.Freeze();
-
-            var built = new List<ModelPart>(mesh.Parts.Count);
-            foreach (var part in mesh.Parts) {
-                ct.ThrowIfCancellationRequested();
-
-                var geometry = new MeshGeometry3D {
-                    Positions = points,
-                    TriangleIndices = new Int32Collection(part.Indices),
-                };
-                geometry.Freeze();
-                built.Add(new ModelPart(geometry, Paint(part.Color), Paint(part.Color, back: true)));
-            }
-
-            parts = built;
-            bounds = mesh.Bounds();
-            triangles = mesh.TriangleCount;
-            vertices = mesh.VertexCount;
         }, ct);
 
         if (ct.IsCancellationRequested) {
             return;
         }
-        if (parts.Count == 0 || bounds is not { } box) {
+        if (scene is not { } model) {
             Kind = PreviewKind.Unsupported;
 
             return;
         }
 
-        ModelCenter = new Point3D(box.CenterX, box.CenterY, box.CenterZ);
-
-        // The bounding *sphere*, not half the longest side. The model spins
-        // under the mouse, and a box's diagonal is what swings into frame
-        // when it turns — framing against the side instead lets a cube grow
-        // past the edges of the pane as soon as it is rotated off-axis.
-        // The floor keeps a degenerate model (one flat face) from putting
-        // the camera inside itself.
-        ModelRadius = Math.Max(
-            Math.Sqrt(
-                (box.SizeX * (double)box.SizeX)
-                + (box.SizeY * (double)box.SizeY)
-                + (box.SizeZ * (double)box.SizeZ)) / 2.0,
-            0.0001);
-        ModelDetail = string.Format(Strings.PreviewModelDetail, triangles, vertices);
-        ModelParts = parts;
+        ModelCenter = model.Center;
+        ModelRadius = model.Radius;
+        ModelDetail = string.Format(Strings.PreviewModelDetail, model.Triangles, model.Vertices);
+        ModelParts = model.Parts;
         Kind = PreviewKind.Model;
     }
 
-
-    /// <summary>
-    /// The brush for one part.
-    ///
-    /// <para>
-    /// Colours come from the file where it states one — <c>Kd</c> in an
-    /// OBJ's material library, <c>baseColorFactor</c> in a glTF — and a
-    /// model that states none stays the neutral grey it always was.
-    /// Textures are still not read; this is the part of a material that
-    /// costs nothing and takes a model from uniformly grey to
-    /// recognisable, and the rest is a scope of its own (see BACKLOG.md).
-    /// </para>
-    ///
-    /// <para>
-    /// <paramref name="back"/> darkens it for the reverse of a face.
-    /// Meshes with inconsistent winding are routine in exported OBJ and
-    /// STL, and without a back material those faces are simply missing;
-    /// with a darker one they read as the inside of a solid.
-    /// </para>
-    /// </summary>
-    private static Brush Paint(MeshColor? colour, bool back = false) {
-        const double BackFactor = 0.72;
-
-        var (r, g, b) = colour is { } c
-            ? (c.R, c.G, c.B)
-            : (ModelGrey, ModelGrey, ModelGrey);
-
-        double shade = back ? BackFactor : 1.0;
-        var brush = new SolidColorBrush(Color.FromRgb(
-            (byte)Math.Round(r * 255 * shade),
-            (byte)Math.Round(g * 255 * shade),
-            (byte)Math.Round(b * 255 * shade)));
-        brush.Freeze();
-
-        return brush;
-    }
 
     private async Task LoadImageAsync(string path, CancellationToken ct) {
         BitmapSource? image = null;
@@ -1181,13 +988,15 @@ public sealed class PreviewController : ObservableObject {
             // like everywhere else is what the user expects to see here.
             if (ImageFormats.IsRaw(path)) {
                 isRaw = true;
-                var raw = _showRawDecode ? DecodeFile(path) : LoadRawPreview(path) ?? DecodeFile(path);
-                image = raw is null ? null : ApplyOrientation(raw, meta?.Orientation);
+                var raw = _showRawDecode
+                    ? ImageDecoder.File(path)
+                    : ImageDecoder.RawPreview(path) ?? ImageDecoder.File(path);
+                image = raw is null ? null : ImageDecoder.ApplyOrientation(raw, meta?.Orientation);
 
                 return;
             }
 
-            image = DecodeFile(path);
+            image = ImageDecoder.File(path);
         }, ct);
 
         if (ct.IsCancellationRequested) {
@@ -1205,292 +1014,60 @@ public sealed class PreviewController : ObservableObject {
     }
 
 
-    /// <summary>
-    /// Turns an EXIF orientation value (1..8) into the rotation and mirror
-    /// it stands for. Values Wander cannot act on — and the identity value
-    /// 1 — return the bitmap untouched.
-    /// </summary>
-    private static BitmapSource ApplyOrientation(BitmapSource source, int? orientation) {
-        var transform = orientation switch {
-            2 => Mirror(0),
-            3 => new RotateTransform(180),
-            4 => Mirror(180),
-            5 => Mirror(90),
-            6 => new RotateTransform(90),
-            7 => Mirror(270),
-            8 => new RotateTransform(270),
-            _ => (Transform?)null,
-        };
-        if (transform is null) {
-            return source;
-        }
-
-        var rotated = new TransformedBitmap(source, transform);
-        rotated.Freeze();
-
-        return rotated;
-    }
-
-    /// <summary>Horizontal flip, then <paramref name="degrees"/> of rotation.</summary>
-    private static Transform Mirror(double degrees) {
-        var group = new TransformGroup();
-        group.Children.Add(new ScaleTransform(-1, 1));
-        group.Children.Add(new RotateTransform(degrees));
-
-        return group;
-    }
-
-    /// <summary>
-    /// RAW files get their embedded JPEG preview rather than a full sensor
-    /// decode — measured at ~10 ms against ~1200 ms for a 33 MB CR3. Null
-    /// when the file has no usable preview; the caller then falls back to
-    /// the ordinary decode, so an unrecognised container costs nothing but
-    /// the old behaviour.
-    /// </summary>
-    private static BitmapImage? LoadRawPreview(string path) {
-        byte[]? jpeg;
-        try {
-            using var file = File.OpenRead(path);
-            jpeg = RawPreviewExtractor.Extract(file);
-        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
-            return null;
-        }
-
-        return jpeg is null ? null : DecodeStream(jpeg);
-    }
-
-    /// <summary>
-    /// Decodes a file by path. <c>IgnoreImageCache</c> is what keeps a
-    /// re-opened file from showing its previous contents — WPF's image
-    /// cache is keyed by URI and does not notice the bytes changed.
-    /// </summary>
-    private static BitmapImage? DecodeFile(string path) {
-        return Decode(bi => {
-            bi.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
-            bi.UriSource = new Uri(path);
-        });
-    }
-
-    /// <summary>
-    /// Same, but decoded down to <paramref name="width"/> pixels. A JPEG
-    /// decoder asked for a smaller result does less work rather than the
-    /// same work followed by a resize, which is the difference between
-    /// reading a cover and reading a photograph.
-    /// </summary>
-    private static BitmapImage? DecodeFile(string path, int width) {
-        return Decode(bi => {
-            bi.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
-            bi.DecodePixelWidth = width;
-            bi.UriSource = new Uri(path);
-        });
-    }
-
-    /// <summary>
-    /// Decodes bytes already in memory — the preview pulled out of a RAW
-    /// container.
-    ///
-    /// <para>
-    /// Deliberately without <c>IgnoreImageCache</c>: that flag makes
-    /// <c>BitmapImage.FinalizeCreation</c> evict the URI it was loaded
-    /// from, and a stream-sourced bitmap has no URI — on .NET 10 that is an
-    /// <c>ArgumentNullException</c> from inside WPF. It cost the whole RAW
-    /// fast path: the decode threw, the caller read the <c>null</c> as "no
-    /// embedded preview" and quietly fell back to a full sensor decode.
-    /// The flag is meaningless here anyway — there is no cache entry to
-    /// bypass when the source is a private <c>MemoryStream</c>.
-    /// </para>
-    /// </summary>
-    private static BitmapImage? DecodeStream(byte[] bytes) {
-        return Decode(bi => bi.StreamSource = new MemoryStream(bytes));
-    }
-
-    /// <summary>
-    /// Shared decode settings. <c>OnLoad</c> matters for both callers: it
-    /// makes the bitmap independent of the stream (so the file handle and
-    /// the buffer can go) and lets us freeze it for the UI thread.
-    /// </summary>
-    private static BitmapImage? Decode(Action<BitmapImage> setSource) {
-        try {
-            var bi = new BitmapImage();
-            bi.BeginInit();
-            bi.CacheOption = BitmapCacheOption.OnLoad;
-            setSource(bi);
-            bi.EndInit();
-            bi.Freeze();
-
-            return bi;
-        } catch {
-            // No codec for this format, truncated file, or a preview whose
-            // bytes turned out not to be a JPEG after all.
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Reads a text file, working out its encoding rather than assuming
-    /// UTF-8. Assuming turns every byte of a codepaged file into
-    /// <c>U+FFFD</c>, and a folder of old notes reads as a wall of black
-    /// diamonds — see <see cref="EncodingProbe"/>.
-    ///
-    /// <para>
-    /// A file past <see cref="PreviewMaxFileSize"/> is read up to that
-    /// budget and reported as clipped, rather than refused. Refusing was
-    /// the old behaviour and it was the wrong answer to the question the
-    /// pane exists to answer: a two-megabyte log is still a log, and its
-    /// first megabyte says what it is. <c>Clipped</c> is what the caller
-    /// turns into the note at the bottom, so the reader is never left
-    /// thinking they have seen the end of the file.
-    /// </para>
-    /// </summary>
-    private static async Task<(string Text, bool Clipped, long Size)?> ReadTextAsync(
-        string path, CancellationToken ct) {
-        try {
-            await using var file = new FileStream(
-                path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite,
-                bufferSize: 64 * 1024, useAsync: true);
-
-            long size = file.Length;
-            int budget = (int)Math.Min(size, PreviewMaxFileSize);
-            byte[] bytes = new byte[budget];
-            await file.ReadExactlyAsync(bytes, ct);
-
-            string text = EncodingProbe.Decode(bytes);
-            bool clipped = size > budget;
-            if (clipped) {
-                // The cut lands wherever the budget ran out, which for
-                // anything but ASCII is regularly the middle of a
-                // character. The decoder turns that stump into U+FFFD;
-                // dropping the tail is nicer than ending the preview on a
-                // black diamond that is an artefact of where we stopped
-                // reading, not of the file.
-                text = text.TrimEnd('�');
-            }
-
-            return (text, clipped, size);
-        } catch (OperationCanceledException) {
-            throw;
-        } catch {
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// The line that closes a preview which does not reach the end of the
-    /// file — either because the file is bigger than the read budget, or
-    /// because it holds more characters than the pane will render.
-    /// <paramref name="prefix"/> makes it a comment where the view expects
-    /// code.
-    /// </summary>
-    private static string ClippedNote(long size, string prefix = "") {
-        return "\n\n" + prefix + string.Format(Strings.PreviewClipped, SizeFormatter.Format(size));
-    }
-
     private async Task LoadTextAsync(string path, CancellationToken ct) {
-        (string Text, bool Clipped, long Size)? read;
-        try {
-            read = await ReadTextAsync(path, ct);
-        } catch (OperationCanceledException) {
-            return;
-        }
-        if (read is not { } file) {
-            Kind = PreviewKind.Unsupported;
+        if (await ReadForPreviewAsync(path, ct) is not { } file) {
             return;
         }
 
-        if (ct.IsCancellationRequested) {
-            return;
-        }
-
-        string text = file.Text;
-        bool clipped = file.Clipped;
-        if (text.Length > PreviewMaxChars) {
-            text = text.Substring(0, PreviewMaxChars);
-            clipped = true;
-        }
-        Text = clipped ? text + ClippedNote(file.Size) : text;
+        Text = PreviewText.Clip(file);
         Kind = PreviewKind.Text;
     }
 
+
     private async Task LoadCodeAsync(string path, string ext, CancellationToken ct) {
-        (string Text, bool Clipped, long Size)? read;
-        try {
-            read = await ReadTextAsync(path, ct);
-        } catch (OperationCanceledException) {
-            return;
-        }
-        if (read is not { } file) {
-            Kind = PreviewKind.Unsupported;
+        if (await ReadForPreviewAsync(path, ct) is not { } file) {
             return;
         }
 
-        if (ct.IsCancellationRequested) {
-            return;
-        }
-
-        string text = file.Text;
-        bool clipped = file.Clipped;
-        if (text.Length > PreviewMaxChars) {
-            text = text.Substring(0, PreviewMaxChars);
-            clipped = true;
-        }
-        CodeText = clipped ? text + ClippedNote(file.Size, "// ") : text;
+        CodeText = PreviewText.Clip(file, "// ");
         CodeExtension = ext;
         Kind = PreviewKind.Code;
     }
 
+
     private async Task LoadMarkdownAsync(string path, CancellationToken ct) {
-        (string Text, bool Clipped, long Size)? read;
-        try {
-            read = await ReadTextAsync(path, ct);
-        } catch (OperationCanceledException) {
-            return;
-        }
-        if (read is not { } file) {
-            Kind = PreviewKind.Unsupported;
+        if (await ReadForPreviewAsync(path, ct) is not { } file) {
             return;
         }
 
-        // Rendered, so the note has to be Markdown too — a rule and an
-        // emphasised line, which is what "the file goes on past here" looks
-        // like in a rendered document.
-        string md = file.Clipped
-            ? file.Text + "\n\n---\n\n*" + string.Format(Strings.PreviewClipped, SizeFormatter.Format(file.Size)) + "*"
-            : file.Text;
-
-        if (ct.IsCancellationRequested) {
-            return;
-        }
-
-        string html = await Task.Run(() => Markdown.ToHtml(md, _markdownPipeline), ct);
-        string wrapped = WrapHtml(html);
-        WebHtml = wrapped;
+        string html = await Task.Run(() => PreviewText.MarkdownToHtml(file), ct);
+        WebHtml = PreviewText.WrapHtml(html);
         Kind = PreviewKind.Web;
     }
 
 
     /// <summary>
-    /// Markdig speaks plain CommonMark unless told otherwise, and CommonMark
-    /// has no tables — a <c>| … | … |</c> block came out as one run-on
-    /// paragraph of pipes and dashes. Which is most of what a README's
-    /// tables are for.
-    ///
-    /// <para>
-    /// Listed one by one rather than through <c>UseAdvancedExtensions()</c>:
-    /// that bundle also turns YouTube links into iframes and reads
-    /// <c>{#id .class}</c> out of the text as markup, neither of which a
-    /// preview pane wants — least of all one that blocks the network and
-    /// would show the iframe as an empty box.
-    /// </para>
+    /// The read every text-shaped loader starts with, and the two answers
+    /// that end the load right there: a cancelled read (a newer selection
+    /// owns the pane now) and a file that cannot be read at all. Null means
+    /// the caller has nothing left to do.
     /// </summary>
-    private static readonly MarkdownPipeline _markdownPipeline =
-        new MarkdownPipelineBuilder()
-            .UsePipeTables()
-            .UseGridTables()
-            .UseEmphasisExtras()      // ~~strikethrough~~, ++inserted++
-            .UseTaskLists()           // - [x] done
-            .UseAutoLinks()           // bare https://… as a link
-            .UseFootnotes()
-            .Build();
+    private async Task<PreviewTextFile?> ReadForPreviewAsync(string path, CancellationToken ct) {
+        PreviewTextFile? read;
+        try {
+            read = await PreviewText.ReadAsync(path, ct);
+        } catch (OperationCanceledException) {
+            return null;
+        }
+
+        if (read is null) {
+            Kind = PreviewKind.Unsupported;
+
+            return null;
+        }
+
+        return ct.IsCancellationRequested ? null : read;
+    }
 
 
     /// <summary>
@@ -1507,7 +1084,7 @@ public sealed class PreviewController : ObservableObject {
 
             return;
         }
-        if (size > BookMaxFileSize) {
+        if (size > PreviewText.BookMaxFileSize) {
             Kind = PreviewKind.Unsupported;
 
             return;
@@ -1541,50 +1118,11 @@ public sealed class PreviewController : ObservableObject {
             ? book.BodyHtml + $"<p class='fb2-cut'>{Strings.PreviewBookTruncated}</p>"
             : book.BodyHtml;
 
-        WebHtml = WrapHtml(body, BookCss);
+        WebHtml = PreviewText.WrapHtml(body, PreviewText.BookCss);
         Kind = PreviewKind.Web;
     }
 
 
-    /// <summary>
-    /// Book-specific rules on top of the shared ones: a cover that sits at
-    /// a plate's size rather than filling the pane, and the indented,
-    /// centred shapes FB2 uses for verse and epigraphs.
-    /// </summary>
-    private const string BookCss = @"
-        .fb2-head { text-align: center; margin-bottom: 1.5em; }
-        .fb2-cover { max-width: 220px; max-height: 320px; box-shadow: 0 1px 6px rgba(0,0,0,.35); margin-bottom: 10px; }
-        .fb2-head h1 { font-size: 18px; margin: 0.2em 0; }
-        .fb2-author { color: #555; margin: 0.2em 0 0; }
-        .fb2-annotation { text-align: left; font-size: 12px; color: #444; border-top: 1px solid #DDD; margin-top: 12px; padding-top: 8px; }
-        .fb2-title { font-size: 15px; font-weight: 600; margin: 1.2em 0 0.5em; }
-        .fb2-title p { margin: 0; }
-        .fb2-empty { height: 0.8em; }
-        .fb2-poem { margin: 1em 2em; font-style: italic; }
-        .fb2-stanza { margin-bottom: 0.8em; }
-        .fb2-text-author { text-align: right; color: #555; font-style: italic; }
-        .fb2-image { display: block; margin: 1em auto; max-width: 100%; }
-        .fb2-cut { color: #A05000; border-top: 1px solid #DDD; padding-top: 8px; }
-        p { text-indent: 1.2em; margin: 0.2em 0; text-align: justify; }
-        blockquote p { text-indent: 0; }";
-
-    private static string WrapHtml(string body, string extraCss = "") {
-        return $@"<!doctype html><html><head><meta charset='utf-8'><style>
-            body {{ font-family: 'Segoe UI', sans-serif; font-size: 13px; padding: 10px; color: #222; }}
-            pre, code {{ font-family: Consolas, monospace; background: #f4f4f4; padding: 2px 4px; border-radius: 3px; }}
-            pre {{ padding: 8px; overflow-x: auto; }}
-            h1, h2, h3 {{ margin: 0.6em 0 0.3em; }}
-            blockquote {{ border-left: 3px solid #ccc; margin: 0; padding-left: 10px; color: #555; }}
-            /* display:block so a table wider than the pane scrolls inside
-               itself instead of pushing the whole page sideways. */
-            table {{ border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; }}
-            th, td {{ border: 1px solid #ccc; padding: 4px 8px; text-align: left; }}
-            th {{ background: #F0F0F0; }}
-            img {{ max-width: 100%; }}
-            ul.contains-task-list {{ list-style: none; padding-left: 1.2em; }}
-            {extraCss}
-        </style></head><body>{body}</body></html>";
-    }
 
     private void ClearPreviewContent() {
         Text = null;
@@ -1942,24 +1480,15 @@ public sealed class PreviewController : ObservableObject {
     private async Task UpdateSummaryAsync(CancellationToken ct) {
         if (!_isVisible) {
             Summary = "";
+
             return;
         }
 
-        // 1. Single file selected — show file details + EXIF if image.
-        //    Recycle-bin items (OriginalLocation set) get "Deleted" instead of
-        //    "Modified" and a second line with the source folder so the user
-        //    can decide whether to restore them without context-switching.
+        // 1. Single file selected — its details, plus EXIF if the metadata
+        //    reader had something to say about it.
         if (_selection.Count == 1 && _selection[0].Kind == EntryKind.File) {
-            var e = _selection[0];
-            string timeLabel = e.OriginalLocation is not null ? Strings.SummaryDeleted : Strings.SummaryModified;
-            string summary = $"📄  {e.Name}\n{Strings.SummarySize}: {SizeFormatter.Format(e.Size)}   •   {timeLabel}: {TimeFormat.FromUtc(e.ModifiedUtc)}";
-            if (e.OriginalLocation is not null) {
-                summary += $"\n{Strings.SummaryDeletedFrom}: {e.OriginalLocation}";
-            }
-            if (_imageMetadata is { } m) {
-                summary += "\n" + FormatExif(m);
-            }
-            Summary = summary;
+            Summary = SummaryText.ForFile(_selection[0], _imageMetadata);
+
             return;
         }
 
@@ -1967,10 +1496,8 @@ public sealed class PreviewController : ObservableObject {
         //    panel's job now (it walks the tree once); repeating them here
         //    meant walking it twice and printing the same numbers twice.
         if (_selection.Count == 1 && _selection[0].Kind == EntryKind.Directory) {
-            var e = _selection[0];
-            Summary = e.OriginalLocation is not null
-                ? $"📁  {e.Name}\n{Strings.SummaryDeleted}: {TimeFormat.FromUtc(e.ModifiedUtc)}\n{Strings.SummaryDeletedFrom}: {e.OriginalLocation}"
-                : $"📁  {e.Name}";
+            Summary = SummaryText.ForFolder(_selection[0]);
+
             return;
         }
 
@@ -1979,89 +1506,20 @@ public sealed class PreviewController : ObservableObject {
         if (_selection.Count > 1) {
             Summary = string.Format(Strings.SummarySelectedCounting, _selection.Count);
             var paths = _selection.Select(en => en.FullPath).ToArray();
-            var (count, size) = await Task.Run(() => CountAndSum(paths, ct), ct);
+            var (count, size) = await Task.Run(() => SummaryText.CountAndSum(paths, ct), ct);
             if (ct.IsCancellationRequested) {
                 return;
             }
             Summary = string.Format(
                 Strings.SummarySelected, _selection.Count, count, SizeFormatter.Format(size));
+
             return;
         }
 
         // 4. Nothing selected — the census panel above describes the folder
         //    we are standing in, so the footer only names it.
-        if (!string.IsNullOrEmpty(_currentFolderPath)) {
-            string name = string.IsNullOrEmpty(_currentFolderName) ? _currentFolderPath! : _currentFolderName;
-            Summary = $"📁  {name}";
-            return;
-        }
-
-        Summary = "";
-    }
-
-    private static (int Count, long Size) CountAndSum(string[] paths, CancellationToken ct) {
-        int count = 0;
-        long size = 0;
-        foreach (var p in paths) {
-            if (ct.IsCancellationRequested) {
-                break;
-            }
-            try {
-                if (Directory.Exists(p)) {
-                    foreach (var f in Directory.EnumerateFiles(p, "*", SearchOption.AllDirectories)) {
-                        if (ct.IsCancellationRequested) {
-                            break;
-                        }
-                        count++;
-                        try {
-                            size += new FileInfo(f).Length;
-                        } catch {
-                            // access denied per-file — ignore
-                        }
-                    }
-                } else if (File.Exists(p)) {
-                    count++;
-                    try {
-                        size += new FileInfo(p).Length;
-                    } catch {
-                        // ignore
-                    }
-                }
-            } catch {
-                // access denied on enumeration — skip this root
-            }
-        }
-        return (count, size);
-    }
-
-    private static string FormatExif(ImageMetadata m) {
-        var parts = new List<string>();
-        string? camera = string.Join(" ", new[] { m.CameraMake, m.CameraModel }.Where(s => !string.IsNullOrWhiteSpace(s)));
-        if (!string.IsNullOrWhiteSpace(camera)) {
-            parts.Add(camera);
-        }
-        var shot = new List<string>();
-        if (!string.IsNullOrEmpty(m.IsoSpeed)) {
-            shot.Add($"ISO {m.IsoSpeed}");
-        }
-        if (!string.IsNullOrEmpty(m.Aperture)) {
-            shot.Add(m.Aperture);
-        }
-        if (!string.IsNullOrEmpty(m.ShutterSpeed)) {
-            shot.Add(m.ShutterSpeed);
-        }
-        if (!string.IsNullOrEmpty(m.FocalLength)) {
-            shot.Add(m.FocalLength);
-        }
-        if (shot.Count > 0) {
-            parts.Add(string.Join(", ", shot));
-        }
-        if (m.PixelWidth is int w && m.PixelHeight is int h) {
-            parts.Add($"{w} × {h}");
-        }
-        if (m.DateTaken is { } dt) {
-            parts.Add(TimeFormat.Local(dt));
-        }
-        return string.Join("   •   ", parts);
+        Summary = string.IsNullOrEmpty(_currentFolderPath)
+            ? ""
+            : SummaryText.ForCurrentFolder(_currentFolderPath!, _currentFolderName);
     }
 }
