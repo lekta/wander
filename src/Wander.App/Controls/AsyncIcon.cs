@@ -77,10 +77,7 @@ public sealed class AsyncIcon : Image {
         }
 
         IconSize size = IconSize;
-        if (ServiceLocator.TryGet<IIconProvider>() is not { } icons) {
-            Source = null;
-            return;
-        }
+        var icons = ServiceLocator.Get<IIconProvider>();
 
         byte[]? cached = icons.TryGetCachedIcon(path, size);
         if (cached is not null) {
@@ -185,7 +182,7 @@ public sealed class AsyncIcon : Image {
         // Superseded loads are routine and stay silent.
         if (image is null) {
             if (generation == _generation) {
-                ServiceLocator.TryGet<Wander.Core.Logging.ILogger>()?.Info(
+                ServiceLocator.Get<Wander.Core.Logging.ILogger>().Info(
                     $"[icon-diag] no icon from provider ({size}) — {path}");
             }
 

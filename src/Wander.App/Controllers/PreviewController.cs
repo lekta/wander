@@ -832,12 +832,8 @@ public sealed class PreviewController : ObservableObject {
     /// service registered or the file cannot be resolved.
     /// </summary>
     private static string? ResolveShortcut(string path) {
-        if (ServiceLocator.TryGet<IShortcutService>() is not { } shortcuts) {
-            return null;
-        }
-
         try {
-            string? target = shortcuts.Resolve(path);
+            string? target = ServiceLocator.Get<IShortcutService>().Resolve(path);
 
             return string.IsNullOrEmpty(target) ? null : target;
         } catch {

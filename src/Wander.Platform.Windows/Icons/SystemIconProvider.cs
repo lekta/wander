@@ -412,12 +412,8 @@ public sealed class SystemIconProvider : IIconProvider {
     }
 
     private static string? ResolveShortcut(string path) {
-        if (ServiceLocator.TryGet<IShortcutService>() is not { } shortcuts) {
-            return null;
-        }
-
         try {
-            string? target = shortcuts.Resolve(path);
+            string? target = ServiceLocator.Get<IShortcutService>().Resolve(path);
 
             return string.IsNullOrEmpty(target) ? null : target;
         } catch {
@@ -807,18 +803,14 @@ public sealed class SystemIconProvider : IIconProvider {
     }
 
 
-    // Diagnostic logging — wired through the standard ILogger so the
-    // user can read what happened via Debug → Logs. Lazily resolved to
-    // avoid a hard dependency: tests register a NullLogger, and an
-    // unconfigured ServiceLocator just silently no-ops.
+    // Diagnostic logging — wired through the standard ILogger so the user
+    // can read what happened via Debug → Logs. Resolved on first use rather
+    // than in a field initialiser: this type is built by the bootstrapper
+    // itself, and a static initialiser would run in the middle of it.
     private static ILogger? _log;
-    private static bool _logResolved;
     private static void IconLog(string msg) {
-        if (!_logResolved) {
-            _logResolved = true;
-            _log = ServiceLocator.TryGet<ILogger>();
-        }
-        _log?.Info("[icon] " + msg);
+        _log ??= ServiceLocator.Get<ILogger>();
+        _log.Info("[icon] " + msg);
     }
 
 

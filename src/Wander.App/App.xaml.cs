@@ -45,7 +45,7 @@ public partial class App : Application {
     /// the whole process down.
     /// </summary>
     private void HookCrashLogging() {
-        var log = ServiceLocator.TryGet<ILogger>() ?? NullLogger.Instance;
+        var log = ServiceLocator.Get<ILogger>();
 
         DispatcherUnhandledException += (_, args) => {
             log.Error("Unhandled dispatcher exception", args.Exception);

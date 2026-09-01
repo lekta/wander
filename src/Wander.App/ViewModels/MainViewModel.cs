@@ -171,8 +171,8 @@ public sealed class MainViewModel : ObservableObject {
         _undo = ServiceLocator.Get<UndoService>();
         _tracker = ServiceLocator.Get<OperationTracker>();
         _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
-        _log = ServiceLocator.TryGet<ILogger>() ?? NullLogger.Instance;
-        _companions = ServiceLocator.TryGet<CompanionResolver>() ?? CompanionResolver.Default;
+        _log = ServiceLocator.Get<ILogger>();
+        _companions = ServiceLocator.Get<CompanionResolver>();
         // Without a system clipboard registered the controller keeps its
         // paths to itself, exactly as it did before the mirroring existed.
         _clipboard = new ClipboardController(
@@ -873,13 +873,9 @@ public sealed class MainViewModel : ObservableObject {
         if (!path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)) {
             return false;
         }
-        if (ServiceLocator.TryGet<IShortcutService>() is not { } shortcuts) {
-            return false;
-        }
-
         string? target;
         try {
-            target = shortcuts.Resolve(path);
+            target = ServiceLocator.Get<IShortcutService>().Resolve(path);
         } catch (Exception ex) {
             _log.Warn($"Resolve shortcut failed: {path} ({ex.Message})");
             return false;
@@ -948,11 +944,7 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     private void CreateShortcuts(IReadOnlyList<string> sources, string targetFolder) {
-        if (ServiceLocator.TryGet<IShortcutService>() is not { } shortcuts) {
-            Status = Strings.StatusShortcutsUnsupported;
-            return;
-        }
-
+        var shortcuts = ServiceLocator.Get<IShortcutService>();
         var created = new List<IUndoableAction>();
         var bin = ServiceLocator.Get<IRecycleBin>();
         int ok = 0;
@@ -1170,9 +1162,7 @@ public sealed class MainViewModel : ObservableObject {
         }
 
         _log.Info($"Version changed ('{lastVersion}' -> '{current}'), dropping the thumbnail cache");
-        if (ServiceLocator.TryGet<IIconProvider>() is not { } icons) {
-            return;
-        }
+        var icons = ServiceLocator.Get<IIconProvider>();
 
         _ = Task.Run(() => {
             try {
@@ -2389,11 +2379,7 @@ public sealed class MainViewModel : ObservableObject {
     /// knows nothing about <see cref="AppSettings"/>.
     /// </summary>
     private void ApplyThumbnailCacheSettings() {
-        if (ServiceLocator.TryGet<IIconProvider>() is not { } icons) {
-            return;
-        }
-
-        icons.ConfigureCache(new ThumbnailCacheOptions(
+        ServiceLocator.Get<IIconProvider>().ConfigureCache(new ThumbnailCacheOptions(
             Settings.ThumbnailMemoryEntries,
             Settings.ThumbnailDiskCacheEnabled,
             Settings.ThumbnailDiskCacheMb * 1024L * 1024L));
@@ -2900,10 +2886,7 @@ public sealed class MainViewModel : ObservableObject {
     /// </para>
     /// </summary>
     private void RestoreFromRecycleBin() {
-        if (ServiceLocator.TryGet<IRecycleBin>() is not { } bin) {
-            return;
-        }
-
+        var bin = ServiceLocator.Get<IRecycleBin>();
         int restored = 0;
         var failures = new List<string>();
 

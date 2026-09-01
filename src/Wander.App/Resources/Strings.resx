@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!--
     Все пользовательские строки Wander. Отдельно от кода намеренно: чтобы
@@ -231,9 +231,6 @@
   </data>
   <data name="StatusDropFailed" xml:space="preserve">
     <value>Перетаскивание не удалось: {0}</value>
-  </data>
-  <data name="StatusShortcutsUnsupported" xml:space="preserve">
-    <value>Ярлыки на этой платформе не поддерживаются.</value>
   </data>
   <data name="StatusShortcutFailed" xml:space="preserve">
     <value>Не удалось создать ярлык для «{0}»: {1}</value>

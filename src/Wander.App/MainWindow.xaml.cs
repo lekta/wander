@@ -90,13 +90,11 @@ public partial class MainWindow : Window {
     /// </summary>
     private void OnFirstFrame(object? sender, EventArgs e) {
         ContentRendered -= OnFirstFrame;
-        if (ServiceLocator.TryGet<Wander.Core.Logging.ILogger>() is not { } log) {
-            return;
-        }
 
         using var self = System.Diagnostics.Process.GetCurrentProcess();
         double ms = (DateTime.Now - self.StartTime).TotalMilliseconds;
-        log.Info($"Startup: first frame {ms:F0} ms after process start");
+        ServiceLocator.Get<Wander.Core.Logging.ILogger>()
+            .Info($"Startup: first frame {ms:F0} ms after process start");
     }
 
 
@@ -143,10 +141,7 @@ public partial class MainWindow : Window {
     }
 
     private void RestoreWindowGeometry() {
-        if (ServiceLocator.TryGet<IAppStateStore>() is not { } store) {
-            return;
-        }
-        var state = store.Load();
+        var state = ServiceLocator.Get<IAppStateStore>().Load();
         if (state.Window is not { } geom) {
             return;
         }
@@ -182,9 +177,7 @@ public partial class MainWindow : Window {
     }
 
     private void SaveWindowGeometry() {
-        if (ServiceLocator.TryGet<IAppStateStore>() is not { } store) {
-            return;
-        }
+        var store = ServiceLocator.Get<IAppStateStore>();
         var existing = store.Load();
 
         // When the window is currently Maximized, Left/Top/Width/Height
@@ -235,9 +228,7 @@ public partial class MainWindow : Window {
         Vm.Entries.CollectionChanged += (_, _) => _shellMenus.Invalidate();
         // Quiet unless something is slow: what the UI thread spends time
         // on lands in the session log — see Core/Diagnostics/PerfLog.
-        if (ServiceLocator.TryGet<Wander.Core.Logging.ILogger>() is { } perfLog) {
-            Wander.Core.Diagnostics.PerfLog.Start(perfLog);
-        }
+        Wander.Core.Diagnostics.PerfLog.Start(ServiceLocator.Get<Wander.Core.Logging.ILogger>());
         Diagnostics.UiStallWatch.Start(Dispatcher);
         // Bubbling, so it sees focus landing anywhere in the window.
         GotKeyboardFocus += OnZoneFocusChanged;

@@ -74,11 +74,8 @@ public sealed class SystemIOFileSystem : IFileSystem {
         if (!path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)) {
             return false;
         }
-        if (ServiceLocator.TryGet<IShortcutService>() is not { } shortcuts) {
-            return false;
-        }
         try {
-            string? target = shortcuts.Resolve(path);
+            string? target = ServiceLocator.Get<IShortcutService>().Resolve(path);
             return !string.IsNullOrEmpty(target) && Directory.Exists(target);
         } catch {
             // Broken / dangling shortcut — treat as a regular file.

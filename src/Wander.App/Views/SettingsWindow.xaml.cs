@@ -157,9 +157,7 @@ public partial class SettingsWindow : Window {
             return;
         }
 
-        if (ServiceLocator.TryGet<IIconProvider>() is { } icons) {
-            icons.ClearCache();
-        }
+        ServiceLocator.Get<IIconProvider>().ClearCache();
         // Decoded copies live a tier above the provider's; leaving them
         // would make the button look like it did nothing.
         Controls.IconImageCache.Clear();
@@ -172,12 +170,7 @@ public partial class SettingsWindow : Window {
     /// only ever done when the dialog opens or right after a clear.
     /// </summary>
     private static void RefreshCacheStatus(SettingsViewModel vm) {
-        if (ServiceLocator.TryGet<IIconProvider>() is not { } icons) {
-            vm.ThumbnailCacheStatus = "";
-            return;
-        }
-
-        var (directory, size) = icons.DescribeCache();
+        var (directory, size) = ServiceLocator.Get<IIconProvider>().DescribeCache();
         vm.ThumbnailCacheStatus = directory is null
             ? Strings.SettingsCacheOff
             : string.Format(Strings.SettingsCacheUsage, SizeFormatter.Format(size), directory);

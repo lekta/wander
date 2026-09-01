@@ -267,12 +267,8 @@ public sealed class DropTargetController {
     }
 
     private static string? ResolveShortcutTarget(string lnkPath) {
-        if (ServiceLocator.TryGet<IShortcutService>() is not { } shortcuts) {
-            return null;
-        }
-
         try {
-            return shortcuts.Resolve(lnkPath);
+            return ServiceLocator.Get<IShortcutService>().Resolve(lnkPath);
         } catch {
             return null;
         }

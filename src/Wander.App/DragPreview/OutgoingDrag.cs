@@ -62,8 +62,12 @@ public sealed class OutgoingDrag {
         var preview = new DragPreviewWindow();
         preview.SetIcon(IconConverter.Load(paths[0], IconSize.Normal));
         preview.SetCount(paths.Length);
-        string startDesc = paths.Length == 1 ? $"Drag '{_firstName}'" : $"Drag {paths.Length} items";
-        preview.SetAction(DragAction.Forbidden, startDesc, null);
+        // What is in hand, and nothing about what would happen to it: the
+        // cursor has not been anywhere yet. The first GiveFeedback re-words
+        // this within a frame, but the plaque is on screen before then —
+        // long enough to be read on the first drag of a session, when the
+        // window and the icon are still being made.
+        preview.SetAction(DragAction.Forbidden, DescribeDragged(paths.Length), null);
         preview.Show();
         preview.MoveToCursor();
         _preview = preview;
