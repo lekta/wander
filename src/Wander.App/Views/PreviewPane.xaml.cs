@@ -568,14 +568,17 @@ public partial class PreviewPane : UserControl {
     }
 
     private void EnsureVideoTimer() {
-        if (_videoTimer is not null) {
-            return;
+        if (_videoTimer is null) {
+            // 200 ms is responsive enough for a progress bar and cheap on CPU.
+            _videoTimer = new DispatcherTimer(DispatcherPriority.Background) {
+                Interval = TimeSpan.FromMilliseconds(200),
+            };
+            _videoTimer.Tick += VideoTimer_Tick;
         }
-        // 200 ms is responsive enough for a progress bar and cheap on CPU.
-        _videoTimer = new DispatcherTimer(DispatcherPriority.Background) {
-            Interval = TimeSpan.FromMilliseconds(200),
-        };
-        _videoTimer.Tick += VideoTimer_Tick;
+
+        // Restart as well as create: ResetVideoTransport stops the clock
+        // whenever the transport lets go of a file, so every media open
+        // has to be able to wind it up again.
         _videoTimer.Start();
     }
 
@@ -647,6 +650,11 @@ public partial class PreviewPane : UserControl {
     }
 
     private void ResetVideoTransport() {
+        // The clock has nothing to track until the next MediaOpened winds
+        // it up again - without this it kept ticking for the rest of the
+        // session, text files and hidden pane included (TECHDEBT, closed
+        // 2026-09-01).
+        _videoTimer?.Stop();
         // Explicitly pause: WPF's Visibility=Collapsed doesn't tear the
         // MediaElement down, so audio would otherwise keep playing in the
         // background after the user selects another file.
