@@ -1,7 +1,8 @@
 using Wander.Core.Companions;
+using Wander.Core.FileSystem;
 using Wander.Core.Icons;
 
-namespace Wander.Core.FileSystem;
+namespace Wander.Core.Listing;
 
 /// <summary>
 /// Answers one question about a folder listing: is this a folder of

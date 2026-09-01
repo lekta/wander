@@ -1,6 +1,10 @@
 using System.IO;
+using Wander.App.Resources;
 using Wander.App.ViewModels;
+using Wander.Core.FileSystem;
+using Wander.Core.Logging;
 using Wander.Core.Navigation;
+using Wander.Core.Shell;
 
 
 namespace Wander.App.Controllers;
@@ -8,27 +12,20 @@ namespace Wander.App.Controllers;
 /// <summary>
 /// View-model shell around <see cref="NavigationService"/>: owns the address
 /// bar text, the Back/Forward/Up/Navigate commands, and the
-/// <see cref="WindowTitle"/> derivation. Path validation and the side-effects
-/// of a successful navigation (folder refresh, preview, save state, tree
-/// expansion) stay on the host — the controller fires
-/// <see cref="CurrentChanged"/> for that.
-///
-/// <para>
-/// Two callbacks are injected at construction time:
-/// </para>
-/// <list type="bullet">
-///   <item><description><c>canNavigate</c> — pre-flight check; if it returns
-///   false, the controller calls <c>onInvalidPath</c> and skips the navigation.</description></item>
-///   <item><description><c>resolveDisplayName</c> — supplies the user-facing
-///   label for shell sentinels (e.g. <c>shell:RecycleBinFolder</c> → "Корзина")
-///   when <see cref="Path.GetFileName"/> would return empty.</description></item>
-/// </list>
+/// <see cref="WindowTitle"/> derivation. The side-effects of a successful
+/// navigation (folder refresh, preview, save state, tree expansion) stay on
+/// the host — the controller fires <see cref="CurrentChanged"/> for that,
+/// and <see cref="StatusReported"/> when a typed path turns out not to
+/// exist. What it can answer itself it answers from its own services:
+/// whether a path is navigable, and the user-facing label for shell
+/// sentinels (e.g. <c>shell:RecycleBinFolder</c> → "Корзина") where
+/// <see cref="Path.GetFileName"/> would return empty.
 /// </summary>
 public sealed class NavigationController : ObservableObject {
     private readonly NavigationService _nav;
-    private readonly Func<string, bool> _canNavigate;
-    private readonly Action<string> _onInvalidPath;
-    private readonly Func<string, string?> _resolveDisplayName;
+    private readonly IFileSystem _fs;
+    private readonly IShellNamespace? _shellNamespace;
+    private readonly ILogger _log;
     private readonly RecentPaths _recent = new();
     private string _addressText = "";
     private IReadOnlyList<string> _recentPaths = Array.Empty<string>();
@@ -38,13 +35,13 @@ public sealed class NavigationController : ObservableObject {
 
     public NavigationController(
         NavigationService nav,
-        Func<string, bool> canNavigate,
-        Action<string> onInvalidPath,
-        Func<string, string?> resolveDisplayName) {
+        IFileSystem fs,
+        IShellNamespace? shellNamespace,
+        ILogger log) {
         _nav = nav;
-        _canNavigate = canNavigate;
-        _onInvalidPath = onInvalidPath;
-        _resolveDisplayName = resolveDisplayName;
+        _fs = fs;
+        _shellNamespace = shellNamespace;
+        _log = log;
 
         BackCommand = new RelayCommand(_ => _nav.GoBack(), _ => _nav.CanGoBack);
         ForwardCommand = new RelayCommand(_ => _nav.GoForward(), _ => _nav.CanGoForward);
@@ -75,6 +72,9 @@ public sealed class NavigationController : ObservableObject {
 
     /// <summary>Fired after <see cref="NavigationService.Current"/> changes.</summary>
     public event EventHandler<string?>? CurrentChanged;
+
+    /// <summary>Something to tell the user — already localised.</summary>
+    public event EventHandler<string>? StatusReported;
 
 
     public string? Current => _nav.Current;
@@ -133,7 +133,7 @@ public sealed class NavigationController : ObservableObject {
             if (string.IsNullOrEmpty(_nav.Current)) {
                 return "Wander";
             }
-            if (_resolveDisplayName(_nav.Current) is { } shellName) {
+            if (ResolveDisplayName(_nav.Current) is { } shellName) {
                 return shellName;
             }
             string trimmed = _nav.Current.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
@@ -194,18 +194,40 @@ public sealed class NavigationController : ObservableObject {
     /// </summary>
     private async Task NavigateWhenValidAsync(string path, NavigationSource source) {
         string? before = _nav.Current;
-        bool ok = await Task.Run(() => _canNavigate(path));
+        bool ok = await Task.Run(() => PathIsNavigable(path));
 
         if (!string.Equals(_nav.Current, before, StringComparison.OrdinalIgnoreCase)) {
             return;
         }
         if (!ok) {
-            _onInvalidPath(path);
+            _log.Warn($"Navigate: path not found {path}");
+            StatusReported?.Invoke(this, string.Format(Strings.StatusPathNotFound, path));
 
             return;
         }
 
         _nav.NavigateTo(path, source);
+    }
+
+
+    // Runs on the pool (see NavigateWhenValidAsync), so it asks the cheap
+    // IsShellPath and never GetDisplayName — no shell COM off the UI thread.
+    private bool PathIsNavigable(string path) {
+        return (_shellNamespace?.IsShellPath(path) ?? false) || _fs.DirectoryExists(path);
+    }
+
+
+    /// <summary>
+    /// The shell namespace's localised label for a sentinel path, or null
+    /// for an ordinary folder (and for every path when the host has no
+    /// shell namespace registered).
+    /// </summary>
+    private string? ResolveDisplayName(string path) {
+        if (_shellNamespace is { } ns && ns.IsShellPath(path)) {
+            return ns.GetDisplayName(path) ?? path;
+        }
+
+        return null;
     }
 
     /// <summary>Restores the recent-folders list from <c>state.json</c>.</summary>
@@ -231,7 +253,7 @@ public sealed class NavigationController : ObservableObject {
             return;
         }
 
-        Breadcrumbs = _resolveDisplayName(current) is { } shellName
+        Breadcrumbs = ResolveDisplayName(current) is { } shellName
             ? new[] { new PathCrumb(shellName, current) }
             : PathCrumbs.Split(current);
     }

@@ -1,4 +1,5 @@
 using System.Text;
+using Wander.Core.FileSystem;
 
 namespace Wander.Core.Companions;
 

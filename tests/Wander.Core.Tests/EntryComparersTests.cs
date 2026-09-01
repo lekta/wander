@@ -1,4 +1,3 @@
-using Wander.Core.Companions;
 using Wander.Core.FileSystem;
 
 namespace Wander.Core.Tests;

@@ -20,6 +20,32 @@ using ImageMetadata = Wander.Core.Icons.ImageMetadata;
 namespace Wander.App.Controllers;
 
 /// <summary>
+/// A star or a swatch was clicked in the preview footer. The pane only
+/// knows which one; writing lives with the host's rating machinery —
+/// asking before creating a sidecar, choosing the format, updating the row
+/// without re-listing the folder. The handler answers through
+/// <see cref="Rating"/>: what the sidecar says afterwards, or null when
+/// nothing was written (declined, or nowhere to write) — the row is then
+/// left unchanged.
+/// </summary>
+public sealed class RatingRequestedEventArgs : EventArgs {
+    public RatingRequestedEventArgs(FileSystemEntry entry, RatingField field, int value) {
+        Entry = entry;
+        Field = field;
+        Value = value;
+    }
+
+
+    public FileSystemEntry Entry { get; }
+    public RatingField Field { get; }
+    public int Value { get; }
+
+    /// <summary>The handler's answer; null means nothing was written.</summary>
+    public SidecarRating? Rating { get; set; }
+}
+
+
+/// <summary>
 /// Owns everything that renders inside the preview pane: the content-kind
 /// switch (image / text / code / web), the async load pipeline, and the
 /// footer summary (single file, folder, multi-select, current folder).
@@ -32,6 +58,13 @@ namespace Wander.App.Controllers;
 /// <c>Set*</c> methods, and the controller decides whether to re-run the
 /// content load, the summary, or both.
 /// </para>
+///
+/// <para>
+/// What the pane cannot answer for itself it raises as an event instead of
+/// calling the host: <see cref="RatingRequested"/> to write a rating,
+/// <see cref="RevealRequested"/> to take the user to a path. The decisions
+/// stay with the host, and the dependency points one way.
+/// </para>
 /// </summary>
 public sealed class PreviewController : ObservableObject {
     /// <summary>
@@ -43,8 +76,6 @@ public sealed class PreviewController : ObservableObject {
 
     private readonly IImageMetadataReader? _metadataReader;
     private readonly CompanionMetadataService? _companionMetadata;
-    private readonly Func<FileSystemEntry, RatingField, int, SidecarRating?>? _applyRating;
-    private readonly Action<string>? _reveal;
 
     private bool _isVisible;
     private FileSystemEntry? _primary;
@@ -95,29 +126,12 @@ public sealed class PreviewController : ObservableObject {
     private string _customColorLabel = "";
 
 
-    /// <param name="applyRating">
-    /// How to write a rating: given the photo, the field and the value,
-    /// returns what its sidecar says afterwards (or null if nothing was
-    /// written). Writing lives in the view model rather than here because
-    /// everything around it does — asking before creating a sidecar,
-    /// choosing the format, updating the row in the list without re-listing
-    /// the folder. The pane only knows which star was clicked.
-    /// </param>
-    /// <param name="reveal">
-    /// How to take the user to a path — navigate to its folder, select it,
-    /// scroll it into view. Owned by the view model, because navigation is;
-    /// the pane only knows which path the button should point at.
-    /// </param>
     public PreviewController(
         IImageMetadataReader? metadataReader,
-        CompanionMetadataService? companionMetadata,
-        Func<FileSystemEntry, RatingField, int, SidecarRating?>? applyRating = null,
-        Action<string>? reveal = null) {
+        CompanionMetadataService? companionMetadata) {
 
         _metadataReader = metadataReader;
         _companionMetadata = companionMetadata;
-        _applyRating = applyRating;
-        _reveal = reveal;
 
         ColorLabelChoices = ColorLabelViewModel.CreateChoices();
 
@@ -126,6 +140,20 @@ public sealed class PreviewController : ObservableObject {
         CopyGuidCommand = new RelayCommand(_ => CopyGuid(), _ => HasUnityGuid);
         GoToLinkTargetCommand = new RelayCommand(_ => GoToLinkTarget(), _ => HasLinkTarget);
     }
+
+
+    /// <summary>
+    /// A rating write is wanted; see <see cref="RatingRequestedEventArgs"/>.
+    /// With no handler attached the rating row never offers itself.
+    /// </summary>
+    public event EventHandler<RatingRequestedEventArgs>? RatingRequested;
+
+    /// <summary>
+    /// The user wants to be taken to this path — navigate to its folder,
+    /// select it, scroll it into view. Navigation is the host's, so the
+    /// pane only says which path the button pointed at.
+    /// </summary>
+    public event EventHandler<string>? RevealRequested;
 
 
     // --- Output properties (XAML binds Preview.X) ----------------------
@@ -1149,7 +1177,7 @@ public sealed class PreviewController : ObservableObject {
     /// </summary>
     private void GoToLinkTarget() {
         if (_linkTarget is { } target) {
-            _reveal?.Invoke(target);
+            RevealRequested?.Invoke(this, target);
         }
     }
 
@@ -1224,7 +1252,7 @@ public sealed class PreviewController : ObservableObject {
     /// the sidecar formats Wander writes are photo formats.
     /// </summary>
     private void OfferRating(FileSystemEntry entry) {
-        if (_applyRating is null || entry.IsFolderLike || !ImageFormats.IsImage(entry.Name)) {
+        if (RatingRequested is null || entry.IsFolderLike || !ImageFormats.IsImage(entry.Name)) {
             return;
         }
 
@@ -1276,7 +1304,7 @@ public sealed class PreviewController : ObservableObject {
     }
 
     private void SetRating(RatingField field, object? parameter, int current) {
-        if (_applyRating is null || _primary is null || !TryReadIndex(parameter, out int clicked)) {
+        if (RatingRequested is not { } write || _primary is null || !TryReadIndex(parameter, out int clicked)) {
             return;
         }
 
@@ -1284,9 +1312,9 @@ public sealed class PreviewController : ObservableObject {
         // could never be taken back except through Ctrl+Z.
         int target = clicked == current ? 0 : clicked;
 
-        SidecarRating? rating;
+        var request = new RatingRequestedEventArgs(_primary, field, target);
         try {
-            rating = _applyRating(_primary, field, target);
+            write(this, request);
             CompanionStatus = "";
         } catch (Exception ex) {
             // Includes the deliberate refusals: a sidecar that vanished
@@ -1296,18 +1324,18 @@ public sealed class PreviewController : ObservableObject {
             return;
         }
 
-        if (rating is null) {
+        if (request.Rating is null) {
             // Declined, or there was nowhere to write. Either is an answer
             // and not an error, and the row is unchanged.
             return;
         }
 
-        // The write went through the view model, which updates the row in
-        // the listing; that comes back here as a new primary and re-reads
-        // the sidecar. Showing the value we were handed keeps the stars
-        // from lagging a frame behind the click in the meantime.
+        // The write went through the host, which updates the row in the
+        // listing; that comes back here as a new primary and re-reads the
+        // sidecar. Showing the value we were handed keeps the stars from
+        // lagging a frame behind the click in the meantime.
         _ratingTarget = null;
-        ShowRating(_ratingPath ?? "", rating);
+        ShowRating(_ratingPath ?? "", request.Rating);
     }
 
 

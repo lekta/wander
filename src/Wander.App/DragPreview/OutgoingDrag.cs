@@ -3,7 +3,6 @@ using System.Windows;
 using System.Windows.Input;
 using Wander.App.Converters;
 using Wander.App.Resources;
-using Wander.App.Util;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
 

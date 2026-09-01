@@ -2,10 +2,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
-using Wander.App.Controls;
 using Wander.Core.FileSystem;
 
-namespace Wander.App.Util;
+namespace Wander.App.Controls;
 
 /// <summary>
 /// Marquee ("rubber band") selection in a file list.

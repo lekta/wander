@@ -3,13 +3,13 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
-using Wander.App.DragPreview;
+using Wander.App.Util;
 using Wander.App.ViewModels;
 using Wander.Core;
 using Wander.Core.FileSystem;
 using Wander.Core.Shell;
 
-namespace Wander.App.Util;
+namespace Wander.App.DragPreview;
 
 /// <summary>
 /// A drop that passed every check: what to drop, where, and how.

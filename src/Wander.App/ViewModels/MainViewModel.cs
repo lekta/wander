@@ -223,24 +223,15 @@ public sealed class MainViewModel : ObservableObject {
 
         Preview = new PreviewController(
             ServiceLocator.TryGet<IImageMetadataReader>(),
-            _companionMetadata,
-            Ratings.ApplyToPrimary,
-            RevealPath);
+            _companionMetadata);
+        Preview.RatingRequested += (_, request) =>
+            request.Rating = Ratings.ApplyToPrimary(request.Entry, request.Field, request.Value);
+        Preview.RevealRequested += (_, path) => RevealPath(path);
         Ratings.CompanionsChanged += (_, _) => Preview.ReloadCompanions();
 
         _nav = new NavigationController(
-            new NavigationService(),
-            canNavigate: PathIsNavigable,
-            onInvalidPath: path => {
-                _log.Warn($"Navigate: path not found {path}");
-                Status = string.Format(Strings.StatusPathNotFound, path);
-            },
-            resolveDisplayName: path => {
-                if (TryGetShellNamespace() is { } ns && ns.IsShellPath(path)) {
-                    return ns.GetDisplayName(path) ?? path;
-                }
-                return null;
-            });
+            new NavigationService(), _fs, TryGetShellNamespace(), _log);
+        _nav.StatusReported += (_, text) => Status = text;
 
         Entries = new BulkObservableCollection<FileSystemEntry>();
         Operations = new ObservableCollection<OperationViewModel>();
@@ -821,10 +812,6 @@ public sealed class MainViewModel : ObservableObject {
         return !string.IsNullOrEmpty(path)
             && TryGetShellNamespace() is { } ns
             && ns.IsShellPath(path);
-    }
-
-    private bool PathIsNavigable(string path) {
-        return IsShellPath(path) || _fs.DirectoryExists(path);
     }
 
     /// <summary>

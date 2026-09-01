@@ -199,7 +199,7 @@ public sealed record AppSettings {
 
     /// <summary>
     /// Switch to the gallery by itself on entering a folder that is mostly
-    /// pictures (see <see cref="Wander.Core.FileSystem.ImageFolderProbe"/>).
+    /// pictures (see <see cref="Wander.Core.Listing.ImageFolderProbe"/>).
     /// On by default: the whole point is not having to ask for the right
     /// view in the folder where it is obvious. Choosing a view by hand in a
     /// folder turns the automation off for that folder permanently — an
@@ -210,7 +210,7 @@ public sealed record AppSettings {
     /// <summary>
     /// How much of a folder has to be pictures before the gallery switches
     /// itself on, in per cent of the <em>content</em> files (see
-    /// <see cref="Wander.Core.FileSystem.ImageFolderProbe"/> for what does
+    /// <see cref="Wander.Core.Listing.ImageFolderProbe"/> for what does
     /// not count). Strictly more than this share.
     /// </summary>
     public int AutoGalleryPercent { get; init; } = 50;

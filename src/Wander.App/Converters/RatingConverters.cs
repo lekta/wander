@@ -4,6 +4,7 @@ using System.Windows.Data;
 using System.Windows.Media;
 using Wander.App.ViewModels;
 using Wander.Core.Companions;
+using Wander.Core.FileSystem;
 
 namespace Wander.App.Converters;
 

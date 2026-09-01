@@ -1,6 +1,6 @@
-using Wander.Core.FileSystem;
+using Wander.Core.Undo;
 
-namespace Wander.Core.Undo;
+namespace Wander.Core.FileSystem;
 
 /// <summary>
 /// Undo: rename <paramref name="NewPath"/> back to <paramref name="OldName"/>.

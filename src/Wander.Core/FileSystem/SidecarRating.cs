@@ -1,4 +1,4 @@
-namespace Wander.Core.Companions;
+namespace Wander.Core.FileSystem;
 
 /// <summary>
 /// How a photo is marked up, whichever sidecar carries it. RawTherapee

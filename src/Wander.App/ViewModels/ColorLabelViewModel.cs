@@ -1,13 +1,12 @@
 using System.Windows.Media;
-using Wander.App.Controllers;
-using Wander.Core.Companions;
+using Wander.Core.FileSystem;
 
 
 namespace Wander.App.ViewModels;
 
 /// <summary>
 /// One colour swatch in the preview footer's rating row. Five of these are
-/// created once per <see cref="PreviewController"/> and stay put; only
+/// created once per <see cref="Controllers.PreviewController"/> and stay put; only
 /// <see cref="IsSelected"/> moves as the selection changes, so the row never
 /// rebuilds itself under the cursor.
 ///

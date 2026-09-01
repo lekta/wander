@@ -1,3 +1,4 @@
+using Wander.Core.FileSystem;
 using Wander.Core.Tests.Fakes;
 using Wander.Core.Undo;
 

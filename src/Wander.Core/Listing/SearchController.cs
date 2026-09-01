@@ -2,9 +2,10 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Wander.Core.Companions;
+using Wander.Core.FileSystem;
 using Wander.Core.Search;
 
-namespace Wander.Core.FileSystem;
+namespace Wander.Core.Listing;
 
 /// <summary>
 /// Live text filter over a list of <see cref="FileSystemEntry"/>. The owner

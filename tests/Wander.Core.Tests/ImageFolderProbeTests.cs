@@ -1,5 +1,6 @@
 using Wander.Core.Companions;
 using Wander.Core.FileSystem;
+using Wander.Core.Listing;
 
 namespace Wander.Core.Tests;
 

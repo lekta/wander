@@ -38,32 +38,41 @@
 src/
 ├── Wander.Core/
 │   ├── Companions/     CompanionRule, CompanionResolver, CompanionMetadataService,
-│   │                   SidecarRating, ColorLabels, SidecarText, RatingFilter,
-│   │                   SidecarFormat, Pp3Sidecar, XmpSidecar, UnityMetaSidecar
-│   ├── Diagnostics/    IFileLockInspector, FileLockInfo, PerfLog
+│   │                   SidecarText, RatingFilter, SidecarFormat,
+│   │                   Pp3Sidecar, XmpSidecar, UnityMetaSidecar
+│   ├── Diagnostics/    IFileLockInspector, FileLockInfo, PerfLog, BuildInfo
 │   ├── FileSystem/     IFileSystem, FileOperationService, BatchExecutor,
-│   │                   ClipboardController, ISystemClipboard, SearchController,
+│   │                   ClipboardController, ISystemClipboard,
 │   │                   TypeAheadController, IDirectoryWatcher, SystemPathGuard,
-│   │                   SystemRootFolders, EntryVisibility,
+│   │                   SystemRootFolders, EntryVisibility, FolderChanges,
 │   │                   PathSafety, IConflictResolver, IRecycleBin, IKnownFolders,
 │   │                   FileSystemEntry, EntryKind, EntryComparers, SortKey,
+│   │                   SidecarRating + ColorLabels, UndoableActions,
+│   │                   FolderStatistics, IVolumeInfoProvider, TransientFiles,
 │   │                   BatchGroup
 │   ├── Icons/          IIconProvider, IImageMetadataReader, IconSize, ImageMetadata,
-│   │                   RawPreviewExtractor
-│   ├── Layout/         TileLayout, TileRect, TileMetrics
-│   ├── Listing/        FolderSession, ListingDiff, ArrivalIntent, RatedListing
+│   │                   ImageFormats, RawPreviewExtractor, ThumbnailCacheOptions
+│   ├── Layout/         TileLayout, TileMetrics, GridNavigation
+│   ├── Listing/        FolderSession, ListingDiff, ArrivalIntent, RatedListing,
+│   │                   SearchController, ImageFolderProbe
+│   ├── Localization/   ITextSource
 │   ├── Logging/        ILogger, ILogFile, NullLogger
 │   ├── Menu/           ContextMenuBuilder, ContextMenuTarget, ContextMenuSettings,
 │   │                   ContextMenuCatalog, MenuEntry, MenuCommandId
 │   ├── Navigation/     NavigationService, NavigationSource, RecentPaths,
 │   │                   PathCrumbs
 │   ├── Operations/     OperationTracker
-│   ├── Persistence/    IAppStateStore, AppState, AppSettings
+│   ├── Persistence/    IAppStateStore, AppState, AppSettings, GalleryBackground
+│   ├── Preview/        PreviewRouter, TextProbe, EncodingProbe, AudioTags,
+│   │                   BookCover, Fb2Document, MeshFile + Obj/Stl/GltfReader
+│   ├── Search/         ContentSearchService, IContentExtractor, ContentMatcher,
+│   │                   NameFilter, SearchExpression, SearchRequest, SearchHit,
+│   │                   SearchScope, BinaryTextSearch, ExtractedTextCache
 │   ├── Shell/          IShellLauncher, IShellNamespace, IShortcutService,
-│   │                   IShellContextMenu, ShellMenuEntry, IShellHandlerRegistry,
+│   │                   IShellContextMenu, IShellHandlerRegistry,
 │   │                   ShellHandler, ShellExtensionCatalog, ShellEntryKey,
 │   │                   ShellScopes, ShellVerbs, RecentScopes
-│   ├── Undo/           UndoService, IUndoableAction, UndoableActions
+│   ├── Undo/           UndoService, IUndoableAction
 │   └── ServiceLocator.cs
 │
 ├── Wander.Platform.Windows/
@@ -73,6 +82,7 @@ src/
 │   ├── Icons/          SystemIconProvider, MetadataExtractorImageReader
 │   ├── Logging/        FileLogger
 │   ├── Persistence/    JsonAppStateStore
+│   ├── Search/         FilterTextExtractor, NativeFilter
 │   ├── Shell/          ShellLauncher, ShellShortcutService, WindowsShellNamespace,
 │   │                   ShellContextMenu, ShellContextMenuInterop, ShellMenuIcons
 │   └── PlatformBootstrapper.cs
@@ -80,27 +90,198 @@ src/
 └── Wander.App/
     ├── Conflict/       ConflictDialog, BatchConflictDialog,
     │                   DispatcherConflictResolver, InteractiveConflictResolver
-    ├── Controls/       AsyncIcon, GifImage, MagnifierCursor, RubberBandAdorner,
+    ├── Controllers/    NavigationController, PreviewController, RatingsController,
+    │                   BookmarksController, FolderTreesController,
+    │                   ContentSearchController, SearchResultsController,
+    │                   ShellCommandsController
+    ├── Controls/       AsyncIcon, GifImage, IconImageCache, MagnifierCursor,
+    │                   NumericField, RubberBandAdorner + RubberBandController,
     │                   VirtualizingWrapPanel
-    ├── Converters/     Icon, EnumEquals, EnumToVisibility, BitmapPixelSize, RankStar,
-    │                   TreeIndent, RenameEditorVisibility
+    ├── Converters/     Icon, EnumEquals, EnumRadio, EnumToVisibility,
+    │                   BitmapPixelSize, RankStar + RatingConverters, CutRow,
+    │                   TreeIndent, RenameEditorVisibility, PixelsToThickness
     ├── Diagnostics/    CrashReporter, UiStallWatch
-    ├── DragPreview/    DragPreviewWindow, OutgoingDrag, DropTargetAdorner,
-    │                   DragAction, NativeMethods
-    ├── Menu/           ContextMenuFactory, MenuBinding, ShellMenuCache
+    ├── DragPreview/    DragPreviewWindow, OutgoingDrag, DropTargetController,
+    │                   DropTargetAdorner, DragAction, NativeMethods
+    ├── Highlighting/   HighlightingCatalog + *.xshd
+    ├── Menu/           ContextMenuFactory, ShellMenuCache
     ├── Preview/        ImageDecoder, ModelBuilder + ModelScene, PreviewText,
     │                   SummaryText — раскодирование для панели просмотра
-    ├── Util/           SelectionController, RubberBandController, ListVisuals,
-    │                   DropTargetController, SizeFormatter
-    ├── ViewModels/     MainViewModel, NavigationController, PreviewController,
-    │                   TreeNodeViewModel, SettingsViewModel, MenuToggleViewModel,
-    │                   OperationViewModel, ColorLabelViewModel,
-    │                   ObservableObject, ViewMode, PreviewKind, DropEffect
-    ├── Views/          FileListView, FolderTreesView, PreviewPane, SettingsWindow,
-    │                   ProgressDialog
+    ├── Resources/      Strings*.resx, AppTextSource, MenuStyles
+    ├── Util/           SelectionController, ListVisuals, SizeFormatter,
+    │                   NumberFormat, TimeFormat, DispatcherExtensions
+    ├── ViewModels/     MainViewModel, SettingsViewModel, TreeNodeViewModel,
+    │                   OperationViewModel, ColorLabelViewModel, HotkeyCatalog,
+    │                   MenuItemRowViewModel, ShellExtensionRowViewModel,
+    │                   SettingsCategoryViewModel, BulkObservableCollection,
+    │                   GalleryPalette, ObservableObject,
+    │                   ViewMode, PreviewKind, DropEffect
+    ├── Views/          FileListView, FolderTreesView, PreviewPane, SearchWindow,
+    │                   SettingsWindow, ShellScopePicker, ProgressDialog
     ├── MainWindow.xaml(.cs)
     └── App.xaml(.cs)
 ```
+
+### Граф зависимостей между папками
+
+Снимается скриптом и поддерживается им же — руками этот блок не править:
+
+```pwsh
+.\tools\deps.ps1            # отчёт на экран
+.\tools\deps.ps1 -UpdateDoc # перезаписать блок ниже
+```
+
+Скрипт сводит `using Wander.*` по папкам (см. шапку `tools/deps.ps1` — что
+именно видно, а что нет), считает уровни и находит циклы. **Правило (шаг
+O7, 2026-09-01): между папками внутри проекта нет циклов, у каждой папки
+есть уровень.** Уровень 0 — папка ни от кого в своём проекте не зависит;
+дальше N = самый длинный путь вниз. Новое ребро, замыкающее цикл, — повод
+переложить файл или развернуть связь (событие вместо коллбэка вверх), а не
+пополнить список исключений.
+
+Единственный оставленный клубок — `[Controllers+ViewModels]` в App:
+`MainViewModel` хостит контроллеры, контроллеры используют базовые типы
+из `ViewModels/` (`ObservableObject`, `SettingsViewModel`,
+`TreeNodeViewModel`, ...). Разрубается это только решением «где живут
+MainViewModel и общие примитивы» — оно за шагом O9 (PLAN.md), не здесь.
+
+Ребро `Wander.App -> Wander.Platform.Windows` — один файл, `App.xaml.cs`:
+это точка композиции (`PlatformBootstrapper.RegisterDefaults()`), ей
+можно.
+
+<!-- deps:generated:begin -->
+```
+=== Wander dependency graph (using sweep) ===
+date   : 2026-09-01
+commit : d9bffc1
+
+-- projects --
+Wander.App -> Wander.Core   (46 files)
+Wander.App -> Wander.Platform.Windows   (1 files)
+Wander.Core.Tests -> Wander.Core   (61 files)
+Wander.Platform.Windows -> Wander.Core   (21 files)
+
+-- Wander.Core: folder -> folder --
+  Companions     -> FileSystem     (5 files)
+  Companions     -> Logging        (1 files)
+  Companions     -> Undo           (1 files)
+  Diagnostics    -> Logging        (1 files)
+  FileSystem     -> Localization   (1 files)
+  FileSystem     -> Logging        (2 files)
+  FileSystem     -> Operations     (2 files)
+  FileSystem     -> Undo           (3 files)
+  Listing        -> Companions     (2 files)
+  Listing        -> FileSystem     (5 files)
+  Listing        -> Icons          (1 files)
+  Listing        -> Search         (1 files)
+  Menu           -> FileSystem     (1 files)
+  Menu           -> Localization   (1 files)
+  Menu           -> Persistence    (1 files)
+  Menu           -> Shell          (2 files)
+  Persistence    -> Companions     (1 files)
+  Persistence    -> FileSystem     (1 files)
+  Persistence    -> Navigation     (1 files)
+  Preview        -> Icons          (1 files)
+  Search         -> FileSystem     (5 files)
+  Search         -> Logging        (1 files)
+  Search         -> Preview        (1 files)
+  Shell          -> FileSystem     (1 files)
+  Shell          -> Localization   (1 files)
+  Shell          -> Persistence    (1 files)
+
+-- Wander.Core: levels --
+  0: (root), Icons, Layout, Localization, Logging, Navigation, Operations, Undo
+  1: Diagnostics, FileSystem, Preview
+  2: Companions, Search
+  3: Listing, Persistence
+  4: Shell
+  5: Menu
+
+-- Wander.Platform.Windows: folder -> folder --
+  (root)         -> Diagnostics    (1 files)
+  (root)         -> FileSystem     (1 files)
+  (root)         -> Icons          (1 files)
+  (root)         -> Logging        (1 files)
+  (root)         -> Persistence    (1 files)
+  (root)         -> Search         (1 files)
+  (root)         -> Shell          (1 files)
+
+-- Wander.Platform.Windows: levels --
+  0: Diagnostics, FileSystem, Icons, Logging, Persistence, Search, Shell
+  1: (root)
+
+-- Wander.App: folder -> folder --
+  (root)         -> Controllers    (1 files)
+  (root)         -> Diagnostics    (1 files)
+  (root)         -> DragPreview    (1 files)
+  (root)         -> Menu           (1 files)
+  (root)         -> Resources      (3 files)
+  (root)         -> Util           (2 files)
+  (root)         -> ViewModels     (1 files)
+  (root)         -> Views          (1 files)
+  Conflict       -> Resources      (2 files)
+  Conflict       -> Util           (2 files)
+  Controllers    -> Preview        (1 files)
+  Controllers    -> Resources      (6 files)
+  Controllers    -> Util           (1 files)
+  Controllers    -> ViewModels     (7 files)
+  Controls       -> Converters     (1 files)
+  Converters     -> ViewModels     (1 files)
+  Diagnostics    -> Resources      (1 files)
+  DragPreview    -> Converters     (1 files)
+  DragPreview    -> Resources      (1 files)
+  DragPreview    -> Util           (1 files)
+  DragPreview    -> ViewModels     (1 files)
+  Preview        -> Resources      (2 files)
+  Preview        -> Util           (2 files)
+  ViewModels     -> Conflict       (1 files)
+  ViewModels     -> Controllers    (1 files)
+  ViewModels     -> Resources      (4 files)
+  ViewModels     -> Util           (1 files)
+  Views          -> Controllers    (1 files)
+  Views          -> Controls       (2 files)
+  Views          -> DragPreview    (1 files)
+  Views          -> Highlighting   (1 files)
+  Views          -> Resources      (6 files)
+  Views          -> Util           (3 files)
+  Views          -> ViewModels     (5 files)
+
+-- Wander.App: levels --
+  0: Highlighting, Menu, Resources, Util
+  1: Conflict, Diagnostics, Preview
+  2: [Controllers+ViewModels]
+  3: Converters
+  4: Controls, DragPreview
+  5: Views
+  6: (root)
+  cycle edges:
+    Controllers -> ViewModels
+    ViewModels -> Controllers
+
+-- namespace <> folder mismatches --
+  (none)
+```
+<!-- deps:generated:end -->
+
+### Когда `IFileSystem`, а когда `System.IO`
+
+Core читает диск двумя способами, и оба законны — правило зафиксировано на
+шаге O7 (2026-09-01), фактическое положение сверено с кодом тогда же:
+
+- **Через `IFileSystem`** идёт всё, что пользователь может отменить, что
+  обязан уметь подменить тест, и всё, что перечисляет папки: операции,
+  листинг, сайдкары, перепись папки. Это контракт слоёв — см. «Жёсткое
+  правило» выше.
+- **Напрямую через `System.IO`** можно читать байты одного файла ради
+  раскодирования, когда файл уже выбран и результат — картинка/текст на
+  экране, а не решение логики. Сегодня так читает **только
+  `Wander.Core/Preview/`** (обложки, теги, меши, пробы текста) — и это
+  весь список. Тесты туда не ходят (раскодирование покрывается руками и
+  smoke-запуском), подменять нечего.
+
+Новый прямой `File.` / `Directory.` где-либо в Core, кроме `Preview/`, —
+это либо кандидат в `IFileSystem`, либо осознанное расширение этого
+списка с записью здесь.
 
 ---
 
@@ -1472,7 +1653,7 @@ Wander.
 | `Views/FolderTreesView` | Обе панели папок и всё, что делает строка дерева: клик открывает, шеврон только раскрывает, drag узла, правый клик как цель операции, `Shift` + колесо, коалесированный клавиатурный обход, полоса «+» для закладок |
 | `Views/FileListView` | Все режимы отображения списка и их общие жесты: выделение, рамка, взведение drag, двойной клик, переименование на месте, набор имени, `Ctrl` + колесо, вызов меню |
 | `Views/PreviewPane` | Всё, что рисуется в панели просмотра, плюс зум по правой кнопке, транспорт видео и инициализация WebView2 |
-| `Util/DropTargetController` | Приём drop'а: какая папка под курсором, разрешён ли туда drop, что он сделает, подсветка цели |
+| `DragPreview/DropTargetController` | Приём drop'а: какая папка под курсором, разрешён ли туда drop, что он сделает, подсветка цели |
 | `DragPreview/OutgoingDrag` | Перетаскивание наружу, пока оно идёт: плашка у курсора, курсор, формулировка «что и куда» |
 
 **`DropTargetController` решает, но не действует.** Он отвечает планом

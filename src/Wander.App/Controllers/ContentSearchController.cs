@@ -33,7 +33,7 @@ public enum SearchState {
 /// inside files, asking the system index.
 ///
 /// <para>
-/// It sits beside <see cref="SearchController"/> rather than inside it
+/// It sits beside <see cref="Wander.Core.Listing.SearchController"/> rather than inside it
 /// because the two are different interactions, not two settings of one.
 /// The filter narrows a list that is already on screen and does it on
 /// every keystroke; a search leaves the folder behind and takes seconds.

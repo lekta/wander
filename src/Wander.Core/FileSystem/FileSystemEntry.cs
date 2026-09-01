@@ -1,5 +1,3 @@
-using Wander.Core.Companions;
-
 namespace Wander.Core.FileSystem;
 
 public sealed record FileSystemEntry(
