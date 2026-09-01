@@ -21,12 +21,6 @@ namespace Wander.Core.FileSystem;
 /// </para>
 /// </summary>
 public sealed record BatchGroup(string Primary, IReadOnlyList<string> Companions) {
-    /// <summary>A lone file — the shape every caller that knows nothing about companions uses.</summary>
-    public static BatchGroup Single(string path) {
-        return new BatchGroup(path, Array.Empty<string>());
-    }
-
-
     /// <summary>Main file first, then its companions. The order operations are applied in.</summary>
     public IEnumerable<string> All {
         get {
@@ -35,5 +29,11 @@ public sealed record BatchGroup(string Primary, IReadOnlyList<string> Companions
                 yield return companion;
             }
         }
+    }
+
+
+    /// <summary>A lone file — the shape every caller that knows nothing about companions uses.</summary>
+    public static BatchGroup Single(string path) {
+        return new BatchGroup(path, Array.Empty<string>());
     }
 }

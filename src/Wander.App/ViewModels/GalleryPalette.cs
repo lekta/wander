@@ -30,6 +30,21 @@ public sealed class GalleryPalette {
     /// gallery matches the other views exactly where it can. Only the
     /// darkened backgrounds need colours of their own.
     /// </summary>
+    /// <summary>
+    /// Contrast the caption tone has to clear. 4.5:1 is the usual floor for
+    /// text this size.
+    /// </summary>
+    private const double PrimaryContrast = 4.5;
+
+    /// <summary>
+    /// …and for the quieter tone. Lower on purpose: it is meant to recede,
+    /// and holding it to the same figure as the caption makes the two the
+    /// same colour on a mid-toned surface, which loses the distinction the
+    /// second tone exists for.
+    /// </summary>
+    private const double SecondaryContrast = 3.4;
+
+
     private static readonly Color _explorerHover = Color.FromRgb(0xE5, 0xF3, 0xFB);
     private static readonly Color _explorerHoverBorder = Color.FromRgb(0xD2, 0xEC, 0xF8);
     private static readonly Color _explorerSelected = Color.FromRgb(0xCC, 0xE8, 0xFF);
@@ -98,16 +113,6 @@ public sealed class GalleryPalette {
     public static GalleryPalette Plain { get; } = new(GalleryBackground.Light, 0, 0);
 
 
-    /// <summary>
-    /// The surface colour one option would give, without building the rest
-    /// of the palette — what the strip's three buttons paint themselves
-    /// with. A button that shows the colour it sets needs no label.
-    /// </summary>
-    public static Brush Swatch(GalleryBackground kind, int greyLevel, int darkLevel) {
-        return new GalleryPalette(kind, greyLevel, darkLevel).Background;
-    }
-
-
     /// <summary>Which of the three the user picked — for the toolbar's checked state.</summary>
     public GalleryBackground Kind { get; }
 
@@ -134,18 +139,13 @@ public sealed class GalleryPalette {
 
 
     /// <summary>
-    /// Contrast the caption tone has to clear. 4.5:1 is the usual floor for
-    /// text this size.
+    /// The surface colour one option would give, without building the rest
+    /// of the palette — what the strip's three buttons paint themselves
+    /// with. A button that shows the colour it sets needs no label.
     /// </summary>
-    private const double PrimaryContrast = 4.5;
-
-    /// <summary>
-    /// …and for the quieter tone. Lower on purpose: it is meant to recede,
-    /// and holding it to the same figure as the caption makes the two the
-    /// same colour on a mid-toned surface, which loses the distinction the
-    /// second tone exists for.
-    /// </summary>
-    private const double SecondaryContrast = 3.4;
+    public static Brush Swatch(GalleryBackground kind, int greyLevel, int darkLevel) {
+        return new GalleryPalette(kind, greyLevel, darkLevel).Background;
+    }
 
 
     /// <summary>

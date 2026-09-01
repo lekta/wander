@@ -127,20 +127,6 @@ public sealed class ClipboardController {
     }
 
 
-    /// <summary>
-    /// Marker values for <see cref="LastSystemIssue"/>. Strings, not an
-    /// enum, because Core has no access to the resource file — the App layer
-    /// maps them onto localized text.
-    /// </summary>
-    public static class SystemIssue {
-        /// <summary>The clipboard holds files that are not on disk (see <see cref="ClipboardFiles.HasUnsupportedFiles"/>).</summary>
-        public const string VirtualFiles = "virtual-files";
-
-        /// <summary>The clipboard could not be written; the copy stayed inside Wander.</summary>
-        public const string WriteFailed = "write-failed";
-    }
-
-
     private void Capture(IEnumerable<string> paths, bool isCut) {
         _paths = paths?.ToList() ?? new List<string>();
         IsCut = isCut;
@@ -179,5 +165,19 @@ public sealed class ClipboardController {
 
     private void RaiseChanged() {
         Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+
+    /// <summary>
+    /// Marker values for <see cref="LastSystemIssue"/>. Strings, not an
+    /// enum, because Core has no access to the resource file — the App layer
+    /// maps them onto localized text.
+    /// </summary>
+    public static class SystemIssue {
+        /// <summary>The clipboard holds files that are not on disk (see <see cref="ClipboardFiles.HasUnsupportedFiles"/>).</summary>
+        public const string VirtualFiles = "virtual-files";
+
+        /// <summary>The clipboard could not be written; the copy stayed inside Wander.</summary>
+        public const string WriteFailed = "write-failed";
     }
 }

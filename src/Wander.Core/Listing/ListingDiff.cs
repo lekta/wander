@@ -36,6 +36,15 @@ public readonly record struct ListingEdit(
 /// wholesale rebuild, or an ordered list of edits.
 /// </summary>
 public sealed class ListingDiffPlan {
+    internal static readonly ListingDiffPlan Rebuild = new(true, Array.Empty<ListingEdit>());
+
+
+    private ListingDiffPlan(bool wholesale, IReadOnlyList<ListingEdit> edits) {
+        Wholesale = wholesale;
+        Edits = edits;
+    }
+
+
     /// <summary>
     /// True when so little of the incoming listing lines up with what is on
     /// screen that reconciling it row by row is pointless — flipping the
@@ -46,15 +55,6 @@ public sealed class ListingDiffPlan {
 
     /// <summary>The edits, in application order. Empty for a wholesale plan.</summary>
     public IReadOnlyList<ListingEdit> Edits { get; }
-
-
-    private ListingDiffPlan(bool wholesale, IReadOnlyList<ListingEdit> edits) {
-        Wholesale = wholesale;
-        Edits = edits;
-    }
-
-
-    internal static readonly ListingDiffPlan Rebuild = new(true, Array.Empty<ListingEdit>());
 
 
     internal static ListingDiffPlan Of(IReadOnlyList<ListingEdit> edits) {

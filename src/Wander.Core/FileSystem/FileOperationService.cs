@@ -170,6 +170,15 @@ public sealed class FileOperationService {
     }
 
 
+    public void CreateFolder(string parent, string name) {
+        using var _ = _undo.BeginOperation();
+        var path = Path.Combine(parent, name);
+        _fs.CreateDirectory(path);
+        _log.Info($"CreateFolder: {path}");
+        _undo.Push(new CreateAction(_bin, path));
+    }
+
+
     private void Rollback(IReadOnlyList<IUndoableAction> steps) {
         for (int i = steps.Count - 1; i >= 0; i--) {
             try {
@@ -180,15 +189,6 @@ public sealed class FileOperationService {
                 _log.Error("Rename rollback failed", ex);
             }
         }
-    }
-
-
-    public void CreateFolder(string parent, string name) {
-        using var _ = _undo.BeginOperation();
-        var path = Path.Combine(parent, name);
-        _fs.CreateDirectory(path);
-        _log.Info($"CreateFolder: {path}");
-        _undo.Push(new CreateAction(_bin, path));
     }
 
 

@@ -30,6 +30,53 @@ internal static class PreviewText {
     /// </summary>
     public const long BookMaxFileSize = 64L * 1024 * 1024;
 
+    /// <summary>
+    /// Book-specific rules on top of the shared ones: a cover that sits at
+    /// a plate's size rather than filling the pane, and the indented,
+    /// centred shapes FB2 uses for verse and epigraphs.
+    /// </summary>
+    public const string BookCss = @"
+        .fb2-head { text-align: center; margin-bottom: 1.5em; }
+        .fb2-cover { max-width: 220px; max-height: 320px; box-shadow: 0 1px 6px rgba(0,0,0,.35); margin-bottom: 10px; }
+        .fb2-head h1 { font-size: 18px; margin: 0.2em 0; }
+        .fb2-author { color: #555; margin: 0.2em 0 0; }
+        .fb2-annotation { text-align: left; font-size: 12px; color: #444; border-top: 1px solid #DDD; margin-top: 12px; padding-top: 8px; }
+        .fb2-title { font-size: 15px; font-weight: 600; margin: 1.2em 0 0.5em; }
+        .fb2-title p { margin: 0; }
+        .fb2-empty { height: 0.8em; }
+        .fb2-poem { margin: 1em 2em; font-style: italic; }
+        .fb2-stanza { margin-bottom: 0.8em; }
+        .fb2-text-author { text-align: right; color: #555; font-style: italic; }
+        .fb2-image { display: block; margin: 1em auto; max-width: 100%; }
+        .fb2-cut { color: #A05000; border-top: 1px solid #DDD; padding-top: 8px; }
+        p { text-indent: 1.2em; margin: 0.2em 0; text-align: justify; }
+        blockquote p { text-indent: 0; }";
+
+
+    /// <summary>
+    /// Markdig speaks plain CommonMark unless told otherwise, and CommonMark
+    /// has no tables — a <c>| … | … |</c> block came out as one run-on
+    /// paragraph of pipes and dashes. Which is most of what a README's
+    /// tables are for.
+    ///
+    /// <para>
+    /// Listed one by one rather than through <c>UseAdvancedExtensions()</c>:
+    /// that bundle also turns YouTube links into iframes and reads
+    /// <c>{#id .class}</c> out of the text as markup, neither of which a
+    /// preview pane wants — least of all one that blocks the network and
+    /// would show the iframe as an empty box.
+    /// </para>
+    /// </summary>
+    private static readonly MarkdownPipeline _markdownPipeline =
+        new MarkdownPipelineBuilder()
+            .UsePipeTables()
+            .UseGridTables()
+            .UseEmphasisExtras()      // ~~strikethrough~~, ++inserted++
+            .UseTaskLists()           // - [x] done
+            .UseAutoLinks()           // bare https://… as a link
+            .UseFootnotes()
+            .Build();
+
 
     /// <summary>
     /// Reads a text file, working out its encoding rather than assuming
@@ -98,16 +145,6 @@ internal static class PreviewText {
 
 
     /// <summary>
-    /// The line that closes a preview which does not reach the end of the
-    /// file — either because the file is bigger than the read budget, or
-    /// because it holds more characters than the pane will render.
-    /// </summary>
-    private static string ClippedNote(long size, string prefix = "") {
-        return "\n\n" + prefix + string.Format(Strings.PreviewClipped, SizeFormatter.Format(size));
-    }
-
-
-    /// <summary>
     /// Markdown rendered to HTML. The note about a clipped file has to be
     /// Markdown too — a rule and an emphasised line, which is what "the
     /// file goes on past here" looks like in a rendered document.
@@ -119,54 +156,6 @@ internal static class PreviewText {
 
         return Markdown.ToHtml(md, _markdownPipeline);
     }
-
-
-    /// <summary>
-    /// Markdig speaks plain CommonMark unless told otherwise, and CommonMark
-    /// has no tables — a <c>| … | … |</c> block came out as one run-on
-    /// paragraph of pipes and dashes. Which is most of what a README's
-    /// tables are for.
-    ///
-    /// <para>
-    /// Listed one by one rather than through <c>UseAdvancedExtensions()</c>:
-    /// that bundle also turns YouTube links into iframes and reads
-    /// <c>{#id .class}</c> out of the text as markup, neither of which a
-    /// preview pane wants — least of all one that blocks the network and
-    /// would show the iframe as an empty box.
-    /// </para>
-    /// </summary>
-    private static readonly MarkdownPipeline _markdownPipeline =
-        new MarkdownPipelineBuilder()
-            .UsePipeTables()
-            .UseGridTables()
-            .UseEmphasisExtras()      // ~~strikethrough~~, ++inserted++
-            .UseTaskLists()           // - [x] done
-            .UseAutoLinks()           // bare https://… as a link
-            .UseFootnotes()
-            .Build();
-
-
-    /// <summary>
-    /// Book-specific rules on top of the shared ones: a cover that sits at
-    /// a plate's size rather than filling the pane, and the indented,
-    /// centred shapes FB2 uses for verse and epigraphs.
-    /// </summary>
-    public const string BookCss = @"
-        .fb2-head { text-align: center; margin-bottom: 1.5em; }
-        .fb2-cover { max-width: 220px; max-height: 320px; box-shadow: 0 1px 6px rgba(0,0,0,.35); margin-bottom: 10px; }
-        .fb2-head h1 { font-size: 18px; margin: 0.2em 0; }
-        .fb2-author { color: #555; margin: 0.2em 0 0; }
-        .fb2-annotation { text-align: left; font-size: 12px; color: #444; border-top: 1px solid #DDD; margin-top: 12px; padding-top: 8px; }
-        .fb2-title { font-size: 15px; font-weight: 600; margin: 1.2em 0 0.5em; }
-        .fb2-title p { margin: 0; }
-        .fb2-empty { height: 0.8em; }
-        .fb2-poem { margin: 1em 2em; font-style: italic; }
-        .fb2-stanza { margin-bottom: 0.8em; }
-        .fb2-text-author { text-align: right; color: #555; font-style: italic; }
-        .fb2-image { display: block; margin: 1em auto; max-width: 100%; }
-        .fb2-cut { color: #A05000; border-top: 1px solid #DDD; padding-top: 8px; }
-        p { text-indent: 1.2em; margin: 0.2em 0; text-align: justify; }
-        blockquote p { text-indent: 0; }";
 
 
     /// <summary>
@@ -189,5 +178,15 @@ internal static class PreviewText {
             ul.contains-task-list {{ list-style: none; padding-left: 1.2em; }}
             {extraCss}
         </style></head><body>{body}</body></html>";
+    }
+
+
+    /// <summary>
+    /// The line that closes a preview which does not reach the end of the
+    /// file — either because the file is bigger than the read budget, or
+    /// because it holds more characters than the pane will render.
+    /// </summary>
+    private static string ClippedNote(long size, string prefix = "") {
+        return "\n\n" + prefix + string.Format(Strings.PreviewClipped, SizeFormatter.Format(size));
     }
 }

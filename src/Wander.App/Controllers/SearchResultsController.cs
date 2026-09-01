@@ -29,6 +29,13 @@ namespace Wander.App.Controllers;
 /// </para>
 /// </summary>
 public sealed class SearchResultsController {
+    /// <summary>
+    /// How often a running search may repaint the list. Refilling the bound
+    /// collection raises one Reset and one full re-layout, and a search over
+    /// a deep tree finds something in hundreds of folders — pushing each
+    /// batch as it lands would spend the whole search re-laying-out. A fifth
+    /// of a second still looks like results streaming in.
+    /// </summary>
     private const int FlushIntervalMs = 200;
 
     private readonly ContentSearchController _search;

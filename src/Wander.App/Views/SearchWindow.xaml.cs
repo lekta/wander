@@ -2,7 +2,6 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
-using Wander.App.ViewModels;
 
 namespace Wander.App.Views;
 
@@ -52,6 +51,15 @@ public partial class SearchWindow : Window {
     }
 
 
+    protected override void OnClosing(System.ComponentModel.CancelEventArgs e) {
+        base.OnClosing(e);
+        Dismissed?.Invoke(this, EventArgs.Empty);
+    }
+
+
+    // --- Window style interop -------------------------------------------
+
+
     /// <summary>
     /// Strips the minimise and maximise boxes, leaving a resizable frame
     /// with nothing in the corner but the close button.
@@ -96,14 +104,6 @@ public partial class SearchWindow : Window {
         }
     }
 
-
-    protected override void OnClosing(System.ComponentModel.CancelEventArgs e) {
-        base.OnClosing(e);
-        Dismissed?.Invoke(this, EventArgs.Empty);
-    }
-
-
-    // --- Window style interop -------------------------------------------
 
     private const int GwlStyle = -16;
     private const int WsMinimizeBox = 0x00020000;

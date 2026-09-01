@@ -10,6 +10,16 @@ namespace Wander.Core.Menu;
 /// reordering).
 /// </summary>
 public sealed record ContextMenuSettings {
+    /// <summary>
+    /// How many discovered third-party names are worth remembering. The list
+    /// exists only so the settings dialog has checkboxes to offer, and some
+    /// handlers put volatile text in their top-level label — TortoiseGit
+    /// shows «Git Commit -&gt; "master"...», one row per branch. Left alone
+    /// that grows <c>state.json</c> forever.
+    /// </summary>
+    public const int MaxKnownShellExtensions = 100;
+
+
     /// <summary>Out-of-the-box configuration: nothing hidden, extensions on.</summary>
     public static readonly ContextMenuSettings Default = new();
 
@@ -60,16 +70,6 @@ public sealed record ContextMenuSettings {
             BlockedShellExtensions = blocked,
         };
     }
-
-
-    /// <summary>
-    /// How many discovered third-party names are worth remembering. The list
-    /// exists only so the settings dialog has checkboxes to offer, and some
-    /// handlers put volatile text in their top-level label — TortoiseGit
-    /// shows «Git Commit -&gt; "master"...», one row per branch. Left alone
-    /// that grows <c>state.json</c> forever.
-    /// </summary>
-    public const int MaxKnownShellExtensions = 100;
 
 
     /// <inheritdoc cref="TrimKnownExtensions"/>

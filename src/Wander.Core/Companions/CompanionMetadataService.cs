@@ -134,59 +134,6 @@ public sealed class CompanionMetadataService {
     }
 
 
-    /// <param name="pushUndo">
-    /// False when the caller is assembling a composite of its own — see
-    /// <see cref="ApplyRatingToMany"/>. The step still exists, it is just
-    /// pushed by somebody else.
-    /// </param>
-    private string CreateRatingSidecar(
-        string mainPath, SidecarFormat format, RatingField field, int value, bool pushUndo) {
-        string path = SidecarPathFor(mainPath, format);
-        if (_fs.FileExists(path)) {
-            throw new InvalidOperationException($"Sidecar already exists: {path}");
-        }
-
-        // The guard is a deny-list for destructive work and creating a file
-        // is not that — but this is the one path in Wander that puts a file
-        // somewhere the user did not name, and the Windows tree is exactly
-        // where it must not do so. Wallpapers live there, and they are
-        // pictures.
-        if (SystemPathGuard.IsProtected(path, out string reason)) {
-            throw new InvalidOperationException(reason);
-        }
-
-        int rank = field == RatingField.Rank ? value : 0;
-        int color = field == RatingField.ColorLabel ? value : 0;
-
-        byte[] content = format == SidecarFormat.Pp3
-            ? Pp3Sidecar.Create(rank, color)
-            : XmpSidecar.Create(rank, color);
-
-        _fs.ReplaceAtomic(path, content);
-        _log.Info($"Sidecar created: {path} ({field} = {value})");
-        if (pushUndo) {
-            _undo.Push(new SidecarCreatedAction(this, path, mainPath));
-        }
-
-        return path;
-    }
-
-
-    /// <summary>
-    /// One photo an edit is about: where it lives, and which sidecar
-    /// already holds its rating (null when it has none yet and one has to
-    /// be created).
-    /// </summary>
-    public readonly record struct RatingTarget(string MainPath, string? SidecarPath);
-
-
-    /// <summary>
-    /// The result for one photo: which file its rating now lives in, and
-    /// what that file now says.
-    /// </summary>
-    public readonly record struct RatingResult(string MainPath, string SidecarPath, SidecarRating Rating);
-
-
     /// <summary>
     /// Sets one rating field on many photos at once — writing into the
     /// sidecars that exist and creating the ones that do not — and puts the
@@ -329,6 +276,44 @@ public sealed class CompanionMetadataService {
     }
 
 
+    /// <param name="pushUndo">
+    /// False when the caller is assembling a composite of its own — see
+    /// <see cref="ApplyRatingToMany"/>. The step still exists, it is just
+    /// pushed by somebody else.
+    /// </param>
+    private string CreateRatingSidecar(
+        string mainPath, SidecarFormat format, RatingField field, int value, bool pushUndo) {
+        string path = SidecarPathFor(mainPath, format);
+        if (_fs.FileExists(path)) {
+            throw new InvalidOperationException($"Sidecar already exists: {path}");
+        }
+
+        // The guard is a deny-list for destructive work and creating a file
+        // is not that — but this is the one path in Wander that puts a file
+        // somewhere the user did not name, and the Windows tree is exactly
+        // where it must not do so. Wallpapers live there, and they are
+        // pictures.
+        if (SystemPathGuard.IsProtected(path, out string reason)) {
+            throw new InvalidOperationException(reason);
+        }
+
+        int rank = field == RatingField.Rank ? value : 0;
+        int color = field == RatingField.ColorLabel ? value : 0;
+
+        byte[] content = format == SidecarFormat.Pp3
+            ? Pp3Sidecar.Create(rank, color)
+            : XmpSidecar.Create(rank, color);
+
+        _fs.ReplaceAtomic(path, content);
+        _log.Info($"Sidecar created: {path} ({field} = {value})");
+        if (pushUndo) {
+            _undo.Push(new SidecarCreatedAction(this, path, mainPath));
+        }
+
+        return path;
+    }
+
+
     private static bool IsPp3(string path) {
         return Path.GetExtension(path).Equals(".pp3", StringComparison.OrdinalIgnoreCase);
     }
@@ -342,6 +327,21 @@ public sealed class CompanionMetadataService {
             return null;
         }
     }
+
+
+    /// <summary>
+    /// One photo an edit is about: where it lives, and which sidecar
+    /// already holds its rating (null when it has none yet and one has to
+    /// be created).
+    /// </summary>
+    public readonly record struct RatingTarget(string MainPath, string? SidecarPath);
+
+
+    /// <summary>
+    /// The result for one photo: which file its rating now lives in, and
+    /// what that file now says.
+    /// </summary>
+    public readonly record struct RatingResult(string MainPath, string SidecarPath, SidecarRating Rating);
 }
 
 

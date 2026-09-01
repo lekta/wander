@@ -32,10 +32,6 @@ public static partial class Strings {
         new("Wander.App.Resources.Strings", typeof(Strings).Assembly);
 
 
-    public static string Get(string key) {
-        return _resources.GetString(key, CultureInfo.CurrentUICulture) ?? key;
-    }
-
     /// <summary>Локальный диск</summary>
     public static string VolumeKindFixed => Get(nameof(VolumeKindFixed));
 
@@ -215,4 +211,9 @@ public static partial class Strings {
 
     /// <summary>Показывать снимки без оценки. С Ctrl — добавить их к уже выбранным оценкам.</summary>
     public static string FilterUnratedHint => Get(nameof(FilterUnratedHint));
+
+
+    public static string Get(string key) {
+        return _resources.GetString(key, CultureInfo.CurrentUICulture) ?? key;
+    }
 }

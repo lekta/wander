@@ -451,8 +451,6 @@ internal static class GltfReader {
         return result;
     }
 
-    private record struct Accessor(byte[] Buffer, int Offset, int Count, int Component, int Stride);
-
     private static bool TryAccessor(
         JsonElement accessors, JsonElement views, List<byte[]?> buffers, int index, out Accessor accessor) {
         accessor = default;
@@ -511,6 +509,9 @@ internal static class GltfReader {
             ? bytes[3..]
             : bytes;
     }
+
+
+    private record struct Accessor(byte[] Buffer, int Offset, int Count, int Component, int Stride);
 
 
     /// <summary>

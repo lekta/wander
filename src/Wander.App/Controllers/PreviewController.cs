@@ -82,6 +82,9 @@ public sealed class PreviewController : ObservableObject {
     private IReadOnlyList<FileSystemEntry> _selection = Array.Empty<FileSystemEntry>();
     private string? _currentFolderPath;
     private string _currentFolderName = "";
+    private string _folderHeadline = "";
+    private string _folderTitle = "";
+    private string _folderNote = "";
 
     private CancellationTokenSource? _previewCts;
     private CancellationTokenSource? _summaryCts;
@@ -114,6 +117,7 @@ public sealed class PreviewController : ObservableObject {
 
     private CancellationTokenSource? _companionCts;
     private string _companionFiles = "";
+    private string _companionStatus = "";
     private string? _unityGuid;
     private string? _unityDetail;
     private string? _ratingPath;
@@ -521,8 +525,6 @@ public sealed class PreviewController : ObservableObject {
         private set => SetField(ref _companionStatus, value);
     }
 
-    private string _companionStatus = "";
-
 
     public bool IsPlaceholderVisible =>
         _isVisible && (_kind == PreviewKind.None || _kind == PreviewKind.Unsupported);
@@ -566,10 +568,6 @@ public sealed class PreviewController : ObservableObject {
 
     /// <summary>Biggest file types first, with a bar proportional to their share.</summary>
     public ObservableCollection<FolderTypeRow> FolderTypes { get; } = new();
-
-    private string _folderHeadline = "";
-    private string _folderTitle = "";
-    private string _folderNote = "";
 
 
     // --- Volume block ---------------------------------------------------

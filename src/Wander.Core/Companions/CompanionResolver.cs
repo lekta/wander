@@ -217,6 +217,36 @@ public sealed class CompanionResolver {
 
 
     /// <summary>
+    /// Every rename a "rename this file" gesture really implies: the main
+    /// file first, then each existing companion under its new name. Handing
+    /// the whole plan to <see cref="FileOperationService.RenameMany"/> is
+    /// what makes the group land as a single undo step.
+    /// </summary>
+    public IReadOnlyList<(string Path, string NewName)> RenamePlan(string mainPath, string newMainName, IFileSystem fs) {
+        return RenamePlan(mainPath, newMainName, FindCompanions(mainPath, fs));
+    }
+
+
+    /// <summary>
+    /// The same plan for companions the caller already knows about — the
+    /// folder listing puts them on the row, so the common case needs no
+    /// disk access at all.
+    /// </summary>
+    public IReadOnlyList<(string Path, string NewName)> RenamePlan(
+        string mainPath, string newMainName, IReadOnlyList<string>? companions) {
+
+        var plan = new List<(string, string)> { (mainPath, newMainName) };
+        foreach (string companion in companions ?? Array.Empty<string>()) {
+            if (RuleFor(companion) is { } rule) {
+                plan.Add((companion, rule.CompanionNameFor(newMainName)));
+            }
+        }
+
+        return plan;
+    }
+
+
+    /// <summary>
     /// The path in <paramref name="siblings"/> that <paramref name="name"/>
     /// is a companion of, or null. Shares the ambiguity rule with
     /// <see cref="Collapse"/>: a stem-matched sidecar with more than one
@@ -255,36 +285,6 @@ public sealed class CompanionResolver {
         }
 
         return null;
-    }
-
-
-    /// <summary>
-    /// Every rename a "rename this file" gesture really implies: the main
-    /// file first, then each existing companion under its new name. Handing
-    /// the whole plan to <see cref="FileOperationService.RenameMany"/> is
-    /// what makes the group land as a single undo step.
-    /// </summary>
-    public IReadOnlyList<(string Path, string NewName)> RenamePlan(string mainPath, string newMainName, IFileSystem fs) {
-        return RenamePlan(mainPath, newMainName, FindCompanions(mainPath, fs));
-    }
-
-
-    /// <summary>
-    /// The same plan for companions the caller already knows about — the
-    /// folder listing puts them on the row, so the common case needs no
-    /// disk access at all.
-    /// </summary>
-    public IReadOnlyList<(string Path, string NewName)> RenamePlan(
-        string mainPath, string newMainName, IReadOnlyList<string>? companions) {
-
-        var plan = new List<(string, string)> { (mainPath, newMainName) };
-        foreach (string companion in companions ?? Array.Empty<string>()) {
-            if (RuleFor(companion) is { } rule) {
-                plan.Add((companion, rule.CompanionNameFor(newMainName)));
-            }
-        }
-
-        return plan;
     }
 
 

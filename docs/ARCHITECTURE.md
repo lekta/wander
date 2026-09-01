@@ -111,7 +111,7 @@ src/
     ├── Resources/      Strings*.resx, AppTextSource, MenuStyles
     ├── Util/           SelectionController, ListVisuals, SizeFormatter,
     │                   NumberFormat, TimeFormat, DispatcherExtensions
-    ├── ViewModels/     MainViewModel, SettingsViewModel, TreeNodeViewModel,
+    ├── ViewModels/     SettingsViewModel, TreeNodeViewModel,
     │                   OperationViewModel, ColorLabelViewModel, HotkeyCatalog,
     │                   MenuItemRowViewModel, ShellExtensionRowViewModel,
     │                   SettingsCategoryViewModel, BulkObservableCollection,
@@ -119,6 +119,7 @@ src/
     │                   ViewMode, PreviewKind, DropEffect
     ├── Views/          FileListView, FolderTreesView, PreviewPane, SearchWindow,
     │                   SettingsWindow, ShellScopePicker, ProgressDialog
+    ├── MainViewModel.cs — при окне, не в ViewModels/ (см. «Окно и его контролы»)
     ├── MainWindow.xaml(.cs)
     └── App.xaml(.cs)
 ```
@@ -140,11 +141,12 @@ O7, 2026-09-01): между папками внутри проекта нет ц
 переложить файл или развернуть связь (событие вместо коллбэка вверх), а не
 пополнить список исключений.
 
-Единственный оставленный клубок — `[Controllers+ViewModels]` в App:
-`MainViewModel` хостит контроллеры, контроллеры используют базовые типы
-из `ViewModels/` (`ObservableObject`, `SettingsViewModel`,
-`TreeNodeViewModel`, ...). Разрубается это только решением «где живут
-MainViewModel и общие примитивы» — оно за шагом O9 (PLAN.md), не здесь.
+Клубок `[Controllers+ViewModels]` в App разрублен на шаге **O9**
+(2026-09-01): `MainViewModel` переехал из `ViewModels/` в корень
+`Wander.App` — к окну, которое он наполняет. `ViewModels/` стала слоем
+биндабельных типов (`ObservableObject`, `SettingsViewModel`,
+`TreeNodeViewModel`, ...) **ниже** контроллеров, и цикла больше нет: у App
+теперь шесть уровней и ни одного ребра назад.
 
 Ребро `Wander.App -> Wander.Platform.Windows` — один файл, `App.xaml.cs`:
 это точка композиции (`PlatformBootstrapper.RegisterDefaults()`), ей
@@ -154,7 +156,7 @@ MainViewModel и общие примитивы» — оно за шагом O9 (
 ```
 === Wander dependency graph (using sweep) ===
 date   : 2026-09-01
-commit : be30b7c
+commit : 00028c5
 
 -- projects --
 Wander.App -> Wander.Core   (46 files)
@@ -212,12 +214,13 @@ Wander.Platform.Windows -> Wander.Core   (21 files)
   1: (root)
 
 -- Wander.App: folder -> folder --
-  (root)         -> Controllers    (1 files)
+  (root)         -> Conflict       (1 files)
+  (root)         -> Controllers    (2 files)
   (root)         -> Diagnostics    (1 files)
   (root)         -> DragPreview    (1 files)
   (root)         -> Menu           (1 files)
-  (root)         -> Resources      (3 files)
-  (root)         -> Util           (2 files)
+  (root)         -> Resources      (4 files)
+  (root)         -> Util           (3 files)
   (root)         -> ViewModels     (1 files)
   (root)         -> Views          (1 files)
   Conflict       -> Resources      (2 files)
@@ -236,29 +239,22 @@ Wander.Platform.Windows -> Wander.Core   (21 files)
   DragPreview    -> ViewModels     (1 files)
   Preview        -> Resources      (2 files)
   Preview        -> Util           (2 files)
-  ViewModels     -> Conflict       (1 files)
-  ViewModels     -> Controllers    (1 files)
-  ViewModels     -> Resources      (5 files)
-  ViewModels     -> Util           (1 files)
+  ViewModels     -> Resources      (4 files)
   Views          -> Controllers    (1 files)
   Views          -> Controls       (2 files)
   Views          -> DragPreview    (1 files)
   Views          -> Highlighting   (1 files)
   Views          -> Resources      (6 files)
   Views          -> Util           (3 files)
-  Views          -> ViewModels     (5 files)
+  Views          -> ViewModels     (4 files)
 
 -- Wander.App: levels --
   0: Highlighting, Menu, Resources, Util
-  1: Conflict, Diagnostics, Preview
-  2: [Controllers+ViewModels]
-  3: Converters
-  4: Controls, DragPreview
-  5: Views
-  6: (root)
-  cycle edges:
-    Controllers -> ViewModels
-    ViewModels -> Controllers
+  1: Conflict, Diagnostics, Preview, ViewModels
+  2: Controllers, Converters
+  3: Controls, DragPreview
+  4: Views
+  5: (root)
 
 -- namespace <> folder mismatches --
   (none)
@@ -1658,6 +1654,14 @@ Wander.
 | `Views/PreviewPane` | Всё, что рисуется в панели просмотра, плюс зум по правой кнопке, транспорт видео и инициализация WebView2 |
 | `DragPreview/DropTargetController` | Приём drop'а: какая папка под курсором, разрешён ли туда drop, что он сделает, подсветка цели |
 | `DragPreview/OutgoingDrag` | Перетаскивание наружу, пока оно идёт: плашка у курсора, курсор, формулировка «что и куда» |
+
+**Главная вью-модель живёт при окне, а не в `ViewModels/`.**
+`MainViewModel.cs` лежит в корне `Wander.App`, рядом с `MainWindow.xaml.cs`,
+и её namespace — `Wander.App`. Это не оплошность: она хостит контроллеры, а
+контроллеры берут базовые типы из `ViewModels/`, и пока она лежала там же,
+между двумя папками стоял цикл. Переезд (шаг O9, 2026-09-01) оставил
+`ViewModels/` слоем биндабельных типов **ниже** контроллеров. Искать её
+поэтому надо там, где окно, а не там, где остальные вью-модели.
 
 **`DropTargetController` решает, но не действует.** Он отвечает планом
 (`DropPlan`: что, куда, каким действием), а выполняет план вью-модель —

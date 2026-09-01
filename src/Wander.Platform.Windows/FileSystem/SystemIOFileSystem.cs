@@ -6,6 +6,10 @@ using Wander.Core.Shell;
 namespace Wander.Platform.Windows.FileSystem;
 
 public sealed class SystemIOFileSystem : IFileSystem {
+    private static readonly IComparer<string> _naturalNameComparer =
+        Comparer<string>.Create((a, b) => StrCmpLogicalW(a, b));
+
+
     public bool DirectoryExists(string path) {
         return Directory.Exists(path);
     }
@@ -60,32 +64,6 @@ public sealed class SystemIOFileSystem : IFileSystem {
 
         return EntryComparers.Sort(all, options, _naturalNameComparer);
     }
-
-    private static readonly IComparer<string> _naturalNameComparer =
-        Comparer<string>.Create((a, b) => StrCmpLogicalW(a, b));
-
-
-    /// <summary>
-    /// Returns true if the given file is a <c>.lnk</c> shortcut that
-    /// resolves to an existing directory. Used at enumeration time so we
-    /// can sort folder-shortcuts with folders.
-    /// </summary>
-    private static bool IsFolderShortcut(string path) {
-        if (!path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)) {
-            return false;
-        }
-        try {
-            string? target = ServiceLocator.Get<IShortcutService>().Resolve(path);
-            return !string.IsNullOrEmpty(target) && Directory.Exists(target);
-        } catch {
-            // Broken / dangling shortcut — treat as a regular file.
-            return false;
-        }
-    }
-
-
-    [DllImport("shlwapi.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
-    private static extern int StrCmpLogicalW(string x, string y);
 
     public IReadOnlyList<FileSystemEntry> GetRoots() {
         var result = new List<FileSystemEntry>();
@@ -207,10 +185,6 @@ public sealed class SystemIOFileSystem : IFileSystem {
         File.Move(source, destination);
     }
 
-    private static bool RootsDiffer(string a, string b) {
-        return !string.Equals(Path.GetPathRoot(a), Path.GetPathRoot(b), StringComparison.OrdinalIgnoreCase);
-    }
-
     public void Rename(string path, string newName) {
         string parent = Directory.GetParent(path)?.FullName
             ?? throw new InvalidOperationException("Cannot rename a root entry.");
@@ -239,6 +213,32 @@ public sealed class SystemIOFileSystem : IFileSystem {
             TryDelete(temp);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Returns true if the given file is a <c>.lnk</c> shortcut that
+    /// resolves to an existing directory. Used at enumeration time so we
+    /// can sort folder-shortcuts with folders.
+    /// </summary>
+    private static bool IsFolderShortcut(string path) {
+        if (!path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)) {
+            return false;
+        }
+        try {
+            string? target = ServiceLocator.Get<IShortcutService>().Resolve(path);
+            return !string.IsNullOrEmpty(target) && Directory.Exists(target);
+        } catch {
+            // Broken / dangling shortcut — treat as a regular file.
+            return false;
+        }
+    }
+
+
+    [DllImport("shlwapi.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    private static extern int StrCmpLogicalW(string x, string y);
+
+    private static bool RootsDiffer(string a, string b) {
+        return !string.Equals(Path.GetPathRoot(a), Path.GetPathRoot(b), StringComparison.OrdinalIgnoreCase);
     }
 
     private static void TryDelete(string path) {

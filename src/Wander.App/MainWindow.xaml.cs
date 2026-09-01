@@ -12,7 +12,6 @@ using Wander.App.DragPreview;
 using Wander.App.Menu;
 using Wander.App.Resources;
 using Wander.App.Util;
-using Wander.App.ViewModels;
 using Wander.App.Views;
 using Wander.Core;
 using Wander.Core.FileSystem;
@@ -26,6 +25,9 @@ using Wander.Core.Shell;
 namespace Wander.App;
 
 public partial class MainWindow : Window {
+
+    private MainViewModel Vm => (MainViewModel)DataContext;
+
 
     // --- Search window ---------------------------------------------------
     /// <summary>
@@ -190,9 +192,6 @@ public partial class MainWindow : Window {
             },
         });
     }
-
-    private MainViewModel Vm => (MainViewModel)DataContext;
-
 
     // --- Preview pane layout --------------------------------------------
 
@@ -527,6 +526,16 @@ public partial class MainWindow : Window {
     private WindowZone _lastFolderPane = WindowZone.Drives;
 
 
+    /// <summary>
+    /// Puts the keyboard back in the file list. Called after a modal dialog
+    /// closes: WPF hands focus to the owner window and then picks whatever
+    /// focusable element it finds first, which is nowhere the user was.
+    /// </summary>
+    public void FocusWorkArea() {
+        FocusZone(WindowZone.FileList);
+    }
+
+
     /// <summary>Which zone an element belongs to, or null for the chrome between them.</summary>
     private WindowZone? ZoneOf(object? source) {
         // The folder panels answer for themselves — which of the two a row
@@ -566,16 +575,6 @@ public partial class MainWindow : Window {
                 return;
             }
         }
-    }
-
-
-    /// <summary>
-    /// Puts the keyboard back in the file list. Called after a modal dialog
-    /// closes: WPF hands focus to the owner window and then picks whatever
-    /// focusable element it finds first, which is nowhere the user was.
-    /// </summary>
-    public void FocusWorkArea() {
-        FocusZone(WindowZone.FileList);
     }
 
 

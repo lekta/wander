@@ -28,6 +28,21 @@ namespace Wander.Platform.Windows.Search;
 /// </summary>
 public sealed class FilterTextExtractor : IContentExtractor {
     /// <summary>
+    /// Characters pulled from one document before we stop asking. The same
+    /// reasoning as <c>ZipDocumentExtractor</c>: past a few million, the
+    /// file is generated and the answer will not change.
+    /// </summary>
+    private const int MaxChars = 8 * 1024 * 1024;
+
+    /// <summary>
+    /// Buffer handed to <c>GetText</c>. One char short of this is asked for
+    /// each time — the filter writes a terminator the count does not
+    /// include, and a buffer sized exactly is how this call corrupts the
+    /// heap.
+    /// </summary>
+    private const int BufferChars = 8192;
+
+    /// <summary>
     /// The formats handed to a filter — a named list rather than "whatever
     /// the registry has".
     ///
@@ -55,20 +70,6 @@ public sealed class FilterTextExtractor : IContentExtractor {
         ".mht", ".mhtml",
     };
 
-    /// <summary>
-    /// Characters pulled from one document before we stop asking. The same
-    /// reasoning as <c>ZipDocumentExtractor</c>: past a few million, the
-    /// file is generated and the answer will not change.
-    /// </summary>
-    private const int MaxChars = 8 * 1024 * 1024;
-
-    /// <summary>
-    /// Buffer handed to <c>GetText</c>. One char short of this is asked for
-    /// each time — the filter writes a terminator the count does not
-    /// include, and a buffer sized exactly is how this call corrupts the
-    /// heap.
-    /// </summary>
-    private const int BufferChars = 8192;
 
     private readonly ILogger _log;
 

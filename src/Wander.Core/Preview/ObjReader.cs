@@ -31,6 +31,8 @@ internal static class ObjReader {
     /// <summary>A material library past this is not a material library.</summary>
     private const long MaxMaterialFileSize = 8L * 1024 * 1024;
 
+    private static int MaxTriangleIndices => MeshFile.MaxTriangles * 3;
+
 
     public static MeshData? Read(string path) {
         string text = File.ReadAllText(path);
@@ -146,9 +148,6 @@ internal static class ObjReader {
 
         return parts.Count == 0 ? null : new MeshData(positions.ToArray(), parts);
     }
-
-
-    private static int MaxTriangleIndices => MeshFile.MaxTriangles * 3;
 
 
     /// <summary>

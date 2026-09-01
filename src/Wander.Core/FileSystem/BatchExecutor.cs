@@ -308,8 +308,6 @@ internal sealed class BatchExecutor {
         return Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
     }
 
-    private sealed record GroupPlan(IReadOnlyList<(string Source, string Dest)> Members);
-
     private IReadOnlyList<DeleteResult> DeleteManyCore(
         IReadOnlyList<string> paths, bool permanent, IOperationHandle progress, CancellationToken ct) {
         using var _ = _undo.BeginOperation();
@@ -427,6 +425,9 @@ internal sealed class BatchExecutor {
             IsSystem: false,
             LinksToDirectory: false);
     }
+
+
+    private sealed record GroupPlan(IReadOnlyList<(string Source, string Dest)> Members);
 }
 
 

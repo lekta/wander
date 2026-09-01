@@ -27,6 +27,31 @@ namespace Wander.App.ViewModels;
 /// </summary>
 public sealed class SettingsViewModel : ObservableObject {
 
+    public SettingsViewModel() {
+        // Initialise from the default AppSettings record so the field
+        // defaults stay in one place (the record).
+        ApplyFrom(new AppSettings());
+
+        Categories = new ObservableCollection<SettingsCategoryViewModel> {
+            // Nine pages, not eleven. "Безопасность" was never about
+            // security — it is what the listing shows — and two pages
+            // holding one checkbox each cost a click to reach and taught
+            // nobody anything. Their contents moved to the page whose
+            // question they actually answer.
+            new GeneralSettingsCategory(this),
+            new VisibilitySettingsCategory(this),
+            new LayoutSettingsCategory(this),
+            new GallerySettingsCategory(this),
+            new ThumbnailsSettingsCategory(this),
+            new BookmarksSettingsCategory(this),
+            new ContextMenuSettingsCategory(this),
+            new HotkeysSettingsCategory(this),
+            new DebugSettingsCategory(this),
+        };
+        _selectedCategory = Categories[0];
+    }
+
+
     // --- General -------------------------------------------------------
     private bool _restoreLastFolder;
     public bool RestoreLastFolder {
@@ -442,6 +467,24 @@ public sealed class SettingsViewModel : ObservableObject {
 
 
     // --- Context menu ---------------------------------------------------
+    /// <summary>
+    /// Menu rows the shell has reported to us, in discovery order. Not a
+    /// collection property because nothing binds to it — it is an input to
+    /// <see cref="RebuildShellRows"/> and a field of the saved record.
+    /// </summary>
+    private readonly List<KnownShellEntry> _seenShellEntries = new();
+
+    /// <summary>Scopes the user added through "Добавить", beyond the base ones.</summary>
+    private readonly List<string> _trackedScopes = new();
+
+    /// <summary>Most recently right-clicked file types, newest first.</summary>
+    private IReadOnlyList<string> _recentScopes = Array.Empty<string>();
+
+    private IReadOnlyList<ShellHandler> _handlers = Array.Empty<ShellHandler>();
+
+    private HashSet<string> _blockedShellKeys = new(StringComparer.OrdinalIgnoreCase);
+
+
     private bool _shellExtensionsEnabled;
     public bool ShellExtensionsEnabled {
         get => _shellExtensionsEnabled;
@@ -465,19 +508,6 @@ public sealed class SettingsViewModel : ObservableObject {
         }
     }
 
-    /// <summary>
-    /// Menu rows the shell has reported to us, in discovery order. Not a
-    /// collection property because nothing binds to it — it is an input to
-    /// <see cref="RebuildShellRows"/> and a field of the saved record.
-    /// </summary>
-    private readonly List<KnownShellEntry> _seenShellEntries = new();
-
-    /// <summary>Scopes the user added through "Добавить", beyond the base ones.</summary>
-    private readonly List<string> _trackedScopes = new();
-
-    /// <summary>Most recently right-clicked file types, newest first.</summary>
-    private IReadOnlyList<string> _recentScopes = Array.Empty<string>();
-
     public IReadOnlyList<string> RecentScopes => _recentScopes;
 
     /// <summary>Every scope the table is built from: the fixed set plus the user's.</summary>
@@ -485,10 +515,6 @@ public sealed class SettingsViewModel : ObservableObject {
 
     /// <summary>One row per hideable built-in entry, in menu order and shape.</summary>
     public ObservableCollection<MenuItemRowViewModel> MenuItemRows { get; } = new();
-
-    private IReadOnlyList<ShellHandler> _handlers = Array.Empty<ShellHandler>();
-
-    private HashSet<string> _blockedShellKeys = new(StringComparer.OrdinalIgnoreCase);
 
 
     // --- Debug ---------------------------------------------------------
@@ -506,31 +532,6 @@ public sealed class SettingsViewModel : ObservableObject {
     public SettingsCategoryViewModel? SelectedCategory {
         get => _selectedCategory;
         set => SetField(ref _selectedCategory, value);
-    }
-
-
-    public SettingsViewModel() {
-        // Initialise from the default AppSettings record so the field
-        // defaults stay in one place (the record).
-        ApplyFrom(new AppSettings());
-
-        Categories = new ObservableCollection<SettingsCategoryViewModel> {
-            // Nine pages, not eleven. "Безопасность" was never about
-            // security — it is what the listing shows — and two pages
-            // holding one checkbox each cost a click to reach and taught
-            // nobody anything. Their contents moved to the page whose
-            // question they actually answer.
-            new GeneralSettingsCategory(this),
-            new VisibilitySettingsCategory(this),
-            new LayoutSettingsCategory(this),
-            new GallerySettingsCategory(this),
-            new ThumbnailsSettingsCategory(this),
-            new BookmarksSettingsCategory(this),
-            new ContextMenuSettingsCategory(this),
-            new HotkeysSettingsCategory(this),
-            new DebugSettingsCategory(this),
-        };
-        _selectedCategory = Categories[0];
     }
 
 
@@ -628,10 +629,6 @@ public sealed class SettingsViewModel : ObservableObject {
             RebuildShellRows();
             OnMenuToggleChanged();
         }
-    }
-
-    private static bool Same(string a, string b) {
-        return string.Equals(a.Trim(), b.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -763,6 +760,11 @@ public sealed class SettingsViewModel : ObservableObject {
             RecentShellScopes = _recentScopes,
             ShowDebugMenu = ShowDebugMenu,
         };
+    }
+
+
+    private static bool Same(string a, string b) {
+        return string.Equals(a.Trim(), b.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 
 

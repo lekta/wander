@@ -37,13 +37,6 @@ public static class ListVisuals {
         }
     }
 
-    private static DependencyObject? ParentOf(DependencyObject node) {
-        return node is Visual or System.Windows.Media.Media3D.Visual3D
-            ? VisualTreeHelper.GetParent(node)
-            : LogicalTreeHelper.GetParent(node);
-    }
-
-
     /// <summary>The entry a click landed on, or null when it missed every row.</summary>
     public static FileSystemEntry? EntryAt(object originalSource) {
         foreach (var hit in Ancestors(originalSource)) {
@@ -150,5 +143,12 @@ public static class ListVisuals {
         viewer.ScrollToHorizontalOffset(viewer.HorizontalOffset - e.Delta);
 
         return true;
+    }
+
+
+    private static DependencyObject? ParentOf(DependencyObject node) {
+        return node is Visual or System.Windows.Media.Media3D.Visual3D
+            ? VisualTreeHelper.GetParent(node)
+            : LogicalTreeHelper.GetParent(node);
     }
 }

@@ -63,16 +63,6 @@ public readonly record struct TileMetrics {
     private const double TilesPadding = 6;
     private const double TilesMargin = 4;
 
-    /// <summary>
-    /// The "kind" line under the name is a step smaller than the name, and
-    /// never smaller than legible. Derived rather than settable: two font
-    /// sizes for one tile is a knob nobody would turn.
-    /// </summary>
-    private static double TilesKindFontSize(double nameFontSize) {
-        return Math.Max(8, nameFontSize - 1);
-    }
-
-
     private TileMetrics(
         double contentWidth, double contentHeight, double margin,
         double imageSize, double labelHeight, double labelFontSize,
@@ -177,5 +167,15 @@ public readonly record struct TileMetrics {
 
     private static double TextLine(double fontSize) {
         return Math.Ceiling(fontSize * LineSpacing);
+    }
+
+
+    /// <summary>
+    /// The "kind" line under the name is a step smaller than the name, and
+    /// never smaller than legible. Derived rather than settable: two font
+    /// sizes for one tile is a knob nobody would turn.
+    /// </summary>
+    private static double TilesKindFontSize(double nameFontSize) {
+        return Math.Max(8, nameFontSize - 1);
     }
 }

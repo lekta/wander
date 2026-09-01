@@ -142,57 +142,6 @@ public sealed class TreeNodeViewModel : ObservableObject {
     }
 
 
-    private void EnsureLoaded() {
-        if (_loaded || _fs is null) {
-            return;
-        }
-
-        _loaded = true;
-        Children.Clear();
-        var children = ReadChildFolders();
-        foreach (var child in children) {
-            Children.Add(child);
-        }
-        ProbeForChevrons(_fs, children);
-    }
-
-
-    /// <summary>
-    /// The subfolders this node should be showing right now, as fresh view
-    /// models. Enumeration failure (access denied, drive pulled out) is not
-    /// an error to report here — the node simply has no children to draw.
-    /// </summary>
-    private List<TreeNodeViewModel> ReadChildFolders() {
-        var result = new List<TreeNodeViewModel>();
-        if (_fs is null) {
-            return result;
-        }
-
-        try {
-            foreach (var entry in _fs.Enumerate(FullPath)) {
-                if (entry.Kind != EntryKind.Directory) {
-                    continue;
-                }
-                if (!IsAllowedByFilters(entry)) {
-                    continue;
-                }
-
-                // Every child starts with a chevron; ProbeForChevrons takes
-                // it off the leaves a beat later. Asking the disk here —
-                // one enumeration per child, on the UI thread — is what
-                // made expanding a branch on a slow drive freeze the window.
-                result.Add(new TreeNodeViewModel(
-                    entry.Name, entry.FullPath, EntryKind.Directory, _fs, hasChildren: true,
-                    _settings, entry.IsHidden));
-            }
-        } catch {
-            // access denied / unavailable — silently skip; UI will show empty
-        }
-
-        return result;
-    }
-
-
     /// <summary>
     /// Finds which of <paramref name="nodes"/> have no subfolders and takes
     /// their chevrons away — off the UI thread, because the question is one
@@ -224,25 +173,6 @@ public sealed class TreeNodeViewModel : ObservableObject {
                 }
             });
         });
-    }
-
-
-    /// <summary>
-    /// The probe's verdict landing: no subfolders, so no chevron. A node
-    /// that loaded for real in the meantime knows better and is left alone.
-    /// </summary>
-    private void SetLeaf() {
-        if (_loaded) {
-            return;
-        }
-
-        if (Children.Count == 1 && ReferenceEquals(Children[0], _placeholder)) {
-            Children.Clear();
-        }
-    }
-
-    private bool IsAllowedByFilters(FileSystemEntry entry) {
-        return _settings is null || _settings.Visibility.Allows(entry);
     }
 
 
@@ -302,6 +232,76 @@ public sealed class TreeNodeViewModel : ObservableObject {
         foreach (var child in Children) {
             child.RefreshChildren();
         }
+    }
+
+
+    private void EnsureLoaded() {
+        if (_loaded || _fs is null) {
+            return;
+        }
+
+        _loaded = true;
+        Children.Clear();
+        var children = ReadChildFolders();
+        foreach (var child in children) {
+            Children.Add(child);
+        }
+        ProbeForChevrons(_fs, children);
+    }
+
+
+    /// <summary>
+    /// The subfolders this node should be showing right now, as fresh view
+    /// models. Enumeration failure (access denied, drive pulled out) is not
+    /// an error to report here — the node simply has no children to draw.
+    /// </summary>
+    private List<TreeNodeViewModel> ReadChildFolders() {
+        var result = new List<TreeNodeViewModel>();
+        if (_fs is null) {
+            return result;
+        }
+
+        try {
+            foreach (var entry in _fs.Enumerate(FullPath)) {
+                if (entry.Kind != EntryKind.Directory) {
+                    continue;
+                }
+                if (!IsAllowedByFilters(entry)) {
+                    continue;
+                }
+
+                // Every child starts with a chevron; ProbeForChevrons takes
+                // it off the leaves a beat later. Asking the disk here —
+                // one enumeration per child, on the UI thread — is what
+                // made expanding a branch on a slow drive freeze the window.
+                result.Add(new TreeNodeViewModel(
+                    entry.Name, entry.FullPath, EntryKind.Directory, _fs, hasChildren: true,
+                    _settings, entry.IsHidden));
+            }
+        } catch {
+            // access denied / unavailable — silently skip; UI will show empty
+        }
+
+        return result;
+    }
+
+
+    /// <summary>
+    /// The probe's verdict landing: no subfolders, so no chevron. A node
+    /// that loaded for real in the meantime knows better and is left alone.
+    /// </summary>
+    private void SetLeaf() {
+        if (_loaded) {
+            return;
+        }
+
+        if (Children.Count == 1 && ReferenceEquals(Children[0], _placeholder)) {
+            Children.Clear();
+        }
+    }
+
+    private bool IsAllowedByFilters(FileSystemEntry entry) {
+        return _settings is null || _settings.Visibility.Allows(entry);
     }
 
 

@@ -7,10 +7,11 @@ namespace Wander.Core.FileSystem;
 /// </summary>
 internal sealed record RenameAction(IFileSystem Fs, string NewPath, string OldName) : IUndoableAction {
     public string Description => $"Rename to '{Path.GetFileName(NewPath)}'";
-    public void Undo() => Fs.Rename(NewPath, OldName);
 
     public IReadOnlyList<string> PathsAfterUndo =>
         new[] { Path.Combine(Path.GetDirectoryName(NewPath) ?? "", OldName) };
+
+    public void Undo() => Fs.Rename(NewPath, OldName);
 }
 
 /// <summary>
@@ -18,9 +19,9 @@ internal sealed record RenameAction(IFileSystem Fs, string NewPath, string OldNa
 /// </summary>
 internal sealed record MoveAction(IFileSystem Fs, string OldPath, string NewPath) : IUndoableAction {
     public string Description => $"Move '{Path.GetFileName(OldPath)}'";
-    public void Undo() => Fs.MoveEntry(NewPath, OldPath);
-
     public IReadOnlyList<string> PathsAfterUndo => new[] { OldPath };
+
+    public void Undo() => Fs.MoveEntry(NewPath, OldPath);
 }
 
 /// <summary>
@@ -31,10 +32,11 @@ internal sealed record MoveAction(IFileSystem Fs, string OldPath, string NewPath
 /// </summary>
 public sealed record CreateAction(IRecycleBin Bin, string CreatedPath) : IUndoableAction {
     public string Description => $"Create '{Path.GetFileName(CreatedPath)}'";
-    public void Undo() => Bin.Send(CreatedPath);
 
     /// <summary>Nothing to select: undoing a create takes the item away.</summary>
     public IReadOnlyList<string> PathsAfterUndo => Array.Empty<string>();
+
+    public void Undo() => Bin.Send(CreatedPath);
 }
 
 /// <summary>
@@ -43,9 +45,9 @@ public sealed record CreateAction(IRecycleBin Bin, string CreatedPath) : IUndoab
 /// </summary>
 internal sealed record DeleteAction(IRecycleBin Bin, RecycleHandle Handle) : IUndoableAction {
     public string Description => $"Delete '{Path.GetFileName(Handle.OriginalPath)}'";
-    public void Undo() => Bin.Restore(Handle);
-
     public IReadOnlyList<string> PathsAfterUndo => new[] { Handle.OriginalPath };
+
+    public void Undo() => Bin.Restore(Handle);
 }
 
 /// <summary>
@@ -65,14 +67,6 @@ public sealed class CompositeAction : IUndoableAction {
     public string Description { get; }
 
 
-    public void Undo() {
-        // Reverse order so dependent ops unwind correctly.
-        for (int i = _actions.Count - 1; i >= 0; i--) {
-            _actions[i].Undo();
-        }
-    }
-
-
     /// <summary>Everything the members put back, in their original order.</summary>
     public IReadOnlyList<string> PathsAfterUndo =>
         _actions.SelectMany(a => a.PathsAfterUndo).ToArray();
@@ -87,4 +81,12 @@ public sealed class CompositeAction : IUndoableAction {
         _actions.Count > 0 && _actions.All(a => a.MetadataTargets.Count > 0)
             ? _actions.SelectMany(a => a.MetadataTargets).Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
             : Array.Empty<string>();
+
+
+    public void Undo() {
+        // Reverse order so dependent ops unwind correctly.
+        for (int i = _actions.Count - 1; i >= 0; i--) {
+            _actions[i].Undo();
+        }
+    }
 }

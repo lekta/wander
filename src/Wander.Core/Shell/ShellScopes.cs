@@ -36,6 +36,17 @@ public static class ShellScopes {
     public const string Drive = "Drive";
 
 
+    private static readonly Dictionary<string, string> _titleKeys =
+        new(StringComparer.OrdinalIgnoreCase) {
+            [AllFiles] = "ScopeAllFiles",
+            [AllFilesystemObjects] = "ScopeAllObjects",
+            [Directory] = "ScopeDirectory",
+            [DirectoryBackground] = "ScopeBackground",
+            [Folder] = "ScopeFolder",
+            [Drive] = "ScopeDrive",
+        };
+
+
     /// <summary>
     /// What the settings table starts out showing. Everything here appears
     /// in almost every menu the user opens, so pre-filling it costs one
@@ -49,17 +60,6 @@ public static class ShellScopes {
         Folder,
         Drive,
     };
-
-
-    private static readonly Dictionary<string, string> _titleKeys =
-        new(StringComparer.OrdinalIgnoreCase) {
-            [AllFiles] = "ScopeAllFiles",
-            [AllFilesystemObjects] = "ScopeAllObjects",
-            [Directory] = "ScopeDirectory",
-            [DirectoryBackground] = "ScopeBackground",
-            [Folder] = "ScopeFolder",
-            [Drive] = "ScopeDrive",
-        };
 
 
     public static bool IsBase(string scope) {

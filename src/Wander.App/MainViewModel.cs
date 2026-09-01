@@ -10,6 +10,7 @@ using Wander.App.Conflict;
 using Wander.App.Controllers;
 using Wander.App.Resources;
 using Wander.App.Util;
+using Wander.App.ViewModels;
 using Wander.Core;
 using Wander.Core.Companions;
 using Wander.Core.Diagnostics;
@@ -26,19 +27,12 @@ using Wander.Core.Shell;
 using Wander.Core.Undo;
 
 
-namespace Wander.App.ViewModels;
+namespace Wander.App;
 
 public sealed class MainViewModel : ObservableObject {
     /// <summary>How long a folder may take to list before the spinner shows.</summary>
     private const int SpinnerDelayMs = 150;
 
-    /// <summary>
-    /// How often an outside change to the current folder may cost a
-    /// re-listing. Half a second: fast enough that a file saved by another
-    /// application appears while the user is still looking at the folder,
-    /// slow enough that unpacking an archive into it does not re-list a
-    /// thousand times.
-    /// </summary>
     /// <summary>
     /// How slow an arrival has to be before it is worth a line in the log.
     /// A third of a second is where "it opened" turns into "it took a
@@ -47,6 +41,13 @@ public sealed class MainViewModel : ObservableObject {
     /// </summary>
     private const int SlowFolderMs = 300;
 
+    /// <summary>
+    /// How often an outside change to the current folder may cost a
+    /// re-listing. Half a second: fast enough that a file saved by another
+    /// application appears while the user is still looking at the folder,
+    /// slow enough that unpacking an archive into it does not re-list a
+    /// thousand times.
+    /// </summary>
     private const int WatchIntervalMs = 500;
 
     /// <summary>
@@ -56,12 +57,10 @@ public sealed class MainViewModel : ObservableObject {
     private const int StateSaveDelayMs = 500;
 
     /// <summary>
-    /// How often a running search may repaint the list. Refilling the bound
-    /// collection raises one Reset and one full re-layout, and a search over
-    /// a deep tree finds something in hundreds of folders — pushing each
-    /// batch as it lands would spend the whole search re-laying-out. A fifth
-    /// of a second still looks like results streaming in.
+    /// How many folders may keep a hand-picked view. See
+    /// <see cref="_manualViewModes"/> for why the list is capped.
     /// </summary>
+    private const int ManualViewModeLimit = 128;
 
     private readonly IFileSystem _fs;
     private readonly IShellLauncher _shell;
@@ -88,15 +87,15 @@ public sealed class MainViewModel : ObservableObject {
     private ViewMode _userViewMode = ViewMode.Details;
 
     // Folders where the user picked a view by hand, and which one. Kept in
-    // insertion order so the cap below drops the oldest, and persisted in
-    // the session bucket of state.json: "the gallery stops guessing here"
-    // has to survive a restart, or the promise lasts until teatime.
+    // insertion order so ManualViewModeLimit drops the oldest, and
+    // persisted in the session bucket of state.json: "the gallery stops
+    // guessing here" has to survive a restart, or the promise lasts until
+    // teatime.
     //
     // Capped rather than unbounded: this grows one entry per folder the
     // user ever set a view in, and state.json is loaded on every launch.
     private readonly Dictionary<string, ViewMode> _manualViewModes = new(StringComparer.OrdinalIgnoreCase);
     private readonly Queue<string> _manualViewModeOrder = new();
-    private const int ManualViewModeLimit = 128;
 
     private bool _isPreviewVisible;
     private double _previewWidth = 280;
@@ -804,16 +803,6 @@ public sealed class MainViewModel : ObservableObject {
     // on what counts as a recognised shell location. Caching the lookup
     // would be premature — TryGet is one dictionary hit.
 
-    private static IShellNamespace? TryGetShellNamespace() {
-        return ServiceLocator.TryGet<IShellNamespace>();
-    }
-
-    private bool IsShellPath(string? path) {
-        return !string.IsNullOrEmpty(path)
-            && TryGetShellNamespace() is { } ns
-            && ns.IsShellPath(path);
-    }
-
     /// <summary>
     /// True when the user is currently browsing a shell namespace (e.g.
     /// the Recycle Bin). Used to gate destructive commands — those would
@@ -830,6 +819,17 @@ public sealed class MainViewModel : ObservableObject {
     public bool IsCurrentRecycleBin =>
         string.Equals(_nav.Current, ShellPaths.RecycleBin, StringComparison.OrdinalIgnoreCase);
 
+    private static IShellNamespace? TryGetShellNamespace() {
+        return ServiceLocator.TryGet<IShellNamespace>();
+    }
+
+    private bool IsShellPath(string? path) {
+        return !string.IsNullOrEmpty(path)
+            && TryGetShellNamespace() is { } ns
+            && ns.IsShellPath(path);
+    }
+
+    // --- Opening an entry -----------------------------------------------
     public void OpenEntry(FileSystemEntry? entry) {
         if (entry is null) {
             return;
@@ -890,6 +890,7 @@ public sealed class MainViewModel : ObservableObject {
         return true;
     }
 
+    // --- Drop -----------------------------------------------------------
     public void HandleDrop(IReadOnlyList<string> sourcePaths, string? targetFolder, DropEffect effect) {
         _ = HandleDropAsync(sourcePaths, targetFolder, effect);
     }
@@ -984,6 +985,22 @@ public sealed class MainViewModel : ObservableObject {
 
 
     // --- Startup state -------------------------------------------------
+
+    /// <summary>
+    /// Writes a pending save out immediately. The window calls this while
+    /// closing — the debounce would otherwise drop whatever changed in the
+    /// last half-second of the session, which is exactly the state "open
+    /// where I left off" needs.
+    /// </summary>
+    public void FlushState() {
+        if (!_stateSaveTimer.IsEnabled) {
+            return;
+        }
+
+        _stateSaveTimer.Stop();
+        WriteStateNow();
+    }
+
 
     private void RestoreState() {
         var state = _stateStore.Load();
@@ -1099,22 +1116,6 @@ public sealed class MainViewModel : ObservableObject {
 
         _stateSaveTimer.Stop();
         _stateSaveTimer.Start();
-    }
-
-
-    /// <summary>
-    /// Writes a pending save out immediately. The window calls this while
-    /// closing — the debounce would otherwise drop whatever changed in the
-    /// last half-second of the session, which is exactly the state "open
-    /// where I left off" needs.
-    /// </summary>
-    public void FlushState() {
-        if (!_stateSaveTimer.IsEnabled) {
-            return;
-        }
-
-        _stateSaveTimer.Stop();
-        WriteStateNow();
     }
 
 
@@ -1303,13 +1304,6 @@ public sealed class MainViewModel : ObservableObject {
     // know where the user is standing.
 
 
-    private void ExpandCurrentInTrees() {
-        if (_nav.Current is { } here) {
-            Trees.ExpandTo(here, _nav.CurrentSource ?? NavigationSource.External);
-        }
-    }
-
-
     /// <summary>
     /// Opens one named panel down to the folder on screen and puts the
     /// highlight there — what <c>Ctrl+2</c> and <c>Ctrl+Shift+E</c> point
@@ -1321,6 +1315,14 @@ public sealed class MainViewModel : ObservableObject {
     }
 
 
+    private void ExpandCurrentInTrees() {
+        if (_nav.Current is { } here) {
+            Trees.ExpandTo(here, _nav.CurrentSource ?? NavigationSource.External);
+        }
+    }
+
+
+    // --- Listing --------------------------------------------------------
     private void Refresh() {
         // Search results are not a folder listing, and re-listing would
         // replace them with the folder underneath. Leaving results is an
@@ -1749,6 +1751,29 @@ public sealed class MainViewModel : ObservableObject {
 
 
     /// <summary>
+    /// A click on one of the stars, with the gesture already read off the
+    /// keyboard. Split from the command for one reason: the keyboard is the
+    /// one thing an offscreen harness must not touch — synthesising a held
+    /// <c>Ctrl</c> is real input on somebody's real machine — so what the
+    /// click <em>does</em> has to be reachable without pretending to press
+    /// anything. <paramref name="toggle"/> is the held <c>Ctrl</c>.
+    /// </summary>
+    public void ClickRankFilter(int rank, bool toggle) {
+        _search.RatingFilter = toggle
+            ? _search.RatingFilter.ToggleRank(rank)
+            : _search.RatingFilter.PickRank(rank);
+    }
+
+
+    /// <summary>The same for a colour swatch — see <see cref="ClickRankFilter"/>.</summary>
+    public void ClickColorFilter(int color, bool toggle) {
+        _search.RatingFilter = toggle
+            ? _search.RatingFilter.ToggleColor(color)
+            : _search.RatingFilter.PickColor(color);
+    }
+
+
+    /// <summary>
     /// Swaps updated copies of rows into <see cref="Entries"/> without
     /// touching anything else, and puts the selection back on them.
     ///
@@ -1931,28 +1956,6 @@ public sealed class MainViewModel : ObservableObject {
     }
 
 
-    /// <summary>
-    /// A click on one of the stars, with the gesture already read off the
-    /// keyboard. Split from the command for one reason: the keyboard is the
-    /// one thing an offscreen harness must not touch — synthesising a held
-    /// <c>Ctrl</c> is real input on somebody's real machine — so what the
-    /// click <em>does</em> has to be reachable without pretending to press
-    /// anything. <paramref name="toggle"/> is the held <c>Ctrl</c>.
-    /// </summary>
-    public void ClickRankFilter(int rank, bool toggle) {
-        _search.RatingFilter = toggle
-            ? _search.RatingFilter.ToggleRank(rank)
-            : _search.RatingFilter.PickRank(rank);
-    }
-
-
-    /// <summary>The same for a colour swatch — see <see cref="ClickRankFilter"/>.</summary>
-    public void ClickColorFilter(int color, bool toggle) {
-        _search.RatingFilter = toggle
-            ? _search.RatingFilter.ToggleColor(color)
-            : _search.RatingFilter.PickColor(color);
-    }
-
     private void ClearRatingFilter() {
         _search.RatingFilter = RatingFilter.None;
     }
@@ -2095,80 +2098,6 @@ public sealed class MainViewModel : ObservableObject {
     // --- View modes ----------------------------------------------------
 
     /// <summary>
-    /// The user picking a view, as opposed to Wander picking one. Both
-    /// halves matter: the choice becomes the one that persists, and the
-    /// folder it was made in is marked as spoken for, so the gallery does
-    /// not switch itself back on the next time the user walks in.
-    /// </summary>
-    private void SetViewMode(string? name) {
-        if (!Enum.TryParse<ViewMode>(name, out var mode)) {
-            return;
-        }
-
-        _userViewMode = mode;
-        ViewMode = mode;
-        if (_nav.Current is { Length: > 0 } here) {
-            RememberManualViewMode(here, mode);
-        }
-        SaveState();
-    }
-
-
-    private void RememberManualViewMode(string path, ViewMode mode) {
-        if (!_manualViewModes.ContainsKey(path)) {
-            _manualViewModeOrder.Enqueue(path);
-        }
-        _manualViewModes[path] = mode;
-
-        while (_manualViewModeOrder.Count > ManualViewModeLimit) {
-            _manualViewModes.Remove(_manualViewModeOrder.Dequeue());
-        }
-    }
-
-
-    private void SetGalleryBackground(string? name) {
-        if (Enum.TryParse<GalleryBackground>(name, out var background)) {
-            Settings.GalleryBackground = background;
-        }
-    }
-
-
-    /// <summary>
-    /// Picks the view for a folder we have just arrived in: the gallery
-    /// when the folder is mostly pictures, otherwise whatever the user
-    /// chose last.
-    ///
-    /// <para>
-    /// The second half is as important as the first. Without it the gallery
-    /// would be sticky — one photo folder and every text folder afterwards
-    /// is a wall of generic icons — so leaving a folder of photographs puts
-    /// the user's own view back.
-    /// </para>
-    ///
-    /// <para>
-    /// Silent in a folder where the user has chosen a view by hand this
-    /// session, and silent altogether when the setting is off.
-    /// </para>
-    /// </summary>
-    private void AutoSelectViewMode(IReadOnlyList<FileSystemEntry> items, string path) {
-        // A folder the user has assigned a view to keeps it, and keeps it
-        // across restarts. That is what "the automation stays out of this
-        // folder" has to mean to be worth saying.
-        if (_manualViewModes.TryGetValue(path, out var chosen)) {
-            ViewMode = chosen;
-
-            return;
-        }
-        if (!Settings.AutoGallery) {
-            return;
-        }
-
-        ViewMode = ImageFolderProbe.IsImageFolder(items, _companions, Settings.AutoGalleryPercent)
-            ? ViewMode.Gallery
-            : _userViewMode;
-    }
-
-    /// <summary>
     /// Ctrl + wheel over the file list: makes the current view bigger or
     /// smaller by <paramref name="steps"/> notches.
     ///
@@ -2260,6 +2189,81 @@ public sealed class MainViewModel : ObservableObject {
         }
 
         ReportViewSize();
+    }
+
+
+    /// <summary>
+    /// The user picking a view, as opposed to Wander picking one. Both
+    /// halves matter: the choice becomes the one that persists, and the
+    /// folder it was made in is marked as spoken for, so the gallery does
+    /// not switch itself back on the next time the user walks in.
+    /// </summary>
+    private void SetViewMode(string? name) {
+        if (!Enum.TryParse<ViewMode>(name, out var mode)) {
+            return;
+        }
+
+        _userViewMode = mode;
+        ViewMode = mode;
+        if (_nav.Current is { Length: > 0 } here) {
+            RememberManualViewMode(here, mode);
+        }
+        SaveState();
+    }
+
+
+    private void RememberManualViewMode(string path, ViewMode mode) {
+        if (!_manualViewModes.ContainsKey(path)) {
+            _manualViewModeOrder.Enqueue(path);
+        }
+        _manualViewModes[path] = mode;
+
+        while (_manualViewModeOrder.Count > ManualViewModeLimit) {
+            _manualViewModes.Remove(_manualViewModeOrder.Dequeue());
+        }
+    }
+
+
+    private void SetGalleryBackground(string? name) {
+        if (Enum.TryParse<GalleryBackground>(name, out var background)) {
+            Settings.GalleryBackground = background;
+        }
+    }
+
+
+    /// <summary>
+    /// Picks the view for a folder we have just arrived in: the gallery
+    /// when the folder is mostly pictures, otherwise whatever the user
+    /// chose last.
+    ///
+    /// <para>
+    /// The second half is as important as the first. Without it the gallery
+    /// would be sticky — one photo folder and every text folder afterwards
+    /// is a wall of generic icons — so leaving a folder of photographs puts
+    /// the user's own view back.
+    /// </para>
+    ///
+    /// <para>
+    /// Silent in a folder where the user has chosen a view by hand this
+    /// session, and silent altogether when the setting is off.
+    /// </para>
+    /// </summary>
+    private void AutoSelectViewMode(IReadOnlyList<FileSystemEntry> items, string path) {
+        // A folder the user has assigned a view to keeps it, and keeps it
+        // across restarts. That is what "the automation stays out of this
+        // folder" has to mean to be worth saying.
+        if (_manualViewModes.TryGetValue(path, out var chosen)) {
+            ViewMode = chosen;
+
+            return;
+        }
+        if (!Settings.AutoGallery) {
+            return;
+        }
+
+        ViewMode = ImageFolderProbe.IsImageFolder(items, _companions, Settings.AutoGalleryPercent)
+            ? ViewMode.Gallery
+            : _userViewMode;
     }
 
 
@@ -2537,6 +2541,17 @@ public sealed class MainViewModel : ObservableObject {
     }
 
 
+    // --- Settings dialog and About --------------------------------------
+    /// <summary>
+    /// "Версия v0.2.1-beta R, 04f26, 31.08.26" for the «О Wander» submenu —
+    /// everything a bug report has to carry, in the order it gets read, and
+    /// the same line the session log opens with. The raw +sha suffix is not
+    /// shown: forty hex characters in a menu row is not a version, it is a
+    /// wall.
+    /// </summary>
+    public string VersionLabel => string.Format(Strings.MenuVersion, BuildInfo.Line);
+
+
     private void OpenSettingsDialog() {
         // Lazy import: the View type lives in Wander.App.Views and is
         // referenced via its full namespace to keep MainViewModel free
@@ -2552,15 +2567,6 @@ public sealed class MainViewModel : ObservableObject {
         // on the list, which is where it was when the dialog opened.
         (Application.Current?.MainWindow as MainWindow)?.FocusWorkArea();
     }
-
-    /// <summary>
-    /// "Версия v0.2.1-beta R, 04f26, 31.08.26" for the «О Wander» submenu —
-    /// everything a bug report has to carry, in the order it gets read, and
-    /// the same line the session log opens with. The raw +sha suffix is not
-    /// shown: forty hex characters in a menu row is not a version, it is a
-    /// wall.
-    /// </summary>
-    public string VersionLabel => string.Format(Strings.MenuVersion, BuildInfo.Line);
 
 
     // --- Context-menu verbs ---------------------------------------------
@@ -2873,6 +2879,8 @@ public sealed class MainViewModel : ObservableObject {
         RenamingPath = null;
     }
 
+
+    // --- Restoring from the recycle bin ---------------------------------
     /// <summary>
     /// Puts the selected recycle-bin items back where they came from. The
     /// shell does the work through <see cref="IRecycleBin.Restore"/> — the
@@ -2915,25 +2923,7 @@ public sealed class MainViewModel : ObservableObject {
     }
 
 
-    private void Copy() {
-        if (_selectedEntries.Count == 0) {
-            return;
-        }
-        _clipboard.Copy(WithCompanions(_selectedEntries));
-        Status = ClipboardWriteIssue()
-            ?? string.Format(Strings.StatusCopied, _selectedEntries.Count);
-    }
-
-    private void Cut() {
-        if (_selectedEntries.Count == 0) {
-            return;
-        }
-        _clipboard.Cut(WithCompanions(_selectedEntries));
-        Status = ClipboardWriteIssue()
-            ?? string.Format(Strings.StatusCut, _selectedEntries.Count);
-    }
-
-
+    // --- Clipboard ------------------------------------------------------
     /// <summary>
     /// Re-reads the OS clipboard so <c>Ctrl+V</c> pastes what the user
     /// copied in another application. Called when the window is activated:
@@ -2956,18 +2946,6 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     /// <summary>
-    /// The message to show when a copy could not reach the OS clipboard, or
-    /// null when it did. The copy itself always worked — only the hand-off
-    /// to other applications was lost.
-    /// </summary>
-    private string? ClipboardWriteIssue() {
-        return _clipboard.LastSystemIssue == ClipboardController.SystemIssue.WriteFailed
-            ? Strings.StatusClipboardNotShared
-            : null;
-    }
-
-
-    /// <summary>
     /// Every path an operation on <paramref name="entries"/> really touches:
     /// the entries themselves plus their companions.
     ///
@@ -2988,6 +2966,37 @@ public sealed class MainViewModel : ObservableObject {
         }
 
         return expanded;
+    }
+
+
+    private void Copy() {
+        if (_selectedEntries.Count == 0) {
+            return;
+        }
+        _clipboard.Copy(WithCompanions(_selectedEntries));
+        Status = ClipboardWriteIssue()
+            ?? string.Format(Strings.StatusCopied, _selectedEntries.Count);
+    }
+
+    private void Cut() {
+        if (_selectedEntries.Count == 0) {
+            return;
+        }
+        _clipboard.Cut(WithCompanions(_selectedEntries));
+        Status = ClipboardWriteIssue()
+            ?? string.Format(Strings.StatusCut, _selectedEntries.Count);
+    }
+
+
+    /// <summary>
+    /// The message to show when a copy could not reach the OS clipboard, or
+    /// null when it did. The copy itself always worked — only the hand-off
+    /// to other applications was lost.
+    /// </summary>
+    private string? ClipboardWriteIssue() {
+        return _clipboard.LastSystemIssue == ClipboardController.SystemIssue.WriteFailed
+            ? Strings.StatusClipboardNotShared
+            : null;
     }
 
 

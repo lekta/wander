@@ -70,6 +70,19 @@ public partial class FileListView : UserControl {
 
 
     /// <summary>
+    /// The user started dragging the current selection out of the list. The
+    /// window answers by running the drag loop with its preview window.
+    /// </summary>
+    public event EventHandler<FileListDragRequest>? DragStartRequested;
+
+    /// <summary>The list wants its context menu shown.</summary>
+    public event EventHandler<FileListMenuRequest>? ContextMenuRequested;
+
+
+    private MainViewModel Vm => (MainViewModel)DataContext;
+
+
+    /// <summary>
     /// Notices the keyboard leaving for nowhere.
     ///
     /// <para>
@@ -90,19 +103,6 @@ public partial class FileListView : UserControl {
 
         _focusFellOutOfTheList = Keyboard.FocusedElement is null or Window;
     }
-
-
-    /// <summary>
-    /// The user started dragging the current selection out of the list. The
-    /// window answers by running the drag loop with its preview window.
-    /// </summary>
-    public event EventHandler<FileListDragRequest>? DragStartRequested;
-
-    /// <summary>The list wants its context menu shown.</summary>
-    public event EventHandler<FileListMenuRequest>? ContextMenuRequested;
-
-
-    private MainViewModel Vm => (MainViewModel)DataContext;
 
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e) {
@@ -272,19 +272,8 @@ public partial class FileListView : UserControl {
 
 
     // --- Public surface used by MainWindow -----------------------------
-    // Just FocusList; everything else here is this control's own business.
-
-    /// <summary>The container backing the current view mode.</summary>
-    private ItemsControl? ActiveList() {
-        return Vm.ViewMode switch {
-            ViewMode.Details => DetailsView,
-            ViewMode.Tiles => TilesView,
-            ViewMode.LargeIcons => IconsView,
-            ViewMode.Gallery => GalleryView,
-            _ => null,
-        };
-    }
-
+    // FocusList, ClearSelection and StartRename (in the rename section);
+    // everything else here is this control's own business.
 
     /// <summary>
     /// Hands the keyboard back to the list — to the selected row when there
@@ -306,6 +295,24 @@ public partial class FileListView : UserControl {
         }
 
         ActiveList()?.Focus();
+    }
+
+
+    /// <summary>Clears the selection in whichever container is on screen.</summary>
+    public void ClearSelection() {
+        SelectionController.ClearActive(ActiveList());
+    }
+
+
+    /// <summary>The container backing the current view mode.</summary>
+    private ItemsControl? ActiveList() {
+        return Vm.ViewMode switch {
+            ViewMode.Details => DetailsView,
+            ViewMode.Tiles => TilesView,
+            ViewMode.LargeIcons => IconsView,
+            ViewMode.Gallery => GalleryView,
+            _ => null,
+        };
     }
 
 
@@ -377,12 +384,6 @@ public partial class FileListView : UserControl {
             default:
                 return false;
         }
-    }
-
-
-    /// <summary>Clears the selection in whichever container is on screen.</summary>
-    public void ClearSelection() {
-        SelectionController.ClearActive(ActiveList());
     }
 
 
@@ -1032,20 +1033,6 @@ public partial class FileListView : UserControl {
     // PromptDialog stays as the fallback for the case the inline editor
     // cannot be reached — a row that virtualisation has not realised.
 
-    /// <summary>
-    /// The view model asked for the editor on a row it just put the
-    /// selection on — a folder that has only this second been created.
-    /// Checked against the selection rather than trusted: the restore that
-    /// carried the request is what set it, and anything that overtook it
-    /// means the row is no longer the one to edit.
-    /// </summary>
-    private void StartRenameOn(FileSystemEntry entry) {
-        if (ReferenceEquals(Vm.SelectedEntry, entry)) {
-            StartRename();
-        }
-    }
-
-
     public void StartRename() {
         if (Vm.SelectedEntry is not FileSystemEntry entry) {
             return;
@@ -1061,6 +1048,20 @@ public partial class FileListView : UserControl {
         }
 
         Vm.RenameCommand.Execute(input);
+    }
+
+
+    /// <summary>
+    /// The view model asked for the editor on a row it just put the
+    /// selection on — a folder that has only this second been created.
+    /// Checked against the selection rather than trusted: the restore that
+    /// carried the request is what set it, and anything that overtook it
+    /// means the row is no longer the one to edit.
+    /// </summary>
+    private void StartRenameOn(FileSystemEntry entry) {
+        if (ReferenceEquals(Vm.SelectedEntry, entry)) {
+            StartRename();
+        }
     }
 
 

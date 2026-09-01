@@ -127,11 +127,6 @@ public readonly record struct MeshBounds(
 /// </para>
 /// </summary>
 public static class MeshFile {
-    /// <summary>Extensions this reader understands.</summary>
-    public static readonly IReadOnlySet<string> Extensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
-        ".stl", ".obj", ".gltf", ".glb",
-    };
-
     /// <summary>
     /// The most triangles a preview will build. Past this the pane would be
     /// spending seconds and hundreds of megabytes on a picture the size of
@@ -141,6 +136,12 @@ public static class MeshFile {
 
     /// <summary>How much of a text model to read. A 200 MB OBJ is not a preview.</summary>
     private const long MaxFileSize = 256L * 1024 * 1024;
+
+
+    /// <summary>Extensions this reader understands.</summary>
+    public static readonly IReadOnlySet<string> Extensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
+        ".stl", ".obj", ".gltf", ".glb",
+    };
 
 
     public static bool IsMesh(string path) {

@@ -36,6 +36,17 @@ namespace Wander.Core.Menu;
 /// </para>
 /// </summary>
 public static class ContextMenuBuilder {
+    /// <summary>
+    /// Verbs whose entries act on the file rather than open it, *despite*
+    /// publishing a name. Everything else in that category is caught by
+    /// <see cref="PublishesNoVerb"/>, so this list stays short — and only
+    /// holds verbs observed on a live system, never guessed ones.
+    /// </summary>
+    private static readonly HashSet<string> _fileOperationVerbs = new(StringComparer.OrdinalIgnoreCase) {
+        "previousversions",
+    };
+
+
     public static IReadOnlyList<MenuEntry> Build(
         ContextMenuTarget target,
         ContextMenuSettings settings,
@@ -48,17 +59,6 @@ public static class ContextMenuBuilder {
 
         return Normalize(raw, settings);
     }
-
-
-    /// <summary>
-    /// Verbs whose entries act on the file rather than open it, *despite*
-    /// publishing a name. Everything else in that category is caught by
-    /// <see cref="PublishesNoVerb"/>, so this list stays short — and only
-    /// holds verbs observed on a live system, never guessed ones.
-    /// </summary>
-    private static readonly HashSet<string> _fileOperationVerbs = new(StringComparer.OrdinalIgnoreCase) {
-        "previousversions",
-    };
 
 
     // --- Menu shapes ----------------------------------------------------

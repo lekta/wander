@@ -43,6 +43,19 @@ public sealed class FileLogger : ILogger, ILogFile, IDisposable {
     public void Error(string message, Exception? ex = null) => Write("ERROR", message, ex);
 
 
+    public void Dispose() {
+        if (_disposed) {
+            return;
+        }
+        _disposed = true;
+        try {
+            _writer.Dispose();
+        } catch {
+            // ignore
+        }
+    }
+
+
     private void Write(string level, string message, Exception? ex) {
         if (_disposed) {
             return;
@@ -57,19 +70,6 @@ public sealed class FileLogger : ILogger, ILogFile, IDisposable {
             } catch {
                 // A logger that throws would be a permanent UX outage; swallow.
             }
-        }
-    }
-
-
-    public void Dispose() {
-        if (_disposed) {
-            return;
-        }
-        _disposed = true;
-        try {
-            _writer.Dispose();
-        } catch {
-            // ignore
         }
     }
 }

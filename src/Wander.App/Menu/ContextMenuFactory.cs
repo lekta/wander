@@ -36,6 +36,29 @@ public sealed record MenuBinding(ICommand Command, object? Parameter = null);
 /// </para>
 /// </summary>
 public sealed class ContextMenuFactory {
+    /// <summary>
+    /// Built-in rows that carry an icon. Both sit among rows that have one —
+    /// the terminal among the third-party entries, "Папка" among the shell's
+    /// own file templates — and the gap next to them read as a picture that
+    /// failed to load rather than as a plain item.
+    ///
+    /// <para>
+    /// Segoe MDL2 Assets is the shell's own icon font: nothing to ship, and
+    /// it is drawn at whatever DPI the rest of the menu is. A bitmap from
+    /// the terminal's own exe would have been the other option, but it means
+    /// a shell call on every menu build for a picture that never changes —
+    /// and nothing to draw at all where Windows Terminal is not installed.
+    /// </para>
+    /// </summary>
+    private static readonly Dictionary<MenuCommandId, string> _glyphs = new() {
+        [MenuCommandId.OpenInTerminal] = "\uE756",
+        // F12B, not the "Folder" / "NewFolder" codepoints: those two are MDL2
+        // folder shapes drawn edge-on, and at 14 px they read as a folder
+        // tipped on its side. F12B is the plain landscape one.
+        [MenuCommandId.NewFolder] = "\uF12B",
+    };
+
+
     private readonly IReadOnlyDictionary<MenuCommandId, MenuBinding> _bindings;
     private readonly Action _afterShellCommand;
 
@@ -140,29 +163,6 @@ public sealed class ContextMenuFactory {
 
         return item;
     }
-
-
-    /// <summary>
-    /// Built-in rows that carry an icon. Both sit among rows that have one —
-    /// the terminal among the third-party entries, "Папка" among the shell's
-    /// own file templates — and the gap next to them read as a picture that
-    /// failed to load rather than as a plain item.
-    ///
-    /// <para>
-    /// Segoe MDL2 Assets is the shell's own icon font: nothing to ship, and
-    /// it is drawn at whatever DPI the rest of the menu is. A bitmap from
-    /// the terminal's own exe would have been the other option, but it means
-    /// a shell call on every menu build for a picture that never changes —
-    /// and nothing to draw at all where Windows Terminal is not installed.
-    /// </para>
-    /// </summary>
-    private static readonly Dictionary<MenuCommandId, string> _glyphs = new() {
-        [MenuCommandId.OpenInTerminal] = "\uE756",
-        // F12B, not the "Folder" / "NewFolder" codepoints: those two are MDL2
-        // folder shapes drawn edge-on, and at 14 px they read as a folder
-        // tipped on its side. F12B is the plain landscape one.
-        [MenuCommandId.NewFolder] = "\uF12B",
-    };
 
 
     private static TextBlock Glyph(string text) {

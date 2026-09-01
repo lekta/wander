@@ -28,6 +28,17 @@ namespace Wander.Core.Preview;
 /// </summary>
 public static class AudioTags {
     /// <summary>
+    /// Upper bound on embedded cover art. Real covers are hundreds of
+    /// kilobytes; past this the length was misread, and a misread length
+    /// must not allocate.
+    /// </summary>
+    private const int MaxCoverBytes = 16 * 1024 * 1024;
+
+    /// <summary>How much of the front of the file the tag readers may buffer.</summary>
+    private const int MaxTagBytes = 32 * 1024 * 1024;
+
+
+    /// <summary>
     /// What the preview pane treats as music.
     ///
     /// <para>
@@ -46,14 +57,16 @@ public static class AudioTags {
     };
 
     /// <summary>
-    /// Upper bound on embedded cover art. Real covers are hundreds of
-    /// kilobytes; past this the length was misread, and a misread length
-    /// must not allocate.
+    /// Picture files that count as cover art when they sit beside a track.
     /// </summary>
-    private const int MaxCoverBytes = 16 * 1024 * 1024;
+    private static readonly string[] _coverExtensions = { ".jpg", ".jpeg", ".png", ".webp", ".bmp" };
 
-    /// <summary>How much of the front of the file the tag readers may buffer.</summary>
-    private const int MaxTagBytes = 32 * 1024 * 1024;
+    /// <summary>
+    /// The names ripping tools give a cover, best first. A folder can hold
+    /// several pictures — a scan of the back, the disc, the booklet — so
+    /// the name is what tells the front cover from the rest.
+    /// </summary>
+    private static readonly string[] _coverNames = { "cover", "folder", "front", "album", "albumart", "artwork" };
 
 
     public static bool IsAudio(string path) {
@@ -106,19 +119,6 @@ public static class AudioTags {
             return null;
         }
     }
-
-
-    /// <summary>
-    /// Picture files that count as cover art when they sit beside a track.
-    /// </summary>
-    private static readonly string[] _coverExtensions = { ".jpg", ".jpeg", ".png", ".webp", ".bmp" };
-
-    /// <summary>
-    /// The names ripping tools give a cover, best first. A folder can hold
-    /// several pictures — a scan of the back, the disc, the booklet — so
-    /// the name is what tells the front cover from the rest.
-    /// </summary>
-    private static readonly string[] _coverNames = { "cover", "folder", "front", "album", "albumart", "artwork" };
 
 
     /// <summary>
@@ -993,6 +993,31 @@ internal static class Mp3Tags {
             return null;
         }
 
+        public TimeSpan? Duration(long fileLength) {
+            if (VbrFrames is { } frames) {
+                return TimeSpan.FromSeconds((double)frames * SamplesPerFrame / SampleRate);
+            }
+
+            long audioBytes = fileLength - AudioStart;
+
+            return audioBytes > 0
+                ? TimeSpan.FromSeconds(audioBytes * 8.0 / (BitrateKbps * 1000.0))
+                : null;
+        }
+
+        /// <summary>
+        /// The bitrate worth showing: the average across the file when it
+        /// is variable, the header's figure when it is not.
+        /// </summary>
+        public int? EffectiveBitrate(long fileLength, TimeSpan? duration) {
+            if (VbrFrames is not null && duration is { TotalSeconds: > 0 } d) {
+                return (int)Math.Round((fileLength - AudioStart) * 8 / d.TotalSeconds / 1000);
+            }
+
+            return BitrateKbps;
+        }
+
+
         private static Mp3Frame? Parse(byte[] b, int i, long position) {
             int versionBits = (b[i + 1] >> 3) & 0x03;
             int layerBits = (b[i + 1] >> 1) & 0x03;
@@ -1060,30 +1085,6 @@ internal static class Mp3Tags {
             }
 
             return this;
-        }
-
-        public TimeSpan? Duration(long fileLength) {
-            if (VbrFrames is { } frames) {
-                return TimeSpan.FromSeconds((double)frames * SamplesPerFrame / SampleRate);
-            }
-
-            long audioBytes = fileLength - AudioStart;
-
-            return audioBytes > 0
-                ? TimeSpan.FromSeconds(audioBytes * 8.0 / (BitrateKbps * 1000.0))
-                : null;
-        }
-
-        /// <summary>
-        /// The bitrate worth showing: the average across the file when it
-        /// is variable, the header's figure when it is not.
-        /// </summary>
-        public int? EffectiveBitrate(long fileLength, TimeSpan? duration) {
-            if (VbrFrames is not null && duration is { TotalSeconds: > 0 } d) {
-                return (int)Math.Round((fileLength - AudioStart) * 8 / d.TotalSeconds / 1000);
-            }
-
-            return BitrateKbps;
         }
     }
 }

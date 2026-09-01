@@ -230,6 +230,24 @@ public sealed class DropTargetController {
     }
 
 
+    /// <summary>Moves the highlight; null takes it down.</summary>
+    public void SetHighlight(UIElement? target) {
+        if (_adorner is not null && _adornerLayer is not null) {
+            _adornerLayer.Remove(_adorner);
+            _adorner = null;
+            _adornerLayer = null;
+        }
+
+        if (target is null || AdornerLayer.GetAdornerLayer(target) is not { } layer) {
+            return;
+        }
+
+        _adorner = new DropTargetAdorner(target);
+        _adornerLayer = layer;
+        layer.Add(_adorner);
+    }
+
+
     /// <summary>
     /// Which folder is under the cursor. A row that is a folder is that
     /// folder; a shortcut to one is what it points at; a tree node is its
@@ -300,24 +318,6 @@ public sealed class DropTargetController {
 
         return null;
     }
-
-    /// <summary>Moves the highlight; null takes it down.</summary>
-    public void SetHighlight(UIElement? target) {
-        if (_adorner is not null && _adornerLayer is not null) {
-            _adornerLayer.Remove(_adorner);
-            _adorner = null;
-            _adornerLayer = null;
-        }
-
-        if (target is null || AdornerLayer.GetAdornerLayer(target) is not { } layer) {
-            return;
-        }
-
-        _adorner = new DropTargetAdorner(target);
-        _adornerLayer = layer;
-        layer.Add(_adorner);
-    }
-
 
     private void Reset() {
         IsBookmarkTarget = false;

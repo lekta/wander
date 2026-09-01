@@ -32,6 +32,8 @@ namespace Wander.App.Views;
 /// </para>
 /// </summary>
 public partial class PreviewPane : UserControl {
+    private bool _webInitialized;
+
     public PreviewPane() {
         InitializeComponent();
         // Wander's own .xshd definitions (batch, ShaderLab, YAML) have to be
@@ -57,9 +59,6 @@ public partial class PreviewPane : UserControl {
     /// panel, and stealing it there would be surprising.
     /// </summary>
     public bool IsCodeEditorFocused => CodeEditor.IsKeyboardFocusWithin;
-
-
-    private bool _webInitialized;
 
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e) {
@@ -257,9 +256,7 @@ public partial class PreviewPane : UserControl {
     }
 
 
-    // ======================================================================
-    // Preview pane: image zoom (FastStone-style RMB-hold pan zoom).
-    // ======================================================================
+    // --- Image zoom (FastStone-style RMB-hold pan) ----------------------
     //
     // When the previewed image is downscaled to fit the pane:
     //   • the cursor turns into a magnifier glyph,
@@ -271,6 +268,14 @@ public partial class PreviewPane : UserControl {
     // linearly onto (0,0)..(src.W, src.H) image-pixel space, then position
     // the 1:1 image so that mapped pixel sits under the cursor. This
     // matches FastStone / IrfanView "navigator" zoom.
+
+    // Mirror of the Margin attribute on ImgFit (8,12,8,8) so the zoom view
+    // can match the fit view's placement on the non-panning axis. Keep in
+    // sync if the XAML margin ever changes.
+    private const double PreviewImageMarginTop = 12;
+    // Left/right margins are symmetric — the centering math (hw - srcW)/2
+    // produces the same X whether you account for them or not, so no
+    // constant needed for X.
 
     private bool _imageZoomActive;
 
@@ -353,14 +358,6 @@ public partial class PreviewPane : UserControl {
         ExitImageZoom();
     }
 
-    // Mirror of the Margin attribute on ImgFit (8,12,8,8) so the zoom view
-    // can match the fit view's placement on the non-panning axis. Keep in
-    // sync if the XAML margin ever changes.
-    private const double PreviewImageMarginTop = 12;
-    // Left/right margins are symmetric — the centering math (hw - srcW)/2
-    // produces the same X whether you account for them or not, so no
-    // constant needed for X.
-
     /// <summary>
     /// Positions the 1:1 zoom image so that the image-pixel under the
     /// cursor stays under the cursor. Pan is per-axis: only the dimension
@@ -426,9 +423,7 @@ public partial class PreviewPane : UserControl {
     }
 
 
-    // ======================================================================
-    // Preview pane: video transport (MediaElement + Play/Pause + seek).
-    // ======================================================================
+    // --- Video transport (MediaElement + Play/Pause + seek) -------------
 
     private DispatcherTimer? _videoTimer;
     private bool _videoIsPlaying;
@@ -677,9 +672,7 @@ public partial class PreviewPane : UserControl {
     }
 
 
-    // ======================================================================
-    // Preview pane: the 3D viewport (camera framing + orbit + zoom).
-    // ======================================================================
+    // --- The 3D viewport (camera framing + orbit + zoom) ----------------
 
     /// <summary>
     /// Slack around the model once it has been fitted to the pane. Ten per

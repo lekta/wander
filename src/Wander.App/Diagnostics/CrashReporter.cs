@@ -230,6 +230,15 @@ public static class CrashReporter {
 
     // --- Environment -----------------------------------------------------
 
+    /// <summary>
+    /// "0.2.1-beta+&lt;sha&gt;" — the informational version, build metadata and
+    /// all. The crash bundle wants every character of it; everything that
+    /// wants it readable asks <see cref="BuildInfo.Line"/> instead.
+    /// </summary>
+    public static string AppVersion() {
+        return BuildInfo.InformationalVersion;
+    }
+
     private static string EnvironmentSummary() {
         var sb = new StringBuilder();
         sb.AppendLine($"Version:  {BuildInfo.Line}");
@@ -241,15 +250,6 @@ public static class CrashReporter {
         sb.AppendLine($"Uptime:   {Uptime()}");
         sb.Append($"WebView2: {WebView2Version()}");
         return sb.ToString();
-    }
-
-    /// <summary>
-    /// "0.2.1-beta+&lt;sha&gt;" — the informational version, build metadata and
-    /// all. The crash bundle wants every character of it; everything that
-    /// wants it readable asks <see cref="BuildInfo.Line"/> instead.
-    /// </summary>
-    public static string AppVersion() {
-        return BuildInfo.InformationalVersion;
     }
 
     private static string IsElevated() {

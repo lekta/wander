@@ -341,17 +341,6 @@ public sealed class ContentSearchController : ObservableObject {
 
 
     /// <summary>
-    /// Rewrites the box after a field in the window changed. Only from
-    /// that direction: typing in the box is the box's own business, and
-    /// re-formatting it there is what ate the colon.
-    /// </summary>
-    private void SyncFilterText() {
-        _filterText = SearchExpression.Format(_nameQuery, _textQuery);
-        Raise(nameof(FilterText));
-    }
-
-
-    /// <summary>
     /// Tells the window that the current folder moved, so the "Folder"
     /// row stops describing where the user used to be.
     /// </summary>
@@ -506,6 +495,17 @@ public sealed class ContentSearchController : ObservableObject {
         if (IsShowingResults || IsDeep) {
             RunNow();
         }
+    }
+
+
+    /// <summary>
+    /// Rewrites the box after a field in the window changed. Only from
+    /// that direction: typing in the box is the box's own business, and
+    /// re-formatting it there is what ate the colon.
+    /// </summary>
+    private void SyncFilterText() {
+        _filterText = SearchExpression.Format(_nameQuery, _textQuery);
+        Raise(nameof(FilterText));
     }
 
 

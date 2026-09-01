@@ -39,6 +39,19 @@ public sealed record FileSystemEntry(
     public bool HasCompanions => Companions is { Count: > 0 };
 
     /// <summary>
+    /// Folder this entry lives in. Only interesting in a search result
+    /// list, where rows come from many folders at once and the name alone
+    /// no longer says which file is which.
+    /// </summary>
+    public string? ParentFolder => Path.GetDirectoryName(FullPath);
+
+    // Convenience: a .lnk that points at a directory is "directory-like" for
+    // sort/open purposes even though its on-disk Kind is still File. Other
+    // call sites (sorting in the FS layer, OpenEntry in MainViewModel) read
+    // this when they want to treat folder-shortcuts the same as folders.
+    public bool IsFolderLike => Kind == EntryKind.Directory || LinksToDirectory;
+
+    /// <summary>
     /// Whether two readings of the same file say the same thing.
     ///
     /// <para>
@@ -82,17 +95,4 @@ public sealed record FileSystemEntry(
 
         return true;
     }
-
-    /// <summary>
-    /// Folder this entry lives in. Only interesting in a search result
-    /// list, where rows come from many folders at once and the name alone
-    /// no longer says which file is which.
-    /// </summary>
-    public string? ParentFolder => Path.GetDirectoryName(FullPath);
-
-    // Convenience: a .lnk that points at a directory is "directory-like" for
-    // sort/open purposes even though its on-disk Kind is still File. Other
-    // call sites (sorting in the FS layer, OpenEntry in MainViewModel) read
-    // this when they want to treat folder-shortcuts the same as folders.
-    public bool IsFolderLike => Kind == EntryKind.Directory || LinksToDirectory;
 }

@@ -61,6 +61,15 @@ internal static class AudioCover {
     }
 
 
+    /// <summary>Paired with the settings dialog's "clear thumbnail cache".</summary>
+    public static void Forget() {
+        lock (_lock) {
+            _beside.Clear();
+            _order.Clear();
+        }
+    }
+
+
     private static string? BesideCached(string path) {
         string? folder = Path.GetDirectoryName(path);
         if (string.IsNullOrEmpty(folder)) {
@@ -98,11 +107,4 @@ internal static class AudioCover {
     }
 
 
-    /// <summary>Paired with the settings dialog's "clear thumbnail cache".</summary>
-    public static void Forget() {
-        lock (_lock) {
-            _beside.Clear();
-            _order.Clear();
-        }
-    }
 }

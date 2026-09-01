@@ -213,8 +213,6 @@ public static class RawPreviewExtractor {
         return null;
     }
 
-    private readonly record struct IfdEntry(ushort Tag, uint Count, uint Value);
-
     private static List<IfdEntry> ReadIfd(Stream s, long offset, bool little, out long next) {
         next = 0;
         var result = new List<IfdEntry>();
@@ -385,4 +383,7 @@ public static class RawPreviewExtractor {
     private static uint U32(ReadOnlySpan<byte> s, bool little) {
         return little ? BinaryPrimitives.ReadUInt32LittleEndian(s) : BinaryPrimitives.ReadUInt32BigEndian(s);
     }
+
+
+    private readonly record struct IfdEntry(ushort Tag, uint Count, uint Value);
 }

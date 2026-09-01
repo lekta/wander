@@ -41,6 +41,9 @@ public readonly record struct DirectoryChange(string Path, bool Structural) {
 /// </para>
 /// </summary>
 public interface IDirectoryWatcher : IDisposable {
+    /// <summary>Something in the watched folder changed. May arrive on any thread.</summary>
+    event EventHandler<DirectoryChange>? Changed;
+
     /// <summary>
     /// Watch <paramref name="path"/> instead of whatever was being watched.
     /// Null or a path that cannot be watched (a shell namespace, a
@@ -48,7 +51,4 @@ public interface IDirectoryWatcher : IDisposable {
     /// is watched — the manual refresh is always there.
     /// </summary>
     void Watch(string? path);
-
-    /// <summary>Something in the watched folder changed. May arrive on any thread.</summary>
-    event EventHandler<DirectoryChange>? Changed;
 }

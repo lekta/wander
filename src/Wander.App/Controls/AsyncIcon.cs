@@ -27,6 +27,9 @@ namespace Wander.App.Controls;
 /// </para>
 /// </summary>
 public sealed class AsyncIcon : Image {
+    /// <summary>One second between the two attempts at a failed icon.</summary>
+    private const int RetryDelayMs = 1000;
+
     public static readonly DependencyProperty IconPathProperty =
         DependencyProperty.Register(
             nameof(IconPath), typeof(string), typeof(AsyncIcon),
@@ -37,6 +40,7 @@ public sealed class AsyncIcon : Image {
             nameof(IconSize), typeof(IconSize), typeof(AsyncIcon),
             new PropertyMetadata(IconSize.Normal, OnIconRequestChanged));
 
+
     // Thumbnail extraction is disk- and CPU-heavy, so it is metered rather
     // than let loose on the thread pool. Four rather than two: two was
     // sized against the shell call, which does not parallelise, and it
@@ -46,6 +50,7 @@ public sealed class AsyncIcon : Image {
     // gate, not the work, was what the user was waiting for. Four still
     // leaves the pool to the rest of the app.
     private static readonly SemaphoreSlim _gate = new(4);
+
 
 
     private int _generation;
@@ -144,19 +149,6 @@ public sealed class AsyncIcon : Image {
         });
     }
 
-    /// <summary>
-    /// The whole pipeline stays off the UI thread, and the finished image
-    /// comes back at <see cref="DispatcherPriority.Background"/> — below
-    /// input. A folder of photographs streams in dozens of thumbnails a
-    /// second, and landing each one at the default (Normal) priority put
-    /// that stream ahead of the user's clicks and keys in the dispatcher
-    /// queue: the window went unresponsive for seconds while it was merely
-    /// filling in pictures (ui.stall 2.5 s in the session log, with no
-    /// navigation in flight at all). Pictures can wait; the user cannot.
-    /// </summary>
-    /// <summary>One second between the two attempts at a failed icon.</summary>
-    private const int RetryDelayMs = 1000;
-
 
     private async Task LoadAndApplyAsync(string path, IconSize size, int generation) {
         var image = await LoadAsync(path, size, () => generation == _generation).ConfigureAwait(false);
@@ -200,7 +192,18 @@ public sealed class AsyncIcon : Image {
     }
 
 
-    /// <summary>See <see cref="IsLightweight"/> for why the two classes differ.</summary>
+    /// <summary>
+    /// The whole pipeline stays off the UI thread, and the finished image
+    /// comes back at <see cref="DispatcherPriority.Background"/> — below
+    /// input. A folder of photographs streams in dozens of thumbnails a
+    /// second, and landing each one at the default (Normal) priority put
+    /// that stream ahead of the user's clicks and keys in the dispatcher
+    /// queue: the window went unresponsive for seconds while it was merely
+    /// filling in pictures (ui.stall 2.5 s in the session log, with no
+    /// navigation in flight at all). Pictures can wait; the user cannot.
+    ///
+    /// <para>See <see cref="IsLightweight"/> for why the two classes differ.</para>
+    /// </summary>
     private static DispatcherPriority ApplyPriority(IconSize size) {
         return IsLightweight(size) ? DispatcherPriority.Normal : DispatcherPriority.Background;
     }

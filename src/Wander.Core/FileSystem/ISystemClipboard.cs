@@ -41,6 +41,9 @@ public readonly record struct ClipboardFiles(
 /// </para>
 /// </summary>
 public interface ISystemClipboard {
+    /// <summary>Message from the last failed call, for the status bar. Null when the last call worked.</summary>
+    string? LastError { get; }
+
     /// <summary>
     /// Puts <paramref name="paths"/> on the clipboard as a file list.
     /// Returns false if the clipboard could not be written.
@@ -62,7 +65,4 @@ public interface ISystemClipboard {
     /// Explorer drops the "ghosted" look off the cut files.
     /// </summary>
     void Clear();
-
-    /// <summary>Message from the last failed call, for the status bar. Null when the last call worked.</summary>
-    string? LastError { get; }
 }

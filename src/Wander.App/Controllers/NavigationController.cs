@@ -186,6 +186,12 @@ public sealed class NavigationController : ObservableObject {
     }
 
 
+    /// <summary>Restores the recent-folders list from <c>state.json</c>.</summary>
+    public void LoadRecentPaths(IEnumerable<string> paths) {
+        _recent.Load(paths);
+        PublishRecentPaths();
+    }
+
     /// <summary>
     /// The typed-path route: existence is checked on the pool, and the
     /// navigation happens only if the user has not gone somewhere else
@@ -228,12 +234,6 @@ public sealed class NavigationController : ObservableObject {
         }
 
         return null;
-    }
-
-    /// <summary>Restores the recent-folders list from <c>state.json</c>.</summary>
-    public void LoadRecentPaths(IEnumerable<string> paths) {
-        _recent.Load(paths);
-        PublishRecentPaths();
     }
 
     private void PublishRecentPaths() {

@@ -71,6 +71,15 @@ public partial class FolderTreesView : UserControl {
 
 
 
+    public FolderTreesView() {
+        InitializeComponent();
+        DataContextChanged += OnDataContextChanged;
+    }
+
+
+    private MainViewModel Vm => (MainViewModel)DataContext;
+
+
     /// <summary>A folder panel wants its context menu shown.</summary>
     public event EventHandler<FolderMenuRequest>? ContextMenuRequested;
 
@@ -86,12 +95,6 @@ public partial class FolderTreesView : UserControl {
     public event EventHandler? FocusListRequested;
 
 
-    public FolderTreesView() {
-        InitializeComponent();
-        DataContextChanged += OnDataContextChanged;
-    }
-
-
     /// <summary>
     /// Hands over the two window-level collaborators of drag &amp; drop.
     /// Not constructor arguments because the control is built by XAML;
@@ -101,11 +104,6 @@ public partial class FolderTreesView : UserControl {
         _drops = drops;
         _drag = drag;
     }
-
-
-    private MainViewModel Vm => (MainViewModel)DataContext;
-
-
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e) {
         if (e.OldValue is MainViewModel old) {
             old.PropertyChanged -= OnViewModelChanged;

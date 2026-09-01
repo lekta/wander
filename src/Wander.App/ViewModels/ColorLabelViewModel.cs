@@ -21,24 +21,6 @@ public sealed class ColorLabelViewModel : ObservableObject {
     private bool _isSelected;
 
 
-    /// <summary>
-    /// Adobe's colour-label palette, in the index order both sidecar
-    /// formats use. A factory rather than a shared array because the
-    /// swatches carry <see cref="IsSelected"/>: the preview footer and the
-    /// gallery's filter bar mean different things by "chosen", and one set
-    /// of five would have them fighting over it.
-    /// </summary>
-    public static IReadOnlyList<ColorLabelViewModel> CreateChoices() {
-        return new[] {
-            new ColorLabelViewModel(1, Palette.ColorLabel1),
-            new ColorLabelViewModel(2, Palette.ColorLabel2),
-            new ColorLabelViewModel(3, Palette.ColorLabel3),
-            new ColorLabelViewModel(4, Palette.ColorLabel4),
-            new ColorLabelViewModel(5, Palette.ColorLabel5),
-        };
-    }
-
-
     public ColorLabelViewModel(int index, Brush brush) {
         Index = index;
         Brush = brush;
@@ -56,5 +38,23 @@ public sealed class ColorLabelViewModel : ObservableObject {
     public bool IsSelected {
         get => _isSelected;
         set => SetField(ref _isSelected, value);
+    }
+
+
+    /// <summary>
+    /// Adobe's colour-label palette, in the index order both sidecar
+    /// formats use. A factory rather than a shared array because the
+    /// swatches carry <see cref="IsSelected"/>: the preview footer and the
+    /// gallery's filter bar mean different things by "chosen", and one set
+    /// of five would have them fighting over it.
+    /// </summary>
+    public static IReadOnlyList<ColorLabelViewModel> CreateChoices() {
+        return new[] {
+            new ColorLabelViewModel(1, Palette.ColorLabel1),
+            new ColorLabelViewModel(2, Palette.ColorLabel2),
+            new ColorLabelViewModel(3, Palette.ColorLabel3),
+            new ColorLabelViewModel(4, Palette.ColorLabel4),
+            new ColorLabelViewModel(5, Palette.ColorLabel5),
+        };
     }
 }

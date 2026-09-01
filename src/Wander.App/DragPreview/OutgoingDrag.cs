@@ -89,42 +89,6 @@ public sealed class OutgoingDrag {
     }
 
 
-    private void OnGiveFeedback(object sender, GiveFeedbackEventArgs e) {
-        // Keep the system's Copy/Move/None cursor in addition to our
-        // preview — except while the cursor is still over the list the drag
-        // started in. There the system would draw the "no entry" sign,
-        // which is a verdict on a gesture nobody has made yet: let go and
-        // the file simply stays where it was. Plain arrow instead.
-        if (IsNeutralDropTarget()) {
-            e.UseDefaultCursors = false;
-            Mouse.SetCursor(Cursors.Arrow);
-            e.Handled = true;
-        } else {
-            e.UseDefaultCursors = true;
-        }
-
-        if (_preview is null) {
-            return;
-        }
-        _preview.MoveToCursor();
-        UpdateForCurrentTarget();
-    }
-
-
-    /// <summary>
-    /// The cursor is over a drop surface that would refuse, but only
-    /// because the target fell back to the folder already being listed —
-    /// dragging across a file's own neighbours. Nothing is wrong, nothing
-    /// is offered, and neither the cursor nor the plaque should say
-    /// otherwise.
-    /// </summary>
-    private bool IsNeutralDropTarget() {
-        return _drops.SelfDropReason != SelfDropReason.None
-            && _drops.Target is not null
-            && _drops.TargetIsFallback;
-    }
-
-
     /// <summary>
     /// Re-reads the target and re-words the plaque. Called on every mouse
     /// move during the drag, and by the window whenever the bookmarks strip
@@ -197,6 +161,42 @@ public sealed class OutgoingDrag {
         }
 
         _preview.SetAction(action, desc, targetText);
+    }
+
+
+    private void OnGiveFeedback(object sender, GiveFeedbackEventArgs e) {
+        // Keep the system's Copy/Move/None cursor in addition to our
+        // preview — except while the cursor is still over the list the drag
+        // started in. There the system would draw the "no entry" sign,
+        // which is a verdict on a gesture nobody has made yet: let go and
+        // the file simply stays where it was. Plain arrow instead.
+        if (IsNeutralDropTarget()) {
+            e.UseDefaultCursors = false;
+            Mouse.SetCursor(Cursors.Arrow);
+            e.Handled = true;
+        } else {
+            e.UseDefaultCursors = true;
+        }
+
+        if (_preview is null) {
+            return;
+        }
+        _preview.MoveToCursor();
+        UpdateForCurrentTarget();
+    }
+
+
+    /// <summary>
+    /// The cursor is over a drop surface that would refuse, but only
+    /// because the target fell back to the folder already being listed —
+    /// dragging across a file's own neighbours. Nothing is wrong, nothing
+    /// is offered, and neither the cursor nor the plaque should say
+    /// otherwise.
+    /// </summary>
+    private bool IsNeutralDropTarget() {
+        return _drops.SelfDropReason != SelfDropReason.None
+            && _drops.Target is not null
+            && _drops.TargetIsFallback;
     }
 
 
