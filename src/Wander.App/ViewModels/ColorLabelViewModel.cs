@@ -1,4 +1,5 @@
 using System.Windows.Media;
+using Wander.App.Resources;
 using Wander.Core.FileSystem;
 
 
@@ -29,11 +30,11 @@ public sealed class ColorLabelViewModel : ObservableObject {
     /// </summary>
     public static IReadOnlyList<ColorLabelViewModel> CreateChoices() {
         return new[] {
-            new ColorLabelViewModel(1, new SolidColorBrush(Color.FromRgb(0xD9, 0x53, 0x4F))),
-            new ColorLabelViewModel(2, new SolidColorBrush(Color.FromRgb(0xE0, 0xB3, 0x2C))),
-            new ColorLabelViewModel(3, new SolidColorBrush(Color.FromRgb(0x5C, 0xA9, 0x4D))),
-            new ColorLabelViewModel(4, new SolidColorBrush(Color.FromRgb(0x3E, 0x7C, 0xC4))),
-            new ColorLabelViewModel(5, new SolidColorBrush(Color.FromRgb(0x8A, 0x5C, 0xB8))),
+            new ColorLabelViewModel(1, Palette.ColorLabel1),
+            new ColorLabelViewModel(2, Palette.ColorLabel2),
+            new ColorLabelViewModel(3, Palette.ColorLabel3),
+            new ColorLabelViewModel(4, Palette.ColorLabel4),
+            new ColorLabelViewModel(5, Palette.ColorLabel5),
         };
     }
 

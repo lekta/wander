@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Documents;
 using System.Windows.Media;
+using Wander.App.Resources;
 
 namespace Wander.App.DragPreview;
 
@@ -10,18 +11,8 @@ namespace Wander.App.DragPreview;
 /// with the drag-over event flow.
 /// </summary>
 public sealed class DropTargetAdorner : Adorner {
-    private static readonly Brush _fill;
-    private static readonly Pen _stroke;
-
-
-    static DropTargetAdorner() {
-        _fill = new SolidColorBrush(Color.FromArgb(60, 0, 120, 215));
-        _fill.Freeze();
-        var strokeBrush = new SolidColorBrush(Color.FromArgb(220, 0, 120, 215));
-        strokeBrush.Freeze();
-        _stroke = new Pen(strokeBrush, 2);
-        _stroke.Freeze();
-    }
+    private static readonly Brush _fill = Palette.DropTargetFill;
+    private static readonly Pen _stroke = Palette.Stroke(Palette.DropTargetStroke, 2);
 
 
     public DropTargetAdorner(UIElement adornedElement) : base(adornedElement) {

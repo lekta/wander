@@ -72,7 +72,7 @@
                    Style="{StaticResource FieldLabel}"
                    Text="{x:Static res:Strings.SearchFieldFolder}"/>
         <TextBox Grid.Row="2" Grid.Column="1" Padding="4,3" Margin="0,8,0,0"
-                 IsReadOnly="True" Background="#F7F7F7" Foreground="#555"
+                 IsReadOnly="True" Background="{StaticResource ReadOnlyFieldBackground}" Foreground="{StaticResource TextMuted}"
                  Text="{Binding ContentSearch.Root, Mode=OneWay}"/>
 
         <StackPanel Grid.Row="3" Grid.Column="1" Margin="0,10,0,0">

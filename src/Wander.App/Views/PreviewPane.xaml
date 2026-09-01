@@ -6,8 +6,8 @@
              xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
              xmlns:ae="http://icsharpcode.net/sharpdevelop/avalonedit"
              xmlns:res="clr-namespace:Wander.App.Resources"
-             BorderBrush="#DDD" BorderThickness="1,0,0,0"
-             Background="#FAFAFA">
+             BorderBrush="{StaticResource Separator}" BorderThickness="1,0,0,0"
+             Background="{StaticResource PreviewBackground}">
     <!--
         The preview pane: one content area that switches by
         PreviewController.Kind (image, animated GIF, video, text, code, web,
@@ -66,7 +66,7 @@
             <Setter Property="Command" Value="{Binding Preview.SetRankCommand}"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground" Value="#D08A00"/>
+            <Setter Property="Foreground" Value="{StaticResource RatingStar}"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="Padding" Value="1,0"/>
             <Setter Property="Cursor" Value="Hand"/>
@@ -115,10 +115,10 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                <Setter TargetName="Ring" Property="BorderBrush" Value="#666"/>
+                                <Setter TargetName="Ring" Property="BorderBrush" Value="{StaticResource SwatchRing}"/>
                             </DataTrigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Ring" Property="Background" Value="#E5E5E5"/>
+                                <Setter TargetName="Ring" Property="Background" Value="{StaticResource ControlHover}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -411,9 +411,9 @@
                                                 untextured solid reads as a
                                                 hole in the model.
                                             -->
-                                            <AmbientLight Color="#404040"/>
-                                            <DirectionalLight x:Name="ModelKeyLight" Color="#C8C8C8" Direction="-0.5,-1,-1"/>
-                                            <DirectionalLight Color="#505050" Direction="1,0.5,0.8"/>
+                                            <AmbientLight Color="{StaticResource ModelAmbientLight}"/>
+                                            <DirectionalLight x:Name="ModelKeyLight" Color="{StaticResource ModelKeyLight}" Direction="-0.5,-1,-1"/>
+                                            <DirectionalLight Color="{StaticResource ModelFillLight}" Direction="1,0.5,0.8"/>
                                             <!--
                                                 The model's drawables, filled
                                                 from code-behind: how many
@@ -448,7 +448,7 @@
                         <TextBlock Grid.Row="1"
                                    Text="{Binding Preview.ModelDetail}"
                                    Margin="8,4,8,6"
-                                   FontSize="11" Foreground="#888"
+                                   FontSize="11" Foreground="{StaticResource TextDim}"
                                    HorizontalAlignment="Center"/>
                     </Grid>
 
@@ -482,12 +482,19 @@
                     <RichTextBox x:Name="DocumentPreview"
                                  Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Document}"
                                  IsReadOnly="True" IsDocumentEnabled="True"
-                                 Background="White" BorderThickness="0"
+                                 Background="{StaticResource InputBackground}" BorderThickness="0"
                                  VerticalScrollBarVisibility="Auto"
                                  HorizontalScrollBarVisibility="Auto"
                                  Padding="6"/>
 
-                    <!-- PDF / HTML / MHTML / Markdown / FB2 via WebView2 -->
+                    <!--
+                        PDF / HTML / MHTML / Markdown / FB2 via WebView2.
+                        DefaultBackgroundColor is the only colour in the app
+                        outside Resources/Palette.xaml: it is a
+                        System.Drawing colour on a native control and takes
+                        no brush resource. It is also the paper a document
+                        is drawn on rather than window chrome.
+                    -->
                     <wv2:WebView2 x:Name="WebPreview"
                                   Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Web}"
                                   DefaultBackgroundColor="White"/>
@@ -530,7 +537,7 @@
                                              Minimum="0" Maximum="100"
                                              Value="{Binding Preview.VolumeUsedPercent, Mode=OneWay}"
                                              Foreground="{Binding Preview.VolumeBarColor}"
-                                             Background="#E6E6E6" BorderBrush="#CCC" BorderThickness="1"/>
+                                             Background="{StaticResource TrackBackground}" BorderBrush="{StaticResource TrackBorder}" BorderThickness="1"/>
                                 <Grid Margin="0,4,0,0">
                                     <TextBlock Text="{Binding Preview.VolumeUsage}"
                                                Style="{StaticResource PaneText}"
@@ -551,7 +558,7 @@
                                        Style="{StaticResource PaneDim}"
                                        Margin="0,4,0,0" TextWrapping="Wrap"/>
                             <TextBlock Text="{Binding Preview.FolderNote}"
-                                       Foreground="#A05000" FontSize="11"
+                                       Foreground="{StaticResource TextWarning}" FontSize="11"
                                        Margin="0,4,0,0" TextWrapping="Wrap"
                                        Visibility="{Binding Preview.HasFolderNote, Converter={StaticResource BoolToVisibility}}"/>
 
@@ -570,7 +577,7 @@
                                         HorizontalAlignment="Center"
                                         Visibility="{Binding Preview.IsCensusLoading, Converter={StaticResource BoolToVisibility}}">
                                 <Ellipse Width="20" Height="20" StrokeThickness="2"
-                                         Stroke="#0078D7" Fill="Transparent"
+                                         Stroke="{StaticResource AccentStroke}" Fill="Transparent"
                                          StrokeDashArray="3,2"
                                          RenderTransformOrigin="0.5,0.5">
                                     <Ellipse.RenderTransform>
@@ -643,7 +650,7 @@
                                             <Border Grid.Column="1" Height="10" CornerRadius="2"
                                                     HorizontalAlignment="Left" VerticalAlignment="Center"
                                                     Width="{Binding BarWidth}"
-                                                    Background="#0078D7" Opacity="0.5"/>
+                                                    Background="{StaticResource AccentFill}" Opacity="0.5"/>
                                             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                                                 <TextBlock Text="{Binding SizeText}" Style="{StaticResource PaneText}"/>
                                                 <TextBlock Text="{Binding CountText}" Style="{StaticResource PaneDim}" Margin="10,0,0,0"/>
@@ -664,10 +671,10 @@
 
                     <!-- Loading spinner — overlays content while content loads -->
                     <Grid Visibility="{Binding Preview.IsLoading, Converter={StaticResource BoolToVisibility}}"
-                          Background="#80FAFAFA"
+                          Background="{StaticResource LoadingVeil}"
                           IsHitTestVisible="False">
                         <Ellipse Width="32" Height="32" StrokeThickness="3"
-                                 Stroke="#0078D7" Fill="Transparent"
+                                 Stroke="{StaticResource AccentStroke}" Fill="Transparent"
                                  StrokeDashArray="3,2"
                                  HorizontalAlignment="Center" VerticalAlignment="Center"
                                  RenderTransformOrigin="0.5,0.5">
@@ -691,8 +698,8 @@
 
                 <!-- Summary footer -->
                 <Border Grid.Row="1"
-                        BorderBrush="#DDD" BorderThickness="0,1,0,0"
-                        Padding="8,6" Background="#F3F3F3">
+                        BorderBrush="{StaticResource Separator}" BorderThickness="0,1,0,0"
+                        Padding="8,6" Background="{StaticResource ChromeBackground}">
                     <StackPanel>
                         <!--
                             The file's details, and — for RAW — the switch
@@ -716,7 +723,7 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0"
                                        Text="{Binding Preview.Summary}"
-                                       FontSize="11" Foreground="#444"
+                                       FontSize="11" Foreground="{StaticResource TextSecondary}"
                                        TextWrapping="Wrap"/>
                             <ToggleButton x:Name="RawToggle" Grid.Column="1"
                                           Content="{x:Static res:Strings.PreviewRawToggle}"
@@ -739,9 +746,9 @@
                         <StackPanel Orientation="Horizontal" Margin="0,6,0,0"
                                     Visibility="{Binding Preview.HasLinkTarget, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="{x:Static res:Strings.PreviewLinkTarget}"
-                                       FontSize="11" Foreground="#888" VerticalAlignment="Center"/>
+                                       FontSize="11" Foreground="{StaticResource TextDim}" VerticalAlignment="Center"/>
                             <TextBlock Text="{Binding Preview.LinkTargetName}"
-                                       FontSize="11" Foreground="#444" VerticalAlignment="Center"
+                                       FontSize="11" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"
                                        Margin="4,0,0,0" MaxWidth="220"
                                        TextTrimming="CharacterEllipsis"
                                        ToolTip="{Binding Preview.LinkTarget}"/>
@@ -761,14 +768,14 @@
                         -->
                         <StackPanel Margin="0,6,0,0"
                                     Visibility="{Binding Preview.HasCompanions, Converter={StaticResource BoolToVisibility}}">
-                            <TextBlock FontSize="11" Foreground="#888" TextWrapping="Wrap">
+                            <TextBlock FontSize="11" Foreground="{StaticResource TextDim}" TextWrapping="Wrap">
                                 <Run Text="{x:Static res:Strings.PreviewIntegrated}"/><Run Text=" "/><Run Text="{Binding Preview.CompanionFiles, Mode=OneWay}"/>
                             </TextBlock>
 
                             <!-- Unity .meta — the GUID, and a button to take it away -->
                             <StackPanel Orientation="Horizontal" Margin="0,3,0,0"
                                         Visibility="{Binding Preview.HasUnityGuid, Converter={StaticResource BoolToVisibility}}">
-                                <TextBlock Text="GUID" FontSize="11" Foreground="#444" VerticalAlignment="Center"/>
+                                <TextBlock Text="GUID" FontSize="11" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"/>
                                 <TextBox Text="{Binding Preview.UnityGuid, Mode=OneWay}"
                                          IsReadOnly="True" IsReadOnlyCaretVisible="True"
                                          FontFamily="Consolas" FontSize="11"
@@ -781,7 +788,7 @@
                                         VerticalAlignment="Center"/>
                             </StackPanel>
                             <TextBlock Text="{Binding Preview.UnityDetail}"
-                                       FontSize="11" Foreground="#888" TextWrapping="Wrap"/>
+                                       FontSize="11" Foreground="{StaticResource TextDim}" TextWrapping="Wrap"/>
                         </StackPanel>
 
                         <!--
@@ -801,7 +808,7 @@
                         -->
                         <StackPanel Orientation="Horizontal" Margin="0,6,0,0"
                                     Visibility="{Binding Preview.HasRating, Converter={StaticResource BoolToVisibility}}">
-                            <TextBlock Text="{x:Static res:Strings.PreviewRating}" FontSize="11" Foreground="#444"
+                            <TextBlock Text="{x:Static res:Strings.PreviewRating}" FontSize="11" Foreground="{StaticResource TextSecondary}"
                                        VerticalAlignment="Center" Margin="0,0,6,0"/>
                             <Button Style="{StaticResource RatingStar}" CommandParameter="1"
                                     Content="{Binding Preview.Rank, Converter={StaticResource RankStar}, ConverterParameter=1}"/>
@@ -829,7 +836,7 @@
                             </ItemsControl>
 
                             <TextBlock Text="{Binding Preview.CustomColorLabel}"
-                                       FontSize="11" Foreground="#888"
+                                       FontSize="11" Foreground="{StaticResource TextDim}"
                                        VerticalAlignment="Center" Margin="8,0,0,0"/>
                         </StackPanel>
 
@@ -841,7 +848,7 @@
                             file that had no companions a moment ago.
                         -->
                         <TextBlock Text="{Binding Preview.CompanionStatus}"
-                                   FontSize="11" Foreground="#888" TextWrapping="Wrap"/>
+                                   FontSize="11" Foreground="{StaticResource TextDim}" TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>
             </Grid>

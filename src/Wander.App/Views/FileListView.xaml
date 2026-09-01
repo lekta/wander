@@ -41,7 +41,7 @@
             <Setter Property="Command" Value="{Binding SetFilterRankCommand}"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground" Value="#D08A00"/>
+            <Setter Property="Foreground" Value="{StaticResource RatingStar}"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="Padding" Value="1,0"/>
             <Setter Property="Cursor" Value="Hand"/>
@@ -81,12 +81,12 @@
                         <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
                             <TextBlock x:Name="Glyph" Text="&#x2605;"
                                        FontSize="{TemplateBinding FontSize}"
-                                       Foreground="#AAAAAA"
+                                       Foreground="{StaticResource RatingStarEmpty}"
                                        TextDecorations="Strikethrough"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <DataTrigger Binding="{Binding FilterIncludesUnrated}" Value="True">
-                                <Setter TargetName="Glyph" Property="Foreground" Value="#D08A00"/>
+                                <Setter TargetName="Glyph" Property="Foreground" Value="{StaticResource RatingStar}"/>
                             </DataTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -111,10 +111,10 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                <Setter TargetName="Ring" Property="BorderBrush" Value="#666"/>
+                                <Setter TargetName="Ring" Property="BorderBrush" Value="{StaticResource SwatchRing}"/>
                             </DataTrigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Ring" Property="Background" Value="#E5E5E5"/>
+                                <Setter TargetName="Ring" Property="Background" Value="{StaticResource ControlHover}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -187,14 +187,14 @@
                              one with the dark ring. -->
                         <Border x:Name="Ring" Width="18" Height="18" CornerRadius="3"
                                 Background="{TemplateBinding Background}"
-                                BorderBrush="#BBB" BorderThickness="1"/>
+                                BorderBrush="{StaticResource OptionRing}" BorderThickness="1"/>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Ring" Property="BorderBrush" Value="#444"/>
+                                <Setter TargetName="Ring" Property="BorderBrush" Value="{StaticResource OptionRingChecked}"/>
                                 <Setter TargetName="Ring" Property="BorderThickness" Value="2"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Ring" Property="BorderBrush" Value="#888"/>
+                                <Setter TargetName="Ring" Property="BorderBrush" Value="{StaticResource OptionRingHover}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -341,8 +341,8 @@
             <Setter Property="SnapsToDevicePixels" Value="True"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                    <Setter Property="Background" Value="#E5F3FB"/>
-                    <Setter Property="BorderBrush" Value="#D2ECF8"/>
+                    <Setter Property="Background" Value="{StaticResource RowHover}"/>
+                    <Setter Property="BorderBrush" Value="{StaticResource RowHoverBorder}"/>
                 </DataTrigger>
                 <!--
                     Selected, but the keyboard is somewhere else. Kept from
@@ -350,24 +350,24 @@
                     the answer to "which pane does the next Delete mean".
                 -->
                 <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                    <Setter Property="Background" Value="#E8E8E8"/>
-                    <Setter Property="BorderBrush" Value="#DCDCDC"/>
+                    <Setter Property="Background" Value="{StaticResource RowSelectedInactive}"/>
+                    <Setter Property="BorderBrush" Value="{StaticResource RowSelectedInactiveBorder}"/>
                 </DataTrigger>
                 <MultiDataTrigger>
                     <MultiDataTrigger.Conditions>
                         <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True"/>
                         <Condition Binding="{Binding (Selector.IsSelectionActive), RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True"/>
                     </MultiDataTrigger.Conditions>
-                    <Setter Property="Background" Value="#CCE8FF"/>
-                    <Setter Property="BorderBrush" Value="#AFD9F2"/>
+                    <Setter Property="Background" Value="{StaticResource RowSelected}"/>
+                    <Setter Property="BorderBrush" Value="{StaticResource RowSelectedBorder}"/>
                 </MultiDataTrigger>
                 <MultiDataTrigger>
                     <MultiDataTrigger.Conditions>
                         <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True"/>
                         <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True"/>
                     </MultiDataTrigger.Conditions>
-                    <Setter Property="Background" Value="#BFE0FA"/>
-                    <Setter Property="BorderBrush" Value="#A5D3EE"/>
+                    <Setter Property="Background" Value="{StaticResource RowSelectedHover}"/>
+                    <Setter Property="BorderBrush" Value="{StaticResource RowSelectedHoverBorder}"/>
                 </MultiDataTrigger>
             </Style.Triggers>
         </Style>
@@ -450,7 +450,7 @@
         -->
         <Border x:Name="GalleryStrip"
                 DockPanel.Dock="Top"
-                Background="#F7F7F7" BorderBrush="#DDD" BorderThickness="0,0,0,1"
+                Background="{StaticResource StripBackground}" BorderBrush="{StaticResource Separator}" BorderThickness="0,0,0,1"
                 Padding="6,3">
             <!--
                 The strip carries two independent things, each with its own
@@ -508,7 +508,7 @@
                 <StackPanel Orientation="Horizontal"
                             Visibility="{Binding HasRatings, Converter={StaticResource BoolToVisibility}}">
                 <TextBlock Text="{x:Static res:Strings.FilterRatingLabel}"
-                           FontSize="11" Foreground="#444"
+                           FontSize="11" Foreground="{StaticResource TextSecondary}"
                            VerticalAlignment="Center" Margin="0,0,6,0"/>
                 <Button Style="{StaticResource FilterUnratedStar}" CommandParameter="0"/>
                 <Button Style="{StaticResource FilterStar}" CommandParameter="1"
@@ -559,7 +559,7 @@
                   AllowDrop="True"
                   ScrollViewer.HorizontalScrollBarVisibility="Auto"
                   ScrollViewer.VerticalScrollBarVisibility="Auto"
-                  GridLinesVisibility="None" AlternatingRowBackground="#F7F7F7"
+                  GridLinesVisibility="None" AlternatingRowBackground="{StaticResource DetailsRowAlternate}"
                   HeadersVisibility="Column"
                   Sorting="Details_Sorting"
                   RowHeight="{Binding Settings.DetailsRowHeight}">
@@ -662,7 +662,7 @@
                                          VerticalAlignment="Center"
                                          Fill="{Binding Rating, Converter={StaticResource ColorLabelBrush}}"/>
                                 <TextBlock Text="{Binding Rating, Converter={StaticResource RankText}}"
-                                           Foreground="#D08A00"
+                                           Foreground="{StaticResource RatingStar}"
                                            VerticalAlignment="Center"/>
                             </StackPanel>
                         </DataTemplate>
@@ -757,7 +757,7 @@
                                         the column tells the user nothing that
                                         the path would not tell them better.
                                     -->
-                                    <TextBlock Foreground="#777" TextTrimming="CharacterEllipsis"
+                                    <TextBlock Foreground="{StaticResource TextSubtle}" TextTrimming="CharacterEllipsis"
                                                FontSize="{Binding DataContext.Settings.TilesMetrics.SecondaryFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
@@ -910,7 +910,7 @@
                                     answerable at a glance.
                                 -->
                                 <Border HorizontalAlignment="Left" VerticalAlignment="Bottom"
-                                        Background="#33000000" CornerRadius="2"
+                                        Background="{StaticResource BadgeBackground}" CornerRadius="2"
                                         Padding="3,0" Margin="2"
                                         Visibility="{Binding Rating, Converter={StaticResource RatingBadge}, ConverterParameter=Badge}">
                                     <StackPanel Orientation="Horizontal">
@@ -919,7 +919,7 @@
                                                  Visibility="{Binding Rating, Converter={StaticResource RatingBadge}, ConverterParameter=Color}"
                                                  Fill="{Binding Rating, Converter={StaticResource ColorLabelBrush}}"/>
                                         <TextBlock Text="{Binding Rating, Converter={StaticResource RankText}}"
-                                                   FontSize="10" Foreground="#FFD37A"
+                                                   FontSize="10" Foreground="{StaticResource BadgeRating}"
                                                    VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </Border>
@@ -954,10 +954,10 @@
             through to the empty list rather than the spinner.
         -->
         <Grid Visibility="{Binding IsListLoading, Converter={StaticResource BoolToVisibility}}"
-              Background="#80FAFAFA"
+              Background="{StaticResource LoadingVeil}"
               IsHitTestVisible="False">
             <Ellipse Width="32" Height="32" StrokeThickness="3"
-                     Stroke="#0078D7" Fill="Transparent"
+                     Stroke="{StaticResource AccentStroke}" Fill="Transparent"
                      StrokeDashArray="3,2"
                      HorizontalAlignment="Center" VerticalAlignment="Center"
                      RenderTransformOrigin="0.5,0.5">
@@ -989,7 +989,7 @@
               Background="Transparent"
               IsHitTestVisible="False">
             <Ellipse Width="26" Height="26" StrokeThickness="2"
-                     Stroke="#999" Fill="Transparent" Opacity="0.7"
+                     Stroke="{StaticResource SpinnerQuiet}" Fill="Transparent" Opacity="0.7"
                      StrokeDashArray="3,2"
                      HorizontalAlignment="Center" VerticalAlignment="Center"
                      RenderTransformOrigin="0.5,0.5">
@@ -1021,17 +1021,17 @@
             offer beyond saying so.
         -->
         <Grid Visibility="{Binding IsMissingFolder, Converter={StaticResource BoolToVisibility}}"
-              Background="#FDFDFD">
+              Background="{StaticResource EmptyStateBackground}">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="420">
                 <TextBlock Text="{x:Static res:Strings.MissingFolderTitle}"
                            FontSize="14" FontWeight="SemiBold"
-                           Foreground="#333"
+                           Foreground="{StaticResource TextHeading}"
                            HorizontalAlignment="Center"
                            TextWrapping="Wrap"/>
                 <TextBlock Text="{Binding MissingFolderPath}"
                            Margin="0,6,0,0"
                            FontSize="11"
-                           Foreground="#888"
+                           Foreground="{StaticResource TextDim}"
                            HorizontalAlignment="Center"
                            TextAlignment="Center"
                            TextWrapping="Wrap"/>

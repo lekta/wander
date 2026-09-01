@@ -28,7 +28,7 @@ internal static class PromptDialog {
         stack.Children.Add(box);
 
         var errorBlock = new TextBlock {
-            Foreground = Brushes.IndianRed,
+            Foreground = Palette.TextError,
             FontSize = 11,
             Margin = new Thickness(0, 4, 0, 0),
             Visibility = Visibility.Collapsed,
@@ -98,7 +98,7 @@ internal static class PromptDialog {
         bool hasInvalid = text.Any(_invalidFileChars.Contains);
 
         if (hasInvalid) {
-            box.BorderBrush = Brushes.IndianRed;
+            box.BorderBrush = Palette.InputBorderError;
             errorBlock.Text = Strings.InvalidFileNameChars + _invalidCharsDisplay;
             errorBlock.Visibility = Visibility.Visible;
             ok.IsEnabled = false;

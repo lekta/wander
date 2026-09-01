@@ -10,7 +10,7 @@
     <StackPanel Margin="16">
         <TextBlock x:Name="HeaderText" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap"/>
         <TextBlock Text="{x:Static res:Strings.BatchConflictPrompt}"
-                   Margin="0,8,0,0" Foreground="#555" TextWrapping="Wrap"/>
+                   Margin="0,8,0,0" Foreground="{StaticResource TextMuted}" TextWrapping="Wrap"/>
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
             <Button x:Name="ReplaceAllBtn" Content="{x:Static res:Strings.BatchReplaceAll}" Width="120" Margin="0,0,6,0" Click="OnReplaceAll"/>

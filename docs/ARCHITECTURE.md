@@ -52,7 +52,8 @@ src/
 │   │                   BatchGroup
 │   ├── Icons/          IIconProvider, IImageMetadataReader, IconSize, ImageMetadata,
 │   │                   ImageFormats, RawPreviewExtractor, ThumbnailCacheOptions
-│   ├── Layout/         TileLayout, TileMetrics, GridNavigation
+│   ├── Layout/         TileLayout, TileMetrics, GridNavigation,
+│   │                   WindowZones, WindowPlacement
 │   ├── Listing/        FolderSession, ListingDiff, ArrivalIntent, RatedListing,
 │   │                   SearchController, ImageFolderProbe
 │   ├── Localization/   ITextSource
@@ -153,12 +154,12 @@ MainViewModel и общие примитивы» — оно за шагом O9 (
 ```
 === Wander dependency graph (using sweep) ===
 date   : 2026-09-01
-commit : d9bffc1
+commit : be30b7c
 
 -- projects --
 Wander.App -> Wander.Core   (46 files)
 Wander.App -> Wander.Platform.Windows   (1 files)
-Wander.Core.Tests -> Wander.Core   (61 files)
+Wander.Core.Tests -> Wander.Core   (63 files)
 Wander.Platform.Windows -> Wander.Core   (21 files)
 
 -- Wander.Core: folder -> folder --
@@ -226,17 +227,18 @@ Wander.Platform.Windows -> Wander.Core   (21 files)
   Controllers    -> Util           (1 files)
   Controllers    -> ViewModels     (7 files)
   Controls       -> Converters     (1 files)
+  Controls       -> Resources      (1 files)
   Converters     -> ViewModels     (1 files)
   Diagnostics    -> Resources      (1 files)
   DragPreview    -> Converters     (1 files)
-  DragPreview    -> Resources      (1 files)
+  DragPreview    -> Resources      (3 files)
   DragPreview    -> Util           (1 files)
   DragPreview    -> ViewModels     (1 files)
   Preview        -> Resources      (2 files)
   Preview        -> Util           (2 files)
   ViewModels     -> Conflict       (1 files)
   ViewModels     -> Controllers    (1 files)
-  ViewModels     -> Resources      (4 files)
+  ViewModels     -> Resources      (5 files)
   ViewModels     -> Util           (1 files)
   Views          -> Controllers    (1 files)
   Views          -> Controls       (2 files)
@@ -1638,7 +1640,8 @@ Wander.
 и на этом смотрелись бы сломанными.
 
 Тот же набор — первый кусок тёмной темы из Roadmap: переключение палитры
-области расширяется, а один захардкоженный цвет пришлось бы выдирать.
+области расширяется, а один захардкоженный цвет пришлось бы выдирать. Второй кусок —
+общий словарь цветов, см. «Цвета — один словарь на всё приложение».
 
 ---
 
@@ -1649,7 +1652,7 @@ Wander.
 
 | Кто | За что отвечает |
 |---|---|
-| `MainWindow` | Тулбар, адресная строка, статус-бар, глобальные хоткеи, сборка контекстного меню, порядок клавиатурных областей, геометрия окна |
+| `MainWindow` | Тулбар, адресная строка, статус-бар, глобальные хоткеи, сборка контекстного меню, исполнение клавиатурных областей и геометрии окна (решения — в `Wander.Core/Layout/`) |
 | `Views/FolderTreesView` | Обе панели папок и всё, что делает строка дерева: клик открывает, шеврон только раскрывает, drag узла, правый клик как цель операции, `Shift` + колесо, коалесированный клавиатурный обход, полоса «+» для закладок |
 | `Views/FileListView` | Все режимы отображения списка и их общие жесты: выделение, рамка, взведение drag, двойной клик, переименование на месте, набор имени, `Ctrl` + колесо, вызов меню |
 | `Views/PreviewPane` | Всё, что рисуется в панели просмотра, плюс зум по правой кнопке, транспорт видео и инициализация WebView2 |
@@ -1702,9 +1705,14 @@ Wander.
 ### Клавиатурные области
 
 `Tab` в окне переключает не контролы, а **области**: тулбар → адресная
-строка → фильтр → закладки → дерево дисков → список. Порядок объявлен
-списком `MainWindow._zoneOrder`, принадлежность элемента области считается
-подъёмом по визуальному дереву (`ZoneOf`), переход — `CycleZone`, вход —
+строка → фильтр → закладки → дерево дисков → список.
+
+Сам порядок и обход по нему живут в Core — `Wander.Core/Layout/WindowZones`
+(`WindowZone`, `Order`, `Ring`, `FolderPane`): это кольцевая арифметика и
+лестница умолчаний, то есть ровно те два места, где прячется ошибка на
+единицу и забытый случай «а если ни та, ни другая?». Окну осталось
+исполнение: принадлежность элемента области считается подъёмом по
+визуальному дереву (`ZoneOf`), переход — `CycleZone` поверх `Ring`, вход —
 `FocusZone`.
 
 **Почему обходом, а не средствами WPF.** Родной `Tab` идёт по дереву
@@ -1760,7 +1768,9 @@ Wander.
 только мышью; добраться до клавиатурного варианта всё равно можно было
 только слепым перебором.
 
-**`Ctrl` + `1`** пользуется тем, что `NavigationSource` уже лежит в истории:
+**`Ctrl` + `1`** пользуется тем, что `NavigationSource` уже лежит в истории
+(решение — `WindowZones.FolderPane`, пять фактов на входе и панель на
+выходе):
 он раскрывает дерево до текущей папки в **той** панели, из которой её
 открыли (`MainViewModel.RevealCurrentIn`), и встаёт на её узел. Нажатый
 повторно — переключает панель. Открыли не из дерева (адресная строка,
@@ -1799,6 +1809,42 @@ Wander.
 `KeyBinding`. Полоса фильтра оценок тоже живёт тут, `DockPanel.Dock="Top"`
 над контейнерами: она про то, какие строки показывает список, а не про то,
 что окружает список.
+
+### Цвета — один словарь на всё приложение
+
+Все цвета хрома лежат в `Resources/Palette.xaml` — именованные кисти,
+сгруппированные по тому, **что они красят** (поверхности, линии, текст,
+строки списка, контролы, акцент, метки, меню), а не по оттенку.
+Словарь влит в `App.xaml` первым, поэтому `{StaticResource}` виден из
+любого окна и шаблона; `MenuStyles.xaml` вливает его и сам — этот
+словарь грузится и отдельно, а `StaticResource` разрешается на разборе.
+
+Цвет в code-behind берётся из того же словаря через `Resources/Palette.cs`
+— там, где кисть не привязать: адорнер рисует `Pen`'ом, плашка драга
+выбирает цвет по глаголу, рамка активной области зажигается из обработчика
+фокуса. Все поля там — `static readonly` на одном классе нарочно:
+обращение к любому разрешает все, и опечатка в ключе падает громко на
+первой отрисовке, а не на единственном жесте, который никто не пробовал.
+
+**Зачем.** Тёмная тема из Roadmap — это второй набор тех же значений и
+больше ничего; работает это только тогда, когда больше ничего и нет. Оставленный в вьюхе
+`Foreground="#888"` — это угол окна, который останется светлым, и увидеть
+его можно только после того, как это уже случилось.
+
+Что в словарь намеренно не попало — перечислено в шапке самого
+файла: `GalleryPalette` (там цвета вычисляются, а не выбираются, см. выше),
+`Highlighting/*.xshd` (свой формат AvalonEdit для токенов кода),
+`DefaultBackgroundColor` у WebView2 (цвет `System.Drawing` на нативном
+контроле, и это бумага документа, а не хром окна), сборка обложки книги
+в `SystemIconProvider` (там рисуется битмап, и платформенный слой всё равно
+не видит ресурсов App). Свет трёхмерной сцены в словаре **есть**, но
+отдельным разделом «Not chrome»: он освещает модель, а не окно, и тема
+его не трогает.
+
+Лестница из семи градаций серого текста (`TextSecondary` … `TextDisabled`)
+унаследована как есть: свести её значило бы поменять то, что на экране
+сегодня. Нужно ли семь ступеней — вопрос тёмной темы, запись в
+[TECHDEBT.md](TECHDEBT.md).
 
 ### Подсветка плитки
 
@@ -2460,6 +2506,13 @@ XAML, поиск ресурсов, регистрация сервисов, пе
   диске, из списка **не** выбрасывается — строка остаётся с флагом
   `IsMissing`, см. «Пропавшая папка» выше.
 - `Window` — `WindowGeometry` (Left/Top/Width/Height/Maximized).
+
+  Обратно геометрия кладётся не как её сохранили: `WindowPlacement`
+  (`Wander.Core/Layout/`) отбрасывает размер меньше 320×240 (такой — не
+  выбор, а обрезок) и прижимает позицию к виртуальному экрану так, чтобы
+  осталась полоса заголовка, за которую можно схватиться. Оба случая
+  молчаливые и проявляются только на чужой конфигурации мониторов, так что
+  арифметика лежит там, где её достаёт тест.
 - `Settings` — `AppSettings`: `RestoreLastFolder`, `ShowHidden`, `ShowSystem`,
   `ConfirmRecycle`, `SortKey` / `SortAscending` / `GroupFoldersFirst`,
   геометрия LargeIcons-ячеек, чекбоксы закладок, `ShowDebugMenu`,

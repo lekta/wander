@@ -6,7 +6,7 @@
         Width="520" Height="560"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
-        Background="#F3F3F3"
+        Background="{StaticResource ChromeBackground}"
         FontFamily="Segoe UI Variable Text, Segoe UI" FontSize="13">
     <!--
         Adds rows to the context-menu table. Two ways in, because there are
@@ -24,7 +24,7 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" TextWrapping="Wrap" Foreground="#666" Margin="0,0,0,12"
+        <TextBlock Grid.Row="0" TextWrapping="Wrap" Foreground="{StaticResource TextCaption}" Margin="0,0,0,12"
                    Text="{x:Static res:Strings.PickerHint}"/>
 
         <TabControl Grid.Row="1" Background="Transparent" BorderThickness="0">
@@ -35,7 +35,7 @@
                     </Grid.RowDefinitions>
                     <ListBox x:Name="AppList" SelectionMode="Extended"
                              DisplayMemberPath="Title"
-                             BorderBrush="#DDD" Background="White"/>
+                             BorderBrush="{StaticResource Separator}" Background="{StaticResource InputBackground}"/>
                 </Grid>
             </TabItem>
 
@@ -46,17 +46,17 @@
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
                     <TextBox x:Name="TypeFilter" Grid.Row="0" Padding="6,4" Margin="0,0,0,8"
-                             BorderBrush="#DDD"
+                             BorderBrush="{StaticResource Separator}"
                              TextChanged="TypeFilter_TextChanged"/>
                     <ListBox x:Name="TypeList" Grid.Row="1" SelectionMode="Extended"
-                             BorderBrush="#DDD" Background="White">
+                             BorderBrush="{StaticResource Separator}" Background="{StaticResource InputBackground}">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="{Binding Name}" Width="90"/>
                                     <!-- Marks the ones just right-clicked, which is the
                                          only ranking signal there is. -->
-                                    <TextBlock Text="{Binding Note}" Foreground="#888"/>
+                                    <TextBlock Text="{Binding Note}" Foreground="{StaticResource TextDim}"/>
                                 </StackPanel>
                             </DataTemplate>
                         </ListBox.ItemTemplate>

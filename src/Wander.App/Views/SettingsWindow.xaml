@@ -132,12 +132,9 @@
             text at the label's size — which is exactly the part the numbers
             control, and all anyone is checking.
         -->
-        <SolidColorBrush x:Key="PreviewIcon" Color="#C7D6E8"/>
-        <SolidColorBrush x:Key="PreviewIconEdge" Color="#8FA8C4"/>
-
         <Style x:Key="PreviewFrame" TargetType="Border">
-            <Setter Property="Background" Value="White"/>
-            <Setter Property="BorderBrush" Value="#DDD"/>
+            <Setter Property="Background" Value="{StaticResource ContentBackground}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource Separator}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="10"/>
             <Setter Property="VerticalAlignment" Value="Top"/>
@@ -154,8 +151,8 @@
         </Style>
 
         <Style x:Key="PreviewBox" TargetType="Rectangle">
-            <Setter Property="Fill" Value="{StaticResource PreviewIcon}"/>
-            <Setter Property="Stroke" Value="{StaticResource PreviewIconEdge}"/>
+            <Setter Property="Fill" Value="{StaticResource SampleIconFill}"/>
+            <Setter Property="Stroke" Value="{StaticResource SampleIconEdge}"/>
             <Setter Property="StrokeThickness" Value="1"/>
             <Setter Property="RadiusX" Value="2"/>
             <Setter Property="RadiusY" Value="2"/>
@@ -207,7 +204,7 @@
                                                VerticalAlignment="Center" Margin="6,0,0,0"/>
                                 </StackPanel>
                             </Grid>
-                            <Grid Height="{Binding Owner.DetailsRowHeight}" Background="#F5F5F5">
+                            <Grid Height="{Binding Owner.DetailsRowHeight}" Background="{StaticResource SampleRowBackground}">
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                     <Rectangle Style="{StaticResource PreviewBox}"
                                                Width="{Binding Owner.DetailsIconSize}"
@@ -259,7 +256,7 @@
                             <StackPanel VerticalAlignment="Center" Margin="8,0,0,0">
                                 <TextBlock Text="{x:Static res:Strings.SettingsPreviewName}"
                                            FontSize="{Binding Owner.TileLabelFontSize}" TextTrimming="CharacterEllipsis"/>
-                                <TextBlock Text="{x:Static res:Strings.SettingsPreviewMeta}" Foreground="#888"
+                                <TextBlock Text="{x:Static res:Strings.SettingsPreviewMeta}" Foreground="{StaticResource TextDim}"
                                            FontSize="{Binding Owner.TileLabelFontSize}" TextTrimming="CharacterEllipsis"/>
                             </StackPanel>
                         </StackPanel>
@@ -329,7 +326,7 @@
                     </Border>
                 </Grid>
 
-                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,16,0,0"
+                <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,16,0,0"
                            Text="{x:Static res:Strings.SettingsZoomHint}"/>
             </StackPanel>
         </DataTemplate>
@@ -356,7 +353,7 @@
                     <TextBox Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
                              Text="{Binding Owner.AutoGalleryPercent, UpdateSourceTrigger=Explicit}"/>
                 </Grid>
-                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,6,0,0"
+                <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,6,0,0"
                            Text="{x:Static res:Strings.SettingsAutoGalleryHint}"/>
 
                 <TextBlock Text="{x:Static res:Strings.SettingsGalleryBackground}" FontWeight="SemiBold" Margin="0,18,0,8"/>
@@ -471,7 +468,7 @@
                 <RadioButton GroupName="RawRatingFormat"
                              Content="{x:Static res:Strings.SettingsRawRatingFormatPp3}"
                              IsChecked="{Binding Owner.RawRatingFormat, Converter={StaticResource EnumRadio}, ConverterParameter=Pp3}"/>
-                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0"
+                <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,10,0,0"
                            Text="{x:Static res:Strings.SettingsRawRatingFormatHint}"/>
             </StackPanel>
         </DataTemplate>
@@ -507,15 +504,15 @@
                 </Grid>
 
                 <TextBlock Text="{Binding Owner.ThumbnailCacheStatus}"
-                           Foreground="#666" TextWrapping="Wrap" Margin="0,12,0,0"/>
+                           Foreground="{StaticResource TextCaption}" TextWrapping="Wrap" Margin="0,12,0,0"/>
 
                 <Button Content="{x:Static res:Strings.SettingsClearCache}" Padding="14,4" Width="140"
                         HorizontalAlignment="Left" Margin="0,8,0,0"
                         Click="ClearThumbnails_Click"/>
 
-                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,12,0,0"
+                <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,12,0,0"
                            Text="{x:Static res:Strings.SettingsThumbnailsHint}"/>
-                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0"
+                <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,10,0,0"
                            Text="{x:Static res:Strings.SettingsThumbnailsLimitsHint}"/>
             </StackPanel>
         </DataTemplate>
@@ -540,7 +537,7 @@
                           IsChecked="{Binding Owner.ShowBookmarkVideos}"/>
                 <CheckBox Content="{x:Static res:Strings.SettingsBookmarkRecycleBin}"
                           IsChecked="{Binding Owner.ShowBookmarkRecycleBin}"/>
-                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,14,0,0"
+                <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,14,0,0"
                            Text="{x:Static res:Strings.SettingsBookmarksAddHint}"/>
             </StackPanel>
         </DataTemplate>
@@ -561,11 +558,11 @@
             <Setter Property="CanUserReorderColumns" Value="False"/>
             <Setter Property="HeadersVisibility" Value="Column"/>
             <Setter Property="GridLinesVisibility" Value="Horizontal"/>
-            <Setter Property="HorizontalGridLinesBrush" Value="#EEE"/>
-            <Setter Property="BorderBrush" Value="#DDD"/>
-            <Setter Property="Background" Value="White"/>
-            <Setter Property="RowBackground" Value="White"/>
-            <Setter Property="AlternatingRowBackground" Value="#FAFAFA"/>
+            <Setter Property="HorizontalGridLinesBrush" Value="{StaticResource GridLine}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource Separator}"/>
+            <Setter Property="Background" Value="{StaticResource ContentBackground}"/>
+            <Setter Property="RowBackground" Value="{StaticResource ContentBackground}"/>
+            <Setter Property="AlternatingRowBackground" Value="{StaticResource TableRowAlternate}"/>
             <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
             <Setter Property="HorizontalScrollBarVisibility" Value="Auto"/>
         </Style>
@@ -623,7 +620,7 @@
                                      rather than hidden — still a switch, just a
                                      speculative one. -->
                                 <DataTrigger Binding="{Binding IsSeen}" Value="False">
-                                    <Setter Property="Foreground" Value="#777"/>
+                                    <Setter Property="Foreground" Value="{StaticResource TextSubtle}"/>
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
@@ -642,7 +639,7 @@
                               VerticalAlignment="Center" Margin="14,0,0,0"/>
                 </StackPanel>
 
-                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0"
+                <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,10,0,0"
                            Text="{x:Static res:Strings.SettingsShellExtensionsHint}"/>
 
                 <TextBlock Text="{x:Static res:Strings.SettingsOwnItemsGroup}" FontWeight="SemiBold" Margin="0,20,0,8"/>
@@ -692,7 +689,7 @@
                     </DataGrid.Columns>
                 </DataGrid>
 
-                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,8,0,0"
+                <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,8,0,0"
                            Text="{x:Static res:Strings.SettingsOwnItemsHint}"/>
             </StackPanel>
         </DataTemplate>
@@ -711,7 +708,7 @@
         <DataTemplate DataType="{x:Type vm:HotkeysSettingsCategory}">
             <StackPanel>
                 <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
-                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,0,0,12"
+                <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,0,0,12"
                            Text="{x:Static res:Strings.SettingsHotkeysHint}"/>
 
                 <ItemsControl ItemsSource="{Binding Groups}">
@@ -729,7 +726,7 @@
                                                     <ColumnDefinition Width="*"/>
                                                 </Grid.ColumnDefinitions>
                                                 <Border Grid.Column="0"
-                                                        Background="#F0F0F0" BorderBrush="#DDD" BorderThickness="1"
+                                                        Background="{StaticResource InsetBackground}" BorderBrush="{StaticResource Separator}" BorderThickness="1"
                                                         CornerRadius="3" Padding="6,1" Margin="0,0,10,0"
                                                         VerticalAlignment="Top">
                                                     <TextBlock Text="{Binding Gesture}"
@@ -755,7 +752,7 @@
                 <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
                 <CheckBox Content="{x:Static res:Strings.SettingsShowDebugMenu}"
                           IsChecked="{Binding Owner.ShowDebugMenu}"/>
-                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0"
+                <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,10,0,0"
                            Text="{x:Static res:Strings.SettingsDebugHint}"/>
 
                 <!-- Сброс живёт здесь, а не в строке кнопок диалога: он нужен
@@ -764,7 +761,7 @@
                 <TextBlock Text="{x:Static res:Strings.SettingsResetGroup}" FontWeight="SemiBold" Margin="0,24,0,4"/>
                 <Button Content="{x:Static res:Strings.SettingsResetAll}" Padding="14,4" Width="140"
                         HorizontalAlignment="Left" Click="Reset_Click"/>
-                <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,8,0,0"
+                <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,8,0,0"
                            Text="{x:Static res:Strings.SettingsResetHint}"/>
             </StackPanel>
         </DataTemplate>
@@ -776,7 +773,7 @@
              Order: OK · Применить · Отмена — OK закоммитит и закроет, Применить
              закоммитит без закрытия, Отмена откатит изменения и закроет.
              Baseline для отката снимается в Loaded в code-behind. -->
-        <Border DockPanel.Dock="Bottom" BorderBrush="#DDD" BorderThickness="0,1,0,0" Padding="12,8">
+        <Border DockPanel.Dock="Bottom" BorderBrush="{StaticResource Separator}" BorderThickness="0,1,0,0" Padding="12,8">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button Content="{x:Static res:Strings.ActionOk}" Padding="14,4" Width="92" Margin="0,0,8,0"
                         IsDefault="True" Click="Ok_Click"/>
@@ -800,8 +797,8 @@
                      SelectedItem="{Binding SelectedCategory}"
                      DisplayMemberPath="Title"
                      BorderThickness="0,0,1,0"
-                     BorderBrush="#DDD"
-                     Background="#FAFAFA"
+                     BorderBrush="{StaticResource Separator}"
+                     Background="{StaticResource ListBackground}"
                      Padding="0,8,0,0"/>
 
             <!-- Right: content area selected by SelectedCategory's type. -->

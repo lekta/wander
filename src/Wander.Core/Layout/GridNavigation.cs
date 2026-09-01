@@ -71,4 +71,52 @@ public static class GridNavigation {
                 return -1;
         }
     }
+
+
+    /// <summary>
+    /// Is this the press WPF cannot answer? Anything in the middle of the
+    /// grid has a neighbour in that direction and is the control's own
+    /// business; only the row ends and the outer rows come here.
+    /// </summary>
+    public static bool IsAtEdge(int index, GridStep step, int columns, int count) {
+        if (index < 0 || columns <= 0) {
+            return false;
+        }
+
+        return step switch {
+            GridStep.Left => index % columns == 0,
+            GridStep.Right => index % columns == columns - 1 || index == count - 1,
+            GridStep.Up => index < columns,
+            GridStep.Down => index + columns >= count,
+            _ => false,
+        };
+    }
+
+
+    /// <summary>
+    /// The item a Shift-extension grows from. What Shift builds is one run,
+    /// so the anchor is the end of it the caret is *not* sitting on; with
+    /// nothing selected the caret is both ends at once.
+    /// </summary>
+    /// <param name="caret">Where the caret is now.</param>
+    /// <param name="count">How many items the list holds.</param>
+    /// <param name="isSelected">Whether the item at an index is selected.</param>
+    public static int Anchor(int caret, int count, Func<int, bool> isSelected) {
+        int first = -1;
+        int last = -1;
+        for (int i = 0; i < count; i++) {
+            if (isSelected(i)) {
+                if (first < 0) {
+                    first = i;
+                }
+                last = i;
+            }
+        }
+
+        if (first < 0) {
+            return caret;
+        }
+
+        return caret == last ? first : last;
+    }
 }

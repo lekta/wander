@@ -37,16 +37,16 @@
                         <Border Background="Transparent" Width="16" Height="16">
                             <Path x:Name="Arrow"
                                   Data="M 0,0 L 5,4.5 L 0,9 Z"
-                                  Fill="#606060"
+                                  Fill="{StaticResource TreeChevron}"
                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="Arrow" Property="Data" Value="M 0,0 L 9,0 L 4.5,5 Z"/>
-                                <Setter TargetName="Arrow" Property="Fill" Value="#1B1B1B"/>
+                                <Setter TargetName="Arrow" Property="Fill" Value="{StaticResource TreeChevronExpanded}"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Arrow" Property="Fill" Value="#0078D7"/>
+                                <Setter TargetName="Arrow" Property="Fill" Value="{StaticResource TreeChevronHover}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -92,7 +92,7 @@
                             <Border x:Name="SectionRule"
                                     Height="1"
                                     Margin="4,2,4,2"
-                                    Background="#D6D6D6"
+                                    Background="{StaticResource SectionRule}"
                                     Visibility="Collapsed"/>
                             <Border x:Name="Row"
                                     Background="Transparent"
@@ -134,17 +134,17 @@
                                 <Setter TargetName="Expander" Property="Visibility" Value="Hidden"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" SourceName="Row" Value="True">
-                                <Setter TargetName="Row" Property="Background" Value="#E5F3FB"/>
+                                <Setter TargetName="Row" Property="Background" Value="{StaticResource RowHover}"/>
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Row" Property="Background" Value="#CCE8FF"/>
+                                <Setter TargetName="Row" Property="Background" Value="{StaticResource RowSelected}"/>
                             </Trigger>
                             <MultiTrigger>
                                 <MultiTrigger.Conditions>
                                     <Condition Property="IsSelected" Value="True"/>
                                     <Condition Property="IsSelectionActive" Value="False"/>
                                 </MultiTrigger.Conditions>
-                                <Setter TargetName="Row" Property="Background" Value="#E8E8E8"/>
+                                <Setter TargetName="Row" Property="Background" Value="{StaticResource RowSelectedInactive}"/>
                             </MultiTrigger>
                             <DataTrigger Binding="{Binding StartsUserSection}" Value="True">
                                 <Setter TargetName="SectionRule" Property="Visibility" Value="Visible"/>
@@ -196,7 +196,7 @@
         </ContextMenu>
     </UserControl.Resources>
 
-    <Grid Background="#F8F8F8">
+    <Grid Background="{StaticResource PaneBackground}">
         <Grid.RowDefinitions>
             <!--
                 Header, tree and the "+" strip share one row, so the
@@ -234,8 +234,8 @@
                     Command="{Binding ToggleBookmarksCommand}"
                     HorizontalContentAlignment="Stretch"
                     Padding="6,4"
-                    Background="#EEE"
-                    BorderBrush="#DDD"
+                    Background="{StaticResource HeaderBackground}"
+                    BorderBrush="{StaticResource Separator}"
                     BorderThickness="0,0,0,1"
                     Cursor="Hand"
                     ToolTip="{x:Static res:Strings.BookmarksToggleHint}">
@@ -275,7 +275,7 @@
                     DockPanel.Dock="Bottom"
                     Height="20"
                     Margin="12,2,12,2"
-                    Background="#ECECEC"
+                    Background="{StaticResource DropZoneFill}"
                     CornerRadius="2"
                     ToolTip="{x:Static res:Strings.BookmarksAddHint}"
                     AllowDrop="True"
@@ -287,7 +287,7 @@
                 <TextBlock x:Name="BookmarkDropZoneGlyph"
                            Text="+"
                            FontSize="13"
-                           Foreground="#888"
+                           Foreground="{StaticResource DropZoneGlyph}"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"/>
             </Border>
@@ -367,7 +367,7 @@
                                     Padding="0"
                                     Content="&#x22EF;"
                                     FontSize="13"
-                                    Foreground="#555"
+                                    Foreground="{StaticResource TextMuted}"
                                     Focusable="False"
                                     Cursor="Hand"
                                     ToolTip="{x:Static res:Strings.BookmarksRowMenuHint}"
@@ -379,7 +379,7 @@
                                         </Border>
                                         <ControlTemplate.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="Bd" Property="Background" Value="#C4E0F4"/>
+                                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource RowActionHover}"/>
                                             </Trigger>
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>
@@ -422,7 +422,7 @@
                                     <Style TargetType="TextBlock">
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding IsMissing}" Value="True">
-                                                <Setter Property="Foreground" Value="#9A9A9A"/>
+                                                <Setter Property="Foreground" Value="{StaticResource TextDisabled}"/>
                                                 <Setter Property="FontStyle" Value="Italic"/>
                                             </DataTrigger>
                                         </Style.Triggers>
@@ -458,7 +458,7 @@
                       VerticalAlignment="Center"
                       ResizeDirection="Rows"
                       ResizeBehavior="PreviousAndNext"
-                      Background="#DDD"
+                      Background="{StaticResource Separator}"
                       Visibility="{Binding IsBookmarksExpanded, Converter={StaticResource BoolToVisibility}}"
                       DragCompleted="BookmarksSplitter_DragCompleted"/>
 

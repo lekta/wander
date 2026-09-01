@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Documents;
 using System.Windows.Media;
+using Wander.App.Resources;
 
 namespace Wander.App.Controls;
 
@@ -16,17 +17,8 @@ internal sealed class RubberBandAdorner : Adorner {
 
     // Soft fill so item icons remain readable through the marquee; the
     // 1-pixel stroke pins down the rectangle's edges.
-    private static readonly Brush _fillBrush;
-    private static readonly Pen _strokePen;
-
-    static RubberBandAdorner() {
-        _fillBrush = new SolidColorBrush(Color.FromArgb(40, 0, 120, 215));
-        _fillBrush.Freeze();
-        var strokeBrush = new SolidColorBrush(Color.FromArgb(180, 0, 120, 215));
-        strokeBrush.Freeze();
-        _strokePen = new Pen(strokeBrush, 1.0);
-        _strokePen.Freeze();
-    }
+    private static readonly Brush _fillBrush = Palette.MarqueeFill;
+    private static readonly Pen _strokePen = Palette.Stroke(Palette.MarqueeStroke, 1.0);
 
 
     public Point StartPoint { get; set; }

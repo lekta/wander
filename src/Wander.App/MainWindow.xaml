@@ -39,7 +39,7 @@
             <Setter Property="Command" Value="{Binding Preview.SetRankCommand}"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground" Value="#D08A00"/>
+            <Setter Property="Foreground" Value="{StaticResource RatingStar}"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="Padding" Value="1,0"/>
             <Setter Property="Cursor" Value="Hand"/>
@@ -74,10 +74,10 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                <Setter TargetName="Ring" Property="BorderBrush" Value="#666"/>
+                                <Setter TargetName="Ring" Property="BorderBrush" Value="{StaticResource SwatchRing}"/>
                             </DataTrigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Ring" Property="Background" Value="#E5E5E5"/>
+                                <Setter TargetName="Ring" Property="Background" Value="{StaticResource ControlHover}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -103,10 +103,10 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#E5E5E5"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource ControlHover}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#C8C8C8"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource ControlPressed}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.4"/>
@@ -137,7 +137,7 @@
             <Setter Property="Width" Value="22"/>
             <Setter Property="Focusable" Value="False"/>
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="#555"/>
+            <Setter Property="Foreground" Value="{StaticResource TextMuted}"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -147,7 +147,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#E5E5E5"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource ControlHover}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.4"/>
@@ -189,7 +189,7 @@
         <KeyBinding Modifiers="Ctrl+Shift" Key="D7" Command="{Binding SetViewModeCommand}" CommandParameter="Tiles"/>
     </Window.InputBindings>
     <DockPanel>
-        <DockPanel DockPanel.Dock="Top" Background="#F3F3F3">
+        <DockPanel DockPanel.Dock="Top" Background="{StaticResource ChromeBackground}">
             <StackPanel x:Name="NavToolbar" Orientation="Horizontal" DockPanel.Dock="Left" Margin="4,4,8,4">
                 <Button Style="{StaticResource ToolbarButton}"
                         Command="{Binding BackCommand}" ToolTip="{x:Static res:Strings.NavBack}"
@@ -376,7 +376,7 @@
                          ToolTip="{x:Static res:Strings.SearchHint}"
                          PreviewKeyDown="SearchBox_PreviewKeyDown"/>
                 <TextBlock Text="{x:Static res:Strings.SearchPlaceholder}"
-                           Foreground="#999"
+                           Foreground="{StaticResource TextPlaceholder}"
                            Margin="8,0,50,0"
                            TextTrimming="CharacterEllipsis"
                            VerticalAlignment="Center"
@@ -438,7 +438,7 @@
                             <Style TargetType="Button" BasedOn="{StaticResource BoxGlyphButton}">
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding ContentSearch.HasNonDefaultOptions}" Value="True">
-                                        <Setter Property="Foreground" Value="#0078D7"/>
+                                        <Setter Property="Foreground" Value="{StaticResource AccentText}"/>
                                         <Setter Property="FontWeight" Value="Bold"/>
                                     </DataTrigger>
                                 </Style.Triggers>
@@ -468,7 +468,7 @@
             -->
             <Border x:Name="AddressBar"
                     VerticalAlignment="Center" Margin="0,4,4,4" MinHeight="26"
-                    Background="White" BorderBrush="#ABADB3" BorderThickness="1"
+                    Background="{StaticResource InputBackground}" BorderBrush="{StaticResource InputBorder}" BorderThickness="1"
                     PreviewMouseLeftButtonDown="AddressBar_PreviewMouseLeftButtonDown">
                 <DockPanel>
                     <ToggleButton x:Name="RecentToggle" DockPanel.Dock="Right"
@@ -478,15 +478,15 @@
                         <ToggleButton.Template>
                             <ControlTemplate TargetType="ToggleButton">
                                 <Border x:Name="Bd" Background="{TemplateBinding Background}">
-                                    <TextBlock Text="&#x25BE;" FontSize="10" Foreground="#444"
+                                    <TextBlock Text="&#x25BE;" FontSize="10" Foreground="{StaticResource TextSecondary}"
                                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter TargetName="Bd" Property="Background" Value="#E5E5E5"/>
+                                        <Setter TargetName="Bd" Property="Background" Value="{StaticResource ControlHover}"/>
                                     </Trigger>
                                     <Trigger Property="IsChecked" Value="True">
-                                        <Setter TargetName="Bd" Property="Background" Value="#D0D0D0"/>
+                                        <Setter TargetName="Bd" Property="Background" Value="{StaticResource ControlChecked}"/>
                                     </Trigger>
                                 </ControlTemplate.Triggers>
                             </ControlTemplate>
@@ -531,7 +531,7 @@
                                                         Command="{Binding DataContext.Nav.NavigateToCrumbCommand,
                                                                           RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding Path}"/>
-                                                <TextBlock Text="&#x203A;" Foreground="#888" FontSize="13"
+                                                <TextBlock Text="&#x203A;" Foreground="{StaticResource TextDim}" FontSize="13"
                                                            Margin="1,0" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </DataTemplate>
@@ -553,7 +553,7 @@
                                Width="{Binding ActualWidth, ElementName=AddressBar}"
                                IsOpen="{Binding IsChecked, ElementName=RecentToggle, Mode=TwoWay}"
                                StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
-                            <Border Background="White" BorderBrush="#ABADB3" BorderThickness="1">
+                            <Border Background="{StaticResource InputBackground}" BorderBrush="{StaticResource InputBorder}" BorderThickness="1">
                                 <ListBox x:Name="RecentList" MaxHeight="320" BorderThickness="0"
                                          ItemsSource="{Binding Nav.RecentPaths}"
                                          SelectionChanged="RecentList_SelectionChanged"
@@ -588,7 +588,7 @@
                 click.
             -->
             <StatusBarItem DockPanel.Dock="Right" Margin="12,0,0,0">
-                <TextBlock Text="{Binding SelectionSummary}" Foreground="#555"
+                <TextBlock Text="{Binding SelectionSummary}" Foreground="{StaticResource TextMuted}"
                            TextTrimming="CharacterEllipsis"/>
             </StatusBarItem>
             <StatusBarItem DockPanel.Dock="Right"
@@ -646,7 +646,7 @@
                 keys, which put a grip nobody was looking for in the middle
                 of the Tab cycle. Resizing them is a mouse gesture here.
             -->
-            <GridSplitter Grid.Column="1" Focusable="False" HorizontalAlignment="Stretch" Background="#DDD"/>
+            <GridSplitter Grid.Column="1" Focusable="False" HorizontalAlignment="Stretch" Background="{StaticResource Separator}"/>
 
             <!--
                 The border is the "this is where the keyboard is" outline —
@@ -673,7 +673,7 @@
                           Grid.Column="3"
                           Focusable="False"
                           HorizontalAlignment="Stretch"
-                          Background="#DDD"
+                          Background="{StaticResource Separator}"
                           DragCompleted="PreviewSplitter_DragCompleted"/>
 
             <!--

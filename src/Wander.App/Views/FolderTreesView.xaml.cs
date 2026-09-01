@@ -771,11 +771,6 @@ public partial class FolderTreesView : UserControl {
     // The parent BookmarksPanel still accepts drops on its empty area, so
     // users who learned that gesture are not forced to aim at the strip.
 
-    private static readonly SolidColorBrush _dropZoneIdleFill = new(Color.FromRgb(0xEC, 0xEC, 0xEC));
-    private static readonly SolidColorBrush _dropZoneIdleGlyph = new(Color.FromRgb(0x88, 0x88, 0x88));
-    private static readonly SolidColorBrush _dropZoneActiveFill = new(Color.FromRgb(0xCC, 0xE8, 0xFF));
-    private static readonly SolidColorBrush _dropZoneActiveGlyph = new(Color.FromRgb(0x00, 0x55, 0xA8));
-
     private void BookmarkDropZone_DragEnter(object sender, DragEventArgs e) {
         if (!CanAcceptBookmarkDrop(e)) {
             return;
@@ -854,8 +849,8 @@ public partial class FolderTreesView : UserControl {
     /// </summary>
     private void SetBookmarkDropZoneActive(bool active) {
         _drops.IsBookmarkTarget = active;
-        BookmarkDropZone.Background = active ? _dropZoneActiveFill : _dropZoneIdleFill;
-        BookmarkDropZoneGlyph.Foreground = active ? _dropZoneActiveGlyph : _dropZoneIdleGlyph;
+        BookmarkDropZone.Background = active ? Palette.DropZoneActiveFill : Palette.DropZoneFill;
+        BookmarkDropZoneGlyph.Foreground = active ? Palette.DropZoneActiveGlyph : Palette.DropZoneGlyph;
         BookmarkDropZoneGlyph.FontWeight = active ? FontWeights.Bold : FontWeights.Normal;
         _drag.UpdateForCurrentTarget();
     }

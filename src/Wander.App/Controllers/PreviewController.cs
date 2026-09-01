@@ -628,10 +628,10 @@ public sealed class PreviewController : ObservableObject {
     /// the same thing and it is the one piece of colour on this panel that
     /// carries information rather than decoration.
     /// </summary>
-    public string VolumeBarColor => (_volume?.UsedFraction ?? 0) switch {
-        >= 0.95 => "#D13438",
-        >= 0.85 => "#CA8A00",
-        _ => "#0078D7",
+    public Brush VolumeBarColor => (_volume?.UsedFraction ?? 0) switch {
+        >= 0.95 => Palette.VolumeBarFull,
+        >= 0.85 => Palette.VolumeBarFilling,
+        _ => Palette.VolumeBarNormal,
     };
 
 

@@ -16,6 +16,7 @@ using Wander.App.ViewModels;
 using Wander.App.Views;
 using Wander.Core;
 using Wander.Core.FileSystem;
+using Wander.Core.Layout;
 using Wander.Core.Menu;
 using Wander.Core.Navigation;
 using Wander.Core.Persistence;
@@ -146,29 +147,20 @@ public partial class MainWindow : Window {
             return;
         }
 
-        // Restore size first — keeping a sane minimum so a previous truncation
-        // can't wedge the window down to a few pixels.
-        if (geom.Width >= 320 && geom.Height >= 240) {
+        // Restore size first: the clamp below is measured against the
+        // width the window is about to have, not the one it has now.
+        if (WindowPlacement.IsUsableSize(geom.Width, geom.Height)) {
             Width = geom.Width;
             Height = geom.Height;
         }
 
-        // Restore position, clamped to the virtual screen. This handles the
-        // "saved on a monitor that is no longer connected" case without
-        // dropping the window off-screen.
-        double vsLeft = SystemParameters.VirtualScreenLeft;
-        double vsTop = SystemParameters.VirtualScreenTop;
-        double vsRight = vsLeft + SystemParameters.VirtualScreenWidth;
-        double vsBottom = vsTop + SystemParameters.VirtualScreenHeight;
-
-        // Keep at least 100 px of titlebar visible so the user can grab it.
-        double minLeft = vsLeft - Width + 100;
-        double maxLeft = vsRight - 100;
-        double minTop = vsTop;
-        double maxTop = vsBottom - 60;
-
-        Left = Math.Min(Math.Max(geom.Left, minLeft), maxLeft);
-        Top = Math.Min(Math.Max(geom.Top, minTop), maxTop);
+        var screen = new ScreenRect(
+            SystemParameters.VirtualScreenLeft,
+            SystemParameters.VirtualScreenTop,
+            SystemParameters.VirtualScreenWidth,
+            SystemParameters.VirtualScreenHeight);
+        (Left, Top) = WindowPlacement.Clamp(
+            new ScreenRect(geom.Left, geom.Top, Width, Height), screen);
         WindowStartupLocation = WindowStartupLocation.Manual;
 
         if (geom.Maximized) {
@@ -372,7 +364,7 @@ public partial class MainWindow : Window {
 
         // Ctrl+2: back to the list, from wherever the keyboard wandered off.
         if (e.Key == Key.D2 && Keyboard.Modifiers == ModifierKeys.Control) {
-            FocusZone(Zone.FileList);
+            FocusZone(WindowZone.FileList);
             e.Handled = true;
             return;
         }
@@ -430,7 +422,7 @@ public partial class MainWindow : Window {
         // list. Not just inside the text box: Tab and a click can leave the
         // focus on a breadcrumb button, and Esc there used to do nothing at
         // all — the strip kept the keyboard with no way out but the mouse.
-        if (e.Key == Key.Escape && ZoneOf(Keyboard.FocusedElement) == Zone.Address) {
+        if (e.Key == Key.Escape && ZoneOf(Keyboard.FocusedElement) == WindowZone.Address) {
             Vm.AddressText = Vm.CurrentPath ?? "";
             Vm.Nav.IsEditingAddress = false;
             FileList.FocusList();
@@ -445,7 +437,7 @@ public partial class MainWindow : Window {
         // Don't mark handled — those handlers run after this one. The rename
         // editor is handled by the guard above, because clearing the
         // selection first would be destructive.
-        if (e.Key == Key.Escape && ZoneOf(Keyboard.FocusedElement) is Zone.FileList or null) {
+        if (e.Key == Key.Escape && ZoneOf(Keyboard.FocusedElement) is WindowZone.FileList or null) {
             FileList.ClearSelection();
         }
     }
@@ -523,54 +515,38 @@ public partial class MainWindow : Window {
 
 
     // --- Keyboard zones --------------------------------------------------
-    // Tab walks the window a zone at a time rather than a control at a time:
-    // one press lands on the toolbar, arrows pick the button. The zones are
-    // listed in reading order — the top strip left to right, then the left
-    // pane top to bottom, then the list. The preview pane is deliberately
-    // not among them: it has no keyboard behaviour yet, so a stop there
-    // would be a dead end (see BACKLOG, "клавиатура в панели просмотра").
-
-    private enum Zone { Toolbar, Address, Search, Bookmarks, Drives, FileList }
-
-    private static readonly Zone[] _zoneOrder = {
-        Zone.Toolbar, Zone.Address, Zone.Search, Zone.Bookmarks, Zone.Drives, Zone.FileList,
-    };
-
-    /// <summary>
-    /// The outline that says where the keyboard is. Muted grey rather than
-    /// the system accent: it is on screen the whole time, and a bright frame
-    /// around whatever you are working in reads as an alarm.
-    /// </summary>
-    private static readonly Brush _activeZoneBrush = new SolidColorBrush(Color.FromArgb(0x99, 0x8A, 0x8A, 0x8A));
+    // Which element in a zone can take the keyboard is the window's own
+    // business and lives here; the order Tab walks the zones in and the
+    // Ctrl+1 panel policy are in Wander.Core.Layout.WindowZones.
 
     /// <summary>
     /// Which folder panel Ctrl+1 opens when the current folder came from
     /// neither of them — the address bar, a double click, a restored
     /// session. The last one the keyboard was in wins.
     /// </summary>
-    private NavigationSource _lastFolderPane = NavigationSource.Drives;
+    private WindowZone _lastFolderPane = WindowZone.Drives;
 
 
     /// <summary>Which zone an element belongs to, or null for the chrome between them.</summary>
-    private Zone? ZoneOf(object? source) {
+    private WindowZone? ZoneOf(object? source) {
         // The folder panels answer for themselves — which of the two a row
         // belongs to is the control's business, not the window's.
         if (FolderTrees.PaneOf(source) is { } pane) {
-            return pane == NavigationSource.Bookmark ? Zone.Bookmarks : Zone.Drives;
+            return pane == NavigationSource.Bookmark ? WindowZone.Bookmarks : WindowZone.Drives;
         }
 
         foreach (var hit in ListVisuals.Ancestors(source)) {
             if (ReferenceEquals(hit, NavToolbar)) {
-                return Zone.Toolbar;
+                return WindowZone.Toolbar;
             }
             if (ReferenceEquals(hit, AddressBar)) {
-                return Zone.Address;
+                return WindowZone.Address;
             }
             if (ReferenceEquals(hit, SearchBox)) {
-                return Zone.Search;
+                return WindowZone.Search;
             }
             if (ReferenceEquals(hit, FileListZone)) {
-                return Zone.FileList;
+                return WindowZone.FileList;
             }
         }
 
@@ -584,11 +560,9 @@ public partial class MainWindow : Window {
     /// toolbar buttons disabled on a fresh start).
     /// </summary>
     private void CycleZone(int delta) {
-        int from = Array.IndexOf(_zoneOrder, ZoneOf(Keyboard.FocusedElement) ?? Zone.FileList);
-        int count = _zoneOrder.Length;
-        for (int step = 1; step <= count; step++) {
-            int next = ((from + (delta * step)) % count + count) % count;
-            if (FocusZone(_zoneOrder[next])) {
+        var from = ZoneOf(Keyboard.FocusedElement) ?? WindowZone.FileList;
+        foreach (var zone in WindowZones.Ring(from, delta)) {
+            if (FocusZone(zone)) {
                 return;
             }
         }
@@ -601,14 +575,14 @@ public partial class MainWindow : Window {
     /// focusable element it finds first, which is nowhere the user was.
     /// </summary>
     public void FocusWorkArea() {
-        FocusZone(Zone.FileList);
+        FocusZone(WindowZone.FileList);
     }
 
 
     /// <summary>Puts the keyboard in one zone. False when the zone cannot take it.</summary>
-    private bool FocusZone(Zone zone) {
+    private bool FocusZone(WindowZone zone) {
         switch (zone) {
-            case Zone.Toolbar:
+            case WindowZone.Toolbar:
                 foreach (UIElement child in NavToolbar.Children) {
                     if (child.Focusable && child.IsEnabled && child.Focus()) {
                         return true;
@@ -617,7 +591,7 @@ public partial class MainWindow : Window {
 
                 return false;
 
-            case Zone.Address:
+            case WindowZone.Address:
                 // The strip turns into the editable path with everything
                 // selected — what Explorer does on the same stop, and what
                 // makes it useful rather than decorative.
@@ -625,16 +599,16 @@ public partial class MainWindow : Window {
 
                 return true;
 
-            case Zone.Search:
+            case WindowZone.Search:
                 return SearchBox.Focus();
 
-            case Zone.Bookmarks:
+            case WindowZone.Bookmarks:
                 return FolderTrees.FocusBookmarks();
 
-            case Zone.Drives:
+            case WindowZone.Drives:
                 return FolderTrees.FocusDrives();
 
-            case Zone.FileList:
+            case WindowZone.FileList:
                 FileList.FocusList();
 
                 return true;
@@ -660,32 +634,29 @@ public partial class MainWindow : Window {
     /// </para>
     /// </summary>
     private void FocusFolderPane(bool toggle) {
-        var owner = Vm.Nav.CurrentSource == NavigationSource.Bookmark
-            ? NavigationSource.Bookmark
-            : NavigationSource.Drives;
-
-        var target = owner;
-        if (toggle) {
-            target = ZoneOf(Keyboard.FocusedElement) switch {
-                Zone.Bookmarks => NavigationSource.Drives,
-                Zone.Drives => NavigationSource.Bookmark,
-                // From anywhere else: the panel the folder was opened from,
-                // falling back to the last panel the keyboard was in when it
-                // was opened from neither.
-                _ => Vm.Nav.CurrentSource is NavigationSource.Bookmark or NavigationSource.Drives
-                    ? owner
-                    : _lastFolderPane,
-            };
-        }
-
-        // A panel with nothing in it (every default bookmark switched off,
-        // and none added) is not somewhere to send the keyboard.
-        if (target == NavigationSource.Bookmark && !FolderTrees.HasBookmarks) {
-            target = NavigationSource.Drives;
-        }
+        var target = WindowZones.FolderPane(
+            toggle,
+            ZoneOf(Keyboard.FocusedElement),
+            PaneZone(Vm.Nav.CurrentSource),
+            _lastFolderPane,
+            FolderTrees.HasBookmarks);
 
         _lastFolderPane = target;
-        FolderTrees.RevealAndFocus(target);
+        FolderTrees.RevealAndFocus(PaneSource(target));
+    }
+
+
+    /// <summary>The zone a navigation came from, or null when it came from neither panel.</summary>
+    private static WindowZone? PaneZone(NavigationSource? source) {
+        return source switch {
+            NavigationSource.Bookmark => WindowZone.Bookmarks,
+            NavigationSource.Drives => WindowZone.Drives,
+            _ => null,
+        };
+    }
+
+    private static NavigationSource PaneSource(WindowZone zone) {
+        return zone == WindowZone.Bookmarks ? NavigationSource.Bookmark : NavigationSource.Drives;
     }
 
 
@@ -696,24 +667,17 @@ public partial class MainWindow : Window {
     /// </summary>
     private void OnZoneFocusChanged(object sender, KeyboardFocusChangedEventArgs e) {
         var zone = ZoneOf(e.NewFocus);
-        FileListZone.BorderBrush = zone == Zone.FileList ? _activeZoneBrush : Brushes.Transparent;
+        FileListZone.BorderBrush = zone == WindowZone.FileList ? Palette.FocusOutline : Brushes.Transparent;
         FolderTrees.ShowFocusOutline(
-            zone switch {
-                Zone.Bookmarks => NavigationSource.Bookmark,
-                Zone.Drives => NavigationSource.Drives,
-                _ => null,
-            },
-            _activeZoneBrush);
+            zone is WindowZone.Bookmarks or WindowZone.Drives ? PaneSource(zone.Value) : null,
+            Palette.FocusOutline);
 
         // Arriving in a folder panel moves the operation target with the
         // keyboard, so the first Delete after Tab is about the folder the
         // user is looking at and not about the list they just left.
-        if (zone == Zone.Bookmarks) {
-            _lastFolderPane = NavigationSource.Bookmark;
-            FolderTrees.TargetSelected(NavigationSource.Bookmark);
-        } else if (zone == Zone.Drives) {
-            _lastFolderPane = NavigationSource.Drives;
-            FolderTrees.TargetSelected(NavigationSource.Drives);
+        if (zone is WindowZone.Bookmarks or WindowZone.Drives) {
+            _lastFolderPane = zone.Value;
+            FolderTrees.TargetSelected(PaneSource(zone.Value));
         }
     }
 

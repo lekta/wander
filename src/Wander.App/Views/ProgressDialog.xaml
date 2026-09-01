@@ -24,7 +24,7 @@
                        Margin="0,0,0,10"/>
 
             <TextBlock Text="{Binding ElementName=Root, Path=CurrentPath}"
-                       Foreground="#666" FontSize="11"
+                       Foreground="{StaticResource TextCaption}" FontSize="11"
                        TextTrimming="CharacterEllipsis"
                        Margin="0,0,0,8"/>
 
@@ -33,7 +33,7 @@
                          Value="{Binding ElementName=Root, Path=Percent, Mode=OneWay}"/>
 
             <TextBlock Text="{Binding ElementName=Root, Path=CounterText}"
-                       Foreground="#888" FontSize="11"
+                       Foreground="{StaticResource TextDim}" FontSize="11"
                        HorizontalAlignment="Right"
                        Margin="0,4,0,12"/>
 

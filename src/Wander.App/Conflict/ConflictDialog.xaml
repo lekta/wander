@@ -18,21 +18,21 @@
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="0" BorderBrush="#CCC" BorderThickness="1" Padding="10" Margin="0,0,6,0">
+            <Border Grid.Column="0" BorderBrush="{StaticResource CardBorder}" BorderThickness="1" Padding="10" Margin="0,0,6,0">
                 <StackPanel>
-                    <TextBlock Text="{x:Static res:Strings.ConflictSource}" Foreground="#666" FontSize="11"/>
+                    <TextBlock Text="{x:Static res:Strings.ConflictSource}" Foreground="{StaticResource TextCaption}" FontSize="11"/>
                     <TextBlock x:Name="SourceName" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Margin="0,4,0,0"/>
-                    <TextBlock x:Name="SourceSize" FontSize="11" Foreground="#444" Margin="0,4,0,0"/>
-                    <TextBlock x:Name="SourceModified" FontSize="11" Foreground="#444"/>
+                    <TextBlock x:Name="SourceSize" FontSize="11" Foreground="{StaticResource TextSecondary}" Margin="0,4,0,0"/>
+                    <TextBlock x:Name="SourceModified" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
                 </StackPanel>
             </Border>
 
-            <Border Grid.Column="1" BorderBrush="#CCC" BorderThickness="1" Padding="10" Margin="6,0,0,0">
+            <Border Grid.Column="1" BorderBrush="{StaticResource CardBorder}" BorderThickness="1" Padding="10" Margin="6,0,0,0">
                 <StackPanel>
-                    <TextBlock Text="{x:Static res:Strings.ConflictTarget}" Foreground="#666" FontSize="11"/>
+                    <TextBlock Text="{x:Static res:Strings.ConflictTarget}" Foreground="{StaticResource TextCaption}" FontSize="11"/>
                     <TextBlock x:Name="TargetName" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Margin="0,4,0,0"/>
-                    <TextBlock x:Name="TargetSize" FontSize="11" Foreground="#444" Margin="0,4,0,0"/>
-                    <TextBlock x:Name="TargetModified" FontSize="11" Foreground="#444"/>
+                    <TextBlock x:Name="TargetSize" FontSize="11" Foreground="{StaticResource TextSecondary}" Margin="0,4,0,0"/>
+                    <TextBlock x:Name="TargetModified" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
                 </StackPanel>
             </Border>
         </Grid>

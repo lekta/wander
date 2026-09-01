@@ -12,18 +12,15 @@
         Merged into App.xaml, which is the only way the code-built menus can
         pick it up: they have no XAML of their own.
 
-        Colours live as brushes at the top on purpose. The dark theme, when it
-        lands, is a second set of these seven values and nothing else — same
-        deal as GalleryPalette.
+        Colours come from Resources/Palette.xaml, merged below rather than
+        inherited: this dictionary is also loaded on its own, and a
+        StaticResource has to resolve at parse time. The dark theme, when it
+        lands, is a second set of the values there and nothing else.
     -->
 
-    <SolidColorBrush x:Key="MenuPopupBackground" Color="#FBFBFB"/>
-    <SolidColorBrush x:Key="MenuPopupBorder" Color="#E2E2E2"/>
-    <SolidColorBrush x:Key="MenuForeground" Color="#1A1A1A"/>
-    <SolidColorBrush x:Key="MenuForegroundDisabled" Color="#9A9A9A"/>
-    <SolidColorBrush x:Key="MenuForegroundGesture" Color="#757575"/>
-    <SolidColorBrush x:Key="MenuHighlight" Color="#ECECEC"/>
-    <SolidColorBrush x:Key="MenuSeparator" Color="#E5E5E5"/>
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="Palette.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
 
     <!--
         Segoe UI Variable Text is the shell's own menu face on Windows 11;
@@ -51,7 +48,7 @@
                 Padding="0,4,0,4"
                 SnapsToDevicePixels="True">
             <Border.Effect>
-                <DropShadowEffect BlurRadius="14" ShadowDepth="2" Direction="270" Opacity="0.16" Color="#000000"/>
+                <DropShadowEffect BlurRadius="14" ShadowDepth="2" Direction="270" Opacity="0.16" Color="{StaticResource MenuShadowColor}"/>
             </Border.Effect>
             <ContentPresenter/>
         </Border>

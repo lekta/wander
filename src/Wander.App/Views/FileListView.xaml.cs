@@ -923,7 +923,7 @@ public partial class FileListView : UserControl {
 
         var entries = Vm.Entries;
         int index = CaretIndex(list, entries);
-        if (!IsAtEdge(index, step.Value, panel.Columns, entries.Count)) {
+        if (!GridNavigation.IsAtEdge(index, step.Value, panel.Columns, entries.Count)) {
             return false;
         }
 
@@ -962,28 +962,13 @@ public partial class FileListView : UserControl {
 
     /// <summary>
     /// The row a Shift-extension grows from. WPF keeps its own anchor
-    /// privately, so this reads it back off the selection instead: what
-    /// Shift builds is a run, and the anchor is the end the caret is not
-    /// sitting on.
+    /// privately, so this reads it back off the selection instead - which
+    /// end of the run that is belongs to <see cref="GridNavigation.Anchor"/>.
     /// </summary>
     private static int AnchorIndex(ListBox list, IList<FileSystemEntry> entries, int caret) {
         var selected = new HashSet<FileSystemEntry>(list.SelectedItems.OfType<FileSystemEntry>());
-        int first = -1;
-        int last = -1;
-        for (int i = 0; i < entries.Count; i++) {
-            if (selected.Contains(entries[i])) {
-                if (first < 0) {
-                    first = i;
-                }
-                last = i;
-            }
-        }
 
-        if (first < 0) {
-            return caret;
-        }
-
-        return caret == last ? first : last;
+        return GridNavigation.Anchor(caret, entries.Count, i => selected.Contains(entries[i]));
     }
 
 
@@ -994,25 +979,6 @@ public partial class FileListView : UserControl {
         }
 
         return run;
-    }
-
-
-    /// <summary>
-    /// Is this the press WPF cannot answer? Anything in the middle of the
-    /// grid has a neighbour in that direction and is none of our business.
-    /// </summary>
-    private static bool IsAtEdge(int index, GridStep step, int columns, int count) {
-        if (index < 0) {
-            return false;
-        }
-
-        return step switch {
-            GridStep.Left => index % columns == 0,
-            GridStep.Right => index % columns == columns - 1 || index == count - 1,
-            GridStep.Up => index < columns,
-            GridStep.Down => index + columns >= count,
-            _ => false,
-        };
     }
 
 

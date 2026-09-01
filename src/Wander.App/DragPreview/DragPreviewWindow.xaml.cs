@@ -2,14 +2,15 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Wander.App.Resources;
 
 namespace Wander.App.DragPreview;
 
 public partial class DragPreviewWindow : Window {
-    private static readonly Brush _moveBrush = Brushes.SteelBlue;
-    private static readonly Brush _copyBrush = Brushes.SeaGreen;
-    private static readonly Brush _linkBrush = Brushes.DarkOrange;
-    private static readonly Brush _forbiddenBrush = Brushes.IndianRed;
+    private static readonly Brush _moveBrush = Palette.DragMove;
+    private static readonly Brush _copyBrush = Palette.DragCopy;
+    private static readonly Brush _linkBrush = Palette.DragLink;
+    private static readonly Brush _forbiddenBrush = Palette.DragForbidden;
 
 
     public DragPreviewWindow() {

@@ -5,6 +5,8 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
+                <!-- Palette first: MenuStyles and every view resolve their colours out of it. -->
+                <ResourceDictionary Source="Resources/Palette.xaml"/>
                 <ResourceDictionary Source="Resources/MenuStyles.xaml"/>
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
