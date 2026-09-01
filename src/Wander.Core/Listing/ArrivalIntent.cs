@@ -1,4 +1,4 @@
-namespace Wander.App.ViewModels;
+namespace Wander.Core.Listing;
 
 /// <summary>What the selection is supposed to do when a listing lands.</summary>
 public enum ArrivalAction {
