@@ -394,6 +394,7 @@
             <EventSetter Event="PreviewMouseRightButtonDown" Handler="List_PreviewMouseRightButtonDown"/>
             <EventSetter Event="PreviewMouseRightButtonUp" Handler="List_PreviewMouseRightButtonUp"/>
             <EventSetter Event="PreviewKeyDown" Handler="List_PreviewKeyDown"/>
+            <EventSetter Event="PreviewKeyUp" Handler="List_PreviewKeyUp"/>
             <EventSetter Event="PreviewTextInput" Handler="List_PreviewTextInput"/>
             <EventSetter Event="MouseDoubleClick" Handler="List_MouseDoubleClick"/>
             <EventSetter Event="PreviewMouseWheel" Handler="List_PreviewMouseWheel"/>

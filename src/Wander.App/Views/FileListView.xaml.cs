@@ -748,15 +748,18 @@ public partial class FileListView : UserControl {
             _contextIsBackground = Vm.SelectedEntries.Count == 0;
             e.Handled = true;
 
-            // Opened after this key event, not inside it. A menu opened
-            // synchronously takes the keyboard while the very key that asked
-            // for it is still being routed, and the menu reads that key as
-            // "close" — which is why it appeared and vanished in the same
-            // press. The mouse path stays direct: there is no key in flight
-            // there to be read twice.
-            Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
+            // The dedicated Menu key opens on its release, not here: an
+            // unhandled Apps key-up goes to DefWindowProc, which turns it
+            // into WM_CONTEXTMENU - and that late event landed on the menu
+            // opened at the press and dismissed it, which is why it
+            // appeared and vanished. See List_PreviewKeyUp, which both
+            // opens the menu and swallows the key-up. Shift+F10 makes its
+            // WM_CONTEXTMENU on the press instead, so the press being
+            // handled is enough and the menu can open right away.
+            if (e.Key != Key.Apps) {
                 ContextMenuRequested?.Invoke(
-                    this, new FileListMenuRequest(host, PlacementMode.Center, _contextIsBackground))));
+                    this, new FileListMenuRequest(host, PlacementMode.Center, _contextIsBackground));
+            }
 
             return;
         }
@@ -775,6 +778,22 @@ public partial class FileListView : UserControl {
 
         if (sender is ListBox list && TryGridStep(list, e.Key, Keyboard.Modifiers)) {
             e.Handled = true;
+        }
+    }
+
+
+    /// <summary>
+    /// The Menu key's other half. The menu opens here, on the release, and
+    /// the release is marked handled so DefWindowProc never synthesises
+    /// WM_CONTEXTMENU out of it - the message that used to dismiss the menu
+    /// the moment it opened. Nothing is deferred: with the key-up consumed
+    /// there is no keyboard event left in flight for the menu to misread.
+    /// </summary>
+    private void List_PreviewKeyUp(object sender, KeyEventArgs e) {
+        if (e.Key == Key.Apps && sender is FrameworkElement host) {
+            e.Handled = true;
+            ContextMenuRequested?.Invoke(
+                this, new FileListMenuRequest(host, PlacementMode.Center, _contextIsBackground));
         }
     }
 

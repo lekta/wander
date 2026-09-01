@@ -159,7 +159,6 @@ public sealed class MainViewModel : ObservableObject {
     // to stay apart on screen: here first, below after.
     private bool _isSearchWindowOpen;
 
-    private bool _restoring;
 
 
     public MainViewModel() {
@@ -203,6 +202,15 @@ public sealed class MainViewModel : ObservableObject {
 
         _companionMetadata = ServiceLocator.TryGet<CompanionMetadataService>();
 
+        // Settings VM is owned by MainVM and shared with the dialog when it
+        // opens. Built before every controller that takes it: RatingsController
+        // used to be handed the property four lines above its assignment and
+        // silently held null - the kind of bug the two-phase construction
+        // below exists to make impossible. The side-effect subscription
+        // (OnSettingsChanged) is at the very end of the constructor, after
+        // RestoreState - see the note there.
+        Settings = new SettingsViewModel();
+
         Ratings = new RatingsController(
             _fs, _companions, _companionMetadata, _search, Settings, _log,
             isCurrent: _session.IsCurrent,
@@ -212,13 +220,13 @@ public sealed class MainViewModel : ObservableObject {
                 MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) == MessageBoxResult.Yes);
         Ratings.HasRatingsChanged += (_, value) => HasRatings = value;
         Ratings.StatusReported += (_, text) => Status = text;
-        Ratings.CompanionsChanged += (_, _) => Preview.ReloadCompanions();
 
         Preview = new PreviewController(
             ServiceLocator.TryGet<IImageMetadataReader>(),
             _companionMetadata,
             Ratings.ApplyToPrimary,
             RevealPath);
+        Ratings.CompanionsChanged += (_, _) => Preview.ReloadCompanions();
 
         _nav = new NavigationController(
             new NavigationService(),
@@ -237,21 +245,14 @@ public sealed class MainViewModel : ObservableObject {
         Entries = new BulkObservableCollection<FileSystemEntry>();
         Operations = new ObservableCollection<OperationViewModel>();
 
-        // Settings VM is owned by MainVM and shared with the dialog when it
-        // opens. Any mutation triggers a refresh-or-save side effect via
-        // OnSettingsChanged.
-        Settings = new SettingsViewModel();
-        Settings.PropertyChanged += OnSettingsChanged;
-
         Shell = new ShellCommandsController(_shell, _log);
         Shell.StatusReported += (_, text) => Status = text;
 
         // The trees are created first and handed a way to look at the
         // bookmark rows, because everything that spans both panels lives
         // with them. The lambda is not called during construction, so the
-        // bookmarks panel being one line away is fine.
-        Trees = new FolderTreesController(_fs, Settings, () => Bookmarks.Items);
-        Trees.ExpansionChanged += (_, _) => SaveState();
+        // bookmarks panel being one line away is fine (hence the !).
+        Trees = new FolderTreesController(_fs, Settings, () => Bookmarks!.Items);
 
         // Wiring a fresh node is the trees' bookkeeping, not the panel's, so
         // the controller is handed that one operation and owns everything
@@ -421,6 +422,18 @@ public sealed class MainViewModel : ObservableObject {
         // Restored settings decide how big the thumbnail caches may be; the
         // provider starts idle until it is told.
         ApplyThumbnailCacheSettings();
+
+        // --- Turn on. Everything above built the object; from here it
+        // reacts to changes. Subscribed after RestoreState on purpose:
+        // ApplyFrom raises one PropertyChanged per restored setting, and
+        // running the side effects during construction - a Refresh here, a
+        // tree reload there, depending on which restored value happened to
+        // differ from its default - was the hidden-initialization-order
+        // problem this ordering replaces (O6.4). Same for the expansions
+        // RestoreState re-opens: they are the saved state coming back, not
+        // a change worth saving.
+        Settings.PropertyChanged += OnSettingsChanged;
+        Trees.ExpansionChanged += (_, _) => SaveState();
     }
 
 
@@ -991,95 +1004,99 @@ public sealed class MainViewModel : ObservableObject {
 
         DropThumbnailCacheOnUpgrade(state.LastRunVersion);
 
-        _restoring = true;
-        try {
-            // Settings before view mode / navigation: ShowHidden affects
-            // what Refresh() displays, so load filters before the first
-            // Refresh fires via the navigation change below.
-            Settings.ApplyFrom(state.Settings);
+        // Settings before view mode / navigation: ShowHidden affects
+        // what Refresh() displays, so load filters before the first
+        // Refresh fires via the navigation change below. No side
+        // effects fire from these setters: OnSettingsChanged is not
+        // subscribed until the constructor's turn-on block, which is
+        // what replaced the old _restoring flag.
+        Settings.ApplyFrom(state.Settings);
 
-            if (!string.IsNullOrEmpty(session.ViewMode) && Enum.TryParse<ViewMode>(session.ViewMode, out var mode)) {
-                _userViewMode = mode;
-                _viewMode = mode;
-                Raise(nameof(ViewMode));
-            }
-
-            // A mode name that no longer parses (a renamed enum member in a
-            // future version, a hand-edited file) is dropped rather than
-            // guessed at: the automatic choice is a fine fallback.
-            foreach (var folder in session.ManualViewModes) {
-                if (!string.IsNullOrEmpty(folder.Path) && Enum.TryParse<ViewMode>(folder.Mode, out var saved)) {
-                    RememberManualViewMode(folder.Path, saved);
-                }
-            }
-
-            _isPreviewVisible = session.IsPreviewVisible;
-            Raise(nameof(IsPreviewVisible));
-            Preview.SetVisible(_isPreviewVisible);
-            if (session.PreviewWidth >= 120 && session.PreviewWidth <= 900) {
-                _previewWidth = session.PreviewWidth;
-                Raise(nameof(PreviewWidth));
-            }
-            if (session.BookmarksHeight >= 44 && session.BookmarksHeight <= 900) {
-                _bookmarksHeight = session.BookmarksHeight;
-                Raise(nameof(BookmarksHeight));
-            }
-
-            Bookmarks.Load(state.Favorites);
-            _isBookmarksExpanded = session.IsBookmarksExpanded;
-            Raise(nameof(IsBookmarksExpanded));
-
-            _persistedExpandedPaths = session.ExpandedPaths.ToArray();
-            // Drives-side expansions are restored immediately. Bookmark-side
-            // ones wait until the bookmarks panel is built below — its rows are
-            // not there yet, and the matching VM instances do not exist either.
-            // expandTarget:true so the saved node itself is shown as expanded,
-            // not just its ancestors (a saved stop means "this node's children
-            // were visible at close").
-            foreach (var stop in _persistedExpandedPaths) {
-                if (stop.Source == NavigationSource.Bookmark) {
-                    continue;
-                }
-                foreach (var root in Trees.Roots) {
-                    if (root.TryExpandToPath(stop.Path, select: false, expandTarget: true)) {
-                        break;
-                    }
-                }
-            }
-
-            // Build the bookmarks tree *before* the initial navigation —
-            // OnNavigationChanged → Trees.ExpandTo walks the bookmarks
-            // for source=Bookmark, and if it's still empty the expander
-            // falls back to drives, defeating the whole point of the
-            // restored source.
-            Bookmarks.Build(_persistedExpandedPaths);
-            // Consumed: from here on the panels themselves are the record
-            // of what is expanded. Keeping the startup set around made
-            // every later rebuild (a bookmark added, a special folder
-            // switched on) re-open branches the user had since collapsed.
-            _persistedExpandedPaths = Array.Empty<NavigationStop>();
-
-            // Before the first navigation: that navigation pushes the
-            // restored folder onto the list, and it should land on top of
-            // the remembered ones rather than under them.
-            _nav.LoadRecentPaths(session.RecentPaths);
-
-            // Honour the RestoreLastFolder preference: when off, ignore
-            // LastPath and start at the first drive.
-            bool wantRestore = Settings.RestoreLastFolder
-                && session.LastPath is not null
-                && _fs.DirectoryExists(session.LastPath.Path);
-            if (wantRestore) {
-                _nav.NavigateTo(session.LastPath!.Path, session.LastPath.Source);
-            } else {
-                string? first = Trees.Roots.FirstOrDefault()?.FullPath;
-                if (first is not null) {
-                    _nav.NavigateTo(first, NavigationSource.External);
-                }
-            }
-        } finally {
-            _restoring = false;
+        if (!string.IsNullOrEmpty(session.ViewMode) && Enum.TryParse<ViewMode>(session.ViewMode, out var mode)) {
+            _userViewMode = mode;
+            _viewMode = mode;
+            Raise(nameof(ViewMode));
         }
+
+        // A mode name that no longer parses (a renamed enum member in a
+        // future version, a hand-edited file) is dropped rather than
+        // guessed at: the automatic choice is a fine fallback.
+        foreach (var folder in session.ManualViewModes) {
+            if (!string.IsNullOrEmpty(folder.Path) && Enum.TryParse<ViewMode>(folder.Mode, out var saved)) {
+                RememberManualViewMode(folder.Path, saved);
+            }
+        }
+
+        _isPreviewVisible = session.IsPreviewVisible;
+        Raise(nameof(IsPreviewVisible));
+        Preview.SetVisible(_isPreviewVisible);
+        if (session.PreviewWidth >= 120 && session.PreviewWidth <= 900) {
+            _previewWidth = session.PreviewWidth;
+            Raise(nameof(PreviewWidth));
+        }
+        if (session.BookmarksHeight >= 44 && session.BookmarksHeight <= 900) {
+            _bookmarksHeight = session.BookmarksHeight;
+            Raise(nameof(BookmarksHeight));
+        }
+
+        Bookmarks.Load(state.Favorites);
+        _isBookmarksExpanded = session.IsBookmarksExpanded;
+        Raise(nameof(IsBookmarksExpanded));
+
+        _persistedExpandedPaths = session.ExpandedPaths.ToArray();
+        // Drives-side expansions are restored immediately. Bookmark-side
+        // ones wait until the bookmarks panel is built below — its rows are
+        // not there yet, and the matching VM instances do not exist either.
+        // expandTarget:true so the saved node itself is shown as expanded,
+        // not just its ancestors (a saved stop means "this node's children
+        // were visible at close").
+        foreach (var stop in _persistedExpandedPaths) {
+            if (stop.Source == NavigationSource.Bookmark) {
+                continue;
+            }
+            foreach (var root in Trees.Roots) {
+                if (root.TryExpandToPath(stop.Path, select: false, expandTarget: true)) {
+                    break;
+                }
+            }
+        }
+
+        // Build the bookmarks tree *before* the initial navigation —
+        // OnNavigationChanged → Trees.ExpandTo walks the bookmarks
+        // for source=Bookmark, and if it's still empty the expander
+        // falls back to drives, defeating the whole point of the
+        // restored source.
+        Bookmarks.Build(_persistedExpandedPaths);
+        // Consumed: from here on the panels themselves are the record
+        // of what is expanded. Keeping the startup set around made
+        // every later rebuild (a bookmark added, a special folder
+        // switched on) re-open branches the user had since collapsed.
+        _persistedExpandedPaths = Array.Empty<NavigationStop>();
+
+        // Before the first navigation: that navigation pushes the
+        // restored folder onto the list, and it should land on top of
+        // the remembered ones rather than under them.
+        _nav.LoadRecentPaths(session.RecentPaths);
+
+        // Honour the RestoreLastFolder preference: when off, ignore
+        // LastPath and start at the first drive.
+        bool wantRestore = Settings.RestoreLastFolder
+            && session.LastPath is not null
+            && _fs.DirectoryExists(session.LastPath.Path);
+        if (wantRestore) {
+            _nav.NavigateTo(session.LastPath!.Path, session.LastPath.Source);
+        } else {
+            string? first = Trees.Roots.FirstOrDefault()?.FullPath;
+            if (first is not null) {
+                _nav.NavigateTo(first, NavigationSource.External);
+            }
+        }
+
+        // Restore is the saved state coming back, not a change worth
+        // saving: whatever armed the debounce on the way (the initial
+        // navigation ends in SaveState like any other) is disarmed here,
+        // in one place, instead of a flag checked in some of the callers.
+        _stateSaveTimer.Stop();
     }
 
     /// <summary>
@@ -1089,7 +1106,7 @@ public sealed class MainViewModel : ObservableObject {
     /// the timer runs out.
     /// </summary>
     private void SaveState() {
-        if (_restoring || Bookmarks.IsBuilding) {
+        if (Bookmarks.IsBuilding) {
             return;
         }
 
@@ -1400,17 +1417,18 @@ public sealed class MainViewModel : ObservableObject {
         // "Arriving" as opposed to re-listing what is already on screen —
         // the view mode is chosen for a folder the user walks into, not
         // every time F5 or a rename re-reads the one they are standing in.
-        // The rows of the folder being left are *not* cleared here: tearing
-        // down a listing is a synchronous Reset the whole window waits for
-        // (90 ms on a folder of thumbnails, measured), and the replacement
-        // is usually a few milliseconds behind. The stale rows stand until
-        // the new listing lands and replaces them in one swap — or until
-        // the load turns out slow, where they are cleared together with
-        // raising the spinner, so nothing invites a double-click on a file
-        // that is not there any more.
+        // An arrival clears the rows of the folder being left right away.
+        // They used to stand until the new listing landed (one swap costs
+        // one Reset instead of a teardown plus a build) - but rows that
+        // look like the new folder and are the old one invite a click on a
+        // file that is not there, and the user reads them as "the folder
+        // has not opened yet". The context switches with the navigation
+        // (decision 2026-09-01); what the extra Reset costs is the freeze
+        // work of O10.
         int epoch = _session.BeginListing(path, out bool arriving);
         if (arriving) {
             _hiddenCount = 0;
+            _search.SetSource(Array.Empty<FileSystemEntry>());
         }
         string statusBeforeLoad = Status;
         var started = System.Diagnostics.Stopwatch.StartNew();
@@ -1448,13 +1466,8 @@ public sealed class MainViewModel : ObservableObject {
 
         // The spinner is a dimming overlay — raising it for the two frames a
         // local folder takes would make every navigation flash. Only slow
-        // folders get it — and only then are the stale rows of the folder
-        // being left cleared, because from here on they would be on screen
-        // long enough to be clicked.
+        // folders get it; the stale rows are already gone (see above).
         if (await Task.WhenAny(work, Task.Delay(SpinnerDelayMs)) != work && !token.IsCancellationRequested) {
-            if (arriving) {
-                _search.SetSource(Array.Empty<FileSystemEntry>());
-            }
             IsListLoading = true;
         }
 
