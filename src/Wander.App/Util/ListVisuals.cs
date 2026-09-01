@@ -83,6 +83,23 @@ public static class ListVisuals {
     }
 
 
+    /// <summary>
+    /// True when the click landed on a control rather than on the surface
+    /// carrying it — a button, a text box, the "…" on a bookmark row. What
+    /// separates "the user pressed this thing" from "the user grabbed the
+    /// row it sits on".
+    /// </summary>
+    public static bool IsInsideControl(object originalSource) {
+        foreach (var hit in Ancestors(originalSource)) {
+            if (hit is ButtonBase or TextBoxBase) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+
     /// <summary>True when the click landed inside the inline rename editor.</summary>
     public static bool IsInsideTextBox(object originalSource) {
         foreach (var hit in Ancestors(originalSource)) {

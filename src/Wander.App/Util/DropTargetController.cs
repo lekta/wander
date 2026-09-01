@@ -176,6 +176,33 @@ public sealed class DropTargetController {
     }
 
 
+    /// <summary>
+    /// Answers a <c>Drop</c> end to end: works out the plan, hands it to
+    /// <paramref name="run"/>, marks the event handled and takes the
+    /// highlight down — including when the drop was refused or
+    /// <paramref name="run"/> threw.
+    ///
+    /// <para>
+    /// Still deciding rather than acting: what a plan <em>does</em> is the
+    /// caller's, and every surface passes the same thing — the view model,
+    /// the one path that logs a file operation, guards it and makes it
+    /// undoable.
+    /// </para>
+    /// </summary>
+    public void Execute(DragEventArgs e, Action<DropPlan> run) {
+        try {
+            if (PlanDrop(e) is not { } plan) {
+                return;
+            }
+
+            run(plan);
+            e.Handled = true;
+        } finally {
+            Clear();
+        }
+    }
+
+
     /// <summary>Takes the highlight down and forgets the last target.</summary>
     public void Clear() {
         SetHighlight(null);

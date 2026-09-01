@@ -29,7 +29,7 @@ namespace Wander.App.DragPreview;
 /// reports through <c>refreshOnFinish</c>.
 /// </para>
 /// </summary>
-internal sealed class OutgoingDrag {
+public sealed class OutgoingDrag {
     private readonly DropTargetController _drops;
     private readonly Action _clearBookmarkTarget;
 
