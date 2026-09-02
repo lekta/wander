@@ -15,6 +15,7 @@ using Wander.App.Controls;
 using Wander.App.Highlighting;
 using Wander.App.Resources;
 using Wander.App.ViewModels;
+using Wander.Core.Persistence;
 
 
 namespace Wander.App.Views;
@@ -190,9 +191,7 @@ public partial class PreviewPane : UserControl {
             // Explicit user-data folder: the default is "<exe dir>.WebView2",
             // which fails silently when Wander runs from a read-only location
             // (portable exe in Program Files, network share).
-            string dataFolder = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Wander", "WebView2");
+            string dataFolder = AppPaths.WebView2;
             var env = await Microsoft.Web.WebView2.Core.CoreWebView2Environment.CreateAsync(
                 browserExecutableFolder: null, userDataFolder: dataFolder);
             await WebPreview.EnsureCoreWebView2Async(env);

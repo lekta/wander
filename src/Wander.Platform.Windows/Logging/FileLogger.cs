@@ -1,11 +1,12 @@
 using Wander.Core.Logging;
+using Wander.Core.Persistence;
 
 namespace Wander.Platform.Windows.Logging;
 
 /// <summary>
 /// Per-session file logger. On construction opens a fresh file named
-/// <c>session-yyyyMMdd-HHmmss.log</c> under
-/// <c>%LOCALAPPDATA%\Wander\logs\</c>. Writes are line-based, timestamped,
+/// <c>session-yyyyMMdd-HHmmss.log</c> under <see cref="AppPaths.Logs"/>
+/// (<c>%LOCALAPPDATA%\Wander\logs\</c> by default). Writes are line-based, timestamped,
 /// and synchronously flushed so a crash still leaves a useful tail.
 /// </summary>
 public sealed class FileLogger : ILogger, ILogFile, IDisposable {
@@ -20,9 +21,7 @@ public sealed class FileLogger : ILogger, ILogFile, IDisposable {
         // started in the same second) must not prevent app startup. PID in
         // the name keeps concurrent instances from fighting over one file.
         try {
-            string folder = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Wander", "logs");
+            string folder = AppPaths.Logs;
             Directory.CreateDirectory(folder);
 
             string fileName = $"session-{DateTime.Now:yyyyMMdd-HHmmss}-{Environment.ProcessId}.log";

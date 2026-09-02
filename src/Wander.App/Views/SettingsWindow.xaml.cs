@@ -1,4 +1,5 @@
 using System.Windows;
+using Wander.App.Dialogs;
 using Wander.App.Resources;
 using Wander.App.Util;
 using Wander.App.ViewModels;
@@ -78,14 +79,10 @@ public partial class SettingsWindow : Window {
             return;
         }
 
-        var answer = MessageBox.Show(
-            this,
-            Strings.SettingsShellResetConfirm,
-            Strings.SettingsShellReset,
-            MessageBoxButton.OKCancel,
-            MessageBoxImage.Warning,
-            MessageBoxResult.Cancel);
-        if (answer != MessageBoxResult.OK) {
+        bool accepted = ServiceLocator.Get<IDialogs>().Ask(new DialogRequest(
+            DialogKind.ShellMenuReset, Strings.SettingsShellReset, Strings.SettingsShellResetConfirm,
+            DialogButtons.OkCancel, DialogIcon.Warning));
+        if (!accepted) {
             return;
         }
 
@@ -135,15 +132,11 @@ public partial class SettingsWindow : Window {
             return;
         }
 
-        var answer = MessageBox.Show(
-            this,
-            Strings.SettingsResetConfirm,
-            Strings.SettingsResetGroup,
-            MessageBoxButton.OKCancel,
-            MessageBoxImage.Warning,
-            MessageBoxResult.Cancel);
+        bool accepted = ServiceLocator.Get<IDialogs>().Ask(new DialogRequest(
+            DialogKind.SettingsReset, Strings.SettingsResetGroup, Strings.SettingsResetConfirm,
+            DialogButtons.OkCancel, DialogIcon.Warning));
 
-        if (answer == MessageBoxResult.OK) {
+        if (accepted) {
             vm.ApplyFrom(new AppSettings());
         }
     }

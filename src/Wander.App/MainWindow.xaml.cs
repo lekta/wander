@@ -65,7 +65,7 @@ public partial class MainWindow : Window {
         // only counts before that. A smoke run must not take the keyboard
         // away from whoever is working on this desktop, and parking it
         // off-screen alone would not stop it doing that.
-        if (App.IsSmokeRun) {
+        if (App.Headless) {
             WindowStartupLocation = WindowStartupLocation.Manual;
             Left = -32000;
             Top = -32000;
@@ -107,7 +107,7 @@ public partial class MainWindow : Window {
         // A smoke run is parked off-screen on purpose — restoring the saved
         // geometry would drag it onto the desktop, and saving it on the way
         // out would leave the real session pointing at (-32000, -32000).
-        if (App.IsSmokeRun) {
+        if (App.Headless) {
             return;
         }
 
@@ -115,7 +115,7 @@ public partial class MainWindow : Window {
     }
 
     private void OnClosing(object? sender, CancelEventArgs e) {
-        if (!App.IsSmokeRun) {
+        if (!App.Headless) {
             SaveWindowGeometry();
         }
         // The session state is saved on a debounce; whatever it is still

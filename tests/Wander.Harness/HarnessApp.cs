@@ -1,0 +1,72 @@
+using System.Windows;
+using System.Windows.Threading;
+using Wander.App;
+using Wander.App.Dialogs;
+using Wander.Core;
+using Wander.Core.Logging;
+using Wander.Harness.Host;
+
+namespace Wander.Harness;
+
+/// <summary>
+/// The real <see cref="Wander.App.App"/> with two things swapped in after
+/// its own startup ran: a logger that keeps every line in memory (the
+/// runner waits on log lines and asserts against them) and a dialog service
+/// that answers by policy. The window is then created the way StartupUri
+/// would create it - off-screen, because <see cref="Wander.App.App.Headless"/>
+/// is set before the app is constructed - and the scenario starts once the
+/// dispatcher goes idle for the first time.
+/// </summary>
+/// <remarks>
+/// <c>InitializeComponent</c> is not called: it looks for App.xaml's BAML in
+/// the assembly of the concrete type, which is this one. The two things it
+/// would have done - merge the resource dictionaries and set StartupUri -
+/// are done by hand here instead.
+/// </remarks>
+public sealed class HarnessApp : Wander.App.App {
+    private readonly RunContext _context;
+    private readonly ScriptedDialogs _dialogs = new();
+    private CapturingLogger _log = null!;
+
+
+    public HarnessApp(RunContext context) {
+        _context = context;
+        Resources.MergedDictionaries.Add(new ResourceDictionary {
+            Source = new Uri("/Wander;component/Resources/Palette.xaml", UriKind.Relative),
+        });
+        Resources.MergedDictionaries.Add(new ResourceDictionary {
+            Source = new Uri("/Wander;component/Resources/MenuStyles.xaml", UriKind.Relative),
+        });
+    }
+
+
+    protected override void OnStartup(StartupEventArgs e) {
+        base.OnStartup(e);
+
+        _log = new CapturingLogger(ServiceLocator.Get<ILogger>(), ServiceLocator.Get<ILogFile>());
+        ServiceLocator.Register<ILogger>(_log);
+        ServiceLocator.Register<ILogFile>(_log);
+        ServiceLocator.Register<IDialogs>(_dialogs);
+
+        new MainWindow().Show();
+        Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() => _ = RunAsync()));
+    }
+
+
+    private async Task RunAsync() {
+        var report = new RunReport(_context);
+        int code;
+        try {
+            var window = (MainWindow)MainWindow!;
+            var vm = (MainViewModel)window.DataContext;
+            var runner = new ScenarioRunner(_context, window, vm, _log, _dialogs, report);
+            code = await runner.RunAsync();
+        } catch (Exception ex) {
+            report.Fatal(ex);
+            code = 70;
+        }
+
+        report.Write(_log, _dialogs);
+        Shutdown(code);
+    }
+}

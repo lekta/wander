@@ -17,11 +17,8 @@ public sealed class JsonAppStateStore : IAppStateStore {
 
 
     public JsonAppStateStore() {
-        string folder = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Wander");
-        Directory.CreateDirectory(folder);
-        _filePath = Path.Combine(folder, "state.json");
+        Directory.CreateDirectory(AppPaths.DataRoot);
+        _filePath = AppPaths.StateFile;
     }
 
 

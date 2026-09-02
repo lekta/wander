@@ -265,9 +265,10 @@ Wander.Platform.Windows -> Wander.Core   (21 files)
 читается `Get<T>()`, обязателен везде**: `IFileSystem`, `IShellLauncher`,
 `IAppStateStore`, `IRecycleBin`, `IShortcutService`, `IIconProvider`,
 `ILogger`, `CompanionResolver`, `UndoService`, `OperationTracker`,
-`FileOperationService` — отсутствие = сломанный бутстраппер, падение на
-старте честнее работы вполсилы; хост без Windows-слоя регистрирует свои
-реализации сам. **Необязательные** читаются `TryGet<T>()`, у каждого
+`FileOperationService`, `IDialogs` (App-уровень, регистрируется в
+`App.OnStartup` рядом с `ITextSource`) — отсутствие = сломанный
+бутстраппер, падение на старте честнее работы вполсилы; хост без
+Windows-слоя регистрирует свои реализации сам. **Необязательные** читаются `TryGet<T>()`, у каждого
 внятный ответ «нет»:
 
 | Сервис | Чего не будет |
@@ -1219,22 +1220,50 @@ measure — цикл; (3) `BringIndexIntoView` дёргал `UpdateLayout()` и�
   ориентация из контейнера; не `System.Drawing` (GDI+ сериализуется);
   шлюз 2 → 4.
 
-### Smoke-запуск
+### Диалоги — один шов
 
-`Wander.exe --smoke`: окно за экраном (`Left = -32000`), `ShowActivated =
-false`, не в панели задач, кадр, листинг, `Shutdown` кодом. Три места:
-`App.IsSmokeRun` (разбор аргумента; выключает `CrashReporter` —
-`Shutdown(1)` вместо диалога); `MainWindow` — координаты **в конструкторе**
-(`ShowActivated` учитывается до показа, показывает `StartupUri`), геометрия
-не читается и не пишется в `state.json`; `StartSmokeCountdown` — две
-секунды на первый листинг, значки, наблюдателей, `Shutdown(0)`.
+Каждый модальный вопрос идёт через `Wander.App/Dialogs/IDialogs`:
+`Ask(DialogRequest)` (вид `DialogKind`, заголовок, текст, кнопки, значок;
+кнопка по умолчанию всегда отменяющая — поэтому не поле), `Prompt`,
+`PickFolder`, `CreateConflictResolver()`. Продакшн — `WpfDialogs`
+(`MessageBox` поверх активного окна, `PromptDialog`, `OpenFolderDialog`,
+`DispatcherConflictResolver(InteractiveConflictResolver)`); харнесс
+подставляет `ScriptedDialogs` до постройки вью-модели. Голых
+`MessageBox.Show` в коде не осталось, кроме аварийного в `CrashReporter`.
+
+### Smoke-запуск и headless
+
+`App.Headless` — окно за экраном (`Left = -32000`), `ShowActivated = false`,
+не в панели задач, геометрия не читается и не пишется в `state.json`,
+крах — лог и `Shutdown(1)` вместо диалога. Ставится смоком и харнессом
+(`internal set`, `InternalsVisibleTo("Wander.Harness")`). `Wander.exe
+--smoke` = `Headless` + `StartSmokeCountdown` (две секунды на первый
+листинг, значки, наблюдателей, `Shutdown(0)`). Координаты — **в
+конструкторе** `MainWindow` (`ShowActivated` учитывается до показа).
 `check.bat run` зовёт exe напрямую (не `start`) и читает код; ловушки cmd:
 `if errorlevel 1` не видит .NET-падения (0xE0434352 отрицательное) — `neq
 0`; `exit /b` внутри скобок не доносит код — выход за пределами блока.
 
+### QA-харнесс
+
+`tests/Wander.Harness` — `HarnessApp : App`: свой `OnStartup` после
+базового подменяет `ILogger` на `CapturingLogger` и `IDialogs` на
+`ScriptedDialogs`, показывает `MainWindow` сам (`InitializeComponent` не
+зовётся — BAML ищется в сборке наследника; словари ресурсов вливаются
+руками) и стартует `ScenarioRunner` на `ApplicationIdle`. Данные — через
+`WANDER_DATA_DIR` в папку прогона. Шаги, профили песочницы, генераторы
+CR3 / DNG — QA.md.
+
 ## Состояние и логи
 
-`%LOCALAPPDATA%\Wander\`.
+Корень — `AppPaths.DataRoot` (Core, `Persistence/`): `--data-dir <путь>` →
+`--portable` (`data` рядом с exe, `Environment.ProcessPath`) →
+`WANDER_DATA_DIR` → `%LOCALAPPDATA%\Wander`; `AppPaths.Resolve(args)` в
+`App.OnStartup` до логгера, `Override` для харнесса и тестов. `LOCALAPPDATA`
+из среды не читается — рантайм берёт папку у оболочки. Пять потребителей:
+`FileLogger`, `JsonAppStateStore`, `ThumbnailDiskCache` (бутстраппер),
+`CrashReporter`, `PreviewPane` (WebView2). Источник корня — в заголовке
+сессии (`Data root: … (arg|portable|env|override|default)`).
 
 **`state.json`** (`JsonAppStateStore`, record `AppState`):
 - `Session` — `LastPath` (`NavigationStop?`), `ExpandedPaths` (только

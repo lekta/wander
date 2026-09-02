@@ -5,6 +5,12 @@
     <ProjectReference Include="..\Wander.Platform.Windows\Wander.Platform.Windows.csproj" />
   </ItemGroup>
 
+  <!-- The headless harness drives the real window in-process and needs the
+       same internals the window has (App.Headless, view internals). -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Wander.Harness" />
+  </ItemGroup>
+
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <AssemblyName>Wander</AssemblyName>

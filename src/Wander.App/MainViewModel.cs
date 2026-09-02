@@ -6,8 +6,8 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
-using Wander.App.Conflict;
 using Wander.App.Controllers;
+using Wander.App.Dialogs;
 using Wander.App.Resources;
 using Wander.App.Util;
 using Wander.App.ViewModels;
@@ -65,6 +65,7 @@ public sealed class MainViewModel : ObservableObject {
     private readonly IFileSystem _fs;
     private readonly IShellLauncher _shell;
     private readonly IAppStateStore _stateStore;
+    private readonly IDialogs _dialogs;
     private readonly IFileLockInspector? _lockInspector;
     private readonly NavigationController _nav;
     private readonly FileOperationService _ops;
@@ -164,6 +165,7 @@ public sealed class MainViewModel : ObservableObject {
         _fs = ServiceLocator.Get<IFileSystem>();
         _shell = ServiceLocator.Get<IShellLauncher>();
         _stateStore = ServiceLocator.Get<IAppStateStore>();
+        _dialogs = ServiceLocator.Get<IDialogs>();
         _lockInspector = ServiceLocator.TryGet<IFileLockInspector>();
         _ops = ServiceLocator.Get<FileOperationService>();
         _undo = ServiceLocator.Get<UndoService>();
@@ -214,9 +216,9 @@ public sealed class MainViewModel : ObservableObject {
             _fs, _companions, _companionMetadata, _search, Settings, _log,
             isCurrent: _session.IsCurrent,
             publish: PublishRows,
-            ask: question => MessageBox.Show(
-                question, Strings.ConfirmCreateSidecarTitle,
-                MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) == MessageBoxResult.Yes);
+            ask: question => _dialogs.Ask(new DialogRequest(
+                DialogKind.CreateSidecar, Strings.ConfirmCreateSidecarTitle, question,
+                DialogButtons.YesNo, DialogIcon.Question)));
         Ratings.HasRatingsChanged += (_, value) => HasRatings = value;
         Ratings.StatusReported += (_, text) => Status = text;
 
@@ -930,7 +932,7 @@ public sealed class MainViewModel : ObservableObject {
         var groups = await Task.Run(() => GroupPathsWithCompanions(sourcePaths));
 
         _log.Info($"Drop: {effect} {groups.Count} item(s) into {targetFolder}");
-        var resolver = new DispatcherConflictResolver(new InteractiveConflictResolver());
+        var resolver = _dialogs.CreateConflictResolver();
         IReadOnlyList<BatchItemResult> results;
         try {
             results = await RunWithProgressDialogAsync(
@@ -2483,16 +2485,13 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
-        var picker = new Microsoft.Win32.OpenFolderDialog {
-            Title = Strings.BookmarksLocateTitle,
-            Multiselect = false,
-        };
-        if (picker.ShowDialog() != true) {
+        string? folder = _dialogs.PickFolder(Strings.BookmarksLocateTitle);
+        if (folder is null) {
             return;
         }
 
-        if (Bookmarks.Relocate(oldPath, picker.FolderName)) {
-            NavigateAndSelectFolder(picker.FolderName, NavigationSource.Bookmark);
+        if (Bookmarks.Relocate(oldPath, folder)) {
+            NavigateAndSelectFolder(folder, NavigationSource.Bookmark);
         }
     }
 
@@ -2707,14 +2706,12 @@ public sealed class MainViewModel : ObservableObject {
                 message += "\n\n" + Strings.ConfirmIrreversible;
             }
 
-            var result = MessageBox.Show(
-                message,
-                title,
-                MessageBoxButton.OKCancel,
-                permanent ? MessageBoxImage.Error : MessageBoxImage.Warning,
-                MessageBoxResult.Cancel);
+            bool accepted = _dialogs.Ask(new DialogRequest(
+                permanent ? DialogKind.PermanentDeleteConfirm : DialogKind.RecycleConfirm,
+                title, message, DialogButtons.OkCancel,
+                permanent ? DialogIcon.Error : DialogIcon.Warning));
 
-            if (result != MessageBoxResult.OK) {
+            if (!accepted) {
                 _log.Info($"Delete cancelled by user (permanent={permanent}, items={snapshot.Count})");
                 return;
             }
@@ -2727,13 +2724,10 @@ public sealed class MainViewModel : ObservableObject {
             string roMsg = string.Format(
                 readOnlys.Count == 1 ? Strings.ConfirmReadOnlyOne : Strings.ConfirmReadOnlyMany, list);
 
-            var roResult = MessageBox.Show(
-                roMsg,
-                Strings.ConfirmReadOnlyTitle,
-                MessageBoxButton.OKCancel,
-                MessageBoxImage.Warning,
-                MessageBoxResult.Cancel);
-            if (roResult != MessageBoxResult.OK) {
+            bool roAccepted = _dialogs.Ask(new DialogRequest(
+                DialogKind.ReadOnlyConfirm, Strings.ConfirmReadOnlyTitle, roMsg,
+                DialogButtons.OkCancel, DialogIcon.Warning));
+            if (!roAccepted) {
                 return;
             }
             foreach (var ro in readOnlys) {
@@ -3074,7 +3068,8 @@ public sealed class MainViewModel : ObservableObject {
         var reason = PathSafety.DetectSelfDrop(sources, target, out string? offender);
         if (reason == SelfDropReason.IntoOwnDescendant || reason == SelfDropReason.Same) {
             string text = PathSafety.FormatReason(reason, offender, target);
-            MessageBox.Show(text, Strings.CannotPasteTitle, MessageBoxButton.OK, MessageBoxImage.Warning);
+            _dialogs.Ask(new DialogRequest(
+                DialogKind.CannotPaste, Strings.CannotPasteTitle, text, DialogButtons.Ok, DialogIcon.Warning));
             Status = text;
             return;
         }
@@ -3090,7 +3085,7 @@ public sealed class MainViewModel : ObservableObject {
         var groups = await Task.Run(() => GroupPathsWithCompanions(sources));
 
         _log.Info($"Paste: {(wasCut ? "move" : "copy")} {groups.Count} item(s) into {target}");
-        var resolver = new DispatcherConflictResolver(new InteractiveConflictResolver());
+        var resolver = _dialogs.CreateConflictResolver();
         IReadOnlyList<BatchItemResult> results;
         try {
             results = await RunWithProgressDialogAsync(
@@ -3265,13 +3260,8 @@ public sealed class MainViewModel : ObservableObject {
             message = string.Format(Strings.ConfirmMoveMany, sources.Count, target);
         }
 
-        var result = MessageBox.Show(
-            message,
-            Strings.ConfirmMoveTitle,
-            MessageBoxButton.OKCancel,
-            MessageBoxImage.Warning,
-            MessageBoxResult.Cancel);
-
-        return result == MessageBoxResult.OK;
+        return _dialogs.Ask(new DialogRequest(
+            DialogKind.MoveConfirm, Strings.ConfirmMoveTitle, message,
+            DialogButtons.OkCancel, DialogIcon.Warning));
     }
 }

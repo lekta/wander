@@ -11,6 +11,7 @@ using Wander.App.Resources;
 using Wander.Core;
 using Wander.Core.Diagnostics;
 using Wander.Core.Logging;
+using Wander.Core.Persistence;
 
 namespace Wander.App.Diagnostics;
 
@@ -168,9 +169,7 @@ public static class CrashReporter {
     // --- Bundle ---------------------------------------------------------
 
     private static string SaveBundle(Exception ex, bool fatal, bool includeLog) {
-        string dir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Wander", "crashes");
+        string dir = AppPaths.Crashes;
         Directory.CreateDirectory(dir);
 
         string zipPath = Path.Combine(dir, $"crash-{DateTime.Now:yyyyMMdd-HHmmss}-{Environment.ProcessId}.zip");

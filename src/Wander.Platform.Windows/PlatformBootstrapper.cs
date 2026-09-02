@@ -30,6 +30,7 @@ public static class PlatformBootstrapper {
         ServiceLocator.Register<ILogFile>(logger);
         logger.Info($"=== Wander session start ({DateTime.Now:yyyy-MM-dd HH:mm:ss}) ===");
         logger.Info($"Log file: {logger.FilePath}");
+        logger.Info($"Data root: {AppPaths.DataRoot} ({AppPaths.Source})");
         // Environment header — makes a lone session log self-sufficient for
         // bug reports (CrashReporter bundles this log as-is).
         logger.Info(
@@ -43,15 +44,10 @@ public static class PlatformBootstrapper {
         ServiceLocator.Register<ISystemClipboard>(new WindowsClipboard(logger));
         ServiceLocator.Register<IDirectoryWatcher>(new WindowsDirectoryWatcher(logger));
         ServiceLocator.Register<IShellLauncher>(new ShellLauncher());
-        // Thumbnails get a disk tier next to the logs and state.json:
-        // %LocalAppData%\Wander	humbs. Limits arrive from the settings
-        // once the view model is up; until then the cache stays idle.
-        var thumbs = new ThumbnailDiskCache(
-            Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Wander",
-                "thumbs"),
-            logger);
+        // Thumbnails get a disk tier next to the logs and state.json
+        // (AppPaths.Thumbs). Limits arrive from the settings once the view
+        // model is up; until then the cache stays idle.
+        var thumbs = new ThumbnailDiskCache(AppPaths.Thumbs, logger);
         ServiceLocator.Register<IIconProvider>(new SystemIconProvider(thumbs));
         ServiceLocator.Register<IAppStateStore>(new JsonAppStateStore());
         ServiceLocator.Register<IFileLockInspector>(new RestartManagerLockInspector());

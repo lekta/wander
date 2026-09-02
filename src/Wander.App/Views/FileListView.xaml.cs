@@ -11,6 +11,7 @@ using System.Windows.Input;
 using System.Windows.Threading;
 using Wander.App.Controls;
 using Wander.App.Converters;
+using Wander.App.Dialogs;
 using Wander.App.Resources;
 using Wander.App.Util;
 using Wander.App.ViewModels;
@@ -1285,7 +1286,7 @@ public partial class FileListView : UserControl {
             return;
         }
 
-        string? input = PromptDialog.Show(Strings.RenameTitle, Strings.RenamePrompt, entry.Name, filenameMode: true);
+        string? input = ServiceLocator.Get<IDialogs>().Prompt(Strings.RenameTitle, Strings.RenamePrompt, entry.Name, filenameMode: true);
         if (input is null || input == entry.Name) {
             return;
         }

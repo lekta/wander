@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Wander.Harness</RootNamespace>
+  </PropertyGroup>
+
+  <!--
+    Drives the real application in-process: the same App, MainWindow and
+    MainViewModel the user gets, parked off-screen, on a generated sandbox
+    folder, with every modal question answered by policy. See docs/QA.md.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Wander.App\Wander.App.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Scenarios\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

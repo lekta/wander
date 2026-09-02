@@ -1,10 +1,12 @@
 using System.Windows;
 using Wander.App.Diagnostics;
+using Wander.App.Dialogs;
 using Wander.App.Resources;
 using Wander.App.Util;
 using Wander.Core;
 using Wander.Core.Localization;
 using Wander.Core.Logging;
+using Wander.Core.Persistence;
 using Wander.Platform.Windows;
 
 namespace Wander.App;
@@ -20,9 +22,21 @@ public partial class App : Application {
     /// </summary>
     public static bool IsSmokeRun { get; private set; }
 
+    /// <summary>
+    /// The window stays off-screen, takes no focus, and neither reads nor
+    /// writes its geometry. True for a smoke run and for the test harness,
+    /// which sets it before constructing the window.
+    /// </summary>
+    public static bool Headless { get; internal set; }
+
 
     protected override void OnStartup(StartupEventArgs e) {
         IsSmokeRun = e.Args.Any(arg => string.Equals(arg, "--smoke", StringComparison.OrdinalIgnoreCase));
+        Headless = IsSmokeRun;
+        // Where state.json, logs and caches live - decided before the
+        // logger opens its file, since the logger is the first thing the
+        // bootstrapper builds.
+        AppPaths.Resolve(e.Args);
         // Before anything formats a number, and before the thread pool has
         // been handed any work that might: the culture set here is the one
         // background passes inherit.
@@ -33,6 +47,9 @@ public partial class App : Application {
         // menu — is what makes ContextMenuCatalog and PathSafety speak
         // Russian instead of returning resource keys.
         ServiceLocator.Register<ITextSource>(new AppTextSource());
+        // Every modal question goes through this seam; the harness swaps
+        // in a scripted answerer before it builds the view model.
+        ServiceLocator.Register<IDialogs>(new WpfDialogs());
         HookCrashLogging();
         base.OnStartup(e);
     }
@@ -52,7 +69,7 @@ public partial class App : Application {
             // No dialog under --smoke: nobody is there to dismiss it, and a
             // check that hangs on a message box is worse than one that fails.
             // The exit code carries the news instead.
-            if (IsSmokeRun) {
+            if (Headless) {
                 args.Handled = true;
                 Shutdown(1);
 
@@ -67,7 +84,7 @@ public partial class App : Application {
             // Process is going down — flush what we know while we still can.
             var ex = args.ExceptionObject as Exception;
             log.Error($"Fatal unhandled exception (terminating={args.IsTerminating})", ex);
-            if (ex is not null && !IsSmokeRun) {
+            if (ex is not null && !Headless) {
                 CrashReporter.Offer(ex, fatal: true);
             }
         };

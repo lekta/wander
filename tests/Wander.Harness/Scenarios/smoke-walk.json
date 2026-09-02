@@ -1,0 +1,56 @@
+{
+  // Walks the sandbox through every view, opens the preview on a JPEG and a
+  // CR3, lands on a 5000-file folder, then creates / renames / recycles /
+  // undoes a folder. Screenshots at each stop; log must end without errors.
+  "name": "smoke-walk",
+  "sandbox": "default",
+  "profiles": [ "photos", "raw", "big" ],
+  "steps": [
+    { "do": "navigate", "path": "{sandbox}\\photos" },
+    { "do": "view", "mode": "Details" },
+    { "do": "screenshot", "name": "photos-details" },
+    { "do": "view", "mode": "Tiles" },
+    { "do": "screenshot", "name": "photos-tiles" },
+    { "do": "view", "mode": "LargeIcons" },
+    { "do": "screenshot", "name": "photos-icons" },
+    { "do": "view", "mode": "Gallery" },
+    { "do": "screenshot", "name": "photos-gallery" },
+    { "do": "select", "names": [ "IMG_0002.jpg" ] },
+    { "do": "preview", "on": true },
+    { "do": "screenshot", "name": "preview-jpeg" },
+    { "do": "measure", "name": "photos-gallery" },
+
+    { "do": "navigate", "path": "{sandbox}\\raw" },
+    { "do": "view", "mode": "LargeIcons" },
+    { "do": "screenshot", "name": "raw-icons" },
+    { "do": "select", "names": [ "IMG_0002.CR3" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "preview-cr3" },
+    { "do": "select", "names": [ "DSC_0003.dng" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "preview-dng" },
+
+    { "do": "navigate", "path": "{sandbox}\\big" },
+    { "do": "view", "mode": "Details" },
+    { "do": "assert-entries", "min": 5000 },
+    { "do": "screenshot", "name": "big-details" },
+    { "do": "measure", "name": "big-details" },
+
+    { "do": "navigate", "path": "{sandbox}\\photos\\sub" },
+    { "do": "view", "mode": "Tiles" },
+    { "do": "command", "name": "new-folder" },
+    { "do": "assert-entries", "contains": [ "Новая папка" ] },
+    { "do": "rename", "name": "Новая папка", "to": "renamed-by-harness" },
+    { "do": "assert-entries", "contains": [ "renamed-by-harness" ], "absent": [ "Новая папка" ] },
+    { "do": "select", "names": [ "renamed-by-harness" ] },
+    { "do": "command", "name": "delete" },
+    { "do": "assert-entries", "absent": [ "renamed-by-harness" ] },
+    { "do": "command", "name": "undo" },
+    { "do": "assert-entries", "contains": [ "renamed-by-harness" ] },
+    { "do": "screenshot", "name": "after-undo" },
+    { "do": "command", "name": "up" },
+    { "do": "assert-entries", "selected": [ "sub" ] },
+
+    { "do": "assert-log", "scope": "all", "noErrors": true }
+  ]
+}

@@ -6,5 +6,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Wander.Core.Tests/Wander.Core.Tests.csproj" />
+    <Project Path="tests/Wander.Harness/Wander.Harness.csproj" />
   </Folder>
 </Solution>
