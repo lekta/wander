@@ -78,6 +78,7 @@ public static class Program {
         // machine's own state.json or caches is touched.
         string dataDir = Path.Combine(outDir, "data");
         Environment.SetEnvironmentVariable(AppPaths.EnvironmentVariable, dataDir);
+        SeedState(scenario, dataDir);
         Wander.App.App.Headless = true;
 
         var context = new RunContext(scenario, sandboxRoot, outDir, dataDir);
@@ -86,6 +87,28 @@ public static class Program {
         Console.WriteLine($"exit {code}: {Path.Combine(outDir, "report.md")}");
 
         return code;
+    }
+
+    /// <summary>
+    /// Puts a saved state.json from an earlier version into the run's data
+    /// directory, so the app comes up on it. Missing is a hard stop rather
+    /// than a warning: a scenario that asked to start on 0.2.1 and silently
+    /// started on nothing would report a pass about a test that never ran.
+    /// </summary>
+    private static void SeedState(Scenario scenario, string dataDir) {
+        if (string.IsNullOrEmpty(scenario.State)) {
+            return;
+        }
+
+        string? fixtures = FixtureLibrary.Discover().Root;
+        string source = Path.Combine(fixtures ?? "", "state", scenario.State + ".json");
+        if (fixtures is null || !File.Exists(source)) {
+            throw new FileNotFoundException($"scenario wants state '{scenario.State}', no such file", source);
+        }
+
+        Directory.CreateDirectory(dataDir);
+        File.Copy(source, Path.Combine(dataDir, "state.json"), overwrite: true);
+        Console.WriteLine($"state: {source}");
     }
 
     private static int Usage() {

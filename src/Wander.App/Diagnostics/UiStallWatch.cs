@@ -65,10 +65,16 @@ public static class UiStallWatch {
             double elapsed = waited.Elapsed.TotalMilliseconds;
             if (elapsed >= StallMs) {
                 PerfLog.Note("ui.stall", elapsed);
+                // What the process looked like while the window was
+                // stuck. Sampled here rather than on the interval so
+                // the numbers belong to the stall, not to whatever
+                // came after it.
+                SystemVitals.Sample();
             }
 
             PerfLog.Tick();
             PerfCounters.Tick();
+            SystemVitals.Tick();
             Thread.Sleep(PingMs);
         }
     }

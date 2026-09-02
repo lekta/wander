@@ -1,0 +1,59 @@
+{
+  // The two panels: a branch opened by hand stays open across a refresh, a
+  // subfolder created in the list shows up in the branch, and a bookmark
+  // added and removed lands where it should. The checklist rows about
+  // dragging, chevron clicks and the divider need a mouse and stay with the
+  // person.
+  "name": "tree-bookmarks",
+  "sandbox": "default",
+  "profiles": [ "photos", "raw", "big" ],
+  "steps": [
+    { "do": "navigate", "path": "{sandbox}" },
+    { "do": "tree-expand", "path": "{sandbox}\\photos" },
+    { "do": "screenshot", "name": "tree-expanded" },
+
+    // A branch a person opened does not close itself - not on F5, not
+    // after an operation. This is the Win11 Explorer behaviour Wander
+    // exists to not have, so it is asserted rather than eyeballed.
+    { "do": "command", "name": "refresh" },
+    { "do": "tree-expand", "path": "{sandbox}\\photos\\sub", "expand": false },
+    { "do": "note", "text": "the branch is still open after F5 - reaching sub without re-expanding photos proves it" },
+
+    // Something created in the list appears in the open branch.
+    { "do": "navigate", "path": "{sandbox}\\photos" },
+    { "do": "command", "name": "new-folder" },
+    { "do": "rename", "name": "Новая папка", "to": "from-the-list" },
+    { "do": "sleep", "ms": 1200 },
+    { "do": "tree-expand", "path": "{sandbox}\\photos\\from-the-list", "expand": false },
+    { "do": "note", "text": "a folder created in the list turned up in the open branch" },
+    { "do": "screenshot", "name": "tree-new-folder" },
+
+    // --- Bookmarks ---------------------------------------------------
+    { "do": "bookmark", "op": "add", "path": "{sandbox}\\raw" },
+    { "do": "tree-expand", "path": "{sandbox}\\raw", "panel": "bookmark" },
+    { "do": "assert-log", "scope": "all", "contains": "Bookmark added" },
+    { "do": "screenshot", "name": "bookmark-added" },
+
+    { "do": "bookmark", "op": "add", "path": "{sandbox}\\big" },
+    { "do": "navigate", "path": "{sandbox}\\big" },
+    { "do": "assert-entries", "min": 5000 },
+    { "do": "screenshot", "name": "bookmark-navigated" },
+
+    { "do": "bookmark", "op": "remove", "path": "{sandbox}\\big" },
+    { "do": "bookmark", "op": "remove", "path": "{sandbox}\\raw" },
+    { "do": "assert-log", "scope": "all", "contains": "Bookmark removed" },
+
+    // Clean up after ourselves: the sandbox is reused between runs, and a
+    // scenario that leaves rubbish behind makes the next run's counts lie.
+    { "do": "navigate", "path": "{sandbox}\\photos" },
+    { "do": "select", "names": [ "from-the-list" ] },
+    { "do": "command", "name": "permanent-delete" },
+    { "do": "assert-entries", "absent": [ "from-the-list" ] },
+
+    {
+      // The tidy-up above is a permanent delete, and every one of those
+      // writes an audit line at WARN.
+      "do": "assert-log", "scope": "all", "noErrors": true, "allow": [ "Permanent delete" ]
+    }
+  ]
+}

@@ -106,6 +106,7 @@ Roadmap. Закрытое → DONE, переезжает из PLAN (как — F
 .\tools\check.bat          # build → dotnet format --verify-no-changes → сверка строк → тесты
 .\tools\check.bat run      # то же + smoke-запуск (окно за экраном, само закрывается)
 .\tools\check.bat format   # применить форматирование (пишет файлы)
+.\tools\check.bat qa       # сборка + харнесс: selfcheck и smoke-walk (минуты, отдельно)
 ```
 
 Шаг «строки» — `tools\check-strings.ps1`: ключи ресурсов в коде и XAML
@@ -140,9 +141,12 @@ Claude не эмулирует ввод и не поднимает окна по
 
 ```pwsh
 $h = "tests\Wander.Harness\bin\Debug\net10.0-windows10.0.19041.0\Wander.Harness.exe"
-& $h selfcheck                                            # генераторы RAW/EXIF против читателей
+& $h selfcheck                                            # генераторы против читателей Core
 & $h run tests\Wander.Harness\Scenarios\smoke-walk.json   # артефакты в artifacts\
 ```
+
+Восемь сценариев: `smoke-walk`, `focus-keys`, `tree-bookmarks`, `file-ops`,
+`search`, `preview-formats`, `watcher`, `soak`. Десять профилей песочницы.
 
 Шаги, профили, правила — QA.md. Разовый консольный харнесс в scratchpad —
 для одного класса. Что проверить нельзя — списком «что посмотреть глазами»

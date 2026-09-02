@@ -1055,8 +1055,24 @@ measure — цикл; (3) `BringIndexIntoView` дёргал `UpdateLayout()` и�
 `Startup: first frame N ms` — `MainWindow.OnFirstFrame` на
 `ContentRendered` от старта процесса (`Loaded` на ~900 мс раньше).
 `UiStallWatch` — фоновый поток раз в 200 мс просит диспетчер
-(`DispatcherPriority.Input`), ждёт > 120 мс → `ui.stall`; тот же heartbeat
-закрывает окно `PerfLog` и флашит `PerfCounters`.
+(`DispatcherPriority.Input`), ждёт > 150 мс → `ui.stall`; тот же heartbeat
+закрывает окно `PerfLog`, флашит `PerfCounters` и дёргает `SystemVitals`.
+
+`SystemVitals` (`App/Diagnostics/`) — раз в 5 с и на каждый `ui.stall` одна
+строка о процессе:
+
+```
+SYS ws=431 private=360 gen=167/155/134 alloc=+45 loh=6 handles=1060 threads=40 cpu=8,0
+```
+
+МБ, счётчики `GC.CollectionCount` нарастающим итогом, `alloc` — прирост с
+прошлой строки (`GC.GetTotalAllocatedBytes`), `loh` —
+`GetGCMemoryInfo().GenerationInfo[3]`, `cpu` — доля одного ядра в %
+(`TotalProcessorTime` / стена / `ProcessorCount`). `Process` берётся один
+раз (`GetCurrentProcess` открывает хэндл на каждый вызов), `Refresh()`
+перед чтением. Одна строка сама по себе не значит ничего; смысл — форма за
+сессию: растущий `ws`, невозвращающиеся `handles`, `gen2` на каждую папку.
+Это то, ради чего существует сценарий `soak`.
 
 ## Отзывчивость: приоритеты
 
@@ -1236,7 +1252,13 @@ measure — цикл; (3) `BringIndexIntoView` дёргал `UpdateLayout()` и�
 `App.Headless` — окно за экраном (`Left = -32000`), `ShowActivated = false`,
 не в панели задач, геометрия не читается и не пишется в `state.json`,
 крах — лог и `Shutdown(1)` вместо диалога. Ставится смоком и харнессом
-(`internal set`, `InternalsVisibleTo("Wander.Harness")`). `Wander.exe
+(`internal set`, `InternalsVisibleTo("Wander.Harness")`). В `App.OnStartup`
+флаг только **включается** (`Headless |= IsSmokeRun`): харнесс выставляет
+его до конструирования `App` и командной строки не имеет, а присваивание
+затирало это — окно выходило на настоящий рабочий стол и забирало фокус
+(2026-09-02). `HarnessApp` перепроверяет флаг и отказывается работать при
+выключенном; позиция окна пишется в лог строкой `HARNESS window at`.
+`Wander.exe
 --smoke` = `Headless` + `StartSmokeCountdown` (две секунды на первый
 листинг, значки, наблюдателей, `Shutdown(0)`). Координаты — **в
 конструкторе** `MainWindow` (`ShowActivated` учитывается до показа).
@@ -1253,6 +1275,22 @@ measure — цикл; (3) `BringIndexIntoView` дёргал `UpdateLayout()` и�
 руками) и стартует `ScenarioRunner` на `ApplicationIdle`. Данные — через
 `WANDER_DATA_DIR` в папку прогона. Шаги, профили песочницы, генераторы
 CR3 / DNG — QA.md.
+
+**Лог берётся у источника, а не у обёртки.** `CapturingLogger` подписан на
+событие `FileLogger.Written`, а не запоминает то, что прошло через него
+самого. Причина конкретная: сервисы, которые строит
+`PlatformBootstrapper`, получают логгер в конструкторе и больше никогда его
+не ищут — `FileOperationService`, шелл, сторож папки. Логгер,
+зарегистрированный поверх после `base.OnStartup`, их строк не видит, и
+`assert-log noErrors` был утверждением про половину приложения: `ERROR
+Delete failed` лежал в файле, а прогон отчитывался «ошибок нет»
+(2026-09-02). Событие поднимается под замком записи — подписчик обязан не
+логировать и не блокировать.
+
+`state.json` прошлой версии кладётся в data-dir **до** старта `App` (поле
+сценария `"state"`, `Program.SeedState`): это не профиль песочницы, потому
+что читается раньше, чем любой профиль мог бы отработать. Файла нет —
+прогон падает сразу, а не проходит молча.
 
 ## Состояние и логи
 

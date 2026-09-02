@@ -1,0 +1,75 @@
+{
+  // The "Фокус, выделение и клавиатура" checklist, minus what needs a real
+  // keyboard: arrows at the edges of the grid, F2 in every view, and where
+  // the selection lands after a delete, an undo and a step up.
+  //
+  // Modifiers are not scriptable - WPF reads Keyboard.Modifiers from the
+  // real keyboard, and the real keyboard belongs to whoever is sitting in
+  // front of the machine - so anything with Ctrl or Shift in it goes
+  // through "command" instead, and the Shift-selection rows of the
+  // checklist stay with the person.
+  "name": "focus-keys",
+  "sandbox": "focus",
+  "profiles": [ "photos" ],
+  "steps": [
+    { "do": "navigate", "path": "{sandbox}\\photos\\sub" },
+
+    // --- Arrows at the edges of a grid ------------------------------
+    { "do": "view", "mode": "LargeIcons" },
+    { "do": "select", "names": [ "SUB_001.jpg" ] },
+    { "do": "key", "key": "Home" },
+    { "do": "key", "key": "Up" },
+    { "do": "assert-entries", "selected": [ "SUB_001.jpg" ] },
+    { "do": "note", "text": "Up on the first row keeps the caret where it was" },
+    { "do": "key", "key": "End" },
+    { "do": "key", "key": "Down" },
+    { "do": "assert-entries", "selected": [ "SUB_010.jpg" ] },
+    { "do": "note", "text": "Down on the last row keeps the caret where it was" },
+    { "do": "key", "key": "Home" },
+    { "do": "key", "key": "Right", "repeat": 4 },
+    { "do": "screenshot", "name": "icons-after-arrows" },
+
+    // --- F2 in all four views ---------------------------------------
+    { "do": "view", "mode": "Details" },
+    { "do": "select", "names": [ "SUB_002.jpg" ] },
+    { "do": "key", "key": "F2" },
+    { "do": "screenshot", "name": "rename-details" },
+    { "do": "key", "key": "Escape" },
+
+    { "do": "view", "mode": "Tiles" },
+    { "do": "select", "names": [ "SUB_002.jpg" ] },
+    { "do": "key", "key": "F2" },
+    { "do": "screenshot", "name": "rename-tiles" },
+    { "do": "key", "key": "Escape" },
+
+    { "do": "view", "mode": "LargeIcons" },
+    { "do": "select", "names": [ "SUB_002.jpg" ] },
+    { "do": "key", "key": "F2" },
+    { "do": "screenshot", "name": "rename-icons" },
+    { "do": "key", "key": "Escape" },
+
+    { "do": "view", "mode": "Gallery" },
+    { "do": "select", "names": [ "SUB_002.jpg" ] },
+    { "do": "key", "key": "F2" },
+    { "do": "screenshot", "name": "rename-gallery" },
+    { "do": "key", "key": "Escape" },
+    { "do": "assert-entries", "contains": [ "SUB_002.jpg" ] },
+
+    // --- Where the selection lands after an operation ---------------
+    { "do": "view", "mode": "Details" },
+    { "do": "select", "names": [ "SUB_005.jpg" ] },
+    { "do": "command", "name": "delete" },
+    { "do": "assert-entries", "absent": [ "SUB_005.jpg" ], "selected": [ "SUB_006.jpg" ] },
+    { "do": "note", "text": "after a delete the selection is on the next row" },
+    { "do": "command", "name": "undo" },
+    { "do": "assert-entries", "contains": [ "SUB_005.jpg" ], "selected": [ "SUB_005.jpg" ] },
+    { "do": "note", "text": "after Ctrl+Z the selection is on what came back" },
+
+    { "do": "command", "name": "up" },
+    { "do": "assert-entries", "selected": [ "sub" ] },
+    { "do": "note", "text": "after a step up the folder we left is selected" },
+    { "do": "screenshot", "name": "after-up" },
+
+    { "do": "assert-log", "scope": "all", "noErrors": true }
+  ]
+}

@@ -222,6 +222,7 @@ public partial class MainWindow : Window {
         var log = ServiceLocator.Get<Wander.Core.Logging.ILogger>();
         Wander.Core.Diagnostics.PerfLog.Start(log);
         Diagnostics.PerfCounters.Start(log);
+        Diagnostics.SystemVitals.Start(log);
         Diagnostics.UiStallWatch.Start(Dispatcher);
         // Bubbling, so it sees focus landing anywhere in the window.
         GotKeyboardFocus += OnZoneFocusChanged;

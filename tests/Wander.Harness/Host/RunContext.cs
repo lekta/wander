@@ -38,6 +38,16 @@ public sealed class Scenario {
     /// <summary>Profiles to generate when the sandbox does not exist yet.</summary>
     public string[] Profiles { get; set; } = { "photos", "raw" };
 
+    /// <summary>
+    /// A <c>state.json</c> from <c>tests\Fixtures\state\</c> to start on,
+    /// named without the extension (<c>"0.2.1"</c>). Not a sandbox profile
+    /// even though it reads like one: the file has to be in the data
+    /// directory before the app's own startup reads it, which is before any
+    /// profile could have run. Empty means start with no state at all,
+    /// which is what every other scenario wants.
+    /// </summary>
+    public string? State { get; set; }
+
     /// <summary>Stop at the first failed step (default) or run everything and report.</summary>
     public bool StopOnFailure { get; set; } = true;
 

@@ -14,8 +14,8 @@ FINALIZING.md), а не остаётся тут зачёркнутым.
 
 ## Спринт 8 (текущий)
 
-Закрыты: чистка #4 (секция O) и стоимость контейнеров списка (секция R) —
-оба в DONE.md. Осталось два блока:
+Закрыты: чистка #4 (секция O), стоимость контейнеров списка (секция R) и
+QA-харнесс (секция S) — все в DONE.md. Осталось два блока:
 
 | | Блок | Что | Секция |
 |---|---|---|---|
@@ -273,56 +273,6 @@ delete + copy и теряет непересекающееся (TECHDEBT), Пр�
 
 Минимум на спринт: Q1 + Q2; Q3 и Q4 меняют батч и требуют решения по
 контракту.
-
-### S. QA-харнесс — [P1, спринт 8; ядро сделано 2026-09-02]
-
-Сделано (Фабле): `AppPaths` (`--data-dir` / `--portable` / `WANDER_DATA_DIR`,
-пять путей через один корень), шов `IDialogs` + `WpfDialogs` (все
-`MessageBox`, конфликты, `PromptDialog`, выбор папки), `App.Headless`,
-проект `tests/Wander.Harness` (хост поверх настоящего `App`, JSON-сценарии,
-скриншоты, метрики, `ScriptedDialogs`, профили photos / raw / big / deep /
-names, генераторы JPEG-EXIF / CR3 / DNG, `selfcheck`, сценарий
-`smoke-walk` — PASS). Описание и шаги — QA.md, «Автоматизация».
-
-**Опусу**, по шагу на коммит, каждый с зелёным `check.bat` и прогоном
-`Wander.Harness selfcheck` + `run Scenarios\smoke-walk.json`; отчёт
-заканчивается напоминанием позвать Фабле на ревью:
-
-- **S1. `SYS`-строка в логе.** В `UiStallWatch` раз в 5 с и на каждый
-  `ui.stall`: `SYS ws=<МБ> private=<МБ> gen=<g0>/<g1>/<g2> alloc=+<МБ>
-  loh=<МБ> handles=<n> threads=<n> cpu=<%>`. `Process.GetCurrentProcess()`
-  один раз, `Refresh()` перед чтением; `GC.CollectionCount`,
-  `GC.GetTotalAllocatedBytes`, `GC.GetGCMemoryInfo().GenerationInfo[3]`;
-  CPU — дельта `TotalProcessorTime` / стена / `ProcessorCount`. Заметно не
-  аллоцировать; Core не трогать. В `RunReport` харнесса — секция `SYS`
-  (последние 5 строк). Образец расчёта — `MetricsSampler` в харнессе.
-- **S2. Профили песочницы** — строка в `SandboxBuilder._profiles` на
-  профиль: `docs`, `code`, `media`, `attrs`, `links`, `state` — состав в
-  таблице QA.md. Zip-документы — `ZipArchive` + минимальный XML; pdf —
-  один текстовый объект руками; html — `<img src="http://…">` и `fetch()`;
-  `.lnk` — `ShellShortcutService`; ACL — `icacls /deny`; `state` — копии
-  `state.json` прошлых версий из `tests/Fixtures/state/`, кладутся в
-  data-dir прогона по полю сценария `"state": "0.2.1"`. mp3 / flac / ogg
-  — файлы в `tests/Fixtures/media/` даст человек. `.gitignore` игнорирует
-  `*.meta` и `*.lnk` — генерировать, не коммитить.
-- **S3. Сценарии по чек-листам** в `Scenarios/`: `focus-keys` (раздел
-  «Фокус, выделение и клавиатура»: стрелки на краю сетки через `key`,
-  `F2` во всех видах, выделение после удаления / undo / `up`),
-  `tree-bookmarks` (нужны шаги `tree-expand path`, `bookmark add|remove
-  path` через `MainViewModel` / `FolderTreesController` — добавить в
-  раннер), `file-ops` (copy / cut / paste между папками песочницы, конфликт
-  с `dialogs conflict: Skip|Replace|Rename`, read-only с `attrs`, цепочка
-  undo), `search` (шаг `search {name, text, subfolders}` через
-  `ContentSearchController` — добавить), `preview-formats` (каждая ветка
-  панели по `docs` / `code` / `media`, скриншот на формат), `watcher` (`fs
-  create` снаружи → `assert-entries contains` без `refresh`), `soak`
-  (команда `soak <минуты>`: случайные навигации, `measure` раз в минуту,
-  критерий — плато WS и handles). Каждый сценарий заканчивается
-  `assert-log noErrors`.
-- **S4. `check.bat qa`** — сборка, `selfcheck`, `smoke-walk`; не в обычном
-  прогоне (минуты); печатает путь к `report.md`.
-- **S5. Доки по факту S1–S4**: ARCHITECTURE («QA-харнесс»), QA.md (новые
-  шаги и профили). Чек-лист в приложении — отдельно, **N**, после решения.
 
 ## Остатки чистки #4 (секция O, закрыта 2026-09-01)
 

@@ -1,0 +1,49 @@
+{
+  // Changes made behind the app's back. Nothing here presses refresh: the
+  // whole point is that the folder guard notices on its own, and a step
+  // that helped it along would test nothing. The sleeps are the watch
+  // interval (500 ms) plus room for the listing that follows.
+  "name": "watcher",
+  "sandbox": "watch",
+  "profiles": [ "photos" ],
+  "steps": [
+    { "do": "navigate", "path": "{sandbox}\\photos\\sub" },
+    { "do": "assert-entries", "count": 10 },
+
+    // --- Something appeared -------------------------------------------
+    { "do": "fs", "op": "create", "path": "{sandbox}\\photos\\sub\\from-outside.txt", "bytes": 64 },
+    { "do": "sleep", "ms": 1500 },
+    { "do": "assert-entries", "contains": [ "from-outside.txt" ], "count": 11 },
+    { "do": "assert-log", "scope": "all", "absent": "HARNESS step refresh" },
+    { "do": "note", "text": "a file created from outside turned up without a refresh" },
+    { "do": "screenshot", "name": "appeared" },
+
+    // --- A folder appeared, then went ---------------------------------
+    { "do": "fs", "op": "mkdir", "path": "{sandbox}\\photos\\sub\\from-outside-dir" },
+    { "do": "sleep", "ms": 1500 },
+    { "do": "assert-entries", "contains": [ "from-outside-dir" ] },
+    { "do": "fs", "op": "delete", "path": "{sandbox}\\photos\\sub\\from-outside-dir" },
+    { "do": "sleep", "ms": 1500 },
+    { "do": "assert-entries", "absent": [ "from-outside-dir" ] },
+
+    // --- Content changed, composition did not -------------------------
+    //
+    // This is the rule the whole listing hangs on: writing into a file that
+    // is already in the folder must not rebuild it. Selection and the row
+    // count are what say so from here; that the rows did not visibly jump
+    // is a look-with-your-eyes item.
+    { "do": "select", "names": [ "SUB_004.jpg" ] },
+    { "do": "fs", "op": "append", "path": "{sandbox}\\photos\\sub\\from-outside.txt", "text": "more bytes\r\n" },
+    { "do": "sleep", "ms": 1500 },
+    { "do": "assert-entries", "count": 11, "selected": [ "SUB_004.jpg" ] },
+    { "do": "note", "text": "a write into an existing file kept the selection and did not change the count" },
+    { "do": "screenshot", "name": "content-changed" },
+
+    // --- And gone again -----------------------------------------------
+    { "do": "fs", "op": "delete", "path": "{sandbox}\\photos\\sub\\from-outside.txt" },
+    { "do": "sleep", "ms": 1500 },
+    { "do": "assert-entries", "absent": [ "from-outside.txt" ], "count": 10 },
+
+    { "do": "assert-log", "scope": "all", "noErrors": true }
+  ]
+}

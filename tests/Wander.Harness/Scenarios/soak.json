@@ -1,0 +1,32 @@
+{
+  // Thirty minutes of random navigation, the release-run item from QA.md.
+  // What it is looking for is a shape, not an event: memory that comes to
+  // a plateau, a handle count that comes back down, no errors, and the SYS
+  // lines in the log telling the same story from inside the process.
+  //
+  // The plateau is measured from the end of the first minute, not from
+  // the start: the first minute is the thumbnail caches filling, and no
+  // run would ever pass if that counted. So three minutes is the
+  // shortest length that measures anything - one to warm up and two to
+  // watch. The release run (QA.md, "Предрелизный прогон") is thirty:
+  // raise "minutes" and leave the limits alone.
+  "name": "soak",
+  "sandbox": "default",
+  "profiles": [ "photos", "raw", "big", "names" ],
+  "stepTimeoutMs": 2400000,
+  "steps": [
+    { "do": "navigate", "path": "{sandbox}" },
+    { "do": "measure", "name": "soak-start" },
+    {
+      "do": "soak",
+      "minutes": 3,
+      "maxWorkingSetGrowthMb": 150,
+      "maxHandleGrowth": 500
+    },
+    { "do": "measure", "name": "soak-end" },
+    { "do": "screenshot", "name": "after-soak" },
+    { "do": "assert-log", "scope": "all", "regex": "^SYS " },
+    { "do": "note", "text": "compare the SYS tail with the first lines: working set, handles and gen2 all have to have stopped climbing" },
+    { "do": "assert-log", "scope": "all", "noErrors": true }
+  ]
+}

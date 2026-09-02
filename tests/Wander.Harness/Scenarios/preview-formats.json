@@ -1,0 +1,112 @@
+{
+  // One screenshot per branch of the preview pane. There is no assertion
+  // that a picture is the right picture - that is what the screenshots are
+  // for, and reading them is the reviewer's job - but the pane has to
+  // route, load and draw every one of them without an error in the log,
+  // and that part is checked here.
+  //
+  // WebView2 is an HWND, so the pdf / html / markdown / fb2 shots come out
+  // with a hole where the document is. The point of taking them anyway is
+  // the rest of the window: the pane's frame, the footer, and whether the
+  // list underneath survived the load.
+  "name": "preview-formats",
+  "sandbox": "formats",
+  "profiles": [ "photos", "raw", "docs", "code", "media", "links" ],
+  "steps": [
+    { "do": "preview", "on": true },
+
+    // --- Pictures -----------------------------------------------------
+    { "do": "navigate", "path": "{sandbox}\\photos" },
+    { "do": "view", "mode": "Details" },
+    { "do": "select", "names": [ "IMG_0002.jpg" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "image-jpeg" },
+
+    { "do": "navigate", "path": "{sandbox}\\raw" },
+    { "do": "select", "names": [ "IMG_0002.CR3" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "image-cr3" },
+    { "do": "select", "names": [ "DSC_0002.dng" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "image-dng" },
+
+    // --- Documents ----------------------------------------------------
+    { "do": "navigate", "path": "{sandbox}\\docs" },
+    { "do": "select", "names": [ "manual.pdf" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "web-pdf" },
+    { "do": "select", "names": [ "page.html" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "web-html" },
+    { "do": "note", "text": "page.html asks for an image over http and calls fetch() - neither should resolve; check the network with your eyes" },
+    { "do": "select", "names": [ "readme.md" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "markdown" },
+    { "do": "select", "names": [ "story.fb2" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "book-fb2" },
+    { "do": "select", "names": [ "letter.rtf" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "document-rtf" },
+    { "do": "select", "names": [ "cp866.txt" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "text-cp866" },
+    { "do": "select", "names": [ "cp1251.txt" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "text-cp1251" },
+
+    // --- Code ---------------------------------------------------------
+    { "do": "navigate", "path": "{sandbox}\\code" },
+    { "do": "select", "names": [ "Program.cs" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "code-cs" },
+    { "do": "select", "names": [ "Window.xaml" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "code-xaml" },
+    { "do": "select", "names": [ "change.diff" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "code-diff" },
+    { "do": "select", "names": [ "build.bat" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "code-bat-866" },
+    { "do": "select", "names": [ "Settings.asset" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "maybetext-yaml" },
+    { "do": "select", "names": [ "Binary.asset" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "maybetext-binary" },
+    { "do": "note", "text": "the same extension twice: one is YAML and shows as code, the other is a blob and should refuse" },
+
+    // --- Media --------------------------------------------------------
+    { "do": "navigate", "path": "{sandbox}\\media" },
+    { "do": "select", "names": [ "tone.wav" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "audio-wav" },
+    { "do": "select", "names": [ "cube.stl" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "model-stl" },
+    { "do": "select", "names": [ "cube.obj" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "model-obj" },
+    { "do": "select", "names": [ "cube.gltf" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "model-gltf" },
+    { "do": "note", "text": "the three models are one cube - they have to look alike" },
+    { "do": "note", "text": "formats that need an encoder (mp3, flac, m4a, mp4, gif, webp) are in this folder only when tests/Fixtures has them - see the fixtures line in the sandbox summary" },
+
+    // --- Folders, and a shortcut to one -------------------------------
+    { "do": "navigate", "path": "{sandbox}\\links" },
+    { "do": "select", "names": [ "to-folder.lnk" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "shortcut-folder" },
+    { "do": "select", "names": [ "broken.lnk" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "shortcut-broken" },
+    { "do": "select", "names": [ "target-folder" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "folder-summary" },
+
+    { "do": "measure", "name": "end-of-formats" },
+    { "do": "assert-log", "scope": "all", "noErrors": true }
+  ]
+}

@@ -1,0 +1,91 @@
+{
+  // Copy, cut and paste between two folders of the sandbox, each of the
+  // three conflict answers on the same collision, a read-only file, a file
+  // somebody else has open, and an undo chain walked all the way back.
+  //
+  // Every dialog is answered by policy and every answer is listed in the
+  // report - a run that said yes to something it should have refused is
+  // visible there rather than only in its consequences.
+  "name": "file-ops",
+  "sandbox": "ops",
+  "profiles": [ "photos", "attrs" ],
+  "steps": [
+    // A run that died halfway leaves its working folder behind, and the
+    // counts below would then be counting somebody else's files.
+    { "do": "fs", "op": "delete", "path": "{sandbox}\\photos\\target" },
+    { "do": "navigate", "path": "{sandbox}\\photos" },
+    { "do": "command", "name": "new-folder" },
+    { "do": "rename", "name": "Новая папка", "to": "target" },
+
+    // --- Copy, then the three answers to the same conflict -----------
+    { "do": "select", "names": [ "IMG_0001.jpg", "IMG_0002.jpg", "IMG_0003.jpg" ] },
+    { "do": "command", "name": "copy" },
+    { "do": "navigate", "path": "{sandbox}\\photos\\target" },
+    { "do": "command", "name": "paste" },
+    { "do": "assert-entries", "count": 3 },
+
+    { "do": "dialogs", "conflict": "Skip" },
+    { "do": "command", "name": "paste" },
+    { "do": "assert-entries", "count": 3 },
+    { "do": "note", "text": "Skip on a full collision leaves the folder as it was" },
+
+    { "do": "dialogs", "conflict": "Rename" },
+    { "do": "command", "name": "paste" },
+    { "do": "assert-entries", "min": 4 },
+    { "do": "note", "text": "Rename adds copies alongside" },
+    { "do": "screenshot", "name": "after-rename-conflict" },
+
+    { "do": "dialogs", "conflict": "Replace" },
+    { "do": "command", "name": "paste" },
+    { "do": "note", "text": "Replace overwrites without adding rows" },
+
+    // --- Cut and paste, which is a move ------------------------------
+    { "do": "select", "names": [ "IMG_0003.jpg" ] },
+    { "do": "command", "name": "cut" },
+    { "do": "navigate", "path": "{sandbox}\\photos" },
+    { "do": "command", "name": "paste" },
+    { "do": "navigate", "path": "{sandbox}\\photos\\target" },
+    { "do": "assert-entries", "absent": [ "IMG_0003.jpg" ] },
+    { "do": "note", "text": "a cut file left the folder it was cut from" },
+
+    // --- A file somebody else has open -------------------------------
+    { "do": "navigate", "path": "{sandbox}\\attrs" },
+    { "do": "fs", "op": "lock", "path": "{sandbox}\\attrs\\locked.txt" },
+    { "do": "select", "names": [ "locked.txt" ] },
+    { "do": "command", "name": "permanent-delete" },
+    { "do": "assert-entries", "contains": [ "locked.txt" ] },
+    { "do": "assert-log", "scope": "all", "contains": "Delete failed" },
+    { "do": "note", "text": "a file held open by another handle survives the delete - the message naming the process is a look-with-your-eyes item" },
+    { "do": "screenshot", "name": "locked-file" },
+    { "do": "fs", "op": "unlock", "path": "{sandbox}\\attrs\\locked.txt" },
+
+    // --- Read-only ----------------------------------------------------
+    { "do": "select", "names": [ "readonly.txt" ] },
+    { "do": "command", "name": "delete" },
+    { "do": "screenshot", "name": "readonly-deleted" },
+    { "do": "command", "name": "undo" },
+    { "do": "assert-entries", "contains": [ "readonly.txt" ] },
+
+    // --- Undo all the way back ---------------------------------------
+    { "do": "navigate", "path": "{sandbox}\\photos\\target" },
+    { "do": "command", "name": "undo" },
+    { "do": "command", "name": "undo" },
+    { "do": "command", "name": "undo" },
+    { "do": "screenshot", "name": "after-undo-chain" },
+
+    // Tidy up: permanent, because the recycle bin is the one part of the
+    // machine a sandbox run does touch.
+    { "do": "navigate", "path": "{sandbox}\\photos" },
+    { "do": "select", "names": [ "target" ] },
+    { "do": "command", "name": "permanent-delete" },
+    { "do": "assert-entries", "absent": [ "target" ] },
+
+    {
+      // Two failures are the point of this scenario, so they are named
+      // rather than tolerated: the delete that had to fail on a locked
+      // file, and the audit line every permanent delete writes.
+      "do": "assert-log", "scope": "all", "noErrors": true,
+      "allow": [ "Delete failed", "Permanent delete" ]
+    }
+  ]
+}

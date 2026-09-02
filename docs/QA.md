@@ -13,7 +13,7 @@
 | 1 | Тесты Core (xUnit, фейки) | логику, машины решений, гонки в контроллерах | UI, COM, диск | да, `check.bat` |
 | 2 | Сборка, `format`, `check-strings`, `deps.ps1` | компилируемость, ключи ресурсов, циклы папок | всё поведение | да |
 | 3 | Smoke (`--smoke`) | XAML, ресурсы, регистрация, первый кадр и листинг | жесты, содержимое | да, `check.bat run` |
-| 4 | Консольный харнесс на класс | конвертеры, `TreeNodeViewModel`, контроллеры, замер одной операции | окно | частично: `Wander.Harness selfcheck` (генераторы против читателей); разовые — в scratchpad |
+| 4 | Консольный харнесс на класс | конвертеры, `TreeNodeViewModel`, контроллеры, замер одной операции | окно | частично: `Wander.Harness selfcheck` (генераторы против читателей: RAW, EXIF, zip-документы, кодировки, теги WAV, меши); разовые — в scratchpad |
 | 5 | Оконный харнесс за экраном | фокус, выделение, rename, раскладка, приземления, скриншоты, PerfLog / GC / память — на песочнице | обмен с системой, настоящий ввод ОС | **есть**: `tests/Wander.Harness`, ниже |
 | 6 | UIA (FlaUI) на релизном exe | настоящий ввод, поставленный бинарник, DnD с Проводником | ничего сверх 5 по коду; хрупкие селекторы | нет; только Sandbox / VM |
 | 7 | Человек по чек-листу | «прыгает или нет», обмен с системой, внешний вид | масштаб | чек-листы ниже |
@@ -48,16 +48,21 @@ exe), переменная `WANDER_DATA_DIR`, иначе `%LOCALAPPDATA%\Wander`
 | `big` (есть) | N файлов по 1 КБ + 50 подпапок | виртуализация, `list.apply`, `ListingDiff`, поиск 5000 |
 | `deep` (есть) | 70 уровней + junction `l01\l02\loop` → `l01` (`mklink /J`) | предел 64, `FolderStatistics`, `CountAndSum`, обход поиска |
 | `names` (есть) | кириллица, эмодзи, RTL, диакритика, точки, ведущие пробелы, имя 200 символов, путь > 260 | type-ahead, rename, guard, крошки |
-| `docs` (Опус) | docx / xlsx / pptx / epub / odt (zip + XML), fb2, md с таблицей, rtf, минимальный pdf, html с внешней картинкой и `fetch()`, txt в UTF-8 / 1251 / 866 / UTF-16 | поиск по содержимому, экстракторы, панель, изоляция WebView2 |
-| `media` (Опус) | wav с RIFF-INFO генерируется; mp3 / flac / ogg / m4a / видео / gif / webp — из `tests/Fixtures/` (что нужно и зачем — `tests/Fixtures/README.md`; отсутствующий формат — пропуск с пометкой); stl / obj / gltf — куб | аудио-карточка, теги, видео-миниатюра, 3D |
-| `code` (Опус) | cs, xaml, yaml, bat, diff, Unity `.asset` (YAML и бинарный) + `.meta` | подсветка, `TextProbe`, спутники |
-| `attrs` (Опус) | `+H`, `+S`, `+H+S`, `desktop.ini` с иконкой, read-only, ACL deny (`icacls`), файл, открытый харнессом | видимость, удаление, «файл занят», иконки панелей |
-| `links` (Опус) | `.lnk` на файл / папку / битый | прозрачность ярлыка, миниатюра, «Перейти к оригиналу» |
-| `state` (Опус) | `state.json` прошлых версий из `tests/Fixtures/state/` в data-dir прогона | загрузка без падения, `WindowPlacement` |
+| `docs` (есть) | docx / xlsx / pptx / odt / epub (zip + XML), fb2 с обложкой-`<binary>`, md с таблицей, rtf (кириллица `\'xx` под `ansicpg1251`), pdf в один текстовый объект с ручным xref, html с картинкой по http и `fetch()`, txt в UTF-8 / UTF-16 / 1251 / 866 — в прозе каждого слово `needle42` и больше нигде в песочнице; плюс `.doc` / `.pdf` / `.rtf` / `.docx` / … из `tests/Fixtures/`, что там есть | поиск по содержимому, экстракторы, панель, `EncodingProbe`, изоляция WebView2 |
+| `media` (есть) | генерируются `tone.wav` (RIFF `LIST`/`INFO`, теги в 1251), один куб тремя файлами `cube.stl` / `.obj` / `.gltf`, `cover.jpg` рядом с треками; из `tests/Fixtures/` по расширению — mp3, flac, ogg, opus, m4a, m4b, aac, wma, mp4, webm, gif, webp, heic (чего нет — строка `missing` в сводке, не ошибка) | аудио-карточка, теги, обложка из папки, видео-миниатюра, 3D |
+| `code` (есть) | `Program.cs`, `Window.xaml`, `pipeline.yaml`, `change.diff`, `build.bat` **в 866** с кириллицей, Unity `Settings.asset` (YAML) и `Binary.asset` (блоб) + `.meta` на оба | подсветка, `TextProbe` на одном расширении в две стороны, спутники |
+| `attrs` (есть) | `+H`, `+S`, `+H+S`, read-only, `themed\` с `desktop.ini` и `+S` на самой папке, `denied.txt` под `icacls /deny *S-1-1-0:(R)` (по SID: на локализованной винде имя другое), `locked.txt` — обычный файл, хэндл берёт шаг `fs lock` | видимость, удаление, «файл занят», иконка папки из `desktop.ini` |
+| `links` (есть) | `to-file.lnk`, `to-folder.lnk`, `broken.lnk` — через настоящий `ShellShortcutService` | прозрачность ярлыка, миниатюра, «Перейти к оригиналу» |
+| `state` — **не профиль** | `state.json` прошлой версии кладётся в data-dir прогона полем сценария `"state": "0.2.1"` (файл `tests/Fixtures/state/0.2.1.json`) — до старта `App`, раньше, чем любой профиль успел бы отработать. Файла нет — прогон падает сразу, а не проходит молча | загрузка без падения, `WindowPlacement` |
 
 `.gitignore` игнорирует `*.meta` и `*.lnk` — такие файлы только генерировать.
 Очистка — `SandboxBuilder.Remove`: junction удаляется как junction, потом
 дерево целиком.
+
+**Песочница переживает прогон и делится между сценариями.** Сценарий
+убирает за собой сам (`permanent-delete` в конце); упавший на середине — не
+убирает, и следующий прогон считает чужие файлы. Отсюда `fs delete` первым
+шагом там, где важен точный счёт, и `--rebuild`, когда песочница разъехалась.
 
 ## Матрица «трогал → проверь»
 
@@ -302,19 +307,46 @@ alloc=+N MB loh=… handles=… threads=… cpu=…%`. Цена — нескол
 трогаются.
 
 ```pwsh
+.\tools\check.bat qa                              # сборка + selfcheck + smoke-walk, минуты
 $h = "tests\Wander.Harness\bin\Debug\net10.0-windows10.0.19041.0\Wander.Harness.exe"
-& $h selfcheck                                    # генераторы против читателей Core (RAW, EXIF)
+& $h selfcheck                                    # генераторы против читателей Core
 & $h sandbox D:\tmp\sb --profiles photos,raw      # песочница руками
 & $h run tests\Wander.Harness\Scenarios\smoke-walk.json [--sandbox dir] [--out dir] [--rebuild]
 ```
 
 Коды: 0 — прошло, 2 — шаг упал (скриншот `fail-N` и причина в отчёте),
-70 — упал сам харнесс.
+70 — упал сам харнесс. `check.bat qa` — отдельный режим, в обычный
+`check.bat` не входит: минуты против секунд.
 
-**Что подменяется.** `ILogger` → `CapturingLogger` (строки в памяти: по
-ним ждём тишину и делаем `assert-log`); `IDialogs` → `ScriptedDialogs`
-(ответ по виду диалога, конфликты по политике, каждый вопрос попадает в
-отчёт); `IAppStateStore` не подменяется — пишет в изолированный корень.
+`selfcheck` проверяет генераторы теми классами, которыми их читает
+приложение: превью и ориентация из CR3 / DNG / JPEG
+(`RawPreviewExtractor`, `MetadataExtractor`), `needle42` из пяти
+zip-документов (`ZipDocumentExtractor`), четыре кодировки
+(`EncodingProbe`), fb2 с обложкой, теги `tone.wav` (`AudioTags`) и «в кубе
+12 треугольников» для всех трёх мешей (`MeshFile`). Смысл — отличать
+сломанный сценарий от кривого тестового файла.
+
+**Что подменяется.** `ILogger` → `CapturingLogger`; `IDialogs` →
+`ScriptedDialogs` (ответ по виду диалога, конфликты по политике, каждый
+вопрос попадает в отчёт); `IAppStateStore` не подменяется — пишет в
+изолированный корень.
+
+`CapturingLogger` слушает событие `FileLogger.Written`, а не свои
+собственные вызовы: сервисы из `PlatformBootstrapper` получают логгер в
+конструкторе и больше не ищут его в локаторе, поэтому логгер,
+зарегистрированный поверх, их строк не видит. До 2026-09-02 `assert-log
+noErrors` их и не видел — `ERROR Delete failed` лежал в файле, а прогон
+рапортовал «ошибок нет».
+
+**Окно не должно оказаться на экране.** `App.Headless` в `App.OnStartup`
+только включается (`|=`); присваивание затирало флаг харнесса, и окно
+выходило на рабочий стол с фокусом (2026-09-02). `HarnessApp` перепроверяет
+флаг и отказывается работать при выключенном, а позицию окна пишет в лог:
+`HARNESS window at (-26214, -26214), taskbar=False, active=False`.
+
+**Поля сценария**: `name`, `sandbox` (папка под `%TEMP%\wander-sandbox`),
+`profiles[]`, `state` (см. таблицу профилей), `stopOnFailure`,
+`stepTimeoutMs`, `steps[]`. Комментарии `//` разрешены.
 
 **Шаги сценария** (`{"do": …}`; пути с `{sandbox}` и `{out}`):
 `navigate path` (ждёт первый экран и тишину), `wait-idle [quietMs,
@@ -326,21 +358,74 @@ undo, up, back, forward, clear-search; деструктивные — тольк
 модификаторов — `Keyboard.Modifiers` читает настоящую клавиатуру; для
 `Ctrl`-сочетаний есть `command`), `settings name value` (свойство
 `SettingsViewModel`), `dialogs {default | kind + accept | conflict | prompt
-| folder}`, `fs {op: create | mkdir | append | delete, path}` (только в
-песочнице), `preview on`, `assert-log {contains | regex | absent |
-noErrors, scope: step|all}`, `assert-entries {count | min | max | contains |
-absent | selected}`, `measure name`, `sleep ms`, `note text`.
+| folder}`, `fs {op: create | mkdir | append | delete | lock | unlock,
+path}` (только в песочнице; `delete` не ругается на отсутствующий путь —
+это шаг сброса; `lock` держит хэндл до `unlock` или конца прогона),
+`preview on`, `tree-expand path [panel: drives|bookmark] [expand: false]`,
+`bookmark {op: add|remove, path}`, `search {name, text, subfolders,
+binaries, searchTimeoutMs}`, `soak {minutes, maxWorkingSetGrowthMb,
+maxHandleGrowth, seed}`, `assert-log {contains | regex | absent | noErrors
+[+ allow[]], scope: step|all}`, `assert-entries {count | min | max |
+contains | absent | selected}`, `measure name`, `sleep ms`, `note text`.
+
+`tree-expand` идёт по уровням, а не зовёт `Trees.ExpandTo`: ветка читает
+детей с диска в момент раскрытия, и путь на шесть уровней вниз до этого
+просто не находится.
+
+`assert-log noErrors` + `allow[]` — сценарий, который **нарочно** вызывает
+ошибку (занятый файл, безвозвратное удаление), называет её. Именно
+называет: ожидаемая ошибка остаётся проверяемой, а не становится уровнем,
+на который перестали смотреть.
+
+`soak` меряет плато **от конца первой минуты**, а не от старта: первая
+минута — это заполнение кэша миниатюр, и на ней провалился бы любой
+прогон. Отсюда минимум три минуты (одна на прогрев, две на наблюдение);
+предрелизные тридцать — это `"minutes": 30` при тех же порогах.
+
+**Сценарии** (`Scenarios\`):
+
+| Файл | Профили | Что закрывает |
+|---|---|---|
+| `smoke-walk` | photos, raw, big | все виды, превью JPEG / CR3 / DNG, 5000 файлов, создание → rename → корзина → undo |
+| `focus-keys` | photos | «Фокус, выделение и клавиатура»: стрелки на краях сетки, `F2` в четырёх видах, выделение после delete / undo / up |
+| `tree-bookmarks` | photos, raw, big | ветка не сворачивается после `F5`, созданная папка появляется в ветке, закладка добавляется и снимается |
+| `file-ops` | photos, attrs | copy / cut / paste между папками, три ответа на один конфликт, занятый файл, read-only, цепочка undo |
+| `search` | docs, code, big | маска по имени, `needle42` по содержимому во всех форматах, четыре кодировки, подпапки, поиск по 5000 |
+| `preview-formats` | photos, raw, docs, code, media, links | по скриншоту на ветку панели (23 штуки) |
+| `watcher` | photos | появилось / исчезло / изменилось снаружи — без единого `refresh` |
+| `soak` | photos, raw, big, names | случайная навигация, плато WS и handles, `SYS` в логе |
+
+Что клавиатурой и мышью не воспроизводится (`Shift`-выделение, DnD,
+чужие пункты меню), помечено в сценариях шагом `note` и попадает в отчёт
+списком «посмотреть глазами».
 
 **«Тишина»** = `IsListLoading == false`, строка `First screen painted` для
 папки, в которую навигировали (ждём до 5 с), и ничего в логе 400 мс.
 Скриншот — `RenderTargetBitmap` визуального дерева: WebView2 (HWND) в нём
 пустой.
 
-**Первый прогон** (`smoke-walk`, Debug, 2026-09-02): 42 шага, PASS, 10
-скриншотов; `ui.stall` 4,1 с на старте (первый экран `C:\` 4,8 с — холодный
-JIT и первые shell-вызовы под Debug, проверить на релизной сборке), WS пик
-516 МБ (Debug плюс харнесс в том же процессе), gen2 = 5 за прогон,
-`WARN` / `ERROR` = 0. Это базлайн харнесса, не приложения.
+**Первый полный прогон** (Debug, 2026-09-02): все восемь сценариев PASS.
+Числа — базлайн харнесса, не приложения: Debug плюс сам харнесс в том же
+процессе.
+
+| Сценарий | Шагов | WS пик | gen2 | Заметное |
+|---|---|---|---|---|
+| `smoke-walk` | 46 | 516 МБ | 5 | `ui.stall` 4,1 с на старте |
+| `focus-keys` | 46 | 487 МБ | 4 | — |
+| `tree-bookmarks` | 29 | 470 МБ | 4 | — |
+| `file-ops` | 51 | 487 МБ | 5 | 8 диалогов, все в отчёте |
+| `search` | 30 | 424 МБ | 4 | `needle42` нашёлся в 12 файлах |
+| `preview-formats` | 60 | 555 МБ | 5 | 23 скриншота |
+| `watcher` | 24 | 443 МБ | 4 | — |
+| `soak` (3 мин) | 8 | 625 МБ | 8 | WS +70 МБ, handles −8, LOH пилой |
+
+Общее: `ui.stall` 4–6 с на первом экране `C:\` под Debug (холодный JIT и
+первые shell-вызовы — проверить на релизной сборке, TECHDEBT),
+`WARN` / `ERROR` = 0 везде, кроме нарочных в `file-ops`.
+
+`soak` — та самая форма, ради которой он есть: рабочий набор вышел на
+плато после первой минуты, хэндлы вернулись ниже начала, LOH ходит пилой
+(110 → 31 МБ), то есть собирается, а не копится.
 
 **Кто что делает** (по правилу чистки #4: Фабле — решения и риск, Опус —
 механика; задачи Опусу — PLAN, S):

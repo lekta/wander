@@ -1,4 +1,4 @@
-# Метрики структуры кода — снимок для технических чисток.
+﻿# Метрики структуры кода — снимок для технических чисток.
 #
 # Смысл скрипта в том, чтобы снимки «до» и «после» были ОДНИМ И ТЕМ ЖЕ
 # измерением. Посчитанное глазами через месяц — это уже другое измерение,
@@ -305,7 +305,10 @@ function Get-Project([string]$path) {
 #
 # Test-Path в конце — потому что закоммиченный файл, который переехал, ещё
 # числится в индексе по старому пути. Считать его нельзя: на диске его нет.
-$tracked = @(git ls-files --cached --others --exclude-standard) | Where-Object { Test-Path -LiteralPath $_ }
+# core.quotepath=off: git иначе отдаёт не-ASCII имена в кавычках и с
+# восьмеричными escape'ами ("tests/Fixtures/Ð...pdf"), и Test-Path
+# на такой строке падает с "Illegal characters in path".
+$tracked = @(git -c core.quotepath=off ls-files --cached --others --exclude-standard) | Where-Object { Test-Path -LiteralPath $_ }
 $csFiles = $tracked | Where-Object { $_ -like '*.cs' -and $_ -ne 'src/Wander.App/AssemblyInfo.cs' }
 $xamlFiles = $tracked | Where-Object { $_ -like '*.xaml' }
 

@@ -439,10 +439,27 @@ Shell-namespace не отслеживаются. Сторож называет �
   `WANDER_DATA_DIR`, иначе `%LOCALAPPDATA%\Wander`); все модальные вопросы
   — через `IDialogs` (2026-09-02).
 - QA-харнесс `tests/Wander.Harness` (2026-09-02): настоящее окно за
-  экраном на сгенерированной песочнице (JPEG с EXIF, CR3, DNG, большие и
-  глубокие папки, junction, имена), JSON-сценарии, скриншоты, метрики
+  экраном на сгенерированной песочнице, JSON-сценарии, скриншоты, метрики
   процесса и GC, диалоги по политике, отчёт; `selfcheck` сверяет
   генераторы с читателями. Механика — ARCHITECTURE, использование — QA.md.
+  - Десять профилей песочницы: `photos`, `raw`, `big`, `deep`, `names`,
+    `docs` (пять zip-документов, fb2, md, rtf, pdf, html, четыре
+    кодировки), `code` (подсветка, Unity `.asset` в двух видах, `.bat` в
+    866), `media` (wav с тегами, куб в stl / obj / gltf, остальное — из
+    `tests/Fixtures/` по расширению), `attrs` (флаги, read-only,
+    `desktop.ini`, `icacls /deny`), `links` (три `.lnk`). `state.json`
+    прошлой версии — поле сценария, не профиль.
+  - Восемь сценариев: `smoke-walk`, `focus-keys`, `tree-bookmarks`,
+    `file-ops`, `search`, `preview-formats` (23 скриншота), `watcher`,
+    `soak` (плато памяти и хэндлов). Шаги сверх базовых: `tree-expand`,
+    `bookmark`, `search`, `soak`, `fs lock|unlock`, `assert-log allow[]`.
+  - `check.bat qa` — сборка, `selfcheck`, `smoke-walk`; в обычный
+    `check.bat` не входит (минуты).
+- `SYS`-строка в логе (`App/Diagnostics/SystemVitals`, 2026-09-02): раз в
+  5 с и на каждый `ui.stall` — рабочий набор, private, счётчики GC,
+  прирост аллокаций, LOH, хэндлы, потоки, CPU. Одна строка не значит
+  ничего, форма за сессию — всё; `soak` смотрит на неё. В отчёте харнесса
+  секция `SYS` (последние пять).
 - Иконки не пропадают: `SHGetFileInfo` сериализован, негативный кэш только
   у миниатюр, `AsyncIcon` переспрашивает через секунду; провал —
   `[icon-diag]`.

@@ -21,7 +21,37 @@
 *.pdf           binary
 *.zip           binary
 *.7z            binary
+*.rar           binary
 *.dll           binary
 *.exe           binary
 *.snk           binary
 *.pfx           binary
+
+# Test fixtures (tests/Fixtures): media and legacy office formats. `text=auto`
+# would usually guess these right, but a .doc or an .rtf has enough ASCII in
+# it to be mistaken for text, and one CRLF conversion is a corrupt fixture.
+*.mp3           binary
+*.flac          binary
+*.ogg           binary
+*.opus          binary
+*.m4a           binary
+*.m4b           binary
+*.aac           binary
+*.wma           binary
+*.wav           binary
+*.mp4           binary
+*.webm          binary
+*.mkv           binary
+*.mov           binary
+*.heic          binary
+*.doc           binary
+*.xls           binary
+*.ppt           binary
+*.docx          binary
+*.xlsx          binary
+*.pptx          binary
+*.odt           binary
+*.epub          binary
+*.djvu          binary
+*.chm           binary
+*.msg           binary

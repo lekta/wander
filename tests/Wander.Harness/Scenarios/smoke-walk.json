@@ -51,6 +51,14 @@
     { "do": "command", "name": "up" },
     { "do": "assert-entries", "selected": [ "sub" ] },
 
-    { "do": "assert-log", "scope": "all", "noErrors": true }
+    // The sandbox outlives the run and is shared with the other
+    // scenarios, so what this one made, it takes away again: a folder
+    // left behind turns the next run's rename into a name collision.
+    { "do": "navigate", "path": "{sandbox}\\photos\\sub" },
+    { "do": "select", "names": [ "renamed-by-harness" ] },
+    { "do": "command", "name": "permanent-delete" },
+    { "do": "assert-entries", "absent": [ "renamed-by-harness" ], "count": 10 },
+
+    { "do": "assert-log", "scope": "all", "noErrors": true, "allow": [ "Permanent delete" ] }
   ]
 }

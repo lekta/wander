@@ -82,6 +82,10 @@ public sealed class RunReport {
         var lines = log.All();
         Section(sb, "First screen", lines.Where(l => l.Message.StartsWith("First screen", StringComparison.Ordinal)));
         Section(sb, "PERF ui.stall", lines.Where(l => l.Message.Contains("ui.stall", StringComparison.Ordinal)));
+        // Vitals are one line every five seconds, so the whole run
+        // would drown the report; the tail is what says where the
+        // process ended up, and metrics.json holds the series.
+        Section(sb, "SYS", lines.Where(l => l.Message.StartsWith("SYS ", StringComparison.Ordinal)).TakeLast(5));
         Section(sb, "WARN / ERROR", lines.Where(l => l.Level != "INFO"));
 
         if (_fatal is not null) {

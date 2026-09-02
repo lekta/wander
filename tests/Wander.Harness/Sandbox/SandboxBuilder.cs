@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using Wander.Platform.Windows.Shell;
 
 namespace Wander.Harness.Sandbox;
 
@@ -35,6 +36,11 @@ public static class SandboxBuilder {
         ["big"] = Big,
         ["deep"] = Deep,
         ["names"] = Names,
+        ["docs"] = Docs,
+        ["code"] = Code,
+        ["media"] = Media,
+        ["attrs"] = Attributes,
+        ["links"] = Links,
     };
 
 
@@ -170,6 +176,151 @@ public static class SandboxBuilder {
     }
 
 
+    /// <summary>
+    /// Every format the content search and the preview pane claim to read,
+    /// one file each, all hiding <see cref="DocumentFactory.Needle"/> in
+    /// their prose. What the generators cannot make - a Word 97 <c>.doc</c>
+    /// among them - is copied in from the fixtures folder if it is there.
+    /// </summary>
+    private static void Docs(SandboxContext c) {
+        string dir = c.Dir("docs");
+        DocumentFactory.WriteAll(dir);
+        c.Fixtures.CopyEach(c, dir, ".doc", ".pdf", ".rtf", ".docx", ".xlsx", ".pptx", ".epub", ".chm", ".msg", ".djvu");
+    }
+
+    /// <summary>
+    /// Source files: one per highlighting branch, plus the pair of Unity
+    /// assets that decide the same extension two different ways. The
+    /// <c>.bat</c> is written in codepage 866 rather than UTF-8, because a
+    /// batch file in DOS Cyrillic is the case <c>EncodingProbe</c> exists
+    /// for and the one nobody ever has a sample of.
+    /// </summary>
+    private static void Code(SandboxContext c) {
+        string dir = c.Dir("code");
+
+        File.WriteAllText(Path.Combine(dir, "Program.cs"),
+            "using System;\r\n\r\nnamespace Sample;\r\n\r\n" +
+            "internal static class Program {\r\n" +
+            "    public static void Main() {\r\n" +
+            "        Console.WriteLine(\"hello\");\r\n" +
+            "    }\r\n}\r\n", new UTF8Encoding(false));
+        File.WriteAllText(Path.Combine(dir, "Window.xaml"),
+            "<Window xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\"\r\n" +
+            "        Title=\"Sample\" Width=\"320\" Height=\"240\">\r\n" +
+            "    <Grid>\r\n        <TextBlock Text=\"hello\"/>\r\n    </Grid>\r\n" +
+            "</Window>\r\n", new UTF8Encoding(false));
+        File.WriteAllText(Path.Combine(dir, "pipeline.yaml"),
+            "name: build\r\non:\r\n  push:\r\n    branches: [ master ]\r\njobs:\r\n" +
+            "  check:\r\n    runs-on: windows-latest\r\n    steps:\r\n" +
+            "      - uses: actions/checkout@v4\r\n      - run: tools\\check.bat\r\n",
+            new UTF8Encoding(false));
+        File.WriteAllBytes(Path.Combine(dir, "build.bat"), CyrillicEncoding.Encode(
+            "@echo off\r\nrem Сборка проекта\r\necho Собираем...\r\ndotnet build\r\n",
+            CyrillicEncoding.Dos866));
+        File.WriteAllText(Path.Combine(dir, "change.diff"),
+            "--- a/Program.cs\r\n+++ b/Program.cs\r\n@@ -5,3 +5,3 @@\r\n" +
+            " internal static class Program {\r\n" +
+            "-        Console.WriteLine(\"hello\");\r\n" +
+            "+        Console.WriteLine(\"hello, world\");\r\n" +
+            " }\r\n", new UTF8Encoding(false));
+
+        // Unity serialises the same extension two ways depending on a
+        // project switch, so .asset is routed as "text if the bytes say so"
+        // - one of each is what makes that decision visible.
+        File.WriteAllText(Path.Combine(dir, "Settings.asset"),
+            "%YAML 1.1\r\n%TAG !u! tag:unity3d.com,2011:\r\n--- !u!114 &11400000\r\n" +
+            "MonoBehaviour:\r\n  m_ObjectHideFlags: 0\r\n  m_Name: Settings\r\n" +
+            "  volume: 0.8\r\n  language: ru\r\n", new UTF8Encoding(false));
+        var blob = new byte[4096];
+        new Random(17).NextBytes(blob);
+        blob[0] = 0;
+        File.WriteAllBytes(Path.Combine(dir, "Binary.asset"), blob);
+        foreach (string asset in new[] { "Settings.asset", "Binary.asset" }) {
+            File.WriteAllText(Path.Combine(dir, asset + ".meta"),
+                "fileFormatVersion: 2\r\nguid: 0123456789abcdef0123456789abcdef\r\n" +
+                "NativeFormatImporter:\r\n  externalObjects: {}\r\n  userData:\r\n",
+                new UTF8Encoding(false));
+        }
+    }
+
+    /// <summary>
+    /// Audio, video and pictures. A WAV and three views of one cube are
+    /// generated; everything that needs a real encoder comes from the
+    /// fixtures folder, and a format nobody has supplied is a note rather
+    /// than a failure - the scenario that needs it asserts for itself.
+    /// </summary>
+    private static void Media(SandboxContext c) {
+        string dir = c.Dir("media");
+        MediaFactory.WriteAll(dir);
+        c.Fixtures.CopyEach(c, dir,
+            ".mp3", ".flac", ".ogg", ".opus", ".m4a", ".m4b", ".aac", ".wma",
+            ".mp4", ".webm", ".gif", ".webp", ".heic");
+
+        // A cover beside a track, which is the other half of the audio
+        // card: tags from the file, picture from the folder.
+        PictureFactory.SaveJpeg(Path.Combine(dir, "cover.jpg"), 600, 600, 1, "COVER", seed: 42);
+    }
+
+    /// <summary>
+    /// Files the listing has to decide about rather than just show: hidden
+    /// and system flags, a read-only file, a folder with its own icon, and
+    /// one file the current user is denied read on. <c>locked.txt</c> is
+    /// ordinary here on purpose - a handle held by the builder would be
+    /// gone by the time a scenario ran against a sandbox it did not
+    /// rebuild, so the runner takes it with <c>fs lock</c> instead.
+    /// </summary>
+    private static void Attributes(SandboxContext c) {
+        string dir = c.Dir("attrs");
+
+        Write(dir, "plain.txt", FileAttributes.Normal);
+        Write(dir, "hidden.txt", FileAttributes.Hidden);
+        Write(dir, "system.txt", FileAttributes.System);
+        Write(dir, "hidden-system.txt", FileAttributes.Hidden | FileAttributes.System);
+        Write(dir, "readonly.txt", FileAttributes.ReadOnly);
+        Write(dir, "locked.txt", FileAttributes.Normal);
+
+        // A folder only honours desktop.ini when it is marked system or
+        // read-only - without the flag the file is just a file and the
+        // custom icon never appears.
+        string themed = c.Dir("attrs", "themed");
+        File.WriteAllText(Path.Combine(themed, "desktop.ini"),
+            "[.ShellClassInfo]\r\nIconResource=%SystemRoot%\\system32\\SHELL32.dll,43\r\n" +
+            "InfoTip=Harness folder with a custom icon\r\n", Encoding.Unicode);
+        File.SetAttributes(Path.Combine(themed, "desktop.ini"), FileAttributes.Hidden | FileAttributes.System);
+        File.SetAttributes(themed, File.GetAttributes(themed) | FileAttributes.System);
+        File.WriteAllText(Path.Combine(themed, "inside.txt"), "inside a themed folder\r\n");
+
+        // Denied to Everyone by SID rather than by name: the well-known
+        // account is spelled differently on a localised Windows, and this
+        // has to work on both.
+        string denied = Path.Combine(dir, "denied.txt");
+        File.WriteAllText(denied, "you should not be able to read this\r\n");
+        c.Note(Run("icacls.exe", $"\"{denied}\" /deny *S-1-1-0:(R)")
+            ? "attrs: denied.txt is unreadable"
+            : "attrs: icacls failed, denied.txt is readable");
+    }
+
+    /// <summary>
+    /// Three shortcuts: to a file, to a folder, and to a path that is not
+    /// there. Made through the app's own <c>IShortcutService</c>, so a
+    /// broken .lnk writer would break the sandbox rather than hide behind
+    /// a hand-built file that Explorer happens to accept.
+    /// </summary>
+    private static void Links(SandboxContext c) {
+        string dir = c.Dir("links");
+        string target = Path.Combine(dir, "target.txt");
+        File.WriteAllText(target, "the file a shortcut points at\r\n");
+        string folder = c.Dir("links", "target-folder");
+        File.WriteAllText(Path.Combine(folder, "inside.txt"), "inside\r\n");
+
+        var shortcuts = new ShellShortcutService();
+        shortcuts.Create(target, Path.Combine(dir, "to-file.lnk"));
+        shortcuts.Create(folder, Path.Combine(dir, "to-folder.lnk"));
+        shortcuts.Create(Path.Combine(dir, "gone.txt"), Path.Combine(dir, "broken.lnk"));
+        c.Note("links: 3 shortcuts");
+    }
+
+
     // --- Sidecars ------------------------------------------------------
 
     private static string Xmp(int rating, string label) {
@@ -189,11 +340,44 @@ public static class SandboxBuilder {
     private static string Pp3(int rank, int color) {
         return $"[General]\r\nRank={rank}\r\nColorLabel={color}\r\nInTrash=false\r\n\r\n[Exposure]\r\nCompensation=0\r\n";
     }
+
+
+    // --- Small helpers -------------------------------------------------
+
+    /// <summary>A one-line text file with attributes; the name says what it is for.</summary>
+    private static void Write(string dir, string name, FileAttributes attributes) {
+        string path = Path.Combine(dir, name);
+        File.WriteAllText(path, $"{name}: {attributes}\r\n", Encoding.UTF8);
+        if (attributes != FileAttributes.Normal) {
+            File.SetAttributes(path, attributes);
+        }
+    }
+
+    /// <summary>Runs a console tool and says whether it succeeded. Nothing here needs its output.</summary>
+    private static bool Run(string exe, string arguments) {
+        try {
+            using var process = Process.Start(new ProcessStartInfo(exe, arguments) {
+                CreateNoWindow = true,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            });
+            if (process is null) {
+                return false;
+            }
+            process.WaitForExit();
+
+            return process.ExitCode == 0;
+        } catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or IOException) {
+            return false;
+        }
+    }
 }
 
 
 public sealed class SandboxContext {
     private readonly List<string> _summary = new();
+    private FixtureLibrary? _fixtures;
 
 
     public SandboxContext(string root, SandboxOptions options) {
@@ -205,6 +389,9 @@ public sealed class SandboxContext {
     public string Root { get; }
 
     public SandboxOptions Options { get; }
+
+    /// <summary>The files no generator can make. Found once, on the first profile that asks.</summary>
+    public FixtureLibrary Fixtures => _fixtures ??= FixtureLibrary.Discover();
 
     public IReadOnlyList<string> Summary => _summary;
 

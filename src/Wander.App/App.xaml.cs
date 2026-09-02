@@ -32,7 +32,12 @@ public partial class App : Application {
 
     protected override void OnStartup(StartupEventArgs e) {
         IsSmokeRun = e.Args.Any(arg => string.Equals(arg, "--smoke", StringComparison.OrdinalIgnoreCase));
-        Headless = IsSmokeRun;
+        // Turned on here, never off. The harness sets it before the
+        // application object exists and there is no command line to say so;
+        // assigning IsSmokeRun to it cleared that, and the harness window
+        // came up on the real desktop and took the focus off whoever was
+        // working there.
+        Headless |= IsSmokeRun;
         // Where state.json, logs and caches live - decided before the
         // logger opens its file, since the logger is the first thing the
         // bootstrapper builds.

@@ -1,4 +1,4 @@
-# Граф зависимостей «от -> к» — проекты и папки внутри проектов (шаг O7).
+﻿# Граф зависимостей «от -> к» — проекты и папки внутри проектов (шаг O7).
 #
 # Дешёвый свод using-ов, а не анализ компилятора: каждая строка
 # `using Wander.X.Y;` (включая alias и static) считается ребром «папка
@@ -37,7 +37,10 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $repoRoot
 
 # Как в metrics.ps1: рабочее дерево, а не индекс, и без исчезнувших файлов.
-$tracked = @(git ls-files --cached --others --exclude-standard) | Where-Object { Test-Path -LiteralPath $_ }
+# core.quotepath=off: git иначе отдаёт не-ASCII имена в кавычках и с
+# восьмеричными escape'ами ("tests/Fixtures/Ð...pdf"), и Test-Path
+# на такой строке падает с "Illegal characters in path".
+$tracked = @(git -c core.quotepath=off ls-files --cached --others --exclude-standard) | Where-Object { Test-Path -LiteralPath $_ }
 $csFiles = $tracked | Where-Object { $_ -like 'src/*.cs' -or $_ -like 'tests/*.cs' }
 
 # Проект и папка файла — из пути на диске.

@@ -48,7 +48,23 @@ public sealed class HarnessApp : Wander.App.App {
         ServiceLocator.Register<ILogFile>(_log);
         ServiceLocator.Register<IDialogs>(_dialogs);
 
-        new MainWindow().Show();
+        // Checked, not assumed. The window is parked off-screen and refuses
+        // activation only while this flag is on, and it is read once, in
+        // MainWindow's constructor - anything that clears it between the
+        // Program setting it and this line puts a live file manager on the
+        // desktop of whoever is working there, and takes their keyboard.
+        // That is the one failure this harness must never have, so it is a
+        // refusal rather than a warning.
+        if (!Wander.App.App.Headless) {
+            _log.Error("HARNESS refusing to run: App.Headless is off, the window would open on the real desktop");
+            Shutdown(70);
+
+            return;
+        }
+
+        var window = new MainWindow();
+        window.Show();
+        _log.Info($"HARNESS window at ({window.Left:F0}, {window.Top:F0}), taskbar={window.ShowInTaskbar}, active={window.IsActive}");
         Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() => _ = RunAsync()));
     }
 

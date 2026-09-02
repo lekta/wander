@@ -39,6 +39,7 @@ public sealed class ScenarioRunner {
     private readonly ScriptedDialogs _dialogs;
     private readonly RunReport _report;
     private readonly MetricsSampler _metrics = new();
+    private readonly Dictionary<string, FileStream> _locked = new(StringComparer.OrdinalIgnoreCase);
     private int _shots;
     private string? _awaitedFolder;
     private volatile bool _firstScreenSeen;
@@ -88,6 +89,10 @@ public sealed class ScenarioRunner {
         _metrics.WriteJson(Path.Combine(_context.OutDir, "metrics.json"));
         _report.Metrics = _metrics.Summary();
         _metrics.Dispose();
+        foreach (var held in _locked.Values) {
+            held.Dispose();
+        }
+        _locked.Clear();
         _log.Logged -= OnLogged;
 
         return failed ? 2 : 0;
@@ -160,6 +165,19 @@ public sealed class ScenarioRunner {
                     await WaitIdleAsync(step);
                     break;
                 }
+            case "tree-expand":
+                await TreeExpandAsync(step);
+                break;
+            case "bookmark":
+                Bookmark(step);
+                await WaitIdleAsync(step);
+                break;
+            case "search":
+                await SearchAsync(step);
+                break;
+            case "soak":
+                await SoakAsync(step);
+                break;
             case "assert-log":
                 AssertLog(step, logStart);
                 break;
@@ -381,16 +399,215 @@ public sealed class ScenarioRunner {
             case "append":
                 File.AppendAllText(path, step.Str("text") ?? "x");
                 break;
+            // Missing is not an error: this is the step a scenario opens
+            // with to clear what a previous run left when it died halfway,
+            // and it has to work on a clean sandbox too.
             case "delete":
                 if (Directory.Exists(path)) {
                     Directory.Delete(path, recursive: true);
-                } else {
+                } else if (File.Exists(path)) {
                     File.Delete(path);
+                }
+                break;
+            // "The file is in use" needs somebody using it. Held here
+            // rather than by the sandbox builder: a run against a sandbox
+            // it did not rebuild would find the handle long gone, and the
+            // check would quietly pass by testing nothing.
+            case "lock":
+                _locked[path] = File.Open(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                break;
+            case "unlock":
+                if (_locked.Remove(path, out var held)) {
+                    held.Dispose();
                 }
                 break;
             default:
                 throw new InvalidDataException($"unknown fs op '{step.Str("op")}'");
         }
+    }
+
+
+    // --- Panels, search, soak ------------------------------------------
+
+    /// <summary>
+    /// Opens one of the two panels down to a folder, a level at a time.
+    /// Level by level rather than in one call because a branch reads its
+    /// children off the disk when it opens: asking for a path six levels
+    /// down before any of them has loaded finds nothing, which is why the
+    /// controller's own <c>ExpandTo</c> is not what a scenario wants.
+    /// </summary>
+    private async Task TreeExpandAsync(JsonElement step) {
+        string path = Normalise(_context.Expand(step.Require("path")));
+        bool bookmarks = string.Equals(step.Str("panel"), "bookmark", StringComparison.OrdinalIgnoreCase);
+        IReadOnlyList<TreeNodeViewModel> level = bookmarks
+            ? _vm.Bookmarks.Items.ToList()
+            : _vm.Trees.Roots.ToList();
+
+        TreeNodeViewModel? node = null;
+        while (true) {
+            var next = level.FirstOrDefault(n => IsUnderOrEqual(path, n.FullPath));
+            if (next is null) {
+                throw new InvalidOperationException(
+                    $"'{path}' is not reachable in the {(bookmarks ? "bookmarks" : "drives")} panel " +
+                    $"(rows: {string.Join(", ", level.Select(n => n.Name))})");
+            }
+
+            node = next;
+            if (Normalise(node.FullPath) == path) {
+                break;
+            }
+
+            node.IsExpanded = true;
+            await WaitIdleAsync(step);
+            level = node.Children.ToList();
+        }
+
+        // The row itself is expanded too unless the scenario only wanted it
+        // brought into view - "expanded" in this panel means "its children
+        // are visible", which is what a chevron click does.
+        if (step.Bool("expand") != false) {
+            node.IsExpanded = true;
+            await WaitIdleAsync(step);
+        }
+        _vm.Trees.Select(node);
+    }
+
+    private void Bookmark(JsonElement step) {
+        string path = _context.Expand(step.Require("path"));
+        switch (step.Require("op").ToLowerInvariant()) {
+            case "add":
+                _vm.Bookmarks.Add(path);
+                break;
+            case "remove":
+                _vm.Bookmarks.Remove(path);
+                break;
+            default:
+                throw new InvalidDataException($"unknown bookmark op '{step.Str("op")}'");
+        }
+    }
+
+    /// <summary>
+    /// Sets up a search the way the search window does and runs it, then
+    /// waits for the pass to finish rather than for the log to go quiet: a
+    /// deep search over a big folder is minutes of work that says nothing
+    /// while it runs.
+    /// </summary>
+    private async Task SearchAsync(JsonElement step) {
+        var search = _vm.ContentSearch;
+        search.NameQuery = step.Str("name") ?? "";
+        search.TextQuery = step.Str("text") ?? "";
+        search.SearchSubfolders = step.Bool("subfolders") ?? false;
+        search.SearchBinaries = step.Bool("binaries") ?? false;
+        search.RunNow();
+
+        var clock = Stopwatch.StartNew();
+        int timeoutMs = step.Int("searchTimeoutMs", 60_000);
+        while (search.IsRunning) {
+            if (clock.ElapsedMilliseconds > timeoutMs) {
+                throw new TimeoutException($"search still running after {timeoutMs} ms");
+            }
+
+            await YieldAsync();
+            await Task.Delay(50);
+        }
+
+        _log.Info($"HARNESS search finished in {clock.ElapsedMilliseconds} ms, {_vm.Entries.Count} rows");
+        await WaitIdleAsync(step);
+    }
+
+    /// <summary>
+    /// Walks the sandbox at random for a while, taking a sample a minute.
+    /// What it is looking for is not a crash but a shape: memory and
+    /// handles that keep climbing for as long as it runs. The limits below
+    /// are measured from the first sample, once the caches have filled -
+    /// growth in the first minute is the app warming up, growth in the
+    /// tenth is a leak.
+    /// </summary>
+    private async Task SoakAsync(JsonElement step) {
+        var folders = Directory
+            .EnumerateDirectories(_context.SandboxRoot, "*", SearchOption.TopDirectoryOnly)
+            .SelectMany(d => new[] { d }.Concat(SafeChildren(d)))
+            .ToList();
+        if (folders.Count == 0) {
+            throw new InvalidOperationException($"nothing to walk in {_context.SandboxRoot}");
+        }
+
+        var modes = new[] { ViewMode.Details, ViewMode.Tiles, ViewMode.LargeIcons, ViewMode.Gallery };
+        var random = new Random(step.Int("seed", 20260902));
+        var clock = Stopwatch.StartNew();
+        long minutes = Math.Max(1, step.Int("minutes", 5));
+        long lastSample = 0;
+        var samples = new List<Sample> { _metrics.Take("soak-0") };
+
+        while (clock.ElapsedMilliseconds < minutes * 60_000) {
+            string folder = folders[random.Next(folders.Count)];
+            _awaitedFolder = folder.TrimEnd('\\', '/');
+            _firstScreenSeen = false;
+            _vm.NavigateTo(folder, NavigationSource.External);
+            await WaitIdleAsync(step);
+
+            if (random.Next(4) == 0) {
+                _vm.ViewMode = modes[random.Next(modes.Length)];
+                await WaitIdleAsync(step);
+            }
+            if (random.Next(8) == 0 && _vm.Entries.Count > 0) {
+                SelectEntries(new[] { _vm.Entries[random.Next(_vm.Entries.Count)].Name });
+                await YieldAsync();
+            }
+
+            if (clock.ElapsedMilliseconds - lastSample >= 60_000) {
+                lastSample = clock.ElapsedMilliseconds;
+                samples.Add(_metrics.Take($"soak-{samples.Count}"));
+            }
+        }
+
+        samples.Add(_metrics.Take($"soak-{samples.Count}"));
+
+        // The baseline is the end of the first minute, not the start of the
+        // run: the first minute is the thumbnail caches filling, and every
+        // soak would fail on that alone. A run too short to have one falls
+        // back to the start and is measuring warm-up - which is why the
+        // limits in soak.json come with a length.
+        int baseIndex = samples.Count > 2 ? 1 : 0;
+        var first = samples[baseIndex];
+        var last = samples[^1];
+        long grewMb = (last.WorkingSet - first.WorkingSet) / (1024 * 1024);
+        int grewHandles = last.Handles - first.Handles;
+        _report.Note(
+            $"soak {minutes} min over {folders.Count} folders, measured from soak-{baseIndex}: " +
+            $"working set {first.WorkingSet / (1024 * 1024)} -> {last.WorkingSet / (1024 * 1024)} MB (+{grewMb}), " +
+            $"handles {first.Handles} -> {last.Handles} (+{grewHandles}), " +
+            $"LOH {first.LohBytes / (1024 * 1024)} -> {last.LohBytes / (1024 * 1024)} MB, " +
+            $"gen2 {last.Gen2 - first.Gen2}");
+
+        int maxMb = step.Int("maxWorkingSetGrowthMb", 150);
+        int maxHandles = step.Int("maxHandleGrowth", 500);
+        if (grewMb > maxMb || grewHandles > maxHandles) {
+            throw new InvalidOperationException(
+                $"no plateau: working set +{grewMb} MB (limit {maxMb}), handles +{grewHandles} (limit {maxHandles})");
+        }
+    }
+
+    private static IEnumerable<string> SafeChildren(string dir) {
+        try {
+            return Directory.EnumerateDirectories(dir, "*", SearchOption.TopDirectoryOnly).Take(20).ToList();
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+            return Array.Empty<string>();
+        }
+    }
+
+    private static string Normalise(string path) {
+        return path.TrimEnd('\\', '/').ToUpperInvariant();
+    }
+
+    private static bool IsUnderOrEqual(string path, string root) {
+        if (string.IsNullOrEmpty(root)) {
+            return false;
+        }
+
+        string normalised = Normalise(root);
+
+        return path == normalised || path.StartsWith(normalised + "\\", StringComparison.Ordinal);
     }
 
 
@@ -411,7 +628,15 @@ public sealed class ScenarioRunner {
             }
         }
         if (step.Bool("noErrors") == true) {
-            var bad = lines.FirstOrDefault(l => l.Level != "INFO" && !l.Message.StartsWith("HARNESS", StringComparison.Ordinal));
+            // A scenario that provokes a failure on purpose - a locked
+            // file, a permanent delete - names it in "allow". Naming it is
+            // the point: an expected error stays asserted rather than
+            // becoming a level the check stops looking at.
+            var allowed = step.Strings("allow");
+            var bad = lines.FirstOrDefault(l =>
+                l.Level != "INFO"
+                && !l.Message.StartsWith("HARNESS", StringComparison.Ordinal)
+                && !allowed.Any(a => l.Message.Contains(a, StringComparison.OrdinalIgnoreCase)));
             if (bad is not null) {
                 throw new InvalidOperationException($"log has {bad.Level}: {bad.Message}");
             }

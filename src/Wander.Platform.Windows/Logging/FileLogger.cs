@@ -34,11 +34,27 @@ public sealed class FileLogger : ILogger, ILogFile, IDisposable {
     }
 
 
+    /// <summary>
+    /// Every line written, whichever thread wrote it: level, message,
+    /// exception. Exists for the test harness, and for a reason no wrapper
+    /// can cover - the services the bootstrapper builds are handed this
+    /// logger and keep it, so a logger registered over the top afterwards
+    /// never sees a word from them, and "the run logged no errors" would be
+    /// a statement about half the application.
+    /// </summary>
+    /// <remarks>
+    /// Raised while the write lock is held, so subscribers see the lines in
+    /// the order they were written - which means a subscriber must not log,
+    /// and must not block.
+    /// </remarks>
+    public event Action<string, string, Exception?>? Written;
+
+
     public string FilePath { get; }
 
 
-    public void Info(string message) => Write("INFO ", message, null);
-    public void Warn(string message) => Write("WARN ", message, null);
+    public void Info(string message) => Write("INFO", message, null);
+    public void Warn(string message) => Write("WARN", message, null);
     public void Error(string message, Exception? ex = null) => Write("ERROR", message, ex);
 
 
@@ -61,13 +77,20 @@ public sealed class FileLogger : ILogger, ILogFile, IDisposable {
         }
         lock (_lock) {
             try {
-                _writer.Write($"{DateTime.Now:HH:mm:ss.fff} {level} ");
+                _writer.Write($"{DateTime.Now:HH:mm:ss.fff} {level,-5} ");
                 _writer.WriteLine(message);
                 if (ex is not null) {
                     _writer.WriteLine(ex);
                 }
             } catch {
                 // A logger that throws would be a permanent UX outage; swallow.
+            }
+
+            try {
+                Written?.Invoke(level, message, ex);
+            } catch {
+                // Same rule for a listener: nothing it does may reach the
+                // caller, which is somewhere in the middle of a file copy.
             }
         }
     }
