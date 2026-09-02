@@ -1,17 +1,23 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Data;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Threading;
 using Wander.App.Controls;
+using Wander.App.Converters;
 using Wander.App.Resources;
 using Wander.App.Util;
 using Wander.App.ViewModels;
+using Wander.Core;
 using Wander.Core.FileSystem;
 using Wander.Core.Layout;
+using Wander.Core.Logging;
 
 namespace Wander.App.Views;
 
@@ -56,6 +62,13 @@ public partial class FileListView : UserControl {
     /// <see cref="OnKeyboardFocusWithinChanged"/>.
     /// </summary>
     private bool _focusFellOutOfTheList;
+
+    /// <summary>The views currently unbound from the rows - see <see cref="ApplyViewAttachment"/>.</summary>
+    private readonly HashSet<Selector> _detachedViews = new();
+
+    /// <summary>The inline rename editor while a name is being edited, and the layer it sits in - see the rename section.</summary>
+    private RenameAdorner? _renameAdorner;
+    private AdornerLayer? _renameLayer;
 
 
     public FileListView() {
@@ -112,6 +125,7 @@ public partial class FileListView : UserControl {
             old.InlineRenameRequested -= StartRenameOn;
             old.PropertyChanged -= OnViewModelChanged;
             old.Settings.PropertyChanged -= OnSettingsChanged;
+            old.FolderArrived -= OnFolderArrived;
             old.Entries.CollectionChanged -= OnEntriesChanged;
         }
         if (e.NewValue is MainViewModel vm) {
@@ -120,9 +134,13 @@ public partial class FileListView : UserControl {
             vm.InlineRenameRequested += StartRenameOn;
             vm.PropertyChanged += OnViewModelChanged;
             vm.Settings.PropertyChanged += OnSettingsChanged;
+            vm.FolderArrived += OnFolderArrived;
             vm.Entries.CollectionChanged += OnEntriesChanged;
             ShowSortIndicator();
-            ApplyIconColumnWidth();
+            ApplyDetailsIconSize();
+            ApplyTileMetrics();
+            ApplyVisibleFirst();
+            ApplyViewAttachment();
             ShowRatingColumn();
             ShowSearchColumns();
         }
@@ -162,7 +180,12 @@ public partial class FileListView : UserControl {
         } else if (e.PropertyName == nameof(MainViewModel.IsSearchResults)) {
             ShowSearchColumns();
         } else if (e.PropertyName == nameof(MainViewModel.ViewMode)) {
+            ApplyViewAttachment();
             KeepFocusAcrossViewSwap();
+        } else if (e.PropertyName == nameof(MainViewModel.RenamingPath) && Vm.RenamingPath is null) {
+            // The view model ended the edit - a commit, an Escape, or a
+            // listing rebuilt under the editor. The editor goes with it.
+            HideRenameEditor();
         }
     }
 
@@ -210,6 +233,10 @@ public partial class FileListView : UserControl {
         var visibility = vm.IsSearchResults ? Visibility.Visible : Visibility.Collapsed;
         FolderColumn.Visibility = visibility;
         MatchColumn.Visibility = visibility;
+        // The tiles' second line follows the same switch; the rows are
+        // replaced wholesale when results come and go, so every tile reads
+        // the flag fresh.
+        ((TileSecondLineConverter)Resources["TileSecondLine"]).ShowFolder = vm.IsSearchResults;
     }
 
     /// <summary>
@@ -233,22 +260,134 @@ public partial class FileListView : UserControl {
                 break;
 
             case nameof(SettingsViewModel.DetailsIconSize):
-                ApplyIconColumnWidth();
+                ApplyDetailsIconSize();
+                break;
+
+            case nameof(SettingsViewModel.TilesMetrics):
+            case nameof(SettingsViewModel.IconsMetrics):
+            case nameof(SettingsViewModel.GalleryMetrics):
+                ApplyTileMetrics();
+                break;
+
+            case nameof(SettingsViewModel.VisibleFirstLoading):
+                ApplyVisibleFirst();
                 break;
         }
     }
 
+
     /// <summary>
-    /// Keeps the icon column as wide as the icon in it. Assigned rather than
-    /// bound: a <see cref="System.Windows.Controls.DataGridColumn"/> is not
-    /// in the visual tree and has no DataContext, so a binding on its Width
-    /// resolves to nothing at all — silently, which is the worst way for a
-    /// binding to fail.
+    /// Mirrors the "read what is on screen first" setting into the icon
+    /// control, which has no DataContext of its own to read it from.
     /// </summary>
-    private void ApplyIconColumnWidth() {
+    private void ApplyVisibleFirst() {
+        if (DataContext is MainViewModel vm) {
+            AsyncIcon.VisibleFirst = vm.Settings.VisibleFirstLoading;
+        }
+    }
+
+
+    /// <summary>
+    /// The rows of a folder the user walked into have landed: once they are
+    /// laid out, the icons on the first screen are handed to
+    /// <see cref="FirstScreenWatch"/>, which times them from the navigation.
+    /// Loaded priority runs right after the layout pass, so the containers
+    /// exist and the viewport question has an answer.
+    /// </summary>
+    private void OnFolderArrived(string path, Stopwatch clock) {
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => {
+            if (DataContext is not MainViewModel vm || !string.Equals(vm.CurrentPath, path, StringComparison.OrdinalIgnoreCase)) {
+                return;
+            }
+
+            FirstScreenWatch.Begin(path, clock, VisibleIcons(), ServiceLocator.Get<ILogger>());
+        }));
+    }
+
+
+    /// <summary>
+    /// The icons of the realised rows that are inside the viewport. The
+    /// tile panels realise exactly the visible range; the table keeps a
+    /// page of rows either side, and those are not the first screen.
+    /// </summary>
+    private List<AsyncIcon> VisibleIcons() {
+        var icons = new List<AsyncIcon>();
+        if (ActiveList() is not { } list) {
+            return icons;
+        }
+
+        var generator = list.ItemContainerGenerator;
+        for (int i = 0; i < list.Items.Count; i++) {
+            if (generator.ContainerFromIndex(i) is DependencyObject container
+                && ListVisuals.FindDescendant<AsyncIcon>(container) is { } icon
+                && icon.IsInViewport()) {
+                icons.Add(icon);
+            }
+        }
+
+        return icons;
+    }
+
+    /// <summary>
+    /// The two numbers the table's icon needs: the width of its column and
+    /// the size of the icon in it. Neither is bound, for two different
+    /// reasons.
+    ///
+    /// <para>
+    /// A <see cref="System.Windows.Controls.DataGridColumn"/> is not in the
+    /// visual tree and has no DataContext, so a binding on its Width
+    /// resolves to nothing at all — silently, which is the worst way for a
+    /// binding to fail. The icon inside the cell could be bound, and was:
+    /// twice, through <c>RelativeSource</c> up to the UserControl, in every
+    /// realised row. It is a resource now for the same reason the tile sizes
+    /// are (see <see cref="ApplyTileMetrics"/>) — a lookup up the tree with
+    /// nothing to subscribe to.
+    /// </para>
+    /// </summary>
+    private void ApplyDetailsIconSize() {
         if (DataContext is MainViewModel vm) {
             IconColumn.Width = new DataGridLength(vm.Settings.DetailsIconColumnWidth);
+            // A double, not the int the setting is: a DynamicResource hands
+            // the value over as it stands, without a type converter, and
+            // Width would quietly keep its default.
+            Resources["DetailsIconSize"] = (double)vm.Settings.DetailsIconSize;
         }
+    }
+
+
+    /// <summary>
+    /// Hands the tile templates their few numbers as resources.
+    ///
+    /// <para>
+    /// The templates used to bind every size through
+    /// <c>RelativeSource AncestorType=UserControl</c> and a four-hop path
+    /// into the settings - eight such bindings per tile, resolved and
+    /// subscribed for every container built, on every folder. A
+    /// DynamicResource is a lookup up the tree and nothing to subscribe to;
+    /// rewriting the entry here is what makes the settings dialog still
+    /// resize tiles live. The font size of the name is not here at all: it
+    /// is set on each ListBox and inherited.
+    /// </para>
+    /// </summary>
+    private void ApplyTileMetrics() {
+        if (DataContext is not MainViewModel vm) {
+            return;
+        }
+
+        var tiles = vm.Settings.TilesMetrics;
+        Resources["TilesCellMargin"] = new Thickness(tiles.Margin);
+        Resources["TilesImageSize"] = tiles.ImageSize;
+        Resources["TilesSecondaryFontSize"] = tiles.SecondaryFontSize;
+
+        var icons = vm.Settings.IconsMetrics;
+        Resources["IconsCellMargin"] = new Thickness(icons.Margin);
+        Resources["IconsImageSize"] = icons.ImageSize;
+        Resources["IconsLabelHeight"] = icons.LabelHeight;
+
+        var gallery = vm.Settings.GalleryMetrics;
+        Resources["GalleryCellMargin"] = new Thickness(gallery.Margin);
+        Resources["GalleryImageSize"] = gallery.ImageSize;
+        Resources["GalleryLabelHeight"] = gallery.LabelHeight;
     }
 
     /// <summary>
@@ -393,6 +532,13 @@ public partial class FileListView : UserControl {
         // Containers can raise this while the control is still being wired
         // up, before the view model has been inherited down the tree.
         if (DataContext is not MainViewModel) {
+            return;
+        }
+
+        // A view being unbound reports an empty selection on the way out
+        // (see ApplyViewAttachment). That is the control emptying, not the
+        // user deselecting anything.
+        if (sender is Selector leaving && _detachedViews.Contains(leaving)) {
             return;
         }
 
@@ -820,7 +966,11 @@ public partial class FileListView : UserControl {
     /// </para>
     /// </summary>
     private bool TryRateFromKeyboard(Key key) {
-        if (Vm.ViewMode != ViewMode.Gallery || Keyboard.Modifiers != ModifierKeys.None) {
+        // A digit typed into the rename editor is part of the name. The
+        // tunnelling handler sees it before the editor does, so the editor
+        // has to be checked for here, as TryEnterList and TryGridStep do.
+        if (Vm.ViewMode != ViewMode.Gallery || Keyboard.Modifiers != ModifierKeys.None
+            || Vm.RenamingPath is not null) {
             return false;
         }
 
@@ -1027,11 +1177,104 @@ public partial class FileListView : UserControl {
     }
 
 
+    // --- Which view holds the rows ---------------------------------------
+    // Only the view on screen is bound to Entries; see ARCHITECTURE.md,
+    // "Вид, которого не видно, не строит ничего".
+
+    /// <summary>
+    /// Binds the view on screen to the rows and unbinds the ones that are
+    /// not. Runs on every mode change, so the incoming view is bound before
+    /// it is shown.
+    ///
+    /// <para>
+    /// Detaching goes first and attaching last: a view losing its rows
+    /// reports an empty selection, and that report must not land after the
+    /// incoming view has re-selected the row.
+    /// </para>
+    /// </summary>
+    private void ApplyViewAttachment() {
+        var active = ActiveList();
+        Selector[] views = { DetailsView, TilesView, IconsView, GalleryView };
+        // Read before anything is unbound. The controls own multi-selection
+        // (SelectedItems is theirs, not the view model's), so a view that is
+        // about to be bound has to be told what is selected - SelectedEntry
+        // alone would land one row of it.
+        var selection = Vm.SelectedEntries;
+
+        foreach (var view in views) {
+            if (ShouldDetach(view, active) && _detachedViews.Add(view)) {
+                // SelectedItem is bound two-way, and a Selector losing its
+                // items clears it - so both halves have to go before the
+                // rows do, or the view on its way out writes null over the
+                // view model's selection. Two steps because the two
+                // families bind it differently: the table has its binding
+                // on the element (ClearBinding removes it), the tile views
+                // get theirs from the TilePanel style, which a local null
+                // overrides without being asked to write through.
+                BindingOperations.ClearBinding(view, Selector.SelectedItemProperty);
+                view.SelectedItem = null;
+                view.ItemsSource = null;
+            }
+        }
+
+        bool attached = false;
+        foreach (var view in views) {
+            if (!ShouldDetach(view, active) && _detachedViews.Remove(view)) {
+                view.SetBinding(ItemsControl.ItemsSourceProperty, new Binding(nameof(MainViewModel.Entries)));
+                view.SetBinding(Selector.SelectedItemProperty,
+                    new Binding(nameof(MainViewModel.SelectedEntry)) { Mode = BindingMode.TwoWay });
+                attached = true;
+            }
+        }
+
+        // A view that has just been bound is scrolled to the top and holds
+        // at most SelectedEntry; the rest of what the user selected lives
+        // only in the control that was on screen a moment ago.
+        if (attached && active is { } host && selection.Count > 0) {
+            SetListSelection(host, selection);
+            if (host is DataGrid grid) {
+                grid.CurrentItem = selection[0];
+            }
+            ScrollRowIntoView(host, selection[0]);
+        }
+    }
+
+
+    /// <summary>
+    /// Should this view be holding no rows right now?
+    ///
+    /// <para>
+    /// Only the table, and only when it is not the view on screen. Its
+    /// panel is WPF's own, so unlike <see cref="VirtualizingWrapPanel"/> it
+    /// cannot be told to build nothing while the control around it is
+    /// collapsed - and a Reset on the shared rows reaches it all the same,
+    /// so every navigation had it realise and tear down a screenful of rows
+    /// behind a collapsed table (PLAN R2, T2). The three tile views already
+    /// build nothing when hidden and stay bound.
+    /// </para>
+    /// </summary>
+    private bool ShouldDetach(Selector view, ItemsControl? active) {
+        return !ReferenceEquals(view, active) && ReferenceEquals(view, DetailsView);
+    }
+
+
+    private static void ScrollRowIntoView(ItemsControl host, FileSystemEntry entry) {
+        switch (host) {
+            case DataGrid grid: grid.ScrollIntoView(entry); break;
+            case ListBox list: list.ScrollIntoView(entry); break;
+        }
+    }
+
+
+
     // --- Rename ----------------------------------------------------------
-    // In-place editing (A3) is the normal path: the row template carries a
-    // collapsed TextBox and MainViewModel.RenamingPath makes it visible.
-    // PromptDialog stays as the fallback for the case the inline editor
-    // cannot be reached — a row that virtualisation has not realised.
+    // In-place editing (A3) is the normal path: one TextBox for the whole
+    // control, laid over the row's name label by a RenameAdorner while
+    // MainViewModel.RenamingPath says which row. The row templates carry
+    // no editor of their own - a TextBox in every row was the single most
+    // expensive thing in them (PLAN R, 2026-09-02). PromptDialog stays as
+    // the fallback for the case the inline editor cannot be reached - a row
+    // that virtualisation has not realised.
 
     public void StartRename() {
         if (Vm.SelectedEntry is not FileSystemEntry entry) {
@@ -1079,24 +1322,69 @@ public partial class FileListView : UserControl {
             return false;
         }
 
+        // The editor sits over the name label, and needs the label's adorner
+        // layer - the scroll viewport's, so it moves and clips with the row.
+        var label = ListVisuals.FindDescendant<TextBlock>(container, "NameLabel");
+        if (label is null || AdornerLayer.GetAdornerLayer(label) is not { } layer) {
+            return false;
+        }
+
         Vm.BeginRename(entry);
         if (Vm.RenamingPath is null) {
             return false;
         }
 
-        container.UpdateLayout();
-        var box = ListVisuals.FindDescendant<TextBox>(container);
-        if (box is null) {
-            Vm.CancelRename();
-
-            return false;
-        }
-
-        box.Text = entry.Name;
+        HideRenameEditor();
+        var box = CreateRenameEditor(entry, label);
+        _renameAdorner = new RenameAdorner(label, box);
+        _renameLayer = layer;
+        layer.Add(_renameAdorner);
+        layer.UpdateLayout();
         box.Focus();
         SelectNameWithoutExtension(box, entry);
 
         return true;
+    }
+
+
+    /// <summary>
+    /// A fresh TextBox per edit rather than one kept for the control's
+    /// lifetime: an adorner owns its child visual, and a reused TextBox
+    /// would have to be pulled out of the last adorner before it could go
+    /// into the next. One TextBox per rename costs nothing anyone can see.
+    /// </summary>
+    private TextBox CreateRenameEditor(FileSystemEntry entry, TextBlock label) {
+        var box = new TextBox {
+            // The row, for the Escape path that puts focus back on it.
+            DataContext = entry,
+            Text = entry.Name,
+            FontSize = label.FontSize,
+            Padding = new Thickness(0),
+            MinWidth = 60,
+        };
+        box.PreviewKeyDown += RenameBox_PreviewKeyDown;
+        box.PreviewTextInput += RenameBox_PreviewTextInput;
+        box.LostKeyboardFocus += RenameBox_LostKeyboardFocus;
+
+        return box;
+    }
+
+
+    /// <summary>
+    /// Takes the editor down. Idempotent, and quiet about focus: the caller
+    /// decides where the keyboard goes next.
+    /// </summary>
+    private void HideRenameEditor() {
+        if (_renameAdorner is not { } adorner) {
+            return;
+        }
+
+        // The layer is remembered rather than looked up again: a row
+        // recycled out from under the editor has no layer above it any
+        // more, and the adorner would stay in the one it was added to.
+        _renameAdorner = null;
+        _renameLayer?.Remove(adorner);
+        _renameLayer = null;
     }
 
 

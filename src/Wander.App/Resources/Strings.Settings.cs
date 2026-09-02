@@ -153,6 +153,12 @@ public static partial class Strings {
     /// <summary>Список перерисовывается, когда файлы меняет кто-то другой. Выключено —</summary>
     public static string SettingsAutoRefreshHint => Get(nameof(SettingsAutoRefreshHint));
 
+    /// <summary>Быстрое чтение первых файлов при открытии папки</summary>
+    public static string SettingsVisibleFirstLoading => Get(nameof(SettingsVisibleFirstLoading));
+
+    /// <summary>Значки и миниатюры того, что видно на экране, читаются раньше всего остального…</summary>
+    public static string SettingsVisibleFirstLoadingHint => Get(nameof(SettingsVisibleFirstLoadingHint));
+
     /// <summary>Режим «Таблица»</summary>
     public static string SettingsDetailsGroup => Get(nameof(SettingsDetailsGroup));
 

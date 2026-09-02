@@ -3,8 +3,11 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
+using Wander.App.Diagnostics;
+using Wander.Core;
 using Wander.Core.Diagnostics;
 using Wander.Core.Layout;
+using Wander.Core.Logging;
 
 namespace Wander.App.Controls;
 
@@ -94,6 +97,12 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo {
     /// one their containers were generated for.
     /// </summary>
     private TileLayout _layout;
+
+    /// <summary>The item template whose container size has been logged - see <see cref="ReportContainerSize"/>.</summary>
+    private DataTemplate? _reportedTemplate;
+
+    /// <summary>The ItemsControl whose visibility is being watched - see <see cref="WatchOwner"/>.</summary>
+    private ItemsControl? _owner;
 
 
     /// <summary>Width of one cell, its margin included — see <see cref="TileMetrics.CellWidth"/>.</summary>
@@ -255,8 +264,28 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo {
         _layout = new TileLayout(ColumnWidth(count, cell), _viewport.Height, cell.Width, cell.Height, count);
         _offsetY = _layout.Clamp(_offsetY);
 
+        var owner = ItemsControl.GetItemsOwner(this);
+        WatchOwner(owner);
+
         var (first, last) = _layout.VisibleRange(_offsetY);
-        if (first != _realisedFirst || last != _realisedLast) {
+        if (owner is { IsVisible: false }) {
+            // A view that is not on screen builds nothing. Collapsing the
+            // ListBox does not stop this panel being measured: a Reset on
+            // the shared rows dirties every panel bound to them, and the
+            // layout manager measures a dirty element with its last
+            // constraint whether or not an ancestor is collapsed. So each
+            // navigation used to realise the folder three times - once
+            // per tile view - and tear all three down on the next one
+            // (COUNT layout.new "96 in 3 passes" per folder, 2026-09-02).
+            // Existing children are still measured, or a dirty one would
+            // keep the layout queue busy forever; the range markers stay
+            // reset so the first visible pass realises from scratch.
+            foreach (UIElement child in children) {
+                child.Measure(cell);
+            }
+            _realisedFirst = 0;
+            _realisedLast = -1;
+        } else if (first != _realisedFirst || last != _realisedLast) {
             RealiseRange(generator, cell, first, last);
             RecycleOutside(generator, first, last);
             _realisedFirst = first;
@@ -319,13 +348,27 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo {
 
 
     protected override void OnItemsChanged(object sender, ItemsChangedEventArgs args) {
+        // Containers thrown away, by count: the other half of the
+        // realise/reuse figures below. A Reset is the folder being left;
+        // a Replace is a row swapped for an updated copy (a rating
+        // arriving), and whether that costs a container is exactly what
+        // the count is for.
         switch (args.Action) {
             case NotifyCollectionChangedAction.Remove:
             case NotifyCollectionChangedAction.Replace:
             case NotifyCollectionChangedAction.Move:
+                PerfCounters.Add("layout.discard", args.ItemUICount);
                 RemoveInternalChildRange(args.Position.Index, args.ItemUICount);
                 break;
             case NotifyCollectionChangedAction.Reset:
+                // Counted off the range markers rather than off
+                // InternalChildren: Panel clears its children on a Reset
+                // before this runs, so the count here was always zero and
+                // "layout.discard" never once appeared in a session log
+                // (PLAN R2, 2026-09-02). The markers still describe the
+                // folder being left, which is exactly what is being torn
+                // down - what was built for it is what goes.
+                PerfCounters.Add("layout.discard", Math.Max(0, _realisedLast - _realisedFirst + 1));
                 RemoveInternalChildRange(0, InternalChildren.Count);
                 _offsetY = 0;
                 break;
@@ -358,6 +401,18 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo {
         // realised, and generation starts after the previous container.
         int childIndex = start.Offset == 0 ? start.Index : start.Index + 1;
 
+        // Three counts per pass, written to the log by PerfCounters: built
+        // from the template, taken back out of the recycling pool, or
+        // already in place and merely re-measured. "layout.realise" says
+        // how long the pass took; these say what it was doing - which is
+        // what tells an expensive template (many new) from a Replace that
+        // throws containers away (new after a landing, where reused was
+        // expected).
+        int created = 0;
+        int reused = 0;
+        int kept = 0;
+        UIElement? sample = null;
+
         using (generator.StartAt(start, GeneratorDirection.Forward, allowStartAtRealizedItem: true)) {
             for (int i = first; i <= last; i++, childIndex++) {
                 if (generator.GenerateNext(out bool isNew) is not UIElement child) {
@@ -375,6 +430,14 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo {
                         InsertInternalChild(childIndex, child);
                     }
                     generator.PrepareItemContainer(child);
+                    if (isNew) {
+                        created++;
+                        sample ??= child;
+                    } else {
+                        reused++;
+                    }
+                } else {
+                    kept++;
                 }
 
                 // Measured against the cell, never against infinity: the
@@ -385,6 +448,45 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo {
                 child.Measure(cell);
             }
         }
+
+        PerfCounters.Add("layout.new", created);
+        PerfCounters.Add("layout.reused", reused);
+        PerfCounters.Add("layout.kept", kept);
+        if (sample is not null) {
+            ReportContainerSize(sample);
+        }
+    }
+
+
+    /// <summary>
+    /// Writes how many visuals one container holds - once per item template,
+    /// since every container built from it has the same tree. Measured
+    /// after the first Measure, when the template has been applied. This is
+    /// the number that separates "the template is heavy" from "there are
+    /// many of them": a tile of forty visuals costs a TextBox and a
+    /// ScrollViewer, a tile of six costs an Image and a caption.
+    /// </summary>
+    private void ReportContainerSize(UIElement container) {
+        var owner = ItemsControl.GetItemsOwner(this);
+        var template = owner?.ItemTemplate;
+        if (owner is null || ReferenceEquals(template, _reportedTemplate)) {
+            return;
+        }
+
+        _reportedTemplate = template;
+        int visuals = CountVisuals(container);
+        ServiceLocator.Get<ILogger>().Info($"LAYOUT {owner.Name} container: {visuals} visuals");
+    }
+
+
+    private static int CountVisuals(DependencyObject root) {
+        int count = 1;
+        int children = VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < children; i++) {
+            count += CountVisuals(VisualTreeHelper.GetChild(root, i));
+        }
+
+        return count;
     }
 
     /// <summary>
@@ -457,6 +559,33 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo {
         return withoutBar.ExtentHeight > _viewport.Height
             ? Math.Max(0, width - SystemParameters.VerticalScrollBarWidth)
             : width;
+    }
+
+
+    /// <summary>
+    /// Follows the owner's visibility, so a view switched back on realises
+    /// its rows the moment it shows - nothing else re-measures a panel whose
+    /// own layout is clean when an ancestor's Visibility flips.
+    /// </summary>
+    private void WatchOwner(ItemsControl? owner) {
+        if (ReferenceEquals(owner, _owner)) {
+            return;
+        }
+
+        if (_owner is not null) {
+            _owner.IsVisibleChanged -= OnOwnerVisibleChanged;
+        }
+        _owner = owner;
+        if (owner is not null) {
+            owner.IsVisibleChanged += OnOwnerVisibleChanged;
+        }
+    }
+
+
+    private void OnOwnerVisibleChanged(object sender, DependencyPropertyChangedEventArgs e) {
+        if (e.NewValue is true) {
+            InvalidateMeasure();
+        }
     }
 
 

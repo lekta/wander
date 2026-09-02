@@ -219,7 +219,9 @@ public partial class MainWindow : Window {
         Vm.Entries.CollectionChanged += (_, _) => _shellMenus.Invalidate();
         // Quiet unless something is slow: what the UI thread spends time
         // on lands in the session log — see Core/Diagnostics/PerfLog.
-        Wander.Core.Diagnostics.PerfLog.Start(ServiceLocator.Get<Wander.Core.Logging.ILogger>());
+        var log = ServiceLocator.Get<Wander.Core.Logging.ILogger>();
+        Wander.Core.Diagnostics.PerfLog.Start(log);
+        Diagnostics.PerfCounters.Start(log);
         Diagnostics.UiStallWatch.Start(Dispatcher);
         // Bubbling, so it sees focus landing anywhere in the window.
         GotKeyboardFocus += OnZoneFocusChanged;

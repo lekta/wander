@@ -67,6 +67,13 @@ public sealed class SettingsViewModel : ObservableObject {
         set => SetField(ref _autoRefresh, value);
     }
 
+    private bool _visibleFirstLoading;
+    /// <summary>Icons for what is on screen load first - see <see cref="AppSettings.VisibleFirstLoading"/>.</summary>
+    public bool VisibleFirstLoading {
+        get => _visibleFirstLoading;
+        set => SetField(ref _visibleFirstLoading, value);
+    }
+
 
     // --- Safety --------------------------------------------------------
     private bool _showHidden;
@@ -540,6 +547,7 @@ public sealed class SettingsViewModel : ObservableObject {
         // refresh when something actually shifted.
         RestoreLastFolder = s.RestoreLastFolder;
         AutoRefresh = s.AutoRefresh;
+        VisibleFirstLoading = s.VisibleFirstLoading;
         ShowHidden = s.ShowHidden;
         ShowSystem = s.ShowSystem;
         HideSystemRootFolders = s.HideSystemRootFolders;
@@ -710,6 +718,7 @@ public sealed class SettingsViewModel : ObservableObject {
         return new AppSettings {
             RestoreLastFolder = RestoreLastFolder,
             AutoRefresh = AutoRefresh,
+            VisibleFirstLoading = VisibleFirstLoading,
             ShowHidden = ShowHidden,
             ShowSystem = ShowSystem,
             HideSystemRootFolders = HideSystemRootFolders,

@@ -453,6 +453,13 @@ public sealed class MainViewModel : ObservableObject {
     /// </summary>
     public event Action<FileSystemEntry>? InlineRenameRequested;
 
+    /// <summary>
+    /// The rows of a folder the user walked into have landed. Carries the
+    /// clock that has been running since the navigation, so the view can
+    /// time the first screen from there (<c>FirstScreenWatch</c>).
+    /// </summary>
+    public event Action<string, System.Diagnostics.Stopwatch>? FolderArrived;
+
 
     public BulkObservableCollection<FileSystemEntry> Entries { get; }
     public ObservableCollection<OperationViewModel> Operations { get; }
@@ -1528,6 +1535,12 @@ public sealed class MainViewModel : ObservableObject {
             PublishRows(epoch, items);
             if (reported != statusBeforeLoad) {
                 Status = reported;
+            }
+            if (arriving && _session.IsCurrent(epoch)) {
+                // The clock keeps running: the view arms FirstScreenWatch
+                // on it once the rows have been laid out, and the line in
+                // the log counts from the navigation, not from the landing.
+                FolderArrived?.Invoke(path, started);
             }
             Ratings.StartPass(items, path, sort, epoch, arriving);
         } catch (OperationCanceledException) {

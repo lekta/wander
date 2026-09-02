@@ -68,6 +68,7 @@ public static class UiStallWatch {
             }
 
             PerfLog.Tick();
+            PerfCounters.Tick();
             Thread.Sleep(PingMs);
         }
     }

@@ -838,6 +838,12 @@
   <data name="SettingsAutoRefreshHint" xml:space="preserve">
     <value>Список перерисовывается, когда файлы меняет кто-то другой. Выключено — только по F5.</value>
   </data>
+  <data name="SettingsVisibleFirstLoading" xml:space="preserve">
+    <value>Быстрое чтение первых файлов при открытии папки</value>
+  </data>
+  <data name="SettingsVisibleFirstLoadingHint" xml:space="preserve">
+    <value>Значки и миниатюры того, что видно на экране, читаются раньше всего остального: строки таблицы за краем окна и папки дерева за пределами видимости ждут своей очереди. Сколько заняла прорисовка первого экрана — в журнале сеанса.</value>
+  </data>
   <data name="SettingsDetailsGroup" xml:space="preserve">
     <value>Режим «Таблица»</value>
   </data>

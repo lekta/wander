@@ -122,6 +122,27 @@ public static class ListVisuals {
 
 
     /// <summary>
+    /// The descendant with this <c>x:Name</c> - how the rename editor finds
+    /// the name label in a row template, where "the first TextBlock" is the
+    /// rating badge in one view and the name in another.
+    /// </summary>
+    public static T? FindDescendant<T>(DependencyObject root, string name) where T : FrameworkElement {
+        int count = VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < count; i++) {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is T match && match.Name == name) {
+                return match;
+            }
+            if (FindDescendant<T>(child, name) is T deeper) {
+                return deeper;
+            }
+        }
+
+        return null;
+    }
+
+
+    /// <summary>
     /// Shift + wheel scrolls sideways — the convention everywhere from
     /// browsers to Explorer, which WPF's ScrollViewer does not implement on
     /// its own. Returns true when it handled the notch, so the caller can

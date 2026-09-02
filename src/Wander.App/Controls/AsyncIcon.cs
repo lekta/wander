@@ -1,6 +1,7 @@
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Wander.Core;
@@ -49,12 +50,33 @@ public sealed class AsyncIcon : Image {
     // and 3 ms per file decoded here (see RawThumbnail), at which point the
     // gate, not the work, was what the user was waiting for. Four still
     // leaves the pool to the rest of the app.
-    private static readonly SemaphoreSlim _gate = new(4);
-
+    private static readonly IconLoadGate _gate = new(4);
 
 
     private int _generation;
     private bool _detached;
+
+
+    static AsyncIcon() {
+        // Every picture that lands, for FirstScreenWatch. Hooked on the
+        // property rather than raised from the load paths: a cached icon set
+        // synchronously, a decoded one landing at ContextIdle and a fresh
+        // shell load all end in the same setter.
+        SourceProperty.OverrideMetadata(typeof(AsyncIcon), new FrameworkPropertyMetadata(OnSourceChanged));
+    }
+
+
+    /// <summary>
+    /// The setting "read what is on screen first" (Settings.VisibleFirstLoading),
+    /// mirrored here because an icon inside an item template has no
+    /// DataContext to read it from. With it on, a load for an icon outside
+    /// its scroll viewport waits behind every load for one inside; off,
+    /// loads go in the order they were asked for.
+    /// </summary>
+    public static bool VisibleFirst { get; set; }
+
+    /// <summary>Raised on the UI thread when an icon gets its picture - see <see cref="FirstScreenWatch"/>.</summary>
+    public static event Action<AsyncIcon>? Painted;
 
 
     public AsyncIcon() {
@@ -91,6 +113,12 @@ public sealed class AsyncIcon : Image {
 
     private static void OnIconRequestChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) {
         ((AsyncIcon)d).Reload();
+    }
+
+    private static void OnSourceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) {
+        if (e.NewValue is not null) {
+            Painted?.Invoke((AsyncIcon)d);
+        }
     }
 
     private void Reload() {
@@ -137,7 +165,53 @@ public sealed class AsyncIcon : Image {
         }
 
         Source = null;
-        _ = LoadAndApplyAsync(path, size, generation);
+        if (!VisibleFirst) {
+            _ = LoadAndApplyAsync(path, size, generation, urgent: true);
+
+            return;
+        }
+
+        // Whether this icon is on screen is only known after layout, and a
+        // container is bound before it is arranged. Loaded priority runs
+        // right after the layout pass, so the answer is real by then; the
+        // few milliseconds it costs are the same for every icon and change
+        // no order among them.
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => {
+            if (generation == _generation) {
+                _ = LoadAndApplyAsync(path, size, generation, IsInViewport());
+            }
+        });
+    }
+
+
+    /// <summary>
+    /// Is this icon inside the viewport of the nearest scroll viewer? An
+    /// icon with no scroll viewer above it counts as visible - a preview
+    /// pane, a dialog - and one not laid out yet resolves to the origin,
+    /// which is inside the viewport, so nothing is held back by mistake.
+    /// </summary>
+    public bool IsInViewport() {
+        if (!IsVisible) {
+            return false;
+        }
+
+        DependencyObject? current = VisualTreeHelper.GetParent(this);
+        while (current is not null && current is not ScrollViewer) {
+            current = VisualTreeHelper.GetParent(current);
+        }
+        if (current is not ScrollViewer scroller) {
+            return true;
+        }
+
+        try {
+            var bounds = TransformToAncestor(scroller).TransformBounds(new Rect(RenderSize));
+
+            return bounds.IntersectsWith(new Rect(0, 0, scroller.ActualWidth, scroller.ActualHeight));
+        } catch (InvalidOperationException) {
+            // Not connected to the scroller any more - recycled between
+            // the question and the answer.
+            return false;
+        }
     }
 
 
@@ -178,8 +252,8 @@ public sealed class AsyncIcon : Image {
     }
 
 
-    private async Task LoadAndApplyAsync(string path, IconSize size, int generation) {
-        var image = await LoadAsync(path, size, () => generation == _generation).ConfigureAwait(false);
+    private async Task LoadAndApplyAsync(string path, IconSize size, int generation, bool urgent) {
+        var image = await LoadAsync(path, size, () => generation == _generation, urgent).ConfigureAwait(false);
 
         // One more try before giving up. The list heals a failed icon by
         // itself — scrolling realises the container again and re-asks —
@@ -191,7 +265,7 @@ public sealed class AsyncIcon : Image {
         if (image is null && generation == _generation) {
             await Task.Delay(RetryDelayMs).ConfigureAwait(false);
             if (generation == _generation) {
-                image = await LoadAsync(path, size, () => generation == _generation).ConfigureAwait(false);
+                image = await LoadAsync(path, size, () => generation == _generation, urgent).ConfigureAwait(false);
             }
         }
 
@@ -241,8 +315,8 @@ public sealed class AsyncIcon : Image {
         return IsLightweight(size) ? DispatcherPriority.Normal : DispatcherPriority.ContextIdle;
     }
 
-    private static async Task<BitmapImage?> LoadAsync(string path, IconSize size, Func<bool> stillWanted) {
-        await _gate.WaitAsync().ConfigureAwait(false);
+    private static async Task<BitmapImage?> LoadAsync(string path, IconSize size, Func<bool> stillWanted, bool urgent) {
+        await _gate.WaitAsync(urgent).ConfigureAwait(false);
         try {
             // Re-check after queueing: a fast scroll through a big folder can
             // park hundreds of loads on this gate, and by the time one gets

@@ -34,6 +34,15 @@ public sealed record AppSettings {
     /// </summary>
     public bool AutoRefresh { get; init; } = true;
 
+    /// <summary>
+    /// Icons and thumbnails for what is on screen are loaded ahead of those
+    /// for what is not - table rows beyond the window's edge, tree nodes
+    /// out of view. Off by default until the session log says it is worth
+    /// it (the "First screen painted" line): with it on, a load is held
+    /// one layout pass to learn where its icon is.
+    /// </summary>
+    public bool VisibleFirstLoading { get; init; }
+
 
     // --- Safety --------------------------------------------------------
     /// <summary>Show files / folders with the <c>Hidden</c> attribute.</summary>

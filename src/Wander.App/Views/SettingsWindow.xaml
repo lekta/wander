@@ -60,7 +60,7 @@
 
 
         <!--
-            General. Four switches about how the window behaves, with the
+            General. Five switches about how the window behaves, with the
             explanations on tooltips: a paragraph under every checkbox turns
             a settings page into a document, and the reader stops seeing the
             settings.
@@ -74,6 +74,9 @@
                 <CheckBox Content="{x:Static res:Strings.SettingsAutoRefresh}"
                           ToolTip="{x:Static res:Strings.SettingsAutoRefreshHint}"
                           IsChecked="{Binding Owner.AutoRefresh}"/>
+                <CheckBox Content="{x:Static res:Strings.SettingsVisibleFirstLoading}"
+                          ToolTip="{x:Static res:Strings.SettingsVisibleFirstLoadingHint}"
+                          IsChecked="{Binding Owner.VisibleFirstLoading}"/>
                 <CheckBox Content="{x:Static res:Strings.SettingsTreeKeyboardNavigates}"
                           ToolTip="{x:Static res:Strings.SettingsTreeKeyboardNavigatesHint}"
                           IsChecked="{Binding Owner.TreeKeyboardNavigates}"/>
