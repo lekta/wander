@@ -882,7 +882,18 @@ public sealed class SystemIconProvider : IIconProvider {
                 if (list.GetIcon(info.iIcon, ILD_TRANSPARENT, ref hIcon) != 0 || hIcon == IntPtr.Zero) {
                     return null;
                 }
-                return HIconToBitmap(hIcon);
+
+                Bitmap? slot = HIconToBitmap(hIcon);
+                if (slot is null) {
+                    return null;
+                }
+
+                Bitmap trimmed = TrimJumboSlot(slot);
+                if (!ReferenceEquals(trimmed, slot)) {
+                    slot.Dispose();
+                }
+
+                return trimmed;
             } finally {
                 if (hIcon != IntPtr.Zero) {
                     DestroyIcon(hIcon);
@@ -890,6 +901,102 @@ public sealed class SystemIconProvider : IIconProvider {
             }
         } finally {
             Marshal.ReleaseComObject(list);
+        }
+    }
+
+
+    /// <summary>
+    /// Cuts the jumbo slot down to the icon actually in it.
+    ///
+    /// <para>
+    /// <c>SHIL_JUMBO</c> always hands back a 256 px square, but it does not
+    /// scale: an application whose largest icon resource is 48 px is drawn
+    /// at 48 px in the top-left corner of that square, and the rest is
+    /// transparent. The view then fits the whole square into the tile, so
+    /// the application ends up as a small picture in the corner of an empty
+    /// cell - next to a photograph, which is scaled up to fill its tile.
+    /// Trimming here is what makes the two behave the same way.
+    /// </para>
+    ///
+    /// <para>
+    /// The crop is to a square anchored at the origin, sized to the next
+    /// standard icon step above the drawn content, rather than tight to the
+    /// content box: an icon's own transparent padding is part of how it was
+    /// drawn, and cropping that away makes some icons bigger than their
+    /// neighbours. A slot that is full, or one whose content cannot be read,
+    /// is returned as it came - the caller tells the two apart by reference.
+    /// </para>
+    /// </summary>
+    private static Bitmap TrimJumboSlot(Bitmap slot) {
+        if (slot.Width != JumboSize || slot.Height != JumboSize) {
+            return slot;
+        }
+
+        int used = DrawnExtent(slot);
+        if (used <= 0) {
+            return slot;
+        }
+
+        int side = JumboSize;
+        foreach (int step in _iconSteps) {
+            if (step >= used) {
+                side = step;
+                break;
+            }
+        }
+
+        if (side >= JumboSize) {
+            return slot;
+        }
+
+        return slot.Clone(new Rectangle(0, 0, side, side), PixelFormat.Format32bppArgb);
+    }
+
+    /// <summary>The icon sizes Windows keeps resources at, smallest first.</summary>
+    private static readonly int[] _iconSteps = { 16, 20, 24, 32, 40, 48, 64, 96, 128, 256 };
+
+    /// <summary>
+    /// How far from the origin the bitmap has any non-transparent pixel, as
+    /// one number: the larger of the right and bottom edges of what is
+    /// drawn. 0 when the bitmap is empty or could not be locked.
+    /// </summary>
+    private static int DrawnExtent(Bitmap bmp) {
+        BitmapData data;
+        try {
+            data = bmp.LockBits(
+                new Rectangle(0, 0, bmp.Width, bmp.Height),
+                ImageLockMode.ReadOnly,
+                PixelFormat.Format32bppArgb);
+        } catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) {
+            return 0;
+        }
+
+        try {
+            // A row at a time into managed memory: the alternative is a
+            // Marshal.ReadInt32 per pixel, and this runs over 65 000 of them
+            // for every icon whose slot turns out to be full.
+            var row = new int[data.Width];
+            int right = -1;
+            int bottom = -1;
+            for (int y = 0; y < data.Height; y++) {
+                Marshal.Copy(data.Scan0 + (y * data.Stride), row, 0, row.Length);
+                for (int x = data.Width - 1; x >= 0; x--) {
+                    // Alpha is the high byte of the little-endian BGRA word.
+                    if ((row[x] & unchecked((int)0xFF000000)) == 0) {
+                        continue;
+                    }
+                    bottom = y;
+                    if (x > right) {
+                        right = x;
+                    }
+
+                    break;
+                }
+            }
+
+            return Math.Max(right + 1, bottom + 1);
+        } finally {
+            bmp.UnlockBits(data);
         }
     }
 

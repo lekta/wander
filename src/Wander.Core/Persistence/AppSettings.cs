@@ -77,6 +77,15 @@ public sealed record AppSettings {
     /// </summary>
     public bool ConfirmRecycle { get; init; } = true;
 
+    /// <summary>
+    /// Ask before a move — a paste after Ctrl+X, or a drag whose effect is
+    /// Move. On by default: a drag that lands one folder off is the classic
+    /// way to lose a folder in Explorer, and the dialog names the
+    /// destination. Off is for someone who moves files by dragging all day;
+    /// Ctrl+Z takes a move back either way.
+    /// </summary>
+    public bool ConfirmMove { get; init; } = true;
+
 
     // --- Navigation ----------------------------------------------------
     /// <summary>
@@ -233,6 +242,16 @@ public sealed record AppSettings {
     /// to how RawTherapee develops the photo.
     /// </summary>
     public SidecarFormat RawRatingFormat { get; init; } = SidecarFormat.Xmp;
+
+    /// <summary>
+    /// Ask before creating the sidecar for the first rating on a photo that
+    /// has none. On by default - Wander does not write files nobody asked
+    /// for. Off is for a rating pass over a folder of RAW, where the answer
+    /// is yes every time and the question is the slow part. Clearing a
+    /// rating never creates anything, so this only ever gates the first
+    /// star; Ctrl+Z takes the file back either way.
+    /// </summary>
+    public bool ConfirmCreateSidecar { get; init; } = true;
 
 
     // --- Thumbnail cache ------------------------------------------------

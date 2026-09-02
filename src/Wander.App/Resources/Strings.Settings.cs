@@ -54,6 +54,12 @@ public static partial class Strings {
     /// <summary>Ctrl+Z возвращает из корзины в любом случае. Shift+Delete спрашивает в</summary>
     public static string SettingsConfirmRecycleHint => Get(nameof(SettingsConfirmRecycleHint));
 
+    /// <summary>Спрашивать при перемещении</summary>
+    public static string SettingsConfirmMove => Get(nameof(SettingsConfirmMove));
+
+    /// <summary>Перетаскивание с перемещением и вставка после Ctrl+X. Ctrl+Z возвраща</summary>
+    public static string SettingsConfirmMoveHint => Get(nameof(SettingsConfirmMoveHint));
+
     /// <summary>Файл и его спутники — одним элементом</summary>
     public static string SettingsIntegrateCompanions => Get(nameof(SettingsIntegrateCompanions));
 
@@ -192,6 +198,12 @@ public static partial class Strings {
     /// <summary>Оценки</summary>
     public static string SettingsRatingGroup => Get(nameof(SettingsRatingGroup));
 
+    /// <summary>Спрашивать перед созданием файла оценки</summary>
+    public static string SettingsConfirmCreateSidecar => Get(nameof(SettingsConfirmCreateSidecar));
+
+    /// <summary>Первая оценка снимка без сайдкара создаёт файл рядом с ним. Снятая г</summary>
+    public static string SettingsConfirmCreateSidecarHint => Get(nameof(SettingsConfirmCreateSidecarHint));
+
     /// <summary>Формат оценки, если сайдкара нет</summary>
     public static string SettingsRawRatingFormat => Get(nameof(SettingsRawRatingFormat));
 
@@ -218,6 +230,12 @@ public static partial class Strings {
 
     /// <summary>Полный список сочетаний. Переназначение пока не поддерживается — сочетания заданы приложением.</summary>
     public static string SettingsHotkeysHint => Get(nameof(SettingsHotkeysHint));
+
+    /// <summary>Поиск по сочетанию или по действию</summary>
+    public static string SettingsHotkeysSearch => Get(nameof(SettingsHotkeysSearch));
+
+    /// <summary>Ничего не нашлось.</summary>
+    public static string SettingsHotkeysNoMatch => Get(nameof(SettingsHotkeysNoMatch));
 
     /// <summary>все файлы</summary>
     public static string ScopeAllFiles => Get(nameof(ScopeAllFiles));

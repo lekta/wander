@@ -80,7 +80,22 @@ public sealed class HotkeysSettingsCategory : SettingsCategoryViewModel {
         : base(Strings.SettingsCategoryHotkeys, owner) { }
 
 
-    public IReadOnlyList<HotkeyGroup> Groups => HotkeyCatalog.Groups;
+    private string _query = string.Empty;
+    /// <summary>
+    /// What the search field holds. Not persisted: it is a way of looking
+    /// through a list, not a preference, and a dialog that reopens still
+    /// filtered is a dialog that looks half-empty for no visible reason.
+    /// </summary>
+    public string Query {
+        get => _query;
+        set {
+            if (SetField(ref _query, value)) {
+                Raise(nameof(Groups));
+            }
+        }
+    }
+
+    public IReadOnlyList<HotkeyGroup> Groups => HotkeyCatalog.Filter(_query);
 }
 
 

@@ -129,6 +129,13 @@ public sealed class SettingsViewModel : ObservableObject {
         set => SetField(ref _confirmRecycle, value);
     }
 
+    private bool _confirmMove;
+    /// <inheritdoc cref="AppSettings.ConfirmMove"/>
+    public bool ConfirmMove {
+        get => _confirmMove;
+        set => SetField(ref _confirmMove, value);
+    }
+
 
     // --- Companions ----------------------------------------------------
     private bool _integrateCompanions;
@@ -390,6 +397,13 @@ public sealed class SettingsViewModel : ObservableObject {
         set => SetField(ref _rawRatingFormat, value);
     }
 
+    private bool _confirmCreateSidecar;
+    /// <inheritdoc cref="AppSettings.ConfirmCreateSidecar"/>
+    public bool ConfirmCreateSidecar {
+        get => _confirmCreateSidecar;
+        set => SetField(ref _confirmCreateSidecar, value);
+    }
+
 
     // --- Thumbnail cache ------------------------------------------------
     private bool _thumbnailDiskCacheEnabled;
@@ -552,6 +566,7 @@ public sealed class SettingsViewModel : ObservableObject {
         ShowSystem = s.ShowSystem;
         HideSystemRootFolders = s.HideSystemRootFolders;
         ConfirmRecycle = s.ConfirmRecycle;
+        ConfirmMove = s.ConfirmMove;
         IntegrateCompanions = s.IntegrateCompanions;
         SortKey = s.SortKey;
         SortAscending = s.SortAscending;
@@ -575,6 +590,7 @@ public sealed class SettingsViewModel : ObservableObject {
         AutoGallery = s.AutoGallery;
         AutoGalleryPercent = s.AutoGalleryPercent;
         RawRatingFormat = s.RawRatingFormat;
+        ConfirmCreateSidecar = s.ConfirmCreateSidecar;
         ThumbnailDiskCacheEnabled = s.ThumbnailDiskCacheEnabled;
         ThumbnailDiskCacheMb = s.ThumbnailDiskCacheMb;
         ThumbnailMemoryEntries = s.ThumbnailMemoryEntries;
@@ -723,6 +739,7 @@ public sealed class SettingsViewModel : ObservableObject {
             ShowSystem = ShowSystem,
             HideSystemRootFolders = HideSystemRootFolders,
             ConfirmRecycle = ConfirmRecycle,
+            ConfirmMove = ConfirmMove,
             IntegrateCompanions = IntegrateCompanions,
             SortKey = SortKey,
             SortAscending = SortAscending,
@@ -746,6 +763,7 @@ public sealed class SettingsViewModel : ObservableObject {
             AutoGallery = AutoGallery,
             AutoGalleryPercent = AutoGalleryPercent,
             RawRatingFormat = RawRatingFormat,
+            ConfirmCreateSidecar = ConfirmCreateSidecar,
             ThumbnailDiskCacheEnabled = ThumbnailDiskCacheEnabled,
             ThumbnailDiskCacheMb = ThumbnailDiskCacheMb,
             ThumbnailMemoryEntries = ThumbnailMemoryEntries,

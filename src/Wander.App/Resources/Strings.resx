@@ -1401,4 +1401,22 @@
   <data name="SettingsShellResetConfirm" xml:space="preserve">
     <value>Сбросить настройки контекстного меню?&#xA;&#xA;Снимутся все галочки «скрыть», забудутся добавленные типы и всё, что Wander встречал в меню. Пункты Wander снова станут видны. Отмена в окне настроек ещё вернёт всё назад.</value>
   </data>
+  <data name="SettingsHotkeysSearch" xml:space="preserve">
+    <value>Поиск по сочетанию или по действию</value>
+  </data>
+  <data name="SettingsHotkeysNoMatch" xml:space="preserve">
+    <value>Ничего не нашлось.</value>
+  </data>
+  <data name="SettingsConfirmMove" xml:space="preserve">
+    <value>Спрашивать при перемещении</value>
+  </data>
+  <data name="SettingsConfirmMoveHint" xml:space="preserve">
+    <value>Перетаскивание с перемещением и вставка после Ctrl+X. Ctrl+Z возвращает файлы на место в любом случае, а перезапись существующего спрашивает всегда.</value>
+  </data>
+  <data name="SettingsConfirmCreateSidecar" xml:space="preserve">
+    <value>Спрашивать перед созданием файла оценки</value>
+  </data>
+  <data name="SettingsConfirmCreateSidecarHint" xml:space="preserve">
+    <value>Первая оценка снимка без сайдкара создаёт файл рядом с ним. Снятая галочка — для прогона по папке RAW, где ответ каждый раз один и тот же. Ctrl+Z отменяет создание в любом случае.</value>
+  </data>
 </root>

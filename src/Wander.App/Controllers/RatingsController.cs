@@ -173,7 +173,10 @@ public sealed class RatingsController {
 
         // Clearing a rating never brings a file into existence: a sidecar
         // created to record "no stars" is exactly the file nobody wanted.
-        if (value > 0 && wouldNeedSidecar.Count > 0 && _ask(SidecarQuestion(wouldNeedSidecar))) {
+        // The question itself is switchable (Settings.ConfirmCreateSidecar)
+        // - a rating pass over a folder of RAW answers it yes every time.
+        if (value > 0 && wouldNeedSidecar.Count > 0
+            && (!_settings.ConfirmCreateSidecar || _ask(SidecarQuestion(wouldNeedSidecar)))) {
             foreach (var entry in wouldNeedSidecar) {
                 targets.Add(new CompanionMetadataService.RatingTarget(entry.FullPath, null));
             }

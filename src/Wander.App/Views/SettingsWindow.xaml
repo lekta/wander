@@ -60,7 +60,7 @@
 
 
         <!--
-            General. Five switches about how the window behaves, with the
+            General. Six switches about how the window behaves, with the
             explanations on tooltips: a paragraph under every checkbox turns
             a settings page into a document, and the reader stops seeing the
             settings.
@@ -83,6 +83,9 @@
                 <CheckBox Content="{x:Static res:Strings.SettingsConfirmRecycle}"
                           ToolTip="{x:Static res:Strings.SettingsConfirmRecycleHint}"
                           IsChecked="{Binding Owner.ConfirmRecycle}"/>
+                <CheckBox Content="{x:Static res:Strings.SettingsConfirmMove}"
+                          ToolTip="{x:Static res:Strings.SettingsConfirmMoveHint}"
+                          IsChecked="{Binding Owner.ConfirmMove}"/>
             </StackPanel>
         </DataTemplate>
 
@@ -464,6 +467,10 @@
                 </Grid>
 
                 <TextBlock Text="{x:Static res:Strings.SettingsRatingGroup}" FontWeight="SemiBold" Margin="0,18,0,8"/>
+                <CheckBox Content="{x:Static res:Strings.SettingsConfirmCreateSidecar}"
+                          ToolTip="{x:Static res:Strings.SettingsConfirmCreateSidecarHint}"
+                          IsChecked="{Binding Owner.ConfirmCreateSidecar}"
+                          Margin="0,0,0,10"/>
                 <TextBlock Text="{x:Static res:Strings.SettingsRawRatingFormat}" Margin="0,0,0,6"/>
                 <RadioButton GroupName="RawRatingFormat" Margin="0,0,0,4"
                              Content="{x:Static res:Strings.SettingsRawRatingFormatXmp}"
@@ -704,23 +711,56 @@
             groups in the order the guide uses them, gesture on the left,
             what it does on the right.
 
-            Not a fixed-width column but a shared-size one, so the widest
-            gesture in a group sets the column and "Esc в поле фильтра"
-            does not wrap under "Ctrl + F".
+            Not a fixed-width column but a shared-size one, and the scope is
+            the whole page rather than each group: five groups each sizing
+            their own column made five different left edges down one page,
+            which reads as five tables instead of one list.
+
+            The field above it filters on the gesture and on the description
+            both - see HotkeyCatalog.Filter.
         -->
         <DataTemplate DataType="{x:Type vm:HotkeysSettingsCategory}">
-            <StackPanel>
+            <StackPanel Grid.IsSharedSizeScope="True">
                 <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
-                <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,0,0,12"
+                <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,0,0,10"
                            Text="{x:Static res:Strings.SettingsHotkeysHint}"/>
+
+                <!--
+                    Same overlaid-placeholder shape as the main window's
+                    search box. NumericField is switched off explicitly: the
+                    page's TextBox style turns it on for the pixel fields,
+                    and a search box that pulls its own text on a wheel
+                    scroll would empty itself when the page is scrolled.
+                -->
+                <Grid Margin="0,0,0,12" HorizontalAlignment="Left" Width="260">
+                    <TextBox Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}"
+                             controls:NumericField.Enabled="False"
+                             Padding="6,4"/>
+                    <TextBlock Text="{x:Static res:Strings.SettingsHotkeysSearch}"
+                               Foreground="{StaticResource TextPlaceholder}"
+                               Margin="8,0,8,0"
+                               TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center"
+                               IsHitTestVisible="False">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Query}" Value="">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Grid>
 
                 <ItemsControl ItemsSource="{Binding Groups}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <StackPanel Margin="0,0,0,14">
                                 <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Margin="0,0,0,4"/>
-                                <ItemsControl ItemsSource="{Binding Rows}"
-                                              Grid.IsSharedSizeScope="True">
+                                <ItemsControl ItemsSource="{Binding Rows}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
                                             <Grid Margin="0,2,0,2">
@@ -747,6 +787,22 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
+
+                <!-- An empty page under a search field is an unanswered
+                     question, so it gets an answer. -->
+                <TextBlock Foreground="{StaticResource TextDim}"
+                           Text="{x:Static res:Strings.SettingsHotkeysNoMatch}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Groups.Count}" Value="0">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
             </StackPanel>
         </DataTemplate>
 
@@ -794,7 +850,12 @@
             </Grid.ColumnDefinitions>
 
             <!-- Left: category list. ListBox today; will swap to TreeView
-                 if/when a category gains nested subsections. -->
+                 if/when a category gains nested subsections.
+
+                 FocusVisualStyle is nulled the same way the file list nulls
+                 it: WPF's dashed rectangle draws on top of the selection
+                 background, so arrowing through the categories showed the
+                 row selected twice. Focus is still tracked semantically. -->
             <ListBox Grid.Column="0"
                      ItemsSource="{Binding Categories}"
                      SelectedItem="{Binding SelectedCategory}"
@@ -802,7 +863,13 @@
                      BorderThickness="0,0,1,0"
                      BorderBrush="{StaticResource Separator}"
                      Background="{StaticResource ListBackground}"
-                     Padding="0,8,0,0"/>
+                     Padding="0,8,0,0">
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+            </ListBox>
 
             <!-- Right: content area selected by SelectedCategory's type. -->
             <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Padding="20">

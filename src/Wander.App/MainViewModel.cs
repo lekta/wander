@@ -3244,7 +3244,17 @@ public sealed class MainViewModel : ObservableObject {
         return await task.ConfigureAwait(true);
     }
 
-    private static bool ConfirmMove(IReadOnlyList<string> sources, string target) {
+    /// <summary>
+    /// The move dialog, or a straight yes when the user has turned it off
+    /// (Settings.ConfirmMove). Off is not "move silently, whatever happens":
+    /// a move that has to overwrite something still asks, through the
+    /// conflict resolver, and Ctrl+Z still takes the whole batch back.
+    /// </summary>
+    private bool ConfirmMove(IReadOnlyList<string> sources, string target) {
+        if (!Settings.ConfirmMove) {
+            return true;
+        }
+
         string message;
         if (sources.Count == 1) {
             message = string.Format(

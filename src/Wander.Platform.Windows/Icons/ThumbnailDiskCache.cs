@@ -12,10 +12,12 @@ namespace Wander.Platform.Windows.Icons;
 ///
 /// <para>
 /// One PNG per cached thumbnail, named after a hash of
-/// <c>path | last-write-time | size</c>. Both stamps are in the key on
-/// purpose: an edited file produces a different name, so a stale thumbnail
-/// is never served — it is simply orphaned and eventually trimmed. That is
-/// cheaper and far more robust than trying to invalidate entries.
+/// <c>generation | path | last-write-time | size</c>. The two file stamps
+/// are in the key on purpose: an edited file produces a different name, so
+/// a stale thumbnail is never served — it is simply orphaned and eventually
+/// trimmed. That is cheaper and far more robust than trying to invalidate
+/// entries. <see cref="Generation"/> is the same trick for a change on our
+/// side rather than the file's.
 /// </para>
 ///
 /// <para>
@@ -29,6 +31,22 @@ public sealed class ThumbnailDiskCache {
 
     /// <summary>How far below the budget a trim goes, so trims stay rare.</summary>
     private const double TrimTargetFraction = 0.8;
+
+    /// <summary>
+    /// Bumped when Wander starts drawing a thumbnail differently for the
+    /// same bytes on disk. The key already covers "the file changed"; this
+    /// covers "we changed", which nothing else could express — a cache
+    /// keyed only on the source would go on serving the old picture for
+    /// files that never moved. Old entries are not deleted, they simply
+    /// stop being found and the budget trims them.
+    ///
+    /// <para>
+    /// v2 (2026-09-02): the jumbo slot is trimmed to the icon in it, so
+    /// applications without a 256-px icon resource no longer come back as a
+    /// small picture in the corner of an empty square.
+    /// </para>
+    /// </summary>
+    private const int Generation = 2;
 
     private readonly string _directory;
     private readonly ILogger _log;
@@ -239,7 +257,7 @@ public sealed class ThumbnailDiskCache {
                 return null;
             }
 
-            string key = $"{sourcePath.ToLowerInvariant()}|{info.LastWriteTimeUtc.Ticks}|{info.Length}";
+            string key = $"v{Generation}|{sourcePath.ToLowerInvariant()}|{info.LastWriteTimeUtc.Ticks}|{info.Length}";
             byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(key));
 
             return Path.Combine(_directory, Convert.ToHexString(hash, 0, 16) + ".png");

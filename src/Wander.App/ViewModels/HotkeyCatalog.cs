@@ -86,6 +86,56 @@ public static class HotkeyCatalog {
             new HotkeyRow("Ctrl + Shift + 7", Strings.HotkeyViewTiles),
         }),
     };
+
+
+    /// <summary>
+    /// The groups that still have rows once <paramref name="query"/> is
+    /// applied. Matched against the gesture and the description both: the
+    /// user looking for "что делает Ctrl+Q" and the one looking for "как
+    /// свернуть панель просмотра" are asking the same list the same
+    /// question from the two ends.
+    ///
+    /// <para>
+    /// An empty query is the whole catalogue, by reference — the common
+    /// case must not rebuild five lists to arrive back where it started.
+    /// A group that matched nothing is dropped rather than shown empty.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<HotkeyGroup> Filter(string? query) {
+        string needle = (query ?? string.Empty).Trim();
+        if (needle.Length == 0) {
+            return Groups;
+        }
+
+        var matched = new List<HotkeyGroup>();
+        foreach (var group in Groups) {
+            var rows = group.Rows.Where(r => Hit(r, needle)).ToArray();
+            if (rows.Length > 0) {
+                matched.Add(group with { Rows = rows });
+            }
+        }
+
+        return matched;
+    }
+
+
+    private static bool Hit(HotkeyRow row, string needle) {
+        return Contains(row.Description, needle)
+            || Contains(row.Gesture, needle)
+            // Spaces removed from both sides, so "ctrl+q" finds the row the
+            // catalogue spells "Ctrl + Q". Nobody types a shortcut with the
+            // spaces in, and the literal comparison above stays for the
+            // gestures written as a phrase ("Esc в поле фильтра").
+            || Contains(Squeeze(row.Gesture), Squeeze(needle));
+    }
+
+    private static bool Contains(string haystack, string needle) {
+        return haystack.Contains(needle, StringComparison.CurrentCultureIgnoreCase);
+    }
+
+    private static string Squeeze(string text) {
+        return text.Replace(" ", "");
+    }
 }
 
 
