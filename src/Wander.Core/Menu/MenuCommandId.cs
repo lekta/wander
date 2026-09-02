@@ -48,6 +48,9 @@ public enum MenuCommandId {
     Delete,
     NewFolder,
 
+    // --- Archives -------------------------------------------------------
+    Extract,
+
     // --- Recycle bin ----------------------------------------------------
     RestoreFromRecycleBin,
 

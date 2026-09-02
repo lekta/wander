@@ -51,6 +51,21 @@ internal sealed record DeleteAction(IRecycleBin Bin, RecycleHandle Handle) : IUn
 }
 
 /// <summary>
+/// Undo of "I took X out of an archive" — send the copy to the recycle
+/// bin. The same act as undoing a create, said in the words of the
+/// operation the user actually performed: after extracting, "Undo:
+/// Create 'notes.txt'" describes something they never did.
+/// </summary>
+internal sealed record ExtractAction(IRecycleBin Bin, string ExtractedPath) : IUndoableAction {
+    public string Description => $"Extract '{Path.GetFileName(ExtractedPath)}'";
+
+    /// <summary>Nothing to select: undoing an extraction takes the copy away.</summary>
+    public IReadOnlyList<string> PathsAfterUndo => Array.Empty<string>();
+
+    public void Undo() => Bin.Send(ExtractedPath);
+}
+
+/// <summary>
 /// Bundles N sub-actions into a single undo step (a paste or drop of many
 /// files lands as one Ctrl+Z, not N).
 /// </summary>

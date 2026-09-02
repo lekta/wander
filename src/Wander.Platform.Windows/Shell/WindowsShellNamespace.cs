@@ -7,12 +7,18 @@ using Wander.Core.Shell;
 namespace Wander.Platform.Windows.Shell;
 
 /// <summary>
-/// Read-only shell-namespace enumeration. Currently knows only about the
-/// Recycle Bin (<see cref="ShellPaths.RecycleBin"/>) — the only
-/// namespace Wander surfaces today. Reuses the same <c>Shell.Application</c>
-/// dynamic-COM dance that <c>ShellRecycleBin.Restore</c> uses; the
-/// trade-off (locale-dependent column lookups, no per-process release
-/// of the RCW) is identical and already documented there.
+/// Read-only shell-namespace enumeration. Two namespaces live behind it:
+/// the Recycle Bin (<see cref="ShellPaths.RecycleBin"/>), which keeps the
+/// <c>Shell.Application</c> dynamic-COM dance <c>ShellRecycleBin.Restore</c>
+/// uses, and archives browsed as folders, which go through
+/// <see cref="ShellArchiveFolder"/> and <c>IShellItem</c> instead - that
+/// same <c>Shell.Application</c> reports 0 for the size and 1899 for the
+/// date of every entry inside a <c>.7z</c>.
+///
+/// <para>
+/// This class is the dispatcher and nothing else: which of the two a path
+/// belongs to, and the fact that neither can be written to.
+/// </para>
 /// </summary>
 public sealed class WindowsShellNamespace : IShellNamespace {
     // Shell special-folder constant CSIDL_BITBUCKET = 0xA. Same value that
@@ -20,26 +26,63 @@ public sealed class WindowsShellNamespace : IShellNamespace {
     private const int SsfBitBucket = 0xA;
 
     private readonly ILogger _logger;
+    private readonly ShellArchiveFolder _archives;
 
 
     public WindowsShellNamespace(ILogger logger) {
         _logger = logger;
+        _archives = new ShellArchiveFolder(logger);
     }
 
 
     public bool IsShellPath(string path) {
-        return IsRecycleBin(path);
+        return IsRecycleBin(path) || ParseArchive(path) is not null;
     }
 
+    /// <summary>
+    /// The archive / inner-path split, and null for everything else - a
+    /// real folder that happens to be called <c>backup.zip</c> included.
+    /// That last check is what makes this safe to ask about any path: the
+    /// split alone is pure string work, and only the disk can tell a
+    /// container from a folder named like one.
+    /// </summary>
+    public ArchivePath? ParseArchive(string path) {
+        var archive = _archives.Parse(path);
+
+        return archive is not null && File.Exists(archive.Archive) ? archive : null;
+    }
+
+    public bool CanNavigate(string path) {
+        if (IsRecycleBin(path)) {
+            return true;
+        }
+
+        return ParseArchive(path) is not null && _archives.CanNavigate(path);
+    }
+
+    public Task CopyOut(
+        IReadOnlyList<CopyOutItem> items, string targetFolder,
+        IProgress<string>? progress, CancellationToken ct) {
+        return Task.Run(() => _archives.CopyOut(items, targetFolder, progress, ct), ct);
+    }
+
+    /// <summary>
+    /// The Recycle Bin's own label; null for an archive, whose path reads
+    /// correctly as it stands and whose breadcrumbs are the ordinary ones.
+    /// </summary>
     public string? GetDisplayName(string shellPath) {
         return IsRecycleBin(shellPath) ? Text.Get("SpecialFolderRecycleBin") : null;
     }
 
     public IReadOnlyList<FileSystemEntry> Enumerate(string shellPath) {
-        if (!IsRecycleBin(shellPath)) {
-            return Array.Empty<FileSystemEntry>();
+        if (IsRecycleBin(shellPath)) {
+            return EnumerateRecycleBin();
         }
-        return EnumerateRecycleBin();
+        if (ParseArchive(shellPath) is not null) {
+            return _archives.Enumerate(shellPath);
+        }
+
+        return Array.Empty<FileSystemEntry>();
     }
 
 

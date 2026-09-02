@@ -586,6 +586,9 @@
   <data name="MenuCmdRestore" xml:space="preserve">
     <value>Восстановить</value>
   </data>
+  <data name="MenuCmdExtract" xml:space="preserve">
+    <value>Извлечь…</value>
+  </data>
   <data name="MenuCmdProperties" xml:space="preserve">
     <value>Свойства</value>
   </data>
@@ -1418,5 +1421,41 @@
   </data>
   <data name="SettingsConfirmCreateSidecarHint" xml:space="preserve">
     <value>Первая оценка снимка без сайдкара создаёт файл рядом с ним. Снятая галочка — для прогона по папке RAW, где ответ каждый раз один и тот же. Ctrl+Z отменяет создание в любом случае.</value>
+  </data>
+  <data name="StatusArchiveUnreadable" xml:space="preserve">
+    <value>Архив «{0}» не читается: повреждён или недоступен</value>
+  </data>
+  <data name="StatusArchiveEmptyOrLocked" xml:space="preserve">
+    <value>«{0}»: пусто или защищено паролем</value>
+  </data>
+  <data name="StatusArchiveCopied" xml:space="preserve">
+    <value>Скопировано из архива: {0}. В другие программы — через «Извлечь…»</value>
+  </data>
+  <data name="StatusArchiveTempCopy" xml:space="preserve">
+    <value>Открыта временная копия «{0}»; изменения в архив не попадут</value>
+  </data>
+  <data name="StatusArchiveLocked" xml:space="preserve">
+    <value>Не извлечь: архив защищён паролем</value>
+  </data>
+  <data name="StatusExtractFailed" xml:space="preserve">
+    <value>Извлечение не удалось: {0}</value>
+  </data>
+  <data name="VerbExtracted" xml:space="preserve">
+    <value>Извлечено</value>
+  </data>
+  <data name="ProgressExtracting" xml:space="preserve">
+    <value>Извлечение</value>
+  </data>
+  <data name="ExtractPickFolderTitle" xml:space="preserve">
+    <value>Куда извлечь</value>
+  </data>
+  <data name="PreviewArchiveEntry" xml:space="preserve">
+    <value>Файл внутри архива. Содержимое не показывается — извлеките его или откройте временную копию.</value>
+  </data>
+  <data name="StatusArchiveNoDrag" xml:space="preserve">
+    <value>Перетаскивание из архива пока не работает — «Извлечь…» или Ctrl+C и вставка в папку</value>
+  </data>
+  <data name="SummaryInsideArchive" xml:space="preserve">
+    <value>В архиве</value>
   </data>
 </root>

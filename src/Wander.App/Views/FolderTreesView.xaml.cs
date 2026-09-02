@@ -11,6 +11,7 @@ using Wander.App.Resources;
 using Wander.App.Util;
 using Wander.App.ViewModels;
 using Wander.Core.Navigation;
+using Wander.Core.Shell;
 
 
 namespace Wander.App.Views;
@@ -297,6 +298,14 @@ public partial class FolderTreesView : UserControl {
     /// </summary>
     private void OnTreeSelectionChanged(object sender, object? item, NavigationSource source) {
         if (item is not TreeNodeViewModel node || string.IsNullOrEmpty(node.FullPath)) {
+            return;
+        }
+
+        // The controller moving the highlight after a navigation is an
+        // echo, not a click. Inside an archive the row it picks is the
+        // folder holding the archive, and treated as a click that echo
+        // navigated straight back out - the archive never got listed.
+        if (Vm.Trees.IsSyncingSelection) {
             return;
         }
 
@@ -642,11 +651,18 @@ public partial class FolderTreesView : UserControl {
     }
 
 
-    /// <summary>The tree node a hit belongs to, if it has a real path.</summary>
+    /// <summary>
+    /// The tree node a hit belongs to, if it has a real path. An archive
+    /// row, or a folder inside one, answers null like a shell sentinel
+    /// does: nothing here can be dragged out of it, dropped into it or
+    /// done to it from a menu - the container is read-only by decision.
+    /// </summary>
     private static TreeNodeViewModel? NodeAt(object originalSource) {
         foreach (var hit in ListVisuals.Ancestors(originalSource)) {
             if (hit is FrameworkElement fe && fe.DataContext is TreeNodeViewModel node) {
-                return string.IsNullOrEmpty(node.FullPath) || node.FullPath.StartsWith("shell:", StringComparison.OrdinalIgnoreCase)
+                return string.IsNullOrEmpty(node.FullPath)
+                    || node.FullPath.StartsWith("shell:", StringComparison.OrdinalIgnoreCase)
+                    || Archives.Contains(node.FullPath)
                     ? null
                     : node;
             }

@@ -332,7 +332,14 @@ public sealed class BookmarksController {
             name = path;
         }
 
-        bool exists = _fs.DirectoryExists(path);
+        // A bookmark inside an archive is not a directory and never will
+        // be, but it is not missing either — the same answer the Recycle
+        // Bin gets. It has no children to enumerate, so it is a leaf. A
+        // bookmark on the archive itself is the tree row it would be under
+        // its folder, and expands the same way.
+        bool isShell = ServiceLocator.TryGet<IShellNamespace>() is { } shell && shell.IsShellPath(path);
+        bool isArchive = isShell && Archives.Of(path) is { IsRoot: true };
+        bool exists = isArchive || (!isShell && _fs.DirectoryExists(path));
         var node = new TreeNodeViewModel(
             name, path, EntryKind.Directory,
             exists ? _fs : null,
@@ -340,7 +347,7 @@ public sealed class BookmarksController {
             _settings) {
             IsRemovableBookmark = true,
             StartsUserSection = startsSection,
-            IsMissing = !exists,
+            IsMissing = !exists && !isShell,
         };
         _wire(node);
 

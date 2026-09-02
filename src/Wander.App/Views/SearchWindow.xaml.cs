@@ -18,6 +18,7 @@ namespace Wander.App.Views;
 public partial class SearchWindow : Window {
     public SearchWindow() {
         InitializeComponent();
+        App.ParkIfHeadless(this);
     }
 
 

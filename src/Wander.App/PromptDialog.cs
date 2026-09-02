@@ -20,6 +20,7 @@ internal static class PromptDialog {
             Owner = Application.Current.MainWindow,
             ResizeMode = ResizeMode.NoResize,
         };
+        App.ParkIfHeadless(window);
 
         var stack = new StackPanel { Margin = new Thickness(12) };
         stack.Children.Add(new TextBlock { Text = label, Margin = new Thickness(0, 0, 0, 6) });

@@ -49,4 +49,19 @@ public sealed record ContextMenuTarget {
     /// but with one thing you *can* do to its contents — put them back.
     /// </summary>
     public bool IsRecycleBin { get; init; }
+
+    /// <summary>
+    /// The listing is inside an archive. Read-only like the bin, and with
+    /// its own short menu: what you can do to a thing in a container you
+    /// cannot write to is open it, copy it, or take it out.
+    /// </summary>
+    public bool IsArchive { get; init; }
+
+    /// <summary>
+    /// Every selected item is an archive Wander can open — in an ordinary
+    /// folder, which is what earns the row its "Извлечь…". Computed by the
+    /// caller: which extensions count is a property of the machine, and
+    /// this record stays a plain snapshot.
+    /// </summary>
+    public bool SelectionIsArchive { get; init; }
 }

@@ -5,6 +5,7 @@ using Wander.App.ViewModels;
 using Wander.Core.FileSystem;
 using Wander.Core.Logging;
 using Wander.Core.Search;
+using Wander.Core.Shell;
 
 
 namespace Wander.App.Controllers;
@@ -364,6 +365,14 @@ public sealed class ContentSearchController : ObservableObject {
 
         string? root = _root();
         if (string.IsNullOrEmpty(root)) {
+            return;
+        }
+
+        // Inside an archive there is nothing to walk: the search service
+        // reads the filesystem, and these paths are not on it. The live
+        // name filter still works — it filters the rows already listed,
+        // which is the whole archive level anyway.
+        if (Archives.Contains(root)) {
             return;
         }
 

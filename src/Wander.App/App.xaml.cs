@@ -56,7 +56,42 @@ public partial class App : Application {
         // in a scripted answerer before it builds the view model.
         ServiceLocator.Register<IDialogs>(new WpfDialogs());
         HookCrashLogging();
+        // Yesterday's scratch copies of archive entries. Swept on the way in
+        // rather than on the way out: a crash is precisely when the tidy-up
+        // on exit would not have run.
+        SweepTempCopies();
         base.OnStartup(e);
+    }
+
+
+    /// <summary>
+    /// Keeps a window off the real desktop while <see cref="Headless"/> is
+    /// on: parked outside the virtual screen, never activated, not in the
+    /// taskbar. Every window the app can open calls this in its constructor,
+    /// before it is shown. Relying on <c>CenterOwner</c> is not enough: WPF
+    /// centres a dialog on an owner it cannot see by putting it at (0, 0) -
+    /// on the desktop of whoever is working there, with the focus - which is
+    /// what the progress dialog did on every paste of a harness run
+    /// (2026-09-02).
+    /// </summary>
+    internal static void ParkIfHeadless(Window window) {
+        if (!Headless) {
+            return;
+        }
+
+        window.WindowStartupLocation = WindowStartupLocation.Manual;
+        window.Left = -32000;
+        window.Top = -32000;
+        window.ShowActivated = false;
+        window.ShowInTaskbar = false;
+    }
+
+
+    private static void SweepTempCopies() {
+        int removed = TempFiles.Sweep(DateTime.UtcNow);
+        if (removed > 0) {
+            ServiceLocator.Get<ILogger>().Info($"Temporary copies: {removed} folder(s) swept");
+        }
     }
 
 

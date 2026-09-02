@@ -29,6 +29,10 @@ public partial class ProgressDialog : Window {
 
     public ProgressDialog(string headline, OperationTracker tracker) {
         InitializeComponent();
+        // Off the desktop in a harness run, like every window: centred on
+        // an owner parked off-screen, this one came up at (0, 0) with the
+        // focus on every paste.
+        App.ParkIfHeadless(this);
         DialogTitle = headline;
         Headline = headline + "...";
         _tracker = tracker;

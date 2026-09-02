@@ -33,6 +33,7 @@ public partial class SettingsWindow : Window {
 
     public SettingsWindow() {
         InitializeComponent();
+        App.ParkIfHeadless(this);
         Loaded += OnLoaded;
     }
 

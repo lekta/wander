@@ -1,0 +1,126 @@
+{
+  // Archives browsed as folders: walking into one by path and by Enter,
+  // down into a subfolder and back out, extracting through the clipboard
+  // and undoing it, and the two things that must NOT happen in there -
+  // writing, and a password-protected archive pretending to be empty.
+  //
+  // Formats are asserted one at a time on purpose: which of them open as
+  // folders is the machine's association state, not Wander's code, and a
+  // machine where 7-Zip owns .7z has to fail on that row alone. selfcheck
+  // says which ones this machine claims before the scenario runs.
+  "name": "archives",
+  "sandbox": "archives",
+  "profiles": [ "archives" ],
+  "steps": [
+    { "do": "fs", "op": "delete", "path": "{sandbox}\\archives\\out" },
+    { "do": "navigate", "path": "{sandbox}\\archives" },
+    { "do": "assert-entries", "contains": [ "nested.zip", "nested.7z", "locked.zip", "plain.zip" ] },
+
+    // --- Into a zip by path -------------------------------------------
+    { "do": "navigate", "path": "{sandbox}\\archives\\nested.zip" },
+    { "do": "assert-entries", "count": 2, "contains": [ "docs", "readme.txt" ] },
+    { "do": "assert-path", "is": "{sandbox}\\archives\\nested.zip", "crumbs": [ "archives", "nested.zip" ] },
+    { "do": "screenshot", "name": "zip-root" },
+
+    // --- Down into a folder inside it, and back up --------------------
+    { "do": "navigate", "path": "{sandbox}\\archives\\nested.zip\\docs" },
+    { "do": "assert-entries", "count": 2, "contains": [ "manual.txt", "notes.txt" ] },
+    { "do": "assert-path", "crumbs": [ "nested.zip", "docs" ] },
+    { "do": "command", "name": "up" },
+    { "do": "assert-path", "is": "{sandbox}\\archives\\nested.zip" },
+    { "do": "command", "name": "up" },
+    { "do": "assert-path", "is": "{sandbox}\\archives" },
+
+    // --- Into the same zip with Enter, the way a person does ----------
+    // In a list view rather than the details grid: the grid consumes Enter
+    // for its own row navigation before the window's hotkey sees it, which
+    // is a separate matter (TECHDEBT) and not what this scenario is about.
+    { "do": "view", "mode": "Tiles" },
+    { "do": "select", "names": [ "nested.zip" ] },
+    { "do": "key", "key": "Enter" },
+    { "do": "wait-idle" },
+    { "do": "assert-path", "is": "{sandbox}\\archives\\nested.zip" },
+    { "do": "assert-entries", "contains": [ "readme.txt" ] },
+
+    // --- Nothing in here writes ---------------------------------------
+    // The commands are run through their CanExecute, exactly as a menu row
+    // or a hotkey would be: a refusal is the command not firing at all.
+    { "do": "select", "names": [ "readme.txt" ] },
+    { "do": "command", "name": "delete" },
+    { "do": "command", "name": "cut" },
+    { "do": "command", "name": "new-folder" },
+    { "do": "assert-entries", "count": 2, "contains": [ "docs", "readme.txt" ] },
+    { "do": "assert-log", "scope": "all", "absent": "Delete (recycle)" },
+    { "do": "note", "text": "delete / cut / new folder are unavailable inside an archive - see the notes above for each" },
+
+    // --- Copy out, paste into a real folder ---------------------------
+    { "do": "select", "names": [ "readme.txt", "docs" ] },
+    { "do": "command", "name": "copy" },
+    { "do": "navigate", "path": "{sandbox}\\archives" },
+    { "do": "command", "name": "new-folder" },
+    { "do": "rename", "name": "Новая папка", "to": "out" },
+    { "do": "navigate", "path": "{sandbox}\\archives\\out" },
+    { "do": "command", "name": "paste" },
+    { "do": "wait-idle" },
+    { "do": "assert-entries", "count": 2, "contains": [ "readme.txt", "docs" ] },
+    { "do": "screenshot", "name": "extracted" },
+    { "do": "assert-log", "scope": "all", "contains": "Extract:" },
+
+    { "do": "command", "name": "undo" },
+    { "do": "wait-idle" },
+    { "do": "assert-entries", "count": 0 },
+    { "do": "note", "text": "Ctrl+Z after an extraction takes the copies to the recycle bin" },
+
+    // --- The archive is a row in the folder tree -----------------------
+    // Level by level, like tree-bookmarks: reaching docs proves nested.zip
+    // was a row under archives and opened into its folders.
+    { "do": "navigate", "path": "{sandbox}\\archives" },
+    { "do": "tree-expand", "path": "{sandbox}\\archives\\nested.zip" },
+    { "do": "tree-expand", "path": "{sandbox}\\archives\\nested.zip\\docs", "expand": false },
+    { "do": "note", "text": "nested.zip is a row in the drives tree and expands into its docs folder" },
+    { "do": "screenshot", "name": "tree-archive" },
+    { "do": "navigate", "path": "{sandbox}\\archives\\nested.zip\\docs" },
+    { "do": "assert-path", "is": "{sandbox}\\archives\\nested.zip\\docs" },
+    { "do": "note", "text": "look with your eyes on tree-archive.png: the tree highlights docs inside nested.zip, not the archives folder" },
+
+    // --- The other formats --------------------------------------------
+    { "do": "navigate", "path": "{sandbox}\\archives\\nested.7z" },
+    { "do": "assert-entries", "count": 2, "contains": [ "docs", "readme.txt" ] },
+    { "do": "navigate", "path": "{sandbox}\\archives\\nested.tar.gz" },
+    { "do": "assert-entries", "min": 1 },
+
+    // --- A folder that is merely named like an archive ----------------
+    { "do": "navigate", "path": "{sandbox}\\archives\\plain.zip" },
+    { "do": "assert-entries", "contains": [ "inside.txt" ] },
+    { "do": "note", "text": "a real folder called plain.zip opens as the folder it is" },
+
+    // --- Password-protected: names visible, bytes not -----------------
+    { "do": "navigate", "path": "{sandbox}\\archives\\locked.zip" },
+    { "do": "assert-entries", "min": 1 },
+    { "do": "select", "names": [ "readme.txt" ] },
+    { "do": "command", "name": "copy" },
+    { "do": "navigate", "path": "{sandbox}\\archives\\out" },
+    { "do": "command", "name": "paste" },
+    { "do": "wait-idle" },
+    { "do": "assert-entries", "count": 0 },
+    { "do": "screenshot", "name": "locked" },
+    { "do": "note", "text": "look with your eyes: the status bar has to say the archive is password-protected, not that nothing happened" },
+
+    // Tidy up. Permanent, because the recycle bin is the one part of the
+    // machine a sandbox run does touch.
+    { "do": "navigate", "path": "{sandbox}\\archives" },
+    // Warm by now, so the icons are in: the archives are ordinary files
+    // with ordinary icons, and plain.zip is a folder with a folder's.
+    { "do": "screenshot", "name": "archives-folder" },
+    { "do": "select", "names": [ "out" ] },
+    { "do": "command", "name": "permanent-delete" },
+    { "do": "assert-entries", "absent": [ "out" ] },
+
+    {
+      // The failed extraction out of the encrypted zip is the one error
+      // this scenario provokes, and it is named rather than tolerated.
+      "do": "assert-log", "scope": "all", "noErrors": true,
+      "allow": [ "Extract failed", "Permanent delete" ]
+    }
+  ]
+}

@@ -187,6 +187,9 @@ public sealed class ScenarioRunner {
             case "assert-entries":
                 AssertEntries(step);
                 break;
+            case "assert-path":
+                AssertPath(step);
+                break;
             case "measure":
                 _metrics.Take(step.Str("name") ?? "measure");
                 break;
@@ -205,48 +208,67 @@ public sealed class ScenarioRunner {
         switch (name.ToLowerInvariant()) {
             case "delete":
                 EnsureInSandbox(name);
-                _vm.DeleteCommand.Execute(null);
+                Invoke(name, _vm.DeleteCommand);
                 break;
             case "permanent-delete":
                 EnsureInSandbox(name);
-                _vm.PermanentDeleteCommand.Execute(null);
+                Invoke(name, _vm.PermanentDeleteCommand);
                 break;
             case "copy":
-                _vm.CopyCommand.Execute(null);
+                Invoke(name, _vm.CopyCommand);
                 break;
             case "cut":
-                _vm.CutCommand.Execute(null);
+                Invoke(name, _vm.CutCommand);
                 break;
             case "paste":
                 EnsureInSandbox(name);
-                _vm.PasteCommand.Execute(null);
+                Invoke(name, _vm.PasteCommand);
                 break;
             case "new-folder":
                 EnsureInSandbox(name);
-                _vm.NewFolderCommand.Execute(null);
+                Invoke(name, _vm.NewFolderCommand);
                 break;
             case "refresh":
-                _vm.RefreshCommand.Execute(null);
+                Invoke(name, _vm.RefreshCommand);
                 break;
             case "undo":
                 EnsureInSandbox(name);
-                _vm.UndoCommand.Execute(null);
+                Invoke(name, _vm.UndoCommand);
                 break;
             case "up":
-                _vm.UpCommand.Execute(null);
+                Invoke(name, _vm.UpCommand);
                 break;
             case "back":
-                _vm.BackCommand.Execute(null);
+                Invoke(name, _vm.BackCommand);
                 break;
             case "forward":
-                _vm.ForwardCommand.Execute(null);
+                Invoke(name, _vm.ForwardCommand);
                 break;
             case "clear-search":
-                _vm.ClearSearchCommand.Execute(null);
+                Invoke(name, _vm.ClearSearchCommand);
                 break;
             default:
                 throw new InvalidDataException($"unknown command '{name}'");
         }
+    }
+
+    /// <summary>
+    /// Runs a command the way the window does - through its CanExecute. A
+    /// disabled menu row and a hotkey in a place that refuses it both do
+    /// nothing, and a scenario asking for one has to see that same nothing
+    /// rather than the guts of a command the user could never have fired.
+    /// The refusal is written into the report: silence would look like the
+    /// command had run.
+    /// </summary>
+    private void Invoke(string name, RelayCommand command) {
+        if (!command.CanExecute(null)) {
+            _report.Note($"command '{name}' is not available here - not run");
+            _log.Info($"HARNESS command '{name}' unavailable, skipped");
+
+            return;
+        }
+
+        command.Execute(null);
     }
 
 
@@ -356,17 +378,50 @@ public sealed class ScenarioRunner {
             ?? throw new InvalidOperationException("window has no presentation source");
 
         for (int i = 0; i < repeat; i++) {
-            Raise(Keyboard.PreviewKeyDownEvent, Keyboard.KeyDownEvent);
+            bool handled = Raise(Keyboard.PreviewKeyDownEvent, Keyboard.KeyDownEvent);
             Raise(Keyboard.PreviewKeyUpEvent, Keyboard.KeyUpEvent);
+            _log.Info($"HARNESS key {key} on {target.GetType().Name}: handled={handled}");
+            if (!handled) {
+                InvokeKeyBinding(key);
+            }
         }
 
-        void Raise(RoutedEvent preview, RoutedEvent main) {
+        bool Raise(RoutedEvent preview, RoutedEvent main) {
             var args = new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, key) { RoutedEvent = preview };
             target.RaiseEvent(args);
-            if (!args.Handled) {
-                var bubble = new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, key) { RoutedEvent = main };
-                target.RaiseEvent(bubble);
+            if (args.Handled) {
+                return true;
             }
+
+            var bubble = new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, key) { RoutedEvent = main };
+            target.RaiseEvent(bubble);
+
+            return bubble.Handled;
+        }
+    }
+
+    /// <summary>
+    /// The window's own <c>InputBindings</c>, replayed by hand. WPF matches
+    /// those inside the input manager, off a real keystroke; a routed event
+    /// raised on an element bubbles past them, so Enter, F5, Ctrl+C and the
+    /// rest of the hotkeys would do nothing in a scenario that pressed
+    /// them. Runs only when nobody handled the key, which is exactly the
+    /// point at which WPF would have reached the bindings.
+    /// </summary>
+    private void InvokeKeyBinding(Key key) {
+        var modifiers = Keyboard.Modifiers;
+        foreach (var binding in _window.InputBindings.OfType<KeyBinding>()) {
+            if (binding.Key != key || binding.Modifiers != modifiers || binding.Command is not { } command) {
+                continue;
+            }
+
+            if (command.CanExecute(binding.CommandParameter)) {
+                command.Execute(binding.CommandParameter);
+            } else {
+                _report.Note($"hotkey '{key}' is not available here - not run");
+            }
+
+            return;
         }
     }
 
@@ -731,6 +786,33 @@ public sealed class ScenarioRunner {
                 if (!actual.Contains(name)) {
                     throw new InvalidOperationException($"'{name}' is not selected (selected: {string.Join(", ", actual)})");
                 }
+            }
+        }
+    }
+
+
+    /// <summary>
+    /// Where the window says it is: the path itself, and the tail of the
+    /// breadcrumb strip. The crumbs are asserted separately because they
+    /// are computed, not copied - a path inside an archive has to cut into
+    /// clickable segments like any other, and a namespace that answered
+    /// with a display name would collapse the whole strip into one row.
+    /// </summary>
+    private void AssertPath(JsonElement step) {
+        if (step.Str("is") is { } expected) {
+            string actual = _vm.CurrentPath ?? "";
+            if (!string.Equals(_context.Expand(expected).TrimEnd('\\', '/'), actual.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase)) {
+                throw new InvalidOperationException($"expected to be at '{expected}', am at '{actual}'");
+            }
+        }
+
+        var crumbs = step.Strings("crumbs");
+        if (crumbs.Length > 0) {
+            var labels = _vm.Nav.Breadcrumbs.Select(c => c.Label).ToList();
+            var tail = labels.Skip(Math.Max(0, labels.Count - crumbs.Length)).ToList();
+            if (!tail.SequenceEqual(crumbs, StringComparer.OrdinalIgnoreCase)) {
+                throw new InvalidOperationException(
+                    $"breadcrumbs end with [{string.Join(" > ", tail)}], expected [{string.Join(" > ", crumbs)}]");
             }
         }
     }

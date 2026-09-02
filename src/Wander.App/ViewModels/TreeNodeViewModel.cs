@@ -1,7 +1,9 @@
 using System.Collections.ObjectModel;
 using System.IO;
+using Wander.Core;
 using Wander.Core.FileSystem;
 using Wander.Core.Navigation;
+using Wander.Core.Shell;
 
 namespace Wander.App.ViewModels;
 
@@ -158,6 +160,13 @@ public sealed class TreeNodeViewModel : ObservableObject {
         _ = Task.Run(() => {
             var leaves = new List<TreeNodeViewModel>();
             foreach (var node in nodes) {
+                // An archive keeps its chevron unasked. Answering would mean
+                // opening every archive in the folder through the shell, in
+                // the background, on every expansion; an empty one loses
+                // the chevron the moment it is expanded instead.
+                if (Archives.Contains(node.FullPath)) {
+                    continue;
+                }
                 if (!fs.HasSubdirectories(node.FullPath)) {
                     leaves.Add(node);
                 }
@@ -265,37 +274,82 @@ public sealed class TreeNodeViewModel : ObservableObject {
 
     /// <summary>
     /// The subfolders this node should be showing right now, as fresh view
-    /// models. Enumeration failure (access denied, drive pulled out) is not
+    /// models - and the archives the shell opens as folders, standing among
+    /// them by name the way Explorer's navigation pane has them. Enumeration
+    /// failure (access denied, drive pulled out, a broken archive) is not
     /// an error to report here — the node simply has no children to draw.
     /// </summary>
     private List<TreeNodeViewModel> ReadChildFolders() {
-        var result = new List<TreeNodeViewModel>();
+        var folders = new List<TreeNodeViewModel>();
         if (_fs is null) {
-            return result;
+            return folders;
         }
 
         try {
+            if (Archives.Contains(FullPath)) {
+                ReadArchiveFolders(folders);
+
+                return folders;
+            }
+
+            var archives = new List<TreeNodeViewModel>();
             foreach (var entry in _fs.Enumerate(FullPath)) {
-                if (entry.Kind != EntryKind.Directory) {
+                bool isFolder = entry.Kind == EntryKind.Directory;
+                bool isArchive = !isFolder
+                    && entry.Kind == EntryKind.File
+                    && Archives.Of(entry.FullPath) is { IsRoot: true };
+                if (!isFolder && !isArchive) {
                     continue;
                 }
                 if (!IsAllowedByFilters(entry)) {
                     continue;
                 }
 
-                // Every child starts with a chevron; ProbeForChevrons takes
-                // it off the leaves a beat later. Asking the disk here —
-                // one enumeration per child, on the UI thread — is what
-                // made expanding a branch on a slow drive freeze the window.
-                result.Add(new TreeNodeViewModel(
-                    entry.Name, entry.FullPath, EntryKind.Directory, _fs, hasChildren: true,
-                    _settings, entry.IsHidden));
+                (isFolder ? folders : archives).Add(Child(entry));
+            }
+
+            // The listing comes folders first and files after; a row for an
+            // archive belongs among the folders, where the eye looks for it.
+            // Inserted rather than re-sorted, so the folders keep whatever
+            // order the filesystem gave them.
+            foreach (var archive in archives) {
+                int at = folders.FindIndex(f => string.Compare(archive.Name, f.Name, StringComparison.OrdinalIgnoreCase) < 0);
+                folders.Insert(at < 0 ? folders.Count : at, archive);
             }
         } catch {
             // access denied / unavailable — silently skip; UI will show empty
         }
 
-        return result;
+        return folders;
+    }
+
+    /// <summary>
+    /// The folders inside an archive, or inside a folder of one: what the
+    /// shell lists, nothing else - there is no filesystem to ask. Files are
+    /// left out as everywhere in the tree.
+    /// </summary>
+    private void ReadArchiveFolders(List<TreeNodeViewModel> into) {
+        if (ServiceLocator.TryGet<IShellNamespace>() is not { } shell) {
+            return;
+        }
+
+        foreach (var entry in shell.Enumerate(FullPath)) {
+            if (entry.Kind == EntryKind.Directory) {
+                into.Add(Child(entry));
+            }
+        }
+    }
+
+    /// <summary>
+    /// One child row. Every child starts with a chevron; ProbeForChevrons
+    /// takes it off the leaves a beat later. Asking the disk here — one
+    /// enumeration per child, on the UI thread — is what made expanding a
+    /// branch on a slow drive freeze the window.
+    /// </summary>
+    private TreeNodeViewModel Child(FileSystemEntry entry) {
+        return new TreeNodeViewModel(
+            entry.Name, entry.FullPath, EntryKind.Directory, _fs, hasChildren: true,
+            _settings, entry.IsHidden);
     }
 
 

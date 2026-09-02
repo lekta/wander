@@ -267,7 +267,14 @@ public sealed class MainViewModel : ObservableObject {
         // only in this iteration.
         DeleteCommand = new RelayCommand(_ => _ = DeleteSelectedAsync(permanent: false), _ => _selectedEntries.Count > 0 && !IsCurrentShellNamespace);
         RenameCommand = new RelayCommand(p => Rename(_selectedEntry, p as string), _ => _selectedEntry is not null && !IsCurrentShellNamespace);
-        CopyCommand = new RelayCommand(_ => Copy(), _ => _selectedEntries.Count > 0 && !IsCurrentShellNamespace);
+        // Copy is the one clipboard verb an archive still answers: it puts
+        // the paths inside the archive on the clipboard, and Paste in a real
+        // folder turns them into an extraction. The bin stays excluded -
+        // pasting a $Recycle.Bin backing path copies a mangled file.
+        CopyCommand = new RelayCommand(
+            _ => Copy(),
+            _ => _selectedEntries.Count > 0 && (!IsCurrentShellNamespace || CurrentArchive is not null));
+        ExtractCommand = new RelayCommand(_ => _ = ExtractSelectionAsync(), _ => CanExtractSelection());
         CutCommand = new RelayCommand(_ => Cut(), _ => _selectedEntries.Count > 0 && !IsCurrentShellNamespace);
         PasteCommand = new RelayCommand(_ => _ = PasteAsync(), _ => _clipboard.HasContent && _nav.Current is not null && !IsCurrentShellNamespace);
         NewFolderCommand = new RelayCommand(_ => NewFolder(), _ => _nav.Current is not null && !IsCurrentShellNamespace);
@@ -585,11 +592,21 @@ public sealed class MainViewModel : ObservableObject {
                 return;
             }
             if (SetField(ref _selectedEntries, value)) {
+                NoteSelectionKind();
                 Preview.SetSelection(value);
                 Raise(nameof(SelectionSummary));
             }
         }
     }
+
+    /// <summary>
+    /// True when everything selected is an archive Wander can open — the
+    /// precondition for "Извлечь…" outside an archive. A field rather than
+    /// a computed property for the same reason as
+    /// <see cref="IsCurrentShellNamespace"/>: the answer ends in a
+    /// <c>File.Exists</c> per row, and <c>CanExecute</c> asks constantly.
+    /// </summary>
+    public bool SelectionIsArchive { get; private set; }
 
     /// <summary>
     /// "Выбрано: 3 · 1.2 MB" — what the selection amounts to, for the status
@@ -754,6 +771,10 @@ public sealed class MainViewModel : ObservableObject {
     public RelayCommand StopSearchCommand { get; }
     public RelayCommand ClearSearchCommand { get; }
     public RelayCommand RestoreFromRecycleBinCommand { get; }
+
+    /// <summary>Takes the selection out of an archive into a folder the user picks.</summary>
+    public RelayCommand ExtractCommand { get; }
+
     public RelayCommand SetViewModeCommand { get; }
     public RelayCommand SetGalleryBackgroundCommand { get; }
     public RelayCommand SetSortKeyCommand { get; }
@@ -809,16 +830,28 @@ public sealed class MainViewModel : ObservableObject {
 
     // --- Shell-namespace helpers ---------------------------------------
     // Centralised checks so Navigate / Refresh / the bookmarks panel all agree
-    // on what counts as a recognised shell location. Caching the lookup
-    // would be premature — TryGet is one dictionary hit.
+    // on what counts as a recognised shell location.
 
     /// <summary>
-    /// True when the user is currently browsing a shell namespace (e.g.
-    /// the Recycle Bin). Used to gate destructive commands — those would
-    /// operate on raw $Recycle.Bin backing paths and produce surprising
-    /// results.
+    /// True when the user is currently browsing a shell namespace (the
+    /// Recycle Bin, or inside an archive). Used to gate destructive
+    /// commands — those would operate on raw $Recycle.Bin backing paths, or
+    /// try to write into a container that is read-only by decision.
+    ///
+    /// <para>
+    /// Answered from a field, not recomputed: WPF re-evaluates every
+    /// <c>CanExecute</c> dozens of times a second, and the archive half of
+    /// the question ends in a <c>File.Exists</c>. It is recomputed once per
+    /// navigation, in <see cref="NoteCurrentLocation"/>.
+    /// </para>
     /// </summary>
-    public bool IsCurrentShellNamespace => IsShellPath(_nav.Current);
+    public bool IsCurrentShellNamespace { get; private set; }
+
+    /// <summary>
+    /// The archive being browsed, or null anywhere else. Same cache and the
+    /// same reason as <see cref="IsCurrentShellNamespace"/>.
+    /// </summary>
+    public ArchivePath? CurrentArchive { get; private set; }
 
     /// <summary>
     /// True in the Recycle Bin specifically. Read-only like any shell
@@ -830,6 +863,15 @@ public sealed class MainViewModel : ObservableObject {
 
     private static IShellNamespace? TryGetShellNamespace() {
         return ServiceLocator.TryGet<IShellNamespace>();
+    }
+
+    /// <summary>
+    /// Re-reads what kind of place the current path is. Called once per
+    /// navigation, before anything that gates on the answer runs.
+    /// </summary>
+    private void NoteCurrentLocation() {
+        CurrentArchive = Archives.Of(_nav.Current);
+        IsCurrentShellNamespace = IsShellPath(_nav.Current);
     }
 
     private bool IsShellPath(string? path) {
@@ -850,6 +892,20 @@ public sealed class MainViewModel : ObservableObject {
             // (which would open it in Explorer). File-targeted shortcuts fall
             // through to the normal shell launcher — the OS resolves them.
             if (TryFollowFolderShortcut(entry.FullPath)) {
+                return;
+            }
+
+            // An archive the shell can browse opens as a folder, the way
+            // Explorer opens it. Only the container itself: a .zip found
+            // *inside* another archive is a file like any other and is
+            // unpacked to a temporary copy below.
+            if (Archives.Of(entry.FullPath) is { } archive) {
+                if (archive.IsRoot) {
+                    NavigateTo(entry.FullPath, DescendSource());
+                } else {
+                    // No path on disk to hand the shell, so make one.
+                    _ = OpenArchiveEntryAsync(entry.FullPath);
+                }
                 return;
             }
 
@@ -1215,6 +1271,11 @@ public sealed class MainViewModel : ObservableObject {
         // whatever was selected there last time).
         _session.OnNavigating(_nav.Current, _selectedEntry?.FullPath);
 
+        // What kind of place this is, asked once and read everywhere below:
+        // the refresh picks its back end by it, and every command's
+        // CanExecute gates on it.
+        NoteCurrentLocation();
+
         // Drop any active filter when the user moves to a new folder — the
         // filter is scoped to "the folder I'm looking at right now".
         // SearchController.Reset cancels any in-flight pass; the upcoming
@@ -1398,13 +1459,14 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
-        // Shell namespaces (Recycle Bin etc.) route through IShellNamespace.
-        // Enumeration goes through Shell.Application COM, which can take
-        // hundreds of ms with many recycled items, so we hand it off to
-        // Task.Run and show a spinner via IsListLoading until it returns.
-        // No Hidden/System filtering: shell items don't carry those flags
-        // and Wander's "what to hide" preference is filesystem-only.
-        if (IsShellPath(_nav.Current) && TryGetShellNamespace() is { } ns) {
+        // Shell namespaces (the Recycle Bin, an archive) route through
+        // IShellNamespace. Enumeration goes through COM, which can take
+        // hundreds of ms with many recycled items or a large archive, so we
+        // hand it off to Task.Run and show a spinner via IsListLoading until
+        // it returns. No Hidden/System filtering: shell items don't carry
+        // those flags and Wander's "what to hide" preference is
+        // filesystem-only.
+        if (IsCurrentShellNamespace && TryGetShellNamespace() is { } ns) {
             _ = RefreshShellAsync(ns, _nav.Current);
             return;
         }
@@ -1583,6 +1645,7 @@ public sealed class MainViewModel : ObservableObject {
 
         IsListLoading = true;
         _hiddenCount = 0;
+        var started = System.Diagnostics.Stopwatch.StartNew();
         // Same rule as the filesystem path: clear when arriving from
         // somewhere else, reconcile in place when re-listing what is
         // already on screen.
@@ -1591,15 +1654,28 @@ public sealed class MainViewModel : ObservableObject {
             _search.SetSource(Array.Empty<FileSystemEntry>());
         }
 
+        // Read on the UI thread and carried in, like the filesystem branch:
+        // the bin sorts itself (newest deletion first), an archive comes
+        // back in whatever order the container holds it and is sorted here
+        // by the same rules the user set for every other folder.
+        var sort = new SortOptions(Settings.SortKey, Settings.SortAscending, Settings.GroupFoldersFirst);
+        var archive = CurrentArchive;
+
         try {
             IReadOnlyList<FileSystemEntry> items;
             try {
-                items = await Task.Run(() => ns.Enumerate(shellPath), token);
+                items = await Task.Run(() => {
+                    var listed = ns.Enumerate(shellPath);
+
+                    return archive is null ? listed : EntryComparers.Sort(listed, sort);
+                }, token);
             } catch (OperationCanceledException) {
                 return;
             } catch (Exception ex) {
                 _log.Error($"Shell enumerate failed: {shellPath}", ex);
-                Status = string.Format(Strings.StatusError, ex.Message);
+                Status = archive is null
+                    ? string.Format(Strings.StatusError, ex.Message)
+                    : string.Format(Strings.StatusArchiveUnreadable, archive.ArchiveName);
                 return;
             }
 
@@ -1614,6 +1690,21 @@ public sealed class MainViewModel : ObservableObject {
             Ratings.Cancel();
             HasRatings = false;
             PublishRows(epoch, items.ToList());
+
+            // Timed like any other folder: an archive is one to the person
+            // opening it, and "how long until I can see it" is the same
+            // question there as on disk.
+            if (arriving && _session.IsCurrent(epoch)) {
+                FolderArrived?.Invoke(shellPath, started);
+            }
+
+            // An archive that lists nothing is either empty or encrypted
+            // whole - 7z with -mhe hides even the names, and the two are
+            // indistinguishable from here. Saying both beats an empty list
+            // that looks like a mistake.
+            if (archive is not null && items.Count == 0) {
+                Status = string.Format(Strings.StatusArchiveEmptyOrLocked, archive.ArchiveName);
+            }
         } finally {
             // Only release the spinner if our load is still the active one.
             // A superseded load (token cancelled) leaves IsListLoading=true
@@ -1949,6 +2040,7 @@ public sealed class MainViewModel : ObservableObject {
     private void AdoptSelection(IReadOnlyList<FileSystemEntry> selection, FileSystemEntry primary) {
         _selectedEntries = selection;
         _selectedEntry = primary;
+        NoteSelectionKind();
 
         Raise(nameof(SelectedEntries));
         Raise(nameof(SelectedEntry));
@@ -3008,6 +3100,15 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
         _clipboard.Copy(WithCompanions(_selectedEntries));
+
+        // From inside an archive the clipboard holds paths no other
+        // application can open — pasting them in Wander extracts, pasting
+        // them elsewhere does nothing. Said out loud rather than discovered.
+        if (CurrentArchive is not null) {
+            Status = string.Format(Strings.StatusArchiveCopied, _selectedEntries.Count);
+            return;
+        }
+
         Status = ClipboardWriteIssue()
             ?? string.Format(Strings.StatusCopied, _selectedEntries.Count);
     }
@@ -3074,6 +3175,15 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
+        // Paths that came out of an archive cannot be copied by
+        // IFileSystem - nothing on disk is at the other end of them. The
+        // clipboard carries them as they are, and Paste is where they turn
+        // into an extraction.
+        if (sources.Any(Archives.Inside)) {
+            await ExtractAsync(sources, target);
+            return;
+        }
+
         bool wasCut = _clipboard.IsCut;
         if (wasCut && !ConfirmMove(sources, target)) {
             return;
@@ -3115,6 +3225,137 @@ public sealed class MainViewModel : ObservableObject {
         Refresh();
         ReportBatchResults(results, wasCut ? Strings.VerbMoved : Strings.VerbCopied, target);
     }
+
+    // --- Archives: extraction and the temporary copy --------------------
+
+    /// <summary>
+    /// True when "Извлечь…" has something to work on: rows inside an
+    /// archive, or archives selected in an ordinary folder.
+    /// </summary>
+    private bool CanExtractSelection() {
+        return _selectedEntries.Count > 0
+            && TryGetShellNamespace() is not null
+            && (CurrentArchive is not null || SelectionIsArchive);
+    }
+
+    /// <summary>
+    /// Re-reads whether the selection is a set of archives. Called from the
+    /// two places a selection lands, so the answer is computed once per
+    /// change rather than on every <c>CanExecute</c>.
+    /// </summary>
+    private void NoteSelectionKind() {
+        SelectionIsArchive = _selectedEntries.Count > 0
+            && _selectedEntries.All(e => e.Kind == EntryKind.File && Archives.Of(e.FullPath) is { IsRoot: true });
+    }
+
+    /// <summary>
+    /// "Извлечь…" — asks where, then extracts. Inside an archive the
+    /// selection is what comes out; on an archive standing in an ordinary
+    /// folder it is everything the archive holds, which is what the shell's
+    /// own "Извлечь все…" does one row above.
+    /// </summary>
+    private async Task ExtractSelectionAsync() {
+        if (!CanExtractSelection() || TryGetShellNamespace() is not { } ns) {
+            return;
+        }
+
+        var sources = CurrentArchive is not null
+            ? _selectedEntries.Select(e => e.FullPath).ToList()
+            : _selectedEntries.SelectMany(e => TopLevelOf(ns, e.FullPath)).ToList();
+        if (sources.Count == 0) {
+            Status = string.Format(Strings.StatusArchiveEmptyOrLocked, _selectedEntries[0].Name);
+            return;
+        }
+
+        string? target = _dialogs.PickFolder(Strings.ExtractPickFolderTitle);
+        if (string.IsNullOrEmpty(target)) {
+            return;
+        }
+
+        await ExtractAsync(sources, target);
+    }
+
+    /// <summary>What an archive holds at its top level, listed off the disk it sits on.</summary>
+    private IReadOnlyList<string> TopLevelOf(IShellNamespace ns, string archivePath) {
+        try {
+            return ns.Enumerate(archivePath).Select(e => e.FullPath).ToArray();
+        } catch (Exception ex) {
+            _log.Error($"Archive listing failed: {archivePath}", ex);
+
+            return Array.Empty<string>();
+        }
+    }
+
+    /// <summary>
+    /// The one route bytes leave an archive by: the paste of archive
+    /// sources into a real folder and the "Извлечь…" row both end here.
+    /// </summary>
+    private async Task ExtractAsync(IReadOnlyList<string> sources, string target) {
+        if (TryGetShellNamespace() is not { } ns) {
+            return;
+        }
+
+        var service = new ExtractionService(ns, _fs, ServiceLocator.Get<IRecycleBin>(), _undo, _tracker, _log);
+        var resolver = _dialogs.CreateConflictResolver();
+        _log.Info($"Extract: {sources.Count} item(s) into {target}");
+
+        IReadOnlyList<BatchItemResult> results;
+        try {
+            results = await RunWithProgressDialogAsync(
+                Strings.ProgressExtracting,
+                ct => service.ExtractAsync(sources, target, resolver, ct));
+        } catch (OperationCanceledException) {
+            Status = Strings.StatusCancelled;
+            return;
+        } catch (Exception ex) {
+            _log.Error($"Extract failed into {target}", ex);
+            Status = string.Format(Strings.StatusExtractFailed, ex.Message);
+            return;
+        }
+
+        // Select what arrived, but only when the folder it arrived in is the
+        // one on screen: an extraction started from inside the archive lands
+        // somewhere the user is not standing.
+        var arrived = results
+            .Where(r => r.Status is BatchItemStatus.Ok or BatchItemStatus.Replaced or BatchItemStatus.Renamed)
+            .Select(r => r.FinalDestination)
+            .ToArray();
+        if (string.Equals(_nav.Current, target, StringComparison.OrdinalIgnoreCase)) {
+            _session.SetArrival(ArrivalIntent.Rows(target, arrived, takeFocus: arrived.Length > 0));
+        }
+
+        Refresh();
+        ReportBatchResults(results, Strings.VerbExtracted, target);
+
+        // Nothing came out and nothing was refused: the shell walked the
+        // whole batch and wrote no bytes, which is what a password does.
+        if (arrived.Length == 0 && results.All(r => r.Status is BatchItemStatus.Failed)) {
+            Status = Strings.StatusArchiveLocked;
+        }
+    }
+
+    /// <summary>
+    /// Opening a file that lives inside an archive: copy it out to a
+    /// scratch folder and hand that copy to the shell. Said plainly in the
+    /// status bar, because the copy is a dead end - editing it changes
+    /// nothing in the archive, and Wander cannot write it back.
+    /// </summary>
+    private async Task OpenArchiveEntryAsync(string path) {
+        if (TryGetShellNamespace() is not { } ns) {
+            return;
+        }
+
+        var service = new ExtractionService(ns, _fs, ServiceLocator.Get<IRecycleBin>(), _undo, _tracker, _log);
+        try {
+            string copy = await service.ExtractToTempAsync(path, TempFiles.FolderFor(path), CancellationToken.None);
+            _shell.Open(copy);
+            Status = string.Format(Strings.StatusArchiveTempCopy, Path.GetFileName(copy));
+        } catch (Exception ex) {
+            _log.Error($"Open from archive failed: {path}", ex);
+            Status = string.Format(Strings.StatusOpenFailed, ex.Message);
+        }
+    }
+
 
     private void ReportBatchResults(IReadOnlyList<BatchItemResult> results, string verb, string target) {
         int ok = results.Count(r =>

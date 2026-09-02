@@ -5,7 +5,6 @@
              xmlns:conv="clr-namespace:Wander.App.Converters"
              xmlns:controls="clr-namespace:Wander.App.Controls"
              xmlns:res="clr-namespace:Wander.App.Resources"
-             xmlns:util="clr-namespace:Wander.App.Util"
              Background="Transparent">
     <!--
         The file list, all display modes in one place.
@@ -29,6 +28,7 @@
         <conv:RatingBadgeVisibilityConverter x:Key="RatingBadge"/>
         <conv:FilterStarConverter x:Key="FilterStarGlyph"/>
         <conv:CutRowConverter x:Key="IsCutRow"/>
+        <conv:TimeStampConverter x:Key="TimeStamp"/>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
 
         <!--
@@ -627,7 +627,7 @@
                                     Width="*" CanUserSort="False"/>
                 <DataGridTextColumn Header="{x:Static res:Strings.ColumnType}" Binding="{Binding Kind}" Width="80" SortMemberPath="Type"/>
                 <DataGridTextColumn Header="{x:Static res:Strings.ColumnSize}" Binding="{Binding Size}" Width="100" SortMemberPath="Size"/>
-                <DataGridTextColumn Header="{x:Static res:Strings.ColumnModified}" Binding="{Binding ModifiedUtc, StringFormat={x:Static util:TimeFormat.Pattern}}" Width="140" SortMemberPath="ModifiedDate"/>
+                <DataGridTextColumn Header="{x:Static res:Strings.ColumnModified}" Binding="{Binding ModifiedUtc, Converter={StaticResource TimeStamp}}" Width="140" SortMemberPath="ModifiedDate"/>
                 <!--
                     Rating. Collapsed until the folder has one (see
                     ShowRatingColumn) - an always-present column of nothing

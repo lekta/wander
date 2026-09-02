@@ -7,6 +7,7 @@ namespace Wander.App.Conflict;
 public partial class BatchConflictDialog : Window {
     private BatchConflictDialog(int conflictCount) {
         InitializeComponent();
+        App.ParkIfHeadless(this);
         HeaderText.Text = string.Format(Strings.BatchConflictHeader, conflictCount);
     }
 

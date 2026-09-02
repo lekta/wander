@@ -165,6 +165,57 @@ public class ContextMenuBuilderTests {
     }
 
 
+    // --- Inside an archive ------------------------------------------------
+
+    [Fact]
+    public void InsideArchive_OffersFourVerbsAndNothingThatWrites() {
+        var target = SelectionOf(File("readme.txt")) with { IsReadOnlyLocation = true, IsArchive = true };
+
+        var menu = ContextMenuBuilder.Build(target, ContextMenuSettings.Default);
+
+        Assert.Equal(MenuCommandId.Open, menu[0].Id);
+        Assert.True(menu[0].IsDefault);
+        Assert.NotNull(Find(menu, MenuCommandId.Copy));
+        Assert.NotNull(Find(menu, MenuCommandId.Extract));
+        Assert.NotNull(Find(menu, MenuCommandId.CopyPath));
+        // Not greyed out - absent. There is no writing into an archive at
+        // all, so a disabled row would be promising something for later.
+        Assert.Null(Find(menu, MenuCommandId.FileSubmenu));
+        Assert.Null(Find(menu, MenuCommandId.Delete));
+        Assert.Null(Find(menu, MenuCommandId.Rename));
+        Assert.Null(Find(menu, MenuCommandId.Cut));
+        Assert.Null(Find(menu, MenuCommandId.Paste));
+    }
+
+    [Fact]
+    public void InsideArchive_BackgroundOffersThePathAndNothingElse() {
+        var target = Background() with { IsReadOnlyLocation = true, IsArchive = true };
+
+        var menu = ContextMenuBuilder.Build(target, ContextMenuSettings.Default);
+
+        Assert.Equal(MenuCommandId.CopyPath, Assert.Single(menu).Id);
+    }
+
+    [Fact]
+    public void ArchiveInAnOrdinaryFolder_GetsExtractOnTopOfTheUsualMenu() {
+        var target = SelectionOf(File("pack.zip")) with { SelectionIsArchive = true };
+
+        var menu = ContextMenuBuilder.Build(target, ContextMenuSettings.Default);
+
+        Assert.NotNull(Find(menu, MenuCommandId.Extract));
+        // Still a file: everything a file can do is still on the menu.
+        Assert.NotNull(Find(menu, MenuCommandId.FileSubmenu));
+        Assert.Equal(MenuCommandId.Properties, menu[^1].Id);
+    }
+
+    [Fact]
+    public void OrdinaryFile_HasNoExtractRow() {
+        var menu = ContextMenuBuilder.Build(SelectionOf(File("a.txt")), ContextMenuSettings.Default);
+
+        Assert.Null(Find(menu, MenuCommandId.Extract));
+    }
+
+
     // --- Background menu ------------------------------------------------
 
     [Fact]

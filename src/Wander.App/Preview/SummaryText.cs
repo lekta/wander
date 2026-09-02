@@ -3,6 +3,7 @@ using Wander.App.Resources;
 using Wander.App.Util;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
+using Wander.Core.Shell;
 
 namespace Wander.App.Preview;
 
@@ -30,6 +31,12 @@ internal static class SummaryText {
         string summary = $"📄  {e.Name}\n{Strings.SummarySize}: {SizeFormatter.Format(e.Size)}   •   {timeLabel}: {TimeFormat.FromUtc(e.ModifiedUtc)}";
         if (e.OriginalLocation is not null) {
             summary += $"\n{Strings.SummaryDeletedFrom}: {e.OriginalLocation}";
+        }
+        // Which container this is in. The path in the address bar says it
+        // too, but the footer is where the file is described, and "no
+        // preview" reads very differently once you know why.
+        if (Archives.Of(e.FullPath) is { IsRoot: false } archive) {
+            summary += $"\n{Strings.SummaryInsideArchive}: {archive.Archive}";
         }
         if (metadata is { } m) {
             summary += "\n" + FormatExif(m);

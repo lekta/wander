@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.Text;
 using Wander.Platform.Windows.Shell;
 
@@ -42,6 +43,7 @@ public static class SandboxBuilder {
         ["media"] = Media,
         ["attrs"] = Attributes,
         ["links"] = Links,
+        ["archives"] = Archives,
     };
 
 
@@ -352,6 +354,46 @@ public static class SandboxBuilder {
 
     private static string Pp3(int rank, int color) {
         return $"[General]\r\nRank={rank}\r\nColorLabel={color}\r\nInTrash=false\r\n\r\n[Exposure]\r\nCompensation=0\r\n";
+    }
+
+
+    /// <summary>
+    /// Archives to walk into, all holding the same three files under the
+    /// same two names, so one <c>assert-entries</c> serves every format.
+    /// Zip is written by the runtime and <c>.tar.gz</c> by the system's own
+    /// <c>tar.exe</c>; the two nobody can make here - a real 7z and a
+    /// password-protected zip - come from the fixtures folder.
+    ///
+    /// <para>
+    /// <c>plain.zip</c> next to them is not an archive to walk into but the
+    /// control case: a real folder called <c>plain.zip</c>, which has to
+    /// open as the folder it is.
+    /// </para>
+    /// </summary>
+    private static void Archives(SandboxContext c) {
+        string dir = c.Dir("archives");
+        string tree = Path.Combine(dir, "~build");
+        Directory.CreateDirectory(Path.Combine(tree, "docs"));
+        File.WriteAllText(Path.Combine(tree, "readme.txt"), "Wander archive fixture.\r\n", new UTF8Encoding(false));
+        File.WriteAllText(Path.Combine(tree, "docs", "manual.txt"), "manual\r\n", new UTF8Encoding(false));
+        File.WriteAllText(Path.Combine(tree, "docs", "notes.txt"), "notes\r\n", new UTF8Encoding(false));
+
+        string zip = Path.Combine(dir, "nested.zip");
+        File.Delete(zip);
+        ZipFile.CreateFromDirectory(tree, zip, CompressionLevel.Optimal, includeBaseDirectory: false);
+
+        // tar.exe has shipped with Windows since 1803 and is the only tar
+        // writer on the machine. Missing it costs the .tar.gz row and
+        // nothing else - the scenario asserts per archive.
+        c.Note(Run("tar.exe", $"-czf \"{Path.Combine(dir, "nested.tar.gz")}\" -C \"{tree}\" .")
+            ? "archives: nested.tar.gz written"
+            : "archives: tar.exe unavailable, no nested.tar.gz");
+
+        Directory.Delete(tree, recursive: true);
+        c.Fixtures.CopyNamed(c, dir, "nested.7z", "locked.zip");
+
+        string folder = c.Dir("archives", "plain.zip");
+        File.WriteAllText(Path.Combine(folder, "inside.txt"), "A folder, not an archive.\r\n", new UTF8Encoding(false));
     }
 
 

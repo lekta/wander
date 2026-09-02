@@ -87,6 +87,34 @@ public sealed class FixtureLibrary {
     }
 
 
+    /// <summary>
+    /// Copies fixtures by name. The by-extension lookup cannot serve the
+    /// archives profile: it needs a specific <c>locked.zip</c> and a
+    /// specific <c>nested.7z</c>, and "the first .zip in the folder" is
+    /// whichever one sorts first.
+    /// </summary>
+    public void CopyNamed(SandboxContext context, string targetDir, params string[] names) {
+        var missing = new List<string>();
+        int copied = 0;
+        foreach (string name in names) {
+            string? source = Root is null ? null : Path.Combine(Root, name);
+            if (source is null || !File.Exists(source)) {
+                missing.Add(name);
+
+                continue;
+            }
+
+            string target = Path.Combine(targetDir, name);
+            File.Copy(source, target, overwrite: true);
+            context.NoteFixture(target);
+            copied++;
+        }
+
+        context.Note($"fixtures by name: {copied} copied"
+            + (missing.Count == 0 ? "" : $", missing {string.Join(" ", missing)}"));
+    }
+
+
     private static string? Search(string start) {
         var dir = new DirectoryInfo(start);
         while (dir is not null) {

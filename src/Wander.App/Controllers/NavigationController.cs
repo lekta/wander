@@ -216,10 +216,13 @@ public sealed class NavigationController : ObservableObject {
     }
 
 
-    // Runs on the pool (see NavigateWhenValidAsync), so it asks the cheap
-    // IsShellPath and never GetDisplayName — no shell COM off the UI thread.
+    // Runs on the pool (see NavigateWhenValidAsync), which is what lets it
+    // ask CanNavigate: an archive has to be opened before anyone can say
+    // whether the shell will list it as a folder, and a typed path with a
+    // typo in the entry name must not walk into an empty listing.
+    // GetDisplayName is still never called here - that one is UI-thread work.
     private bool PathIsNavigable(string path) {
-        return (_shellNamespace?.IsShellPath(path) ?? false) || _fs.DirectoryExists(path);
+        return (_shellNamespace?.CanNavigate(path) ?? false) || _fs.DirectoryExists(path);
     }
 
 
@@ -227,13 +230,18 @@ public sealed class NavigationController : ObservableObject {
     /// The shell namespace's localised label for a sentinel path, or null
     /// for an ordinary folder (and for every path when the host has no
     /// shell namespace registered).
+    ///
+    /// <para>
+    /// A namespace that offers no label of its own also answers null, and
+    /// that is the answer for every archive: <c>...\pack.zip\docs</c> reads
+    /// correctly as it stands, so its title is its leaf name and its
+    /// breadcrumbs are the ordinary split.
+    /// </para>
     /// </summary>
     private string? ResolveDisplayName(string path) {
-        if (_shellNamespace is { } ns && ns.IsShellPath(path)) {
-            return ns.GetDisplayName(path) ?? path;
-        }
-
-        return null;
+        return _shellNamespace is { } ns && ns.IsShellPath(path)
+            ? ns.GetDisplayName(path)
+            : null;
     }
 
     private void PublishRecentPaths() {

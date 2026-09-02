@@ -223,7 +223,8 @@ public sealed class DropTargetController {
             }
 
             return !string.IsNullOrEmpty(node.FullPath)
-                && !node.FullPath.StartsWith("shell:", StringComparison.OrdinalIgnoreCase);
+                && !node.FullPath.StartsWith("shell:", StringComparison.OrdinalIgnoreCase)
+                && !Archives.Contains(node.FullPath);
         }
 
         return false;
@@ -275,7 +276,9 @@ public sealed class DropTargetController {
             }
 
             if (element.DataContext is TreeNodeViewModel node && !string.IsNullOrEmpty(node.FullPath)) {
-                return node.FullPath;
+                // An archive row, or a folder inside one, is aimed at and
+                // refused: nothing is written into a container.
+                return Archives.Contains(node.FullPath) ? null : node.FullPath;
             }
         }
 

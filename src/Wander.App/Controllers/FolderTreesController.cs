@@ -43,6 +43,17 @@ public sealed class FolderTreesController {
     /// <summary>The drives tree. Bound by the lower half of the left panel.</summary>
     public ObservableCollection<TreeNodeViewModel> Roots { get; } = new();
 
+    /// <summary>
+    /// True while <see cref="ExpandTo"/> or <see cref="RevealIn"/> is moving
+    /// the highlight itself. The panels' selection handlers treat a change
+    /// arriving under this flag as an echo of a navigation, not as a click.
+    /// It used to be harmless either way, because the row picked was the
+    /// current folder and the view drops those; inside an archive the row
+    /// is the folder the archive lives in, and taken for a click that echo
+    /// navigated straight back out of the archive (2026-09-02).
+    /// </summary>
+    public bool IsSyncingSelection { get; private set; }
+
 
     /// <summary>Fills the drives tree. Called once, at startup.</summary>
     public void LoadRoots() {
@@ -119,17 +130,22 @@ public sealed class FolderTreesController {
     /// </para>
     /// </summary>
     public void ExpandTo(string path, NavigationSource source) {
-        // Clear the previously selected row first. IsSelected is two-way
-        // bound, so leaving it set keeps the prior bookmark/drive row
-        // visually highlighted when navigation jumps between panels.
-        if (_selected is not null) {
-            _selected.IsSelected = false;
-            _selected = null;
-        }
+        IsSyncingSelection = true;
+        try {
+            // Clear the previously selected row first. IsSelected is two-way
+            // bound, so leaving it set keeps the prior bookmark/drive row
+            // visually highlighted when navigation jumps between panels.
+            if (_selected is not null) {
+                _selected.IsSelected = false;
+                _selected = null;
+            }
 
-        bool ok = source == NavigationSource.Bookmark && TryExpandAndSelect(_bookmarkRows(), path);
-        if (!ok) {
-            TryExpandAndSelect(Roots, path);
+            bool ok = source == NavigationSource.Bookmark && TryExpandAndSelect(_bookmarkRows(), path);
+            if (!ok) {
+                TryExpandAndSelect(Roots, path);
+            }
+        } finally {
+            IsSyncingSelection = false;
         }
     }
 
@@ -142,24 +158,29 @@ public sealed class FolderTreesController {
     /// back where it was rather than leaving both panels blank.
     /// </summary>
     public bool RevealIn(NavigationSource panel, string path) {
-        var previous = _selected;
-        if (previous is not null) {
-            // Cleared before the search: FindSelected looks for a selected
-            // row and would otherwise find this one.
-            previous.IsSelected = false;
-            _selected = null;
-        }
+        IsSyncingSelection = true;
+        try {
+            var previous = _selected;
+            if (previous is not null) {
+                // Cleared before the search: FindSelected looks for a selected
+                // row and would otherwise find this one.
+                previous.IsSelected = false;
+                _selected = null;
+            }
 
-        if (TryExpandAndSelect(panel == NavigationSource.Bookmark ? _bookmarkRows() : Roots, path)) {
-            return true;
-        }
+            if (TryExpandAndSelect(panel == NavigationSource.Bookmark ? _bookmarkRows() : Roots, path)) {
+                return true;
+            }
 
-        if (previous is not null) {
-            previous.IsSelected = true;
-            _selected = previous;
-        }
+            if (previous is not null) {
+                previous.IsSelected = true;
+                _selected = previous;
+            }
 
-        return false;
+            return false;
+        } finally {
+            IsSyncingSelection = false;
+        }
     }
 
 

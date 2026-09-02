@@ -8,6 +8,7 @@ namespace Wander.App.Conflict;
 public partial class ConflictDialog : Window {
     private ConflictDialog(FileConflictInfo conflict) {
         InitializeComponent();
+        App.ParkIfHeadless(this);
 
         HeaderText.Text = string.Format(Strings.ConflictHeader, conflict.ExistingTarget.Name);
 

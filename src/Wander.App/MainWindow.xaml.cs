@@ -65,13 +65,7 @@ public partial class MainWindow : Window {
         // only counts before that. A smoke run must not take the keyboard
         // away from whoever is working on this desktop, and parking it
         // off-screen alone would not stop it doing that.
-        if (App.Headless) {
-            WindowStartupLocation = WindowStartupLocation.Manual;
-            Left = -32000;
-            Top = -32000;
-            ShowActivated = false;
-            ShowInTaskbar = false;
-        }
+        App.ParkIfHeadless(this);
 
         Loaded += OnLoaded;
         ContentRendered += OnFirstFrame;
@@ -787,6 +781,11 @@ public partial class MainWindow : Window {
             IsBackground = isBackground,
             IsReadOnlyLocation = vm.IsCurrentShellNamespace,
             IsRecycleBin = vm.IsCurrentRecycleBin,
+            IsArchive = vm.CurrentArchive is not null,
+            // "Every one of them is an archive", not "one of them is": the
+            // row extracts what is selected, and a mixed selection has no
+            // single answer to what that would mean.
+            SelectionIsArchive = !isBackground && vm.SelectionIsArchive,
             CanPaste = vm.PasteCommand.CanExecute(null),
         };
 
@@ -869,6 +868,8 @@ public partial class MainWindow : Window {
             [MenuCommandId.Delete] = new(vm.DeleteCommand),
             [MenuCommandId.NewFolder] = new(vm.NewFolderCommand),
 
+            [MenuCommandId.Extract] = new(vm.ExtractCommand),
+
             [MenuCommandId.RestoreFromRecycleBin] = new(vm.RestoreFromRecycleBinCommand),
 
             [MenuCommandId.Properties] = new(vm.PropertiesCommand),
@@ -885,6 +886,16 @@ public partial class MainWindow : Window {
     // the file list or a tree row. Running it does not: see OutgoingDrag.
 
     private void FileList_DragStartRequested(object? sender, FileListDragRequest e) {
+        // A path inside an archive is not a file anybody can be handed: a
+        // CF_HDROP carrying it would have Explorer report a missing file.
+        // Taking things out is what "Извлечь…" and Ctrl+C are for, and the
+        // status bar says so — until the drag itself can carry the shell's
+        // own data object (PLAN, P4).
+        if (Vm.CurrentArchive is not null) {
+            Vm.Status = Strings.StatusArchiveNoDrag;
+            return;
+        }
+
         _outgoing.Run(e.Source, e.Paths, e.Payload);
     }
 

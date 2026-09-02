@@ -43,6 +43,13 @@ public static class AppPaths {
 
     public static string WebView2 => Path.Combine(DataRoot, "WebView2");
 
+    /// <summary>
+    /// Scratch copies Wander makes for the user to open - today, entries
+    /// pulled out of an archive so an application can be pointed at them.
+    /// Swept at startup; see <c>TempFiles</c>.
+    /// </summary>
+    public static string Tmp => Path.Combine(DataRoot, "tmp");
+
 
     /// <summary>
     /// Picks the root from the command line and the environment. Called

@@ -64,6 +64,10 @@ public static class ContextMenuBuilder {
     // --- Menu shapes ----------------------------------------------------
 
     private static List<MenuEntry> BuildSelection(ContextMenuTarget t, ShellGroups shell) {
+        if (t.IsArchive) {
+            return BuildInsideArchive(t);
+        }
+
         bool fs = t.IsWritable;
         // The shell's own list of apps is richer than anything we could
         // assemble; ours is the fallback for when it isn't offered. Neither
@@ -122,13 +126,49 @@ public static class ContextMenuBuilder {
         }
         items.Add(Sub(MenuCommandId.FileSubmenu, fileGroup));
 
+        // An archive sitting in an ordinary folder: everything above still
+        // applies to it as a file, and this is the one verb it has as a
+        // container. The shell's own "Извлечь все..." arrives among the
+        // third-party rows above and is left where it is - it is somebody
+        // else's verb and it behaves differently.
+        if (t.SelectionIsArchive) {
+            items.Add(MenuEntry.Divider);
+            items.Add(Cmd(MenuCommandId.Extract));
+        }
+
         items.Add(MenuEntry.Divider);
         items.Add(Cmd(MenuCommandId.Properties, t.IsSingle));
 
         return items;
     }
 
+    /// <summary>
+    /// The menu on a row inside an archive. Four verbs, and nothing that
+    /// would write: the container is read-only by decision, so rename,
+    /// delete, cut and paste are not greyed out here - they are simply not
+    /// things this place offers. Third-party rows are absent for the same
+    /// reason the Recycle Bin has none: the shell is never queried in a
+    /// read-only location.
+    /// </summary>
+    private static List<MenuEntry> BuildInsideArchive(ContextMenuTarget t) {
+        return new List<MenuEntry> {
+            // Open is single-item here for the same reason as everywhere
+            // else: it opens the row under the cursor, not a selection.
+            Cmd(MenuCommandId.Open, t.IsSingle, isDefault: true),
+            MenuEntry.Divider,
+            Cmd(MenuCommandId.Copy),
+            Cmd(MenuCommandId.Extract),
+            Cmd(MenuCommandId.CopyPath),
+        };
+    }
+
     private static List<MenuEntry> BuildBackground(ContextMenuTarget t, ShellGroups shell) {
+        if (t.IsArchive) {
+            // Nothing is created, opened in a terminal or pasted here; the
+            // path is the one thing a click on empty space can still give.
+            return new List<MenuEntry> { Cmd(MenuCommandId.CopyPath) };
+        }
+
         bool fs = t.IsWritable;
 
         var items = new List<MenuEntry> {

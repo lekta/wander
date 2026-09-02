@@ -1,11 +1,14 @@
 using System.IO;
 using System.Windows.Media.Imaging;
+using Wander.Core.FileSystem;
 using Wander.Core.Icons;
+using Wander.Core.Logging;
 using Wander.Core.Preview;
 using Wander.Core.Search;
 using Wander.Harness.Sandbox;
 using Wander.Platform.Windows.FileSystem;
 using Wander.Platform.Windows.Icons;
+using Wander.Platform.Windows.Shell;
 
 namespace Wander.Harness;
 
@@ -28,7 +31,7 @@ public static class SelfCheck {
         string dir = Path.GetFullPath(options.Value("dir") ?? Path.Combine(Path.GetTempPath(), "wander-sandbox", "selfcheck"));
         SandboxBuilder.Remove(dir);
         var built = SandboxBuilder.Build(
-            dir, new[] { "photos", "raw", "docs", "media" },
+            dir, new[] { "photos", "raw", "docs", "media", "archives" },
             new SandboxOptions(Photos: 8, Big: 0, RawCount: 4, RawMb: 3));
         Console.WriteLine($"selfcheck sandbox: {built.Root}");
         foreach (string line in built.Summary) {
@@ -50,6 +53,7 @@ public static class SelfCheck {
 
         failures += CheckDocuments(Path.Combine(dir, "docs"));
         failures += CheckMedia(Path.Combine(dir, "media"));
+        failures += CheckArchives(Path.Combine(dir, "archives"));
         failures += CheckFixtures(built.Fixtures);
 
         Console.WriteLine(failures == 0 ? "selfcheck: OK" : $"selfcheck: {failures} failure(s)");
@@ -159,6 +163,48 @@ public static class SelfCheck {
             } else {
                 failures += Report(name, $"copied, {new FileInfo(path).Length / 1024} KB, nothing of ours reads it");
             }
+        }
+
+        return failures;
+    }
+
+    /// <summary>
+    /// Does the shell of <em>this</em> machine open the archive fixtures as
+    /// folders, and does it report an entry's size? Both are association
+    /// state, not code: hand .7z to 7-Zip and the folder view closes here
+    /// exactly as it does in Explorer. Asked before the archives scenario
+    /// runs, so a red step there is never a mystery about whose fault it is.
+    ///
+    /// <para>
+    /// A fixture whose extension the shell does not claim is reported and
+    /// not counted against the run - that is a machine's configuration
+    /// speaking, and the scenario's own assertions say what it costs.
+    /// </para>
+    /// </summary>
+    private static int CheckArchives(string dir) {
+        var shell = new WindowsShellNamespace(NullLogger.Instance);
+        int failures = 0;
+
+        foreach (string path in Directory.EnumerateFiles(dir).OrderBy(p => p, StringComparer.OrdinalIgnoreCase)) {
+            if (shell.ParseArchive(path) is null) {
+                continue;
+            }
+
+            string name = Path.GetFileName(path);
+            if (!shell.CanNavigate(path)) {
+                Report(name, "not a folder to this shell: the association is somebody else's");
+                continue;
+            }
+
+            var entries = shell.Enumerate(path);
+            var file = entries.FirstOrDefault(e => e.Kind == EntryKind.File);
+            failures += Report(name, entries.Count == 0
+                ? "empty or fully encrypted, nothing to read"
+                : file is null
+                    ? $"ok, {entries.Count} entries, all folders"
+                    : file.Size is null
+                        ? $"FAIL: {entries.Count} entries, but '{file.Name}' has no size"
+                        : $"ok, {entries.Count} entries, '{file.Name}' {Size((int)file.Size.Value)}");
         }
 
         return failures;

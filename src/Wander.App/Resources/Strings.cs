@@ -212,6 +212,42 @@ public static partial class Strings {
     /// <summary>Показывать снимки без оценки. С Ctrl — добавить их к уже выбранным оценкам.</summary>
     public static string FilterUnratedHint => Get(nameof(FilterUnratedHint));
 
+    /// <summary>Архив «{0}» не читается: повреждён или недоступен</summary>
+    public static string StatusArchiveUnreadable => Get(nameof(StatusArchiveUnreadable));
+
+    /// <summary>«{0}»: пусто или защищено паролем</summary>
+    public static string StatusArchiveEmptyOrLocked => Get(nameof(StatusArchiveEmptyOrLocked));
+
+    /// <summary>Скопировано из архива: {0}. В другие программы — через «Извлечь…»</summary>
+    public static string StatusArchiveCopied => Get(nameof(StatusArchiveCopied));
+
+    /// <summary>Открыта временная копия «{0}»; изменения в архив не попадут</summary>
+    public static string StatusArchiveTempCopy => Get(nameof(StatusArchiveTempCopy));
+
+    /// <summary>Не извлечь: архив защищён паролем</summary>
+    public static string StatusArchiveLocked => Get(nameof(StatusArchiveLocked));
+
+    /// <summary>Извлечение не удалось: {0}</summary>
+    public static string StatusExtractFailed => Get(nameof(StatusExtractFailed));
+
+    /// <summary>Извлечено</summary>
+    public static string VerbExtracted => Get(nameof(VerbExtracted));
+
+    /// <summary>Извлечение</summary>
+    public static string ProgressExtracting => Get(nameof(ProgressExtracting));
+
+    /// <summary>Куда извлечь</summary>
+    public static string ExtractPickFolderTitle => Get(nameof(ExtractPickFolderTitle));
+
+    /// <summary>Файл внутри архива. Содержимое не показывается.</summary>
+    public static string PreviewArchiveEntry => Get(nameof(PreviewArchiveEntry));
+
+    /// <summary>Перетаскивание из архива пока не работает</summary>
+    public static string StatusArchiveNoDrag => Get(nameof(StatusArchiveNoDrag));
+
+    /// <summary>В архиве</summary>
+    public static string SummaryInsideArchive => Get(nameof(SummaryInsideArchive));
+
 
     public static string Get(string key) {
         return _resources.GetString(key, CultureInfo.CurrentUICulture) ?? key;

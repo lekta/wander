@@ -100,7 +100,11 @@ public sealed class SystemIconProvider : IIconProvider {
             return null;
         }
 
-        var (key, perPath) = BuildCacheKey(path, size);
+        // Asked once and carried through: for a path inside an archive the
+        // answer costs a shell call, and both the cache key and the icon
+        // itself depend on it.
+        bool isFolder = System.IO.Directory.Exists(path) || IsArchiveFolder(path);
+        var (key, perPath) = BuildCacheKey(path, size, isFolder);
 
         lock (_lock) {
             if (_cache.TryGetValue(key, out byte[]? cached)) {
@@ -136,7 +140,7 @@ public sealed class SystemIconProvider : IIconProvider {
             byte[]? bytes;
             var asked = System.Diagnostics.Stopwatch.StartNew();
             using (PerfLog.Measure("bg.thumb-shell")) {
-                bytes = LoadIcon(path, size);
+                bytes = LoadIcon(path, size, isFolder);
             }
             // The PERF line says a shell call was slow; only this one says
             // which file. A single extraction can take seconds (a dead
@@ -261,7 +265,7 @@ public sealed class SystemIconProvider : IIconProvider {
     /// to this one file (a thumbnail) or is shared by every file of its type
     /// (an icon). The second half is what the memory budget is counted on.
     /// </summary>
-    private static (string Key, bool PerPath) BuildCacheKey(string path, IconSize size) {
+    private static (string Key, bool PerPath) BuildCacheKey(string path, IconSize size, bool isFolder) {
         // Shell-namespace sentinels (shell:RecycleBinFolder, …) have no real
         // filesystem behind them; key by the full URI lowered so different
         // sentinels stay distinct but caching still works.
@@ -269,11 +273,27 @@ public sealed class SystemIconProvider : IIconProvider {
             return ($"shell|{path.ToLowerInvariant()}|{size}", true);
         }
 
-        if (System.IO.Directory.Exists(path)) {
+        // The same shape a real folder uses, so TryGetCachedIcon's
+        // "look under both keys" probe finds a folder inside an archive
+        // without being told anything new.
+        if (isFolder) {
             return ($"dir|{path}|{size}", true);
         }
 
         return BuildFileCacheKey(path, size);
+    }
+
+    /// <summary>
+    /// Is this path a folder <em>inside an archive</em>? Nothing on disk can
+    /// answer, so the shell is asked — which is why this is background-only
+    /// work and why the question is put once per icon, in
+    /// <see cref="GetIcon"/>. Everywhere else the path is not in an archive
+    /// and the call is a string test that returns false immediately.
+    /// </summary>
+    private static bool IsArchiveFolder(string path) {
+        return Archives.Inside(path)
+            && ServiceLocator.TryGet<IShellNamespace>() is { } shell
+            && shell.CanNavigate(path);
     }
 
 
@@ -316,7 +336,7 @@ public sealed class SystemIconProvider : IIconProvider {
         return ($"ext|{ext.ToLowerInvariant()}|{size}", false);
     }
 
-    private static byte[]? LoadIcon(string path, IconSize size) {
+    private static byte[]? LoadIcon(string path, IconSize size, bool isFolder) {
         // shell:RecycleBinFolder and similar sentinels can't go through
         // SHGetFileInfo by path — those calls just fail because there's
         // no file. Route them through PIDL-based icon lookup instead.
@@ -324,11 +344,39 @@ public sealed class SystemIconProvider : IIconProvider {
             return LoadShellNamespaceIcon(path, size);
         }
 
+        // A folder inside an archive is not on disk, so SHGetFileInfo has
+        // to be *told* it is a folder: left to the default it draws the
+        // blank "unknown file" page for every one of them. Thumbnails do
+        // not apply in there either (see IsThumbnailable), so both large
+        // tiers take the icon branch.
+        if (isFolder && Archives.Inside(path)) {
+            return size == IconSize.Large
+                ? JumboToPng(LoadIconBitmapJumbo(path, FILE_ATTRIBUTE_DIRECTORY))
+                    ?? LoadShellIcon(path, IconSize.Normal, FILE_ATTRIBUTE_DIRECTORY)
+                : LoadShellIcon(path, size, FILE_ATTRIBUTE_DIRECTORY);
+        }
+
         return size switch {
             IconSize.Large => LoadJumboImage(path),
             IconSize.Medium => LoadMediumImage(path),
             _ => LoadShellIcon(path, size),
         };
+    }
+
+    /// <summary>PNG bytes of a jumbo bitmap, disposing it. Null in, null out.</summary>
+    private static byte[]? JumboToPng(Bitmap? bitmap) {
+        if (bitmap is null) {
+            return null;
+        }
+
+        try {
+            using var ms = new MemoryStream();
+            bitmap.Save(ms, ImageFormat.Png);
+
+            return ms.ToArray();
+        } finally {
+            bitmap.Dispose();
+        }
     }
 
 
@@ -682,7 +730,7 @@ public sealed class SystemIconProvider : IIconProvider {
     private static readonly object _shellIconLock = new();
 
 
-    private static byte[]? LoadShellIcon(string path, IconSize size) {
+    private static byte[]? LoadShellIcon(string path, IconSize size, uint attributes = FILE_ATTRIBUTE_NORMAL) {
         uint flags = SHGFI_ICON | (size == IconSize.Small ? SHGFI_SMALLICON : SHGFI_LARGEICON);
 
         bool exists = File.Exists(path) || System.IO.Directory.Exists(path);
@@ -699,7 +747,7 @@ public sealed class SystemIconProvider : IIconProvider {
         lock (_shellIconLock) {
             result = SHGetFileInfo(
                 path,
-                FILE_ATTRIBUTE_NORMAL,
+                attributes,
                 ref info,
                 (uint)Marshal.SizeOf<SHFILEINFO>(),
                 flags);
@@ -836,10 +884,23 @@ public sealed class SystemIconProvider : IIconProvider {
         ".pdf", ".docx", ".xlsx", ".pptx", ".doc", ".xls", ".ppt",
     };
 
+    /// <summary>
+    /// Whether the shell can be asked for a picture of this file's
+    /// contents. Never for anything inside an archive: the provider would
+    /// have to unpack the entry to draw it, once per row, and a folder of
+    /// photographs in a zip would decompress itself on every scroll. Those
+    /// rows get the icon their extension registers - which
+    /// <c>SHGFI_USEFILEATTRIBUTES</c> hands out for a path that is not on
+    /// disk - and no thumbnail at all.
+    /// </summary>
     private static bool IsThumbnailable(string path) {
+        if (Archives.Inside(path)) {
+            return false;
+        }
         if (Directory.Exists(path)) {
             return true;
         }
+
         return _thumbnailableExtensions.Contains(Path.GetExtension(path));
     }
 
@@ -852,7 +913,7 @@ public sealed class SystemIconProvider : IIconProvider {
     /// Used for files we know have no thumbnail provider — .txt, .lnk,
     /// .exe, source code, etc.
     /// </summary>
-    private static Bitmap? LoadIconBitmapJumbo(string path) {
+    private static Bitmap? LoadIconBitmapJumbo(string path, uint attributes = FILE_ATTRIBUTE_NORMAL) {
         var iidImageList = new Guid("46EB5926-582E-4017-9FDF-E8998DAA0950");
         int hr = SHGetImageList(SHIL_JUMBO, ref iidImageList, out IImageList list);
         if (hr != 0 || list is null) {
@@ -869,7 +930,7 @@ public sealed class SystemIconProvider : IIconProvider {
             var info = new SHFILEINFO();
             IntPtr result = SHGetFileInfo(
                 path,
-                FILE_ATTRIBUTE_NORMAL,
+                attributes,
                 ref info,
                 (uint)Marshal.SizeOf<SHFILEINFO>(),
                 flags);
@@ -1296,6 +1357,12 @@ public sealed class SystemIconProvider : IIconProvider {
     private const uint SHGFI_LINKOVERLAY = 0x000008000;
     private const uint SHGFI_USEFILEATTRIBUTES = 0x000000010;
     private const uint FILE_ATTRIBUTE_NORMAL = 0x00000080;
+
+    /// <summary>
+    /// What <c>SHGFI_USEFILEATTRIBUTES</c> is told for a path that is not
+    /// on disk but is a folder all the same — an entry inside an archive.
+    /// </summary>
+    private const uint FILE_ATTRIBUTE_DIRECTORY = 0x00000010;
 
     private const int JumboSize = 256;
 

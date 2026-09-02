@@ -532,6 +532,7 @@ public sealed class PreviewController : ObservableObject {
     public string PlaceholderText =>
         _kind == PreviewKind.None ? Strings.PreviewSelectFile
         : _linkBroken ? Strings.PreviewLinkBroken
+        : Archives.Inside(_primary?.FullPath) ? Strings.PreviewArchiveEntry
         : Strings.PreviewUnsupported;
 
 
@@ -719,16 +720,27 @@ public sealed class PreviewController : ObservableObject {
         // census instead of "Select a file to preview". Recycled folders do
         // not: their backing path under $Recycle.Bin is not reliably
         // walkable, and the footer already says where they came from.
+        // Neither does anything inside an archive: the census walks the
+        // filesystem, and there is no filesystem in there.
         if (_primary is null || _primary.Kind != EntryKind.File) {
             string? folder = _primary?.Kind == EntryKind.Directory && _primary.OriginalLocation is null
                 ? _primary.FullPath
                 : _primary is null ? _currentFolderPath : null;
-            if (folder is not null) {
+            if (folder is not null && !Archives.Contains(folder)) {
                 await ShowFolderCensusAsync(folder, ct);
                 return;
             }
 
             Kind = PreviewKind.None;
+            IsLoading = false;
+            return;
+        }
+
+        // A file inside an archive: name, size and date in the footer, and
+        // a line saying why there is nothing above it. Reading the content
+        // means unpacking it, which is what "Открыть" is for.
+        if (Archives.Inside(_primary.FullPath)) {
+            Kind = PreviewKind.Unsupported;
             IsLoading = false;
             return;
         }
@@ -1528,6 +1540,19 @@ public sealed class PreviewController : ObservableObject {
         // 3. Multiple items selected. No census panel for a mixed
         //    selection, so the aggregate stays here.
         if (_selection.Count > 1) {
+            // Inside an archive the walk has nothing to walk: the rows are
+            // the whole listing there, so they are added up as they stand.
+            // Folders inside contribute nothing - the shell reports no size
+            // for them, and guessing one would be worse than leaving it out.
+            if (Archives.Inside(_selection[0].FullPath)) {
+                var files = _selection.Where(en => en.Kind == EntryKind.File).ToList();
+                Summary = string.Format(
+                    Strings.SummarySelected, _selection.Count, files.Count,
+                    SizeFormatter.Format(files.Sum(en => en.Size ?? 0)));
+
+                return;
+            }
+
             Summary = string.Format(Strings.SummarySelectedCounting, _selection.Count);
             var paths = _selection.Select(en => en.FullPath).ToArray();
             var (count, size) = await Task.Run(() => SummaryText.CountAndSum(paths, ct), ct);
