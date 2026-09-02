@@ -39,7 +39,7 @@ public partial class SettingsWindow : Window {
     private void OnLoaded(object sender, RoutedEventArgs e) {
         if (DataContext is SettingsViewModel vm) {
             _baseline = vm.ToRecord();
-            RefreshCacheStatus(vm);
+            _ = RefreshCacheStatusAsync(vm);
             ScanShellHandlers(vm);
         }
     }
@@ -161,16 +161,18 @@ public partial class SettingsWindow : Window {
         // Decoded copies live a tier above the provider's; leaving them
         // would make the button look like it did nothing.
         Controls.IconImageCache.Clear();
-        RefreshCacheStatus(vm);
+        _ = RefreshCacheStatusAsync(vm);
     }
 
 
     /// <summary>
-    /// Reads the cache folder's real size. Cheap (a directory listing), and
-    /// only ever done when the dialog opens or right after a clear.
+    /// Reads the cache folder's real size - a listing of a few thousand
+    /// files, so it runs on the pool rather than while the dialog is
+    /// opening. Only ever done on opening and right after a clear.
     /// </summary>
-    private static void RefreshCacheStatus(SettingsViewModel vm) {
-        var (directory, size) = ServiceLocator.Get<IIconProvider>().DescribeCache();
+    private static async Task RefreshCacheStatusAsync(SettingsViewModel vm) {
+        var provider = ServiceLocator.Get<IIconProvider>();
+        var (directory, size) = await Task.Run(provider.DescribeCache);
         vm.ThumbnailCacheStatus = directory is null
             ? Strings.SettingsCacheOff
             : string.Format(Strings.SettingsCacheUsage, SizeFormatter.Format(size), directory);

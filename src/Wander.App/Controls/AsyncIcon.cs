@@ -54,6 +54,28 @@ public sealed class AsyncIcon : Image {
 
 
     private int _generation;
+    private bool _detached;
+
+
+    public AsyncIcon() {
+        // Leaving the tree ends the request. A container discarded by a
+        // listing swap is never recycled and never has its path changed,
+        // so nothing else would bump the generation: its load kept its
+        // place at the gate and its delivery its place in the queue, and
+        // a folder walked through quickly left hundreds of both behind -
+        // exactly what the next folder's thumbnails then waited on.
+        Unloaded += (_, _) => {
+            _generation++;
+            _detached = true;
+        };
+        // A recycled container that comes back for the same file gets no
+        // property change to reload it, so it asks again here.
+        Loaded += (_, _) => {
+            if (_detached) {
+                Reload();
+            }
+        };
+    }
 
 
     public string? IconPath {
@@ -75,6 +97,7 @@ public sealed class AsyncIcon : Image {
         // Bumping the generation invalidates whatever load is in flight for
         // the previous path — its result will be dropped below.
         int generation = ++_generation;
+        _detached = false;
 
         if (IconPath is not { Length: > 0 } path) {
             Source = null;
@@ -125,7 +148,8 @@ public sealed class AsyncIcon : Image {
     /// stream: a tree whose rows have no icons reads as broken, while a
     /// tile whose picture arrives a beat later reads as loading. Medium
     /// and Large are per-file thumbnails — the heavy stream that must
-    /// never starve input, so they land at Background.
+    /// never starve input, nor the listing they decorate, so they land at
+    /// ContextIdle.
     /// </summary>
     private static bool IsLightweight(IconSize size) {
         return size is IconSize.Small or IconSize.Normal;
@@ -137,8 +161,12 @@ public sealed class AsyncIcon : Image {
     /// same way a fresh load does — below input priority.
     /// </summary>
     private async Task DecodeAndApplyAsync(string path, IconSize size, byte[] bytes, int generation) {
-        var image = await Task.Run(() => IconImageCache.Get(path, size, bytes)).ConfigureAwait(false);
-        if (generation != _generation) {
+        // Re-checked on the pool as well: a folder left behind has hundreds
+        // of these queued, and decoding for a tile that is gone is pure
+        // waste in front of the next folder's own work.
+        var image = await Task.Run(() => generation == _generation ? IconImageCache.Get(path, size, bytes) : null)
+            .ConfigureAwait(false);
+        if (image is null || generation != _generation) {
             return;
         }
 
@@ -194,18 +222,23 @@ public sealed class AsyncIcon : Image {
 
     /// <summary>
     /// The whole pipeline stays off the UI thread, and the finished image
-    /// comes back at <see cref="DispatcherPriority.Background"/> — below
-    /// input. A folder of photographs streams in dozens of thumbnails a
-    /// second, and landing each one at the default (Normal) priority put
-    /// that stream ahead of the user's clicks and keys in the dispatcher
-    /// queue: the window went unresponsive for seconds while it was merely
-    /// filling in pictures (ui.stall 2.5 s in the session log, with no
-    /// navigation in flight at all). Pictures can wait; the user cannot.
+    /// comes back at <see cref="DispatcherPriority.ContextIdle"/> — below
+    /// input, and below the listing. A folder of photographs streams in
+    /// dozens of thumbnails a second, and landing each one at the default
+    /// (Normal) priority put that stream ahead of the user's clicks and
+    /// keys in the dispatcher queue: the window went unresponsive for
+    /// seconds while it was merely filling in pictures (ui.stall 2.5 s in
+    /// the session log, with no navigation in flight at all). Background
+    /// fixed that and made the next mistake: the rows of a new folder are
+    /// cleared and landed at Background too, and the queue is FIFO, so a
+    /// folder walked into from a folder of pictures showed the old rows
+    /// filling in until every one of their pictures had landed. Pictures
+    /// can wait; the user cannot, and neither can the folder they asked for.
     ///
     /// <para>See <see cref="IsLightweight"/> for why the two classes differ.</para>
     /// </summary>
     private static DispatcherPriority ApplyPriority(IconSize size) {
-        return IsLightweight(size) ? DispatcherPriority.Normal : DispatcherPriority.Background;
+        return IsLightweight(size) ? DispatcherPriority.Normal : DispatcherPriority.ContextIdle;
     }
 
     private static async Task<BitmapImage?> LoadAsync(string path, IconSize size, Func<bool> stillWanted) {

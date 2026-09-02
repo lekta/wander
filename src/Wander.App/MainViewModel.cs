@@ -1084,22 +1084,38 @@ public sealed class MainViewModel : ObservableObject {
 
         // Honour the RestoreLastFolder preference: when off, ignore
         // LastPath and start at the first drive.
-        bool wantRestore = Settings.RestoreLastFolder
-            && session.LastPath is not null
-            && _fs.DirectoryExists(session.LastPath.Path);
-        if (wantRestore) {
-            _nav.NavigateTo(session.LastPath!.Path, session.LastPath.Source);
-        } else {
-            string? first = Trees.Roots.FirstOrDefault()?.FullPath;
-            if (first is not null) {
-                _nav.NavigateTo(first, NavigationSource.External);
-            }
-        }
+        _ = OpenStartFolderAsync(Settings.RestoreLastFolder ? session.LastPath : null);
 
         // Restore is the saved state coming back, not a change worth
-        // saving: whatever armed the debounce on the way (the initial
-        // navigation ends in SaveState like any other) is disarmed here,
+        // saving: whatever armed the debounce on the way is disarmed here,
         // in one place, instead of a flag checked in some of the callers.
+        _stateSaveTimer.Stop();
+    }
+
+
+    /// <summary>
+    /// The first navigation of the session: the remembered folder when it
+    /// is still there, the first drive otherwise. Whether it is still there
+    /// is asked on the pool - that one <c>DirectoryExists</c> used to sit on
+    /// the UI thread before the first frame, and a session closed on a
+    /// drive that has since spun down or been unplugged made the next start
+    /// wait for it. A user who went somewhere themselves while the disk was
+    /// thinking is left where they went.
+    /// </summary>
+    private async Task OpenStartFolderAsync(NavigationStop? remembered) {
+        bool restore = remembered is not null
+            && await Task.Run(() => _fs.DirectoryExists(remembered.Path));
+        if (_nav.Current is not null) {
+            return;
+        }
+
+        if (restore) {
+            _nav.NavigateTo(remembered!.Path, remembered.Source);
+        } else if (Trees.Roots.FirstOrDefault()?.FullPath is { } first) {
+            _nav.NavigateTo(first, NavigationSource.External);
+        }
+        // The initial navigation ends in SaveState like any other, and the
+        // restored folder is not a change worth writing back.
         _stateSaveTimer.Stop();
     }
 
@@ -1331,7 +1347,7 @@ public sealed class MainViewModel : ObservableObject {
         // whose files are gone. That is what makes a delete or a rename
         // done on a result actually leave the list.
         if (ContentSearch.IsShowingResults) {
-            SearchResults.PruneMissing();
+            _ = SearchResults.PruneMissingAsync();
             // Results are a list of their own, not a folder listing — the
             // "this folder is gone" panel has nothing to sit on top of.
             SetMissingFolder(null);
@@ -1406,21 +1422,10 @@ public sealed class MainViewModel : ObservableObject {
         // "Arriving" as opposed to re-listing what is already on screen —
         // the view mode is chosen for a folder the user walks into, not
         // every time F5 or a rename re-reads the one they are standing in.
-        // An arrival clears the rows of the folder being left right away.
-        // They used to stand until the new listing landed (one swap costs
-        // one Reset instead of a teardown plus a build) - but rows that
-        // look like the new folder and are the old one invite a click on a
-        // file that is not there, and the user reads them as "the folder
-        // has not opened yet". The context switches with the navigation
-        // (decision 2026-09-01); what the extra Reset costs is the freeze
-        // work of O10.
         int epoch = _session.BeginListing(path, out bool arriving);
-        if (arriving) {
-            _hiddenCount = 0;
-            _search.SetSource(Array.Empty<FileSystemEntry>());
-        }
         string statusBeforeLoad = Status;
         var started = System.Diagnostics.Stopwatch.StartNew();
+        var spinnerDelay = Task.Delay(SpinnerDelayMs);
 
         var work = Task.Run(() => {
             var items = new List<FileSystemEntry>();
@@ -1453,10 +1458,32 @@ public sealed class MainViewModel : ObservableObject {
             }
         }, token);
 
+        // An arrival clears the rows of the folder being left: rows that
+        // look like the new folder and are the old one invite a click on a
+        // file that is not there, and read as "the folder has not opened
+        // yet" (decision 2026-09-01). Tearing their containers down is the
+        // one expensive UI moment of a navigation (50-100 ms in a folder
+        // with thumbnails), so it does not run inside the click that
+        // navigated: it steps below input priority, after the address bar
+        // and the panels have drawn the move. A local folder is usually
+        // listed by then, and its landing below - queued at the same
+        // priority, so never ahead of this - replaces the rows in one
+        // swap instead of a clear and a fill.
+        if (arriving) {
+            await Dispatcher.Yield(DispatcherPriority.Background);
+            if (token.IsCancellationRequested) {
+                return;
+            }
+            if (!work.IsCompleted) {
+                _hiddenCount = 0;
+                _search.SetSource(Array.Empty<FileSystemEntry>());
+            }
+        }
+
         // The spinner is a dimming overlay — raising it for the two frames a
         // local folder takes would make every navigation flash. Only slow
         // folders get it; the stale rows are already gone (see above).
-        if (await Task.WhenAny(work, Task.Delay(SpinnerDelayMs)) != work && !token.IsCancellationRequested) {
+        if (await Task.WhenAny(work, spinnerDelay) != work && !token.IsCancellationRequested) {
             IsListLoading = true;
         }
 

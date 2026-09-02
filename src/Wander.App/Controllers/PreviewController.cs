@@ -832,7 +832,7 @@ public sealed class PreviewController : ObservableObject {
             // so, so the bytes are asked before the pane commits to
             // showing them.
             case PreviewRoute.MaybeText:
-                if (await LooksLikeTextAsync(path, ct)) {
+                if (await Task.Run(() => LooksLikeTextAsync(path, ct), ct)) {
                     await LoadCodeAsync(path, ext, ct);
                 } else {
                     Kind = PreviewKind.Unsupported;
@@ -1077,7 +1077,9 @@ public sealed class PreviewController : ObservableObject {
     private async Task<PreviewTextFile?> ReadForPreviewAsync(string path, CancellationToken ct) {
         PreviewTextFile? read;
         try {
-            read = await PreviewText.ReadAsync(path, ct);
+            // Opening the file is synchronous however the stream is read
+            // afterwards; on the pool so a sleeping disk waits there.
+            read = await Task.Run(() => PreviewText.ReadAsync(path, ct), ct);
         } catch (OperationCanceledException) {
             return null;
         }
@@ -1100,7 +1102,7 @@ public sealed class PreviewController : ObservableObject {
     private async Task LoadBookAsync(string path, CancellationToken ct) {
         long size;
         try {
-            size = new FileInfo(path).Length;
+            size = await Task.Run(() => new FileInfo(path).Length);
         } catch {
             Kind = PreviewKind.Unsupported;
 

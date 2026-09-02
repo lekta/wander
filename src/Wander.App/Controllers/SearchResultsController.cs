@@ -204,10 +204,24 @@ public sealed class SearchResultsController {
     /// Rows that are still there keep their place: the pass that found them
     /// is not re-run, because "delete one file" is not a reason to walk the
     /// disk again.
+    ///
+    /// <para>
+    /// The stats run on the pool: five thousand results are five thousand
+    /// touches of the disk, which the UI thread used to sit through on
+    /// every watcher tick. The rows are snapshotted first - the list keeps
+    /// growing under a running search - and only what was found missing is
+    /// taken out, whatever the list holds by the time the answer is back.
+    /// </para>
     /// </summary>
-    public void PruneMissing() {
+    public async Task PruneMissingAsync() {
+        var rows = _rows.ToArray();
+        var gone = await Task.Run(() => rows
+            .Where(entry => !_fs.FileExists(entry.FullPath) && !_fs.DirectoryExists(entry.FullPath))
+            .Select(entry => entry.FullPath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase));
+
         int removed = _rows.RemoveAll(entry => {
-            if (_fs.FileExists(entry.FullPath) || _fs.DirectoryExists(entry.FullPath)) {
+            if (!gone.Contains(entry.FullPath)) {
                 return false;
             }
             _seen.Remove(entry.FullPath);

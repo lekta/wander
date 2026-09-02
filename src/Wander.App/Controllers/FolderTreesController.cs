@@ -83,12 +83,12 @@ public sealed class FolderTreesController {
 
     /// <summary>
     /// Re-reads every expanded branch of both panels. What is expanded stays
-    /// expanded — <see cref="TreeNodeViewModel.RefreshChildren"/> reconciles
-    /// rather than rebuilds — so this is safe to hang off F5.
+    /// expanded - <see cref="TreeNodeViewModel.RefreshChildrenAsync"/>
+    /// reconciles rather than rebuilds - so this is safe to hang off F5.
     /// </summary>
     public void RefreshAll() {
         foreach (var node in BothPanels()) {
-            node.RefreshChildren();
+            _ = node.RefreshChildrenAsync();
         }
     }
 

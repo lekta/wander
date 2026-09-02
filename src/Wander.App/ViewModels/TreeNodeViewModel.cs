@@ -189,8 +189,15 @@ public sealed class TreeNodeViewModel : ObservableObject {
     /// would collapse every branch below this one, which is exactly the Win11
     /// Explorer behaviour Wander exists to not have.
     /// </para>
+    ///
+    /// <para>
+    /// The level is read on the pool. F5 walks every expanded branch of
+    /// both panels, and on a share or a drive that has gone to sleep each
+    /// one was a wait the window sat through; the reconciliation itself
+    /// stays on the UI thread, where the collection is bound.
+    /// </para>
     /// </summary>
-    public void RefreshChildren() {
+    public async Task RefreshChildrenAsync() {
         if (!_loaded) {
             return;
         }
@@ -210,7 +217,13 @@ public sealed class TreeNodeViewModel : ObservableObject {
             return;
         }
 
-        var fresh = ReadChildFolders();
+        var fresh = await Task.Run(ReadChildFolders);
+        if (!_loaded) {
+            // Collapsed and dropped while the disk was answering: the
+            // placeholder is what belongs there now, not these rows.
+            return;
+        }
+
         List<TreeNodeViewModel>? added = null;
         for (int i = 0; i < fresh.Count; i++) {
             int existing = IndexOfChild(fresh[i].FullPath, i);
@@ -230,7 +243,7 @@ public sealed class TreeNodeViewModel : ObservableObject {
         }
 
         foreach (var child in Children) {
-            child.RefreshChildren();
+            _ = child.RefreshChildrenAsync();
         }
     }
 
@@ -363,7 +376,7 @@ public sealed class TreeNodeViewModel : ObservableObject {
     /// </summary>
     public void RefreshBranch(string path) {
         if (PathsEqual(FullPath, path)) {
-            RefreshChildren();
+            _ = RefreshChildrenAsync();
 
             return;
         }
