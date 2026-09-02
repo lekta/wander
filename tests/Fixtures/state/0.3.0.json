@@ -1,0 +1,369 @@
+{
+  "Session": {
+    "LastPath": {
+      "Path": "D:\\_ box\\sandbox",
+      "Source": "Bookmark"
+    },
+    "ViewMode": "LargeIcons",
+    "ManualViewModes": [
+      {
+        "Path": "D:\\Dev",
+        "Mode": "LargeIcons"
+      },
+      {
+        "Path": "D:\\_ box\\temp",
+        "Mode": "LargeIcons"
+      },
+      {
+        "Path": "D:\\_ box\\wander sandox",
+        "Mode": "LargeIcons"
+      },
+      {
+        "Path": "D:\\_ box\\wander sandox\\3d",
+        "Mode": "LargeIcons"
+      },
+      {
+        "Path": "D:\\Raw\\26.08 \u0441\u044A\u0451\u043C\u043A\u0430 2",
+        "Mode": "LargeIcons"
+      },
+      {
+        "Path": "D:\\Raw\\26.06 \u0441\u044A\u0451\u043C\u043A\u0430",
+        "Mode": "Gallery"
+      },
+      {
+        "Path": "D:\\_ box\\sandbox",
+        "Mode": "LargeIcons"
+      },
+      {
+        "Path": "C:\\Users\\user\\Downloads\\Assets",
+        "Mode": "LargeIcons"
+      }
+    ],
+    "ExpandedPaths": [
+      {
+        "Path": "D:\\",
+        "Source": "Drives"
+      },
+      {
+        "Path": "D:\\_ box",
+        "Source": "Drives"
+      },
+      {
+        "Path": "D:\\Dev",
+        "Source": "Drives"
+      },
+      {
+        "Path": "D:\\_ box\\sandbox",
+        "Source": "Bookmark"
+      }
+    ],
+    "RecentPaths": [
+      "D:\\_ box\\sandbox",
+      "C:\\Users\\user\\Downloads",
+      "C:\\Users\\user\\Downloads\\Assets",
+      "C:\\",
+      "C:\\Programs\\tool-07",
+      "C:\\Programs\\tool-08",
+      "C:\\Programs\\tool-09",
+      "C:\\Programs\\tool-10",
+      "C:\\Programs\\tool-06",
+      "C:\\Programs\\tool-12",
+      "C:\\Programs\\tool-05",
+      "C:\\Programs\\tool-04",
+      "C:\\Programs\\tool-11",
+      "C:\\Programs\\tool-03",
+      "C:\\Programs\\tool-02",
+      "C:\\Programs\\tool-01",
+      "C:\\Programs",
+      "C:\\Program Files (x86)",
+      "D:\\_ box\\sandbox\\3d",
+      "C:\\Users\\user\\Documents"
+    ],
+    "IsPreviewVisible": true,
+    "PreviewWidth": 748,
+    "IsBookmarksExpanded": true,
+    "BookmarksHeight": 340
+  },
+  "Favorites": [
+    "D:\\Dev\\project",
+    "D:\\_ box\\sandbox",
+    "D:\\Books\\\u0431\u0438\u0431\u043B\u0438\u043E\u0442\u0435\u043A\u0430",
+    "D:\\Raw\\26.08 \u0441\u044A\u0451\u043C\u043A\u0430 \u0433\u043E\u0440\u043E\u0434"
+  ],
+  "Window": {
+    "Left": 48.800000000000004,
+    "Top": 83.2,
+    "Width": 1925.6000000000001,
+    "Height": 938.4000000000001,
+    "Maximized": false
+  },
+  "Settings": {
+    "RestoreLastFolder": true,
+    "AutoRefresh": true,
+    "VisibleFirstLoading": true,
+    "ShowHidden": true,
+    "ShowSystem": true,
+    "HideSystemRootFolders": true,
+    "ConfirmRecycle": true,
+    "ConfirmMove": true,
+    "TreeKeyboardNavigates": true,
+    "IntegrateCompanions": true,
+    "SortKey": "Name",
+    "SortAscending": true,
+    "GroupFoldersFirst": true,
+    "DetailsRowHeight": 20,
+    "DetailsIconSize": 16,
+    "TileCellWidth": 256,
+    "TileIconSize": 48,
+    "TileLabelFontSize": 12,
+    "LargeIconCellWidth": 120,
+    "LargeIconImageSize": 96,
+    "LargeIconMargin": 2,
+    "LargeIconLabelFontSize": 12,
+    "GalleryCellWidth": 220,
+    "GalleryImageSize": 216,
+    "GalleryMargin": 4,
+    "GalleryLabelFontSize": 11,
+    "GalleryBackground": "Grey",
+    "GalleryGreyLevel": 110,
+    "GalleryDarkLevel": 30,
+    "AutoGallery": true,
+    "AutoGalleryPercent": 80,
+    "RawRatingFormat": "Xmp",
+    "ConfirmCreateSidecar": true,
+    "ThumbnailDiskCacheEnabled": true,
+    "ThumbnailDiskCacheMb": 256,
+    "ThumbnailMemoryEntries": 512,
+    "ShowBookmarkDownloads": true,
+    "ShowBookmarkDocuments": true,
+    "ShowBookmarkPictures": false,
+    "ShowBookmarkDesktop": false,
+    "ShowBookmarkMusic": false,
+    "ShowBookmarkVideos": false,
+    "ShowBookmarkRecycleBin": true,
+    "ShellExtensionsEnabled": true,
+    "BlockedShellExtensions": [
+      "git_shell",
+      "git_gui",
+      "AddToPlaylistVLC",
+      "PlayWithVLC",
+      "NvAppDesktopContext",
+      "Browse with FastStone",
+      "cmd",
+      "ANotepad\u002B\u002B64",
+      "Powershell"
+    ],
+    "KnownShellEntries": [
+      {
+        "Key": "git_gui",
+        "Title": "Open Git GUI here",
+        "Help": "Open Git GUI here",
+        "Scope": "Directory\\Background"
+      },
+      {
+        "Key": "git_shell",
+        "Title": "Open Git Bash here",
+        "Help": "Open Git Bash here",
+        "Scope": "Directory\\Background"
+      },
+      {
+        "Key": "Git Clone...",
+        "Title": "Git Clone",
+        "Help": "Clone a repository",
+        "Scope": "Directory\\Background"
+      },
+      {
+        "Key": "Git Create repository here...",
+        "Title": "Git Create repository here",
+        "Help": "Creates a repository database at the current location",
+        "Scope": "Directory\\Background"
+      },
+      {
+        "Key": "TortoiseGit",
+        "Title": "TortoiseGit",
+        "Help": "",
+        "Scope": "Directory\\Background"
+      },
+      {
+        "Key": "\u0421\u043E\u0437\u0434\u0430\u0442\u044C",
+        "Title": "\u0421\u043E\u0437\u0434\u0430\u0442\u044C",
+        "Help": "",
+        "Scope": "Directory\\Background"
+      },
+      {
+        "Key": "{9F156763-7844-4DC4-B2B1-901F640F5155}",
+        "Title": "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0432 \u0422\u0435\u0440\u043C\u0438\u043D\u0430\u043B\u0435",
+        "Help": "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0432 \u0422\u0435\u0440\u043C\u0438\u043D\u0430\u043B\u0435",
+        "Scope": "Directory\\Background"
+      },
+      {
+        "Key": "Print",
+        "Title": "\u041F\u0435\u0447\u0430\u0442\u044C",
+        "Help": "\u041F\u0435\u0447\u0430\u0442\u044C",
+        "Scope": ".pdf"
+      },
+      {
+        "Key": "ANotepad\u002B\u002B64",
+        "Title": "\u0420\u0435\u0434\u0430\u043A\u0442\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u0432 Notepad\u002B\u002B",
+        "Help": "\u0420\u0435\u0434\u0430\u043A\u0442\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u0432 Notepad\u002B\u002B",
+        "Scope": ".pdf"
+      },
+      {
+        "Key": "7-Zip",
+        "Title": "7-Zip",
+        "Help": "",
+        "Scope": ".pdf"
+      },
+      {
+        "Key": "\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0441 \u0438\u0441\u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u043D\u0438\u0435\u043C Microsoft Defender",
+        "Title": "\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0441 \u0438\u0441\u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u043D\u0438\u0435\u043C Microsoft Defender",
+        "Help": "\u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u044B\u0435 \u044D\u043B\u0435\u043C\u0435\u043D\u0442\u044B \u043D\u0430 \u043F\u043E\u0442\u0435\u043D\u0446\u0438\u0430\u043B\u044C\u043D\u044B\u0435 \u0443\u0433\u0440\u043E\u0437\u044B, \u0438\u0441\u043F\u043E\u043B\u044C\u0437\u0443\u044F Microsoft Defender",
+        "Scope": ".pdf"
+      },
+      {
+        "Key": "openas",
+        "Title": "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0441 \u043F\u043E\u043C\u043E\u0449\u044C\u044E",
+        "Help": "",
+        "Scope": ".pdf"
+      },
+      {
+        "Key": "PreviousVersions",
+        "Title": "\u0412\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u0438\u0442\u044C \u043F\u0440\u0435\u0436\u043D\u044E\u044E \u0432\u0435\u0440\u0441\u0438\u044E",
+        "Help": "\u041F\u0440\u043E\u0441\u043C\u043E\u0442\u0440 \u0438\u043B\u0438 \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435 \u043F\u0440\u0435\u0434\u044B\u0434\u0443\u0449\u0435\u0439 \u0432\u0435\u0440\u0441\u0438\u0438 \u044D\u0442\u043E\u0433\u043E \u043E\u0431\u044A\u0435\u043A\u0442\u0430",
+        "Scope": ".pdf"
+      },
+      {
+        "Key": "opencontaining",
+        "Title": "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0440\u0430\u0441\u043F\u043E\u043B\u043E\u0436\u0435\u043D\u0438\u0435 \u043F\u0430\u043F\u043A\u0438",
+        "Help": "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u043F\u0430\u043F\u043A\u0443 \u0434\u043B\u044F \u043F\u043E\u0438\u0441\u043A\u0430 \u044D\u043B\u0435\u043C\u0435\u043D\u0442\u0430",
+        "Scope": ".lnk"
+      },
+      {
+        "Key": "AddToPlaylistVLC",
+        "Title": "\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0432 \u043F\u043B\u0435\u0439\u043B\u0438\u0441\u0442 VLC",
+        "Help": "\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0432 \u043F\u043B\u0435\u0439\u043B\u0438\u0441\u0442 VLC",
+        "Scope": ".lnk"
+      },
+      {
+        "Key": "Browse with FastStone",
+        "Title": "Browse with FastStone",
+        "Help": "Browse with FastStone",
+        "Scope": ".lnk"
+      },
+      {
+        "Key": "PlayWithVLC",
+        "Title": "\u0412\u043E\u0441\u043F\u0440\u043E\u0438\u0437\u0432\u0435\u0441\u0442\u0438 \u0432 VLC",
+        "Help": "\u0412\u043E\u0441\u043F\u0440\u043E\u0438\u0437\u0432\u0435\u0441\u0442\u0438 \u0432 VLC",
+        "Scope": ".lnk"
+      },
+      {
+        "Key": "Play",
+        "Title": "\u0412\u043E\u0441\u043F\u0440\u043E\u0438\u0437\u0432\u0435\u0441\u0442\u0438 \u0441 \u043F\u043E\u043C\u043E\u0449\u044C\u044E \u041F\u0440\u043E\u0438\u0433\u0440\u044B\u0432\u0430\u0442\u0435\u043B\u044C Windows Media (\u0443\u0441\u0442\u0430\u0440\u0435\u0432\u0448\u0430\u044F \u0432\u0435\u0440\u0441\u0438\u044F)",
+        "Help": "\u0412\u043E\u0441\u043F\u0440\u043E\u0438\u0437\u0432\u0435\u0441\u0442\u0438 \u0441 \u043F\u043E\u043C\u043E\u0449\u044C\u044E \u041F\u0440\u043E\u0438\u0433\u0440\u044B\u0432\u0430\u0442\u0435\u043B\u044C Windows Media (\u0443\u0441\u0442\u0430\u0440\u0435\u0432\u0448\u0430\u044F \u0432\u0435\u0440\u0441\u0438\u044F)",
+        "Scope": ".lnk"
+      },
+      {
+        "Key": "\u041F\u0435\u0440\u0435\u0434\u0430\u0442\u044C \u043D\u0430 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u043E",
+        "Title": "\u041F\u0435\u0440\u0435\u0434\u0430\u0442\u044C \u043D\u0430 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u043E",
+        "Help": "",
+        "Scope": ".lnk"
+      },
+      {
+        "Key": "\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0432 \u0431\u0438\u0431\u043B\u0438\u043E\u0442\u0435\u043A\u0443",
+        "Title": "\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0432 \u0431\u0438\u0431\u043B\u0438\u043E\u0442\u0435\u043A\u0443",
+        "Help": "",
+        "Scope": ".lnk"
+      },
+      {
+        "Key": "PinToStartScreen",
+        "Title": "\u0417\u0430\u043A\u0440\u0435\u043F\u0438\u0442\u044C \u0432 \u043C\u0435\u043D\u044E \u0022\u041F\u0443\u0441\u043A\u0022",
+        "Help": "",
+        "Scope": ".lnk"
+      },
+      {
+        "Key": "\u041E\u0442\u043F\u0440\u0430\u0432\u0438\u0442\u044C",
+        "Title": "\u041E\u0442\u043F\u0440\u0430\u0432\u0438\u0442\u044C",
+        "Help": "",
+        "Scope": ".lnk"
+      },
+      {
+        "Key": "{BFE0E2A4-C70C-4AD7-AC3D-10D1ECEBB5B4}",
+        "Title": "\u0418\u0437\u043C\u0435\u043D\u0438\u0442\u044C \u0441 \u043F\u043E\u043C\u043E\u0449\u044C\u044E \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u044F \u0022\u0424\u043E\u0442\u043E\u0433\u0440\u0430\u0444\u0438\u0438\u0022",
+        "Help": "\u0418\u0437\u043C\u0435\u043D\u0438\u0442\u044C \u0441 \u043F\u043E\u043C\u043E\u0449\u044C\u044E \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u044F \u0022\u0424\u043E\u0442\u043E\u0433\u0440\u0430\u0444\u0438\u0438\u0022",
+        "Scope": ".lnk"
+      },
+      {
+        "Key": "{7A53B94A-4E6E-4826-B48E-535020B264E5}",
+        "Title": "\u0421\u043E\u0437\u0434\u0430\u0442\u044C \u0441 \u043F\u043E\u043C\u043E\u0449\u044C\u044E Designer",
+        "Help": "\u0421\u043E\u0437\u0434\u0430\u0442\u044C \u0441 \u043F\u043E\u043C\u043E\u0449\u044C\u044E Designer",
+        "Scope": ".lnk"
+      },
+      {
+        "Key": "{2430F218-B743-4FD6-97BF-5C76541B4AE9}",
+        "Title": "\u0420\u0435\u0434\u0430\u043A\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u0435 \u0441 \u043F\u043E\u043C\u043E\u0449\u044C\u044E \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u044F Paint",
+        "Help": "\u0420\u0435\u0434\u0430\u043A\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u0435 \u0441 \u043F\u043E\u043C\u043E\u0449\u044C\u044E \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u044F Paint",
+        "Scope": ".lnk"
+      },
+      {
+        "Key": "{8AB635F8-9A67-4698-AB99-784AD929F3B4}",
+        "Title": "\u0420\u0435\u0434\u0430\u043A\u0442\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u0432 Clipchamp",
+        "Help": "\u0420\u0435\u0434\u0430\u043A\u0442\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u0432 Clipchamp",
+        "Scope": ".lnk"
+      },
+      {
+        "Key": "setdesktopwallpaper",
+        "Title": "\u0421\u0434\u0435\u043B\u0430\u0442\u044C \u0444\u043E\u043D\u043E\u043C \u0440\u0430\u0431\u043E\u0447\u0435\u0433\u043E \u0441\u0442\u043E\u043B\u0430",
+        "Help": "\u0421\u0434\u0435\u043B\u0430\u0442\u044C \u0444\u043E\u043D\u043E\u043C \u0440\u0430\u0431\u043E\u0447\u0435\u0433\u043E \u0441\u0442\u043E\u043B\u0430",
+        "Scope": ".lnk"
+      },
+      {
+        "Key": "rotate90",
+        "Title": "\u041F\u043E\u0432\u0435\u0440\u043D\u0443\u0442\u044C \u0432\u043F\u0440\u0430\u0432\u043E",
+        "Help": "\u0412\u044B\u0432\u043E\u0434 \u043D\u0430 \u043F\u0435\u0447\u0430\u0442\u044C \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u044B\u0445 \u0444\u0430\u0439\u043B\u043E\u0432 \u043D\u0430 \u0443\u043A\u0430\u0437\u0430\u043D\u043D\u043E\u043C \u043F\u0440\u0438\u043D\u0442\u0435\u0440\u0435.",
+        "Scope": ".lnk"
+      },
+      {
+        "Key": "rotate270",
+        "Title": "\u041F\u043E\u0432\u0435\u0440\u043D\u0443\u0442\u044C \u0432\u043B\u0435\u0432\u043E",
+        "Help": "\u041F\u043E\u0432\u043E\u0440\u043E\u0442 \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u044B\u0445 \u043E\u0431\u044A\u0435\u043A\u0442\u043E\u0432 \u043D\u0430 90 \u0433\u0440\u0430\u0434\u0443\u0441\u043E\u0432 \u043F\u043E \u0447\u0430\u0441\u043E\u0432\u043E\u0439 \u0441\u0442\u0440\u0435\u043B\u043A\u0435.",
+        "Scope": ".lnk"
+      },
+      {
+        "Key": "Git Sync...",
+        "Title": "Git Sync",
+        "Help": "Sync Remote Repositories, including pull, push, email patch and so on",
+        "Scope": "Directory\\Background"
+      },
+      {
+        "Key": "Git Commit...",
+        "Title": "Git Commit -\u003E \u0022master\u0022",
+        "Help": "Commits your changes to the repository",
+        "Scope": "Directory\\Background"
+      },
+      {
+        "Key": "runas",
+        "Title": "\u0417\u0430\u043F\u0443\u0441\u043A \u043E\u0442 \u0438\u043C\u0435\u043D\u0438 \u0430\u0434\u043C\u0438\u043D\u0438\u0441\u0442\u0440\u0430\u0442\u043E\u0440\u0430",
+        "Help": "\u0417\u0430\u043F\u0443\u0441\u043A \u043E\u0442 \u0438\u043C\u0435\u043D\u0438 \u0430\u0434\u043C\u0438\u043D\u0438\u0441\u0442\u0440\u0430\u0442\u043E\u0440\u0430",
+        "Scope": ".exe"
+      },
+      {
+        "Key": "Troubleshoot",
+        "Title": "\u0418\u0441\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u0438\u0435 \u043F\u0440\u043E\u0431\u043B\u0435\u043C \u0441 \u0441\u043E\u0432\u043C\u0435\u0441\u0442\u0438\u043C\u043E\u0441\u0442\u044C\u044E",
+        "Help": "\u0418\u0441\u043F\u0440\u0430\u0432\u043B\u0026\u0435\u043D\u0438\u0435 \u043F\u0440\u043E\u0431\u043B\u0435\u043C \u0441 \u0441\u043E\u0432\u043C\u0435\u0441\u0442\u0438\u043C\u043E\u0441\u0442\u044C\u044E",
+        "Scope": ".exe"
+      }
+    ],
+    "ShowSystemShellExtensions": true,
+    "TrackedShellScopes": [],
+    "RecentShellScopes": [
+      ".exe",
+      ".png",
+      ".pdf",
+      ".lnk",
+      ".cr3"
+    ],
+    "HiddenContextMenuItems": [],
+    "ShowDebugMenu": true
+  },
+  "LastRunVersion": "0.3.0-beta\u002Bd97db7230d380295b4d51671094003e3680a2d14"
+}

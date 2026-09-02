@@ -75,7 +75,9 @@ public sealed class FixtureLibrary {
                 continue;
             }
 
-            File.Copy(source, Path.Combine(targetDir, Path.GetFileName(source)), overwrite: true);
+            string target = Path.Combine(targetDir, Path.GetFileName(source));
+            File.Copy(source, target, overwrite: true);
+            context.NoteFixture(target);
             copied++;
         }
 

@@ -16,7 +16,8 @@ public sealed record SandboxOptions(int Photos, int Big, int RawCount, int RawMb
 }
 
 
-public sealed record BuiltSandbox(string Root, IReadOnlyList<string> Summary);
+/// <param name="Fixtures">The files copied in from <c>tests\Fixtures</c>, by full path - what selfcheck reads back.</param>
+public sealed record BuiltSandbox(string Root, IReadOnlyList<string> Summary, IReadOnlyList<string> Fixtures);
 
 
 /// <summary>
@@ -59,7 +60,7 @@ public static class SandboxBuilder {
             context.Note($"{profile}: {clock.ElapsedMilliseconds} ms");
         }
 
-        return new BuiltSandbox(root, context.Summary);
+        return new BuiltSandbox(root, context.Summary, context.CopiedFixtures);
     }
 
     /// <summary>Deletes a sandbox. Junctions go first and as junctions, so nothing they point at is touched.</summary>
@@ -67,9 +68,21 @@ public static class SandboxBuilder {
         if (!Directory.Exists(root)) {
             return;
         }
-        foreach (var dir in new DirectoryInfo(root).EnumerateDirectories("*", SearchOption.AllDirectories).ToList()) {
+
+        var top = new DirectoryInfo(root);
+        foreach (var dir in top.EnumerateDirectories("*", SearchOption.AllDirectories).ToList()) {
             if (dir.Exists && dir.Attributes.HasFlag(FileAttributes.ReparsePoint)) {
                 dir.Delete();
+            }
+        }
+
+        // The read-only flag comes off first: the attrs profile writes such
+        // a file on purpose, and Directory.Delete refuses it - a --rebuild
+        // of that sandbox died with "access denied" on a file the harness
+        // had made itself. Hidden and system delete fine.
+        foreach (var file in top.EnumerateFiles("*", SearchOption.AllDirectories)) {
+            if (file.Attributes.HasFlag(FileAttributes.ReadOnly)) {
+                file.Attributes &= ~FileAttributes.ReadOnly;
             }
         }
         Directory.Delete(root, recursive: true);
@@ -377,6 +390,7 @@ public static class SandboxBuilder {
 
 public sealed class SandboxContext {
     private readonly List<string> _summary = new();
+    private readonly List<string> _fixtureFiles = new();
     private FixtureLibrary? _fixtures;
 
 
@@ -395,6 +409,14 @@ public sealed class SandboxContext {
 
     public IReadOnlyList<string> Summary => _summary;
 
+    /// <summary>
+    /// Where each fixture landed. Kept because a fixture cannot be found
+    /// again by name afterwards - it keeps whatever name it came with, and
+    /// a generated file may share its extension (docs has both a made-up
+    /// report.docx and whatever real .docx somebody supplied).
+    /// </summary>
+    public IReadOnlyList<string> CopiedFixtures => _fixtureFiles;
+
 
     public string Dir(params string[] parts) {
         string path = Path.Combine(new[] { Root }.Concat(parts).ToArray());
@@ -405,5 +427,9 @@ public sealed class SandboxContext {
 
     public void Note(string text) {
         _summary.Add(text);
+    }
+
+    public void NoteFixture(string path) {
+        _fixtureFiles.Add(path);
     }
 }

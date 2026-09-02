@@ -31,6 +31,9 @@ public static class SelfCheck {
             dir, new[] { "photos", "raw", "docs", "media" },
             new SandboxOptions(Photos: 8, Big: 0, RawCount: 4, RawMb: 3));
         Console.WriteLine($"selfcheck sandbox: {built.Root}");
+        foreach (string line in built.Summary) {
+            Console.WriteLine("  " + line);
+        }
 
         var reader = new MetadataExtractorImageReader();
         int failures = 0;
@@ -47,6 +50,7 @@ public static class SelfCheck {
 
         failures += CheckDocuments(Path.Combine(dir, "docs"));
         failures += CheckMedia(Path.Combine(dir, "media"));
+        failures += CheckFixtures(built.Fixtures);
 
         Console.WriteLine(failures == 0 ? "selfcheck: OK" : $"selfcheck: {failures} failure(s)");
 
@@ -120,6 +124,49 @@ public static class SelfCheck {
         }
 
         return failures;
+    }
+
+    /// <summary>
+    /// The files no generator can make, read back by the class the app
+    /// reads them with. This is where a replaced fixture breaks quietly: a
+    /// track whose tags did not survive the swap previews as a track with
+    /// no tags, and the screenshot in <c>preview-formats</c> looks
+    /// plausible either way. Formats we have no reader for - pdf, doc,
+    /// webp, zip - are listed and left alone; they are the shell's and
+    /// WebView2's business, and neither can be asked from here.
+    /// </summary>
+    private static int CheckFixtures(IReadOnlyList<string> fixtures) {
+        if (fixtures.Count == 0) {
+            Console.WriteLine("  fixtures         none: tests/Fixtures is empty or was not found");
+
+            return 0;
+        }
+
+        int failures = 0;
+        var documents = new ZipDocumentExtractor(new SystemIOFileSystem());
+        foreach (string path in fixtures.OrderBy(p => p, StringComparer.OrdinalIgnoreCase)) {
+            string name = Path.GetFileName(path);
+            if (AudioTags.IsAudio(path)) {
+                var track = AudioTags.Read(path);
+                failures += Report(name, track is null || track.IsEmpty
+                    ? "FAIL: no tags read back"
+                    : $"ok, \"{track.Title ?? "(untitled)"}\" / {track.Artist ?? "(no artist)"}"
+                        + (track.Duration is { } duration ? $", {duration.TotalSeconds:F1} s" : "")
+                        + (track.Cover is null ? ", no cover" : $", cover {Size(track.Cover.Length)}"));
+            } else if (documents.CanExtract(path)) {
+                string? text = documents.Extract(path, CancellationToken.None);
+                failures += Report(name, text is null ? "FAIL: does not extract" : $"ok, {text.Length} chars");
+            } else {
+                failures += Report(name, $"copied, {new FileInfo(path).Length / 1024} KB, nothing of ours reads it");
+            }
+        }
+
+        return failures;
+    }
+
+    /// <summary>Bytes below a kilobyte, kilobytes above: a 700-byte cover printed as "0 KB" reads like a missing one.</summary>
+    private static string Size(int bytes) {
+        return bytes < 1024 ? $"{bytes} B" : $"{bytes / 1024} KB";
     }
 
     private static int Report(string name, string verdict) {

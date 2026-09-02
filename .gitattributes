@@ -45,6 +45,7 @@
 *.mov           binary
 *.heic          binary
 *.doc           binary
+*.rtf           binary
 *.xls           binary
 *.ppt           binary
 *.docx          binary

@@ -1,0 +1,28 @@
+{
+  // Starting on a state.json that another build wrote. What this proves is
+  // not that the window came up: the fixture says ShowHidden and ShowSystem,
+  // and both are off by default, so a hidden row in the listing can only
+  // have come from the file. The paths inside it are deliberately ones no
+  // machine has - a folder that has since gone is the normal case for a
+  // saved state, and the app has to shrug rather than complain.
+  //
+  // The window geometry in the fixture is ignored on purpose: MainWindow
+  // skips both restoring and saving it while App.Headless is on, or a run
+  // would drag itself onto the real desktop.
+  "name": "state-upgrade",
+  "sandbox": "state",
+  "profiles": [ "photos", "attrs" ],
+  "state": "0.3.0",
+  "steps": [
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "started-on-old-state" },
+    { "do": "note", "text": "bookmarks in the panel come from the fixture and point at folders that do not exist - rows, not errors" },
+
+    { "do": "navigate", "path": "{sandbox}\\attrs" },
+    { "do": "assert-entries", "contains": [ "hidden.txt", "system.txt", "hidden-system.txt" ] },
+    { "do": "note", "text": "hidden and system rows are the proof: both settings default to off, so they were read from the seeded state" },
+    { "do": "screenshot", "name": "hidden-shown" },
+
+    { "do": "assert-log", "scope": "all", "noErrors": true }
+  ]
+}

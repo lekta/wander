@@ -48,6 +48,10 @@
     { "do": "select", "names": [ "letter.rtf" ] },
     { "do": "wait-idle" },
     { "do": "screenshot", "name": "document-rtf" },
+    // Word 97: the only document format here that no generator can make,
+    // so it comes from the fixtures and the step is optional - see the
+    // notes at the end of the report for what this machine did not have.
+    { "do": "preview-format", "ext": ".doc", "name": "document-doc" },
     { "do": "select", "names": [ "cp866.txt" ] },
     { "do": "wait-idle" },
     { "do": "screenshot", "name": "text-cp866" },
@@ -92,7 +96,19 @@
     { "do": "wait-idle" },
     { "do": "screenshot", "name": "model-gltf" },
     { "do": "note", "text": "the three models are one cube - they have to look alike" },
-    { "do": "note", "text": "formats that need an encoder (mp3, flac, m4a, mp4, gif, webp) are in this folder only when tests/Fixtures has them - see the fixtures line in the sandbox summary" },
+
+    // Everything below needs a real encoder, so it is here only when
+    // somebody has put a file of that format in tests/Fixtures. A missing
+    // one is a note in this report, not a failure: the scenario has to run
+    // on a machine that has no fixtures at all.
+    { "do": "preview-format", "ext": ".mp3", "name": "audio-mp3" },
+    { "do": "note", "text": "the mp3 is the one file with cover art inside it - the card should show the picture, not the folder's cover.jpg" },
+    { "do": "preview-format", "ext": ".flac", "name": "audio-flac" },
+    { "do": "preview-format", "ext": ".m4a", "name": "audio-m4a" },
+    { "do": "preview-format", "ext": ".webp", "name": "image-webp" },
+    { "do": "preview-format", "ext": ".gif", "name": "image-gif" },
+    { "do": "preview-format", "ext": ".mp4", "name": "video-mp4" },
+    { "do": "note", "text": "cover.jpg sits beside the tracks: a file with no cover of its own has to borrow it" },
 
     // --- Folders, and a shortcut to one -------------------------------
     { "do": "navigate", "path": "{sandbox}\\links" },

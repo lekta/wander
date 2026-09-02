@@ -68,9 +68,19 @@ public static class Program {
 
         string sandboxRoot = Path.GetFullPath(options.Value("sandbox")
             ?? Path.Combine(Path.GetTempPath(), "wander-sandbox", scenario.Sandbox));
-        if (!Directory.Exists(sandboxRoot) || options.Has("rebuild")) {
+        if (options.Has("rebuild")) {
+            // Emptied first, or --rebuild only writes over what is there:
+            // a fixture that has since been dropped, or a folder a failed
+            // run left behind, would live in every sandbox for ever and
+            // quietly turn up in the next screenshot.
+            SandboxBuilder.Remove(sandboxRoot);
+        }
+        if (!Directory.Exists(sandboxRoot)) {
             var built = SandboxBuilder.Build(sandboxRoot, scenario.Profiles, SandboxOptions.From(options));
             Console.WriteLine($"sandbox built: {built.Root}");
+            foreach (string line in built.Summary) {
+                Console.WriteLine("  " + line);
+            }
         }
 
         // Everything the app writes for itself lands inside the run folder:

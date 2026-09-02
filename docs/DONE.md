@@ -176,6 +176,12 @@ PLAN.md при закрытии; история — CHANGELOG.md и гит.
   Обложка рисуется «страницей» (подложка, рамка, тень); 16 / 32 px —
   значок формата. `.lnk` — миниатюра оригинала со стрелкой (накладываем
   сами: шелл запекает её в значок, не в миниатюру).
+- Ячейка — потолок, а не цель (`StretchDirection=DownOnly` в плитках,
+  значках и галерее; в панели просмотра так было всегда): крупное
+  ужимается, мелкое рисуется своего размера по центру. Шелл не
+  увеличивает (`SIIGBF_RESIZETOFIT` только ужимает), растягивал вид.
+  Работает в паре с `TrimJumboSlot`: без обрезки 256-слота натуральным
+  размером значка приложения был бы весь пустой квадрат.
 - RAW-миниатюры мимо оболочки: `RawThumbnail` — встроенный JPEG + WinRT
   `BitmapDecoder` (GDI+ сериализуется), ориентация из контейнера;
   75 → 3 мс/файл (PERFORMANCE). Ворота `AsyncIcon` 4. Потеряно осознанно:
@@ -441,7 +447,8 @@ Shell-namespace не отслеживаются. Сторож называет �
 - QA-харнесс `tests/Wander.Harness` (2026-09-02): настоящее окно за
   экраном на сгенерированной песочнице, JSON-сценарии, скриншоты, метрики
   процесса и GC, диалоги по политике, отчёт; `selfcheck` сверяет
-  генераторы с читателями. Механика — ARCHITECTURE, использование — QA.md.
+  генераторы и фикстуры с читателями (теги mp3 / flac / m4a, настоящие
+  docx / epub). Механика — ARCHITECTURE, использование — QA.md.
   - Десять профилей песочницы: `photos`, `raw`, `big`, `deep`, `names`,
     `docs` (пять zip-документов, fb2, md, rtf, pdf, html, четыре
     кодировки), `code` (подсветка, Unity `.asset` в двух видах, `.bat` в
@@ -449,10 +456,14 @@ Shell-namespace не отслеживаются. Сторож называет �
     `tests/Fixtures/` по расширению), `attrs` (флаги, read-only,
     `desktop.ini`, `icacls /deny`), `links` (три `.lnk`). `state.json`
     прошлой версии — поле сценария, не профиль.
-  - Восемь сценариев: `smoke-walk`, `focus-keys`, `tree-bookmarks`,
-    `file-ops`, `search`, `preview-formats` (23 скриншота), `watcher`,
-    `soak` (плато памяти и хэндлов). Шаги сверх базовых: `tree-expand`,
-    `bookmark`, `search`, `soak`, `fs lock|unlock`, `assert-log allow[]`.
+  - Девять сценариев: `smoke-walk`, `focus-keys`, `tree-bookmarks`,
+    `file-ops`, `search`, `preview-formats` (26 скриншотов при нынешнем
+    наборе фикстур), `watcher`, `soak` (плато памяти и хэндлов),
+    `state-upgrade` (старт на `state.json` чужой сборки). Шаги сверх
+    базовых: `tree-expand`, `bookmark`, `search`, `soak`, `fs lock|unlock`,
+    `assert-log allow[]`, `preview-format` (формат из фикстур: нет файла —
+    строка в отчёте, а не падение), `assert-entries scope: visible` (маска
+    имени фильтрует вид, а не `Entries`).
   - `check.bat qa` — сборка, `selfcheck`, `smoke-walk`; в обычный
     `check.bat` не входит (минуты).
 - `SYS`-строка в логе (`App/Diagnostics/SystemVitals`, 2026-09-02): раз в

@@ -2,17 +2,22 @@
   // Name masks, content search, and the extractors behind it. Every
   // generated document hides the same word in its prose and nowhere else,
   // so "how many formats can we read" is a row count rather than a reading
-  // exercise: nine generated documents carry it, and the .doc and .pdf
-  // copied in from the fixtures do not - they say what the system's own
-  // IFilter can do, which is a separate question and a separate assertion.
+  // exercise: twelve of them are read by our own extractors, letter.rtf by
+  // whatever RTF filter the system has, and the fixtures carry no needle at
+  // all - they are here to say which formats this machine can open, which
+  // is a different question.
   "name": "search",
   "sandbox": "search",
   "profiles": [ "docs", "code", "big" ],
   "steps": [
     // --- By name, here -----------------------------------------------
     { "do": "navigate", "path": "{sandbox}\\docs" },
+    // "scope": "visible" and not by accident: a name mask filters the view,
+    // not Entries, so counting the view model here would count the whole
+    // folder and pass whatever the search did.
     { "do": "search", "name": "*.txt" },
-    { "do": "assert-entries", "contains": [ "utf8.txt", "utf16.txt", "cp1251.txt", "cp866.txt" ] },
+    { "do": "assert-entries", "scope": "visible", "count": 4, "contains": [ "utf8.txt", "utf16.txt", "cp1251.txt", "cp866.txt" ] },
+    { "do": "assert-entries", "scope": "visible", "absent": [ "report.docx", "manual.pdf" ] },
     { "do": "screenshot", "name": "by-name" },
     { "do": "command", "name": "clear-search" },
 
@@ -20,8 +25,8 @@
     { "do": "search", "text": "needle42" },
     { "do": "assert-entries", "min": 12 },
     { "do": "assert-entries", "contains": [ "report.docx", "budget.xlsx", "deck.pptx", "notes.odt", "book.epub", "story.fb2", "readme.md", "page.html", "utf8.txt", "utf16.txt", "cp1251.txt", "cp866.txt" ] },
-    { "do": "note", "text": "twelve documents answered: the five zip-and-XML ones, fb2, md, html, and the four codepages" },
-    { "do": "note", "text": "pdf, doc and rtf are NOT asserted - they go through the system IFilters, which are installed on some machines and not others; look at the row count and say which ones this machine could read" },
+    { "do": "note", "text": "twelve documents are ours: the five zip-and-XML ones, fb2, md, html, and the four codepages" },
+    { "do": "note", "text": "anything past twelve came from a system IFilter, which is installed on some machines and not others - here letter.rtf makes thirteen, and the two pdfs are the 'could not read' pair in the status bar. Fixtures carry no needle: they answer 'was this format readable at all', not 'was it found'" },
     { "do": "screenshot", "name": "by-content" },
     { "do": "command", "name": "clear-search" },
 
@@ -43,11 +48,11 @@
     { "do": "navigate", "path": "{sandbox}\\big" },
     { "do": "measure", "name": "before-search" },
     { "do": "search", "name": "file-01*", "searchTimeoutMs": 120000 },
-    { "do": "assert-entries", "min": 1000 },
+    { "do": "assert-entries", "scope": "visible", "count": 1000 },
     { "do": "measure", "name": "after-search" },
     { "do": "screenshot", "name": "big-search" },
     { "do": "command", "name": "clear-search" },
-    { "do": "assert-entries", "min": 5000 },
+    { "do": "assert-entries", "scope": "visible", "min": 5000 },
     { "do": "note", "text": "clearing the search put the folder back" },
 
     { "do": "assert-log", "scope": "all", "noErrors": true }

@@ -157,6 +157,9 @@ public sealed class ScenarioRunner {
             case "fs":
                 FileSystemOp(step);
                 break;
+            case "preview-format":
+                await PreviewFormatAsync(step);
+                break;
             case "preview": {
                     bool on = step.Bool("on") ?? true;
                     if (_vm.IsPreviewVisible != on) {
@@ -308,15 +311,28 @@ public sealed class ScenarioRunner {
             ?? throw new InvalidOperationException($"no entry named '{name}' in {_vm.CurrentPath}");
     }
 
-    private void SelectEntries(string[] names) {
-        var entries = names.Select(Entry).ToList();
+    /// <summary>
+    /// The control the current view mode is showing. Rows are counted and
+    /// selected through it rather than through the view model, because the
+    /// two do not hold the same thing: the name filter is a view filter, so
+    /// <c>Entries</c> keeps the whole folder while the control shows what
+    /// is left of it.
+    /// </summary>
+    private Selector ActiveList() {
         var list = _window.FileList;
-        Selector active = _vm.ViewMode switch {
+
+        return _vm.ViewMode switch {
             ViewMode.Details => list.DetailsView,
             ViewMode.Tiles => list.TilesView,
             ViewMode.LargeIcons => list.IconsView,
             _ => list.GalleryView,
         };
+    }
+
+    private void SelectEntries(string[] names) {
+        var entries = names.Select(Entry).ToList();
+        var list = _window.FileList;
+        var active = ActiveList();
         // Through the control, not the view model: the list's own
         // SelectionChanged is what keeps SelectedEntries and the preview in
         // step, and that is the path a click takes.
@@ -470,6 +486,38 @@ public sealed class ScenarioRunner {
             await WaitIdleAsync(step);
         }
         _vm.Trees.Select(node);
+    }
+
+    /// <summary>
+    /// Selects the file with this extension, if the folder has one, and
+    /// shoots it. Optional by design: the formats that need a real encoder
+    /// are copied in from <c>tests\Fixtures</c> by extension, and a machine
+    /// where nobody has supplied one still has to run the scenario - the
+    /// hole is a line in the report rather than a failed step.
+    ///
+    /// <para>
+    /// First match by name, so this is for extensions the generators do not
+    /// write: ask for .pdf in the docs folder and you get the generated
+    /// manual.pdf, which has a step of its own already.
+    /// </para>
+    /// </summary>
+    private async Task PreviewFormatAsync(JsonElement step) {
+        string extension = step.Require("ext");
+        var entry = _vm.Entries
+            .Where(e => e.Kind == EntryKind.File
+                && string.Equals(Path.GetExtension(e.Name), extension, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+        if (entry is null) {
+            _report.Note($"no {extension} in {_vm.CurrentPath}: no fixture for it, that branch of the pane was not opened");
+            _log.Info($"HARNESS no {extension} here, step skipped");
+
+            return;
+        }
+
+        SelectEntries(new[] { entry.Name });
+        await WaitIdleAsync(step);
+        SaveScreenshot(step.Str("name") ?? extension.TrimStart('.'));
     }
 
     private void Bookmark(JsonElement step) {
@@ -643,26 +691,37 @@ public sealed class ScenarioRunner {
         }
     }
 
+    /// <summary>
+    /// Rows, either as the view model holds them or as the list shows them
+    /// (<c>"scope": "visible"</c>). The distinction is not academic: a name
+    /// mask filters the view, not <c>Entries</c>, so counting the view model
+    /// after a name search asserts nothing at all - "at least a thousand of
+    /// them" was true of the unfiltered folder before the search ran.
+    /// </summary>
     private void AssertEntries(JsonElement step) {
-        var names = _vm.Entries.Select(e => e.Name).ToList();
+        bool visible = string.Equals(step.Str("scope"), "visible", StringComparison.OrdinalIgnoreCase);
+        var names = visible
+            ? ActiveList().Items.OfType<FileSystemEntry>().Select(e => e.Name).ToList()
+            : _vm.Entries.Select(e => e.Name).ToList();
         int count = names.Count;
+        string what = visible ? "visible rows" : "entries";
         if (step.TryGetProperty("count", out var exact) && exact.GetInt32() != count) {
-            throw new InvalidOperationException($"expected {exact.GetInt32()} entries, found {count}");
+            throw new InvalidOperationException($"expected {exact.GetInt32()} {what}, found {count}");
         }
         if (step.TryGetProperty("min", out var min) && count < min.GetInt32()) {
-            throw new InvalidOperationException($"expected at least {min.GetInt32()} entries, found {count}");
+            throw new InvalidOperationException($"expected at least {min.GetInt32()} {what}, found {count}");
         }
         if (step.TryGetProperty("max", out var max) && count > max.GetInt32()) {
-            throw new InvalidOperationException($"expected at most {max.GetInt32()} entries, found {count}");
+            throw new InvalidOperationException($"expected at most {max.GetInt32()} {what}, found {count}");
         }
         foreach (string name in step.Strings("contains")) {
             if (!names.Contains(name, StringComparer.OrdinalIgnoreCase)) {
-                throw new InvalidOperationException($"entry '{name}' missing in {_vm.CurrentPath}");
+                throw new InvalidOperationException($"entry '{name}' missing in {_vm.CurrentPath}" + (visible ? " (visible rows)" : ""));
             }
         }
         foreach (string name in step.Strings("absent")) {
             if (names.Contains(name, StringComparer.OrdinalIgnoreCase)) {
-                throw new InvalidOperationException($"entry '{name}' still present in {_vm.CurrentPath}");
+                throw new InvalidOperationException($"entry '{name}' still present in {_vm.CurrentPath}" + (visible ? " (visible rows)" : ""));
             }
         }
         var selected = step.Strings("selected");
@@ -687,9 +746,18 @@ public sealed class ScenarioRunner {
     }
 
     private bool IsInSandbox(string path) {
-        string root = _context.SandboxRoot.TrimEnd('\\', '/') + "\\";
+        if (string.IsNullOrEmpty(path)) {
+            return false;
+        }
 
-        return Path.GetFullPath(path).TrimEnd('\\', '/').StartsWith(root.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
+        string root = Path.GetFullPath(_context.SandboxRoot).TrimEnd('\\', '/');
+        string full = Path.GetFullPath(path).TrimEnd('\\', '/');
+
+        // The separator matters: a bare prefix would let a delete run in
+        // "...\wander-sandbox\formats-old" while the guard believed it was
+        // inside "...\wander-sandbox\formats".
+        return full.Equals(root, StringComparison.OrdinalIgnoreCase)
+            || full.StartsWith(root + "\\", StringComparison.OrdinalIgnoreCase);
     }
 
     private string SaveScreenshot(string name) {

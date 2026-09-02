@@ -15,8 +15,10 @@
 | Мелочь, замеченная по пути | [TECHDEBT.md](docs/TECHDEBT.md) |
 | Что решили не делать и почему | [REJECTED.md](docs/REJECTED.md) |
 | Стратегические направления | Roadmap ниже |
-| Замеры веса, старта, поставки | [PERFORMANCE.md](docs/PERFORMANCE.md) |
-| Что делать по окончании скоупа | [FINALIZING.md](docs/FINALIZING.md) |
+| Как устроены режимы работы: задача, финализация, подготовка к релизу, релиз | [WORKFLOW.md](docs/WORKFLOW.md) |
+| Замеры веса, старта, поставки — как устроено | [PERFORMANCE.md](docs/PERFORMANCE.md) |
+| Замеры конкретной версии, по файлу на версию | [docs/measurements/](docs/measurements/README.md) |
+| Что делать по окончании куска работ | [FINALIZING.md](docs/FINALIZING.md) |
 | QA: уровни, песочница, харнесс, чек-листы, предрелизный прогон, метрики | [QA.md](docs/QA.md) |
 | Как выпустить версию | [RELEASING.md](docs/RELEASING.md) |
 | Возможности и хоткеи для пользователя | [GUIDE.md](docs/GUIDE.md) |
@@ -145,8 +147,9 @@ $h = "tests\Wander.Harness\bin\Debug\net10.0-windows10.0.19041.0\Wander.Harness.
 & $h run tests\Wander.Harness\Scenarios\smoke-walk.json   # артефакты в artifacts\
 ```
 
-Восемь сценариев: `smoke-walk`, `focus-keys`, `tree-bookmarks`, `file-ops`,
-`search`, `preview-formats`, `watcher`, `soak`. Десять профилей песочницы.
+Девять сценариев: `smoke-walk`, `focus-keys`, `tree-bookmarks`, `file-ops`,
+`search`, `preview-formats`, `watcher`, `soak`, `state-upgrade`. Десять
+профилей песочницы.
 
 Шаги, профили, правила — QA.md. Разовый консольный харнесс в scratchpad —
 для одного класса. Что проверить нельзя — списком «что посмотреть глазами»

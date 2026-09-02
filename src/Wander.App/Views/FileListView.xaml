@@ -711,11 +711,15 @@
                             it has not. Details stays on Normal — at 20 px
                             a photo is a smudge, and a folder of source
                             would pay a per-file shell call for nothing.
+
+                            DownOnly for the same reason as the two grids
+                            below: the size is a ceiling, not a target.
                         -->
                         <controls:AsyncIcon DockPanel.Dock="Left"
                                             IconPath="{Binding FullPath}" IconSize="Medium"
                                             Width="{DynamicResource TilesImageSize}"
                                             Height="{DynamicResource TilesImageSize}"
+                                            StretchDirection="DownOnly"
                                             Margin="0,0,8,0" VerticalAlignment="Center"
                                             RenderOptions.BitmapScalingMode="HighQuality"
                                             UseLayoutRounding="True"/>
@@ -765,11 +769,16 @@
                         stretched to its cell; the image size and the label
                         box arrive as resources (ApplyTileMetrics), the font
                         size is inherited from the ListBox.
+
+                        The image size is a ceiling, not a target
+                        (StretchDirection=DownOnly): what is smaller keeps
+                        its own size. See the gallery template below.
                     -->
                     <StackPanel>
                         <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Large"
                                             Width="{DynamicResource IconsImageSize}"
                                             Height="{DynamicResource IconsImageSize}"
+                                            StretchDirection="DownOnly"
                                             Margin="0,2,0,2"
                                             HorizontalAlignment="Center"
                                             RenderOptions.BitmapScalingMode="HighQuality"
@@ -836,12 +845,20 @@
                             an input to layout here (see TileMetrics)
                             precisely so that nothing about a folder's
                             contents can move the grid. The Grid is for the
-                            badge; the image fills it.
+                            badge; the image sits centred in it.
+
+                            DownOnly - the cell is a ceiling, not a target.
+                            A picture (or an icon) smaller than the cell is
+                            drawn at its own size; only a bigger one is
+                            shrunk to fit. Blowing a 16-px file up to 200
+                            is mush, and it makes a tiny icon shout as
+                            loudly as a photograph.
                         -->
                         <Grid Width="{DynamicResource GalleryImageSize}"
                               Height="{DynamicResource GalleryImageSize}"
                               Margin="0,2,0,2">
                             <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Large"
+                                                StretchDirection="DownOnly"
                                                 HorizontalAlignment="Center" VerticalAlignment="Center"
                                                 RenderOptions.BitmapScalingMode="HighQuality"
                                                 UseLayoutRounding="True"/>
