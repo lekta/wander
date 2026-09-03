@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Windows.Media.Imaging;
 using Wander.Core.FileSystem;
@@ -5,6 +6,7 @@ using Wander.Core.Icons;
 using Wander.Core.Logging;
 using Wander.Core.Preview;
 using Wander.Core.Search;
+using Wander.Harness.Host;
 using Wander.Harness.Sandbox;
 using Wander.Platform.Windows.FileSystem;
 using Wander.Platform.Windows.Icons;
@@ -27,7 +29,14 @@ namespace Wander.Harness;
 /// </para>
 /// </summary>
 public static class SelfCheck {
+    // Every verdict printed, passed or failed: the batch journal wants
+    // "passed of total", and the failure count alone does not give it.
+    private static int _checks;
+
+
     public static int Run(Options options) {
+        _checks = 0;
+        var clock = Stopwatch.StartNew();
         string dir = Path.GetFullPath(options.Value("dir") ?? Path.Combine(Path.GetTempPath(), "wander-sandbox", "selfcheck"));
         SandboxBuilder.Remove(dir);
         var built = SandboxBuilder.Build(
@@ -57,6 +66,7 @@ public static class SelfCheck {
         failures += CheckFixtures(built.Fixtures);
 
         Console.WriteLine(failures == 0 ? "selfcheck: OK" : $"selfcheck: {failures} failure(s)");
+        RunJournal.Append("selfcheck", _checks - failures, _checks, clock.Elapsed, failures == 0 ? "ok" : "fail");
 
         return failures == 0 ? 0 : 1;
     }
@@ -216,6 +226,7 @@ public static class SelfCheck {
     }
 
     private static int Report(string name, string verdict) {
+        _checks++;
         Console.WriteLine($"  {name,-16} {verdict}");
 
         return verdict.StartsWith("FAIL", StringComparison.Ordinal) ? 1 : 0;
@@ -251,6 +262,7 @@ public static class SelfCheck {
         }
 
         string verdict = problems.Count == 0 ? "ok" : "FAIL: " + string.Join("; ", problems);
+        _checks++;
         Console.WriteLine($"  {Path.GetFileName(path),-16} {size / (1024 * 1024.0),7:F1} MB  o={expectedOrientation}  {previewNote,-28} {verdict}");
 
         return problems.Count == 0 ? 0 : 1;

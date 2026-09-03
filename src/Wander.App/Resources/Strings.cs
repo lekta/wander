@@ -167,6 +167,15 @@ public static partial class Strings {
     /// <summary>Папка</summary>
     public static string KindFolderNoun => Get(nameof(KindFolderNoun));
 
+    /// <summary>Файл — колонка «Тип»</summary>
+    public static string ColumnTypeFile => Get(nameof(ColumnTypeFile));
+
+    /// <summary>Папка — колонка «Тип»</summary>
+    public static string ColumnTypeFolder => Get(nameof(ColumnTypeFolder));
+
+    /// <summary>Диск — колонка «Тип»</summary>
+    public static string ColumnTypeDrive => Get(nameof(ColumnTypeDrive));
+
     /// <summary>Переименовать</summary>
     public static string RenameTitle => Get(nameof(RenameTitle));
 

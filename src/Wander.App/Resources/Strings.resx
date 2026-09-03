@@ -521,6 +521,18 @@
   <data name="KindFolderNoun" xml:space="preserve">
     <value>Папка</value>
   </data>
+  <data name="ColumnTypeFile" xml:space="preserve">
+    <value>Файл</value>
+  </data>
+  <data name="ColumnTypeFolder" xml:space="preserve">
+    <value>Папка</value>
+  </data>
+  <data name="ColumnTypeDrive" xml:space="preserve">
+    <value>Диск</value>
+  </data>
+  <data name="PreviewRatingWrittenTo" xml:space="preserve">
+    <value>Оценка, пишется в {0}</value>
+  </data>
   <data name="ActionOk" xml:space="preserve">
     <value>ОК</value>
   </data>

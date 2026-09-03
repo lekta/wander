@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Threading;
 using Wander.App;
@@ -26,6 +27,9 @@ namespace Wander.Harness;
 public sealed class HarnessApp : Wander.App.App {
     private readonly RunContext _context;
     private readonly ScriptedDialogs _dialogs = new();
+    // From construction, so the app's own startup counts: that is part of
+    // what a scenario run costs, and the journal is read for trends.
+    private readonly Stopwatch _clock = Stopwatch.StartNew();
     private CapturingLogger _log = null!;
 
 
@@ -83,6 +87,9 @@ public sealed class HarnessApp : Wander.App.App {
         }
 
         report.Write(_log, _dialogs);
+        RunJournal.Append(
+            _context.Scenario.Name, report.Passed, _context.Scenario.Steps.Count, _clock.Elapsed,
+            code switch { 0 => "ok", 2 => "fail", _ => "crash" });
         Shutdown(code);
     }
 }

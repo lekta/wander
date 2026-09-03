@@ -78,16 +78,30 @@ internal static class SummaryText {
             }
             try {
                 if (Directory.Exists(p)) {
-                    foreach (var f in Directory.EnumerateFiles(p, "*", SearchOption.AllDirectories)) {
+                    // Files only, and no descent into junctions or symlinks:
+                    // a reparse loop (deep\l01\l02\loop -> l01) was an
+                    // endless count until the selection changed, and a link
+                    // into a sibling folder counted it twice. Files that are
+                    // reparse points themselves (OneDrive placeholders) still
+                    // count, which is why this is a recurse predicate and not
+                    // AttributesToSkip; hidden and system files count as they
+                    // always did. Length comes with the entry - no FileInfo
+                    // per file.
+                    // Fully qualified: System.IO.Enumeration has its own
+                    // FileSystemEntry, and a using would make ours ambiguous.
+                    var files = new System.IO.Enumeration.FileSystemEnumerable<long>(
+                        p,
+                        (ref System.IO.Enumeration.FileSystemEntry entry) => entry.Length,
+                        new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = 0, IgnoreInaccessible = true }) {
+                        ShouldIncludePredicate = (ref System.IO.Enumeration.FileSystemEntry entry) => !entry.IsDirectory,
+                        ShouldRecursePredicate = (ref System.IO.Enumeration.FileSystemEntry entry) => (entry.Attributes & FileAttributes.ReparsePoint) == 0,
+                    };
+                    foreach (long length in files) {
                         if (ct.IsCancellationRequested) {
                             break;
                         }
                         count++;
-                        try {
-                            size += new FileInfo(f).Length;
-                        } catch {
-                            // access denied per-file — ignore
-                        }
+                        size += length;
                     }
                 } else if (File.Exists(p)) {
                     count++;

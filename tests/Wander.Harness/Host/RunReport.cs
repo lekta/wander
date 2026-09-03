@@ -22,9 +22,15 @@ public sealed class RunReport {
 
     public string? Metrics { get; set; }
 
+    /// <summary>Steps that ended "ok"; the batch journal reports it against the scenario's step count.</summary>
+    public int Passed { get; private set; }
+
 
     public void Step(int index, string verb, string outcome, long ms, string? detail = null) {
         _steps.Add($"| {index} | `{verb}` | {outcome} | {ms} | {detail ?? ""} |");
+        if (outcome == "ok") {
+            Passed++;
+        }
     }
 
     public void Note(string text) {

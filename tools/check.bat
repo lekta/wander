@@ -77,7 +77,10 @@ if errorlevel 1 exit /b 1
 
 echo.
 echo === tests ===
-%DOTNET% test %SLN% --nologo --verbosity minimal --no-restore --no-build
+rem Through a script rather than `dotnet test` directly: same command, plus
+rem one line per run in artifacts\test-runs.tsv - passed of total and the
+rem time it took. The harness writes the same file (docs/QA.md).
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0run-tests.ps1"
 if errorlevel 1 exit /b 1
 
 if /i "%MODE%"=="run" (

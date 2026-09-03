@@ -51,6 +51,9 @@ public static partial class Strings {
     /// <summary>Оценка</summary>
     public static string PreviewRating => Get(nameof(PreviewRating));
 
+    /// <summary>Оценка, пишется в {0}</summary>
+    public static string PreviewRatingWrittenTo => Get(nameof(PreviewRatingWrittenTo));
+
     /// <summary>Показано начало книги — дальше не разбиралось</summary>
     public static string PreviewBookTruncated => Get(nameof(PreviewBookTruncated));
 

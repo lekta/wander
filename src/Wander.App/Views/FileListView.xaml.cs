@@ -988,6 +988,22 @@ public partial class FileListView : UserControl {
             return;
         }
 
+        // Enter in the table. DataGrid answers the key itself - commits an
+        // edit, moves the current cell down a row - and marks it handled,
+        // so the window's KeyBinding (Enter -> Open) never saw it and the
+        // table was the one view where Enter opened nothing. This tunnelling
+        // handler runs first; the rename editor is checked for the same way
+        // the digits and arrows check for it.
+        if (sender is DataGrid && e.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.None
+            && Vm.RenamingPath is null) {
+            if (Vm.OpenCommand.CanExecute(null)) {
+                Vm.OpenCommand.Execute(null);
+            }
+            e.Handled = true;
+
+            return;
+        }
+
         if (sender is Selector target && TryEnterList(target, e.Key)) {
             e.Handled = true;
 
@@ -1332,15 +1348,21 @@ public partial class FileListView : UserControl {
             }
         }
 
-        // A view that has just been bound is scrolled to the top and holds
-        // at most SelectedEntry; the rest of what the user selected lives
-        // only in the control that was on screen a moment ago.
-        if (attached && active is { } host && selection.Count > 0) {
+        // Every control keeps its own SelectedItems, so the view coming on
+        // screen is handed the selection whether or not it was just bound.
+        // Before, only the table (the one view that gets rebound) received
+        // it: three rows picked there showed as one in the tiles while
+        // Ctrl+C still copied three. Applied by delta - unchanged is a
+        // no-op. A view that has just been bound is also scrolled to the
+        // top, so that one is brought back to the selection.
+        if (active is { } host && selection.Count > 0) {
             SetListSelection(host, selection);
-            if (host is DataGrid grid) {
-                grid.CurrentItem = selection[0];
+            if (attached) {
+                if (host is DataGrid grid) {
+                    grid.CurrentItem = selection[0];
+                }
+                ScrollRowIntoView(host, selection[0]);
             }
-            ScrollRowIntoView(host, selection[0]);
         }
     }
 

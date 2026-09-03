@@ -30,6 +30,7 @@
         <conv:CutRowConverter x:Key="IsCutRow"/>
         <conv:CaretRowConverter x:Key="IsCaretRow"/>
         <conv:TimeStampConverter x:Key="TimeStamp"/>
+        <conv:EntryKindConverter x:Key="EntryKind"/>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
 
         <!--
@@ -694,7 +695,7 @@
                                     Header="{x:Static res:Strings.ColumnMatch}"
                                     Binding="{Binding MatchSnippet}"
                                     Width="*" CanUserSort="False"/>
-                <DataGridTextColumn Header="{x:Static res:Strings.ColumnType}" Binding="{Binding Kind}" Width="80" SortMemberPath="Type"/>
+                <DataGridTextColumn Header="{x:Static res:Strings.ColumnType}" Binding="{Binding Kind, Converter={StaticResource EntryKind}}" Width="80" SortMemberPath="Type"/>
                 <DataGridTextColumn Header="{x:Static res:Strings.ColumnSize}" Binding="{Binding Size}" Width="100" SortMemberPath="Size"/>
                 <DataGridTextColumn Header="{x:Static res:Strings.ColumnModified}" Binding="{Binding ModifiedUtc, Converter={StaticResource TimeStamp}}" Width="140" SortMemberPath="ModifiedDate"/>
                 <!--

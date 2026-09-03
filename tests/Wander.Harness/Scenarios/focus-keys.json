@@ -55,6 +55,22 @@
     { "do": "key", "key": "Escape" },
     { "do": "assert-entries", "contains": [ "SUB_002.jpg" ] },
 
+    // --- Multi-selection survives a change of view ------------------
+    // Each control owns its SelectedItems; three rows picked in the table
+    // used to show as one in the tiles while Ctrl+C still copied three.
+    { "do": "view", "mode": "Details" },
+    { "do": "select", "names": [ "SUB_003.jpg", "SUB_004.jpg", "SUB_007.jpg" ] },
+    { "do": "view", "mode": "Tiles" },
+    { "do": "assert-entries", "selected": [ "SUB_003.jpg", "SUB_004.jpg", "SUB_007.jpg" ] },
+    { "do": "view", "mode": "LargeIcons" },
+    { "do": "assert-entries", "selected": [ "SUB_003.jpg", "SUB_004.jpg", "SUB_007.jpg" ] },
+    { "do": "view", "mode": "Gallery" },
+    { "do": "assert-entries", "selected": [ "SUB_003.jpg", "SUB_004.jpg", "SUB_007.jpg" ] },
+    { "do": "screenshot", "name": "three-selected-gallery" },
+    { "do": "view", "mode": "Details" },
+    { "do": "assert-entries", "selected": [ "SUB_003.jpg", "SUB_004.jpg", "SUB_007.jpg" ] },
+    { "do": "note", "text": "three rows selected in the table stayed selected through tiles, icons and gallery" },
+
     // --- Where the selection lands after an operation ---------------
     { "do": "view", "mode": "Details" },
     { "do": "select", "names": [ "SUB_005.jpg" ] },
@@ -69,6 +85,14 @@
     { "do": "assert-entries", "selected": [ "sub" ] },
     { "do": "note", "text": "after a step up the folder we left is selected" },
     { "do": "screenshot", "name": "after-up" },
+
+    // --- Enter in the table opens the row ---------------------------
+    // DataGrid used to swallow Enter for its own row navigation, and the
+    // window's Enter -> Open binding never fired in this one view.
+    { "do": "key", "key": "Enter" },
+    { "do": "wait-idle" },
+    { "do": "assert-path", "is": "{sandbox}\\photos\\sub" },
+    { "do": "note", "text": "Enter in the table opened the selected folder" },
 
     { "do": "assert-log", "scope": "all", "noErrors": true }
   ]

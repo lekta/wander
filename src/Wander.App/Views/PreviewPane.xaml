@@ -70,7 +70,7 @@
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="Padding" Value="1,0"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="ToolTip" Value="{Binding Preview.RatingSource, StringFormat='Rating, written to {0}'}"/>
+            <Setter Property="ToolTip" Value="{Binding Preview.RatingSource, StringFormat={x:Static res:Strings.PreviewRatingWrittenTo}}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
