@@ -1,9 +1,9 @@
+using Wander.Core.FileSystem;
 using Wander.Core.Logging;
 using Wander.Core.Operations;
-using Wander.Core.Shell;
 using Wander.Core.Undo;
 
-namespace Wander.Core.FileSystem;
+namespace Wander.Core.Shell;
 
 /// <summary>
 /// Taking things out of an archive onto the real filesystem. The same

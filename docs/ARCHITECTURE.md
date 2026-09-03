@@ -125,12 +125,12 @@ Platform.Windows` — один файл, `App.xaml.cs` (точка композ�
 ```
 === Wander dependency graph (using sweep) ===
 date   : 2026-09-03
-commit : b6f1699
+commit : 9f63c06
 
 -- projects --
-Wander.App -> Wander.Core   (55 files)
+Wander.App -> Wander.Core   (56 files)
 Wander.App -> Wander.Platform.Windows   (1 files)
-Wander.Core.Tests -> Wander.Core   (72 files)
+Wander.Core.Tests -> Wander.Core   (76 files)
 Wander.Harness -> Wander.App   (4 files)
 Wander.Harness -> Wander.Core   (6 files)
 Wander.Harness -> Wander.Platform.Windows   (3 files)
@@ -142,10 +142,9 @@ Wander.Platform.Windows -> Wander.Core   (22 files)
   Companions     -> Undo           (1 files)
   Diagnostics    -> Logging        (1 files)
   FileSystem     -> Localization   (1 files)
-  FileSystem     -> Logging        (3 files)
-  FileSystem     -> Operations     (3 files)
-  FileSystem     -> Shell          (1 files)
-  FileSystem     -> Undo           (4 files)
+  FileSystem     -> Logging        (2 files)
+  FileSystem     -> Operations     (2 files)
+  FileSystem     -> Undo           (3 files)
   Listing        -> Companions     (2 files)
   Listing        -> FileSystem     (5 files)
   Listing        -> Icons          (1 files)
@@ -161,22 +160,20 @@ Wander.Platform.Windows -> Wander.Core   (22 files)
   Search         -> FileSystem     (5 files)
   Search         -> Logging        (1 files)
   Search         -> Preview        (1 files)
-  Shell          -> FileSystem     (1 files)
+  Shell          -> FileSystem     (2 files)
   Shell          -> Localization   (1 files)
+  Shell          -> Logging        (1 files)
+  Shell          -> Operations     (1 files)
   Shell          -> Persistence    (1 files)
+  Shell          -> Undo           (1 files)
 
 -- Wander.Core: levels --
   0: (root), Icons, Layout, Localization, Logging, Navigation, Operations, Undo
-  1: [Companions+FileSystem+Persistence+Shell], Diagnostics, Preview
-  2: Menu, Search
-  3: Listing
-  cycle edges:
-    Companions -> FileSystem
-    FileSystem -> Shell
-    Persistence -> Companions
-    Persistence -> FileSystem
-    Shell -> FileSystem
-    Shell -> Persistence
+  1: Diagnostics, FileSystem, Preview
+  2: Companions, Search
+  3: Listing, Persistence
+  4: Shell
+  5: Menu
 
 -- Wander.Platform.Windows: folder -> folder --
   (root)         -> Diagnostics    (1 files)
@@ -212,6 +209,7 @@ Wander.Platform.Windows -> Wander.Core   (22 files)
   Controls       -> Converters     (1 files)
   Controls       -> Diagnostics    (1 files)
   Controls       -> Resources      (1 files)
+  Converters     -> Resources      (1 files)
   Converters     -> Util           (1 files)
   Converters     -> ViewModels     (1 files)
   Diagnostics    -> Resources      (1 files)

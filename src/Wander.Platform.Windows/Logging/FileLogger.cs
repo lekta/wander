@@ -11,7 +11,10 @@ namespace Wander.Platform.Windows.Logging;
 /// </summary>
 public sealed class FileLogger : ILogger, ILogFile, IDisposable {
     private readonly StreamWriter _writer;
+    private readonly RepeatCollapser _collapser = new();
     private readonly object _lock = new();
+
+    private string _runLevel = "INFO";
     private bool _disposed;
 
 
@@ -64,6 +67,13 @@ public sealed class FileLogger : ILogger, ILogFile, IDisposable {
         }
         _disposed = true;
         try {
+            // The tail of a flood belongs in the file, not in the state of
+            // an object about to go away.
+            lock (_lock) {
+                if (_collapser.Flush() is { } repeats) {
+                    Emit(_runLevel, repeats.Line, null);
+                }
+            }
             _writer.Dispose();
         } catch {
             // ignore
@@ -76,22 +86,42 @@ public sealed class FileLogger : ILogger, ILogFile, IDisposable {
             return;
         }
         lock (_lock) {
-            try {
-                _writer.Write($"{DateTime.Now:HH:mm:ss.fff} {level,-5} ");
-                _writer.WriteLine(message);
-                if (ex is not null) {
-                    _writer.WriteLine(ex);
-                }
-            } catch {
-                // A logger that throws would be a permanent UX outage; swallow.
+            // Asked under the lock, because the answer is about the line
+            // written just before this one and two threads must not both
+            // think they are that line.
+            var decision = _collapser.Decide(RepeatCollapser.Signature(level, message, ex), DateTime.UtcNow);
+            if (decision.Repeats is { } repeats) {
+                // The summary belongs to the run that is ending, so it goes
+                // out at that run's level, before _runLevel moves on.
+                Emit(_runLevel, repeats.Line, null);
+            }
+            if (decision.Write) {
+                _runLevel = level;
+                Emit(level, message, ex);
             }
 
             try {
+                // Every call, written or collapsed: the harness counts
+                // errors through this event, and a flood that is being
+                // collapsed in the file is still a flood of errors.
                 Written?.Invoke(level, message, ex);
             } catch {
-                // Same rule for a listener: nothing it does may reach the
-                // caller, which is somewhere in the middle of a file copy.
+                // Same rule as in Emit: nothing a listener does may reach
+                // the caller, which is somewhere in the middle of a file
+                // copy.
             }
+        }
+    }
+
+    private void Emit(string level, string message, Exception? ex) {
+        try {
+            _writer.Write($"{DateTime.Now:HH:mm:ss.fff} {level,-5} ");
+            _writer.WriteLine(message);
+            if (ex is not null) {
+                _writer.WriteLine(ex);
+            }
+        } catch {
+            // A logger that throws would be a permanent UX outage; swallow.
         }
     }
 }

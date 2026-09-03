@@ -8,10 +8,23 @@ using Wander.Core.Localization;
 using Wander.Core.Logging;
 using Wander.Core.Persistence;
 using Wander.Platform.Windows;
+using Wander.Platform.Windows.Logging;
 
 namespace Wander.App;
 
 public partial class App : Application {
+    /// <summary>
+    /// How long the same fault has to wait before it may offer a crash
+    /// bundle again. A dispatcher fault repeating on every frame used to
+    /// put the dialog up sixty times a second; one report of it is one
+    /// report, and the log already says it is still happening.
+    /// </summary>
+    private static readonly TimeSpan _offerInterval = TimeSpan.FromMinutes(1);
+
+    private static string _lastOfferSignature = "";
+    private static DateTime _lastOfferUtc = DateTime.MinValue;
+
+
     /// <summary>
     /// Started with <c>--smoke</c>: come up, draw a frame, go away, and say
     /// through the exit code whether that worked. It is what
@@ -60,6 +73,7 @@ public partial class App : Application {
         // rather than on the way out: a crash is precisely when the tidy-up
         // on exit would not have run.
         SweepTempCopies();
+        SweepLogs();
         base.OnStartup(e);
     }
 
@@ -96,6 +110,40 @@ public partial class App : Application {
 
 
     /// <summary>
+    /// Caps how many session logs and crash bundles the data folder keeps.
+    /// On the pool: it is a directory listing and a pile of deletes, and
+    /// nothing on the way to the first frame needs the answer.
+    /// </summary>
+    private static void SweepLogs() {
+        var log = ServiceLocator.Get<ILogger>();
+        string? current = ServiceLocator.TryGet<ILogFile>()?.FilePath;
+        _ = Task.Run(() => {
+            var (logs, crashes) = LogFolders.Sweep(AppPaths.Logs, AppPaths.Crashes, current);
+            if (logs > 0 || crashes > 0) {
+                log.Info($"Log retention: removed {logs} logs, {crashes} crash bundles");
+            }
+        });
+    }
+
+
+    /// <summary>
+    /// Whether this fault may raise the crash-report dialog now. The fatal
+    /// handler does not ask: that process is going down, and its one report
+    /// is the only one there will be.
+    /// </summary>
+    private static bool ShouldOffer(string message, Exception ex, DateTime nowUtc) {
+        string signature = RepeatCollapser.Signature("ERROR", message, ex);
+        if (signature == _lastOfferSignature && nowUtc - _lastOfferUtc < _offerInterval) {
+            return false;
+        }
+        _lastOfferSignature = signature;
+        _lastOfferUtc = nowUtc;
+
+        return true;
+    }
+
+
+    /// <summary>
     /// Last-resort exception logging. A file manager dying silently mid-batch
     /// is the worst possible failure mode — at minimum the session log must
     /// record what happened, and recoverable UI-thread faults should not take
@@ -116,7 +164,9 @@ public partial class App : Application {
                 return;
             }
 
-            CrashReporter.Offer(args.Exception, fatal: false);
+            if (ShouldOffer("Unhandled dispatcher exception", args.Exception, DateTime.UtcNow)) {
+                CrashReporter.Offer(args.Exception, fatal: false);
+            }
             args.Handled = true;
         };
 

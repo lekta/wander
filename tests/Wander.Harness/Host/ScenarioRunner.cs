@@ -190,6 +190,9 @@ public sealed class ScenarioRunner {
             case "assert-path":
                 AssertPath(step);
                 break;
+            case "assert-pane":
+                AssertPane(step);
+                break;
             case "measure":
                 _metrics.Take(step.Str("name") ?? "measure");
                 break;
@@ -814,6 +817,26 @@ public sealed class ScenarioRunner {
                 throw new InvalidOperationException(
                     $"breadcrumbs end with [{string.Join(" > ", tail)}], expected [{string.Join(" > ", crumbs)}]");
             }
+        }
+    }
+
+
+    /// <summary>
+    /// The preview pane against the window it lives in. The three numbers
+    /// go into the report either way: what this is about is a state.json
+    /// written on a monitor and opened on a laptop, where a pane that keeps
+    /// its pixel width leaves the file list a sliver.
+    /// </summary>
+    private void AssertPane(JsonElement step) {
+        double window = _window.ActualWidth;
+        double pane = _vm.IsPreviewVisible ? _vm.PreviewWidth : 0;
+        double list = window - pane;
+        _report.Note($"window {window:F0} px, preview pane {pane:F0} px, list about {list:F0} px");
+
+        int minList = step.Int("minList", 0);
+        if (minList > 0 && list < minList) {
+            throw new InvalidOperationException(
+                $"the file list has about {list:F0} px of a {window:F0} px window, less than {minList}");
         }
     }
 

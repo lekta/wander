@@ -131,6 +131,19 @@ public sealed record SessionState {
     /// the user last dragged the divider between bookmarks and drives.
     /// </summary>
     public double BookmarksHeight { get; init; } = 200;
+
+    /// <summary>
+    /// Size of the window when the two sizes above were written. What the
+    /// pane sizes are a share of: without it a pane left at 748 px of a
+    /// 1925 px window comes back at 748 px in a 1086 px window and leaves
+    /// the file list thirty pixels wide - a laptop after a monitor. Zero
+    /// on a file written before this field existed, which
+    /// <c>PaneSizes.Restore</c> reads as "nothing to scale by".
+    /// </summary>
+    public double LayoutWindowWidth { get; init; }
+
+    /// <summary>Window height when the sizes above were written; see <see cref="LayoutWindowWidth"/>.</summary>
+    public double LayoutWindowHeight { get; init; }
 }
 
 

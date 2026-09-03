@@ -223,6 +223,11 @@ public partial class MainWindow : Window {
         if (App.IsSmokeRun) {
             StartSmokeCountdown();
         }
+        // Here rather than in the view model's constructor: a saved pane
+        // size is a share of the window it was saved from, and this is the
+        // first moment there is a window with a size to compare against.
+        Vm.RestorePaneSizes(ActualWidth, ActualHeight);
+        SizeChanged += (_, _) => Vm.NoteWindowSize(ActualWidth, ActualHeight);
         ApplyPreviewLayout();
         // Native-size cap (so small images don't stretch above 100 %) is
         // now done in XAML via BitmapPixelSizeConverter on MaxWidth/MaxHeight

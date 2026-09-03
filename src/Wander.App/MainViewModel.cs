@@ -17,6 +17,7 @@ using Wander.Core.Companions;
 using Wander.Core.Diagnostics;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
+using Wander.Core.Layout;
 using Wander.Core.Listing;
 using Wander.Core.Logging;
 using Wander.Core.Menu;
@@ -63,6 +64,14 @@ public sealed class MainViewModel : ObservableObject {
     /// </summary>
     private const int ManualViewModeLimit = 128;
 
+    /// <summary>Smallest the preview pane may be, and what the file list keeps of the window beside it.</summary>
+    private const double PreviewMinWidth = 120;
+    private const double ListMinWidth = 240;
+
+    /// <summary>The same pair for the bookmarks panel and the drives tree under it.</summary>
+    private const double BookmarksMinHeight = 44;
+    private const double TreeMinHeight = 200;
+
     private readonly IFileSystem _fs;
     private readonly IShellLauncher _shell;
     private readonly IAppStateStore _stateStore;
@@ -103,6 +112,16 @@ public sealed class MainViewModel : ObservableObject {
     private bool _isPreviewVisible;
     private double _previewWidth = 280;
     private double _bookmarksHeight = 200;
+
+    // Pane sizes as they were persisted, plus the window they were a share
+    // of, held from RestoreState until the window is loaded and can say how
+    // big it is now - see RestorePaneSizes.
+    private double _savedPreviewWidth;
+    private double _savedBookmarksHeight;
+    private double _savedWindowWidth;
+    private double _savedWindowHeight;
+    private double _windowWidth;
+    private double _windowHeight;
 
     private readonly ClipboardController _clipboard;
 
@@ -772,7 +791,7 @@ public sealed class MainViewModel : ObservableObject {
     public double PreviewWidth {
         get => _previewWidth;
         set {
-            double clamped = Math.Max(120, Math.Min(900, value));
+            double clamped = Math.Max(PreviewMinWidth, Math.Min(PaneSizes.LegacyMax, value));
             if (SetField(ref _previewWidth, clamped)) {
                 SaveState();
             }
@@ -788,7 +807,7 @@ public sealed class MainViewModel : ObservableObject {
     public double BookmarksHeight {
         get => _bookmarksHeight;
         set {
-            double clamped = Math.Max(44, Math.Min(900, value));
+            double clamped = Math.Max(BookmarksMinHeight, Math.Min(PaneSizes.LegacyMax, value));
             if (SetField(ref _bookmarksHeight, clamped)) {
                 SaveState();
             }
@@ -1110,6 +1129,39 @@ public sealed class MainViewModel : ObservableObject {
         WriteStateNow();
     }
 
+    /// <summary>
+    /// Puts the side panes back at the sizes they were left at, scaled to
+    /// the window they are coming back into - see
+    /// <see cref="PaneSizes.Restore"/>. Called from the window's Loaded
+    /// handler, because that is the first moment there is a window with a
+    /// size to scale against.
+    /// </summary>
+    public void RestorePaneSizes(double windowWidth, double windowHeight) {
+        NoteWindowSize(windowWidth, windowHeight);
+
+        // Nothing usable saved (a fresh install, a hand-edited file): the
+        // defaults stand, exactly as before.
+        if (_savedPreviewWidth > 0) {
+            _previewWidth = PaneSizes.Restore(
+                _savedPreviewWidth, _savedWindowWidth, windowWidth, PreviewMinWidth, ListMinWidth);
+            Raise(nameof(PreviewWidth));
+        }
+        if (_savedBookmarksHeight > 0) {
+            _bookmarksHeight = PaneSizes.Restore(
+                _savedBookmarksHeight, _savedWindowHeight, windowHeight, BookmarksMinHeight, TreeMinHeight);
+            Raise(nameof(BookmarksHeight));
+        }
+    }
+
+    /// <summary>
+    /// The window size the pane sizes are a share of, kept current so the
+    /// two always go into <c>state.json</c> describing the same moment.
+    /// </summary>
+    public void NoteWindowSize(double width, double height) {
+        _windowWidth = width;
+        _windowHeight = height;
+    }
+
 
     private void RestoreState() {
         var state = _stateStore.Load();
@@ -1143,14 +1195,14 @@ public sealed class MainViewModel : ObservableObject {
         _isPreviewVisible = session.IsPreviewVisible;
         Raise(nameof(IsPreviewVisible));
         Preview.SetVisible(_isPreviewVisible);
-        if (session.PreviewWidth >= 120 && session.PreviewWidth <= 900) {
-            _previewWidth = session.PreviewWidth;
-            Raise(nameof(PreviewWidth));
-        }
-        if (session.BookmarksHeight >= 44 && session.BookmarksHeight <= 900) {
-            _bookmarksHeight = session.BookmarksHeight;
-            Raise(nameof(BookmarksHeight));
-        }
+        // Not applied here: what a saved pane size means depends on the
+        // window it was saved from and the one it is coming back into, and
+        // there is no window yet - the constructor runs before it exists.
+        // RestorePaneSizes, called from MainWindow.OnLoaded, finishes this.
+        _savedPreviewWidth = session.PreviewWidth;
+        _savedBookmarksHeight = session.BookmarksHeight;
+        _savedWindowWidth = session.LayoutWindowWidth;
+        _savedWindowHeight = session.LayoutWindowHeight;
 
         Bookmarks.Load(state.Favorites);
         _isBookmarksExpanded = session.IsBookmarksExpanded;
@@ -1264,6 +1316,8 @@ public sealed class MainViewModel : ObservableObject {
                 IsPreviewVisible = _isPreviewVisible,
                 PreviewWidth = _previewWidth,
                 BookmarksHeight = _bookmarksHeight,
+                LayoutWindowWidth = _windowWidth,
+                LayoutWindowHeight = _windowHeight,
                 IsBookmarksExpanded = _isBookmarksExpanded,
                 RecentPaths = _nav.RecentPaths.ToArray(),
             },

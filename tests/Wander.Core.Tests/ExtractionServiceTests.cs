@@ -1,6 +1,7 @@
 using Wander.Core.FileSystem;
 using Wander.Core.Logging;
 using Wander.Core.Operations;
+using Wander.Core.Shell;
 using Wander.Core.Tests.Fakes;
 using Wander.Core.Undo;
 

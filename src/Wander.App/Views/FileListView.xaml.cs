@@ -16,6 +16,7 @@ using Wander.App.Resources;
 using Wander.App.Util;
 using Wander.App.ViewModels;
 using Wander.Core;
+using Wander.Core.Diagnostics;
 using Wander.Core.FileSystem;
 using Wander.Core.Layout;
 using Wander.Core.Logging;
@@ -66,6 +67,13 @@ public partial class FileListView : UserControl {
 
     /// <summary>The views currently unbound from the rows - see <see cref="ApplyViewAttachment"/>.</summary>
     private readonly HashSet<Selector> _detachedViews = new();
+
+    /// <summary>
+    /// True while <see cref="SetListSelection"/> is putting a selection on
+    /// row by row. The selection handler steps aside for the round and is
+    /// told once at the end.
+    /// </summary>
+    private bool _applyingSelection;
 
     /// <summary>The inline rename editor while a name is being edited, and the layer it sits in - see the rename section.</summary>
     private RenameAdorner? _renameAdorner;
@@ -555,8 +563,26 @@ public partial class FileListView : UserControl {
             return;
         }
 
+        // A selection being put on by the code below arrives one row at a
+        // time and raises this on every add, and every raise walks the
+        // whole of SelectedItems again - 5000 rows cost 12.5 million walked
+        // rows and eleven seconds (measured, PLAN block 0 step 0.7).
+        // SetListSelection reports once, when it is done.
+        if (_applyingSelection) {
+            return;
+        }
+
+        ReportSelection(sender);
+    }
+
+    /// <summary>
+    /// Hands the control's current selection to the view model. One call
+    /// per real selection change - the user's, or one finished round of
+    /// <see cref="SetListSelection"/>.
+    /// </summary>
+    private void ReportSelection(object host) {
         var entries = new List<FileSystemEntry>();
-        switch (sender) {
+        switch (host) {
             case DataGrid dg:
                 foreach (var item in dg.SelectedItems) {
                     if (item is FileSystemEntry fe) {
@@ -697,21 +723,45 @@ public partial class FileListView : UserControl {
         }
     }
 
-    private static void SetListSelection(ItemsControl host, IEnumerable<FileSystemEntry> items) {
+    private void SetListSelection(ItemsControl host, IEnumerable<FileSystemEntry> items) {
         // Set the selection by delta — clearing+adding everything would
         // collapse and re-expand the control's selection, causing visible
         // flicker on ListBox and unnecessary SelectionChanged churn.
-        switch (host) {
-            case ListBox lb: ApplyDelta(lb.SelectedItems, items); break;
-            case DataGrid dg: ApplyDelta(dg.SelectedItems, items); break;
+        //
+        // The handler stands aside for the whole round rather than running
+        // on every add: see List_SelectionChanged. Measured because the
+        // shape is suspicious; PerfLog only writes a line once a category
+        // is slow, so this one appearing in the log is itself the answer.
+        bool changed;
+        using (PerfLog.Measure("ui.selection-apply")) {
+            _applyingSelection = true;
+            try {
+                changed = host switch {
+                    ListBox lb => ApplyDelta(lb.SelectedItems, items),
+                    DataGrid dg => ApplyDelta(dg.SelectedItems, items),
+                    _ => false,
+                };
+            } finally {
+                _applyingSelection = false;
+            }
+        }
+
+        // Only when something moved, so that a delta which turned out to be
+        // a no-op stays as silent as it was when the control raised the
+        // event itself.
+        if (changed) {
+            ReportSelection(host);
         }
     }
 
-    private static void ApplyDelta(System.Collections.IList currentSelection, IEnumerable<FileSystemEntry> targetItems) {
+    /// <returns>True when the selection actually moved.</returns>
+    private static bool ApplyDelta(System.Collections.IList currentSelection, IEnumerable<FileSystemEntry> targetItems) {
+        bool changed = false;
         var target = new HashSet<FileSystemEntry>(targetItems);
         for (int i = currentSelection.Count - 1; i >= 0; i--) {
             if (currentSelection[i] is FileSystemEntry existing && !target.Contains(existing)) {
                 currentSelection.RemoveAt(i);
+                changed = true;
             }
         }
 
@@ -724,8 +774,11 @@ public partial class FileListView : UserControl {
         foreach (var entry in target) {
             if (!present.Contains(entry)) {
                 currentSelection.Add(entry);
+                changed = true;
             }
         }
+
+        return changed;
     }
 
 

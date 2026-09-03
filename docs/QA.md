@@ -426,6 +426,11 @@ exe), переменная `WANDER_DATA_DIR`, иначе `%LOCALAPPDATA%\Wander`
       окном показывает только «что в руках», курсор системный.
 - [ ] **Потерянная закладка** → «Указать расположение…» открывается на
       ближайшей уцелевшей родительской папке.
+- [ ] **Ярлык на книгу, PDF, трек с обложкой** (2026-09-03, PLAN W1): в
+      Плитках и Крупных значках — обложка оригинала со стрелкой в углу;
+      ярлык на `.txt` — значок ярлыка, ярлык на картинку — картинка, как
+      раньше. Замена оригинала другой книгой миниатюру ярлыка **не**
+      обновляет до перезапуска — известно (TECHDEBT).
 - [ ] **Перепись папки с junction-петлёй** (2026-09-03): футер панели
       просмотра досчитывает, размеры не задвоены; профиль `deep`
       песочницы даёт такую папку (`deep\l01\l02\loop`). Колонка «Тип» в
@@ -609,7 +614,9 @@ binaries, searchTimeoutMs}`, `soak {minutes, maxWorkingSetGrowthMb,
 maxHandleGrowth, seed}`, `assert-log {contains | regex | absent | noErrors
 [+ allow[]], scope: step|all}`, `assert-entries {count | min | max |
 contains | absent | selected, scope: model|visible}`, `assert-path {is,
-crumbs[]}`, `measure name`,
+crumbs[]}`, `assert-pane {minList}` (ширина окна, панели просмотра и
+остатка под список - в отчёт; `minList` роняет шаг, если списку осталось
+меньше), `measure name`,
 `sleep ms`, `note text`.
 
 `command` и `key` ходят через `CanExecute` и через

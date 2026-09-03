@@ -23,6 +23,9 @@
     { "do": "note", "text": "hidden and system rows are the proof: both settings default to off, so they were read from the seeded state" },
     { "do": "screenshot", "name": "hidden-shown" },
 
+    { "do": "assert-pane", "minList": 240 },
+    { "do": "note", "text": "the 0.3.0 fixture predates LayoutWindowWidth, so the pane comes back at its literal width - the numbers above are the legacy branch of PaneSizes.Restore" },
+
     { "do": "assert-log", "scope": "all", "noErrors": true }
   ]
 }

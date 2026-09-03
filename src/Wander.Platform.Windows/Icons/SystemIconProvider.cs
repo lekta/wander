@@ -558,9 +558,16 @@ public sealed class SystemIconProvider : IIconProvider {
 
         // A shortcut shows its target's picture, the way Explorer does —
         // a folder of shortcuts to photographs is otherwise a folder of
-        // identical arrows.
-        string? linkTarget = LinkThumbnailTarget(path);
-        string source = linkTarget ?? path;
+        // identical arrows. A shortcut to a book gets the book's cover:
+        // the cover branch above looked at the .lnk itself and found none
+        // there, so the target has to be asked in its place.
+        string? linkTarget = ExistingLinkTarget(path);
+        if (linkTarget is not null && TryRenderLinkedCover(linkTarget, path, MediumSize) is { } linkedCover) {
+            return linkedCover;
+        }
+
+        string? thumbTarget = linkTarget is not null && IsThumbnailable(linkTarget) ? linkTarget : null;
+        string source = thumbTarget ?? path;
         if (!IsThumbnailable(source)) {
             return LoadShellIcon(path, IconSize.Normal);
         }
@@ -568,7 +575,7 @@ public sealed class SystemIconProvider : IIconProvider {
         // Same RAW shortcut as the jumbo tier, for the same reason — the
         // tile view of a folder of photographs is the other place where
         // the shell's per-file cost is felt.
-        if (linkTarget is null && RawThumbnail.Render(path, MediumSize) is { } rawThumb) {
+        if (thumbTarget is null && RawThumbnail.Render(path, MediumSize) is { } rawThumb) {
             return rawThumb;
         }
 
@@ -580,7 +587,7 @@ public sealed class SystemIconProvider : IIconProvider {
         // The shell bakes the arrow into the icons it hands out, but not
         // into a thumbnail it was asked for by a different path — so when
         // the picture came from the target, the badge is ours to draw.
-        if (linkTarget is not null) {
+        if (thumbTarget is not null) {
             DrawLinkOverlay(bmp, path);
         }
 
@@ -592,21 +599,40 @@ public sealed class SystemIconProvider : IIconProvider {
 
 
     /// <summary>
-    /// The file a shortcut's picture should come from: the target, when
-    /// <paramref name="path"/> is a <c>.lnk</c> and the target still exists
-    /// and has a thumbnail of its own. Null in every other case, which
-    /// means "draw this file the ordinary way".
+    /// Where a shortcut points, when <paramref name="path"/> is a
+    /// <c>.lnk</c> and the target is a file that still exists. Null in
+    /// every other case, which means "draw this file the ordinary way".
+    /// Whether the target's picture is worth borrowing - a thumbnail of
+    /// its own, or a cover - is the caller's question.
     /// </summary>
-    private static string? LinkThumbnailTarget(string path) {
+    private static string? ExistingLinkTarget(string path) {
         if (!path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)) {
             return null;
         }
 
         string? target = ResolveShortcut(path);
 
-        return target is not null && File.Exists(target) && IsThumbnailable(target)
-            ? target
-            : null;
+        return target is not null && File.Exists(target) ? target : null;
+    }
+
+    /// <summary>
+    /// The cover of the book (PDF, track) a shortcut points at, with the
+    /// shortcut arrow on it, or null when the target draws no cover of
+    /// its own. The arrow is drawn here for the same reason it is drawn
+    /// on a borrowed thumbnail: the plate came from the target, and
+    /// nothing in it says "shortcut".
+    /// </summary>
+    private static byte[]? TryRenderLinkedCover(string target, string linkPath, int side) {
+        using Bitmap? plate = RenderCoverPlate(target, side);
+        if (plate is null) {
+            return null;
+        }
+
+        DrawLinkOverlay(plate, linkPath);
+        using var png = new MemoryStream();
+        plate.Save(png, ImageFormat.Png);
+
+        return png.ToArray();
     }
 
     private static string? ResolveShortcut(string path) {
@@ -662,6 +688,22 @@ public sealed class SystemIconProvider : IIconProvider {
     /// </para>
     /// </summary>
     private static byte[]? TryRenderBookCover(string path, int side) {
+        using Bitmap? plate = RenderCoverPlate(path, side);
+        if (plate is null) {
+            return null;
+        }
+
+        using var png = new MemoryStream();
+        plate.Save(png, ImageFormat.Png);
+
+        return png.ToArray();
+    }
+
+    /// <summary>
+    /// The framed cover as a bitmap the caller owns - encoded as it is
+    /// for the file's own tile, or with a shortcut arrow drawn on first.
+    /// </summary>
+    private static Bitmap? RenderCoverPlate(string path, int side) {
         if (!HasOwnCover(path)) {
             return null;
         }
@@ -679,14 +721,11 @@ public sealed class SystemIconProvider : IIconProvider {
         try {
             using var buffer = new MemoryStream(bytes);
             using var cover = new Bitmap(buffer);
-            using var framed = RenderFramedCover(cover, side);
-            using var png = new MemoryStream();
-            framed.Save(png, ImageFormat.Png);
 
-            return png.ToArray();
+            return RenderFramedCover(cover, side);
         } catch (Exception ex) when (ex is ArgumentException or OutOfMemoryException) {
             // GDI+ throws both of these for "these bytes are not an image
-            // I know" — a cover in a format without a codec, or a truncated
+            // I know" - a cover in a format without a codec, or a truncated
             // one.
             return null;
         }
@@ -939,9 +978,16 @@ public sealed class SystemIconProvider : IIconProvider {
         }
 
         // A shortcut is drawn from its target's thumbnail when the target
-        // has one; the arrow is composited below either way.
-        string? linkTarget = LinkThumbnailTarget(path);
-        string source = linkTarget ?? path;
+        // has one; the arrow is composited below either way. A shortcut to
+        // a book gets the book's cover, arrow included - the cover branch
+        // above only knows the .lnk itself.
+        string? linkTarget = ExistingLinkTarget(path);
+        if (linkTarget is not null && TryRenderLinkedCover(linkTarget, path, JumboSize) is { } linkedCover) {
+            return linkedCover;
+        }
+
+        string? thumbTarget = linkTarget is not null && IsThumbnailable(linkTarget) ? linkTarget : null;
+        string source = thumbTarget ?? path;
 
         // RAW containers carry a display JPEG, and pulling it out beats
         // asking the shell by more than an order of magnitude — see
@@ -950,7 +996,7 @@ public sealed class SystemIconProvider : IIconProvider {
         // Bitmap this path never produces. Overlays on the RAW itself are
         // not a case that occurs — the arrow is the only overlay Wander has
         // ever seen — so returning here loses nothing.
-        if (linkTarget is null && RawThumbnail.Render(path, JumboSize) is { } rawThumb) {
+        if (thumbTarget is null && RawThumbnail.Render(path, JumboSize) is { } rawThumb) {
             return rawThumb;
         }
 

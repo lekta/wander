@@ -116,7 +116,10 @@ public partial class FolderTreesView : UserControl {
     }
 
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e) {
-        if (e.PropertyName == nameof(MainViewModel.IsBookmarksExpanded)) {
+        // BookmarksHeight as well as the toggle: the saved height arrives
+        // after the window is loaded (MainViewModel.RestorePaneSizes), long
+        // after the data context did.
+        if (e.PropertyName is nameof(MainViewModel.IsBookmarksExpanded) or nameof(MainViewModel.BookmarksHeight)) {
             ApplyBookmarksLayout();
         }
     }

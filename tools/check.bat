@@ -87,6 +87,12 @@ if /i "%MODE%"=="run" (
     echo.
     echo === smoke run ===
     set EXE=src\Wander.App\bin\Debug\%TFM%\Wander.exe
+    rem Its own data root, not %LOCALAPPDATA%\Wander: a smoke run opens a
+    rem log and writes state.json like any other launch, and a check that
+    rem runs a dozen times a day left a dozen two-second sessions in the
+    rem real logs folder - and overwrote the real state.json on the way.
+    set SMOKEDATA=%~dp0..\artifacts\smoke
+    if exist "!SMOKEDATA!" rd /s /q "!SMOKEDATA!"
     rem --smoke keeps the window off-screen and closes it after a couple of
     rem seconds, and the exit code is the answer. Called directly rather than
     rem through `start`, so this batch waits for it and can read that code —
@@ -99,7 +105,7 @@ if /i "%MODE%"=="run" (
         echo   smoke launch FAILED - no such file: !EXE!
         set SMOKE_FAILED=1
     ) else (
-        "!EXE!" --smoke
+        "!EXE!" --smoke --data-dir "!SMOKEDATA!\data"
         rem `if errorlevel 1` compares as signed and misses a .NET crash,
         rem which exits with 0xE0434352 — negative as an int32. `neq 0`
         rem catches both.
@@ -107,6 +113,9 @@ if /i "%MODE%"=="run" (
             set SMOKE_FAILED=1
         ) else (
             echo   smoke launch ok
+            rem Green leaves nothing behind; red keeps the folder, because
+            rem the log inside it is what the message below points at.
+            rd /s /q "!SMOKEDATA!"
         )
     )
 )
@@ -115,7 +124,7 @@ rem Reported out here, not inside the block above: `exit /b` from within a
 rem parenthesised block leaves cmd's own exit code at whatever the last
 rem command in it set — the echo — and check.bat is judged by that code.
 if defined SMOKE_FAILED (
-    echo   smoke launch FAILED - see %LOCALAPPDATA%\Wander\logs
+    echo   smoke launch FAILED - see artifacts\smoke\data\logs
     exit /b 1
 )
 
