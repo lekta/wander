@@ -215,6 +215,34 @@ public sealed class ThumbnailDiskCache {
     }
 
 
+    /// <summary>
+    /// Drops the entry for one file, if the key it would be under right now
+    /// exists.
+    ///
+    /// <para>
+    /// Normally there is nothing to do: the key carries the file's stamp,
+    /// so an edited file asks under a new name and the old entry is already
+    /// unreachable. This covers the one case the stamp cannot - a file
+    /// rewritten with its size and its last-write time unchanged, which is
+    /// what a tool that preserves timestamps does. Then the key is the same
+    /// key, and the picture behind it is the wrong one.
+    /// </para>
+    /// </summary>
+    public void Forget(string sourcePath) {
+        if (TryBuildFileName(sourcePath) is not { } file) {
+            return;
+        }
+
+        try {
+            File.Delete(file);
+        } catch {
+            // Being read right now, or already gone. Either way there is
+            // nothing to do about it: the memory tier has been dropped, so
+            // the next load re-reads the file itself.
+        }
+    }
+
+
     /// <summary>Removes every cached thumbnail. Wired to the settings dialog's button.</summary>
     public void Clear() {
         try {

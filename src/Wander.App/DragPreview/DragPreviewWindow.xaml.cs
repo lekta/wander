@@ -3,10 +3,14 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Wander.App.Resources;
+using Wander.Core.Layout;
 
 namespace Wander.App.DragPreview;
 
 public partial class DragPreviewWindow : Window {
+    /// <summary>Gap between the cursor and the plaque, so one never covers the other.</summary>
+    private const double CursorGap = 18;
+
     private static readonly Brush _moveBrush = Palette.DragMove;
     private static readonly Brush _copyBrush = Palette.DragCopy;
     private static readonly Brush _linkBrush = Palette.DragLink;
@@ -71,15 +75,23 @@ public partial class DragPreviewWindow : Window {
         // window's current PresentationSource transform.
         var source = PresentationSource.FromVisual(this);
         if (source?.CompositionTarget is null) {
-            Left = pt.X + 18;
-            Top = pt.Y + 18;
+            Left = pt.X + CursorGap;
+            Top = pt.Y + CursorGap;
+
             return;
         }
 
         var dip = source.CompositionTarget.TransformFromDevice.Transform(new Point(pt.X, pt.Y));
-        // Small offset so the preview sits to the bottom-right of the cursor.
-        Left = dip.X + 18;
-        Top = dip.Y + 18;
+        // Below and to the right of the cursor, and on the other side of it
+        // when there is no room — which is what a drag towards the taskbar
+        // always runs into. See WindowPlacement.BesideCursor.
+        var screen = new ScreenRect(
+            SystemParameters.VirtualScreenLeft,
+            SystemParameters.VirtualScreenTop,
+            SystemParameters.VirtualScreenWidth,
+            SystemParameters.VirtualScreenHeight);
+        (Left, Top) = WindowPlacement.BesideCursor(
+            dip.X, dip.Y, ActualWidth, ActualHeight, screen, CursorGap);
     }
 
 

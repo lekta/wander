@@ -284,6 +284,26 @@
                                       MediaOpened="VideoPreview_MediaOpened"
                                       MediaEnded="VideoPreview_MediaEnded"
                                       MediaFailed="VideoPreview_MediaFailed"/>
+                        <!--
+                            The last frame, held while a clip is reopened
+                            (PreviewPane.HoldLastFrame). A file that declares
+                            no length can only be started over by closing
+                            and opening it again, and between the two the
+                            element has nothing to draw: it collapsed to
+                            nothing, then showed black until the first frame
+                            arrived - once per loop on a short clip. This
+                            sits over it with a snapshot of the frame it was
+                            showing until the position moves again. Same
+                            margin and alignment as the element under it, so
+                            the snapshot lands where the picture was.
+                        -->
+                        <Image x:Name="VideoHold"
+                               Grid.Row="0"
+                               Margin="8,12,8,4"
+                               VerticalAlignment="Top" HorizontalAlignment="Center"
+                               Stretch="Fill"
+                               IsHitTestVisible="False"
+                               Visibility="Collapsed"/>
 
                         <!--
                             The track's card. The cover gets the room it can
@@ -334,6 +354,7 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <Button x:Name="VideoPlayPauseButton"
@@ -341,6 +362,18 @@
                                     Grid.Column="0"
                                     Click="VideoPlayPause_Click"
                                     ToolTip="{x:Static res:Strings.PreviewPlayPause}"/>
+                            <!--
+                                Repeat. Pressed by itself for anything
+                                shorter than three seconds: a two-second
+                                clip played once is a flicker, and the only
+                                way to see what is in it is to watch it go
+                                round. Longer clips start with it off -
+                                looping a film is not what "preview" means.
+                            -->
+                            <ToggleButton x:Name="VideoLoopButton"
+                                          Content="⟳" Width="32" Padding="0,2"
+                                          Grid.Column="1" Margin="4,0,0,0"
+                                          ToolTip="{x:Static res:Strings.PreviewRepeat}"/>
                             <!--
                                 Palette-coloured because for a track the
                                 transport stands on the surround, and on the
@@ -351,13 +384,13 @@
                             -->
                             <TextBlock x:Name="VideoTimeText"
                                        Style="{StaticResource PaneText}"
-                                       Grid.Column="1"
+                                       Grid.Column="2"
                                        VerticalAlignment="Center"
                                        Margin="8,0"
                                        FontFamily="Consolas" FontSize="11"
                                        Text="0:00 / 0:00"/>
                             <Slider x:Name="VideoSlider"
-                                    Grid.Column="2"
+                                    Grid.Column="3"
                                     VerticalAlignment="Center"
                                     Minimum="0" Maximum="1"
                                     SmallChange="0.5" LargeChange="5"

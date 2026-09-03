@@ -53,6 +53,18 @@ public class FolderChangesTests {
     }
 
     [Fact]
+    public void AStructuralChange_StillNamesItsPath() {
+        // The re-listing needs no names, but the caches keyed by path do:
+        // a file replaced under its own name is a new file at an old path.
+        var changes = new FolderChanges();
+
+        changes.Note(new DirectoryChange(@"C:\shoot\photo.jpg", Structural: true));
+
+        Assert.True(changes.NeedsRelisting);
+        Assert.Equal(new[] { @"C:\shoot\photo.jpg" }, changes.ChangedPaths);
+    }
+
+    [Fact]
     public void TheSameFileTwice_IsNotedOnce() {
         // One atomic replace is several events for the same path.
         var changes = new FolderChanges();

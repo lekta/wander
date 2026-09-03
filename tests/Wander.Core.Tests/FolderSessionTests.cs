@@ -329,6 +329,40 @@ public class FolderSessionTests {
     }
 
     [Fact]
+    public void AReplacedFile_IsReportedStale_EvenThoughTheFolderIsRelisted() {
+        // A picture deleted and another one copied in under its name. The
+        // listing is rebuilt, but the path is the same one - so whatever is
+        // cached against that path has to be named, or the tile goes on
+        // showing the picture that was deleted.
+        var session = new FolderSession();
+        session.NoteChange(new DirectoryChange(@"C:\folder\photo.jpg", Structural: true));
+
+        var decision = session.DecideWatchTick(busy: false, rows: Array.Empty<FileSystemEntry>());
+
+        Assert.Equal(WatchOutcome.Relist, decision.Outcome);
+        Assert.Equal(new[] { @"C:\folder\photo.jpg" }, decision.Stale);
+    }
+
+    [Fact]
+    public void AnEditedFile_IsReportedStale_AlongsideItsRowRefresh() {
+        var session = new FolderSession();
+        var photo = Row("IMG_1.CR3");
+        session.NoteChange(new DirectoryChange(@"C:\folder\IMG_1.CR3", Structural: false));
+
+        var decision = session.DecideWatchTick(busy: false, rows: new[] { photo });
+
+        Assert.Equal(WatchOutcome.RefreshRows, decision.Outcome);
+        Assert.Equal(new[] { @"C:\folder\IMG_1.CR3" }, decision.Stale);
+    }
+
+    [Fact]
+    public void AQuietTick_NamesNothingStale() {
+        var session = new FolderSession();
+
+        Assert.Null(session.DecideWatchTick(busy: false, rows: Array.Empty<FileSystemEntry>()).Stale);
+    }
+
+    [Fact]
     public void AChangedFileNobodyShows_Relists_WithoutBotheringTheTrees() {
         // The listing does not know the file; only a fresh listing can say
         // what it is. Nothing says the panels are affected.

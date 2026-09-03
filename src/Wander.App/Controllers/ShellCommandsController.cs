@@ -3,6 +3,7 @@ using System.Windows;
 using Wander.App.Resources;
 using Wander.Core;
 using Wander.Core.Logging;
+using Wander.Core.Persistence;
 using Wander.Core.Shell;
 
 namespace Wander.App.Controllers;
@@ -68,6 +69,38 @@ public sealed class ShellCommandsController {
             _shell.Open(path);
         } catch (Exception ex) {
             Report(Strings.StatusOpenLogFailed, ex.Message);
+        }
+    }
+
+
+    /// <summary>
+    /// Writes what the status bar has said this session to a text file and
+    /// opens it in whatever reads text on this machine.
+    ///
+    /// <para>
+    /// A file rather than a window of our own: the journal is text, the
+    /// system already has something that shows text well, and a viewer
+    /// built here would be a second one to maintain for the sake of a few
+    /// hundred lines. Rewritten on every open, beside the session log, so
+    /// the two are found in the same place.
+    /// </para>
+    /// </summary>
+    public void OpenJournal(ActionJournal journal) {
+        string path = Path.Combine(AppPaths.Logs, $"journal-{Environment.ProcessId}.txt");
+        try {
+            Directory.CreateDirectory(AppPaths.Logs);
+            File.WriteAllText(path, journal.Render(), System.Text.Encoding.UTF8);
+        } catch (Exception ex) {
+            _log.Error($"Journal write failed: {path}", ex);
+            Report(Strings.StatusJournalFailed, ex.Message);
+
+            return;
+        }
+
+        try {
+            _shell.Open(path);
+        } catch (Exception ex) {
+            Report(Strings.StatusJournalFailed, ex.Message);
         }
     }
 

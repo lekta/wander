@@ -71,6 +71,13 @@ public partial class FileListView : UserControl {
     private RenameAdorner? _renameAdorner;
     private AdornerLayer? _renameLayer;
 
+    /// <summary>
+    /// The editor's text box while an edit is open. Kept because a click
+    /// that lands outside it has to commit the edit, and the adorner owns
+    /// the box rather than lending it out.
+    /// </summary>
+    private TextBox? _renameBox;
+
 
     public FileListView() {
         InitializeComponent();
@@ -497,6 +504,11 @@ public partial class FileListView : UserControl {
 
 
     private bool FocusRow(FileSystemEntry entry) {
+        // The caret follows the keyboard, and this is where the keyboard is
+        // put on a row deliberately. The presses WPF answers by itself
+        // (an arrow inside the grid) are picked up in List_SelectionChanged.
+        Vm.CaretPath = entry.FullPath;
+
         switch (ActiveList()) {
             case DataGrid dg:
                 dg.ScrollIntoView(entry);
@@ -561,6 +573,37 @@ public partial class FileListView : UserControl {
                 break;
         }
         Vm.SelectedEntries = entries;
+        UpdateCaret(entries);
+    }
+
+
+    /// <summary>
+    /// Where the focus rectangle goes after the selection changed.
+    ///
+    /// <para>
+    /// The keyboard's own row wins: with Shift held the selection is a run
+    /// and the caret is the end of it the user is moving, which is exactly
+    /// the row that has focus. Failing that — a selection set from code, a
+    /// click WPF handled itself — the last selected row is the caret, the
+    /// same one Explorer leaves the rectangle on. An emptied selection
+    /// leaves the caret alone: a click on empty space is the case this
+    /// whole thing exists for.
+    /// </para>
+    /// </summary>
+    private void UpdateCaret(IReadOnlyList<FileSystemEntry> selected) {
+        // Nothing here walks the listing: a marquee over five thousand
+        // files raises this once per file (ApplyDelta adds them one at a
+        // time), and a scan of the rows in each of those would be the
+        // gesture's cost squared.
+        if (Keyboard.FocusedElement is FrameworkElement { DataContext: FileSystemEntry focused }) {
+            Vm.CaretPath = focused.FullPath;
+
+            return;
+        }
+
+        if (selected.Count > 0) {
+            Vm.CaretPath = selected[^1].FullPath;
+        }
     }
 
 
@@ -718,6 +761,8 @@ public partial class FileListView : UserControl {
             return;
         }
 
+        CommitRenameOnClickAway(e.OriginalSource);
+
         var clicked = ListVisuals.EntryAt(e.OriginalSource);
         if (clicked is null) {
             // Empty area: start a rubber-band lasso. The drag-source path
@@ -729,13 +774,17 @@ public partial class FileListView : UserControl {
                 // means "the folder, not a file in it", and the first arrow
                 // key enters the rows from there (see TryEnterList).
                 TakeKeyboardOnClick(host, null);
-                _rubberBand.Start(host, e, Vm.SelectedEntries);
+                _rubberBand.Arm(host, e, Vm.SelectedEntries);
                 e.Handled = true;
             }
 
             return;
         }
         _dragArmed = true;
+        // A press on a row is where the keyboard would go next, whoever
+        // ends up handling it — WPF, when the press is left to it, moves
+        // focus without telling anyone.
+        Vm.CaretPath = clicked.FullPath;
 
         if (_selection.TryArmDeferred(sender, clicked, Vm.SelectedEntries, Keyboard.Modifiers)) {
             TakeKeyboardOnClick(sender as ItemsControl, clicked);
@@ -759,18 +808,37 @@ public partial class FileListView : UserControl {
     /// </para>
     /// </summary>
     private void TakeKeyboardOnClick(ItemsControl? host, FileSystemEntry? row) {
-        if (host is null || host.IsKeyboardFocusWithin) {
+        if (host is null) {
             return;
         }
 
-        if (row is null || !FocusRow(row)) {
+        // A press on a row moves the keyboard onto it — which is what WPF
+        // would have done if the press had not been marked handled, and
+        // what keeps the focus rectangle and the row the arrows count from
+        // being the same row. A press on empty space moves nothing when the
+        // keyboard is already in the list: the caret is where the user put
+        // it, and clearing the selection does not move it.
+        if (row is not null) {
+            if (!FocusRow(row)) {
+                host.Focus();
+            }
+
+            return;
+        }
+
+        if (!host.IsKeyboardFocusWithin) {
             host.Focus();
         }
     }
 
 
     private void List_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e) {
-        if (_rubberBand.IsActive) {
+        // Armed as well as active: a press on empty space that never moved
+        // far enough to paint a rectangle still holds the mouse capture,
+        // and letting go is where that ends. The selection it cleared on
+        // the way down stays cleared — the gesture was a click on the
+        // background, which is what clearing it means.
+        if (_rubberBand.IsHost(sender)) {
             _rubberBand.End();
             e.Handled = true;
 
@@ -866,6 +934,8 @@ public partial class FileListView : UserControl {
         if (sender is not ItemsControl host || ListVisuals.IsChrome(e.OriginalSource)) {
             return;
         }
+
+        CommitRenameOnClickAway(e.OriginalSource);
 
         var clicked = ListVisuals.EntryAt(e.OriginalSource);
         _contextIsBackground = clicked is null;
@@ -1023,6 +1093,16 @@ public partial class FileListView : UserControl {
             return FocusRow(selected);
         }
 
+        // Nothing selected, but the focus rectangle is still on the row the
+        // user last stood on — a click on empty space leaves exactly that.
+        // The press means "back into the list", and the list resumes where
+        // the rectangle is rather than at its top edge.
+        if (CaretEntry() is { } caret) {
+            SetListSelection(list, new[] { caret });
+
+            return FocusRow(caret);
+        }
+
         var entry = key is Key.Down or Key.Right ? entries[0] : entries[^1];
         SetListSelection(list, new[] { entry });
 
@@ -1108,7 +1188,31 @@ public partial class FileListView : UserControl {
             }
         }
 
-        return Vm.SelectedEntry is { } selected ? entries.IndexOf(selected) : -1;
+        if (Vm.SelectedEntry is { } selected) {
+            return entries.IndexOf(selected);
+        }
+
+        return CaretEntry() is { } caret ? entries.IndexOf(caret) : -1;
+    }
+
+
+    /// <summary>
+    /// The row the focus rectangle is on, or null when it points at
+    /// something this folder no longer has — a file deleted, a folder left
+    /// and come back to with the list re-read.
+    /// </summary>
+    private FileSystemEntry? CaretEntry() {
+        if (Vm.CaretPath is not { Length: > 0 } path) {
+            return null;
+        }
+
+        foreach (var entry in Vm.Entries) {
+            if (string.Equals(entry.FullPath, path, StringComparison.OrdinalIgnoreCase)) {
+                return entry;
+            }
+        }
+
+        return null;
     }
 
 
@@ -1338,6 +1442,7 @@ public partial class FileListView : UserControl {
         HideRenameEditor();
         var box = CreateRenameEditor(entry, label);
         _renameAdorner = new RenameAdorner(label, box);
+        _renameBox = box;
         _renameLayer = layer;
         layer.Add(_renameAdorner);
         layer.UpdateLayout();
@@ -1362,6 +1467,14 @@ public partial class FileListView : UserControl {
             FontSize = label.FontSize,
             Padding = new Thickness(0),
             MinWidth = 60,
+            // A name is wider than the label it is edited in — that is why
+            // it is being renamed at all — and a single-line box answers
+            // that by scrolling, so the user edits a name they can see six
+            // characters of. Wrapping shows the whole of it instead; the
+            // adorner grows the editor to the height the wrapped text needs
+            // (see RenameAdorner), and Enter still commits because
+            // AcceptsReturn is left off.
+            TextWrapping = TextWrapping.Wrap,
         };
         box.PreviewKeyDown += RenameBox_PreviewKeyDown;
         box.PreviewTextInput += RenameBox_PreviewTextInput;
@@ -1376,6 +1489,7 @@ public partial class FileListView : UserControl {
     /// decides where the keyboard goes next.
     /// </summary>
     private void HideRenameEditor() {
+        _renameBox = null;
         if (_renameAdorner is not { } adorner) {
             return;
         }
@@ -1446,6 +1560,35 @@ public partial class FileListView : UserControl {
             e.Handled = true;
             Vm.Status = Strings.InvalidFileNameChars + "\\ / : * ? \" < > |";
         }
+    }
+
+    /// <summary>
+    /// A click landed somewhere in the list while a name was being edited:
+    /// apply the edit, the way Explorer does.
+    ///
+    /// <para>
+    /// The editor normally commits on losing the keyboard, but a press the
+    /// list handles itself never takes the keyboard off it — a click on
+    /// empty space is handled to own the lasso, and the focus stays in the
+    /// editor because the editor <em>is</em> inside the list. So the editor
+    /// hung there over a folder that had already dropped its selection.
+    /// </para>
+    /// </summary>
+    private void CommitRenameOnClickAway(object originalSource) {
+        if (_renameBox is not { } box || ListVisuals.IsInsideTextBox(originalSource)) {
+            return;
+        }
+
+        CommitInlineRename(box, takeFocus: false);
+
+        // And take the keyboard off the editor now. The editor is removed a
+        // moment later (the view model clears RenamingPath, and the rename
+        // itself finishes asynchronously), and WPF answers the removal of
+        // the focused element by handing focus to the window — where the
+        // list's own key handlers never see an arrow press. The press that
+        // follows this one puts the keyboard on a row; this only makes sure
+        // it is not left nowhere.
+        ActiveList()?.Focus();
     }
 
     private void RenameBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e) {

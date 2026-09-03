@@ -125,12 +125,12 @@ Platform.Windows` — один файл, `App.xaml.cs` (точка композ�
 ```
 === Wander dependency graph (using sweep) ===
 date   : 2026-09-03
-commit : 8d9e10e
+commit : b6f1699
 
 -- projects --
-Wander.App -> Wander.Core   (54 files)
+Wander.App -> Wander.Core   (55 files)
 Wander.App -> Wander.Platform.Windows   (1 files)
-Wander.Core.Tests -> Wander.Core   (70 files)
+Wander.Core.Tests -> Wander.Core   (72 files)
 Wander.Harness -> Wander.App   (4 files)
 Wander.Harness -> Wander.Core   (6 files)
 Wander.Harness -> Wander.Platform.Windows   (3 files)
@@ -193,6 +193,7 @@ Wander.Platform.Windows -> Wander.Core   (22 files)
 
 -- Wander.App: folder -> folder --
   (root)         -> Controllers    (2 files)
+  (root)         -> Controls       (1 files)
   (root)         -> Diagnostics    (1 files)
   (root)         -> Dialogs        (2 files)
   (root)         -> DragPreview    (1 files)
@@ -221,7 +222,6 @@ Wander.Platform.Windows -> Wander.Core   (22 files)
   DragPreview    -> ViewModels     (1 files)
   Preview        -> Resources      (2 files)
   Preview        -> Util           (2 files)
-  Util           -> Resources      (1 files)
   ViewModels     -> Resources      (4 files)
   Views          -> Controllers    (1 files)
   Views          -> Controls       (2 files)
@@ -234,10 +234,10 @@ Wander.Platform.Windows -> Wander.Core   (22 files)
   Views          -> ViewModels     (4 files)
 
 -- Wander.App: levels --
-  0: Highlighting, Menu, Resources
-  1: Diagnostics, Util, ViewModels
-  2: Conflict, Converters, Preview
-  3: Controllers, Controls, Dialogs, DragPreview
+  0: Highlighting, Menu, Resources, Util
+  1: Diagnostics, Preview, ViewModels
+  2: Conflict, Controllers, Converters
+  3: Controls, Dialogs, DragPreview
   4: Views
   5: (root)
 
@@ -569,9 +569,24 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
 
 - **`SelectionController`** (App) — deferred selection при click-and-drag
   (drag не сбрасывает мультивыбор), «снять выделение в активном списке».
+  Отложены оба смысла нажатия на строку: схлопывание мультивыбора и
+  `Ctrl`-переключение. Оба применяются на отпускании, начавшееся
+  перетаскивание их отменяет; единственное исключение — `Ctrl` по
+  невыделенной строке при старте перетаскивания: она добавляется, иначе
+  поедет не то, за что взялись.
 - **`RubberBandController`** (App) — адорнер, захват мыши, пересечение с
   контейнерами; только с пустого места (`ListVisuals.IsChrome` — полоса
   прокрутки, заголовки, разделители); невиртуализованные не попадают.
+  Нажатие взводит (`Arm`), прямоугольник появляется на системном пороге
+  перетаскивания (`Begin`): без порога клик в зазор между плитками ловил
+  обоих соседей.
+- **Каретка** (App, 2026-09-03) — `MainViewModel.CaretPath`, строка, от
+  которой пойдёт следующая стрелка, и рамка в шаблоне контейнера
+  (`CaretRowConverter`, триггер последним). Путь, а не строка: строки
+  заменяются на каждом перечитывании. Ставится там, где клавиатуру кладут
+  на строку осознанно (`FocusRow`, нажатие на строку), и подхватывается из
+  `List_SelectionChanged` для нажатий, на которые отвечает WPF. Читают
+  `TryEnterList` и `CaretIndex`.
 - **`EntryVisibility`** (Core) — `ShowHidden` / `ShowSystem` /
   `HideSystemRootFolders` одним значением; список и дерево фильтруют им
   обоим; в фон передаётся снимком. Третий флаг — `SystemRootFolders`
@@ -620,6 +635,19 @@ undo его нет.
 `FolderSession.DecideWatchTick`, гасит себя на холостом тике. Пока правится
 имя или идёт своя операция — `Hold`, изменения ждут следующего тика.
 Ошибка вотчера (переполнение буфера) = изменение, вотчер переподнимается.
+
+Решение тика несёт ещё и `Stale` — все пути, которые сторож назвал в этой
+пачке, **включая** структурные. Это не про строки, а про кэши: миниатюры
+ключуются путём, а путь не меняется, когда файл под ним заменили другим с
+тем же именем. `MainViewModel` чистит по этим путям оба уровня
+(`IIconProvider.Forget` + `IconImageCache`) и поднимает `AsyncIcon`
+перерисоваться; дисковая запись удаляется на пуле, потому что тик живёт на
+UI-потоке. Второй заход на ту же проблему — сверка при публикации листинга:
+`ForgetIfChanged(path, FileStamp)` сравнивает mtime и размер строки с тем,
+что было у закэшированной картинки. Он и закрывает случай, которого сторож
+не видел: папку посмотрели, ушли, файл изменили снаружи, вернулись.
+`FileStamp` живёт в `Core/Icons` — значение, которое одинаково читают
+листинг (`FileSystemEntry.ModifiedUtc` + `Size`) и провайдер (`FileInfo`).
 
 ## Сессия папки — `Wander.Core/Listing/`
 
@@ -1111,6 +1139,33 @@ measure — цикл; (3) `BringIndexIntoView` дёргал `UpdateLayout()` и�
 (пропорция фото); `CellSizeProbe` залипал на мусоре. Теперь `TileMetrics` из
 настроек, VM отдаёт одним значением (`Settings.IconsMetrics` /
 `TilesMetrics`), дети меряются **ровно ячейкой**; кругов нет.
+
+Одно исключение из «дети меряются ровно ячейкой» (2026-09-03):
+**единственная выделенная** ячейка меряется с бесконечной высотой и
+расставляется на ту, которая получилась (`MeasureChild` / `IsExpanding`), —
+её подпись снимает потолок и показывает имя целиком. Должна расти вниз
+поверх соседей (`ZIndex` из `ArrangeOverride`), а не раздвигать их:
+раскладка по-прежнему считается от размера ячейки, поэтому сетка не
+переливается. При двух и больше выделенных не растёт никто: выросшие соседи
+по вертикали закрывали бы друг другу подписи. **Незакрытое:** на стенде
+`ZIndex` кладёт выросшую ячейку поверх (проверено растеризатором и
+`PrintWindow`), в живом окне сосед всё равно сверху — стенд разницу не
+воспроизводит, чинить в живом окне (BACKLOG, «Интерфейс»).
+
+Двух вещей это стоило, и обе неочевидны:
+
+- потолок подписи вешает **триггер «не выделен»**, а не атрибут в шаблоне:
+  `DynamicResource` в шаблоне ложится значением на сам элемент и обходит
+  триггер шаблона по приоритету, так что снять его триггером невозможно
+  (первая версия так и не работала — многоточие уходило, высота
+  оставалась);
+- панель **сама подписывается на `SelectionChanged` владельца** и
+  инвалидирует себя. Иначе её никто не разбудит: контейнер, чей constraint
+  не изменился, возвращает прежний `DesiredSize` (обрезанный ячейкой), WPF
+  не видит, что распространять, и панель не помечается грязной — подпись
+  снимала потолок, её собственный `DesiredSize` рос, а контейнер оставался
+  ростом в ячейку. Замерено на стенде (QA.md, «что можно проверить без
+  окна»): 159 px до инвалидации, 173,84 после.
 
 Инвариант тестом: `ExtentWidth` не превышает вьюпорт при колонках > 1.
 Панель не хранит производного состояния. Харнесс: настоящие `FileListView` и

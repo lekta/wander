@@ -66,10 +66,18 @@ public enum WatchOutcome {
 /// says the panels are affected, and the original code never refreshed them
 /// on that path.
 /// </param>
+/// <param name="Stale">
+/// Paths whose picture on screen can no longer be trusted — every file the
+/// watcher named in this burst. Caches keyed by path alone (thumbnails)
+/// have to be told, because neither a re-listing nor a row re-read changes
+/// a path: a photograph deleted and replaced under the same name keeps
+/// showing the deleted one otherwise.
+/// </param>
 public sealed record WatchTickDecision(
     WatchOutcome Outcome,
     bool RefreshTrees = false,
-    IReadOnlyList<FileSystemEntry>? Rows = null) {
+    IReadOnlyList<FileSystemEntry>? Rows = null,
+    IReadOnlyList<string>? Stale = null) {
 
     public static readonly WatchTickDecision Idle = new(WatchOutcome.Idle);
     public static readonly WatchTickDecision Hold = new(WatchOutcome.Hold);
@@ -337,13 +345,18 @@ public sealed class FolderSession {
             return WatchTickDecision.Hold;
         }
 
+        // Every path this burst touched, kept before the accumulator is
+        // cleared: whatever the outcome, the caller has to drop what it
+        // cached about these files.
+        var stale = _pendingChanges.ChangedPaths.ToArray();
+
         // A file appeared, vanished or was renamed: the folder holds a
         // different set of files than the one on screen, and only a fresh
         // listing can say what it is now.
         if (_pendingChanges.NeedsRelisting) {
             _pendingChanges.Clear();
 
-            return new WatchTickDecision(WatchOutcome.Relist, RefreshTrees: true);
+            return new WatchTickDecision(WatchOutcome.Relist, RefreshTrees: true, Stale: stale);
         }
 
         // Nothing appeared or vanished — some files were written to. If
@@ -356,11 +369,11 @@ public sealed class FolderSession {
         _pendingChanges.Clear();
 
         if (touched is null) {
-            return new WatchTickDecision(WatchOutcome.Relist);
+            return new WatchTickDecision(WatchOutcome.Relist, Stale: stale);
         }
 
         return touched.Count > 0
-            ? new WatchTickDecision(WatchOutcome.RefreshRows, Rows: touched)
+            ? new WatchTickDecision(WatchOutcome.RefreshRows, Rows: touched, Stale: stale)
             : WatchTickDecision.Idle;
     }
 

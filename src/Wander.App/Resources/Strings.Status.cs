@@ -45,6 +45,12 @@ public static partial class Strings {
     /// <summary>Не удалось открыть журнал: {0}</summary>
     public static string StatusOpenLogFailed => Get(nameof(StatusOpenLogFailed));
 
+    /// <summary>Не удалось открыть журнал действий: {0}</summary>
+    public static string StatusJournalFailed => Get(nameof(StatusJournalFailed));
+
+    /// <summary>Скопирован текст из панели просмотра: {0} симв.</summary>
+    public static string StatusTextCopied => Get(nameof(StatusTextCopied));
+
     /// <summary>Не удалось показать свойства: {0}</summary>
     public static string StatusPropertiesFailed => Get(nameof(StatusPropertiesFailed));
 

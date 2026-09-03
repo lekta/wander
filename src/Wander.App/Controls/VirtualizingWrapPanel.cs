@@ -281,7 +281,7 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo {
             // keep the layout queue busy forever; the range markers stay
             // reset so the first visible pass realises from scratch.
             foreach (UIElement child in children) {
-                child.Measure(cell);
+                MeasureChild(child, cell);
             }
             _realisedFirst = 0;
             _realisedLast = -1;
@@ -297,7 +297,7 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo {
             // forever, so this is not optional; but WPF skips children that
             // are clean, so it costs almost nothing.
             foreach (UIElement child in children) {
-                child.Measure(cell);
+                MeasureChild(child, cell);
             }
         }
 
@@ -319,11 +319,16 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo {
             // a row of files drawn on top of each other.
             int index = ItemContainerGenerator.IndexFromGeneratorPosition(new GeneratorPosition(i, 0));
             var cell = _layout.CellAt(index < 0 ? i : index);
-            InternalChildren[i].Arrange(new Rect(
-                cell.X,
-                cell.Y - _offsetY,
-                cell.Width,
-                cell.Height));
+            var child = InternalChildren[i];
+
+            // The selected cell may be taller than its slot: it shows the
+            // whole of a name the others cut. It grows downwards over its
+            // neighbours rather than pushing them, so the grid does not
+            // reflow under the cursor — which means it also has to be drawn
+            // over them.
+            double height = Math.Max(cell.Height, child.DesiredSize.Height);
+            SetZIndex(child, height > cell.Height ? 1 : 0);
+            child.Arrange(new Rect(cell.X, cell.Y - _offsetY, cell.Width, height));
         }
 
         return finalSize;
@@ -440,12 +445,7 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo {
                     kept++;
                 }
 
-                // Measured against the cell, never against infinity: the
-                // container is being told how much room it has, not asked.
-                // Asking is what let a half-built template — or an Image
-                // reporting the pixel size of the photograph it just
-                // loaded — redefine the grid for the whole folder.
-                child.Measure(cell);
+                MeasureChild(child, cell);
             }
         }
 
@@ -455,6 +455,41 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo {
         if (sample is not null) {
             ReportContainerSize(sample);
         }
+    }
+
+
+    /// <summary>
+    /// Measured against the cell, never against infinity: the container is
+    /// being told how much room it has, not asked. Asking is what let a
+    /// half-built template — or an Image reporting the pixel size of the
+    /// photograph it just loaded — redefine the grid for the whole folder.
+    ///
+    /// <para>
+    /// The one exception is the selected cell. Its name label drops its
+    /// height cap while it is selected (see the item templates), so that
+    /// the name nobody could read in two lines can be read in six; the cell
+    /// is asked how tall that made it, and <see cref="ArrangeOverride"/>
+    /// gives it the room over its neighbours. The grid itself never moves -
+    /// the layout is computed from the cell size, not from what is in the
+    /// cells.
+    /// </para>
+    /// </summary>
+    private void MeasureChild(UIElement child, Size cell) {
+        child.Measure(IsExpanding(child) ? new Size(cell.Width, double.PositiveInfinity) : cell);
+    }
+
+
+    /// <summary>
+    /// The cell that may outgrow its slot: the selected one, and only while
+    /// it is the only one. A grown cell is drawn over the row below it, so
+    /// with two selected cells one above the other the lower would cover
+    /// exactly the caption the upper one grew to show - and a marquee over
+    /// the folder is not the moment anyone is reading names. One cell can
+    /// be read whole; several are left in their cells.
+    /// </summary>
+    private bool IsExpanding(UIElement child) {
+        return child is ListBoxItem { IsSelected: true }
+            && _owner is ListBox { SelectedItems.Count: 1 };
     }
 
 
@@ -574,10 +609,16 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo {
 
         if (_owner is not null) {
             _owner.IsVisibleChanged -= OnOwnerVisibleChanged;
+            if (_owner is Selector previous) {
+                previous.SelectionChanged -= OnOwnerSelectionChanged;
+            }
         }
         _owner = owner;
         if (owner is not null) {
             owner.IsVisibleChanged += OnOwnerVisibleChanged;
+            if (owner is Selector selector) {
+                selector.SelectionChanged += OnOwnerSelectionChanged;
+            }
         }
     }
 
@@ -586,6 +627,26 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo {
         if (e.NewValue is true) {
             InvalidateMeasure();
         }
+    }
+
+
+    /// <summary>
+    /// The selection moved, so the cell that may outgrow its slot is a
+    /// different one — re-measure.
+    ///
+    /// <para>
+    /// Nothing else would ask. The selected cell is measured against an
+    /// unbounded height (<see cref="MeasureChild"/>) and every other one
+    /// against the cell, and a container whose constraint has not changed
+    /// reports the same <c>DesiredSize</c> it did before — clipped to the
+    /// cell — so WPF sees nothing to propagate and this panel is never
+    /// marked dirty. Measured, not guessed: the name label dropped its
+    /// height cap, its own DesiredSize grew to 63 px, the container stayed
+    /// at the cell's 159, and the tile went on showing three lines.
+    /// </para>
+    /// </summary>
+    private void OnOwnerSelectionChanged(object sender, SelectionChangedEventArgs e) {
+        InvalidateMeasure();
     }
 
 

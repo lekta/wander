@@ -16,6 +16,7 @@ using Wander.App.Highlighting;
 using Wander.App.Resources;
 using Wander.App.ViewModels;
 using Wander.Core.Persistence;
+using Wander.Core.Preview;
 
 
 namespace Wander.App.Views;
@@ -60,6 +61,54 @@ public partial class PreviewPane : UserControl {
     /// panel, and stealing it there would be surprising.
     /// </summary>
     public bool IsCodeEditorFocused => CodeEditor.IsKeyboardFocusWithin;
+
+
+    /// <summary>
+    /// Copies whatever text is selected in the pane, and says how much.
+    /// Returns null when the keyboard is not in here, or is but has nothing
+    /// selected — then Ctrl+C means the files, as it always did.
+    ///
+    /// <para>
+    /// The window asks before its own Ctrl+C runs, rather than leaving each
+    /// text control to answer for itself. Two reasons: the answer has to be
+    /// the same in all four of them (plain text, code, rich text and the
+    /// GUID box), and the user has to be told which of the two things
+    /// Ctrl+C did — the pane and the list are one keystroke apart, and
+    /// "copied 3 items" over a selected paragraph is a silent wrong answer.
+    /// The web view is left alone: it is a browser and copies for itself,
+    /// out of a document we cannot read.
+    /// </para>
+    /// </summary>
+    public int? TryCopySelectedText() {
+        if (!IsKeyboardFocusWithin) {
+            return null;
+        }
+
+        switch (Keyboard.FocusedElement) {
+            case TextBox { SelectionLength: > 0 } box:
+                box.Copy();
+
+                return box.SelectionLength;
+
+            case RichTextBox rich when !rich.Selection.IsEmpty:
+                int length = rich.Selection.Text.Length;
+                rich.Copy();
+
+                return length;
+
+            default:
+                // AvalonEdit's editor is not the focused element - its own
+                // text area is - so it is asked directly rather than
+                // matched on.
+                if (CodeEditor.IsKeyboardFocusWithin && CodeEditor.SelectionLength > 0) {
+                    CodeEditor.Copy();
+
+                    return CodeEditor.SelectionLength;
+                }
+
+                return null;
+        }
+    }
 
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e) {
@@ -440,6 +489,43 @@ public partial class PreviewPane : UserControl {
     /// <summary>Which of the two the transport is driving right now.</summary>
     private bool _transportIsAudio;
 
+    /// <summary>
+    /// Notices a clip finishing when the player does not say so — see
+    /// <see cref="PlaybackClock"/>. Fed by the same 200 ms tick that moves
+    /// the seek bar.
+    /// </summary>
+    private readonly PlaybackClock _clock = new();
+
+    /// <summary>What the transport has open, for <see cref="RestartMedia"/> to open again.</summary>
+    private Uri? _mediaUri;
+
+    /// <summary>
+    /// True between a restart and the <c>MediaOpened</c> it causes: the
+    /// same file coming back, not a new one.
+    /// </summary>
+    private bool _restarting;
+
+    /// <summary>
+    /// The file has played to its end and is waiting to be started over.
+    ///
+    /// <para>
+    /// Kept as a flag rather than read off the position, because the
+    /// position is no help: the player rewinds itself to zero when it
+    /// ends, so "am I at the end" answers no the moment the clip is over.
+    /// That is what left the button dead after the first play — measured,
+    /// not guessed.
+    /// </para>
+    /// </summary>
+    private bool _finished;
+
+    /// <summary>
+    /// The furthest the position has been seen to reach. Stands in for the
+    /// length of a file that declares none — after one play it is the only
+    /// honest number the clock has, and "0:00" for a clip that plainly
+    /// played is worse than an estimate rounded up to "0:01".
+    /// </summary>
+    private TimeSpan _seen;
+
 
     // --- one transport, two players -------------------------------------
 
@@ -480,6 +566,121 @@ public partial class PreviewPane : UserControl {
     }
 
     /// <summary>
+    /// Plays the current file from its beginning.
+    ///
+    /// <para>
+    /// Two roads, chosen by whether the file declares its length. One that
+    /// does is rewound - <c>Position = 0; Play()</c> - and the picture on
+    /// screen stays until the first frame of the next pass. One that does
+    /// not cannot be: <c>burn-in-hell-elmo.mp4</c> (0.8 s, no length in the
+    /// container), measured on a MediaPlayer stand (2026-09-03) - after it
+    /// ends, <c>Position = 0; Play()</c> and <c>Stop(); Play()</c> both
+    /// leave the position at zero, and only <c>Close()</c> followed by a
+    /// fresh open plays it again; a file with a length took all three. The
+    /// re-open costs a frame of nothing between the two, so it is kept for
+    /// the files that need it, and <see cref="HoldLastFrame"/> covers that
+    /// frame.
+    /// </para>
+    /// </summary>
+    private void RestartMedia() {
+        if (_mediaUri is not { } uri) {
+            return;
+        }
+
+        _finished = false;
+        _clock.Reset();
+
+        if (TransportDuration is not null) {
+            TransportPosition = TimeSpan.Zero;
+            TransportPlay();
+        } else {
+            // The re-open raises MediaOpened again, and that handler must
+            // not treat this as a new file: it would recompute the repeat
+            // button and undo whatever the user had chosen.
+            _restarting = true;
+            if (_transportIsAudio) {
+                _audioPlayer.Close();
+                _audioPlayer.Open(uri);
+                _audioPlayer.Play();
+            } else {
+                HoldLastFrame();
+                VideoPreview.Close();
+                VideoPreview.Source = uri;
+                VideoPreview.Play();
+            }
+        }
+
+        _videoIsPlaying = true;
+        VideoPlayPauseButton.Content = "⏸";
+        EnsureVideoTimer();
+    }
+
+    /// <summary>
+    /// Back to the start, stopped rather than paused: the state a clip that
+    /// played to its end waits in until the button is pressed. Stop()
+    /// rewinds by itself; whether Play() then moves the file is
+    /// <see cref="RestartMedia"/>'s question, not this one's.
+    /// </summary>
+    private void TransportRewind() {
+        if (_transportIsAudio) {
+            _audioPlayer.Stop();
+        } else {
+            VideoPreview.Stop();
+        }
+    }
+
+    /// <summary>
+    /// Covers the video element with a snapshot of the frame it is showing,
+    /// and holds the element at its size, for as long as reopening the file
+    /// takes. Closed, a MediaElement has no natural size and measures to
+    /// nothing; opened, it draws black until the first frame is decoded -
+    /// on a 0.8 s clip with repeat on that was a collapse of the picture
+    /// and a black flash every second. Released by the first tick that
+    /// sees the position move (<see cref="VideoTimer_Tick"/>) and by any
+    /// new file (<see cref="ResetVideoTransport"/>).
+    /// </summary>
+    private void HoldLastFrame() {
+        double width = VideoPreview.ActualWidth;
+        double height = VideoPreview.ActualHeight;
+        if (width < 1 || height < 1) {
+            return;
+        }
+
+        // Through a DrawingVisual rather than Render(VideoPreview): a
+        // visual rendered directly is drawn at its own offset inside its
+        // parent - here the margin - which leaves a blank strip and crops
+        // the picture. Pixel size follows the monitor so the snapshot is
+        // not softer than the frame it stands in for.
+        var dpi = VisualTreeHelper.GetDpi(VideoPreview);
+        var frame = new RenderTargetBitmap(
+            (int)Math.Ceiling(width * dpi.DpiScaleX), (int)Math.Ceiling(height * dpi.DpiScaleY),
+            dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
+        var visual = new DrawingVisual();
+        using (var dc = visual.RenderOpen()) {
+            dc.DrawRectangle(new VisualBrush(VideoPreview), null, new Rect(0, 0, width, height));
+        }
+        frame.Render(visual);
+
+        VideoHold.Source = frame;
+        VideoHold.Width = width;
+        VideoHold.Height = height;
+        VideoHold.Visibility = Visibility.Visible;
+        VideoPreview.MinWidth = width;
+        VideoPreview.MinHeight = height;
+    }
+
+    private void ReleaseHeldFrame() {
+        if (VideoHold.Visibility != Visibility.Visible) {
+            return;
+        }
+
+        VideoHold.Visibility = Visibility.Collapsed;
+        VideoHold.Source = null;
+        VideoPreview.MinWidth = 0;
+        VideoPreview.MinHeight = 0;
+    }
+
+    /// <summary>
     /// Points the transport at a new file. Both players are stopped first:
     /// walking from a clip to a track and back must not leave the previous
     /// one running behind the new one.
@@ -488,6 +689,10 @@ public partial class PreviewPane : UserControl {
         try { VideoPreview.Stop(); } catch { /* not yet loaded */ }
         try { _audioPlayer.Stop(); } catch { /* nothing open */ }
 
+        _mediaUri = uri;
+        _restarting = false;
+        _finished = false;
+        _seen = TimeSpan.Zero;
         _transportIsAudio = Vm.Preview.Kind == PreviewKind.Audio;
 
         if (uri is null) {
@@ -526,12 +731,38 @@ public partial class PreviewPane : UserControl {
     /// question for a clip and for a track.
     /// </summary>
     private void MediaOpened() {
-        if (TransportDuration is not { } natural) {
+        var natural = TransportDuration;
+        _clock.Reset();
+
+        // The same file coming back from RestartMedia: the repeat button is
+        // the user's choice by now, and recomputing it here would undo it
+        // on every loop.
+        bool restarted = _restarting;
+        _restarting = false;
+
+        // A very short clip is unreadable played once — by the time the eye
+        // has found it, it is over — so repeat starts on for those and off
+        // for everything else. Set per file rather than remembered: the
+        // answer belongs to the clip, not to the session. A length the
+        // container does not declare counts as short (PlaybackClock) —
+        // those are the two-second clips. Sound is left alone; a
+        // two-second noise on a loop is not a preview, it is an alarm.
+        if (!restarted) {
+            VideoLoopButton.IsChecked = !_transportIsAudio && PlaybackClock.LoopsByDefault(natural);
+        }
+
+        // A file whose length is not known yet still gets a clock: without
+        // one, nothing watches its position, and a clip that never raises
+        // "ended" would leave the transport claiming to play forever.
+        if (natural is not { } total) {
+            UpdateVideoTimeText();
+            EnsureVideoTimer();
+
             return;
         }
-        double total = natural.TotalSeconds;
+
         _suppressVideoSliderChanged = true;
-        VideoSlider.Maximum = total;
+        VideoSlider.Maximum = total.TotalSeconds;
         VideoSlider.Value = 0;
         _suppressVideoSliderChanged = false;
 
@@ -544,13 +775,23 @@ public partial class PreviewPane : UserControl {
     }
 
     /// <summary>
-    /// Rewind to start, leave paused — same convention as Explorer's
-    /// preview pane and most desktop video viewers.
+    /// With repeat on, start over; otherwise rewind and stop — the same
+    /// convention as Explorer's preview pane and most desktop video
+    /// viewers. Starting over means opening the file again, not rewinding:
+    /// see <see cref="RestartMedia"/>.
     /// </summary>
     private void MediaEnded() {
-        TransportPosition = TimeSpan.Zero;
-        TransportPause();
+        _clock.Reset();
+        if (VideoLoopButton.IsChecked == true) {
+            RestartMedia();
+            UpdateVideoTimeText();
+
+            return;
+        }
+
+        TransportRewind();
         _videoIsPlaying = false;
+        _finished = true;
         VideoPlayPauseButton.Content = "▶";
         UpdateVideoTimeText();
     }
@@ -558,6 +799,7 @@ public partial class PreviewPane : UserControl {
     private void VideoPreview_MediaFailed(object sender, ExceptionRoutedEventArgs e) {
         // Codec not installed (e.g. .webm without the Web Media Extensions)
         // or corrupt file. Surface a minimal hint in the slider area.
+        ReleaseHeldFrame();
         VideoTimeText.Text = Strings.PreviewVideoUnavailable;
     }
 
@@ -577,15 +819,35 @@ public partial class PreviewPane : UserControl {
     }
 
     private void VideoTimer_Tick(object? sender, EventArgs e) {
-        if (_videoSliderDragging || TransportDuration is null) {
+        if (_videoSliderDragging) {
             return;
         }
-        // Avoid feedback: setting Slider.Value programmatically would
-        // otherwise re-fire ValueChanged and try to seek us back.
-        _suppressVideoSliderChanged = true;
-        VideoSlider.Value = TransportPosition.TotalSeconds;
-        _suppressVideoSliderChanged = false;
+
+        var position = TransportPosition;
+        var duration = TransportDuration;
+        if (position > _seen) {
+            _seen = position;
+        }
+        if (position > TimeSpan.Zero) {
+            // The reopened file is drawing frames again; the snapshot that
+            // stood in for it can go.
+            ReleaseHeldFrame();
+        }
+        if (duration is not null) {
+            // Avoid feedback: setting Slider.Value programmatically would
+            // otherwise re-fire ValueChanged and try to seek us back.
+            _suppressVideoSliderChanged = true;
+            VideoSlider.Value = position.TotalSeconds;
+            _suppressVideoSliderChanged = false;
+        }
         UpdateVideoTimeText();
+
+        // Some files play to their last frame and raise nothing. Then this
+        // is what ends the playback: the button goes back to "play", and
+        // repeat gets its chance — see PlaybackClock.
+        if (_clock.NoteTick(position, duration, _videoIsPlaying)) {
+            MediaEnded();
+        }
     }
 
     private void VideoPlayPause_Click(object sender, RoutedEventArgs e) {
@@ -593,7 +855,15 @@ public partial class PreviewPane : UserControl {
             TransportPause();
             _videoIsPlaying = false;
             VideoPlayPauseButton.Content = "▶";
+        } else if (_finished || PlaybackClock.AtEnd(TransportPosition, TransportDuration)) {
+            // A file that has finished cannot be played from where it
+            // stands - and how it is taken back to the start depends on the
+            // file, which is RestartMedia's business. The flag is checked
+            // first because the player rewinds itself on ending, so the
+            // position alone would say "not at the end".
+            RestartMedia();
         } else {
+            _clock.Reset();
             TransportPlay();
             _videoIsPlaying = true;
             VideoPlayPauseButton.Content = "⏸";
@@ -633,14 +903,13 @@ public partial class PreviewPane : UserControl {
     }
 
     private void UpdateVideoTimeText() {
+        // The length rounds up, the position down: a clip of 0.8 s that
+        // truncated to "0:00" read as an empty file (see Timecode). And
+        // when the file declares no length at all — burn-in-hell-elmo.mp4
+        // does not — the furthest the position has reached stands in for
+        // it, so after one play the clock says "0:01" instead of nothing.
         VideoTimeText.Text =
-            $"{FormatTimecode(TransportPosition)} / {FormatTimecode(TransportDuration ?? TimeSpan.Zero)}";
-    }
-
-    private static string FormatTimecode(TimeSpan t) {
-        return t.TotalHours >= 1
-            ? $"{(int)t.TotalHours}:{t.Minutes:D2}:{t.Seconds:D2}"
-            : $"{t.Minutes}:{t.Seconds:D2}";
+            $"{Timecode.Format(TransportPosition)} / {Timecode.Format(TransportDuration ?? _seen, roundUp: true)}";
     }
 
     private void ResetVideoTransport() {
@@ -654,6 +923,8 @@ public partial class PreviewPane : UserControl {
         // background after the user selects another file.
         try { VideoPreview.Pause(); } catch { /* not yet loaded */ }
         try { _audioPlayer.Pause(); } catch { /* nothing open */ }
+        ReleaseHeldFrame();
+        _clock.Reset();
         _videoIsPlaying = false;
         VideoPlayPauseButton.Content = "▶";
         _suppressVideoSliderChanged = true;

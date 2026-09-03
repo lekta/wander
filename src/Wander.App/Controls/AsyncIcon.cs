@@ -6,6 +6,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Wander.Core;
 using Wander.Core.Diagnostics;
+using Wander.Core.FileSystem;
 using Wander.Core.Icons;
 
 namespace Wander.App.Controls;
@@ -52,9 +53,19 @@ public sealed class AsyncIcon : Image {
     // leaves the pool to the rest of the app.
     private static readonly IconLoadGate _gate = new(4);
 
+    /// <summary>
+    /// Icons on screen whose file has just changed under them. Static
+    /// because the invalidation comes from the folder watcher, which knows
+    /// a path and nothing about which control is drawing it; subscription
+    /// is tied to Loaded / Unloaded, so only the icons actually in the tree
+    /// are ever called - and none of them is kept alive by this.
+    /// </summary>
+    private static event Action<string>? _invalidated;
+
 
     private int _generation;
     private bool _detached;
+    private bool _listening;
 
 
     static AsyncIcon() {
@@ -87,12 +98,14 @@ public sealed class AsyncIcon : Image {
         // a folder walked through quickly left hundreds of both behind -
         // exactly what the next folder's thumbnails then waited on.
         Unloaded += (_, _) => {
+            Listen(false);
             _generation++;
             _detached = true;
         };
         // A recycled container that comes back for the same file gets no
         // property change to reload it, so it asks again here.
         Loaded += (_, _) => {
+            Listen(true);
             if (_detached) {
                 Reload();
             }
@@ -111,6 +124,60 @@ public sealed class AsyncIcon : Image {
     }
 
 
+    /// <summary>
+    /// The file at this path is not what it was: drop every cached picture
+    /// of it and redraw the icons showing it.
+    ///
+    /// <para>
+    /// Both tiers are keyed by path, and a path does not change when the
+    /// file under it does. Deleting a photograph and copying another one
+    /// into its place is the case that shows it: the listing is rebuilt,
+    /// the row is new, the path is the same, and the tile went on showing
+    /// the picture that had been deleted for the rest of the session.
+    /// </para>
+    /// </summary>
+    public static void Invalidate(string path) {
+        if (string.IsNullOrEmpty(path)) {
+            return;
+        }
+
+        ServiceLocator.Get<IIconProvider>().Forget(path);
+        IconImageCache.Forget(path);
+        _invalidated?.Invoke(path);
+    }
+
+
+    /// <summary>
+    /// Drops the cached picture of every row whose file no longer matches
+    /// the reading the listing just did.
+    ///
+    /// <para>
+    /// The watcher covers a folder while it is on screen. This covers the
+    /// rest: a folder listed, left, edited by another program, and walked
+    /// back into — no event ever arrived, and the memory cache is keyed by
+    /// path, so it would answer with the old picture for the rest of the
+    /// session. One dictionary probe per row, no disk access: the stamp is
+    /// what the listing already read.
+    /// </para>
+    /// </summary>
+    public static void DropStale(IReadOnlyList<FileSystemEntry> rows) {
+        if (rows.Count == 0) {
+            return;
+        }
+
+        var icons = ServiceLocator.Get<IIconProvider>();
+        foreach (var row in rows) {
+            if (row.Kind != EntryKind.File) {
+                continue;
+            }
+            if (icons.ForgetIfChanged(row.FullPath, FileStamp.Of(row.ModifiedUtc, row.Size))) {
+                IconImageCache.Forget(row.FullPath);
+                _invalidated?.Invoke(row.FullPath);
+            }
+        }
+    }
+
+
     private static void OnIconRequestChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) {
         ((AsyncIcon)d).Reload();
     }
@@ -118,6 +185,29 @@ public sealed class AsyncIcon : Image {
     private static void OnSourceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) {
         if (e.NewValue is not null) {
             Painted?.Invoke((AsyncIcon)d);
+        }
+    }
+
+    /// <summary>
+    /// Subscribes to <see cref="Invalidate"/> while this icon is in the
+    /// tree, and only then. The flag guards against a second Loaded without
+    /// an Unloaded between them, which is what re-parenting looks like.
+    /// </summary>
+    private void Listen(bool on) {
+        if (on == _listening) {
+            return;
+        }
+        _listening = on;
+        if (on) {
+            _invalidated += OnInvalidated;
+        } else {
+            _invalidated -= OnInvalidated;
+        }
+    }
+
+    private void OnInvalidated(string path) {
+        if (string.Equals(path, IconPath, StringComparison.OrdinalIgnoreCase)) {
+            Reload();
         }
     }
 

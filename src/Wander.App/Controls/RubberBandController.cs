@@ -17,6 +17,16 @@ namespace Wander.App.Controls;
 /// </para>
 ///
 /// <para>
+/// The press only <em>arms</em> the gesture; the rectangle appears once the
+/// cursor has moved past the system drag threshold. The gap between two
+/// tiles is a few pixels wide, and a click that lands in it with the hand
+/// shaking by one pixel used to paint a rectangle across both neighbours
+/// and select them — which is how a click on nothing ended up selecting
+/// two files. Below the threshold the gesture is a click on the background
+/// and nothing else.
+/// </para>
+///
+/// <para>
 /// Implementation notes:
 /// </para>
 /// <list type="bullet">
@@ -40,6 +50,7 @@ public sealed class RubberBandController {
     private RubberBandAdorner? _adorner;
     private HashSet<FileSystemEntry>? _baseSelection;
     private Point _origin;
+    private bool _armed;
 
 
     public RubberBandController(
@@ -52,12 +63,23 @@ public sealed class RubberBandController {
     }
 
 
+    /// <summary>True once the rectangle is on screen and painting a selection.</summary>
     public bool IsActive { get; private set; }
 
-    public bool IsHost(object? candidate) => IsActive && ReferenceEquals(_host, candidate);
+    /// <summary>
+    /// True while the gesture owns the mouse — armed by a press on empty
+    /// space, whether or not the rectangle has appeared yet. What tells the
+    /// list that a mouse move belongs here and not to drag arming.
+    /// </summary>
+    public bool IsHost(object? candidate) => (IsActive || _armed) && ReferenceEquals(_host, candidate);
 
 
-    public void Start(ItemsControl host, MouseButtonEventArgs e, IReadOnlyList<FileSystemEntry> selection) {
+    /// <summary>
+    /// A press landed on empty space. Takes the selection down (the click
+    /// on the background it is, so far) and waits to see whether the cursor
+    /// moves far enough to mean a marquee.
+    /// </summary>
+    public void Arm(ItemsControl host, MouseButtonEventArgs e, IReadOnlyList<FileSystemEntry> selection) {
         // If a previous gesture didn't clean up (shouldn't happen, but be
         // robust), drop it first.
         End();
@@ -70,20 +92,7 @@ public sealed class RubberBandController {
 
         _host = host;
         _origin = e.GetPosition(host);
-        _layer = AdornerLayer.GetAdornerLayer(host);
-        if (_layer is null) {
-            // No adorner layer (extremely rare) — proceed without visuals,
-            // hit-testing still works.
-            _adorner = null;
-        } else {
-            _adorner = new RubberBandAdorner(host) {
-                StartPoint = _origin,
-                CurrentPoint = _origin,
-            };
-            _layer.Add(_adorner);
-        }
-
-        IsActive = true;
+        _armed = true;
         host.CaptureMouse();
         host.LostMouseCapture += OnLostCapture;
     }
@@ -95,6 +104,14 @@ public sealed class RubberBandController {
         }
 
         Point current = e.GetPosition(_host);
+        if (_armed) {
+            if (!PastThreshold(current)) {
+                return;
+            }
+
+            Begin();
+        }
+
         if (_adorner is not null) {
             _adorner.CurrentPoint = current;
             _adorner.InvalidateVisual();
@@ -115,10 +132,11 @@ public sealed class RubberBandController {
 
 
     public void End() {
-        if (!IsActive) {
+        if (!IsActive && !_armed) {
             return;
         }
         IsActive = false;
+        _armed = false;
 
         if (_host is { } host) {
             host.LostMouseCapture -= OnLostCapture;
@@ -134,6 +152,41 @@ public sealed class RubberBandController {
         _layer = null;
         _adorner = null;
         _baseSelection = null;
+    }
+
+
+    /// <summary>
+    /// The cursor has moved far enough for the press to be a marquee rather
+    /// than a click: put the rectangle on screen.
+    /// </summary>
+    private void Begin() {
+        _armed = false;
+        IsActive = true;
+        _layer = _host is null ? null : AdornerLayer.GetAdornerLayer(_host);
+        if (_layer is null) {
+            // No adorner layer (extremely rare) — proceed without visuals,
+            // hit-testing still works.
+            _adorner = null;
+
+            return;
+        }
+
+        _adorner = new RubberBandAdorner(_host!) {
+            StartPoint = _origin,
+            CurrentPoint = _origin,
+        };
+        _layer.Add(_adorner);
+    }
+
+
+    /// <summary>
+    /// The system's own "this is a drag, not a click" distance, in both
+    /// axes — the same one the drag source uses, so the two gestures start
+    /// at the same remove from the press.
+    /// </summary>
+    private bool PastThreshold(Point current) {
+        return Math.Abs(current.X - _origin.X) >= SystemParameters.MinimumHorizontalDragDistance
+            || Math.Abs(current.Y - _origin.Y) >= SystemParameters.MinimumVerticalDragDistance;
     }
 
 

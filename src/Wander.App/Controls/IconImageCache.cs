@@ -38,6 +38,13 @@ internal static class IconImageCache {
     /// </summary>
     private const int ThumbnailBudget = 256;
 
+    /// <summary>
+    /// The sizes one path can be cached at, held rather than asked for:
+    /// <see cref="Forget"/> runs once per file in a watcher burst, and
+    /// <c>Enum.GetValues</c> allocates a fresh array on every call.
+    /// </summary>
+    private static readonly IconSize[] _sizes = Enum.GetValues<IconSize>();
+
     // Keyed by a tuple rather than a formatted string: this is asked once
     // per tile appearing, and a string built per lookup is garbage produced
     // by the very code that exists to stop the hot path costing anything.
@@ -92,6 +99,22 @@ internal static class IconImageCache {
         }
 
         return image;
+    }
+
+
+    /// <summary>
+    /// Drops the decoded images of one file. The tier below
+    /// (<see cref="Wander.Core.Icons.IIconProvider.Forget"/>) has just been
+    /// told the same thing; leaving the decoded copy here would keep the
+    /// old picture on screen anyway, since a hit here never asks the
+    /// provider at all.
+    /// </summary>
+    public static void Forget(string path) {
+        lock (_lock) {
+            foreach (var size in _sizes) {
+                _images.Remove((size, path));
+            }
+        }
     }
 
 

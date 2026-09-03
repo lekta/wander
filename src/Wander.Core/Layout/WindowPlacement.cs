@@ -62,4 +62,40 @@ public static class WindowPlacement {
             Math.Min(Math.Max(saved.Left, minLeft), maxLeft),
             Math.Min(Math.Max(saved.Top, minTop), maxTop));
     }
+
+
+    /// <summary>
+    /// Where a plaque that follows the cursor goes: below and to the right
+    /// of it, flipped to the other side of the cursor on whichever axis
+    /// there is no room on, and never off the screen.
+    ///
+    /// <para>
+    /// The flip is the whole point. The drag plaque says what would happen
+    /// on release, and the one place a drag most often ends up — the
+    /// taskbar at the bottom of the screen — is exactly where a plaque
+    /// hung below the cursor falls off the edge and the user drags blind.
+    /// Above the cursor there is always room, because the cursor got to the
+    /// bottom of the screen by coming down from it.
+    /// </para>
+    /// </summary>
+    /// <param name="offset">Gap between the cursor and the plaque, on both axes.</param>
+    public static (double Left, double Top) BesideCursor(
+        double cursorX, double cursorY, double width, double height, ScreenRect screen, double offset) {
+        double left = cursorX + offset;
+        if (left + width > screen.Right) {
+            left = cursorX - offset - width;
+        }
+
+        double top = cursorY + offset;
+        if (top + height > screen.Bottom) {
+            top = cursorY - offset - height;
+        }
+
+        // A plaque wider or taller than the screen cannot be placed
+        // properly; putting its top-left corner on screen at least keeps
+        // the beginning of the text readable.
+        return (
+            Math.Min(Math.Max(left, screen.Left), Math.Max(screen.Left, screen.Right - width)),
+            Math.Min(Math.Max(top, screen.Top), Math.Max(screen.Top, screen.Bottom - height)));
+    }
 }

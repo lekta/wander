@@ -578,6 +578,26 @@
                     <DockPanel HorizontalAlignment="Stretch"/>
                 </ItemsPanelTemplate>
             </StatusBar.ItemsPanel>
+            <!--
+                The journal button, next to the line it keeps: the status
+                bar shows one message at a time, and the one before it is
+                gone before it can be read twice. This opens everything the
+                bar has said this session, timestamped, as text.
+            -->
+            <StatusBarItem DockPanel.Dock="Left" Padding="0">
+                <!--
+                    Segoe MDL2 Assets, like the other glyphs in the window:
+                    the shell's own icon font is monochrome and sized in
+                    points, where an emoji would come out coloured and as
+                    tall as its font decides - in a 22-pixel status bar that
+                    is the difference between an icon and a lump.
+                -->
+                <Button Style="{StaticResource ToolbarButton}"
+                        Content="&#xF0E3;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                        Padding="4,0" Margin="0,0,4,0"
+                        Command="{Binding OpenJournalCommand}"
+                        ToolTip="{x:Static res:Strings.JournalTooltip}"/>
+            </StatusBarItem>
             <StatusBarItem DockPanel.Dock="Left">
                 <TextBlock Text="{Binding Status}" TextTrimming="CharacterEllipsis"/>
             </StatusBarItem>

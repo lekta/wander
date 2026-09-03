@@ -169,6 +169,15 @@
     <SolidColorBrush x:Key="RowSelectedHover" Color="#BFE0FA"/>
     <SolidColorBrush x:Key="RowSelectedHoverBorder" Color="#A5D3EE"/>
 
+    <!--
+        The row the keyboard would move from - Explorer's focus rectangle.
+        Drawn as a frame and nothing else, so it reads on a selected row and
+        on an unselected one alike: a click on empty space clears the
+        selection but leaves this, which is the only thing on screen saying
+        where the next arrow key starts from.
+    -->
+    <SolidColorBrush x:Key="RowCaretBorder" Color="#3B3B3B"/>
+
     <!-- The "..." button that appears on a bookmark row under the cursor. -->
     <SolidColorBrush x:Key="RowActionHover" Color="#C4E0F4"/>
 

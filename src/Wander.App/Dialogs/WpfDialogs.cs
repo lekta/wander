@@ -40,11 +40,14 @@ public sealed class WpfDialogs : IDialogs {
         return PromptDialog.Show(title, label, initial, filenameMode);
     }
 
-    public string? PickFolder(string title) {
+    public string? PickFolder(string title, string? startAt = null) {
         var picker = new Microsoft.Win32.OpenFolderDialog {
             Title = title,
             Multiselect = false,
         };
+        if (!string.IsNullOrEmpty(startAt)) {
+            picker.InitialDirectory = startAt;
+        }
 
         return picker.ShowDialog() == true ? picker.FolderName : null;
     }

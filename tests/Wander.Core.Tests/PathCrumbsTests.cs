@@ -51,4 +51,30 @@ public class PathCrumbsTests {
     public void Split_EmptyInputHasNoCrumbs(string? path) {
         Assert.Empty(PathCrumbs.Split(path));
     }
+
+
+    [Fact]
+    public void NearestExisting_TakesTheDeepestSurvivingParent() {
+        var alive = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { @"A:\", @"A:\B", @"A:\B\C" };
+
+        Assert.Equal(@"A:\B\C", PathCrumbs.NearestExisting(@"A:\B\C\D", alive.Contains));
+    }
+
+    [Fact]
+    public void NearestExisting_WalksPastMoreThanOneMissingLevel() {
+        var alive = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { @"A:\", @"A:\B" };
+
+        Assert.Equal(@"A:\B", PathCrumbs.NearestExisting(@"A:\B\C\D", alive.Contains));
+    }
+
+    [Fact]
+    public void NearestExisting_KeepsThePathItselfWhenItIsStillThere() {
+        Assert.Equal(@"A:\B\C", PathCrumbs.NearestExisting(@"A:\B\C", _ => true));
+    }
+
+    [Fact]
+    public void NearestExisting_NullWhenEvenTheRootIsGone() {
+        Assert.Null(PathCrumbs.NearestExisting(@"A:\B\C", _ => false));
+        Assert.Null(PathCrumbs.NearestExisting(null, _ => true));
+    }
 }

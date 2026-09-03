@@ -65,6 +65,13 @@ public sealed class SystemIconProvider : IIconProvider {
     /// </summary>
     private const int SlowShellLoadMs = 1000;
 
+    /// <summary>
+    /// The sizes a path can be cached at, held rather than asked for:
+    /// <see cref="ForgetCached"/> runs once per file in a watcher burst,
+    /// and <c>Enum.GetValues</c> allocates a fresh array on every call.
+    /// </summary>
+    private static readonly IconSize[] _sizes = Enum.GetValues<IconSize>();
+
     private readonly Dictionary<string, byte[]> _cache = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
@@ -76,8 +83,24 @@ public sealed class SystemIconProvider : IIconProvider {
     /// rest of the cache, so a thumbnail that appears later is found again.
     /// </summary>
     private readonly HashSet<string> _missing = new(StringComparer.OrdinalIgnoreCase);
-    /// <summary>Insertion order of the per-path entries, for evicting the oldest.</summary>
-    private readonly Queue<string> _thumbnailOrder = new();
+    /// <summary>
+    /// Insertion order of the per-path entries, for evicting the oldest.
+    /// The path travels with the key so an eviction can drop the stamp
+    /// beside it — the key has the path baked into a different place in
+    /// every one of its shapes, and parsing it back out would be a rule to
+    /// keep in step with <see cref="BuildCacheKey"/> forever.
+    /// </summary>
+    private readonly Queue<(string Key, string Path)> _thumbnailOrder = new();
+
+    /// <summary>
+    /// What the file looked like when its per-path picture was taken. The
+    /// cache keys cannot carry it — <see cref="TryGetCachedIcon"/> answers
+    /// on the UI thread and must not stat anything — so it is kept beside
+    /// them and checked once per row when a listing is published (see
+    /// <see cref="ForgetIfChanged"/>), against the reading the listing
+    /// already did.
+    /// </summary>
+    private readonly Dictionary<string, FileStamp> _stamps = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _lock = new();
 
     /// <summary>
@@ -130,9 +153,8 @@ public sealed class SystemIconProvider : IIconProvider {
             fromDisk = cacheable ? _disk!.TryRead(path) : null;
         }
         if (fromDisk is not null) {
-            lock (_lock) {
-                Store(key, fromDisk, perPath);
-            }
+            Remember(key, fromDisk, perPath, path);
+
             return fromDisk;
         }
 
@@ -165,9 +187,7 @@ public sealed class SystemIconProvider : IIconProvider {
                     }
                 }
             } else {
-                lock (_lock) {
-                    Store(key, bytes, perPath);
-                }
+                Remember(key, bytes, perPath, path);
                 if (cacheable) {
                     using (PerfLog.Measure("bg.thumb-disk-write")) {
                         _disk!.Write(path, bytes);
@@ -196,8 +216,52 @@ public sealed class SystemIconProvider : IIconProvider {
             _cache.Clear();
             _thumbnailOrder.Clear();
             _missing.Clear();
+            _stamps.Clear();
         }
         _disk?.Clear();
+    }
+
+
+    public bool ForgetIfChanged(string path, FileStamp stamp) {
+        if (string.IsNullOrEmpty(path) || !stamp.IsKnown) {
+            return false;
+        }
+
+        lock (_lock) {
+            // Nothing cached, or cached from a reading that matches: leave
+            // it. Not knowing the stamp counts as a match — the entry came
+            // from a path that has no file behind it (a shell sentinel, a
+            // folder inside an archive), and there is nothing to compare.
+            if (!_stamps.TryGetValue(path, out var known) || known == stamp) {
+                return false;
+            }
+        }
+
+        // Memory only. The stamps disagree, so the disk tier is keyed on
+        // the old one and the next load will not find it anyway — and this
+        // runs once per row of a landing listing, on the UI thread, where a
+        // file deletion has no business being.
+        ForgetCached(path);
+
+        return true;
+    }
+
+
+    public void Forget(string path) {
+        if (string.IsNullOrEmpty(path)) {
+            return;
+        }
+
+        ForgetCached(path);
+
+        // The disk goes on a worker: this is called once per file in a
+        // watcher burst — unpacking an archive into the folder on screen is
+        // hundreds of them — from the UI thread. The next load of this
+        // picture is itself queued behind AsyncIcon's gate, so the deletion
+        // is there long before anything looks.
+        if (_disk is { } disk) {
+            _ = Task.Run(() => disk.Forget(path));
+        }
     }
 
 
@@ -235,19 +299,53 @@ public sealed class SystemIconProvider : IIconProvider {
 
 
     /// <summary>
+    /// Puts an icon in the cache along with the reading of the file it was
+    /// made from. The stamp is read outside the lock: it is a stat call,
+    /// and this only ever runs on a background thread after work that cost
+    /// far more than one.
+    /// </summary>
+    private void Remember(string key, byte[] bytes, bool perPath, string path) {
+        var stamp = perPath ? ReadStamp(path) : default;
+
+        lock (_lock) {
+            Store(key, bytes, perPath, path);
+            if (stamp.IsKnown) {
+                _stamps[path] = stamp;
+            }
+        }
+    }
+
+
+    /// <summary>
+    /// The file as it is on disk right now, or the unknown stamp when there
+    /// is no file behind the path — a shell sentinel, an entry inside an
+    /// archive, something deleted between the load and this call.
+    /// </summary>
+    private static FileStamp ReadStamp(string path) {
+        try {
+            var info = new FileInfo(path);
+
+            return info.Exists ? FileStamp.Of(info.LastWriteTimeUtc, info.Length) : default;
+        } catch {
+            return default;
+        }
+    }
+
+
+    /// <summary>
     /// Caller holds the lock. Evicts oldest-first once the thumbnail budget
     /// is spent. Only per-path entries count against it: the ones keyed by
     /// extension are bounded by how many file types exist on the machine and
     /// cost a few kilobytes each.
     /// </summary>
-    private void Store(string key, byte[] bytes, bool perPath) {
+    private void Store(string key, byte[] bytes, bool perPath, string path = "") {
         bool isNew = !_cache.ContainsKey(key);
         _cache[key] = bytes;
         if (!perPath || !isNew) {
             return;
         }
 
-        _thumbnailOrder.Enqueue(key);
+        _thumbnailOrder.Enqueue((key, path));
         TrimMemory();
     }
 
@@ -255,7 +353,16 @@ public sealed class SystemIconProvider : IIconProvider {
     /// <summary>Caller holds the lock.</summary>
     private void TrimMemory() {
         while (_thumbnailOrder.Count > _memoryBudget) {
-            _cache.Remove(_thumbnailOrder.Dequeue());
+            var (key, path) = _thumbnailOrder.Dequeue();
+            _cache.Remove(key);
+            // The stamp goes with the entry rather than being reference
+            // counted across the two sizes one file can occupy: an evicted
+            // picture is re-read anyway, and the disk tier keys on the
+            // stamp itself, so the worst case is one staleness check that
+            // no longer has anything to compare.
+            if (path.Length > 0) {
+                _stamps.Remove(path);
+            }
         }
     }
 
@@ -334,6 +441,49 @@ public sealed class SystemIconProvider : IIconProvider {
         }
 
         return ($"ext|{ext.ToLowerInvariant()}|{size}", false);
+    }
+
+    /// <summary>
+    /// Drops what is held in memory about one path: every shape of key it
+    /// could have been stored under, at every size, plus the stamp. The
+    /// caller knows a file changed, not which size of it was ever asked
+    /// for — and a probe of the disk to tell a folder from a file is
+    /// exactly what must not happen here. Dropping a key that was never
+    /// there costs a dictionary miss.
+    /// </summary>
+    private void ForgetCached(string path) {
+        lock (_lock) {
+            foreach (var size in _sizes) {
+                foreach (string key in KeysFor(path, size)) {
+                    _cache.Remove(key);
+                    _missing.Remove(key);
+                }
+            }
+            _stamps.Remove(path);
+        }
+    }
+
+
+    /// <summary>
+    /// Every per-path key one path can occupy at one size. Listed rather
+    /// than computed, and deliberately without the conditions
+    /// <see cref="BuildFileCacheKey"/> applies: those ask the disk (does
+    /// this book have a cover?), and the answer for a file that just
+    /// changed is not the answer that was true when it was cached. Keys
+    /// shared by a whole file type ("ext|…") are left alone - the file
+    /// changing says nothing about its type's icon.
+    /// </summary>
+    private static IEnumerable<string> KeysFor(string path, IconSize size) {
+        yield return $"shell|{path.ToLowerInvariant()}|{size}";
+        yield return $"dir|{path}|{size}";
+        yield return $"lnk|{path}|{size}";
+        yield return $"book|{path}|{size}";
+        if (size == IconSize.Large) {
+            yield return $"thumb|{path}";
+        }
+        if (size == IconSize.Medium) {
+            yield return $"thumb96|{path}";
+        }
     }
 
     private static byte[]? LoadIcon(string path, IconSize size, bool isFolder) {

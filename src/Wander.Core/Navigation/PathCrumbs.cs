@@ -52,6 +52,30 @@ public static class PathCrumbs {
     }
 
 
+    /// <summary>
+    /// The deepest segment of <paramref name="path"/> that still exists,
+    /// or null when even its root is gone. What a bookmark pointing at
+    /// "A:\B\C\D" opens the folder picker on once D has been deleted: C,
+    /// or B if C went with it.
+    ///
+    /// <para>
+    /// Takes the existence test rather than asking the disk: Core does not
+    /// touch the filesystem directly, and a rule with no I/O in it is one a
+    /// test can put any tree in front of.
+    /// </para>
+    /// </summary>
+    public static string? NearestExisting(string? path, Func<string, bool> exists) {
+        var crumbs = Split(path);
+        for (int i = crumbs.Count - 1; i >= 0; i--) {
+            if (exists(crumbs[i].Path)) {
+                return crumbs[i].Path;
+            }
+        }
+
+        return null;
+    }
+
+
     private static string TrimTrailingSeparators(string path) {
         string trimmed = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         return trimmed.Length == 0 ? path : trimmed;

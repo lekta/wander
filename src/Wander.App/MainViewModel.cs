@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
 using Wander.App.Controllers;
+using Wander.App.Controls;
 using Wander.App.Dialogs;
 using Wander.App.Resources;
 using Wander.App.Util;
@@ -76,6 +77,7 @@ public sealed class MainViewModel : ObservableObject {
     private readonly CompanionResolver _companions;
 
     private string _status = "";
+    private string? _caretPath;
     private FileSystemEntry? _selectedEntry;
     private string? _renamingPath;
     private IReadOnlyList<FileSystemEntry> _selectedEntries = Array.Empty<FileSystemEntry>();
@@ -314,6 +316,7 @@ public sealed class MainViewModel : ObservableObject {
         CreateShortcutCommand = new RelayCommand(
             _ => CreateShortcutsForSelection(),
             _ => _selectedEntries.Count > 0 && _nav.Current is not null && !IsCurrentShellNamespace);
+        OpenJournalCommand = new RelayCommand(_ => OpenJournal(), _ => Journal.Count > 0);
         TogglePreviewCommand = new RelayCommand(_ => IsPreviewVisible = !IsPreviewVisible);
         UndoCommand = new RelayCommand(_ => UndoLast(), _ => _undo.CanUndo);
         PermanentDeleteCommand = new RelayCommand(_ => _ = DeleteSelectedAsync(permanent: true), _ => _selectedEntries.Count > 0 && !IsCurrentShellNamespace);
@@ -549,7 +552,47 @@ public sealed class MainViewModel : ObservableObject {
 
     public string Status {
         get => _status;
-        set => SetField(ref _status, value);
+        set {
+            // Noted before the property changes, so the journal holds every
+            // line the user could have seen - including the ones a second
+            // message replaced before the eye got to them. That is the
+            // whole reason it exists.
+            Journal.Note(value, DateTime.Now);
+            SetField(ref _status, value);
+        }
+    }
+
+    /// <summary>
+    /// What happened this session, in the words the status bar used. Read
+    /// by the journal button next to it — see
+    /// <see cref="OpenJournalCommand"/>.
+    ///
+    /// <para>
+    /// Not a copy of the status line: the line also carries what the list
+    /// <em>is</em> ("элементов: 27", rewritten on every keystroke of a
+    /// filter), and a journal of those answers nothing. Those go through
+    /// <see cref="SetStatusQuietly"/>; what the journal keeps is the
+    /// folders that were opened and the operations that ran in them.
+    /// </para>
+    /// </summary>
+    public ActionJournal Journal { get; } = new();
+
+    /// <summary>
+    /// The row the keyboard would move from — Explorer's focus rectangle,
+    /// and the only thing on screen after a click on empty space that says
+    /// where the next arrow key starts.
+    ///
+    /// <para>
+    /// A path rather than a row: rows are replaced on every re-listing and
+    /// on every rating written, and a caret held as an object would either
+    /// go stale or force the list to be rebuilt to move it. The list sets
+    /// it; the row templates read it through
+    /// <see cref="Converters.CaretRowConverter"/>.
+    /// </para>
+    /// </summary>
+    public string? CaretPath {
+        get => _caretPath;
+        set => SetField(ref _caretPath, value);
     }
 
     public FileSystemEntry? SelectedEntry {
@@ -796,6 +839,7 @@ public sealed class MainViewModel : ObservableObject {
     public RelayCommand RemoveMissingBookmarkCommand { get; }
     public RelayCommand RelocateMissingBookmarkCommand { get; }
     public RelayCommand OpenWithCommand { get; }
+    public RelayCommand OpenJournalCommand { get; }
     public RelayCommand OpenInTerminalCommand { get; }
     public RelayCommand CopyPathCommand { get; }
     public RelayCommand CopyNameCommand { get; }
@@ -1271,6 +1315,10 @@ public sealed class MainViewModel : ObservableObject {
         // whatever was selected there last time).
         _session.OnNavigating(_nav.Current, _selectedEntry?.FullPath);
 
+        // The focus rectangle belongs to the folder being left. The arrival
+        // puts it wherever the selection lands.
+        CaretPath = null;
+
         // What kind of place this is, asked once and read everywhere below:
         // the refresh picks its back end by it, and every command's
         // CanExecute gates on it.
@@ -1359,6 +1407,16 @@ public sealed class MainViewModel : ObservableObject {
         var decision = _session.DecideWatchTick(
             busy: RenamingPath is not null || HasActiveOperations,
             rows: _search.Source);
+
+        // Before anything is re-read: what the caches hold about these files
+        // is a picture of the file as it was. A re-listing does not fix it —
+        // the thumbnail caches are keyed by path, and the path is what did
+        // not change when the file behind it was replaced.
+        if (decision.Stale is { Count: > 0 } stale) {
+            foreach (string path in stale) {
+                AsyncIcon.Invalidate(path);
+            }
+        }
 
         switch (decision.Outcome) {
             case WatchOutcome.Idle:
@@ -1579,6 +1637,11 @@ public sealed class MainViewModel : ObservableObject {
             _session.NoteListed(path);
             SetMissingFolder(null);
             if (arriving) {
+                // The journal's backbone: "where was I when this happened".
+                // Only on arrival — an F5 or a re-read after an operation is
+                // the same folder, and a journal that repeated it would bury
+                // the operations between them.
+                Journal.Note(string.Format(Strings.JournalOpenedFolder, path), DateTime.Now);
                 using (PerfLog.Measure("ui.autoview")) {
                     AutoSelectViewMode(items, path);
                 }
@@ -1684,6 +1747,11 @@ public sealed class MainViewModel : ObservableObject {
             }
             _session.NoteListed(shellPath);
             SetMissingFolder(null);
+            if (arriving) {
+                // An archive and the Recycle Bin are folders to the person
+                // opening them, so they belong in the journal the same way.
+                Journal.Note(string.Format(Strings.JournalOpenedFolder, shellPath), DateTime.Now);
+            }
             // No sidecars in a shell namespace, and no picture-folder
             // guessing either: the Recycle Bin is a list of things to
             // decide about, not a folder to look at.
@@ -1739,6 +1807,11 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
+        // A file can have been rewritten while this folder was not on
+        // screen, and nothing watched it happen. The listing just read
+        // every file's stamp; the thumbnail caches are keyed by path alone
+        // and would go on showing the old picture, so they are told here.
+        AsyncIcon.DropStale(items);
         _search.SetSource(items);
     }
 
@@ -2101,17 +2174,35 @@ public sealed class MainViewModel : ObservableObject {
     }
 
 
+    /// <summary>
+    /// The status line, without a journal entry. For the messages that
+    /// describe what the list <em>is</em> rather than report an event —
+    /// see <see cref="Journal"/>.
+    /// </summary>
+    private void SetStatusQuietly(string text) {
+        SetField(ref _status, text, nameof(Status));
+    }
+
+
+    /// <summary>
+    /// The count under the list. Written past the journal
+    /// (<see cref="SetStatusQuietly"/>): it is not something that happened,
+    /// it is what the list is, and it is rewritten on every filter
+    /// keystroke and every landing. In the journal it drowned the lines
+    /// that matter — the journal says which folder was opened, and the
+    /// count of what is in it belongs to the folder, not to a moment.
+    /// </summary>
     private void UpdateFilterStatus(int shown, int total) {
         if (_search.HasRatingFilter && !_search.HasQuery) {
-            Status = string.Format(Strings.StatusRatingFilterMatches, shown, total);
+            SetStatusQuietly(string.Format(Strings.StatusRatingFilterMatches, shown, total));
         } else if (_search.HasQuery) {
-            Status = total > 0
+            SetStatusQuietly(total > 0
                 ? string.Format(Strings.StatusFilterMatches, shown, total, _search.Query)
-                : string.Format(Strings.StatusItems, shown);
+                : string.Format(Strings.StatusItems, shown));
         } else if (_hiddenCount > 0) {
-            Status = string.Format(Strings.StatusItemsWithHidden, shown, _hiddenCount);
+            SetStatusQuietly(string.Format(Strings.StatusItemsWithHidden, shown, _hiddenCount));
         } else {
-            Status = string.Format(Strings.StatusItems, shown);
+            SetStatusQuietly(string.Format(Strings.StatusItems, shown));
         }
     }
 
@@ -2571,13 +2662,22 @@ public sealed class MainViewModel : ObservableObject {
     /// Points a bookmark at where its folder went, and walks into it. Only
     /// the folder picker and the navigation are here; whether the move is
     /// allowed and what it does to the list is the panel's own rule.
+    ///
+    /// <para>
+    /// The picker opens on the deepest part of the old path that still
+    /// exists: a bookmark on "A:\B\C\D" that lost D starts the search in C,
+    /// which is where the folder was last seen and almost always where it
+    /// went. Opening on the dead path itself puts the dialog wherever
+    /// Windows last was instead - usually another drive entirely.
+    /// </para>
     /// </summary>
     public void RelocateBookmark(string? oldPath) {
         if (string.IsNullOrEmpty(oldPath) || !Bookmarks.Contains(oldPath)) {
             return;
         }
 
-        string? folder = _dialogs.PickFolder(Strings.BookmarksLocateTitle);
+        string? startAt = PathCrumbs.NearestExisting(oldPath, _fs.DirectoryExists);
+        string? folder = _dialogs.PickFolder(Strings.BookmarksLocateTitle, startAt);
         if (folder is null) {
             return;
         }
@@ -2723,6 +2823,15 @@ public sealed class MainViewModel : ObservableObject {
         if (PropertiesTarget() is { } path) {
             Shell.ShowProperties(path);
         }
+    }
+
+    /// <summary>
+    /// Shows the session's status-bar journal. The write and the open are
+    /// the controller's; what is here is only that the journal belongs to
+    /// this view model.
+    /// </summary>
+    private void OpenJournal() {
+        Shell.OpenJournal(Journal);
     }
 
     private void OpenWith() {

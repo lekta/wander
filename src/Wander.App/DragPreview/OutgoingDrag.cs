@@ -116,6 +116,19 @@ public sealed class OutgoingDrag {
             return;
         }
 
+        // Out over another application - a window to drop a photograph
+        // into, the taskbar button of the program that should open it.
+        // Nothing here has an opinion about that: whether the drop is taken
+        // is the other program's answer, and it gives it through the
+        // system's own cursor. The plaque stays, because "what am I
+        // holding" is still worth showing, and says only that.
+        if (!CursorIsOverWander()) {
+            Show();
+            _preview.SetAction(DragAction.None, DescribeDragged(count), null);
+
+            return;
+        }
+
         if (_drops.Effect == DragDropEffects.None || _drops.Target is null) {
             // Nothing would happen on release. Three sub-cases:
             //  • Self-drop with a specific reason ("into own subfolder", …)
@@ -196,7 +209,37 @@ public sealed class OutgoingDrag {
     private bool IsNeutralDropTarget() {
         return _drops.SelfDropReason != SelfDropReason.None
             && _drops.Target is not null
-            && _drops.TargetIsFallback;
+            && _drops.TargetIsFallback
+            && CursorIsOverWander();
+    }
+
+
+    /// <summary>
+    /// Is the cursor still over one of our own windows?
+    ///
+    /// <para>
+    /// Everything <see cref="DropTargetController"/> knows was learned from
+    /// a <c>DragOver</c>, and those stop arriving the moment the cursor
+    /// leaves the application — so its last answer goes on standing while
+    /// the drag is somewhere else entirely. Acting on it out there is how a
+    /// drag over the taskbar ended up drawing our own plain arrow over
+    /// another program's refusal, and a plaque about a folder in Wander
+    /// over a window that has nothing to do with it.
+    /// </para>
+    /// </summary>
+    private static bool CursorIsOverWander() {
+        if (!NativeMethods.GetCursorPos(out var pt)) {
+            return true;
+        }
+
+        var hwnd = NativeMethods.WindowFromPoint(pt);
+        if (hwnd == IntPtr.Zero) {
+            return false;
+        }
+
+        _ = NativeMethods.GetWindowThreadProcessId(hwnd, out uint owner);
+
+        return owner == (uint)Environment.ProcessId;
     }
 
 

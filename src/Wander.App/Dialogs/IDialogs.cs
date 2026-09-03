@@ -52,8 +52,12 @@ public interface IDialogs {
     /// <summary>Text entry; null when cancelled.</summary>
     string? Prompt(string title, string label, string initial, bool filenameMode);
 
-    /// <summary>Folder picker; null when cancelled.</summary>
-    string? PickFolder(string title);
+    /// <summary>
+    /// Folder picker; null when cancelled. <paramref name="startAt"/> is
+    /// the folder to open on - the caller's best guess at where the user
+    /// is going, not a default answer.
+    /// </summary>
+    string? PickFolder(string title, string? startAt = null);
 
     /// <summary>
     /// The resolver a batch copy / move consults about collisions.

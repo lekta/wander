@@ -78,6 +78,12 @@ public static partial class Strings {
     /// <summary>Открыть файл журнала текущего сеанса</summary>
     public static string MenuLogsHint => Get(nameof(MenuLogsHint));
 
+    /// <summary>Журнал действий за сеанс — открыть в текстовом просмотрщике</summary>
+    public static string JournalTooltip => Get(nameof(JournalTooltip));
+
+    /// <summary>Открыта папка: {0}</summary>
+    public static string JournalOpenedFolder => Get(nameof(JournalOpenedFolder));
+
     /// <summary>Выход</summary>
     public static string MenuExit => Get(nameof(MenuExit));
 

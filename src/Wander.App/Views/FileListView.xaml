@@ -28,6 +28,7 @@
         <conv:RatingBadgeVisibilityConverter x:Key="RatingBadge"/>
         <conv:FilterStarConverter x:Key="FilterStarGlyph"/>
         <conv:CutRowConverter x:Key="IsCutRow"/>
+        <conv:CaretRowConverter x:Key="IsCaretRow"/>
         <conv:TimeStampConverter x:Key="TimeStamp"/>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
 
@@ -180,9 +181,49 @@
         -->
         <Style TargetType="DataGridRow">
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <!--
+                A frame that is always there and usually invisible: the
+                caret trigger below only changes its colour, so a row
+                acquiring the focus rectangle does not change height and
+                the rows below it do not shift by a pixel.
+            -->
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsHidden}" Value="True">
                     <Setter Property="Opacity" Value="0.55"/>
+                </DataTrigger>
+                <!--
+                    Hover. The other views have had it from the start; the
+                    table had nothing, and "is there a row under the cursor
+                    at all" is the question a click between two rows is
+                    answered by. Not while selected - the selection colour
+                    is the louder statement, and swapping it for the hover
+                    tint reads as the row being deselected.
+                -->
+                <MultiTrigger>
+                    <MultiTrigger.Conditions>
+                        <Condition Property="IsMouseOver" Value="True"/>
+                        <Condition Property="IsSelected" Value="False"/>
+                    </MultiTrigger.Conditions>
+                    <Setter Property="Background" Value="{StaticResource RowHover}"/>
+                </MultiTrigger>
+                <!--
+                    The focus rectangle. Last, so it survives selection and
+                    hover: it answers a different question from both - not
+                    "what would Delete take" but "where would the next arrow
+                    key go" - and after a click on empty space it is the
+                    only mark left on the list.
+                -->
+                <DataTrigger Value="True">
+                    <DataTrigger.Binding>
+                        <MultiBinding Converter="{StaticResource IsCaretRow}">
+                            <Binding Path="FullPath"/>
+                            <Binding Path="DataContext.CaretPath"
+                                     RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                        </MultiBinding>
+                    </DataTrigger.Binding>
+                    <Setter Property="BorderBrush" Value="{StaticResource RowCaretBorder}"/>
                 </DataTrigger>
                 <!--
                     Cut, not yet pasted. Explorer fades these the moment
@@ -298,6 +339,17 @@
                     <Setter Property="Background" Value="{StaticResource RowSelectedHover}"/>
                     <Setter Property="BorderBrush" Value="{StaticResource RowSelectedHoverBorder}"/>
                 </MultiTrigger>
+                <!-- The focus rectangle; last, so it outranks both. See DataGridRow above. -->
+                <DataTrigger Value="True">
+                    <DataTrigger.Binding>
+                        <MultiBinding Converter="{StaticResource IsCaretRow}">
+                            <Binding Path="FullPath"/>
+                            <Binding Path="DataContext.CaretPath"
+                                     RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                        </MultiBinding>
+                    </DataTrigger.Binding>
+                    <Setter Property="BorderBrush" Value="{StaticResource RowCaretBorder}"/>
+                </DataTrigger>
             </Style.Triggers>
         </Style>
         <Style x:Key="TilesItem" TargetType="ListBoxItem" BasedOn="{StaticResource TileItem}">
@@ -363,6 +415,23 @@
                     <Setter Property="Background" Value="{Binding DataContext.Settings.GalleryPalette.Selected, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
                     <Setter Property="BorderBrush" Value="{Binding DataContext.Settings.GalleryPalette.SelectedBorder, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
                 </MultiTrigger>
+                <!--
+                    The focus rectangle, in the one colour here that does
+                    not come from the palette: it has to read against a
+                    white surround and a black one alike, and a frame
+                    derived from the background would vanish into whichever
+                    of the two it was derived from.
+                -->
+                <DataTrigger Value="True">
+                    <DataTrigger.Binding>
+                        <MultiBinding Converter="{StaticResource IsCaretRow}">
+                            <Binding Path="FullPath"/>
+                            <Binding Path="DataContext.CaretPath"
+                                     RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                        </MultiBinding>
+                    </DataTrigger.Binding>
+                    <Setter Property="BorderBrush" Value="{StaticResource RowCaretBorder}"/>
+                </DataTrigger>
             </Style.Triggers>
         </Style>
 
@@ -783,12 +852,46 @@
                                             HorizontalAlignment="Center"
                                             RenderOptions.BitmapScalingMode="HighQuality"
                                             UseLayoutRounding="True"/>
+                        <!--
+                            Written for the selected state - whole name,
+                            wrapped, no cap - and the trigger below puts the
+                            cap on every *other* cell. That way round on
+                            purpose: a DynamicResource in a template lands
+                            as a value on the element itself, which outranks
+                            a template trigger, so a cap set here could
+                            never be lifted by one (that is exactly how the
+                            first attempt failed - the ellipsis went away
+                            and the height stayed). In a trigger the same
+                            resource works, and MinHeight - which nothing
+                            has to lift - can stay here.
+                        -->
                         <TextBlock x:Name="NameLabel" Text="{Binding Name}"
                                    TextAlignment="Center"
                                    TextWrapping="Wrap"
-                                   Height="{DynamicResource IconsLabelHeight}"
-                                   TextTrimming="CharacterEllipsis"/>
+                                   TextTrimming="None"
+                                   MinHeight="{DynamicResource IconsLabelHeight}"/>
                     </StackPanel>
+                    <DataTemplate.Triggers>
+                        <!--
+                            Every cell but the selected one: the name is cut
+                            to the three lines the grid budgets for it
+                            (TileMetrics.LabelLines). The selected cell
+                            shows the name whole and grows downwards over
+                            its neighbours (VirtualizingWrapPanel.MeasureChild)
+                            - a name cut at «Снимок экрана 2026-05-28…» is
+                            exactly the case where the rest of it was the
+                            useful part.
+
+                            One binding per tile, and the cheapest shape
+                            available: the alternative was two triggers, or
+                            seven of them as the highlight used to be.
+                        -->
+                        <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"
+                                     Value="False">
+                            <Setter TargetName="NameLabel" Property="MaxHeight" Value="{DynamicResource IconsLabelHeight}"/>
+                            <Setter TargetName="NameLabel" Property="TextTrimming" Value="CharacterEllipsis"/>
+                        </DataTrigger>
+                    </DataTemplate.Triggers>
                 </DataTemplate>
             </ListBox.ItemTemplate>
         </ListBox>
@@ -885,15 +988,34 @@
                             <ContentControl x:Name="Badge"
                                             HorizontalAlignment="Left" VerticalAlignment="Bottom"/>
                         </Grid>
+                        <!--
+                            Written for the selected state, capped by the
+                            trigger below for every other cell - see the
+                            LargeIcons template for why that way round.
+                        -->
                         <TextBlock x:Name="NameLabel" Text="{Binding Name}"
-                                   TextAlignment="Center" TextTrimming="CharacterEllipsis"
-                                   Height="{DynamicResource GalleryLabelHeight}"/>
+                                   TextAlignment="Center" TextTrimming="None"
+                                   TextWrapping="Wrap"
+                                   MinHeight="{DynamicResource GalleryLabelHeight}"/>
                     </StackPanel>
                     <DataTemplate.Triggers>
                         <DataTrigger Binding="{Binding Rating, Converter={StaticResource RatingBadge}, ConverterParameter=Badge}"
                                      Value="Visible">
                             <Setter TargetName="Badge" Property="Content" Value="{Binding}"/>
                             <Setter TargetName="Badge" Property="ContentTemplate" Value="{StaticResource GalleryRatingBadge}"/>
+                        </DataTrigger>
+                        <!--
+                            Every cell but the selected one: one line,
+                            trimmed. A gallery caption is one line by design
+                            - a wall of photographs must not become a wall
+                            of file names - and the selected cell is the
+                            single place that rule is worth suspending.
+                        -->
+                        <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"
+                                     Value="False">
+                            <Setter TargetName="NameLabel" Property="MaxHeight" Value="{DynamicResource GalleryLabelHeight}"/>
+                            <Setter TargetName="NameLabel" Property="TextWrapping" Value="NoWrap"/>
+                            <Setter TargetName="NameLabel" Property="TextTrimming" Value="CharacterEllipsis"/>
                         </DataTrigger>
                     </DataTemplate.Triggers>
                 </DataTemplate>

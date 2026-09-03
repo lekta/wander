@@ -103,4 +103,43 @@ public class WindowPlacementTests {
         Assert.Equal(-1800, left);
         Assert.Equal(300, top);
     }
+
+
+    // --- The plaque that follows the cursor -------------------------------
+
+    [Fact]
+    public void BesideCursor_SitsBelowAndRightWhenThereIsRoom() {
+        var (left, top) = WindowPlacement.BesideCursor(500, 400, 200, 60, _screen, 18);
+
+        Assert.Equal(518, left);
+        Assert.Equal(418, top);
+    }
+
+    /// <summary>
+    /// The case this exists for: a drag down onto the taskbar. Hung below
+    /// the cursor the plaque falls off the bottom of the screen and the
+    /// user drags without being able to read what they are dragging.
+    /// </summary>
+    [Fact]
+    public void BesideCursor_FlipsAboveTheCursorAtTheBottomOfTheScreen() {
+        var (_, top) = WindowPlacement.BesideCursor(500, 1060, 200, 60, _screen, 18);
+
+        Assert.Equal(1060 - 18 - 60, top);
+    }
+
+    [Fact]
+    public void BesideCursor_FlipsLeftAtTheRightEdge() {
+        var (left, _) = WindowPlacement.BesideCursor(1900, 400, 200, 60, _screen, 18);
+
+        Assert.Equal(1900 - 18 - 200, left);
+    }
+
+    [Fact]
+    public void BesideCursor_NeverLeavesTheDesktop() {
+        // Both flips would still overflow: a plaque wider than the screen.
+        var (left, top) = WindowPlacement.BesideCursor(10, 10, 4000, 60, _screen, 18);
+
+        Assert.Equal(_screen.Left, left);
+        Assert.Equal(28, top);
+    }
 }

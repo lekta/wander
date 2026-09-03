@@ -52,8 +52,8 @@ public sealed class ScriptedDialogs : IDialogs {
         return PromptAnswer;
     }
 
-    public string? PickFolder(string title) {
-        Record($"PickFolder '{title}' -> {FolderAnswer ?? "(cancel)"}");
+    public string? PickFolder(string title, string? startAt = null) {
+        Record($"PickFolder '{title}' at='{startAt}' -> {FolderAnswer ?? "(cancel)"}");
 
         return FolderAnswer;
     }

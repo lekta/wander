@@ -28,18 +28,29 @@ public sealed class FolderChanges {
     /// </summary>
     public bool NeedsRelisting => _structural;
 
-    /// <summary>Files whose contents changed, for the case where a re-listing is not needed.</summary>
+    /// <summary>
+    /// Every path the watcher named since the last <see cref="Clear"/>,
+    /// whether the change was structural or not.
+    ///
+    /// <para>
+    /// The structural ones are in here too because of what an appearance
+    /// means to a cache: a file deleted and replaced by another one under
+    /// the same name is a new picture at an old path, and anything keyed by
+    /// path alone (the thumbnail caches) goes on showing the old one. The
+    /// re-listing does not fix that - the row is rebuilt, the path is not.
+    /// </para>
+    /// </summary>
     public IReadOnlyCollection<string> ChangedPaths => _paths;
 
 
     public void Note(DirectoryChange change) {
         if (change.Structural || change.Path.Length == 0) {
             _structural = true;
-
-            return;
         }
 
-        _paths.Add(change.Path);
+        if (change.Path.Length > 0) {
+            _paths.Add(change.Path);
+        }
     }
 
 

@@ -87,6 +87,9 @@ public static partial class Strings {
     /// <summary>Воспроизведение / пауза (Пробел)</summary>
     public static string PreviewPlayPause => Get(nameof(PreviewPlayPause));
 
+    /// <summary>Повторять. Для роликов короче трёх секунд включается сам</summary>
+    public static string PreviewRepeat => Get(nameof(PreviewRepeat));
+
     /// <summary>Оценки пока нет. Щелчок по звезде создаст файл рядом со снимком — с подтверждением.</summary>
     public static string PreviewRatingUnsaved => Get(nameof(PreviewRatingUnsaved));
 

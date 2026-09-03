@@ -298,6 +298,20 @@ public partial class MainWindow : Window {
             return;
         }
 
+        // Ctrl+C with the keyboard in the preview pane and text selected
+        // there copies the text, not the file. Handled here rather than
+        // left to the text controls so that the status bar can say which of
+        // the two happened: the pane and the list are one keystroke apart,
+        // and a user who copied a paragraph and pasted a file would have no
+        // way of knowing where it went wrong.
+        if (e.Key == Key.C && Keyboard.Modifiers == ModifierKeys.Control
+            && Preview.TryCopySelectedText() is { } copied) {
+            Vm.Status = string.Format(Strings.StatusTextCopied, copied);
+            e.Handled = true;
+
+            return;
+        }
+
         // Ctrl+L: focus the address bar (parity with browsers / Explorer).
         if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.Control) {
             BeginAddressEdit();
