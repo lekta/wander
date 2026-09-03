@@ -50,8 +50,7 @@ public class BatchExecutorTests {
 
         Assert.Equal(2, results.Count);
         Assert.All(results, r => Assert.Equal(BatchItemStatus.Ok, r.Status));
-        Assert.Empty(resolver.StartBatchCalls);
-        Assert.Empty(resolver.ResolveCalls);
+        Assert.Empty(resolver.ResolveAllCalls);
         // Two items => composite undo, single-step depth.
         Assert.Equal(1, undo.Depth);
         Assert.Contains("copy of 2 items", undo.NextDescription);
@@ -79,7 +78,7 @@ public class BatchExecutorTests {
 
         Assert.Empty(results);
         Assert.Equal(0, undo.Depth);
-        Assert.Empty(resolver.StartBatchCalls);
+        Assert.Empty(resolver.ResolveAllCalls);
     }
 
 
@@ -100,9 +99,7 @@ public class BatchExecutorTests {
         Assert.Equal(BatchItemStatus.Skipped, results[0].Status);
         Assert.Equal(BatchItemStatus.Ok, results[1].Status);
         Assert.Equal(new byte[] { 9 }, fs.Files[DstA]);    // unchanged
-        Assert.Empty(resolver.ResolveCalls);               // batch override → no per-item
-        Assert.Single(resolver.StartBatchCalls);
-        Assert.Equal(1, resolver.StartBatchCalls[0]);      // exactly one conflict pre-detected
+        Assert.Equal(1, Assert.Single(resolver.ResolveAllCalls));   // exactly one conflict pre-detected
     }
 
     [Fact]
@@ -145,17 +142,15 @@ public class BatchExecutorTests {
     }
 
     [Fact]
-    public void CopyMany_PerItemCancel_StopsBatch_RemainingItemsAreCancelled() {
+    public void CopyMany_CancelAmongTheAnswers_AppliesNothing() {
         var (batch, fs, _, undo, _) = Setup();
         fs.Files[SrcA] = new byte[] { 1 };
         fs.Files[SrcB] = new byte[] { 2 };
         fs.Files[SrcC] = new byte[] { 3 };
         fs.Directories.Add(DstFolder);
-        // All three conflict.
+        // a and c conflict; b would copy freely.
         fs.Files[DstA] = new byte[] { 9 };
-        fs.Files[DstB] = new byte[] { 9 };
         fs.Files[DstC] = new byte[] { 9 };
-        // StartBatch returns null → per-item; first replace, then cancel.
         var resolver = new FakeConflictResolver(
             batchOverride: null,
             ConflictResolution.Replace,
@@ -163,13 +158,50 @@ public class BatchExecutorTests {
 
         var results = batch.CopyMany(new[] { SrcA, SrcB, SrcC }, DstFolder, resolver);
 
+        // Every answer is collected before anything moves, so a Cancel
+        // anywhere in the list is a Cancel of the whole batch: the item
+        // answered Replace is not replaced, the free one is not copied.
         Assert.Equal(3, results.Count);
-        Assert.Equal(BatchItemStatus.Replaced, results[0].Status);
-        Assert.Equal(BatchItemStatus.Cancelled, results[1].Status);
-        Assert.Equal(BatchItemStatus.Cancelled, results[2].Status);
-        // Replaced item still went through — one undo entry on the stack
-        // (recycle-target + copy steps bundled into a single composite).
-        Assert.Equal(1, undo.Depth);
+        Assert.All(results, r => Assert.Equal(BatchItemStatus.Cancelled, r.Status));
+        Assert.DoesNotContain(fs.CallLog, c => c.StartsWith("CopyFile"));
+        Assert.Equal(new byte[] { 9 }, fs.Files[DstA]);
+        Assert.Equal(0, undo.Depth);
+    }
+
+    [Fact]
+    public void CopyMany_ResolverBackingOut_CancelsEverything() {
+        var (batch, fs, _, undo, _) = Setup();
+        fs.Files[SrcA] = new byte[] { 1 };
+        fs.Files[SrcB] = new byte[] { 2 };
+        fs.Directories.Add(DstFolder);
+        fs.Files[DstA] = new byte[] { 9 };
+        var resolver = new ScriptedResolver(_ => null);
+
+        var results = batch.CopyMany(new[] { SrcA, SrcB }, DstFolder, resolver);
+
+        Assert.All(results, r => Assert.Equal(BatchItemStatus.Cancelled, r.Status));
+        Assert.DoesNotContain(fs.CallLog, c => c.StartsWith("CopyFile"));
+        Assert.Equal(0, undo.Depth);
+    }
+
+    [Fact]
+    public void CopyMany_TargetThatLandedMidBatch_IsAskedAboutOnItsOwn() {
+        var (batch, fs, _, _, _) = Setup();
+        fs.Files[SrcA] = new byte[] { 1 };
+        fs.Files[SrcB] = new byte[] { 2 };
+        fs.Directories.Add(DstFolder);
+        fs.Files[DstA] = new byte[] { 9 };
+        // While the user answers about a.txt, somebody drops a b.txt into
+        // the target folder: the up-front list did not have it.
+        var resolver = new ScriptedResolver(request => {
+            fs.Files[DstB] = new byte[] { 9 };
+            return request.Conflicts.Select(c => new ConflictAnswer(c, ConflictResolution.Skip)).ToList();
+        });
+
+        var results = batch.CopyMany(new[] { SrcA, SrcB }, DstFolder, resolver);
+
+        Assert.Equal(new[] { 1, 1 }, resolver.Calls);
+        Assert.All(results, r => Assert.Equal(BatchItemStatus.Skipped, r.Status));
     }
 
     [Fact]
@@ -205,20 +237,26 @@ public class BatchExecutorTests {
     }
 
     [Fact]
-    public void CopyMany_PerItemSkip_DoesNotCallStartBatch_WhenOnlyOneConflict() {
-        // BatchExecutor only consults StartBatch when conflictCount > 0; with
-        // exactly one conflict, batch-override still asked (impl detail), but
-        // a null return should fall through to Resolve for that item.
+    public void CopyMany_AsksAboutTheCollidingItemsOnly_AndInOrder() {
         var (batch, fs, _, _, _) = Setup();
         fs.Files[SrcA] = new byte[] { 1 };
+        fs.Files[SrcB] = new byte[] { 2 };
+        fs.Files[SrcC] = new byte[] { 3 };
         fs.Directories.Add(DstFolder);
         fs.Files[DstA] = new byte[] { 9 };
-        var resolver = new FakeConflictResolver(batchOverride: null, ConflictResolution.Skip);
+        fs.Files[DstC] = new byte[] { 9 };
+        var resolver = new FakeConflictResolver(batchOverride: null, ConflictResolution.Skip, ConflictResolution.Replace);
 
-        var results = batch.CopyMany(new[] { SrcA }, DstFolder, resolver);
+        var results = batch.CopyMany(new[] { SrcA, SrcB, SrcC }, DstFolder, resolver);
 
+        // One call, the two collisions in batch order; each answer lands on
+        // the item it was given for, with the free item untouched between.
+        Assert.Equal(2, Assert.Single(resolver.ResolveAllCalls));
+        Assert.Equal(new[] { SrcA, SrcC }, resolver.Conflicts.Select(c => c.Source.FullPath));
+        Assert.Equal(new[] { DstA, DstC }, resolver.Conflicts.Select(c => c.ExistingTarget.FullPath));
         Assert.Equal(BatchItemStatus.Skipped, results[0].Status);
-        Assert.Single(resolver.ResolveCalls);
+        Assert.Equal(BatchItemStatus.Ok, results[1].Status);
+        Assert.Equal(BatchItemStatus.Replaced, results[2].Status);
     }
 
 
@@ -284,6 +322,19 @@ public class BatchExecutorTests {
     }
 
     [Fact]
+    public void MoveMany_TellsTheDialogItIsAMove() {
+        var (batch, fs, _, _, _) = Setup();
+        fs.Files[SrcA] = new byte[] { 1 };
+        fs.Directories.Add(DstFolder);
+        fs.Files[DstA] = new byte[] { 9 };
+        var resolver = new FakeConflictResolver(batchOverride: ConflictResolution.Skip);
+
+        batch.MoveMany(new[] { SrcA }, DstFolder, resolver);
+
+        Assert.True(Assert.Single(resolver.Conflicts).IsMove);
+    }
+
+    [Fact]
     public void MoveMany_ReplaceConflict_UndoRestoresBothSides() {
         var (batch, fs, _, undo, _) = Setup();
         fs.Files[SrcA] = new byte[] { 1 };
@@ -298,6 +349,175 @@ public class BatchExecutorTests {
         // restore the replaced target from the bin — full original state.
         Assert.NotNull(undone);
         Assert.Equal(new byte[] { 1 }, fs.Files[SrcA]);
+        Assert.Equal(new byte[] { 9 }, fs.Files[DstA]);
+    }
+
+
+    // --- Into the folder it is already in --------------------------------
+
+    [Fact]
+    public void CopyMany_IntoItsOwnFolder_MakesACopy_WithoutAsking() {
+        var (batch, fs, _, _, _) = Setup();
+        fs.Directories.Add(@"C:\src");
+        fs.Files[SrcA] = new byte[] { 1 };
+        var resolver = new FakeConflictResolver();
+
+        var results = batch.CopyMany(new[] { SrcA }, @"C:\src", resolver);
+
+        Assert.Empty(resolver.ResolveAllCalls);
+        Assert.Equal(BatchItemStatus.Renamed, results[0].Status);
+        Assert.Equal(new byte[] { 1 }, fs.Files[@"C:\src\a (1).txt"]);
+        Assert.Equal(new byte[] { 1 }, fs.Files[SrcA]);
+    }
+
+    [Fact]
+    public void CopyMany_IntoItsOwnFolder_TakesCompanionsAlong() {
+        var (batch, fs, _, _, _) = Setup();
+        fs.Directories.Add(@"C:\src");
+        fs.Files[SrcA] = new byte[] { 1 };
+        fs.Files[@"C:\src\a.txt.meta"] = new byte[] { 2 };
+        var group = new BatchGroup(SrcA, new[] { @"C:\src\a.txt.meta" });
+
+        batch.CopyMany(new[] { group }, @"C:\src", new FakeConflictResolver());
+
+        Assert.Equal(new byte[] { 2 }, fs.Files[@"C:\src\a (1).txt.meta"]);
+    }
+
+    [Fact]
+    public void MoveMany_IntoItsOwnFolder_DoesNothing_AndAsksNothing() {
+        var (batch, fs, bin, _, _) = Setup();
+        fs.Directories.Add(@"C:\src");
+        fs.Files[SrcA] = new byte[] { 1 };
+        var resolver = new FakeConflictResolver();
+
+        var results = batch.MoveMany(new[] { SrcA }, @"C:\src", resolver);
+
+        Assert.Empty(resolver.ResolveAllCalls);
+        Assert.Equal(BatchItemStatus.Skipped, results[0].Status);
+        Assert.Equal(new byte[] { 1 }, fs.Files[SrcA]);
+        Assert.Empty(bin.CallLog);
+    }
+
+
+    // --- Merging two folders ---------------------------------------------
+
+    [Fact]
+    public void CopyMany_Merge_CombinesTheTwoFolders_AndAsksAboutWhatCollidesInside() {
+        var (batch, fs, bin, _, _) = Setup();
+        fs.Directories.Add(@"C:\src\docs");
+        fs.Directories.Add(@"C:\dst\docs");
+        fs.Files[@"C:\src\docs\same.txt"] = new byte[] { 1 };
+        fs.Files[@"C:\src\docs\free.txt"] = new byte[] { 2 };
+        fs.Files[@"C:\dst\docs\same.txt"] = new byte[] { 9 };
+        fs.Files[@"C:\dst\docs\theirs.txt"] = new byte[] { 8 };
+        // The folder pair first; the fake does not walk folders, so the
+        // collision inside is asked about on its own once the merge
+        // reaches it.
+        var resolver = new FakeConflictResolver(batchOverride: null, ConflictResolution.Merge, ConflictResolution.Replace);
+
+        var results = batch.CopyMany(new[] { @"C:\src\docs" }, DstFolder, resolver);
+
+        Assert.Equal(BatchItemStatus.Merged, Assert.Single(results).Status);
+        Assert.Equal(new[] { 1, 1 }, resolver.ResolveAllCalls);
+        Assert.Equal(@"C:\src\docs\same.txt", resolver.Conflicts[1].Source.FullPath);
+        Assert.Equal(new byte[] { 1 }, fs.Files[@"C:\dst\docs\same.txt"]);
+        Assert.Equal(new byte[] { 2 }, fs.Files[@"C:\dst\docs\free.txt"]);
+        Assert.Equal(new byte[] { 8 }, fs.Files[@"C:\dst\docs\theirs.txt"]);
+        Assert.Equal(@"Recycle:C:\dst\docs\same.txt", Assert.Single(bin.CallLog, c => c.StartsWith("Recycle:")));
+    }
+
+    [Fact]
+    public void CopyMany_Merge_UsesTheAnswersTheWindowGaveForTheInside() {
+        // A resolver that walked the folder answers the inner pair up
+        // front, by path; the batch does not ask again.
+        var (batch, fs, _, _, _) = Setup();
+        fs.Directories.Add(@"C:\src\docs");
+        fs.Directories.Add(@"C:\dst\docs");
+        fs.Files[@"C:\src\docs\same.txt"] = new byte[] { 1 };
+        fs.Files[@"C:\src\docs\free.txt"] = new byte[] { 2 };
+        fs.Files[@"C:\dst\docs\same.txt"] = new byte[] { 9 };
+        var resolver = new ScriptedResolver(request => {
+            var inner = new FileConflictInfo(fs.GetEntry(@"C:\src\docs\same.txt")!, fs.GetEntry(@"C:\dst\docs\same.txt")!);
+            return new[] {
+                new ConflictAnswer(request.Conflicts[0], ConflictResolution.Merge),
+                new ConflictAnswer(inner, ConflictResolution.Skip),
+            };
+        });
+
+        batch.CopyMany(new[] { @"C:\src\docs" }, DstFolder, resolver);
+
+        Assert.Single(resolver.Calls);
+        Assert.Equal(new byte[] { 9 }, fs.Files[@"C:\dst\docs\same.txt"]);
+        Assert.Equal(new byte[] { 2 }, fs.Files[@"C:\dst\docs\free.txt"]);
+    }
+
+    [Fact]
+    public void CopyMany_Merge_NestedFolders_MergeInTurn() {
+        var (batch, fs, _, _, _) = Setup();
+        fs.Directories.Add(@"C:\src\docs");
+        fs.Directories.Add(@"C:\src\docs\sub");
+        fs.Directories.Add(@"C:\dst\docs");
+        fs.Directories.Add(@"C:\dst\docs\sub");
+        fs.Files[@"C:\src\docs\sub\deep.txt"] = new byte[] { 3 };
+        fs.Files[@"C:\dst\docs\sub\old.txt"] = new byte[] { 7 };
+        var resolver = new FakeConflictResolver(batchOverride: ConflictResolution.Merge);
+
+        batch.CopyMany(new[] { @"C:\src\docs" }, DstFolder, resolver);
+
+        Assert.Equal(new byte[] { 3 }, fs.Files[@"C:\dst\docs\sub\deep.txt"]);
+        Assert.Equal(new byte[] { 7 }, fs.Files[@"C:\dst\docs\sub\old.txt"]);
+        Assert.Equal(new[] { 1, 1 }, resolver.ResolveAllCalls);
+    }
+
+    [Fact]
+    public void MoveMany_Merge_EmptiesTheSourceFolder_AndUndoBringsItAllBack() {
+        var (batch, fs, bin, undo, _) = Setup();
+        fs.Directories.Add(@"C:\src\docs");
+        fs.Directories.Add(@"C:\dst\docs");
+        fs.Files[@"C:\src\docs\free.txt"] = new byte[] { 2 };
+        var resolver = new FakeConflictResolver(batchOverride: ConflictResolution.Merge);
+
+        var results = batch.MoveMany(new[] { @"C:\src\docs" }, DstFolder, resolver);
+
+        Assert.Equal(BatchItemStatus.Merged, results[0].Status);
+        Assert.Equal(new byte[] { 2 }, fs.Files[@"C:\dst\docs\free.txt"]);
+        Assert.False(fs.Files.ContainsKey(@"C:\src\docs\free.txt"));
+        // The emptied shell goes to the bin, not into oblivion.
+        Assert.Contains(@"Recycle:C:\src\docs", bin.CallLog);
+        Assert.DoesNotContain(@"C:\src\docs", fs.Directories);
+
+        undo.Undo();
+        Assert.Contains(@"C:\src\docs", fs.Directories);
+        Assert.Equal(new byte[] { 2 }, fs.Files[@"C:\src\docs\free.txt"]);
+    }
+
+    [Fact]
+    public void MoveMany_Merge_KeepsTheSourceFolder_WhenSomethingStaysBehind() {
+        var (batch, fs, bin, _, _) = Setup();
+        fs.Directories.Add(@"C:\src\docs");
+        fs.Directories.Add(@"C:\dst\docs");
+        fs.Files[@"C:\src\docs\same.txt"] = new byte[] { 1 };
+        fs.Files[@"C:\dst\docs\same.txt"] = new byte[] { 9 };
+        var resolver = new FakeConflictResolver(batchOverride: null, ConflictResolution.Merge, ConflictResolution.Skip);
+
+        batch.MoveMany(new[] { @"C:\src\docs" }, DstFolder, resolver);
+
+        Assert.True(fs.Files.ContainsKey(@"C:\src\docs\same.txt"));
+        Assert.Contains(@"C:\src\docs", fs.Directories);
+        Assert.Empty(bin.CallLog);
+    }
+
+    [Fact]
+    public void CopyMany_Merge_OnAFile_MeansKeepBoth() {
+        var (batch, fs, _, _, _) = Setup();
+        fs.Files[SrcA] = new byte[] { 1 };
+        fs.Directories.Add(DstFolder);
+        fs.Files[DstA] = new byte[] { 9 };
+
+        var results = batch.CopyMany(new[] { SrcA }, DstFolder, new FakeConflictResolver(batchOverride: ConflictResolution.Merge));
+
+        Assert.Equal(BatchItemStatus.Renamed, results[0].Status);
+        Assert.Equal(DstARenamed1, results[0].FinalDestination);
         Assert.Equal(new byte[] { 9 }, fs.Files[DstA]);
     }
 
@@ -454,5 +674,30 @@ public class BatchExecutorTests {
         Assert.True(seenInProgress > 0, "expected at least one Changed fire while the op was in flight");
         // After dispose, tracker is empty.
         Assert.Empty(tracker.Snapshot());
+    }
+
+
+    /// <summary>
+    /// A resolver whose answer is a function of what it was shown - for the
+    /// cases the fake's fixed script cannot express.
+    /// </summary>
+    private sealed class ScriptedResolver : IConflictResolver {
+        private readonly Func<ConflictRequest, IReadOnlyList<ConflictAnswer>?> _answer;
+
+
+        public ScriptedResolver(Func<ConflictRequest, IReadOnlyList<ConflictAnswer>?> answer) {
+            _answer = answer;
+        }
+
+
+        /// <summary>How many conflicts each call brought.</summary>
+        public List<int> Calls { get; } = new();
+
+
+        public IReadOnlyList<ConflictAnswer>? ResolveAll(ConflictRequest request) {
+            Calls.Add(request.Conflicts.Count);
+
+            return _answer(request);
+        }
     }
 }

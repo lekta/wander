@@ -136,6 +136,13 @@ public sealed class SettingsViewModel : ObservableObject {
         set => SetField(ref _confirmMove, value);
     }
 
+    private bool _skipIdenticalOnConflict;
+    /// <inheritdoc cref="AppSettings.SkipIdenticalOnConflict"/>
+    public bool SkipIdenticalOnConflict {
+        get => _skipIdenticalOnConflict;
+        set => SetField(ref _skipIdenticalOnConflict, value);
+    }
+
 
     // --- Companions ----------------------------------------------------
     private bool _integrateCompanions;
@@ -567,6 +574,7 @@ public sealed class SettingsViewModel : ObservableObject {
         HideSystemRootFolders = s.HideSystemRootFolders;
         ConfirmRecycle = s.ConfirmRecycle;
         ConfirmMove = s.ConfirmMove;
+        SkipIdenticalOnConflict = s.SkipIdenticalOnConflict;
         IntegrateCompanions = s.IntegrateCompanions;
         SortKey = s.SortKey;
         SortAscending = s.SortAscending;
@@ -740,6 +748,7 @@ public sealed class SettingsViewModel : ObservableObject {
             HideSystemRootFolders = HideSystemRootFolders,
             ConfirmRecycle = ConfirmRecycle,
             ConfirmMove = ConfirmMove,
+            SkipIdenticalOnConflict = SkipIdenticalOnConflict,
             IntegrateCompanions = IntegrateCompanions,
             SortKey = SortKey,
             SortAscending = SortAscending,

@@ -156,20 +156,35 @@ public class ExtractionServiceTests {
         await service.ExtractAsync(
             new[] { InnerReadme, InnerDocs }, Target, resolver, CancellationToken.None);
 
-        Assert.Equal(2, Assert.Single(resolver.StartBatchCalls));
+        Assert.Equal(2, Assert.Single(resolver.ResolveAllCalls));
     }
 
     [Fact]
-    public async Task Extract_PerItemAnswers_SeeTheArchiveEntryInTheDialog() {
+    public async Task Extract_ShowsTheArchiveEntryInTheDialog() {
         var (service, _, fs, _, _) = Setup();
         fs.Files[TargetReadme] = "already here"u8.ToArray();
         var resolver = new FakeConflictResolver(batchOverride: null, ConflictResolution.Skip);
 
         await service.ExtractAsync(new[] { InnerReadme }, Target, resolver, CancellationToken.None);
 
-        var (source, existing) = Assert.Single(resolver.ResolveCalls);
-        Assert.Equal(InnerReadme, source);
-        Assert.Equal(TargetReadme, existing);
+        var conflict = Assert.Single(resolver.Conflicts);
+        Assert.Equal(InnerReadme, conflict.Source.FullPath);
+        Assert.Equal(TargetReadme, conflict.ExistingTarget.FullPath);
+        Assert.False(conflict.IsMove);
+        // Only the shell can open what is inside: no byte comparison, no merge.
+        Assert.False(conflict.SourceReachable);
+    }
+
+    [Fact]
+    public async Task Extract_MergeOnAFolder_MeansANewName() {
+        var (service, ns, fs, _, _) = Setup();
+        fs.Directories.Add(TargetDocs);
+        var resolver = new FakeConflictResolver(ConflictResolution.Merge);
+
+        var results = await service.ExtractAsync(new[] { InnerDocs }, Target, resolver, CancellationToken.None);
+
+        Assert.Equal(BatchItemStatus.Renamed, Assert.Single(results).Status);
+        Assert.Equal("docs (1)", Assert.Single(ns.CopiedOut).NewName);
     }
 
 

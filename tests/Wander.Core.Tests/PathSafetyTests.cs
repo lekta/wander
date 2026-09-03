@@ -175,6 +175,22 @@ public class PathSafetyTests {
         Assert.Equal("same(<unnamed>)", text);
     }
 
+    // --- The one self-drop that is not a refusal -------------------------
+
+    [Theory]
+    [InlineData(SelfDropReason.AlreadyInTarget, true, true)]
+    [InlineData(SelfDropReason.AlreadyInTarget, false, false)]
+    [InlineData(SelfDropReason.Same, true, false)]
+    [InlineData(SelfDropReason.IntoOwnDescendant, true, false)]
+    [InlineData(SelfDropReason.None, true, false)]
+    public void IsAllowedDuplicate_OnlyBackIntoItsOwnFolder_AndOnlyWhenItDuplicates(
+        SelfDropReason reason, bool duplicates, bool expected) {
+        // Dropping a file back where it lives with Ctrl held is how a copy
+        // is made; the same gesture into a folder's own subtree, or onto
+        // itself, still has no outcome.
+        Assert.Equal(expected, PathSafety.IsAllowedDuplicate(reason, duplicates));
+    }
+
     [Fact]
     public void FormatReason_TargetIsDriveRoot_FallsBackToFullPath() {
         // Path.GetFileName(@"C:\") is empty — the formatter should fall back to
@@ -182,5 +198,16 @@ public class PathSafetyTests {
         string text = PathSafety.FormatReason(SelfDropReason.AlreadyInTarget, PhotosRoot, DriveCRoot, _text);
 
         Assert.Equal($"already(photos|{DriveCRoot})", text);
+    }
+
+
+    // --- A cut pasted back where it came from ---------------------------
+
+    [Fact]
+    public void AllAlreadyIn_IsTrue_OnlyWhenEveryPathLivesInTheTarget() {
+        Assert.True(PathSafety.AllAlreadyIn(new[] { @"C:\photos\a.jpg", @"C:\photos\b.jpg" }, PhotosRoot));
+        Assert.True(PathSafety.AllAlreadyIn(new[] { @"C:\photos\a.jpg" }, PhotosRootWithSlash));
+        Assert.False(PathSafety.AllAlreadyIn(new[] { @"C:\photos\a.jpg", @"C:\photos\2024\b.jpg" }, PhotosRoot));
+        Assert.False(PathSafety.AllAlreadyIn(Array.Empty<string>(), PhotosRoot));
     }
 }

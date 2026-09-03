@@ -45,6 +45,14 @@ public interface IFileSystem {
     byte[] ReadAllBytes(string path);
 
     /// <summary>
+    /// The file's bytes as a stream, for the one reader that must not load
+    /// the whole thing: "are these two the same?" over files of any size
+    /// (<see cref="FileContentComparer"/>). Shared read access - the file
+    /// may be open in an editor at the time.
+    /// </summary>
+    Stream OpenRead(string path);
+
+    /// <summary>
     /// Replace a file's content without ever leaving it half-written: the
     /// new content goes to a temporary file next to the target, which is
     /// then swapped in. Used for edits to third-party formats, where a

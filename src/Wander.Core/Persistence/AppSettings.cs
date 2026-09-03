@@ -86,6 +86,17 @@ public sealed record AppSettings {
     /// </summary>
     public bool ConfirmMove { get; init; } = true;
 
+    /// <summary>
+    /// In the conflict window, answer for the pairs that turn out to be
+    /// byte-for-byte the same: keep what is already there, and everything
+    /// stays where it was - a copy is not made, a move leaves the source in
+    /// place, as Explorer's own Skip does. On by default: replacing a file
+    /// with its own bytes changes nothing, so there is nothing to ask. The
+    /// answer is still shown on its row and still goes through OK; this
+    /// only saves clicking it.
+    /// </summary>
+    public bool SkipIdenticalOnConflict { get; init; } = true;
+
 
     // --- Navigation ----------------------------------------------------
     /// <summary>

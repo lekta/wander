@@ -60,7 +60,7 @@
 
 
         <!--
-            General. Six switches about how the window behaves, with the
+            General. Seven switches about how the window behaves, with the
             explanations on tooltips: a paragraph under every checkbox turns
             a settings page into a document, and the reader stops seeing the
             settings.
@@ -86,6 +86,9 @@
                 <CheckBox Content="{x:Static res:Strings.SettingsConfirmMove}"
                           ToolTip="{x:Static res:Strings.SettingsConfirmMoveHint}"
                           IsChecked="{Binding Owner.ConfirmMove}"/>
+                <CheckBox Content="{x:Static res:Strings.SettingsSkipIdentical}"
+                          ToolTip="{x:Static res:Strings.SettingsSkipIdenticalHint}"
+                          IsChecked="{Binding Owner.SkipIdenticalOnConflict}"/>
             </StackPanel>
         </DataTemplate>
 

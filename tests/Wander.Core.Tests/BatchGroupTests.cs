@@ -48,39 +48,47 @@ public class BatchGroupTests {
     }
 
 
-    // --- One question per group -----------------------------------------
+    // --- Every member is its own collision ------------------------------
 
     [Fact]
-    public void CopyMany_AsksOnce_WhenBothMembersCollide() {
+    public void CopyMany_AsksAboutEachCollidingMember_InOneCall() {
+        // A sidecar's content changes independently of its main file's, so
+        // the two are two questions - asked together, answered apart.
         var (batch, _, _, _) = Setup(targetHasPng: true, targetHasMeta: true);
-        var resolver = new FakeConflictResolver(perItem: ConflictResolution.Replace);
+        var resolver = new FakeConflictResolver(batchOverride: ConflictResolution.Replace);
 
         batch.CopyMany(SpriteGroup(), DstFolder, resolver);
 
-        Assert.Single(resolver.ResolveCalls);
-        Assert.Equal(SrcPng, resolver.ResolveCalls[0].Src);
+        Assert.Equal(2, Assert.Single(resolver.ResolveAllCalls));
+        Assert.Equal(new[] { SrcPng, SrcMeta }, resolver.Conflicts.Select(c => c.Source.FullPath));
     }
 
     [Fact]
-    public void CopyMany_CountsConflictsInGroups() {
-        // The "N conflicts" the batch dialog announces has to be the number
-        // of decisions the user is about to make, not the number of files.
-        var (batch, _, _, _) = Setup(targetHasPng: true, targetHasMeta: true);
-        var resolver = new FakeConflictResolver(perItem: ConflictResolution.Replace);
+    public void CopyMany_AsksOnlyAboutTheCompanion_WhenOnlyItCollides() {
+        var (batch, fs, _, _) = Setup(targetHasMeta: true);
+        var resolver = new FakeConflictResolver(perItem: ConflictResolution.Skip);
 
-        batch.CopyMany(SpriteGroup(), DstFolder, resolver);
+        var results = batch.CopyMany(SpriteGroup(), DstFolder, resolver);
 
-        Assert.Equal(1, Assert.Single(resolver.StartBatchCalls));
+        Assert.Equal(SrcMeta, Assert.Single(resolver.Conflicts).Source.FullPath);
+        // The main file had a free name and simply went; the group reads by it.
+        Assert.Equal(BatchItemStatus.Ok, Assert.Single(results).Status);
+        Assert.True(fs.Files.ContainsKey(DstPng));
+        Assert.Equal(new byte[] { 9 }, fs.Files[DstMeta]);
     }
 
     [Fact]
-    public void CopyMany_AsksAboutTheMainFile_EvenWhenOnlyTheCompanionCollides() {
-        var (batch, _, _, _) = Setup(targetHasMeta: true);
-        var resolver = new FakeConflictResolver(perItem: ConflictResolution.Replace);
+    public void CopyMany_MixedAnswers_LandMemberByMember() {
+        // png already there -> keep; meta changed -> replace. The case the
+        // per-file rows exist for.
+        var (batch, fs, bin, _) = Setup(targetHasPng: true, targetHasMeta: true);
+        var resolver = new FakeConflictResolver(batchOverride: null, ConflictResolution.Skip, ConflictResolution.Replace);
 
         batch.CopyMany(SpriteGroup(), DstFolder, resolver);
 
-        Assert.Equal(SrcPng, Assert.Single(resolver.ResolveCalls).Src);
+        Assert.Equal(new byte[] { 9 }, fs.Files[DstPng]);
+        Assert.Equal(new byte[] { 2 }, fs.Files[DstMeta]);
+        Assert.Equal($"Recycle:{DstMeta}", Assert.Single(bin.CallLog, c => c.StartsWith("Recycle:")));
     }
 
     [Fact]
@@ -109,20 +117,23 @@ public class BatchGroupTests {
     }
 
     [Fact]
-    public void CopyMany_Skip_SkipsTheWholeGroup() {
+    public void CopyMany_Skip_SkipsOnlyTheMemberAsked() {
+        // The sidecar has nothing in its way: it is not held back by the
+        // main file's answer.
         var (batch, fs, _, _) = Setup(targetHasPng: true);
         var resolver = new FakeConflictResolver(perItem: ConflictResolution.Skip);
 
         var results = batch.CopyMany(SpriteGroup(), DstFolder, resolver);
 
         Assert.Equal(BatchItemStatus.Skipped, Assert.Single(results).Status);
-        Assert.False(fs.Files.ContainsKey(DstMeta));
+        Assert.Equal(new byte[] { 9 }, fs.Files[DstPng]);
+        Assert.True(fs.Files.ContainsKey(DstMeta));
     }
 
     [Fact]
     public void CopyMany_Replace_RecyclesEveryCollidingMember() {
         var (batch, fs, bin, _) = Setup(targetHasPng: true, targetHasMeta: true);
-        var resolver = new FakeConflictResolver(perItem: ConflictResolution.Replace);
+        var resolver = new FakeConflictResolver(batchOverride: ConflictResolution.Replace);
 
         batch.CopyMany(SpriteGroup(), DstFolder, resolver);
 
@@ -143,6 +154,32 @@ public class BatchGroupTests {
         Assert.Equal(@"C:\dst\Sprite (1).png", Assert.Single(results).FinalDestination);
         Assert.True(fs.Files.ContainsKey(@"C:\dst\Sprite (1).png"));
         Assert.True(fs.Files.ContainsKey(@"C:\dst\Sprite (1).png.meta"));
+    }
+
+    [Fact]
+    public void CopyMany_RenamedMainFile_TakesACollidingCompanionAlong_WhateverItAnswered() {
+        // Both collide; png -> keep both, meta -> replace. The meta belongs
+        // to the png that just became Sprite (1).png, so it goes there, and
+        // the meta at the old name - the old png's - is left alone.
+        var (batch, fs, bin, _) = Setup(targetHasPng: true, targetHasMeta: true);
+        var resolver = new FakeConflictResolver(batchOverride: null, ConflictResolution.Rename, ConflictResolution.Replace);
+
+        batch.CopyMany(SpriteGroup(), DstFolder, resolver);
+
+        Assert.Equal(new byte[] { 2 }, fs.Files[@"C:\dst\Sprite (1).png.meta"]);
+        Assert.Equal(new byte[] { 9 }, fs.Files[DstMeta]);
+        Assert.Empty(bin.CallLog);
+    }
+
+    [Fact]
+    public void CopyMany_RenamedMainFile_LeavesASkippedCompanionBehind() {
+        var (batch, fs, _, _) = Setup(targetHasPng: true, targetHasMeta: true);
+        var resolver = new FakeConflictResolver(batchOverride: null, ConflictResolution.Rename, ConflictResolution.Skip);
+
+        batch.CopyMany(SpriteGroup(), DstFolder, resolver);
+
+        Assert.True(fs.Files.ContainsKey(@"C:\dst\Sprite (1).png"));
+        Assert.False(fs.Files.ContainsKey(@"C:\dst\Sprite (1).png.meta"));
     }
 
     [Fact]

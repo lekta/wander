@@ -60,6 +60,12 @@ public static partial class Strings {
     /// <summary>Перетаскивание с перемещением и вставка после Ctrl+X. Ctrl+Z возвраща</summary>
     public static string SettingsConfirmMoveHint => Get(nameof(SettingsConfirmMoveHint));
 
+    /// <summary>Не спрашивать про одинаковые файлы</summary>
+    public static string SettingsSkipIdentical => Get(nameof(SettingsSkipIdentical));
+
+    /// <summary>В окне совпадений имён сразу отвечать «оставить» за пары, совпадающие побайтово</summary>
+    public static string SettingsSkipIdenticalHint => Get(nameof(SettingsSkipIdenticalHint));
+
     /// <summary>Файл и его спутники — одним элементом</summary>
     public static string SettingsIntegrateCompanions => Get(nameof(SettingsIntegrateCompanions));
 

@@ -49,6 +49,32 @@ public static class PathSafety {
     }
 
     /// <summary>
+    /// Is this self-drop actually fine? One of them is: something dropped
+    /// back into the folder it already lives in, by a gesture that
+    /// duplicates rather than moves. That is how a duplicate is made -
+    /// Explorer makes one too - and the copy lands beside the original
+    /// under a free name. Dropping a folder onto itself or into its own
+    /// subtree stays refused whatever the gesture: neither has an outcome.
+    /// </summary>
+    /// <param name="duplicates">The gesture leaves the original in place: copy, or a shortcut.</param>
+    public static bool IsAllowedDuplicate(SelfDropReason reason, bool duplicates) {
+        return duplicates && reason == SelfDropReason.AlreadyInTarget;
+    }
+
+    /// <summary>
+    /// Every path already lives in the target folder. A cut pasted back
+    /// where it came from has nothing to move: the caller drops the cut and
+    /// says so, rather than confirming a move that would do nothing.
+    /// </summary>
+    public static bool AllAlreadyIn(IReadOnlyList<string> paths, string target) {
+        string targetNorm = Normalize(target);
+
+        return paths.Count > 0 && paths.All(p =>
+            string.Equals(Normalize(Path.GetDirectoryName(Normalize(p)) ?? ""), targetNorm, StringComparison.OrdinalIgnoreCase));
+    }
+
+
+    /// <summary>
     /// Human-readable reason a drop was refused. <paramref name="text"/> is
     /// for tests, which pass their own templates rather than depend on a
     /// process-wide registration: the string table is global state, and a

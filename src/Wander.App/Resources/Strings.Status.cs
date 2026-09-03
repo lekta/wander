@@ -81,6 +81,9 @@ public static partial class Strings {
     /// <summary>Вырезано элементов: {0}</summary>
     public static string StatusCut => Get(nameof(StatusCut));
 
+    /// <summary>Уже в этой папке, вырезание снято</summary>
+    public static string StatusCutAlreadyHere => Get(nameof(StatusCutAlreadyHere));
+
     /// <summary>Вставка не удалась: {0}</summary>
     public static string StatusPasteFailed => Get(nameof(StatusPasteFailed));
 

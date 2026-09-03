@@ -49,8 +49,8 @@ public sealed class WpfDialogs : IDialogs {
         return picker.ShowDialog() == true ? picker.FolderName : null;
     }
 
-    public IConflictResolver CreateConflictResolver() {
-        return new DispatcherConflictResolver(new InteractiveConflictResolver());
+    public IConflictResolver CreateConflictResolver(bool skipIdentical) {
+        return new DispatcherConflictResolver(new InteractiveConflictResolver(skipIdentical));
     }
 
 

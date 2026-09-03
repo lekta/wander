@@ -55,6 +55,11 @@ public interface IDialogs {
     /// <summary>Folder picker; null when cancelled.</summary>
     string? PickFolder(string title);
 
-    /// <summary>The resolver a batch copy / move consults about collisions.</summary>
-    IConflictResolver CreateConflictResolver();
+    /// <summary>
+    /// The resolver a batch copy / move consults about collisions.
+    /// <paramref name="skipIdentical"/> is the user's setting of the same
+    /// name, passed in rather than read here so the resolver stays a thing
+    /// with no opinions of its own.
+    /// </summary>
+    IConflictResolver CreateConflictResolver(bool skipIdentical);
 }

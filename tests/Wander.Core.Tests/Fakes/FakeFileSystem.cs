@@ -96,6 +96,10 @@ internal class FakeFileSystem : IFileSystem {
             : throw new System.IO.FileNotFoundException("Not found", path);
     }
 
+    public System.IO.Stream OpenRead(string path) {
+        return new System.IO.MemoryStream(ReadAllBytes(path), writable: false);
+    }
+
     public void ReplaceAtomic(string path, byte[] content) {
         CallLog.Add($"ReplaceAtomic:{path}");
         Files[path] = content;

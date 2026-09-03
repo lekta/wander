@@ -286,6 +286,9 @@
   <data name="StatusCut" xml:space="preserve">
     <value>Вырезано элементов: {0}</value>
   </data>
+  <data name="StatusCutAlreadyHere" xml:space="preserve">
+    <value>Уже в этой папке, вырезание снято</value>
+  </data>
   <data name="StatusPasteFailed" xml:space="preserve">
     <value>Вставка не удалась: {0}</value>
   </data>
@@ -429,47 +432,77 @@
     <value>Переместить {0} элем. в:
 {1}?</value>
   </data>
-  <data name="ConflictTitle" xml:space="preserve">
-    <value>Заменить или пропустить</value>
+  <data name="ConflictVerdictIdentical" xml:space="preserve">
+    <value>Файлы идентичны</value>
   </data>
-  <data name="ConflictHeader" xml:space="preserve">
-    <value>Здесь уже есть файл с именем «{0}».</value>
+  <data name="ConflictVerdictContentDiffers" xml:space="preserve">
+    <value>Содержимое отличается</value>
   </data>
-  <data name="ConflictSource" xml:space="preserve">
-    <value>Что копируем</value>
+  <data name="ConflictVerdictDifferentKind" xml:space="preserve">
+    <value>Разные типы: файл и папка</value>
   </data>
-  <data name="ConflictTarget" xml:space="preserve">
-    <value>Что уже на месте</value>
+  <data name="ConflictTitleCopy" xml:space="preserve">
+    <value>Копирование: {0} элем., совпадений имён: {1}</value>
   </data>
-  <data name="ConflictReplace" xml:space="preserve">
+  <data name="ConflictTitleMove" xml:space="preserve">
+    <value>Перемещение: {0} элем., совпадений имён: {1}</value>
+  </data>
+  <data name="ConflictFrom" xml:space="preserve">
+    <value>Из: {0}</value>
+  </data>
+  <data name="ConflictFromSeveral" xml:space="preserve">
+    <value>Из: несколько папок</value>
+  </data>
+  <data name="ConflictTo" xml:space="preserve">
+    <value>В: {0}</value>
+  </data>
+  <data name="ConflictComparing" xml:space="preserve">
+    <value>Сравниваем…</value>
+  </data>
+  <data name="ConflictChoiceReplace" xml:space="preserve">
+    <value>заменить</value>
+  </data>
+  <data name="ConflictChoiceKeep" xml:space="preserve">
+    <value>оставить</value>
+  </data>
+  <data name="ConflictChoiceBoth" xml:space="preserve">
+    <value>оба</value>
+  </data>
+  <data name="ConflictMergeScanning" xml:space="preserve">
+    <value>слияние, читаем…</value>
+  </data>
+  <data name="ConflictMergeFailed" xml:space="preserve">
+    <value>слияние, содержимое не прочитано</value>
+  </data>
+  <data name="ConflictMergeSummary" xml:space="preserve">
+    <value>слияние: совпадений {0}, прочих файлов {1}</value>
+  </data>
+  <data name="ConflictFolderReplaceNote" xml:space="preserve">
+    <value>Папка заменится целиком, без слияния</value>
+  </data>
+  <data name="ConflictSkipIdentical" xml:space="preserve">
+    <value>Не спрашивать про одинаковые файлы</value>
+  </data>
+  <data name="ConflictSkipIdenticalHint" xml:space="preserve">
+    <value>За пары, совпадающие побайтово, отвечать «оставить»: ничего не копируется и не переезжает.</value>
+  </data>
+  <data name="ConflictBulkCaption" xml:space="preserve">
+    <value>Применить к нерешённым:</value>
+  </data>
+  <data name="ConflictBulkReplace" xml:space="preserve">
     <value>Заменить</value>
   </data>
-  <data name="ConflictSkip" xml:space="preserve">
-    <value>Пропустить</value>
+  <data name="ConflictBulkSkip" xml:space="preserve">
+    <value>Оставить оригиналы</value>
   </data>
-  <data name="ConflictKeepBoth" xml:space="preserve">
+  <data name="ConflictBulkKeepBoth" xml:space="preserve">
     <value>Оставить оба</value>
   </data>
-  <data name="ConflictKeepBothHint" xml:space="preserve">
-    <value>Сохранить копию с номером в имени, например «имя (1).txt»</value>
+  <data name="ConflictBulkReplaceIfNewer" xml:space="preserve">
+    <value>Заменить, если новее</value>
   </data>
-  <data name="BatchConflictTitle" xml:space="preserve">
-    <value>Совпадения имён</value>
-  </data>
-  <data name="BatchConflictHeader" xml:space="preserve">
-    <value>Совпадений: {0}</value>
-  </data>
-  <data name="BatchConflictPrompt" xml:space="preserve">
-    <value>Что сделать с файлами, которые уже есть на месте:</value>
-  </data>
-  <data name="BatchReplaceAll" xml:space="preserve">
-    <value>Заменить все</value>
-  </data>
-  <data name="BatchSkipAll" xml:space="preserve">
-    <value>Пропустить все</value>
-  </data>
-  <data name="BatchResolveEach" xml:space="preserve">
-    <value>Решать по каждому</value>
+  <data name="ConflictDecided" xml:space="preserve">
+    <value>Решено {0} из {1}</value>
   </data>
   <data name="KindFolderNoun" xml:space="preserve">
     <value>Папка</value>
@@ -1415,6 +1448,12 @@
   </data>
   <data name="SettingsConfirmMoveHint" xml:space="preserve">
     <value>Перетаскивание с перемещением и вставка после Ctrl+X. Ctrl+Z возвращает файлы на место в любом случае, а перезапись существующего спрашивает всегда.</value>
+  </data>
+  <data name="SettingsSkipIdentical" xml:space="preserve">
+    <value>Не спрашивать про одинаковые файлы</value>
+  </data>
+  <data name="SettingsSkipIdenticalHint" xml:space="preserve">
+    <value>В окне совпадений имён сразу отвечать «оставить» за пары, совпадающие побайтово: ничего не копируется и не переезжает.</value>
   </data>
   <data name="SettingsConfirmCreateSidecar" xml:space="preserve">
     <value>Спрашивать перед созданием файла оценки</value>

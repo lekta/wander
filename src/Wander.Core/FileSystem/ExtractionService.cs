@@ -172,33 +172,45 @@ public sealed class ExtractionService {
         List<CopyOutItem> queue, List<int> queued, List<IUndoableAction> restores,
         IConflictResolver resolver) {
 
-        int conflicts = plans.Count(p => Exists(p.Destination));
-        ConflictResolution? batchAnswer = null;
-        if (conflicts > 0) {
-            batchAnswer = resolver.StartBatch(conflicts);
-            if (batchAnswer == ConflictResolution.Cancel) {
-                _log.Info($"Extract cancelled before start ({plans.Count} items, {conflicts} conflicts)");
+        var colliding = new List<int>();
+        var infos = new List<FileConflictInfo>();
+        for (int i = 0; i < plans.Count; i++) {
+            if (Exists(plans[i].Destination)) {
+                colliding.Add(i);
+                infos.Add(BuildInfo(plans[i]));
+            }
+        }
+
+        // Asked once, about the whole list, before the engine starts - see
+        // IConflictResolver. Nothing has been copied yet, so a Cancel here
+        // is a Cancel of everything.
+        var answers = new ConflictResolution?[plans.Count];
+        if (infos.Count > 0) {
+            var replies = resolver.ResolveAll(new ConflictRequest(infos, plans.Count));
+            if (replies is null || replies.Any(r => r.Resolution == ConflictResolution.Cancel)) {
+                _log.Info($"Extract cancelled before start ({plans.Count} items, {infos.Count} conflicts)");
                 FillCancelled(plans, results, from: 0);
 
                 return false;
+            }
+            var byPath = replies.ToDictionary(r => r.Conflict.Source.FullPath, r => r.Resolution, StringComparer.OrdinalIgnoreCase);
+            foreach (int i in colliding) {
+                answers[i] = byPath.TryGetValue(plans[i].Source, out var resolution)
+                    ? resolution
+                    : throw new InvalidOperationException($"The conflict resolver left {plans[i].Source} unanswered.");
             }
         }
 
         for (int i = 0; i < plans.Count; i++) {
             var plan = plans[i];
-            var answer = Exists(plan.Destination)
-                ? batchAnswer ?? resolver.Resolve(BuildInfo(plan))
-                : (ConflictResolution?)null;
-
-            switch (answer) {
-                case ConflictResolution.Cancel:
-                    FillCancelled(plans, results, from: i);
-
-                    return false;
+            switch (answers[i]) {
                 case ConflictResolution.Skip:
                     results[i] = new BatchItemResult(plan.Source, plan.Destination, BatchItemStatus.Skipped, null);
                     continue;
                 case ConflictResolution.Rename:
+                // A folder inside an archive cannot be merged - only the
+                // shell can walk it - so "keep both" means a new name here.
+                case ConflictResolution.Merge:
                     plan.Destination = UniqueName(plan.Destination);
                     plan.NewName = NameOf(plan.Destination);
                     plan.Status = BatchItemStatus.Renamed;
@@ -261,7 +273,12 @@ public sealed class ExtractionService {
         var source = _ns.Enumerate(Path.GetDirectoryName(plan.Source) ?? "")
             .FirstOrDefault(e => string.Equals(e.FullPath, plan.Source, StringComparison.OrdinalIgnoreCase));
 
-        return new FileConflictInfo(source ?? Unknown(plan.Source), _fs.GetEntry(plan.Destination) ?? Unknown(plan.Destination));
+        // Only the shell can open what is inside the archive: no byte
+        // comparison, no merge - the window decides on name, size and date.
+        return new FileConflictInfo(
+            source ?? Unknown(plan.Source),
+            _fs.GetEntry(plan.Destination) ?? Unknown(plan.Destination),
+            SourceReachable: false);
     }
 
     private bool Exists(string path) => _fs.FileExists(path) || _fs.DirectoryExists(path);

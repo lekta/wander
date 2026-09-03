@@ -988,7 +988,7 @@ public sealed class MainViewModel : ObservableObject {
         var groups = await Task.Run(() => GroupPathsWithCompanions(sourcePaths));
 
         _log.Info($"Drop: {effect} {groups.Count} item(s) into {targetFolder}");
-        var resolver = _dialogs.CreateConflictResolver();
+        var resolver = _dialogs.CreateConflictResolver(Settings.SkipIdenticalOnConflict);
         IReadOnlyList<BatchItemResult> results;
         try {
             results = await RunWithProgressDialogAsync(
@@ -3184,6 +3184,16 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
+        // A cut pasted back where it came from has nothing to move. The cut
+        // is dropped and the status line says so: no confirmation, no
+        // window, nothing on disk.
+        if (_clipboard.IsCut && PathSafety.AllAlreadyIn(sources, target)) {
+            _clipboard.Clear();
+            Status = Strings.StatusCutAlreadyHere;
+            _log.Info($"Paste: cut into its own folder, cut dropped ({sources.Count} item(s) in {target})");
+            return;
+        }
+
         bool wasCut = _clipboard.IsCut;
         if (wasCut && !ConfirmMove(sources, target)) {
             return;
@@ -3195,7 +3205,7 @@ public sealed class MainViewModel : ObservableObject {
         var groups = await Task.Run(() => GroupPathsWithCompanions(sources));
 
         _log.Info($"Paste: {(wasCut ? "move" : "copy")} {groups.Count} item(s) into {target}");
-        var resolver = _dialogs.CreateConflictResolver();
+        var resolver = _dialogs.CreateConflictResolver(Settings.SkipIdenticalOnConflict);
         IReadOnlyList<BatchItemResult> results;
         try {
             results = await RunWithProgressDialogAsync(
@@ -3218,7 +3228,7 @@ public sealed class MainViewModel : ObservableObject {
         // Select what just arrived — the whole point of the operation is now
         // on screen, and the keyboard should already be on it.
         var arrived = results
-            .Where(r => r.Status is BatchItemStatus.Ok or BatchItemStatus.Replaced or BatchItemStatus.Renamed)
+            .Where(r => r.Status is BatchItemStatus.Ok or BatchItemStatus.Replaced or BatchItemStatus.Renamed or BatchItemStatus.Merged)
             .Select(r => r.FinalDestination)
             .ToArray();
         _session.SetArrival(ArrivalIntent.Rows(target, arrived, takeFocus: arrived.Length > 0));
@@ -3296,7 +3306,7 @@ public sealed class MainViewModel : ObservableObject {
         }
 
         var service = new ExtractionService(ns, _fs, ServiceLocator.Get<IRecycleBin>(), _undo, _tracker, _log);
-        var resolver = _dialogs.CreateConflictResolver();
+        var resolver = _dialogs.CreateConflictResolver(Settings.SkipIdenticalOnConflict);
         _log.Info($"Extract: {sources.Count} item(s) into {target}");
 
         IReadOnlyList<BatchItemResult> results;
@@ -3317,7 +3327,7 @@ public sealed class MainViewModel : ObservableObject {
         // one on screen: an extraction started from inside the archive lands
         // somewhere the user is not standing.
         var arrived = results
-            .Where(r => r.Status is BatchItemStatus.Ok or BatchItemStatus.Replaced or BatchItemStatus.Renamed)
+            .Where(r => r.Status is BatchItemStatus.Ok or BatchItemStatus.Replaced or BatchItemStatus.Renamed or BatchItemStatus.Merged)
             .Select(r => r.FinalDestination)
             .ToArray();
         if (string.Equals(_nav.Current, target, StringComparison.OrdinalIgnoreCase)) {
@@ -3361,7 +3371,8 @@ public sealed class MainViewModel : ObservableObject {
         int ok = results.Count(r =>
             r.Status == BatchItemStatus.Ok ||
             r.Status == BatchItemStatus.Replaced ||
-            r.Status == BatchItemStatus.Renamed);
+            r.Status == BatchItemStatus.Renamed ||
+            r.Status == BatchItemStatus.Merged);
         int skipped = results.Count(r => r.Status == BatchItemStatus.Skipped);
         int failed = results.Count(r => r.Status == BatchItemStatus.Failed);
         int cancelled = results.Count(r => r.Status == BatchItemStatus.Cancelled);

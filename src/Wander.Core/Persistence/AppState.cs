@@ -31,6 +31,15 @@ public sealed record AppState {
     public WindowGeometry? Window { get; init; }
 
     /// <summary>
+    /// The conflict window's own placement. It is a working surface, not a
+    /// message box — a list of pairs with thumbnails that the user resizes
+    /// to see more of at once — and a window that forgets that every time
+    /// is a window that gets resized every time. Null until it is opened
+    /// once.
+    /// </summary>
+    public WindowGeometry? ConflictWindow { get; init; }
+
+    /// <summary>
     /// User preferences (separate from session-state above). Always
     /// non-null so consumers don't have to null-check; the default
     /// record represents the out-of-the-box settings.

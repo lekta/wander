@@ -58,7 +58,7 @@ public sealed class ScriptedDialogs : IDialogs {
         return FolderAnswer;
     }
 
-    public IConflictResolver CreateConflictResolver() {
+    public IConflictResolver CreateConflictResolver(bool skipIdentical) {
         return new PolicyConflictResolver(this);
     }
 
@@ -85,16 +85,12 @@ public sealed class ScriptedDialogs : IDialogs {
         }
 
 
-        public ConflictResolution? StartBatch(int conflictCount) {
-            _owner.Record($"Conflicts: {conflictCount} -> {_owner.Conflict} (all)");
+        public IReadOnlyList<ConflictAnswer>? ResolveAll(ConflictRequest request) {
+            _owner.Record($"Conflicts: {request.Conflicts.Count} of {request.ItemCount} -> {_owner.Conflict}");
 
-            return _owner.Conflict;
-        }
-
-        public ConflictResolution Resolve(FileConflictInfo conflict) {
-            _owner.Record($"Conflict -> {_owner.Conflict}");
-
-            return _owner.Conflict;
+            return _owner.Conflict == ConflictResolution.Cancel
+                ? null
+                : request.Conflicts.Select(c => new ConflictAnswer(c, _owner.Conflict)).ToList();
         }
     }
 }

@@ -196,6 +196,10 @@ public sealed class SystemIOFileSystem : IFileSystem {
         return File.ReadAllBytes(path);
     }
 
+    public Stream OpenRead(string path) {
+        return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, bufferSize: 4096, FileOptions.SequentialScan);
+    }
+
     public void ReplaceAtomic(string path, byte[] content) {
         // Temp file in the same directory so the swap stays on one volume.
         string temp = path + TransientFiles.ReplaceSuffix;

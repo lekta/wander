@@ -7,9 +7,9 @@ namespace Wander.App.Conflict;
 
 /// <summary>
 /// Wraps a UI-thread resolver so async batch ops running on the thread pool
-/// can still pop modal conflict dialogs. Every call is marshalled back to
-/// the dispatcher synchronously — the background worker blocks until the
-/// user clicks a button.
+/// can still pop modal conflict dialogs. The call is marshalled back to
+/// the dispatcher synchronously - the background worker blocks until the
+/// user has answered for every item.
 /// </summary>
 public sealed class DispatcherConflictResolver : IConflictResolver {
     private readonly IConflictResolver _inner;
@@ -19,15 +19,11 @@ public sealed class DispatcherConflictResolver : IConflictResolver {
     public DispatcherConflictResolver(IConflictResolver inner) {
         _inner = inner;
         _dispatcher = Application.Current?.Dispatcher
-            ?? throw new InvalidOperationException("No WPF Application available — DispatcherConflictResolver requires a UI dispatcher.");
+            ?? throw new InvalidOperationException("No WPF Application available - DispatcherConflictResolver requires a UI dispatcher.");
     }
 
 
-    public ConflictResolution? StartBatch(int conflictCount) {
-        return _dispatcher.Ask(() => _inner.StartBatch(conflictCount));
-    }
-
-    public ConflictResolution Resolve(FileConflictInfo conflict) {
-        return _dispatcher.Ask(() => _inner.Resolve(conflict));
+    public IReadOnlyList<ConflictAnswer>? ResolveAll(ConflictRequest request) {
+        return _dispatcher.Ask(() => _inner.ResolveAll(request));
     }
 }

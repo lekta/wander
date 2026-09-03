@@ -1,0 +1,283 @@
+<Window x:Class="Wander.App.Conflict.ConflictWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:conv="clr-namespace:Wander.App.Converters"
+        xmlns:controls="clr-namespace:Wander.App.Controls"
+        xmlns:local="clr-namespace:Wander.App.Conflict"
+        xmlns:res="clr-namespace:Wander.App.Resources"
+        Title="{Binding Title}"
+        Width="760" Height="560"
+        MinWidth="560" MinHeight="360"
+        WindowStartupLocation="CenterOwner"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        ShowInTaskbar="False"
+        Background="{StaticResource ChromeBackground}">
+
+    <!--
+        One list for the whole batch, one row per pair, two ticks per row:
+        "keep this one" on the left card and on the right. Both ticked means
+        both are kept - a file under a new name, two folders merged with
+        their own collisions listed underneath, stepped in; neither means
+        the pair is still open. The answer is also written after the name.
+        Nothing is applied until OK, and Cancel costs nothing at all,
+        because the batch has not touched the disk yet (see
+        IConflictResolver: the whole list is asked up front).
+
+        Ticks rather than per-row buttons: a button in a list of files reads
+        as an action that has already happened. The only buttons in this
+        window are the two at the bottom that end it, and they are set apart
+        by the footer strip for the same reason.
+
+        The verb and the count are in the title bar and the two folders head
+        the two columns, the way the system's own copy-conflict dialog
+        arranges them - so no card has to repeat which side it is. What a
+        row has to say beyond its two numbers rides on the name line, and
+        rows are told apart by the gap between them rather than by a rule.
+
+        Enter is deliberately not bound to anything: this window replaces
+        files, and a window that replaces files on a stray Enter is the
+        thing the safety pillar exists to prevent. Escape cancels.
+    -->
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+        <conv:EnumRadioConverter x:Key="EnumRadio"/>
+
+        <Style x:Key="Caption" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="{StaticResource TextCaption}"/>
+        </Style>
+
+        <!--
+            The two numbers. Bold is the whole vocabulary of difference on a
+            row: the bigger size and the newer date carry it, and a badge on
+            the name line only appears where no number can.
+        -->
+        <Style x:Key="Fact" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+        </Style>
+
+        <!--
+            One side of a pair. The whole card is the tick's content, so
+            clicking anywhere on it - picture included - chooses that side.
+        -->
+        <Style x:Key="SideCard" TargetType="CheckBox">
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Padding" Value="8,0,0,0"/>
+        </Style>
+
+        <DataTemplate DataType="{x:Type local:ConflictRowViewModel}">
+            <StackPanel Margin="{Binding Indent}">
+                <!--
+                    Name, and after it whatever this pair has to say that its
+                    numbers do not. Wraps rather than clips: the list never
+                    scrolls sideways.
+                -->
+                <WrapPanel Margin="0,0,0,4">
+                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                    <TextBlock Text="{Binding ChoiceText}" Style="{StaticResource Caption}"
+                               VerticalAlignment="Center" Margin="8,0,0,0"
+                               Visibility="{Binding HasChoiceText, Converter={StaticResource BoolToVisibility}}"/>
+                    <TextBlock Text="{Binding VerdictText}" Style="{StaticResource Caption}"
+                               VerticalAlignment="Center" Margin="8,0,0,0"
+                               Visibility="{Binding HasVerdictText, Converter={StaticResource BoolToVisibility}}"/>
+                    <TextBlock Text="{x:Static res:Strings.ConflictComparing}"
+                               Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="8,0,0,0"
+                               Visibility="{Binding IsComparing, Converter={StaticResource BoolToVisibility}}"/>
+                    <TextBlock Text="{x:Static res:Strings.ConflictFolderReplaceNote}"
+                               Foreground="{StaticResource TextWarning}" FontSize="11"
+                               VerticalAlignment="Center" Margin="8,0,0,0"
+                               Visibility="{Binding IsFolderReplace, Converter={StaticResource BoolToVisibility}}"/>
+                </WrapPanel>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Margin="0,0,6,0" Padding="8"
+                            Background="{StaticResource ContentBackground}"
+                            BorderBrush="{StaticResource CardBorder}" BorderThickness="1"
+                            ToolTip="{Binding SourcePath}">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsSourceDimmed}" Value="True">
+                                        <Setter Property="Opacity" Value="0.4"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <CheckBox Style="{StaticResource SideCard}" IsChecked="{Binding TakeSource}">
+                            <StackPanel Orientation="Horizontal">
+                                <controls:AsyncIcon IconPath="{Binding SourcePath}" IconSize="Medium"
+                                                    Width="48" Height="48" Stretch="Uniform"/>
+                                <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding SourceSize}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource Fact}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsSourceBigger}" Value="True">
+                                                        <Setter Property="FontWeight" Value="Bold"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <TextBlock Text="{Binding SourceModified}" Margin="0,2,0,0">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource Fact}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsSourceNewer}" Value="True">
+                                                        <Setter Property="FontWeight" Value="Bold"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </StackPanel>
+                            </StackPanel>
+                        </CheckBox>
+                    </Border>
+
+                    <Border Grid.Column="1" Margin="6,0,0,0" Padding="8"
+                            Background="{StaticResource ContentBackground}"
+                            BorderBrush="{StaticResource CardBorder}" BorderThickness="1"
+                            ToolTip="{Binding TargetPath}">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsTargetDimmed}" Value="True">
+                                        <Setter Property="Opacity" Value="0.4"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <CheckBox Style="{StaticResource SideCard}" IsChecked="{Binding TakeTarget}">
+                            <StackPanel Orientation="Horizontal">
+                                <controls:AsyncIcon IconPath="{Binding TargetPath}" IconSize="Medium"
+                                                    Width="48" Height="48" Stretch="Uniform"/>
+                                <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding TargetSize}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource Fact}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsTargetBigger}" Value="True">
+                                                        <Setter Property="FontWeight" Value="Bold"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <TextBlock Text="{Binding TargetModified}" Margin="0,2,0,0">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource Fact}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsTargetNewer}" Value="True">
+                                                        <Setter Property="FontWeight" Value="Bold"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </StackPanel>
+                            </StackPanel>
+                        </CheckBox>
+                    </Border>
+                </Grid>
+            </StackPanel>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- One folder over each column: which side is which is said once. -->
+        <Grid Grid.Row="0" Margin="16,14,16,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="{Binding FromText}" Margin="0,0,6,0"
+                       FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                       ToolTip="{Binding FromText}"/>
+            <TextBlock Grid.Column="1" Text="{Binding ToText}" Margin="6,0,0,0"
+                       FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                       ToolTip="{Binding ToText}"/>
+        </Grid>
+
+        <ItemsControl Grid.Row="1" ItemsSource="{Binding Rows}"
+                      Margin="16,0,16,0"
+                      VirtualizingPanel.IsVirtualizing="True"
+                      VirtualizingPanel.VirtualizationMode="Recycling"
+                      VirtualizingPanel.ScrollUnit="Pixel"
+                      ScrollViewer.CanContentScroll="True">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <VirtualizingStackPanel/>
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.Template>
+                <ControlTemplate TargetType="ItemsControl">
+                    <ScrollViewer CanContentScroll="True" Focusable="False"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled">
+                        <ItemsPresenter/>
+                    </ScrollViewer>
+                </ControlTemplate>
+            </ItemsControl.Template>
+        </ItemsControl>
+
+        <!--
+            The two group answers, under the list rather than over it: both
+            are about "the rest of them", which is a thing to decide after
+            looking, not a question to answer before seeing anything. None
+            of the four is picked to begin with, because "decide each one" is
+            what an untouched list already does.
+        -->
+        <StackPanel Grid.Row="2" Margin="16,8,16,0">
+            <CheckBox Content="{x:Static res:Strings.ConflictSkipIdentical}"
+                      ToolTip="{x:Static res:Strings.ConflictSkipIdenticalHint}"
+                      IsChecked="{Binding SkipIdentical}"/>
+
+            <TextBlock Text="{x:Static res:Strings.ConflictBulkCaption}"
+                       Style="{StaticResource Caption}" Margin="0,10,0,4"/>
+            <WrapPanel>
+                <RadioButton Content="{x:Static res:Strings.ConflictBulkReplace}" Margin="0,0,16,0"
+                             IsChecked="{Binding BulkAction, Converter={StaticResource EnumRadio}, ConverterParameter=Replace}"/>
+                <RadioButton Content="{x:Static res:Strings.ConflictBulkSkip}" Margin="0,0,16,0"
+                             IsChecked="{Binding BulkAction, Converter={StaticResource EnumRadio}, ConverterParameter=Skip}"/>
+                <RadioButton Content="{x:Static res:Strings.ConflictBulkKeepBoth}" Margin="0,0,16,0"
+                             IsChecked="{Binding BulkAction, Converter={StaticResource EnumRadio}, ConverterParameter=KeepBoth}"/>
+                <RadioButton Content="{x:Static res:Strings.ConflictBulkReplaceIfNewer}"
+                             IsChecked="{Binding BulkAction, Converter={StaticResource EnumRadio}, ConverterParameter=ReplaceIfSourceNewer}"/>
+            </WrapPanel>
+        </StackPanel>
+
+        <!-- The strip that ends the window, set apart from everything above it. -->
+        <Border Grid.Row="3" Margin="0,12,0,0" Padding="16,12"
+                Background="{StaticResource StripBackground}"
+                BorderBrush="{StaticResource Separator}" BorderThickness="0,1,0,0">
+            <Grid>
+                <TextBlock Text="{Binding DecidedText}" Style="{StaticResource Caption}"
+                           VerticalAlignment="Center" HorizontalAlignment="Left"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Content="{x:Static res:Strings.ActionOk}"
+                            IsEnabled="{Binding CanAccept}"
+                            Width="110" Padding="6,4" Margin="0,0,8,0"
+                            Click="OnOk"/>
+                    <Button Content="{x:Static res:Strings.ActionCancel}"
+                            Width="110" Padding="6,4"
+                            IsCancel="True" Click="OnCancel"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

@@ -92,47 +92,77 @@ public static partial class Strings {
     /// <summary>Нельзя вставить</summary>
     public static string CannotPasteTitle => Get(nameof(CannotPasteTitle));
 
-    /// <summary>Заменить или пропустить</summary>
-    public static string ConflictTitle => Get(nameof(ConflictTitle));
+    /// <summary>Файлы идентичны</summary>
+    public static string ConflictVerdictIdentical => Get(nameof(ConflictVerdictIdentical));
 
-    /// <summary>Здесь уже есть файл с именем «{0}».</summary>
-    public static string ConflictHeader => Get(nameof(ConflictHeader));
+    /// <summary>Содержимое отличается</summary>
+    public static string ConflictVerdictContentDiffers => Get(nameof(ConflictVerdictContentDiffers));
 
-    /// <summary>Что копируем</summary>
-    public static string ConflictSource => Get(nameof(ConflictSource));
+    /// <summary>Разные типы: файл и папка</summary>
+    public static string ConflictVerdictDifferentKind => Get(nameof(ConflictVerdictDifferentKind));
 
-    /// <summary>Что уже на месте</summary>
-    public static string ConflictTarget => Get(nameof(ConflictTarget));
+    /// <summary>Копирование, совпадений имён: {0}</summary>
+    public static string ConflictTitleCopy => Get(nameof(ConflictTitleCopy));
+
+    /// <summary>Перемещение, совпадений имён: {0}</summary>
+    public static string ConflictTitleMove => Get(nameof(ConflictTitleMove));
+
+    /// <summary>Из: {0}</summary>
+    public static string ConflictFrom => Get(nameof(ConflictFrom));
+
+    /// <summary>Из: несколько папок</summary>
+    public static string ConflictFromSeveral => Get(nameof(ConflictFromSeveral));
+
+    /// <summary>В: {0}</summary>
+    public static string ConflictTo => Get(nameof(ConflictTo));
+
+    /// <summary>Сравниваем…</summary>
+    public static string ConflictComparing => Get(nameof(ConflictComparing));
+
+    /// <summary>заменить</summary>
+    public static string ConflictChoiceReplace => Get(nameof(ConflictChoiceReplace));
+
+    /// <summary>оставить</summary>
+    public static string ConflictChoiceKeep => Get(nameof(ConflictChoiceKeep));
+
+    /// <summary>оба</summary>
+    public static string ConflictChoiceBoth => Get(nameof(ConflictChoiceBoth));
+
+    /// <summary>слияние, читаем…</summary>
+    public static string ConflictMergeScanning => Get(nameof(ConflictMergeScanning));
+
+    /// <summary>слияние, содержимое не прочитано</summary>
+    public static string ConflictMergeFailed => Get(nameof(ConflictMergeFailed));
+
+    /// <summary>слияние: совпадений {0}, прочих файлов {1}</summary>
+    public static string ConflictMergeSummary => Get(nameof(ConflictMergeSummary));
+
+    /// <summary>Папка заменится целиком, без слияния</summary>
+    public static string ConflictFolderReplaceNote => Get(nameof(ConflictFolderReplaceNote));
+
+    /// <summary>Не спрашивать про одинаковые файлы</summary>
+    public static string ConflictSkipIdentical => Get(nameof(ConflictSkipIdentical));
+
+    /// <summary>За пары, совпадающие побайтово, оставлять то, что уже на месте.</summary>
+    public static string ConflictSkipIdenticalHint => Get(nameof(ConflictSkipIdenticalHint));
+
+    /// <summary>Применить к нерешённым:</summary>
+    public static string ConflictBulkCaption => Get(nameof(ConflictBulkCaption));
 
     /// <summary>Заменить</summary>
-    public static string ConflictReplace => Get(nameof(ConflictReplace));
+    public static string ConflictBulkReplace => Get(nameof(ConflictBulkReplace));
 
-    /// <summary>Пропустить</summary>
-    public static string ConflictSkip => Get(nameof(ConflictSkip));
+    /// <summary>Оставить оригиналы</summary>
+    public static string ConflictBulkSkip => Get(nameof(ConflictBulkSkip));
 
     /// <summary>Оставить оба</summary>
-    public static string ConflictKeepBoth => Get(nameof(ConflictKeepBoth));
+    public static string ConflictBulkKeepBoth => Get(nameof(ConflictBulkKeepBoth));
 
-    /// <summary>Сохранить копию с номером в имени, например «имя (1).txt»</summary>
-    public static string ConflictKeepBothHint => Get(nameof(ConflictKeepBothHint));
+    /// <summary>Заменить, если новее</summary>
+    public static string ConflictBulkReplaceIfNewer => Get(nameof(ConflictBulkReplaceIfNewer));
 
-    /// <summary>Совпадения имён</summary>
-    public static string BatchConflictTitle => Get(nameof(BatchConflictTitle));
-
-    /// <summary>Совпадений: {0}</summary>
-    public static string BatchConflictHeader => Get(nameof(BatchConflictHeader));
-
-    /// <summary>Что сделать с файлами, которые уже есть на месте:</summary>
-    public static string BatchConflictPrompt => Get(nameof(BatchConflictPrompt));
-
-    /// <summary>Заменить все</summary>
-    public static string BatchReplaceAll => Get(nameof(BatchReplaceAll));
-
-    /// <summary>Пропустить все</summary>
-    public static string BatchSkipAll => Get(nameof(BatchSkipAll));
-
-    /// <summary>Решать по каждому</summary>
-    public static string BatchResolveEach => Get(nameof(BatchResolveEach));
+    /// <summary>Решено {0} из {1}</summary>
+    public static string ConflictDecided => Get(nameof(ConflictDecided));
 
     /// <summary>Папка</summary>
     public static string KindFolderNoun => Get(nameof(KindFolderNoun));

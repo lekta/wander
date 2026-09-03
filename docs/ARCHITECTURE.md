@@ -33,7 +33,8 @@ src/
 │   │                   FileSystemEntry, EntryKind, EntryComparers, SortKey,
 │   │                   SidecarRating + ColorLabels, UndoableActions,
 │   │                   FolderStatistics, IVolumeInfoProvider, TransientFiles,
-│   │                   BatchGroup
+│   │                   BatchGroup, ConflictVerdict, ConflictBatch, ConflictPair,
+│   │                   MergeScanner, FileContentComparer
 │   ├── Icons/          IIconProvider, IImageMetadataReader, IconSize, ImageMetadata,
 │   │                   ImageFormats, RawPreviewExtractor, ThumbnailCacheOptions
 │   ├── Layout/         TileLayout, TileMetrics, GridNavigation,
@@ -73,8 +74,9 @@ src/
 │   └── PlatformBootstrapper.cs
 │
 └── Wander.App/
-    ├── Conflict/       ConflictDialog, BatchConflictDialog,
-    │                   DispatcherConflictResolver, InteractiveConflictResolver
+    ├── Conflict/       ConflictWindow (+ ConflictWindowViewModel,
+    │                   ConflictRowViewModel), DispatcherConflictResolver,
+    │                   InteractiveConflictResolver
     ├── Controllers/    NavigationController, PreviewController, RatingsController,
     │                   BookmarksController, FolderTreesController,
     │                   ContentSearchController, SearchResultsController,
@@ -122,14 +124,17 @@ Platform.Windows` — один файл, `App.xaml.cs` (точка композ�
 <!-- deps:generated:begin -->
 ```
 === Wander dependency graph (using sweep) ===
-date   : 2026-09-02
-commit : 9f3273c
+date   : 2026-09-03
+commit : 8d9e10e
 
 -- projects --
-Wander.App -> Wander.Core   (49 files)
+Wander.App -> Wander.Core   (54 files)
 Wander.App -> Wander.Platform.Windows   (1 files)
-Wander.Core.Tests -> Wander.Core   (63 files)
-Wander.Platform.Windows -> Wander.Core   (21 files)
+Wander.Core.Tests -> Wander.Core   (70 files)
+Wander.Harness -> Wander.App   (4 files)
+Wander.Harness -> Wander.Core   (6 files)
+Wander.Harness -> Wander.Platform.Windows   (3 files)
+Wander.Platform.Windows -> Wander.Core   (22 files)
 
 -- Wander.Core: folder -> folder --
   Companions     -> FileSystem     (5 files)
@@ -137,9 +142,10 @@ Wander.Platform.Windows -> Wander.Core   (21 files)
   Companions     -> Undo           (1 files)
   Diagnostics    -> Logging        (1 files)
   FileSystem     -> Localization   (1 files)
-  FileSystem     -> Logging        (2 files)
-  FileSystem     -> Operations     (2 files)
-  FileSystem     -> Undo           (3 files)
+  FileSystem     -> Logging        (3 files)
+  FileSystem     -> Operations     (3 files)
+  FileSystem     -> Shell          (1 files)
+  FileSystem     -> Undo           (4 files)
   Listing        -> Companions     (2 files)
   Listing        -> FileSystem     (5 files)
   Listing        -> Icons          (1 files)
@@ -161,11 +167,16 @@ Wander.Platform.Windows -> Wander.Core   (21 files)
 
 -- Wander.Core: levels --
   0: (root), Icons, Layout, Localization, Logging, Navigation, Operations, Undo
-  1: Diagnostics, FileSystem, Preview
-  2: Companions, Search
-  3: Listing, Persistence
-  4: Shell
-  5: Menu
+  1: [Companions+FileSystem+Persistence+Shell], Diagnostics, Preview
+  2: Menu, Search
+  3: Listing
+  cycle edges:
+    Companions -> FileSystem
+    FileSystem -> Shell
+    Persistence -> Companions
+    Persistence -> FileSystem
+    Shell -> FileSystem
+    Shell -> Persistence
 
 -- Wander.Platform.Windows: folder -> folder --
   (root)         -> Diagnostics    (1 files)
@@ -181,9 +192,9 @@ Wander.Platform.Windows -> Wander.Core   (21 files)
   1: (root)
 
 -- Wander.App: folder -> folder --
-  (root)         -> Conflict       (1 files)
   (root)         -> Controllers    (2 files)
   (root)         -> Diagnostics    (1 files)
+  (root)         -> Dialogs        (2 files)
   (root)         -> DragPreview    (1 files)
   (root)         -> Menu           (1 files)
   (root)         -> Resources      (4 files)
@@ -192,6 +203,7 @@ Wander.Platform.Windows -> Wander.Core   (21 files)
   (root)         -> Views          (1 files)
   Conflict       -> Resources      (2 files)
   Conflict       -> Util           (2 files)
+  Conflict       -> ViewModels     (2 files)
   Controllers    -> Preview        (1 files)
   Controllers    -> Resources      (6 files)
   Controllers    -> Util           (1 files)
@@ -199,18 +211,22 @@ Wander.Platform.Windows -> Wander.Core   (21 files)
   Controls       -> Converters     (1 files)
   Controls       -> Diagnostics    (1 files)
   Controls       -> Resources      (1 files)
+  Converters     -> Util           (1 files)
   Converters     -> ViewModels     (1 files)
   Diagnostics    -> Resources      (1 files)
+  Dialogs        -> Conflict       (1 files)
   DragPreview    -> Converters     (1 files)
   DragPreview    -> Resources      (3 files)
   DragPreview    -> Util           (1 files)
   DragPreview    -> ViewModels     (1 files)
   Preview        -> Resources      (2 files)
   Preview        -> Util           (2 files)
+  Util           -> Resources      (1 files)
   ViewModels     -> Resources      (4 files)
   Views          -> Controllers    (1 files)
   Views          -> Controls       (2 files)
   Views          -> Converters     (1 files)
+  Views          -> Dialogs        (2 files)
   Views          -> DragPreview    (1 files)
   Views          -> Highlighting   (1 files)
   Views          -> Resources      (6 files)
@@ -218,10 +234,10 @@ Wander.Platform.Windows -> Wander.Core   (21 files)
   Views          -> ViewModels     (4 files)
 
 -- Wander.App: levels --
-  0: Highlighting, Menu, Resources, Util
-  1: Conflict, Diagnostics, Preview, ViewModels
-  2: Controllers, Converters
-  3: Controls, DragPreview
+  0: Highlighting, Menu, Resources
+  1: Diagnostics, Util, ViewModels
+  2: Conflict, Converters, Preview
+  3: Controllers, Controls, Dialogs, DragPreview
   4: Views
   5: (root)
 
@@ -362,11 +378,38 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
   (диспозить всегда); `Snapshot()` — иммутабельный срез; несколько операций
   агрегируются; `Changed` — с фона. `MainViewModel.RunWithProgressDialogAsync`
   оборачивает батчи в модальный `ProgressDialog` с отменой.
-- **Конфликты.** `IConflictResolver`: Replace all / Skip all / Resolve
-  each; `ConflictDialog`, `BatchConflictDialog`; `DispatcherConflictResolver`
-  маршалит на UI. При Replace цель уходит **в корзину**, `DeleteAction` в
-  composite перед основным шагом — `Ctrl+Z` возвращает обе стороны
-  (Explorer замещает безвозвратно).
+- **Конфликты.** `IConflictResolver.ResolveAll(ConflictRequest)` — push:
+  все коллизии, найденные до первого касания диска, одним вызовом (плюс
+  размер батча для заголовка); ответ — `ConflictAnswer` на каждую
+  показанную пару, вложенные (внутри сливаемых папок) включительно,
+  привязка по пути источника; null / `Cancel` — отмена всего батча, ничего
+  не применено; коллизия, возникшая по ходу или не спрошенная (имя внутри
+  сливаемой папки, которую резолвер не обошёл), — второй вызов из одного
+  элемента. Каждый файл группы — своя коллизия; связывает их только имя:
+  `BatchExecutor.ApplyGroup` уводит спутников за переименованным основным
+  файлом. `FileConflictInfo` — две записи + `IsMove` + `SourceReachable`
+  (false у записи архива); `ConflictVerdict.Of` — чистый вердикт (вид,
+  размер, кто новее, «идентичны»); `FileContentComparer` — побайтово через
+  `IFileSystem.OpenRead`, `AutoCompareLimit` делит очередь на два прохода.
+  `ConflictResolution.Merge` — слияние папок: `BatchExecutor.MergeFolder`
+  обходит исходную папку, ответы берёт по пути, вложенные папки сливает
+  рекурсивно, опустевшую при перемещении папку отправляет в корзину;
+  `MergeScanner` (Core) даёт окну то же дерево совпадений заранее, предел
+  глубины 64. `ConflictBatch` — состояние окна в Core: дерево
+  `ConflictPair` (вердикт, ответ, дети сливаемой папки, `IsEffective`),
+  очередь сравнения `NextToCompare`, разовый ответ за нерешённые
+  (`ConflictBulkAction`) и стоячая политика `SetSkipIdentical` (помнит,
+  какие ответы её, и забирает ровно их). UI — `Conflict/ConflictWindow`
+  (+ две вьюмодели) поверх него, выбор — две галки на пару (исходник /
+  целевой → Replace / Skip / Rename-или-Merge / не решено), слово-подпись
+  после имени; `DispatcherConflictResolver` маршалит на UI. При Replace
+  цель уходит **в корзину**, `DeleteAction` в composite перед основным
+  шагом — `Ctrl+Z` возвращает обе стороны (Explorer замещает
+  безвозвратно). Элемент, копируемый в свою же папку, конфликтом не
+  считается: `BatchExecutor` отвечает Rename (move — Skip) до того, как
+  кого-то спросят, сторож drag & drop пропускает такой бросок через
+  `PathSafety.IsAllowedDuplicate`, а вырезание в свою же папку
+  `PasteAsync` снимает молча (`PathSafety.AllAlreadyIn`).
 - **Защита.** `SystemPathGuard` — чистая функция от пути и окружения, без
   I/O и локатора, зовётся статически: корни дисков, спец-папки (Windows,
   Program Files x86/x64, ProgramData, Users, корень профиля), всё дерево
@@ -798,8 +841,10 @@ Listing/RatedListing     WithRatings() листинг → тот же с Rating 
   выключенном флаге; блок «Вместе с файлом:» в футере. Значок в списке —
   REJECTED.
 - Меню про спутников не знает: их нет в выделении.
-- Групповые операции — `BatchGroup` (основной + спутники): один вопрос
-  на группу, ответ ко всем, composite-undo. Группы из выделения бесплатно
+- Групповые операции — `BatchGroup` (основной + спутники): один шаг
+  прогресса и один результат на группу, composite-undo; коллизия — у
+  каждого файла своя (см. «Конфликты»), переименованный основной файл
+  уводит спутников за собой. Группы из выделения бесплатно
   (`Companions` уже в записи; Copy / Cut / Delete / drag на UI-потоке); из
   плоского списка (буфер, drop из Explorer) — `CompanionResolver.Group()` с
   диском, в `Task.Run`.
@@ -1319,7 +1364,7 @@ SYS ws=431 private=360 gen=167/155/134 alloc=+45 loh=6 handles=1060 threads=40 c
 Каждый модальный вопрос идёт через `Wander.App/Dialogs/IDialogs`:
 `Ask(DialogRequest)` (вид `DialogKind`, заголовок, текст, кнопки, значок;
 кнопка по умолчанию всегда отменяющая — поэтому не поле), `Prompt`,
-`PickFolder`, `CreateConflictResolver()`. Продакшн — `WpfDialogs`
+`PickFolder`, `CreateConflictResolver(skipIdentical)`. Продакшн — `WpfDialogs`
 (`MessageBox` поверх активного окна, `PromptDialog`, `OpenFolderDialog`,
 `DispatcherConflictResolver(InteractiveConflictResolver)`); харнесс
 подставляет `ScriptedDialogs` до постройки вью-модели. Голых
@@ -1441,7 +1486,7 @@ xUnit, `tests/Wander.Core.Tests`, **только Core**; UI и Platform — smok
 | Фейк | Что |
 |---|---|
 | `FakeFileSystem` | `Directories` (`HashSet`), `Files` (`Dictionary<string, byte[]>`), `CallLog`; `RenameFailures` роняет путь — для откатов |
-| `FakeConflictResolver` | `batchOverride` на батч, `perItem`-очередь; `StartBatchCalls` / `ResolveCalls` |
+| `FakeConflictResolver` | `batchOverride` на всё, `perItem`-очередь; `ResolveAllCalls` (размер каждого вызова) / `Conflicts` (что показали) |
 | `FakeRecycleBin` | поверх `FakeFileSystem`, `Send` / `Restore`, `CallLog` |
 
 `CallLog` — «сходили ровно туда и ровно столько раз».

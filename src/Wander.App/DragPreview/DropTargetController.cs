@@ -116,10 +116,15 @@ public sealed class DropTargetController {
         }
 
         // Self-drop checks don't apply to Link — Explorer happily makes a
-        // shortcut next to the original.
+        // shortcut next to the original — nor to a Ctrl-drag back into the
+        // item's own folder, which is how a duplicate is made
+        // (PathSafety.IsAllowedDuplicate).
         var reason = IsLinkGesture()
             ? SelfDropReason.None
             : PathSafety.DetectSelfDrop(paths, target, out _);
+        if (PathSafety.IsAllowedDuplicate(reason, IsCopyGesture(paths, target))) {
+            reason = SelfDropReason.None;
+        }
 
         if (reason != SelfDropReason.None) {
             PathSafety.DetectSelfDrop(paths, target, out string? offender);
@@ -162,7 +167,10 @@ public sealed class DropTargetController {
             return null;
         }
 
-        if (!IsLinkGesture() && PathSafety.DetectSelfDrop(paths, target, out _) != SelfDropReason.None) {
+        var reason = IsLinkGesture()
+            ? SelfDropReason.None
+            : PathSafety.DetectSelfDrop(paths, target, out _);
+        if (reason != SelfDropReason.None && !PathSafety.IsAllowedDuplicate(reason, IsCopyGesture(paths, target))) {
             return null;
         }
 
@@ -355,6 +363,15 @@ public sealed class DropTargetController {
 
     private static bool IsLinkGesture() {
         return (Keyboard.Modifiers & ModifierKeys.Alt) != 0;
+    }
+
+    /// <summary>
+    /// Does this gesture leave the original where it is? Only then is a drop
+    /// back into the item's own folder worth doing - a move there has
+    /// nothing to do.
+    /// </summary>
+    private static bool IsCopyGesture(IReadOnlyList<string> paths, string target) {
+        return ChooseEffect(paths, target) is DragDropEffects.Copy or DragDropEffects.Link;
     }
 
     private static bool IsSameDrive(string a, string b) {
