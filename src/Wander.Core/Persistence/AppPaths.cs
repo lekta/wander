@@ -44,11 +44,34 @@ public static class AppPaths {
     public static string WebView2 => Path.Combine(DataRoot, "WebView2");
 
     /// <summary>
-    /// Scratch copies Wander makes for the user to open - today, entries
-    /// pulled out of an archive so an application can be pointed at them.
-    /// Swept at startup; see <c>TempFiles</c>.
+    /// Whether scratch copies go to the system's Temp folder instead of the
+    /// data folder - <c>AppSettings.UseSystemTemp</c>, applied by the view
+    /// model when the settings are loaded and whenever they change. Off
+    /// until told: the sweep at startup runs before any setting is read,
+    /// and looks in both places anyway.
     /// </summary>
-    public static string Tmp => Path.Combine(DataRoot, "tmp");
+    public static bool UseSystemTemp { get; set; }
+
+    /// <summary>The data folder sits beside the exe (<c>--portable</c>).</summary>
+    public static bool IsPortable => _source == "portable";
+
+    /// <summary>
+    /// Scratch copies Wander makes for the user to open or look at - entries
+    /// pulled out of an archive so an application, or the preview pane, can
+    /// be pointed at them. One of the two folders below, by
+    /// <see cref="UseSystemTemp"/>; swept at startup, see <c>TempFiles</c>.
+    /// </summary>
+    public static string Tmp => UseSystemTemp ? SystemTmp : DataTmp;
+
+    /// <summary>Scratch copies inside the data folder - beside the settings, or beside the exe when portable.</summary>
+    public static string DataTmp => Path.Combine(DataRoot, "tmp");
+
+    /// <summary>
+    /// Scratch copies under the system's Temp folder - what Storage Sense
+    /// and Disk Cleanup sweep, and off the stick when the data folder is on
+    /// one.
+    /// </summary>
+    public static string SystemTmp => Path.Combine(Path.GetTempPath(), "Wander");
 
 
     /// <summary>

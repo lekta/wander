@@ -100,18 +100,23 @@ internal sealed class FakeShellNamespace : IShellNamespace {
 
     public Task CopyOut(
         IReadOnlyList<CopyOutItem> items, string targetFolder,
-        IProgress<string>? progress, CancellationToken ct) {
+        IProgress<string>? progress, CancellationToken ct,
+        IProgress<CopyOutWork>? work = null) {
 
         if (CopyOutFailure is not null) {
             throw CopyOutFailure;
         }
 
-        foreach (var item in items) {
+        for (int i = 0; i < items.Count; i++) {
             ct.ThrowIfCancellationRequested();
+            var item = items[i];
             CopiedOut.Add(item);
             string name = item.NewName ?? Path.GetFileName(item.Path);
             Write(item.Path, Path.Combine(targetFolder, name));
             progress?.Report(item.Path);
+            // One "work unit" per item, which is as much as the real engine
+            // promises: only the ratio of the two numbers means anything.
+            work?.Report(new CopyOutWork(i + 1, items.Count));
         }
 
         return Task.CompletedTask;

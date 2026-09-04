@@ -35,21 +35,23 @@ internal static class ShellDataObject {
             return null;
         }
 
-        var items = new List<IShellItem>(paths.Count);
+        // Absolute id lists rather than the items themselves: the array
+        // function that takes items is not exported by name (see
+        // ShellItemInterop), and the id list is what the object carries
+        // anyway.
+        var pidls = new List<IntPtr>(paths.Count);
         try {
             foreach (string path in paths) {
-                if (CreateItem(path) is not { } item) {
+                if (CreateIdList(path) is not { } pidl) {
                     log.Warn($"Data object: the shell does not know {path}");
 
                     return null;
                 }
-                items.Add(item);
+                pidls.Add(pidl);
             }
 
-            var arrayIid = IID_IShellItemArray;
-            int hr = SHCreateShellItemArrayFromShellItems(
-                (uint)items.Count, items.ToArray(), ref arrayIid, out object raw);
-            if (hr < 0 || raw is not IShellItemArray array) {
+            int hr = SHCreateShellItemArrayFromIDLists((uint)pidls.Count, pidls.ToArray(), out IShellItemArray array);
+            if (hr < 0 || array is null) {
                 log.Warn($"Data object: no item array for {paths.Count} paths (hr=0x{hr:X8})");
 
                 return null;
@@ -69,19 +71,33 @@ internal static class ShellDataObject {
             } finally {
                 Release(array);
             }
+        } catch (COMException ex) {
+            // A handler that throws instead of failing: the caller has the
+            // ordinary file list to fall back on, and Ctrl+C must not crash.
+            log.Warn($"Data object: {ex.Message}");
+
+            return null;
         } finally {
-            foreach (var item in items) {
-                Release(item);
+            foreach (IntPtr pidl in pidls) {
+                Marshal.FreeCoTaskMem(pidl);
             }
         }
     }
 
 
-    private static IShellItem? CreateItem(string path) {
+    /// <summary>The absolute id list of a path, or null when the shell cannot parse it.</summary>
+    private static IntPtr? CreateIdList(string path) {
         var iid = IID_IShellItem;
-        int hr = SHCreateItemFromParsingName(path, IntPtr.Zero, ref iid, out object item);
+        int hr = SHCreateItemFromParsingName(path, IntPtr.Zero, ref iid, out object raw);
+        if (hr < 0 || raw is not IShellItem item) {
+            return null;
+        }
 
-        return hr >= 0 ? item as IShellItem : null;
+        try {
+            return SHGetIDListFromObject(item, out IntPtr pidl) >= 0 ? pidl : null;
+        } finally {
+            Release(item);
+        }
     }
 
     private static void Release(object? comObject) {

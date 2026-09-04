@@ -107,7 +107,7 @@ public class RepeatCollapserTests {
     public void Summary_ReadsAsOneLine() {
         var summary = new RepeatCollapser.Summary(16277, TimeSpan.FromSeconds(271));
 
-        Assert.Equal("previous line repeated 16277 times over 271 s", summary.Line);
+        Assert.Equal("repeated 16277 times over 271 s", summary.Line);
     }
 
 

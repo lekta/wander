@@ -1,7 +1,9 @@
 using System.Collections.ObjectModel;
 using System.IO;
 using Wander.Core;
+using Wander.Core.Diagnostics;
 using Wander.Core.FileSystem;
+using Wander.Core.Logging;
 using Wander.Core.Navigation;
 using Wander.Core.Shell;
 
@@ -226,7 +228,13 @@ public sealed class TreeNodeViewModel : ObservableObject {
             return;
         }
 
-        var fresh = await Task.Run(ReadChildFolders);
+        // Watched: a share on a sleeping disk or a RAR the shell has to
+        // open answer in seconds, and a spinner that spins for seconds is
+        // otherwise nowhere in the log.
+        var fresh = await LongWait.WatchAsync(
+            Task.Run(ReadChildFolders),
+            ServiceLocator.TryGet<ILogger>() ?? NullLogger.Instance,
+            $"tree: listing {FullPath}");
         if (!_loaded) {
             // Collapsed and dropped while the disk was answering: the
             // placeholder is what belongs there now, not these rows.

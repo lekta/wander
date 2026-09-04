@@ -21,6 +21,8 @@ namespace Wander.Core.Logging;
 /// <para>
 /// Pure and clock-driven from the outside: the caller passes the time, so
 /// three minutes of flooding is a test rather than a three-minute test.
+/// Which lines are fed to it is the logger's decision - warnings and
+/// errors; an INFO line is chronology and is never collapsed.
 /// </para>
 /// </summary>
 public sealed class RepeatCollapser {
@@ -113,10 +115,12 @@ public sealed class RepeatCollapser {
     /// <summary>How many repeats were swallowed, and over how long.</summary>
     public readonly record struct Summary(int Count, TimeSpan Span) {
         /// <summary>
-        /// The line the log gets in their place. English, like every other
-        /// line the logger writes itself - the log is a diagnostic, not
-        /// user-facing text.
+        /// The line the log gets in their place; the logger appends the
+        /// message the run was about, since lines of other levels may have
+        /// been written in between. English, like every other line the
+        /// logger writes itself - the log is a diagnostic, not user-facing
+        /// text.
         /// </summary>
-        public string Line => $"previous line repeated {Count} times over {(int)Math.Round(Span.TotalSeconds)} s";
+        public string Line => $"repeated {Count} times over {(int)Math.Round(Span.TotalSeconds)} s";
     }
 }

@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 using Wander.Core;
 using Wander.Core.FileSystem;
@@ -144,16 +145,37 @@ public sealed class SystemIOFileSystem : IFileSystem {
         }
     }
 
-    public void CopyFile(string source, string destination, bool overwrite) {
-        File.Copy(source, destination, overwrite);
+    /// <summary>
+    /// <c>File.Copy</c> when nobody is watching, <c>CopyFileEx</c> when
+    /// somebody is. The two have the same semantics - attributes, alternate
+    /// data streams, no partial file left behind on failure - but only the
+    /// second says how far it has got, and takes a "stop now" flag the
+    /// system checks between chunks. Cancelling mid-file is the reason it is
+    /// here at all: a 5 GB copy that can only be stopped between files
+    /// cannot be stopped.
+    /// </summary>
+    public void CopyFile(string source, string destination, bool overwrite,
+        IProgress<long>? bytesCopied = null, CancellationToken ct = default) {
+
+        if (bytesCopied is null && !ct.CanBeCanceled) {
+            File.Copy(source, destination, overwrite);
+
+            return;
+        }
+
+        ct.ThrowIfCancellationRequested();
+        CopyFileWithProgress(source, destination, overwrite, bytesCopied, ct);
     }
 
-    public void CopyDirectory(string source, string destination, bool overwrite) {
+    public void CopyDirectory(string source, string destination, bool overwrite,
+        IProgress<long>? bytesCopied = null, CancellationToken ct = default) {
+
         Directory.CreateDirectory(destination);
 
         foreach (var file in Directory.EnumerateFiles(source)) {
+            ct.ThrowIfCancellationRequested();
             var target = Path.Combine(destination, Path.GetFileName(file));
-            File.Copy(file, target, overwrite);
+            CopyFile(file, target, overwrite, bytesCopied, ct);
         }
 
         foreach (var dir in Directory.EnumerateDirectories(source)) {
@@ -165,24 +187,36 @@ public sealed class SystemIOFileSystem : IFileSystem {
             }
 
             var target = Path.Combine(destination, Path.GetFileName(dir));
-            CopyDirectory(dir, target, overwrite);
+            CopyDirectory(dir, target, overwrite, bytesCopied, ct);
         }
     }
 
-    public void MoveEntry(string source, string destination) {
+    public void MoveEntry(string source, string destination,
+        IProgress<long>? bytesCopied = null, CancellationToken ct = default) {
+
         if (Directory.Exists(source)) {
             try {
                 Directory.Move(source, destination);
             } catch (IOException) when (RootsDiffer(source, destination)) {
                 // Directory.Move can't span volumes; fall back to recursive
                 // copy + delete. File.Move handles cross-volume by itself.
-                CopyDirectory(source, destination, overwrite: false);
+                CopyDirectory(source, destination, overwrite: false, bytesCopied, ct);
                 Directory.Delete(source, recursive: true);
             }
+
             return;
         }
 
-        File.Move(source, destination);
+        // Within one volume a move is a rename: nothing to watch, nothing to
+        // stop. Across volumes it is a copy, and then it is worth both.
+        if ((bytesCopied is null && !ct.CanBeCanceled) || !RootsDiffer(source, destination)) {
+            File.Move(source, destination);
+
+            return;
+        }
+
+        CopyFileWithProgress(source, destination, overwrite: false, bytesCopied, ct);
+        File.Delete(source);
     }
 
     public void Rename(string path, string newName) {
@@ -238,8 +272,55 @@ public sealed class SystemIOFileSystem : IFileSystem {
     }
 
 
-    [DllImport("shlwapi.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
-    private static extern int StrCmpLogicalW(string x, string y);
+    /// <summary>
+    /// One file through <c>CopyFileEx</c>, reporting deltas and honouring
+    /// the token. A cancelled copy throws
+    /// <see cref="OperationCanceledException"/>; the system removes the
+    /// partial destination itself (COPY_FILE_RESTARTABLE is not set), so
+    /// there is no tail to clean up here.
+    /// </summary>
+    private static void CopyFileWithProgress(string source, string destination, bool overwrite,
+        IProgress<long>? bytesCopied, CancellationToken ct) {
+
+        long reported = 0;
+        int cancel = 0;
+
+        // Kept in a local, and alive across the call: the unmanaged side
+        // holds a pointer to it for the whole copy.
+        CopyProgressRoutine routine = (_, transferred, _, _, _, _, _, _, _) => {
+            if (ct.IsCancellationRequested) {
+                return PROGRESS_CANCEL;
+            }
+            if (bytesCopied is not null && transferred > reported) {
+                bytesCopied.Report(transferred - reported);
+                reported = transferred;
+            }
+
+            return PROGRESS_CONTINUE;
+        };
+
+        bool ok = CopyFileExW(
+            source, destination, routine, IntPtr.Zero, ref cancel,
+            overwrite ? 0 : COPY_FILE_FAIL_IF_EXISTS);
+        int error = Marshal.GetLastWin32Error();
+        GC.KeepAlive(routine);
+        if (ok) {
+            return;
+        }
+
+        if (error == ERROR_REQUEST_ABORTED) {
+            ct.ThrowIfCancellationRequested();
+
+            throw new OperationCanceledException(ct);
+        }
+
+        // The system's own words first ("The process cannot access the
+        // file", "Access is denied"): they reach the status bar as they are.
+        throw new IOException(
+            $"{new Win32Exception(error).Message} ({source} -> {destination})",
+            unchecked((int)0x80070000 | error));
+    }
+
 
     private static bool RootsDiffer(string a, string b) {
         return !string.Equals(Path.GetPathRoot(a), Path.GetPathRoot(b), StringComparison.OrdinalIgnoreCase);
@@ -308,4 +389,28 @@ public sealed class SystemIOFileSystem : IFileSystem {
             return null;
         }
     }
+
+
+    // --- P/Invoke ------------------------------------------------------
+
+    private const int PROGRESS_CONTINUE = 0;
+    private const int PROGRESS_CANCEL = 1;
+    private const int COPY_FILE_FAIL_IF_EXISTS = 0x00000001;
+    private const int ERROR_REQUEST_ABORTED = 1235;
+
+    private delegate int CopyProgressRoutine(
+        long totalFileSize, long totalBytesTransferred,
+        long streamSize, long streamBytesTransferred,
+        uint streamNumber, uint callbackReason,
+        IntPtr sourceFile, IntPtr destinationFile, IntPtr data);
+
+    [DllImport("shlwapi.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    private static extern int StrCmpLogicalW(string x, string y);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, EntryPoint = "CopyFileExW", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CopyFileExW(
+        string existingFileName, string newFileName,
+        CopyProgressRoutine? progressRoutine, IntPtr data,
+        ref int cancel, int copyFlags);
 }

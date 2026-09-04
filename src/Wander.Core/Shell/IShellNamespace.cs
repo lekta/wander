@@ -74,11 +74,18 @@ public interface IShellNamespace {
     /// </para>
     /// </summary>
     /// <param name="progress">Reports each item's path as it is finished.</param>
+    /// <param name="work">
+    /// Reports how far the engine thinks it has got. Separate from
+    /// <paramref name="progress"/> because it is a different kind of fact:
+    /// item names are what landed, this is how much is left, and the two
+    /// arrive on their own schedules.
+    /// </param>
     Task CopyOut(
         IReadOnlyList<CopyOutItem> items,
         string targetFolder,
         IProgress<string>? progress,
-        CancellationToken ct);
+        CancellationToken ct,
+        IProgress<CopyOutWork>? work = null);
 
     /// <summary>
     /// The shell's own data object for <paramref name="paths"/> - what
@@ -104,6 +111,15 @@ public interface IShellNamespace {
     /// </summary>
     object? CreateDataObject(IReadOnlyList<string> paths);
 }
+
+
+/// <summary>
+/// How far the shell's copy engine reckons it has got. Not bytes and not
+/// items: the engine keeps its own idea of "work", and only the ratio of
+/// the two numbers means anything - which is why anything showing it says
+/// "%" rather than "MB".
+/// </summary>
+public readonly record struct CopyOutWork(long Done, long Total);
 
 
 /// <summary>One thing to copy out of a namespace.</summary>

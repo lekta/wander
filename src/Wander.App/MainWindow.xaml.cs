@@ -229,6 +229,7 @@ public partial class MainWindow : Window {
         Vm.RestorePaneSizes(ActualWidth, ActualHeight);
         SizeChanged += (_, _) => Vm.NoteWindowSize(ActualWidth, ActualHeight);
         ApplyPreviewLayout();
+        ApplyFoldersLayout();
         // Native-size cap (so small images don't stretch above 100 %) is
         // now done in XAML via BitmapPixelSizeConverter on MaxWidth/MaxHeight
         // — synchronous with WPF's measure pass instead of an async
@@ -261,7 +262,19 @@ public partial class MainWindow : Window {
                 ApplyPreviewLayout();
                 break;
 
+            case nameof(MainViewModel.FoldersWidth):
+                ApplyFoldersLayout();
+                break;
         }
+    }
+
+    /// <summary>The folders pane: how wide, and nothing else about it.</summary>
+    private void ApplyFoldersLayout() {
+        FoldersColumn.Width = new GridLength(Vm.FoldersWidth);
+    }
+
+    private void FoldersSplitter_DragCompleted(object sender, DragCompletedEventArgs e) {
+        Vm.FoldersWidth = FoldersColumn.ActualWidth;
     }
 
 

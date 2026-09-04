@@ -47,7 +47,7 @@ src/
 │   │                   ContextMenuCatalog, MenuEntry, MenuCommandId
 │   ├── Navigation/     NavigationService, NavigationSource, RecentPaths,
 │   │                   PathCrumbs
-│   ├── Operations/     OperationTracker
+│   ├── Operations/     OperationTracker, OperationVerbs, TransferRate
 │   ├── Persistence/    IAppStateStore, AppState, AppSettings, GalleryBackground
 │   ├── Preview/        PreviewRouter, TextProbe, EncodingProbe, AudioTags,
 │   │                   BookCover, Fb2Document, MeshFile + Obj/Stl/GltfReader
@@ -97,7 +97,8 @@ src/
     │                   SummaryText — раскодирование для панели просмотра
     ├── Resources/      Strings*.resx, AppTextSource, MenuStyles, Palette
     ├── Util/           SelectionController, ListVisuals, SizeFormatter,
-    │                   NumberFormat, TimeFormat, DispatcherExtensions
+    │                   NumberFormat, TimeFormat, DurationFormat,
+    │                   DispatcherExtensions
     ├── ViewModels/     SettingsViewModel, TreeNodeViewModel,
     │                   OperationViewModel, ColorLabelViewModel, HotkeyCatalog,
     │                   MenuItemRowViewModel, ShellExtensionRowViewModel,
@@ -124,13 +125,13 @@ Platform.Windows` — один файл, `App.xaml.cs` (точка композ�
 <!-- deps:generated:begin -->
 ```
 === Wander dependency graph (using sweep) ===
-date   : 2026-09-03
+date   : 2026-09-04
 commit : 5a3f966
 
 -- projects --
 Wander.App -> Wander.Core   (56 files)
 Wander.App -> Wander.Platform.Windows   (1 files)
-Wander.Core.Tests -> Wander.Core   (76 files)
+Wander.Core.Tests -> Wander.Core   (77 files)
 Wander.Harness -> Wander.App   (4 files)
 Wander.Harness -> Wander.Core   (6 files)
 Wander.Harness -> Wander.Platform.Windows   (3 files)
@@ -221,7 +222,9 @@ Wander.Platform.Windows -> Wander.Core   (23 files)
   DragPreview    -> ViewModels     (1 files)
   Preview        -> Resources      (2 files)
   Preview        -> Util           (2 files)
-  ViewModels     -> Resources      (4 files)
+  Util           -> Resources      (1 files)
+  ViewModels     -> Resources      (5 files)
+  ViewModels     -> Util           (1 files)
   Views          -> Controllers    (1 files)
   Views          -> Controls       (2 files)
   Views          -> Converters     (1 files)
@@ -230,15 +233,16 @@ Wander.Platform.Windows -> Wander.Core   (23 files)
   Views          -> Highlighting   (1 files)
   Views          -> Resources      (6 files)
   Views          -> Util           (3 files)
-  Views          -> ViewModels     (4 files)
+  Views          -> ViewModels     (5 files)
 
 -- Wander.App: levels --
-  0: Highlighting, Menu, Resources, Util
-  1: Diagnostics, Preview, ViewModels
-  2: Conflict, Converters
-  3: Controllers, Controls, Dialogs, DragPreview
-  4: Views
-  5: (root)
+  0: Highlighting, Menu, Resources
+  1: Diagnostics, Util
+  2: Preview, ViewModels
+  3: Conflict, Converters
+  4: Controllers, Controls, Dialogs, DragPreview
+  5: Views
+  6: (root)
 
 -- namespace <> folder mismatches --
   (none)
@@ -362,9 +366,10 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
 
 Чтения остаются на `IFileSystem` и конвейер минуют. `BatchExecutor` —
 цикл конфликтов, composite-undo, recycle-vs-permanent; синхронные
-`CopyMany` / `MoveMany` для тестов, продакшн — async на пуле с per-item
-прогрессом и `CancellationToken`. Отмена и прогресс гранулярны по элементам
-верхнего уровня (TECHDEBT). Типы результатов (`BatchItemResult`,
+`CopyMany` / `MoveMany` для тестов, продакшн — async на пуле с прогрессом
+и `CancellationToken`. Прогресс и отмена — по байтам внутри файла (ниже);
+отмена посреди элемента даёт `BatchItemStatus.Cancelled`, а не `Failed`, и
+кладёт частично скопированное в undo. Типы результатов (`BatchItemResult`,
 `DeleteResult`) — на уровне namespace.
 
 - **Undo.** Один LIFO-стек. Move ↔ Move обратно, Rename ↔ Rename, Delete →
@@ -373,10 +378,46 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
   `CanUndo == false` в полёте (`Ctrl+Z` игнорируется, как в Explorer).
   Стек под одним локом; `Changed` поднимается вне лока и может прийти с
   фонового потока — подписчик маршалит сам. Не переживает рестарт.
-- **Прогресс.** `OperationTracker.Begin(verb, total)` → `IOperationHandle`
-  (диспозить всегда); `Snapshot()` — иммутабельный срез; несколько операций
-  агрегируются; `Changed` — с фона. `MainViewModel.RunWithProgressDialogAsync`
-  оборачивает батчи в модальный `ProgressDialog` с отменой.
+- **Прогресс — в двух счётчиках сразу** (2026-09-04, блок 2). Элементы —
+  то, что выделил человек; байты — то, что двигает диск, и без них копия
+  одного файла на 5 ГБ держит бар на нуле.
+  `OperationTracker.Begin(verb, total, totalBytes, bytesAreWork)` →
+  `IOperationHandle` (диспозить всегда) с `Advance` / `AdvanceBytes`
+  (можно отрицательной дельтой) / `SetCurrentPath` / `SetTotalBytes`;
+  `Snapshot()` — иммутабельный срез с `Id`, `Percent` (по байтам, иначе по
+  элементам) и `StartedAtUtc`. `verb` — **ключ ресурса**
+  (`OperationVerbs`), не слово: Core своей таблицы строк не имеет.
+  `Changed` приходит с фона и троттлится до 10 раз в секунду, последнее
+  состояние довозит одноразовый таймер; появление и завершение операции
+  идут без троттла — на них открываются и закрываются окна.
+  - Откуда байты: `BatchExecutor` взвешивает источники до старта
+    (`FolderStatistics.Collect`, глубина 64) и держит вес по пути, чтобы не
+    обходить папку дважды; сам перенос идёт через
+    `IFileSystem.CopyFile/CopyDirectory/MoveEntry` с `IProgress<long>` и
+    токеном, в `SystemIOFileSystem` это `CopyFileEx` с
+    `LPPROGRESS_ROUTINE` (та же семантика, что `File.Copy`, плюс отмена
+    внутри файла — недописанный файл система убирает сама). Разницу между
+    оценкой и тем, что отчитала копия, `ApplyOne` сводит по каждому
+    элементу, поэтому счётчик приходит ровно туда, куда обещал план.
+  - Извлечение байтов не знает: `IShellNamespace.CopyOut` отдаёт
+    `IProgress<CopyOutWork>` от `IFileOperationProgressSink.UpdateProgress`
+    — это «работа» движка, не мегабайты, поэтому операция помечена
+    `BytesAreWork` и показывается только процентом.
+- **Окно операции и статус-бар.** `MainViewModel.RunWithProgressDialogAsync`
+  открывает **немодальный** `ProgressDialog` и ждёт задачу, а не окно:
+  список остаётся живым. Окно узнаёт свою операцию по токену: хендл
+  рождается несколькими слоями ниже, `OperationTracker.Begin` получает
+  токен операции и кладёт его в снимок, окно сравнивает со своим. Водяной
+  знак по `Id` («первая операция новее моей отметки») был первым вариантом
+  и не пережил ревью: извлечение регистрирует операцию только после
+  диалога о совпадениях, и вторая операция, запущенная в этот промежуток,
+  доставалась чужому окну. Закрыть окно нельзя, пока
+  операция идёт (`Closing` отменяется): X, `Alt+F4` и `Esc` = «Свернуть»,
+  дальше окно живёт в статус-баре и возвращается кнопкой «Показать»;
+  по завершении закрывается само. Строку и всплывающую панель в
+  статус-баре кормит `OperationViewModel` — обновляется на месте, а не
+  пересоздаётся (у него внутри `TransferRate`, скользящее среднее за 3 с,
+  и кнопки, которые нельзя ронять под курсором).
 - **Конфликты.** `IConflictResolver.ResolveAll(ConflictRequest)` — push:
   все коллизии, найденные до первого касания диска, одним вызовом (плюс
   размер батча для заголовка); ответ — `ConflictAnswer` на каждую
@@ -545,10 +586,15 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
   `Core/Shell/TempExtraction.CopyOutAsync` мимо всех правил: без гарда, без
   диалогов, без `IUndoableAction`. Временная копия чужого файла не
   пользовательские данные. Папка — `AppPaths.Tmp` по хешу пути записи
-  (`TempFiles.FolderFor`), чистка — `TempFiles.Sweep` на старте, старше
-  суток. Три потребителя делят одну копию: «открыть» (запуск ассоциацией,
-  статусная строка говорит, что правки в архив не попадут), панель
-  просмотра и окно конфликтов.
+  (`TempFiles.FolderFor`): либо `DataTmp` (`<DataRoot>\tmp`), либо
+  `SystemTmp` (`%TEMP%\Wander`) — настройка `AppSettings.UseSystemTemp`
+  (`bool?`: пока человек не сказал, следует режиму — системная Temp в
+  портативном, где папка данных лежит на флешке; `AppPaths.UseSystemTemp`
+  ставит вьюмодель при загрузке и при смене). Чистка — `TempFiles.Sweep`
+  на старте по **обеим** папкам, старше суток: настройку могли
+  переключить после того, как копии сделаны. Три потребителя делят одну
+  копию: «открыть» (запуск ассоциацией, статусная строка говорит, что
+  правки в архив не попадут), панель просмотра и окно конфликтов.
 - **Конфликты: «извлёк — сравнил»** (2026-09-03). Запись архива через
   `IFileSystem` не открыть, поэтому `ExtractionService` перед `ResolveAll`
   распаковывает те пары, где байты что-то решают: файл против файла равного
@@ -575,13 +621,25 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
   внутри архива принимающая программа читает как несуществующий файл,
   поэтому `IShellNamespace.CreateDataObject(paths)` собирает тот же объект,
   что отдаёт Проводник: `SHCreateItemFromParsingName` на каждый путь →
-  `SHCreateShellItemArrayFromShellItems` → `BindToHandler(BHID_DataObject)`
-  (Platform, `ShellDataObject`). Внутри — `CFSTR_SHELLIDLIST`, у zip ещё
+  `SHGetIDListFromObject` → `SHCreateShellItemArrayFromIDLists` →
+  `BindToHandler(BHID_DataObject)` (Platform, `ShellDataObject`). Не
+  `…FromShellItems`: SDK её объявляет, но shell32 по имени не экспортирует,
+  и `DllImport` падал на первом вызове (ревью 2026-09-04, стенд в
+  scratchpad). Внутри — `CFSTR_SHELLIDLIST`, у zip ещё
   `FileGroupDescriptor`; байты принимающая сторона берёт у шелла. Две
   точки: `OutgoingDrag.Run` оборачивает его в `DataObject(comObject)` и
   предлагает **только** `Copy` (Move попросил бы источник удалить запись);
   `Ctrl+C` идёт через `ISystemClipboard.SetShellObject` (`OleSetClipboard`,
-  OLE поднимается по первому `CO_E_NOTINITIALIZED`). Какой объект отдать,
+  OLE поднимается по первому `CO_E_NOTINITIALIZED`). Свои же приёмники
+  (`DropTargetController`) списка файлов в таком объекте не находят и
+  берут пути у самого перетаскивания — `OutgoingDrag.InFlightPaths`, живёт
+  на время `DoDragDrop` (он качает сообщения на том же потоке, так что
+  читающий его приёмник заведомо внутри того же жеста); дописать формат в
+  обёрнутый OLE-объект WPF не даёт. Для источников из архива приёмник
+  отвечает только `Copy` (источник больше и не предлагает: `Move` удалял бы
+  из архива), drop в папку — `MainViewModel.ExtractAsync`, тем же путём,
+  что вставка; папка внутри архива и листинг архива как цель — отказ, для
+  листинга нейтральный (стрелка и плашка «что в руках»). Какой объект отдать,
   решает `MainViewModel` и передаёт вторым аргументом
   `ClipboardController.Copy`: контроллер живёт в `Core/FileSystem`, а
   `IShellNamespace` — в `Core/Shell` этажом выше, и зависимость обратно
@@ -594,11 +652,17 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
   сверху, потолок 200 строк и «и ещё N», заголовок — числа и размер файла
   архива. Решает не расширение: `PreviewRouter.Route(path, isArchive)`
   берёт ответ фактом от вызывающего (`Archives.Of` плюс `CanNavigate` на
-  пуле) — таблица расширений такого знать не может. Файл **внутри** архива
-  до 32 МБ — временная копия и обычный конвейер по ней (повторный выбор той
-  же записи копию не переделывает: помнятся путь и размер); больше —
-  карточка с отсылкой к «Открыть». Миниатюр и поиска внутри по-прежнему
-  нет.
+  пуле) — таблица расширений такого знать не может. Тот же список — для
+  текущей папки архива, когда внутри него ничего не выделено или выделена
+  папка (клик в пустое место; заголовок без размера архива). Файл
+  **внутри** архива до 32 МБ — временная копия и обычный конвейер по ней;
+  копия на диске с размером записи переиспользуется, не распаковывается
+  заново; распаковка идёт **одна за раз** (`SemaphoreSlim` в
+  `PreviewController`): движок шелла не останавливается внутри записи,
+  отменённый запрос держит поток пула до конца, и стрелки по RAR сканов
+  набрали 85 потоков и подвесили всё, что ходит через пул (сессия
+  2026-09-04); больше 32 МБ — карточка с отсылкой к «Открыть». Миниатюр и
+  поиска внутри по-прежнему нет.
 
 ## Выделение, буфер, фильтр
 
@@ -1522,7 +1586,13 @@ Delete failed` лежал в файле, а прогон отчитывался 
   свёрнутом; флаги внутри ветки не гасятся при сворачивании, иначе
   восстановление раскроет свёрнутого родителя), `ViewMode`,
   `IsPreviewVisible`, `PreviewWidth`, `IsBookmarksExpanded`,
-  `RecentPaths`, `ManualViewModes`, `BookmarksHeight`.
+  `RecentPaths`, `ManualViewModes`, `BookmarksHeight`, `FoldersWidth`,
+  `LayoutWindowWidth` / `LayoutWindowHeight` — окно, долей которого были
+  три размера панелей: `PaneSizes.Restore` (Core/Layout, тест) при `Loaded`
+  окна возвращает пиксели как были, если окно того же размера, и ту же долю
+  нового окна, если нет; потолок при перетаскивании — окно минус резерв
+  соседа (`MainViewModel.PaneCeiling`), чтобы drag и восстановление не
+  спорили.
 - `Favorites` — закладки в порядке пользователя (`MoveBookmark`);
   стандартные не здесь; пропавший путь не выбрасывается (`IsMissing`).
 - `Window` — `WindowGeometry`; обратно через `WindowPlacement`
@@ -1539,7 +1609,23 @@ Delete failed` лежал в файле, а прогон отчитывался 
 (до 1.0 схема ломается).
 
 **`logs\session-*.log`** — `FileLogger`: открытие папки, операции, конфликты,
-ошибки; в тестах `NullLogger`. Ротации нет (TECHDEBT).
+ошибки; в тестах `NullLogger`. Ротация — `LogFolders.Sweep` при старте на
+пуле: 200 последних `session-*` / `journal-*` и 20 `crashes\crash-*.zip`,
+правило отбора — `Core/Logging/LogRetention` (тест). Повторы `WARN` /
+`ERROR` схлопывает `Core/Logging/RepeatCollapser` (подпись — уровень,
+сообщение, тип и первый кадр исключения): первое появление пишется всегда,
+та же подпись в течение 5 с считается, итог «`ERROR repeated N times over
+M s: сообщение`» — при смене строки, раз в минуту, пока повторы идут, и при
+закрытии лога. `INFO` через коллапсер не проходит: это хронология, и две
+одинаковые строки подряд — два события. Событие `Written` поднимается на
+каждый вызов, схлопнутые включая. Smoke-прогон `check.bat run` пишет в
+`artifacts\smoke\data`, не сюда. Долгие фоновые ожидания — спиннер, за
+которым в логе ничего, — называет `Core/Diagnostics/LongWait.WatchAsync`
+(тест): `SLOW wait: что - still running after 5 s` один раз и `SLOW done:
+что - took N s` по концу; висит на листинге архива в списке
+(`RefreshShellAsync`), в дереве (`TreeNodeViewModel.LoadChildrenAsync`) и в
+панели просмотра, и на распаковке записи для панели (очередь и распаковка
+одним ожиданием).
 
 **`thumbs\*.png`** — `ThumbnailDiskCache` (Platform): имя SHA-256 от «путь +
 mtime + размер» (изменившийся файл — другое имя, инвалидации не нужно);

@@ -194,13 +194,37 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
+        <!--
+            The two answers people give most often, and the two the list
+            makes slowest to give: a tick on every row, or a bullet plus OK.
+            Up here, at the far end of the window from OK and Cancel - a
+            miss at the bottom of a dialog must never be a "replace
+            everything". Each of them answers the whole list, already-decided
+            rows included, and closes the window; what makes that safe is the
+            distance, and Ctrl+Z, which brings a replaced file back out of
+            the bin.
+        -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right"
+                    Margin="16,12,16,0">
+            <Button Content="{x:Static res:Strings.ConflictSkipAll}"
+                    ToolTip="{x:Static res:Strings.ConflictSkipAllHint}"
+                    Padding="10,4" Margin="0,0,10,0"
+                    VerticalAlignment="Center"
+                    Click="OnSkipAll"/>
+            <Button Content="{x:Static res:Strings.ConflictReplaceAll}"
+                    ToolTip="{x:Static res:Strings.ConflictReplaceAllHint}"
+                    Padding="16,7" FontWeight="SemiBold"
+                    Click="OnReplaceAll"/>
+        </StackPanel>
+
         <!-- One folder over each column: which side is which is said once. -->
-        <Grid Grid.Row="0" Margin="16,14,16,8">
+        <Grid Grid.Row="1" Margin="16,14,16,8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="*"/>
@@ -213,7 +237,7 @@
                        ToolTip="{Binding ToText}"/>
         </Grid>
 
-        <ItemsControl Grid.Row="1" ItemsSource="{Binding Rows}"
+        <ItemsControl Grid.Row="2" ItemsSource="{Binding Rows}"
                       Margin="16,0,16,0"
                       VirtualizingPanel.IsVirtualizing="True"
                       VirtualizingPanel.VirtualizationMode="Recycling"
@@ -242,7 +266,7 @@
             of the four is picked to begin with, because "decide each one" is
             what an untouched list already does.
         -->
-        <StackPanel Grid.Row="2" Margin="16,8,16,0">
+        <StackPanel Grid.Row="3" Margin="16,8,16,0">
             <CheckBox Content="{x:Static res:Strings.ConflictSkipIdentical}"
                       ToolTip="{x:Static res:Strings.ConflictSkipIdenticalHint}"
                       IsChecked="{Binding SkipIdentical}"/>
@@ -262,7 +286,7 @@
         </StackPanel>
 
         <!-- The strip that ends the window, set apart from everything above it. -->
-        <Border Grid.Row="3" Margin="0,12,0,0" Padding="16,12"
+        <Border Grid.Row="4" Margin="0,12,0,0" Padding="16,12"
                 Background="{StaticResource StripBackground}"
                 BorderBrush="{StaticResource Separator}" BorderThickness="0,1,0,0">
             <Grid>

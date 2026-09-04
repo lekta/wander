@@ -383,10 +383,23 @@ internal static class ShellItemInterop {
         [MarshalAs(UnmanagedType.LPWStr)] string pszPath, IntPtr pbc, ref Guid riid,
         [MarshalAs(UnmanagedType.Interface)] out object ppv);
 
+    /// <summary>
+    /// The absolute item id list behind a shell item. Freed with
+    /// <c>Marshal.FreeCoTaskMem</c>.
+    /// </summary>
     [DllImport("shell32.dll")]
-    internal static extern int SHCreateShellItemArrayFromShellItems(uint cidl,
-        [MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.Interface)] IShellItem[] rgpsi,
-        ref Guid riid, [MarshalAs(UnmanagedType.Interface)] out object ppv);
+    internal static extern int SHGetIDListFromObject(
+        [MarshalAs(UnmanagedType.IUnknown)] object punk, out IntPtr ppidl);
+
+    /// <summary>
+    /// An item array over absolute id lists. This one rather than
+    /// <c>SHCreateShellItemArrayFromShellItems</c>: the SDK declares both,
+    /// but shell32 exports only this one by name, and a DllImport of the
+    /// other fails on the first call (checked on Windows 11 26200).
+    /// </summary>
+    [DllImport("shell32.dll")]
+    internal static extern int SHCreateShellItemArrayFromIDLists(uint cidl,
+        [MarshalAs(UnmanagedType.LPArray)] IntPtr[] rgpidl, out IShellItemArray ppsiItemArray);
 
     [DllImport("ole32.dll")]
     internal static extern int CoCreateInstance(ref Guid rclsid, IntPtr pUnkOuter, uint dwClsContext,

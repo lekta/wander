@@ -390,7 +390,10 @@ public static class SandboxBuilder {
             : "archives: tar.exe unavailable, no nested.tar.gz");
 
         Directory.Delete(tree, recursive: true);
-        c.Fixtures.CopyNamed(c, dir, "nested.7z", "locked.zip");
+        // nested.rar mirrors nested.zip; solid.rar is the slow kind - six
+        // entries in one stream, what the preview pane's one-at-a-time
+        // unpacking exists for.
+        c.Fixtures.CopyNamed(c, dir, "nested.7z", "locked.zip", "nested.rar", "solid.rar");
 
         string folder = c.Dir("archives", "plain.zip");
         File.WriteAllText(Path.Combine(folder, "inside.txt"), "A folder, not an archive.\r\n", new UTF8Encoding(false));

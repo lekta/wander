@@ -143,6 +143,17 @@ public sealed class SettingsViewModel : ObservableObject {
         set => SetField(ref _skipIdenticalOnConflict, value);
     }
 
+    private bool _useSystemTemp;
+    /// <summary>
+    /// <inheritdoc cref="AppSettings.UseSystemTemp"/> The checkbox shows
+    /// the effective value; once saved it is explicit, and stops following
+    /// the mode.
+    /// </summary>
+    public bool UseSystemTemp {
+        get => _useSystemTemp;
+        set => SetField(ref _useSystemTemp, value);
+    }
+
 
     // --- Companions ----------------------------------------------------
     private bool _integrateCompanions;
@@ -575,6 +586,7 @@ public sealed class SettingsViewModel : ObservableObject {
         ConfirmRecycle = s.ConfirmRecycle;
         ConfirmMove = s.ConfirmMove;
         SkipIdenticalOnConflict = s.SkipIdenticalOnConflict;
+        UseSystemTemp = s.UseSystemTemp ?? AppPaths.IsPortable;
         IntegrateCompanions = s.IntegrateCompanions;
         SortKey = s.SortKey;
         SortAscending = s.SortAscending;
@@ -749,6 +761,7 @@ public sealed class SettingsViewModel : ObservableObject {
             ConfirmRecycle = ConfirmRecycle,
             ConfirmMove = ConfirmMove,
             SkipIdenticalOnConflict = SkipIdenticalOnConflict,
+            UseSystemTemp = UseSystemTemp,
             IntegrateCompanions = IntegrateCompanions,
             SortKey = SortKey,
             SortAscending = SortAscending,

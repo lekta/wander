@@ -109,18 +109,35 @@ internal class FakeFileSystem : IFileSystem {
         CallLog.Add($"ClearReadOnly:{path}");
     }
 
-    public void CopyFile(string source, string destination, bool overwrite) {
+    /// <summary>
+    /// How much of a file goes out per progress report. Small on purpose:
+    /// the real copy reports many times inside one file, and a test that
+    /// wants to see a bar move part-way through has to be able to.
+    /// </summary>
+    public int CopyChunk { get; set; } = 4;
+
+
+    public void CopyFile(string source, string destination, bool overwrite,
+        IProgress<long>? bytesCopied = null, CancellationToken ct = default) {
         CallLog.Add($"CopyFile:{source}->{destination}:{overwrite}");
-        Files[destination] = Files[source];
+        ct.ThrowIfCancellationRequested();
+
+        byte[] data = Files[source];
+        Files[destination] = data;
+        Report(data.Length, bytesCopied, ct);
     }
 
-    public void CopyDirectory(string source, string destination, bool overwrite) {
+    public void CopyDirectory(string source, string destination, bool overwrite,
+        IProgress<long>? bytesCopied = null, CancellationToken ct = default) {
         CallLog.Add($"CopyDirectory:{source}->{destination}:{overwrite}");
+        ct.ThrowIfCancellationRequested();
         Directories.Add(destination);
     }
 
-    public void MoveEntry(string source, string destination) {
+    public void MoveEntry(string source, string destination,
+        IProgress<long>? bytesCopied = null, CancellationToken ct = default) {
         CallLog.Add($"MoveEntry:{source}->{destination}");
+        ct.ThrowIfCancellationRequested();
 
         if (Files.TryGetValue(source, out byte[]? data)) {
             Files.Remove(source);
@@ -143,5 +160,19 @@ internal class FakeFileSystem : IFileSystem {
         }
         string parent = System.IO.Path.GetDirectoryName(path)!;
         MoveEntry(path, System.IO.Path.Combine(parent, newName));
+    }
+
+
+    /// <summary>Hands out <paramref name="length"/> bytes a chunk at a time.</summary>
+    private void Report(int length, IProgress<long>? bytesCopied, CancellationToken ct) {
+        if (bytesCopied is null) {
+            return;
+        }
+
+        int chunk = Math.Max(1, CopyChunk);
+        for (int sent = 0; sent < length; sent += chunk) {
+            ct.ThrowIfCancellationRequested();
+            bytesCopied.Report(Math.Min(chunk, length - sent));
+        }
     }
 }

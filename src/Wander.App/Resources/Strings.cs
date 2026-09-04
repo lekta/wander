@@ -233,6 +233,54 @@ public static partial class Strings {
     /// <summary>Отмена…</summary>
     public static string ProgressCancelling => Get(nameof(ProgressCancelling));
 
+    /// <summary>Заменить все</summary>
+    public static string ConflictReplaceAll => Get(nameof(ConflictReplaceAll));
+
+    /// <summary>Пропустить все</summary>
+    public static string ConflictSkipAll => Get(nameof(ConflictSkipAll));
+
+    /// <summary>Заменяет все файлы, включая уже отвеченные, и сразу закрывает окно. Заменённые уходят в корзину — Ctrl+Z вернёт всё обратно.</summary>
+    public static string ConflictReplaceAllHint => Get(nameof(ConflictReplaceAllHint));
+
+    /// <summary>Ничего не переносит и сразу закрывает окно.</summary>
+    public static string ConflictSkipAllHint => Get(nameof(ConflictSkipAllHint));
+
+    /// <summary>Свернуть</summary>
+    public static string ActionMinimize => Get(nameof(ActionMinimize));
+
+    /// <summary>Показать</summary>
+    public static string ActionShow => Get(nameof(ActionShow));
+
+    /// <summary>Файлов: {0} из {1}</summary>
+    public static string OperationItems => Get(nameof(OperationItems));
+
+    /// <summary>{0} из {1}</summary>
+    public static string OperationBytes => Get(nameof(OperationBytes));
+
+    /// <summary>{0}/с</summary>
+    public static string OperationSpeed => Get(nameof(OperationSpeed));
+
+    /// <summary>осталось ~ {0}</summary>
+    public static string OperationRemaining => Get(nameof(OperationRemaining));
+
+    /// <summary>{0} %</summary>
+    public static string OperationPercent => Get(nameof(OperationPercent));
+
+    /// <summary>{0}: {1} %</summary>
+    public static string OperationOne => Get(nameof(OperationOne));
+
+    /// <summary>Операций: {0} — {1} %</summary>
+    public static string OperationMany => Get(nameof(OperationMany));
+
+    /// <summary>{0} с</summary>
+    public static string DurationSeconds => Get(nameof(DurationSeconds));
+
+    /// <summary>{0} мин {1} с</summary>
+    public static string DurationMinutes => Get(nameof(DurationMinutes));
+
+    /// <summary>{0} ч {1} мин</summary>
+    public static string DurationHours => Get(nameof(DurationHours));
+
     /// <summary>«{0}»</summary>
     public static string DragOneItem => Get(nameof(DragOneItem));
 

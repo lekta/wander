@@ -2,88 +2,121 @@ using System.ComponentModel;
 using System.Threading.Tasks;
 using System.Windows;
 using Wander.App.Resources;
+using Wander.App.ViewModels;
 using Wander.Core.Operations;
 
 namespace Wander.App.Views;
 
 /// <summary>
-/// Modal progress window for batch file ops. Owns a <see cref="CancellationTokenSource"/>
-/// the caller passes to the operation, watches an <see cref="OperationTracker"/> for
-/// per-item progress, and auto-closes when the watched task completes.
+/// The window one batch file operation runs in. Owns a
+/// <see cref="CancellationTokenSource"/> the caller passes to the operation,
+/// follows that operation in the <see cref="OperationTracker"/>, and closes
+/// itself when the watched task completes.
 ///
 /// <para>
-/// Usage pattern (see <c>MainViewModel.RunWithProgressDialogAsync</c>):
-/// the caller creates the dialog, fires the async work using
-/// <see cref="Token"/>, attaches the resulting task via
-/// <see cref="TrackTask"/>, and calls <see cref="Window.ShowDialog"/>.
-/// ShowDialog blocks the calling continuation while the WPF dispatcher
-/// keeps pumping — when the task finishes (or the user clicks Cancel),
-/// the dialog closes and ShowDialog returns.
+/// Usage pattern (see <c>MainViewModel.RunWithProgressDialogAsync</c>): the
+/// caller creates the window, fires the async work using <see cref="Token"/>,
+/// attaches the resulting task via <see cref="TrackTask"/> and calls
+/// <see cref="Window.Show"/>. The window is <em>not</em> modal - the list
+/// stays live underneath, and the caller simply awaits its own task.
+/// </para>
+///
+/// <para>
+/// Which operation is mine: the one registered under this window's
+/// <see cref="Token"/>. The handle is created several layers down, in Core,
+/// and the token is the one thing the window and the work already share -
+/// an id watermark was tried first, and an extraction that registers only
+/// after its conflict dialog let a second operation slip in under it. One
+/// window, one operation - two copies at once get two windows.
+/// </para>
+///
+/// <para>
+/// It cannot be closed while the work runs, only minimised (into the
+/// status-bar panel) or cancelled - see the XAML.
 /// </para>
 /// </summary>
-public partial class ProgressDialog : Window {
+public partial class ProgressDialog : Window, INotifyPropertyChanged {
     private readonly CancellationTokenSource _cts = new();
     private readonly OperationTracker _tracker;
-    private bool _autoClosing;
+
+    private OperationViewModel? _operation;
+    private bool _finished;
 
 
     public ProgressDialog(string headline, OperationTracker tracker) {
         InitializeComponent();
-        // Off the desktop in a harness run, like every window: centred on
-        // an owner parked off-screen, this one came up at (0, 0) with the
-        // focus on every paste.
+        // Off the desktop in a harness run, like every window: centred on an
+        // owner parked off-screen, this one came up at (0, 0) with the focus
+        // on every paste.
         App.ParkIfHeadless(this);
         DialogTitle = headline;
         Headline = headline + "...";
         _tracker = tracker;
+        DataContext = this;
         _tracker.Changed += OnTrackerChanged;
+        Closed += OnClosed;
         RefreshSnapshot();
     }
 
 
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+
     public string DialogTitle { get; }
+
     public string Headline { get; }
 
     public CancellationToken Token => _cts.Token;
 
+    /// <summary>The tracker id of the operation this window shows; 0 until it appears.</summary>
+    public long OperationId => _operation?.Id ?? 0;
+
+    /// <summary>The numbers on screen. Null for the moment before the operation registers itself.</summary>
+    public OperationViewModel? Operation {
+        get => _operation;
+        private set {
+            _operation = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Operation)));
+        }
+    }
+
 
     /// <summary>
-    /// Tell the dialog which task to follow. When the task completes (success,
-    /// failure, or cancellation), the dialog closes itself on the UI thread.
-    /// Safe to call before <c>ShowDialog</c> — completion that races the show
-    /// is honoured the moment the dispatcher starts pumping.
+    /// Tell the window which task to follow. When the task completes
+    /// (success, failure, or cancellation) the window closes itself on the
+    /// UI thread. Safe to call before <c>Show</c> - completion that races the
+    /// show is honoured the moment the dispatcher starts pumping.
     /// </summary>
     public void TrackTask(Task task) {
         _ = task.ContinueWith(_ => Dispatcher.BeginInvoke(() => {
-            _autoClosing = true;
-            if (IsVisible) {
-                Close();
-            }
+            _finished = true;
+            Close();
         }));
     }
 
+    /// <summary>Back from the status bar, where "Свернуть" put it.</summary>
+    public void Restore() {
+        if (_finished) {
+            return;
+        }
 
-    // --- Progress display (bound by XAML) ------------------------------
-
-    private string _currentPath = "";
-    public string CurrentPath {
-        get => _currentPath;
-        private set { _currentPath = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CurrentPath))); }
+        Show();
+        if (WindowState == WindowState.Minimized) {
+            WindowState = WindowState.Normal;
+        }
+        Activate();
     }
 
-    private double _percent;
-    public double Percent {
-        get => _percent;
-        private set { _percent = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Percent))); }
-    }
+    /// <summary>Stop the operation - the status-bar panel's Cancel comes here too.</summary>
+    public void RequestCancel() {
+        if (_cts.IsCancellationRequested) {
+            return;
+        }
 
-    private string _counterText = "";
-    public string CounterText {
-        get => _counterText;
-        private set { _counterText = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CounterText))); }
+        CancelButton.IsEnabled = false;
+        CancelButton.Content = Strings.ProgressCancelling;
+        _cts.Cancel();
     }
-
-    public event PropertyChangedEventHandler? PropertyChanged;
 
 
     // --- Tracker plumbing ---------------------------------------------
@@ -96,39 +129,67 @@ public partial class ProgressDialog : Window {
         }
     }
 
+    /// <summary>
+    /// Finds this window's operation and hands it the fresh numbers. An
+    /// operation that has gone leaves the last state on screen: the window
+    /// is closing anyway, and blanking it first would flash.
+    /// </summary>
     private void RefreshSnapshot() {
         var snapshot = _tracker.Snapshot();
-        if (snapshot.Count == 0) {
-            CurrentPath = "";
-            Percent = 0;
-            CounterText = "";
+        OperationSnapshot? mine = null;
+        foreach (var candidate in snapshot) {
+            if (candidate.Token != Token) {
+                continue;
+            }
+            if (_operation is null || candidate.Id == _operation.Id) {
+                mine = candidate;
+                break;
+            }
+        }
+
+        if (mine is null) {
             return;
         }
 
-        // For the base dialog we report on the first in-flight op; with one
-        // batch in flight at a time (the common case) that's exactly right.
-        // Nested ops + an op-picker can come later.
-        var op = snapshot[0];
-        CurrentPath = op.CurrentPath ?? "";
-        Percent = op.Total > 0 ? (double)op.Completed * 100.0 / op.Total : 0;
-        CounterText = $"{op.Completed} / {op.Total}";
+        if (_operation is null || _operation.Id != mine.Id) {
+            Operation = new OperationViewModel(mine.Id, cancel: _ => RequestCancel());
+        }
+        _operation!.Update(mine, DateTime.UtcNow);
     }
 
 
     // --- User intent --------------------------------------------------
 
-    private void CancelButton_Click(object sender, RoutedEventArgs e) {
-        CancelButton.IsEnabled = false;
-        CancelButton.Content = Strings.ProgressCancelling;
-        _cts.Cancel();
+    private void MinimizeButton_Click(object sender, RoutedEventArgs e) {
+        Hide();
     }
 
+    private void CancelButton_Click(object sender, RoutedEventArgs e) {
+        RequestCancel();
+    }
+
+    /// <summary>
+    /// While the work runs there is no closing this window: the X, Alt+F4
+    /// and Escape all mean "Свернуть". Once the task has finished, the close
+    /// is ours and goes through.
+    /// </summary>
     private void OnClosing(object? sender, CancelEventArgs e) {
-        // X / Esc / Alt+F4 = cancel. If we're auto-closing because the task
-        // finished, skip cancelling (it'd be a no-op but explicit).
-        if (!_autoClosing && !_cts.IsCancellationRequested) {
+        if (!_finished) {
+            e.Cancel = true;
+            Hide();
+        }
+    }
+
+    /// <summary>
+    /// The window really is going away. If the work has not finished, this
+    /// is the application shutting down - WPF closes owned windows with the
+    /// cancel above ignored - and the operation has to be told, rather than
+    /// have the process pulled out from under it mid-write.
+    /// </summary>
+    private void OnClosed(object? sender, EventArgs e) {
+        _tracker.Changed -= OnTrackerChanged;
+        if (!_finished) {
             _cts.Cancel();
         }
-        _tracker.Changed -= OnTrackerChanged;
     }
 }

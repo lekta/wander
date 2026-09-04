@@ -87,10 +87,12 @@ public sealed class OutgoingDrag {
             var effects = shell is null
                 ? DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link
                 : DragDropEffects.Copy;
+            InFlightPaths = shell is null ? null : payload;
             System.Windows.DragDrop.DoDragDrop(src, data, effects);
         } catch {
             // drop target may throw on rejection — ignore.
         } finally {
+            InFlightPaths = null;
             System.Windows.DragDrop.RemoveGiveFeedbackHandler(src, feedback);
             _drops.Clear();
             _clearBookmarkTarget();
@@ -98,6 +100,20 @@ public sealed class OutgoingDrag {
             _preview = null;
         }
     }
+
+
+    /// <summary>
+    /// The paths of the drag in progress, for the one kind of drag whose
+    /// data object cannot say: a drag out of an archive carries the shell's
+    /// object and no file list, because the receiver is meant to ask the
+    /// shell for the bytes. Our own drop targets are that receiver too, and
+    /// they want paths, not bytes - and nothing can be added to a wrapped
+    /// OLE object after the fact. Set for the duration of
+    /// <c>DoDragDrop</c>, which pumps on this thread, so a drop target
+    /// reading it is by definition inside the same drag; null for an
+    /// ordinary drag, whose payload names its files itself.
+    /// </summary>
+    public static IReadOnlyList<string>? InFlightPaths { get; private set; }
 
 
     /// <summary>

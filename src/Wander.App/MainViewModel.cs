@@ -68,6 +68,9 @@ public sealed class MainViewModel : ObservableObject {
     private const double PreviewMinWidth = 120;
     private const double ListMinWidth = 240;
 
+    /// <summary>Smallest the folders pane on the left may be; the list's reserve is the same as above.</summary>
+    private const double FoldersMinWidth = 120;
+
     /// <summary>The same pair for the bookmarks panel and the drives tree under it.</summary>
     private const double BookmarksMinHeight = 44;
     private const double TreeMinHeight = 200;
@@ -84,6 +87,10 @@ public sealed class MainViewModel : ObservableObject {
     private readonly Dispatcher _dispatcher;
     private readonly ILogger _log;
     private readonly CompanionResolver _companions;
+
+    // The operation windows currently open, minimised ones included: how the
+    // status-bar panel gets one back on screen, or stops it.
+    private readonly List<Wander.App.Views.ProgressDialog> _operationWindows = new();
 
     private string _status = "";
     private string? _caretPath;
@@ -111,12 +118,14 @@ public sealed class MainViewModel : ObservableObject {
 
     private bool _isPreviewVisible;
     private double _previewWidth = 280;
+    private double _foldersWidth = 280;
     private double _bookmarksHeight = 200;
 
     // Pane sizes as they were persisted, plus the window they were a share
     // of, held from RestoreState until the window is loaded and can say how
     // big it is now - see RestorePaneSizes.
     private double _savedPreviewWidth;
+    private double _savedFoldersWidth;
     private double _savedBookmarksHeight;
     private double _savedWindowWidth;
     private double _savedWindowHeight;
@@ -441,8 +450,10 @@ public sealed class MainViewModel : ObservableObject {
         Trees.LoadRoots();
         RestoreState();
         // Restored settings decide how big the thumbnail caches may be; the
-        // provider starts idle until it is told.
+        // provider starts idle until it is told. Same for where scratch
+        // copies go: AppPaths cannot read a setting, so it is told.
         ApplyThumbnailCacheSettings();
+        AppPaths.UseSystemTemp = Settings.UseSystemTemp;
 
         // --- Turn on. Everything above built the object; from here it
         // reacts to changes. Subscribed after RestoreState on purpose:
@@ -534,9 +545,25 @@ public sealed class MainViewModel : ObservableObject {
     public SettingsViewModel Settings { get; }
 
     private double _aggregateProgress;
+
+    /// <summary>
+    /// Everything in flight as one number, weighted by bytes where there
+    /// are bytes: a 5 GB copy and a two-file delete are not half each.
+    /// </summary>
     public double AggregateProgress {
         get => _aggregateProgress;
         private set => SetField(ref _aggregateProgress, value);
+    }
+
+    private string _operationsSummary = "";
+
+    /// <summary>
+    /// What the status bar says next to the bar: "Копирование: 45 %" for
+    /// one, "Операций: 3 - 60 %" for several.
+    /// </summary>
+    public string OperationsSummary {
+        get => _operationsSummary;
+        private set => SetField(ref _operationsSummary, value);
     }
 
     public bool HasActiveOperations => Operations.Count > 0;
@@ -791,8 +818,24 @@ public sealed class MainViewModel : ObservableObject {
     public double PreviewWidth {
         get => _previewWidth;
         set {
-            double clamped = Math.Max(PreviewMinWidth, Math.Min(PaneSizes.LegacyMax, value));
+            double clamped = Math.Max(PreviewMinWidth, Math.Min(PaneCeiling(_windowWidth, ListMinWidth), value));
             if (SetField(ref _previewWidth, clamped)) {
+                SaveState();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Width of the folders pane on the left, in pixels - where the user
+    /// left the divider between it and the file list. Same arrangement as
+    /// <see cref="PreviewWidth"/>: the window applies it to the grid, the
+    /// view model persists it with the window size beside it.
+    /// </summary>
+    public double FoldersWidth {
+        get => _foldersWidth;
+        set {
+            double clamped = Math.Max(FoldersMinWidth, Math.Min(PaneCeiling(_windowWidth, ListMinWidth), value));
+            if (SetField(ref _foldersWidth, clamped)) {
                 SaveState();
             }
         }
@@ -807,11 +850,21 @@ public sealed class MainViewModel : ObservableObject {
     public double BookmarksHeight {
         get => _bookmarksHeight;
         set {
-            double clamped = Math.Max(BookmarksMinHeight, Math.Min(PaneSizes.LegacyMax, value));
+            double clamped = Math.Max(BookmarksMinHeight, Math.Min(PaneCeiling(_windowHeight, TreeMinHeight), value));
             if (SetField(ref _bookmarksHeight, clamped)) {
                 SaveState();
             }
         }
+    }
+
+    /// <summary>
+    /// The most a side pane may take: the window less what its neighbour
+    /// keeps, or the old fixed ceiling while the window size is not known
+    /// yet - the same bound <see cref="PaneSizes.Restore"/> puts on a size
+    /// coming back from disk, so a drag and a restore agree.
+    /// </summary>
+    private static double PaneCeiling(double window, double reserve) {
+        return window > 0 ? window - reserve : PaneSizes.LegacyMax;
     }
 
     // Navigation commands live on NavigationController; surface them here
@@ -1034,6 +1087,15 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
+        // Entries dragged out of an archive take the one route bytes leave
+        // an archive by - the same one a paste of them takes, with its own
+        // progress, conflict dialog and undo. The modifiers do not apply:
+        // there is nothing to move and nothing to point a shortcut at.
+        if (sourcePaths.Any(Archives.Inside)) {
+            await ExtractAsync(sourcePaths, targetFolder);
+            return;
+        }
+
         if (effect == DropEffect.Link) {
             CreateShortcuts(sourcePaths, targetFolder);
             return;
@@ -1146,6 +1208,11 @@ public sealed class MainViewModel : ObservableObject {
                 _savedPreviewWidth, _savedWindowWidth, windowWidth, PreviewMinWidth, ListMinWidth);
             Raise(nameof(PreviewWidth));
         }
+        if (_savedFoldersWidth > 0) {
+            _foldersWidth = PaneSizes.Restore(
+                _savedFoldersWidth, _savedWindowWidth, windowWidth, FoldersMinWidth, ListMinWidth);
+            Raise(nameof(FoldersWidth));
+        }
         if (_savedBookmarksHeight > 0) {
             _bookmarksHeight = PaneSizes.Restore(
                 _savedBookmarksHeight, _savedWindowHeight, windowHeight, BookmarksMinHeight, TreeMinHeight);
@@ -1200,6 +1267,7 @@ public sealed class MainViewModel : ObservableObject {
         // there is no window yet - the constructor runs before it exists.
         // RestorePaneSizes, called from MainWindow.OnLoaded, finishes this.
         _savedPreviewWidth = session.PreviewWidth;
+        _savedFoldersWidth = session.FoldersWidth;
         _savedBookmarksHeight = session.BookmarksHeight;
         _savedWindowWidth = session.LayoutWindowWidth;
         _savedWindowHeight = session.LayoutWindowHeight;
@@ -1315,6 +1383,7 @@ public sealed class MainViewModel : ObservableObject {
                 ExpandedPaths = Trees.CollectExpanded(),
                 IsPreviewVisible = _isPreviewVisible,
                 PreviewWidth = _previewWidth,
+                FoldersWidth = _foldersWidth,
                 BookmarksHeight = _bookmarksHeight,
                 LayoutWindowWidth = _windowWidth,
                 LayoutWindowHeight = _windowHeight,
@@ -1781,11 +1850,17 @@ public sealed class MainViewModel : ObservableObject {
         try {
             IReadOnlyList<FileSystemEntry> items;
             try {
-                items = await Task.Run(() => {
-                    var listed = ns.Enumerate(shellPath);
+                // Watched: an archive the shell has to open to list - a
+                // solid RAR - can take seconds, and that is the spinner
+                // the person is looking at.
+                items = await LongWait.WatchAsync(
+                    Task.Run(() => {
+                        var listed = ns.Enumerate(shellPath);
 
-                    return archive is null ? listed : EntryComparers.Sort(listed, sort);
-                }, token);
+                        return archive is null ? listed : EntryComparers.Sort(listed, sort);
+                    }, token),
+                    _log,
+                    $"list: enumerating {shellPath}");
             } catch (OperationCanceledException) {
                 return;
             } catch (Exception ex) {
@@ -2582,6 +2657,13 @@ public sealed class MainViewModel : ObservableObject {
         // NOT trigger a Save — that's a UI-only property, not a setting.
         if (e.PropertyName == nameof(SettingsViewModel.SelectedCategory)) {
             return;
+        }
+
+        if (e.PropertyName == nameof(SettingsViewModel.UseSystemTemp)) {
+            // Takes effect for the next scratch copy. Copies already made
+            // stay where they are and go with the next startup sweep, which
+            // looks in both places.
+            AppPaths.UseSystemTemp = Settings.UseSystemTemp;
         }
 
         // Tile geometry and the icon column's width are projections of the
@@ -3631,39 +3713,100 @@ public sealed class MainViewModel : ObservableObject {
         }
     }
 
+    /// <summary>
+    /// Brings the rows in step with the tracker, in place: an operation that
+    /// is still running keeps its row, and with it the running speed average
+    /// and any button the pointer is on. Only ones that appeared or finished
+    /// change the collection.
+    /// </summary>
     private void RebuildOperations() {
         var snapshots = _tracker.Snapshot();
-        Operations.Clear();
-        long totalCompleted = 0;
-        long totalSteps = 0;
-        foreach (var s in snapshots) {
-            Operations.Add(new OperationViewModel(s));
-            totalCompleted += s.Completed;
-            totalSteps += s.Total;
+        var now = DateTime.UtcNow;
+
+        for (int i = Operations.Count - 1; i >= 0; i--) {
+            if (!snapshots.Any(s => s.Id == Operations[i].Id)) {
+                Operations.RemoveAt(i);
+            }
         }
-        AggregateProgress = totalSteps > 0 ? (double)totalCompleted * 100.0 / totalSteps : 0.0;
+
+        long doneWeighted = 0;
+        long totalWeighted = 0;
+        for (int i = 0; i < snapshots.Count; i++) {
+            var snapshot = snapshots[i];
+            var row = Operations.FirstOrDefault(o => o.Id == snapshot.Id);
+            if (row is null) {
+                row = new OperationViewModel(snapshot.Id, ShowOperationWindow, CancelOperation);
+                Operations.Insert(Math.Min(i, Operations.Count), row);
+            }
+            row.Update(snapshot, now);
+
+            // Bytes where there are bytes, items where there are not: the
+            // two are added on one scale so a big copy is not outvoted by a
+            // two-file delete.
+            if (snapshot.HasBytes) {
+                doneWeighted += snapshot.BytesDone;
+                totalWeighted += snapshot.BytesTotal;
+            } else if (snapshot.Total > 0) {
+                doneWeighted += snapshot.Completed;
+                totalWeighted += snapshot.Total;
+            }
+        }
+
+        AggregateProgress = totalWeighted > 0
+            ? Math.Clamp((double)doneWeighted * 100.0 / totalWeighted, 0.0, 100.0)
+            : 0.0;
+        OperationsSummary = Operations.Count switch {
+            0 => "",
+            1 => Operations[0].Summary,
+            _ => string.Format(Strings.OperationMany, Operations.Count, (int)Math.Round(AggregateProgress)),
+        };
         Raise(nameof(HasActiveOperations));
+    }
+
+    /// <summary>Brings an operation's window back from the status bar.</summary>
+    private void ShowOperationWindow(long operationId) {
+        WindowOf(operationId)?.Restore();
+    }
+
+    /// <summary>The panel's Cancel, routed to the window that owns the token.</summary>
+    private void CancelOperation(long operationId) {
+        WindowOf(operationId)?.RequestCancel();
+    }
+
+    private Wander.App.Views.ProgressDialog? WindowOf(long operationId) {
+        return _operationWindows.FirstOrDefault(w => w.OperationId == operationId);
     }
 
 
     /// <summary>
-    /// Run an async batch op inside a modal <see cref="Wander.App.Views.ProgressDialog"/>.
-    /// The dialog opens before the await, watches <see cref="_tracker"/> for
-    /// per-item progress, and auto-closes when <paramref name="work"/>
-    /// finishes (success, failure, or user cancel). Returns whatever the
-    /// work returned; rethrows <see cref="OperationCanceledException"/> when
-    /// the user clicks Cancel so callers can show a uniform message.
+    /// Run an async batch op with its own <see cref="Wander.App.Views.ProgressDialog"/>.
+    /// The window opens before the await, follows the operation the work
+    /// registers in <see cref="_tracker"/>, and closes itself when
+    /// <paramref name="work"/> finishes (success, failure, or user cancel).
+    /// Returns whatever the work returned; rethrows
+    /// <see cref="OperationCanceledException"/> when the user cancels, so
+    /// callers can show a uniform message.
+    ///
+    /// <para>
+    /// Not modal (PLAN, block 2): the list stays live while a long copy
+    /// runs, the way it does in Explorer. What used to be ShowDialog
+    /// blocking this continuation is now the plain await below - the window
+    /// is a display, not a gate.
+    /// </para>
     /// </summary>
     private async Task<TResult> RunWithProgressDialogAsync<TResult>(string headline, Func<CancellationToken, Task<TResult>> work) {
+        // The window finds its operation by the token it hands the work:
+        // the operation registers under that token several layers down.
         var dlg = new Wander.App.Views.ProgressDialog(headline, _tracker) {
             Owner = Application.Current?.MainWindow,
         };
+        _operationWindows.Add(dlg);
+        dlg.Closed += (_, _) => _operationWindows.Remove(dlg);
+
         var task = work(dlg.Token);
         dlg.TrackTask(task);
-        // ShowDialog blocks this continuation but keeps the dispatcher
-        // pumping — when the task completes, the Dispatcher.BeginInvoke
-        // posted by TrackTask runs and closes the dialog.
-        dlg.ShowDialog();
+        dlg.Show();
+
         return await task.ConfigureAwait(true);
     }
 

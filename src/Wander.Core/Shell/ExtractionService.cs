@@ -90,7 +90,11 @@ public sealed class ExtractionService {
 
         // Progress counts the things the user selected, not the files inside
         // the folders among them: they chose four entries, not four hundred.
-        using var operation = _tracker.Begin("Extract", queue.Count);
+        // The bar underneath it runs on the engine's own "work" units rather
+        // than bytes - nothing here knows how big an entry is until it is
+        // out - which is why it is flagged as work and shown as a percentage.
+        using var operation = _tracker.Begin(
+            OperationVerbs.Extract, queue.Count, totalBytes: 0, bytesAreWork: true, token: ct);
         var landed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var progress = new InlineProgress(path => {
             lock (landed) {
@@ -99,9 +103,16 @@ public sealed class ExtractionService {
             operation.Advance(path);
         });
 
+        long reportedWork = 0;
+        var work = new InlineWorkProgress(units => {
+            operation.SetTotalBytes(units.Total);
+            operation.AdvanceBytes(units.Done - reportedWork);
+            reportedWork = units.Done;
+        });
+
         Exception? failure = null;
         try {
-            await _ns.CopyOut(queue, targetFolder, progress, ct).ConfigureAwait(false);
+            await _ns.CopyOut(queue, targetFolder, progress, ct, work).ConfigureAwait(false);
         } catch (OperationCanceledException) {
             failure = null;
         } catch (Exception ex) {
@@ -264,13 +275,20 @@ public sealed class ExtractionService {
             }
         }
 
+        // Two ceilings: bytes, and how many runs of the shell's engine the
+        // dialog is made to wait for - each copy is a file operation of its
+        // own, and a hundred tiny collisions would otherwise cost a hundred
+        // of them before anything is asked.
+        const int MaxUnpacks = 32;
         long budget = FileContentComparer.AutoCompareLimit;
+        int unpacked = 0;
         foreach (int i in candidates.OrderBy(i => infos[i].Source.Size ?? 0)) {
             long size = infos[i].Source.Size ?? 0;
-            if (size > budget) {
+            if (size > budget || unpacked >= MaxUnpacks) {
                 break;
             }
             budget -= size;
+            unpacked++;
 
             try {
                 string copy = await TempExtraction
@@ -381,6 +399,18 @@ public sealed class ExtractionService {
         }
 
         public void Report(string value) => _report(value);
+    }
+
+
+    /// <summary>The same, for the engine's work units.</summary>
+    private sealed class InlineWorkProgress : IProgress<CopyOutWork> {
+        private readonly Action<CopyOutWork> _report;
+
+        public InlineWorkProgress(Action<CopyOutWork> report) {
+            _report = report;
+        }
+
+        public void Report(CopyOutWork value) => _report(value);
     }
 
 

@@ -35,18 +35,28 @@ public static class TempFiles {
     }
 
     /// <summary>
-    /// Removes scratch folders older than <see cref="MaxAge"/>. Never
-    /// throws: a folder still held open by the application the user
-    /// launched simply stays for the next run.
+    /// Removes scratch folders older than <see cref="MaxAge"/> from the
+    /// folder in use. Never throws: a folder still held open by the
+    /// application the user launched simply stays for the next run.
     /// </summary>
     /// <returns>How many folders were removed.</returns>
     public static int Sweep(DateTime nowUtc) {
-        if (!Directory.Exists(AppPaths.Tmp)) {
+        return Sweep(nowUtc, AppPaths.Tmp);
+    }
+
+    /// <summary>
+    /// The same, for one scratch root. The application sweeps both roots
+    /// (<see cref="AppPaths.DataTmp"/> and <see cref="AppPaths.SystemTmp"/>)
+    /// at startup: the setting that picks between them may have been
+    /// switched since the copies were made.
+    /// </summary>
+    public static int Sweep(DateTime nowUtc, string root) {
+        if (!Directory.Exists(root)) {
             return 0;
         }
 
         int removed = 0;
-        foreach (string folder in SafeList()) {
+        foreach (string folder in SafeList(root)) {
             try {
                 if (nowUtc - Directory.GetLastWriteTimeUtc(folder) < MaxAge) {
                     continue;
@@ -62,9 +72,9 @@ public static class TempFiles {
     }
 
 
-    private static IReadOnlyList<string> SafeList() {
+    private static IReadOnlyList<string> SafeList(string root) {
         try {
-            return Directory.GetDirectories(AppPaths.Tmp);
+            return Directory.GetDirectories(root);
         } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
             return Array.Empty<string>();
         }

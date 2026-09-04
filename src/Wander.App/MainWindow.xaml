@@ -1,4 +1,4 @@
-﻿<Window x:Class="Wander.App.MainWindow"
+<Window x:Class="Wander.App.MainWindow"
         x:Name="WanderWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -611,36 +611,101 @@
                 <TextBlock Text="{Binding SelectionSummary}" Foreground="{StaticResource TextMuted}"
                            TextTrimming="CharacterEllipsis"/>
             </StatusBarItem>
-            <StatusBarItem DockPanel.Dock="Right"
+            <!--
+                What is running, right of centre and out of the way of the
+                two text fields. A tooltip used to carry the detail; it is a
+                popup now, because the detail has buttons on it and a tooltip
+                vanishes the moment you reach for one. The popup lives inside
+                the item it hangs off - it draws in its own window, so the
+                status bar's clipping does not reach it.
+            -->
+            <StatusBarItem DockPanel.Dock="Right" Margin="12,0,0,0"
                            Visibility="{Binding HasActiveOperations, Converter={StaticResource BoolToVisibility}}">
-                <ProgressBar Width="140" Height="14"
-                             Minimum="0" Maximum="100"
-                             Value="{Binding AggregateProgress, Mode=OneWay}">
-                    <ProgressBar.ToolTip>
-                        <ToolTip DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
-                            <ItemsControl ItemsSource="{Binding Operations}" MinWidth="260">
+                <Grid>
+                    <ToggleButton x:Name="OperationsButton"
+                                  Background="Transparent" BorderThickness="0"
+                                  Padding="4,0" Cursor="Hand"
+                                  Focusable="False">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding OperationsSummary}"
+                                       Foreground="{StaticResource TextMuted}"
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" MaxWidth="220"/>
+                            <ProgressBar Width="110" Height="12" Margin="8,0,0,0"
+                                         VerticalAlignment="Center"
+                                         Minimum="0" Maximum="100"
+                                         Value="{Binding AggregateProgress, Mode=OneWay}"/>
+                        </StackPanel>
+                    </ToggleButton>
+
+                    <!--
+                        One row per running operation: the verb, the file in
+                        flight, the two counts, and the two things only this
+                        panel can do - bring the operation's window back from
+                        where "Свернуть" put it, or stop it. Closes when it
+                        loses the mouse and the keyboard (StaysOpen="False"),
+                        which also unticks the button it is bound to.
+                    -->
+                    <Popup IsOpen="{Binding ElementName=OperationsButton, Path=IsChecked}"
+                           PlacementTarget="{Binding ElementName=OperationsButton}"
+                           Placement="Top" HorizontalOffset="-8" VerticalOffset="-4"
+                           StaysOpen="False" AllowsTransparency="True"
+                           PopupAnimation="Fade">
+                        <Border Background="{StaticResource ContentBackground}"
+                                BorderBrush="{StaticResource CardBorder}" BorderThickness="1"
+                                Padding="12,10" MinWidth="340" MaxWidth="440">
+                            <ItemsControl ItemsSource="{Binding Operations}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <StackPanel Margin="0,3">
-                                            <TextBlock Text="{Binding Description}" FontSize="11"
-                                                       TextTrimming="CharacterEllipsis" MaxWidth="320"/>
-                                            <ProgressBar Width="240" Height="6"
-                                                         Minimum="0" Maximum="100"
-                                                         Value="{Binding Percent, Mode=OneWay}"
-                                                         Margin="0,2,0,0"/>
-                                        </StackPanel>
+                                        <Grid Margin="0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding Verb}" FontWeight="SemiBold" FontSize="12"/>
+                                                    <TextBlock Text="{Binding PercentText}" FontSize="12"
+                                                               Foreground="{StaticResource TextMuted}"
+                                                               Margin="8,0,0,0"/>
+                                                </StackPanel>
+                                                <TextBlock Text="{Binding CurrentFile}" FontSize="11"
+                                                           Foreground="{StaticResource TextCaption}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           Margin="0,2,0,0"/>
+                                                <ProgressBar Height="6" Margin="0,4,0,0"
+                                                             Minimum="0" Maximum="100"
+                                                             Value="{Binding Percent, Mode=OneWay}"/>
+                                                <TextBlock Text="{Binding ItemsText}" FontSize="11"
+                                                           Foreground="{StaticResource TextDim}"
+                                                           Margin="0,3,0,0"/>
+                                                <TextBlock Text="{Binding BytesText}" FontSize="11"
+                                                           Foreground="{StaticResource TextDim}"
+                                                           Margin="0,1,0,0"/>
+                                            </StackPanel>
+
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                <Button Content="{x:Static res:Strings.ActionShow}"
+                                                        Width="96" Padding="6,3"
+                                                        Command="{Binding ShowCommand}"/>
+                                                <Button Content="{x:Static res:Strings.ActionCancel}"
+                                                        Width="96" Padding="6,3" Margin="0,6,0,0"
+                                                        Command="{Binding CancelCommand}"/>
+                                            </StackPanel>
+                                        </Grid>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
-                        </ToolTip>
-                    </ProgressBar.ToolTip>
-                </ProgressBar>
+                        </Border>
+                    </Popup>
+                </Grid>
             </StatusBarItem>
         </StatusBar>
 
         <Grid>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="280"/>
+                <ColumnDefinition x:Name="FoldersColumn" Width="280"/>
                 <ColumnDefinition Width="4"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition x:Name="PreviewSplitterColumn" Width="0"/>
@@ -666,7 +731,8 @@
                 keys, which put a grip nobody was looking for in the middle
                 of the Tab cycle. Resizing them is a mouse gesture here.
             -->
-            <GridSplitter Grid.Column="1" Focusable="False" HorizontalAlignment="Stretch" Background="{StaticResource Separator}"/>
+            <GridSplitter Grid.Column="1" Focusable="False" HorizontalAlignment="Stretch" Background="{StaticResource Separator}"
+                          DragCompleted="FoldersSplitter_DragCompleted"/>
 
             <!--
                 The border is the "this is where the keyboard is" outline —

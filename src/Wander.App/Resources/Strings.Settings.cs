@@ -66,6 +66,12 @@ public static partial class Strings {
     /// <summary>В окне совпадений имён сразу отвечать «оставить» за пары, совпадающие побайтово</summary>
     public static string SettingsSkipIdenticalHint => Get(nameof(SettingsSkipIdenticalHint));
 
+    /// <summary>Временные копии в системной папке Temp</summary>
+    public static string SettingsUseSystemTemp => Get(nameof(SettingsUseSystemTemp));
+
+    /// <summary>Копии файлов из архивов для просмотра и «Открыть». Снято — в папке данных Wander</summary>
+    public static string SettingsUseSystemTempHint => Get(nameof(SettingsUseSystemTempHint));
+
     /// <summary>Файл и его спутники — одним элементом</summary>
     public static string SettingsIntegrateCompanions => Get(nameof(SettingsIntegrateCompanions));
 

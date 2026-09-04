@@ -57,6 +57,14 @@ public static class TempExtraction {
         return CopyOutAsync(ns, fs, log, source, TempFiles.FolderFor(source), ct);
     }
 
+    /// <summary>
+    /// Where the overload above puts the copy of <paramref name="source"/>,
+    /// whether or not it has been made yet: a caller can look before it asks.
+    /// </summary>
+    public static string CopyPathFor(string source) {
+        return Path.Combine(TempFiles.FolderFor(source), NameOf(source));
+    }
+
 
     private static string NameOf(string path) {
         return Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));

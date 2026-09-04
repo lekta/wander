@@ -45,6 +45,8 @@ download and use» без формальной лицензии и без сло
 | `texts.zip` | zip, три текстовых файла по 25–41 байт, deflate | впрок; профилями пока не используется |
 | `nested.7z` | 7z (LZMA2, solid), `readme.txt` + `docs\` из двух файлов | да, профиль `archives` — единственный настоящий 7z |
 | `locked.zip` | zip с паролем `wander` (AES не используется, имена видны), то же содержимое | да, профиль `archives` — «имена видно, байты нет» |
+| `nested.rar` | rar, `readme.txt` + `docs\` из двух файлов — то же содержимое, что у `nested.7z` | да, профиль `archives` — `.rar` в списке и узлом дерева |
+| `solid.rar` | rar, solid, шесть текстовых файлов 17–1285 байт | да, профиль `archives` — медленная распаковка одна за раз в панели просмотра, повторный выбор без второй распаковки |
 | `Документ из openoffice.doc` | Word 97-2003 (OLE2), свой текст-рыба; свойства документа вычищены | да (`IFilter` / `OffFilt.dll`) |
 | `Новый документ.docx` | Word 2007+, экспорт Google Docs, с картинкой (`word/media/image1.png`); `docProps` нет вовсе, то есть и автора нет | да, `ZipDocumentExtractor` на реальной разметке |
 | `Новый документ.epub` | EPUB 3, экспорт Google Docs (`GoogleDoc/Untitled.xhtml` + картинка) | да |
@@ -55,7 +57,8 @@ download and use» без формальной лицензии и без сло
 
 **Всё, что здесь лежит, — своё:** `drone45-clip.mp3` (Lekta / Ajaja,
 2026), `app_ico.webp` (значок Wander), `texts.zip`, `nested.7z`, `locked.zip`
-(собраны `7z.exe` из своего же текста),
+(собраны `7z.exe` из своего же текста), `nested.rar`, `solid.rar` (WinRAR,
+из того же текста, 2026-09-04),
 `Документ из openoffice.doc`, `Новый документ.docx` / `.epub` / `.rtf` /
 `.pdf` (экспорт собственного текста из Google Docs — в метаданных ни
 имени, ни аккаунта).
@@ -74,8 +77,7 @@ download and use» без формальной лицензии и без сло
 Список форматов и зачем каждый — BACKLOG, «QA: добить фикстуры по
 форматам». Коротко: видео (mp4 / webm), анимированный gif, flac, m4a,
 ogg / opus / aac / m4b / wma, heic, xlsx / pptx от настоящих программ,
-rar (7z и zip с паролем закрыты
-профилем `archives`), chm / msg / djvu.
+chm / msg / djvu (7z, zip с паролем и rar закрыты профилем `archives`).
 
 Проверяются они не глазами: `SandboxBuilder` помнит, что скопировал, а
 `Wander.Harness selfcheck` читает каждую фикстуру тем же классом, что и

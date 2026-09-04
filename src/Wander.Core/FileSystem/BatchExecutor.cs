@@ -95,7 +95,8 @@ internal sealed class BatchExecutor {
     /// </summary>
     public async Task<IReadOnlyList<DeleteResult>> DeleteManyAsync(
         IReadOnlyList<string> paths, bool permanent, CancellationToken ct) {
-        using var op = _tracker.Begin(permanent ? "Delete permanently" : "Recycle", paths.Count);
+        using var op = _tracker.Begin(
+            permanent ? OperationVerbs.DeletePermanently : OperationVerbs.Recycle, paths.Count, token: ct);
         return await Task.Run(
             () => DeleteManyCore(paths, permanent, op, ct),
             ct).ConfigureAwait(false);
@@ -108,11 +109,58 @@ internal sealed class BatchExecutor {
         IReadOnlyList<BatchGroup> groups, string targetFolder, bool isMove, IConflictResolver resolver,
         CancellationToken ct) {
         // Progress counts groups, not files: the user dragged three photos,
-        // not three photos and three sidecars.
-        using var op = _tracker.Begin(isMove ? "Move" : "Copy", groups.Count);
+        // not three photos and three sidecars. Bytes count everything,
+        // sidecars included - the disk does not care who asked for them.
+        using var op = _tracker.Begin(isMove ? OperationVerbs.Move : OperationVerbs.Copy, groups.Count, token: ct);
+
         return await Task.Run(
-            () => ApplyBatch(groups, targetFolder, isMove, resolver, op, ct),
+            () => {
+                var weights = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+                op.SetTotalBytes(Weigh(groups, weights, ct));
+
+                return ApplyBatch(groups, targetFolder, isMove, resolver, op, ct, weights);
+            },
             ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// How many bytes the batch is about to move, counted before it starts:
+    /// a file is its own size, a folder is the walk of it. Zero when nothing
+    /// could be measured, and the display falls back to counting items.
+    ///
+    /// <para>
+    /// The walk carries the same depth guard as every other walk in Wander
+    /// (<see cref="FolderStatistics.DefaultMaxDepth"/>), and an unreadable
+    /// subtree is skipped rather than fatal: an estimate that is a little
+    /// low costs a bar that finishes early, and a batch that refuses to
+    /// start because one folder is locked costs the whole operation.
+    /// </para>
+    /// </summary>
+    private long Weigh(IReadOnlyList<BatchGroup> groups, Dictionary<string, long> into, CancellationToken ct) {
+        long total = 0;
+        foreach (string source in groups.SelectMany(g => g.All)) {
+            if (ct.IsCancellationRequested) {
+                into.Clear();
+
+                return 0;
+            }
+
+            try {
+                long size = _fs.DirectoryExists(source)
+                    ? FolderStatistics.Collect(_fs, source, maxTypes: 0, ct: ct).TotalSize
+                    : _fs.GetEntry(source)?.Size ?? 0;
+                into[source] = size;
+                total += size;
+            } catch (OperationCanceledException) {
+                into.Clear();
+
+                return 0;
+            } catch (Exception ex) {
+                _log.Info($"Cannot size {source} for the progress bar - {ex.Message}");
+            }
+        }
+
+        return total;
     }
 
     /// <summary>
@@ -130,11 +178,16 @@ internal sealed class BatchExecutor {
     /// </summary>
     private IReadOnlyList<BatchItemResult> ApplyBatch(
         IReadOnlyList<BatchGroup> groups, string targetFolder, bool isMove, IConflictResolver resolver,
-        IOperationHandle? progress, CancellationToken ct = default) {
+        IOperationHandle? progress, CancellationToken ct = default,
+        IReadOnlyDictionary<string, long>? weights = null) {
         using var _ = _undo.BeginOperation();
 
         var plans = groups.Select(g => Plan(g, targetFolder)).ToList();
-        var run = new Run(isMove, resolver, plans.Count);
+        var run = new Run(isMove, resolver, plans.Count) {
+            Progress = progress,
+            Token = ct,
+            Weights = weights,
+        };
 
         // An item already where it is being sent is not a collision, and
         // nothing worth a question: copying it there is how a duplicate is
@@ -166,6 +219,7 @@ internal sealed class BatchExecutor {
                 continue;
             }
 
+            progress?.SetCurrentPath(plan.Members[0].Source);
             var (result, applied) = ApplyGroup(plan, run);
             results.Add(result);
             if (applied) {
@@ -302,7 +356,7 @@ internal sealed class BatchExecutor {
                 run.UndoSteps.Add(new DeleteAction(_bin, _bin.Send(dest)));
             }
 
-            ApplyOne(src, dest, run.IsMove);
+            ApplyOne(src, dest, run);
             run.UndoSteps.Add(run.IsMove
                 ? new MoveAction(_fs, src, dest)
                 : new CreateAction(_bin, dest));
@@ -314,6 +368,26 @@ internal sealed class BatchExecutor {
             _log.Info($"{run.Verb}: {src} -> {dest} [{status}]");
 
             return new Outcome(status, true, null);
+        } catch (OperationCanceledException) {
+            // Cancel now reaches inside an item, not only between items: a
+            // copy stops in the middle of a file. That is a cancellation,
+            // not a failure, and it must not be reported as one.
+            //
+            // The system removes a half-written file itself; a folder can be
+            // part-copied, and what did land is undoable like everything
+            // else that lands - "Отмена" then "Ctrl+Z" leaves no leftovers.
+            // For a move the source is still where it was, so binning the
+            // partial destination is the right undo there too.
+            run.Cancelled = true;
+            if (Exists(dest)) {
+                run.UndoSteps.Add(new CreateAction(_bin, dest));
+                _log.Info($"{run.Verb} cancelled part-way: {src} -> {dest} (partial copy is undoable)");
+
+                return new Outcome(BatchItemStatus.Cancelled, true, null);
+            }
+            _log.Info($"{run.Verb} cancelled: {src} -> {dest}");
+
+            return new Outcome(BatchItemStatus.Cancelled, false, null);
         } catch (Exception ex) {
             _log.Error($"{run.Verb} failed: {src} -> {dest}", ex);
 
@@ -534,19 +608,60 @@ internal sealed class BatchExecutor {
         _undo.Push(steps.Count == 1 ? steps[0] : new CompositeAction(desc, steps));
     }
 
-    private void ApplyOne(string src, string dest, bool isMove) {
-        // A Replace conflict never reaches here with the target still in
-        // place - ApplyEntry recycles it first - so plain no-overwrite
-        // semantics are enough for both branches.
-        if (isMove) {
-            _fs.MoveEntry(src, dest);
-            return;
+    /// <summary>
+    /// The one call that moves bytes, and so the one that reports them. What
+    /// the copy reports and what the estimate said are two different numbers
+    /// - the estimate is a walk taken before the fact - so the difference is
+    /// settled here, per entry: the counter ends up exactly where the plan
+    /// said it would, however wrong either half was.
+    /// </summary>
+    private void ApplyOne(string src, string dest, Run run) {
+        long expected = run.Progress is null ? 0 : ExpectedBytes(run, src);
+        long reported = 0;
+        var bytes = run.Progress is null
+            ? null
+            : new InlineProgress(delta => {
+                reported += delta;
+                run.Progress.AdvanceBytes(delta);
+            });
+
+        try {
+            // A Replace conflict never reaches here with the target still in
+            // place - ApplyEntry recycles it first - so plain no-overwrite
+            // semantics are enough for both branches.
+            if (run.IsMove) {
+                _fs.MoveEntry(src, dest, bytes, run.Token);
+            } else if (_fs.DirectoryExists(src)) {
+                _fs.CopyDirectory(src, dest, overwrite: false, bytes, run.Token);
+            } else {
+                _fs.CopyFile(src, dest, overwrite: false, bytes, run.Token);
+            }
+        } finally {
+            // Only where the plan had a number to settle against. Nothing
+            // walked the insides of a merged folder before the fact, so its
+            // entries are counted by what the copy actually reported, and
+            // subtracting a zero "expectation" would cancel that out.
+            if (expected > 0) {
+                run.Progress?.AdvanceBytes(expected - reported);
+            }
+        }
+    }
+
+    /// <summary>
+    /// What the up-front walk said this source weighs. A file it never saw -
+    /// an entry inside a merged folder - is worth one cheap stat; a folder
+    /// it never saw is left at zero rather than walked in the middle of the
+    /// operation.
+    /// </summary>
+    private long ExpectedBytes(Run run, string source) {
+        if (run.Weights is not null && run.Weights.TryGetValue(source, out long known)) {
+            return known;
         }
 
-        if (_fs.DirectoryExists(src)) {
-            _fs.CopyDirectory(src, dest, overwrite: false);
-        } else {
-            _fs.CopyFile(src, dest, overwrite: false);
+        try {
+            return _fs.DirectoryExists(source) ? 0 : _fs.GetEntry(source)?.Size ?? 0;
+        } catch {
+            return 0;
         }
     }
 
@@ -584,6 +699,23 @@ internal sealed class BatchExecutor {
             IsReadOnly: false,
             IsSystem: false,
             LinksToDirectory: false);
+    }
+
+
+    /// <summary>
+    /// Reports on the thread that calls it, unlike <see cref="Progress{T}"/>,
+    /// which posts to a synchronization context: these deltas are counted,
+    /// not displayed, and one still in flight when the copy returns would be
+    /// counted twice by the true-up.
+    /// </summary>
+    private sealed class InlineProgress : IProgress<long> {
+        private readonly Action<long> _report;
+
+        public InlineProgress(Action<long> report) {
+            _report = report;
+        }
+
+        public void Report(long value) => _report(value);
     }
 
 
@@ -631,6 +763,15 @@ internal sealed class BatchExecutor {
 
         /// <summary>A late question was answered with Cancel: nothing more is applied.</summary>
         public bool Cancelled { get; set; }
+
+        /// <summary>Where bytes are reported; null for the sync entry points.</summary>
+        public IOperationHandle? Progress { get; init; }
+
+        /// <summary>Cancels a copy in the middle of a file, not only between files.</summary>
+        public CancellationToken Token { get; init; }
+
+        /// <summary>What the up-front walk weighed, by source path; null for the sync entry points.</summary>
+        public IReadOnlyDictionary<string, long>? Weights { get; init; }
 
 
         public ConflictResolution? AnswerFor(string source) {

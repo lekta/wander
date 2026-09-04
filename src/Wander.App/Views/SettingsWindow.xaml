@@ -89,6 +89,9 @@
                 <CheckBox Content="{x:Static res:Strings.SettingsSkipIdentical}"
                           ToolTip="{x:Static res:Strings.SettingsSkipIdenticalHint}"
                           IsChecked="{Binding Owner.SkipIdenticalOnConflict}"/>
+                <CheckBox Content="{x:Static res:Strings.SettingsUseSystemTemp}"
+                          ToolTip="{x:Static res:Strings.SettingsUseSystemTempHint}"
+                          IsChecked="{Binding Owner.UseSystemTemp}"/>
             </StackPanel>
         </DataTemplate>
 

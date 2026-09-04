@@ -102,7 +102,10 @@ public partial class App : Application {
 
 
     private static void SweepTempCopies() {
-        int removed = TempFiles.Sweep(DateTime.UtcNow);
+        // Both roots, whichever the setting picks today: the copies may
+        // have been made under the other one before it was switched.
+        var now = DateTime.UtcNow;
+        int removed = TempFiles.Sweep(now, AppPaths.DataTmp) + TempFiles.Sweep(now, AppPaths.SystemTmp);
         if (removed > 0) {
             ServiceLocator.Get<ILogger>().Info($"Temporary copies: {removed} folder(s) swept");
         }

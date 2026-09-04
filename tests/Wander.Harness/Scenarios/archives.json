@@ -14,7 +14,7 @@
   "steps": [
     { "do": "fs", "op": "delete", "path": "{sandbox}\\archives\\out" },
     { "do": "navigate", "path": "{sandbox}\\archives" },
-    { "do": "assert-entries", "contains": [ "nested.zip", "nested.7z", "locked.zip", "plain.zip" ] },
+    { "do": "assert-entries", "contains": [ "nested.zip", "nested.7z", "nested.rar", "solid.rar", "locked.zip", "plain.zip" ] },
 
     // --- Into a zip by path -------------------------------------------
     { "do": "navigate", "path": "{sandbox}\\archives\\nested.zip" },
@@ -90,6 +90,24 @@
     { "do": "assert-entries", "count": 0 },
     { "do": "note", "text": "Ctrl+Z after an extraction takes the copies to the recycle bin" },
 
+    // --- Dragged out into a real folder --------------------------------
+    // The drop surface is WPF's and cannot be driven from here (no input
+    // emulation); everything under it can - the view model's drop entry,
+    // which for an entry inside an archive has to extract whatever gesture
+    // the drag asked for. Move is asked on purpose: out of an archive
+    // there is nothing to move, and the answer must still be a copy out.
+    { "do": "navigate", "path": "{sandbox}\\archives\\nested.zip" },
+    { "do": "drop", "paths": [ "{sandbox}\\archives\\nested.zip\\readme.txt" ], "target": "{sandbox}\\archives\\out", "effect": "Move" },
+    { "do": "navigate", "path": "{sandbox}\\archives\\out" },
+    { "do": "assert-entries", "count": 1, "contains": [ "readme.txt" ] },
+    { "do": "navigate", "path": "{sandbox}\\archives\\nested.zip" },
+    { "do": "assert-entries", "contains": [ "readme.txt" ] },
+    { "do": "note", "text": "a drop out of an archive extracts: readme.txt landed in out and is still in the zip" },
+    { "do": "navigate", "path": "{sandbox}\\archives\\out" },
+    { "do": "command", "name": "undo" },
+    { "do": "wait-idle" },
+    { "do": "assert-entries", "count": 0 },
+
     // --- The archive is a row in the folder tree -----------------------
     // Level by level, like tree-bookmarks: reaching docs proves nested.zip
     // was a row under archives and opened into its folders.
@@ -107,6 +125,32 @@
     { "do": "assert-entries", "count": 2, "contains": [ "docs", "readme.txt" ] },
     { "do": "navigate", "path": "{sandbox}\\archives\\nested.tar.gz" },
     { "do": "assert-entries", "min": 1 },
+    { "do": "navigate", "path": "{sandbox}\\archives\\nested.rar" },
+    { "do": "assert-entries", "count": 2, "contains": [ "docs", "readme.txt" ] },
+    { "do": "navigate", "path": "{sandbox}\\archives" },
+    { "do": "tree-expand", "path": "{sandbox}\\archives\\nested.rar" },
+    { "do": "tree-expand", "path": "{sandbox}\\archives\\nested.rar\\docs", "expand": false },
+    { "do": "note", "text": "nested.rar is a row in the drives tree too and expands into docs - a .rar the tree had once missed in the wild (TECHDEBT)" },
+
+    // --- A solid RAR: the slow kind, six entries in one stream --------
+    // The preview unpacks one entry at a time and keeps the copies, so
+    // walking back over an entry must not unpack it twice. How many
+    // "Extract (temporary copy)" lines there are cannot be counted from
+    // here; the log is left for the eye, and only the first unpacking of
+    // text1.txt is asserted.
+    { "do": "preview", "on": true },
+    { "do": "navigate", "path": "{sandbox}\\archives\\solid.rar" },
+    { "do": "assert-entries", "count": 6, "contains": [ "text1.txt", "text6.txt" ] },
+    { "do": "select", "names": [ "text1.txt" ] },
+    { "do": "wait-idle" },
+    { "do": "select", "names": [ "text2.txt" ] },
+    { "do": "wait-idle" },
+    { "do": "select", "names": [ "text1.txt" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "preview-solid-rar" },
+    { "do": "assert-log", "scope": "all", "regex": "Extract \\(temporary copy\\): .*solid\\.rar\\\\text1\\.txt" },
+    { "do": "note", "text": "look in the log: text1.txt out of solid.rar was unpacked once, not twice - the second selection reused the copy; SLOW lines appear only if the shell took over five seconds" },
+    { "do": "preview", "on": false },
 
     // --- A folder that is merely named like an archive ----------------
     { "do": "navigate", "path": "{sandbox}\\archives\\plain.zip" },

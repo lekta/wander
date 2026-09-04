@@ -64,6 +64,23 @@ public partial class ConflictWindow : Window {
         DialogResult = true;
     }
 
+    /// <summary>
+    /// "Заменить все": every pair answered Replace and the window gone, in
+    /// one press. The safety is not a second question - it is the distance
+    /// from OK and the fact that a replaced file is in the recycle bin, one
+    /// Ctrl+Z from coming back.
+    /// </summary>
+    private void OnReplaceAll(object sender, RoutedEventArgs e) {
+        _vm.ApplyToEverything(ConflictBulkAction.Replace);
+        OnOk(sender, e);
+    }
+
+    /// <summary>"Пропустить все": the same door, and nothing is touched at all.</summary>
+    private void OnSkipAll(object sender, RoutedEventArgs e) {
+        _vm.ApplyToEverything(ConflictBulkAction.Skip);
+        OnOk(sender, e);
+    }
+
     private void OnCancel(object sender, RoutedEventArgs e) {
         Result = null;
         DialogResult = false;

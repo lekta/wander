@@ -97,6 +97,17 @@ public sealed record AppSettings {
     /// </summary>
     public bool SkipIdenticalOnConflict { get; init; } = true;
 
+    /// <summary>
+    /// Where scratch copies go - entries unpacked out of an archive for
+    /// the preview pane and for "Open": the system's Temp folder, or the
+    /// data folder (<c>AppPaths.DataTmp</c>). Null until the user has said:
+    /// then it follows the mode - the system folder for a portable run,
+    /// where the data folder is a stick and scratch copies on it are
+    /// wear and waiting; the data folder otherwise, where the sweep at
+    /// startup is the only cleaner it needs.
+    /// </summary>
+    public bool? UseSystemTemp { get; init; }
+
 
     // --- Navigation ----------------------------------------------------
     /// <summary>

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!--
     Все пользовательские строки Wander. Отдельно от кода намеренно: чтобы
@@ -92,6 +92,10 @@
   <data name="PreviewArchiveHeadline" xml:space="preserve">
     <value>Архив: {0:N0} файлов · {1:N0} папок · {2}</value>
     <comment>{0} — файлов в корне, {1} — папок, {2} — размер самого файла архива</comment>
+  </data>
+  <data name="PreviewArchiveFolderHeadline" xml:space="preserve">
+    <value>В архиве: {0:N0} файлов · {1:N0} папок</value>
+    <comment>{0} — файлов в этой папке архива, {1} — папок в ней</comment>
   </data>
   <data name="PreviewArchiveMore" xml:space="preserve">
     <value>и ещё {0:N0}</value>
@@ -1498,6 +1502,12 @@
   <data name="SettingsSkipIdenticalHint" xml:space="preserve">
     <value>В окне совпадений имён сразу отвечать «оставить» за пары, совпадающие побайтово: ничего не копируется и не переезжает.</value>
   </data>
+  <data name="SettingsUseSystemTemp" xml:space="preserve">
+    <value>Временные копии в системной папке Temp</value>
+  </data>
+  <data name="SettingsUseSystemTempHint" xml:space="preserve">
+    <value>Копии файлов из архивов для просмотра и «Открыть». Снято — в папке данных Wander (в портативном режиме — в папке data рядом с exe). Чистятся при запуске, старше суток. По умолчанию включено в портативном режиме.</value>
+  </data>
   <data name="SettingsConfirmCreateSidecar" xml:space="preserve">
     <value>Спрашивать перед созданием файла оценки</value>
   </data>
@@ -1536,5 +1546,60 @@
   </data>
   <data name="SummaryInsideArchive" xml:space="preserve">
     <value>В архиве</value>
+  </data>
+  <data name="ActionMinimize" xml:space="preserve">
+    <value>Свернуть</value>
+  </data>
+  <data name="ActionShow" xml:space="preserve">
+    <value>Показать</value>
+  </data>
+  <data name="OperationItems" xml:space="preserve">
+    <value>Файлов: {0} из {1}</value>
+    <comment>{0} - сколько уже сделано, {1} - всего</comment>
+  </data>
+  <data name="OperationBytes" xml:space="preserve">
+    <value>{0} из {1}</value>
+    <comment>{0} - сколько скопировано, {1} - всего</comment>
+  </data>
+  <data name="OperationSpeed" xml:space="preserve">
+    <value>{0}/с</value>
+    <comment>{0} - скорость, например 12.4 MB</comment>
+  </data>
+  <data name="OperationRemaining" xml:space="preserve">
+    <value>осталось ~ {0}</value>
+    <comment>{0} - время</comment>
+  </data>
+  <data name="OperationPercent" xml:space="preserve">
+    <value>{0} %</value>
+    <comment>{0} - целые проценты</comment>
+  </data>
+  <data name="OperationOne" xml:space="preserve">
+    <value>{0}: {1} %</value>
+    <comment>{0} - глагол операции, {1} - проценты</comment>
+  </data>
+  <data name="OperationMany" xml:space="preserve">
+    <value>Операций: {0} — {1} %</value>
+    <comment>{0} - сколько операций идёт, {1} - общий процент</comment>
+  </data>
+  <data name="DurationSeconds" xml:space="preserve">
+    <value>{0} с</value>
+  </data>
+  <data name="DurationMinutes" xml:space="preserve">
+    <value>{0} мин {1} с</value>
+  </data>
+  <data name="DurationHours" xml:space="preserve">
+    <value>{0} ч {1} мин</value>
+  </data>
+  <data name="ConflictReplaceAll" xml:space="preserve">
+    <value>Заменить все</value>
+  </data>
+  <data name="ConflictSkipAll" xml:space="preserve">
+    <value>Пропустить все</value>
+  </data>
+  <data name="ConflictReplaceAllHint" xml:space="preserve">
+    <value>Заменяет все файлы, включая уже отвеченные, и сразу закрывает окно. Заменённые уходят в корзину — Ctrl+Z вернёт всё обратно.</value>
+  </data>
+  <data name="ConflictSkipAllHint" xml:space="preserve">
+    <value>Ничего не переносит и сразу закрывает окно.</value>
   </data>
 </root>

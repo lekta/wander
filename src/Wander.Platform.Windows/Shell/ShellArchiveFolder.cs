@@ -150,7 +150,8 @@ public sealed class ShellArchiveFolder {
     /// </summary>
     public void CopyOut(
         IReadOnlyList<CopyOutItem> items, string targetFolder,
-        IProgress<string>? progress, CancellationToken ct) {
+        IProgress<string>? progress, CancellationToken ct,
+        IProgress<CopyOutWork>? work = null) {
 
         if (items.Count == 0) {
             return;
@@ -159,7 +160,7 @@ public sealed class ShellArchiveFolder {
         var operation = CreateFileOperation();
         var target = CreateItem(targetFolder)
             ?? throw new IOException($"Cannot open target folder '{targetFolder}'.");
-        var sink = new CopySink(progress, ct);
+        var sink = new CopySink(progress, work, ct);
         var sources = new List<IShellItem>(items.Count);
 
         try {
@@ -359,11 +360,13 @@ public sealed class ShellArchiveFolder {
     /// </summary>
     private sealed class CopySink : IFileOperationProgressSink {
         private readonly IProgress<string>? _progress;
+        private readonly IProgress<CopyOutWork>? _work;
         private readonly CancellationToken _ct;
 
 
-        public CopySink(IProgress<string>? progress, CancellationToken ct) {
+        public CopySink(IProgress<string>? progress, IProgress<CopyOutWork>? work, CancellationToken ct) {
             _progress = progress;
+            _work = work;
             _ct = ct;
         }
 
@@ -391,7 +394,17 @@ public sealed class ShellArchiveFolder {
         public int PostDeleteItem(uint dwFlags, IShellItem psiItem, int hrDelete, IShellItem? psiNewlyCreated) => 0;
         public int PreNewItem(uint dwFlags, IShellItem psiDestinationFolder, string? pszNewName) => 0;
         public int PostNewItem(uint dwFlags, IShellItem psiDestinationFolder, string? pszNewName, string? pszTemplateName, uint dwFileAttributes, int hrNew, IShellItem? psiNewItem) => 0;
-        public int UpdateProgress(uint iWorkTotal, uint iWorkSoFar) => 0;
+        /// <summary>
+        /// The engine's own measure of how far along the whole batch is.
+        /// Whatever a unit of it is - the documentation does not say, and it
+        /// is not bytes - the ratio is honest, and it is the only thing that
+        /// moves while a single large entry is being decompressed.
+        /// </summary>
+        public int UpdateProgress(uint iWorkTotal, uint iWorkSoFar) {
+            _work?.Report(new CopyOutWork(iWorkSoFar, iWorkTotal));
+
+            return 0;
+        }
         public int ResetTimer() => 0;
         public int PauseTimer() => 0;
         public int ResumeTimer() => 0;

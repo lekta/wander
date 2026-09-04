@@ -14,7 +14,10 @@ public sealed class FileLogger : ILogger, ILogFile, IDisposable {
     private readonly RepeatCollapser _collapser = new();
     private readonly object _lock = new();
 
+    // The line a run of repeats is about: its level and its message, for
+    // the summary that closes the run.
     private string _runLevel = "INFO";
+    private string _runMessage = "";
     private bool _disposed;
 
 
@@ -71,7 +74,7 @@ public sealed class FileLogger : ILogger, ILogFile, IDisposable {
             // an object about to go away.
             lock (_lock) {
                 if (_collapser.Flush() is { } repeats) {
-                    Emit(_runLevel, repeats.Line, null);
+                    EmitSummary(repeats);
                 }
             }
             _writer.Dispose();
@@ -86,18 +89,29 @@ public sealed class FileLogger : ILogger, ILogFile, IDisposable {
             return;
         }
         lock (_lock) {
-            // Asked under the lock, because the answer is about the line
-            // written just before this one and two threads must not both
-            // think they are that line.
-            var decision = _collapser.Decide(RepeatCollapser.Signature(level, message, ex), DateTime.UtcNow);
-            if (decision.Repeats is { } repeats) {
-                // The summary belongs to the run that is ending, so it goes
-                // out at that run's level, before _runLevel moves on.
-                Emit(_runLevel, repeats.Line, null);
-            }
-            if (decision.Write) {
-                _runLevel = level;
+            // Only warnings and errors are collapsed. An INFO line is the
+            // chronology itself, and two identical ones a second apart are
+            // two events, so they go straight through - and a run of
+            // repeats in progress is left as it is: its summary names the
+            // message it is about, so an INFO line in between does not
+            // confuse it.
+            if (level is not ("WARN" or "ERROR")) {
                 Emit(level, message, ex);
+            } else {
+                // Asked under the lock, because the answer is about the
+                // line written just before this one and two threads must
+                // not both think they are that line.
+                var decision = _collapser.Decide(RepeatCollapser.Signature(level, message, ex), DateTime.UtcNow);
+                if (decision.Repeats is { } repeats) {
+                    // The summary belongs to the run that is ending, so it
+                    // goes out about that run's line, before it moves on.
+                    EmitSummary(repeats);
+                }
+                if (decision.Write) {
+                    _runLevel = level;
+                    _runMessage = message;
+                    Emit(level, message, ex);
+                }
             }
 
             try {
@@ -111,6 +125,15 @@ public sealed class FileLogger : ILogger, ILogFile, IDisposable {
                 // copy.
             }
         }
+    }
+
+    /// <summary>
+    /// The line that stands in for a run of repeats, at the run's level and
+    /// naming its message: "ERROR repeated 16277 times over 271 s: Unhandled
+    /// dispatcher exception".
+    /// </summary>
+    private void EmitSummary(RepeatCollapser.Summary repeats) {
+        Emit(_runLevel, $"{repeats.Line}: {_runMessage}", null);
     }
 
     private void Emit(string level, string message, Exception? ex) {

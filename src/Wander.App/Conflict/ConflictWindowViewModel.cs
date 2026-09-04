@@ -139,6 +139,20 @@ public sealed class ConflictWindowViewModel : ObservableObject {
     }
 
     /// <summary>
+    /// One answer for the whole list, decided rows included - the buttons in
+    /// the header (PLAN, Q8). Unlike <see cref="BulkAction"/>, which is
+    /// "apply to the rest", this one overrules what has been answered
+    /// already: that is what the user is saying when they reach for it.
+    /// Nothing is scanned afterwards, because the window is about to close.
+    /// </summary>
+    public void ApplyToEverything(ConflictBulkAction action) {
+        _bulkAction = action;
+        Refresh(Batch.Apply(action, includeDecided: true));
+        RebuildRows();
+        Raise(nameof(BulkAction));
+    }
+
+    /// <summary>
     /// A row answered, or took its answer back. A folder switched to or
     /// from merge shows or hides what is inside it, and a merge nobody has
     /// read yet starts being read.

@@ -122,6 +122,81 @@ public class ConflictBatchTests {
     }
 
     [Fact]
+    public void ReplaceAll_OverrulesAnswersAlreadyGiven() {
+        // "Заменить все" is an answer for the list, not for what is left of
+        // it - the whole point of the button (PLAN, Q8).
+        var batch = Batch(conflicts: new[] { Pair(10, 10), Pair(20, 30), Pair(40, 50) });
+        batch.Choose(batch.Roots[1], ConflictResolution.Rename);
+        batch.Choose(batch.Roots[2], ConflictResolution.Skip);
+
+        var changed = batch.Apply(ConflictBulkAction.Replace, includeDecided: true);
+
+        Assert.Equal(3, changed.Count);
+        Assert.All(batch.Roots, p => Assert.Equal(ConflictResolution.Replace, p.Choice));
+        Assert.True(batch.AllDecided);
+    }
+
+    [Fact]
+    public void ReplaceAll_ReportsOnlyWhatItActuallyChanged() {
+        var batch = Batch(conflicts: new[] { Pair(10, 10), Pair(20, 30) });
+        batch.Choose(batch.Roots[0], ConflictResolution.Replace);
+
+        var changed = batch.Apply(ConflictBulkAction.Replace, includeDecided: true);
+
+        Assert.Equal(new[] { batch.Roots[1] }, changed);
+    }
+
+    [Fact]
+    public void ReplaceAll_TakesBackAPolicyAnswer() {
+        // "Skip identical" answered this pair; the user then said "replace
+        // everything", and meant it.
+        var batch = Batch(skipIdentical: true, conflicts: new[] { Pair(10, 10) });
+        batch.SetCompared(batch.Roots[0], identical: true);
+        Assert.Equal(ConflictResolution.Skip, batch.Roots[0].Choice);
+
+        batch.Apply(ConflictBulkAction.Replace, includeDecided: true);
+
+        Assert.Equal(ConflictResolution.Replace, batch.Roots[0].Choice);
+        Assert.False(batch.Roots[0].FromPolicy);
+    }
+
+    [Fact]
+    public void ReplaceAll_OverACollapsedMerge_AnswersTheWholeList() {
+        // A folder the user had opened up and answered inside: replacing it
+        // folds the children away, and what is left is decided.
+        var batch = Batch(conflicts: new[] { FolderPair(), Pair(10, 10) });
+        batch.Choose(batch.Roots[0], ConflictResolution.Merge);
+        batch.AttachScan(batch.Roots[0], DocsScan());
+
+        batch.Apply(ConflictBulkAction.Replace, includeDecided: true);
+
+        Assert.Equal(ConflictResolution.Replace, batch.Roots[0].Choice);
+        Assert.True(batch.AllDecided);
+        Assert.Equal(2, batch.Effective().Count);
+    }
+
+    [Fact]
+    public void SkipAll_AnswersEverythingWithSkip() {
+        var batch = Batch(conflicts: new[] { FolderPair(), Pair(10, 10) });
+        batch.Choose(batch.Roots[1], ConflictResolution.Replace);
+
+        batch.Apply(ConflictBulkAction.Skip, includeDecided: true);
+
+        Assert.All(batch.Roots, p => Assert.Equal(ConflictResolution.Skip, p.Choice));
+        Assert.True(batch.AllDecided);
+    }
+
+    [Fact]
+    public void QuickAction_WithoutTheFlag_StillLeavesAnswersAlone() {
+        var batch = Batch(conflicts: new[] { Pair(10, 10), Pair(20, 30) });
+        batch.Choose(batch.Roots[0], ConflictResolution.Rename);
+
+        batch.Apply(ConflictBulkAction.Replace);
+
+        Assert.Equal(ConflictResolution.Rename, batch.Roots[0].Choice);
+    }
+
+    [Fact]
     public void KeepBoth_IsAMerge_ForTwoFolders_AndANewName_ForAFile() {
         var batch = Batch(conflicts: new[] { FolderPair(), Pair(10, 10), FolderPair("packed", reachable: false) });
 

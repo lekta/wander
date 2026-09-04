@@ -193,6 +193,10 @@ public sealed class ScenarioRunner {
             case "assert-pane":
                 AssertPane(step);
                 break;
+            case "drop":
+                Drop(step);
+                await WaitIdleAsync(step);
+                break;
             case "measure":
                 _metrics.Take(step.Str("name") ?? "measure");
                 break;
@@ -838,6 +842,26 @@ public sealed class ScenarioRunner {
             throw new InvalidOperationException(
                 $"the file list has about {list:F0} px of a {window:F0} px window, less than {minList}");
         }
+    }
+
+
+    /// <summary>
+    /// A drop, fed straight into the view model. The drag itself is WPF's
+    /// and cannot be driven from here (no input emulation); what lies
+    /// under the drop surface can - the routing of archive entries into an
+    /// extraction, the confirmations, the progress and the undo step. The
+    /// target has to be in the sandbox like everything this file writes.
+    /// </summary>
+    private void Drop(JsonElement step) {
+        EnsureInSandbox("drop");
+        var paths = step.Strings("paths").Select(_context.Expand).ToList();
+        string target = _context.Expand(step.Require("target"));
+        if (!IsInSandbox(target)) {
+            throw new InvalidOperationException($"refusing 'drop' outside the sandbox: '{target}'");
+        }
+
+        var effect = Enum.Parse<DropEffect>(step.Str("effect") ?? "Copy", ignoreCase: true);
+        _vm.HandleDrop(paths, target, effect);
     }
 
 

@@ -39,6 +39,9 @@ public static partial class Strings {
     /// <summary>Архив: {0:N0} файлов · {1:N0} папок · {2}</summary>
     public static string PreviewArchiveHeadline => Get(nameof(PreviewArchiveHeadline));
 
+    /// <summary>В архиве: {0:N0} файлов · {1:N0} папок</summary>
+    public static string PreviewArchiveFolderHeadline => Get(nameof(PreviewArchiveFolderHeadline));
+
     /// <summary>и ещё {0:N0}</summary>
     public static string PreviewArchiveMore => Get(nameof(PreviewArchiveMore));
 

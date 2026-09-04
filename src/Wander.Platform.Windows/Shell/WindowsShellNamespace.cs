@@ -62,8 +62,9 @@ public sealed class WindowsShellNamespace : IShellNamespace {
 
     public Task CopyOut(
         IReadOnlyList<CopyOutItem> items, string targetFolder,
-        IProgress<string>? progress, CancellationToken ct) {
-        return Task.Run(() => _archives.CopyOut(items, targetFolder, progress, ct), ct);
+        IProgress<string>? progress, CancellationToken ct,
+        IProgress<CopyOutWork>? work = null) {
+        return Task.Run(() => _archives.CopyOut(items, targetFolder, progress, ct, work), ct);
     }
 
     public object? CreateDataObject(IReadOnlyList<string> paths) {

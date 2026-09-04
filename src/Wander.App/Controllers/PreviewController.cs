@@ -11,6 +11,7 @@ using Wander.App.Util;
 using Wander.App.ViewModels;
 using Wander.Core;
 using Wander.Core.Companions;
+using Wander.Core.Diagnostics;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
 using Wander.Core.Logging;
@@ -105,11 +106,9 @@ public sealed class PreviewController : ObservableObject {
     private string _archiveMore = "";
     private bool _archiveEntryTooBig;
 
-    // The last archive entry unpacked for a preview, so re-selecting the
-    // same row does not unpack it again.
-    private string? _archiveCopyOf;
-    private long? _archiveCopySize;
-    private string? _archiveCopy;
+    // One archive entry is unpacked for a preview at a time - see
+    // ArchiveEntryCopyAsync for why the queue is kept this short.
+    private readonly SemaphoreSlim _archiveCopyGate = new(1, 1);
 
     private CancellationTokenSource? _previewCts;
     private CancellationTokenSource? _summaryCts;
@@ -776,13 +775,28 @@ public sealed class PreviewController : ObservableObject {
         // census instead of "Select a file to preview". Recycled folders do
         // not: their backing path under $Recycle.Bin is not reliably
         // walkable, and the footer already says where they came from.
-        // Neither does anything inside an archive: the census walks the
-        // filesystem, and there is no filesystem in there.
+        // Inside an archive the census has nothing to walk - there is no
+        // filesystem in there - but the shell can list the folder, and the
+        // pane shows that listing instead: the same one an archive file
+        // gets when it is selected from outside, and the answer to "where
+        // am I" on a click into empty space.
         if (_primary is null || _primary.Kind != EntryKind.File) {
             string? folder = _primary?.Kind == EntryKind.Directory && _primary.OriginalLocation is null
                 ? _primary.FullPath
                 : _primary is null ? _currentFolderPath : null;
-            if (folder is not null && !Archives.Contains(folder)) {
+            if (folder is not null && Archives.Contains(folder)) {
+                IsLoading = true;
+                try {
+                    await LoadArchiveAsync(folder, ct);
+                } catch (OperationCanceledException) {
+                    // A newer selection took over; it will draw its own.
+                } finally {
+                    IsLoading = false;
+                }
+
+                return;
+            }
+            if (folder is not null) {
                 await ShowFolderCensusAsync(folder, ct);
                 return;
             }
@@ -805,6 +819,7 @@ public sealed class PreviewController : ObservableObject {
                 if (_primary.Size > MaxArchivePreviewBytes) {
                     _archiveEntryTooBig = true;
                     Kind = PreviewKind.Unsupported;
+                    Raise(nameof(PlaceholderText));
 
                     return;
                 }
@@ -842,6 +857,7 @@ public sealed class PreviewController : ObservableObject {
                     // file" would blame the wrong file.
                     _linkBroken = true;
                     Kind = PreviewKind.Unsupported;
+                    Raise(nameof(PlaceholderText));
                     return;
                 }
 
@@ -952,42 +968,72 @@ public sealed class PreviewController : ObservableObject {
     /// when the shell would not give it up (a password, a broken archive).
     ///
     /// <para>
-    /// Remembered by path and size so that selecting the same row again -
-    /// walking a list with the arrow keys goes back and forth over the same
-    /// few - does not unpack it a second time. Size, because an archive
-    /// rebuilt under the same name is a different file: the copy is then
-    /// made again.
+    /// A copy already on disk with the entry's size is that entry: the
+    /// scratch folder is keyed by the path, and walking a list back and
+    /// forth with the arrow keys must not unpack the same file every time
+    /// it comes round. Size, because an archive rebuilt under the same name
+    /// is a different file - the copy is then made again.
+    /// </para>
+    ///
+    /// <para>
+    /// One extraction at a time. The engine cannot be stopped inside an
+    /// entry, so a cancelled request keeps its pool thread until the entry
+    /// is out; arrow keys over a RAR of scanned pages queued dozens of
+    /// those, the pool ran out of threads, and everything else that needed
+    /// one - the shell asked whether a file opens as a folder, the listing
+    /// of the next archive - waited behind them (session of 2026-09-04,
+    /// 85 threads). Waiting at the gate costs nothing: a request cancelled
+    /// while it waits leaves before it starts.
     /// </para>
     /// </summary>
     private async Task<string?> ArchiveEntryCopyAsync(FileSystemEntry entry, CancellationToken ct) {
-        if (_archiveCopyOf == entry.FullPath && _archiveCopySize == entry.Size
-            && _archiveCopy is { } known && File.Exists(known)) {
-            return known;
+        // A copy is reused when its size matches the entry, and also when
+        // the listing gave no size to match against - RAR entries through
+        // the shell come without one, and unpacking them again on every
+        // pass is what starved the pool. The copy is a day old at most.
+        string expected = TempExtraction.CopyPathFor(entry.FullPath);
+        long onDisk = SizeOnDisk(expected);
+        if (onDisk >= 0 && (entry.Size is null || entry.Size == onDisk)) {
+            return expected;
         }
 
         if (ServiceLocator.TryGet<IShellNamespace>() is not { } ns) {
             return null;
         }
 
+        var log = ServiceLocator.Get<ILogger>();
         try {
-            string copy = await TempExtraction.CopyOutAsync(
-                ns,
-                ServiceLocator.Get<IFileSystem>(),
-                ServiceLocator.Get<ILogger>(),
-                entry.FullPath,
-                ct);
-
-            _archiveCopyOf = entry.FullPath;
-            _archiveCopySize = entry.Size;
-            _archiveCopy = copy;
-
-            return copy;
+            // The queue and the unpacking watched as one wait: what the
+            // person sees is a spinner, and which half of it is slow is
+            // the second question.
+            return await LongWait.WatchAsync(
+                UnpackThroughGateAsync(ns, log, entry.FullPath, ct), log, $"preview: unpacking {entry.FullPath}");
         } catch (OperationCanceledException) {
             throw;
         } catch (Exception ex) {
-            ServiceLocator.Get<ILogger>().Info($"Preview: cannot unpack {entry.FullPath} - {ex.Message}");
+            log.Info($"Preview: cannot unpack {entry.FullPath} - {ex.Message}");
 
             return null;
+        }
+    }
+
+    private async Task<string> UnpackThroughGateAsync(IShellNamespace ns, ILogger log, string source, CancellationToken ct) {
+        await _archiveCopyGate.WaitAsync(ct);
+        try {
+            return await TempExtraction.CopyOutAsync(ns, ServiceLocator.Get<IFileSystem>(), log, source, ct);
+        } finally {
+            _archiveCopyGate.Release();
+        }
+    }
+
+    /// <summary>The file's length, or -1 when there is no file there.</summary>
+    private static long SizeOnDisk(string path) {
+        try {
+            var info = new FileInfo(path);
+
+            return info.Exists ? info.Length : -1;
+        } catch {
+            return -1;
         }
     }
 
@@ -1005,7 +1051,8 @@ public sealed class PreviewController : ObservableObject {
         ArchiveEntries.Clear();
         Kind = PreviewKind.Archive;
 
-        var listing = await Task.Run(() => ReadArchive(path, ct), ct);
+        var listing = await LongWait.WatchAsync(
+            Task.Run(() => ReadArchive(path, ct), ct), ServiceLocator.Get<ILogger>(), $"preview: listing {path}");
         if (ct.IsCancellationRequested) {
             return;
         }
@@ -1022,14 +1069,19 @@ public sealed class PreviewController : ObservableObject {
         ArchiveMore = listing.Hidden > 0
             ? string.Format(Strings.PreviewArchiveMore, listing.Hidden)
             : "";
+        // The archive itself, or a folder inside it: only the first has a
+        // size of its own to report, and only the first can be "empty or
+        // encrypted" - an archive whose entries are encrypted lists as
+        // nothing at all, and is not told apart from a genuinely empty one
+        // from here.
+        bool isRoot = Archives.Of(path) is { IsRoot: true };
         ArchiveHeadline = listing.Files == 0 && listing.Folders == 0
-            // Nothing came back and the file is not empty: an archive whose
-            // entries are encrypted lists as nothing at all, and is not
-            // told apart from a genuinely empty one from here.
-            ? Strings.PreviewArchiveEmpty
-            : string.Format(
-                Strings.PreviewArchiveHeadline,
-                listing.Files, listing.Folders, SizeFormatter.Format(SizeOf(path)));
+            ? (isRoot ? Strings.PreviewArchiveEmpty : Strings.PreviewFolderEmpty)
+            : isRoot
+                ? string.Format(
+                    Strings.PreviewArchiveHeadline,
+                    listing.Files, listing.Folders, SizeFormatter.Format(SizeOf(path)))
+                : string.Format(Strings.PreviewArchiveFolderHeadline, listing.Files, listing.Folders);
     }
 
     /// <summary>
@@ -1412,14 +1464,12 @@ public sealed class PreviewController : ObservableObject {
         IsRawImage = false;
         LinkTarget = null;
         _linkBroken = false;
-        // Two archive entries in a row - one too big, one of a format the
-        // pane cannot read - both land on Unsupported, so the Kind setter
-        // does not fire and the placeholder would keep the first one's
-        // words.
-        if (_archiveEntryTooBig) {
-            _archiveEntryTooBig = false;
-            Raise(nameof(PlaceholderText));
-        }
+        _archiveEntryTooBig = false;
+        // Two files in a row can land on Unsupported for different reasons
+        // (a broken shortcut, an entry too big to unpack), and the Kind
+        // setter then never fires. The placeholder is re-read here, when
+        // the reasons are cleared, and again wherever one is set.
+        Raise(nameof(PlaceholderText));
         ArchiveEntries.Clear();
         ArchiveHeadline = "";
         ArchiveMore = "";

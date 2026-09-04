@@ -183,16 +183,23 @@ public sealed class ConflictBatch {
     /// returns the ones it changed. A decided pair is never overwritten:
     /// the point of the list is that a considered answer survives an
     /// impatient click on "replace the rest".
+    ///
+    /// <para>
+    /// <paramref name="includeDecided"/> is the one exception, and it is a
+    /// different question: "заменить все" is an answer for the whole list,
+    /// not for what is left of it (PLAN, Q8). It is why the button that
+    /// asks it sits far away from OK.
+    /// </para>
     /// </summary>
-    public IReadOnlyList<ConflictPair> Apply(ConflictBulkAction action) {
+    public IReadOnlyList<ConflictPair> Apply(ConflictBulkAction action, bool includeDecided = false) {
         var changed = new List<ConflictPair>();
         foreach (var pair in Effective()) {
-            if (pair.Choice is not null) {
+            if (pair.Choice is not null && !includeDecided) {
                 continue;
             }
 
             var choice = ChoiceFor(action, pair);
-            if (choice is null) {
+            if (choice is null || choice == pair.Choice) {
                 continue;
             }
 

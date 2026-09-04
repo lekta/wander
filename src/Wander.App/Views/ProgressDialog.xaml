@@ -2,47 +2,88 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:res="clr-namespace:Wander.App.Resources"
-        Title="{Binding ElementName=Root, Path=DialogTitle}"
-        x:Name="Root"
-        Width="460" SizeToContent="Height"
+        Title="{Binding DialogTitle}"
+        Width="470" SizeToContent="Height"
         ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
         Closing="OnClosing">
-    <Border Padding="20">
+    <!--
+        The operation, while it runs. Not modal: a copy of five gigabytes
+        must not hold the list hostage, and the folder watcher keeps the rows
+        honest while it goes on underneath.
+
+        There is no "Закрыть" and there will not be one - an operation the
+        user cannot see is an operation they cannot stop. The two ways out
+        are "Свернуть", which parks it in the status bar, and "Отмена", which
+        stops it; the window closes itself when the work is done. The X,
+        Alt+F4 and Escape all mean "Свернуть", because that is the harmless
+        one of the two.
+    -->
+    <Border Padding="20,18">
         <StackPanel>
             <!--
-                Headline: the verb passed in by the caller ("Copying",
-                "Moving", "Deleting"). We deliberately don't show the source
-                paths here — there can be thousands; the per-file path
-                streams into CurrentPathText below as the op progresses.
+                The verb the caller passed ("Копирование", "Перемещение"),
+                then the file in flight. We deliberately don't show the
+                source paths - there can be thousands.
             -->
-            <TextBlock Text="{Binding ElementName=Root, Path=Headline}"
+            <TextBlock Text="{Binding Headline}"
                        FontSize="14" FontWeight="SemiBold"
                        Margin="0,0,0,10"/>
 
-            <TextBlock Text="{Binding ElementName=Root, Path=CurrentPath}"
+            <TextBlock Text="{Binding Operation.CurrentFile}"
                        Foreground="{StaticResource TextCaption}" FontSize="11"
                        TextTrimming="CharacterEllipsis"
                        Margin="0,0,0,8"/>
 
             <ProgressBar Height="14"
                          Minimum="0" Maximum="100"
-                         Value="{Binding ElementName=Root, Path=Percent, Mode=OneWay}"/>
+                         Value="{Binding Operation.Percent, Mode=OneWay}"/>
 
-            <TextBlock Text="{Binding ElementName=Root, Path=CounterText}"
-                       Foreground="{StaticResource TextDim}" FontSize="11"
-                       HorizontalAlignment="Right"
-                       Margin="0,4,0,12"/>
+            <!--
+                Counts on the left, speed and what is left on the right. The
+                right-hand pair goes quiet rather than guess: a copy that has
+                only just started has no speed to report yet, and a delete
+                has no bytes at all.
+            -->
+            <Grid Margin="0,6,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
 
-            <Button x:Name="CancelButton"
-                    Content="{x:Static res:Strings.ActionCancel}"
-                    Width="100" Padding="6,3"
-                    HorizontalAlignment="Right"
-                    Click="CancelButton_Click"
-                    IsCancel="True"/>
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="{Binding Operation.ItemsText}"
+                               Foreground="{StaticResource TextDim}" FontSize="11"/>
+                    <TextBlock Text="{Binding Operation.BytesText}"
+                               Foreground="{StaticResource TextDim}" FontSize="11"
+                               Margin="0,2,0,0"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" HorizontalAlignment="Right" Margin="12,0,0,0">
+                    <TextBlock Text="{Binding Operation.SpeedText}"
+                               Foreground="{StaticResource TextDim}" FontSize="11"
+                               HorizontalAlignment="Right"/>
+                    <TextBlock Text="{Binding Operation.RemainingText}"
+                               Foreground="{StaticResource TextDim}" FontSize="11"
+                               HorizontalAlignment="Right"
+                               Margin="0,2,0,0"/>
+                </StackPanel>
+            </Grid>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+                <Button x:Name="MinimizeButton"
+                        Content="{x:Static res:Strings.ActionMinimize}"
+                        Width="100" Padding="6,3" Margin="0,0,8,0"
+                        IsCancel="True"
+                        Click="MinimizeButton_Click"/>
+                <Button x:Name="CancelButton"
+                        Content="{x:Static res:Strings.ActionCancel}"
+                        Width="100" Padding="6,3"
+                        Click="CancelButton_Click"/>
+            </StackPanel>
         </StackPanel>
     </Border>
 </Window>

@@ -746,7 +746,11 @@ public partial class FolderTreesView : UserControl {
     // wrongly turn "add bookmark" into "copy into current folder".
 
     private void BookmarksPanel_DragOver(object sender, DragEventArgs e) {
-        if (!e.Data.GetDataPresent(DataFormats.FileDrop)) {
+        // Through the controller's reading of the payload, not the data
+        // object's own: a drag out of an archive carries no file list, and
+        // this check used to turn the whole strip into "no drop" for it
+        // before the bookmark folder underneath got a say.
+        if (DropTargetController.PayloadPaths(e.Data) is null) {
             e.Effects = DragDropEffects.None;
             e.Handled = true;
             return;
@@ -851,10 +855,9 @@ public partial class FolderTreesView : UserControl {
     /// would do nothing, so the strip should not promise otherwise.
     /// </summary>
     private bool CanAcceptBookmarkDrop(DragEventArgs e) {
-        if (!e.Data.GetDataPresent(DataFormats.FileDrop)) {
+        if (DropTargetController.PayloadPaths(e.Data) is not { } paths) {
             return false;
         }
-        var paths = (string[])e.Data.GetData(DataFormats.FileDrop);
 
         return paths.Any(p => Directory.Exists(p) && !Vm.Bookmarks.Contains(p));
     }

@@ -120,6 +120,14 @@ public sealed record SessionState {
     public double PreviewWidth { get; init; } = 280;
 
     /// <summary>
+    /// Width of the folders pane on the left, in pixels - a share of
+    /// <see cref="LayoutWindowWidth"/> like the two sizes beside it. The
+    /// default is the grid's own; a file written before this field existed
+    /// reads as it.
+    /// </summary>
+    public double FoldersWidth { get; init; } = 280;
+
+    /// <summary>
     /// Collapsed state of the bookmarks panel itself (the section above
     /// the drives tree). Defaults to expanded for new users — discovery
     /// matters more than chrome conservation on first run.

@@ -97,7 +97,7 @@ public sealed class DropTargetController {
         IsBookmarkTarget = false;
         e.Handled = true;
 
-        if (!e.Data.GetDataPresent(DataFormats.FileDrop)) {
+        if (PayloadPaths(e.Data) is not { } paths) {
             e.Effects = DragDropEffects.None;
             Reset();
             SetHighlight(null);
@@ -105,12 +105,21 @@ public sealed class DropTargetController {
             return;
         }
 
-        var paths = (string[])e.Data.GetData(DataFormats.FileDrop);
         string? target = ResolveTarget(e, out bool aimed);
         if (target is null) {
             e.Effects = DragDropEffects.None;
             Reset();
             SetHighlight(null);
+            if (!aimed && _currentFolder() is { } container) {
+                // Over the listing of an archive: nothing can be dropped
+                // here, and nothing is wrong either - the entries are
+                // already in it. Marked as the neutral case so the cursor
+                // stays an arrow and the plaque only names what is in
+                // hand, the way it does over any folder of one's own.
+                Target = container;
+                SelfDropReason = SelfDropReason.AlreadyInTarget;
+                TargetIsFallback = true;
+            }
 
             return;
         }
@@ -157,11 +166,11 @@ public sealed class DropTargetController {
     /// move and the release, and that is exactly how a move becomes a copy.
     /// </summary>
     public DropPlan? PlanDrop(DragEventArgs e) {
-        if (!e.Data.GetDataPresent(DataFormats.FileDrop)) {
+        if (PayloadPaths(e.Data) is not { } dropped) {
             return null;
         }
 
-        var paths = ((string[])e.Data.GetData(DataFormats.FileDrop)).ToList();
+        var paths = dropped.ToList();
         string? target = ResolveTarget(e, out _);
         if (target is null) {
             return null;
@@ -273,7 +282,10 @@ public sealed class DropTargetController {
         foreach (var element in Ancestors(e)) {
             if (element.DataContext is FileSystemEntry entry) {
                 if (entry.Kind == EntryKind.Directory) {
-                    return entry.FullPath;
+                    // A folder inside an archive is aimed at and refused,
+                    // like an archive node in the tree below: nothing is
+                    // written into a container.
+                    return Archives.Contains(entry.FullPath) ? null : entry.FullPath;
                 }
 
                 if (entry.FullPath.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)
@@ -291,8 +303,31 @@ public sealed class DropTargetController {
         }
 
         aimed = false;
+        string? here = _currentFolder();
 
-        return _currentFolder();
+        // The listing of an archive is a container too. Refused - and the
+        // caller sees from the flag that nothing was aimed at, and keeps the
+        // cursor neutral rather than forbidding.
+        return here is not null && Archives.Contains(here) ? null : here;
+    }
+
+    /// <summary>
+    /// The file list in the payload, or null when there is none. A drag out
+    /// of an archive carries the shell's own object with no file list in
+    /// it - the receiver is meant to ask the shell for the bytes - so for
+    /// that one the paths come from the drag itself, which is ours and
+    /// still in flight (<see cref="OutgoingDrag.InFlightPaths"/>). A shell
+    /// object from another process has no such side channel and is
+    /// refused, as before. Every drop surface asks this rather than the
+    /// data object directly, or the bookmarks strip answers "no" to a
+    /// drag the tree beside it would take.
+    /// </summary>
+    public static string[]? PayloadPaths(IDataObject data) {
+        if (data.GetDataPresent(DataFormats.FileDrop)) {
+            return (string[])data.GetData(DataFormats.FileDrop);
+        }
+
+        return OutgoingDrag.InFlightPaths?.ToArray();
     }
 
     private static string? ResolveShortcutTarget(string lnkPath) {
@@ -345,6 +380,15 @@ public sealed class DropTargetController {
     /// does without any: move within a drive, copy across drives.
     /// </summary>
     private static DragDropEffects ChooseEffect(IReadOnlyList<string> paths, string target) {
+        // Out of an archive a drop can do one thing: copy the entry out. A
+        // move would delete it from the archive, which nothing here writes
+        // to, and a shortcut into one opens nothing - so the modifiers do
+        // not get a say. The source offers Copy alone for the same reason,
+        // and an answer outside what is offered would read as "no drop".
+        if (paths.Any(Archives.Inside)) {
+            return DragDropEffects.Copy;
+        }
+
         var mods = Keyboard.Modifiers;
         if (mods.HasFlag(ModifierKeys.Alt)) {
             return DragDropEffects.Link;

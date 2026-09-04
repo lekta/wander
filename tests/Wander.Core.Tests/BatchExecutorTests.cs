@@ -30,7 +30,9 @@ public class BatchExecutorTests {
         var fs = new FakeFileSystem();
         var bin = new FakeRecycleBin(fs);
         var undo = new UndoService();
-        var tracker = new OperationTracker();
+        // No throttle: a test wants to see every report, and the fake copies
+        // a batch faster than the real tracker's window.
+        var tracker = new OperationTracker(TimeSpan.Zero);
         var batch = new BatchExecutor(fs, bin, undo, tracker, NullLogger.Instance);
         return (batch, fs, bin, undo, tracker);
     }
@@ -664,7 +666,7 @@ public class BatchExecutorTests {
             var snap = tracker.Snapshot();
             if (snap.Count > 0) {
                 seenInProgress++;
-                Assert.Equal("Recycle", snap[0].Verb);
+                Assert.Equal(OperationVerbs.Recycle, snap[0].Verb);
                 Assert.Equal(2, snap[0].Total);
             }
         };
@@ -674,6 +676,165 @@ public class BatchExecutorTests {
         Assert.True(seenInProgress > 0, "expected at least one Changed fire while the op was in flight");
         // After dispose, tracker is empty.
         Assert.Empty(tracker.Snapshot());
+    }
+
+
+    // --- Bytes ---------------------------------------------------------
+
+    [Fact]
+    public async Task CopyManyAsync_WeighsTheSourcesUpFront_AndCountsBytesAsTheyGo() {
+        var (batch, fs, _, _, tracker) = Setup();
+        fs.Files[SrcA] = new byte[100];
+        fs.Files[SrcB] = new byte[60];
+        fs.Directories.Add(DstFolder);
+
+        long biggestSeen = 0;
+        long totalSeen = 0;
+        tracker.Changed += (_, _) => {
+            foreach (var snap in tracker.Snapshot()) {
+                biggestSeen = Math.Max(biggestSeen, snap.BytesDone);
+                totalSeen = Math.Max(totalSeen, snap.BytesTotal);
+            }
+        };
+
+        await batch.CopyManyAsync(new[] { SrcA, SrcB }, DstFolder, new FakeConflictResolver(), default);
+
+        Assert.Equal(160, totalSeen);
+        Assert.Equal(160, biggestSeen);
+    }
+
+    [Fact]
+    public async Task CopyManyAsync_ReportsBytes_WhileOneFileIsStillGoing() {
+        // The point of the whole exercise: a single large file has to move
+        // the bar, not sit at zero until it lands.
+        var (batch, fs, _, _, tracker) = Setup();
+        fs.Files[SrcA] = new byte[1000];
+        fs.CopyChunk = 100;
+        fs.Directories.Add(DstFolder);
+
+        var partials = new List<long>();
+        tracker.Changed += (_, _) => {
+            var snap = tracker.Snapshot();
+            if (snap.Count > 0 && snap[0].Completed == 0 && snap[0].BytesDone > 0) {
+                partials.Add(snap[0].BytesDone);
+            }
+        };
+
+        await batch.CopyManyAsync(new[] { SrcA }, DstFolder, new FakeConflictResolver(), default);
+
+        // Part-way readings, not one jump from nothing to everything.
+        Assert.Contains(partials, b => b > 0 && b < 1000);
+        Assert.True(partials.Count > 2, $"expected several readings inside the file, got {partials.Count}");
+    }
+
+    [Fact]
+    public async Task CopyManyAsync_SettlesTheCounter_WhenTheCopyReportsNothing() {
+        // A folder: the fake copies it in one call and reports no bytes at
+        // all. The counter still has to end where the estimate said.
+        var (batch, fs, _, _, tracker) = Setup();
+        fs.Directories.Add(RootDir);
+        fs.Files[RootDir + @"\inner.bin"] = new byte[512];
+        fs.Directories.Add(DstFolder);
+
+        long lastDone = 0;
+        tracker.Changed += (_, _) => {
+            var snap = tracker.Snapshot();
+            if (snap.Count > 0) {
+                lastDone = Math.Max(lastDone, snap[0].BytesDone);
+            }
+        };
+
+        await batch.CopyManyAsync(new[] { RootDir }, DstFolder, new FakeConflictResolver(), default);
+
+        Assert.Equal(512, lastDone);
+    }
+
+    [Fact]
+    public async Task MoveManyAsync_CountsBytes_ForARenameThatMovesNone() {
+        var (batch, fs, _, _, tracker) = Setup();
+        fs.Files[SrcA] = new byte[250];
+        fs.Directories.Add(DstFolder);
+
+        long lastDone = 0;
+        tracker.Changed += (_, _) => {
+            var snap = tracker.Snapshot();
+            if (snap.Count > 0) {
+                lastDone = Math.Max(lastDone, snap[0].BytesDone);
+            }
+        };
+
+        await batch.MoveManyAsync(new[] { SrcA }, DstFolder, new FakeConflictResolver(), default);
+
+        Assert.Equal(250, lastDone);
+    }
+
+    [Fact]
+    public async Task DeleteManyAsync_HasNoBytes_AndCountsItems() {
+        var (batch, fs, _, _, tracker) = Setup();
+        fs.Files[RootA] = new byte[10];
+        fs.Files[RootB] = new byte[10];
+
+        bool sawBytes = false;
+        tracker.Changed += (_, _) => {
+            foreach (var snap in tracker.Snapshot()) {
+                sawBytes |= snap.HasBytes;
+            }
+        };
+
+        await batch.DeleteManyAsync(new[] { RootA, RootB }, permanent: false, default);
+
+        Assert.False(sawBytes);
+    }
+
+    [Fact]
+    public async Task CopyManyAsync_CancelledInsideAFile_IsCancelled_NotFailed_AndUndoable() {
+        // Cancel used to be possible only between items; now it lands in the
+        // middle of one. The partial copy is a cancellation, not an error,
+        // and Ctrl+Z has to be able to clear it away.
+        var (batch, fs, bin, undo, tracker) = Setup();
+        fs.Files[SrcA] = new byte[1000];
+        fs.Files[SrcB] = new byte[1000];
+        fs.CopyChunk = 100;
+        fs.Directories.Add(DstFolder);
+
+        using var cts = new CancellationTokenSource();
+        tracker.Changed += (_, _) => {
+            if (tracker.Snapshot() is [{ BytesDone: > 0 }]) {
+                cts.Cancel();
+            }
+        };
+
+        var results = await batch.CopyManyAsync(
+            new[] { SrcA, SrcB }, DstFolder, new FakeConflictResolver(), cts.Token);
+
+        Assert.All(results, r => Assert.Equal(BatchItemStatus.Cancelled, r.Status));
+        Assert.All(results, r => Assert.Null(r.Error));
+
+        // What landed part-way is on the undo stack, so Ctrl+Z clears it.
+        Assert.Equal(1, undo.Depth);
+        undo.Undo();
+        Assert.Contains($"Recycle:{DstA}", bin.CallLog);
+        Assert.False(fs.FileExists(DstA));
+    }
+
+    [Fact]
+    public async Task CopyManyAsync_NamesTheCurrentFile_BeforeItIsFinished() {
+        var (batch, fs, _, _, tracker) = Setup();
+        fs.Files[SrcA] = new byte[100];
+        fs.CopyChunk = 10;
+        fs.Directories.Add(DstFolder);
+
+        var namedWhileUnfinished = new List<string>();
+        tracker.Changed += (_, _) => {
+            var snap = tracker.Snapshot();
+            if (snap.Count > 0 && snap[0].Completed == 0 && snap[0].CurrentPath is { } path) {
+                namedWhileUnfinished.Add(path);
+            }
+        };
+
+        await batch.CopyManyAsync(new[] { SrcA }, DstFolder, new FakeConflictResolver(), default);
+
+        Assert.Contains(SrcA, namedWhileUnfinished);
     }
 
 
