@@ -15,6 +15,9 @@ public enum PreviewRoute {
     /// <summary>A <c>.lnk</c> — the preview is of whatever it points at.</summary>
     Shortcut,
 
+    /// <summary>An archive file: the listing of what is inside it.</summary>
+    Archive,
+
     /// <summary>Multi-frame image: composited frame by frame rather than decoded once.</summary>
     Animation,
     Video,
@@ -129,8 +132,16 @@ public static class PreviewRouter {
 
 
     /// <summary>The route for a path, decided by its extension alone.</summary>
-    public static PreviewRoute Route(string path) {
-        return ForExtension(Path.GetExtension(path));
+    /// <param name="isArchive">
+    /// The path is an archive the shell can list as a folder. A fact the
+    /// table cannot work out for itself - which extensions open that way is
+    /// a property of the machine, and only <c>IShellNamespace</c> knows it -
+    /// so it arrives as an answer rather than as another extension list.
+    /// It wins over the extension: nothing routed by extension has anything
+    /// to show for a <c>.zip</c> anyway.
+    /// </param>
+    public static PreviewRoute Route(string path, bool isArchive = false) {
+        return isArchive ? PreviewRoute.Archive : ForExtension(Path.GetExtension(path));
     }
 
 

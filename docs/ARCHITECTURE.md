@@ -125,7 +125,7 @@ Platform.Windows` — один файл, `App.xaml.cs` (точка композ�
 ```
 === Wander dependency graph (using sweep) ===
 date   : 2026-09-03
-commit : 9f63c06
+commit : 5a3f966
 
 -- projects --
 Wander.App -> Wander.Core   (56 files)
@@ -134,7 +134,7 @@ Wander.Core.Tests -> Wander.Core   (76 files)
 Wander.Harness -> Wander.App   (4 files)
 Wander.Harness -> Wander.Core   (6 files)
 Wander.Harness -> Wander.Platform.Windows   (3 files)
-Wander.Platform.Windows -> Wander.Core   (22 files)
+Wander.Platform.Windows -> Wander.Core   (23 files)
 
 -- Wander.Core: folder -> folder --
   Companions     -> FileSystem     (5 files)
@@ -160,11 +160,11 @@ Wander.Platform.Windows -> Wander.Core   (22 files)
   Search         -> FileSystem     (5 files)
   Search         -> Logging        (1 files)
   Search         -> Preview        (1 files)
-  Shell          -> FileSystem     (2 files)
+  Shell          -> FileSystem     (3 files)
   Shell          -> Localization   (1 files)
-  Shell          -> Logging        (1 files)
+  Shell          -> Logging        (2 files)
   Shell          -> Operations     (1 files)
-  Shell          -> Persistence    (1 files)
+  Shell          -> Persistence    (2 files)
   Shell          -> Undo           (1 files)
 
 -- Wander.Core: levels --
@@ -202,6 +202,7 @@ Wander.Platform.Windows -> Wander.Core   (22 files)
   Conflict       -> Resources      (2 files)
   Conflict       -> Util           (2 files)
   Conflict       -> ViewModels     (2 files)
+  Controllers    -> Converters     (1 files)
   Controllers    -> Preview        (1 files)
   Controllers    -> Resources      (6 files)
   Controllers    -> Util           (1 files)
@@ -234,8 +235,8 @@ Wander.Platform.Windows -> Wander.Core   (22 files)
 -- Wander.App: levels --
   0: Highlighting, Menu, Resources, Util
   1: Diagnostics, Preview, ViewModels
-  2: Conflict, Controllers, Converters
-  3: Controls, Dialogs, DragPreview
+  2: Conflict, Converters
+  3: Controllers, Controls, Dialogs, DragPreview
   4: Views
   5: (root)
 
@@ -518,7 +519,7 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
 - **Байты — только копирующим движком шелла.** `BHID_Stream` и
   `IDataObject` для `ArchiveFolder` отвечают `E_NOINTERFACE`;
   `IFileOperation::CopyItem` с `FOF_NO_UI` извлекает всё. Отсюда
-  `IShellNamespace.CopyOut` и `FileSystem/ExtractionService` (Core) вокруг
+  `IShellNamespace.CopyOut` и `Shell/ExtractionService` (Core) вокруг
   него: `SystemPathGuard` на цель, `IConflictResolver` (Replace → старое в
   корзину), лог, прогресс в `OperationTracker`, отмена через
   `IFileOperationProgressSink.PreCopyItem`, undo — `ExtractAction`
@@ -540,12 +541,23 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
   даёт байт; 7z с `-mhe` отдаёт ноль записей — неотличимо от пустого. Оба
   случая — текст в статусной строке, не пустой список без объяснений;
   нечитаемый контейнер — «архив повреждён или недоступен».
-- **Отступление от «всё откатываемо»:** «открыть» файл из архива извлекает
-  его во временную копию (`AppPaths.Tmp`, подпапка по хешу пути,
-  `TempFiles.Sweep` на старте чистит старше суток) и запускает
-  ассоциацией — без диалогов и без `IUndoableAction`. Временная копия
-  чужого файла не пользовательские данные; статусная строка говорит, что
-  правки в архив не попадут.
+- **Отступление от «всё откатываемо»:** временная копия записи —
+  `Core/Shell/TempExtraction.CopyOutAsync` мимо всех правил: без гарда, без
+  диалогов, без `IUndoableAction`. Временная копия чужого файла не
+  пользовательские данные. Папка — `AppPaths.Tmp` по хешу пути записи
+  (`TempFiles.FolderFor`), чистка — `TempFiles.Sweep` на старте, старше
+  суток. Три потребителя делят одну копию: «открыть» (запуск ассоциацией,
+  статусная строка говорит, что правки в архив не попадут), панель
+  просмотра и окно конфликтов.
+- **Конфликты: «извлёк — сравнил»** (2026-09-03). Запись архива через
+  `IFileSystem` не открыть, поэтому `ExtractionService` перед `ResolveAll`
+  распаковывает те пары, где байты что-то решают: файл против файла равного
+  размера, от мелких к крупным в пределах
+  `FileContentComparer.AutoCompareLimit`. Куда читать байты —
+  `FileConflictInfo.ReadablePath` (`SourceReadPath`); ключ ответов остаётся
+  `Source.FullPath`. Папка внутри архива не распаковывается никогда
+  (`SourceReachable` = false): слияние — это обход, обойти может только
+  шелл; её ответы — заменить / оставить / под новым именем.
 - **Дерево и закладки.** Архив — узел в обеих панелях (как в панели
   навигации Проводника): `TreeNodeViewModel.ReadChildFolders` добавляет к
   папкам файлы, для которых `Archives.Of(path) is { IsRoot: true }`,
@@ -559,9 +571,34 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
   контейнера уводила из архива). `NodeAt` и `DropTargetController` считают
   архивные узлы, как `shell:`: ни меню, ни цели drop. Закладка на архив —
   раскрываемый узел; на путь внутри — лист, не «пропавшая», как у корзины.
-- **Наружу пока нельзя.** Перетаскивание из архива и `Ctrl+C` для чужих
-  программ (`CF_HDROP` с несуществующим путём) — PLAN, P4; сейчас
-  статусная строка честно отсылает к «Извлечь…».
+- **Наружу — шелловским объектом данных** (2026-09-03). `CF_HDROP` с путём
+  внутри архива принимающая программа читает как несуществующий файл,
+  поэтому `IShellNamespace.CreateDataObject(paths)` собирает тот же объект,
+  что отдаёт Проводник: `SHCreateItemFromParsingName` на каждый путь →
+  `SHCreateShellItemArrayFromShellItems` → `BindToHandler(BHID_DataObject)`
+  (Platform, `ShellDataObject`). Внутри — `CFSTR_SHELLIDLIST`, у zip ещё
+  `FileGroupDescriptor`; байты принимающая сторона берёт у шелла. Две
+  точки: `OutgoingDrag.Run` оборачивает его в `DataObject(comObject)` и
+  предлагает **только** `Copy` (Move попросил бы источник удалить запись);
+  `Ctrl+C` идёт через `ISystemClipboard.SetShellObject` (`OleSetClipboard`,
+  OLE поднимается по первому `CO_E_NOTINITIALIZED`). Какой объект отдать,
+  решает `MainViewModel` и передаёт вторым аргументом
+  `ClipboardController.Copy`: контроллер живёт в `Core/FileSystem`, а
+  `IShellNamespace` — в `Core/Shell` этажом выше, и зависимость обратно
+  дала бы цикл. Свой список путей остаётся как был — вставка внутри Wander
+  работает по нему; чтобы `SyncFromSystem` его не стёр (чужой взгляд на
+  шелловский объект — «файлы не на диске»), контроллер помнит флаг
+  `_sharedShellObject`.
+- **Панель просмотра** (2026-09-03). Выделен архив в обычной папке —
+  `PreviewRoute.Archive`, первый уровень через `Enumerate` на пуле, папки
+  сверху, потолок 200 строк и «и ещё N», заголовок — числа и размер файла
+  архива. Решает не расширение: `PreviewRouter.Route(path, isArchive)`
+  берёт ответ фактом от вызывающего (`Archives.Of` плюс `CanNavigate` на
+  пуле) — таблица расширений такого знать не может. Файл **внутри** архива
+  до 32 МБ — временная копия и обычный конвейер по ней (повторный выбор той
+  же записи копию не переделывает: помнятся путь и размер); больше —
+  карточка с отсылкой к «Открыть». Миниатюр и поиска внутри по-прежнему
+  нет.
 
 ## Выделение, буфер, фильтр
 

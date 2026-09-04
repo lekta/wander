@@ -12,9 +12,11 @@ public class ExtractionServiceTests {
     private const string InnerReadme = @"C:\packs\nested.zip\readme.txt";
     private const string InnerDocs = @"C:\packs\nested.zip\docs";
     private const string InnerManual = @"C:\packs\nested.zip\docs\manual.txt";
+    private const string InnerHuge = @"C:\packs\nested.zip\huge.bin";
 
     private const string Target = @"C:\out";
     private const string TargetReadme = @"C:\out\readme.txt";
+    private const string TargetHuge = @"C:\out\huge.bin";
     private const string TargetRenamed = @"C:\out\readme (1).txt";
     private const string TargetDocs = @"C:\out\docs";
 
@@ -174,6 +176,73 @@ public class ExtractionServiceTests {
         Assert.False(conflict.IsMove);
         // Only the shell can open what is inside: no byte comparison, no merge.
         Assert.False(conflict.SourceReachable);
+    }
+
+    /// <summary>
+    /// Q7: same size on both sides is the one case where reading the bytes
+    /// decides anything, so the entry is unpacked into scratch space first
+    /// and the window is told where to read it.
+    /// </summary>
+    [Fact]
+    public async Task Extract_SameSizePair_IsUnpackedSoItsBytesCanBeCompared() {
+        var (service, _, fs, _, _) = Setup();
+        fs.Files[TargetReadme] = "readme"u8.ToArray();
+        var resolver = new FakeConflictResolver(ConflictResolution.Skip);
+
+        await service.ExtractAsync(new[] { InnerReadme }, Target, resolver, CancellationToken.None);
+
+        var conflict = Assert.Single(resolver.Conflicts);
+        Assert.True(conflict.SourceReachable);
+        Assert.NotNull(conflict.ReadablePath);
+        Assert.NotEqual(InnerReadme, conflict.SourceReadPath);
+        Assert.True(fs.FileExists(conflict.SourceReadPath));
+        // And what the window would do with it: the two turn out identical,
+        // which is what "do not ask about identical files" acts on.
+        Assert.True(FileContentComparer.AreIdentical(fs, conflict.SourceReadPath, TargetReadme));
+    }
+
+    [Fact]
+    public async Task Extract_SameSizeButDifferentBytes_ComparesAsDifferent() {
+        var (service, _, fs, _, _) = Setup();
+        fs.Files[TargetReadme] = "README"u8.ToArray();
+        var resolver = new FakeConflictResolver(ConflictResolution.Skip);
+
+        await service.ExtractAsync(new[] { InnerReadme }, Target, resolver, CancellationToken.None);
+
+        var conflict = Assert.Single(resolver.Conflicts);
+        Assert.False(FileContentComparer.AreIdentical(fs, conflict.SourceReadPath, TargetReadme));
+    }
+
+    [Fact]
+    public async Task Extract_PairOverTheCompareLimit_StaysUnreadable() {
+        var (service, ns, fs, _, _) = Setup();
+        long tooBig = FileContentComparer.AutoCompareLimit + 1;
+        ns.AddFile(InnerHuge, "huge", size: tooBig);
+        fs.Files[TargetHuge] = new byte[tooBig];
+        var resolver = new FakeConflictResolver(ConflictResolution.Skip);
+
+        await service.ExtractAsync(new[] { InnerHuge }, Target, resolver, CancellationToken.None);
+
+        var conflict = Assert.Single(resolver.Conflicts);
+        Assert.False(conflict.SourceReachable);
+        Assert.Null(conflict.ReadablePath);
+        Assert.Equal(InnerHuge, conflict.SourceReadPath);
+    }
+
+    /// <summary>
+    /// A folder inside an archive is never unpacked for a question: merging
+    /// one means walking it, and only the shell can. It keeps "replace,
+    /// keep, or a new name".
+    /// </summary>
+    [Fact]
+    public async Task Extract_FolderPair_IsNotUnpacked() {
+        var (service, _, fs, _, _) = Setup();
+        fs.Directories.Add(TargetDocs);
+        var resolver = new FakeConflictResolver(ConflictResolution.Skip);
+
+        await service.ExtractAsync(new[] { InnerDocs }, Target, resolver, CancellationToken.None);
+
+        Assert.False(Assert.Single(resolver.Conflicts).SourceReachable);
     }
 
     [Fact]

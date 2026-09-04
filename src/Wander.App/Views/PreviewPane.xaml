@@ -171,6 +171,9 @@
                                     <DataTrigger Binding="{Binding Preview.Kind}" Value="Folder">
                                         <Setter Property="Visibility" Value="Visible"/>
                                     </DataTrigger>
+                                    <DataTrigger Binding="{Binding Preview.Kind}" Value="Archive">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
                                     <DataTrigger Binding="{Binding Preview.Kind}" Value="None">
                                         <Setter Property="Visibility" Value="Visible"/>
                                     </DataTrigger>
@@ -692,6 +695,57 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!--
+                        Archive listing (P5). An archive file selected in an
+                        ordinary folder: what is in its first level. The
+                        census above cannot answer that - it walks the
+                        filesystem, and there is no filesystem in a zip - so
+                        this is a plain list of names, in the census's
+                        clothes so the two read as one panel.
+                    -->
+                    <ScrollViewer Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Archive}"
+                                  VerticalScrollBarVisibility="Auto" Padding="12,10,12,10">
+                        <StackPanel>
+                            <TextBlock Text="{Binding Preview.FolderTitle}"
+                                       Style="{StaticResource PaneText}"
+                                       FontSize="14" FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="{Binding Preview.ArchiveHeadline}"
+                                       Style="{StaticResource PaneDim}"
+                                       Margin="0,4,0,10" TextWrapping="Wrap"/>
+
+                            <ItemsControl ItemsSource="{Binding Preview.ArchiveEntries}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,2,0,2">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Image Grid.Column="0" Source="{Binding Icon}"
+                                                   Width="16" Height="16" Margin="0,0,8,0"
+                                                   VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Name}"
+                                                       Style="{StaticResource PaneText}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="2" Text="{Binding SizeText}"
+                                                       Style="{StaticResource PaneDim}"
+                                                       Margin="10,0,0,0"
+                                                       VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <TextBlock Text="{Binding Preview.ArchiveMore}"
+                                       Style="{StaticResource PaneDim}"
+                                       Margin="0,8,0,0"
+                                       Visibility="{Binding Preview.HasArchiveMore, Converter={StaticResource BoolToVisibility}}"/>
                         </StackPanel>
                     </ScrollViewer>
 

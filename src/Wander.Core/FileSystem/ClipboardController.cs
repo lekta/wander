@@ -30,6 +30,10 @@ public sealed class ClipboardController {
 
     private List<string> _paths = new();
 
+    // The last thing handed to the OS was a shell data object rather than a
+    // file list; see SyncFromSystem for what that changes.
+    private bool _sharedShellObject;
+
 
     public ClipboardController(ISystemClipboard? system = null) {
         _system = system;
@@ -62,8 +66,19 @@ public sealed class ClipboardController {
     /// Capture paths for a future copy-paste. Replaces any previous content,
     /// including the Cut/Copy mode. Empty input is treated as <see cref="Clear"/>.
     /// </summary>
-    public void Copy(IEnumerable<string> paths) {
-        Capture(paths, isCut: false);
+    /// <param name="systemObject">
+    /// What to hand the OS clipboard instead of a file list, or null for
+    /// the ordinary one. Non-null for a copy from inside an archive, where
+    /// the paths name nothing another program could open and only the
+    /// shell's own data object carries the items
+    /// (<c>IShellNamespace.CreateDataObject</c>). Wander's own paste still
+    /// works off <see cref="Paths"/>, which is captured either way. Built
+    /// by the caller rather than here: the shell lives a layer above this
+    /// one, and pointing the dependency the other way would put the file
+    /// operations and the shell namespace in a circle.
+    /// </param>
+    public void Copy(IEnumerable<string> paths, object? systemObject = null) {
+        Capture(paths, isCut: false, systemObject);
     }
 
     /// <summary>
@@ -83,6 +98,7 @@ public sealed class ClipboardController {
     /// </summary>
     public void Clear() {
         _system?.Clear();
+        _sharedShellObject = false;
         ClearLocal();
     }
 
@@ -113,6 +129,16 @@ public sealed class ClipboardController {
             return false;
         }
 
+        // Our own copy out of an archive reads back as "files that are not
+        // on disk", which is exactly what it is: the shell object carries
+        // item ids and no paths at all. Adopting that reading would throw
+        // away the paths our own paste extracts from, so while the thing
+        // out there is the one we put there, it is left alone.
+        if (_sharedShellObject && !files.Value.HasContent && files.Value.HasUnsupportedFiles) {
+            return false;
+        }
+        _sharedShellObject = false;
+
         LastSystemIssue = files.Value.HasUnsupportedFiles ? SystemIssue.VirtualFiles : null;
 
         if (Same(files.Value.Paths, _paths) && files.Value.IsCut == IsCut) {
@@ -127,15 +153,23 @@ public sealed class ClipboardController {
     }
 
 
-    private void Capture(IEnumerable<string> paths, bool isCut) {
+    private void Capture(IEnumerable<string> paths, bool isCut, object? systemObject = null) {
         _paths = paths?.ToList() ?? new List<string>();
         IsCut = isCut;
         LastSystemIssue = null;
+        _sharedShellObject = false;
 
-        if (_system is not null && _paths.Count > 0 && !_system.SetFiles(_paths, isCut)) {
-            // The copy still works inside Wander — the model is right here.
-            // Only the hand-off to other applications was lost.
-            LastSystemIssue = SystemIssue.WriteFailed;
+        if (_system is not null && _paths.Count > 0) {
+            bool shared = systemObject is null
+                ? _system.SetFiles(_paths, isCut)
+                : _system.SetShellObject(systemObject);
+            if (shared) {
+                _sharedShellObject = systemObject is not null;
+            } else {
+                // The copy still works inside Wander - the model is right
+                // here. Only the hand-off to other applications was lost.
+                LastSystemIssue = SystemIssue.WriteFailed;
+            }
         }
 
         RaiseChanged();

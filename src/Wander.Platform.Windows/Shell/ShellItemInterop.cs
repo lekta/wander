@@ -20,9 +20,22 @@ internal static class ShellItemInterop {
     internal static Guid IID_IShellItem = new("43826d1e-e718-42ee-bc55-a1e261c37bfe");
     internal static Guid IID_IShellItem2 = new("7e9fb0d3-919f-4307-ab2e-9b1860310c93");
     internal static Guid IID_IEnumShellItems = new("70629033-e363-4a28-a567-0db78006e6d7");
+    internal static Guid IID_IShellItemArray = new("b63ea76d-1f85-456f-a19c-48159efa858b");
+
+    /// <summary>The plain COM <c>IDataObject</c> - ole2, not the WPF one.</summary>
+    internal static Guid IID_IDataObject = new("0000010e-0000-0000-c000-000000000046");
 
     /// <summary>Bind handler that hands back an enumerator over the children of a folder.</summary>
     internal static Guid BHID_EnumItems = new("94f60519-2850-4924-aa5a-d15e84868039");
+
+    /// <summary>
+    /// Bind handler that hands back the data object for a selection - the
+    /// same one Explorer puts on the clipboard and into a drag. For entries
+    /// inside an archive it is the only payload that means anything: it
+    /// carries item ids (and, for zip, a file-group descriptor), never
+    /// paths a receiver could open.
+    /// </summary>
+    internal static Guid BHID_DataObject = new("b8c0bd9f-ed24-455c-83e6-d5390c4fe8c4");
 
     internal static Guid CLSID_FileOperation = new("3ad05575-8857-4850-9277-11b85bdb8e09");
     internal static Guid IID_IFileOperation = new("947aab5f-0a5c-4c13-b4d6-4bf7836fc9f8");
@@ -163,6 +176,41 @@ internal static class ShellItemInterop {
 
         [PreserveSig]
         int GetBool(ref PROPERTYKEY key, out int pf);
+    }
+
+
+    /// <summary>
+    /// A selection of shell items. Declared in full - all seven methods in
+    /// vtable order - though only <c>BindToHandler</c> is ever called; see
+    /// the note at the top of the file.
+    /// </summary>
+    [ComImport]
+    [Guid("b63ea76d-1f85-456f-a19c-48159efa858b")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    internal interface IShellItemArray {
+        [PreserveSig]
+        int BindToHandler(IntPtr pbc, ref Guid bhid, ref Guid riid,
+            [MarshalAs(UnmanagedType.Interface)] out object ppv);
+
+        [PreserveSig]
+        int GetPropertyStore(uint flags, ref Guid riid,
+            [MarshalAs(UnmanagedType.Interface)] out object ppv);
+
+        [PreserveSig]
+        int GetPropertyDescriptionList(ref PROPERTYKEY keyType, ref Guid riid,
+            [MarshalAs(UnmanagedType.Interface)] out object ppv);
+
+        [PreserveSig]
+        int GetAttributes(uint attribFlags, uint sfgaoMask, out uint psfgaoAttribs);
+
+        [PreserveSig]
+        int GetCount(out uint pdwNumItems);
+
+        [PreserveSig]
+        int GetItemAt(uint dwIndex, out IShellItem ppsi);
+
+        [PreserveSig]
+        int EnumItems(out IEnumShellItems ppenumShellItems);
     }
 
 
@@ -334,6 +382,11 @@ internal static class ShellItemInterop {
     internal static extern int SHCreateItemFromParsingName(
         [MarshalAs(UnmanagedType.LPWStr)] string pszPath, IntPtr pbc, ref Guid riid,
         [MarshalAs(UnmanagedType.Interface)] out object ppv);
+
+    [DllImport("shell32.dll")]
+    internal static extern int SHCreateShellItemArrayFromShellItems(uint cidl,
+        [MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.Interface)] IShellItem[] rgpsi,
+        ref Guid riid, [MarshalAs(UnmanagedType.Interface)] out object ppv);
 
     [DllImport("ole32.dll")]
     internal static extern int CoCreateInstance(ref Guid rclsid, IntPtr pUnkOuter, uint dwClsContext,

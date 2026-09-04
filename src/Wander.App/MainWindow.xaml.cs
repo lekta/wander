@@ -905,16 +905,6 @@ public partial class MainWindow : Window {
     // the file list or a tree row. Running it does not: see OutgoingDrag.
 
     private void FileList_DragStartRequested(object? sender, FileListDragRequest e) {
-        // A path inside an archive is not a file anybody can be handed: a
-        // CF_HDROP carrying it would have Explorer report a missing file.
-        // Taking things out is what "Извлечь…" and Ctrl+C are for, and the
-        // status bar says so — until the drag itself can carry the shell's
-        // own data object (PLAN, P4).
-        if (Vm.CurrentArchive is not null) {
-            Vm.Status = Strings.StatusArchiveNoDrag;
-            return;
-        }
-
         _outgoing.Run(e.Source, e.Paths, e.Payload);
     }
 

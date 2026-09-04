@@ -51,6 +51,22 @@ public interface ISystemClipboard {
     bool SetFiles(IReadOnlyList<string> paths, bool isCut);
 
     /// <summary>
+    /// Puts a data object built elsewhere on the clipboard as it stands.
+    /// The one caller is a copy from inside an archive, where the paths
+    /// name nothing another program could open and the shell's own object
+    /// carries the items instead (<c>IShellNamespace.CreateDataObject</c>).
+    /// Typed as <c>object</c> for the same reason it is there: Core cannot
+    /// name a COM interface.
+    ///
+    /// <para>
+    /// What lands on the clipboard is rendered by this process, so it goes
+    /// when Wander does - the same as Explorer's own copy out of a zip.
+    /// </para>
+    /// </summary>
+    /// <returns>False if the clipboard could not be written.</returns>
+    bool SetShellObject(object dataObject);
+
+    /// <summary>
     /// What the clipboard holds right now, or <c>null</c> when it could not
     /// be read at all. The distinction matters: an unreadable clipboard must
     /// leave Wander's own copy/cut state alone, while a readable one that

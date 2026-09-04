@@ -16,12 +16,26 @@ namespace Wander.Core.FileSystem;
 /// <param name="SourceReachable">
 /// The source can be opened through <see cref="IFileSystem"/>: its bytes
 /// compared and, for a folder, its contents walked for a merge. False for
-/// an entry inside an archive, which only the shell reads - such a pair is
-/// decided on name, size and date alone, and a folder among them cannot be
-/// merged, only replaced, kept, or extracted under a new name.
+/// a folder inside an archive, which only the shell reads - such a pair is
+/// decided on name, size and date alone, and cannot be merged, only
+/// replaced, kept, or extracted under a new name.
+/// </param>
+/// <param name="ReadablePath">
+/// Where the source's bytes can be read, when that is not
+/// <see cref="Source"/>'s own path. Set for a file inside an archive: only
+/// the shell can read one, so a scratch copy is unpacked before the
+/// question is asked and the comparison reads that instead. Null means the
+/// source reads from where it says it is - every ordinary copy or move.
+/// The answers are still keyed by <see cref="Source"/>'s path: the copy is
+/// where the bytes are, not what the user is deciding about.
 /// </param>
 public sealed record FileConflictInfo(
     FileSystemEntry Source,
     FileSystemEntry ExistingTarget,
     bool IsMove = false,
-    bool SourceReachable = true);
+    bool SourceReachable = true,
+    string? ReadablePath = null) {
+
+    /// <summary>Where to open the source's bytes.</summary>
+    public string SourceReadPath => ReadablePath ?? Source.FullPath;
+}

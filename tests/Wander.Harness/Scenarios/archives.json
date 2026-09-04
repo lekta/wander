@@ -42,6 +42,25 @@
     { "do": "assert-path", "is": "{sandbox}\\archives\\nested.zip" },
     { "do": "assert-entries", "contains": [ "readme.txt" ] },
 
+    // --- The preview pane on an archive and on one of its entries -----
+    // P5: the archive file selected in an ordinary folder lists what is in
+    // it. P6: an entry inside is unpacked into scratch space and previewed
+    // off the copy. Neither can be asserted from here - what the pane drew
+    // is a picture - so both are screenshots for a person to look at.
+    { "do": "preview", "on": true },
+    { "do": "navigate", "path": "{sandbox}\\archives" },
+    { "do": "select", "names": [ "nested.zip" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "preview-archive" },
+    { "do": "note", "text": "look with your eyes on preview-archive.png: the pane lists docs and readme.txt with icons, and says how many files the zip holds" },
+
+    { "do": "navigate", "path": "{sandbox}\\archives\\nested.zip" },
+    { "do": "select", "names": [ "readme.txt" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "preview-archive-entry" },
+    { "do": "note", "text": "look with your eyes on preview-archive-entry.png: the text of readme.txt is shown, and the footer says which archive it is in" },
+    { "do": "preview", "on": false },
+
     // --- Nothing in here writes ---------------------------------------
     // The commands are run through their CanExecute, exactly as a menu row
     // or a hotkey would be: a refusal is the command not firing at all.

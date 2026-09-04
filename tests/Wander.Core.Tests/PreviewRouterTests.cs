@@ -92,4 +92,24 @@ public class PreviewRouterTests {
         Assert.Equal(PreviewRoute.Code, PreviewRouter.Route(@"D:\Dev\Wander\src\App.xaml"));
         Assert.Equal(PreviewRoute.Unsupported, PreviewRouter.Route(@"D:\Downloads\archive.7z"));
     }
+
+
+    /// <summary>
+    /// Whether a file opens as a folder is not something an extension can
+    /// answer - a .7z whose association went to 7-Zip does not - so the
+    /// caller brings the answer and the table takes it as a fact.
+    /// </summary>
+    [Fact]
+    public void Archive_IsRoutedByTheCallersAnswer_NotByExtension() {
+        Assert.Equal(PreviewRoute.Archive, PreviewRouter.Route(@"D:\Downloads\pack.7z", isArchive: true));
+        Assert.Equal(PreviewRoute.Unsupported, PreviewRouter.Route(@"D:\Downloads\pack.7z"));
+    }
+
+    [Fact]
+    public void Archive_WinsOverAnyExtension() {
+        // An archive whose name says nothing about it: .nupkg is a zip, and
+        // a file with no extension at all can be one too.
+        Assert.Equal(PreviewRoute.Archive, PreviewRouter.Route(@"D:\pkg\lib.nupkg", isArchive: true));
+        Assert.Equal(PreviewRoute.Archive, PreviewRouter.Route(@"D:\pkg\dump", isArchive: true));
+    }
 }

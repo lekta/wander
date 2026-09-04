@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using Wander.Core.FileSystem;
 using Wander.Core.Logging;
+using ComTypes = System.Runtime.InteropServices.ComTypes;
 
 namespace Wander.Platform.Windows.FileSystem;
 
@@ -94,6 +95,52 @@ public sealed class WindowsClipboard : ISystemClipboard {
 
             return true;
         });
+    }
+
+
+    /// <summary>
+    /// Hands a shell data object to the clipboard through OLE rather than
+    /// through <c>SetClipboardData</c>: the object renders its formats on
+    /// demand, and only <c>OleSetClipboard</c> keeps it alive to be asked.
+    /// The formats inside are the shell's, so a receiver sees exactly what
+    /// it would have seen from Explorer.
+    ///
+    /// <para>
+    /// Not flushed (<c>OleFlushClipboard</c>): flushing renders every
+    /// format there and then, which for an archive means unpacking the
+    /// bytes into memory before anyone has asked for them. The cost of not
+    /// flushing is that the copy dies with the process - which is what
+    /// Explorer's own copy out of a zip does too.
+    /// </para>
+    /// </summary>
+    public bool SetShellObject(object dataObject) {
+        if (dataObject is not ComTypes.IDataObject data) {
+            LastError = nameof(SetShellObject);
+            _log.Warn("[clipboard] the object handed over is not an IDataObject");
+
+            return false;
+        }
+
+        int hr = OleSetClipboard(data);
+        // OLE has to be started on the thread that owns the clipboard, and
+        // nothing else in Wander does it - the rest of this class is plain
+        // Win32. One initialization on first use, never undone: the thread
+        // is the UI thread and it lives as long as the process.
+        if (hr == CO_E_NOTINITIALIZED) {
+            OleInitialize(IntPtr.Zero);
+            hr = OleSetClipboard(data);
+        }
+
+        if (hr < 0) {
+            LastError = $"{nameof(SetShellObject)}: 0x{hr:X8}";
+            _log.Warn($"[clipboard] OleSetClipboard failed (hr=0x{hr:X8})");
+
+            return false;
+        }
+
+        LastError = null;
+
+        return true;
     }
 
 
@@ -323,6 +370,9 @@ public sealed class WindowsClipboard : ISystemClipboard {
     /// <summary>DragQueryFile's "how many files are in there" sentinel.</summary>
     private const uint AllFiles = 0xFFFFFFFF;
 
+    /// <summary>OLE was never started on this thread; see <see cref="SetShellObject"/>.</summary>
+    private const int CO_E_NOTINITIALIZED = unchecked((int)0x800401F0);
+
     private const string PreferredDropEffect = "Preferred DropEffect";
     private const string FileGroupDescriptorW = "FileGroupDescriptorW";
     private const string FileGroupDescriptorA = "FileGroupDescriptor";
@@ -373,6 +423,12 @@ public sealed class WindowsClipboard : ISystemClipboard {
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     private static extern uint DragQueryFile(IntPtr hDrop, uint iFile, char[]? lpszFile, uint cch);
+
+    [DllImport("ole32.dll")]
+    private static extern int OleSetClipboard(ComTypes.IDataObject pDataObj);
+
+    [DllImport("ole32.dll")]
+    private static extern int OleInitialize(IntPtr pvReserved);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern IntPtr GlobalAlloc(uint uFlags, UIntPtr dwBytes);

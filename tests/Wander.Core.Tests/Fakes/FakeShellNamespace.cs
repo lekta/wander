@@ -14,6 +14,7 @@ internal sealed class FakeShellNamespace : IShellNamespace {
     private readonly HashSet<string> _extensions;
 
     private readonly Dictionary<string, string> _files = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, long> _sizes = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _folders = new(StringComparer.OrdinalIgnoreCase);
 
 
@@ -33,8 +34,16 @@ internal sealed class FakeShellNamespace : IShellNamespace {
 
 
     /// <summary>Adds a file inside an archive: full path, then its contents.</summary>
-    public FakeShellNamespace AddFile(string fullPath, string content = "x") {
+    /// <param name="size">
+    /// What the listing reports, when that is not the length of
+    /// <paramref name="content"/> - the way to have an entry of many
+    /// megabytes in a test without allocating them.
+    /// </param>
+    public FakeShellNamespace AddFile(string fullPath, string content = "x", long? size = null) {
         _files[fullPath] = content;
+        if (size is { } declared) {
+            _sizes[fullPath] = declared;
+        }
         AddParents(fullPath);
 
         return this;
@@ -74,11 +83,19 @@ internal sealed class FakeShellNamespace : IShellNamespace {
         }
         foreach (var (file, content) in _files) {
             if (IsChildOf(file, shellPath)) {
-                children.Add(Entry(file, EntryKind.File, content.Length));
+                children.Add(Entry(file, EntryKind.File, _sizes.TryGetValue(file, out long declared) ? declared : content.Length));
             }
         }
 
         return children;
+    }
+
+    /// <summary>
+    /// Stands in for the shell's data object: a marker holding the paths,
+    /// enough for a test to see that one went out instead of a file list.
+    /// </summary>
+    public object? CreateDataObject(IReadOnlyList<string> paths) {
+        return paths.Count == 0 ? null : string.Join(";", paths);
     }
 
     public Task CopyOut(

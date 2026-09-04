@@ -79,6 +79,30 @@ public interface IShellNamespace {
         string targetFolder,
         IProgress<string>? progress,
         CancellationToken ct);
+
+    /// <summary>
+    /// The shell's own data object for <paramref name="paths"/> - what
+    /// Explorer puts on the clipboard and into a drag when a selection is
+    /// copied out of a zip. Handed back as <c>object</c> because it is a
+    /// COM interface Core has no way to name: the caller either passes it
+    /// straight to the platform (the clipboard) or lets WPF wrap it (a
+    /// drag).
+    ///
+    /// <para>
+    /// It exists for the paths a file list cannot carry. An entry inside an
+    /// archive has no file another program could open, and a
+    /// <c>CF_HDROP</c> naming it makes the receiver report a file that is
+    /// not there. The shell's object carries item ids instead, and whoever
+    /// takes the drop asks the shell for the bytes.
+    /// </para>
+    ///
+    /// <para>
+    /// Null when no object could be built - a path the shell does not
+    /// recognise, an archive that has gone. The caller then falls back to
+    /// the ordinary file list.
+    /// </para>
+    /// </summary>
+    object? CreateDataObject(IReadOnlyList<string> paths);
 }
 
 

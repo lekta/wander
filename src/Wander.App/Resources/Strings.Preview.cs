@@ -36,6 +36,18 @@ public static partial class Strings {
     /// <summary>Папка пуста</summary>
     public static string PreviewFolderEmpty => Get(nameof(PreviewFolderEmpty));
 
+    /// <summary>Архив: {0:N0} файлов · {1:N0} папок · {2}</summary>
+    public static string PreviewArchiveHeadline => Get(nameof(PreviewArchiveHeadline));
+
+    /// <summary>и ещё {0:N0}</summary>
+    public static string PreviewArchiveMore => Get(nameof(PreviewArchiveMore));
+
+    /// <summary>Архив пуст или защищён паролем</summary>
+    public static string PreviewArchiveEmpty => Get(nameof(PreviewArchiveEmpty));
+
+    /// <summary>Архив повреждён или защищён</summary>
+    public static string PreviewArchiveBroken => Get(nameof(PreviewArchiveBroken));
+
     /// <summary>Вместе с файлом:</summary>
     public static string PreviewIntegrated => Get(nameof(PreviewIntegrated));
 

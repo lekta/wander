@@ -66,6 +66,10 @@ public sealed class WindowsShellNamespace : IShellNamespace {
         return Task.Run(() => _archives.CopyOut(items, targetFolder, progress, ct), ct);
     }
 
+    public object? CreateDataObject(IReadOnlyList<string> paths) {
+        return ShellDataObject.Create(paths, _logger);
+    }
+
     /// <summary>
     /// The Recycle Bin's own label; null for an archive, whose path reads
     /// correctly as it stands and whose breadcrumbs are the ordinary ones.

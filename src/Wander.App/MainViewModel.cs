@@ -3262,18 +3262,31 @@ public sealed class MainViewModel : ObservableObject {
         if (_selectedEntries.Count == 0) {
             return;
         }
-        _clipboard.Copy(WithCompanions(_selectedEntries));
 
-        // From inside an archive the clipboard holds paths no other
-        // application can open — pasting them in Wander extracts, pasting
-        // them elsewhere does nothing. Said out loud rather than discovered.
-        if (CurrentArchive is not null) {
-            Status = string.Format(Strings.StatusArchiveCopied, _selectedEntries.Count);
-            return;
-        }
+        var paths = WithCompanions(_selectedEntries).ToList();
+
+        // From inside an archive the paths name no file another program
+        // could open, so what goes out to the system is the shell's own
+        // data object over the same entries - the one Explorer puts there
+        // when you copy out of a zip. Wander's own paste keeps working off
+        // the paths either way.
+        _clipboard.Copy(paths, ArchiveDataObject(paths));
 
         Status = ClipboardWriteIssue()
-            ?? string.Format(Strings.StatusCopied, _selectedEntries.Count);
+            ?? string.Format(
+                CurrentArchive is not null ? Strings.StatusArchiveCopied : Strings.StatusCopied,
+                _selectedEntries.Count);
+    }
+
+    /// <summary>
+    /// The shell's data object for <paramref name="paths"/> when they lead
+    /// into an archive, and null for ordinary files - those travel as the
+    /// file list every application understands.
+    /// </summary>
+    private object? ArchiveDataObject(IReadOnlyList<string> paths) {
+        return paths.Any(Archives.Inside) && TryGetShellNamespace() is { } ns
+            ? ns.CreateDataObject(paths)
+            : null;
     }
 
     private void Cut() {

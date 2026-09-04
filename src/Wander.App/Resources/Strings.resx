@@ -89,6 +89,20 @@
   <data name="PreviewFolderTypes" xml:space="preserve">
     <value>Что внутри</value>
   </data>
+  <data name="PreviewArchiveHeadline" xml:space="preserve">
+    <value>Архив: {0:N0} файлов · {1:N0} папок · {2}</value>
+    <comment>{0} — файлов в корне, {1} — папок, {2} — размер самого файла архива</comment>
+  </data>
+  <data name="PreviewArchiveMore" xml:space="preserve">
+    <value>и ещё {0:N0}</value>
+    <comment>{0} — сколько записей не поместилось в список</comment>
+  </data>
+  <data name="PreviewArchiveEmpty" xml:space="preserve">
+    <value>Архив пуст или защищён паролем</value>
+  </data>
+  <data name="PreviewArchiveBroken" xml:space="preserve">
+    <value>Архив повреждён или защищён</value>
+  </data>
   <data name="PreviewFolderEmpty" xml:space="preserve">
     <value>Папка пуста</value>
   </data>
@@ -1497,7 +1511,7 @@
     <value>«{0}»: пусто или защищено паролем</value>
   </data>
   <data name="StatusArchiveCopied" xml:space="preserve">
-    <value>Скопировано из архива: {0}. В другие программы — через «Извлечь…»</value>
+    <value>Скопировано из архива: {0}</value>
   </data>
   <data name="StatusArchiveTempCopy" xml:space="preserve">
     <value>Открыта временная копия «{0}»; изменения в архив не попадут</value>
@@ -1517,11 +1531,8 @@
   <data name="ExtractPickFolderTitle" xml:space="preserve">
     <value>Куда извлечь</value>
   </data>
-  <data name="PreviewArchiveEntry" xml:space="preserve">
-    <value>Файл внутри архива. Содержимое не показывается — извлеките его или откройте временную копию.</value>
-  </data>
-  <data name="StatusArchiveNoDrag" xml:space="preserve">
-    <value>Перетаскивание из архива пока не работает — «Извлечь…» или Ctrl+C и вставка в папку</value>
+  <data name="PreviewArchiveTooBig" xml:space="preserve">
+    <value>Файл внутри архива больше 32 МБ — «Открыть» распакует его во временную копию</value>
   </data>
   <data name="SummaryInsideArchive" xml:space="preserve">
     <value>В архиве</value>

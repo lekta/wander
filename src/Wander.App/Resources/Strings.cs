@@ -278,11 +278,8 @@ public static partial class Strings {
     /// <summary>Куда извлечь</summary>
     public static string ExtractPickFolderTitle => Get(nameof(ExtractPickFolderTitle));
 
-    /// <summary>Файл внутри архива. Содержимое не показывается.</summary>
-    public static string PreviewArchiveEntry => Get(nameof(PreviewArchiveEntry));
-
-    /// <summary>Перетаскивание из архива пока не работает</summary>
-    public static string StatusArchiveNoDrag => Get(nameof(StatusArchiveNoDrag));
+    /// <summary>Файл внутри архива больше 32 МБ</summary>
+    public static string PreviewArchiveTooBig => Get(nameof(PreviewArchiveTooBig));
 
     /// <summary>В архиве</summary>
     public static string SummaryInsideArchive => Get(nameof(SummaryInsideArchive));

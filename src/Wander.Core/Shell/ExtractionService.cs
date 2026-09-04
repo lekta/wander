@@ -74,7 +74,7 @@ public sealed class ExtractionService {
         var queued = new List<int>(plans.Count);
         var restores = new List<IUndoableAction>();
 
-        if (!ResolveConflicts(plans, results, queue, queued, restores, resolver)) {
+        if (!await ResolveConflicts(plans, results, queue, queued, restores, resolver, ct).ConfigureAwait(false)) {
             // Cancelled before anything moved. The recycled originals of the
             // Replaces answered before the Cancel are still undoable.
             PushUndo(restores, Array.Empty<string>());
@@ -139,25 +139,15 @@ public sealed class ExtractionService {
     }
 
     /// <summary>
-    /// One entry, copied out with no questions asked, for a target folder
-    /// Wander owns and cleans up itself - the temporary copy behind
-    /// "open". Deliberately outside the rules the method above follows:
-    /// a scratch copy of somebody's file is not the user's data, so it
-    /// carries no undo step and asks about no conflicts (the folder it goes
-    /// into was made for it). Written down in ARCHITECTURE.md.
+    /// One entry, copied out with no questions asked, into scratch space
+    /// Wander owns - the temporary copy behind "open". The work is
+    /// <see cref="TempExtraction"/>'s, shared with the preview pane and the
+    /// conflict window; this is the door onto it for a caller that already
+    /// has the service in hand.
     /// </summary>
     /// <returns>The path of the copy.</returns>
-    public async Task<string> ExtractToTempAsync(string source, string tempFolder, CancellationToken ct) {
-        _fs.CreateDirectory(tempFolder);
-        string destination = Path.Combine(tempFolder, NameOf(source));
-        if (_fs.FileExists(destination)) {
-            _fs.DeleteFile(destination);
-        }
-
-        await _ns.CopyOut(new[] { new CopyOutItem(source) }, tempFolder, null, ct).ConfigureAwait(false);
-        _log.Info($"Extract (temporary copy): {source} -> {destination}");
-
-        return destination;
+    public Task<string> ExtractToTempAsync(string source, string tempFolder, CancellationToken ct) {
+        return TempExtraction.CopyOutAsync(_ns, _fs, _log, source, tempFolder, ct);
     }
 
 
@@ -167,10 +157,10 @@ public sealed class ExtractionService {
     /// ones that will, and a restore step for every target sent to the bin.
     /// </summary>
     /// <returns>False when the user cancelled the whole batch.</returns>
-    private bool ResolveConflicts(
+    private async Task<bool> ResolveConflicts(
         IReadOnlyList<Plan> plans, BatchItemResult[] results,
         List<CopyOutItem> queue, List<int> queued, List<IUndoableAction> restores,
-        IConflictResolver resolver) {
+        IConflictResolver resolver, CancellationToken ct) {
 
         var colliding = new List<int>();
         var infos = new List<FileConflictInfo>();
@@ -180,6 +170,8 @@ public sealed class ExtractionService {
                 infos.Add(BuildInfo(plans[i]));
             }
         }
+
+        await UnpackForComparison(infos, ct).ConfigureAwait(false);
 
         // Asked once, about the whole list, before the engine starts - see
         // IConflictResolver. Nothing has been copied yet, so a Cancel here
@@ -238,6 +230,61 @@ public sealed class ExtractionService {
         return true;
     }
 
+    /// <summary>
+    /// Unpacks the sources the window would otherwise have to guess about,
+    /// so their bytes can be compared with the files they would overwrite.
+    /// Only same-size file pairs are worth it - anything else is already
+    /// decided by kind or size, without reading a byte
+    /// (<see cref="ConflictVerdict.ContentUndecided"/>).
+    ///
+    /// <para>
+    /// Smallest first, up to <see cref="FileContentComparer.AutoCompareLimit"/>
+    /// altogether: a single 60 MB pair must not cost the two 1 KB ones
+    /// their answer, and unpacking everything a batch happens to collide
+    /// with would make the dialog wait on the disk. What is left over stays
+    /// as it was - decided on name, size and date.
+    /// </para>
+    ///
+    /// <para>
+    /// The copies go to the same scratch folders the preview pane and
+    /// "Open" use, so an entry already unpacked costs nothing, and
+    /// <c>TempFiles.Sweep</c> clears them a day later. An entry the shell
+    /// will not give up (a password) simply keeps its old verdict.
+    /// </para>
+    /// </summary>
+    private async Task UnpackForComparison(List<FileConflictInfo> infos, CancellationToken ct) {
+        var candidates = new List<int>();
+        for (int i = 0; i < infos.Count; i++) {
+            var info = infos[i];
+            if (info.Source.Kind == EntryKind.File
+                && info.ExistingTarget.Kind == EntryKind.File
+                && info.Source.Size is { } size
+                && size == info.ExistingTarget.Size) {
+                candidates.Add(i);
+            }
+        }
+
+        long budget = FileContentComparer.AutoCompareLimit;
+        foreach (int i in candidates.OrderBy(i => infos[i].Source.Size ?? 0)) {
+            long size = infos[i].Source.Size ?? 0;
+            if (size > budget) {
+                break;
+            }
+            budget -= size;
+
+            try {
+                string copy = await TempExtraction
+                    .CopyOutAsync(_ns, _fs, _log, infos[i].Source.FullPath, ct)
+                    .ConfigureAwait(false);
+                infos[i] = infos[i] with { SourceReachable = true, ReadablePath = copy };
+            } catch (OperationCanceledException) {
+                throw;
+            } catch (Exception ex) {
+                _log.Info($"Extract: cannot unpack {infos[i].Source.FullPath} for comparison - {ex.Message}");
+            }
+        }
+    }
+
     private void PushUndo(IReadOnlyList<IUndoableAction> restores, IReadOnlyList<string> extracted) {
         var steps = new List<IUndoableAction>(restores.Count + extracted.Count);
         steps.AddRange(restores);
@@ -273,8 +320,12 @@ public sealed class ExtractionService {
         var source = _ns.Enumerate(Path.GetDirectoryName(plan.Source) ?? "")
             .FirstOrDefault(e => string.Equals(e.FullPath, plan.Source, StringComparison.OrdinalIgnoreCase));
 
-        // Only the shell can open what is inside the archive: no byte
-        // comparison, no merge - the window decides on name, size and date.
+        // Nothing inside an archive can be opened through IFileSystem, so
+        // the pair starts out decided on name, size and date alone.
+        // UnpackForComparison then buys the bytes back for the file pairs
+        // where they would settle the question; a folder keeps this
+        // verdict, because merging one means walking it, and only the
+        // shell can.
         return new FileConflictInfo(
             source ?? Unknown(plan.Source),
             _fs.GetEntry(plan.Destination) ?? Unknown(plan.Destination),

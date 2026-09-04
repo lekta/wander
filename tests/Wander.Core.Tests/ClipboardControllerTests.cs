@@ -246,6 +246,48 @@ public class ClipboardControllerTests {
     }
 
     [Fact]
+    public void Copy_WithShellObject_SendsItInsteadOfTheFileList() {
+        var system = new FakeSystemClipboard();
+        var clip = new ClipboardController(system);
+
+        clip.Copy(new[] { FileA }, systemObject: "shell-object");
+
+        Assert.Equal(new[] { "SetShellObject" }, system.CallLog);
+        Assert.Equal("shell-object", system.SharedObject);
+        // The paths stay: Wander's own paste extracts from them.
+        Assert.Equal(new[] { FileA }, clip.Paths);
+        Assert.Null(clip.LastSystemIssue);
+    }
+
+    [Fact]
+    public void Sync_KeepsOurOwnShellObjectsPaths() {
+        var system = new FakeSystemClipboard();
+        var clip = new ClipboardController(system);
+
+        // A copy out of an archive: the clipboard reads back as "files that
+        // are not on disk", because that is what a shell object looks like
+        // from outside. Our own paths must survive it.
+        clip.Copy(new[] { FileA }, systemObject: "shell-object");
+
+        Assert.False(clip.SyncFromSystem());
+        Assert.Equal(new[] { FileA }, clip.Paths);
+        Assert.Null(clip.LastSystemIssue);
+    }
+
+    [Fact]
+    public void Sync_AdoptsWhatCameAfterOurShellObject() {
+        var system = new FakeSystemClipboard();
+        var clip = new ClipboardController(system);
+        clip.Copy(new[] { FileA }, systemObject: "shell-object");
+
+        // Somebody copied real files afterwards; ours is gone.
+        system.Content = new ClipboardFiles(new[] { FileC }, IsCut: false);
+
+        Assert.True(clip.SyncFromSystem());
+        Assert.Equal(new[] { FileC }, clip.Paths);
+    }
+
+    [Fact]
     public void Sync_FiresChanged_SoPasteCanRefresh() {
         var system = new FakeSystemClipboard {
             Content = new ClipboardFiles(new[] { FileC }, IsCut: false),

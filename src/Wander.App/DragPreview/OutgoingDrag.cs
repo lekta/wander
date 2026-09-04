@@ -3,8 +3,10 @@ using System.Windows;
 using System.Windows.Input;
 using Wander.App.Converters;
 using Wander.App.Resources;
+using Wander.Core;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
+using Wander.Core.Shell;
 
 namespace Wander.App.DragPreview;
 
@@ -75,8 +77,17 @@ public sealed class OutgoingDrag {
         System.Windows.DragDrop.AddGiveFeedbackHandler(src, feedback);
 
         try {
-            var data = new DataObject(DataFormats.FileDrop, payload);
-            System.Windows.DragDrop.DoDragDrop(src, data, DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link);
+            // Out of an archive the payload is not a file list anybody can
+            // open, and the shell's own object goes instead (see
+            // ShellPayload). Copy is then the only effect offered: a Move
+            // would be asking the source to delete the entry afterwards,
+            // and nothing writes into an archive.
+            var shell = ShellPayload(payload);
+            var data = shell ?? new DataObject(DataFormats.FileDrop, payload);
+            var effects = shell is null
+                ? DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link
+                : DragDropEffects.Copy;
+            System.Windows.DragDrop.DoDragDrop(src, data, effects);
         } catch {
             // drop target may throw on rejection — ignore.
         } finally {
@@ -86,6 +97,24 @@ public sealed class OutgoingDrag {
             preview.Close();
             _preview = null;
         }
+    }
+
+
+    /// <summary>
+    /// The shell's data object for a drag out of an archive, wrapped so WPF
+    /// can carry it, or null when the paths are ordinary files. What is in
+    /// it - item ids, and for a zip a file-group descriptor - is what the
+    /// receiver asks the shell to unpack; a <c>CF_HDROP</c> naming the same
+    /// entries would have it report a file that is not there.
+    /// </summary>
+    private static DataObject? ShellPayload(string[] payload) {
+        if (!payload.Any(Archives.Inside)) {
+            return null;
+        }
+
+        var shellObject = ServiceLocator.TryGet<IShellNamespace>()?.CreateDataObject(payload);
+
+        return shellObject is null ? null : new DataObject(shellObject);
     }
 
 

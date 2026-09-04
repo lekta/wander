@@ -251,7 +251,7 @@ public sealed class ConflictWindowViewModel : ObservableObject {
     private bool? Read(FileConflictInfo conflict) {
         try {
             return FileContentComparer.AreIdentical(
-                _fs, conflict.Source.FullPath, conflict.ExistingTarget.FullPath, _cts.Token);
+                _fs, conflict.SourceReadPath, conflict.ExistingTarget.FullPath, _cts.Token);
         } catch (OperationCanceledException) {
             return null;
         } catch (Exception ex) {

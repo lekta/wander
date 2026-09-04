@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Media.Media3D;
+using Wander.App.Converters;
 using Wander.App.Preview;
 using Wander.App.Resources;
 using Wander.App.Util;
@@ -12,6 +13,7 @@ using Wander.Core;
 using Wander.Core.Companions;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
+using Wander.Core.Logging;
 using Wander.Core.Preview;
 using Wander.Core.Shell;
 using ImageMetadata = Wander.Core.Icons.ImageMetadata;
@@ -73,6 +75,20 @@ public sealed class PreviewController : ObservableObject {
     /// </summary>
     private const int CoverDecodeWidth = 520;
 
+    /// <summary>
+    /// How many rows of an archive the pane lists. Past this the answer to
+    /// "what is in here" is the count, not the names, and every row costs
+    /// a shell call for its icon.
+    /// </summary>
+    private const int ArchiveRowLimit = 200;
+
+    /// <summary>
+    /// How big an entry the pane will unpack to look inside. Above it the
+    /// wait and the disk both stop being worth a glance, and "Open" is
+    /// there for the times they are.
+    /// </summary>
+    private const long MaxArchivePreviewBytes = 32L * 1024 * 1024;
+
 
     private readonly IImageMetadataReader? _metadataReader;
     private readonly CompanionMetadataService? _companionMetadata;
@@ -85,6 +101,15 @@ public sealed class PreviewController : ObservableObject {
     private string _folderHeadline = "";
     private string _folderTitle = "";
     private string _folderNote = "";
+    private string _archiveHeadline = "";
+    private string _archiveMore = "";
+    private bool _archiveEntryTooBig;
+
+    // The last archive entry unpacked for a preview, so re-selecting the
+    // same row does not unpack it again.
+    private string? _archiveCopyOf;
+    private long? _archiveCopySize;
+    private string? _archiveCopy;
 
     private CancellationTokenSource? _previewCts;
     private CancellationTokenSource? _summaryCts;
@@ -532,7 +557,10 @@ public sealed class PreviewController : ObservableObject {
     public string PlaceholderText =>
         _kind == PreviewKind.None ? Strings.PreviewSelectFile
         : _linkBroken ? Strings.PreviewLinkBroken
-        : Archives.Inside(_primary?.FullPath) ? Strings.PreviewArchiveEntry
+        // An entry too big to unpack for a look. Everything else inside an
+        // archive is previewed off its scratch copy, and a format the pane
+        // cannot read says so in the ordinary words.
+        : _archiveEntryTooBig ? Strings.PreviewArchiveTooBig
         : Strings.PreviewUnsupported;
 
 
@@ -569,6 +597,34 @@ public sealed class PreviewController : ObservableObject {
 
     /// <summary>Biggest file types first, with a bar proportional to their share.</summary>
     public ObservableCollection<FolderTypeRow> FolderTypes { get; } = new();
+
+
+    // --- Archive listing -------------------------------------------------
+    // An archive file selected in an ordinary folder. The census above
+    // cannot describe it - it walks the filesystem, and what is inside an
+    // archive is not on one - so the first level is listed instead, which
+    // is the question "what is in this zip" asked plainly.
+
+    /// <summary>Counts and the archive file's own size, over the listing.</summary>
+    public string ArchiveHeadline {
+        get => _archiveHeadline;
+        private set => SetField(ref _archiveHeadline, value);
+    }
+
+    /// <summary>"and N more" when the listing was cut at the ceiling; blank otherwise.</summary>
+    public string ArchiveMore {
+        get => _archiveMore;
+        private set {
+            if (SetField(ref _archiveMore, value)) {
+                Raise(nameof(HasArchiveMore));
+            }
+        }
+    }
+
+    public bool HasArchiveMore => _archiveMore.Length > 0;
+
+    /// <summary>First level of the archive, folders first.</summary>
+    public ObservableCollection<ArchiveEntryRow> ArchiveEntries { get; } = new();
 
 
     // --- Volume block ---------------------------------------------------
@@ -736,18 +792,33 @@ public sealed class PreviewController : ObservableObject {
             return;
         }
 
-        // A file inside an archive: name, size and date in the footer, and
-        // a line saying why there is nothing above it. Reading the content
-        // means unpacking it, which is what "Открыть" is for.
-        if (Archives.Inside(_primary.FullPath)) {
-            Kind = PreviewKind.Unsupported;
-            IsLoading = false;
-            return;
-        }
-
         IsLoading = true;
         try {
             string path = _primary.FullPath;
+
+            // A file inside an archive has no bytes anyone but the shell
+            // can read, so a copy is unpacked into scratch space and the
+            // copy goes through the ordinary pipeline. Past the ceiling
+            // there is no copy: unpacking half a gigabyte because a row was
+            // clicked is not a preview, and "Open" is the way to it.
+            if (Archives.Inside(path)) {
+                if (_primary.Size > MaxArchivePreviewBytes) {
+                    _archiveEntryTooBig = true;
+                    Kind = PreviewKind.Unsupported;
+
+                    return;
+                }
+
+                if (await ArchiveEntryCopyAsync(_primary, ct) is not { } copy) {
+                    Kind = PreviewKind.Unsupported;
+
+                    return;
+                }
+
+                await LoadFileAsync(copy, ct);
+
+                return;
+            }
 
             // A shortcut is a file about another file. Nobody opens the
             // preview pane to look at a .lnk, so it stands aside and the
@@ -797,7 +868,18 @@ public sealed class PreviewController : ObservableObject {
     private async Task LoadFileAsync(string path, CancellationToken ct) {
         string ext = Path.GetExtension(path);
 
-        switch (PreviewRouter.Route(path)) {
+        // Whether a file opens as a folder is the shell's answer and costs
+        // a call into it, so the cheap half - is this an archive extension
+        // on this machine at all - is asked first and settles it for every
+        // ordinary file without leaving this thread.
+        bool isArchive = Archives.Of(path) is { IsRoot: true }
+            && await Task.Run(() => CanNavigate(path), ct);
+
+        switch (PreviewRouter.Route(path, isArchive)) {
+            case PreviewRoute.Archive:
+                await LoadArchiveAsync(path, ct);
+                break;
+
             case PreviewRoute.Animation:
                 LoadGif(path);
                 break;
@@ -861,6 +943,158 @@ public sealed class PreviewController : ObservableObject {
             default:
                 Kind = PreviewKind.Unsupported;
                 break;
+        }
+    }
+
+
+    /// <summary>
+    /// The scratch copy of one archive entry, unpacked on demand, or null
+    /// when the shell would not give it up (a password, a broken archive).
+    ///
+    /// <para>
+    /// Remembered by path and size so that selecting the same row again -
+    /// walking a list with the arrow keys goes back and forth over the same
+    /// few - does not unpack it a second time. Size, because an archive
+    /// rebuilt under the same name is a different file: the copy is then
+    /// made again.
+    /// </para>
+    /// </summary>
+    private async Task<string?> ArchiveEntryCopyAsync(FileSystemEntry entry, CancellationToken ct) {
+        if (_archiveCopyOf == entry.FullPath && _archiveCopySize == entry.Size
+            && _archiveCopy is { } known && File.Exists(known)) {
+            return known;
+        }
+
+        if (ServiceLocator.TryGet<IShellNamespace>() is not { } ns) {
+            return null;
+        }
+
+        try {
+            string copy = await TempExtraction.CopyOutAsync(
+                ns,
+                ServiceLocator.Get<IFileSystem>(),
+                ServiceLocator.Get<ILogger>(),
+                entry.FullPath,
+                ct);
+
+            _archiveCopyOf = entry.FullPath;
+            _archiveCopySize = entry.Size;
+            _archiveCopy = copy;
+
+            return copy;
+        } catch (OperationCanceledException) {
+            throw;
+        } catch (Exception ex) {
+            ServiceLocator.Get<ILogger>().Info($"Preview: cannot unpack {entry.FullPath} - {ex.Message}");
+
+            return null;
+        }
+    }
+
+
+    /// <summary>
+    /// The first level of an archive: what is in it, without opening it as
+    /// a folder. Names and sizes only - no thumbnails and no walk into the
+    /// subfolders, both of which mean unpacking, and the pane is for
+    /// looking rather than for work (PLAN, decision 4 of section P).
+    /// </summary>
+    private async Task LoadArchiveAsync(string path, CancellationToken ct) {
+        FolderTitle = Path.GetFileName(path);
+        ArchiveHeadline = "";
+        ArchiveMore = "";
+        ArchiveEntries.Clear();
+        Kind = PreviewKind.Archive;
+
+        var listing = await Task.Run(() => ReadArchive(path, ct), ct);
+        if (ct.IsCancellationRequested) {
+            return;
+        }
+
+        if (listing is null) {
+            ArchiveHeadline = Strings.PreviewArchiveBroken;
+
+            return;
+        }
+
+        foreach (var row in listing.Rows) {
+            ArchiveEntries.Add(row);
+        }
+        ArchiveMore = listing.Hidden > 0
+            ? string.Format(Strings.PreviewArchiveMore, listing.Hidden)
+            : "";
+        ArchiveHeadline = listing.Files == 0 && listing.Folders == 0
+            // Nothing came back and the file is not empty: an archive whose
+            // entries are encrypted lists as nothing at all, and is not
+            // told apart from a genuinely empty one from here.
+            ? Strings.PreviewArchiveEmpty
+            : string.Format(
+                Strings.PreviewArchiveHeadline,
+                listing.Files, listing.Folders, SizeFormatter.Format(SizeOf(path)));
+    }
+
+    /// <summary>
+    /// Off the UI thread: the listing, its counts, and an icon per row.
+    /// Null when the archive could not be opened at all - a broken file, a
+    /// disk that went away.
+    /// </summary>
+    private static ArchiveListing? ReadArchive(string path, CancellationToken ct) {
+        if (ServiceLocator.TryGet<IShellNamespace>() is not { } ns) {
+            return null;
+        }
+
+        IReadOnlyList<FileSystemEntry> entries;
+        try {
+            entries = ns.Enumerate(path);
+        } catch (Exception) {
+            return null;
+        }
+
+        int files = entries.Count(e => e.Kind == EntryKind.File);
+        var ordered = entries
+            .OrderBy(e => e.Kind == EntryKind.Directory ? 0 : 1)
+            .ThenBy(e => e.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+
+        var rows = new List<ArchiveEntryRow>(Math.Min(ordered.Count, ArchiveRowLimit));
+        foreach (var entry in ordered.Take(ArchiveRowLimit)) {
+            ct.ThrowIfCancellationRequested();
+            rows.Add(new ArchiveEntryRow(
+                LoadIcon(entry.FullPath),
+                entry.Name,
+                entry.Size is { } size ? SizeFormatter.Format(size) : ""));
+        }
+
+        return new ArchiveListing(rows, files, entries.Count - files, ordered.Count - rows.Count);
+    }
+
+    /// <summary>
+    /// The icon for one row, built frozen so it can be made here rather
+    /// than back on the UI thread. A failure is an icon that stays blank -
+    /// the name is what the row is for.
+    /// </summary>
+    private static ImageSource? LoadIcon(string path) {
+        try {
+            byte[]? bytes = ServiceLocator.Get<IIconProvider>().GetIcon(path, IconSize.Small);
+
+            return bytes is null ? null : IconConverter.ToImage(bytes);
+        } catch {
+            return null;
+        }
+    }
+
+    private static bool CanNavigate(string path) {
+        try {
+            return ServiceLocator.TryGet<IShellNamespace>()?.CanNavigate(path) == true;
+        } catch {
+            return false;
+        }
+    }
+
+    private static long SizeOf(string path) {
+        try {
+            return new FileInfo(path).Length;
+        } catch {
+            return 0;
         }
     }
 
@@ -1178,6 +1412,17 @@ public sealed class PreviewController : ObservableObject {
         IsRawImage = false;
         LinkTarget = null;
         _linkBroken = false;
+        // Two archive entries in a row - one too big, one of a format the
+        // pane cannot read - both land on Unsupported, so the Kind setter
+        // does not fire and the placeholder would keep the first one's
+        // words.
+        if (_archiveEntryTooBig) {
+            _archiveEntryTooBig = false;
+            Raise(nameof(PlaceholderText));
+        }
+        ArchiveEntries.Clear();
+        ArchiveHeadline = "";
+        ArchiveMore = "";
         SetVolume(null);
     }
 
@@ -1505,6 +1750,12 @@ public sealed class PreviewController : ObservableObject {
             _ => Strings.VolumeKindUnknown,
         };
     }
+
+
+    /// <summary>What one read of an archive came back with.</summary>
+    /// <param name="Hidden">Entries past <see cref="ArchiveRowLimit"/>.</param>
+    private sealed record ArchiveListing(
+        IReadOnlyList<ArchiveEntryRow> Rows, int Files, int Folders, int Hidden);
 
 
     private void ScheduleSummaryUpdate() {

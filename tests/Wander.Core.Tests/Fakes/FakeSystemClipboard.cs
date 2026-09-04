@@ -17,6 +17,9 @@ internal sealed class FakeSystemClipboard : ISystemClipboard {
     /// <summary>When true, every call fails — the busy-clipboard case.</summary>
     public bool Fails { get; set; }
 
+    /// <summary>The object handed to <see cref="SetShellObject"/>, if any.</summary>
+    public object? SharedObject { get; private set; }
+
 
     public string? LastError { get; private set; }
 
@@ -30,6 +33,25 @@ internal sealed class FakeSystemClipboard : ISystemClipboard {
 
         LastError = null;
         Content = new ClipboardFiles(paths.ToList(), isCut);
+
+        return true;
+    }
+
+    /// <summary>
+    /// A shell data object went out instead of a file list. The fake keeps
+    /// the object itself and models what the real clipboard then reads
+    /// back: no paths, and "there are files here that are not on disk".
+    /// </summary>
+    public bool SetShellObject(object dataObject) {
+        CallLog.Add("SetShellObject");
+        if (Fails) {
+            LastError = "busy";
+            return false;
+        }
+
+        LastError = null;
+        SharedObject = dataObject;
+        Content = new ClipboardFiles(Array.Empty<string>(), false, HasUnsupportedFiles: true);
 
         return true;
     }
