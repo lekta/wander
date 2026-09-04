@@ -741,6 +741,10 @@ Shell-namespace не отслеживаются. Сторож называет �
 
 ## Настройки и справка
 
+- «Помощь» в меню открывает `docs/GUIDE.md` в браузере: релизная сборка —
+  на теге своей версии (`CrashReporter.GuideUrl`, тег из
+  `InformationalVersion` без суффикса), Debug — на `master`. Снимок на
+  теге — руководство версии; на master — рабочий гайд (RELEASING.md).
 - Язык — русский; все строки в `Strings.resx` через `Resources/Strings.cs`
   (аксессор разложен по областям partial-классами); второй язык —
   `Strings.<culture>.resx`.

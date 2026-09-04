@@ -32,9 +32,6 @@ public static class CrashReporter {
     /// <summary>Project home — the base every other link is built from.</summary>
     public const string ProjectUrl = "https://github.com/lekta/wander";
 
-    /// <summary>The user guide — what the "Помощь" menu row opens.</summary>
-    public const string GuideUrl = ProjectUrl + "/blob/master/docs/GUIDE.md";
-
     private const string NewIssueUrl = ProjectUrl + "/issues/new";
 
     /// <summary>Template chooser (bug report / feature request) — used by the in-app "Report an issue" menu.</summary>
@@ -44,6 +41,16 @@ public static class CrashReporter {
     private const int MaxStackChars = 1800;
 
     private static bool _offeredThisSession;
+
+
+    /// <summary>
+    /// The user guide - what the "Help" menu row opens. A release build
+    /// opens the guide at its own tag, so the text matches the binary; a
+    /// Debug build opens master, which describes the tree it was built from.
+    /// </summary>
+    public static string GuideUrl { get; } = BuildInfo.IsDebug
+        ? ProjectUrl + "/blob/master/docs/GUIDE.md"
+        : ProjectUrl + "/blob/v" + TagVersion(BuildInfo.Version) + "/docs/GUIDE.md";
 
 
     /// <summary>
@@ -293,5 +300,15 @@ public static class CrashReporter {
 
     private static string Truncate(string s, int max) {
         return s.Length <= max ? s : s[..max] + "…";
+    }
+
+    /// <summary>
+    /// The tag a version was released under: <c>0.3.1-beta</c> is tagged
+    /// <c>v0.3.1</c>, the suffix stays out (RELEASING.md).
+    /// </summary>
+    private static string TagVersion(string version) {
+        int dash = version.IndexOf('-');
+
+        return dash < 0 ? version : version[..dash];
     }
 }
