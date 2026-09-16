@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
 using Wander.Core;
+using Wander.Core.Actions;
 using Wander.Core.Companions;
 using Wander.Core.Diagnostics;
 using Wander.Core.FileSystem;
@@ -92,6 +93,16 @@ public static class PlatformBootstrapper {
         ServiceLocator.Register<OperationTracker>(new OperationTracker());
         ServiceLocator.Register<IRecycleBin>(new ShellRecycleBin(logger));
         ServiceLocator.Register<FileOperationService>(new FileOperationService());
+
+        // Custom actions: external programs over the selection, and Wander's
+        // own handlers (the built-in list grows with the presets that need
+        // them). The list file goes where the archive scratch copies go.
+        ServiceLocator.Register<IProcessRunner>(new WindowsProcessRunner());
+        ServiceLocator.Register<ExternalActionRunner>(new ExternalActionRunner(
+            ServiceLocator.Get<IFileSystem>(), ServiceLocator.Get<IRecycleBin>(),
+            ServiceLocator.Get<UndoService>(), ServiceLocator.Get<OperationTracker>(),
+            ServiceLocator.Get<IProcessRunner>(), Array.Empty<IBuiltinAction>(), logger,
+            () => AppPaths.Tmp));
 
         // Companion ("integrated item") support: the resolver knows which
         // files belong together, the metadata service reads and writes what

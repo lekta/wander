@@ -1,6 +1,18 @@
+using Wander.Core.Actions;
 using Wander.Core.FileSystem;
+using Wander.Core.Rename;
 
 namespace Wander.Core.Menu;
+
+/// <summary>Which menu is being built - the shape differs, the rules do not.</summary>
+public enum MenuPlace {
+    /// <summary>A right-click: what applies is shown, the rest is absent.</summary>
+    Context,
+
+    /// <summary>The header's "Операции": a fixed skeleton, what does not apply is greyed and explained.</summary>
+    Header,
+}
+
 
 /// <summary>
 /// Everything the menu is allowed to know about the right-click that
@@ -9,8 +21,20 @@ namespace Wander.Core.Menu;
 /// testable without a UI.
 /// </summary>
 public sealed record ContextMenuTarget {
+    public MenuPlace Place { get; init; } = MenuPlace.Context;
+
     /// <summary>Items under the cursor. Empty for a background click.</summary>
     public IReadOnlyList<FileSystemEntry> Selection { get; init; } = Array.Empty<FileSystemEntry>();
+
+    /// <summary>The actions catalog, presets included; the builder keeps the enabled ones.</summary>
+    public IReadOnlyList<CustomAction> Actions { get; init; } = Array.Empty<CustomAction>();
+
+    /// <summary>
+    /// Tools (<see cref="CustomAction.RequiredTool"/>) the machine does not
+    /// have. Detection is the app's business and happens once; the menu
+    /// only reads the answer.
+    /// </summary>
+    public IReadOnlySet<string> MissingTools { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Folder currently listed. Null only before the first navigation.</summary>
     public string? FolderPath { get; init; }
@@ -43,6 +67,11 @@ public sealed record ContextMenuTarget {
 
     /// <summary>Shorthand for "real filesystem verbs are allowed here".</summary>
     public bool IsWritable => !IsReadOnlyLocation;
+
+    /// <summary>Whether the selection may go to the batch-rename window, and why not.</summary>
+    public BatchRenameKind RenameKind => BatchRenameGate.Classify(Selection);
+
+    public bool ToolAvailable(string tool) => tool.Length == 0 || !MissingTools.Contains(tool);
 
     /// <summary>
     /// The listing is the Recycle Bin. Read-only like any shell namespace,

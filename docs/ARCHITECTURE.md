@@ -125,23 +125,30 @@ Platform.Windows` — один файл, `App.xaml.cs` (точка композ�
 <!-- deps:generated:begin -->
 ```
 === Wander dependency graph (using sweep) ===
-date   : 2026-09-04
-commit : 5a3f966
+date   : 2026-09-16
+commit : 3a9f4ca
 
 -- projects --
 Wander.App -> Wander.Core   (56 files)
 Wander.App -> Wander.Platform.Windows   (1 files)
-Wander.Core.Tests -> Wander.Core   (77 files)
+Wander.Core.Tests -> Wander.Core   (88 files)
 Wander.Harness -> Wander.App   (4 files)
 Wander.Harness -> Wander.Core   (6 files)
 Wander.Harness -> Wander.Platform.Windows   (3 files)
-Wander.Platform.Windows -> Wander.Core   (23 files)
+Wander.Platform.Windows -> Wander.Core   (25 files)
 
 -- Wander.Core: folder -> folder --
+  Actions        -> FileSystem     (3 files)
+  Actions        -> Icons          (1 files)
+  Actions        -> Localization   (1 files)
+  Actions        -> Logging        (1 files)
+  Actions        -> Operations     (1 files)
+  Actions        -> Preview        (1 files)
+  Actions        -> Undo           (1 files)
   Companions     -> FileSystem     (5 files)
   Companions     -> Logging        (1 files)
   Companions     -> Undo           (1 files)
-  Diagnostics    -> Logging        (1 files)
+  Diagnostics    -> Logging        (2 files)
   FileSystem     -> Localization   (1 files)
   FileSystem     -> Logging        (2 files)
   FileSystem     -> Operations     (2 files)
@@ -150,14 +157,21 @@ Wander.Platform.Windows -> Wander.Core   (23 files)
   Listing        -> FileSystem     (5 files)
   Listing        -> Icons          (1 files)
   Listing        -> Search         (1 files)
+  Menu           -> Actions        (2 files)
   Menu           -> FileSystem     (1 files)
-  Menu           -> Localization   (1 files)
+  Menu           -> Localization   (2 files)
   Menu           -> Persistence    (1 files)
+  Menu           -> Rename         (2 files)
   Menu           -> Shell          (2 files)
+  Persistence    -> Actions        (1 files)
   Persistence    -> Companions     (1 files)
   Persistence    -> FileSystem     (1 files)
   Persistence    -> Navigation     (1 files)
+  Persistence    -> Rename         (1 files)
+  Preview        -> FileSystem     (1 files)
   Preview        -> Icons          (1 files)
+  Rename         -> Companions     (1 files)
+  Rename         -> FileSystem     (2 files)
   Search         -> FileSystem     (5 files)
   Search         -> Logging        (1 files)
   Search         -> Preview        (1 files)
@@ -170,11 +184,12 @@ Wander.Platform.Windows -> Wander.Core   (23 files)
 
 -- Wander.Core: levels --
   0: (root), Icons, Layout, Localization, Logging, Navigation, Operations, Undo
-  1: Diagnostics, FileSystem, Preview
-  2: Companions, Search
-  3: Listing, Persistence
-  4: Shell
-  5: Menu
+  1: Diagnostics, FileSystem
+  2: Companions, Preview
+  3: Actions, Rename, Search
+  4: Listing, Persistence
+  5: Shell
+  6: Menu
 
 -- Wander.Platform.Windows: folder -> folder --
   (root)         -> Diagnostics    (1 files)
@@ -936,6 +951,59 @@ false — набор в `SearchController`; true — `Query` очищается,
   `MenuCommandId` (новый пункт появится сам, переименование enum не
   воскресит спрятанное). `KnownShellExtensions` накапливается по мере
   открытия меню и подрезается при сохранении (`TrimKnownExtensions`).
+- **Меню «Операции» в шапке — третья форма тех же правил** (2026-09-16,
+  PLAN AC). `ContextMenuTarget.Place = MenuPlace.Header` →
+  `ContextMenuBuilder.BuildHeader`: статичный каркас (подпись выделения ·
+  Переименовать группой · Действия ▸ · Конвертировать ▸ · Извлечь · Ярлык
+  · Копировать путь · Терминал), неприменимое **серое с причиной** в
+  `MenuEntry.Tooltip` (ключи `MenuReason*`), контекстное меню то же
+  **прячет**. Один каталог: `HideableTree` и галочки Параметров действуют
+  на оба места. Шелл в шапке не опрашивается. Пустое подменю билдер не
+  создаёт (`AddSubmenu`): `Normalize` выбрасывает только подменю,
+  опустевшее от скрытия, а `Sub` без детей — это лист с именем подменю.
+
+## Свои действия и групповое переименование
+
+Один каталог `CustomAction` (`Core/Actions/`) — строка «название · для
+каких файлов · программа или встроенный обработчик · шаблон аргументов ·
+режим · где показывать · объявленный выход»; хранится в
+`AppSettings.CustomActions`, пресеты приходят из кода и сливаются по `Id`.
+Что решает Core, а UI только исполняет:
+
+- **Применимость** — `ActionApplicability.For`: все выделенные подходят
+  под `FileTypeSelector` (группа из `FileTypeGroups` — те же списки, что
+  у панели просмотра, — или маска `*.psd;*.ai`), иначе действие не
+  предлагается; пустое выделение — только действия для папок, на текущую
+  папку; `RequiredTool` без инструмента — `ToolMissing`. Частичное
+  совпадение не считается (BACKLOG).
+- **Командная строка** — `CommandLine.Expand`: `{path} {name} {ext} {dir}
+  {paths} {list} {out}`, кавычки ставит подстановка всегда, хвостовой `\`
+  корня удваивается; `ValidationKey` ловит режим «на каждый файл» с
+  `{paths}` и наоборот. **Выход** — `OutputNames.Resolve`: рядом с
+  источником, `(1)` как у копии, источник считается занятым.
+- **Исполнение** — `ExternalActionRunner`: по одному, не параллельно;
+  `OperationTracker` (`OperationVerbs.RunAction`, по элементам); гард
+  `SystemPathGuard` на папку выхода; `{list}` — временный файл в
+  `AppPaths.Tmp` через `IFileSystem`; код возврата ≠ 0 — `Failed` с
+  хвостом stderr; отмена убивает процесс (`IProcessRunner.WasKilled`),
+  недописанный выход — в корзину, остальные `Cancelled`. **Undo — только
+  объявленный выход** (`CreateAction` → корзина); сам процесс не
+  откатывается, это осознанное отступление. `IProcessRunner` в Core,
+  `WindowsProcessRunner` в Platform: `UseShellExecute = false`, оба потока
+  сливаются на ходу (иначе полный пайп вешает программу), stderr читается
+  только при скрытой консоли, `Kill(entireProcessTree)`. Встроенные
+  обработчики — `IBuiltinAction` по имени в `Program`.
+- **Групповое переименование** — `Core/Rename/`: `RenameRules` (найти /
+  заменить, шаблон, регистр — фиксированный порядок применения;
+  расширение меняется только регистром) → `RenamePlanner.Preview` — чистая
+  функция от правил, элементов и `RenameContext` (`exists`, спутники,
+  дата съёмки): «было → станет» со статусом, дубликаты внутри пачки,
+  совпадения снаружи; имя, которое пачка сама освобождает, совпадением не
+  считается. `BatchRenameGate` пускает в окно два и более **одного вида**
+  (файлы или папки), смешанное — отказ. Применение —
+  `FileOperationService.RenameMany`, **двухфазный**: член, чьё имя ещё
+  занято поздним членом, паркуется на `…<8 hex>.wander-tmp` (сторож такие
+  не видит) и переезжает после; один composite, откат в обратном порядке.
 
 ## Companion-файлы
 

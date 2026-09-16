@@ -17,8 +17,11 @@
       * Strings.<Key>           - C#;
       * res:Strings.<Key>       - XAML ({x:Static});
       * Text.Get / Text.Format  - Wander.Core, through ITextSource;
-      * "MenuCmd..." / "Scope..."- the key tables in ContextMenuCatalog
-                                  and ShellScopes.
+      * "MenuCmd..." / "Scope..." and the other prefixes listed below -
+                                  the key tables and constants in Core
+                                  (ContextMenuCatalog, ShellScopes,
+                                  FileTypeGroups, the rename and actions
+                                  rules).
 
     Output is kept ASCII on purpose: this runs from check.bat under cmd,
     whose console codepage is not UTF-8.
@@ -73,9 +76,11 @@ foreach ($file in $sources) {
     foreach ($m in [regex]::Matches($text, '\b(?:Say|Fill)\("([^"]+)"')) {
         [void] $used.Add($m.Groups[1].Value)
     }
-    # Core's own key tables: a dictionary literal from enum/name to resource
-    # key. Both live in Core, which cannot reference the accessor at all.
-    foreach ($m in [regex]::Matches($text, '= "((?:MenuCmd|Scope)[A-Za-z]+)"')) {
+    # Core's own key tables and constants: a dictionary literal, a switch
+    # arm or a const from enum/name to resource key. They live in Core,
+    # which cannot reference the accessor at all, and are told apart from
+    # other string literals by the key's prefix.
+    foreach ($m in [regex]::Matches($text, '=>? "((?:MenuCmd|MenuReason|MenuCaption|Scope|FileType|ActionPreset|RenameError|ActionsError)[A-Za-z]+)"')) {
         [void] $used.Add($m.Groups[1].Value)
     }
 }

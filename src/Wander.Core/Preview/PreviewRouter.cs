@@ -131,6 +131,20 @@ public static class PreviewRouter {
     };
 
 
+    /// <summary>What plays as video - the same list the router sends to the video branch.</summary>
+    public static IReadOnlySet<string> Video => _video;
+
+    /// <summary>
+    /// Everything the pane would show as text: plain text, code, Markdown,
+    /// and the Unity assets that turn out to be YAML. One set for the
+    /// actions catalog's "text and code", so an action for text files is
+    /// offered on exactly the files the pane reads as text.
+    /// </summary>
+    public static IReadOnlySet<string> TextLike { get; } = new HashSet<string>(
+        _text.Concat(_code).Concat(_maybeText).Concat(new[] { ".md", ".markdown" }),
+        StringComparer.OrdinalIgnoreCase);
+
+
     /// <summary>The route for a path, decided by its extension alone.</summary>
     /// <param name="isArchive">
     /// The path is an archive the shell can list as a folder. A fact the

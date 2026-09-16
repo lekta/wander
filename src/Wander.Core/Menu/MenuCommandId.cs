@@ -29,6 +29,8 @@ public enum MenuCommandId {
     OpenSubmenu,
     FileSubmenu,
     NewSubmenu,
+    ActionsSubmenu,
+    ConvertSubmenu,
 
     // --- Open group -----------------------------------------------------
     Open,
@@ -45,8 +47,17 @@ public enum MenuCommandId {
 
     // --- Mutations ------------------------------------------------------
     Rename,
+    BatchRename,
     Delete,
     NewFolder,
+
+    // --- Custom actions (Wander.Core.Actions) ---------------------------
+    /// <summary>One catalog action; <c>MenuEntry.Argument</c> carries its id.</summary>
+    RunAction,
+    /// <summary>Placeholder row: the submenu has nothing for this selection.</summary>
+    NoActions,
+    /// <summary>Opens the settings page that edits the catalog.</summary>
+    ConfigureActions,
 
     // --- Archives -------------------------------------------------------
     Extract,

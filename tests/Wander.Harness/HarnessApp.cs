@@ -66,6 +66,10 @@ public sealed class HarnessApp : Wander.App.App {
             return;
         }
 
+        // Every window and popup that comes up from here on is logged,
+        // and anything on the screen is a WARN in the report - see
+        // App.WatchWindowsWhenHeadless.
+        Wander.App.App.WatchWindowsWhenHeadless();
         var window = new MainWindow();
         window.Show();
         _log.Info($"HARNESS window at ({window.Left:F0}, {window.Top:F0}), taskbar={window.ShowInTaskbar}, active={window.IsActive}");

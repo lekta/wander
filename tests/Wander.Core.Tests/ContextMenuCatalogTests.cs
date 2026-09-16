@@ -87,6 +87,16 @@ public class ContextMenuCatalogTests {
         yield return ContextMenuBuilder.Build(
             new ContextMenuTarget { FolderPath = @"C:\work", IsBackground = true },
             ContextMenuSettings.Default);
+
+        // The header's "Операции", with and without a selection: its
+        // skeleton rows are the ones that must be hideable and labelled.
+        yield return ContextMenuBuilder.Build(
+            new ContextMenuTarget { Place = MenuPlace.Header, Selection = new[] { file, file }, FolderPath = @"C:\work" },
+            ContextMenuSettings.Default);
+
+        yield return ContextMenuBuilder.Build(
+            new ContextMenuTarget { Place = MenuPlace.Header, FolderPath = @"C:\work" },
+            ContextMenuSettings.Default);
     }
 
     private static IEnumerable<MenuEntry> TopLevelBuiltInEntries() {

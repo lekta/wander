@@ -12,4 +12,5 @@ public static class OperationVerbs {
     public const string Recycle = "ProgressRecycling";
     public const string DeletePermanently = "ProgressDeleting";
     public const string Extract = "ProgressExtracting";
+    public const string RunAction = "ProgressRunningAction";
 }

@@ -52,6 +52,25 @@ public sealed record MenuEntry {
     /// <summary>PNG bytes of the entry's icon, when the shell supplied one.</summary>
     public byte[]? IconPng { get; init; }
 
+    /// <summary>
+    /// A file whose shell icon the row carries - the program a custom
+    /// action runs. The UI resolves it; null means no icon of that kind.
+    /// </summary>
+    public string? IconPath { get; init; }
+
+    /// <summary>
+    /// Why the row is greyed, for a tooltip; null when there is nothing to
+    /// explain. Only the header menu uses it: the context menu hides what
+    /// does not apply instead of explaining it.
+    /// </summary>
+    public string? Tooltip { get; init; }
+
+    /// <summary>
+    /// What the command is given: the catalog id of a <see cref="MenuCommandId.RunAction"/>
+    /// row. Null for the rows whose command needs nothing.
+    /// </summary>
+    public string? Argument { get; init; }
+
     public IReadOnlyList<MenuEntry> Children { get; init; } = Array.Empty<MenuEntry>();
 
 

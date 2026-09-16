@@ -1,5 +1,7 @@
+using Wander.Core.Actions;
 using Wander.Core.FileSystem;
 using Wander.Core.Menu;
+using Wander.Core.Rename;
 using Wander.Core.Shell;
 
 namespace Wander.Core.Tests;
@@ -568,7 +570,287 @@ public class ContextMenuBuilderTests {
     }
 
 
+    // --- Batch rename ---------------------------------------------------
+
+    [Fact]
+    public void BatchRename_AppearsInFile_ForTwoOrMoreOfOneKind() {
+        var two = ContextMenuBuilder.Build(SelectionOf(File("a.txt"), File("b.txt")), ContextMenuSettings.Default);
+        var folders = ContextMenuBuilder.Build(SelectionOf(Dir("a"), Dir("b")), ContextMenuSettings.Default);
+
+        Assert.True(Enabled(Find(two, MenuCommandId.FileSubmenu)!.Children, MenuCommandId.BatchRename));
+        Assert.True(Enabled(Find(folders, MenuCommandId.FileSubmenu)!.Children, MenuCommandId.BatchRename));
+        // The in-place rename stays greyed beside it, as before.
+        Assert.False(Enabled(Find(two, MenuCommandId.FileSubmenu)!.Children, MenuCommandId.Rename));
+    }
+
+    [Fact]
+    public void BatchRename_IsAbsent_ForOneItem_ForAMix_AndInTheBin() {
+        var one = ContextMenuBuilder.Build(SelectionOf(File("a.txt")), ContextMenuSettings.Default);
+        var mixed = ContextMenuBuilder.Build(SelectionOf(File("a.txt"), Dir("b")), ContextMenuSettings.Default);
+        var bin = ContextMenuBuilder.Build(
+            SelectionOf(File("a.txt"), File("b.txt")) with { IsReadOnlyLocation = true, IsRecycleBin = true },
+            ContextMenuSettings.Default);
+
+        Assert.Null(Find(Find(one, MenuCommandId.FileSubmenu)!.Children, MenuCommandId.BatchRename));
+        Assert.Null(Find(Find(mixed, MenuCommandId.FileSubmenu)!.Children, MenuCommandId.BatchRename));
+        Assert.Null(Find(Find(bin, MenuCommandId.FileSubmenu)!.Children, MenuCommandId.BatchRename));
+    }
+
+
+    // --- Custom actions in the context menu --------------------------------
+
+    [Fact]
+    public void ContextMenu_ShowsOnlyTheActionsThatApply() {
+        var target = SelectionOf(File("a.mp4")) with { Actions = new[] { _forVideo, _forImages, _forAll } };
+
+        var menu = ContextMenuBuilder.Build(target, ContextMenuSettings.Default);
+        var actions = Find(menu, MenuCommandId.ActionsSubmenu)!.Children;
+
+        Assert.Equal(new[] { _forVideo.Id, _forAll.Id }, actions.Select(e => e.Argument));
+        Assert.All(actions, e => Assert.Equal(MenuCommandId.RunAction, e.Id));
+        Assert.All(actions, e => Assert.True(e.IsEnabled));
+        Assert.Equal(_forVideo.Title, actions[0].Header);
+    }
+
+    [Fact]
+    public void ContextMenu_DropsTheSubmenu_WhenNothingApplies() {
+        var target = SelectionOf(File("a.txt")) with { Actions = new[] { _forVideo } };
+
+        var menu = ContextMenuBuilder.Build(target, ContextMenuSettings.Default);
+
+        Assert.Null(Find(menu, MenuCommandId.ActionsSubmenu));
+        Assert.Null(Find(menu, MenuCommandId.ConvertSubmenu));
+        AssertSeparatorsAreSane(menu);
+    }
+
+    [Fact]
+    public void ContextMenu_ActionsSitBetweenTheShellBlockAndFile() {
+        var target = SelectionOf(File("a.mp4")) with { Actions = new[] { _forVideo } };
+
+        var menu = ContextMenuBuilder.Build(target, ContextMenuSettings.Default, new[] { ShellItem(0, "7-Zip") });
+
+        Assert.True(IndexOfHeader(menu, "7-Zip") < IndexOf(menu, MenuCommandId.ActionsSubmenu));
+        Assert.True(IndexOf(menu, MenuCommandId.ActionsSubmenu) < IndexOf(menu, MenuCommandId.FileSubmenu));
+    }
+
+    [Fact]
+    public void ContextMenu_SplitsPresetsIntoConvert_AndLooseRowsOutOfTheSubmenu() {
+        var loose = _forVideo with { Id = "loose", InSubmenu = false };
+        var preset = _forVideo with { Id = "preset", Category = ActionCategory.Convert };
+        var target = SelectionOf(File("a.mp4")) with { Actions = new[] { _forVideo, loose, preset } };
+
+        var menu = ContextMenuBuilder.Build(target, ContextMenuSettings.Default);
+
+        Assert.Contains(menu, e => e.Id == MenuCommandId.RunAction && e.Argument == "loose");
+        Assert.Equal(new[] { _forVideo.Id }, Find(menu, MenuCommandId.ActionsSubmenu)!.Children.Select(e => e.Argument));
+        Assert.Equal(new[] { "preset" }, Find(menu, MenuCommandId.ConvertSubmenu)!.Children.Select(e => e.Argument));
+    }
+
+    [Fact]
+    public void ContextMenu_HidesWhatNeedsAMissingTool_AndWhatIsSwitchedOff() {
+        var needsFfmpeg = _forVideo with { Id = "ff", RequiredTool = "ffmpeg" };
+        var off = _forVideo with { Id = "off", Enabled = false };
+        var headerOnly = _forVideo with { Id = "header", Placement = ActionPlacement.Header };
+        var target = SelectionOf(File("a.mp4")) with {
+            Actions = new[] { needsFfmpeg, off, headerOnly },
+            MissingTools = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "ffmpeg" },
+        };
+
+        var menu = ContextMenuBuilder.Build(target, ContextMenuSettings.Default);
+
+        Assert.Null(Find(menu, MenuCommandId.ActionsSubmenu));
+    }
+
+    [Fact]
+    public void Background_OffersFolderActions_ForTheFolderOnScreen() {
+        var target = Background() with { Actions = new[] { _forFolders, _forVideo } };
+
+        var menu = ContextMenuBuilder.Build(target, ContextMenuSettings.Default);
+
+        Assert.Equal(new[] { _forFolders.Id }, Find(menu, MenuCommandId.ActionsSubmenu)!.Children.Select(e => e.Argument));
+    }
+
+    [Fact]
+    public void InsideArchiveOrBin_NoActionsAtAll() {
+        var archive = SelectionOf(File("a.mp4")) with { IsReadOnlyLocation = true, IsArchive = true, Actions = new[] { _forVideo, _forAll } };
+        var bin = SelectionOf(File("a.mp4")) with { IsReadOnlyLocation = true, IsRecycleBin = true, Actions = new[] { _forVideo, _forAll } };
+
+        Assert.Null(Find(ContextMenuBuilder.Build(archive, ContextMenuSettings.Default), MenuCommandId.ActionsSubmenu));
+        Assert.Null(Find(ContextMenuBuilder.Build(bin, ContextMenuSettings.Default), MenuCommandId.ActionsSubmenu));
+    }
+
+    [Fact]
+    public void HidingTheActionsSubmenu_HidesItInBothPlaces() {
+        var target = SelectionOf(File("a.mp4")) with { Actions = new[] { _forVideo } };
+        var settings = Hiding(MenuCommandId.ActionsSubmenu);
+
+        Assert.Null(Find(ContextMenuBuilder.Build(target, settings), MenuCommandId.ActionsSubmenu));
+        Assert.Null(Find(ContextMenuBuilder.Build(target with { Place = MenuPlace.Header }, settings), MenuCommandId.ActionsSubmenu));
+    }
+
+
+    // --- The header's "Операции" --------------------------------------------
+
+    [Fact]
+    public void Header_KeepsItsShape_WhateverIsSelected() {
+        var none = Header();
+        var one = Header(File("a.txt"));
+        var many = Header(File("a.txt"), File("b.txt"));
+
+        foreach (var menu in new[] { none, one, many }) {
+            // Caption first: a disabled, command-less row saying what the
+            // rows below are about.
+            Assert.Equal(MenuCommandId.None, menu[0].Id);
+            Assert.False(menu[0].IsEnabled);
+            Assert.NotEmpty(menu[0].Header);
+            Assert.Equal(new[] {
+                MenuCommandId.BatchRename, MenuCommandId.ActionsSubmenu,
+                MenuCommandId.Extract, MenuCommandId.CreateShortcut, MenuCommandId.CopyPath, MenuCommandId.OpenInTerminal,
+            }, menu.Where(e => !e.IsSeparator && e.Id != MenuCommandId.None).Select(e => e.Id));
+            AssertSeparatorsAreSane(menu);
+        }
+    }
+
+    [Fact]
+    public void Header_GreysAndExplains_InsteadOfHiding() {
+        var one = Header(File("a.txt"));
+        var mixed = Header(File("a.txt"), Dir("b"));
+        var many = Header(File("a.txt"), File("b.txt"));
+
+        Assert.False(Enabled(one, MenuCommandId.BatchRename));
+        Assert.Equal(BatchRenameGate.SelectTwoKey, Find(one, MenuCommandId.BatchRename)!.Tooltip);
+        Assert.Equal(BatchRenameGate.FilesOrFoldersKey, Find(mixed, MenuCommandId.BatchRename)!.Tooltip);
+        Assert.True(Enabled(many, MenuCommandId.BatchRename));
+        Assert.Null(Find(many, MenuCommandId.BatchRename)!.Tooltip);
+
+        Assert.False(Enabled(one, MenuCommandId.Extract));
+        Assert.Equal(ContextMenuBuilder.SelectArchiveKey, Find(one, MenuCommandId.Extract)!.Tooltip);
+        Assert.True(Enabled(Header(File("a.zip")), MenuCommandId.CopyPath));
+    }
+
+    [Fact]
+    public void Header_FolderVerbsWorkOnTheFolder_WhenNothingIsSelected() {
+        var none = Header();
+        var file = Header(File("a.txt"));
+        var folder = Header(Dir("d"));
+
+        Assert.True(Enabled(none, MenuCommandId.OpenInTerminal));
+        Assert.False(Enabled(file, MenuCommandId.OpenInTerminal));
+        Assert.Equal(ContextMenuBuilder.SelectFolderKey, Find(file, MenuCommandId.OpenInTerminal)!.Tooltip);
+        Assert.True(Enabled(folder, MenuCommandId.OpenInTerminal));
+
+        Assert.False(Enabled(none, MenuCommandId.CreateShortcut));
+        Assert.True(Enabled(file, MenuCommandId.CreateShortcut));
+    }
+
+    [Fact]
+    public void Header_ExtractApplies_ToArchivesAndInsideThem() {
+        var archives = ContextMenuBuilder.Build(
+            SelectionOf(File("a.zip")) with { Place = MenuPlace.Header, SelectionIsArchive = true },
+            ContextMenuSettings.Default);
+        var inside = ContextMenuBuilder.Build(
+            SelectionOf(File("readme.txt")) with { Place = MenuPlace.Header, IsReadOnlyLocation = true, IsArchive = true },
+            ContextMenuSettings.Default);
+
+        Assert.True(Enabled(archives, MenuCommandId.Extract));
+        Assert.True(Enabled(inside, MenuCommandId.Extract));
+        // Nothing else writes inside an archive.
+        Assert.False(Enabled(inside, MenuCommandId.BatchRename));
+        Assert.Equal(ContextMenuBuilder.ReadOnlyKey, Find(inside, MenuCommandId.BatchRename)!.Tooltip);
+        Assert.False(Enabled(inside, MenuCommandId.CreateShortcut));
+    }
+
+    [Fact]
+    public void Header_ActionsSubmenu_ExplainsEachGreyRow_AndLeadsToSettings() {
+        var needsFfmpeg = _forVideo with { Id = "ff", RequiredTool = "ffmpeg" };
+        var target = SelectionOf(File("a.jpg")) with {
+            Place = MenuPlace.Header,
+            Actions = new[] { _forVideo, _forImages, needsFfmpeg },
+            MissingTools = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "ffmpeg" },
+        };
+
+        var actions = Find(ContextMenuBuilder.Build(target, ContextMenuSettings.Default), MenuCommandId.ActionsSubmenu)!.Children;
+
+        Assert.Equal(new[] { _forVideo.Id, _forImages.Id, "ff" }, actions.Where(e => e.Id == MenuCommandId.RunAction).Select(e => e.Argument));
+        Assert.False(actions[0].IsEnabled);
+        Assert.Equal(ActionApplicability.NotForSelectionKey, actions[0].Tooltip);
+        Assert.True(actions[1].IsEnabled);
+        Assert.Null(actions[1].Tooltip);
+        Assert.False(actions[2].IsEnabled);
+        // The tool's name is in the text; with no text source the key comes
+        // back unformatted, and that is what is pinned here.
+        Assert.Equal(ActionApplicability.ToolMissingKey, actions[2].Tooltip);
+        Assert.Equal(MenuCommandId.ConfigureActions, actions[^1].Id);
+        Assert.True(actions[^2].IsSeparator);
+    }
+
+    [Fact]
+    public void Header_EmptyCatalog_SaysSo_AndStillLeadsToSettings() {
+        var actions = Find(Header(File("a.jpg")), MenuCommandId.ActionsSubmenu)!.Children;
+
+        Assert.Equal(MenuCommandId.NoActions, actions[0].Id);
+        Assert.False(actions[0].IsEnabled);
+        Assert.Equal(MenuCommandId.ConfigureActions, actions[^1].Id);
+    }
+
+    [Fact]
+    public void Header_ConvertSubmenu_ExistsOnlyWithPresets() {
+        var preset = _forVideo with { Id = "preset", Category = ActionCategory.Convert };
+        var without = ContextMenuBuilder.Build(
+            SelectionOf(File("a.mp4")) with { Place = MenuPlace.Header, Actions = new[] { _forVideo } }, ContextMenuSettings.Default);
+        var with = ContextMenuBuilder.Build(
+            SelectionOf(File("a.mp4")) with { Place = MenuPlace.Header, Actions = new[] { _forVideo, preset } }, ContextMenuSettings.Default);
+
+        Assert.Null(Find(without, MenuCommandId.ConvertSubmenu));
+        var convert = Find(with, MenuCommandId.ConvertSubmenu)!.Children;
+        Assert.Equal("preset", convert[0].Argument);
+        Assert.Equal(MenuCommandId.ConfigureActions, convert[^1].Id);
+    }
+
+    [Fact]
+    public void Header_ContextOnlyActions_StayOutOfIt() {
+        var contextOnly = _forVideo with { Id = "ctx", Placement = ActionPlacement.ContextMenu };
+        var target = SelectionOf(File("a.mp4")) with { Place = MenuPlace.Header, Actions = new[] { contextOnly } };
+
+        var actions = Find(ContextMenuBuilder.Build(target, ContextMenuSettings.Default), MenuCommandId.ActionsSubmenu)!.Children;
+
+        Assert.Equal(MenuCommandId.NoActions, actions[0].Id);
+    }
+
+    [Fact]
+    public void Header_Caption_NamesTheCountAndTheType() {
+        // No text source in tests: keys come back as themselves, so the
+        // caption is the key with the arguments unformatted in it - which
+        // is enough to see which of the three shapes was chosen.
+        Assert.Equal(ContextMenuBuilder.CaptionFolderKey, Header()[0].Header);
+        Assert.Equal(ContextMenuBuilder.CaptionSelectionTypedKey, Header(File("a.jpg"), File("b.png"))[0].Header);
+        Assert.Equal(ContextMenuBuilder.CaptionSelectionKey, Header(File("a.jpg"), File("b.mp4"))[0].Header);
+    }
+
+
     // --- Helpers ----------------------------------------------------------
+
+    private static readonly CustomAction _forVideo = new() {
+        Id = "video", Title = "Encode", Program = "ffmpeg", Types = new FileTypeSelector(FileTypeGroup.Video),
+    };
+
+    private static readonly CustomAction _forImages = new() {
+        Id = "images", Title = "Shrink", Program = "magick", Types = new FileTypeSelector(FileTypeGroup.Images),
+    };
+
+    private static readonly CustomAction _forAll = new() {
+        Id = "all", Title = "Anything", Program = "tool", Types = new FileTypeSelector(FileTypeGroup.All),
+    };
+
+    private static readonly CustomAction _forFolders = new() {
+        Id = "folders", Title = "Index", Program = "tool", Types = new FileTypeSelector(FileTypeGroup.Folders),
+    };
+
+    private static IReadOnlyList<MenuEntry> Header(params FileSystemEntry[] selection) {
+        return ContextMenuBuilder.Build(
+            new ContextMenuTarget { Place = MenuPlace.Header, Selection = selection, FolderPath = Folder },
+            ContextMenuSettings.Default);
+    }
 
     private static void AssertSeparatorsAreSane(IReadOnlyList<MenuEntry> menu) {
         Assert.NotEmpty(menu);

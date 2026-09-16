@@ -1,4 +1,5 @@
 using Wander.Core.Navigation;
+using Wander.Core.Rename;
 
 namespace Wander.Core.Persistence;
 
@@ -38,6 +39,13 @@ public sealed record AppState {
     /// once.
     /// </summary>
     public WindowGeometry? ConflictWindow { get; init; }
+
+    /// <summary>
+    /// What the batch-rename window was last set to. Where the user left
+    /// off, not a preference: the same numbering pass is usually run over
+    /// the next folder too. Null until the window has been used once.
+    /// </summary>
+    public RenameRules? RenameRules { get; init; }
 
     /// <summary>
     /// User preferences (separate from session-state above). Always

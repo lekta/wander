@@ -22,6 +22,8 @@ public partial class ShellScopePicker : Window {
 
     public ShellScopePicker(IShellHandlerRegistry registry, IReadOnlyList<string> recent) {
         InitializeComponent();
+        // Off the desktop in a harness run, like every window.
+        App.ParkIfHeadless(this);
 
         var extensions = registry.ListExtensions();
         var handlers = registry.Scan(ShellScopes.Base.Concat(extensions).ToArray());

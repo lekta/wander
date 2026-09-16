@@ -69,6 +69,7 @@ public partial class App : Application {
         // in a scripted answerer before it builds the view model.
         ServiceLocator.Register<IDialogs>(new WpfDialogs());
         HookCrashLogging();
+        WatchWindowsWhenHeadless();
         // Yesterday's scratch copies of archive entries. Swept on the way in
         // rather than on the way out: a crash is precisely when the tidy-up
         // on exit would not have run.
@@ -98,6 +99,45 @@ public partial class App : Application {
         window.Top = -32000;
         window.ShowActivated = false;
         window.ShowInTaskbar = false;
+    }
+
+
+    /// <summary>
+    /// Says which windows and popups actually came up while
+    /// <see cref="Headless"/> is on: one line per window as it loads (WARN
+    /// when it is on the virtual screen rather than parked), one per
+    /// context menu or tooltip (always a WARN - WPF keeps a popup on the
+    /// screen whatever its owner's position). The answer to "something
+    /// flickered for a frame" that the person at the desk cannot give: one
+    /// window, one frame, during six harness runs on 2026-09-16, and no
+    /// way to say which. Class handlers, so an unparked window is caught
+    /// too - the parked ones are the ones that call ParkIfHeadless. Called
+    /// by both hosts that construct windows: the app and the harness.
+    /// </summary>
+    internal static void WatchWindowsWhenHeadless() {
+        EventManager.RegisterClassHandler(typeof(Window), FrameworkElement.LoadedEvent, new RoutedEventHandler((sender, _) => {
+            if (!Headless || sender is not Window window) {
+                return;
+            }
+
+            var log = ServiceLocator.Get<ILogger>();
+            string line = $"HEADLESS window {window.GetType().Name} at ({window.Left:F0}, {window.Top:F0}), active={window.IsActive}";
+            if (window.Left <= -20000 && window.Top <= -20000) {
+                log.Info(line);
+            } else {
+                log.Warn(line + " - ON SCREEN");
+            }
+        }));
+        EventManager.RegisterClassHandler(typeof(System.Windows.Controls.ContextMenu), System.Windows.Controls.ContextMenu.OpenedEvent,
+            new RoutedEventHandler((sender, _) => WarnPopup("context menu", sender)));
+        EventManager.RegisterClassHandler(typeof(System.Windows.Controls.ToolTip), System.Windows.Controls.ToolTip.OpenedEvent,
+            new RoutedEventHandler((sender, _) => WarnPopup("tooltip", sender)));
+
+        static void WarnPopup(string what, object sender) {
+            if (Headless) {
+                ServiceLocator.Get<ILogger>().Warn($"HEADLESS {what} opened ({sender.GetType().Name}) - ON SCREEN");
+            }
+        }
     }
 
 

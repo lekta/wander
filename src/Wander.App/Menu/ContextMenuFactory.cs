@@ -124,6 +124,12 @@ public sealed class ContextMenuFactory {
         if (entry.IsDefault) {
             item.FontWeight = FontWeights.SemiBold;
         }
+        // The reason a header row is greyed. Shown on the disabled row,
+        // which WPF does not do unless told: that is the whole point.
+        if (entry.Tooltip is { } tooltip) {
+            item.ToolTip = tooltip;
+            ToolTipService.SetShowOnDisabled(item, true);
+        }
 
         if (entry.HasChildren) {
             Fill(item.Items, entry.Children, pending);
@@ -154,7 +160,9 @@ public sealed class ContextMenuFactory {
 
         if (_bindings.TryGetValue(entry.Id, out var binding)) {
             item.Command = binding.Command;
-            item.CommandParameter = binding.Parameter;
+            // A row that names its own argument (a catalog action's id)
+            // wins over the binding's fixed one.
+            item.CommandParameter = entry.Argument ?? binding.Parameter;
         } else {
             // An id with no binding is a wiring bug, not a user-facing
             // state; showing it greyed is the least confusing failure.

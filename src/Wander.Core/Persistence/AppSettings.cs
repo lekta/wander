@@ -1,3 +1,4 @@
+using Wander.Core.Actions;
 using Wander.Core.Companions;
 using Wander.Core.FileSystem;
 
@@ -379,6 +380,17 @@ public sealed record AppSettings {
     /// extended enum doesn't reinterpret the saved list.
     /// </summary>
     public IReadOnlyList<string> HiddenContextMenuItems { get; init; } = Array.Empty<string>();
+
+
+    // --- Custom actions ------------------------------------------------
+    /// <summary>
+    /// The actions catalog as the user left it: their own rows, plus the
+    /// shipped presets they touched (switched off, pointed at a program).
+    /// Presets they never touched are not here - they come from the code
+    /// and are merged in by id, so a new preset appears on update and an
+    /// improved one is not shadowed by a stale copy.
+    /// </summary>
+    public IReadOnlyList<CustomAction> CustomActions { get; init; } = Array.Empty<CustomAction>();
 
 
     // --- Debug ---------------------------------------------------------

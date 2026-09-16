@@ -206,6 +206,91 @@ public class FileOperationServiceTests {
     }
 
 
+    // --- RenameMany: members trading names (the batch-rename window) ---
+
+    private const string BatchA = @"C:\batch\a.txt";
+    private const string BatchB = @"C:\batch\b.txt";
+    private const string BatchC = @"C:\batch\c.txt";
+
+
+    [Fact]
+    public void RenameMany_Swap_GoesThroughAScratchName_AndLandsRight() {
+        var (ops, fs, _, undo) = Setup();
+        fs.Files[BatchA] = new byte[] { 1 };
+        fs.Files[BatchB] = new byte[] { 2 };
+
+        ops.RenameMany(new[] { (BatchA, "b.txt"), (BatchB, "a.txt") }, "Rename 2 items");
+
+        Assert.Equal(new byte[] { 1 }, fs.Files[BatchB]);
+        Assert.Equal(new byte[] { 2 }, fs.Files[BatchA]);
+        // a parked, b moved, a unparked - and nothing else left behind.
+        Assert.Equal(3, fs.CallLog.Count(line => line.StartsWith("Rename:")));
+        Assert.Equal(2, fs.Files.Count);
+        Assert.DoesNotContain(fs.Files.Keys, path => path.EndsWith(TransientFiles.ReplaceSuffix));
+        Assert.Equal("Rename 2 items", undo.NextDescription);
+    }
+
+    [Fact]
+    public void RenameMany_Swap_UndoesAsOneStep_BackToTheStart() {
+        var (ops, fs, _, undo) = Setup();
+        fs.Files[BatchA] = new byte[] { 1 };
+        fs.Files[BatchB] = new byte[] { 2 };
+        ops.RenameMany(new[] { (BatchA, "b.txt"), (BatchB, "a.txt") });
+
+        Assert.Equal(1, undo.Depth);
+        undo.Undo();
+
+        Assert.Equal(new byte[] { 1 }, fs.Files[BatchA]);
+        Assert.Equal(new byte[] { 2 }, fs.Files[BatchB]);
+        Assert.Equal(2, fs.Files.Count);
+    }
+
+    [Fact]
+    public void RenameMany_Shift_ParksOnlyWhatHasToWait() {
+        // 1 -> 2 -> 3: "c" moves out of the way by itself if it goes first;
+        // in list order it goes last, so a and b each wait for their name.
+        var (ops, fs, _, _) = Setup();
+        fs.Files[BatchA] = new byte[] { 1 };
+        fs.Files[BatchB] = new byte[] { 2 };
+        fs.Files[BatchC] = new byte[] { 3 };
+
+        ops.RenameMany(new[] { (BatchA, "b.txt"), (BatchB, "c.txt"), (BatchC, "d.txt") });
+
+        Assert.Equal(new byte[] { 1 }, fs.Files[BatchB]);
+        Assert.Equal(new byte[] { 2 }, fs.Files[BatchC]);
+        Assert.Equal(new byte[] { 3 }, fs.Files[@"C:\batch\d.txt"]);
+        Assert.Equal(3, fs.Files.Count);
+        // a and b parked and unparked (4 renames), c straight (1).
+        Assert.Equal(5, fs.CallLog.Count(line => line.StartsWith("Rename:")));
+    }
+
+    [Fact]
+    public void RenameMany_WithoutCollisions_NeverParks() {
+        var (ops, fs, _, _) = Setup();
+        fs.Files[BatchA] = new byte[] { 1 };
+        fs.Files[BatchB] = new byte[] { 2 };
+
+        ops.RenameMany(new[] { (BatchA, "x.txt"), (BatchB, "y.txt") });
+
+        Assert.Equal(2, fs.CallLog.Count(line => line.StartsWith("Rename:")));
+    }
+
+    [Fact]
+    public void RenameMany_Swap_RollsBackTheScratchStep_WhenALaterMemberFails() {
+        var (ops, fs, _, undo) = Setup();
+        fs.Files[BatchA] = new byte[] { 1 };
+        fs.Files[BatchB] = new byte[] { 2 };
+        fs.RenameFailures.Add(BatchB);
+
+        Assert.Throws<IOException>(() => ops.RenameMany(new[] { (BatchA, "b.txt"), (BatchB, "a.txt") }));
+
+        Assert.Equal(new byte[] { 1 }, fs.Files[BatchA]);
+        Assert.Equal(new byte[] { 2 }, fs.Files[BatchB]);
+        Assert.Equal(2, fs.Files.Count);
+        Assert.Equal(0, undo.Depth);
+    }
+
+
     [Fact]
     public void CreateFolder_CombinesPath() {
         var (ops, fs, _, _) = Setup();

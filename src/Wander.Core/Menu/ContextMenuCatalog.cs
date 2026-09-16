@@ -28,6 +28,8 @@ public static class ContextMenuCatalog {
         [MenuCommandId.OpenSubmenu] = "MenuCmdOpenSubmenu",
         [MenuCommandId.FileSubmenu] = "MenuCmdFileSubmenu",
         [MenuCommandId.NewSubmenu] = "MenuCmdNewSubmenu",
+        [MenuCommandId.ActionsSubmenu] = "MenuCmdActionsSubmenu",
+        [MenuCommandId.ConvertSubmenu] = "MenuCmdConvertSubmenu",
 
         [MenuCommandId.Open] = "MenuCmdOpen",
         [MenuCommandId.OpenWith] = "MenuCmdOpenWith",
@@ -41,8 +43,13 @@ public static class ContextMenuCatalog {
         [MenuCommandId.CreateShortcut] = "MenuCmdCreateShortcut",
 
         [MenuCommandId.Rename] = "MenuCmdRename",
+        [MenuCommandId.BatchRename] = "MenuCmdBatchRename",
         [MenuCommandId.Delete] = "MenuCmdDelete",
         [MenuCommandId.NewFolder] = "MenuCmdNewFolder",
+
+        [MenuCommandId.RunAction] = "MenuCmdRunAction",
+        [MenuCommandId.NoActions] = "MenuCmdNoActions",
+        [MenuCommandId.ConfigureActions] = "MenuCmdConfigureActions",
 
         [MenuCommandId.Extract] = "MenuCmdExtract",
 
@@ -87,6 +94,10 @@ public static class ContextMenuCatalog {
         new MenuNode(MenuCommandId.OpenSubmenu, 0),
         new MenuNode(MenuCommandId.OpenWith, 1),
         new MenuNode(MenuCommandId.OpenInTerminal, 0),
+        // The two action submenus: one switch each, in both menus at once.
+        // Single actions are switched off in their own settings table.
+        new MenuNode(MenuCommandId.ActionsSubmenu, 0),
+        new MenuNode(MenuCommandId.ConvertSubmenu, 0),
         new MenuNode(MenuCommandId.FileSubmenu, 0),
         new MenuNode(MenuCommandId.Cut, 1),
         new MenuNode(MenuCommandId.Copy, 1),
@@ -94,6 +105,7 @@ public static class ContextMenuCatalog {
         new MenuNode(MenuCommandId.CopyPath, 1),
         new MenuNode(MenuCommandId.CopyName, 1),
         new MenuNode(MenuCommandId.Rename, 1),
+        new MenuNode(MenuCommandId.BatchRename, 1),
         new MenuNode(MenuCommandId.CreateShortcut, 1),
         new MenuNode(MenuCommandId.Delete, 1),
         new MenuNode(MenuCommandId.Extract, 0),

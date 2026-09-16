@@ -131,13 +131,23 @@ public sealed class FileOperationService {
 
     /// <summary>
     /// Renames a group of files as one action — a main file together with
-    /// its companion sidecars. All-or-nothing: a failure part-way through
-    /// puts the already-renamed members back before the exception leaves
-    /// this method, so the user never ends up with <c>Ship.png</c> next to
-    /// <c>Sprite.png.meta</c>.
+    /// its companion sidecars, or a whole batch from the rename window.
+    /// All-or-nothing: a failure part-way through puts the already-renamed
+    /// members back before the exception leaves this method, so the user
+    /// never ends up with <c>Ship.png</c> next to <c>Sprite.png.meta</c>.
+    ///
+    /// <para>
+    /// Members may trade names ("a to b, b to a") or shift along ("1 to 2,
+    /// 2 to 3"): a member whose new name is still held by a later member
+    /// goes through a scratch name first and gets its real one after the
+    /// holder has moved. The scratch name carries
+    /// <see cref="TransientFiles.ReplaceSuffix"/>, so the folder watcher
+    /// does not report it as a file that came and went.
+    /// </para>
     /// </summary>
     /// <param name="renames">Path → new name, main file first.</param>
-    public void RenameMany(IReadOnlyList<(string Path, string NewName)> renames) {
+    /// <param name="description">What the undo stack calls the step; the first new name when omitted.</param>
+    public void RenameMany(IReadOnlyList<(string Path, string NewName)> renames, string? description = null) {
         if (renames.Count == 1) {
             Rename(renames[0].Path, renames[0].NewName);
 
@@ -154,19 +164,32 @@ public sealed class FileOperationService {
         using var _ = _undo.BeginOperation();
         var steps = new List<IUndoableAction>(renames.Count);
         try {
+            // Paths still occupied by members not yet renamed. A target
+            // among them is taken only for now.
+            var held = new HashSet<string>(renames.Select(r => r.Path), StringComparer.OrdinalIgnoreCase);
+            var parked = new List<(string ScratchPath, string NewName)>();
+
             foreach (var (path, newName) in renames) {
-                string oldName = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-                _fs.Rename(path, newName);
+                held.Remove(path);
                 string parent = Path.GetDirectoryName(path) ?? "";
-                steps.Add(new RenameAction(_fs, Path.Combine(parent, newName), oldName));
-                _log.Info($"Rename: {path} -> {newName}");
+                if (held.Contains(Path.Combine(parent, newName))) {
+                    string scratch = ScratchName(parent, newName);
+                    RenameStep(path, scratch, steps);
+                    parked.Add((Path.Combine(parent, scratch), newName));
+                } else {
+                    RenameStep(path, newName, steps);
+                }
+            }
+
+            foreach (var (scratchPath, newName) in parked) {
+                RenameStep(scratchPath, newName, steps);
             }
         } catch {
             Rollback(steps);
             throw;
         }
 
-        _undo.Push(new CompositeAction($"Rename to '{renames[0].NewName}'", steps));
+        _undo.Push(new CompositeAction(description ?? $"Rename to '{renames[0].NewName}'", steps));
     }
 
 
@@ -178,6 +201,25 @@ public sealed class FileOperationService {
         _undo.Push(new CreateAction(_bin, path));
     }
 
+
+    private void RenameStep(string path, string newName, List<IUndoableAction> steps) {
+        string oldName = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        _fs.Rename(path, newName);
+        string parent = Path.GetDirectoryName(path) ?? "";
+        steps.Add(new RenameAction(_fs, Path.Combine(parent, newName), oldName));
+        _log.Info($"Rename: {path} -> {newName}");
+    }
+
+    /// <summary>A name nothing in <paramref name="parent"/> has, marked as ours and transient.</summary>
+    private string ScratchName(string parent, string wanted) {
+        while (true) {
+            string candidate = $"{wanted}.{Guid.NewGuid():N}"[..(wanted.Length + 9)] + TransientFiles.ReplaceSuffix;
+            string path = Path.Combine(parent, candidate);
+            if (!_fs.FileExists(path) && !_fs.DirectoryExists(path)) {
+                return candidate;
+            }
+        }
+    }
 
     private void Rollback(IReadOnlyList<IUndoableAction> steps) {
         for (int i = steps.Count - 1; i >= 0; i--) {

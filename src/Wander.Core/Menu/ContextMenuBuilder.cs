@@ -1,3 +1,6 @@
+using Wander.Core.Actions;
+using Wander.Core.Localization;
+using Wander.Core.Rename;
 using Wander.Core.Shell;
 
 namespace Wander.Core.Menu;
@@ -30,12 +33,27 @@ namespace Wander.Core.Menu;
 /// </para>
 ///
 /// <para>
+/// The header's "Операции" is a third shape from the same rules
+/// (<see cref="MenuPlace.Header"/>): a fixed skeleton whose rows keep their
+/// places between clicks, with what does not apply greyed out and
+/// explained in a tooltip rather than absent. The two menus stay one
+/// catalog - a row hidden in settings is hidden in both.
+/// </para>
+///
+/// <para>
 /// The layer above never has to think about dangling separators: every
 /// group is emitted with its divider and <see cref="Normalize"/> collapses
 /// whatever the hiding rules left behind.
 /// </para>
 /// </summary>
 public static class ContextMenuBuilder {
+    public const string ReadOnlyKey = "MenuReasonReadOnly";
+    public const string SelectFolderKey = "MenuReasonSelectFolder";
+    public const string SelectArchiveKey = "MenuReasonSelectArchive";
+    public const string CaptionFolderKey = "MenuCaptionFolder";
+    public const string CaptionSelectionKey = "MenuCaptionSelection";
+    public const string CaptionSelectionTypedKey = "MenuCaptionSelectionTyped";
+
     /// <summary>
     /// Verbs whose entries act on the file rather than open it, *despite*
     /// publishing a name. Everything else in that category is caught by
@@ -53,9 +71,11 @@ public static class ContextMenuBuilder {
         IReadOnlyList<ShellMenuEntry>? shellItems = null) {
 
         var shell = SplitShell(settings, shellItems);
-        var raw = target.IsBackground
-            ? BuildBackground(target, shell)
-            : BuildSelection(target, shell);
+        var raw = target.Place == MenuPlace.Header
+            ? BuildHeader(target)
+            : target.IsBackground
+                ? BuildBackground(target, shell)
+                : BuildSelection(target, shell);
 
         return Normalize(raw, settings);
     }
@@ -107,6 +127,14 @@ public static class ContextMenuBuilder {
         items.AddRange(shell.TopLevel);
         items.Add(MenuEntry.Divider);
 
+        // The user's own actions, right under the third-party ones: the same
+        // kind of thing, "do this to these files with that program". Only
+        // what applies - a context menu does not explain itself.
+        if (fs) {
+            items.AddRange(ContextActionRows(t));
+            items.Add(MenuEntry.Divider);
+        }
+
         var fileGroup = new List<MenuEntry> {
             Cmd(MenuCommandId.Cut, fs),
             Cmd(MenuCommandId.Copy, fs),
@@ -116,10 +144,18 @@ public static class ContextMenuBuilder {
             Cmd(MenuCommandId.CopyName),
             MenuEntry.Divider,
             Cmd(MenuCommandId.Rename, t.IsSingle && fs),
+        };
+        // Two or more of one kind: the window. Absent otherwise - on one
+        // file F2 renames in place, and a mixed selection is refused
+        // (BatchRenameGate) rather than offered greyed.
+        if (fs && t.RenameKind is BatchRenameKind.Files or BatchRenameKind.Folders) {
+            fileGroup.Add(Cmd(MenuCommandId.BatchRename));
+        }
+        fileGroup.AddRange(new[] {
             Cmd(MenuCommandId.CreateShortcut, fs),
             MenuEntry.Divider,
             Cmd(MenuCommandId.Delete, fs),
-        };
+        });
         if (shell.FileOperations.Count > 0) {
             fileGroup.Add(MenuEntry.Divider);
             fileGroup.AddRange(shell.FileOperations);
@@ -186,6 +222,12 @@ public static class ContextMenuBuilder {
             MenuEntry.Divider,
         };
 
+        // Actions for folders act on the folder being listed.
+        if (fs) {
+            items.AddRange(ContextActionRows(t));
+            items.Add(MenuEntry.Divider);
+        }
+
         // No File submenu here, so the folder's own shell verbs stay inline
         // rather than inventing a one-item container for them.
         items.AddRange(shell.TopLevel);
@@ -195,6 +237,151 @@ public static class ContextMenuBuilder {
         items.Add(Cmd(MenuCommandId.Properties));
 
         return items;
+    }
+
+    /// <summary>
+    /// The header's "Операции". Same rows in the same places every time;
+    /// the selection changes what is enabled, and a caption on top says
+    /// what the rows are about, which is cheaper to read than a menu that
+    /// changes shape.
+    /// </summary>
+    private static List<MenuEntry> BuildHeader(ContextMenuTarget t) {
+        bool fs = t.IsWritable;
+        bool any = t.Selection.Count > 0;
+        var kind = t.RenameKind;
+
+        var items = new List<MenuEntry> {
+            Caption(t),
+            MenuEntry.Divider,
+            Cmd(MenuCommandId.BatchRename,
+                fs && kind is BatchRenameKind.Files or BatchRenameKind.Folders,
+                tooltipKey: !fs ? ReadOnlyKey : BatchRenameGate.ReasonKey(kind)),
+        };
+        items.AddRange(HeaderActionRows(t));
+        items.Add(MenuEntry.Divider);
+
+        // The folder verbs the context menu keeps inside "Файл": up here
+        // they are what the menu is for. With nothing selected, the ones
+        // about a folder work on the folder on screen.
+        bool archive = any && (t.SelectionIsArchive || t.IsArchive);
+        items.Add(Cmd(MenuCommandId.Extract, archive, tooltipKey: archive ? null : SelectArchiveKey));
+        items.Add(Cmd(MenuCommandId.CreateShortcut, fs && any,
+            tooltipKey: !fs ? ReadOnlyKey : any ? null : ActionApplicability.SelectFilesKey));
+        items.Add(Cmd(MenuCommandId.CopyPath));
+        bool terminal = fs && (!any || (t.IsSingle && t.AllFolders));
+        items.Add(Cmd(MenuCommandId.OpenInTerminal, terminal,
+            tooltipKey: !fs ? ReadOnlyKey : terminal ? null : SelectFolderKey));
+
+        return items;
+    }
+
+    /// <summary>"Выделено: 3 · видео", or the folder when nothing is.</summary>
+    private static MenuEntry Caption(ContextMenuTarget t) {
+        string header;
+        if (t.Selection.Count == 0) {
+            header = Text.Format(CaptionFolderKey, t.FolderPath ?? string.Empty);
+        } else if (FileTypeGroups.Classify(t.Selection) is { } group) {
+            header = Text.Format(CaptionSelectionTypedKey, t.Selection.Count, Text.Get(FileTypeGroups.CaptionKey(group)));
+        } else {
+            header = Text.Format(CaptionSelectionKey, t.Selection.Count);
+        }
+
+        return new MenuEntry { Header = header, IsEnabled = false };
+    }
+
+
+    // --- Custom actions ------------------------------------------------
+
+    /// <summary>
+    /// What a right-click shows of the catalog: the rows that apply, and
+    /// nothing else. Loose rows first, then the two submenus; an empty
+    /// submenu drops out in <see cref="Normalize"/>.
+    /// </summary>
+    private static List<MenuEntry> ContextActionRows(ContextMenuTarget t) {
+        var rows = t.Actions
+            .Where(a => a.Enabled && a.Placement != ActionPlacement.Header)
+            .Select(a => (Action: a, State: StateOf(a, t)))
+            .Where(r => r.State == ActionState.Applicable)
+            .ToList();
+
+        var items = rows.Where(r => !r.Action.InSubmenu)
+            .Select(r => ActionRow(r.Action, r.State))
+            .ToList();
+        AddSubmenu(items, MenuCommandId.ActionsSubmenu,
+            rows.Where(r => r.Action.InSubmenu && r.Action.Category == ActionCategory.Actions)
+                .Select(r => ActionRow(r.Action, r.State)).ToList());
+        AddSubmenu(items, MenuCommandId.ConvertSubmenu,
+            rows.Where(r => r.Action.InSubmenu && r.Action.Category == ActionCategory.Convert)
+                .Select(r => ActionRow(r.Action, r.State)).ToList());
+
+        return items;
+    }
+
+    /// <summary>
+    /// The header's view of the catalog: every enabled action, greyed with
+    /// its reason where it does not apply, and a way to the settings page
+    /// at the bottom of each submenu. "Действия" is always there, with a
+    /// placeholder when the catalog has nothing for the user's own;
+    /// "Конвертировать" only once a preset exists.
+    /// </summary>
+    private static List<MenuEntry> HeaderActionRows(ContextMenuTarget t) {
+        var rows = t.Actions
+            .Where(a => a.Enabled && a.Placement != ActionPlacement.ContextMenu)
+            .Select(a => (Action: a, State: StateOf(a, t)))
+            .ToList();
+
+        var items = rows.Where(r => !r.Action.InSubmenu)
+            .Select(r => ActionRow(r.Action, r.State))
+            .ToList();
+
+        var actions = rows.Where(r => r.Action.InSubmenu && r.Action.Category == ActionCategory.Actions)
+            .Select(r => ActionRow(r.Action, r.State)).ToList();
+        if (actions.Count == 0) {
+            actions.Add(Cmd(MenuCommandId.NoActions, enabled: false));
+        }
+        actions.Add(MenuEntry.Divider);
+        actions.Add(Cmd(MenuCommandId.ConfigureActions));
+        AddSubmenu(items, MenuCommandId.ActionsSubmenu, actions);
+
+        var convert = rows.Where(r => r.Action.InSubmenu && r.Action.Category == ActionCategory.Convert)
+            .Select(r => ActionRow(r.Action, r.State)).ToList();
+        if (convert.Count > 0) {
+            convert.Add(MenuEntry.Divider);
+            convert.Add(Cmd(MenuCommandId.ConfigureActions));
+        }
+        AddSubmenu(items, MenuCommandId.ConvertSubmenu, convert);
+
+        return items;
+    }
+
+    /// <summary>
+    /// A submenu only when it has rows: an empty one is not a submenu but
+    /// a leaf with the submenu's name, and <see cref="Normalize"/> would
+    /// keep it as such.
+    /// </summary>
+    private static void AddSubmenu(List<MenuEntry> items, MenuCommandId id, IReadOnlyList<MenuEntry> children) {
+        if (children.Count > 0) {
+            items.Add(Sub(id, children));
+        }
+    }
+
+    private static ActionState StateOf(CustomAction action, ContextMenuTarget t) {
+        return ActionApplicability.For(action, t.Selection, t.FolderPath is not null && t.IsWritable, t.ToolAvailable);
+    }
+
+    private static MenuEntry ActionRow(CustomAction action, ActionState state) {
+        string? reasonKey = ActionApplicability.ReasonKey(state);
+
+        return new MenuEntry {
+            Id = MenuCommandId.RunAction,
+            Header = action.DisplayTitle,
+            Argument = action.Id,
+            IsEnabled = state == ActionState.Applicable,
+            Tooltip = reasonKey is null ? null
+                : state == ActionState.ToolMissing ? Text.Format(reasonKey, action.RequiredTool)
+                : Text.Get(reasonKey),
+            IconPath = action.Kind == ActionKind.Command && Path.IsPathRooted(action.Program) ? action.Program : null,
+        };
     }
 
     // --- Shell extensions -----------------------------------------------
@@ -397,13 +584,15 @@ public static class ContextMenuBuilder {
 
     // --- Row factories ---------------------------------------------------
 
-    private static MenuEntry Cmd(MenuCommandId id, bool enabled = true, bool isDefault = false) {
+    /// <param name="tooltipKey">Resource key of why the row is greyed; read only when it is.</param>
+    private static MenuEntry Cmd(MenuCommandId id, bool enabled = true, bool isDefault = false, string? tooltipKey = null) {
         return new MenuEntry {
             Id = id,
             Header = ContextMenuCatalog.Title(id),
             Gesture = ContextMenuCatalog.Gesture(id),
             IsEnabled = enabled,
             IsDefault = isDefault,
+            Tooltip = enabled || tooltipKey is null ? null : Text.Get(tooltipKey),
         };
     }
 

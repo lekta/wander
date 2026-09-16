@@ -1638,4 +1638,100 @@
     <value>{0} — настройки не сохраняются</value>
     <comment>{0} — обычный заголовок окна; хвост — когда эта копия уступает запущенной установленной</comment>
   </data>
+  <data name="MenuCmdActionsSubmenu" xml:space="preserve">
+    <value>Действия</value>
+  </data>
+  <data name="MenuCmdConvertSubmenu" xml:space="preserve">
+    <value>Конвертировать</value>
+  </data>
+  <data name="MenuCmdBatchRename" xml:space="preserve">
+    <value>Переименовать группой…</value>
+  </data>
+  <data name="MenuCmdRunAction" xml:space="preserve">
+    <value>Действие</value>
+    <comment>Запасная подпись строки действия; обычно строка носит название действия</comment>
+  </data>
+  <data name="MenuCmdNoActions" xml:space="preserve">
+    <value>Нет действий для этих файлов</value>
+  </data>
+  <data name="MenuCmdConfigureActions" xml:space="preserve">
+    <value>Настроить действия…</value>
+  </data>
+  <data name="MenuReasonSelectTwo" xml:space="preserve">
+    <value>Выделите два и более файла или папки</value>
+    <comment>Тултип серой строки в меню «Операции»</comment>
+  </data>
+  <data name="MenuReasonFilesOrFolders" xml:space="preserve">
+    <value>Выделите только файлы или только папки</value>
+  </data>
+  <data name="MenuReasonReadOnly" xml:space="preserve">
+    <value>Здесь файлы не меняются</value>
+    <comment>Корзина, архив</comment>
+  </data>
+  <data name="MenuReasonSelectFiles" xml:space="preserve">
+    <value>Выделите файлы</value>
+  </data>
+  <data name="MenuReasonNotForSelection" xml:space="preserve">
+    <value>Не для этих файлов</value>
+  </data>
+  <data name="MenuReasonToolMissing" xml:space="preserve">
+    <value>Нужен {0} (Параметры → Действия)</value>
+    <comment>{0} — имя внешней программы: ffmpeg, soffice, pandoc</comment>
+  </data>
+  <data name="MenuReasonSelectFolder" xml:space="preserve">
+    <value>Выделите папку</value>
+  </data>
+  <data name="MenuReasonSelectArchive" xml:space="preserve">
+    <value>Выделите архив</value>
+  </data>
+  <data name="MenuCaptionFolder" xml:space="preserve">
+    <value>Папка: {0}</value>
+    <comment>Первая, неактивная строка меню «Операции», когда ничего не выделено</comment>
+  </data>
+  <data name="MenuCaptionSelection" xml:space="preserve">
+    <value>Выделено: {0}</value>
+  </data>
+  <data name="MenuCaptionSelectionTyped" xml:space="preserve">
+    <value>Выделено: {0} · {1}</value>
+    <comment>{1} — группа типов строчными: «видео», «изображения» (FileType*)</comment>
+  </data>
+  <data name="FileTypeAll" xml:space="preserve">
+    <value>всё</value>
+  </data>
+  <data name="FileTypeImages" xml:space="preserve">
+    <value>изображения</value>
+  </data>
+  <data name="FileTypeVideo" xml:space="preserve">
+    <value>видео</value>
+  </data>
+  <data name="FileTypeAudio" xml:space="preserve">
+    <value>аудио</value>
+  </data>
+  <data name="FileTypeTextAndCode" xml:space="preserve">
+    <value>текст и код</value>
+  </data>
+  <data name="FileTypeDocuments" xml:space="preserve">
+    <value>документы</value>
+  </data>
+  <data name="FileTypeArchives" xml:space="preserve">
+    <value>архивы</value>
+  </data>
+  <data name="FileTypeFolders" xml:space="preserve">
+    <value>папки</value>
+  </data>
+  <data name="RenameErrorRegex" xml:space="preserve">
+    <value>Регулярное выражение с ошибкой</value>
+    <comment>Окно группового переименования; рядом — текст ошибки от .NET</comment>
+  </data>
+  <data name="RenameErrorDateFormat" xml:space="preserve">
+    <value>Формат даты с ошибкой</value>
+  </data>
+  <data name="ActionsErrorPerFileWithList" xml:space="preserve">
+    <value>Режим «на каждый файл» не может использовать {paths} и {list}</value>
+    <comment>Показывать через Get, не Format: фигурные скобки — часть текста</comment>
+  </data>
+  <data name="ActionsErrorGroupWithoutList" xml:space="preserve">
+    <value>Режим «все одной командой» требует {paths} или {list}</value>
+    <comment>Показывать через Get, не Format: фигурные скобки — часть текста</comment>
+  </data>
 </root>
