@@ -18,6 +18,26 @@ Win10 2004, сам `Windows.Data.Pdf` есть с 8.1; вызов обёрнут
 **Жёсткое правило:** в Core нет `using System.Windows.*`, COM, PInvoke.
 Нужно — интерфейс в Core, реализация в Platform.
 
+**Platform без WPF** (2026-09-16, после того как кодировщик картинок
+оказался в App). Platform.Windows не ссылается на `PresentationCore` /
+`PresentationFramework` и не будет: WPF — отвинчиваемый слой, а
+платформенная возможность, реализованная на нём, отвинтилась бы вместе с
+ним. Куда что кладётся:
+
+| Что делает код | Где живёт | На чём |
+|---|---|---|
+| Файл, процесс, реестр, шелл, кодирование в файл, метаданные | Platform | Win32, COM, **WinRT** (`Windows.Graphics.Imaging`, `Windows.Data.Pdf`), `System.Drawing`, MetadataExtractor |
+| Картинка для экрана (`BitmapSource`), окно, диалог, буфер как объект WPF | App | WPF |
+| Реализация интерфейса Core в App | только когда реализация про экран: `WpfDialogs`, `AppTextSource` | — |
+
+Проверка при ревью: если реализация интерфейса Core в App не рисует и
+не спрашивает пользователя — ей место в Platform, и отсутствие API там
+значит искать не-WPF API, а не переезжать в App. Прецеденты: `RawThumbnail`
+и `PdfPageImage` (WinRT вместо WPF-декодера), `ImageConvertAction`
+(перенесён из App на `Windows.Graphics.Imaging`; тот же WIC, что у WPF, без
+`PresentationCore`). `Preview/ImageDecoder` остаётся в App правомерно: его
+выход — `BitmapImage` для контрола.
+
 ```
 src/
 ├── Wander.Core/
@@ -126,26 +146,27 @@ Platform.Windows` — один файл, `App.xaml.cs` (точка композ�
 ```
 === Wander dependency graph (using sweep) ===
 date   : 2026-09-16
-commit : 3a9f4ca
+commit : ebd5e51
 
 -- projects --
-Wander.App -> Wander.Core   (56 files)
+Wander.App -> Wander.Core   (59 files)
 Wander.App -> Wander.Platform.Windows   (1 files)
-Wander.Core.Tests -> Wander.Core   (88 files)
+Wander.Core.Tests -> Wander.Core   (94 files)
 Wander.Harness -> Wander.App   (4 files)
 Wander.Harness -> Wander.Core   (6 files)
 Wander.Harness -> Wander.Platform.Windows   (3 files)
-Wander.Platform.Windows -> Wander.Core   (25 files)
+Wander.Platform.Windows -> Wander.Core   (28 files)
 
 -- Wander.Core: folder -> folder --
-  Actions        -> FileSystem     (3 files)
-  Actions        -> Icons          (1 files)
-  Actions        -> Localization   (1 files)
+  Actions        -> FileSystem     (5 files)
+  Actions        -> Icons          (2 files)
+  Actions        -> Localization   (3 files)
   Actions        -> Logging        (1 files)
   Actions        -> Operations     (1 files)
   Actions        -> Preview        (1 files)
   Actions        -> Undo           (1 files)
   Companions     -> FileSystem     (5 files)
+  Companions     -> Icons          (1 files)
   Companions     -> Logging        (1 files)
   Companions     -> Undo           (1 files)
   Diagnostics    -> Logging        (2 files)
@@ -195,13 +216,14 @@ Wander.Platform.Windows -> Wander.Core   (25 files)
   (root)         -> Diagnostics    (1 files)
   (root)         -> FileSystem     (1 files)
   (root)         -> Icons          (1 files)
+  (root)         -> Imaging        (1 files)
   (root)         -> Logging        (1 files)
   (root)         -> Persistence    (1 files)
   (root)         -> Search         (1 files)
   (root)         -> Shell          (1 files)
 
 -- Wander.Platform.Windows: levels --
-  0: Diagnostics, FileSystem, Icons, Logging, Persistence, Search, Shell
+  0: Diagnostics, FileSystem, Icons, Imaging, Logging, Persistence, Search, Shell
   1: (root)
 
 -- Wander.App: folder -> folder --
@@ -238,7 +260,7 @@ Wander.Platform.Windows -> Wander.Core   (25 files)
   Preview        -> Resources      (2 files)
   Preview        -> Util           (2 files)
   Util           -> Resources      (1 files)
-  ViewModels     -> Resources      (5 files)
+  ViewModels     -> Resources      (9 files)
   ViewModels     -> Util           (1 files)
   Views          -> Controllers    (1 files)
   Views          -> Controls       (2 files)
@@ -248,7 +270,7 @@ Wander.Platform.Windows -> Wander.Core   (25 files)
   Views          -> Highlighting   (1 files)
   Views          -> Resources      (6 files)
   Views          -> Util           (3 files)
-  Views          -> ViewModels     (5 files)
+  Views          -> ViewModels     (6 files)
 
 -- Wander.App: levels --
   0: Highlighting, Menu, Resources
@@ -986,7 +1008,23 @@ false — набор в `SearchController`; true — `Query` очищается,
   {paths} {list} {out}`, кавычки ставит подстановка всегда, хвостовой `\`
   корня удваивается; `ValidationKey` ловит режим «на каждый файл» с
   `{paths}` и наоборот. **Выход** — `OutputNames.Resolve`: рядом с
-  источником, `(1)` как у копии, источник считается занятым.
+  источником или в папке, которую человек выбрал («В другую папку…»,
+  `RunAsync(..., outputFolder)`), источник считается занятым; занятое имя
+  — `FileSystem/UniqueNames`, **номер после наибольшего** («clip (3)»,
+  «clip (4)» → «clip (5)»): одно правило на копии при «оставить обе»,
+  извлечение и выходы действий (решение 2026-09-16). Проводник, Finder и
+  браузеры заполняют первый пропуск; выбрано иначе, чтобы новое было
+  последним в списке и номер не переезжал на другой файл.
+- **Хранение пресетов** — `ActionCatalog.ToStored` / `Merge`: у пресета
+  в `state.json` только `Id`, `Enabled` и свой `Program`
+  (`ActionCatalog.Override`), остальное берётся из кода при слиянии —
+  улучшенная команда доезжает и до того, кто пресет выключал. Свои строки
+  хранятся целиком. Старый полный снимок пресета читается тем же путём.
+- **Кодировщик картинок** — `Platform/Imaging/ImageConvertAction`
+  (WinRT, см. «Platform без WPF»): метаданные из `ImageMetadata`
+  (MetadataExtractor, с RAW тоже) пишутся номерами тегов
+  (`Imaging/ExifTags`, GPS включительно), слова — из свойств декодера;
+  JPEG без изменения пикселей идёт transcoding'ом без пережатия.
 - **Исполнение** — `ExternalActionRunner`: по одному, не параллельно;
   `OperationTracker` (`OperationVerbs.RunAction`, по элементам); гард
   `SystemPathGuard` на папку выхода; `{list}` — временный файл в
@@ -1037,7 +1075,12 @@ Listing/RatedListing     WithRatings() листинг → тот же с Rating 
 | `Replaced` — заменяет расширение | `IMG_1234.xmp` | Adobe / darktable, `.AAE` |
 
 `Appended` по точному имени, `Replaced` по stem'у; два претендента на stem
-(`IMG.CR2` + `IMG.jpg` при `IMG.xmp`) — не привязывается ни к кому.
+— сайдкар отдаётся RAW, если RAW среди них ровно один (`IMG.CR2` +
+`IMG.jpg` при `IMG.xmp`: пара RAW+JPEG с камеры или JPEG, сделанный из
+RAW, — XMP в обоих случаях у RAW; 2026-09-16, после «Превью из RAW»
+сайдкар и оценка оставались сиротами); иначе (два JPEG, два RAW) — ни к
+кому. То же в `Group` и в `FindCompanions`: JPEG рядом с RAW того же
+имени свой `.xmp` при переносе не забирает (`CompanionResolver.Owner`).
 
 - Свёртка — в воркере `RefreshFolderAsync` **после** Hidden/System:
   спутник у отфильтрованного файла и сирота остаются видимыми.
@@ -1593,7 +1636,10 @@ false` — сплит только на картинку, футер один и
   raw-данные (SOF3). Цена: превью-разрешение (Canon 1620×1080); размеры в
   футере из EXIF. JPEG лежит **неповёрнутым**, поворот в IFD0 контейнера
   (6 / 8) — `ImageMetadata.Orientation`, `ApplyOrientation` через
-  `TransformedBitmap`, только для RAW.
+  `TransformedBitmap`. С 2026-09-16 тег применяется к **каждой** картинке,
+  не только к RAW: `BitmapImage` JPEG с камеры тоже не поворачивает, а
+  Проводник и любой просмотрщик поворачивают — «оставить как есть» было
+  ошибкой, всплывшей на превью, взятом из RAW как есть вместе с тегом.
 - **`IgnoreImageCache` — только для файлов**: кэш WPF по URI не замечает
   подмены байтов; у картинки из `MemoryStream` URI нет, и
   `FinalizeCreation` на .NET 10 падает на `null` — `Decode` гасил

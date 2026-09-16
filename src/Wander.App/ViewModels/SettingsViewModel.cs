@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Windows.Media;
+using Wander.App.Resources;
+using Wander.Core.Actions;
 using Wander.Core.Companions;
 using Wander.Core.FileSystem;
 using Wander.Core.Layout;
@@ -45,6 +47,8 @@ public sealed class SettingsViewModel : ObservableObject {
             new ThumbnailsSettingsCategory(this),
             new BookmarksSettingsCategory(this),
             new ContextMenuSettingsCategory(this),
+            new ActionsSettingsCategory(this),
+            new ToolsSettingsCategory(this),
             new HotkeysSettingsCategory(this),
             new DebugSettingsCategory(this),
         };
@@ -556,6 +560,28 @@ public sealed class SettingsViewModel : ObservableObject {
     public ObservableCollection<MenuItemRowViewModel> MenuItemRows { get; } = new();
 
 
+    // --- Custom actions ------------------------------------------------
+    /// <summary>Where the programs are; empty until the dialog has looked.</summary>
+    private IReadOnlyDictionary<string, ToolLocation> _toolLocations = new Dictionary<string, ToolLocation>();
+
+    /// <summary>Programs pointed at by hand on the "Программы" page.</summary>
+    private IReadOnlyList<ToolPath> _toolPaths = Array.Empty<ToolPath>();
+
+    /// <summary>
+    /// The actions table: presets merged with what the user stored, in
+    /// catalog order (<see cref="ActionCatalog.Merge"/>).
+    /// </summary>
+    public ObservableCollection<ActionRowViewModel> ActionRows { get; } = new();
+
+    /// <summary>The catalog as it stands, presets included - what the menus and the runner read.</summary>
+    public IReadOnlyList<CustomAction> Actions => ActionRows.Select(r => r.Action).ToArray();
+
+    /// <summary>The "Программы" page: one block per program the catalog needs.</summary>
+    public ObservableCollection<ToolRowViewModel> ToolRows { get; } = new();
+
+    public IReadOnlyList<ToolPath> ToolPaths => _toolPaths;
+
+
     // --- Debug ---------------------------------------------------------
     private bool _showDebugMenu;
     public bool ShowDebugMenu {
@@ -633,6 +659,8 @@ public sealed class SettingsViewModel : ObservableObject {
         _recentScopes = s.RecentShellScopes;
         _blockedShellKeys = new HashSet<string>(s.BlockedShellExtensions, StringComparer.OrdinalIgnoreCase);
         RebuildShellRows();
+        _toolPaths = s.ToolPaths;
+        RebuildActionRows(s.CustomActions);
         ShowDebugMenu = s.ShowDebugMenu;
     }
 
@@ -750,6 +778,50 @@ public sealed class SettingsViewModel : ObservableObject {
         RebuildShellRows();
     }
 
+    /// <summary>
+    /// Hands both pages where the programs are. Looked up by the dialog on
+    /// the pool: <c>PATH</c> can hold a network folder.
+    /// </summary>
+    public void SetToolLocations(IReadOnlyDictionary<string, ToolLocation> tools) {
+        _toolLocations = tools;
+        foreach (var row in ActionRows) {
+            row.SetTools(tools);
+        }
+
+        ToolRows.Clear();
+        foreach (string tool in ActionCatalog.ToolNames(Actions)) {
+            var row = new ToolRowViewModel(tool);
+            if (tools.TryGetValue(tool, out var location)) {
+                row.SetLocation(location);
+            }
+            ToolRows.Add(row);
+        }
+    }
+
+    /// <summary>"Указать…" and "Сбросить": null goes back to looking for the program. The caller looks again.</summary>
+    public void SetToolPath(string tool, string? path) {
+        _toolPaths = ActionCatalog.WithToolPath(_toolPaths, tool, path);
+        Raise(nameof(ToolPaths));
+    }
+
+    public ActionRowViewModel AddAction() {
+        return AppendAction(ActionCatalog.NewAction(Strings.ActionsNewTitle));
+    }
+
+    /// <summary>A copy goes to the end of the table - where the user's rows are kept.</summary>
+    public ActionRowViewModel CopyAction(ActionRowViewModel source) {
+        return AppendAction(ActionCatalog.CopyOf(source.Action, string.Format(Strings.ActionsCopyTitle, source.Title)));
+    }
+
+    public void RemoveAction(ActionRowViewModel row) {
+        if (row.IsPreset) {
+            return;
+        }
+
+        ActionRows.Remove(row);
+        OnActionsChanged();
+    }
+
     public AppSettings ToRecord() {
         return new AppSettings {
             RestoreLastFolder = RestoreLastFolder,
@@ -807,6 +879,8 @@ public sealed class SettingsViewModel : ObservableObject {
             ShowSystemShellExtensions = ShowSystemShellExtensions,
             TrackedShellScopes = _trackedScopes.ToArray(),
             RecentShellScopes = _recentScopes,
+            CustomActions = ActionCatalog.ToStored(ActionPresets.All, Actions),
+            ToolPaths = _toolPaths,
             ShowDebugMenu = ShowDebugMenu,
         };
     }
@@ -862,6 +936,34 @@ public sealed class SettingsViewModel : ObservableObject {
         }
 
         OnMenuToggleChanged();
+    }
+
+    private void RebuildActionRows(IReadOnlyList<CustomAction> stored) {
+        ActionRows.Clear();
+        foreach (var action in ActionCatalog.Merge(ActionPresets.All, stored)) {
+            ActionRows.Add(NewActionRow(action));
+        }
+        OnActionsChanged();
+    }
+
+    private ActionRowViewModel AppendAction(CustomAction action) {
+        var row = NewActionRow(action);
+        ActionRows.Add(row);
+        OnActionsChanged();
+
+        return row;
+    }
+
+    private ActionRowViewModel NewActionRow(CustomAction action) {
+        var row = new ActionRowViewModel(action, OnActionsChanged);
+        row.SetTools(_toolLocations);
+
+        return row;
+    }
+
+    /// <summary>The same nudge as <see cref="OnMenuToggleChanged"/>, for the actions table.</summary>
+    private void OnActionsChanged() {
+        Raise(nameof(ActionRows));
     }
 
     /// <summary>

@@ -667,18 +667,9 @@ internal sealed class BatchExecutor {
 
     private bool Exists(string path) => _fs.FileExists(path) || _fs.DirectoryExists(path);
 
+    /// <summary>The number after the highest already there - the one rule, see <see cref="UniqueNames"/>.</summary>
     private string GenerateUniqueName(string desiredPath) {
-        string dir = Path.GetDirectoryName(desiredPath) ?? "";
-        string nameNoExt = Path.GetFileNameWithoutExtension(desiredPath);
-        string ext = Path.GetExtension(desiredPath);
-        int i = 1;
-        while (true) {
-            string candidate = Path.Combine(dir, $"{nameNoExt} ({i}){ext}");
-            if (!Exists(candidate)) {
-                return candidate;
-            }
-            i++;
-        }
+        return Wander.Core.FileSystem.UniqueNames.Resolve(desiredPath, Exists, folder => _fs.Enumerate(folder).Select(e => e.Name));
     }
 
     private FileConflictInfo BuildInfo(string src, string dest, bool isMove) {

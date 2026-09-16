@@ -1366,16 +1366,14 @@ public sealed class PreviewController : ObservableObject {
                 meta = _metadataReader.Read(path);
             }
 
-            // RAW comes out of its container unrotated, whichever way we
-            // read it: the embedded preview carries no EXIF of its own, and
-            // WIC's own RAW decode ignores the orientation tag too. A camera
-            // set to "rotate on the computer only" records the rotation in
-            // the container's IFD0 and leaves the pixels alone — so this is
-            // the one branch that has to apply it, and it applies to the
-            // full-decode fallback as well.
-            //
-            // JPEG and PNG are deliberately left as they are: what they look
-            // like everywhere else is what the user expects to see here.
+            // Nothing WIC decodes here turns the picture by itself: the RAW
+            // decode and the embedded preview ignore the container's tag,
+            // and BitmapImage leaves a JPEG the way the sensor stored it. The
+            // camera records the turn in EXIF and every viewer applies it -
+            // Explorer, Photos, a browser - so a portrait JPEG shown as it is
+            // lies on its side here and nowhere else (found 2026-09-16 on a
+            // preview taken out of a RAW as it is, tag and all). The tag is
+            // applied to every picture; a file without one is unchanged.
             if (ImageFormats.IsRaw(path)) {
                 isRaw = true;
                 var raw = _showRawDecode
@@ -1386,7 +1384,8 @@ public sealed class PreviewController : ObservableObject {
                 return;
             }
 
-            image = ImageDecoder.File(path);
+            var plain = ImageDecoder.File(path);
+            image = plain is null ? null : ImageDecoder.ApplyOrientation(plain, meta?.Orientation);
         }, ct);
 
         if (ct.IsCancellationRequested) {

@@ -711,6 +711,286 @@
         </DataTemplate>
 
 
+        <!--
+            Actions. One table for the shipped presets and the user's own
+            rows - the same catalog the header menu and the context menu
+            read. A preset takes only its checkbox and "Указать…"; anything
+            more is done to a copy, so the shipped row stays what the code
+            says and is not written to state.json.
+
+            Cells are plain controls in template columns, like the tables on
+            the context-menu page: a DataGrid edit mode costs a click per
+            field. The implicit TextBox style below switches the page's
+            number-field behaviour off - a wheel over a command line must
+            not rewrite it.
+        -->
+        <DataTemplate DataType="{x:Type vm:ActionsSettingsCategory}">
+            <StackPanel>
+                <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
+
+                <DataGrid x:Name="ActionsGrid"
+                          Style="{StaticResource SettingsGrid}"
+                          ItemsSource="{Binding Owner.ActionRows}"
+                          SelectedItem="{Binding SelectedRow}"
+                          SelectionMode="Single"
+                          GotKeyboardFocus="ActionsGrid_GotKeyboardFocus"
+                          Height="300">
+                    <DataGrid.Resources>
+                        <Style TargetType="TextBox">
+                            <Setter Property="controls:NumericField.Enabled" Value="False"/>
+                            <Setter Property="Padding" Value="2,1"/>
+                            <Setter Property="VerticalAlignment" Value="Center"/>
+                            <Setter Property="IsReadOnly" Value="{Binding IsPreset}"/>
+                        </Style>
+                        <Style TargetType="ComboBox">
+                            <Setter Property="VerticalAlignment" Value="Center"/>
+                            <Setter Property="DisplayMemberPath" Value="Title"/>
+                            <Setter Property="SelectedValuePath" Value="Value"/>
+                            <Setter Property="IsEnabled" Value="{Binding IsEditable}"/>
+                        </Style>
+                    </DataGrid.Resources>
+                    <DataGrid.Columns>
+                        <DataGridTemplateColumn Header="{x:Static res:Strings.SettingsActionsColumnEnabled}" Width="42">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <CheckBox IsChecked="{Binding Enabled, UpdateSourceTrigger=PropertyChanged}"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0"/>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="{x:Static res:Strings.SettingsActionsColumnTitle}" Width="170">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBox Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}"/>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <!-- The mask wins over the group when it is not empty. -->
+                        <DataGridTemplateColumn Header="{x:Static res:Strings.SettingsActionsColumnTypes}" Width="200">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <ComboBox Grid.Column="0"
+                                                  ItemsSource="{x:Static vm:ActionRowViewModel.GroupChoices}"
+                                                  SelectedValue="{Binding Group}"/>
+                                        <TextBox Grid.Column="1" Margin="4,0,0,0"
+                                                 ToolTip="{x:Static res:Strings.SettingsActionsMaskHint}"
+                                                 Text="{Binding Mask, UpdateSourceTrigger=PropertyChanged}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <!-- A program that is not on the machine is marked here;
+                             where it is is the "Программы" page's business. -->
+                        <DataGridTemplateColumn Header="{x:Static res:Strings.SettingsActionsColumnProgram}" Width="150">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBox Text="{Binding Program, UpdateSourceTrigger=PropertyChanged}"
+                                             ToolTip="{Binding ProgramHint}">
+                                        <TextBox.Style>
+                                            <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding NeedsTool}" Value="True">
+                                                        <Setter Property="Foreground" Value="{StaticResource TextError}"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBox.Style>
+                                    </TextBox>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <!-- A mode the command line cannot work in is said in red
+                             under it; saving is not blocked. -->
+                        <DataGridTemplateColumn Header="{x:Static res:Strings.SettingsActionsColumnArguments}" Width="260">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBox Text="{Binding Arguments, UpdateSourceTrigger=PropertyChanged}"
+                                                 ToolTip="{x:Static res:Strings.SettingsActionsPlaceholders}"/>
+                                        <TextBlock Text="{Binding ValidationText}" Foreground="{StaticResource TextError}"
+                                                   TextWrapping="Wrap">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding ValidationText}" Value="">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="{x:Static res:Strings.SettingsActionsColumnMode}" Width="150">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <ComboBox ItemsSource="{x:Static vm:ActionRowViewModel.ModeChoices}"
+                                              SelectedValue="{Binding RunPerFile}"/>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="{x:Static res:Strings.SettingsActionsColumnPlacement}" Width="120">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <ComboBox ItemsSource="{x:Static vm:ActionRowViewModel.PlacementChoices}"
+                                              SelectedValue="{Binding Placement}"/>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="{x:Static res:Strings.SettingsActionsColumnSubmenu}" Width="Auto">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <CheckBox IsChecked="{Binding InSubmenu, UpdateSourceTrigger=PropertyChanged}"
+                                              IsEnabled="{Binding IsEditable}"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0"/>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="{x:Static res:Strings.SettingsActionsColumnHideConsole}" Width="Auto">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <CheckBox IsChecked="{Binding HideConsole, UpdateSourceTrigger=PropertyChanged}"
+                                              IsEnabled="{Binding IsEditable}"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0"/>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="{x:Static res:Strings.SettingsActionsColumnOutput}" Width="130">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBox Text="{Binding Output, UpdateSourceTrigger=PropertyChanged}"
+                                             ToolTip="{x:Static res:Strings.SettingsActionsOutputHint}"/>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                    <DataGrid.RowStyle>
+                        <Style TargetType="DataGridRow">
+                            <Style.Triggers>
+                                <!-- Switched off: still a row to switch back on,
+                                     drawn the way the unseen shell rows are. -->
+                                <DataTrigger Binding="{Binding Enabled}" Value="False">
+                                    <Setter Property="Foreground" Value="{StaticResource TextSubtle}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGrid.RowStyle>
+                </DataGrid>
+
+                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                    <Button Content="{x:Static res:Strings.ActionsAdd}"
+                            Padding="14,5" Click="AddAction_Click"/>
+                    <Button Content="{x:Static res:Strings.ActionsCopy}"
+                            IsEnabled="{Binding HasSelection}"
+                            Padding="14,5" Margin="8,0,0,0" Click="CopyAction_Click"/>
+                    <Button Content="{x:Static res:Strings.ActionsRemove}"
+                            IsEnabled="{Binding CanRemove}"
+                            ToolTip="{x:Static res:Strings.ActionsRemoveHint}"
+                            ToolTipService.ShowOnDisabled="True"
+                            Padding="14,5" Margin="8,0,0,0" Click="RemoveAction_Click"/>
+                </StackPanel>
+
+                <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,10,0,0"
+                           Text="{x:Static res:Strings.SettingsActionsPlaceholders}"/>
+                <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,8,0,0"
+                           Text="{x:Static res:Strings.SettingsActionsHint}"/>
+            </StackPanel>
+        </DataTemplate>
+
+
+        <!--
+            Programs. One block per program the actions need: what it is for,
+            whether it was found or pointed at, and where. The winget line is
+            a read-only text box so it can be selected and copied.
+        -->
+        <DataTemplate DataType="{x:Type vm:ToolsSettingsCategory}">
+            <StackPanel>
+                <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
+                <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,0,0,6"
+                           Text="{x:Static res:Strings.SettingsToolsHint}"/>
+
+                <ItemsControl ItemsSource="{Binding Owner.ToolRows}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border BorderBrush="{StaticResource Separator}" BorderThickness="0,0,0,1" Padding="0,10,0,10">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold"/>
+                                            <TextBlock Text="{Binding Purpose}" Foreground="{StaticResource TextDim}" Margin="10,0,0,0"/>
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding StatusText}" Margin="0,4,0,0">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Foreground" Value="{StaticResource TextCaption}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsAvailable}" Value="False">
+                                                            <Setter Property="Foreground" Value="{StaticResource TextError}"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        <TextBlock Text="{Binding PathText}" ToolTip="{Binding PathText}"
+                                                   TextTrimming="CharacterEllipsis" Margin="0,2,0,0">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding PathText}" Value="">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        <TextBox Text="{Binding InstallHint, Mode=OneWay}" IsReadOnly="True"
+                                                 controls:NumericField.Enabled="False"
+                                                 BorderThickness="0" Background="Transparent" Padding="0"
+                                                 Foreground="{StaticResource TextDim}" Margin="0,2,0,0">
+                                            <TextBox.Style>
+                                                <Style TargetType="TextBox">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsAvailable}" Value="True">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding InstallHint}" Value="">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBox.Style>
+                                        </TextBox>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                                        <Button Content="{x:Static res:Strings.ToolsPointAt}"
+                                                Padding="12,3" Click="PointTool_Click"/>
+                                        <Button Content="{x:Static res:Strings.ToolsReset}"
+                                                ToolTip="{x:Static res:Strings.ToolsResetHint}"
+                                                IsEnabled="{Binding IsSpecified}"
+                                                Padding="12,3" Margin="6,0,0,0" Click="ResetTool_Click"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </DataTemplate>
+
+
         <!-- Debug -->
         <!--
             The keyboard reference. A read-only list, and it says so: five

@@ -352,18 +352,9 @@ public sealed class ExtractionService {
 
     private bool Exists(string path) => _fs.FileExists(path) || _fs.DirectoryExists(path);
 
+    /// <summary>The number after the highest already there - the one rule, see <see cref="UniqueNames"/>.</summary>
     private string UniqueName(string desired) {
-        string dir = Path.GetDirectoryName(desired) ?? "";
-        string stem = Path.GetFileNameWithoutExtension(desired);
-        string extension = Path.GetExtension(desired);
-        int i = 1;
-        while (true) {
-            string candidate = Path.Combine(dir, $"{stem} ({i}){extension}");
-            if (!Exists(candidate)) {
-                return candidate;
-            }
-            i++;
-        }
+        return UniqueNames.Resolve(desired, Exists, folder => _fs.Enumerate(folder).Select(e => e.Name));
     }
 
     private static string NameOf(string path) {

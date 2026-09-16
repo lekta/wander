@@ -1,9 +1,13 @@
+using System.IO;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
 using Wander.App.Dialogs;
 using Wander.App.Resources;
 using Wander.App.Util;
 using Wander.App.ViewModels;
 using Wander.Core;
+using Wander.Core.Actions;
 using Wander.Core.Icons;
 using Wander.Core.Persistence;
 using Wander.Core.Shell;
@@ -43,7 +47,30 @@ public partial class SettingsWindow : Window {
             _baseline = vm.ToRecord();
             _ = RefreshCacheStatusAsync(vm);
             ScanShellHandlers(vm);
+            _ = LocateToolsAsync(vm, rescan: true);
         }
+    }
+
+
+    /// <summary>
+    /// Finds the programs for the "Программы" page and the marks in the
+    /// actions table. On opening the answers kept for the session are
+    /// dropped first: the dialog is where the user comes to check whether the
+    /// program they just installed is seen. The walk over <c>PATH</c> runs on
+    /// the pool.
+    /// </summary>
+    private static async Task LocateToolsAsync(SettingsViewModel vm, bool rescan) {
+        if (ServiceLocator.TryGet<IToolLocator>() is not { } locator) {
+            return;
+        }
+
+        if (rescan) {
+            locator.Refresh();
+        }
+        var catalog = vm.Actions;
+        var given = vm.ToolPaths;
+        var tools = await Task.Run(() => ActionCatalog.LocateTools(catalog, given, locator.Find, File.Exists));
+        vm.SetToolLocations(tools);
     }
 
 
@@ -139,6 +166,8 @@ public partial class SettingsWindow : Window {
 
         if (accepted) {
             vm.ApplyFrom(new AppSettings());
+            // The chosen programs went with the rest.
+            _ = LocateToolsAsync(vm, rescan: false);
         }
     }
 
@@ -185,5 +214,74 @@ public partial class SettingsWindow : Window {
         if (DataContext is SettingsViewModel vm) {
             _baseline = vm.ToRecord();
         }
+    }
+
+
+    // --- Actions table ----------------------------------------------------
+
+    /// <summary>
+    /// A click into a cell's text box does not select the row - the box
+    /// takes the mouse first - and the buttons under the table act on the
+    /// selected one. Following the keyboard focus keeps the two the same.
+    /// </summary>
+    private void ActionsGrid_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e) {
+        if (sender is DataGrid grid
+            && e.NewFocus is DependencyObject focused
+            && ItemsControl.ContainerFromElement(grid, focused) is DataGridRow row) {
+            grid.SelectedItem = row.Item;
+        }
+    }
+
+    private void AddAction_Click(object sender, RoutedEventArgs e) {
+        ActionsPage(sender)?.Add();
+    }
+
+    private void CopyAction_Click(object sender, RoutedEventArgs e) {
+        ActionsPage(sender)?.CopySelected();
+    }
+
+    private void RemoveAction_Click(object sender, RoutedEventArgs e) {
+        ActionsPage(sender)?.RemoveSelected();
+    }
+
+
+    private static ActionsSettingsCategory? ActionsPage(object sender) {
+        return (sender as FrameworkElement)?.DataContext as ActionsSettingsCategory;
+    }
+
+
+    // --- Programs page ----------------------------------------------------
+
+    /// <summary>"Указать…": the program's file, chosen by hand; it wins over what was found.</summary>
+    private void PointTool_Click(object sender, RoutedEventArgs e) {
+        if (sender is not FrameworkElement { DataContext: ToolRowViewModel row } || DataContext is not SettingsViewModel vm) {
+            return;
+        }
+
+        var picker = new Microsoft.Win32.OpenFileDialog {
+            Title = string.Format(Strings.ToolsPointAtTitle, row.Title),
+            Filter = Strings.ToolsProgramFilter,
+            FileName = row.Tool + ".exe",
+            CheckFileExists = true,
+        };
+        if (row.PathText.Length > 0 && Path.GetDirectoryName(row.PathText) is { } folder && Directory.Exists(folder)) {
+            picker.InitialDirectory = folder;
+        }
+        if (picker.ShowDialog(this) != true) {
+            return;
+        }
+
+        vm.SetToolPath(row.Tool, picker.FileName);
+        _ = LocateToolsAsync(vm, rescan: false);
+    }
+
+    /// <summary>"Сбросить": forget the chosen file and look for the program again.</summary>
+    private void ResetTool_Click(object sender, RoutedEventArgs e) {
+        if (sender is not FrameworkElement { DataContext: ToolRowViewModel row } || DataContext is not SettingsViewModel vm) {
+            return;
+        }
+
+        vm.SetToolPath(row.Tool, null);
+        _ = LocateToolsAsync(vm, rescan: false);
     }
 }

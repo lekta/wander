@@ -828,6 +828,38 @@ public class ContextMenuBuilderTests {
     }
 
     [Fact]
+    public void ToFolder_OffersTheApplicableActionsWithAnOutput_InBothMenus() {
+        var preset = _forVideo with { Id = "preset", Category = ActionCategory.Convert, Output = "{name}.mp4" };
+        var noOutput = _forVideo with { Id = "open", Category = ActionCategory.Convert };
+        var forImages = _forImages with { Id = "img", Category = ActionCategory.Convert, Output = "{name}.jpg" };
+        var target = SelectionOf(File("a.mp4")) with { Actions = new[] { preset, noOutput, forImages } };
+
+        var context = Find(ContextMenuBuilder.Build(target, ContextMenuSettings.Default), MenuCommandId.ConvertSubmenu)!.Children;
+        var header = Find(ContextMenuBuilder.Build(target with { Place = MenuPlace.Header }, ContextMenuSettings.Default), MenuCommandId.ConvertSubmenu)!.Children;
+
+        foreach (var convert in new[] { context, header }) {
+            var toFolder = Find(convert, MenuCommandId.ToFolderSubmenu)!;
+            var row = Assert.Single(toFolder.Children);
+            Assert.Equal(MenuCommandId.RunActionTo, row.Id);
+            Assert.Equal("preset", row.Argument);
+            Assert.Equal(preset.Title, row.Header);
+        }
+        // In the header it sits above the way to settings.
+        Assert.Equal(MenuCommandId.ConfigureActions, header[^1].Id);
+        Assert.True(IndexOf(header, MenuCommandId.ToFolderSubmenu) < IndexOf(header, MenuCommandId.ConfigureActions));
+    }
+
+    [Fact]
+    public void ToFolder_IsAbsent_WhenNothingApplicableDeclaresAnOutput() {
+        var target = SelectionOf(File("a.mp4")) with { Actions = new[] { _forVideo with { Category = ActionCategory.Convert } } };
+
+        var convert = Find(ContextMenuBuilder.Build(target, ContextMenuSettings.Default), MenuCommandId.ConvertSubmenu)!.Children;
+
+        Assert.Null(Find(convert, MenuCommandId.ToFolderSubmenu));
+        Assert.DoesNotContain(convert, e => e.IsSeparator);
+    }
+
+    [Fact]
     public void Header_ContextOnlyActions_StayOutOfIt() {
         var contextOnly = _forVideo with { Id = "ctx", Placement = ActionPlacement.ContextMenu };
         var target = SelectionOf(File("a.mp4")) with { Place = MenuPlace.Header, Actions = new[] { contextOnly } };

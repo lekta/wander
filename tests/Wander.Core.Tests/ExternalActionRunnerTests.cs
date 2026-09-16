@@ -107,6 +107,31 @@ public class ExternalActionRunnerTests {
     }
 
     [Fact]
+    public async Task OutputFolder_PutsEveryOutputThere_UniqueThereToo() {
+        var (runner, fs, _, _, processes, _) = Setup();
+        fs.Directories.Add(@"C:\out");
+        fs.Files[@"C:\out\a.mp4"] = new byte[] { 7 };
+
+        var results = await runner.RunAsync(_encode, new[] { A, B }, CancellationToken.None, outputFolder: @"C:\out");
+
+        Assert.Equal(@"C:\out\a (1).mp4", results[0].Output);
+        Assert.Equal(@"C:\out\b.mp4", results[1].Output);
+        Assert.Contains(@"""C:\out\a (1).mp4""", processes.Requests[0].Arguments);
+        // The program still runs where its input is.
+        Assert.All(processes.Requests, r => Assert.Equal(Folder, r.WorkingDirectory));
+    }
+
+    [Fact]
+    public async Task OutputFolder_ThatIsProtected_IsRefused() {
+        var (runner, _, _, _, processes, _) = Setup();
+
+        var results = await runner.RunAsync(_encode, new[] { A }, CancellationToken.None, outputFolder: @"C:\Windows\Temp");
+
+        Assert.Empty(processes.Requests);
+        Assert.Equal(BatchItemStatus.Failed, results[0].Status);
+    }
+
+    [Fact]
     public async Task OutputNeverLandsOnAnExistingFile() {
         var (runner, fs, _, _, processes, _) = Setup();
         fs.Files[@"C:\videos\a.mp4"] = new byte[] { 7 };

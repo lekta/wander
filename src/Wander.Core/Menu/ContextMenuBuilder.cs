@@ -311,12 +311,12 @@ public static class ContextMenuBuilder {
         var items = rows.Where(r => !r.Action.InSubmenu)
             .Select(r => ActionRow(r.Action, r.State))
             .ToList();
-        AddSubmenu(items, MenuCommandId.ActionsSubmenu,
-            rows.Where(r => r.Action.InSubmenu && r.Action.Category == ActionCategory.Actions)
-                .Select(r => ActionRow(r.Action, r.State)).ToList());
-        AddSubmenu(items, MenuCommandId.ConvertSubmenu,
-            rows.Where(r => r.Action.InSubmenu && r.Action.Category == ActionCategory.Convert)
-                .Select(r => ActionRow(r.Action, r.State)).ToList());
+        foreach (var category in new[] { ActionCategory.Actions, ActionCategory.Convert }) {
+            var inside = rows.Where(r => r.Action.InSubmenu && r.Action.Category == category).ToList();
+            var submenu = inside.Select(r => ActionRow(r.Action, r.State)).ToList();
+            AppendToFolder(submenu, inside);
+            AddSubmenu(items, category == ActionCategory.Actions ? MenuCommandId.ActionsSubmenu : MenuCommandId.ConvertSubmenu, submenu);
+        }
 
         return items;
     }
@@ -340,24 +340,45 @@ public static class ContextMenuBuilder {
             .Select(r => ActionRow(r.Action, r.State))
             .ToList();
 
-        var actions = rows.Where(r => r.Action.InSubmenu && r.Action.Category == ActionCategory.Actions)
-            .Select(r => ActionRow(r.Action, r.State)).ToList();
+        var ownRows = rows.Where(r => r.Action.InSubmenu && r.Action.Category == ActionCategory.Actions).ToList();
+        var actions = ownRows.Select(r => ActionRow(r.Action, r.State)).ToList();
         if (actions.Count == 0) {
             actions.Add(Cmd(MenuCommandId.NoActions, enabled: false));
         }
+        AppendToFolder(actions, ownRows);
         actions.Add(MenuEntry.Divider);
         actions.Add(Cmd(MenuCommandId.ConfigureActions));
         AddSubmenu(items, MenuCommandId.ActionsSubmenu, actions);
 
-        var convert = rows.Where(r => r.Action.InSubmenu && r.Action.Category == ActionCategory.Convert)
-            .Select(r => ActionRow(r.Action, r.State)).ToList();
+        var presetRows = rows.Where(r => r.Action.InSubmenu && r.Action.Category == ActionCategory.Convert).ToList();
+        var convert = presetRows.Select(r => ActionRow(r.Action, r.State)).ToList();
         if (convert.Count > 0) {
+            AppendToFolder(convert, presetRows);
             convert.Add(MenuEntry.Divider);
             convert.Add(Cmd(MenuCommandId.ConfigureActions));
         }
         AddSubmenu(items, MenuCommandId.ConvertSubmenu, convert);
 
         return items;
+    }
+
+    /// <summary>
+    /// "В другую папку ▸" at the end of a submenu: the same actions, for
+    /// the ones that declare an output and apply, with the output going to
+    /// a folder the user is asked for. An action without a declared output
+    /// has nothing to redirect and stays out.
+    /// </summary>
+    private static void AppendToFolder(List<MenuEntry> submenu, IReadOnlyList<(CustomAction Action, ActionState State)> rows) {
+        var redirectable = rows
+            .Where(r => r.State == ActionState.Applicable && r.Action.Output.Length > 0)
+            .Select(r => ActionRow(r.Action, r.State, toFolder: true))
+            .ToList();
+        if (redirectable.Count == 0) {
+            return;
+        }
+
+        submenu.Add(MenuEntry.Divider);
+        submenu.Add(Sub(MenuCommandId.ToFolderSubmenu, redirectable));
     }
 
     /// <summary>
@@ -375,11 +396,12 @@ public static class ContextMenuBuilder {
         return ActionApplicability.For(action, t.Selection, t.FolderPath is not null && t.IsWritable, t.ToolAvailable);
     }
 
-    private static MenuEntry ActionRow(CustomAction action, ActionState state) {
+    /// <param name="toFolder">The row that asks for a folder first (<see cref="MenuCommandId.RunActionTo"/>).</param>
+    private static MenuEntry ActionRow(CustomAction action, ActionState state, bool toFolder = false) {
         bool missing = state == ActionState.ToolMissing;
 
         return new MenuEntry {
-            Id = MenuCommandId.RunAction,
+            Id = toFolder ? MenuCommandId.RunActionTo : MenuCommandId.RunAction,
             Header = action.DisplayTitle,
             Argument = action.Id,
             IsEnabled = state == ActionState.Applicable,

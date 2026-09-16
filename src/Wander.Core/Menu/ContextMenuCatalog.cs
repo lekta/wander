@@ -30,6 +30,7 @@ public static class ContextMenuCatalog {
         [MenuCommandId.NewSubmenu] = "MenuCmdNewSubmenu",
         [MenuCommandId.ActionsSubmenu] = "MenuCmdActionsSubmenu",
         [MenuCommandId.ConvertSubmenu] = "MenuCmdConvertSubmenu",
+        [MenuCommandId.ToFolderSubmenu] = "MenuCmdToFolderSubmenu",
 
         [MenuCommandId.Open] = "MenuCmdOpen",
         [MenuCommandId.OpenWith] = "MenuCmdOpenWith",
@@ -48,6 +49,7 @@ public static class ContextMenuCatalog {
         [MenuCommandId.NewFolder] = "MenuCmdNewFolder",
 
         [MenuCommandId.RunAction] = "MenuCmdRunAction",
+        [MenuCommandId.RunActionTo] = "MenuCmdRunActionTo",
         [MenuCommandId.NoActions] = "MenuCmdNoActions",
         [MenuCommandId.ConfigureActions] = "MenuCmdConfigureActions",
 
@@ -98,6 +100,7 @@ public static class ContextMenuCatalog {
         // Single actions are switched off in their own settings table.
         new MenuNode(MenuCommandId.ActionsSubmenu, 0),
         new MenuNode(MenuCommandId.ConvertSubmenu, 0),
+        new MenuNode(MenuCommandId.ToFolderSubmenu, 1),
         new MenuNode(MenuCommandId.FileSubmenu, 0),
         new MenuNode(MenuCommandId.Cut, 1),
         new MenuNode(MenuCommandId.Copy, 1),

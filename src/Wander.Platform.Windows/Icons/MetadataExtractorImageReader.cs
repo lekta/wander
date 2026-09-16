@@ -10,6 +10,12 @@ namespace Wander.Platform.Windows.Icons;
 /// Reads EXIF / shot details via MetadataExtractor. Supports JPEG, PNG, TIFF,
 /// HEIC, and the major RAW formats including Canon CR2/CR3 — same set as
 /// Explorer's Details pane on Win11.
+///
+/// <para>
+/// Two readings of the same tags: the worded ones for the footer, and the
+/// numbers for the converter, which writes them into the file it makes.
+/// The position comes from the GPS block, altitude included.
+/// </para>
 /// </summary>
 public sealed class MetadataExtractorImageReader : IImageMetadataReader {
     public ImageMetadata? Read(string path) {
@@ -38,12 +44,46 @@ public sealed class MetadataExtractorImageReader : IImageMetadataReader {
 
             int? orientation = ifd0?.TryGetInt32(ExifDirectoryBase.TagOrientation, out int o) == true ? o : null;
 
-            return new ImageMetadata(make, model, iso, aperture, shutter, focal, taken, width, height, orientation);
+            return new ImageMetadata(make, model, iso, aperture, shutter, focal, taken, width, height, orientation,
+                Iso: Int(sub, ExifDirectoryBase.TagIsoEquivalent),
+                ExposureSeconds: Number(sub, ExifDirectoryBase.TagExposureTime),
+                FNumber: Number(sub, ExifDirectoryBase.TagFNumber),
+                FocalLengthMm: Number(sub, ExifDirectoryBase.TagFocalLength),
+                Position: Position(dirs.OfType<GpsDirectory>().FirstOrDefault()),
+                Copyright: ifd0?.GetString(ExifDirectoryBase.TagCopyright),
+                Rating: Int(ifd0, ExifDirectoryBase.TagRating));
         } catch {
             return null;
         }
     }
 
+
+    private static int? Int(MetadataExtractor.Directory? dir, int tag) {
+        return dir?.TryGetInt32(tag, out int value) == true ? value : null;
+    }
+
+    private static double? Number(MetadataExtractor.Directory? dir, int tag) {
+        return dir?.TryGetRational(tag, out var value) == true ? value.ToDouble() : null;
+    }
+
+    /// <summary>
+    /// Latitude and longitude, altitude when the block has one. A block with
+    /// zeros for both (a camera with GPS that never got a fix) reads as no
+    /// position - that is MetadataExtractor's own rule.
+    /// </summary>
+    private static GeoPosition? Position(GpsDirectory? gps) {
+        if (gps?.GetGeoLocation() is not { } location || location.IsZero) {
+            return null;
+        }
+
+        double? altitude = null;
+        if (gps.TryGetRational(GpsDirectory.TagAltitude, out var metres)) {
+            bool below = gps.TryGetInt32(GpsDirectory.TagAltitudeRef, out int reference) && reference == 1;
+            altitude = below ? -metres.ToDouble() : metres.ToDouble();
+        }
+
+        return new GeoPosition(location.Latitude, location.Longitude, altitude);
+    }
 
     private static void ReadDimensions(IEnumerable<MetadataExtractor.Directory> dirs, ref int? width, ref int? height) {
         // EXIF SubIFD has PixelXDimension/PixelYDimension; JPEG/PNG file directories have their own.

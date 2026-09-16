@@ -1,4 +1,5 @@
 using Wander.Core.FileSystem;
+using Wander.Core.Icons;
 
 namespace Wander.Core.Companions;
 
@@ -143,6 +144,11 @@ public sealed class CompanionResolver {
             if (string.Equals(candidate, mainPath, StringComparison.OrdinalIgnoreCase) || !fs.FileExists(candidate)) {
                 continue;
             }
+            // IMG.xmp next to IMG.jpg and IMG.CR2 is the RAW's (see
+            // Owner); the JPEG must not take it along.
+            if (rule.Naming == CompanionNaming.Replaced && !ImageFormats.IsRaw(name) && RawSiblingExists(dir, name, fs)) {
+                continue;
+            }
             found ??= new List<string>();
             if (!found.Contains(candidate, StringComparer.OrdinalIgnoreCase)) {
                 found.Add(candidate);
@@ -265,26 +271,54 @@ public sealed class CompanionResolver {
                 continue;
             }
 
-            string? single = null;
+            var candidates = new List<string>();
             foreach (var (candidate, path) in siblings) {
                 if (string.Equals(candidate, name, StringComparison.OrdinalIgnoreCase)) {
                     continue;
                 }
-                if (!string.Equals(Path.GetFileNameWithoutExtension(candidate), key, StringComparison.OrdinalIgnoreCase)) {
-                    continue;
+                if (string.Equals(Path.GetFileNameWithoutExtension(candidate), key, StringComparison.OrdinalIgnoreCase)) {
+                    candidates.Add(path);
                 }
-                if (single is not null) {
-                    single = null;
-                    break;
-                }
-                single = path;
             }
-            if (single is not null) {
-                return single;
+            if (Owner(candidates, path => path) is { } owner) {
+                return owner;
             }
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Which of the files sharing a stem a replaced-extension sidecar
+    /// belongs to. One candidate: that one. Several: the RAW among them,
+    /// if there is exactly one - a folder holding IMG.CR2 and IMG.jpg is
+    /// the camera's RAW+JPEG pair or a JPEG developed from the RAW, and the
+    /// XMP is the RAW's in both cases. Otherwise nobody's: attaching a
+    /// sidecar to a guess would hide it under the wrong file.
+    /// </summary>
+    private static T? Owner<T>(IReadOnlyList<T> candidates, Func<T, string> nameOf) where T : class {
+        if (candidates.Count == 1) {
+            return candidates[0];
+        }
+        if (candidates.Count == 0) {
+            return null;
+        }
+
+        var raw = candidates.Where(c => ImageFormats.IsRaw(nameOf(c))).ToList();
+
+        return raw.Count == 1 ? raw[0] : null;
+    }
+
+    /// <summary>A RAW file with the same stem as <paramref name="name"/> exists in <paramref name="dir"/>.</summary>
+    private static bool RawSiblingExists(string dir, string name, IFileSystem fs) {
+        string stem = Path.GetFileNameWithoutExtension(name);
+        foreach (string extension in ImageFormats.Raw) {
+            if (fs.FileExists(Path.Combine(dir, stem + extension))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
 
@@ -306,24 +340,18 @@ public sealed class CompanionResolver {
             }
 
             // Replaced: the key is a stem, so several files could claim it
-            // (IMG.CR2 and IMG.jpg both stem to "IMG"). An ambiguous sidecar
-            // is left alone rather than attached to a guess.
-            FileSystemEntry? single = null;
+            // (IMG.CR2 and IMG.jpg both stem to "IMG") - see Owner.
+            var candidates = new List<FileSystemEntry>();
             foreach (var e in entries) {
                 if (ReferenceEquals(e, candidate) || e.Kind != EntryKind.File) {
                     continue;
                 }
-                if (!string.Equals(Path.GetFileNameWithoutExtension(e.Name), key, StringComparison.OrdinalIgnoreCase)) {
-                    continue;
+                if (string.Equals(Path.GetFileNameWithoutExtension(e.Name), key, StringComparison.OrdinalIgnoreCase)) {
+                    candidates.Add(e);
                 }
-                if (single is not null) {
-                    single = null;
-                    break;
-                }
-                single = e;
             }
-            if (single is not null) {
-                return single;
+            if (Owner(candidates, e => e.Name) is { } owner) {
+                return owner;
             }
         }
 

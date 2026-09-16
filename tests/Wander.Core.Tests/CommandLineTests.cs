@@ -63,14 +63,76 @@ public class CommandLineTests {
 
     [Fact]
     public void Output_LandsBesideTheSource() {
-        Assert.Equal(@"D:\My Videos\clip one.mkv", OutputNames.Resolve("{name}.mkv", Clip, _ => false));
-        Assert.Equal(@"D:\My Videos\clip one_small.mp4", OutputNames.Resolve("{name}_small.{ext}", Clip, _ => false));
+        Assert.Equal(@"D:\My Videos\clip one.mkv", OutputNames.Resolve("{name}.mkv", Clip, _ => false, NoNames));
+        Assert.Equal(@"D:\My Videos\clip one_small.mp4", OutputNames.Resolve("{name}_small.{ext}", Clip, _ => false, NoNames));
+    }
+
+    [Fact]
+    public void Output_GoesToTheFolderGiven_AndIsUniqueThere() {
+        var taken = Folder(@"E:\done\clip one.mkv");
+
+        Assert.Equal(@"E:\done\clip one.mkv",
+            OutputNames.Resolve("{name}.mkv", Clip, _ => false, NoNames, folder: @"E:\done"));
+        Assert.Equal(@"E:\done\clip one (1).mkv",
+            OutputNames.Resolve("{name}.mkv", Clip, taken.Contains, _ => taken.Select(Path.GetFileName)!, folder: @"E:\done"));
     }
 
     [Fact]
     public void Output_NeverOverwrites_TheSourceIncluded() {
-        var taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { Clip, @"D:\My Videos\clip one (1).mp4" };
+        var taken = Folder(Clip, @"D:\My Videos\clip one (1).mp4");
 
-        Assert.Equal(@"D:\My Videos\clip one (2).mp4", OutputNames.Resolve("{name}.{ext}", Clip, taken.Contains));
+        Assert.Equal(@"D:\My Videos\clip one (2).mp4", Resolve("{name}.{ext}", taken));
+    }
+
+    [Fact]
+    public void Output_TakesTheNumberAfterTheHighest_NotTheFirstGap() {
+        var taken = Folder(@"D:\My Videos\clip one.mkv", @"D:\My Videos\clip one (3).mkv", @"D:\My Videos\CLIP ONE (4).MKV");
+
+        Assert.Equal(@"D:\My Videos\clip one (5).mkv", Resolve("{name}.mkv", taken));
+    }
+
+    [Fact]
+    public void Output_CountsOnlyItsOwnNumberedNames() {
+        var taken = Folder(
+            @"D:\My Videos\clip one.mkv",
+            @"D:\My Videos\clip one 7.mkv",
+            @"D:\My Videos\clip one (x).mkv",
+            @"D:\My Videos\clip one (8).mp4",
+            @"D:\My Videos\other (9).mkv",
+            @"D:\My Videos\clip one (2) copy.mkv");
+
+        Assert.Equal(@"D:\My Videos\clip one (1).mkv", Resolve("{name}.mkv", taken));
+    }
+
+    [Fact]
+    public void Output_NameWithPatternCharacters_IsMatchedLiterally() {
+        const string source = @"C:\a+b [1].mov";
+        var taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { @"C:\a+b [1].mp4", @"C:\a+b [1] (2).mp4", @"C:\aab [1] (6).mp4" };
+
+        Assert.Equal(@"C:\a+b [1] (3).mp4",
+            OutputNames.Resolve("{name}.mp4", source, taken.Contains, _ => taken.Select(Path.GetFileName)!));
+    }
+
+    [Fact]
+    public void Output_StillChecksTheNumberItPicked() {
+        // A folder that appeared after the listing was read.
+        var listed = Folder(@"D:\My Videos\clip one.mkv", @"D:\My Videos\clip one (1).mkv");
+        var taken = new HashSet<string>(listed, StringComparer.OrdinalIgnoreCase) { @"D:\My Videos\clip one (2).mkv" };
+
+        Assert.Equal(@"D:\My Videos\clip one (3).mkv",
+            OutputNames.Resolve("{name}.mkv", Clip, taken.Contains, _ => listed.Select(Path.GetFileName)!));
+    }
+
+
+    private static IEnumerable<string> NoNames(string folder) {
+        return Array.Empty<string>();
+    }
+
+    private static HashSet<string> Folder(params string[] paths) {
+        return new HashSet<string>(paths, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static string Resolve(string template, HashSet<string> taken) {
+        return OutputNames.Resolve(template, Clip, taken.Contains, _ => taken.Select(Path.GetFileName)!);
     }
 }

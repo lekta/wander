@@ -1839,4 +1839,254 @@
   <data name="StatusBatchRenameMixed" xml:space="preserve">
     <value>Переименовать группой можно только файлы или только папки</value>
   </data>
+  <data name="SettingsCategoryActions" xml:space="preserve">
+    <value>Действия</value>
+    <comment>Страница Параметров: свои действия и встроенные конвертации</comment>
+  </data>
+  <data name="SettingsActionsColumnEnabled" xml:space="preserve">
+    <value>Вкл</value>
+  </data>
+  <data name="SettingsActionsColumnTitle" xml:space="preserve">
+    <value>Название</value>
+  </data>
+  <data name="SettingsActionsColumnTypes" xml:space="preserve">
+    <value>Для чего</value>
+  </data>
+  <data name="SettingsActionsColumnProgram" xml:space="preserve">
+    <value>Программа</value>
+  </data>
+  <data name="SettingsActionsColumnArguments" xml:space="preserve">
+    <value>Аргументы</value>
+  </data>
+  <data name="SettingsActionsColumnMode" xml:space="preserve">
+    <value>Режим</value>
+  </data>
+  <data name="SettingsActionsColumnPlacement" xml:space="preserve">
+    <value>Где</value>
+  </data>
+  <data name="SettingsActionsColumnSubmenu" xml:space="preserve">
+    <value>В подменю</value>
+  </data>
+  <data name="SettingsActionsColumnHideConsole" xml:space="preserve">
+    <value>Скрыть консоль</value>
+  </data>
+  <data name="SettingsActionsColumnOutput" xml:space="preserve">
+    <value>Выход</value>
+  </data>
+  <data name="SettingsActionsMaskHint" xml:space="preserve">
+    <value>Маска вместо группы, например *.psd;*.ai. Непустая маска главнее группы и к папкам не подходит</value>
+  </data>
+  <data name="SettingsActionsPlaceholders" xml:space="preserve">
+    <value>Подстановки: {path} — файл, {name} — его имя без расширения, {ext} — расширение, {dir} — папка файла, {paths} — все выделенные, {list} — временный файл со списком путей, {out} — выход. Кавычки подстановка ставит сама.</value>
+    <comment>Показывать через Get, не Format: фигурные скобки — часть текста</comment>
+  </data>
+  <data name="SettingsActionsOutputHint" xml:space="preserve">
+    <value>Имя результата рядом с исходным, например {name}.mp4. Занятое имя получит «(1)»; Ctrl+Z отправит результат в корзину. Пусто — выход не объявлен, отменить нечего.</value>
+    <comment>Показывать через Get, не Format: фигурные скобки — часть текста</comment>
+  </data>
+  <data name="SettingsActionsHint" xml:space="preserve">
+    <value>Встроенные действия не удаляются и не правятся — их выключают галочкой или делают копию. Свои действия — в подменю «Частные», копии встроенных — в «Конвертировать».</value>
+  </data>
+  <data name="ActionsModePerFile" xml:space="preserve">
+    <value>на каждый файл</value>
+  </data>
+  <data name="ActionsModeOnce" xml:space="preserve">
+    <value>все одной командой</value>
+  </data>
+  <data name="ActionsPlacementBoth" xml:space="preserve">
+    <value>оба меню</value>
+  </data>
+  <data name="ActionsPlacementContext" xml:space="preserve">
+    <value>контекстное</value>
+  </data>
+  <data name="ActionsPlacementHeader" xml:space="preserve">
+    <value>шапка</value>
+  </data>
+  <data name="ActionsToolMissingHint" xml:space="preserve">
+    <value>Программа {0} не найдена — укажите её на странице «Программы»</value>
+    <comment>Подсказка ячейки «Программа» в таблице действий; {0} — FFmpeg, LibreOffice, Pandoc</comment>
+  </data>
+  <data name="SettingsCategoryTools" xml:space="preserve">
+    <value>Программы</value>
+    <comment>Страница Параметров: внешние программы для встроенных действий</comment>
+  </data>
+  <data name="SettingsToolsHint" xml:space="preserve">
+    <value>Программы, которые нужны встроенным действиям. Wander ищет их в PATH и в обычных папках установки. «Указать…» — выбрать файл вручную, он главнее найденного; «Сбросить» — снова искать самому.</value>
+  </data>
+  <data name="ToolsPurposeFfmpeg" xml:space="preserve">
+    <value>видео и аудио, WebP</value>
+  </data>
+  <data name="ToolsPurposeLibreOffice" xml:space="preserve">
+    <value>документы в PDF</value>
+  </data>
+  <data name="ToolsPurposePandoc" xml:space="preserve">
+    <value>Markdown ↔ DOCX</value>
+  </data>
+  <data name="ToolsStatusFound" xml:space="preserve">
+    <value>Найдена в системе</value>
+  </data>
+  <data name="ToolsStatusSpecified" xml:space="preserve">
+    <value>Указана вручную</value>
+  </data>
+  <data name="ToolsStatusMissing" xml:space="preserve">
+    <value>Не найдена</value>
+  </data>
+  <data name="ToolsStatusSpecifiedMissing" xml:space="preserve">
+    <value>По указанному пути файла нет</value>
+  </data>
+  <data name="ToolsInstallHint" xml:space="preserve">
+    <value>Поставить: winget install {0}</value>
+    <comment>{0} — пакет winget: Gyan.FFmpeg и т. п.</comment>
+  </data>
+  <data name="ToolsPointAt" xml:space="preserve">
+    <value>Указать…</value>
+  </data>
+  <data name="ToolsPointAtTitle" xml:space="preserve">
+    <value>Где {0}?</value>
+    <comment>Заголовок выбора файла; {0} — FFmpeg, LibreOffice, Pandoc</comment>
+  </data>
+  <data name="ToolsProgramFilter" xml:space="preserve">
+    <value>Программы (*.exe)|*.exe</value>
+    <comment>Фильтр OpenFileDialog: подпись|маска</comment>
+  </data>
+  <data name="ToolsReset" xml:space="preserve">
+    <value>Сбросить</value>
+  </data>
+  <data name="ToolsResetHint" xml:space="preserve">
+    <value>Забыть указанный файл и снова искать программу самому</value>
+  </data>
+  <data name="ActionsErrorImageNoFormat" xml:space="preserve">
+    <value>Встроенному кодировщику нужен format=jpeg, png, bmp, tiff или gif</value>
+  </data>
+  <data name="ActionsErrorImageFormat" xml:space="preserve">
+    <value>Встроенный кодировщик не пишет «{0}»</value>
+  </data>
+  <data name="ActionsErrorImageSource" xml:space="preserve">
+    <value>Встроенный кодировщик не читает из «{0}»</value>
+  </data>
+  <data name="ImageConvertNoPreview" xml:space="preserve">
+    <value>Внутри файла нет превью, которое Wander умеет достать</value>
+  </data>
+  <data name="ImageConvertNoDecoder" xml:space="preserve">
+    <value>Нет декодера для этого формата, и превью внутри не нашлось</value>
+  </data>
+  <data name="ActionPresetRawPreview" xml:space="preserve">
+    <value>Превью из RAW (JPEG)</value>
+  </data>
+  <data name="ActionsAdd" xml:space="preserve">
+    <value>Добавить</value>
+  </data>
+  <data name="ActionsCopy" xml:space="preserve">
+    <value>Копировать</value>
+  </data>
+  <data name="ActionsRemove" xml:space="preserve">
+    <value>Удалить</value>
+  </data>
+  <data name="ActionsRemoveHint" xml:space="preserve">
+    <value>Встроенное действие не удаляется — его выключают галочкой</value>
+  </data>
+  <data name="ActionsNewTitle" xml:space="preserve">
+    <value>Новое действие</value>
+  </data>
+  <data name="ActionsCopyTitle" xml:space="preserve">
+    <value>{0} (копия)</value>
+  </data>
+  <data name="ActionPresetVideoMpeg" xml:space="preserve">
+    <value>В MP4 (H.264)</value>
+  </data>
+  <data name="ActionPresetVideoCompress" xml:space="preserve">
+    <value>Сжать (H.264, CRF 28)</value>
+  </data>
+  <data name="ActionPresetVideoAudioAac" xml:space="preserve">
+    <value>Извлечь звук (M4A)</value>
+  </data>
+  <data name="ActionPresetVideoAudioLame" xml:space="preserve">
+    <value>Извлечь звук (MP3)</value>
+  </data>
+  <data name="ActionPresetVideoFrame" xml:space="preserve">
+    <value>Кадр в PNG</value>
+  </data>
+  <data name="ActionPresetAudioLame" xml:space="preserve">
+    <value>В MP3 (192k)</value>
+  </data>
+  <data name="ActionPresetAudioAac" xml:space="preserve">
+    <value>В M4A (AAC)</value>
+  </data>
+  <data name="ActionPresetAudioFlac" xml:space="preserve">
+    <value>В FLAC</value>
+  </data>
+  <data name="ActionPresetAudioWav" xml:space="preserve">
+    <value>В WAV</value>
+  </data>
+  <data name="ActionPresetImageJpeg" xml:space="preserve">
+    <value>В JPEG (качество 90)</value>
+  </data>
+  <data name="ActionPresetImagePng" xml:space="preserve">
+    <value>В PNG</value>
+  </data>
+  <data name="ActionPresetImageShrink" xml:space="preserve">
+    <value>Уменьшить до 1920 (JPEG)</value>
+  </data>
+  <data name="ActionPresetImageWebp" xml:space="preserve">
+    <value>В WebP (ffmpeg)</value>
+  </data>
+  <data name="ActionPresetDocumentPdf" xml:space="preserve">
+    <value>В PDF (LibreOffice)</value>
+  </data>
+  <data name="ActionPresetMarkdownDocx" xml:space="preserve">
+    <value>Markdown → DOCX (pandoc)</value>
+  </data>
+  <data name="ActionPresetDocxMarkdown" xml:space="preserve">
+    <value>DOCX → Markdown (pandoc)</value>
+  </data>
+  <data name="ProgressRunningAction" xml:space="preserve">
+    <value>Выполняется действие</value>
+    <comment>Окно операции и строка состояния во время своего действия или конвертации</comment>
+  </data>
+  <data name="StatusActionDone" xml:space="preserve">
+    <value>{0}: готово {1} из {2}</value>
+    <comment>{0} — название действия, {1} — сколько удалось, {2} — сколько было</comment>
+  </data>
+  <data name="StatusActionFailed" xml:space="preserve">
+    <value>{0}: не удалось — {1}</value>
+    <comment>{0} — название действия, {1} — текст ошибки</comment>
+  </data>
+  <data name="ActionReportHeader" xml:space="preserve">
+    <value>Готово {0} из {1}. Не получилось:</value>
+    <comment>Первая строка отчёта после действия с ошибками или отменой; дальше — строка на файл</comment>
+  </data>
+  <data name="ActionReportCancelled" xml:space="preserve">
+    <value>{0} — отменено</value>
+    <comment>{0} — имя файла</comment>
+  </data>
+  <data name="ActionReportError" xml:space="preserve">
+    <value>{0} — {1}</value>
+    <comment>{0} — имя файла, {1} — ошибка: программа не запустилась, путь под защитой и т. п.</comment>
+  </data>
+  <data name="ActionReportExitCode" xml:space="preserve">
+    <value>{0} — код {1}: {2}</value>
+    <comment>{0} — имя файла, {1} — код возврата программы, {2} — последняя строка её сообщений об ошибке</comment>
+  </data>
+  <data name="ActionReportExitCodeOnly" xml:space="preserve">
+    <value>{0} — код {1}</value>
+    <comment>Программа ничего не написала (или работала со своей консолью)</comment>
+  </data>
+  <data name="ActionReportMore" xml:space="preserve">
+    <value>… и ещё {0} (подробности — в логе)</value>
+  </data>
+  <data name="ActionReportOnce" xml:space="preserve">
+    <value>Файлов: {0}, одной командой. {1}</value>
+    <comment>{0} — сколько файлов было в одной команде, {1} — строка отчёта по первому из них</comment>
+  </data>
+  <data name="MenuCmdToFolderSubmenu" xml:space="preserve">
+    <value>В другую папку…</value>
+    <comment>Подменю в «Частных» и «Конвертировать»: те же действия, результат в выбранную папку</comment>
+  </data>
+  <data name="MenuCmdRunActionTo" xml:space="preserve">
+    <value>Действие в папку…</value>
+    <comment>Запасная подпись; обычно строка носит название действия</comment>
+  </data>
+  <data name="ActionsPickFolderTitle" xml:space="preserve">
+    <value>Папка для результата</value>
+  </data>
 </root>

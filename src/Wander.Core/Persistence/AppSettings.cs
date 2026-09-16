@@ -392,6 +392,12 @@ public sealed record AppSettings {
     /// </summary>
     public IReadOnlyList<CustomAction> CustomActions { get; init; } = Array.Empty<CustomAction>();
 
+    /// <summary>
+    /// Programs the user pointed Wander at on the "Программы" page. A program
+    /// not here is looked for on <c>PATH</c> and in installers' folders.
+    /// </summary>
+    public IReadOnlyList<ToolPath> ToolPaths { get; init; } = Array.Empty<ToolPath>();
+
 
     // --- Debug ---------------------------------------------------------
     /// <summary>Whether the "Debug" submenu is visible in the main menu.</summary>

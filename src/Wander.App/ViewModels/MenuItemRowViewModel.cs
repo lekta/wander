@@ -28,7 +28,7 @@ public sealed class MenuItemRowViewModel : ObservableObject {
         Gesture = ContextMenuCatalog.Gesture(node.Id) ?? string.Empty;
         Indent = new Thickness(node.Depth * IndentStep, 0, 0, 0);
         IsSubmenu = node.Id is MenuCommandId.OpenSubmenu or MenuCommandId.FileSubmenu or MenuCommandId.NewSubmenu
-            or MenuCommandId.ActionsSubmenu or MenuCommandId.ConvertSubmenu;
+            or MenuCommandId.ActionsSubmenu or MenuCommandId.ConvertSubmenu or MenuCommandId.ToFolderSubmenu;
         _isHidden = isHidden;
         _onChanged = onChanged;
     }

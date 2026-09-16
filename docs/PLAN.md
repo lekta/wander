@@ -27,13 +27,12 @@
 | 3 | **Мелочи с заметным эффектом** | X вставка текста / картинки файлом; Y1 заголовок «Компьютер»; Y2 флешки — появление, исчезновение, «Извлечь» | X, Y |
 | 4 | **Хвост конфликтов** | Q5 окно «Сравнить» (отвязка `PreviewPane` сделана 2026-09-15), Q6 внешнее сравнение | Q |
 | 5 | **Хвосты и мелочи 2026-09-04** | AD4 дерево после удаления (баг); AD3 `F2` в дереве с правкой путей закладок; AD2 корзина открывается долго; AD5 журнал поимённо; AD6 прогресс вправо; AD1 WebView2 | AD |
-| 6 | **Свои действия и групповые операции** | AC1 меню «Операции» в шапке; AC2 групповое переименование своим окном; AC3 свои команды по типам файлов; AC4 встроенные пресеты с ffmpeg / WIC / soffice и видимым «не найден». Спека 2026-09-16, база в Core сделана, волна 1 готова Опусу | AC |
 | — | **Обсуждения** | Y3 «Сеть» и FTP; B9 плагины / системные обработчики; AA синхронизация папок; Z1 — детали базы параметров папки (делать решено, форма записи и ключ — до кода); AB массовое выделение — делать ли | |
 
-Добавлено 2026-09-04 (блоки 5–6). Предложение по порядку: AD4 + AD3 +
+Добавлено 2026-09-04 (блок 5). Предложение по порядку: AD4 + AD3 +
 AD6 короткой пачкой до блока 1 — баг и две мелочи в тех же файлах
-(дерево, строка состояния); AD1, AD2, AD5 — после блока 3; AC — после 4,
-спека по подблокам, AC2 можно раньше: зависимостей нет. Блок 7
+(дерево, строка состояния); AD1, AD2, AD5 — после блока 3. Блок 6 (AC:
+меню «Действия», переименование группой, свои команды, пресеты), блок 7
 (множественное выделение в панели, оценки группой, сплит) и AD7 / AD8
 закрыты 2026-09-16 — DONE.
 
@@ -47,7 +46,6 @@ AD6 короткой пачкой до блока 1 — баг и две мел�
 
 | # | Кандидат | Что даёт каждый день | Объём | Риск | Готовность |
 |---|---|---|---|---|---|
-| 1 | **AC свои действия, групповое переименование, меню «Операции»** (блок 6) | ffmpeg / конвертация / переименование пачкой из меню, не из консоли | крупный; AC2 сам по себе средний | внешние процессы, undo только у объявленного выхода | разобрано, развилки в секции |
 | 2 | **Потребители отвязки `PreviewPane`** (сама отвязка сделана 2026-09-15: `DataContext` панели — её контроллер, второй экземпляр живёт в сплите) → Q5 «Сравнить», полноэкранный просмотр по `Enter` / `Space` в галерее (BACKLOG «Поворот и коррекция» называет самым заметным пропуском) | фотографический сценарий человека | малый на потребителя: окно + свой `PreviewController` | окно поверх панели, фокус, `Esc` | фундамент есть; форма окна — решить |
 | 3 | **Тёмная тема** (Roadmap) | витрина релиза, видна с первого кадра | средний: второй набор ключей `Palette.xaml`, `GalleryPalette`, тема AvalonEdit, CSS для Markdown / HTML в WebView2, системный `AppsUseLightTheme` + `UserPreferenceChanged` | низкий, но каждый XAML; скриншоты харнесса меняются | O8 подготовил; решить — переключатель или за системой |
 | 4 | **Z1 база параметров папки** | папка помнит вид / сортировку / фон, не 128 последних | средний | низкий | решено (в), ключ и форма — до кода |
@@ -63,12 +61,11 @@ FTP — сначала сценарий; метки (теги) — сначал�
 Roadmap; T автотесты вне машины — инфраструктура, не фича; F2 страница
 гайда — доки; вкладки — BACKLOG, ответ «нет».
 
-**Рекомендация.** Если брать два крупных: (2) полноэкранный просмотр и
-Q5 на готовой отвязке `PreviewPane` — это сценарий человека; и (1) AC в
-порядке AC2 → AC1 → AC3. (3) тёмная тема
-— если релизу нужна витрина: дешевле обоих и видна сразу. (4) Z1 — фоном,
-малой кровью. (5) AA — только если архивный сценарий горит, и тогда
-первым делом после релиза, не перед ним.
+**Рекомендация.** AC (бывший № 1) закрыт 2026-09-16. Из оставшихся: (2)
+полноэкранный просмотр и Q5 на готовой отвязке `PreviewPane` — это
+сценарий человека. (3) тёмная тема — если релизу нужна витрина: дешевле
+и видна сразу. (4) Z1 — фоном, малой кровью. (5) AA — только если
+архивный сценарий горит, и тогда первым делом после релиза, не перед ним.
 
 ## Обязательные цели
 
@@ -449,308 +446,6 @@ UTF-8 без BOM; операция новая, по правилу CLAUDE.md: `S
 `FileListView.xaml` — трогает типы всех четырёх видов (стили,
 `ItemContainerStyle`, харнесс). Решить, делать ли; сегодня `Ctrl+A` в
 папке на 5000 и переключение видов замирают.
-
-### AC. Свои действия, групповые операции, меню «Операции» — спека (2026-09-16)
-
-Цель: одним механизмом дать меню «Операции» в шапке, окно группового
-переименования, свои команды по типам файлов и встроенные пресеты
-(ffmpeg, WIC, soffice, pandoc). Действие = строка одного каталога
-(`CustomAction`); шапка, контекстное меню и Параметры читают его.
-Развилки закрыты 2026-09-16 (решения — в квадратных скобках по шагам).
-Две волны для Опуса: **волна 1** — AC2 + AC1 (своё, без внешних
-зависимостей), **волна 2** — AC3 + AC4 (внешние процессы) поверх
-каталога волны 1. Волна 2 запускается после ревью волны 1.
-
-**База (сделано Фабле 2026-09-16, зелёный `check.bat`, +96 тестов).**
-Опус этого не переписывает, только использует:
-
-- `Core/Rename/`: `RenameRules` (запись правил: найти / заменить, шаблон
-  `[N] [C] [D] [X] [P]` с `[D:формат]`, регистр имени и расширения
-  отдельно; `IsIdentity`), `RenamePlanner.Preview(rules, items, context)
-  → RenamePreview` (строки «было → станет» со статусом Unchanged /
-  Renamed / InvalidName / DuplicateInBatch / Collides, счётчики, ошибка
-  правил ключом + текст .NET; `Plan()` — список для `RenameMany`, спутники
-  за своим файлом; `IsValidName`), `RenameContext(exists, companions,
-  shotDate)`, `BatchRenameGate.Classify` (TooFew / Files / Folders /
-  Mixed) и `ReasonKey`. Тесты `RenamePlannerTests`.
-- `FileOperationService.RenameMany(renames, description)` — двухфазный:
-  член, чьё новое имя ещё занято поздним членом, уходит на временное имя с
-  суффиксом `TransientFiles.ReplaceSuffix` и получает своё после; один
-  composite, откат целиком. Тесты своп / сдвиг / откат в
-  `FileOperationServiceTests`.
-- `Core/Actions/`: `FileTypeGroup` + `FileTypeGroups` (All, Images, Video,
-  Audio, TextAndCode, Documents, Archives, Folders — списки из
-  `ImageFormats`, `PreviewRouter.Video` / `TextLike`, `AudioTags`;
-  `Classify` для подписи, `CaptionKey`), `FileTypeSelector(Group, Mask)`
-  (`*.psd;*.ai`), `CustomAction` (Id, Title / TitleKey, Types, Kind
-  Command / Builtin, Program, Arguments, RunPerFile, Placement, InSubmenu,
-  HideConsole, Output, Category Actions / Convert, IsPreset, Enabled,
-  RequiredTool; `DisplayTitle`), `ActionApplicability.For` (Applicable /
-  NeedsSelection / NotForSelection / ToolMissing, `ReasonKey`),
-  `CommandLine.Expand` (`{path} {name} {ext} {dir} {paths} {list} {out}`,
-  кавычки всегда, хвостовой `\` удваивается; `ValidationKey` на
-  несоответствие режима), `OutputNames.Resolve` (рядом с источником,
-  `(1)` как у копии, источник считается занятым), `IProcessRunner`
-  (`ProcessRequest` / `ProcessResult` с `WasKilled` и хвостом stderr),
-  `IBuiltinAction`, `ExternalActionRunner.RunAsync(action, paths, ct)` —
-  по одному, трекер `OperationVerbs.RunAction`, гард на папку выхода,
-  `{list}` во временный файл, отмена убивает текущий и отправляет
-  недописанный выход в корзину, объявленный выход → `CreateAction` в
-  undo, лог по элементу и итог. Тесты `FileTypeGroupsTests`,
-  `ActionApplicabilityTests`, `CommandLineTests`,
-  `ExternalActionRunnerTests` с `FakeProcessRunner`.
-- `Platform/Shell/WindowsProcessRunner` (Process, `CreateNoWindow`, слив
-  обоих потоков, `Kill(entireProcessTree)` по токену); в бутстраппере
-  зарегистрированы `IProcessRunner` и `ExternalActionRunner` (список
-  встроенных пока пуст, временная папка — `AppPaths.Tmp`).
-- Меню: `ContextMenuTarget.Place` (`MenuPlace.Context` / `Header`),
-  `Actions`, `MissingTools`, `RenameKind`; `ContextMenuBuilder.BuildHeader`
-  (подпись выделения · Переименовать группой · Действия ▸ ·
-  Конвертировать ▸ · Извлечь · Ярлык · Копировать путь · Терминал; серое
-  с `MenuEntry.Tooltip`); в контекстном — `BatchRename` в «Файл» при двух
-  и более одного вида, «Действия ▸» / «Конвертировать ▸» только с
-  применимыми между сторонними и «Файл», в фоне — действия для папок;
-  `MenuCommandId.BatchRename / ActionsSubmenu / ConvertSubmenu /
-  RunAction / NoActions / ConfigureActions`; `MenuEntry.Argument`
-  (id действия), `IconPath` (exe), `Tooltip`; `HideableTree` дополнен;
-  фабрика уже ставит тултип на серую строку и `Argument` параметром
-  команды. Ресурсы `MenuCmd*`, `MenuReason*`, `MenuCaption*`, `FileType*`,
-  `RenameError*`, `ActionsError*` добавлены; `check-strings` видит ключи
-  Core по префиксам.
-- `AppState.RenameRules` (память окна), `AppSettings.CustomActions`.
-
-#### Волна 1 — AC2 окно переименования, AC1 меню «Операции»
-
-Порядок: 1.1 окно (польза сразу, привязка `BatchRename` нужна обоим
-меню) → 1.2 меню в шапке.
-
-- **1.1 Окно группового переименования.** `Views/BatchRenameWindow.xaml`
-  + `.xaml.cs`, `ViewModels/BatchRenameViewModel` (`ObservableObject`;
-  правила — свойства, на каждое изменение `Preview` пересчитывается
-  синхронно через `RenamePlanner.Preview`). Вход: `MainViewModel.
-  BatchRenameCommand` (CanExecute: `BatchRenameGate.Classify(
-  SelectedEntries)` даёт Files или Folders и `!IsCurrentShellNamespace`);
-  `MainWindow` на `F2`: два и более — команда, один — `FileList.
-  StartRename()` как сейчас; при Mixed команда недоступна, `F2` пишет в
-  строку состояния `StatusBatchRenameMixed` [окно не открывается: либо
-  файлы, либо папки, решено 2026-09-16]; привязка `[MenuCommandId.
-  BatchRename]` в `BuildMenuBindings`. Элементы — `RenameItem.From` по
-  выделенным **в порядке `Entries`** (текущая сортировка), не в порядке
-  кликов; подпись в окне «Нумерация — в порядке списка». Контекст:
-  `exists` = `IFileSystem.FileExists || DirectoryExists`; спутники —
-  `CompanionResolver` из локатора, если `Settings.IntegrateCompanions`;
-  `ShotDate` — `IImageMetadataReader.Read(path)?.DateTaken` [дата съёмки
-  включена, решено], только для `ImageFormats.IsImage`, кэш
-  `Dictionary<string, DateTime?>` в VM; чтение — на пуле пачкой при первом
-  появлении `[X]` в шаблоне, до ответа строки считаются по mtime и внизу
-  подпись «Дата съёмки читается…», по окончании пересчёт (UI-поток не
-  ждёт RAW). Разметка: слева правила — «Найти» / «Заменить», галочки «без
-  учёта регистра» (вкл) и «регулярное выражение»; «Шаблон» с подсказкой
-  токенов (`[N] [C] [D] [D:yyyy-MM-dd] [X] [P]`), счётчик «с», «шаг»,
-  «цифр»; «Регистр имени», «Регистр расширения» (как есть / строчные /
-  ПРОПИСНЫЕ / Первая заглавная) [расширение шаблоном и заменой не
-  меняется, только регистром — решено]; справа `DataGrid` «Было · Станет
-  · Статус» (`RenameStatus*` строки; конфликт — красным, без изменений —
-  серым); внизу `RenameSummary` «Изменится {0} из {1}, конфликтов {2}»,
-  ошибка правил — `Strings.Get(preview.RuleErrorKey)` + `RuleErrorDetail`;
-  кнопки ОК (`IsEnabled = CanApply`, **не** `IsDefault`: Enter в поле не
-  применяет) и Отмена (`IsCancel`). ОК: `_ops.RenameMany(preview.Plan(),
-  $"Rename {n} items")` в try/catch; `_session.SetArrival(ArrivalIntent.
-  Rows(folder, новые пути))`, `Refresh()`, статус `StatusBatchRenamed`
-  «Переименовано: {0}» (журнал берёт строку статуса; поимённо — лог
-  `Rename:`, структурный журнал — AD5); ошибка — `StatusRenameFailed`.
-  Память: `AppState.RenameRules` читается при открытии, пишется при ОК
-  (тем же путём, что `ConflictWindow`) [решено]. `App.ParkIfHeadless`,
-  `Owner` = главное окно, `ShowDialog`, размер запоминать не нужно.
-  `HotkeyCatalog`: строка `F2` — «Переименовать; два и более — группой».
-  Не в этом шаге: перестановка строк мышью, `[E]`, окно в архиве и
-  корзине (команда недоступна). Глазами: 40 фото + `[C]` на три цифры;
-  regex с `$1`; `[X]` на RAW; своп счётчиком в обратном порядке;
-  совпадение с существующим именем и с соседом; `Ctrl+Z` возвращает все;
-  папки; смешанное выделение — строка состояния; `.JPG` → `.jpg`
-  регистром. Харнесс: окно не поднимает (нет шва), задет `focus-keys`
-  (`F2`) — назвать.
-- **1.2 Меню «Операции» в шапке.** `MainWindow.xaml`: третье `Menu`
-  **левее** «Вид», заголовок `MenuOperations` «Операции» с тем же
-  шевроном, `MenuItem x:Name="OperationsMenu"` пустой; `SubmenuOpened` →
-  `RebuildOperationsMenu()`: цель как в `ShowContextMenu`, но `Place =
-  MenuPlace.Header`, `Selection = vm.SelectedEntries`, `IsBackground =
-  false`, `Actions = vm.Settings.CustomActions` (в волне 1 пусто),
-  `MissingTools` пусто; шелл не опрашивается; `model = ContextMenuBuilder.
-  Build(target, settings)`; `ContextMenuFactory.Populate(ItemCollection,
-  model)` — новый публичный метод (вынести из `Build` заполнение без
-  шелл-сессии; `PendingShellCommand` там не нужен). Подпись выделения —
-  первая строка, `Id = None`, `IsEnabled = false`: рисуется серой, как
-  задумано. Иконка `IconPath` — фабрика через `IIconProvider.GetIcon(path,
-  IconSize.Small)` (только для строк с `IconPath`; в волне 1 таких нет).
-  Привязки: `[BatchRename]` (1.1), `[ConfigureActions] = vm.
-  OptionsCommand` (в волне 2 — открыть сразу категорию «Действия»),
-  `[RunAction]` — волна 2. Галочки Параметры → «Контекстное меню» →
-  «Пункты Wander» получают строки «Действия», «Конвертировать»,
-  «Переименовать группой…» сами (`HideableTree`); скрытие действует на оба
-  меню. [Мнемоника `Alt` — не делаем, BACKLOG; меню «Переход» — не в
-  блоке.] Ресурс `MenuOperations`. Глазами: меню при пустом выделении
-  (подпись «Папка: …», терминал активен), на одном файле (серые с
-  тултипами по наведению), на двух файлах, в корзине и в архиве (всё
-  серое с причиной, «Извлечь» живо в архиве); «Действия ▸» показывает
-  «Нет действий…» и «Настроить действия…»; скрыть «Действия» в Параметрах
-  — исчезло в обоих меню; `Esc` закрывает, фокус возвращается в список.
-  Харнесс: `smoke-walk` — назвать; шага «открыть меню шапки» у харнесса
-  нет, не добавлять.
-
-Критерии ревью волны 1: ни одного `ServiceLocator.IsRegistered`; в
-Core — только использование готовых контрактов, новых правил в UI нет
-(порядок элементов, пересчёт, память правил — в VM тонко, логика в
-`RenamePlanner`); `check-strings` зелёный; в отчёте — что глазами.
-
-**Правки после прогона волны 1** (решения человека 2026-09-16, сделаны;
-в тексте спеки «Операции» = меню «Действия», «Действия ▸» = «Частные ▸»):
-
-- Меню в шапке — «Действия», подменю своих действий — «Частные» (в обоих
-  меню). Ключи и имена в коде прежние (`MenuOperations`, `OperationsMenu`,
-  `ActionsSubmenu`).
-- Подпись — «4 изображения», «21 элемент»: без «Выделено:» и точки;
-  `Text.Plural`, формы в ресурсе через `|`.
-- [В шапке только применимое.] Серое с тултипом — лишь действие без
-  программы, и только если по типу подходит (`ActionApplicability`
-  проверяет инструмент последним). Остальные серые строки и ключи
-  `MenuReason*`, кроме `ToolMissing`, убраны; в корзине и архиве своих
-  действий нет.
-- Окно: шаблон сверху — поле с выпадающим списком пяти последних
-  применённых (`AppState.RenameTemplates`, `RenameTemplateHistory`);
-  «Найти и заменить» — под счётчиком, за галочкой (выключена — правило не
-  применяется и не запоминается).
-
-**Доработки окна переименования** (замечания человека, копятся; решать
-перед волной 2 или отдельно):
-
-- Токены в квадратных скобках вводить лень — нужен ввод быстрее
-  (вставка из списка, кнопки — не решено).
-- Порядок строк — как в списке; по умолчанию так и оставить, но нужна
-  быстрая сортировка в окне (по дате и др.) и ручная перестановка.
-
-#### Волна 2 — AC3 свои команды, AC4 пресеты
-
-Порядок: 2.1 каталог в Параметрах и пресеты (данные) → 2.2 запуск из
-меню → 2.3 кодировщик картинок → 2.4 доки. 2.1 первым: без таблицы
-нечего запускать и негде указать путь к ffmpeg.
-
-- **2.1 Категория «Действия» и пресеты.** Core: `Actions/ActionPresets.
-  All` — данные (`IsPreset = true`, `Category = Convert`, `TitleKey`
-  с префиксом `ActionPreset`, `Id` вида `preset:video-mp4`,
-  `RequiredTool`); `Actions/ActionCatalog.Merge(presets, stored) →
-  список` — сохранённая строка с тем же `Id` заменяет пресет целиком
-  (так помнятся выключение и указанный путь), нетронутые пресеты не
-  сохраняются, порядок: пресеты, потом свои; тест. Набор [решено
-  2026-09-16]: **видео** (ffmpeg, Video) «В MP4 (H.264)» `-i {path}
-  -c:v libx264 -crf 23 -preset medium -c:a aac -movflags +faststart
-  {out}` → `{name}.mp4`; «Сжать (H.264, CRF 28)» → `{name}_small.mp4`;
-  «Извлечь звук (M4A)» `-i {path} -vn -c:a aac -b:a 192k {out}` →
-  `{name}.m4a`; «Извлечь звук (MP3)» `-vn -c:a libmp3lame -q:a 2` →
-  `{name}.mp3`; «Кадр в PNG» `-ss 1 -i {path} -frames:v 1 {out}` →
-  `{name}.png`. **Аудио** (ffmpeg, Audio) [своего кодировщика нет:
-  в системе только Media Foundation через COM, ffmpeg строкой дешевле]:
-  «В MP3 (192k)» `-i {path} -vn -c:a libmp3lame -b:a 192k {out}`;
-  «В M4A (AAC)» `-c:a aac -b:a 192k`; «В FLAC» `-c:a flac`; «В WAV»
-  `-c:a pcm_s16le`. **Картинки** (Builtin `image-convert`, Images)
-  [своё через WIC — ноль зависимостей]: «В JPEG (качество 90)»
-  `format=jpeg;quality=90` → `{name}.jpg`; «В PNG» `format=png` →
-  `{name}.png`; «Уменьшить до 1920 (JPEG)» `format=jpeg;quality=85;
-  maxside=1920` → `{name}_1920.jpg`; «В WebP (ffmpeg)» Command `-i {path}
-  -c:v libwebp -quality 85 {out}` → `{name}.webp`, RequiredTool ffmpeg.
-  **Документы**: «В PDF (LibreOffice)» soffice `--headless --convert-to
-  pdf --outdir {dir} {path}`, Types Documents, `Output` **пустой**:
-  soffice сам называет выход `{name}.pdf` и перезаписывает существующий,
-  объявить выход честно нельзя — без undo, в BACKLOG «выход через
-  временную папку»; «Markdown → DOCX (pandoc)» маска `*.md;*.markdown`,
-  `{path} -o {out}` → `{name}.docx`; «DOCX → Markdown (pandoc)» маска
-  `*.docx`, `{path} -t gfm -o {out}` → `{name}.md`. Обнаружение: Core
-  `Actions/IToolLocator` (`string? Find(string tool)`), Platform
-  `WindowsToolLocator`: `PATH`, плюс `%ProgramFiles%\LibreOffice\program`,
-  `%LOCALAPPDATA%\Microsoft\WinGet\Links`, `%ProgramFiles%\ffmpeg\bin`,
-  `%LOCALAPPDATA%\Programs\Pandoc`; ищется `<tool>.exe`; кэш на сеанс,
-  `Refresh()`; регистрация в бутстраппере. VM: `MissingTools` считается
-  на пуле при старте и после Параметров; перед запуском пресета `Program`
-  подменяется найденным полным путём (`action with { Program = found }`),
-  если в строке не указан свой. App: `ActionsSettingsCategory`, шаблон в
-  `SettingsWindow.xaml` по образцу «Контекстное меню» (`SettingsGrid`),
-  `ActionRowViewModel`: вкл · название · для чего (комбобокс групп
-  `FileType*` с заглавной + поле маски) · программа · аргументы · режим
-  (на каждый файл / все одной командой) · где (оба / контекстное / шапка)
-  · в подменю · скрыть консоль · выход · статус («встроено», «не найден:
-  ffmpeg» + кнопка «Указать…» с `OpenFileDialog` и подсказка `winget
-  install Gyan.FFmpeg` / `TheDocumentFoundation.LibreOffice` /
-  `JohnMacFarlane.Pandoc`); кнопки Добавить / Копировать / Удалить
-  (пресет — не удаляется, правится копией; выключается галочкой);
-  `CommandLine.ValidationKey` — красная подпись у строки, сохранение не
-  блокирует. Хранение — `AppSettings.CustomActions` через `Merge` в
-  обе стороны. `check-strings`: префикс `ActionPreset` уже в списке.
-  Не делаем [BACKLOG по запросу]: переменные среды, запуск с повышением,
-  редактор скриптов, импорт / экспорт. Глазами: таблица открывается с
-  пресетами, «не найден» у отсутствующих, «Указать…» запоминается,
-  копия пресета правится, пресет не удаляется.
-- **2.2 Запуск из меню.** `MainViewModel.RunActionCommand(string id)`:
-  действие по id из каталога; пути — выделение, для группы Folders при
-  пустом выделении — текущая папка; `RunWithProgressDialogAsync(Strings.
-  ProgressRunningAction, ct => runner.RunAsync(action, paths, ct))` —
-  ключ `ProgressRunningAction` «Выполняется действие» в resx и accessor
-  (`OperationVerbs.RunAction` уже указывает на него); окно операции
-  показывает счётчик элементов и текущий файл (байтов нет — бар по
-  элементам, отмена — токен окна, исполнитель убивает процесс). По
-  завершении: статус `StatusActionDone` «{0}: готово {1} из {2}»; при
-  ошибках или отменах — `IDialogs.Ask(DialogKind.ActionReport, …)`
-  (новый вид, `DialogButtons.Ok`, значок Warning): заголовок действия,
-  строка на элемент «имя — код N: последняя строка stderr», не больше 20
-  и «ещё N» [решено: пользователь видит, что именно не удалось]; полный
-  хвост — в логе. `Refresh()` не звать — результат приходит сторожем.
-  Привязки: `[RunAction] = new(vm.RunActionCommand)` — параметр из
-  `MenuEntry.Argument`; `[ConfigureActions]` открывает Параметры на
-  категории «Действия» (`OpenSettingsDialog(category)`). `ScriptedDialogs`
-  отвечает по политике — новый `DialogKind` в отчёте харнесса. Глазами:
-  ffmpeg на трёх видео — три процесса по очереди, окно операции с
-  «2 из 3», отмена посреди второго — второй выход в корзине, третий не
-  запускался; код возврата ≠ 0 (битый файл) — отчёт с последней строкой
-  stderr; `Ctrl+Z` после успеха отправляет `{name}.mp4` в корзину;
-  действие «все одной командой» с `{list}`; своя команда «Открыть в
-  Notepad++» с `{path}`, консоль скрыта / показана.
-- **2.3 Кодировщик картинок.** Platform `Imaging/ImageConvertAction :
-  IBuiltinAction` (`Name = "image-convert"`), в бутстраппере — в список
-  встроенных. Аргументы `format=jpeg|png|bmp|tiff|gif; quality=1..100;
-  maxside=N` (разбор — маленький чистый парсер в Core
-  `Actions/BuiltinArguments.Parse`, тест). Декод `BitmapDecoder`
-  (`BitmapCacheOption.OnLoad`); RAW — тем же путём, что миниатюры
-  (`RawPreviewExtractor` встроенный JPEG), если системный декодер не
-  открыл; ориентация из EXIF применяется к пикселям
-  (`TransformedBitmap` с `RotateTransform`), `maxside` — масштаб по
-  длинной стороне без увеличения; кодер по формату
-  (`JpegBitmapEncoder.QualityLevel`). Метаданные [решено 2026-09-16:
-  переносить всё, что можно]: тот же контейнер (JPEG → JPEG, TIFF →
-  TIFF) — `frame.Metadata.Clone()` в кадр; JPEG ↔ TIFF — политики WIC
-  `System.Photo.DateTaken`, `CameraManufacturer`, `CameraModel`,
-  `ExposureTime`, `FNumber`, `ISOSpeed`, `FocalLength`, `System.Photo.
-  Rating`, `System.Title`, `System.Keywords`, `System.Copyright` по
-  одному через `SetQuery` в `try/catch` на ключ; после поворота
-  `System.Photo.Orientation = 1`; PNG / BMP / GIF на выходе — без
-  метаданных: у кодеров WIC для них нет EXIF-контейнера (причина и
-  варианты — BACKLOG). Работа на `Task.Run`, токен проверяется до
-  записи; пишется прямо в `output` (имя уже уникально, недописанное при
-  отмене убирает исполнитель). Глазами: JPEG → PNG, RAW → JPEG 1920,
-  портретный JPEG с ориентацией 6 — стоит ровно и в свойствах
-  Проводника ориентация «нормальная», дата съёмки и камера на месте у
-  JPEG → JPEG и JPEG → TIFF.
-- **2.4 Доки и матрица.** GUIDE: раздел «Операции» (меню, групповое
-  переименование с токенами, свои действия и подстановки, пресеты и
-  какие программы нужны, отмена и что откатывается); QA.md: строка
-  матрицы «Действия, каталог, запуск» → тесты `ActionApplicabilityTests`,
-  `CommandLineTests`, `ExternalActionRunnerTests`, руками — пункт
-  «Операции» в чек-листе; DONE / ARCHITECTURE — при финализации.
-
-Критерии ревью волны 2: внешний процесс никогда не пишет в системный
-путь (гард в исполнителе — не обходить); всё, что решает, применимо ли,
-как назвать выход и что подставить, — в Core с тестами, UI только
-вызывает; `Program` пресета в `state.json` попадает только когда его
-указал человек; отчёт по ошибкам содержит имя файла и код; ни одного
-`Process.Start` вне `WindowsProcessRunner` и `ShellLauncher`.
 
 ### AD. Хвосты и мелочи 2026-09-04
 

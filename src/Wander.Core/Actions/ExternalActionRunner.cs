@@ -57,23 +57,28 @@ public sealed class ExternalActionRunner {
     }
 
 
+    /// <param name="outputFolder">
+    /// Where a declared output goes; beside its source when null. A folder
+    /// the user picked, so the outputs of a whole selection land together.
+    /// </param>
     /// <returns>One result per path, in the order given.</returns>
     public async Task<IReadOnlyList<ActionItemResult>> RunAsync(
-        CustomAction action, IReadOnlyList<string> paths, CancellationToken ct) {
+        CustomAction action, IReadOnlyList<string> paths, CancellationToken ct, string? outputFolder = null) {
 
         if (paths.Count == 0) {
             return Array.Empty<ActionItemResult>();
         }
 
         string title = action.DisplayTitle;
-        _log.Info($"Action '{title}': {paths.Count} item(s), {(action.RunPerFile ? "per file" : "one command")}");
+        _log.Info($"Action '{title}': {paths.Count} item(s), {(action.RunPerFile ? "per file" : "one command")}"
+            + (outputFolder is null ? string.Empty : $", output into {outputFolder}"));
 
         using var busy = _undo.BeginOperation();
         using var operation = _tracker.Begin(OperationVerbs.RunAction, paths.Count, token: ct);
 
         IReadOnlyList<ActionItemResult> results = action.RunPerFile
-            ? await RunPerFileAsync(action, paths, operation, ct).ConfigureAwait(false)
-            : await RunOnceAsync(action, paths, operation, ct).ConfigureAwait(false);
+            ? await RunPerFileAsync(action, paths, outputFolder, operation, ct).ConfigureAwait(false)
+            : await RunOnceAsync(action, paths, outputFolder, operation, ct).ConfigureAwait(false);
 
         var created = results
             .Where(r => r.Status == BatchItemStatus.Ok && r.Output is not null && Exists(r.Output))
@@ -95,7 +100,7 @@ public sealed class ExternalActionRunner {
 
 
     private async Task<IReadOnlyList<ActionItemResult>> RunPerFileAsync(
-        CustomAction action, IReadOnlyList<string> paths, IOperationHandle operation, CancellationToken ct) {
+        CustomAction action, IReadOnlyList<string> paths, string? outputFolder, IOperationHandle operation, CancellationToken ct) {
 
         var results = new ActionItemResult[paths.Count];
         for (int i = 0; i < paths.Count; i++) {
@@ -106,7 +111,7 @@ public sealed class ExternalActionRunner {
             }
 
             operation.SetCurrentPath(path);
-            results[i] = await RunItemAsync(action, new[] { path }, path, ct).ConfigureAwait(false);
+            results[i] = await RunItemAsync(action, new[] { path }, path, outputFolder, ct).ConfigureAwait(false);
             operation.Advance(path);
         }
 
@@ -115,10 +120,10 @@ public sealed class ExternalActionRunner {
 
     /// <summary>One command for the lot: the first path stands for the selection in the result.</summary>
     private async Task<IReadOnlyList<ActionItemResult>> RunOnceAsync(
-        CustomAction action, IReadOnlyList<string> paths, IOperationHandle operation, CancellationToken ct) {
+        CustomAction action, IReadOnlyList<string> paths, string? outputFolder, IOperationHandle operation, CancellationToken ct) {
 
         operation.SetCurrentPath(paths[0]);
-        var result = await RunItemAsync(action, paths, paths[0], ct).ConfigureAwait(false);
+        var result = await RunItemAsync(action, paths, paths[0], outputFolder, ct).ConfigureAwait(false);
         foreach (string path in paths) {
             operation.Advance(path);
         }
@@ -134,21 +139,22 @@ public sealed class ExternalActionRunner {
     }
 
     private async Task<ActionItemResult> RunItemAsync(
-        CustomAction action, IReadOnlyList<string> paths, string primary, CancellationToken ct) {
+        CustomAction action, IReadOnlyList<string> paths, string primary, string? outputFolder, CancellationToken ct) {
 
         string title = action.DisplayTitle;
         string workingDir = _fs.DirectoryExists(primary) ? primary : Path.GetDirectoryName(primary) ?? primary;
         string? output = null;
 
         if (action.Output.Length > 0) {
-            // The output lands beside its source, and that is a write.
-            string outputDir = Path.GetDirectoryName(primary) ?? workingDir;
+            // The output lands beside its source or where the user said,
+            // and either way that is a write.
+            string outputDir = outputFolder ?? Path.GetDirectoryName(primary) ?? workingDir;
             if (SystemPathGuard.IsProtected(outputDir, out string reason)) {
                 _log.Warn($"Action '{title}' refused for {primary}: {reason}");
 
                 return Failed(primary, null, new IOException(reason));
             }
-            output = OutputNames.Resolve(action.Output, primary, Exists);
+            output = OutputNames.Resolve(action.Output, primary, Exists, NamesIn, outputFolder);
         }
 
         var started = DateTime.UtcNow;
@@ -168,7 +174,7 @@ public sealed class ExternalActionRunner {
                 return new ActionItemResult(primary, output, BatchItemStatus.Cancelled, result.ExitCode, result.ErrorTail, null);
             }
             if (result.ExitCode != 0) {
-                _log.Warn($"Action '{title}': {primary} failed with exit code {result.ExitCode} after {Elapsed(started)}: {LastLine(result.ErrorTail)}");
+                _log.Warn($"Action '{title}': {primary} failed with exit code {result.ExitCode} after {Elapsed(started)}: {ActionReport.LastLine(result.ErrorTail)}");
 
                 return new ActionItemResult(primary, output, BatchItemStatus.Failed, result.ExitCode, result.ErrorTail, null);
             }
@@ -250,17 +256,15 @@ public sealed class ExternalActionRunner {
         return _fs.FileExists(path) || _fs.DirectoryExists(path);
     }
 
+    private IEnumerable<string> NamesIn(string folder) {
+        return _fs.Enumerate(folder).Select(e => e.Name);
+    }
+
     private static ActionItemResult Failed(string path, string? output, Exception error) {
         return new ActionItemResult(path, output, BatchItemStatus.Failed, 0, error.Message, error);
     }
 
     private static string Elapsed(DateTime startedUtc) {
         return $"{(DateTime.UtcNow - startedUtc).TotalSeconds:F1} s";
-    }
-
-    private static string LastLine(string tail) {
-        int end = tail.TrimEnd().LastIndexOf('\n');
-
-        return (end < 0 ? tail : tail[(end + 1)..]).Trim();
     }
 }

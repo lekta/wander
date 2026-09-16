@@ -12,6 +12,9 @@ public enum DialogKind {
     CannotPaste,
     ShellMenuReset,
     SettingsReset,
+
+    /// <summary>A custom action finished with failures or cancellations: what did not work, per file.</summary>
+    ActionReport,
 }
 
 public enum DialogButtons {

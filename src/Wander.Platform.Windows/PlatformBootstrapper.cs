@@ -16,6 +16,7 @@ using Wander.Core.Undo;
 using Wander.Platform.Windows.Diagnostics;
 using Wander.Platform.Windows.FileSystem;
 using Wander.Platform.Windows.Icons;
+using Wander.Platform.Windows.Imaging;
 using Wander.Platform.Windows.Logging;
 using Wander.Platform.Windows.Persistence;
 using Wander.Platform.Windows.Search;
@@ -95,13 +96,18 @@ public static class PlatformBootstrapper {
         ServiceLocator.Register<FileOperationService>(new FileOperationService());
 
         // Custom actions: external programs over the selection, and Wander's
-        // own handlers (the built-in list grows with the presets that need
-        // them). The list file goes where the archive scratch copies go.
+        // own handlers - the picture encoder on WinRT imaging, with the
+        // metadata reader that tells it what the source was shot with. The
+        // list file goes where the archive scratch copies go.
         ServiceLocator.Register<IProcessRunner>(new WindowsProcessRunner());
+        ServiceLocator.Register<IToolLocator>(new WindowsToolLocator());
+        var builtins = new IBuiltinAction[] {
+            new ImageConvertAction(ServiceLocator.Get<IImageMetadataReader>(), logger),
+        };
         ServiceLocator.Register<ExternalActionRunner>(new ExternalActionRunner(
             ServiceLocator.Get<IFileSystem>(), ServiceLocator.Get<IRecycleBin>(),
             ServiceLocator.Get<UndoService>(), ServiceLocator.Get<OperationTracker>(),
-            ServiceLocator.Get<IProcessRunner>(), Array.Empty<IBuiltinAction>(), logger,
+            ServiceLocator.Get<IProcessRunner>(), builtins, logger,
             () => AppPaths.Tmp));
 
         // Companion ("integrated item") support: the resolver knows which

@@ -31,6 +31,8 @@ public enum MenuCommandId {
     NewSubmenu,
     ActionsSubmenu,
     ConvertSubmenu,
+    /// <summary>Inside the two above: the same actions, their outputs going to a folder the user picks.</summary>
+    ToFolderSubmenu,
 
     // --- Open group -----------------------------------------------------
     Open,
@@ -54,6 +56,8 @@ public enum MenuCommandId {
     // --- Custom actions (Wander.Core.Actions) ---------------------------
     /// <summary>One catalog action; <c>MenuEntry.Argument</c> carries its id.</summary>
     RunAction,
+    /// <summary>The same action, asking for the folder its outputs go to first.</summary>
+    RunActionTo,
     /// <summary>Placeholder row: the submenu has nothing for this selection.</summary>
     NoActions,
     /// <summary>Opens the settings page that edits the catalog.</summary>

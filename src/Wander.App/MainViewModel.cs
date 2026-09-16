@@ -13,6 +13,7 @@ using Wander.App.Resources;
 using Wander.App.Util;
 using Wander.App.ViewModels;
 using Wander.Core;
+using Wander.Core.Actions;
 using Wander.Core.Companions;
 using Wander.Core.Diagnostics;
 using Wander.Core.FileSystem;
@@ -84,6 +85,8 @@ public sealed class MainViewModel : ObservableObject {
     private readonly IFileLockInspector? _lockInspector;
     private readonly NavigationController _nav;
     private readonly FileOperationService _ops;
+    private readonly ExternalActionRunner _actions;
+    private readonly IToolLocator _toolLocator;
     private readonly UndoService _undo;
     private readonly OperationTracker _tracker;
     private readonly Dispatcher _dispatcher;
@@ -203,6 +206,8 @@ public sealed class MainViewModel : ObservableObject {
         _dialogs = ServiceLocator.Get<IDialogs>();
         _lockInspector = ServiceLocator.TryGet<IFileLockInspector>();
         _ops = ServiceLocator.Get<FileOperationService>();
+        _actions = ServiceLocator.Get<ExternalActionRunner>();
+        _toolLocator = ServiceLocator.Get<IToolLocator>();
         _undo = ServiceLocator.Get<UndoService>();
         _tracker = ServiceLocator.Get<OperationTracker>();
         _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
@@ -352,6 +357,10 @@ public sealed class MainViewModel : ObservableObject {
         ToggleGroupFoldersFirstCommand = new RelayCommand(_ => Settings.GroupFoldersFirst = !Settings.GroupFoldersFirst);
         ExitCommand = new RelayCommand(_ => Application.Current?.Shutdown());
         OptionsCommand = new RelayCommand(_ => OpenSettingsDialog());
+        ConfigureActionsCommand = new RelayCommand(
+            _ => OpenSettingsDialog(Settings.Categories.OfType<ActionsSettingsCategory>().FirstOrDefault()));
+        RunActionCommand = new RelayCommand(p => _ = RunActionAsync(p as string), _ => !IsCurrentShellNamespace);
+        RunActionToFolderCommand = new RelayCommand(p => _ = RunActionAsync(p as string, pickFolder: true), _ => !IsCurrentShellNamespace);
         // GitHub's template chooser lets the user pick "Bug report" or
         // "Feature request"; nothing is pre-filled, so no session data is
         // involved — unlike the crash path, which bundles diagnostics.
@@ -498,6 +507,7 @@ public sealed class MainViewModel : ObservableObject {
         // The restored view mode and palette decide the surround; the panes
         // were built before either was known.
         PushPalette();
+        _ = LocateToolsAsync();
     }
 
 
@@ -1042,6 +1052,15 @@ public sealed class MainViewModel : ObservableObject {
 
     /// <summary>Opens the batch-rename window on the selection: two or more, all files or all folders.</summary>
     public RelayCommand BatchRenameCommand { get; }
+
+    /// <summary>Runs a catalog action, named by its id, over the selection.</summary>
+    public RelayCommand RunActionCommand { get; }
+
+    /// <summary>The same, with the outputs going to a folder the user picks first.</summary>
+    public RelayCommand RunActionToFolderCommand { get; }
+
+    /// <summary>The settings dialog, opened on the actions page.</summary>
+    public RelayCommand ConfigureActionsCommand { get; }
 
     public RelayCommand CopyCommand { get; }
     public RelayCommand CutCommand { get; }
@@ -3185,7 +3204,12 @@ public sealed class MainViewModel : ObservableObject {
     public string VersionLabel => string.Format(Strings.MenuVersion, BuildInfo.Line);
 
 
-    private void OpenSettingsDialog() {
+    /// <param name="page">The page to open on; the one left last time when null.</param>
+    private void OpenSettingsDialog(SettingsCategoryViewModel? page = null) {
+        if (page is not null) {
+            Settings.SelectedCategory = page;
+        }
+
         // Lazy import: the View type lives in Wander.App.Views and is
         // referenced via its full namespace to keep MainViewModel free
         // of view-layer using directives at the top of the file.
@@ -3199,6 +3223,8 @@ public sealed class MainViewModel : ObservableObject {
         // focusable search happens to land in the owner window. Put it back
         // on the list, which is where it was when the dialog opened.
         (Application.Current?.MainWindow as MainWindow)?.FocusWorkArea();
+        // A tool may have been installed or pointed at, a row added.
+        _ = LocateToolsAsync();
     }
 
 
@@ -3473,6 +3499,115 @@ public sealed class MainViewModel : ObservableObject {
         } catch (Exception ex) {
             _log.Error($"Rename failed: {entry.FullPath} -> {newName}", ex);
             Status = string.Format(Strings.StatusRenameFailed, DescribeError(ex, entry.FullPath));
+        }
+    }
+
+
+    // --- Custom actions ----------------------------------------------------
+
+    /// <summary>Where the programs are, as last looked up; what a preset is started with.</summary>
+    private IReadOnlyDictionary<string, ToolLocation> _toolLocations = new Dictionary<string, ToolLocation>();
+
+
+    /// <summary>
+    /// Tools the catalog needs and the machine lacks - their actions are
+    /// greyed in the header menu. Looked up at startup and after the
+    /// settings dialog, never while a menu is opening.
+    /// </summary>
+    public IReadOnlySet<string> MissingTools { get; private set; } = new HashSet<string>();
+
+
+    /// <summary>
+    /// Runs the catalog action <paramref name="id"/> over the selection, in
+    /// the order the list shows it, in an operation window of its own. What
+    /// applies is Core's call, asked again here: the menu that offered the
+    /// row was built a moment ago. The outputs arrive through the folder
+    /// watcher, so nothing is re-listed.
+    /// </summary>
+    /// <param name="pickFolder">Ask where the outputs go before running; beside their sources otherwise.</param>
+    private async Task RunActionAsync(string? id, bool pickFolder = false) {
+        if (IsCurrentShellNamespace || id is null) {
+            return;
+        }
+
+        var action = Settings.Actions.FirstOrDefault(a => a.Id == id);
+        if (action is null) {
+            _log.Warn($"Action '{id}' is not in the catalog");
+
+            return;
+        }
+
+        string? folder = _nav.Current;
+        var state = ActionApplicability.For(action, _selectedEntries, folder is not null, tool => !MissingTools.Contains(tool));
+        if (state != ActionState.Applicable) {
+            _log.Info($"Action '{action.DisplayTitle}' not run: {state}");
+
+            return;
+        }
+
+        // Nothing selected and still applicable: an action for folders, on
+        // the folder on screen.
+        var paths = _selectedEntries.Count > 0 ? InListOrder(_selectedEntries) : new[] { folder! };
+        var run = ActionCatalog.WithLocatedProgram(action, _toolLocations);
+        string title = action.DisplayTitle;
+
+        string? outputFolder = null;
+        if (pickFolder) {
+            outputFolder = _dialogs.PickFolder(Strings.ActionsPickFolderTitle, folder);
+            if (outputFolder is null) {
+                return;
+            }
+        }
+
+        IReadOnlyList<ActionItemResult> results;
+        try {
+            results = await RunWithProgressDialogAsync(
+                Strings.ProgressRunningAction,
+                ct => Task.Run(() => _actions.RunAsync(run, paths, ct, outputFolder)));
+        } catch (OperationCanceledException) {
+            Status = Strings.StatusCancelled;
+
+            return;
+        } catch (Exception ex) {
+            _log.Error($"Action '{title}' failed", ex);
+            Status = string.Format(Strings.StatusActionFailed, title, ex.Message);
+
+            return;
+        }
+
+        int ok = results.Count(r => r.Status == BatchItemStatus.Ok);
+        Status = string.Format(Strings.StatusActionDone, title, ok, results.Count);
+        if (ActionReport.IsNeeded(results)) {
+            string message = string.Format(Strings.ActionReportHeader, ok, results.Count)
+                + "\n\n" + string.Join("\n", ActionReport.Lines(results, oneCommand: !run.RunPerFile));
+            _dialogs.Ask(new DialogRequest(
+                DialogKind.ActionReport, title, message, DialogButtons.Ok, DialogIcon.Warning));
+        }
+    }
+
+    /// <summary>The selection in the order the list shows it, not the order it was clicked in.</summary>
+    private string[] InListOrder(IReadOnlyList<FileSystemEntry> selection) {
+        var position = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < Entries.Count; i++) {
+            position.TryAdd(Entries[i].FullPath, i);
+        }
+
+        return selection
+            .Select(e => e.FullPath)
+            .OrderBy(p => position.GetValueOrDefault(p, int.MaxValue))
+            .ToArray();
+    }
+
+    /// <summary>The walk over <c>PATH</c> is file probes, some of them maybe on a network share - on the pool.</summary>
+    private async Task LocateToolsAsync() {
+        var catalog = Settings.Actions;
+        var given = Settings.ToolPaths;
+        try {
+            var tools = await Task.Run(() => ActionCatalog.LocateTools(catalog, given, _toolLocator.Find, _fs.FileExists));
+            _toolLocations = tools;
+            MissingTools = ActionCatalog.Missing(tools);
+        } catch (Exception ex) {
+            _log.Error("Could not look for the actions' tools", ex);
         }
     }
 

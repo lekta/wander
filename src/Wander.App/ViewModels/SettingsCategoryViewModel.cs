@@ -72,6 +72,59 @@ public sealed class ContextMenuSettingsCategory : SettingsCategoryViewModel {
 
 
 /// <summary>
+/// The actions catalog: presets and the user's own rows in one table. The
+/// selected row lives here rather than on the owner - a click in the table
+/// is not a setting, and the owner's every property change is saved.
+/// </summary>
+public sealed class ActionsSettingsCategory : SettingsCategoryViewModel {
+    public ActionsSettingsCategory(SettingsViewModel owner)
+        : base(Strings.SettingsCategoryActions, owner) { }
+
+
+    private ActionRowViewModel? _selectedRow;
+    public ActionRowViewModel? SelectedRow {
+        get => _selectedRow;
+        set {
+            if (SetField(ref _selectedRow, value)) {
+                Raise(nameof(HasSelection));
+                Raise(nameof(CanRemove));
+            }
+        }
+    }
+
+    public bool HasSelection => _selectedRow is not null;
+
+    /// <summary>A shipped row is switched off, not deleted.</summary>
+    public bool CanRemove => _selectedRow is { IsPreset: false };
+
+
+    public void Add() {
+        SelectedRow = Owner.AddAction();
+    }
+
+    public void CopySelected() {
+        if (_selectedRow is { } row) {
+            SelectedRow = Owner.CopyAction(row);
+        }
+    }
+
+    public void RemoveSelected() {
+        if (_selectedRow is { IsPreset: false } row) {
+            SelectedRow = null;
+            Owner.RemoveAction(row);
+        }
+    }
+}
+
+
+/// <summary>The programs the presets need: found by themselves or pointed at by hand, one block each.</summary>
+public sealed class ToolsSettingsCategory : SettingsCategoryViewModel {
+    public ToolsSettingsCategory(SettingsViewModel owner)
+        : base(Strings.SettingsCategoryTools, owner) { }
+}
+
+
+/// <summary>
 /// The keyboard reference. Reads rather than edits — see
 /// <see cref="HotkeyCatalog"/> for why the two are different tasks.
 /// </summary>

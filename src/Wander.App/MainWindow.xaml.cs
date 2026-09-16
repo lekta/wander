@@ -969,6 +969,8 @@ public partial class MainWindow : Window {
             // single answer to what that would mean.
             SelectionIsArchive = !isBackground && vm.SelectionIsArchive,
             CanPaste = vm.PasteCommand.CanExecute(null),
+            Actions = vm.Settings.Actions,
+            MissingTools = vm.MissingTools,
         };
     }
 
@@ -1016,7 +1018,10 @@ public partial class MainWindow : Window {
 
             [MenuCommandId.Properties] = new(vm.PropertiesCommand),
 
-            [MenuCommandId.ConfigureActions] = new(vm.OptionsCommand),
+            // The row carries the action's id as its argument.
+            [MenuCommandId.RunAction] = new(vm.RunActionCommand),
+            [MenuCommandId.RunActionTo] = new(vm.RunActionToFolderCommand),
+            [MenuCommandId.ConfigureActions] = new(vm.ConfigureActionsCommand),
         };
     }
 
