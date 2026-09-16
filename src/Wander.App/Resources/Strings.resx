@@ -1602,4 +1602,40 @@
   <data name="ConflictSkipAllHint" xml:space="preserve">
     <value>Ничего не переносит и сразу закрывает окно.</value>
   </data>
+  <data name="MenuFoldersPane" xml:space="preserve">
+    <value>Панель папок</value>
+  </data>
+  <data name="NavToggleFolders" xml:space="preserve">
+    <value>Показать или скрыть панель папок (Ctrl+B)</value>
+  </data>
+  <data name="HotkeyToggleFolders" xml:space="preserve">
+    <value>Показать или убрать панель папок (закладки и компьютер)</value>
+  </data>
+  <data name="HotkeyColorInGallery" xml:space="preserve">
+    <value>Цветная метка выделенным файлам; та же ещё раз — снять, 0 — снять</value>
+  </data>
+  <data name="PreviewRatingOthers" xml:space="preserve">
+    <value>и ещё {0}</value>
+    <comment>{0} — сколько ещё файлов выделено кроме показанного; звёзды и метка ставятся всем</comment>
+  </data>
+  <data name="PreviewRatingOthersHint" xml:space="preserve">
+    <value>Звёзды и метка ставятся всему выделению: этому файлу и ещё {0}. Цифры и Shift+цифры в галерее делают то же.</value>
+  </data>
+  <data name="StatusColorApplied" xml:space="preserve">
+    <value>Метка поставлена — файлов: {0}</value>
+  </data>
+  <data name="StatusColorCleared" xml:space="preserve">
+    <value>Метка снята — файлов: {0}</value>
+  </data>
+  <data name="SummaryShots" xml:space="preserve">
+    <value>📷  Снимков: {0}</value>
+  </data>
+  <data name="SummaryShotsSample" xml:space="preserve">
+    <value>📷  Снимков: {0} — EXIF по первым {1}</value>
+    <comment>{0} — снимков в выделении, {1} — сколько из них прочитано для сводки</comment>
+  </data>
+  <data name="TitleYielding" xml:space="preserve">
+    <value>{0} — настройки не сохраняются</value>
+    <comment>{0} — обычный заголовок окна; хвост — когда эта копия уступает запущенной установленной</comment>
+  </data>
 </root>

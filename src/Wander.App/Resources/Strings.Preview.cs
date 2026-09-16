@@ -173,4 +173,10 @@ public static partial class Strings {
 
     /// <summary>{0:N0} треугольников · {1:N0} вершин</summary>
     public static string PreviewModelDetail => Get(nameof(PreviewModelDetail));
+
+    /// <summary>и ещё {0}</summary>
+    public static string PreviewRatingOthers => Get(nameof(PreviewRatingOthers));
+
+    /// <summary>Звёзды и метка ставятся всему выделению: этому файлу и ещё {0}. Цифры и Shift+цифры в галерее делают то же.</summary>
+    public static string PreviewRatingOthersHint => Get(nameof(PreviewRatingOthersHint));
 }

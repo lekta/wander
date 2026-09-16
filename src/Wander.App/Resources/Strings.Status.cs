@@ -272,4 +272,13 @@ public static partial class Strings {
 
     /// <summary>Оценка снята — файлов: {0}</summary>
     public static string StatusRatingCleared => Get(nameof(StatusRatingCleared));
+
+    /// <summary>Метка поставлена — файлов: {0}</summary>
+    public static string StatusColorApplied => Get(nameof(StatusColorApplied));
+
+    /// <summary>Метка снята — файлов: {0}</summary>
+    public static string StatusColorCleared => Get(nameof(StatusColorCleared));
+
+    /// <summary>{0} — настройки не сохраняются</summary>
+    public static string TitleYielding => Get(nameof(TitleYielding));
 }

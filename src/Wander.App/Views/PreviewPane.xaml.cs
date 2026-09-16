@@ -52,7 +52,13 @@ public partial class PreviewPane : UserControl {
     }
 
 
-    private MainViewModel Vm => (MainViewModel)DataContext;
+    /// <summary>
+    /// What this pane draws. The controller is the DataContext itself, not
+    /// a property of the window's view model: the same control then works
+    /// for the second half of a split pane, or in a window of its own, with
+    /// nothing but a different controller handed to it.
+    /// </summary>
+    private PreviewController Controller => (PreviewController)DataContext;
 
 
     /// <summary>
@@ -112,11 +118,11 @@ public partial class PreviewPane : UserControl {
 
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e) {
-        if (e.OldValue is MainViewModel old) {
-            old.Preview.PropertyChanged -= OnPreviewPropertyChanged;
+        if (e.OldValue is PreviewController old) {
+            old.PropertyChanged -= OnPreviewPropertyChanged;
         }
-        if (e.NewValue is MainViewModel vm) {
-            vm.Preview.PropertyChanged += OnPreviewPropertyChanged;
+        if (e.NewValue is PreviewController controller) {
+            controller.PropertyChanged += OnPreviewPropertyChanged;
             UpdateCodeEditor();
         }
     }
@@ -130,21 +136,21 @@ public partial class PreviewPane : UserControl {
                 break;
 
             case nameof(PreviewController.WebUri):
-                if (Vm.Preview.WebUri is { } uri) {
+                if (Controller.WebUri is { } uri) {
                     await EnsureWebViewReadyAsync();
                     try { WebPreview.Source = uri; } catch { /* webview not ready */ }
                 }
                 break;
 
             case nameof(PreviewController.WebHtml):
-                if (Vm.Preview.WebHtml is { } html) {
+                if (Controller.WebHtml is { } html) {
                     await EnsureWebViewReadyAsync();
                     try { WebPreview.NavigateToString(html); } catch { /* webview not ready */ }
                 }
                 break;
 
             case nameof(PreviewController.DocumentPath):
-                await LoadDocumentAsync(Vm.Preview.DocumentPath);
+                await LoadDocumentAsync(Controller.DocumentPath);
                 break;
 
             case nameof(PreviewController.Kind):
@@ -160,7 +166,7 @@ public partial class PreviewPane : UserControl {
             case nameof(PreviewController.MediaUri):
                 // The controller sets Kind before MediaUri precisely so
                 // that this can tell a track from a clip.
-                OpenMedia(Vm.Preview.MediaUri);
+                OpenMedia(Controller.MediaUri);
                 break;
 
             case nameof(PreviewController.ModelParts):
@@ -171,16 +177,16 @@ public partial class PreviewPane : UserControl {
 
 
     private void UpdateCodeEditor() {
-        if (string.IsNullOrEmpty(Vm.Preview.CodeText)) {
+        if (string.IsNullOrEmpty(Controller.CodeText)) {
             CodeEditor.Clear();
             CodeEditor.SyntaxHighlighting = null;
             return;
         }
 
-        string ext = Vm.Preview.CodeExtension ?? "";
+        string ext = Controller.CodeExtension ?? "";
         // AvalonEdit ships highlighting for: C#, C++, Java, JS, TS, CSS, HTML, XML, JSON, Python, PHP, SQL, Markdown, ...
         CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinitionByExtension(ext);
-        CodeEditor.Text = Vm.Preview.CodeText;
+        CodeEditor.Text = Controller.CodeText;
     }
 
     /// <summary>
@@ -213,7 +219,7 @@ public partial class PreviewPane : UserControl {
         }
 
         // The selection may have moved on while the file was being read.
-        if (!string.Equals(Vm.Preview.DocumentPath, path, StringComparison.OrdinalIgnoreCase)) {
+        if (!string.Equals(Controller.DocumentPath, path, StringComparison.OrdinalIgnoreCase)) {
             return;
         }
 
@@ -693,7 +699,7 @@ public partial class PreviewPane : UserControl {
         _restarting = false;
         _finished = false;
         _seen = TimeSpan.Zero;
-        _transportIsAudio = Vm.Preview.Kind == PreviewKind.Audio;
+        _transportIsAudio = Controller.Kind == PreviewKind.Audio;
 
         if (uri is null) {
             VideoPreview.Source = null;
@@ -971,7 +977,7 @@ public partial class PreviewPane : UserControl {
     /// </summary>
     private void ShowModel() {
         ModelParts.Children.Clear();
-        foreach (var part in Vm.Preview.ModelParts) {
+        foreach (var part in Controller.ModelParts) {
             ModelParts.Children.Add(new GeometryModel3D {
                 Geometry = part.Geometry,
                 Material = new DiffuseMaterial(part.Front),
@@ -995,12 +1001,12 @@ public partial class PreviewPane : UserControl {
     }
 
     private void PlaceModelCamera() {
-        if (!Vm.Preview.HasModel) {
+        if (!Controller.HasModel) {
             return;
         }
 
-        var centre = Vm.Preview.ModelCenter;
-        double radius = Vm.Preview.ModelRadius;
+        var centre = Controller.ModelCenter;
+        double radius = Controller.ModelRadius;
         double distance = FitDistance(radius) * _modelZoom;
 
         // Down the Z axis and slightly above, which is the three-quarter
@@ -1053,7 +1059,7 @@ public partial class PreviewPane : UserControl {
     /// sits away from it right out of frame.
     /// </summary>
     private void ApplyModelRotationCentre() {
-        var centre = Vm.Preview.ModelCenter;
+        var centre = Controller.ModelCenter;
         ModelSpin.Axis = new Vector3D(0, 1, 0);
         ModelTilt.Axis = new Vector3D(1, 0, 0);
 
@@ -1069,7 +1075,7 @@ public partial class PreviewPane : UserControl {
     }
 
     private void Model_MouseDown(object sender, MouseButtonEventArgs e) {
-        if (!Vm.Preview.HasModel) {
+        if (!Controller.HasModel) {
             return;
         }
 
@@ -1108,7 +1114,7 @@ public partial class PreviewPane : UserControl {
     }
 
     private void Model_MouseWheel(object sender, MouseWheelEventArgs e) {
-        if (!Vm.Preview.HasModel) {
+        if (!Controller.HasModel) {
             return;
         }
 

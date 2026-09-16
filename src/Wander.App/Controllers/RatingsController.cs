@@ -187,7 +187,7 @@ public sealed class RatingsController {
         }
 
         var results = _metadata.ApplyRatingToMany(targets, field, value, _settings.RawRatingFormat);
-        ApplyResults(results);
+        ApplyResults(results, field);
 
         return results;
     }
@@ -323,7 +323,7 @@ public sealed class RatingsController {
     }
 
 
-    private void ApplyResults(IReadOnlyList<CompanionMetadataService.RatingResult> results) {
+    private void ApplyResults(IReadOnlyList<CompanionMetadataService.RatingResult> results, RatingField field) {
         if (results.Count == 0) {
             return;
         }
@@ -350,6 +350,14 @@ public sealed class RatingsController {
             HasRatingsChanged?.Invoke(this, true);
         }
         CompanionsChanged?.Invoke(this, EventArgs.Empty);
+
+        if (field == RatingField.ColorLabel) {
+            StatusReported?.Invoke(this, (results[0].Rating.ColorLabel ?? 0) > 0
+                ? string.Format(Strings.StatusColorApplied, results.Count)
+                : string.Format(Strings.StatusColorCleared, results.Count));
+
+            return;
+        }
 
         int rank = results[0].Rating.Rank ?? 0;
         StatusReported?.Invoke(this, rank > 0

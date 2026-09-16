@@ -63,6 +63,12 @@ public static partial class Strings {
     /// <summary>Показать или убрать панель быстрого просмотра</summary>
     public static string HotkeyTogglePreview => Get(nameof(HotkeyTogglePreview));
 
+    /// <summary>Показать или убрать панель папок (закладки и компьютер)</summary>
+    public static string HotkeyToggleFolders => Get(nameof(HotkeyToggleFolders));
+
+    /// <summary>Цветная метка выделенным файлам; та же ещё раз — снять, 0 — снять</summary>
+    public static string HotkeyColorInGallery => Get(nameof(HotkeyColorInGallery));
+
     /// <summary>Свернуть или раскрыть ветку</summary>
     public static string HotkeyTreeExpand => Get(nameof(HotkeyTreeExpand));
 

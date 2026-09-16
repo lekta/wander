@@ -50,6 +50,7 @@ public static class HotkeyCatalog {
             new HotkeyRow("Ctrl + 2", Strings.HotkeyToList),
             new HotkeyRow("Ctrl + Shift + E", Strings.HotkeyRevealInTree),
             new HotkeyRow("Ctrl + Q", Strings.HotkeyTogglePreview),
+            new HotkeyRow("Ctrl + B", Strings.HotkeyToggleFolders),
             new HotkeyRow("← / → в дереве", Strings.HotkeyTreeExpand),
             new HotkeyRow("Enter в дереве", Strings.HotkeyTreeEnter),
             new HotkeyRow("Esc в дереве", Strings.HotkeyTreeEscape),
@@ -81,6 +82,7 @@ public static class HotkeyCatalog {
         new HotkeyGroup(Strings.HotkeyGroupView, new[] {
             new HotkeyRow("Ctrl + Shift + 1", Strings.HotkeyViewGallery),
             new HotkeyRow("0…5 в галерее", Strings.HotkeyRateInGallery),
+            new HotkeyRow("Shift + 0…5 в галерее", Strings.HotkeyColorInGallery),
             new HotkeyRow("Ctrl + Shift + 2", Strings.HotkeyViewLargeIcons),
             new HotkeyRow("Ctrl + Shift + 6", Strings.HotkeyViewDetails),
             new HotkeyRow("Ctrl + Shift + 7", Strings.HotkeyViewTiles),

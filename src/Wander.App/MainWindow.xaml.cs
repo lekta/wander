@@ -262,15 +262,40 @@ public partial class MainWindow : Window {
                 ApplyPreviewLayout();
                 break;
 
+            case nameof(MainViewModel.IsPreviewSplit):
+                ApplyPreviewSplit();
+                break;
+
+            case nameof(MainViewModel.IsFoldersVisible):
             case nameof(MainViewModel.FoldersWidth):
                 ApplyFoldersLayout();
                 break;
         }
     }
 
-    /// <summary>The folders pane: how wide, and nothing else about it.</summary>
+    /// <summary>
+    /// The folders pane: whether it is on screen, and how wide. Put away,
+    /// both its column and the divider's go to zero and the control is
+    /// collapsed, so neither Tab nor a drop can land in it; the width it
+    /// had waits in the view model for the next time it is shown.
+    /// </summary>
     private void ApplyFoldersLayout() {
-        FoldersColumn.Width = new GridLength(Vm.FoldersWidth);
+        if (Vm.IsFoldersVisible) {
+            FoldersColumn.Width = new GridLength(Vm.FoldersWidth);
+            FoldersSplitterColumn.Width = new GridLength(4);
+            FolderTrees.Visibility = Visibility.Visible;
+        } else {
+            // The keyboard must not vanish with the pane: a collapsed
+            // element cannot hold focus, and WPF would drop it on the
+            // window, where the next arrow key does nothing. The list is
+            // where it goes - the same place Esc in a tree sends it.
+            if (ZoneOf(Keyboard.FocusedElement) is WindowZone.Bookmarks or WindowZone.Drives) {
+                FocusZone(WindowZone.FileList);
+            }
+            FoldersColumn.Width = new GridLength(0);
+            FoldersSplitterColumn.Width = new GridLength(0);
+            FolderTrees.Visibility = Visibility.Collapsed;
+        }
     }
 
     private void FoldersSplitter_DragCompleted(object sender, DragCompletedEventArgs e) {
@@ -288,15 +313,79 @@ public partial class MainWindow : Window {
         if (Vm.IsPreviewVisible) {
             PreviewSplitterColumn.Width = new GridLength(4);
             PreviewColumn.Width = new GridLength(Vm.PreviewWidth);
+            PreviewSplit.Visibility = Visibility.Visible;
         } else {
             PreviewSplitterColumn.Width = new GridLength(0);
             PreviewColumn.Width = new GridLength(0);
+            // Collapsed as well as zero-width: a WebView2 in a column of
+            // no width still composes, a collapsed one does not.
+            PreviewSplit.Visibility = Visibility.Collapsed;
         }
     }
 
     private void PreviewSplitter_DragCompleted(object sender, DragCompletedEventArgs e) {
         Vm.PreviewWidth = PreviewColumn.ActualWidth;
     }
+
+
+    // --- Split preview -----------------------------------------------------
+
+    private Views.PreviewPane? _previewSecond;
+
+    /// <summary>
+    /// Two panes or one. The second control is made on the first pair and
+    /// kept for the session; between pairs it is collapsed, and its
+    /// controller has already let go of the file.
+    /// </summary>
+    private void ApplyPreviewSplit() {
+        if (!Vm.IsPreviewSplit) {
+            PreviewSecondHost.Visibility = Visibility.Collapsed;
+            PreviewSplit.Rows = 1;
+            PreviewSplit.Columns = 1;
+
+            return;
+        }
+
+        if (_previewSecond is null) {
+            _previewSecond = new Views.PreviewPane { DataContext = Vm.PreviewSecond };
+            PreviewSecondHost.Content = _previewSecond;
+        }
+        PreviewSecondHost.Visibility = Visibility.Visible;
+        ApplyPreviewSplitOrientation();
+    }
+
+    /// <summary>
+    /// Stacked while the column is taller than it is wide - the usual shape
+    /// of a preview strip - and side by side once it has been dragged wider
+    /// than that. Two photographs across a 280-px strip are two thumbnails;
+    /// one above the other they are two photographs.
+    /// </summary>
+    private void ApplyPreviewSplitOrientation() {
+        if (!Vm.IsPreviewSplit || _previewSecond is null) {
+            return;
+        }
+
+        bool stacked = PreviewSplit.ActualHeight >= PreviewSplit.ActualWidth;
+        PreviewSplit.Rows = stacked ? 2 : 1;
+        PreviewSplit.Columns = stacked ? 1 : 2;
+        // The line between the halves is the second pane's own border, on
+        // whichever side faces the first; the left edge stays for the
+        // splitter it always had.
+        _previewSecond.BorderThickness = stacked ? new Thickness(1, 1, 0, 0) : new Thickness(1, 0, 0, 0);
+    }
+
+    private void PreviewSplit_SizeChanged(object sender, SizeChangedEventArgs e) {
+        ApplyPreviewSplitOrientation();
+    }
+
+    /// <summary>Text selected in either half of the preview, whichever has the keyboard.</summary>
+    private int? TryCopyPreviewText() {
+        return Preview.TryCopySelectedText() ?? _previewSecond?.TryCopySelectedText();
+    }
+
+    /// <summary>The keyboard is in a code viewer - either pane's.</summary>
+    private bool IsCodeEditorFocused =>
+        Preview.IsCodeEditorFocused || _previewSecond?.IsCodeEditorFocused == true;
 
 
     // --- Global hotkeys not bound to commands ---------------------------
@@ -323,7 +412,7 @@ public partial class MainWindow : Window {
         // and a user who copied a paragraph and pasted a file would have no
         // way of knowing where it went wrong.
         if (e.Key == Key.C && Keyboard.Modifiers == ModifierKeys.Control
-            && Preview.TryCopySelectedText() is { } copied) {
+            && TryCopyPreviewText() is { } copied) {
             Vm.Status = string.Format(Strings.StatusTextCopied, copied);
             e.Handled = true;
 
@@ -421,7 +510,7 @@ public partial class MainWindow : Window {
         // AvalonEdit owns Ctrl+F there for its own search panel, and
         // stealing it would be surprising.
         if (e.Key == Key.F && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift)) {
-            if (!Preview.IsCodeEditorFocused) {
+            if (!IsCodeEditorFocused) {
                 OpenSearchWindow();
                 e.Handled = true;
 
@@ -430,7 +519,7 @@ public partial class MainWindow : Window {
         }
 
         if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control) {
-            if (!Preview.IsCodeEditorFocused) {
+            if (!IsCodeEditorFocused) {
                 SearchBox.Focus();
                 SearchBox.SelectAll();
                 e.Handled = true;
@@ -662,6 +751,14 @@ public partial class MainWindow : Window {
     /// </para>
     /// </summary>
     private void FocusFolderPane(bool toggle) {
+        // Put away, the pane cannot take the keyboard, and a shortcut that
+        // silently did nothing would read as broken - so it comes back
+        // first, the way collapsed bookmarks unfold for the same key.
+        if (!Vm.IsFoldersVisible) {
+            Vm.IsFoldersVisible = true;
+            UpdateLayout();
+        }
+
         var target = WindowZones.FolderPane(
             toggle,
             ZoneOf(Keyboard.FocusedElement),

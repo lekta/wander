@@ -26,22 +26,31 @@ namespace Wander.App.Controllers;
 /// A star or a swatch was clicked in the preview footer. The pane only
 /// knows which one; writing lives with the host's rating machinery —
 /// asking before creating a sidecar, choosing the format, updating the row
-/// without re-listing the folder. The handler answers through
+/// without re-listing the folder, and deciding whether the click sets or
+/// clears (<c>RatingToggle</c>: the host knows how many files the click is
+/// about, the pane does not). The handler answers through
 /// <see cref="Rating"/>: what the sidecar says afterwards, or null when
 /// nothing was written (declined, or nowhere to write) — the row is then
 /// left unchanged.
 /// </summary>
 public sealed class RatingRequestedEventArgs : EventArgs {
-    public RatingRequestedEventArgs(FileSystemEntry entry, RatingField field, int value) {
+    public RatingRequestedEventArgs(FileSystemEntry entry, RatingField field, int clicked, int current) {
         Entry = entry;
         Field = field;
-        Value = value;
+        Clicked = clicked;
+        Current = current;
     }
 
 
+    /// <summary>The file on screen when the click happened.</summary>
     public FileSystemEntry Entry { get; }
     public RatingField Field { get; }
-    public int Value { get; }
+
+    /// <summary>The star or the swatch, 1…5 — not yet resolved into "set" or "clear".</summary>
+    public int Clicked { get; }
+
+    /// <summary>What the pane shows for <see cref="Entry"/> in that field right now, 0 for nothing.</summary>
+    public int Current { get; }
 
     /// <summary>The handler's answer; null means nothing was written.</summary>
     public SidecarRating? Rating { get; set; }
@@ -91,12 +100,22 @@ public sealed class PreviewController : ObservableObject {
     private const long MaxArchivePreviewBytes = 32L * 1024 * 1024;
 
 
+    /// <summary>
+    /// How many pictures of a multi-selection are opened for the shared
+    /// EXIF line. Reading a header is cheap; reading two thousand of them
+    /// off a spinning disk because somebody pressed Ctrl+A is not, and
+    /// the line says how many it looked at.
+    /// </summary>
+    private const int ShotSummarySample = 100;
+
+
     private readonly IImageMetadataReader? _metadataReader;
     private readonly CompanionMetadataService? _companionMetadata;
 
     private bool _isVisible;
     private FileSystemEntry? _primary;
     private IReadOnlyList<FileSystemEntry> _selection = Array.Empty<FileSystemEntry>();
+    private GalleryPalette _contentPalette = GalleryPalette.Plain;
     private string? _currentFolderPath;
     private string _currentFolderName = "";
     private string _folderHeadline = "";
@@ -184,7 +203,26 @@ public sealed class PreviewController : ObservableObject {
     public event EventHandler<string>? RevealRequested;
 
 
-    // --- Output properties (XAML binds Preview.X) ----------------------
+    // --- Output properties (the pane's DataContext is this object) -----
+
+    /// <summary>
+    /// The colours of the surround the content is drawn on - the gallery's
+    /// while the gallery is on screen, the plain one otherwise. Handed in
+    /// by the host, which owns both the view mode and the setting; the
+    /// pane only has to agree with the list beside it.
+    /// </summary>
+    public GalleryPalette ContentPalette {
+        get => _contentPalette;
+        private set => SetField(ref _contentPalette, value);
+    }
+
+    /// <summary>
+    /// Whether the pane draws its footer - the summary, the RAW switch, the
+    /// companions and the rating row. Off for the second half of a split:
+    /// the split doubles the picture only, and the one footer under both
+    /// belongs to the selection as a whole.
+    /// </summary>
+    public bool ShowFooter { get; init; } = true;
 
     public PreviewKind Kind {
         get => _kind;
@@ -534,6 +572,24 @@ public sealed class PreviewController : ObservableObject {
         private set => SetField(ref _customColorLabel, value);
     }
 
+    /// <summary>
+    /// How many other files a star or a swatch would write to besides the
+    /// one on screen - the rest of a multi-selection the file is part of.
+    /// Zero for a single file, and for a file shown outside its selection.
+    /// </summary>
+    public int RatingOthersCount =>
+        _primary is null || _selection.Count < 2
+            || !_selection.Any(e => string.Equals(e.FullPath, _primary.FullPath, StringComparison.OrdinalIgnoreCase))
+            ? 0
+            : _selection.Count - 1;
+
+    public bool HasRatingOthers => RatingOthersCount > 0;
+
+    /// <summary>"и ещё 4" beside the stars, when the click is about more than the picture shown.</summary>
+    public string RatingOthers => HasRatingOthers ? string.Format(Strings.PreviewRatingOthers, RatingOthersCount) : "";
+
+    public string RatingOthersHint => HasRatingOthers ? string.Format(Strings.PreviewRatingOthersHint, RatingOthersCount) : "";
+
     /// <summary>Writes a new star count into the sidecar. Parameter is the star clicked, 1…5.</summary>
     public RelayCommand SetRankCommand { get; }
 
@@ -718,6 +774,7 @@ public sealed class PreviewController : ObservableObject {
             && entry.ModifiedUtc == _primary.ModifiedUtc;
 
         _primary = entry;
+        RaiseRatingOthers();
         if (sameFile) {
             ScheduleCompanionUpdate();
 
@@ -727,6 +784,11 @@ public sealed class PreviewController : ObservableObject {
         SchedulePreviewUpdate();
         ScheduleSummaryUpdate();
         ScheduleCompanionUpdate();
+    }
+
+    /// <summary>The surround's colours changed - see <see cref="ContentPalette"/>.</summary>
+    public void SetPalette(GalleryPalette palette) {
+        ContentPalette = palette;
     }
 
 
@@ -741,7 +803,15 @@ public sealed class PreviewController : ObservableObject {
 
     public void SetSelection(IReadOnlyList<FileSystemEntry> selection) {
         _selection = selection ?? Array.Empty<FileSystemEntry>();
+        RaiseRatingOthers();
         ScheduleSummaryUpdate();
+    }
+
+    private void RaiseRatingOthers() {
+        Raise(nameof(RatingOthersCount));
+        Raise(nameof(HasRatingOthers));
+        Raise(nameof(RatingOthers));
+        Raise(nameof(RatingOthersHint));
     }
 
     public void SetCurrentFolder(string? path, string name) {
@@ -1615,11 +1685,11 @@ public sealed class PreviewController : ObservableObject {
             return;
         }
 
-        // Clicking what is already set clears it — otherwise a mis-click
-        // could never be taken back except through Ctrl+Z.
-        int target = clicked == current ? 0 : clicked;
-
-        var request = new RatingRequestedEventArgs(_primary, field, target);
+        // Whether the click sets or clears is the host's call: clicking
+        // what is already set clears it, but "already set" is a question
+        // about every file the click is for, and only the host knows how
+        // many that is. The pane hands over what it shows and lets go.
+        var request = new RatingRequestedEventArgs(_primary, field, clicked, current);
         try {
             write(this, request);
             CompanionStatus = "";
@@ -1856,12 +1926,29 @@ public sealed class PreviewController : ObservableObject {
 
             Summary = string.Format(Strings.SummarySelectedCounting, _selection.Count);
             var paths = _selection.Select(en => en.FullPath).ToArray();
-            var (count, size) = await Task.Run(() => SummaryText.CountAndSum(paths, ct), ct);
+            // Pictures among the selection: what they have in common goes
+            // under the count. Read on the same worker, after the sizes,
+            // so a selection of two thousand RAW files still gets its
+            // byte count while the headers are being read.
+            var pictures = _selection
+                .Where(en => en.Kind == EntryKind.File && ImageFormats.IsImage(en.Name))
+                .Select(en => en.FullPath)
+                .ToArray();
+            var (count, size, shots, read) = await Task.Run(() => {
+                var totals = SummaryText.CountAndSum(paths, ct);
+                var (summary, opened) = SummariseShots(pictures, ct);
+
+                return (totals.Count, totals.Size, summary, opened);
+            }, ct);
             if (ct.IsCancellationRequested) {
                 return;
             }
-            Summary = string.Format(
+            string text = string.Format(
                 Strings.SummarySelected, _selection.Count, count, SizeFormatter.Format(size));
+            if (shots is not null) {
+                text += "\n" + SummaryText.ForShots(shots, read);
+            }
+            Summary = text;
 
             return;
         }
@@ -1871,5 +1958,37 @@ public sealed class PreviewController : ObservableObject {
         Summary = string.IsNullOrEmpty(_currentFolderPath)
             ? ""
             : SummaryText.ForCurrentFolder(_currentFolderPath!, _currentFolderName);
+    }
+
+    /// <summary>
+    /// Opens the first <see cref="ShotSummarySample"/> pictures for their
+    /// EXIF and folds them into one summary. Null when there are no
+    /// pictures, or nothing to read them with. A file the reader cannot
+    /// make sense of simply does not take part.
+    /// </summary>
+    private (ShotSummary? Summary, int Read) SummariseShots(string[] pictures, CancellationToken ct) {
+        if (pictures.Length == 0 || _metadataReader is null) {
+            return (null, 0);
+        }
+
+        var shots = new List<ImageMetadata>();
+        int read = 0;
+        foreach (string path in pictures.Take(ShotSummarySample)) {
+            if (ct.IsCancellationRequested) {
+                break;
+            }
+            read++;
+            try {
+                if (_metadataReader.Read(path) is { } meta) {
+                    shots.Add(meta);
+                }
+            } catch {
+                // Unreadable or not a picture after all: no vote.
+            }
+        }
+
+        var summary = ShotSummary.Aggregate(shots);
+
+        return (summary with { Shots = pictures.Length }, read);
     }
 }

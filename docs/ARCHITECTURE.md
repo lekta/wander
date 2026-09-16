@@ -1031,6 +1031,13 @@ MainViewModel.ApplyRating(строки, поле, значение)
   настоящие изменения.
 - **Панель просмотра** — `SetPrimary` сравнивает путь + размер + mtime:
   та же строка = перечитать спутников, не декодировать RAW.
+- **Клик по звезде или свотчу** (2026-09-15) уходит хозяину неразрешённым:
+  `RatingRequestedEventArgs` несёт `Clicked` и `Current`, а «поставить или
+  снять» решает `RatingToggle.Resolve` (Core, тест) против **всех** целей —
+  всё выделение, если показанный файл в нём (в футере «и ещё N»), иначе
+  один файл; вторая половина сплита всегда про свой файл. `Shift`+цифры в
+  галерее — `SetColorForSelection` тем же правилом; цифры без `Shift` —
+  как были: ставят, `0` снимает.
 - **Служебные файлы.** `ReplaceAtomic` пишет `<файл>.wander-tmp`,
   `File.Replace` создаёт **свой** бэкап `<файл>~RF<hex>.TMP` (не описан у
   API; найден логом сторожа) — оба в `TransientFiles`. Переименование
@@ -1405,7 +1412,25 @@ SYS ws=431 private=360 gen=167/155/134 alloc=+45 loh=6 handles=1060 threads=40 c
 
 ## Preview pane
 
-`PreviewController` (App) — конвейер с отменой и спиннером. `PreviewKind`:
+`PreviewController` (App) — конвейер с отменой и спиннером. `PreviewPane`
+берёт контроллер **своим `DataContext`** (2026-09-15; раньше — окно, и
+биндинги шли через `Preview.*`): всё, что панели нужно от хозяина, —
+свойства контроллера (`ContentPalette` кладёт `MainViewModel.PushPalette`),
+события наружу — `RatingRequested`, `RevealRequested`. Поэтому панель
+живёт вторым экземпляром: `MainViewModel.PreviewSecond` (`ShowFooter =
+false` — сплит только на картинку, футер один и описывает всё выделение;
+`ShowRawDecode` зеркалится с первой) + второй `PreviewPane`, созданный
+при первой паре (`MainWindow.ApplyPreviewSplit`, `UniformGrid`:
+столбиком, пока колонка выше, чем шире). Пара — чистое правило
+`PreviewPair.Of(выделение, листинг)` (Core, тест): ровно два файла, оба с
+маршрутом, порядок — по списку. Какой файл панель показывает при
+множественном выделении — `ActiveEntry`: каретка (`CaretPath`, её ставит
+список на клик и фокус), если она внутри выделения, — то есть файл,
+добавленный `Ctrl`+кликом последним; `SelectedItem` WPF остаётся на
+первом выделенном и показывал бы не то. `RefreshPreviewPrimary` зовётся
+из трёх сеттеров (`SelectedEntry`, `SelectedEntries`, `CaretPath`) —
+список сообщает их в произвольном порядке; в паре главный — верхний
+(`PrimaryForPane`). `PreviewKind`:
 
 | Kind | Чем |
 |---|---|
@@ -1580,19 +1605,40 @@ Delete failed` лежал в файле, а прогон отчитывался 
 `CrashReporter`, `PreviewPane` (WebView2). Источник корня — в заголовке
 сессии (`Data root: … (arg|portable|env|override|default)`).
 
+**Две копии на одних данных** (2026-09-15): установленная (`C:\Programs\
+Wander`, `publish.ps1 -Install`) и Debug из Rider делят `%LOCALAPPDATA%\
+Wander` — так задумано, отдельной папки для отладки нет: отлаживаться
+удобно на своих закладках и раскладке. Кто пишет `state.json`, решает
+`InstanceLock` (Platform): экземпляр без ключа держит именованный мьютекс
+`Local\Wander.state.<хэш корня>` (не захватывает — только существует, пока
+жив процесс); экземпляр с `--yield` (`AppPaths.Yields`, ставит профиль
+`launchSettings.json` для Rider) ничего не держит, а перед каждой записью
+смотрит, есть ли владелец, и, увидев его раз, больше не пишет до конца
+сеанса (`IAppStateStore.IsReadOnly`, в заголовке окна «— настройки не
+сохраняются», строка в логе). Читает состояние он как обычно. Имя с хэшем
+корня — харнесс в песочнице и установленная копия друг друга не видят.
+Кэш миниатюр и профиль WebView2 общие: один рантайм, одни опции.
+
 **`state.json`** (`JsonAppStateStore`, record `AppState`):
 - `Session` — `LastPath` (`NavigationStop?`), `ExpandedPaths` (только
   **видимо** раскрытые: `CollectExpandedRecursive` останавливается на
   свёрнутом; флаги внутри ветки не гасятся при сворачивании, иначе
   восстановление раскроет свёрнутого родителя), `ViewMode`,
-  `IsPreviewVisible`, `PreviewWidth`, `IsBookmarksExpanded`,
+  `IsPreviewVisible`, `PreviewWidth`, `IsFoldersVisible` (панель папок
+  убрана — колонка и её сплиттер в 0, `FoldersWidth` ждёт), `IsBookmarksExpanded`,
   `RecentPaths`, `ManualViewModes`, `BookmarksHeight`, `FoldersWidth`,
   `LayoutWindowWidth` / `LayoutWindowHeight` — окно, долей которого были
   три размера панелей: `PaneSizes.Restore` (Core/Layout, тест) при `Loaded`
   окна возвращает пиксели как были, если окно того же размера, и ту же долю
   нового окна, если нет; потолок при перетаскивании — окно минус резерв
   соседа (`MainViewModel.PaneCeiling`), чтобы drag и восстановление не
-  спорили.
+  спорили. В файл уходит **пара, выставленная пользователем** (`_saved*`),
+  а не масштабированные размеры с экрана: перебазирование
+  (`RebasePaneSizes`) — только при перетаскивании разделителя и один раз
+  на легаси-файле без размера окна; иначе круг монитор → ноутбук → монитор
+  возвращал панели на пиксели не туда (округление и минимумы в обе
+  стороны, 2026-09-16). Строка `Pane sizes: window WxH, set at WxH; …` в
+  логе при старте — числа для разбора жалобы.
 - `Favorites` — закладки в порядке пользователя (`MoveBookmark`);
   стандартные не здесь; пропавший путь не выбрасывается (`IsMissing`).
 - `Window` — `WindowGeometry`; обратно через `WindowPlacement`

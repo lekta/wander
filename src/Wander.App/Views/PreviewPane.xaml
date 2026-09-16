@@ -19,6 +19,11 @@
         machines, and none of them has anything to say to the file list or
         the trees. The window keeps only the layout question ("is the pane
         visible, how wide"), because that is a property of the window's grid.
+
+        The DataContext is the PreviewController itself, not the window's
+        view model: every binding below is a property of the controller,
+        and a second copy of this control with a second controller is the
+        other half of a split pane.
     -->
     <UserControl.Resources>
         <conv:EnumToVisibilityConverter x:Key="EnumToVisibility"/>
@@ -63,14 +68,14 @@
             that already marks the rating clears it.
         -->
         <Style x:Key="RatingStar" TargetType="Button">
-            <Setter Property="Command" Value="{Binding Preview.SetRankCommand}"/>
+            <Setter Property="Command" Value="{Binding SetRankCommand}"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Foreground" Value="{StaticResource RatingStar}"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="Padding" Value="1,0"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="ToolTip" Value="{Binding Preview.RatingSource, StringFormat={x:Static res:Strings.PreviewRatingWrittenTo}}"/>
+            <Setter Property="ToolTip" Value="{Binding RatingSource, StringFormat={x:Static res:Strings.PreviewRatingWrittenTo}}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -89,7 +94,7 @@
                     yet" are not the same statement, and the difference is
                     exactly the one the click is about to resolve.
                 -->
-                <DataTrigger Binding="{Binding Preview.IsRatingUnsaved}" Value="True">
+                <DataTrigger Binding="{Binding IsRatingUnsaved}" Value="True">
                     <Setter Property="Opacity" Value="0.55"/>
                     <Setter Property="ToolTip" Value="{x:Static res:Strings.PreviewRatingUnsaved}"/>
                 </DataTrigger>
@@ -102,7 +107,7 @@
             change to indicate selection.
         -->
         <Style x:Key="ColorLabelSwatch" TargetType="Button">
-            <Setter Property="Command" Value="{Binding DataContext.Preview.SetColorLabelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+            <Setter Property="Command" Value="{Binding DataContext.SetColorLabelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Margin" Value="1,0"/>
             <Setter Property="Template">
@@ -159,25 +164,25 @@
                             <Style TargetType="Border">
                                 <Setter Property="Visibility" Value="Collapsed"/>
                                 <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Preview.Kind}" Value="Image">
+                                    <DataTrigger Binding="{Binding Kind}" Value="Image">
                                         <Setter Property="Visibility" Value="Visible"/>
                                     </DataTrigger>
-                                    <DataTrigger Binding="{Binding Preview.Kind}" Value="Gif">
+                                    <DataTrigger Binding="{Binding Kind}" Value="Gif">
                                         <Setter Property="Visibility" Value="Visible"/>
                                     </DataTrigger>
-                                    <DataTrigger Binding="{Binding Preview.Kind}" Value="Audio">
+                                    <DataTrigger Binding="{Binding Kind}" Value="Audio">
                                         <Setter Property="Visibility" Value="Visible"/>
                                     </DataTrigger>
-                                    <DataTrigger Binding="{Binding Preview.Kind}" Value="Folder">
+                                    <DataTrigger Binding="{Binding Kind}" Value="Folder">
                                         <Setter Property="Visibility" Value="Visible"/>
                                     </DataTrigger>
-                                    <DataTrigger Binding="{Binding Preview.Kind}" Value="Archive">
+                                    <DataTrigger Binding="{Binding Kind}" Value="Archive">
                                         <Setter Property="Visibility" Value="Visible"/>
                                     </DataTrigger>
-                                    <DataTrigger Binding="{Binding Preview.Kind}" Value="None">
+                                    <DataTrigger Binding="{Binding Kind}" Value="None">
                                         <Setter Property="Visibility" Value="Visible"/>
                                     </DataTrigger>
-                                    <DataTrigger Binding="{Binding Preview.Kind}" Value="Unsupported">
+                                    <DataTrigger Binding="{Binding Kind}" Value="Unsupported">
                                         <Setter Property="Visibility" Value="Visible"/>
                                     </DataTrigger>
                                 </Style.Triggers>
@@ -191,7 +196,7 @@
                         in code-behind (ImageZoom_* handlers).
                     -->
                     <Grid x:Name="ImagePreviewHost"
-                          Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Image}"
+                          Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Image}"
                           ClipToBounds="True"
                           Background="Transparent"
                           MouseEnter="ImageZoom_MouseEnter"
@@ -201,7 +206,7 @@
                           MouseLeftButtonUp="ImageZoom_LmbUp"
                           LostMouseCapture="ImageZoom_LostCapture">
                         <Image x:Name="ImgFit"
-                               Source="{Binding Preview.Image}"
+                               Source="{Binding Image}"
                                Stretch="Uniform" StretchDirection="DownOnly"
                                MaxWidth="{Binding Source, RelativeSource={RelativeSource Self}, Converter={StaticResource BitmapPixelSize}, ConverterParameter=W}"
                                MaxHeight="{Binding Source, RelativeSource={RelativeSource Self}, Converter={StaticResource BitmapPixelSize}, ConverterParameter=H}"
@@ -220,8 +225,8 @@
 
                     <!-- Animated GIF (also anchored middle-top with same margin). -->
                     <controls:GifImage x:Name="GifPreview"
-                                       GifUri="{Binding Preview.GifUri}"
-                                       Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Gif}"
+                                       GifUri="{Binding GifUri}"
+                                       Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Gif}"
                                        Stretch="Uniform" StretchDirection="DownOnly"
                                        MaxWidth="{Binding Source, RelativeSource={RelativeSource Self}, Converter={StaticResource BitmapPixelSize}, ConverterParameter=W}"
                                        MaxHeight="{Binding Source, RelativeSource={RelativeSource Self}, Converter={StaticResource BitmapPixelSize}, ConverterParameter=H}"
@@ -246,10 +251,10 @@
                             <Style TargetType="Grid">
                                 <Setter Property="Visibility" Value="Collapsed"/>
                                 <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Preview.Kind}" Value="Video">
+                                    <DataTrigger Binding="{Binding Kind}" Value="Video">
                                         <Setter Property="Visibility" Value="Visible"/>
                                     </DataTrigger>
-                                    <DataTrigger Binding="{Binding Preview.Kind}" Value="Audio">
+                                    <DataTrigger Binding="{Binding Kind}" Value="Audio">
                                         <Setter Property="Visibility" Value="Visible"/>
                                     </DataTrigger>
                                 </Style.Triggers>
@@ -277,7 +282,7 @@
                         -->
                         <MediaElement x:Name="VideoPreview"
                                       Grid.Row="0"
-                                      Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Video}"
+                                      Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Video}"
                                       LoadedBehavior="Manual"
                                       UnloadedBehavior="Stop"
                                       ScrubbingEnabled="True"
@@ -317,37 +322,37 @@
                         <StackPanel Grid.Row="0"
                                     Margin="16,20,16,8"
                                     VerticalAlignment="Top" HorizontalAlignment="Center"
-                                    Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Audio}">
+                                    Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Audio}">
                             <Border MaxWidth="260" MaxHeight="260"
                                     HorizontalAlignment="Center"
                                     BorderBrush="{Binding ContentPalette.Dim}" BorderThickness="1"
-                                    Visibility="{Binding Preview.HasAudioCover, Converter={StaticResource BoolToVisibility}}">
-                                <Image Source="{Binding Preview.AudioCover}"
+                                    Visibility="{Binding HasAudioCover, Converter={StaticResource BoolToVisibility}}">
+                                <Image Source="{Binding AudioCover}"
                                        Stretch="Uniform" StretchDirection="DownOnly"
                                        RenderOptions.BitmapScalingMode="HighQuality"/>
                             </Border>
 
-                            <TextBlock Text="{Binding Preview.AudioTitle}"
+                            <TextBlock Text="{Binding AudioTitle}"
                                        Style="{StaticResource PaneText}"
                                        Margin="0,12,0,0"
                                        FontSize="15" FontWeight="SemiBold"
                                        TextAlignment="Center" TextWrapping="Wrap"
                                        MaxWidth="320"/>
-                            <TextBlock Text="{Binding Preview.AudioArtist}"
+                            <TextBlock Text="{Binding AudioArtist}"
                                        Style="{StaticResource PaneText}"
                                        Margin="0,3,0,0"
                                        FontSize="12"
                                        TextAlignment="Center" TextWrapping="Wrap"
                                        MaxWidth="320"
-                                       Visibility="{Binding Preview.HasAudioArtist, Converter={StaticResource BoolToVisibility}}"/>
-                            <TextBlock Text="{Binding Preview.AudioAlbum}"
+                                       Visibility="{Binding HasAudioArtist, Converter={StaticResource BoolToVisibility}}"/>
+                            <TextBlock Text="{Binding AudioAlbum}"
                                        Style="{StaticResource PaneDim}"
                                        Margin="0,2,0,0"
                                        FontSize="11"
                                        TextAlignment="Center" TextWrapping="Wrap"
                                        MaxWidth="320"
-                                       Visibility="{Binding Preview.HasAudioAlbum, Converter={StaticResource BoolToVisibility}}"/>
-                            <TextBlock Text="{Binding Preview.AudioDetail}"
+                                       Visibility="{Binding HasAudioAlbum, Converter={StaticResource BoolToVisibility}}"/>
+                            <TextBlock Text="{Binding AudioDetail}"
                                        Style="{StaticResource PaneDim}"
                                        Margin="0,8,0,0"
                                        FontSize="11"
@@ -418,7 +423,7 @@
                         viewer has to have, and no more, because this is a
                         preview and not a viewport.
                     -->
-                    <Grid Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Model}">
+                    <Grid Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Model}">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="*"/>
                             <RowDefinition Height="Auto"/>
@@ -482,15 +487,15 @@
                             </Viewport3D>
                         </Border>
                         <TextBlock Grid.Row="1"
-                                   Text="{Binding Preview.ModelDetail}"
+                                   Text="{Binding ModelDetail}"
                                    Margin="8,4,8,6"
                                    FontSize="11" Foreground="{StaticResource TextDim}"
                                    HorizontalAlignment="Center"/>
                     </Grid>
 
                     <!-- Plain text -->
-                    <TextBox Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Text}"
-                             Text="{Binding Preview.Text, Mode=OneWay}"
+                    <TextBox Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Text}"
+                             Text="{Binding Text, Mode=OneWay}"
                              IsReadOnly="True"
                              FontFamily="Consolas" FontSize="11"
                              Background="Transparent" BorderThickness="0"
@@ -501,7 +506,7 @@
 
                     <!-- Code with syntax highlighting -->
                     <ae:TextEditor x:Name="CodeEditor"
-                                   Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Code}"
+                                   Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Code}"
                                    IsReadOnly="True"
                                    ShowLineNumbers="True"
                                    FontFamily="Consolas" FontSize="11"
@@ -516,7 +521,7 @@
                         only way in and it is not a bindable property.
                     -->
                     <RichTextBox x:Name="DocumentPreview"
-                                 Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Document}"
+                                 Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Document}"
                                  IsReadOnly="True" IsDocumentEnabled="True"
                                  Background="{StaticResource InputBackground}" BorderThickness="0"
                                  VerticalScrollBarVisibility="Auto"
@@ -532,7 +537,7 @@
                         is drawn on rather than window chrome.
                     -->
                     <wv2:WebView2 x:Name="WebPreview"
-                                  Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Web}"
+                                  Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Web}"
                                   DefaultBackgroundColor="White"/>
 
                     <!--
@@ -542,7 +547,7 @@
                         a folder raises, and a wall of thumbnails does not
                         answer it.
                     -->
-                    <ScrollViewer Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Folder}"
+                    <ScrollViewer Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Folder}"
                                   VerticalScrollBarVisibility="Auto" Padding="12,10,12,10">
                         <StackPanel>
                             <!--
@@ -560,43 +565,43 @@
                                 stay honest at 0 and 100.
                             -->
                             <StackPanel Margin="0,0,0,14"
-                                        Visibility="{Binding Preview.HasVolume, Converter={StaticResource BoolToVisibility}}">
-                                <TextBlock Text="{Binding Preview.VolumeLabel}"
+                                        Visibility="{Binding HasVolume, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="{Binding VolumeLabel}"
                                            Style="{StaticResource PaneText}"
                                            FontSize="14" FontWeight="SemiBold"
                                            TextTrimming="CharacterEllipsis"/>
-                                <TextBlock Text="{Binding Preview.VolumeDetail}"
+                                <TextBlock Text="{Binding VolumeDetail}"
                                            Style="{StaticResource PaneDim}"
                                            FontSize="11" Margin="0,2,0,0"
                                            TextTrimming="CharacterEllipsis"/>
                                 <ProgressBar Height="12" Margin="0,8,0,0"
                                              Minimum="0" Maximum="100"
-                                             Value="{Binding Preview.VolumeUsedPercent, Mode=OneWay}"
-                                             Foreground="{Binding Preview.VolumeBarColor}"
+                                             Value="{Binding VolumeUsedPercent, Mode=OneWay}"
+                                             Foreground="{Binding VolumeBarColor}"
                                              Background="{StaticResource TrackBackground}" BorderBrush="{StaticResource TrackBorder}" BorderThickness="1"/>
                                 <Grid Margin="0,4,0,0">
-                                    <TextBlock Text="{Binding Preview.VolumeUsage}"
+                                    <TextBlock Text="{Binding VolumeUsage}"
                                                Style="{StaticResource PaneText}"
                                                FontSize="11"
                                                HorizontalAlignment="Left"/>
-                                    <TextBlock Text="{Binding Preview.VolumeFree}"
+                                    <TextBlock Text="{Binding VolumeFree}"
                                                Style="{StaticResource PaneText}"
                                                FontSize="11"
                                                HorizontalAlignment="Right"/>
                                 </Grid>
                             </StackPanel>
 
-                            <TextBlock Text="{Binding Preview.FolderTitle}"
+                            <TextBlock Text="{Binding FolderTitle}"
                                        Style="{StaticResource PaneText}"
                                        FontSize="14" FontWeight="SemiBold"
                                        TextTrimming="CharacterEllipsis"/>
-                            <TextBlock Text="{Binding Preview.FolderHeadline}"
+                            <TextBlock Text="{Binding FolderHeadline}"
                                        Style="{StaticResource PaneDim}"
                                        Margin="0,4,0,0" TextWrapping="Wrap"/>
-                            <TextBlock Text="{Binding Preview.FolderNote}"
+                            <TextBlock Text="{Binding FolderNote}"
                                        Foreground="{StaticResource TextWarning}" FontSize="11"
                                        Margin="0,4,0,0" TextWrapping="Wrap"
-                                       Visibility="{Binding Preview.HasFolderNote, Converter={StaticResource BoolToVisibility}}"/>
+                                       Visibility="{Binding HasFolderNote, Converter={StaticResource BoolToVisibility}}"/>
 
                             <!--
                                 Walking a folder takes as long as it takes,
@@ -611,7 +616,7 @@
                             -->
                             <StackPanel Margin="0,18,0,0"
                                         HorizontalAlignment="Center"
-                                        Visibility="{Binding Preview.IsCensusLoading, Converter={StaticResource BoolToVisibility}}">
+                                        Visibility="{Binding IsCensusLoading, Converter={StaticResource BoolToVisibility}}">
                                 <Ellipse Width="20" Height="20" StrokeThickness="2"
                                          Stroke="{StaticResource AccentStroke}" Fill="Transparent"
                                          StrokeDashArray="3,2"
@@ -647,7 +652,7 @@
                             <TextBlock Text="{x:Static res:Strings.PreviewFolderTypes}"
                                        Style="{StaticResource PaneText}"
                                        FontWeight="SemiBold" Margin="0,16,0,6"
-                                       Visibility="{Binding Preview.IsCensusLoading, Converter={StaticResource InverseBoolToVisibility}}"/>
+                                       Visibility="{Binding IsCensusLoading, Converter={StaticResource InverseBoolToVisibility}}"/>
 
                             <!-- Empty folder: say so instead of leaving a blank panel. -->
                             <TextBlock Text="{x:Static res:Strings.PreviewFolderEmpty}">
@@ -657,8 +662,8 @@
                                         <Style.Triggers>
                                             <MultiDataTrigger>
                                                 <MultiDataTrigger.Conditions>
-                                                    <Condition Binding="{Binding Preview.FolderTypes.Count}" Value="0"/>
-                                                    <Condition Binding="{Binding Preview.IsCensusLoading}" Value="False"/>
+                                                    <Condition Binding="{Binding FolderTypes.Count}" Value="0"/>
+                                                    <Condition Binding="{Binding IsCensusLoading}" Value="False"/>
                                                 </MultiDataTrigger.Conditions>
                                                 <Setter Property="Visibility" Value="Visible"/>
                                             </MultiDataTrigger>
@@ -667,7 +672,7 @@
                                 </TextBlock.Style>
                             </TextBlock>
 
-                            <ItemsControl ItemsSource="{Binding Preview.FolderTypes}">
+                            <ItemsControl ItemsSource="{Binding FolderTypes}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <!-- Bars are scaled against the biggest bucket,
@@ -706,18 +711,18 @@
                         this is a plain list of names, in the census's
                         clothes so the two read as one panel.
                     -->
-                    <ScrollViewer Visibility="{Binding Preview.Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Archive}"
+                    <ScrollViewer Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Archive}"
                                   VerticalScrollBarVisibility="Auto" Padding="12,10,12,10">
                         <StackPanel>
-                            <TextBlock Text="{Binding Preview.FolderTitle}"
+                            <TextBlock Text="{Binding FolderTitle}"
                                        Style="{StaticResource PaneText}"
                                        FontSize="14" FontWeight="SemiBold"
                                        TextTrimming="CharacterEllipsis"/>
-                            <TextBlock Text="{Binding Preview.ArchiveHeadline}"
+                            <TextBlock Text="{Binding ArchiveHeadline}"
                                        Style="{StaticResource PaneDim}"
                                        Margin="0,4,0,10" TextWrapping="Wrap"/>
 
-                            <ItemsControl ItemsSource="{Binding Preview.ArchiveEntries}">
+                            <ItemsControl ItemsSource="{Binding ArchiveEntries}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <Grid Margin="0,2,0,2">
@@ -742,22 +747,22 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
 
-                            <TextBlock Text="{Binding Preview.ArchiveMore}"
+                            <TextBlock Text="{Binding ArchiveMore}"
                                        Style="{StaticResource PaneDim}"
                                        Margin="0,8,0,0"
-                                       Visibility="{Binding Preview.HasArchiveMore, Converter={StaticResource BoolToVisibility}}"/>
+                                       Visibility="{Binding HasArchiveMore, Converter={StaticResource BoolToVisibility}}"/>
                         </StackPanel>
                     </ScrollViewer>
 
                     <!-- Placeholder (None / Unsupported) -->
-                    <TextBlock Text="{Binding Preview.PlaceholderText}"
+                    <TextBlock Text="{Binding PlaceholderText}"
                                Style="{StaticResource PaneDim}"
                                HorizontalAlignment="Center"
                                VerticalAlignment="Center"
-                               Visibility="{Binding Preview.IsPlaceholderVisible, Converter={StaticResource BoolToVisibility}}"/>
+                               Visibility="{Binding IsPlaceholderVisible, Converter={StaticResource BoolToVisibility}}"/>
 
                     <!-- Loading spinner — overlays content while content loads -->
-                    <Grid Visibility="{Binding Preview.IsLoading, Converter={StaticResource BoolToVisibility}}"
+                    <Grid Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisibility}}"
                           Background="{StaticResource LoadingVeil}"
                           IsHitTestVisible="False">
                         <Ellipse Width="32" Height="32" StrokeThickness="3"
@@ -783,10 +788,11 @@
                     </Grid>
                 </Grid>
 
-                <!-- Summary footer -->
+                <!-- Summary footer; absent on the second half of a split (ShowFooter) -->
                 <Border Grid.Row="1"
                         BorderBrush="{StaticResource Separator}" BorderThickness="0,1,0,0"
-                        Padding="8,6" Background="{StaticResource ChromeBackground}">
+                        Padding="8,6" Background="{StaticResource ChromeBackground}"
+                        Visibility="{Binding ShowFooter, Converter={StaticResource BoolToVisibility}}">
                     <StackPanel>
                         <!--
                             The file's details, and — for RAW — the switch
@@ -809,7 +815,7 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0"
-                                       Text="{Binding Preview.Summary}"
+                                       Text="{Binding Summary}"
                                        FontSize="11" Foreground="{StaticResource TextSecondary}"
                                        TextWrapping="Wrap"/>
                             <ToggleButton x:Name="RawToggle" Grid.Column="1"
@@ -820,8 +826,8 @@
                                           FontSize="11"
                                           Focusable="False"
                                           ToolTip="{x:Static res:Strings.PreviewRawToggleHint}"
-                                          IsChecked="{Binding Preview.ShowRawDecode, Mode=TwoWay}"
-                                          Visibility="{Binding Preview.IsRawImage, Converter={StaticResource BoolToVisibility}}"/>
+                                          IsChecked="{Binding ShowRawDecode, Mode=TwoWay}"
+                                          Visibility="{Binding IsRawImage, Converter={StaticResource BoolToVisibility}}"/>
                         </Grid>
 
                         <!--
@@ -831,16 +837,16 @@
                             "somebody else's", offer the way over to it.
                         -->
                         <StackPanel Orientation="Horizontal" Margin="0,6,0,0"
-                                    Visibility="{Binding Preview.HasLinkTarget, Converter={StaticResource BoolToVisibility}}">
+                                    Visibility="{Binding HasLinkTarget, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="{x:Static res:Strings.PreviewLinkTarget}"
                                        FontSize="11" Foreground="{StaticResource TextDim}" VerticalAlignment="Center"/>
-                            <TextBlock Text="{Binding Preview.LinkTargetName}"
+                            <TextBlock Text="{Binding LinkTargetName}"
                                        FontSize="11" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"
                                        Margin="4,0,0,0" MaxWidth="220"
                                        TextTrimming="CharacterEllipsis"
-                                       ToolTip="{Binding Preview.LinkTarget}"/>
+                                       ToolTip="{Binding LinkTarget}"/>
                             <Button Content="{x:Static res:Strings.PreviewGoToTarget}"
-                                    Command="{Binding Preview.GoToLinkTargetCommand}"
+                                    Command="{Binding GoToLinkTargetCommand}"
                                     ToolTip="{x:Static res:Strings.PreviewGoToTargetHint}"
                                     Margin="8,0,0,0" Padding="6,0" FontSize="11"
                                     VerticalAlignment="Center"/>
@@ -854,27 +860,27 @@
                             for any companion at all.
                         -->
                         <StackPanel Margin="0,6,0,0"
-                                    Visibility="{Binding Preview.HasCompanions, Converter={StaticResource BoolToVisibility}}">
+                                    Visibility="{Binding HasCompanions, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock FontSize="11" Foreground="{StaticResource TextDim}" TextWrapping="Wrap">
-                                <Run Text="{x:Static res:Strings.PreviewIntegrated}"/><Run Text=" "/><Run Text="{Binding Preview.CompanionFiles, Mode=OneWay}"/>
+                                <Run Text="{x:Static res:Strings.PreviewIntegrated}"/><Run Text=" "/><Run Text="{Binding CompanionFiles, Mode=OneWay}"/>
                             </TextBlock>
 
                             <!-- Unity .meta — the GUID, and a button to take it away -->
                             <StackPanel Orientation="Horizontal" Margin="0,3,0,0"
-                                        Visibility="{Binding Preview.HasUnityGuid, Converter={StaticResource BoolToVisibility}}">
+                                        Visibility="{Binding HasUnityGuid, Converter={StaticResource BoolToVisibility}}">
                                 <TextBlock Text="GUID" FontSize="11" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"/>
-                                <TextBox Text="{Binding Preview.UnityGuid, Mode=OneWay}"
+                                <TextBox Text="{Binding UnityGuid, Mode=OneWay}"
                                          IsReadOnly="True" IsReadOnlyCaretVisible="True"
                                          FontFamily="Consolas" FontSize="11"
                                          BorderThickness="0" Background="Transparent"
                                          Margin="6,0,0,0" MinWidth="0" Padding="0"
                                          VerticalAlignment="Center"/>
-                                <Button Content="{x:Static res:Strings.ActionCopy}" Command="{Binding Preview.CopyGuidCommand}"
+                                <Button Content="{x:Static res:Strings.ActionCopy}" Command="{Binding CopyGuidCommand}"
                                         ToolTip="{x:Static res:Strings.PreviewCopyGuid}"
                                         Margin="4,0,0,0" Padding="4,0" FontSize="11"
                                         VerticalAlignment="Center"/>
                             </StackPanel>
-                            <TextBlock Text="{Binding Preview.UnityDetail}"
+                            <TextBlock Text="{Binding UnityDetail}"
                                        FontSize="11" Foreground="{StaticResource TextDim}" TextWrapping="Wrap"/>
                         </StackPanel>
 
@@ -894,21 +900,21 @@
                             yet"); the block above was hiding the offer.
                         -->
                         <StackPanel Orientation="Horizontal" Margin="0,6,0,0"
-                                    Visibility="{Binding Preview.HasRating, Converter={StaticResource BoolToVisibility}}">
+                                    Visibility="{Binding HasRating, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="{x:Static res:Strings.PreviewRating}" FontSize="11" Foreground="{StaticResource TextSecondary}"
                                        VerticalAlignment="Center" Margin="0,0,6,0"/>
                             <Button Style="{StaticResource RatingStar}" CommandParameter="1"
-                                    Content="{Binding Preview.Rank, Converter={StaticResource RankStar}, ConverterParameter=1}"/>
+                                    Content="{Binding Rank, Converter={StaticResource RankStar}, ConverterParameter=1}"/>
                             <Button Style="{StaticResource RatingStar}" CommandParameter="2"
-                                    Content="{Binding Preview.Rank, Converter={StaticResource RankStar}, ConverterParameter=2}"/>
+                                    Content="{Binding Rank, Converter={StaticResource RankStar}, ConverterParameter=2}"/>
                             <Button Style="{StaticResource RatingStar}" CommandParameter="3"
-                                    Content="{Binding Preview.Rank, Converter={StaticResource RankStar}, ConverterParameter=3}"/>
+                                    Content="{Binding Rank, Converter={StaticResource RankStar}, ConverterParameter=3}"/>
                             <Button Style="{StaticResource RatingStar}" CommandParameter="4"
-                                    Content="{Binding Preview.Rank, Converter={StaticResource RankStar}, ConverterParameter=4}"/>
+                                    Content="{Binding Rank, Converter={StaticResource RankStar}, ConverterParameter=4}"/>
                             <Button Style="{StaticResource RatingStar}" CommandParameter="5"
-                                    Content="{Binding Preview.Rank, Converter={StaticResource RankStar}, ConverterParameter=5}"/>
+                                    Content="{Binding Rank, Converter={StaticResource RankStar}, ConverterParameter=5}"/>
 
-                            <ItemsControl ItemsSource="{Binding Preview.ColorLabelChoices}"
+                            <ItemsControl ItemsSource="{Binding ColorLabelChoices}"
                                           Margin="10,0,0,0" VerticalAlignment="Center">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
@@ -922,9 +928,21 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
 
-                            <TextBlock Text="{Binding Preview.CustomColorLabel}"
+                            <TextBlock Text="{Binding CustomColorLabel}"
                                        FontSize="11" Foreground="{StaticResource TextDim}"
                                        VerticalAlignment="Center" Margin="8,0,0,0"/>
+
+                            <!--
+                                Several files selected: the stars and the
+                                swatches show the one on screen, but a click
+                                writes to all of them - and the click must
+                                not be the first the user hears of it.
+                            -->
+                            <TextBlock Text="{Binding RatingOthers}"
+                                       ToolTip="{Binding RatingOthersHint}"
+                                       FontSize="11" Foreground="{StaticResource TextDim}"
+                                       VerticalAlignment="Center" Margin="8,0,0,0"
+                                       Visibility="{Binding HasRatingOthers, Converter={StaticResource BoolToVisibility}}"/>
                         </StackPanel>
 
                         <!--
@@ -934,7 +952,7 @@
                             message that matters most is the one about a
                             file that had no companions a moment ago.
                         -->
-                        <TextBlock Text="{Binding Preview.CompanionStatus}"
+                        <TextBlock Text="{Binding CompanionStatus}"
                                    FontSize="11" Foreground="{StaticResource TextDim}" TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>

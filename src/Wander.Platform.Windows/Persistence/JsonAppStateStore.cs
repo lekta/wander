@@ -14,12 +14,22 @@ public sealed class JsonAppStateStore : IAppStateStore {
     };
 
     private readonly string _filePath;
+    private readonly InstanceLock _owner;
 
 
-    public JsonAppStateStore() {
+    /// <param name="owner">
+    /// Who owns the file - see <see cref="InstanceLock"/>. Asked before
+    /// every write, never before a read: a yielding instance still starts
+    /// from the state the owner saved.
+    /// </param>
+    public JsonAppStateStore(InstanceLock owner) {
         Directory.CreateDirectory(AppPaths.DataRoot);
         _filePath = AppPaths.StateFile;
+        _owner = owner;
     }
+
+
+    public bool IsReadOnly => _owner.IsYielding;
 
 
     public AppState Load() {
@@ -36,6 +46,10 @@ public sealed class JsonAppStateStore : IAppStateStore {
     }
 
     public void Save(AppState state) {
+        if (IsReadOnly) {
+            return;
+        }
+
         try {
             // Write-then-rename so a crash mid-write can't leave a truncated
             // state.json — the old file stays intact until the new one is

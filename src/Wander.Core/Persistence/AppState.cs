@@ -120,6 +120,14 @@ public sealed record SessionState {
     public double PreviewWidth { get; init; } = 280;
 
     /// <summary>
+    /// Whether the folders pane on the left is on screen at all. Off, the
+    /// pane is put away with its width kept (<see cref="FoldersWidth"/>),
+    /// so showing it again brings it back as it was. On for a file written
+    /// before this field existed.
+    /// </summary>
+    public bool IsFoldersVisible { get; init; } = true;
+
+    /// <summary>
     /// Width of the folders pane on the left, in pixels - a share of
     /// <see cref="LayoutWindowWidth"/> like the two sizes beside it. The
     /// default is the grid's own; a file written before this field existed

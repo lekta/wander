@@ -49,7 +49,16 @@ public static class PlatformBootstrapper {
         // model is up; until then the cache stays idle.
         var thumbs = new ThumbnailDiskCache(AppPaths.Thumbs, logger);
         ServiceLocator.Register<IIconProvider>(new SystemIconProvider(thumbs));
-        ServiceLocator.Register<IAppStateStore>(new JsonAppStateStore());
+        // Who owns state.json under this root. The instance the user runs
+        // holds the mark; one started with --yield (Rider) only looks for
+        // it, and stops writing the moment it is found.
+        var owner = new InstanceLock(AppPaths.DataRoot, AppPaths.Yields, logger);
+        if (owner.Yields) {
+            logger.Info(owner.IsYielding
+                ? "Started with --yield: the owning instance is running, state.json will not be written"
+                : "Started with --yield: no owning instance yet, state.json is written until one appears");
+        }
+        ServiceLocator.Register<IAppStateStore>(new JsonAppStateStore(owner));
         ServiceLocator.Register<IFileLockInspector>(new RestartManagerLockInspector());
         ServiceLocator.Register<IShortcutService>(new ShellShortcutService());
         ServiceLocator.Register<IShellNamespace>(new WindowsShellNamespace(logger));

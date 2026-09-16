@@ -24,6 +24,7 @@ using Wander.Core.Menu;
 using Wander.Core.Navigation;
 using Wander.Core.Operations;
 using Wander.Core.Persistence;
+using Wander.Core.Preview;
 using Wander.Core.Search;
 using Wander.Core.Shell;
 using Wander.Core.Undo;
@@ -135,6 +136,9 @@ public sealed class MainViewModel : ObservableObject {
     private readonly ClipboardController _clipboard;
 
     private bool _isBookmarksExpanded = true;
+    private bool _isFoldersVisible = true;
+    private bool _isPreviewSplit;
+    private (FileSystemEntry First, FileSystemEntry Second)? _previewPair;
     private IReadOnlyList<NavigationStop> _persistedExpandedPaths = Array.Empty<NavigationStop>();
     private string? _missingFolderPath;
 
@@ -255,10 +259,29 @@ public sealed class MainViewModel : ObservableObject {
         Preview = new PreviewController(
             ServiceLocator.TryGet<IImageMetadataReader>(),
             _companionMetadata);
+        // A click in the footer is about the whole selection the shown file
+        // is part of - split or not: the split only doubles the picture,
+        // the footer under it stays the one footer of the selection.
         Preview.RatingRequested += (_, request) =>
-            request.Rating = Ratings.ApplyToPrimary(request.Entry, request.Field, request.Value);
+            request.Rating = ApplyRatingFromPane(request, wholeSelection: true);
         Preview.RevealRequested += (_, path) => RevealPath(path);
-        Ratings.CompanionsChanged += (_, _) => Preview.ReloadCompanions();
+        PreviewSecond = new PreviewController(
+            ServiceLocator.TryGet<IImageMetadataReader>(),
+            _companionMetadata) { ShowFooter = false };
+        PreviewSecond.RatingRequested += (_, request) =>
+            request.Rating = ApplyRatingFromPane(request, wholeSelection: true);
+        PreviewSecond.RevealRequested += (_, path) => RevealPath(path);
+        // One RAW switch for both halves: it lives in the footer, and the
+        // footer belongs to the selection, not to the upper picture.
+        Preview.PropertyChanged += (_, e) => {
+            if (e.PropertyName == nameof(PreviewController.ShowRawDecode)) {
+                PreviewSecond.ShowRawDecode = Preview.ShowRawDecode;
+            }
+        };
+        Ratings.CompanionsChanged += (_, _) => {
+            Preview.ReloadCompanions();
+            PreviewSecond.ReloadCompanions();
+        };
 
         _nav = new NavigationController(
             new NavigationService(), _fs, TryGetShellNamespace(), _log);
@@ -317,7 +340,7 @@ public sealed class MainViewModel : ObservableObject {
         FilterColorChoices = ColorLabelViewModel.CreateChoices();
         SetFilterRankCommand = new RelayCommand(p => SetFilterRank(p as string));
         SetRankForSelectionCommand = new RelayCommand(p => SetRankForSelection(p as string));
-        SetFilterColorCommand = new RelayCommand(p => SetFilterColor(p as string));
+        SetFilterColorCommand = new RelayCommand(SetFilterColor);
         ClearRatingFilterCommand = new RelayCommand(_ => ClearRatingFilter(), _ => HasRatingFilter);
         SetSortKeyCommand = new RelayCommand(p => SetSortKey(p as string));
         ToggleSortAscendingCommand = new RelayCommand(_ => Settings.SortAscending = !Settings.SortAscending);
@@ -346,6 +369,7 @@ public sealed class MainViewModel : ObservableObject {
             _ => _selectedEntries.Count > 0 && _nav.Current is not null && !IsCurrentShellNamespace);
         OpenJournalCommand = new RelayCommand(_ => OpenJournal(), _ => Journal.Count > 0);
         TogglePreviewCommand = new RelayCommand(_ => IsPreviewVisible = !IsPreviewVisible);
+        ToggleFoldersCommand = new RelayCommand(_ => IsFoldersVisible = !IsFoldersVisible);
         UndoCommand = new RelayCommand(_ => UndoLast(), _ => _undo.CanUndo);
         PermanentDeleteCommand = new RelayCommand(_ => _ = DeleteSelectedAsync(permanent: true), _ => _selectedEntries.Count > 0 && !IsCurrentShellNamespace);
         OpenLogFileCommand = new RelayCommand(_ => Shell.OpenLogFile(), _ => ServiceLocator.IsRegistered<ILogFile>());
@@ -466,6 +490,9 @@ public sealed class MainViewModel : ObservableObject {
         // a change worth saving.
         Settings.PropertyChanged += OnSettingsChanged;
         Trees.ExpansionChanged += (_, _) => SaveState();
+        // The restored view mode and palette decide the surround; the panes
+        // were built before either was known.
+        PushPalette();
     }
 
 
@@ -532,9 +559,31 @@ public sealed class MainViewModel : ObservableObject {
     /// <summary>
     /// Owns the preview pane content (kind, image / text / code / web,
     /// footer summary). MainVM only feeds it selection / folder / visibility
-    /// — XAML binds to <c>Preview.X</c> directly.
+    /// — the pane takes it as its DataContext and binds to it directly.
     /// </summary>
     public PreviewController Preview { get; }
+
+    /// <summary>
+    /// The other half of a split pane: the second of exactly two selected
+    /// files the pane can draw (<see cref="PreviewPair"/>). Fed only while
+    /// <see cref="IsPreviewSplit"/> is on; the rest of the time it holds
+    /// nothing and draws nothing.
+    /// </summary>
+    public PreviewController PreviewSecond { get; }
+
+    /// <summary>
+    /// Two files side by side in the preview column. Decided by the
+    /// selection, not by a setting: it comes on with the pair and goes
+    /// off with it.
+    /// </summary>
+    public bool IsPreviewSplit {
+        get => _isPreviewSplit;
+        private set {
+            if (SetField(ref _isPreviewSplit, value)) {
+                PreviewSecond.SetVisible(_isPreviewVisible && value);
+            }
+        }
+    }
 
     /// <summary>
     /// User preferences. XAML binds to this (e.g. tile sizes) and the
@@ -638,7 +687,13 @@ public sealed class MainViewModel : ObservableObject {
     /// </summary>
     public string? CaretPath {
         get => _caretPath;
-        set => SetField(ref _caretPath, value);
+        set {
+            // Inside a multi-selection the caret is the file the user just
+            // added - the one the preview should be showing.
+            if (SetField(ref _caretPath, value) && _selectedEntries.Count > 1) {
+                RefreshPreviewPrimary();
+            }
+        }
     }
 
     public FileSystemEntry? SelectedEntry {
@@ -655,7 +710,7 @@ public sealed class MainViewModel : ObservableObject {
                 return;
             }
             if (SetField(ref _selectedEntry, value)) {
-                Preview.SetPrimary(value);
+                RefreshPreviewPrimary();
             }
         }
     }
@@ -682,10 +737,67 @@ public sealed class MainViewModel : ObservableObject {
             }
             if (SetField(ref _selectedEntries, value)) {
                 NoteSelectionKind();
-                Preview.SetSelection(value);
+                SyncPreviewSelection();
                 Raise(nameof(SelectionSummary));
             }
         }
+    }
+
+    /// <summary>
+    /// Hands the selection to the preview. The footer always describes the
+    /// whole selection; the picture above it is the active file, or - when
+    /// the selection is exactly two files the pane can draw - both of
+    /// them, upper one first in listing order whichever was clicked last
+    /// (<see cref="PrimaryForPane"/>).
+    /// </summary>
+    private void SyncPreviewSelection() {
+        var pair = PreviewPair.Of(_selectedEntries, Entries);
+        _previewPair = pair;
+        Preview.SetSelection(_selectedEntries);
+        if (pair is { } p) {
+            PreviewSecond.SetSelection(new[] { p.Second });
+            PreviewSecond.SetPrimary(p.Second);
+        } else {
+            PreviewSecond.SetSelection(Array.Empty<FileSystemEntry>());
+            PreviewSecond.SetPrimary(null);
+        }
+        RefreshPreviewPrimary();
+        IsPreviewSplit = pair is not null;
+    }
+
+    /// <summary>
+    /// Points the main pane at the file it should be showing. Called from
+    /// every setter that can change the answer, because the list reports
+    /// its current item, its selection and its caret as three separate
+    /// events in no fixed order; each call is cheap when nothing moved.
+    /// </summary>
+    private void RefreshPreviewPrimary() {
+        Preview.SetPrimary(PrimaryForPane(ActiveEntry()));
+    }
+
+    /// <summary>
+    /// The file the preview follows. In a multi-selection it is the row
+    /// with the focus rectangle when that row is part of the selection -
+    /// the one a Ctrl+click just added, which is what "show me this one
+    /// too" means; the list's own current item stays on the first row
+    /// selected and would show the wrong picture. One file selected, the
+    /// current item is the truth.
+    /// </summary>
+    private FileSystemEntry? ActiveEntry() {
+        if (_caretPath is { Length: > 0 } caret && _selectedEntries.Count > 1) {
+            foreach (var entry in _selectedEntries) {
+                if (PathsEqual(entry.FullPath, caret)) {
+                    return entry;
+                }
+            }
+        }
+
+        return _selectedEntry;
+    }
+
+    /// <summary>What the main pane shows: the upper file of a split pair, otherwise the active file.</summary>
+    private FileSystemEntry? PrimaryForPane(FileSystemEntry? entry) {
+        return _previewPair is { } p ? p.First : entry;
     }
 
     /// <summary>
@@ -780,8 +892,15 @@ public sealed class MainViewModel : ObservableObject {
         set {
             if (SetField(ref _viewMode, value)) {
                 Raise(nameof(ContentPalette));
+                PushPalette();
             }
         }
+    }
+
+    /// <summary>The preview panes draw on the same surround as the list; they are told when it changes.</summary>
+    private void PushPalette() {
+        Preview.SetPalette(ContentPalette);
+        PreviewSecond.SetPalette(ContentPalette);
     }
 
     /// <summary>
@@ -810,6 +929,22 @@ public sealed class MainViewModel : ObservableObject {
         set {
             if (SetField(ref _isPreviewVisible, value)) {
                 Preview.SetVisible(value);
+                PreviewSecond.SetVisible(value && _isPreviewSplit);
+                SaveState();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Whether the folders pane (bookmarks and the drives tree) is on
+    /// screen. Put away, its width is kept in <see cref="FoldersWidth"/>
+    /// and comes back with it - the same arrangement as the preview pane
+    /// and <see cref="PreviewWidth"/>.
+    /// </summary>
+    public bool IsFoldersVisible {
+        get => _isFoldersVisible;
+        set {
+            if (SetField(ref _isFoldersVisible, value)) {
                 SaveState();
             }
         }
@@ -820,6 +955,7 @@ public sealed class MainViewModel : ObservableObject {
         set {
             double clamped = Math.Max(PreviewMinWidth, Math.Min(PaneCeiling(_windowWidth, ListMinWidth), value));
             if (SetField(ref _previewWidth, clamped)) {
+                RebasePaneSizes();
                 SaveState();
             }
         }
@@ -836,6 +972,7 @@ public sealed class MainViewModel : ObservableObject {
         set {
             double clamped = Math.Max(FoldersMinWidth, Math.Min(PaneCeiling(_windowWidth, ListMinWidth), value));
             if (SetField(ref _foldersWidth, clamped)) {
+                RebasePaneSizes();
                 SaveState();
             }
         }
@@ -852,9 +989,29 @@ public sealed class MainViewModel : ObservableObject {
         set {
             double clamped = Math.Max(BookmarksMinHeight, Math.Min(PaneCeiling(_windowHeight, TreeMinHeight), value));
             if (SetField(ref _bookmarksHeight, clamped)) {
+                RebasePaneSizes();
                 SaveState();
             }
         }
+    }
+
+    /// <summary>
+    /// What <c>state.json</c> keeps is not what is on screen but what the
+    /// user set, with the window they set it in. On a window of another
+    /// size the panes are shown scaled (<see cref="RestorePaneSizes"/>),
+    /// and saving those scaled sizes back was what made a monitor - laptop
+    /// - monitor round trip come home a few pixels off: rounding, and the
+    /// minimums, each way. So the pair is rebased only here - the user
+    /// dragged a divider, and all three sizes are now theirs at this
+    /// window - and once at the first start with a file that has no
+    /// window size beside its pane sizes.
+    /// </summary>
+    private void RebasePaneSizes() {
+        _savedPreviewWidth = _previewWidth;
+        _savedFoldersWidth = _foldersWidth;
+        _savedBookmarksHeight = _bookmarksHeight;
+        _savedWindowWidth = _windowWidth;
+        _savedWindowHeight = _windowHeight;
     }
 
     /// <summary>
@@ -905,6 +1062,7 @@ public sealed class MainViewModel : ObservableObject {
     public RelayCommand PermanentDeleteCommand { get; }
     public RelayCommand OpenLogFileCommand { get; }
     public RelayCommand ToggleBookmarksCommand { get; }
+    public RelayCommand ToggleFoldersCommand { get; }
     public RelayCommand AddBookmarkCommand { get; }
 
     public RelayCommand RemoveBookmarkCommand { get; }
@@ -936,7 +1094,15 @@ public sealed class MainViewModel : ObservableObject {
 
     public string UndoTooltip => _undo.NextDescription is { } next ? $"Undo: {next}" : "Nothing to undo";
 
-    public string WindowTitle => _nav.WindowTitle;
+    /// <summary>
+    /// The folder's name - with a warning appended while this instance is
+    /// standing aside for the installed copy and saving nothing
+    /// (<see cref="IAppStateStore.IsReadOnly"/>): a bookmark added in such
+    /// a session is gone at the next start, and the title is where that is
+    /// said before it happens.
+    /// </summary>
+    public string WindowTitle =>
+        _stateStore.IsReadOnly ? string.Format(Strings.TitleYielding, _nav.WindowTitle) : _nav.WindowTitle;
 
 
     public void NavigateTo(string path, NavigationSource source = NavigationSource.External) {
@@ -1218,6 +1384,21 @@ public sealed class MainViewModel : ObservableObject {
                 _savedBookmarksHeight, _savedWindowHeight, windowHeight, BookmarksMinHeight, TreeMinHeight);
             Raise(nameof(BookmarksHeight));
         }
+
+        // One line per session, so a report of "the pane came back wrong"
+        // arrives with the numbers it is about.
+        _log.Info(
+            $"Pane sizes: window {windowWidth:F0}x{windowHeight:F0}, set at {_savedWindowWidth:F0}x{_savedWindowHeight:F0}; " +
+            $"folders {_foldersWidth:F0} (saved {_savedFoldersWidth:F0}), preview {_previewWidth:F0} (saved {_savedPreviewWidth:F0}), " +
+            $"bookmarks {_bookmarksHeight:F0} (saved {_savedBookmarksHeight:F0})");
+
+        // A file from before the window size was kept beside the sizes,
+        // or one with a size missing: what is on screen now becomes the
+        // pair, and from here on it is exact.
+        if (_savedWindowWidth <= 0 || _savedWindowHeight <= 0
+            || _savedPreviewWidth <= 0 || _savedFoldersWidth <= 0 || _savedBookmarksHeight <= 0) {
+            RebasePaneSizes();
+        }
     }
 
     /// <summary>
@@ -1262,6 +1443,9 @@ public sealed class MainViewModel : ObservableObject {
         _isPreviewVisible = session.IsPreviewVisible;
         Raise(nameof(IsPreviewVisible));
         Preview.SetVisible(_isPreviewVisible);
+        PreviewSecond.SetVisible(_isPreviewVisible && _isPreviewSplit);
+        _isFoldersVisible = session.IsFoldersVisible;
+        Raise(nameof(IsFoldersVisible));
         // Not applied here: what a saved pane size means depends on the
         // window it was saved from and the one it is coming back into, and
         // there is no window yet - the constructor runs before it exists.
@@ -1381,12 +1565,15 @@ public sealed class MainViewModel : ObservableObject {
                     .Select(p => new FolderViewMode(p, _manualViewModes[p].ToString()))
                     .ToArray(),
                 ExpandedPaths = Trees.CollectExpanded(),
+                // The pair the user set, not the scaled sizes on screen -
+                // see RebasePaneSizes.
                 IsPreviewVisible = _isPreviewVisible,
-                PreviewWidth = _previewWidth,
-                FoldersWidth = _foldersWidth,
-                BookmarksHeight = _bookmarksHeight,
-                LayoutWindowWidth = _windowWidth,
-                LayoutWindowHeight = _windowHeight,
+                PreviewWidth = _savedPreviewWidth,
+                IsFoldersVisible = _isFoldersVisible,
+                FoldersWidth = _savedFoldersWidth,
+                BookmarksHeight = _savedBookmarksHeight,
+                LayoutWindowWidth = _savedWindowWidth,
+                LayoutWindowHeight = _savedWindowHeight,
                 IsBookmarksExpanded = _isBookmarksExpanded,
                 RecentPaths = _nav.RecentPaths.ToArray(),
             },
@@ -1477,7 +1664,7 @@ public sealed class MainViewModel : ObservableObject {
             ExpandCurrentInTrees();
         }
         using (PerfLog.Measure("nav.preview")) {
-            Preview.SetCurrentFolder(_nav.Current, WindowTitle);
+            Preview.SetCurrentFolder(_nav.Current, _nav.WindowTitle);
         }
         using (PerfLog.Measure("nav.watch")) {
             UpdateFolderWatch();
@@ -2077,11 +2264,70 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
-        var target = _selectedEntries.Count > 0
+        Ratings.Apply(RatingTargets(), RatingField.Rank, rank);
+    }
+
+    /// <summary>
+    /// Sets a colour label on the current selection - the gallery's
+    /// Shift + digits. Unlike the stars, pressing the colour every file
+    /// already carries takes it away again (<see cref="RatingToggle"/>);
+    /// zero clears outright.
+    /// </summary>
+    public void SetColorForSelection(int color) {
+        if (color < 0 || color > ColorLabels.Max) {
+            return;
+        }
+
+        var targets = RatingTargets();
+        int value = color == 0
+            ? 0
+            : RatingToggle.Resolve(color, targets.Select(e => e.Rating?.ColorLabel));
+
+        Ratings.Apply(targets, RatingField.ColorLabel, value);
+    }
+
+    /// <summary>What a rating gesture on the list is about: the selection, or the current item alone.</summary>
+    private IReadOnlyList<FileSystemEntry> RatingTargets() {
+        return _selectedEntries.Count > 0
             ? _selectedEntries
             : _selectedEntry is { } single ? new[] { single } : Array.Empty<FileSystemEntry>();
+    }
 
-        Ratings.Apply(target, RatingField.Rank, rank);
+    /// <summary>
+    /// A star or a swatch clicked in a preview footer. The click is about
+    /// every selected file when the pane shows one of them
+    /// (<paramref name="wholeSelection"/>), and about the pane's own file
+    /// otherwise; whether it sets or clears is decided against all of
+    /// them at once. The answer is what the clicked file's sidecar says
+    /// afterwards - the footer redraws from it.
+    /// </summary>
+    private SidecarRating? ApplyRatingFromPane(RatingRequestedEventArgs request, bool wholeSelection) {
+        var entry = request.Entry;
+        bool inSelection = _selectedEntries.Any(e => PathsEqual(e.FullPath, entry.FullPath));
+        IReadOnlyList<FileSystemEntry> targets = wholeSelection && inSelection && _selectedEntries.Count > 1
+            ? _selectedEntries
+            : new[] { entry };
+
+        // The pane's own reading of its file is fresher than the row's:
+        // the row learns of a rating from a pass, the pane read the sidecar.
+        int value = RatingToggle.Resolve(
+            request.Clicked,
+            targets.Select(e => PathsEqual(e.FullPath, entry.FullPath)
+                ? request.Current
+                : request.Field == RatingField.Rank ? e.Rating?.Rank : e.Rating?.ColorLabel));
+
+        var results = Ratings.Apply(targets, request.Field, value);
+        foreach (var result in results) {
+            if (PathsEqual(result.MainPath, entry.FullPath)) {
+                return result.Rating;
+            }
+        }
+
+        return entry.Rating;
+    }
+
+    private static bool PathsEqual(string a, string b) {
+        return string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
     }
 
 
@@ -2247,8 +2493,7 @@ public sealed class MainViewModel : ObservableObject {
         Raise(nameof(SelectedEntries));
         Raise(nameof(SelectedEntry));
         Raise(nameof(SelectionSummary));
-        Preview.SetSelection(selection);
-        Preview.SetPrimary(primary);
+        SyncPreviewSelection();
     }
 
 
@@ -2273,9 +2518,20 @@ public sealed class MainViewModel : ObservableObject {
         }
     }
 
-    /// <summary>A swatch in the filter bar. Same two gestures as the stars.</summary>
-    private void SetFilterColor(string? parameter) {
-        if (int.TryParse(parameter, out int color) && ReadFilterGesture() is { } toggle) {
+    /// <summary>
+    /// A swatch in the filter bar. Same two gestures as the stars. The
+    /// parameter arrives as the swatch's index - an <c>int</c> bound from
+    /// <c>ColorLabelViewModel</c>, not the string literal the stars carry;
+    /// reading it as a string is how the colour half of the bar did nothing
+    /// for a while.
+    /// </summary>
+    private void SetFilterColor(object? parameter) {
+        int color = parameter switch {
+            int i => i,
+            string s when int.TryParse(s, out int parsed) => parsed,
+            _ => -1,
+        };
+        if (color >= 0 && ReadFilterGesture() is { } toggle) {
             ClickColorFilter(color, toggle);
         }
     }
@@ -2675,6 +2931,7 @@ public sealed class MainViewModel : ObservableObject {
             // Cosmetic like the metrics below, but the pane derives its own
             // colours from it, so the derived property has to be told.
             Raise(nameof(ContentPalette));
+            PushPalette();
 
             return;
         }
@@ -3173,6 +3430,7 @@ public sealed class MainViewModel : ObservableObject {
             // A rating undo rewrites a sidecar the footer is already
             // showing; neither path above would touch it.
             Preview.ReloadCompanions();
+            PreviewSecond.ReloadCompanions();
         } catch (Exception ex) {
             _log.Error("Undo failed", ex);
             Status = string.Format(Strings.StatusUndoFailed, ex.Message);

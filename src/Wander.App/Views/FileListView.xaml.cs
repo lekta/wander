@@ -1100,30 +1100,39 @@ public partial class FileListView : UserControl {
     /// </para>
     ///
     /// <para>
-    /// Modifiers are left alone deliberately — <c>Ctrl</c> + digits are
-    /// window zones and <c>Ctrl</c> + <c>Shift</c> + digits are the view
-    /// modes, so a bare digit is the only shape free to mean this.
+    /// <c>Shift</c> + the same digits is the colour label - the second
+    /// thing a sidecar records, on the same keys. The other modifiers are
+    /// taken: <c>Ctrl</c> + digits are window zones and <c>Ctrl</c> +
+    /// <c>Shift</c> + digits are the view modes. The numeric keypad only
+    /// rates: with <c>Shift</c> held Windows turns it into Home / End and
+    /// the arrows, and those never arrive here as digits.
     /// </para>
     /// </summary>
     private bool TryRateFromKeyboard(Key key) {
         // A digit typed into the rename editor is part of the name. The
         // tunnelling handler sees it before the editor does, so the editor
         // has to be checked for here, as TryEnterList and TryGridStep do.
-        if (Vm.ViewMode != ViewMode.Gallery || Keyboard.Modifiers != ModifierKeys.None
+        var modifiers = Keyboard.Modifiers;
+        bool colour = modifiers == ModifierKeys.Shift;
+        if (Vm.ViewMode != ViewMode.Gallery || (modifiers != ModifierKeys.None && !colour)
             || Vm.RenamingPath is not null) {
             return false;
         }
 
-        int rank = key switch {
+        int index = key switch {
             >= Key.D0 and <= Key.D5 => key - Key.D0,
-            >= Key.NumPad0 and <= Key.NumPad5 => key - Key.NumPad0,
+            >= Key.NumPad0 and <= Key.NumPad5 when !colour => key - Key.NumPad0,
             _ => -1,
         };
-        if (rank < 0 || Vm.SelectedEntries.Count == 0) {
+        if (index < 0 || Vm.SelectedEntries.Count == 0) {
             return false;
         }
 
-        Vm.SetRankForSelection(rank.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        if (colour) {
+            Vm.SetColorForSelection(index);
+        } else {
+            Vm.SetRankForSelection(index.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
 
         return true;
     }

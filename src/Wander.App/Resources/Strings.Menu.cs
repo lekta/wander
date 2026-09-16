@@ -60,6 +60,12 @@ public static partial class Strings {
     /// <summary>Область просмотра</summary>
     public static string MenuQuickPreview => Get(nameof(MenuQuickPreview));
 
+    /// <summary>Панель папок</summary>
+    public static string MenuFoldersPane => Get(nameof(MenuFoldersPane));
+
+    /// <summary>Показать или скрыть панель папок (Ctrl+B)</summary>
+    public static string NavToggleFolders => Get(nameof(NavToggleFolders));
+
     /// <summary>Параметры</summary>
     public static string MenuOptions => Get(nameof(MenuOptions));
 

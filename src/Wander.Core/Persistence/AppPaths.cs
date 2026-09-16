@@ -23,6 +23,18 @@ public static class AppPaths {
     public const string EnvironmentVariable = "WANDER_DATA_DIR";
     public const string PortableFolderName = "data";
 
+    /// <summary>
+    /// <c>--yield</c>: this instance shares the data folder with the copy
+    /// the user actually runs, and gives way to it. What that means is the
+    /// state store's business (it stops writing <c>state.json</c> while
+    /// the other instance is alive); the flag is only parsed here, next to
+    /// the other things the command line says about the data folder. The
+    /// Rider launch profile passes it, so a Debug session on the real
+    /// bookmarks and layout never overwrites what the installed copy
+    /// saved a moment ago.
+    /// </summary>
+    public const string YieldOption = "--yield";
+
     private static string? _root;
     private static string _source = "default";
 
@@ -32,6 +44,9 @@ public static class AppPaths {
 
     /// <summary>Where the root came from ("arg", "portable", "env", "override", "default") - for the session log header.</summary>
     public static string Source => _source;
+
+    /// <summary>Started with <see cref="YieldOption"/>; see there.</summary>
+    public static bool Yields { get; private set; }
 
     public static string StateFile => Path.Combine(DataRoot, "state.json");
 
@@ -79,6 +94,8 @@ public static class AppPaths {
     /// once, before anything opens a file; calling it again re-resolves.
     /// </summary>
     public static void Resolve(IReadOnlyList<string> args) {
+        Yields = args.Any(a => a.Equals(YieldOption, StringComparison.OrdinalIgnoreCase));
+
         for (int i = 0; i < args.Count; i++) {
             string arg = args[i];
             if (arg.Equals(DataDirOption, StringComparison.OrdinalIgnoreCase) && i + 1 < args.Count) {

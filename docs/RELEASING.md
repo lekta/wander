@@ -44,10 +44,17 @@ Debug-сборка — на `master`. Снимок на теге — руков�
 
 ## Скрипты
 
-- `tools\publish.ps1 [-Run]` — тот же набор ключей, что у CI (Release,
-  win-x64, self-contained, один файл, сжатие); печатает размер и SHA256.
-  `dotnet run` и Rider дают Debug — стартует медленнее и ведёт себя иначе.
-  В Rider — конфигурации «Publish release exe» и «Run release exe».
+- `tools\publish.ps1 [-Run] [-Install [-InstallDir <папка>]]` — тот же
+  набор ключей, что у CI (Release, win-x64, self-contained, один файл,
+  сжатие); печатает размер, версию и SHA256. `dotnet run` и Rider дают
+  Debug — стартует медленнее и ведёт себя иначе. В Rider — конфигурации
+  «Publish release exe», «Run release exe», «Publish and install».
+  `-Install` кладёт exe в `C:\Programs\Wander` (или в `-InstallDir`) —
+  рабочую копию человека: запущенный `Wander.exe` переименовывается в
+  `Wander.exe.<время>.old` (образ держится по хендлу), новый встаёт на
+  место, старый экземпляр доживает, следующий запуск — новый; `.old`
+  подметаются следующим `-Install`. С `-Run` запускается установленная
+  копия. Упавшая сборка ничего не устанавливает.
 - `tools\version.ps1 <MAJOR.MINOR.PATCH> [-Suffix rc1|''] [-DryRun]` —
   проставляет три поля в `Directory.Build.props`, вставляет в CHANGELOG
   секцию с датой и заготовками `### Added` / `### Fixed` (`TODO`), добавляет

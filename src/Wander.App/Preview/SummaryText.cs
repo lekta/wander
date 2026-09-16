@@ -121,6 +121,46 @@ internal static class SummaryText {
 
 
     /// <summary>
+    /// What several pictures have in common, under the count. The same
+    /// order as one picture's line - body, exposure, pixels - with the two
+    /// or three values a field is allowed to vary over listed after a
+    /// comma, and a field that varies more than that left out
+    /// (<see cref="ShotSummary"/>). Nothing is said when nothing is shared.
+    /// </summary>
+    /// <param name="read">How many pictures were actually opened for it - fewer than <c>Shots</c> when the selection was capped.</param>
+    public static string ForShots(ShotSummary shots, int read) {
+        string headline = read < shots.Shots
+            ? string.Format(Strings.SummaryShotsSample, shots.Shots, read)
+            : string.Format(Strings.SummaryShots, shots.Shots);
+        if (shots.IsEmpty) {
+            return headline;
+        }
+
+        var parts = new List<string>();
+        if (shots.Cameras.Count > 0) {
+            parts.Add(string.Join(", ", shots.Cameras));
+        }
+        if (shots.Iso.Count > 0) {
+            parts.Add("ISO " + string.Join(", ", shots.Iso));
+        }
+        if (shots.Apertures.Count > 0) {
+            parts.Add(string.Join(", ", shots.Apertures));
+        }
+        if (shots.Shutters.Count > 0) {
+            parts.Add(string.Join(", ", shots.Shutters));
+        }
+        if (shots.FocalLengths.Count > 0) {
+            parts.Add(string.Join(", ", shots.FocalLengths));
+        }
+        if (shots.PixelSizes.Count > 0) {
+            parts.Add(string.Join(", ", shots.PixelSizes.Select(p => $"{p.Width} × {p.Height}")));
+        }
+
+        return headline + "\n" + string.Join("   •   ", parts);
+    }
+
+
+    /// <summary>
     /// What the camera recorded, in the order a photographer reads it:
     /// body, then exposure, then pixels, then when. Anything the file does
     /// not carry is simply absent rather than blank.

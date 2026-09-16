@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Wander (Debug, yields to the installed copy)": {
+      "commandName": "Project",
+      "commandLineArgs": "--yield"
+    }
+  }
+}

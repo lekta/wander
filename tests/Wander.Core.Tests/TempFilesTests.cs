@@ -2,6 +2,7 @@ using Wander.Core.Persistence;
 
 namespace Wander.Core.Tests;
 
+[Collection("AppPaths")]
 public class TempFilesTests {
     private const string Entry = @"D:\packs\photos.zip\raw\IMG.CR2";
 
