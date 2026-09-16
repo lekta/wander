@@ -99,7 +99,7 @@ public static partial class Strings {
     /// <summary>Удалить безвозвратно: всегда спрашивает, не откатывается</summary>
     public static string HotkeyDeleteForever => Get(nameof(HotkeyDeleteForever));
 
-    /// <summary>Переименовать прямо в строке списка: Enter — применить, Esc — отменить</summary>
+    /// <summary>Переименовать прямо в строке списка (Enter — применить, Esc — отменить); два и более — группой, в своём окне</summary>
     public static string HotkeyRename => Get(nameof(HotkeyRename));
 
     /// <summary>Создать папку</summary>

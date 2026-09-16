@@ -39,21 +39,30 @@ public class ActionApplicabilityTests {
     }
 
     [Fact]
-    public void MissingTool_TrumpsEverything() {
+    public void MissingTool_Counts_OnlyForAnActionThatWouldApply() {
         var needsFfmpeg = _forVideo with { RequiredTool = "ffmpeg" };
+        Func<string, bool> noFfmpeg = tool => tool != "ffmpeg";
 
         Assert.Equal(ActionState.ToolMissing,
-            ActionApplicability.For(needsFfmpeg, new[] { File("a.mp4") }, true, tool => tool != "ffmpeg"));
+            ActionApplicability.For(needsFfmpeg, new[] { File("a.mp4") }, true, noFfmpeg));
         Assert.Equal(ActionState.Applicable,
             ActionApplicability.For(needsFfmpeg, new[] { File("a.mp4") }, true, _ => true));
+        // Installing ffmpeg would not make it run on a picture, so there is
+        // nothing to hint at.
+        Assert.Equal(ActionState.NotForSelection,
+            ActionApplicability.For(needsFfmpeg, new[] { File("a.jpg") }, true, noFfmpeg));
+        Assert.Equal(ActionState.NeedsSelection,
+            ActionApplicability.For(needsFfmpeg, Array.Empty<FileSystemEntry>(), true, noFfmpeg));
     }
 
     [Fact]
-    public void ReasonKeys_ExplainEveryGreyState() {
-        Assert.Null(ActionApplicability.ReasonKey(ActionState.Applicable));
-        Assert.Equal(ActionApplicability.SelectFilesKey, ActionApplicability.ReasonKey(ActionState.NeedsSelection));
-        Assert.Equal(ActionApplicability.NotForSelectionKey, ActionApplicability.ReasonKey(ActionState.NotForSelection));
-        Assert.Equal(ActionApplicability.ToolMissingKey, ActionApplicability.ReasonKey(ActionState.ToolMissing));
+    public void MissingTool_OfAFolderAction_OnTheFolderOnScreen() {
+        var needsTool = _forFolders with { RequiredTool = "tool" };
+
+        Assert.Equal(ActionState.ToolMissing,
+            ActionApplicability.For(needsTool, Array.Empty<FileSystemEntry>(), true, _ => false));
+        Assert.Equal(ActionState.NeedsSelection,
+            ActionApplicability.For(needsTool, Array.Empty<FileSystemEntry>(), hasFolder: false, _ => false));
     }
 
 

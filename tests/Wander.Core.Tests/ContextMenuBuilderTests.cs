@@ -689,43 +689,49 @@ public class ContextMenuBuilderTests {
     }
 
 
-    // --- The header's "Операции" --------------------------------------------
+    // --- The header's "Actions" ----------------------------------------------
 
     [Fact]
-    public void Header_KeepsItsShape_WhateverIsSelected() {
+    public void Header_KeepsItsOrder_AndOffersOnlyWhatApplies() {
         var none = Header();
         var one = Header(File("a.txt"));
         var many = Header(File("a.txt"), File("b.txt"));
+        var archive = ContextMenuBuilder.Build(
+            SelectionOf(File("a.zip"), File("b.zip")) with { Place = MenuPlace.Header, SelectionIsArchive = true },
+            ContextMenuSettings.Default);
 
-        foreach (var menu in new[] { none, one, many }) {
+        foreach (var menu in new[] { none, one, many, archive }) {
             // Caption first: a disabled, command-less row saying what the
             // rows below are about.
             Assert.Equal(MenuCommandId.None, menu[0].Id);
             Assert.False(menu[0].IsEnabled);
             Assert.NotEmpty(menu[0].Header);
-            Assert.Equal(new[] {
-                MenuCommandId.BatchRename, MenuCommandId.ActionsSubmenu,
-                MenuCommandId.Extract, MenuCommandId.CreateShortcut, MenuCommandId.CopyPath, MenuCommandId.OpenInTerminal,
-            }, menu.Where(e => !e.IsSeparator && e.Id != MenuCommandId.None).Select(e => e.Id));
             AssertSeparatorsAreSane(menu);
+            // Whatever is there works: nothing is greyed without an action.
+            Assert.All(menu.Where(e => !e.IsSeparator && e.Id != MenuCommandId.None), e => Assert.True(e.IsEnabled));
+        }
+
+        Assert.Equal(new[] { MenuCommandId.ActionsSubmenu, MenuCommandId.CopyPath, MenuCommandId.OpenInTerminal }, Ids(none));
+        Assert.Equal(new[] { MenuCommandId.ActionsSubmenu, MenuCommandId.CreateShortcut, MenuCommandId.CopyPath }, Ids(one));
+        Assert.Equal(new[] {
+            MenuCommandId.BatchRename, MenuCommandId.ActionsSubmenu, MenuCommandId.CreateShortcut, MenuCommandId.CopyPath,
+        }, Ids(many));
+        Assert.Equal(new[] {
+            MenuCommandId.BatchRename, MenuCommandId.ActionsSubmenu,
+            MenuCommandId.Extract, MenuCommandId.CreateShortcut, MenuCommandId.CopyPath,
+        }, Ids(archive));
+
+        static IEnumerable<MenuCommandId> Ids(IReadOnlyList<MenuEntry> menu) {
+            return menu.Where(e => !e.IsSeparator && e.Id != MenuCommandId.None).Select(e => e.Id);
         }
     }
 
     [Fact]
-    public void Header_GreysAndExplains_InsteadOfHiding() {
-        var one = Header(File("a.txt"));
-        var mixed = Header(File("a.txt"), Dir("b"));
-        var many = Header(File("a.txt"), File("b.txt"));
-
-        Assert.False(Enabled(one, MenuCommandId.BatchRename));
-        Assert.Equal(BatchRenameGate.SelectTwoKey, Find(one, MenuCommandId.BatchRename)!.Tooltip);
-        Assert.Equal(BatchRenameGate.FilesOrFoldersKey, Find(mixed, MenuCommandId.BatchRename)!.Tooltip);
-        Assert.True(Enabled(many, MenuCommandId.BatchRename));
-        Assert.Null(Find(many, MenuCommandId.BatchRename)!.Tooltip);
-
-        Assert.False(Enabled(one, MenuCommandId.Extract));
-        Assert.Equal(ContextMenuBuilder.SelectArchiveKey, Find(one, MenuCommandId.Extract)!.Tooltip);
-        Assert.True(Enabled(Header(File("a.zip")), MenuCommandId.CopyPath));
+    public void Header_BatchRename_OnlyForTwoOrMoreOfOneKind() {
+        Assert.Null(Find(Header(File("a.txt")), MenuCommandId.BatchRename));
+        Assert.Null(Find(Header(File("a.txt"), Dir("b")), MenuCommandId.BatchRename));
+        Assert.True(Enabled(Header(File("a.txt"), File("b.txt")), MenuCommandId.BatchRename));
+        Assert.True(Enabled(Header(Dir("a"), Dir("b")), MenuCommandId.BatchRename));
     }
 
     [Fact]
@@ -735,11 +741,10 @@ public class ContextMenuBuilderTests {
         var folder = Header(Dir("d"));
 
         Assert.True(Enabled(none, MenuCommandId.OpenInTerminal));
-        Assert.False(Enabled(file, MenuCommandId.OpenInTerminal));
-        Assert.Equal(ContextMenuBuilder.SelectFolderKey, Find(file, MenuCommandId.OpenInTerminal)!.Tooltip);
+        Assert.Null(Find(file, MenuCommandId.OpenInTerminal));
         Assert.True(Enabled(folder, MenuCommandId.OpenInTerminal));
 
-        Assert.False(Enabled(none, MenuCommandId.CreateShortcut));
+        Assert.Null(Find(none, MenuCommandId.CreateShortcut));
         Assert.True(Enabled(file, MenuCommandId.CreateShortcut));
     }
 
@@ -755,33 +760,48 @@ public class ContextMenuBuilderTests {
         Assert.True(Enabled(archives, MenuCommandId.Extract));
         Assert.True(Enabled(inside, MenuCommandId.Extract));
         // Nothing else writes inside an archive.
-        Assert.False(Enabled(inside, MenuCommandId.BatchRename));
-        Assert.Equal(ContextMenuBuilder.ReadOnlyKey, Find(inside, MenuCommandId.BatchRename)!.Tooltip);
-        Assert.False(Enabled(inside, MenuCommandId.CreateShortcut));
+        Assert.Null(Find(inside, MenuCommandId.BatchRename));
+        Assert.Null(Find(inside, MenuCommandId.CreateShortcut));
+        Assert.Null(Find(inside, MenuCommandId.OpenInTerminal));
     }
 
     [Fact]
-    public void Header_ActionsSubmenu_ExplainsEachGreyRow_AndLeadsToSettings() {
-        var needsFfmpeg = _forVideo with { Id = "ff", RequiredTool = "ffmpeg" };
+    public void Header_ActionsSubmenu_GreysOnlyAMissingTool_AndLeadsToSettings() {
+        var videoNeedsFfmpeg = _forVideo with { Id = "ff-video", RequiredTool = "ffmpeg" };
+        var imagesNeedFfmpeg = _forImages with { Id = "ff-images", RequiredTool = "ffmpeg" };
         var target = SelectionOf(File("a.jpg")) with {
             Place = MenuPlace.Header,
-            Actions = new[] { _forVideo, _forImages, needsFfmpeg },
+            Actions = new[] { _forVideo, _forImages, videoNeedsFfmpeg, imagesNeedFfmpeg },
             MissingTools = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "ffmpeg" },
         };
 
         var actions = Find(ContextMenuBuilder.Build(target, ContextMenuSettings.Default), MenuCommandId.ActionsSubmenu)!.Children;
 
-        Assert.Equal(new[] { _forVideo.Id, _forImages.Id, "ff" }, actions.Where(e => e.Id == MenuCommandId.RunAction).Select(e => e.Argument));
-        Assert.False(actions[0].IsEnabled);
-        Assert.Equal(ActionApplicability.NotForSelectionKey, actions[0].Tooltip);
-        Assert.True(actions[1].IsEnabled);
-        Assert.Null(actions[1].Tooltip);
-        Assert.False(actions[2].IsEnabled);
+        // The video actions do not apply to a picture, tool or no tool.
+        Assert.Equal(new[] { _forImages.Id, "ff-images" }, actions.Where(e => e.Id == MenuCommandId.RunAction).Select(e => e.Argument));
+        Assert.True(actions[0].IsEnabled);
+        Assert.Null(actions[0].Tooltip);
+        Assert.False(actions[1].IsEnabled);
         // The tool's name is in the text; with no text source the key comes
         // back unformatted, and that is what is pinned here.
-        Assert.Equal(ActionApplicability.ToolMissingKey, actions[2].Tooltip);
+        Assert.Equal(ActionApplicability.ToolMissingKey, actions[1].Tooltip);
         Assert.Equal(MenuCommandId.ConfigureActions, actions[^1].Id);
         Assert.True(actions[^2].IsSeparator);
+    }
+
+    [Fact]
+    public void Header_NoActions_WhereFilesCannotBeWritten() {
+        var bin = SelectionOf(File("a.jpg")) with {
+            Place = MenuPlace.Header,
+            IsReadOnlyLocation = true,
+            IsRecycleBin = true,
+            Actions = new[] { _forImages, _forAll },
+        };
+
+        var actions = Find(ContextMenuBuilder.Build(bin, ContextMenuSettings.Default), MenuCommandId.ActionsSubmenu)!.Children;
+
+        Assert.Equal(MenuCommandId.NoActions, actions[0].Id);
+        Assert.DoesNotContain(actions, e => e.Id == MenuCommandId.RunAction);
     }
 
     [Fact]
@@ -821,9 +841,10 @@ public class ContextMenuBuilderTests {
     public void Header_Caption_NamesTheCountAndTheType() {
         // No text source in tests: keys come back as themselves, so the
         // caption is the key with the arguments unformatted in it - which
-        // is enough to see which of the three shapes was chosen.
+        // is enough to see which shape was chosen.
         Assert.Equal(ContextMenuBuilder.CaptionFolderKey, Header()[0].Header);
-        Assert.Equal(ContextMenuBuilder.CaptionSelectionTypedKey, Header(File("a.jpg"), File("b.png"))[0].Header);
+        Assert.Equal("MenuCaptionImages", Header(File("a.jpg"), File("b.png"))[0].Header);
+        Assert.Equal("MenuCaptionFolders", Header(Dir("a"))[0].Header);
         Assert.Equal(ContextMenuBuilder.CaptionSelectionKey, Header(File("a.jpg"), File("b.mp4"))[0].Header);
     }
 

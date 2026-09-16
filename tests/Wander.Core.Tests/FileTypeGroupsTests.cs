@@ -59,9 +59,9 @@ public class FileTypeGroupsTests {
     }
 
     [Fact]
-    public void EveryGroupHasACaptionKey() {
+    public void EveryGroupHasANameKey() {
         foreach (var group in Enum.GetValues<FileTypeGroup>()) {
-            Assert.StartsWith("FileType", FileTypeGroups.CaptionKey(group));
+            Assert.StartsWith("FileType", FileTypeGroups.NameKey(group));
         }
     }
 

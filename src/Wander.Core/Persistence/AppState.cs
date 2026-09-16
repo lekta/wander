@@ -48,6 +48,13 @@ public sealed record AppState {
     public RenameRules? RenameRules { get; init; }
 
     /// <summary>
+    /// The last templates the batch-rename window applied, newest first
+    /// (<see cref="RenameTemplateHistory"/>) - its template field's
+    /// drop-down.
+    /// </summary>
+    public IReadOnlyList<string> RenameTemplates { get; init; } = Array.Empty<string>();
+
+    /// <summary>
     /// User preferences (separate from session-state above). Always
     /// non-null so consumers don't have to null-check; the default
     /// record represents the out-of-the-box settings.

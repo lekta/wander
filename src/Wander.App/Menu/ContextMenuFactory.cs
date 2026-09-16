@@ -5,6 +5,8 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using Wander.Core;
+using Wander.Core.Icons;
 using Wander.Core.Menu;
 using Wander.Core.Shell;
 
@@ -99,8 +101,18 @@ public sealed class ContextMenuFactory {
         return menu;
     }
 
+    /// <summary>
+    /// Replaces the rows of a menu that is not a context menu - the header's
+    /// Operations menu. The shell is never asked there, so there is no
+    /// session and nothing to invoke once the menu closes.
+    /// </summary>
+    public void Populate(ItemCollection items, IReadOnlyList<MenuEntry> model) {
+        items.Clear();
+        Fill(items, model, pending: null);
+    }
 
-    private void Fill(ItemCollection items, IReadOnlyList<MenuEntry> model, PendingShellCommand pending) {
+
+    private void Fill(ItemCollection items, IReadOnlyList<MenuEntry> model, PendingShellCommand? pending) {
         foreach (var entry in model) {
             if (entry.IsSeparator) {
                 items.Add(new Separator());
@@ -110,7 +122,7 @@ public sealed class ContextMenuFactory {
         }
     }
 
-    private MenuItem CreateItem(MenuEntry entry, PendingShellCommand pending) {
+    private MenuItem CreateItem(MenuEntry entry, PendingShellCommand? pending) {
         var item = new MenuItem {
             Header = EscapeHeader(entry.Header),
             InputGestureText = entry.Gesture ?? string.Empty,
@@ -118,6 +130,9 @@ public sealed class ContextMenuFactory {
 
         if (entry.IconPng is { } png && ToImageSource(png) is { } icon) {
             item.Icon = new Image { Source = icon, Width = 16, Height = 16 };
+        } else if (entry.IconPath is { } path && FileIcon(path) is { } fileIcon) {
+            // The program a custom action runs, drawn the way the shell draws it.
+            item.Icon = new Image { Source = fileIcon, Width = 16, Height = 16 };
         } else if (_glyphs.TryGetValue(entry.Id, out string? glyph)) {
             item.Icon = Glyph(glyph);
         }
@@ -151,7 +166,9 @@ public sealed class ContextMenuFactory {
             return item;
         }
 
-        if (entry.IsShellCommand) {
+        // Without a pending box there is no session to run a shell row in;
+        // such a row falls through to the unbound-id case below.
+        if (entry.IsShellCommand && pending is not null) {
             int command = entry.ShellCommand;
             item.Click += (_, _) => pending.Id = command;
 
@@ -192,6 +209,12 @@ public sealed class ContextMenuFactory {
         return header.Replace("_", "__");
     }
 
+
+    private static ImageSource? FileIcon(string path) {
+        return ServiceLocator.Get<IIconProvider>().GetIcon(path, IconSize.Small) is { } png
+            ? ToImageSource(png)
+            : null;
+    }
 
     private static ImageSource? ToImageSource(byte[] png) {
         try {

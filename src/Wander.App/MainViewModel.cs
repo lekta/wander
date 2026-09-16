@@ -25,6 +25,7 @@ using Wander.Core.Navigation;
 using Wander.Core.Operations;
 using Wander.Core.Persistence;
 using Wander.Core.Preview;
+using Wander.Core.Rename;
 using Wander.Core.Search;
 using Wander.Core.Shell;
 using Wander.Core.Undo;
@@ -320,6 +321,10 @@ public sealed class MainViewModel : ObservableObject {
         // only in this iteration.
         DeleteCommand = new RelayCommand(_ => _ = DeleteSelectedAsync(permanent: false), _ => _selectedEntries.Count > 0 && !IsCurrentShellNamespace);
         RenameCommand = new RelayCommand(p => Rename(_selectedEntry, p as string), _ => _selectedEntry is not null && !IsCurrentShellNamespace);
+        BatchRenameCommand = new RelayCommand(
+            _ => BatchRename(),
+            _ => !IsCurrentShellNamespace
+                && BatchRenameGate.Classify(_selectedEntries) is BatchRenameKind.Files or BatchRenameKind.Folders);
         // Copy is the one clipboard verb an archive still answers: it puts
         // the paths inside the archive on the clipboard, and Paste in a real
         // folder turns them into an extraction. The bin stays excluded -
@@ -1034,6 +1039,10 @@ public sealed class MainViewModel : ObservableObject {
     public RelayCommand OpenCommand { get; }
     public RelayCommand DeleteCommand { get; }
     public RelayCommand RenameCommand { get; }
+
+    /// <summary>Opens the batch-rename window on the selection: two or more, all files or all folders.</summary>
+    public RelayCommand BatchRenameCommand { get; }
+
     public RelayCommand CopyCommand { get; }
     public RelayCommand CutCommand { get; }
     public RelayCommand PasteCommand { get; }
@@ -3465,6 +3474,81 @@ public sealed class MainViewModel : ObservableObject {
             _log.Error($"Rename failed: {entry.FullPath} -> {newName}", ex);
             Status = string.Format(Strings.StatusRenameFailed, DescribeError(ex, entry.FullPath));
         }
+    }
+
+
+    // --- Batch rename ------------------------------------------------------
+
+    /// <summary>
+    /// Opens the batch-rename window on the selection and applies what it
+    /// answers, as one undo step. A mixed selection is refused out loud:
+    /// F2 comes here with any two rows without asking CanExecute, and a key
+    /// that silently does nothing reads as broken.
+    /// </summary>
+    private void BatchRename() {
+        if (IsCurrentShellNamespace || _nav.Current is not { } folder) {
+            return;
+        }
+
+        var kind = BatchRenameGate.Classify(_selectedEntries);
+        if (kind == BatchRenameKind.Mixed) {
+            Status = Strings.StatusBatchRenameMixed;
+
+            return;
+        }
+        if (kind == BatchRenameKind.TooFew) {
+            return;
+        }
+
+        // The counter runs down the list as it is on screen, not in the
+        // order the rows were clicked.
+        var chosen = new HashSet<string>(_selectedEntries.Select(e => e.FullPath), StringComparer.OrdinalIgnoreCase);
+        var items = Entries.Where(e => chosen.Contains(e.FullPath)).Select(RenameItem.From).ToArray();
+        var context = new RenameContext(
+            path => _fs.FileExists(path) || _fs.DirectoryExists(path),
+            Settings.IntegrateCompanions ? _companions : null);
+        var saved = _stateStore.Load();
+        var vm = new BatchRenameViewModel(
+            items, context, ServiceLocator.TryGet<IImageMetadataReader>(),
+            saved.RenameRules ?? RenameRules.Default, saved.RenameTemplates);
+
+        var dlg = new Wander.App.Views.BatchRenameWindow(vm) {
+            Owner = Application.Current?.MainWindow,
+        };
+        bool accepted = dlg.ShowDialog() == true;
+        (Application.Current?.MainWindow as MainWindow)?.FocusWorkArea();
+        if (!accepted) {
+            return;
+        }
+
+        // Where the user left off: the same pass usually goes over the next
+        // folder too.
+        var rules = vm.Rules;
+        var state = _stateStore.Load();
+        _stateStore.Save(state with {
+            RenameRules = rules,
+            RenameTemplates = RenameTemplateHistory.Add(state.RenameTemplates, rules.Template),
+        });
+
+        var preview = vm.Preview;
+        var renamed = preview.Rows.Where(r => r.Status == RenameRowStatus.Renamed).ToArray();
+        try {
+            _ops.RenameMany(preview.Plan(), $"Rename {renamed.Length} items");
+        } catch (Exception ex) {
+            _log.Error($"Batch rename failed: {renamed.Length} items in {folder}", ex);
+            Status = string.Format(Strings.StatusRenameFailed, DescribeError(ex, renamed[0].Path));
+
+            return;
+        }
+
+        _log.Info($"Batch rename: {renamed.Length} items in {folder}");
+        var arrived = renamed
+            .Select(r => Path.Combine(Path.GetDirectoryName(r.Path) ?? "", r.NewName))
+            .ToArray();
+        // The renamed rows are new rows: the keyboard went with the old ones.
+        _session.SetArrival(ArrivalIntent.Rows(folder, arrived, takeFocus: true));
+        Refresh();
+        Status = string.Format(Strings.StatusBatchRenamed, renamed.Length);
     }
 
 

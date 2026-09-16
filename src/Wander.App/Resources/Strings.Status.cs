@@ -81,6 +81,12 @@ public static partial class Strings {
     /// <summary>Переименование не удалось: {0}</summary>
     public static string StatusRenameFailed => Get(nameof(StatusRenameFailed));
 
+    /// <summary>Переименовано: {0}</summary>
+    public static string StatusBatchRenamed => Get(nameof(StatusBatchRenamed));
+
+    /// <summary>Переименовать группой можно только файлы или только папки</summary>
+    public static string StatusBatchRenameMixed => Get(nameof(StatusBatchRenameMixed));
+
     /// <summary>Скопировано элементов: {0}</summary>
     public static string StatusCopied => Get(nameof(StatusCopied));
 

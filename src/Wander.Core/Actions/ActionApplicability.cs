@@ -28,10 +28,15 @@ public enum ActionState {
 /// screen - that is what the header menu and the background context menu
 /// are about.
 /// </para>
+///
+/// <para>
+/// A missing tool is asked about last: it is the one state a menu shows
+/// greyed, as a hint to install the tool, and that hint is only worth
+/// giving for an action that would otherwise run on this selection.
+/// </para>
 /// </summary>
 public static class ActionApplicability {
-    public const string SelectFilesKey = "MenuReasonSelectFiles";
-    public const string NotForSelectionKey = "MenuReasonNotForSelection";
+    /// <summary>Why a row is greyed; takes the tool's name as <c>{0}</c>.</summary>
     public const string ToolMissingKey = "MenuReasonToolMissing";
 
 
@@ -39,14 +44,11 @@ public static class ActionApplicability {
         CustomAction action, IReadOnlyList<FileSystemEntry> selection,
         bool hasFolder, Func<string, bool> toolAvailable) {
 
-        if (action.RequiredTool.Length > 0 && !toolAvailable(action.RequiredTool)) {
-            return ActionState.ToolMissing;
-        }
-
         if (selection.Count == 0) {
             bool forFolders = !action.Types.HasMask && action.Types.Group == FileTypeGroup.Folders;
-
-            return forFolders && hasFolder ? ActionState.Applicable : ActionState.NeedsSelection;
+            if (!forFolders || !hasFolder) {
+                return ActionState.NeedsSelection;
+            }
         }
 
         foreach (var entry in selection) {
@@ -55,20 +57,10 @@ public static class ActionApplicability {
             }
         }
 
+        if (action.RequiredTool.Length > 0 && !toolAvailable(action.RequiredTool)) {
+            return ActionState.ToolMissing;
+        }
+
         return ActionState.Applicable;
-    }
-
-
-    /// <summary>
-    /// Resource key of the reason a row is greyed; null when it is not.
-    /// <see cref="ToolMissingKey"/> takes the tool's name as <c>{0}</c>.
-    /// </summary>
-    public static string? ReasonKey(ActionState state) {
-        return state switch {
-            ActionState.NeedsSelection => SelectFilesKey,
-            ActionState.NotForSelection => NotForSelectionKey,
-            ActionState.ToolMissing => ToolMissingKey,
-            _ => null,
-        };
     }
 }

@@ -81,8 +81,8 @@ public static class FileTypeGroups {
 
     /// <summary>
     /// The one group every item of a selection belongs to, or null for an
-    /// empty or mixed selection. What the menu caption says after the
-    /// count: "3 · видео".
+    /// empty or mixed selection. What the header menu's caption counts:
+    /// "3 videos" rather than "3 items".
     /// </summary>
     public static FileTypeGroup? Classify(IReadOnlyList<FileSystemEntry> selection) {
         if (selection.Count == 0) {
@@ -102,8 +102,11 @@ public static class FileTypeGroups {
     }
 
 
-    /// <summary>Resource key of the group's name as the menu caption prints it.</summary>
-    public static string CaptionKey(FileTypeGroup group) {
+    /// <summary>
+    /// Resource key of the group's name, lower case - what a type picker
+    /// lists. The menu caption has its own, counted, forms.
+    /// </summary>
+    public static string NameKey(FileTypeGroup group) {
         return group switch {
             FileTypeGroup.Images => "FileTypeImages",
             FileTypeGroup.Video => "FileTypeVideo",

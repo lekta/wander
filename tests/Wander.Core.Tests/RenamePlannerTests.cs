@@ -264,10 +264,6 @@ public class RenamePlannerTests {
         Assert.Equal(BatchRenameKind.Files, BatchRenameGate.Classify(new[] { File("a"), File("b") }));
         Assert.Equal(BatchRenameKind.Folders, BatchRenameGate.Classify(new[] { Dir("a"), Dir("b") }));
         Assert.Equal(BatchRenameKind.Mixed, BatchRenameGate.Classify(new[] { File("a"), Dir("b") }));
-
-        Assert.Equal(BatchRenameGate.SelectTwoKey, BatchRenameGate.ReasonKey(BatchRenameKind.TooFew));
-        Assert.Equal(BatchRenameGate.FilesOrFoldersKey, BatchRenameGate.ReasonKey(BatchRenameKind.Mixed));
-        Assert.Null(BatchRenameGate.ReasonKey(BatchRenameKind.Files));
     }
 
 

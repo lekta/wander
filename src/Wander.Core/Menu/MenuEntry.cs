@@ -60,8 +60,8 @@ public sealed record MenuEntry {
 
     /// <summary>
     /// Why the row is greyed, for a tooltip; null when there is nothing to
-    /// explain. Only the header menu uses it: the context menu hides what
-    /// does not apply instead of explaining it.
+    /// explain. Only the header menu uses it, for an action whose tool is
+    /// not installed: everything else that does not apply is left out.
     /// </summary>
     public string? Tooltip { get; init; }
 

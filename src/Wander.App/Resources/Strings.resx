@@ -1278,7 +1278,7 @@
     <value>Удалить безвозвратно: всегда спрашивает, не откатывается</value>
   </data>
   <data name="HotkeyRename" xml:space="preserve">
-    <value>Переименовать прямо в строке списка: Enter — применить, Esc — отменить</value>
+    <value>Переименовать прямо в строке списка (Enter — применить, Esc — отменить); два и более — группой, в своём окне</value>
   </data>
   <data name="HotkeyNewFolder" xml:space="preserve">
     <value>Создать папку</value>
@@ -1639,7 +1639,8 @@
     <comment>{0} — обычный заголовок окна; хвост — когда эта копия уступает запущенной установленной</comment>
   </data>
   <data name="MenuCmdActionsSubmenu" xml:space="preserve">
-    <value>Действия</value>
+    <value>Частные</value>
+    <comment>Подменю своих действий пользователя — в контекстном меню и в меню «Действия» шапки</comment>
   </data>
   <data name="MenuCmdConvertSubmenu" xml:space="preserve">
     <value>Конвертировать</value>
@@ -1657,43 +1658,40 @@
   <data name="MenuCmdConfigureActions" xml:space="preserve">
     <value>Настроить действия…</value>
   </data>
-  <data name="MenuReasonSelectTwo" xml:space="preserve">
-    <value>Выделите два и более файла или папки</value>
-    <comment>Тултип серой строки в меню «Операции»</comment>
-  </data>
-  <data name="MenuReasonFilesOrFolders" xml:space="preserve">
-    <value>Выделите только файлы или только папки</value>
-  </data>
-  <data name="MenuReasonReadOnly" xml:space="preserve">
-    <value>Здесь файлы не меняются</value>
-    <comment>Корзина, архив</comment>
-  </data>
-  <data name="MenuReasonSelectFiles" xml:space="preserve">
-    <value>Выделите файлы</value>
-  </data>
-  <data name="MenuReasonNotForSelection" xml:space="preserve">
-    <value>Не для этих файлов</value>
-  </data>
   <data name="MenuReasonToolMissing" xml:space="preserve">
     <value>Нужен {0} (Параметры → Действия)</value>
-    <comment>{0} — имя внешней программы: ffmpeg, soffice, pandoc</comment>
-  </data>
-  <data name="MenuReasonSelectFolder" xml:space="preserve">
-    <value>Выделите папку</value>
-  </data>
-  <data name="MenuReasonSelectArchive" xml:space="preserve">
-    <value>Выделите архив</value>
+    <comment>Тултип серой строки в меню «Действия» шапки; {0} — имя внешней программы: ffmpeg, soffice, pandoc</comment>
   </data>
   <data name="MenuCaptionFolder" xml:space="preserve">
     <value>Папка: {0}</value>
-    <comment>Первая, неактивная строка меню «Операции», когда ничего не выделено</comment>
+    <comment>Первая, неактивная строка меню «Действия» шапки, когда ничего не выделено</comment>
   </data>
   <data name="MenuCaptionSelection" xml:space="preserve">
-    <value>Выделено: {0}</value>
+    <value>{0} элемент|{0} элемента|{0} элементов</value>
+    <comment>Подпись меню «Действия» при выделении разного типа. Формы через «|»: 1 / 2–4 / 5 и 11–14</comment>
   </data>
-  <data name="MenuCaptionSelectionTyped" xml:space="preserve">
-    <value>Выделено: {0} · {1}</value>
-    <comment>{1} — группа типов строчными: «видео», «изображения» (FileType*)</comment>
+  <data name="MenuCaptionImages" xml:space="preserve">
+    <value>{0} изображение|{0} изображения|{0} изображений</value>
+    <comment>Подпись меню «Действия»: все выделенные — картинки. Формы через «|»: 1 / 2–4 / 5 и 11–14</comment>
+  </data>
+  <data name="MenuCaptionVideo" xml:space="preserve">
+    <value>{0} видео</value>
+    <comment>Одна форма на все числа</comment>
+  </data>
+  <data name="MenuCaptionAudio" xml:space="preserve">
+    <value>{0} аудиофайл|{0} аудиофайла|{0} аудиофайлов</value>
+  </data>
+  <data name="MenuCaptionTextAndCode" xml:space="preserve">
+    <value>{0} текстовый файл|{0} текстовых файла|{0} текстовых файлов</value>
+  </data>
+  <data name="MenuCaptionDocuments" xml:space="preserve">
+    <value>{0} документ|{0} документа|{0} документов</value>
+  </data>
+  <data name="MenuCaptionArchives" xml:space="preserve">
+    <value>{0} архив|{0} архива|{0} архивов</value>
+  </data>
+  <data name="MenuCaptionFolders" xml:space="preserve">
+    <value>{0} папка|{0} папки|{0} папок</value>
   </data>
   <data name="FileTypeAll" xml:space="preserve">
     <value>всё</value>
@@ -1733,5 +1731,112 @@
   <data name="ActionsErrorGroupWithoutList" xml:space="preserve">
     <value>Режим «все одной командой» требует {paths} или {list}</value>
     <comment>Показывать через Get, не Format: фигурные скобки — часть текста</comment>
+  </data>
+  <data name="MenuOperations" xml:space="preserve">
+    <value>Действия</value>
+    <comment>Меню в шапке, левее «Вид»: что можно сделать с выделенным</comment>
+  </data>
+  <data name="BatchRenameTitle" xml:space="preserve">
+    <value>Переименовать группой — {0}</value>
+    <comment>{0} — сколько файлов или папок в окне</comment>
+  </data>
+  <data name="BatchRenameUseFind" xml:space="preserve">
+    <value>Найти и заменить</value>
+    <comment>Галочка под шаблоном; открывает поля «Найти» / «Заменить»</comment>
+  </data>
+  <data name="BatchRenameFind" xml:space="preserve">
+    <value>Найти</value>
+  </data>
+  <data name="BatchRenameReplace" xml:space="preserve">
+    <value>Заменить</value>
+  </data>
+  <data name="BatchRenameIgnoreCase" xml:space="preserve">
+    <value>Без учёта регистра</value>
+  </data>
+  <data name="BatchRenameRegex" xml:space="preserve">
+    <value>Регулярное выражение</value>
+  </data>
+  <data name="BatchRenameRegexHint" xml:space="preserve">
+    <value>Синтаксис .NET; в поле «Заменить» $1 — первая группа в скобках</value>
+  </data>
+  <data name="BatchRenameTemplate" xml:space="preserve">
+    <value>Шаблон</value>
+  </data>
+  <data name="BatchRenameTemplateHint" xml:space="preserve">
+    <value>[N] имя · [C] счётчик · [D] дата изменения · [D:yyyy-MM-dd] дата в своём формате · [X] дата съёмки · [P] папка. Остальное — как написано</value>
+  </data>
+  <data name="BatchRenameCounter" xml:space="preserve">
+    <value>Счётчик [C]</value>
+  </data>
+  <data name="BatchRenameCounterStart" xml:space="preserve">
+    <value>с</value>
+    <comment>«Счётчик [C]: с 1, шаг 1, цифр 3»</comment>
+  </data>
+  <data name="BatchRenameCounterStep" xml:space="preserve">
+    <value>шаг</value>
+  </data>
+  <data name="BatchRenameCounterWidth" xml:space="preserve">
+    <value>цифр</value>
+  </data>
+  <data name="BatchRenameNameCase" xml:space="preserve">
+    <value>Регистр имени</value>
+  </data>
+  <data name="BatchRenameExtensionCase" xml:space="preserve">
+    <value>Регистр расширения</value>
+  </data>
+  <data name="BatchRenameExtensionHint" xml:space="preserve">
+    <value>Расширение шаблоном и заменой не меняется — только регистром</value>
+  </data>
+  <data name="BatchRenameCaseUnchanged" xml:space="preserve">
+    <value>как есть</value>
+  </data>
+  <data name="BatchRenameCaseLower" xml:space="preserve">
+    <value>строчные</value>
+  </data>
+  <data name="BatchRenameCaseUpper" xml:space="preserve">
+    <value>ПРОПИСНЫЕ</value>
+  </data>
+  <data name="BatchRenameCaseSentence" xml:space="preserve">
+    <value>Первая заглавная</value>
+  </data>
+  <data name="BatchRenameColumnOld" xml:space="preserve">
+    <value>Было</value>
+  </data>
+  <data name="BatchRenameColumnNew" xml:space="preserve">
+    <value>Станет</value>
+  </data>
+  <data name="BatchRenameColumnStatus" xml:space="preserve">
+    <value>Статус</value>
+  </data>
+  <data name="BatchRenameOrderNote" xml:space="preserve">
+    <value>Нумерация — в порядке списка</value>
+  </data>
+  <data name="BatchRenameReadingShotDates" xml:space="preserve">
+    <value>Дата съёмки читается…</value>
+    <comment>Пока читается EXIF, [X] считается по дате изменения</comment>
+  </data>
+  <data name="RenameSummary" xml:space="preserve">
+    <value>Изменится {0} из {1}, конфликтов {2}</value>
+  </data>
+  <data name="RenameStatusUnchanged" xml:space="preserve">
+    <value>Без изменений</value>
+  </data>
+  <data name="RenameStatusRenamed" xml:space="preserve">
+    <value>Изменится</value>
+  </data>
+  <data name="RenameStatusInvalidName" xml:space="preserve">
+    <value>Недопустимое имя</value>
+  </data>
+  <data name="RenameStatusDuplicateInBatch" xml:space="preserve">
+    <value>Повтор внутри группы</value>
+  </data>
+  <data name="RenameStatusCollides" xml:space="preserve">
+    <value>Имя уже занято</value>
+  </data>
+  <data name="StatusBatchRenamed" xml:space="preserve">
+    <value>Переименовано: {0}</value>
+  </data>
+  <data name="StatusBatchRenameMixed" xml:space="preserve">
+    <value>Переименовать группой можно только файлы или только папки</value>
   </data>
 </root>

@@ -237,6 +237,28 @@
             </StackPanel>
 
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" Margin="8,4,4,4">
+                <!--
+                    What can be done to the selection: the same catalog as the
+                    context menu, in a fixed shape whose rows keep their places
+                    and explain themselves when greyed. Rebuilt every time it
+                    opens (MainWindow.RebuildOperationsMenu); the one row here
+                    only makes WPF treat the header as a submenu - an item
+                    with no children is a button and never opens.
+                -->
+                <Menu VerticalAlignment="Center">
+                    <MenuItem x:Name="OperationsMenu" Padding="10,4"
+                              SubmenuOpened="OperationsMenu_SubmenuOpened">
+                        <MenuItem.Header>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{x:Static res:Strings.MenuOperations}"/>
+                                <TextBlock Text="&#xE70D;" FontFamily="Segoe MDL2 Assets" FontSize="9"
+                                           Margin="6,1,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </MenuItem.Header>
+                        <Separator/>
+                    </MenuItem>
+                </Menu>
+
                 <Menu VerticalAlignment="Center">
                     <MenuItem Padding="10,4">
                         <MenuItem.Header>

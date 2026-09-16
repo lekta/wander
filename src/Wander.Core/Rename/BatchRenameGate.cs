@@ -18,13 +18,10 @@ public enum BatchRenameKind {
 /// more items, and all of one kind: a folder that slipped into a selection
 /// of photographs would be renamed with them, and a numbering pass over
 /// "IMG_0001.jpg ... IMG_0040.jpg, Backup" is not something anybody asked
-/// for. Either files or folders - the menu row says which is missing.
+/// for. Either files or folders: the menus do not offer the row otherwise,
+/// and F2 on a mixed selection says why in the status bar.
 /// </summary>
 public static class BatchRenameGate {
-    public const string SelectTwoKey = "MenuReasonSelectTwo";
-    public const string FilesOrFoldersKey = "MenuReasonFilesOrFolders";
-
-
     public static BatchRenameKind Classify(IReadOnlyList<FileSystemEntry> selection) {
         if (selection.Count < 2) {
             return BatchRenameKind.TooFew;
@@ -45,15 +42,5 @@ public static class BatchRenameGate {
         }
 
         return anyFolder ? BatchRenameKind.Folders : BatchRenameKind.Files;
-    }
-
-
-    /// <summary>Resource key explaining a refusal; null when the window may open.</summary>
-    public static string? ReasonKey(BatchRenameKind kind) {
-        return kind switch {
-            BatchRenameKind.TooFew => SelectTwoKey,
-            BatchRenameKind.Mixed => FilesOrFoldersKey,
-            _ => null,
-        };
     }
 }

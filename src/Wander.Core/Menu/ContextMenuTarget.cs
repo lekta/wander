@@ -9,7 +9,7 @@ public enum MenuPlace {
     /// <summary>A right-click: what applies is shown, the rest is absent.</summary>
     Context,
 
-    /// <summary>The header's "Операции": a fixed skeleton, what does not apply is greyed and explained.</summary>
+    /// <summary>The header's "Actions": a fixed order and a caption; only a missing tool is greyed and explained.</summary>
     Header,
 }
 

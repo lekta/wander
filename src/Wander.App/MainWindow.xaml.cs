@@ -528,9 +528,14 @@ public partial class MainWindow : Window {
             }
         }
 
-        // F2: rename the primary selected entry.
+        // F2: one item is renamed in place; two or more go to the batch
+        // window, which refuses a mix of files and folders on its own.
         if (e.Key == Key.F2 && Vm.SelectedEntry is FileSystemEntry) {
-            FileList.StartRename();
+            if (Vm.SelectedEntries.Count > 1) {
+                Vm.BatchRenameCommand.Execute(null);
+            } else {
+                FileList.StartRename();
+            }
             e.Handled = true;
             return;
         }
@@ -904,19 +909,7 @@ public partial class MainWindow : Window {
 
         var vm = Vm;
         var settings = vm.MenuSettings;
-        var target = new ContextMenuTarget {
-            Selection = isBackground ? Array.Empty<FileSystemEntry>() : vm.SelectedEntries,
-            FolderPath = folderPath ?? vm.CurrentPath,
-            IsBackground = isBackground,
-            IsReadOnlyLocation = vm.IsCurrentShellNamespace,
-            IsRecycleBin = vm.IsCurrentRecycleBin,
-            IsArchive = vm.CurrentArchive is not null,
-            // "Every one of them is an archive", not "one of them is": the
-            // row extracts what is selected, and a mixed selection has no
-            // single answer to what that would mean.
-            SelectionIsArchive = !isBackground && vm.SelectionIsArchive,
-            CanPaste = vm.PasteCommand.CanExecute(null),
-        };
+        var target = MenuTarget(isBackground, folderPath);
 
         // Remember the file type that was right-clicked. The "Добавить"
         // picker in settings leads with these — of the eight hundred
@@ -960,6 +953,25 @@ public partial class MainWindow : Window {
         menu.IsOpen = true;
     }
 
+    /// <summary>What both menus are told about the list as it is now.</summary>
+    private ContextMenuTarget MenuTarget(bool isBackground, string? folderPath = null) {
+        var vm = Vm;
+
+        return new ContextMenuTarget {
+            Selection = isBackground ? Array.Empty<FileSystemEntry>() : vm.SelectedEntries,
+            FolderPath = folderPath ?? vm.CurrentPath,
+            IsBackground = isBackground,
+            IsReadOnlyLocation = vm.IsCurrentShellNamespace,
+            IsRecycleBin = vm.IsCurrentRecycleBin,
+            IsArchive = vm.CurrentArchive is not null,
+            // "Every one of them is an archive", not "one of them is": the
+            // row extracts what is selected, and a mixed selection has no
+            // single answer to what that would mean.
+            SelectionIsArchive = !isBackground && vm.SelectionIsArchive,
+            CanPaste = vm.PasteCommand.CanExecute(null),
+        };
+    }
+
     private IShellContextMenuSession? QueryShellMenu(ContextMenuTarget target, ContextMenuSettings settings) {
         if (!settings.ShellExtensionsEnabled
             || target.IsReadOnlyLocation
@@ -994,6 +1006,7 @@ public partial class MainWindow : Window {
             [MenuCommandId.CreateShortcut] = new(vm.CreateShortcutCommand),
 
             [MenuCommandId.Rename] = new(rename),
+            [MenuCommandId.BatchRename] = new(vm.BatchRenameCommand),
             [MenuCommandId.Delete] = new(vm.DeleteCommand),
             [MenuCommandId.NewFolder] = new(vm.NewFolderCommand),
 
@@ -1002,7 +1015,37 @@ public partial class MainWindow : Window {
             [MenuCommandId.RestoreFromRecycleBin] = new(vm.RestoreFromRecycleBinCommand),
 
             [MenuCommandId.Properties] = new(vm.PropertiesCommand),
+
+            [MenuCommandId.ConfigureActions] = new(vm.OptionsCommand),
         };
+    }
+
+
+    // --- Operations menu --------------------------------------------------
+    // The header's "Operations": the context menu's builder in its header
+    // shape, so a row hidden in settings is gone from both.
+
+    private void OperationsMenu_SubmenuOpened(object sender, RoutedEventArgs e) {
+        // Its own submenus raise the same event on the way up, and
+        // rebuilding then would pull the rows out from under the cursor.
+        if (!ReferenceEquals(e.OriginalSource, OperationsMenu)) {
+            return;
+        }
+
+        RebuildOperationsMenu();
+    }
+
+    /// <summary>
+    /// Fills the menu for the selection as it is at the moment it opens.
+    /// The shell is not asked: the header offers Wander's own verbs only.
+    /// </summary>
+    private void RebuildOperationsMenu() {
+        if (_contextMenus is null) {
+            return;
+        }
+
+        var target = MenuTarget(isBackground: false) with { Place = MenuPlace.Header };
+        _contextMenus.Populate(OperationsMenu.Items, ContextMenuBuilder.Build(target, Vm.MenuSettings));
     }
 
 

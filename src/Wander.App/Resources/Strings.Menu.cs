@@ -24,6 +24,9 @@ public static partial class Strings {
     /// <summary>Вид</summary>
     public static string MenuView => Get(nameof(MenuView));
 
+    /// <summary>Действия</summary>
+    public static string MenuOperations => Get(nameof(MenuOperations));
+
     /// <summary>Таблица</summary>
     public static string MenuViewDetails => Get(nameof(MenuViewDetails));
 
