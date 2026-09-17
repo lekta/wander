@@ -230,7 +230,7 @@ public static class RenamePlanner {
             return match.Groups[1].Value switch {
                 "N" => stem,
                 "C" => counter.ToString(CultureInfo.InvariantCulture)
-                    .PadLeft(Math.Max(rules.CounterWidth, 1), '0'),
+                    .PadLeft(Math.Clamp(rules.CounterWidth, 1, RenameRules.MaxCounterWidth), '0'),
                 "D" => item.ModifiedUtc.ToLocalTime().ToString(format, CultureInfo.InvariantCulture),
                 "X" => (context.ShotDate?.Invoke(item.FullPath) ?? item.ModifiedUtc.ToLocalTime())
                     .ToString(format, CultureInfo.InvariantCulture),

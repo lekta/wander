@@ -195,6 +195,12 @@ public static partial class Strings {
     /// <summary>Переместить {0} элем. в: {1}?</summary>
     public static string ConfirmMoveMany => Get(nameof(ConfirmMoveMany));
 
+    /// <summary>Выйти из Wander?</summary>
+    public static string ExitWithOperationsTitle => Get(nameof(ExitWithOperationsTitle));
+
+    /// <summary>Идут операции: {0}. Прервать их и выйти?</summary>
+    public static string ExitWithOperationsMessage => Get(nameof(ExitWithOperationsMessage));
+
     /// <summary>Wander — отчёт об ошибке</summary>
     public static string CrashTitle => Get(nameof(CrashTitle));
 

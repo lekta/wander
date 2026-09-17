@@ -382,9 +382,8 @@ public static class ContextMenuBuilder {
     }
 
     /// <summary>
-    /// A submenu only when it has rows: an empty one is not a submenu but
-    /// a leaf with the submenu's name, and <see cref="Normalize"/> would
-    /// keep it as such.
+    /// A submenu only when it has rows. <see cref="Normalize"/> drops an
+    /// empty header as well; not making one keeps the raw list honest.
     /// </summary>
     private static void AddSubmenu(List<MenuEntry> items, MenuCommandId id, IReadOnlyList<MenuEntry> children) {
         if (children.Count > 0) {
@@ -560,8 +559,23 @@ public static class ContextMenuBuilder {
     // --- Normalisation ---------------------------------------------------
 
     /// <summary>
-    /// Drops what the user hid, drops submenus left empty by that, and
-    /// collapses the separators the removals stranded.
+    /// Ids that only ever head a submenu. One of them with no rows is not a
+    /// leaf to click but an empty submenu, and goes the same way.
+    /// </summary>
+    private static readonly HashSet<MenuCommandId> _submenuHeaders = new() {
+        MenuCommandId.OpenSubmenu,
+        MenuCommandId.FileSubmenu,
+        MenuCommandId.NewSubmenu,
+        MenuCommandId.ActionsSubmenu,
+        MenuCommandId.ConvertSubmenu,
+        MenuCommandId.ToFolderSubmenu,
+    };
+
+
+    /// <summary>
+    /// Drops what the user hid, drops submenus that are empty - built so,
+    /// or left so by the hiding - and collapses the separators the removals
+    /// stranded.
     /// </summary>
     internal static IReadOnlyList<MenuEntry> Normalize(IEnumerable<MenuEntry> items, ContextMenuSettings settings) {
         var kept = new List<MenuEntry>();
@@ -575,7 +589,7 @@ public static class ContextMenuBuilder {
                 continue;
             }
 
-            if (item.HasChildren) {
+            if (item.HasChildren || _submenuHeaders.Contains(item.Id)) {
                 var children = Normalize(item.Children, settings);
                 if (children.Count == 0) {
                     continue;

@@ -15,6 +15,9 @@ public enum DialogKind {
 
     /// <summary>A custom action finished with failures or cancellations: what did not work, per file.</summary>
     ActionReport,
+
+    /// <summary>The window is closing with operations still running: stop them and exit?</summary>
+    ExitWithOperations,
 }
 
 public enum DialogButtons {

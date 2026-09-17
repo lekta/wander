@@ -34,39 +34,44 @@ public sealed class MetricsSampler : IDisposable {
     }
 
 
+    /// <summary>
+    /// Called from the timer thread and from a <c>measure</c> step at once,
+    /// so the CPU baseline and the sample are taken under one lock: two
+    /// calls interleaved would measure against each other's baseline.
+    /// </summary>
     public Sample Take(string? label) {
         _process.Refresh();
-        long now = _clock.ElapsedMilliseconds;
-        var cpu = _process.TotalProcessorTime;
-        double cpuShare = 0;
-        long wall = now - _lastCpuAtMs;
-        if (wall > 0) {
-            cpuShare = (cpu - _lastCpu).TotalMilliseconds / wall / Environment.ProcessorCount * 100;
-        }
-        _lastCpu = cpu;
-        _lastCpuAtMs = now;
-
-        var gc = GC.GetGCMemoryInfo();
-        var sample = new Sample(
-            now,
-            label,
-            _process.WorkingSet64,
-            _process.PrivateMemorySize64,
-            GC.GetTotalAllocatedBytes(),
-            GC.CollectionCount(0),
-            GC.CollectionCount(1),
-            GC.CollectionCount(2),
-            gc.HeapSizeBytes,
-            gc.GenerationInfo.Length > 3 ? gc.GenerationInfo[3].SizeAfterBytes : 0,
-            gc.PauseTimePercentage,
-            _process.HandleCount,
-            _process.Threads.Count,
-            Math.Round(cpuShare, 1));
         lock (_samples) {
-            _samples.Add(sample);
-        }
+            long now = _clock.ElapsedMilliseconds;
+            var cpu = _process.TotalProcessorTime;
+            double cpuShare = 0;
+            long wall = now - _lastCpuAtMs;
+            if (wall > 0) {
+                cpuShare = (cpu - _lastCpu).TotalMilliseconds / wall / Environment.ProcessorCount * 100;
+            }
+            _lastCpu = cpu;
+            _lastCpuAtMs = now;
 
-        return sample;
+            var gc = GC.GetGCMemoryInfo();
+            var sample = new Sample(
+                now,
+                label,
+                _process.WorkingSet64,
+                _process.PrivateMemorySize64,
+                GC.GetTotalAllocatedBytes(),
+                GC.CollectionCount(0),
+                GC.CollectionCount(1),
+                GC.CollectionCount(2),
+                gc.HeapSizeBytes,
+                gc.GenerationInfo.Length > 3 ? gc.GenerationInfo[3].SizeAfterBytes : 0,
+                gc.PauseTimePercentage,
+                _process.HandleCount,
+                _process.Threads.Count,
+                Math.Round(cpuShare, 1));
+            _samples.Add(sample);
+
+            return sample;
+        }
     }
 
     public void WriteJson(string path) {

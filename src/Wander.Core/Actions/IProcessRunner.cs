@@ -31,6 +31,15 @@ public sealed record ProcessResult(int ExitCode, string ErrorTail, TimeSpan Elap
 /// </summary>
 public interface IProcessRunner {
     Task<ProcessResult> RunAsync(ProcessRequest request, CancellationToken ct);
+
+    /// <summary>
+    /// Kills every program still running, with everything it started, and
+    /// returns without waiting for anyone: the exit that gave up on its
+    /// operations and the crash handler call this, and neither can count on
+    /// a cancellation reaching the process in time. Failures are logged, not
+    /// thrown.
+    /// </summary>
+    void KillAll();
 }
 
 

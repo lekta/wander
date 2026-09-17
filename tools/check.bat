@@ -2,7 +2,7 @@
 rem ===========================================================
 rem  Wander - combined verification entry point.
 rem
-rem    tools\check.bat            build + format verify + strings + tests
+rem    tools\check.bat            build + format verify + strings + resources + tests
 rem    tools\check.bat run        + smoke launch of the app
 rem    tools\check.bat format     apply dotnet format (writes files)
 rem    tools\check.bat qa         build + harness selfcheck + smoke-walk
@@ -73,6 +73,13 @@ rem Resource keys against Strings.resx. The tests cannot reach this (they
 rem cover Wander.Core only), and a typo in a key shows up nowhere except as
 rem the key itself appearing in the UI in place of a label.
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0check-strings.ps1"
+if errorlevel 1 exit /b 1
+
+echo.
+echo === resources ===
+rem XAML resource keys: every one used is defined somewhere. Same blind
+rem spot as the strings - a mistyped key fails only when its view is built.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0check-resources.ps1"
 if errorlevel 1 exit /b 1
 
 echo.

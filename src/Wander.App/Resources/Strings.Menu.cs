@@ -171,6 +171,9 @@ public static partial class Strings {
     /// <summary>Закладки</summary>
     public static string BookmarksHeader => Get(nameof(BookmarksHeader));
 
+    /// <summary>Компьютер</summary>
+    public static string ComputerHeader => Get(nameof(ComputerHeader));
+
     /// <summary>Свернуть / развернуть закладки</summary>
     public static string BookmarksToggleHint => Get(nameof(BookmarksToggleHint));
 

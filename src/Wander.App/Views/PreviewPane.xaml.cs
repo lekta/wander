@@ -116,6 +116,18 @@ public partial class PreviewPane : UserControl {
         }
     }
 
+    /// <summary>
+    /// Lets go of the browser behind the pane on the way out, so its
+    /// <c>msedgewebview2</c> processes neither outlive Wander nor keep the
+    /// profile folder locked. Only when one was ever started: a web view
+    /// that never initialised has nothing to stop.
+    /// </summary>
+    public void ReleaseWebView() {
+        if (WebPreview.CoreWebView2 is not null) {
+            WebPreview.Dispose();
+        }
+    }
+
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e) {
         if (e.OldValue is PreviewController old) {

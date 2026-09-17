@@ -20,6 +20,14 @@ public class SystemPathGuardTests {
     }
 
     [Fact]
+    public void NetworkShareRoot_IsProtected_ButItsFoldersAreNot() {
+        Assert.True(SystemPathGuard.IsProtected(@"\\server\share", out string reason));
+        Assert.Contains("network share", reason);
+        Assert.True(SystemPathGuard.IsProtected(@"\\server\share\", out _));
+        Assert.False(SystemPathGuard.IsProtected(@"\\server\share\folder", out _));
+    }
+
+    [Fact]
     public void WindowsDirectory_IsProtected() {
         Assert.True(SystemPathGuard.IsProtected(_windowsDir, out _));
     }

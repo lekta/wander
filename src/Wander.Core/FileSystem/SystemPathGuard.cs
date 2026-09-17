@@ -8,9 +8,10 @@ namespace Wander.Core.FileSystem;
 /// clear reason instead.
 ///
 /// <para>
-/// Blocked: drive roots, the special folders themselves (Windows, Program
-/// Files (x86/x64), ProgramData, the Users folder, the current user's
-/// profile root) and everything inside the Windows directory — that tree
+/// Blocked: drive roots and network share roots, the special folders
+/// themselves (Windows, Program Files (x86/x64), ProgramData, the Users
+/// folder, the current user's profile root) and everything inside the
+/// Windows directory - that tree
 /// never holds user content. Contents of Program Files / other profiles
 /// are intentionally NOT blocked (ordinary uninstall-leftover cleanup);
 /// a warn-instead-of-block tier for those is a possible later step.
@@ -47,8 +48,10 @@ internal static class SystemPathGuard {
             return false;
         }
 
-        if (IsDriveRoot(norm)) {
-            reason = $"'{path}' is a drive root and cannot be moved or deleted";
+        if (IsRoot(norm)) {
+            reason = norm.StartsWith(@"\\", StringComparison.Ordinal)
+                ? $"'{path}' is a network share root and cannot be moved or deleted"
+                : $"'{path}' is a drive root and cannot be moved or deleted";
             return true;
         }
 
@@ -109,8 +112,12 @@ internal static class SystemPathGuard {
         }
     }
 
-    private static bool IsDriveRoot(string normalized) {
-        // After trimming separators a drive root is exactly "C:".
-        return normalized.Length == 2 && normalized[1] == ':';
+    private static bool IsRoot(string normalized) {
+        // After trimming separators a root is whatever the path's own root
+        // trims to: "C:" for a drive, "\\server\share" for a network share.
+        string root = (Path.GetPathRoot(normalized) ?? "")
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        return root.Length > 0 && root.Equals(normalized, StringComparison.OrdinalIgnoreCase);
     }
 }

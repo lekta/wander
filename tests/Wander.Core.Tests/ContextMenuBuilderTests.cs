@@ -397,6 +397,25 @@ public class ContextMenuBuilderTests {
     }
 
     [Fact]
+    public void Normalize_DropsASubmenuHeaderBuiltWithoutRows() {
+        // Built empty rather than emptied by hiding: without the rule it
+        // stayed as a leaf named like a submenu, doing nothing on a click.
+        var items = new[] {
+            new MenuEntry { Id = MenuCommandId.Open, Header = "Open" },
+            MenuEntry.Divider,
+            ContextMenuBuilder.Sub(MenuCommandId.ActionsSubmenu, Array.Empty<MenuEntry>()),
+            MenuEntry.Divider,
+            new MenuEntry { Id = MenuCommandId.Properties, Header = "Properties" },
+        };
+
+        var menu = ContextMenuBuilder.Normalize(items, ContextMenuSettings.Default);
+
+        Assert.Null(Find(menu, MenuCommandId.ActionsSubmenu));
+        Assert.Equal(new[] { MenuCommandId.Open, MenuCommandId.None, MenuCommandId.Properties }, menu.Select(e => e.Id));
+        Assert.True(menu[1].IsSeparator);
+    }
+
+    [Fact]
     public void UnknownPersistedName_IsIgnoredRatherThanFatal() {
         var settings = ContextMenuSettings.From(new Persistence.AppSettings {
             HiddenContextMenuItems = new[] { "Delete", "SomeVerbFromTheFuture", "" },

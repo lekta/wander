@@ -17,6 +17,16 @@ public class SystemRootFoldersTests {
 
 
     [Fact]
+    public void IsSystemRoot_CoversTheSystemFilesInARootToo() {
+        // The page file is always in use; a file of the same name deeper
+        // down is somebody's copy.
+        Assert.True(SystemRootFolders.IsSystemRoot(@"C:\pagefile.sys"));
+        Assert.True(SystemRootFolders.IsSystemRoot(@"D:\DumpStack.log.tmp"));
+        Assert.False(SystemRootFolders.IsSystemRoot(@"C:\data\pagefile.sys"));
+    }
+
+
+    [Fact]
     public void IsSystemRoot_IgnoresATrailingSeparator() {
         Assert.True(SystemRootFolders.IsSystemRoot(@"C:\$RECYCLE.BIN\"));
     }

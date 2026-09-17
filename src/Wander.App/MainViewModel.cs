@@ -356,7 +356,9 @@ public sealed class MainViewModel : ObservableObject {
         SetSortKeyCommand = new RelayCommand(p => SetSortKey(p as string));
         ToggleSortAscendingCommand = new RelayCommand(_ => Settings.SortAscending = !Settings.SortAscending);
         ToggleGroupFoldersFirstCommand = new RelayCommand(_ => Settings.GroupFoldersFirst = !Settings.GroupFoldersFirst);
-        ExitCommand = new RelayCommand(_ => Application.Current?.Shutdown());
+        // A close, not Shutdown: WPF ignores a cancelled close during
+        // Shutdown, and the window asks before leaving operations behind.
+        ExitCommand = new RelayCommand(_ => Application.Current?.MainWindow?.Close());
         OptionsCommand = new RelayCommand(_ => OpenSettingsDialog());
         ConfigureActionsCommand = new RelayCommand(
             _ => OpenSettingsDialog(Settings.Categories.OfType<ActionsSettingsCategory>().FirstOrDefault()));
@@ -1435,6 +1437,22 @@ public sealed class MainViewModel : ObservableObject {
         return followed;
     }
 
+    /// <summary>
+    /// Re-reads, in both folder panels, the folders that hold
+    /// <paramref name="paths"/> - they just lost or regained an item, and
+    /// the watcher only covers the folder on screen.
+    /// </summary>
+    private Task RefreshTreesAboveAsync(IEnumerable<string> paths) {
+        var parents = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string path in paths) {
+            if (Path.GetDirectoryName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)) is { Length: > 0 } parent) {
+                parents.Add(parent);
+            }
+        }
+
+        return Task.WhenAll(parents.Select(Trees.RefreshForAsync));
+    }
+
     private void CreateShortcuts(IReadOnlyList<string> sources, string targetFolder) {
         var shortcuts = ServiceLocator.Get<IShortcutService>();
         var created = new List<IUndoableAction>();
@@ -1809,6 +1827,7 @@ public sealed class MainViewModel : ObservableObject {
         }
         using (PerfLog.Measure("nav.preview")) {
             Preview.SetCurrentFolder(_nav.Current, _nav.WindowTitle);
+            PreviewSecond.SetCurrentFolder(_nav.Current, _nav.WindowTitle);
         }
         using (PerfLog.Measure("nav.watch")) {
             UpdateFolderWatch();
@@ -2217,6 +2236,10 @@ public sealed class MainViewModel : ObservableObject {
             // decide about, not a folder to look at.
             Ratings.Cancel();
             HasRatings = false;
+            // Always, not only when slow as on disk: shell listings are few,
+            // and their cost is the number the bin's slowness (AD2) is
+            // decided on.
+            _log.Info($"Folder listed in {started.ElapsedMilliseconds} ms: {items.Count} shown - {shellPath}");
             PublishRows(epoch, items.ToList());
 
             // Timed like any other folder: an archive is one to the person
@@ -3138,6 +3161,13 @@ public sealed class MainViewModel : ObservableObject {
             UpdateFolderWatch();
         }
 
+        if (e.PropertyName == nameof(SettingsViewModel.ThumbnailMemoryEntries) ||
+            e.PropertyName == nameof(SettingsViewModel.ThumbnailDiskCacheEnabled) ||
+            e.PropertyName == nameof(SettingsViewModel.ThumbnailDiskCacheMb)) {
+            // A lowered limit bites now, not at the next start.
+            ApplyThumbnailCacheSettings();
+        }
+
         SaveState();
     }
 
@@ -3501,18 +3531,33 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
-        int ok = results.Count(r => r.Status == DeleteStatus.Ok);
+        var gone = results.Where(r => r.Status == DeleteStatus.Ok).Select(r => r.Path).ToList();
+        int ok = gone.Count;
         int failed = results.Count(r => r.Status == DeleteStatus.Failed);
 
-        // Point the keyboard at what will be under it once the rows are
-        // gone, and take it back from the progress dialog. Only when
-        // something actually went: a delete that failed outright leaves the
-        // rows on screen, and moving off them would hide what went wrong.
-        if (ok > 0 && _nav.Current is { } folder) {
-            var next = NextAfterRemoval(snapshot);
-            _session.SetArrival(ArrivalIntent.Rows(folder, next, takeFocus: next.Length > 0));
+        // The panels show folders too, and a folder deleted from a tree is
+        // usually not in the listing at all. Started before the listing
+        // moves, awaited after it.
+        var trees = RefreshTreesAboveAsync(gone);
+        if (NavigationFallback.AfterDelete(gone, _nav.Current) is { } fallback) {
+            // The folder on screen went, or one above it: the listing goes
+            // to the nearest survivor, the way Up would, rather than showing
+            // "folder is gone" over what was removed on purpose. History is
+            // left alone - Back into the deleted folder shows that panel.
+            NavigateTo(fallback, _nav.CurrentSource ?? NavigationSource.External);
+        } else {
+            // Point the keyboard at what will be under it once the rows are
+            // gone, and take it back from the progress dialog. Only when
+            // something actually went: a delete that failed outright leaves
+            // the rows on screen, and moving off them would hide what went
+            // wrong.
+            if (ok > 0 && _nav.Current is { } folder) {
+                var next = NextAfterRemoval(snapshot);
+                _session.SetArrival(ArrivalIntent.Rows(folder, next, takeFocus: next.Length > 0));
+            }
+            Refresh();
         }
-        Refresh();
+        await trees;
 
         if (failed > 0) {
             var firstFail = results.First(r => r.Status == DeleteStatus.Failed);
@@ -3582,6 +3627,11 @@ public sealed class MainViewModel : ObservableObject {
                 // selection happened to be.
                 _session.SetArrival(ArrivalIntent.Rows(_nav.Current!, action.PathsAfterUndo.ToArray()));
                 Refresh();
+                // Nothing moved, yet something came back - a folder out of
+                // the bin reappears in its parent's branch too.
+                if (action.MovesOnUndo.Count == 0) {
+                    await RefreshTreesAboveAsync(action.PathsAfterUndo);
+                }
             }
 
             // A rating undo rewrites a sidecar the footer is already
@@ -4331,6 +4381,21 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     // --- Operation progress (status bar) -------------------------------
+
+    /// <summary>
+    /// Cancels every operation, the way each window's own Cancel would -
+    /// what an exit with operations running does first. Returns how many
+    /// were told.
+    /// </summary>
+    public int CancelAllOperations() {
+        var windows = _operationWindows.ToList();
+        foreach (var window in windows) {
+            window.RequestCancel();
+        }
+
+        return windows.Count;
+    }
+
 
     private void OnTrackerChanged(object? sender, EventArgs e) {
         if (_dispatcher.CheckAccess()) {

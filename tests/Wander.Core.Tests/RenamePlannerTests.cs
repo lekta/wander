@@ -80,6 +80,18 @@ public class RenamePlannerTests {
     }
 
     [Fact]
+    public void CounterWidth_IsCappedAtTheMaximum() {
+        // A million from a hand-edited state.json pads to ten digits, not to
+        // a million characters.
+        var rules = new RenameRules { Template = "[C]", CounterWidth = 1_000_000 };
+
+        var preview = Preview(rules, Items("a.txt"));
+
+        Assert.Equal("0000000001.txt", preview.Rows[0].NewName);
+        Assert.Equal(10, RenameRules.MaxCounterWidth);
+    }
+
+    [Fact]
     public void Date_PrintsTheModifiedDate_InTheGivenFormat() {
         var modified = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc);
         var items = new[] { new RenameItem(Path.Combine(Folder, "a.jpg"), false, modified) };

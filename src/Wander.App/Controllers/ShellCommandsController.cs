@@ -110,6 +110,7 @@ public sealed class ShellCommandsController {
         try {
             _shell.ShowProperties(path);
         } catch (Exception ex) {
+            _log.Error($"Properties failed: {path}", ex);
             Report(Strings.StatusPropertiesFailed, ex.Message);
         }
     }

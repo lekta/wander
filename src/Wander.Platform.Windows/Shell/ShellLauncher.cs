@@ -67,6 +67,12 @@ public sealed class ShellLauncher : IShellLauncher {
     }
 
 
+    /// <summary>
+    /// Runs a shell verb on a path. A refusal throws
+    /// <see cref="Win32Exception"/> for the caller to report, except the
+    /// user closing the dialog the verb opened ("Open with" without picking
+    /// an app), which is an answer, not an error.
+    /// </summary>
     private static void InvokeVerb(string verb, string path) {
         var info = new SHELLEXECUTEINFO {
             cbSize = Marshal.SizeOf<SHELLEXECUTEINFO>(),
@@ -75,7 +81,16 @@ public sealed class ShellLauncher : IShellLauncher {
             nShow = SW_SHOW,
             fMask = SEE_MASK_INVOKEIDLIST,
         };
-        ShellExecuteEx(ref info);
+        if (ShellExecuteEx(ref info)) {
+            return;
+        }
+
+        int error = Marshal.GetLastWin32Error();
+        if (error == ERROR_CANCELLED) {
+            return;
+        }
+
+        throw new Win32Exception(error);
     }
 
 
@@ -83,6 +98,7 @@ public sealed class ShellLauncher : IShellLauncher {
 
     private const uint SEE_MASK_INVOKEIDLIST = 0x0000000C;
     private const int SW_SHOW = 5;
+    private const int ERROR_CANCELLED = 1223;
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
     private struct SHELLEXECUTEINFO {

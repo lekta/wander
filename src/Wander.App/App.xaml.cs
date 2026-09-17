@@ -3,9 +3,12 @@ using Wander.App.Diagnostics;
 using Wander.App.Dialogs;
 using Wander.App.Resources;
 using Wander.App.Util;
+using Wander.App.Views;
 using Wander.Core;
+using Wander.Core.Actions;
 using Wander.Core.Localization;
 using Wander.Core.Logging;
+using Wander.Core.Operations;
 using Wander.Core.Persistence;
 using Wander.Platform.Windows;
 using Wander.Platform.Windows.Logging;
@@ -20,6 +23,9 @@ public partial class App : Application {
     /// report, and the log already says it is still happening.
     /// </summary>
     private static readonly TimeSpan _offerInterval = TimeSpan.FromMinutes(1);
+
+    /// <summary>How long a dying process gives its operations to let go of their files.</summary>
+    private static readonly TimeSpan _crashWait = TimeSpan.FromSeconds(3);
 
     private static string _lastOfferSignature = "";
     private static DateTime _lastOfferUtc = DateTime.MinValue;
@@ -41,6 +47,14 @@ public partial class App : Application {
     /// which sets it before constructing the window.
     /// </summary>
     public static bool Headless { get; internal set; }
+
+    /// <summary>
+    /// The application itself is ending the session: a smoke countdown, the
+    /// harness, a crash, Windows logging off. WPF closes every window then
+    /// with a cancelled close ignored, so the main window must neither ask
+    /// nor put the exit off - see <see cref="ShutdownWithoutAsking"/>.
+    /// </summary>
+    internal static bool IsShuttingDown { get; private set; }
 
 
     protected override void OnStartup(StartupEventArgs e) {
@@ -69,6 +83,8 @@ public partial class App : Application {
         // in a scripted answerer before it builds the view model.
         ServiceLocator.Register<IDialogs>(new WpfDialogs());
         HookCrashLogging();
+        // WPF answers an unrefused session end with Shutdown.
+        SessionEnding += (_, _) => IsShuttingDown = true;
         WatchWindowsWhenHeadless();
         // Yesterday's scratch copies of archive entries. Swept on the way in
         // rather than on the way out: a crash is precisely when the tidy-up
@@ -99,6 +115,29 @@ public partial class App : Application {
         window.Top = -32000;
         window.ShowActivated = false;
         window.ShowInTaskbar = false;
+    }
+
+
+    /// <summary>
+    /// <see cref="Application.Shutdown(int)"/> for callers that end the
+    /// session themselves. Marks it first, so the main window stops the
+    /// operations on the spot instead of asking a question whose "no" WPF
+    /// would ignore anyway.
+    /// </summary>
+    internal static void ShutdownWithoutAsking(int exitCode) {
+        IsShuttingDown = true;
+        Current.Shutdown(exitCode);
+    }
+
+
+    /// <summary>
+    /// Stops the operations without waiting for them, from any thread: each
+    /// window cancels its token, and the programs the custom actions started
+    /// are killed. For an exit that cannot wait on them.
+    /// </summary>
+    internal static void AbandonOperations() {
+        ProgressDialog.CancelAll();
+        ServiceLocator.Get<IProcessRunner>().KillAll();
     }
 
 
@@ -187,6 +226,25 @@ public partial class App : Application {
 
 
     /// <summary>
+    /// The process is going down on an exception: the operations are
+    /// stopped and get <see cref="_crashWait"/> to close their files, so a
+    /// half-written copy is not left locked and an encoder is not left
+    /// running. Blocking, and nothing goes through the dispatcher - it may
+    /// be the thing that died.
+    /// </summary>
+    private static void StopOperationsBeforeDying(ILogger log) {
+        try {
+            AbandonOperations();
+            if (!ServiceLocator.Get<OperationTracker>().WhenIdleAsync(_crashWait).Result) {
+                log.Warn($"Crash: operation(s) still running after {_crashWait.TotalSeconds:F0} s");
+            }
+        } catch (Exception ex) {
+            log.Error("Crash: stopping the operations failed", ex);
+        }
+    }
+
+
+    /// <summary>
     /// Last-resort exception logging. A file manager dying silently mid-batch
     /// is the worst possible failure mode — at minimum the session log must
     /// record what happened, and recoverable UI-thread faults should not take
@@ -202,7 +260,8 @@ public partial class App : Application {
             // The exit code carries the news instead.
             if (Headless) {
                 args.Handled = true;
-                Shutdown(1);
+                StopOperationsBeforeDying(log);
+                ShutdownWithoutAsking(1);
 
                 return;
             }
@@ -217,6 +276,7 @@ public partial class App : Application {
             // Process is going down — flush what we know while we still can.
             var ex = args.ExceptionObject as Exception;
             log.Error($"Fatal unhandled exception (terminating={args.IsTerminating})", ex);
+            StopOperationsBeforeDying(log);
             if (ex is not null && !Headless) {
                 CrashReporter.Offer(ex, fatal: true);
             }

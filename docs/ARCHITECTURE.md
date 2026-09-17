@@ -145,13 +145,13 @@ Platform.Windows` — один файл, `App.xaml.cs` (точка композ�
 <!-- deps:generated:begin -->
 ```
 === Wander dependency graph (using sweep) ===
-date   : 2026-09-16
-commit : ebd5e51
+date   : 2026-09-17
+commit : 9b11f84
 
 -- projects --
 Wander.App -> Wander.Core   (59 files)
 Wander.App -> Wander.Platform.Windows   (1 files)
-Wander.Core.Tests -> Wander.Core   (96 files)
+Wander.Core.Tests -> Wander.Core   (97 files)
 Wander.Harness -> Wander.App   (4 files)
 Wander.Harness -> Wander.Core   (6 files)
 Wander.Harness -> Wander.Platform.Windows   (3 files)
@@ -184,7 +184,7 @@ Wander.Platform.Windows -> Wander.Core   (28 files)
   Menu           -> Persistence    (1 files)
   Menu           -> Rename         (2 files)
   Menu           -> Shell          (2 files)
-  Navigation     -> FileSystem     (1 files)
+  Navigation     -> FileSystem     (2 files)
   Persistence    -> Actions        (1 files)
   Persistence    -> Companions     (1 files)
   Persistence    -> FileSystem     (1 files)
@@ -231,13 +231,13 @@ Wander.Platform.Windows -> Wander.Core   (28 files)
   (root)         -> Controllers    (2 files)
   (root)         -> Controls       (1 files)
   (root)         -> Diagnostics    (1 files)
-  (root)         -> Dialogs        (2 files)
+  (root)         -> Dialogs        (3 files)
   (root)         -> DragPreview    (1 files)
   (root)         -> Menu           (1 files)
   (root)         -> Resources      (4 files)
   (root)         -> Util           (3 files)
   (root)         -> ViewModels     (2 files)
-  (root)         -> Views          (1 files)
+  (root)         -> Views          (2 files)
   Conflict       -> Resources      (2 files)
   Conflict       -> Util           (2 files)
   Conflict       -> ViewModels     (2 files)

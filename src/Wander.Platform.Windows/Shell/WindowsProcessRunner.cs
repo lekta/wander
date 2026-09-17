@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using Wander.Core.Actions;
+using Wander.Core.Logging;
 
 namespace Wander.Platform.Windows.Shell;
 
@@ -17,10 +18,26 @@ namespace Wander.Platform.Windows.Shell;
 /// exits, and stdout is drained for exactly that reason even though nothing
 /// is kept of it.
 /// </para>
+///
+/// <para>
+/// Every program between its start and its exit is on a list, so an exit
+/// that cannot wait for the cancellations to arrive still reaches them all
+/// (<see cref="KillAll"/>). Static: the list is the process's, not one
+/// runner's.
+/// </para>
 /// </summary>
 public sealed class WindowsProcessRunner : IProcessRunner {
     /// <summary>How much of stderr is kept - the last lines say what went wrong.</summary>
     private const int TailChars = 2000;
+
+    private static readonly List<Process> _running = new();
+
+    private readonly ILogger _log;
+
+
+    public WindowsProcessRunner(ILogger log) {
+        _log = log;
+    }
 
 
     public async Task<ProcessResult> RunAsync(ProcessRequest request, CancellationToken ct) {
@@ -37,27 +54,57 @@ public sealed class WindowsProcessRunner : IProcessRunner {
         var watch = Stopwatch.StartNew();
         using var process = Process.Start(info)
             ?? throw new InvalidOperationException($"Could not start {request.Program}.");
-
-        var tail = new StringBuilder();
-        var stderr = request.HideWindow ? DrainAsync(process.StandardError, tail) : Task.CompletedTask;
-        var stdout = request.HideWindow ? DrainAsync(process.StandardOutput, null) : Task.CompletedTask;
-
-        bool killed = false;
-        try {
-            await process.WaitForExitAsync(ct).ConfigureAwait(false);
-        } catch (OperationCanceledException) {
-            killed = true;
-            try {
-                process.Kill(entireProcessTree: true);
-            } catch (InvalidOperationException) {
-                // Exited between the cancellation and the kill.
-            }
-            await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
+        lock (_running) {
+            _running.Add(process);
         }
 
-        await Task.WhenAll(stderr, stdout).ConfigureAwait(false);
+        try {
+            var tail = new StringBuilder();
+            var stderr = request.HideWindow ? DrainAsync(process.StandardError, tail) : Task.CompletedTask;
+            var stdout = request.HideWindow ? DrainAsync(process.StandardOutput, null) : Task.CompletedTask;
 
-        return new ProcessResult(process.ExitCode, tail.ToString(), watch.Elapsed, killed);
+            bool killed = false;
+            try {
+                await process.WaitForExitAsync(ct).ConfigureAwait(false);
+            } catch (OperationCanceledException) {
+                killed = true;
+                try {
+                    process.Kill(entireProcessTree: true);
+                } catch (InvalidOperationException) {
+                    // Exited between the cancellation and the kill.
+                }
+                await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+
+            await Task.WhenAll(stderr, stdout).ConfigureAwait(false);
+
+            return new ProcessResult(process.ExitCode, tail.ToString(), watch.Elapsed, killed);
+        } finally {
+            lock (_running) {
+                _running.Remove(process);
+            }
+        }
+    }
+
+    public void KillAll() {
+        Process[] running;
+        lock (_running) {
+            running = _running.ToArray();
+        }
+        if (running.Length == 0) {
+            return;
+        }
+
+        _log.Info($"Killing {running.Length} running program(s)");
+        foreach (var process in running) {
+            try {
+                process.Kill(entireProcessTree: true);
+            } catch (Exception ex) {
+                // Exited or disposed since the list was read, or refused:
+                // either way there is nothing more this can do.
+                _log.Warn($"Kill failed: {ex.Message}");
+            }
+        }
     }
 
 

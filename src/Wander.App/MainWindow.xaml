@@ -30,62 +30,6 @@
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
         <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility"/>
 
-        <!--
-            One star of the .pp3 rating widget. Five copies of this in the
-            preview footer, each with its own CommandParameter; clicking the
-            star that already marks the rating clears it.
-        -->
-        <Style x:Key="RatingStar" TargetType="Button">
-            <Setter Property="Command" Value="{Binding Preview.SetRankCommand}"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground" Value="{StaticResource RatingStar}"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Padding" Value="1,0"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="ToolTip" Value="{Binding Preview.RatingSource, StringFormat='Rating, written to {0}'}"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter/>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <!--
-            One colour-label swatch. The chosen one gets a ring rather than a
-            different fill — the fill *is* the information, so it must not
-            change to indicate selection.
-        -->
-        <Style x:Key="ColorLabelSwatch" TargetType="Button">
-            <Setter Property="Command" Value="{Binding DataContext.Preview.SetColorLabelCommand, RelativeSource={RelativeSource AncestorType=Window}}"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Margin" Value="1,0"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="Ring" Width="16" Height="16" CornerRadius="8"
-                                Background="Transparent"
-                                BorderBrush="Transparent" BorderThickness="2">
-                            <Ellipse Width="8" Height="8" Fill="{Binding Brush}"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                <Setter TargetName="Ring" Property="BorderBrush" Value="{StaticResource SwatchRing}"/>
-                            </DataTrigger>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Ring" Property="Background" Value="{StaticResource ControlHover}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-
         <Style x:Key="ToolbarButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -658,9 +602,6 @@
                         Command="{Binding OpenJournalCommand}"
                         ToolTip="{x:Static res:Strings.JournalTooltip}"/>
             </StatusBarItem>
-            <StatusBarItem DockPanel.Dock="Left">
-                <TextBlock Text="{Binding Status}" TextTrimming="CharacterEllipsis"/>
-            </StatusBarItem>
             <!--
                 Selection summary sits on the right, in its own field: the
                 left one carries transient messages ("скопировано…", errors),
@@ -672,9 +613,10 @@
                            TextTrimming="CharacterEllipsis"/>
             </StatusBarItem>
             <!--
-                What is running, right of centre and out of the way of the
-                two text fields. A tooltip used to carry the detail; it is a
-                popup now, because the detail has buttons on it and a tooltip
+                What is running, against the right edge next to the
+                selection summary, out of the way of the status text. A
+                tooltip used to carry the detail; it is a popup now,
+                because the detail has buttons on it and a tooltip
                 vanishes the moment you reach for one. The popup lives inside
                 the item it hangs off - it draws in its own window, so the
                 status bar's clipping does not reach it.
@@ -689,7 +631,7 @@
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="{Binding OperationsSummary}"
                                        Foreground="{StaticResource TextMuted}"
-                                       VerticalAlignment="Center"
+                                       VerticalAlignment="Center" TextAlignment="Right"
                                        TextTrimming="CharacterEllipsis" MaxWidth="220"/>
                             <ProgressBar Width="110" Height="12" Margin="8,0,0,0"
                                          VerticalAlignment="Center"
@@ -760,6 +702,14 @@
                         </Border>
                     </Popup>
                 </Grid>
+            </StatusBarItem>
+            <!--
+                The status text last and undocked: it fills whatever the
+                fields on the right leave, so a long message is trimmed
+                instead of pushing the progress bar about.
+            -->
+            <StatusBarItem>
+                <TextBlock Text="{Binding Status}" TextTrimming="CharacterEllipsis"/>
             </StatusBarItem>
         </StatusBar>
 

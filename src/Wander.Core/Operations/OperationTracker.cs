@@ -95,6 +95,47 @@ public sealed class OperationTracker {
         }
     }
 
+    /// <summary>
+    /// Completes with true once no operation is running - at once when
+    /// none is - and with false when <paramref name="timeout"/> runs out
+    /// first. What an exit waits on: the handles close only after the work
+    /// has let go of its files.
+    ///
+    /// <para>
+    /// Never resumes on the caller's context, so a crash handler may block
+    /// on it from the UI thread without waiting on that same thread.
+    /// </para>
+    /// </summary>
+    public async Task<bool> WhenIdleAsync(TimeSpan timeout) {
+        var idle = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        void OnChanged(object? sender, EventArgs e) {
+            if (IsIdle()) {
+                idle.TrySetResult();
+            }
+        }
+
+        // Subscribed before the first look, so an operation finishing in
+        // between is not missed.
+        Changed += OnChanged;
+        try {
+            OnChanged(this, EventArgs.Empty);
+            await idle.Task.WaitAsync(timeout).ConfigureAwait(false);
+
+            return true;
+        } catch (TimeoutException) {
+            return false;
+        } finally {
+            Changed -= OnChanged;
+        }
+    }
+
+
+    private bool IsIdle() {
+        lock (_gate) {
+            return _ops.Count == 0;
+        }
+    }
 
     private void Remove(OperationProgress op) {
         lock (_gate) {

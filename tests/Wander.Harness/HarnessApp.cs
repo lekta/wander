@@ -61,7 +61,7 @@ public sealed class HarnessApp : Wander.App.App {
         // refusal rather than a warning.
         if (!Wander.App.App.Headless) {
             _log.Error("HARNESS refusing to run: App.Headless is off, the window would open on the real desktop");
-            Shutdown(70);
+            ShutdownWithoutAsking(70);
 
             return;
         }
@@ -94,6 +94,9 @@ public sealed class HarnessApp : Wander.App.App {
         RunJournal.Append(
             _context.Scenario.Name, report.Passed, _context.Scenario.Steps.Count, _clock.Elapsed,
             code switch { 0 => "ok", 2 => "fail", _ => "crash" });
-        Shutdown(code);
+        // The exit question would be answered by policy, but its "no" is
+        // what WPF ignores during Shutdown: running operations are stopped
+        // on the spot instead (MainWindow.OnClosing).
+        ShutdownWithoutAsking(code);
     }
 }

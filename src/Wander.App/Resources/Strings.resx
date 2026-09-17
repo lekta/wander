@@ -464,6 +464,12 @@
     <value>Переместить {0} элем. в:
 {1}?</value>
   </data>
+  <data name="ExitWithOperationsTitle" xml:space="preserve">
+    <value>Выйти из Wander?</value>
+  </data>
+  <data name="ExitWithOperationsMessage" xml:space="preserve">
+    <value>Идут операции: {0}. Прервать их и выйти?</value>
+  </data>
   <data name="ConflictVerdictIdentical" xml:space="preserve">
     <value>Файлы идентичны</value>
   </data>
@@ -830,6 +836,9 @@
   </data>
   <data name="BookmarksHeader" xml:space="preserve">
     <value>Закладки</value>
+  </data>
+  <data name="ComputerHeader" xml:space="preserve">
+    <value>Компьютер</value>
   </data>
   <data name="BookmarksToggleHint" xml:space="preserve">
     <value>Свернуть / развернуть закладки</value>

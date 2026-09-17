@@ -11,7 +11,14 @@ namespace Wander.Harness.Host;
 /// something it should not have is visible, not silent.
 /// </summary>
 public sealed class ScriptedDialogs : IDialogs {
-    private readonly Dictionary<DialogKind, bool> _answers = new();
+    /// <summary>
+    /// Kinds answered "accept" whatever <see cref="DefaultAnswer"/> says - a
+    /// scenario that turns the default to "cancel" must not leave the run
+    /// hanging on its way out. A <c>dialogs</c> step still overrides them.
+    /// </summary>
+    private readonly Dictionary<DialogKind, bool> _answers = new() {
+        [DialogKind.ExitWithOperations] = true,
+    };
     private readonly List<string> _records = new();
 
 

@@ -464,12 +464,25 @@
                       DragCompleted="BookmarksSplitter_DragCompleted"/>
 
         <!--
+            The drives panel gets a title strip like the bookmarks, minus
+            the toggle: it is the main panel, and there is nothing to fold
+            it into.
+        -->
+        <DockPanel Grid.Row="2">
+        <Border DockPanel.Dock="Top"
+                Padding="6,4"
+                Background="{StaticResource HeaderBackground}"
+                BorderBrush="{StaticResource Separator}"
+                BorderThickness="0,0,0,1">
+            <TextBlock Text="{x:Static res:Strings.ComputerHeader}" FontWeight="SemiBold"/>
+        </Border>
+        <!--
             No top margin: the outline is this panel's own edge, and
             a four-pixel gap under the splitter put it where the eye
             does not look for it. The rows keep their air from the
             row template's MinHeight.
         -->
-        <TreeView x:Name="Tree" Grid.Row="2"
+        <TreeView x:Name="Tree"
                   ContextMenu="{StaticResource PanelSettingsMenu}"
                   ItemsSource="{Binding Trees.Roots}"
                   SelectedItemChanged="Tree_SelectedItemChanged"
@@ -501,5 +514,6 @@
                 </HierarchicalDataTemplate>
             </TreeView.ItemTemplate>
         </TreeView>
+        </DockPanel>
     </Grid>
 </UserControl>

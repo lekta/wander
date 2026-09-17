@@ -6,8 +6,8 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
-using Microsoft.Web.WebView2.Core;
 using Wander.App.Controllers;
+using Wander.App.Dialogs;
 using Wander.App.DragPreview;
 using Wander.App.Menu;
 using Wander.App.Resources;
@@ -15,10 +15,12 @@ using Wander.App.Util;
 using Wander.App.ViewModels;
 using Wander.App.Views;
 using Wander.Core;
+using Wander.Core.Actions;
 using Wander.Core.FileSystem;
 using Wander.Core.Layout;
 using Wander.Core.Menu;
 using Wander.Core.Navigation;
+using Wander.Core.Operations;
 using Wander.Core.Persistence;
 using Wander.Core.Shell;
 
@@ -110,6 +112,25 @@ public partial class MainWindow : Window {
     }
 
     private void OnClosing(object? sender, CancelEventArgs e) {
+        // Operations still running: asked about, stopped and waited for
+        // before anything below happens, with the window still up. A
+        // Shutdown cannot be put off - WPF closes whatever the handler says
+        // - so there they are stopped on the spot and the close goes on.
+        if (Vm.HasActiveOperations && !_operationsStopped) {
+            if (App.IsShuttingDown) {
+                ServiceLocator.Get<Wander.Core.Logging.ILogger>()
+                    .Info($"Shutdown with {Vm.Operations.Count} operation(s) running: cancelled without waiting");
+                App.AbandonOperations();
+            } else {
+                e.Cancel = true;
+                if (!_stoppingOperations && ConfirmExitWithOperations()) {
+                    StopOperationsThenClose();
+                }
+
+                return;
+            }
+        }
+
         if (!App.Headless) {
             SaveWindowGeometry();
         }
@@ -134,6 +155,11 @@ public partial class MainWindow : Window {
         // Releases the cached IContextMenu, and with it the third-party
         // handler DLLs it keeps referenced.
         _shellMenus.Dispose();
+        // The handle on the folder on screen, and the browser processes of
+        // both preview panes: none of them may outlive the window.
+        ServiceLocator.TryGet<IDirectoryWatcher>()?.Watch(null);
+        Preview.ReleaseWebView();
+        _previewSecond?.ReleaseWebView();
         // Whatever the last, unfinished second of measurements holds.
         Wander.Core.Diagnostics.PerfLog.Flush();
     }
@@ -187,6 +213,61 @@ public partial class MainWindow : Window {
             },
         });
     }
+
+    // --- Exit with operations running ----------------------------------
+
+    /// <summary>How long an exit waits for cancelled operations to let go of their files.</summary>
+    private static readonly TimeSpan _exitWait = TimeSpan.FromSeconds(10);
+
+    /// <summary>The user said yes and the operations are winding down; another close changes nothing.</summary>
+    private bool _stoppingOperations;
+
+    /// <summary>The wait is over: the next close goes through without a question.</summary>
+    private bool _operationsStopped;
+
+
+    private bool ConfirmExitWithOperations() {
+        return ServiceLocator.Get<IDialogs>().Ask(new DialogRequest(
+            DialogKind.ExitWithOperations,
+            Strings.ExitWithOperationsTitle,
+            string.Format(Strings.ExitWithOperationsMessage, Vm.Operations.Count),
+            DialogButtons.OkCancel,
+            DialogIcon.Warning));
+    }
+
+    /// <summary>
+    /// Every operation is cancelled and given <see cref="_exitWait"/> to
+    /// finish, the window and the operation windows still on screen, so
+    /// their cancelling state is seen. Whatever is still running after that
+    /// has the programs it started killed. Then the close is made again.
+    /// </summary>
+    private async void StopOperationsThenClose() {
+        _stoppingOperations = true;
+        try {
+            var log = ServiceLocator.Get<Wander.Core.Logging.ILogger>();
+            var tracker = ServiceLocator.Get<OperationTracker>();
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            int count = Vm.CancelAllOperations();
+            log.Info($"Exit requested with {count} operation(s) running");
+            if (await tracker.WhenIdleAsync(_exitWait)) {
+                log.Info($"Exit: operations idle after {watch.ElapsedMilliseconds} ms");
+            } else {
+                log.Warn($"Exit: {tracker.Snapshot().Count} operation(s) still running after {_exitWait.TotalSeconds:F0} s");
+                ServiceLocator.Get<IProcessRunner>().KillAll();
+            }
+        } finally {
+            _operationsStopped = true;
+            // Posted: with nothing left to wait for, this is still inside
+            // the Closing handler, where WPF refuses a Close. And a close
+            // the user made meanwhile may already have gone through.
+            _ = Dispatcher.BeginInvoke(new Action(() => {
+                if (!_closingForReal) {
+                    Close();
+                }
+            }));
+        }
+    }
+
 
     // --- Preview pane layout --------------------------------------------
 
@@ -257,7 +338,7 @@ public partial class MainWindow : Window {
         };
         timer.Tick += (_, _) => {
             timer.Stop();
-            Application.Current.Shutdown(0);
+            App.ShutdownWithoutAsking(0);
         };
         timer.Start();
     }

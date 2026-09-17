@@ -308,4 +308,41 @@ public class OperationTrackerTests {
         Assert.Equal(CancellationToken.None, snaps[1].Token);
         Assert.NotEqual(snaps[0].Token, snaps[1].Token);
     }
+
+    [Fact]
+    public async Task WhenIdle_EmptyTracker_IsTrueAtOnce() {
+        var tracker = new OperationTracker();
+
+        var idle = tracker.WhenIdleAsync(TimeSpan.FromSeconds(5));
+
+        Assert.True(idle.IsCompletedSuccessfully);
+        Assert.True(await idle);
+    }
+
+    [Fact]
+    public async Task WhenIdle_LiveOperation_IsFalseAfterTheTimeout() {
+        var tracker = new OperationTracker();
+        using var op = tracker.Begin("Copy", 1);
+
+        bool idle = await tracker.WhenIdleAsync(TimeSpan.FromMilliseconds(50));
+
+        Assert.False(idle);
+        Assert.Single(tracker.Snapshot());
+    }
+
+    [Fact]
+    public async Task WhenIdle_OperationFinishesInTime_IsTrue() {
+        // What an exit waits for: the last handle closing, from whatever
+        // thread the work ends on.
+        var tracker = new OperationTracker();
+        var first = tracker.Begin("Copy", 1);
+        var second = tracker.Begin("Move", 1);
+
+        var idle = tracker.WhenIdleAsync(TimeSpan.FromSeconds(5));
+        first.Dispose();
+        Assert.False(idle.IsCompleted);
+        _ = Task.Run(second.Dispose);
+
+        Assert.True(await idle);
+    }
 }

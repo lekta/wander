@@ -1,9 +1,9 @@
 namespace Wander.Core.FileSystem;
 
 /// <summary>
-/// The folders Windows keeps in the root of every volume for its own
-/// bookkeeping. They are not user content, the user has no access to their
-/// insides anyway (ACLs on <c>System Volume Information</c> deny even an
+/// The folders - and the few files - Windows keeps in the root of every
+/// volume for its own bookkeeping. They are not user content, the user has
+/// no access to the folders' insides anyway (ACLs on <c>System Volume Information</c> deny even an
 /// administrator without taking ownership), and touching them breaks
 /// restore points or the recycle bin.
 ///
@@ -39,12 +39,18 @@ internal static class SystemRootFolders {
         "$GetCurrent",
         // Delivery Optimization / Windows Update download cache on data drives.
         "$Windows.~LS",
+        // Files: virtual memory, hibernation, the store apps' swap, and the
+        // crash-dump scratch file. Always in use, never the user's.
+        "pagefile.sys",
+        "hiberfil.sys",
+        "swapfile.sys",
+        "DumpStack.log.tmp",
     };
 
 
     /// <summary>
     /// True when <paramref name="path"/> is one of the well-known system
-    /// folders sitting directly in a volume root.
+    /// folders or files sitting directly in a volume root.
     /// </summary>
     public static bool IsSystemRoot(string path) {
         if (string.IsNullOrWhiteSpace(path)) {

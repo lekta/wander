@@ -20,13 +20,6 @@ namespace Wander.App.ViewModels;
 /// </para>
 /// </summary>
 public sealed class BatchRenameViewModel : ObservableObject {
-    /// <summary>
-    /// Widest counter the window accepts. The planner pads to whatever it is
-    /// given, and a mistyped width of a few billion would be an allocation
-    /// of that many characters.
-    /// </summary>
-    private const int MaxCounterWidth = 10;
-
     private readonly IReadOnlyList<RenameItem> _items;
     private readonly RenameContext _context;
     private readonly IImageMetadataReader? _metadata;
@@ -63,7 +56,7 @@ public sealed class BatchRenameViewModel : ObservableObject {
         _template = rules.Template;
         _counterStart = rules.CounterStart;
         _counterStep = rules.CounterStep;
-        _counterWidth = Math.Clamp(rules.CounterWidth, 1, MaxCounterWidth);
+        _counterWidth = Math.Clamp(rules.CounterWidth, 1, RenameRules.MaxCounterWidth);
         _nameCase = rules.NameCase;
         _extensionCase = rules.ExtensionCase;
 
@@ -181,7 +174,7 @@ public sealed class BatchRenameViewModel : ObservableObject {
     private int _counterWidth;
     public int CounterWidth {
         get => _counterWidth;
-        set => SetRule(ref _counterWidth, Math.Clamp(value, 1, MaxCounterWidth));
+        set => SetRule(ref _counterWidth, Math.Clamp(value, 1, RenameRules.MaxCounterWidth));
     }
 
     private NameCase _nameCase;

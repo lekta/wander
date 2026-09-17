@@ -134,6 +134,7 @@ public sealed class ScenarioRunner {
                 await WaitIdleAsync(step);
                 break;
             case "rename": {
+                    EnsureInSandbox("rename");
                     var entry = Entry(step.Require("name"));
                     if (!string.Equals(_vm.RenamingPath, entry.FullPath, StringComparison.OrdinalIgnoreCase)) {
                         _vm.BeginRename(entry);

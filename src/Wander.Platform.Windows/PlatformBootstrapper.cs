@@ -99,7 +99,7 @@ public static class PlatformBootstrapper {
         // own handlers - the picture encoder on WinRT imaging, with the
         // metadata reader that tells it what the source was shot with. The
         // list file goes where the archive scratch copies go.
-        ServiceLocator.Register<IProcessRunner>(new WindowsProcessRunner());
+        ServiceLocator.Register<IProcessRunner>(new WindowsProcessRunner(logger));
         ServiceLocator.Register<IToolLocator>(new WindowsToolLocator());
         var builtins = new IBuiltinAction[] {
             new ImageConvertAction(ServiceLocator.Get<IImageMetadataReader>(), logger),

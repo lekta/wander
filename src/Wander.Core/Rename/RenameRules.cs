@@ -19,6 +19,13 @@ public sealed record RenameRules {
     /// <summary>The template that changes nothing.</summary>
     public const string IdentityTemplate = "[N]";
 
+    /// <summary>
+    /// Widest counter there is. The planner pads to the width it is given,
+    /// and a width of a few billion - mistyped, or read from a hand-edited
+    /// state.json - would be an allocation of that many characters.
+    /// </summary>
+    public const int MaxCounterWidth = 10;
+
     public static readonly RenameRules Default = new();
 
 
@@ -50,7 +57,7 @@ public sealed record RenameRules {
 
     public int CounterStep { get; init; } = 1;
 
-    /// <summary>Minimum digits, zero-padded: 3 gives 001.</summary>
+    /// <summary>Minimum digits, zero-padded: 3 gives 001. Read within 1..<see cref="MaxCounterWidth"/>.</summary>
     public int CounterWidth { get; init; } = 1;
 
 

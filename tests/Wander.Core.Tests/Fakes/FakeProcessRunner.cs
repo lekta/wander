@@ -29,4 +29,7 @@ internal sealed class FakeProcessRunner : IProcessRunner {
             ? Results.Dequeue()
             : new ProcessResult(0, string.Empty, TimeSpan.Zero, WasKilled: false));
     }
+
+    public void KillAll() {
+    }
 }

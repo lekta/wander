@@ -36,6 +36,9 @@ namespace Wander.App.Views;
 /// </para>
 /// </summary>
 public partial class ProgressDialog : Window, INotifyPropertyChanged {
+    /// <summary>Every window from construction to close - what <see cref="CancelAll"/> reaches.</summary>
+    private static readonly List<ProgressDialog> _live = new();
+
     private readonly CancellationTokenSource _cts = new();
     private readonly OperationTracker _tracker;
 
@@ -55,6 +58,9 @@ public partial class ProgressDialog : Window, INotifyPropertyChanged {
         DataContext = this;
         _tracker.Changed += OnTrackerChanged;
         Closed += OnClosed;
+        lock (_live) {
+            _live.Add(this);
+        }
         RefreshSnapshot();
     }
 
@@ -116,6 +122,22 @@ public partial class ProgressDialog : Window, INotifyPropertyChanged {
         CancelButton.IsEnabled = false;
         CancelButton.Content = Strings.ProgressCancelling;
         _cts.Cancel();
+    }
+
+    /// <summary>
+    /// Stops every operation that has a window, from any thread, without
+    /// touching a control: the crash handler calls this, and the dispatcher
+    /// may be what died. The buttons keep their caption - nobody is looking
+    /// any more. The UI thread's way is <see cref="RequestCancel"/>.
+    /// </summary>
+    public static void CancelAll() {
+        ProgressDialog[] windows;
+        lock (_live) {
+            windows = _live.ToArray();
+        }
+        foreach (var window in windows) {
+            window._cts.Cancel();
+        }
     }
 
 
@@ -188,6 +210,9 @@ public partial class ProgressDialog : Window, INotifyPropertyChanged {
     /// </summary>
     private void OnClosed(object? sender, EventArgs e) {
         _tracker.Changed -= OnTrackerChanged;
+        lock (_live) {
+            _live.Remove(this);
+        }
         if (!_finished) {
             _cts.Cancel();
         }
