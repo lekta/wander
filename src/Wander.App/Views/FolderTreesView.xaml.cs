@@ -10,8 +10,6 @@ using Wander.App.DragPreview;
 using Wander.App.Resources;
 using Wander.App.Util;
 using Wander.App.ViewModels;
-using Wander.Core;
-using Wander.Core.Logging;
 using Wander.Core.Navigation;
 using Wander.Core.Shell;
 
@@ -154,15 +152,9 @@ public partial class FolderTreesView : UserControl {
             BookmarksRow.MinHeight = 0;
             BookmarksRow.Height = GridLength.Auto;
         }
-        // What the grid was actually given, beside what the view model
-        // holds - see PLAN AD10.
-        ServiceLocator.TryGet<ILogger>()?.Info(Vm.IsBookmarksExpanded
-            ? $"Bookmarks row applied: {Vm.BookmarksHeight:F0} (row was {BookmarksRow.ActualHeight:F0})"
-            : $"Bookmarks row collapsed (row was {BookmarksRow.ActualHeight:F0})");
     }
 
     private void BookmarksSplitter_DragCompleted(object sender, DragCompletedEventArgs e) {
-        ServiceLocator.TryGet<ILogger>()?.Info($"Bookmarks splitter released: row {BookmarksRow.ActualHeight:F0}");
         Vm.BookmarksHeight = BookmarksRow.ActualHeight;
     }
 

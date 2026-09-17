@@ -136,7 +136,6 @@ public sealed class MainViewModel : ObservableObject {
     private double _savedWindowHeight;
     private double _windowWidth;
     private double _windowHeight;
-    private bool _paneSizesRestored;
     private string? _lastWrittenPanes;
 
     private readonly ClipboardController _clipboard;
@@ -1005,14 +1004,7 @@ public sealed class MainViewModel : ObservableObject {
         get => _bookmarksHeight;
         set {
             double clamped = Math.Max(BookmarksMinHeight, Math.Min(PaneCeiling(_windowHeight, TreeMinHeight), value));
-            bool changed = SetField(ref _bookmarksHeight, clamped);
-            // Every step of the height's life is in the log while "the
-            // panel comes back short" is open (PLAN AD10): the numbers, not
-            // the code, are what has to say where it goes wrong.
-            _log.Info(
-                $"Bookmarks height set: {value:F0} -> {clamped:F0} (window {_windowWidth:F0}x{_windowHeight:F0}, " +
-                $"ceiling {PaneCeiling(_windowHeight, TreeMinHeight):F0}){(changed ? "" : ", unchanged")}");
-            if (changed) {
+            if (SetField(ref _bookmarksHeight, clamped)) {
                 RebasePaneSizes();
                 SaveState();
             }
@@ -1027,8 +1019,10 @@ public sealed class MainViewModel : ObservableObject {
     /// - monitor round trip come home a few pixels off: rounding, and the
     /// minimums, each way. So the pair is rebased only here - the user
     /// dragged a divider, and all three sizes are now theirs at this
-    /// window - and once at the first start with a file that has no
-    /// window size beside its pane sizes.
+    /// window. A file from before the window size was kept beside the
+    /// sizes stays as it is until then: the old bounds apply
+    /// (<see cref="PaneSizes.LegacyMax"/>), and the first drag rebases
+    /// it at the window it happens in.
     /// </summary>
     private void RebasePaneSizes() {
         _savedPreviewWidth = _previewWidth;
@@ -1036,10 +1030,9 @@ public sealed class MainViewModel : ObservableObject {
         _savedBookmarksHeight = _bookmarksHeight;
         _savedWindowWidth = _windowWidth;
         _savedWindowHeight = _windowHeight;
-        _log.Info($"Pane sizes rebased: {DescribeSavedPanes()}");
     }
 
-    /// <summary>The pair that goes to <c>state.json</c>, for the log lines that watch it (PLAN AD10).</summary>
+    /// <summary>The pair that goes to <c>state.json</c>, for the two log lines that watch it: State loaded, State written.</summary>
     private string DescribeSavedPanes() {
         return $"folders {_savedFoldersWidth:F0}, preview {_savedPreviewWidth:F0}, bookmarks {_savedBookmarksHeight:F0} " +
             $"(expanded {_isBookmarksExpanded}) at {_savedWindowWidth:F0}x{_savedWindowHeight:F0}";
@@ -1503,19 +1496,17 @@ public sealed class MainViewModel : ObservableObject {
     /// Puts the side panes back at the sizes they were left at, scaled to
     /// the window they are coming back into - see
     /// <see cref="PaneSizes.Restore"/>. Called from the window's Loaded
-    /// handler, because that is the first moment there is a window with a
-    /// size to scale against.
+    /// handler, the first moment there is a window with a size to scale
+    /// against, and again from ContentRendered: at Loaded the window is
+    /// not yet the size it comes up in - one restored maximized is still
+    /// at its normal bounds there (1762x700 in the log, 2062x1118 once
+    /// shown), and panes scaled to that came back short on every start
+    /// (2026-09-17). A pure function of the saved pair and the window, so
+    /// the second call for the same size gives the same answer; a guard
+    /// against "the same window" here compared with the size SizeChanged
+    /// had already noted, and skipped the call that mattered.
     /// </summary>
     public void RestorePaneSizes(double windowWidth, double windowHeight) {
-        // Asked again for the same window - the second call after the first
-        // paint, see MainWindow.OnLoaded - there is nothing to recompute.
-        if (_paneSizesRestored
-            && Math.Abs(windowWidth - _windowWidth) <= 1
-            && Math.Abs(windowHeight - _windowHeight) <= 1) {
-            return;
-        }
-
-        _paneSizesRestored = true;
         NoteWindowSize(windowWidth, windowHeight);
 
         // Nothing usable saved (a fresh install, a hand-edited file): the
@@ -1536,20 +1527,13 @@ public sealed class MainViewModel : ObservableObject {
             Raise(nameof(BookmarksHeight));
         }
 
-        // One line per session, so a report of "the pane came back wrong"
-        // arrives with the numbers it is about.
+        // One line per call, so a report of "the pane came back wrong"
+        // arrives with the numbers it is about, and says which window the
+        // panes were last sized for.
         _log.Info(
             $"Pane sizes: window {windowWidth:F0}x{windowHeight:F0}, set at {_savedWindowWidth:F0}x{_savedWindowHeight:F0}; " +
             $"folders {_foldersWidth:F0} (saved {_savedFoldersWidth:F0}), preview {_previewWidth:F0} (saved {_savedPreviewWidth:F0}), " +
             $"bookmarks {_bookmarksHeight:F0} (saved {_savedBookmarksHeight:F0})");
-
-        // A file from before the window size was kept beside the sizes,
-        // or one with a size missing: what is on screen now becomes the
-        // pair, and from here on it is exact.
-        if (_savedWindowWidth <= 0 || _savedWindowHeight <= 0
-            || _savedPreviewWidth <= 0 || _savedFoldersWidth <= 0 || _savedBookmarksHeight <= 0) {
-            RebasePaneSizes();
-        }
     }
 
     /// <summary>

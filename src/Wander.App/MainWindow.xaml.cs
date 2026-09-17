@@ -51,10 +51,6 @@ public partial class MainWindow : Window {
     /// </summary>
     private DropTargetController _drops = null!;
 
-    // The window size last written to the log - see OnLoaded.
-    private double _loggedWidth;
-    private double _loggedHeight;
-
     /// <summary>
     /// The drag currently leaving Wander — the plaque, the cursor and the
     /// wording. See <see cref="OutgoingDrag"/>; the window keeps only the
@@ -114,8 +110,6 @@ public partial class MainWindow : Window {
     }
 
     private void OnClosing(object? sender, CancelEventArgs e) {
-        ServiceLocator.Get<Wander.Core.Logging.ILogger>().Info(
-            $"Closing: window {ActualWidth:F0}x{ActualHeight:F0}, {WindowState}");
         if (!App.Headless) {
             SaveWindowGeometry();
         }
@@ -233,31 +227,15 @@ public partial class MainWindow : Window {
         // Here rather than in the view model's constructor: a saved pane
         // size is a share of the window it was saved from, and this is the
         // first moment there is a window with a size to compare against.
-        // The window's own numbers beside the view model's, while "the
-        // bookmarks panel comes back short" is open (PLAN AD10).
-        log.Info($"Window at Loaded: {ActualWidth:F0}x{ActualHeight:F0}, {WindowState}, dpi {VisualTreeHelper.GetDpi(this).DpiScaleX:F2}");
-        _loggedWidth = ActualWidth;
-        _loggedHeight = ActualHeight;
         Vm.RestorePaneSizes(ActualWidth, ActualHeight);
-        SizeChanged += (_, _) => {
-            Vm.NoteWindowSize(ActualWidth, ActualHeight);
-            // A resize by hand is dozens of events; a line every 50 px is
-            // enough to see where the window went.
-            if (Math.Abs(ActualWidth - _loggedWidth) >= 50 || Math.Abs(ActualHeight - _loggedHeight) >= 50) {
-                _loggedWidth = ActualWidth;
-                _loggedHeight = ActualHeight;
-                log.Info($"Window resized: {ActualWidth:F0}x{ActualHeight:F0}, {WindowState}");
-            }
-        };
-        StateChanged += (_, _) => log.Info($"Window state: {WindowState}, {ActualWidth:F0}x{ActualHeight:F0}");
+        SizeChanged += (_, _) => Vm.NoteWindowSize(ActualWidth, ActualHeight);
         // And once more after the first paint, against the size the window
-        // has settled at: whatever it still did to itself between Loaded
-        // and then is applied to the panes as well. Recomputed from the
-        // saved pair, so for the same size it is a no-op.
-        ContentRendered += (_, _) => {
-            log.Info($"Window at ContentRendered: {ActualWidth:F0}x{ActualHeight:F0}, {WindowState}, dpi {VisualTreeHelper.GetDpi(this).DpiScaleX:F2}");
-            Vm.RestorePaneSizes(ActualWidth, ActualHeight);
-        };
+        // has settled at: at Loaded a window restored maximized is still at
+        // its normal bounds (1762x700 there, 2062x1118 here, by the two
+        // "Pane sizes" lines in the log), and the panes scaled to those
+        // stayed short. Recomputed from the saved pair, so for the same
+        // size it is the same answer.
+        ContentRendered += (_, _) => Vm.RestorePaneSizes(ActualWidth, ActualHeight);
         ApplyPreviewLayout();
         ApplyFoldersLayout();
         // Native-size cap (so small images don't stretch above 100 %) is
