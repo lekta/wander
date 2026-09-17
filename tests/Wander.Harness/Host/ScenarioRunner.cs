@@ -450,6 +450,9 @@ public sealed class ScenarioRunner {
         if (step.Str("kind") is { } kind) {
             _dialogs.Answer(Enum.Parse<DialogKind>(kind, ignoreCase: true), step.Bool("accept") ?? true);
         }
+        if (step.TryGetProperty("choice", out var choice)) {
+            _dialogs.ChoiceAnswer = choice.GetInt32();
+        }
         if (step.Str("conflict") is { } conflict) {
             _dialogs.Conflict = Enum.Parse<ConflictResolution>(conflict, ignoreCase: true);
         }

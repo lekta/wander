@@ -68,6 +68,14 @@ public partial class PreviewPane : UserControl {
     /// </summary>
     public bool IsCodeEditorFocused => CodeEditor.IsKeyboardFocusWithin;
 
+    /// <summary>
+    /// The held-button zoom moved to a point of the picture area, given as
+    /// shares of it (0..1 each way), or ended (null). The window passes it
+    /// to the other half of a split (<see cref="FollowZoom"/>), so both
+    /// pictures are looked at in the same place.
+    /// </summary>
+    public event EventHandler<Point?>? ZoomMoved;
+
 
     /// <summary>
     /// Copies whatever text is selected in the pane, and says how much.
@@ -126,6 +134,53 @@ public partial class PreviewPane : UserControl {
         if (WebPreview.CoreWebView2 is not null) {
             WebPreview.Dispose();
         }
+    }
+
+    /// <summary>
+    /// Puts the other half of a split inside this pane: under the content
+    /// when <paramref name="stacked"/>, beside it otherwise - and above the
+    /// footer either way. The footer speaks for the pair, and between the
+    /// two pictures it cut them apart. Null takes the half away; the control
+    /// stays in the slot, collapsed, for the next pair.
+    /// </summary>
+    public void ShowSecond(PreviewPane? second, bool stacked) {
+        if (second is null) {
+            SecondSlot.Visibility = Visibility.Collapsed;
+            SecondRow.Height = new GridLength(0);
+            SecondColumn.Width = new GridLength(0);
+
+            return;
+        }
+
+        if (!ReferenceEquals(SecondSlot.Content, second)) {
+            SecondSlot.Content = second;
+        }
+        Grid.SetRow(SecondSlot, stacked ? 1 : 0);
+        Grid.SetColumn(SecondSlot, stacked ? 0 : 1);
+        SecondRow.Height = stacked ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+        SecondColumn.Width = stacked ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
+        // The line between the halves is the second pane's own border, on
+        // the side that faces this one.
+        second.BorderThickness = stacked ? new Thickness(0, 1, 0, 0) : new Thickness(1, 0, 0, 0);
+        SecondSlot.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>
+    /// Shows the other half's zoom here: the same share of this picture,
+    /// without taking the mouse. Null ends it. A picture that fits whole
+    /// has nothing to zoom into and stays as it is.
+    /// </summary>
+    public void FollowZoom(Point? share) {
+        if (share is not { } at) {
+            ExitImageZoom(notify: false);
+
+            return;
+        }
+        if (!_imageZoomActive && !BeginImageZoom()) {
+            return;
+        }
+
+        UpdateZoomPosition(new Point(at.X * ImagePreviewHost.ActualWidth, at.Y * ImagePreviewHost.ActualHeight));
     }
 
 
@@ -381,25 +436,43 @@ public partial class PreviewPane : UserControl {
     }
 
     private void ImageZoom_LmbDown(object sender, MouseButtonEventArgs e) {
-        if (!IsImageDownscaled()) {
-            return;
-        }
-        if (ImgFit.Source is not BitmapSource src) {
+        if (!BeginImageZoom()) {
             return;
         }
 
-        _imageZoomActive = true;
-        // 1 DIP = 1 image pixel (no DPI compensation — matches FastStone's
-        // "100 %" semantics on the user's currently configured DPI).
-        ImgZoom.Width = src.PixelWidth;
-        ImgZoom.Height = src.PixelHeight;
-        ImgZoomCanvas.Visibility = Visibility.Visible;
-        UpdateZoomPosition(e.GetPosition(ImagePreviewHost));
+        MoveImageZoom(e.GetPosition(ImagePreviewHost));
         // Capture so we still get the LMB-up if the user lifts the button
         // outside the host (e.g., over the splitter). LostMouseCapture is
         // our cleanup path.
         ImagePreviewHost.CaptureMouse();
         e.Handled = true;
+    }
+
+    /// <summary>Switches to the 1:1 view; false when the picture fits whole and there is nothing to zoom into.</summary>
+    private bool BeginImageZoom() {
+        if (!IsImageDownscaled() || ImgFit.Source is not BitmapSource src) {
+            return false;
+        }
+
+        _imageZoomActive = true;
+        // 1 DIP = 1 image pixel (no DPI compensation - matches FastStone's
+        // "100 %" semantics on the user's currently configured DPI).
+        ImgZoom.Width = src.PixelWidth;
+        ImgZoom.Height = src.PixelHeight;
+        ImgZoomCanvas.Visibility = Visibility.Visible;
+
+        return true;
+    }
+
+    /// <summary>The zoom follows the mouse here, and the other half of a split is told where.</summary>
+    private void MoveImageZoom(Point mouse) {
+        UpdateZoomPosition(mouse);
+
+        double hw = ImagePreviewHost.ActualWidth;
+        double hh = ImagePreviewHost.ActualHeight;
+        if (hw > 0 && hh > 0) {
+            ZoomMoved?.Invoke(this, new Point(Math.Clamp(mouse.X / hw, 0, 1), Math.Clamp(mouse.Y / hh, 0, 1)));
+        }
     }
 
     private void ImageZoom_LmbUp(object sender, MouseButtonEventArgs e) {
@@ -417,7 +490,7 @@ public partial class PreviewPane : UserControl {
             ExitImageZoom();
             return;
         }
-        UpdateZoomPosition(e.GetPosition(ImagePreviewHost));
+        MoveImageZoom(e.GetPosition(ImagePreviewHost));
     }
 
     private void ImageZoom_LostCapture(object sender, MouseEventArgs e) {
@@ -476,7 +549,11 @@ public partial class PreviewPane : UserControl {
         Canvas.SetTop(ImgZoom, y);
     }
 
-    private void ExitImageZoom() {
+    /// <param name="notify">
+    /// Tell the other half of a split. Not when this pane was only following
+    /// it: the end came from there.
+    /// </param>
+    private void ExitImageZoom(bool notify = true) {
         if (!_imageZoomActive) {
             return;
         }
@@ -486,6 +563,9 @@ public partial class PreviewPane : UserControl {
             ImagePreviewHost.ReleaseMouseCapture();
         }
         UpdateImageCursor();
+        if (notify) {
+            ZoomMoved?.Invoke(this, null);
+        }
     }
 
 

@@ -39,6 +39,21 @@ public static partial class Strings {
     /// <summary>Иначе — первый доступный диск.</summary>
     public static string SettingsRestoreLastFolderHint => Get(nameof(SettingsRestoreLastFolderHint));
 
+    /// <summary>Рабочая папка</summary>
+    public static string SettingsWorkFolder => Get(nameof(SettingsWorkFolder));
+
+    /// <summary>Открывается при запуске, если последняя папка была на отключённом диске — флешке, сетевом.</summary>
+    public static string SettingsWorkFolderHint => Get(nameof(SettingsWorkFolderHint));
+
+    /// <summary>{0} (системные «Документы»)</summary>
+    public static string SettingsWorkFolderDefault => Get(nameof(SettingsWorkFolderDefault));
+
+    /// <summary>Выбрать рабочую папку</summary>
+    public static string SettingsWorkFolderPick => Get(nameof(SettingsWorkFolderPick));
+
+    /// <summary>Вернуть системные «Документы»</summary>
+    public static string SettingsWorkFolderReset => Get(nameof(SettingsWorkFolderReset));
+
     /// <summary>Скрытые файлы и папки</summary>
     public static string SettingsShowHidden => Get(nameof(SettingsShowHidden));
 

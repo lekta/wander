@@ -10,6 +10,12 @@ namespace Wander.Platform.Windows.FileSystem;
 /// Shell32 namespace COM for Restore.
 /// </summary>
 public sealed class ShellRecycleBin : IRecycleBin {
+    /// <summary>What a "something is in use" failure carries, so the caller can say so.</summary>
+    private const int HResultSharingViolation = unchecked((int)0x80070020);
+
+    /// <summary>How long a busy file or folder gets before the one retry.</summary>
+    private const int BusyRetryDelayMs = 300;
+
     private readonly ILogger _logger;
 
 
@@ -25,15 +31,24 @@ public sealed class ShellRecycleBin : IRecycleBin {
             throw new FileNotFoundException("Cannot recycle non-existent path", path);
         }
 
-        // pFrom is a double-null-terminated list of paths; for a single item
-        // it's still "X:\foo\bar\0\0".
-        var op = new SHFILEOPSTRUCT {
-            wFunc = FO_DELETE,
-            pFrom = path + '\0' + '\0',
-            fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT | FOF_WANTNUKEWARNING,
-        };
         DateTime when = DateTime.UtcNow;
+        var op = RecycleOperation(path);
         int rc = SHFileOperation(ref op);
+        // Something is open. Measured 2026-09-17 with a file held without
+        // share-delete: the file itself answers ERROR_SHARING_VIOLATION, its
+        // folder DE_INVALIDFILES - on a path that does exist, so "invalid"
+        // is not the reason. Often a moment's worth - a thumbnail handler
+        // still reading - so once more after a pause before giving up.
+        if (IsBusy(rc)) {
+            _logger.Info($"Recycle: {path} or something in it is in use, retrying");
+            Thread.Sleep(BusyRetryDelayMs);
+            op = RecycleOperation(path);
+            rc = SHFileOperation(ref op);
+        }
+        if (IsBusy(rc)) {
+            throw new IOException(
+                $"'{path}' or something inside it is in use (SHFileOperation {rc:X})", HResultSharingViolation);
+        }
         if (rc != 0) {
             throw new IOException($"SHFileOperation FO_DELETE failed ({rc:X}) for {path}");
         }
@@ -43,6 +58,21 @@ public sealed class ShellRecycleBin : IRecycleBin {
 
         _logger.Info($"Recycled: {path}");
         return new RecycleHandle(path, when);
+    }
+
+
+    private static bool IsBusy(int rc) {
+        return rc is DE_INVALIDFILES or ERROR_SHARING_VIOLATION;
+    }
+
+    private static SHFILEOPSTRUCT RecycleOperation(string path) {
+        // pFrom is a double-null-terminated list of paths; for a single item
+        // it's still "X:\foo\bar\0\0".
+        return new SHFILEOPSTRUCT {
+            wFunc = FO_DELETE,
+            pFrom = path + '\0' + '\0',
+            fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT | FOF_WANTNUKEWARNING,
+        };
     }
 
 
@@ -170,6 +200,10 @@ public sealed class ShellRecycleBin : IRecycleBin {
     // --- P/Invoke ------------------------------------------------------
 
     private const uint FO_DELETE = 0x0003;
+
+    /// <summary>SHFileOperation's own "the path was invalid" - see <see cref="Send"/>.</summary>
+    private const int DE_INVALIDFILES = 0x7C;
+    private const int ERROR_SHARING_VIOLATION = 0x20;
 
     private const ushort FOF_SILENT = 0x0004;
     private const ushort FOF_NOCONFIRMATION = 0x0010;

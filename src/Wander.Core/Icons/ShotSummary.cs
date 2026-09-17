@@ -34,7 +34,7 @@ public sealed record ShotSummary(
     public static ShotSummary Aggregate(IReadOnlyList<ImageMetadata> shots) {
         return new ShotSummary(
             shots.Count,
-            Shared(shots, m => CameraOf(m)),
+            Shared(shots, CameraName),
             Shared(shots, m => m.IsoSpeed),
             Shared(shots, m => m.Aperture),
             Shared(shots, m => m.ShutterSpeed),
@@ -43,12 +43,27 @@ public sealed record ShotSummary(
     }
 
 
-    /// <summary>Make and model as one name; null when the file names neither.</summary>
-    private static string? CameraOf(ImageMetadata m) {
-        string camera = string.Join(" ", new[] { m.CameraMake, m.CameraModel }.Where(s => !string.IsNullOrWhiteSpace(s)));
+    /// <summary>
+    /// Make and model as one name; null when the file names neither. Most
+    /// makers repeat themselves in the model - "Canon" and "Canon EOS R8" -
+    /// and then the model is the name: the make is not said twice. The
+    /// make's first word is what is compared, for the ones who write
+    /// "NIKON CORPORATION" and "NIKON Z 6".
+    /// </summary>
+    public static string? CameraName(ImageMetadata m) {
+        string make = m.CameraMake?.Trim() ?? "";
+        string model = m.CameraModel?.Trim() ?? "";
+        string maker = make.Split(' ', 2)[0];
+        bool repeated = maker.Length > 0
+            && model.StartsWith(maker, StringComparison.OrdinalIgnoreCase)
+            && (model.Length == maker.Length || model[maker.Length] == ' ');
+        string camera = repeated || make.Length == 0 ? model
+            : model.Length == 0 ? make
+            : make + " " + model;
 
         return camera.Length > 0 ? camera : null;
     }
+
 
     private static IReadOnlyList<string> Shared(IReadOnlyList<ImageMetadata> shots, Func<ImageMetadata, string?> field) {
         return Distinct(shots.Select(field).Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v!));

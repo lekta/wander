@@ -428,18 +428,27 @@ public partial class MainWindow : Window {
     /// </summary>
     private void ApplyPreviewSplit() {
         if (!Vm.IsPreviewSplit) {
-            PreviewSecondHost.Visibility = Visibility.Collapsed;
-            PreviewSplit.Rows = 1;
-            PreviewSplit.Columns = 1;
+            Preview.ShowSecond(null, stacked: true);
 
             return;
         }
 
         if (_previewSecond is null) {
             _previewSecond = new Views.PreviewPane { DataContext = Vm.PreviewSecond };
-            PreviewSecondHost.Content = _previewSecond;
+            // Zoom on either half looks at the same place of the other
+            // picture. The end of a zoom always goes across, split or not,
+            // so a half put away mid-zoom does not come back zoomed.
+            Preview.ZoomMoved += (_, at) => {
+                if (at is null || Vm.IsPreviewSplit) {
+                    _previewSecond?.FollowZoom(at);
+                }
+            };
+            _previewSecond.ZoomMoved += (_, at) => {
+                if (at is null || Vm.IsPreviewSplit) {
+                    Preview.FollowZoom(at);
+                }
+            };
         }
-        PreviewSecondHost.Visibility = Visibility.Visible;
         ApplyPreviewSplitOrientation();
     }
 
@@ -455,12 +464,7 @@ public partial class MainWindow : Window {
         }
 
         bool stacked = PreviewSplit.ActualHeight >= PreviewSplit.ActualWidth;
-        PreviewSplit.Rows = stacked ? 2 : 1;
-        PreviewSplit.Columns = stacked ? 1 : 2;
-        // The line between the halves is the second pane's own border, on
-        // whichever side faces the first; the left edge stays for the
-        // splitter it always had.
-        _previewSecond.BorderThickness = stacked ? new Thickness(1, 1, 0, 0) : new Thickness(1, 0, 0, 0);
+        Preview.ShowSecond(_previewSecond, stacked);
     }
 
     private void PreviewSplit_SizeChanged(object sender, SizeChangedEventArgs e) {

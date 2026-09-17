@@ -1614,7 +1614,16 @@ public sealed class MainViewModel : ObservableObject {
         Raise(nameof(IsBookmarksExpanded));
         _log.Info($"State loaded: {DescribeSavedPanes()}{(_stateStore.IsReadOnly ? "; read-only, nothing will be written" : "")}");
 
-        _persistedExpandedPaths = session.ExpandedPaths.ToArray();
+        // A remembered branch whose folder has gone opens as far as it
+        // still goes; one on a medium that is not the machine's own stays
+        // closed (NavigationFallback.AfterRestore). Answered here, on the UI
+        // thread, like the expanding below that reads the same folders.
+        _persistedExpandedPaths = session.ExpandedPaths
+            .Select(stop => NavigationFallback.AfterRestore(stop.Path, IsStillThere, VolumeKindOf) is { } path
+                ? stop with { Path = path }
+                : null)
+            .OfType<NavigationStop>()
+            .ToArray();
         // Drives-side expansions are restored immediately. Bookmark-side
         // ones wait until the bookmarks panel is built below — its rows are
         // not there yet, and the matching VM instances do not exist either.
@@ -1662,28 +1671,74 @@ public sealed class MainViewModel : ObservableObject {
 
     /// <summary>
     /// The first navigation of the session: the remembered folder when it
-    /// is still there, the first drive otherwise. Whether it is still there
-    /// is asked on the pool - that one <c>DirectoryExists</c> used to sit on
-    /// the UI thread before the first frame, and a session closed on a
-    /// drive that has since spun down or been unplugged made the next start
-    /// wait for it. A user who went somewhere themselves while the disk was
-    /// thinking is left where they went.
+    /// is still there, its nearest surviving ancestor when it has gone from
+    /// one of the machine's own drives, the working folder (a setting; the
+    /// system Documents by default) when it was on a medium that has most
+    /// likely been taken out, and the first drive when nothing was
+    /// remembered or the working folder is not there either. Whether it is still there is asked on
+    /// the pool - that one <c>DirectoryExists</c> used to sit on the UI
+    /// thread before the first frame, and a session closed on a drive that
+    /// has since spun down or been unplugged made the next start wait for
+    /// it. A user who went somewhere themselves while the disk was thinking
+    /// is left where they went.
     /// </summary>
     private async Task OpenStartFolderAsync(NavigationStop? remembered) {
-        bool restore = remembered is not null
-            && await Task.Run(() => _fs.DirectoryExists(remembered.Path));
+        // Read here, on the UI thread, and carried into the pool.
+        string? work = Settings.ResolveWorkFolder();
+        var (restored, home) = remembered is null
+            ? (null, null)
+            : await Task.Run(() => {
+                string? back = NavigationFallback.AfterRestore(remembered.Path, CanOpen, VolumeKindOf);
+                string? parked = back is null && work is not null && _fs.DirectoryExists(work) ? work : null;
+
+                return (back, parked);
+            });
         if (_nav.Current is not null) {
             return;
         }
 
-        if (restore) {
-            _nav.NavigateTo(remembered!.Path, remembered.Source);
+        if (restored is not null) {
+            if (!string.Equals(restored, remembered!.Path, StringComparison.OrdinalIgnoreCase)) {
+                _log.Info($"Start: {remembered.Path} is gone, opening {restored}");
+            }
+            _nav.NavigateTo(restored, remembered.Source);
+        } else if (home is not null) {
+            _log.Info($"Start: {remembered!.Path} is not on this machine's own drives any more, opening the working folder {home}");
+            _nav.NavigateTo(home, NavigationSource.External);
         } else if (Trees.Roots.FirstOrDefault()?.FullPath is { } first) {
             _nav.NavigateTo(first, NavigationSource.External);
         }
         // The initial navigation ends in SaveState like any other, and the
         // restored folder is not a change worth writing back.
         _stateSaveTimer.Stop();
+    }
+
+    /// <summary>
+    /// Whether a remembered place is still there, cheaply enough for the UI
+    /// thread: a folder on disk is asked about, the bin is always there, and
+    /// an archive is taken as there while its file is - what is inside it
+    /// the tree finds out as it expands.
+    /// </summary>
+    private bool IsStillThere(string path) {
+        if (!IsShellPath(path)) {
+            return _fs.DirectoryExists(path);
+        }
+
+        return Archives.Of(path) is not { } archive || _fs.FileExists(archive.Archive);
+    }
+
+    /// <summary>
+    /// <see cref="IsStillThere"/> in full, for the pool: an archive path is
+    /// opened to see whether it lists.
+    /// </summary>
+    private bool CanOpen(string path) {
+        return IsShellPath(path)
+            ? TryGetShellNamespace()!.CanNavigate(path)
+            : _fs.DirectoryExists(path);
+    }
+
+    private static VolumeKind VolumeKindOf(string path) {
+        return ServiceLocator.TryGet<IVolumeInfoProvider>()?.Describe(path)?.Kind ?? VolumeKind.Unknown;
     }
 
     /// <summary>
@@ -3229,6 +3284,42 @@ public sealed class MainViewModel : ObservableObject {
 
 
     /// <summary>
+    /// Delete pressed on a bookmark. The key could mean the row or the
+    /// folder behind it, and the two are far apart - one is a line in a
+    /// panel, the other is the user's files - so it asks, with both answers
+    /// named on the buttons. A bookmark whose folder is gone has only the
+    /// first answer.
+    /// </summary>
+    public void DeleteFromBookmark(TreeNodeViewModel bookmark, bool permanent) {
+        var choices = new List<string> { Strings.BookmarkDeleteRemove };
+        if (!bookmark.IsMissing) {
+            choices.Add(permanent ? Strings.BookmarkDeleteFolderForever : Strings.BookmarkDeleteFolder);
+        }
+
+        int choice = _dialogs.Choose(new ChoiceRequest(
+            DialogKind.BookmarkOrFolder,
+            Strings.BookmarkDeleteTitle,
+            string.Format(Strings.BookmarkDeleteMessage, bookmark.Name, bookmark.FullPath),
+            choices));
+        switch (choice) {
+            case 0:
+                _log.Info($"Delete on a bookmark: bookmark removed - {bookmark.FullPath}");
+                RemoveBookmarkCommand.Execute(bookmark);
+                break;
+
+            case 1:
+                SelectExternalPath(bookmark.FullPath);
+                _ = DeleteSelectedAsync(permanent, confirmed: true);
+                break;
+
+            default:
+                _log.Info($"Delete on a bookmark cancelled - {bookmark.FullPath}");
+                break;
+        }
+    }
+
+
+    /// <summary>
     /// Points a bookmark at where its folder went, and walks into it. Only
     /// the folder picker and the navigation are here; whether the move is
     /// allowed and what it does to the list is the panel's own rule.
@@ -3446,7 +3537,12 @@ public sealed class MainViewModel : ObservableObject {
 
     // --- Destructive / clipboard ops (always confirm, Cancel-default) --
 
-    private async Task DeleteSelectedAsync(bool permanent) {
+    /// <param name="confirmed">
+    /// The user has already said "to the bin" in so many words (the bookmark
+    /// question); the recycle confirmation would only ask it again. A
+    /// permanent delete is confirmed regardless.
+    /// </param>
+    private async Task DeleteSelectedAsync(bool permanent, bool confirmed = false) {
         if (_selectedEntries.Count == 0) {
             return;
         }
@@ -3458,7 +3554,7 @@ public sealed class MainViewModel : ObservableObject {
         // Permanent (Shift+Delete) always asks. Recycle asks only when the
         // user kept the "confirm" preference on — Ctrl+Z still restores from
         // the bin so skipping the prompt is safe by default.
-        bool needsConfirm = permanent || Settings.ConfirmRecycle;
+        bool needsConfirm = permanent || (Settings.ConfirmRecycle && !confirmed);
         if (needsConfirm) {
             string title = permanent ? Strings.ConfirmDeleteTitle : Strings.ConfirmRecycleTitle;
             string message;
@@ -4375,6 +4471,11 @@ public sealed class MainViewModel : ObservableObject {
             if (lockers.Count > 0) {
                 string procs = string.Join(", ", lockers.Select(l => $"{l.ProcessName} (PID {l.ProcessId})"));
                 return string.Format(Strings.ErrorFileInUse, procs);
+            }
+            // ERROR_SHARING_VIOLATION with nobody to name: the lock was a
+            // moment's, or held by something Restart Manager does not see.
+            if (ex.HResult == unchecked((int)0x80070020)) {
+                return Strings.ErrorInUse;
             }
         }
         return ex.Message;

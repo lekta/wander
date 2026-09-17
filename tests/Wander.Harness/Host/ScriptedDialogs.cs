@@ -26,6 +26,9 @@ public sealed class ScriptedDialogs : IDialogs {
 
     public ConflictResolution Conflict { get; set; } = ConflictResolution.Replace;
 
+    /// <summary>What <see cref="Choose"/> returns: the answer's index, -1 cancels.</summary>
+    public int ChoiceAnswer { get; set; }
+
     /// <summary>What <see cref="Prompt"/> returns; null cancels.</summary>
     public string? PromptAnswer { get; set; }
 
@@ -51,6 +54,13 @@ public sealed class ScriptedDialogs : IDialogs {
         Record($"{request.Kind} [{request.Buttons}] -> {(accept ? "accept" : "cancel")}: {OneLine(request.Message)}");
 
         return accept;
+    }
+
+    public int Choose(ChoiceRequest request) {
+        string answer = ChoiceAnswer >= 0 && ChoiceAnswer < request.Choices.Count ? request.Choices[ChoiceAnswer] : "cancel";
+        Record($"{request.Kind} [{string.Join(" | ", request.Choices)}] -> {answer}: {OneLine(request.Message)}");
+
+        return ChoiceAnswer < request.Choices.Count ? ChoiceAnswer : -1;
     }
 
     public string? Prompt(string title, string label, string initial, bool filenameMode) {

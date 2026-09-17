@@ -167,8 +167,7 @@ internal static class SummaryText {
     /// </summary>
     private static string FormatExif(ImageMetadata m) {
         var parts = new List<string>();
-        string? camera = string.Join(" ", new[] { m.CameraMake, m.CameraModel }.Where(s => !string.IsNullOrWhiteSpace(s)));
-        if (!string.IsNullOrWhiteSpace(camera)) {
+        if (ShotSummary.CameraName(m) is { } camera) {
             parts.Add(camera);
         }
         var shot = new List<string>();

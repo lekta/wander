@@ -785,20 +785,20 @@
                 One pane or two: the second appears when exactly two files
                 the pane can draw are selected (PreviewPair) - stacked while
                 the column is taller than it is wide, side by side once it
-                is not. The second control is built on the first pair
+                is not. It lives inside the first (PreviewPane.ShowSecond),
+                so the pair shares one footer under both pictures. The
+                second control is built on the first pair
                 (ApplyPreviewSplit): it carries a WebView2 and a code editor
                 of its own, and most sessions never need them. Each pane's
                 DataContext is its own PreviewController.
             -->
-            <UniformGrid x:Name="PreviewSplit"
-                         Grid.Column="4"
-                         Rows="1" Columns="1"
-                         KeyboardNavigation.TabNavigation="None"
-                         SizeChanged="PreviewSplit_SizeChanged">
+            <Grid x:Name="PreviewSplit"
+                  Grid.Column="4"
+                  KeyboardNavigation.TabNavigation="None"
+                  SizeChanged="PreviewSplit_SizeChanged">
                 <views:PreviewPane x:Name="Preview"
                                    DataContext="{Binding Preview}"/>
-                <ContentControl x:Name="PreviewSecondHost" Visibility="Collapsed"/>
-            </UniformGrid>
+            </Grid>
         </Grid>
     </DockPanel>
 </Window>

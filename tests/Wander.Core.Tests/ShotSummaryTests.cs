@@ -53,6 +53,18 @@ public class ShotSummaryTests {
         Assert.Equal(new[] { "Canon EOS R5", "Nikon Z6" }, summary.Cameras);
     }
 
+    [Theory]
+    [InlineData("Canon", "Canon EOS R8", "Canon EOS R8")]
+    [InlineData("NIKON CORPORATION", "NIKON Z 6", "NIKON Z 6")]
+    [InlineData("SONY", "ILCE-7M3", "SONY ILCE-7M3")]
+    [InlineData("Canon", "Canonet", "Canon Canonet")]
+    [InlineData(" Canon ", null, "Canon")]
+    [InlineData(null, "EOS R8", "EOS R8")]
+    [InlineData(null, " ", null)]
+    public void CameraName_DoesNotSayTheMakeTwice(string? make, string? model, string? expected) {
+        Assert.Equal(expected, ShotSummary.CameraName(Shot(make: make, model: model)));
+    }
+
     [Fact]
     public void PixelSize_CountsAsOneValue() {
         var summary = ShotSummary.Aggregate(new[] { Shot(), Shot(width: 4000, height: 6000), Shot() });

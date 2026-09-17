@@ -431,9 +431,11 @@ public partial class FolderTreesView : UserControl {
 
     /// <summary>
     /// Enter opens the folder under the cursor, Esc hands the keyboard back
-    /// to the list. Both have to be caught here: the window's own bindings
-    /// would otherwise open whatever the <em>file list</em> has selected and
-    /// clear its selection, neither of which is what the user is pointing at.
+    /// to the list, Delete on a bookmark asks what it is about. All three
+    /// have to be caught here: the window's own bindings would otherwise
+    /// open whatever the <em>file list</em> has selected, clear its
+    /// selection or delete without asking, none of which is what the user
+    /// is pointing at.
     /// </summary>
     private void Tree_PreviewKeyDown(object sender, KeyEventArgs e) {
         if (sender is not TreeView tree) {
@@ -460,6 +462,20 @@ public partial class FolderTreesView : UserControl {
             && tree.SelectedItem is TreeNodeViewModel { IsRemovableBookmark: true } bookmark) {
 
             MoveBookmark(bookmark, e.Key == Key.Up ? -1 : 1);
+            e.Handled = true;
+
+            return;
+        }
+
+        // Delete on a bookmark row: the bookmark, or its folder? Asked
+        // rather than guessed - see MainViewModel.DeleteFromBookmark. Caught
+        // here, ahead of the window's own Delete binding.
+        if (e.Key == Key.Delete
+            && Keyboard.Modifiers is ModifierKeys.None or ModifierKeys.Shift
+            && ReferenceEquals(tree, BookmarksTree)
+            && tree.SelectedItem is TreeNodeViewModel { IsRemovableBookmark: true } marked) {
+
+            Vm.DeleteFromBookmark(marked, permanent: Keyboard.Modifiers == ModifierKeys.Shift);
             e.Handled = true;
 
             return;

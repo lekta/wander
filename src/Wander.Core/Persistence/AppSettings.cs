@@ -23,6 +23,13 @@ public sealed record AppSettings {
     /// <summary>Restore the last folder on launch instead of going to the first drive.</summary>
     public bool RestoreLastFolder { get; init; } = true;
 
+    /// <summary>
+    /// The user's working folder: where a session starts when its last
+    /// folder was on a medium that is gone - a flash drive taken out, a
+    /// share that is not there. Empty means the system Documents folder.
+    /// </summary>
+    public string WorkFolder { get; init; } = "";
+
 
     // --- Behaviour -----------------------------------------------------
     /// <summary>

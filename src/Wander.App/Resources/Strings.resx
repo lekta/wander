@@ -122,9 +122,6 @@
   <data name="PreviewRawToggleHint" xml:space="preserve">
     <value>Показать полный кадр RAW вместо встроенного превью — медленнее, но это настоящее изображение с матрицы</value>
   </data>
-  <data name="PreviewRating" xml:space="preserve">
-    <value>Оценка</value>
-  </data>
   <data name="SummaryDeleted" xml:space="preserve">
     <value>Удалён</value>
   </data>
@@ -624,6 +621,9 @@
     <value>файл открыт в: {0}</value>
     <comment>{0} — список процессов</comment>
   </data>
+  <data name="ErrorInUse" xml:space="preserve">
+    <value>файл занят другой программой</value>
+  </data>
   <data name="MenuCmdOpenSubmenu" xml:space="preserve">
     <value>Открыть с помощью</value>
   </data>
@@ -720,6 +720,22 @@
   </data>
   <data name="SettingsRestoreLastFolderHint" xml:space="preserve">
     <value>Иначе — первый доступный диск.</value>
+  </data>
+  <data name="SettingsWorkFolder" xml:space="preserve">
+    <value>Рабочая папка</value>
+  </data>
+  <data name="SettingsWorkFolderHint" xml:space="preserve">
+    <value>Открывается при запуске, если последняя папка была на отключённом диске — флешке, сетевом.</value>
+  </data>
+  <data name="SettingsWorkFolderDefault" xml:space="preserve">
+    <value>{0} (системные «Документы»)</value>
+    <comment>{0} — путь к папке «Документы»</comment>
+  </data>
+  <data name="SettingsWorkFolderPick" xml:space="preserve">
+    <value>Выбрать рабочую папку</value>
+  </data>
+  <data name="SettingsWorkFolderReset" xml:space="preserve">
+    <value>Вернуть системные «Документы»</value>
   </data>
   <data name="SettingsShowHidden" xml:space="preserve">
     <value>Отображать скрытые файлы и папки</value>
@@ -851,6 +867,24 @@
   </data>
   <data name="BookmarksRemove" xml:space="preserve">
     <value>Убрать из закладок</value>
+  </data>
+  <data name="BookmarkDeleteTitle" xml:space="preserve">
+    <value>Закладка или папка?</value>
+  </data>
+  <data name="BookmarkDeleteMessage" xml:space="preserve">
+    <value>Убрать закладку «{0}» или удалить саму папку?
+
+{1}</value>
+    <comment>{0} — имя закладки, {1} — путь</comment>
+  </data>
+  <data name="BookmarkDeleteRemove" xml:space="preserve">
+    <value>Убрать закладку</value>
+  </data>
+  <data name="BookmarkDeleteFolder" xml:space="preserve">
+    <value>Удалить папку в корзину</value>
+  </data>
+  <data name="BookmarkDeleteFolderForever" xml:space="preserve">
+    <value>Удалить папку навсегда</value>
   </data>
   <data name="BookmarksMoveUp" xml:space="preserve">
     <value>Переместить вверх</value>
@@ -1020,9 +1054,6 @@
   </data>
   <data name="GalleryBackgroundDark" xml:space="preserve">
     <value>Тёмный</value>
-  </data>
-  <data name="FilterRatingLabel" xml:space="preserve">
-    <value>Оценка</value>
   </data>
   <data name="FilterColorHint" xml:space="preserve">
     <value>Показывать только снимки с этой цветовой меткой. Повторный щелчок снимает фильтр.</value>

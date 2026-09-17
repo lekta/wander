@@ -571,9 +571,6 @@
 
                 <StackPanel Orientation="Horizontal"
                             Visibility="{Binding HasRatings, Converter={StaticResource BoolToVisibility}}">
-                <TextBlock Text="{x:Static res:Strings.FilterRatingLabel}"
-                           FontSize="11" Foreground="{StaticResource TextSecondary}"
-                           VerticalAlignment="Center" Margin="0,0,6,0"/>
                 <Button Style="{StaticResource FilterUnratedStar}" CommandParameter="0"/>
                 <Button Style="{StaticResource FilterStar}" CommandParameter="1"
                             Content="{Binding RatingFilter, Converter={StaticResource FilterStarGlyph}, ConverterParameter=1}"/>
@@ -600,12 +597,29 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <Button Content="{x:Static res:Strings.FilterClear}"
-                        Command="{Binding ClearRatingFilterCommand}"
+                <!-- Reset: the arrow back, the words in the tooltip. -->
+                <Button Command="{Binding ClearRatingFilterCommand}"
                         Visibility="{Binding HasRatingFilter, Converter={StaticResource BoolToVisibility}}"
-                        Margin="12,0,0,0" Padding="6,0" FontSize="11"
-                        Focusable="False"
-                        VerticalAlignment="Center"/>
+                        ToolTip="{x:Static res:Strings.FilterClear}"
+                        Content="&#xE777;" FontFamily="Segoe MDL2 Assets" FontSize="12"
+                        Foreground="{StaticResource TextSecondary}"
+                        Margin="8,0,0,0" Padding="4,2"
+                        Cursor="Hand" Focusable="False"
+                        VerticalAlignment="Center">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Bd" Background="Transparent"
+                                    Padding="{TemplateBinding Padding}" CornerRadius="3">
+                                <ContentPresenter/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{StaticResource ControlHover}"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
                 </StackPanel>
             </DockPanel>
         </Border>

@@ -290,9 +290,6 @@ public static partial class Strings {
     /// <summary>«{0}»</summary>
     public static string DragOneItem => Get(nameof(DragOneItem));
 
-    /// <summary>Оценка</summary>
-    public static string FilterRatingLabel => Get(nameof(FilterRatingLabel));
-
     /// <summary>Показывать только снимки с этой цветовой меткой. Повторный щелчок снимает фильтр.</summary>
     public static string FilterColorHint => Get(nameof(FilterColorHint));
 

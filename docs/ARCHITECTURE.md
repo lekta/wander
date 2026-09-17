@@ -254,6 +254,7 @@ Wander.Platform.Windows -> Wander.Core   (28 files)
   Converters     -> ViewModels     (1 files)
   Diagnostics    -> Resources      (1 files)
   Dialogs        -> Conflict       (1 files)
+  Dialogs        -> Resources      (1 files)
   DragPreview    -> Converters     (1 files)
   DragPreview    -> Resources      (3 files)
   DragPreview    -> Util           (1 files)
@@ -1548,8 +1549,11 @@ SYS ws=431 private=360 gen=167/155/134 alloc=+45 loh=6 handles=1060 threads=40 c
 живёт вторым экземпляром: `MainViewModel.PreviewSecond` (`ShowFooter =
 false` — сплит только на картинку, футер один и описывает всё выделение;
 `ShowRawDecode` зеркалится с первой) + второй `PreviewPane`, созданный
-при первой паре (`MainWindow.ApplyPreviewSplit`, `UniformGrid`:
-столбиком, пока колонка выше, чем шире). Пара — чистое правило
+при первой паре (`MainWindow.ApplyPreviewSplit`) и вложенный в первый
+(`PreviewPane.ShowSecond`, 2026-09-17): под картинкой, пока колонка выше,
+чем шире, иначе рядом; футер первой — под обеими. Зум удержанием
+синхронный: `ZoomMoved` отдаёт точку долями области, вторая половина
+повторяет её `FollowZoom` без захвата мыши. Пара — чистое правило
 `PreviewPair.Of(выделение, листинг)` (Core, тест): ровно два файла, оба с
 маршрутом, порядок — по списку. Какой файл панель показывает при
 множественном выделении — `ActiveEntry`: каретка (`CaretPath`, её ставит
@@ -1673,10 +1677,12 @@ false` — сплит только на картинку, футер один и
 
 Каждый модальный вопрос идёт через `Wander.App/Dialogs/IDialogs`:
 `Ask(DialogRequest)` (вид `DialogKind`, заголовок, текст, кнопки, значок;
-кнопка по умолчанию всегда отменяющая — поэтому не поле), `Prompt`,
-`PickFolder`, `CreateConflictResolver(skipIdentical)`. Продакшн — `WpfDialogs`
-(`MessageBox` поверх активного окна, `PromptDialog`, `OpenFolderDialog`,
-`DispatcherConflictResolver(InteractiveConflictResolver)`); харнесс
+кнопка по умолчанию всегда отменяющая — поэтому не поле),
+`Choose(ChoiceRequest)` (ответы названы на кнопках, «Отмена» — по
+умолчанию; индекс или -1), `Prompt`, `PickFolder`,
+`CreateConflictResolver(skipIdentical)`. Продакшн — `WpfDialogs`
+(`MessageBox` поверх активного окна, `ChoiceDialog`, `PromptDialog`,
+`OpenFolderDialog`, `DispatcherConflictResolver(InteractiveConflictResolver)`); харнесс
 подставляет `ScriptedDialogs` до постройки вью-модели. Голых
 `MessageBox.Show` в коде не осталось, кроме аварийного в `CrashReporter`.
 

@@ -135,8 +135,13 @@
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*"/>
+                    <RowDefinition x:Name="SecondRow" Height="0"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition x:Name="SecondColumn" Width="0"/>
+                </Grid.ColumnDefinitions>
 
                 <!-- Content area -->
                 <Grid Grid.Row="0">
@@ -788,8 +793,15 @@
                     </Grid>
                 </Grid>
 
+                <!--
+                    The other half of a split: under the content or beside
+                    it, and above the footer, which the pair shares (see
+                    ShowSecond).
+                -->
+                <ContentControl x:Name="SecondSlot" Visibility="Collapsed"/>
+
                 <!-- Summary footer; absent on the second half of a split (ShowFooter) -->
-                <Border Grid.Row="1"
+                <Border Grid.Row="2" Grid.ColumnSpan="2"
                         BorderBrush="{StaticResource Separator}" BorderThickness="0,1,0,0"
                         Padding="8,6" Background="{StaticResource ChromeBackground}"
                         Visibility="{Binding ShowFooter, Converter={StaticResource BoolToVisibility}}">
@@ -901,8 +913,6 @@
                         -->
                         <StackPanel Orientation="Horizontal" Margin="0,6,0,0"
                                     Visibility="{Binding HasRating, Converter={StaticResource BoolToVisibility}}">
-                            <TextBlock Text="{x:Static res:Strings.PreviewRating}" FontSize="11" Foreground="{StaticResource TextSecondary}"
-                                       VerticalAlignment="Center" Margin="0,0,6,0"/>
                             <Button Style="{StaticResource RatingStar}" CommandParameter="1"
                                     Content="{Binding Rank, Converter={StaticResource RankStar}, ConverterParameter=1}"/>
                             <Button Style="{StaticResource RatingStar}" CommandParameter="2"

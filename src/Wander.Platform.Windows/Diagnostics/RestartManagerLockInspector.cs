@@ -6,12 +6,18 @@ namespace Wander.Platform.Windows.Diagnostics;
 /// <summary>
 /// Uses the Windows Restart Manager API (rstrtmgr.dll) to ask "who has this file
 /// open?". This is the same mechanism MSIs use to figure out which apps to ask
-/// to close during installs. Works for files only — for folders we return empty
-/// because RmRegisterResources expects individual file paths.
+/// to close during installs. RmRegisterResources takes file paths only, so a
+/// folder is asked about through the files inside it - the first
+/// <see cref="MaxFolderFiles"/> of them: a folder that will not go to the bin
+/// is usually a folder with one of its files open.
 /// </summary>
 public sealed class RestartManagerLockInspector : IFileLockInspector {
+    private const int MaxFolderFiles = 500;
+
+
     public IReadOnlyList<FileLockInfo> WhoIsLocking(string filePath) {
-        if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) {
+        string[] resources = FilesOf(filePath);
+        if (resources.Length == 0) {
             return Array.Empty<FileLockInfo>();
         }
 
@@ -22,7 +28,6 @@ public sealed class RestartManagerLockInspector : IFileLockInspector {
         }
 
         try {
-            string[] resources = { filePath };
             hr = RmRegisterResources(handle, (uint)resources.Length, resources, 0, null, 0, null);
             if (hr != 0) {
                 return Array.Empty<FileLockInfo>();
@@ -56,6 +61,31 @@ public sealed class RestartManagerLockInspector : IFileLockInspector {
             return Array.Empty<FileLockInfo>();
         } finally {
             RmEndSession(handle);
+        }
+    }
+
+
+    private static string[] FilesOf(string path) {
+        if (string.IsNullOrEmpty(path)) {
+            return Array.Empty<string>();
+        }
+        if (File.Exists(path)) {
+            return new[] { path };
+        }
+        if (!Directory.Exists(path)) {
+            return Array.Empty<string>();
+        }
+
+        try {
+            var options = new EnumerationOptions {
+                RecurseSubdirectories = true,
+                IgnoreInaccessible = true,
+                AttributesToSkip = FileAttributes.ReparsePoint,
+            };
+
+            return Directory.EnumerateFiles(path, "*", options).Take(MaxFolderFiles).ToArray();
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+            return Array.Empty<string>();
         }
     }
 

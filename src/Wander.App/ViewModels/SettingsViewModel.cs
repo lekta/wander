@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Windows.Media;
 using Wander.App.Resources;
+using Wander.Core;
 using Wander.Core.Actions;
 using Wander.Core.Companions;
 using Wander.Core.FileSystem;
@@ -61,6 +62,34 @@ public sealed class SettingsViewModel : ObservableObject {
     public bool RestoreLastFolder {
         get => _restoreLastFolder;
         set => SetField(ref _restoreLastFolder, value);
+    }
+
+    private string _workFolder = "";
+    /// <summary>The user's own choice of working folder; empty for the system Documents - see <see cref="AppSettings.WorkFolder"/>.</summary>
+    public string WorkFolder {
+        get => _workFolder;
+        set {
+            if (SetField(ref _workFolder, value ?? "")) {
+                Raise(nameof(WorkFolderText));
+                Raise(nameof(HasCustomWorkFolder));
+            }
+        }
+    }
+
+    public bool HasCustomWorkFolder => _workFolder.Length > 0;
+
+    /// <summary>What the settings page shows: the chosen folder, or the system one it stands for.</summary>
+    public string WorkFolderText => HasCustomWorkFolder
+        ? _workFolder
+        : string.Format(Strings.SettingsWorkFolderDefault, SystemDocuments() ?? "");
+
+    /// <summary>
+    /// The working folder as it stands now: the user's choice, or the
+    /// system Documents when there is none. Whether it exists is the
+    /// caller's question.
+    /// </summary>
+    public string? ResolveWorkFolder() {
+        return HasCustomWorkFolder ? _workFolder : SystemDocuments();
     }
 
 
@@ -604,6 +633,7 @@ public sealed class SettingsViewModel : ObservableObject {
         // Bulk update without raising for unchanged values; bindings only
         // refresh when something actually shifted.
         RestoreLastFolder = s.RestoreLastFolder;
+        WorkFolder = s.WorkFolder;
         AutoRefresh = s.AutoRefresh;
         VisibleFirstLoading = s.VisibleFirstLoading;
         ShowHidden = s.ShowHidden;
@@ -825,6 +855,7 @@ public sealed class SettingsViewModel : ObservableObject {
     public AppSettings ToRecord() {
         return new AppSettings {
             RestoreLastFolder = RestoreLastFolder,
+            WorkFolder = WorkFolder,
             AutoRefresh = AutoRefresh,
             VisibleFirstLoading = VisibleFirstLoading,
             ShowHidden = ShowHidden,
@@ -990,5 +1021,9 @@ public sealed class SettingsViewModel : ObservableObject {
 
     private static int ClampInt(int value, int min, int max) {
         return Math.Max(min, Math.Min(max, value));
+    }
+
+    private static string? SystemDocuments() {
+        return ServiceLocator.TryGet<IKnownFolders>()?.GetDocuments();
     }
 }

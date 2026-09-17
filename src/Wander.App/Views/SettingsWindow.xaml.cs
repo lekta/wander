@@ -217,6 +217,26 @@ public partial class SettingsWindow : Window {
     }
 
 
+    // --- Working folder ---------------------------------------------------
+
+    private void PickWorkFolder_Click(object sender, RoutedEventArgs e) {
+        if (DataContext is not SettingsViewModel vm) {
+            return;
+        }
+
+        string? folder = ServiceLocator.Get<IDialogs>().PickFolder(Strings.SettingsWorkFolderPick, vm.ResolveWorkFolder());
+        if (folder is not null) {
+            vm.WorkFolder = folder;
+        }
+    }
+
+    private void ResetWorkFolder_Click(object sender, RoutedEventArgs e) {
+        if (DataContext is SettingsViewModel vm) {
+            vm.WorkFolder = "";
+        }
+    }
+
+
     // --- Actions table ----------------------------------------------------
 
     /// <summary>

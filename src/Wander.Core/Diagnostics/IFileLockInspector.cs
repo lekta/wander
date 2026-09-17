@@ -6,9 +6,10 @@ namespace Wander.Core.Diagnostics;
 /// </summary>
 public interface IFileLockInspector {
     /// <summary>
-    /// Returns the processes that have <paramref name="filePath"/> open.
-    /// Returns an empty list when the file isn't locked, isn't a file (e.g. a
-    /// directory), or the platform doesn't expose this information.
+    /// Returns the processes that have <paramref name="filePath"/> open -
+    /// for a folder, any of the files inside it. Returns an empty list when
+    /// nothing is locked, the path is gone, or the platform doesn't expose
+    /// this information.
     /// </summary>
     IReadOnlyList<FileLockInfo> WhoIsLocking(string filePath);
 }

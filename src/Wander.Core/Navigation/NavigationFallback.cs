@@ -3,9 +3,10 @@ using Wander.Core.FileSystem;
 namespace Wander.Core.Navigation;
 
 /// <summary>
-/// Where the listing goes when a delete took away the folder on screen, or
-/// one above it: to the nearest ancestor that is still there, instead of a
-/// "folder is gone" panel over a path the user removed on purpose.
+/// Where the listing goes when the folder it wants is gone: after a delete
+/// took away the folder on screen, or one above it, and at the start of a
+/// session whose last folder has since been moved. To the nearest ancestor
+/// that is still there, instead of a "folder is gone" panel or a drive root.
 /// </summary>
 public static class NavigationFallback {
     /// <summary>
@@ -23,11 +24,29 @@ public static class NavigationFallback {
 
         string? candidate = current;
         while (candidate is not null && IsCovered(candidate, deleted)) {
-            candidate = Path.GetDirectoryName(
-                candidate.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            candidate = ParentOf(candidate);
         }
 
         return candidate;
+    }
+
+    /// <summary>
+    /// Where a place remembered from the last session - the folder that was
+    /// open, a branch that was expanded - is reopened: the place itself
+    /// while it is there, otherwise its nearest ancestor that is, but only
+    /// on one of the machine's own drives. Anywhere else (a flash drive, a
+    /// share, a disc, a drive letter that is no longer there) the answer is
+    /// null: whatever carries that letter now is most likely another
+    /// medium, and its folders are no place to reopen in.
+    /// </summary>
+    /// <param name="exists">Whether a place is there; asked from the path upwards.</param>
+    /// <param name="kindOf">The volume under a path; asked only once the path itself is gone.</param>
+    public static string? AfterRestore(string path, Func<string, bool> exists, Func<string, VolumeKind> kindOf) {
+        if (exists(path)) {
+            return path;
+        }
+
+        return kindOf(path) == VolumeKind.Fixed ? PathCrumbs.NearestExisting(path, exists) : null;
     }
 
 
@@ -42,5 +61,9 @@ public static class NavigationFallback {
         }
 
         return false;
+    }
+
+    private static string? ParentOf(string path) {
+        return Path.GetDirectoryName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
     }
 }

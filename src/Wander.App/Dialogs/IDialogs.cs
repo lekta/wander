@@ -18,6 +18,9 @@ public enum DialogKind {
 
     /// <summary>The window is closing with operations still running: stop them and exit?</summary>
     ExitWithOperations,
+
+    /// <summary>Delete on a bookmark: take the bookmark away, or delete the folder behind it?</summary>
+    BookmarkOrFolder,
 }
 
 public enum DialogButtons {
@@ -46,6 +49,18 @@ public sealed record DialogRequest(
     DialogIcon Icon);
 
 /// <summary>
+/// A question whose answers are named, for when "OK" would not say which
+/// of two things happens. Cancel is always there besides, and is the
+/// default.
+/// </summary>
+/// <param name="Choices">The answers, as the buttons read, left to right.</param>
+public sealed record ChoiceRequest(
+    DialogKind Kind,
+    string Title,
+    string Message,
+    IReadOnlyList<string> Choices);
+
+/// <summary>
 /// Every modal question the app asks goes through here, so a headless run
 /// can answer them by policy instead of hanging on a message box nobody
 /// will click. Production is <see cref="WpfDialogs"/>; the harness
@@ -54,6 +69,9 @@ public sealed record DialogRequest(
 public interface IDialogs {
     /// <summary>True when the user accepted (OK / Yes). A single-button request returns true once shown.</summary>
     bool Ask(DialogRequest request);
+
+    /// <summary>The index of the answer picked, or -1 for Cancel.</summary>
+    int Choose(ChoiceRequest request);
 
     /// <summary>Text entry; null when cancelled.</summary>
     string? Prompt(string title, string label, string initial, bool filenameMode);

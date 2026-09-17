@@ -36,6 +36,10 @@ public sealed class WpfDialogs : IDialogs {
         return result is MessageBoxResult.OK or MessageBoxResult.Yes;
     }
 
+    public int Choose(ChoiceRequest request) {
+        return ChoiceDialog.Show(request, ActiveWindow());
+    }
+
     public string? Prompt(string title, string label, string initial, bool filenameMode) {
         return PromptDialog.Show(title, label, initial, filenameMode);
     }

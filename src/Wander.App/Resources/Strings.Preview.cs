@@ -63,9 +63,6 @@ public static partial class Strings {
     /// <summary>Показать полный кадр RAW вместо встроенного превью …</summary>
     public static string PreviewRawToggleHint => Get(nameof(PreviewRawToggleHint));
 
-    /// <summary>Оценка</summary>
-    public static string PreviewRating => Get(nameof(PreviewRating));
-
     /// <summary>Оценка, пишется в {0}</summary>
     public static string PreviewRatingWrittenTo => Get(nameof(PreviewRatingWrittenTo));
 

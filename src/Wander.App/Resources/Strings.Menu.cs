@@ -180,6 +180,21 @@ public static partial class Strings {
     /// <summary>Убрать из закладок</summary>
     public static string BookmarksRemove => Get(nameof(BookmarksRemove));
 
+    /// <summary>Закладка или папка?</summary>
+    public static string BookmarkDeleteTitle => Get(nameof(BookmarkDeleteTitle));
+
+    /// <summary>Убрать закладку «{0}» или удалить саму папку?  {1}</summary>
+    public static string BookmarkDeleteMessage => Get(nameof(BookmarkDeleteMessage));
+
+    /// <summary>Убрать закладку</summary>
+    public static string BookmarkDeleteRemove => Get(nameof(BookmarkDeleteRemove));
+
+    /// <summary>Удалить папку в корзину</summary>
+    public static string BookmarkDeleteFolder => Get(nameof(BookmarkDeleteFolder));
+
+    /// <summary>Удалить папку навсегда</summary>
+    public static string BookmarkDeleteFolderForever => Get(nameof(BookmarkDeleteFolderForever));
+
     /// <summary>Переместить вверх</summary>
     public static string BookmarksMoveUp => Get(nameof(BookmarksMoveUp));
 

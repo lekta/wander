@@ -60,8 +60,8 @@
 
 
         <!--
-            General. Seven switches about how the window behaves, with the
-            explanations on tooltips: a paragraph under every checkbox turns
+            General. The switches about how the window behaves and the
+            working folder, with the explanations on tooltips: a paragraph under every checkbox turns
             a settings page into a document, and the reader stops seeing the
             settings.
         -->
@@ -71,6 +71,39 @@
                 <CheckBox Content="{x:Static res:Strings.SettingsRestoreLastFolder}"
                           ToolTip="{x:Static res:Strings.SettingsRestoreLastFolderHint}"
                           IsChecked="{Binding Owner.RestoreLastFolder}"/>
+                <!--
+                    The working folder: the path, a picker and a way back to
+                    the system Documents. Buttons as glyphs, the words on
+                    tooltips.
+                -->
+                <Grid Margin="{StaticResource Row}" ToolTip="{x:Static res:Strings.SettingsWorkFolderHint}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{x:Static res:Strings.SettingsWorkFolder}" Style="{StaticResource FieldLabel}"/>
+                    <TextBlock Grid.Column="1" Text="{Binding Owner.WorkFolderText}"
+                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Owner.HasCustomWorkFolder}" Value="False">
+                                        <Setter Property="Foreground" Value="{StaticResource TextDim}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <Button Grid.Column="2" Content="&#xED25;" FontFamily="Segoe MDL2 Assets"
+                            ToolTip="{x:Static res:Strings.SettingsWorkFolderPick}"
+                            Padding="8,3" Margin="8,0,0,0" Click="PickWorkFolder_Click"/>
+                    <Button Grid.Column="3" Content="&#xE777;" FontFamily="Segoe MDL2 Assets"
+                            ToolTip="{x:Static res:Strings.SettingsWorkFolderReset}"
+                            IsEnabled="{Binding Owner.HasCustomWorkFolder}"
+                            Padding="8,3" Margin="4,0,0,0" Click="ResetWorkFolder_Click"/>
+                </Grid>
                 <CheckBox Content="{x:Static res:Strings.SettingsAutoRefresh}"
                           ToolTip="{x:Static res:Strings.SettingsAutoRefreshHint}"
                           IsChecked="{Binding Owner.AutoRefresh}"/>

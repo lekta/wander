@@ -228,6 +228,9 @@ public static partial class Strings {
     /// <summary>файл открыт в: {0}</summary>
     public static string ErrorFileInUse => Get(nameof(ErrorFileInUse));
 
+    /// <summary>файл занят другой программой</summary>
+    public static string ErrorInUse => Get(nameof(ErrorInUse));
+
     /// <summary>В буфере обмена файл, которого нет на диске (вложение письма, файл внутри архива) — вставить его Wander не может</summary>
     public static string StatusClipboardVirtualFiles => Get(nameof(StatusClipboardVirtualFiles));
 
