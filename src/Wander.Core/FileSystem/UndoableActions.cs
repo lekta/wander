@@ -20,6 +20,7 @@ internal sealed record RenameAction(IFileSystem Fs, string NewPath, string OldNa
 internal sealed record MoveAction(IFileSystem Fs, string OldPath, string NewPath) : IUndoableAction {
     public string Description => $"Move '{Path.GetFileName(OldPath)}'";
     public IReadOnlyList<string> PathsAfterUndo => new[] { OldPath };
+    public IReadOnlyList<(string From, string To)> MovesOnUndo => new[] { (NewPath, OldPath) };
 
     public void Undo() => Fs.MoveEntry(NewPath, OldPath);
 }
@@ -96,6 +97,10 @@ public sealed class CompositeAction : IUndoableAction {
         _actions.Count > 0 && _actions.All(a => a.MetadataTargets.Count > 0)
             ? _actions.SelectMany(a => a.MetadataTargets).Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
             : Array.Empty<string>();
+
+    /// <summary>The members' moves in the order <see cref="Undo"/> makes them - last member first.</summary>
+    public IReadOnlyList<(string From, string To)> MovesOnUndo =>
+        _actions.Reverse().SelectMany(a => a.MovesOnUndo).ToArray();
 
 
     public void Undo() {

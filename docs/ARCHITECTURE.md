@@ -151,7 +151,7 @@ commit : ebd5e51
 -- projects --
 Wander.App -> Wander.Core   (59 files)
 Wander.App -> Wander.Platform.Windows   (1 files)
-Wander.Core.Tests -> Wander.Core   (94 files)
+Wander.Core.Tests -> Wander.Core   (96 files)
 Wander.Harness -> Wander.App   (4 files)
 Wander.Harness -> Wander.Core   (6 files)
 Wander.Harness -> Wander.Platform.Windows   (3 files)
@@ -178,12 +178,13 @@ Wander.Platform.Windows -> Wander.Core   (28 files)
   Listing        -> FileSystem     (5 files)
   Listing        -> Icons          (1 files)
   Listing        -> Search         (1 files)
-  Menu           -> Actions        (2 files)
-  Menu           -> FileSystem     (1 files)
-  Menu           -> Localization   (2 files)
+  Menu           -> Actions        (3 files)
+  Menu           -> FileSystem     (2 files)
+  Menu           -> Localization   (3 files)
   Menu           -> Persistence    (1 files)
   Menu           -> Rename         (2 files)
   Menu           -> Shell          (2 files)
+  Navigation     -> FileSystem     (1 files)
   Persistence    -> Actions        (1 files)
   Persistence    -> Companions     (1 files)
   Persistence    -> FileSystem     (1 files)
@@ -204,9 +205,9 @@ Wander.Platform.Windows -> Wander.Core   (28 files)
   Shell          -> Undo           (1 files)
 
 -- Wander.Core: levels --
-  0: (root), Icons, Layout, Localization, Logging, Navigation, Operations, Undo
+  0: (root), Icons, Layout, Localization, Logging, Operations, Undo
   1: Diagnostics, FileSystem
-  2: Companions, Preview
+  2: Companions, Navigation, Preview
   3: Actions, Rename, Search
   4: Listing, Persistence
   5: Shell
@@ -235,7 +236,7 @@ Wander.Platform.Windows -> Wander.Core   (28 files)
   (root)         -> Menu           (1 files)
   (root)         -> Resources      (4 files)
   (root)         -> Util           (3 files)
-  (root)         -> ViewModels     (1 files)
+  (root)         -> ViewModels     (2 files)
   (root)         -> Views          (1 files)
   Conflict       -> Resources      (2 files)
   Conflict       -> Util           (2 files)
@@ -1168,6 +1169,13 @@ MainViewModel.ApplyRating(строки, поле, значение)
 - **`Ctrl+Z`** — `IUndoableAction.MetadataTargets`: непустой = состав не
   изменился, `UndoLast` → `RefreshMetadataRowsAsync`; `CompositeAction`
   отдаёт объединение только если **все** члены — метаданные.
+- **`Ctrl+Z` переноса** — `IUndoableAction.MovesOnUndo`: пары «где
+  сейчас → куда вернётся» (`MoveAction`; `CompositeAction` — в порядке
+  отката), `UndoLast` ведёт по ним листинг, историю и закладки через
+  `FollowRelocatedAsync` — тот же шаг, что после броска или `Ctrl+V`
+  (`PathRewrite.Under`, `NavigationService.RewritePaths`,
+  `Bookmarks.Follow`); открытая папка, вернувшаяся на место, не
+  оставляет список на опустевшем пути.
 
 ### Проход по оценкам — второй
 

@@ -58,6 +58,11 @@ public static class ContextMenuCatalog {
         [MenuCommandId.RestoreFromRecycleBin] = "MenuCmdRestore",
 
         [MenuCommandId.Properties] = "MenuCmdProperties",
+
+        [MenuCommandId.DropCopyHere] = "MenuCmdDropCopyHere",
+        [MenuCommandId.DropMoveHere] = "MenuCmdDropMoveHere",
+        [MenuCommandId.DropLinkHere] = "MenuCmdDropLinkHere",
+        [MenuCommandId.DropCancel] = "MenuCmdDropCancel",
     };
 
     private static readonly Dictionary<MenuCommandId, string> _gestures = new() {

@@ -308,6 +308,7 @@
                       PreviewMouseLeftButtonUp="Tree_PreviewMouseLeftButtonUp"
                       PreviewMouseMove="Tree_PreviewMouseMove"
                       PreviewMouseWheel="Tree_PreviewMouseWheel"
+                      PreviewMouseRightButtonDown="BookmarksTree_PreviewMouseRightButtonDown"
                       PreviewMouseRightButtonUp="BookmarksTree_PreviewMouseRightButtonUp"
                       PreviewKeyDown="Tree_PreviewKeyDown"
                       TreeViewItem.Expanded="TreeViewItem_Expanded"

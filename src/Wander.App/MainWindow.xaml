@@ -783,7 +783,8 @@
                                    Grid.Column="0"
                                    ContextMenuRequested="FolderTrees_ContextMenuRequested"
                                    FolderTargeted="FolderTrees_FolderTargeted"
-                                   FocusListRequested="FolderTrees_FocusListRequested"/>
+                                   FocusListRequested="FolderTrees_FocusListRequested"
+                                   DropMenuRequested="FolderTrees_DropMenuRequested"/>
 
             <!--
                 Focusable="False" on all three splitters: WPF makes a

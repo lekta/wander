@@ -37,6 +37,7 @@ public sealed class OutgoingDrag {
     private DragPreviewWindow? _preview;
     private int _pathCount;
     private string? _firstName;
+    private bool _rightButton;
 
 
     /// <param name="drops">Where a drop would land, and what it would do.</param>
@@ -55,9 +56,14 @@ public sealed class OutgoingDrag {
     /// has let go. Blocking is not ours to choose — WPF's
     /// <c>DoDragDrop</c> pumps its own message loop until the drop.
     /// </summary>
-    public void Run(DependencyObject src, string[] paths, string[] payload) {
+    /// <param name="rightButton">
+    /// The drag is held by the right mouse button: the drop opens a menu
+    /// instead of acting, so the plaque names no verb.
+    /// </param>
+    public void Run(DependencyObject src, string[] paths, string[] payload, bool rightButton = false) {
         _pathCount = paths.Length;
         _firstName = Path.GetFileName(paths[0].TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        _rightButton = rightButton;
         _drops.Clear();
 
         var preview = new DragPreviewWindow();
@@ -88,11 +94,13 @@ public sealed class OutgoingDrag {
                 ? DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link
                 : DragDropEffects.Copy;
             InFlightPaths = shell is null ? null : payload;
+            InFlightRightButton = rightButton;
             System.Windows.DragDrop.DoDragDrop(src, data, effects);
         } catch {
             // drop target may throw on rejection — ignore.
         } finally {
             InFlightPaths = null;
+            InFlightRightButton = false;
             System.Windows.DragDrop.RemoveGiveFeedbackHandler(src, feedback);
             _drops.Clear();
             _clearBookmarkTarget();
@@ -114,6 +122,15 @@ public sealed class OutgoingDrag {
     /// ordinary drag, whose payload names its files itself.
     /// </summary>
     public static IReadOnlyList<string>? InFlightPaths { get; private set; }
+
+    /// <summary>
+    /// The drag in progress is held by the right mouse button. Read by the
+    /// drop side, which then opens a menu instead of acting: the data
+    /// object cannot say, and the key state a drop reports has the button
+    /// released already. Set for the duration of <c>DoDragDrop</c>, like
+    /// <see cref="InFlightPaths"/>.
+    /// </summary>
+    public static bool InFlightRightButton { get; private set; }
 
 
     /// <summary>
@@ -202,6 +219,13 @@ public sealed class OutgoingDrag {
 
                 return;
             }
+        } else if (_rightButton) {
+            // The verb is picked from a menu on release: the plaque names
+            // what is in hand and what it is over, and promises nothing.
+            Show();
+            action = DragAction.None;
+            desc = DescribeDragged(count);
+            targetText = string.Format(Strings.DragTarget, FormatTarget(_drops.Target));
         } else {
             Show();
             action = _drops.Effect switch {

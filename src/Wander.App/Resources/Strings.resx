@@ -2089,4 +2089,17 @@
   <data name="ActionsPickFolderTitle" xml:space="preserve">
     <value>Папка для результата</value>
   </data>
+  <data name="MenuCmdDropCopyHere" xml:space="preserve">
+    <value>Копировать сюда</value>
+    <comment>Меню броска правой кнопкой мыши; жирным — то, что сделал бы бросок левой</comment>
+  </data>
+  <data name="MenuCmdDropMoveHere" xml:space="preserve">
+    <value>Переместить сюда</value>
+  </data>
+  <data name="MenuCmdDropLinkHere" xml:space="preserve">
+    <value>Создать ярлыки</value>
+  </data>
+  <data name="MenuCmdDropCancel" xml:space="preserve">
+    <value>Отмена</value>
+  </data>
 </root>

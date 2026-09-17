@@ -184,4 +184,40 @@ public class NavigationServiceTests {
         Assert.Equal(Foo, nav.Current);
         Assert.Equal(NavigationSource.Drives, nav.CurrentSource);
     }
+
+    [Fact]
+    public void RewritePaths_FollowsAMovedFolder_InTheCurrentEntryAndBehindIt() {
+        var nav = new NavigationService();
+        nav.NavigateTo(Foo, NavigationSource.Bookmark);
+        nav.NavigateTo(FooBar);
+        int raised = 0;
+        nav.CurrentChanged += (_, _) => raised++;
+
+        bool followed = nav.RewritePaths(Foo, Baz);
+
+        Assert.True(followed);
+        Assert.Equal(1, raised);
+        Assert.Equal(@"C:\baz\bar", nav.Current);
+        Assert.Equal(NavigationSource.External, nav.CurrentSource);
+        nav.GoBack();
+        Assert.Equal(Baz, nav.Current);
+        Assert.Equal(NavigationSource.Bookmark, nav.CurrentSource);
+    }
+
+    [Fact]
+    public void RewritePaths_LeavesTheRest_AndStaysQuietWhenTheCurrentEntryIsNotInvolved() {
+        var nav = new NavigationService();
+        nav.NavigateTo(Foo);
+        nav.NavigateTo(Bar);
+        int raised = 0;
+        nav.CurrentChanged += (_, _) => raised++;
+
+        bool followed = nav.RewritePaths(Foo, Baz);
+
+        Assert.False(followed);
+        Assert.Equal(0, raised);
+        Assert.Equal(Bar, nav.Current);
+        nav.GoBack();
+        Assert.Equal(Baz, nav.Current);
+    }
 }

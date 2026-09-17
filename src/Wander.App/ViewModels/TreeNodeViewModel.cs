@@ -434,20 +434,22 @@ public sealed class TreeNodeViewModel : ObservableObject {
     /// <summary>
     /// Re-reads the row standing on <paramref name="path"/> anywhere in this
     /// branch. A path can appear more than once, so this does not stop at
-    /// the first hit at any one level.
+    /// the first hit at any one level. Completes when every re-read has
+    /// landed, for a caller that is about to look for a row it brings in.
     /// </summary>
-    public void RefreshBranch(string path) {
+    public Task RefreshBranch(string path) {
         if (PathsEqual(FullPath, path)) {
-            _ = RefreshChildrenAsync();
-
-            return;
+            return RefreshChildrenAsync();
         }
 
         // Snapshot: a match further down rebuilds its own Children, never
         // this level's, but the enumerator is cheap enough not to argue with.
+        var pending = new List<Task>();
         foreach (var child in Children.ToArray()) {
-            child.RefreshBranch(path);
+            pending.Add(child.RefreshBranch(path));
         }
+
+        return Task.WhenAll(pending);
     }
 
 

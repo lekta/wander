@@ -186,4 +186,38 @@ public class UndoableActionsTests {
 
         Assert.Equal(new[] { MoveOld }, composite.PathsAfterUndo);
     }
+
+
+    // --- MovesOnUndo ---------------------------------------------------
+    // What the UI walks the remembered paths through after Ctrl+Z. A wrong
+    // pair leaves the listing on a folder the undo just emptied.
+
+    [Fact]
+    public void MoveAction_MovesOnUndo_IsFromTheNewPathBackToTheOld() {
+        var action = new MoveAction(new FakeFileSystem(), MoveOld, MoveNew);
+
+        Assert.Equal(new[] { (MoveNew, MoveOld) }, action.MovesOnUndo);
+    }
+
+    [Fact]
+    public void CreateAndDeleteActions_MoveNothing() {
+        var fs = new FakeFileSystem();
+        fs.Files[GonePath] = new byte[] { 7 };
+        var bin = new FakeRecycleBin(fs);
+
+        Assert.Empty(((IUndoableAction)new CreateAction(bin, NewPath)).MovesOnUndo);
+        Assert.Empty(((IUndoableAction)new DeleteAction(bin, bin.Send(GonePath))).MovesOnUndo);
+    }
+
+    [Fact]
+    public void Composite_MovesOnUndo_FollowsTheUndoOrder_AndSkipsMembersThatMoveNothing() {
+        var fs = new FakeFileSystem();
+        var composite = new CompositeAction("3 ops", new IUndoableAction[] {
+            new MoveAction(fs, MoveOld, MoveNew),
+            new CreateAction(new FakeRecycleBin(fs), NewPath),
+            new MoveAction(fs, @"C:\old\b", @"C:\new\b"),
+        });
+
+        Assert.Equal(new[] { (@"C:\new\b", @"C:\old\b"), (MoveNew, MoveOld) }, composite.MovesOnUndo);
+    }
 }

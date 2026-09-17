@@ -86,6 +86,15 @@ public sealed class DropTargetController {
     /// </summary>
     public bool IsBookmarkTarget { get; set; }
 
+    /// <summary>
+    /// The drag is held by the right mouse button, so a drop opens a menu
+    /// instead of doing what the modifiers say. Learned from the key state
+    /// of every DragOver and kept, because by the time the drop arrives the
+    /// button has been released; for Wander's own drags the source says so
+    /// outright (<see cref="OutgoingDrag.InFlightRightButton"/>).
+    /// </summary>
+    public bool IsRightButton { get; private set; }
+
 
     /// <summary>
     /// Answers a <c>DragOver</c>: fills in <c>e.Effects</c>, remembers what
@@ -96,6 +105,9 @@ public sealed class DropTargetController {
         // drop target again, whatever it was over a moment ago.
         IsBookmarkTarget = false;
         e.Handled = true;
+        if (OutgoingDrag.InFlightRightButton || (e.KeyStates & DragDropKeyStates.RightMouseButton) != 0) {
+            IsRightButton = true;
+        }
 
         if (PayloadPaths(e.Data) is not { } paths) {
             e.Effects = DragDropEffects.None;
@@ -206,13 +218,26 @@ public sealed class DropTargetController {
     /// undoable.
     /// </para>
     /// </summary>
-    public void Execute(DragEventArgs e, Action<DropPlan> run) {
+    /// <param name="offerMenu">
+    /// What to do instead of <paramref name="run"/> when the drag was held
+    /// by the right mouse button: open the menu that asks. The plan's
+    /// effect is then what a left-button drop would have done - the row
+    /// the menu draws bold. Null when the surface has no such menu.
+    /// </param>
+    public void Execute(DragEventArgs e, Action<DropPlan> run, Action<DropPlan>? offerMenu = null) {
         try {
             if (PlanDrop(e) is not { } plan) {
                 return;
             }
 
-            run(plan);
+            bool rightButton = IsRightButton
+                || OutgoingDrag.InFlightRightButton
+                || (e.KeyStates & DragDropKeyStates.RightMouseButton) != 0;
+            if (rightButton && offerMenu is not null) {
+                offerMenu(plan);
+            } else {
+                run(plan);
+            }
             e.Handled = true;
         } finally {
             Clear();
@@ -348,11 +373,15 @@ public sealed class DropTargetController {
             switch (hit) {
                 case TreeViewItem tvi when tvi.DataContext is TreeNodeViewModel:
                     // RenderSize of a TreeViewItem includes its expanded
-                    // children — adorning that would paint the highlight over
-                    // the whole subtree. The default WPF template names the
-                    // row container "Bd" (Aero2); adorn that if available,
-                    // otherwise fall back to the row itself.
-                    return tvi.Template?.FindName("Bd", tvi) as UIElement ?? tvi;
+                    // children - adorning that would paint the highlight over
+                    // the whole subtree. Our row template (FolderTreesView,
+                    // WanderTreeViewItem) names the row border "Row"; the
+                    // stock Aero2 template calls it "Bd". Looking for the
+                    // stock name only was what lit up the whole branch of an
+                    // open folder (2026-09-16).
+                    return tvi.Template?.FindName("Row", tvi) as UIElement
+                        ?? tvi.Template?.FindName("Bd", tvi) as UIElement
+                        ?? tvi;
 
                 case ListBoxItem lbi when lbi.DataContext is FileSystemEntry { Kind: EntryKind.Directory }:
                     return lbi;
@@ -367,6 +396,7 @@ public sealed class DropTargetController {
 
     private void Reset() {
         IsBookmarkTarget = false;
+        IsRightButton = false;
         Effect = DragDropEffects.None;
         Target = null;
         SelfDropReason = SelfDropReason.None;

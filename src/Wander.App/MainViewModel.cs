@@ -136,6 +136,8 @@ public sealed class MainViewModel : ObservableObject {
     private double _savedWindowHeight;
     private double _windowWidth;
     private double _windowHeight;
+    private bool _paneSizesRestored;
+    private string? _lastWrittenPanes;
 
     private readonly ClipboardController _clipboard;
 
@@ -1003,7 +1005,14 @@ public sealed class MainViewModel : ObservableObject {
         get => _bookmarksHeight;
         set {
             double clamped = Math.Max(BookmarksMinHeight, Math.Min(PaneCeiling(_windowHeight, TreeMinHeight), value));
-            if (SetField(ref _bookmarksHeight, clamped)) {
+            bool changed = SetField(ref _bookmarksHeight, clamped);
+            // Every step of the height's life is in the log while "the
+            // panel comes back short" is open (PLAN AD10): the numbers, not
+            // the code, are what has to say where it goes wrong.
+            _log.Info(
+                $"Bookmarks height set: {value:F0} -> {clamped:F0} (window {_windowWidth:F0}x{_windowHeight:F0}, " +
+                $"ceiling {PaneCeiling(_windowHeight, TreeMinHeight):F0}){(changed ? "" : ", unchanged")}");
+            if (changed) {
                 RebasePaneSizes();
                 SaveState();
             }
@@ -1027,6 +1036,13 @@ public sealed class MainViewModel : ObservableObject {
         _savedBookmarksHeight = _bookmarksHeight;
         _savedWindowWidth = _windowWidth;
         _savedWindowHeight = _windowHeight;
+        _log.Info($"Pane sizes rebased: {DescribeSavedPanes()}");
+    }
+
+    /// <summary>The pair that goes to <c>state.json</c>, for the log lines that watch it (PLAN AD10).</summary>
+    private string DescribeSavedPanes() {
+        return $"folders {_savedFoldersWidth:F0}, preview {_savedPreviewWidth:F0}, bookmarks {_savedBookmarksHeight:F0} " +
+            $"(expanded {_isBookmarksExpanded}) at {_savedWindowWidth:F0}x{_savedWindowHeight:F0}";
     }
 
     /// <summary>
@@ -1324,8 +1340,106 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
-        Refresh();
+        if (!await FollowMovedAsync(results, targetFolder, moved: effect == DropEffect.Move)) {
+            Refresh();
+        }
         ReportBatchResults(results, effect == DropEffect.Move ? Strings.VerbMoved : Strings.VerbCopied, targetFolder);
+    }
+
+
+    /// <summary>
+    /// What the right-button drop menu is built from. The payload of a drag
+    /// carries the companions (a RAW's .xmp and .pp3 travel with it), and
+    /// a copy or a move wants them; an action does not - "convert" is about
+    /// the pictures, and a sidecar among the items would make every image
+    /// action inapplicable. So the items are grouped the way the
+    /// operations group them, and only the primaries are what the actions
+    /// see and the caption counts. Looked up on the pool - a drop can be a
+    /// thousand files - and out of an archive not at all: nothing runs on
+    /// an entry that is not a file yet.
+    /// </summary>
+    public async Task<DropMenuTarget> DescribeDropAsync(IReadOnlyList<string> paths, string target, bool moveByDefault) {
+        bool fromArchive = paths.Any(Archives.Inside);
+        var primaries = fromArchive
+            ? paths
+            : await Task.Run(() => GroupPathsWithCompanions(paths).Select(g => g.Primary).ToArray());
+        var entries = fromArchive
+            ? Array.Empty<FileSystemEntry>()
+            : await Task.Run(() => primaries.Select(_fs.GetEntry).OfType<FileSystemEntry>().ToArray());
+
+        return new DropMenuTarget {
+            Paths = primaries,
+            Entries = entries,
+            TargetFolder = target,
+            MoveByDefault = moveByDefault,
+            FromArchive = fromArchive,
+            Actions = Settings.Actions,
+            MissingTools = MissingTools,
+            Settings = MenuSettings,
+        };
+    }
+
+
+    /// <summary>
+    /// Brings the rest of the window in line after a copy or a move. The
+    /// folder panels re-read the folders that lost or gained a subfolder -
+    /// the watcher only covers the folder on screen. After a move, a
+    /// bookmark on a moved folder follows it, the history follows it, and
+    /// when the folder on screen - or one above it - is what moved, the
+    /// listing goes on where the folder is now instead of showing "folder
+    /// is gone" over its old path.
+    /// </summary>
+    /// <returns>True when the listing was re-pointed; the caller then must not re-list the old path.</returns>
+    private async Task<bool> FollowMovedAsync(IReadOnlyList<BatchItemResult> results, string target, bool moved) {
+        var landed = results
+            .Where(r => r.Status is BatchItemStatus.Ok or BatchItemStatus.Replaced or BatchItemStatus.Renamed or BatchItemStatus.Merged)
+            .ToList();
+        if (landed.Count == 0) {
+            return false;
+        }
+
+        var moves = moved
+            ? landed.Select(r => (r.Source, r.FinalDestination)).ToArray()
+            : Array.Empty<(string, string)>();
+
+        return await FollowRelocatedAsync(moves, target);
+    }
+
+
+    /// <summary>
+    /// <see cref="FollowMovedAsync"/> from the moves alone - and what
+    /// <c>Ctrl+Z</c> of a move runs, with the pairs pointing back
+    /// (<see cref="IUndoableAction.MovesOnUndo"/>). The panels re-read both
+    /// ends of every move, and <paramref name="target"/>: a copy moves
+    /// nothing, yet the folder it went into gained a subfolder.
+    /// </summary>
+    /// <returns>True when the listing was re-pointed; the caller then must not re-list the old path.</returns>
+    private async Task<bool> FollowRelocatedAsync(IReadOnlyList<(string From, string To)> moves, string? target) {
+        bool followed = false;
+        var touched = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (target is not null) {
+            touched.Add(target);
+        }
+        foreach (var (from, to) in moves) {
+            foreach (string? parent in new[] { Path.GetDirectoryName(from), Path.GetDirectoryName(to) }) {
+                if (parent is { Length: > 0 }) {
+                    touched.Add(parent);
+                }
+            }
+            Bookmarks.Follow(from, to);
+            followed |= _nav.RewritePaths(from, to);
+        }
+
+        // One re-read per folder, whatever was dropped: a panel row only
+        // enumerates while it is open, and it is folders that show there.
+        await Task.WhenAll(touched.Select(Trees.RefreshForAsync));
+        if (followed) {
+            // The navigation above looked for its row before the target's
+            // branch had the moved folder in it.
+            ExpandCurrentInTrees();
+        }
+
+        return followed;
     }
 
     private void CreateShortcuts(IReadOnlyList<string> sources, string targetFolder) {
@@ -1393,6 +1507,15 @@ public sealed class MainViewModel : ObservableObject {
     /// size to scale against.
     /// </summary>
     public void RestorePaneSizes(double windowWidth, double windowHeight) {
+        // Asked again for the same window - the second call after the first
+        // paint, see MainWindow.OnLoaded - there is nothing to recompute.
+        if (_paneSizesRestored
+            && Math.Abs(windowWidth - _windowWidth) <= 1
+            && Math.Abs(windowHeight - _windowHeight) <= 1) {
+            return;
+        }
+
+        _paneSizesRestored = true;
         NoteWindowSize(windowWidth, windowHeight);
 
         // Nothing usable saved (a fresh install, a hand-edited file): the
@@ -1487,6 +1610,7 @@ public sealed class MainViewModel : ObservableObject {
         Bookmarks.Load(state.Favorites);
         _isBookmarksExpanded = session.IsBookmarksExpanded;
         Raise(nameof(IsBookmarksExpanded));
+        _log.Info($"State loaded: {DescribeSavedPanes()}{(_stateStore.IsReadOnly ? "; read-only, nothing will be written" : "")}");
 
         _persistedExpandedPaths = session.ExpandedPaths.ToArray();
         // Drives-side expansions are restored immediately. Bookmark-side
@@ -1609,6 +1733,14 @@ public sealed class MainViewModel : ObservableObject {
             Settings = Settings.ToRecord(),
             LastRunVersion = Diagnostics.CrashReporter.AppVersion(),
         });
+
+        // Only when the pane pair changed: the state is written after every
+        // navigation, and the line is about the panes.
+        string panes = DescribeSavedPanes();
+        if (panes != _lastWrittenPanes) {
+            _lastWrittenPanes = panes;
+            _log.Info($"State written{(_stateStore.IsReadOnly ? " (not really: read-only)" : "")}: {panes}");
+        }
     }
 
     /// <summary>
@@ -3009,6 +3141,9 @@ public sealed class MainViewModel : ObservableObject {
         if (e.PropertyName == nameof(SettingsViewModel.ShowBookmarkDownloads) ||
             e.PropertyName == nameof(SettingsViewModel.ShowBookmarkDocuments) ||
             e.PropertyName == nameof(SettingsViewModel.ShowBookmarkPictures) ||
+            e.PropertyName == nameof(SettingsViewModel.ShowBookmarkDesktop) ||
+            e.PropertyName == nameof(SettingsViewModel.ShowBookmarkMusic) ||
+            e.PropertyName == nameof(SettingsViewModel.ShowBookmarkVideos) ||
             e.PropertyName == nameof(SettingsViewModel.ShowBookmarkRecycleBin)) {
             Bookmarks.Build(_persistedExpandedPaths);
         }
@@ -3440,7 +3575,7 @@ public sealed class MainViewModel : ObservableObject {
     }
 
 
-    private void UndoLast() {
+    private async void UndoLast() {
         try {
             var action = _undo.Undo();
             if (action is null) {
@@ -3453,9 +3588,12 @@ public sealed class MainViewModel : ObservableObject {
             // as it was — same files, same names, same order — so re-listing
             // it would be the same jump the write itself avoids. Only the
             // rows it touched are re-read.
+            // An undo that took the folder on screen back to where it was
+            // moved from has taken the listing with it - re-listing the path
+            // it left would show "folder is gone".
             if (action.MetadataTargets.Count > 0) {
                 _ = Ratings.RefreshRowsAsync(action.MetadataTargets);
-            } else {
+            } else if (!await FollowRelocatedAsync(action.MovesOnUndo, target: null)) {
                 // Point the user at what came back, not at wherever the
                 // selection happened to be.
                 _session.SetArrival(ArrivalIntent.Rows(_nav.Current!, action.PathsAfterUndo.ToArray()));
@@ -3548,8 +3686,6 @@ public sealed class MainViewModel : ObservableObject {
         // Nothing selected and still applicable: an action for folders, on
         // the folder on screen.
         var paths = _selectedEntries.Count > 0 ? InListOrder(_selectedEntries) : new[] { folder! };
-        var run = ActionCatalog.WithLocatedProgram(action, _toolLocations);
-        string title = action.DisplayTitle;
 
         string? outputFolder = null;
         if (pickFolder) {
@@ -3558,6 +3694,34 @@ public sealed class MainViewModel : ObservableObject {
                 return;
             }
         }
+
+        await RunActionOnAsync(action, paths, outputFolder);
+    }
+
+    /// <summary>
+    /// The right-button drop menu chose an action: it runs over what was
+    /// dropped, not over the selection, and the outputs land in the folder
+    /// dropped on. Not asked again whether it applies - the menu offered
+    /// only what does, a moment ago, over these same items.
+    /// </summary>
+    public void RunActionOnDropped(string? id, IReadOnlyList<string> paths, string outputFolder) {
+        var action = Settings.Actions.FirstOrDefault(a => a.Id == id);
+        if (action is null) {
+            _log.Warn($"Action '{id}' is not in the catalog");
+
+            return;
+        }
+        if (paths.Count == 0) {
+            return;
+        }
+
+        _ = RunActionOnAsync(action, paths, outputFolder);
+    }
+
+    /// <summary>One action over the given paths, in an operation window of its own, with the report at the end.</summary>
+    private async Task RunActionOnAsync(CustomAction action, IReadOnlyList<string> paths, string? outputFolder) {
+        var run = ActionCatalog.WithLocatedProgram(action, _toolLocations);
+        string title = action.DisplayTitle;
 
         IReadOnlyList<ActionItemResult> results;
         try {
@@ -3967,7 +4131,9 @@ public sealed class MainViewModel : ObservableObject {
             .Select(r => r.FinalDestination)
             .ToArray();
         _session.SetArrival(ArrivalIntent.Rows(target, arrived, takeFocus: arrived.Length > 0));
-        Refresh();
+        if (!await FollowMovedAsync(results, target, moved: wasCut)) {
+            Refresh();
+        }
         ReportBatchResults(results, wasCut ? Strings.VerbMoved : Strings.VerbCopied, target);
     }
 

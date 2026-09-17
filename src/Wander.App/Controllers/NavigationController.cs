@@ -186,6 +186,16 @@ public sealed class NavigationController : ObservableObject {
     }
 
 
+    /// <summary>
+    /// A folder Wander moved or renamed: the history follows it. True when
+    /// the folder on screen was involved - the listing then re-points
+    /// itself through <see cref="CurrentChanged"/>.
+    /// </summary>
+    public bool RewritePaths(string oldRoot, string newRoot) {
+        return _nav.RewritePaths(oldRoot, newRoot);
+    }
+
+
     /// <summary>Restores the recent-folders list from <c>state.json</c>.</summary>
     public void LoadRecentPaths(IEnumerable<string> paths) {
         _recent.Load(paths);

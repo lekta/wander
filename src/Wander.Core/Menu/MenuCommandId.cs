@@ -71,4 +71,12 @@ public enum MenuCommandId {
 
     // --- Misc -----------------------------------------------------------
     Properties,
+
+    // --- Drop with the right mouse button (DropMenuBuilder) -------------
+    /// <summary>The first row: what was dropped and where. Never enabled.</summary>
+    DropCaption,
+    DropCopyHere,
+    DropMoveHere,
+    DropLinkHere,
+    DropCancel,
 }

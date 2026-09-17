@@ -10,6 +10,8 @@ using Wander.App.DragPreview;
 using Wander.App.Resources;
 using Wander.App.Util;
 using Wander.App.ViewModels;
+using Wander.Core;
+using Wander.Core.Logging;
 using Wander.Core.Navigation;
 using Wander.Core.Shell;
 
@@ -70,6 +72,12 @@ public partial class FolderTreesView : UserControl {
     private Point _treeDragOrigin;
     private TreeNodeViewModel? _treeMenuNode;
 
+    // A right-button press on a drives-tree row arms a drag as well: moved
+    // past the threshold it drags the folder, released in place it opens
+    // the folder's menu.
+    private Point _treeRightDragOrigin;
+    private bool _treeRightDragArmed;
+
 
 
     public FolderTreesView() {
@@ -94,6 +102,13 @@ public partial class FolderTreesView : UserControl {
 
     /// <summary><c>Esc</c> in a panel: the keyboard belongs back in the list.</summary>
     public event EventHandler? FocusListRequested;
+
+    /// <summary>
+    /// A drop held by the right mouse button landed on a row: the window
+    /// opens the menu that asks what to do with it, where every other menu
+    /// is built.
+    /// </summary>
+    public event EventHandler<DropMenuRequest>? DropMenuRequested;
 
 
     /// <summary>
@@ -139,9 +154,15 @@ public partial class FolderTreesView : UserControl {
             BookmarksRow.MinHeight = 0;
             BookmarksRow.Height = GridLength.Auto;
         }
+        // What the grid was actually given, beside what the view model
+        // holds - see PLAN AD10.
+        ServiceLocator.TryGet<ILogger>()?.Info(Vm.IsBookmarksExpanded
+            ? $"Bookmarks row applied: {Vm.BookmarksHeight:F0} (row was {BookmarksRow.ActualHeight:F0})"
+            : $"Bookmarks row collapsed (row was {BookmarksRow.ActualHeight:F0})");
     }
 
     private void BookmarksSplitter_DragCompleted(object sender, DragCompletedEventArgs e) {
+        ServiceLocator.TryGet<ILogger>()?.Info($"Bookmarks splitter released: row {BookmarksRow.ActualHeight:F0}");
         Vm.BookmarksHeight = BookmarksRow.ActualHeight;
     }
 
@@ -528,8 +549,25 @@ public partial class FolderTreesView : UserControl {
         }
     }
 
+    /// <summary>
+    /// A right-button press on a bookmark row arms a drag of its folder, as
+    /// in the drives tree (<see cref="Tree_PreviewMouseRightButtonDown"/>);
+    /// released in place, it still opens the row menu below. Not handled:
+    /// the press reaches the row the way it did before there was a drag.
+    /// </summary>
+    private void BookmarksTree_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e) {
+        // The "..." button is a control, not a grip - same as for the left button.
+        _treeMenuNode = ListVisuals.IsInsideControl(e.OriginalSource) ? null : NodeAt(e.OriginalSource);
+        _treeRightDragArmed = _treeMenuNode is not null;
+        _treeRightDragOrigin = e.GetPosition(this);
+    }
+
     /// <summary>The same menu, from the right mouse button.</summary>
     private void BookmarksTree_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e) {
+        _treeRightDragArmed = false;
+        // Armed here, not in the drives tree: a release over that one must
+        // not find this row waiting.
+        _treeMenuNode = null;
         if (NodeAt(e.OriginalSource) is { } node && sender is FrameworkElement host) {
             ShowBookmarkMenu(host, node);
             e.Handled = true;
@@ -598,13 +636,26 @@ public partial class FolderTreesView : UserControl {
     }
 
     private void Tree_PreviewMouseMove(object sender, MouseEventArgs e) {
+        if (_treeRightDragArmed) {
+            if (e.RightButton != MouseButtonState.Pressed) {
+                _treeRightDragArmed = false;
+            } else if (_treeMenuNode is { } grabbed && MovedPastDragThreshold(e.GetPosition(this), _treeRightDragOrigin)) {
+                _treeRightDragArmed = false;
+                // The drag swallows the release; a menu waiting for it
+                // would open on the next stray one instead.
+                _treeMenuNode = null;
+                var grabbedPaths = new[] { grabbed.FullPath };
+                _drag.Run((DependencyObject)sender, grabbedPaths, grabbedPaths, rightButton: true);
+            }
+
+            return;
+        }
+
         if (_treeDragNode is not { } node || e.LeftButton != MouseButtonState.Pressed) {
             return;
         }
 
-        var pos = e.GetPosition(this);
-        if (Math.Abs(pos.X - _treeDragOrigin.X) < SystemParameters.MinimumHorizontalDragDistance &&
-            Math.Abs(pos.Y - _treeDragOrigin.Y) < SystemParameters.MinimumVerticalDragDistance) {
+        if (!MovedPastDragThreshold(e.GetPosition(this), _treeDragOrigin)) {
             return;
         }
 
@@ -623,6 +674,11 @@ public partial class FolderTreesView : UserControl {
         }
     }
 
+    private static bool MovedPastDragThreshold(Point pos, Point origin) {
+        return Math.Abs(pos.X - origin.X) >= SystemParameters.MinimumHorizontalDragDistance
+            || Math.Abs(pos.Y - origin.Y) >= SystemParameters.MinimumVerticalDragDistance;
+    }
+
 
     /// <summary>
     /// Right-clicking a folder in the drives tree targets that folder —
@@ -639,11 +695,18 @@ public partial class FolderTreesView : UserControl {
         }
 
         FolderTargeted?.Invoke(this, _treeMenuNode.FullPath);
+        _treeRightDragArmed = true;
+        _treeRightDragOrigin = e.GetPosition(this);
         e.Handled = true;
     }
 
     private void Tree_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e) {
-        if (_treeMenuNode is not { } node || sender is not FrameworkElement host) {
+        _treeRightDragArmed = false;
+        var node = _treeMenuNode;
+        // Consumed by this release: a press elsewhere released over the
+        // tree must not find this row still waiting for its menu.
+        _treeMenuNode = null;
+        if (node is null || sender is not FrameworkElement host) {
             return;
         }
 
@@ -726,7 +789,10 @@ public partial class FolderTreesView : UserControl {
     }
 
     private void OnDrop(object sender, DragEventArgs e) {
-        _drops.Execute(e, plan => Vm.HandleDrop(plan.Paths, plan.Target, plan.Effect));
+        _drops.Execute(
+            e,
+            plan => Vm.HandleDrop(plan.Paths, plan.Target, plan.Effect),
+            plan => DropMenuRequested?.Invoke(this, new DropMenuRequest((FrameworkElement)sender, plan)));
     }
 
 
@@ -883,3 +949,10 @@ public partial class FolderTreesView : UserControl {
 /// <paramref name="Host"/>.
 /// </summary>
 public sealed record FolderMenuRequest(FrameworkElement Host, string Folder);
+
+
+/// <summary>
+/// A folder panel asking for the menu of a right-button drop, placed at
+/// <paramref name="Host"/>.
+/// </summary>
+public sealed record DropMenuRequest(FrameworkElement Host, DropPlan Plan);

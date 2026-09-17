@@ -45,6 +45,11 @@ public partial class FileListView : UserControl {
     private Point _dragOrigin;
     private bool _dragArmed;
 
+    // The same for the right button: a right-drag opens a menu on the
+    // drop instead of doing what the modifiers say - Explorer's gesture.
+    private Point _rightDragOrigin;
+    private bool _rightDragArmed;
+
     // A committed rename re-lists the folder asynchronously, so the row to
     // put the keyboard on does not exist yet when the editor closes. This
     // says "the next selection restore is mine" — undo and refresh must not
@@ -922,31 +927,53 @@ public partial class FileListView : UserControl {
             return;
         }
 
+        if (_rightDragArmed) {
+            if (e.RightButton != MouseButtonState.Pressed) {
+                _rightDragArmed = false;
+            } else if (MovedPastDragThreshold(e.GetPosition(this), _rightDragOrigin)) {
+                _rightDragArmed = false;
+                StartDrag(sender, rightButton: true);
+            }
+
+            return;
+        }
+
         if (!_dragArmed || e.LeftButton != MouseButtonState.Pressed) {
             return;
         }
 
-        var pos = e.GetPosition(this);
-        if (Math.Abs(pos.X - _dragOrigin.X) < SystemParameters.MinimumHorizontalDragDistance &&
-            Math.Abs(pos.Y - _dragOrigin.Y) < SystemParameters.MinimumVerticalDragDistance) {
+        if (!MovedPastDragThreshold(e.GetPosition(this), _dragOrigin)) {
             return;
         }
 
         _dragArmed = false;
         _selection.NotifyDragStarted(); // drag started — keep the full selection
+        StartDrag(sender, rightButton: false);
+    }
 
+
+    private static bool MovedPastDragThreshold(Point pos, Point origin) {
+        return Math.Abs(pos.X - origin.X) >= SystemParameters.MinimumHorizontalDragDistance
+            || Math.Abs(pos.Y - origin.Y) >= SystemParameters.MinimumVerticalDragDistance;
+    }
+
+    /// <summary>
+    /// Hands the selection to the window's drag pipeline. The payload
+    /// carries the companions; the paths - what the user selected - still
+    /// drive the drag preview, because that is what they think they are
+    /// dragging.
+    /// </summary>
+    private void StartDrag(object sender, bool rightButton) {
         var paths = Vm.SelectedEntries.Select(en => en.FullPath).ToArray();
         if (paths.Length == 0) {
             return;
         }
 
-        // The payload carries the companions; `paths` — what the user
-        // selected — still drives the drag preview, because that is what
-        // they think they are dragging.
         DragStartRequested?.Invoke(this, new FileListDragRequest(
             (DependencyObject)sender,
             paths,
-            Vm.WithCompanions(Vm.SelectedEntries).ToArray()));
+            Vm.WithCompanions(Vm.SelectedEntries).ToArray(),
+            rightButton));
     }
 
 
@@ -1002,9 +1029,15 @@ public partial class FileListView : UserControl {
             // row; right-clicking inside one keeps the whole multi-selection.
             SetListSelection(host, new[] { clicked });
         }
+
+        // A row under the right button can be dragged as well; the menu on
+        // release is what a press that never moved gets.
+        _rightDragArmed = clicked is not null;
+        _rightDragOrigin = e.GetPosition(this);
     }
 
     private void List_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e) {
+        _rightDragArmed = false;
         if (sender is FrameworkElement host && !ListVisuals.IsChrome(e.OriginalSource)) {
             ContextMenuRequested?.Invoke(this, new FileListMenuRequest(host, PlacementMode.MousePoint, _contextIsBackground));
             e.Handled = true;
@@ -1712,7 +1745,8 @@ public partial class FileListView : UserControl {
 /// <param name="Source">The control the drag originated from.</param>
 /// <param name="Paths">What the user selected — drives the drag preview.</param>
 /// <param name="Payload">What actually travels, companions included.</param>
-public sealed record FileListDragRequest(DependencyObject Source, string[] Paths, string[] Payload);
+/// <param name="RightButton">The drag is held by the right mouse button: the drop opens a menu instead of acting.</param>
+public sealed record FileListDragRequest(DependencyObject Source, string[] Paths, string[] Payload, bool RightButton = false);
 
 /// <summary>Where and in what mode the list wants its context menu.</summary>
 public sealed record FileListMenuRequest(FrameworkElement Host, PlacementMode Placement, bool IsBackground);

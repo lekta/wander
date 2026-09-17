@@ -397,7 +397,7 @@ public static class ContextMenuBuilder {
     }
 
     /// <param name="toFolder">The row that asks for a folder first (<see cref="MenuCommandId.RunActionTo"/>).</param>
-    private static MenuEntry ActionRow(CustomAction action, ActionState state, bool toFolder = false) {
+    internal static MenuEntry ActionRow(CustomAction action, ActionState state, bool toFolder = false) {
         bool missing = state == ActionState.ToolMissing;
 
         return new MenuEntry {
@@ -563,7 +563,7 @@ public static class ContextMenuBuilder {
     /// Drops what the user hid, drops submenus left empty by that, and
     /// collapses the separators the removals stranded.
     /// </summary>
-    private static IReadOnlyList<MenuEntry> Normalize(IEnumerable<MenuEntry> items, ContextMenuSettings settings) {
+    internal static IReadOnlyList<MenuEntry> Normalize(IEnumerable<MenuEntry> items, ContextMenuSettings settings) {
         var kept = new List<MenuEntry>();
 
         foreach (var item in items) {
@@ -620,7 +620,7 @@ public static class ContextMenuBuilder {
         };
     }
 
-    private static MenuEntry Sub(MenuCommandId id, IReadOnlyList<MenuEntry> children) {
+    internal static MenuEntry Sub(MenuCommandId id, IReadOnlyList<MenuEntry> children) {
         return new MenuEntry {
             Id = id,
             Header = ContextMenuCatalog.Title(id),

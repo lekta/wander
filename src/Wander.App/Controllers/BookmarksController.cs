@@ -273,6 +273,31 @@ public sealed class BookmarksController {
 
 
     /// <summary>
+    /// A folder Wander moved or renamed: every bookmark on it, or inside
+    /// it, points at the new place. Without this the row would go grey and
+    /// italic over a folder that is one drag away - moved by the user's own
+    /// hand, in this window.
+    /// </summary>
+    public void Follow(string oldRoot, string newRoot) {
+        bool changed = false;
+        for (int i = 0; i < _favorites.Count; i++) {
+            if (PathRewrite.Under(_favorites[i], oldRoot, newRoot) is not { } moved
+                || string.Equals(moved, _favorites[i], StringComparison.OrdinalIgnoreCase)) {
+                continue;
+            }
+
+            _log.Info($"Bookmark followed: {_favorites[i]} -> {moved}");
+            _favorites[i] = moved;
+            changed = true;
+        }
+
+        if (changed) {
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+
+    /// <summary>
     /// Adds one special-folder node. No-op when the path can't be resolved
     /// or doesn't exist on disk (e.g. the user moved the folder to a drive
     /// that is no longer there). The label is a fixed localised name, not

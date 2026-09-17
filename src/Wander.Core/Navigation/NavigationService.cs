@@ -1,3 +1,5 @@
+using Wander.Core.FileSystem;
+
 namespace Wander.Core.Navigation;
 
 /// <summary>
@@ -84,6 +86,33 @@ public sealed class NavigationService {
 
         NavigateTo(parent, CurrentSource ?? NavigationSource.External);
         return Current;
+    }
+
+
+    /// <summary>
+    /// A folder moved or was renamed by Wander itself: every entry of the
+    /// history that pointed at it, or inside it, now points at the new
+    /// place - "Back" must not lead into a folder that is gone because we
+    /// moved it. True when the current entry was among them; then
+    /// <see cref="CurrentChanged"/> has been raised, and the listing goes
+    /// on where the folder is now.
+    /// </summary>
+    public bool RewritePaths(string oldRoot, string newRoot) {
+        bool currentChanged = false;
+        for (int i = 0; i < _history.Count; i++) {
+            if (PathRewrite.Under(_history[i].Path, oldRoot, newRoot) is not { } moved) {
+                continue;
+            }
+
+            _history[i] = _history[i] with { Path = moved };
+            currentChanged |= i == _cursor;
+        }
+
+        if (currentChanged) {
+            RaiseChanged();
+        }
+
+        return currentChanged;
     }
 
 

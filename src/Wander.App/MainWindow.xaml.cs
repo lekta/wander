@@ -12,6 +12,7 @@ using Wander.App.DragPreview;
 using Wander.App.Menu;
 using Wander.App.Resources;
 using Wander.App.Util;
+using Wander.App.ViewModels;
 using Wander.App.Views;
 using Wander.Core;
 using Wander.Core.FileSystem;
@@ -49,6 +50,10 @@ public partial class MainWindow : Window {
     /// cursor is drawn here from what it reports.
     /// </summary>
     private DropTargetController _drops = null!;
+
+    // The window size last written to the log - see OnLoaded.
+    private double _loggedWidth;
+    private double _loggedHeight;
 
     /// <summary>
     /// The drag currently leaving Wander — the plaque, the cursor and the
@@ -109,6 +114,8 @@ public partial class MainWindow : Window {
     }
 
     private void OnClosing(object? sender, CancelEventArgs e) {
+        ServiceLocator.Get<Wander.Core.Logging.ILogger>().Info(
+            $"Closing: window {ActualWidth:F0}x{ActualHeight:F0}, {WindowState}");
         if (!App.Headless) {
             SaveWindowGeometry();
         }
@@ -226,8 +233,31 @@ public partial class MainWindow : Window {
         // Here rather than in the view model's constructor: a saved pane
         // size is a share of the window it was saved from, and this is the
         // first moment there is a window with a size to compare against.
+        // The window's own numbers beside the view model's, while "the
+        // bookmarks panel comes back short" is open (PLAN AD10).
+        log.Info($"Window at Loaded: {ActualWidth:F0}x{ActualHeight:F0}, {WindowState}, dpi {VisualTreeHelper.GetDpi(this).DpiScaleX:F2}");
+        _loggedWidth = ActualWidth;
+        _loggedHeight = ActualHeight;
         Vm.RestorePaneSizes(ActualWidth, ActualHeight);
-        SizeChanged += (_, _) => Vm.NoteWindowSize(ActualWidth, ActualHeight);
+        SizeChanged += (_, _) => {
+            Vm.NoteWindowSize(ActualWidth, ActualHeight);
+            // A resize by hand is dozens of events; a line every 50 px is
+            // enough to see where the window went.
+            if (Math.Abs(ActualWidth - _loggedWidth) >= 50 || Math.Abs(ActualHeight - _loggedHeight) >= 50) {
+                _loggedWidth = ActualWidth;
+                _loggedHeight = ActualHeight;
+                log.Info($"Window resized: {ActualWidth:F0}x{ActualHeight:F0}, {WindowState}");
+            }
+        };
+        StateChanged += (_, _) => log.Info($"Window state: {WindowState}, {ActualWidth:F0}x{ActualHeight:F0}");
+        // And once more after the first paint, against the size the window
+        // has settled at: whatever it still did to itself between Loaded
+        // and then is applied to the panes as well. Recomputed from the
+        // saved pair, so for the same size it is a no-op.
+        ContentRendered += (_, _) => {
+            log.Info($"Window at ContentRendered: {ActualWidth:F0}x{ActualHeight:F0}, {WindowState}, dpi {VisualTreeHelper.GetDpi(this).DpiScaleX:F2}");
+            Vm.RestorePaneSizes(ActualWidth, ActualHeight);
+        };
         ApplyPreviewLayout();
         ApplyFoldersLayout();
         // Native-size cap (so small images don't stretch above 100 %) is
@@ -1063,7 +1093,7 @@ public partial class MainWindow : Window {
     // the file list or a tree row. Running it does not: see OutgoingDrag.
 
     private void FileList_DragStartRequested(object? sender, FileListDragRequest e) {
-        _outgoing.Run(e.Source, e.Paths, e.Payload);
+        _outgoing.Run(e.Source, e.Paths, e.Payload, e.RightButton);
     }
 
 
@@ -1099,9 +1129,41 @@ public partial class MainWindow : Window {
     }
 
     private void OnDrop(object sender, DragEventArgs e) {
-        _drops.Execute(e, plan => Vm.HandleDrop(plan.Paths, plan.Target, plan.Effect));
+        _drops.Execute(
+            e,
+            plan => Vm.HandleDrop(plan.Paths, plan.Target, plan.Effect),
+            plan => ShowDropMenu((FrameworkElement)sender, plan));
     }
 
+    private void FolderTrees_DropMenuRequested(object? sender, DropMenuRequest e) {
+        ShowDropMenu(e.Host, e.Plan);
+    }
 
+    /// <summary>
+    /// The menu of a drop held by the right mouse button, Explorer's
+    /// gesture: copy, move or a shortcut - the one a left-button drop would
+    /// have done in bold - and the catalog actions with an output, sent
+    /// into the folder dropped on. Opened once the drag loop has returned:
+    /// a popup raised from inside the drop callback competes with the drag
+    /// for the mouse. Built fresh per drop, because its rows close over
+    /// that drop's paths and folder.
+    /// </summary>
+    private async void ShowDropMenu(FrameworkElement host, DropPlan plan) {
+        var target = await Vm.DescribeDropAsync(plan.Paths, plan.Target, plan.Effect == DropEffect.Move);
+        var bindings = new Dictionary<MenuCommandId, MenuBinding> {
+            [MenuCommandId.DropCopyHere] = new(new RelayCommand(() => Vm.HandleDrop(plan.Paths, plan.Target, DropEffect.Copy))),
+            [MenuCommandId.DropMoveHere] = new(new RelayCommand(() => Vm.HandleDrop(plan.Paths, plan.Target, DropEffect.Move))),
+            [MenuCommandId.DropLinkHere] = new(new RelayCommand(() => Vm.HandleDrop(plan.Paths, plan.Target, DropEffect.Link))),
+            // Over the primaries the menu was built for, not the payload:
+            // a RAW's sidecars go along with a copy, never into a convert.
+            [MenuCommandId.RunActionTo] = new(new RelayCommand(id => Vm.RunActionOnDropped(id as string, target.Paths, plan.Target))),
+            [MenuCommandId.DropCancel] = new(new RelayCommand(() => { })),
+        };
 
+        var menu = new ContextMenuFactory(bindings, () => { }).Build(DropMenuBuilder.Build(target), session: null);
+        menu.DataContext = Vm;
+        menu.PlacementTarget = host;
+        menu.Placement = PlacementMode.MousePoint;
+        menu.IsOpen = true;
+    }
 }

@@ -111,9 +111,17 @@ public sealed class FolderTreesController {
     /// them, so this does not stop at the first hit.
     /// </summary>
     public void RefreshFor(string path) {
-        foreach (var node in BothPanels()) {
-            node.RefreshBranch(path);
-        }
+        _ = RefreshForAsync(path);
+    }
+
+
+    /// <summary>
+    /// <see cref="RefreshFor"/> that can be waited for: a caller about to
+    /// highlight a row the re-read is only now bringing in - a folder just
+    /// moved into an open branch - needs the row there first.
+    /// </summary>
+    public Task RefreshForAsync(string path) {
+        return Task.WhenAll(BothPanels().Select(node => node.RefreshBranch(path)));
     }
 
 
