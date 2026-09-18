@@ -146,12 +146,12 @@ Platform.Windows` — один файл, `App.xaml.cs` (точка композ�
 ```
 === Wander dependency graph (using sweep) ===
 date   : 2026-09-17
-commit : 9b11f84
+commit : d66b509
 
 -- projects --
 Wander.App -> Wander.Core   (59 files)
 Wander.App -> Wander.Platform.Windows   (1 files)
-Wander.Core.Tests -> Wander.Core   (97 files)
+Wander.Core.Tests -> Wander.Core   (98 files)
 Wander.Harness -> Wander.App   (4 files)
 Wander.Harness -> Wander.Core   (6 files)
 Wander.Harness -> Wander.Platform.Windows   (3 files)
@@ -267,7 +267,7 @@ Wander.Platform.Windows -> Wander.Core   (28 files)
   Views          -> Controllers    (1 files)
   Views          -> Controls       (2 files)
   Views          -> Converters     (1 files)
-  Views          -> Dialogs        (2 files)
+  Views          -> Dialogs        (3 files)
   Views          -> DragPreview    (1 files)
   Views          -> Highlighting   (1 files)
   Views          -> Resources      (6 files)
@@ -453,10 +453,37 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
   доставалась чужому окну. Закрыть окно нельзя, пока
   операция идёт (`Closing` отменяется): X, `Alt+F4` и `Esc` = «Свернуть»,
   дальше окно живёт в статус-баре и возвращается кнопкой «Показать»;
-  по завершении закрывается само. Строку и всплывающую панель в
-  статус-баре кормит `OperationViewModel` — обновляется на месте, а не
+  по завершении его закрывает сам `RunWithProgressDialogAsync`
+  (`ProgressDialog.Finish` в `finally`), **до** возврата к вызывающему.
+  Раньше окно закрывало себя продолжением задачи — отдельной операцией
+  диспетчера после продолжения вызывающего, и вопрос об итоге («файл
+  занят, повторить?») заставал окно открытым и активным, брал его
+  владельцем и уничтожался вместе с ним, а приложение оставалось
+  выключенным во вложенном цикле невидимого модального окна
+  (2026-09-17). Второй замок на то же: `WpfDialogs.ActiveWindow` никогда
+  не отдаёт `ProgressDialog` владельцем вопроса — операций может быть
+  несколько, и чужое окно закрывается по своему расписанию. Строку и
+  всплывающую панель в статус-баре кормит `OperationViewModel` — обновляется на месте, а не
   пересоздаётся (у него внутри `TransferRate`, скользящее среднее за 3 с,
   и кнопки, которые нельзя ронять под курсором).
+- **Выход при идущих операциях** (2026-09-17). `MainWindow.OnClosing`
+  первым делом: операции есть — вопрос (`DialogKind.ExitWithOperations`,
+  Cancel по умолчанию); «да» — `e.Cancel`, `Vm.CancelAllOperations`
+  (`RequestCancel` каждому окну), `await OperationTracker.WhenIdleAsync(10 с)`
+  (Core, тест: true — список операций пуст, false — таймаут; продолжение
+  не на контексте вызывающего, так что фатальный обработчик может
+  блокироваться на нём), потом `Close()` снова по флагу «второй проход».
+  Таймаут — `IProcessRunner.KillAll`: `WindowsProcessRunner` ведёт
+  статический список живых процессов и убивает деревом. `Shutdown`
+  (`SessionEnding`, smoke, харнесс) отменить нельзя — `App.IsShuttingDown`
+  и `ShutdownWithoutAsking`: отмена на месте без вопроса. Вылет
+  (`AppDomain.UnhandledException`, headless-ветка диспетчера) —
+  `App.StopOperationsBeforeDying`: `ProgressDialog.CancelAll` (статический
+  список окон, только `_cts.Cancel`, без контролов — диспетчер может быть
+  мёртв), `KillAll`, `WhenIdleAsync(3 с).Result`. Пункт «Выход» в меню —
+  `MainWindow.Close`, не `Shutdown`, иначе вопрос игнорируется. После
+  `Hide()` окно отпускает сторож (`IDirectoryWatcher.Watch(null)`) и
+  WebView2 обеих панелей (`PreviewPane.ReleaseWebView`).
 - **Конфликты.** `IConflictResolver.ResolveAll(ConflictRequest)` — push:
   все коллизии, найденные до первого касания диска, одним вызовом (плюс
   размер батча для заголовка); ответ — `ConflictAnswer` на каждую
@@ -504,6 +531,14 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
 
 ## Навигация и дерево
 
+- **`NavigationFallback`** (Core, тест, 2026-09-17) — куда идти, когда
+  папки нет. `AfterDelete(удалённые, текущая)` — ближайший не задетый
+  предок или null («не трогать»), вложенность как у `PathRewrite.Under`;
+  `AfterRestore(путь, exists, kindOf)` — путь, пока он есть, иначе
+  `PathCrumbs.NearestExisting`, но только на `VolumeKind.Fixed`, на всём
+  остальном null (буква флешки могла достаться другому носителю) — тогда
+  `MainViewModel.OpenStartFolderAsync` берёт `AppSettings.WorkFolder`.
+  Историю оба не трогают.
 - **`NavigationService`** — back / forward; каждая запись несёт
   `NavigationSource`, чтобы дерево и панель просмотра реагировали по-разному.
 - **Быстрый фильтр не кончается на текущей папке.** `SearchController`
@@ -1681,7 +1716,8 @@ false` — сплит только на картинку, футер один и
 `Choose(ChoiceRequest)` (ответы названы на кнопках, «Отмена» — по
 умолчанию; индекс или -1), `Prompt`, `PickFolder`,
 `CreateConflictResolver(skipIdentical)`. Продакшн — `WpfDialogs`
-(`MessageBox` поверх активного окна, `ChoiceDialog`, `PromptDialog`,
+(`MessageBox` поверх активного окна — но никогда поверх окна операции,
+`ITransientWindow`; `ChoiceDialog`, `PromptDialog`,
 `OpenFolderDialog`, `DispatcherConflictResolver(InteractiveConflictResolver)`); харнесс
 подставляет `ScriptedDialogs` до постройки вью-модели. Голых
 `MessageBox.Show` в коде не осталось, кроме аварийного в `CrashReporter`.

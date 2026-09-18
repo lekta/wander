@@ -231,6 +231,15 @@ public static partial class Strings {
     /// <summary>файл занят другой программой</summary>
     public static string ErrorInUse => Get(nameof(ErrorInUse));
 
+    /// <summary>Файл занят</summary>
+    public static string DeleteInUseTitle => Get(nameof(DeleteInUseTitle));
+
+    /// <summary>Не удалось удалить «{0}»: {1}.  Закройте его там и нажмите «Повторить».</summary>
+    public static string DeleteInUseOne => Get(nameof(DeleteInUseOne));
+
+    /// <summary>Не удалось удалить {0} элем. — они заняты. Например, «{1}»: {2}.  Закройте их там и нажмите «Повторить».</summary>
+    public static string DeleteInUseMany => Get(nameof(DeleteInUseMany));
+
     /// <summary>В буфере обмена файл, которого нет на диске (вложение письма, файл внутри архива) — вставить его Wander не может</summary>
     public static string StatusClipboardVirtualFiles => Get(nameof(StatusClipboardVirtualFiles));
 

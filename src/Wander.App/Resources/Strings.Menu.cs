@@ -117,6 +117,9 @@ public static partial class Strings {
     /// <summary>Отмена</summary>
     public static string ActionCancel => Get(nameof(ActionCancel));
 
+    /// <summary>Повторить</summary>
+    public static string ActionRetry => Get(nameof(ActionRetry));
+
     /// <summary>Открыть с помощью</summary>
     public static string MenuCmdOpenSubmenu => Get(nameof(MenuCmdOpenSubmenu));
 

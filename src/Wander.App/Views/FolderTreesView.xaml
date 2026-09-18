@@ -469,51 +469,51 @@
             it into.
         -->
         <DockPanel Grid.Row="2">
-        <Border DockPanel.Dock="Top"
-                Padding="6,4"
-                Background="{StaticResource HeaderBackground}"
-                BorderBrush="{StaticResource Separator}"
-                BorderThickness="0,0,0,1">
-            <TextBlock Text="{x:Static res:Strings.ComputerHeader}" FontWeight="SemiBold"/>
-        </Border>
-        <!--
-            No top margin: the outline is this panel's own edge, and
-            a four-pixel gap under the splitter put it where the eye
-            does not look for it. The rows keep their air from the
-            row template's MinHeight.
-        -->
-        <TreeView x:Name="Tree"
-                  ContextMenu="{StaticResource PanelSettingsMenu}"
-                  ItemsSource="{Binding Trees.Roots}"
-                  SelectedItemChanged="Tree_SelectedItemChanged"
-                  PreviewMouseLeftButtonDown="Tree_PreviewMouseLeftButtonDown"
-                  PreviewMouseLeftButtonUp="Tree_PreviewMouseLeftButtonUp"
-                  PreviewMouseMove="Tree_PreviewMouseMove"
-                  PreviewMouseRightButtonDown="Tree_PreviewMouseRightButtonDown"
-                  PreviewMouseRightButtonUp="Tree_PreviewMouseRightButtonUp"
-                  PreviewMouseWheel="Tree_PreviewMouseWheel"
-                  PreviewKeyDown="Tree_PreviewKeyDown"
-                  TreeViewItem.Expanded="TreeViewItem_Expanded"
-                  TreeViewItem.Collapsed="TreeViewItem_Collapsed"
-                  AllowDrop="True"
-                  Background="Transparent"
-                  BorderThickness="1"
-                  BorderBrush="Transparent"
-                  DragOver="OnDragOver"
-                  Drop="OnDrop">
-            <TreeView.ItemContainerStyle>
-                <Style TargetType="TreeViewItem" BasedOn="{StaticResource WanderTreeViewItem}"/>
-            </TreeView.ItemContainerStyle>
-            <TreeView.ItemTemplate>
-                <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                    <StackPanel Orientation="Horizontal" Background="Transparent">
-                        <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Small"
-                                            Width="16" Height="16" Margin="0,0,4,0"/>
-                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
-                    </StackPanel>
-                </HierarchicalDataTemplate>
-            </TreeView.ItemTemplate>
-        </TreeView>
+            <Border DockPanel.Dock="Top"
+                    Padding="6,4"
+                    Background="{StaticResource HeaderBackground}"
+                    BorderBrush="{StaticResource Separator}"
+                    BorderThickness="0,0,0,1">
+                <TextBlock Text="{x:Static res:Strings.ComputerHeader}" FontWeight="SemiBold"/>
+            </Border>
+            <!--
+                No top margin: the outline is this panel's own edge, and
+                a four-pixel gap under the splitter put it where the eye
+                does not look for it. The rows keep their air from the
+                row template's MinHeight.
+            -->
+            <TreeView x:Name="Tree"
+                      ContextMenu="{StaticResource PanelSettingsMenu}"
+                      ItemsSource="{Binding Trees.Roots}"
+                      SelectedItemChanged="Tree_SelectedItemChanged"
+                      PreviewMouseLeftButtonDown="Tree_PreviewMouseLeftButtonDown"
+                      PreviewMouseLeftButtonUp="Tree_PreviewMouseLeftButtonUp"
+                      PreviewMouseMove="Tree_PreviewMouseMove"
+                      PreviewMouseRightButtonDown="Tree_PreviewMouseRightButtonDown"
+                      PreviewMouseRightButtonUp="Tree_PreviewMouseRightButtonUp"
+                      PreviewMouseWheel="Tree_PreviewMouseWheel"
+                      PreviewKeyDown="Tree_PreviewKeyDown"
+                      TreeViewItem.Expanded="TreeViewItem_Expanded"
+                      TreeViewItem.Collapsed="TreeViewItem_Collapsed"
+                      AllowDrop="True"
+                      Background="Transparent"
+                      BorderThickness="1"
+                      BorderBrush="Transparent"
+                      DragOver="OnDragOver"
+                      Drop="OnDrop">
+                <TreeView.ItemContainerStyle>
+                    <Style TargetType="TreeViewItem" BasedOn="{StaticResource WanderTreeViewItem}"/>
+                </TreeView.ItemContainerStyle>
+                <TreeView.ItemTemplate>
+                    <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                        <StackPanel Orientation="Horizontal" Background="Transparent">
+                            <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Small"
+                                                Width="16" Height="16" Margin="0,0,4,0"/>
+                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </HierarchicalDataTemplate>
+                </TreeView.ItemTemplate>
+            </TreeView>
         </DockPanel>
     </Grid>
 </UserControl>

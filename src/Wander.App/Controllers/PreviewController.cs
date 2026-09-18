@@ -156,6 +156,9 @@ public sealed class PreviewController : ObservableObject {
     private string _summary = "";
     private string? _linkTarget;
     private bool _linkBroken;
+    // Who holds the file shut when nothing could be shown: the names, ""
+    // when nobody can be named, null when the file is not held.
+    private string? _lockedBy;
     private VolumeInfo? _volume;
 
     private CancellationTokenSource? _companionCts;
@@ -616,6 +619,8 @@ public sealed class PreviewController : ObservableObject {
         // archive is previewed off its scratch copy, and a format the pane
         // cannot read says so in the ordinary words.
         : _archiveEntryTooBig ? Strings.PreviewArchiveTooBig
+        : _lockedBy is { Length: > 0 } holders ? string.Format(Strings.PreviewFileLockedBy, holders)
+        : _lockedBy is not null ? Strings.PreviewFileLocked
         : Strings.PreviewUnsupported;
 
 
@@ -935,6 +940,9 @@ public sealed class PreviewController : ObservableObject {
             }
 
             await LoadFileAsync(path, ct);
+            if (_kind == PreviewKind.Unsupported) {
+                await ExplainUnreadableAsync(path, ct);
+            }
         } catch (OperationCanceledException) {
             // newer selection won — ignore
         } finally {
@@ -942,6 +950,43 @@ public sealed class PreviewController : ObservableObject {
                 IsLoading = false;
                 ScheduleSummaryUpdate();  // metadata might have arrived
             }
+        }
+    }
+
+    /// <summary>
+    /// A file no loader could show may simply be one another program holds
+    /// shut - then the pane says who, instead of "no preview for this
+    /// file", which blames the file. Asked only after a load came back
+    /// empty: the check opens the file, and the answer names processes.
+    /// </summary>
+    private async Task ExplainUnreadableAsync(string path, CancellationToken ct) {
+        string? holders = await Task.Run(() => {
+            if (!IsHeldShut(path)) {
+                return null;
+            }
+
+            var lockers = ServiceLocator.TryGet<IFileLockInspector>()?.WhoIsLocking(path);
+
+            return lockers is null ? "" : FileLockInfo.Describe(lockers);
+        }, ct);
+        if (ct.IsCancellationRequested || holders is null) {
+            return;
+        }
+
+        _lockedBy = holders;
+        Raise(nameof(PlaceholderText));
+    }
+
+    /// <summary>The file exists and cannot even be opened for reading: somebody holds it without sharing.</summary>
+    private static bool IsHeldShut(string path) {
+        try {
+            using var probe = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+
+            return false;
+        } catch (IOException ex) {
+            return FileInUse.Is(ex);
+        } catch (UnauthorizedAccessException) {
+            return false;
         }
     }
 
@@ -1534,6 +1579,7 @@ public sealed class PreviewController : ObservableObject {
         LinkTarget = null;
         _linkBroken = false;
         _archiveEntryTooBig = false;
+        _lockedBy = null;
         // Two files in a row can land on Unsupported for different reasons
         // (a broken shortcut, an entry too big to unpack), and the Kind
         // setter then never fires. The placeholder is re-read here, when

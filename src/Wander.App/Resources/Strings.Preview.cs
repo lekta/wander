@@ -18,6 +18,12 @@ public static partial class Strings {
     /// <summary>Для этого файла просмотр недоступен</summary>
     public static string PreviewUnsupported => Get(nameof(PreviewUnsupported));
 
+    /// <summary>Файл занят другой программой — прочитать его нельзя</summary>
+    public static string PreviewFileLocked => Get(nameof(PreviewFileLocked));
+
+    /// <summary>Файл занят: его держит {0} — прочитать нельзя, пока программа его не отпустит</summary>
+    public static string PreviewFileLockedBy => Get(nameof(PreviewFileLockedBy));
+
     /// <summary>Анализ содержимого</summary>
     public static string PreviewCounting => Get(nameof(PreviewCounting));
 

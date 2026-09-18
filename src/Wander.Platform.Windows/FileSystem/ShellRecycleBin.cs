@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
 using Wander.Core.FileSystem;
 using Wander.Core.Logging;
 
@@ -31,23 +32,35 @@ public sealed class ShellRecycleBin : IRecycleBin {
             throw new FileNotFoundException("Cannot recycle non-existent path", path);
         }
 
+        // A file somebody holds without share-delete cannot be moved into
+        // the bin, and SHFileOperation takes a second to say so (measured
+        // 2026-09-17: 1075 ms). A handle asked for delete access answers the
+        // same question in a couple of milliseconds. Often the hold is a
+        // moment's - a thumbnail handler still reading - so once more after
+        // a pause before giving up.
+        if (IsFileBusy(path)) {
+            _logger.Info($"Recycle: {path} is in use, waiting {BusyRetryDelayMs} ms");
+            Thread.Sleep(BusyRetryDelayMs);
+            if (IsFileBusy(path)) {
+                throw InUse(path);
+            }
+        }
+
         DateTime when = DateTime.UtcNow;
         var op = RecycleOperation(path);
         int rc = SHFileOperation(ref op);
-        // Something is open. Measured 2026-09-17 with a file held without
-        // share-delete: the file itself answers ERROR_SHARING_VIOLATION, its
-        // folder DE_INVALIDFILES - on a path that does exist, so "invalid"
-        // is not the reason. Often a moment's worth - a thumbnail handler
-        // still reading - so once more after a pause before giving up.
+        // A folder with something open inside answers DE_INVALIDFILES - on a
+        // path that does exist, so "invalid" is not the reason - and does so
+        // at once; the file's own ERROR_SHARING_VIOLATION is the race with
+        // the check above. Same pause, same one retry.
         if (IsBusy(rc)) {
-            _logger.Info($"Recycle: {path} or something in it is in use, retrying");
+            _logger.Info($"Recycle: something in {path} is in use, retrying");
             Thread.Sleep(BusyRetryDelayMs);
             op = RecycleOperation(path);
             rc = SHFileOperation(ref op);
         }
         if (IsBusy(rc)) {
-            throw new IOException(
-                $"'{path}' or something inside it is in use (SHFileOperation {rc:X})", HResultSharingViolation);
+            throw InUse(path);
         }
         if (rc != 0) {
             throw new IOException($"SHFileOperation FO_DELETE failed ({rc:X}) for {path}");
@@ -63,6 +76,29 @@ public sealed class ShellRecycleBin : IRecycleBin {
 
     private static bool IsBusy(int rc) {
         return rc is DE_INVALIDFILES or ERROR_SHARING_VIOLATION;
+    }
+
+    /// <summary>
+    /// A file some handle keeps from being deleted or renamed. False for a
+    /// folder, and for any other failure to open: SHFileOperation reports
+    /// those in its own words.
+    /// </summary>
+    private static bool IsFileBusy(string path) {
+        if (!File.Exists(path)) {
+            return false;
+        }
+
+        using SafeFileHandle handle = CreateFileW(path, DELETE, FILE_SHARE_ALL, IntPtr.Zero, OPEN_EXISTING, 0, IntPtr.Zero);
+        if (!handle.IsInvalid) {
+            return false;
+        }
+
+        return Marshal.GetLastWin32Error() == ERROR_SHARING_VIOLATION;
+    }
+
+    /// <summary>The failure the caller can recognise and name the holder of.</summary>
+    private static IOException InUse(string path) {
+        return new IOException($"'{path}' or something inside it is in use", HResultSharingViolation);
     }
 
     private static SHFILEOPSTRUCT RecycleOperation(string path) {
@@ -205,6 +241,10 @@ public sealed class ShellRecycleBin : IRecycleBin {
     private const int DE_INVALIDFILES = 0x7C;
     private const int ERROR_SHARING_VIOLATION = 0x20;
 
+    private const uint DELETE = 0x00010000;
+    private const uint FILE_SHARE_ALL = 0x00000007;
+    private const uint OPEN_EXISTING = 3;
+
     private const ushort FOF_SILENT = 0x0004;
     private const ushort FOF_NOCONFIRMATION = 0x0010;
     private const ushort FOF_ALLOWUNDO = 0x0040;
@@ -230,4 +270,9 @@ public sealed class ShellRecycleBin : IRecycleBin {
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     private static extern int SHFileOperation(ref SHFILEOPSTRUCT lpFileOp);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern SafeFileHandle CreateFileW(
+        string lpFileName, uint dwDesiredAccess, uint dwShareMode, IntPtr lpSecurityAttributes,
+        uint dwCreationDisposition, uint dwFlagsAndAttributes, IntPtr hTemplateFile);
 }

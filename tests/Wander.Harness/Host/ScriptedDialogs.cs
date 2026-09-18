@@ -21,6 +21,15 @@ public sealed class ScriptedDialogs : IDialogs {
     };
     private readonly List<string> _records = new();
 
+    /// <summary>
+    /// Kinds that answer Cancel whatever <see cref="ChoiceAnswer"/> says:
+    /// "try again" repeated by policy would never end while the file stays
+    /// held. A <c>dialogs</c> step with <c>kind</c> and <c>choice</c> overrides.
+    /// </summary>
+    private readonly Dictionary<DialogKind, int> _choices = new() {
+        [DialogKind.DeleteInUse] = -1,
+    };
+
 
     public bool DefaultAnswer { get; set; } = true;
 
@@ -56,11 +65,19 @@ public sealed class ScriptedDialogs : IDialogs {
         return accept;
     }
 
+    public void AnswerChoice(DialogKind kind, int choice) {
+        _choices[kind] = choice;
+    }
+
     public int Choose(ChoiceRequest request) {
-        string answer = ChoiceAnswer >= 0 && ChoiceAnswer < request.Choices.Count ? request.Choices[ChoiceAnswer] : "cancel";
+        int pick = _choices.TryGetValue(request.Kind, out int policy) ? policy : ChoiceAnswer;
+        if (pick >= request.Choices.Count) {
+            pick = -1;
+        }
+        string answer = pick >= 0 ? request.Choices[pick] : "cancel";
         Record($"{request.Kind} [{string.Join(" | ", request.Choices)}] -> {answer}: {OneLine(request.Message)}");
 
-        return ChoiceAnswer < request.Choices.Count ? ChoiceAnswer : -1;
+        return pick;
     }
 
     public string? Prompt(string title, string label, string initial, bool filenameMode) {

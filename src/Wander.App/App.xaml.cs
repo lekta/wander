@@ -137,7 +137,9 @@ public partial class App : Application {
     /// </summary>
     internal static void AbandonOperations() {
         ProgressDialog.CancelAll();
-        ServiceLocator.Get<IProcessRunner>().KillAll();
+        // TryGet: called from the crash handler too, where a startup that
+        // died before the platform registered is exactly the case.
+        ServiceLocator.TryGet<IProcessRunner>()?.KillAll();
     }
 
 

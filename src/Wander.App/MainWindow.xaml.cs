@@ -243,8 +243,8 @@ public partial class MainWindow : Window {
     /// </summary>
     private async void StopOperationsThenClose() {
         _stoppingOperations = true;
+        var log = ServiceLocator.Get<Wander.Core.Logging.ILogger>();
         try {
-            var log = ServiceLocator.Get<Wander.Core.Logging.ILogger>();
             var tracker = ServiceLocator.Get<OperationTracker>();
             var watch = System.Diagnostics.Stopwatch.StartNew();
             int count = Vm.CancelAllOperations();
@@ -255,6 +255,10 @@ public partial class MainWindow : Window {
                 log.Warn($"Exit: {tracker.Snapshot().Count} operation(s) still running after {_exitWait.TotalSeconds:F0} s");
                 ServiceLocator.Get<IProcessRunner>().KillAll();
             }
+        } catch (Exception ex) {
+            // async void: anything thrown here would be an unhandled
+            // dispatcher exception on the way out. The close goes on.
+            log.Error("Exit: stopping the operations failed", ex);
         } finally {
             _operationsStopped = true;
             // Posted: with nothing left to wait for, this is still inside

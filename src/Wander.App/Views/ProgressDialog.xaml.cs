@@ -1,6 +1,6 @@
 using System.ComponentModel;
-using System.Threading.Tasks;
 using System.Windows;
+using Wander.App.Dialogs;
 using Wander.App.Resources;
 using Wander.App.ViewModels;
 using Wander.Core.Operations;
@@ -10,15 +10,22 @@ namespace Wander.App.Views;
 /// <summary>
 /// The window one batch file operation runs in. Owns a
 /// <see cref="CancellationTokenSource"/> the caller passes to the operation,
-/// follows that operation in the <see cref="OperationTracker"/>, and closes
-/// itself when the watched task completes.
+/// follows that operation in the <see cref="OperationTracker"/>, and is
+/// closed by the caller (<see cref="Finish"/>) the moment the work is over.
 ///
 /// <para>
 /// Usage pattern (see <c>MainViewModel.RunWithProgressDialogAsync</c>): the
 /// caller creates the window, fires the async work using <see cref="Token"/>,
-/// attaches the resulting task via <see cref="TrackTask"/> and calls
-/// <see cref="Window.Show"/>. The window is <em>not</em> modal - the list
-/// stays live underneath, and the caller simply awaits its own task.
+/// calls <see cref="Window.Show"/>, awaits its own task and calls
+/// <see cref="Finish"/> - on the UI thread, before doing anything else
+/// with the outcome. The window is <em>not</em> modal - the list stays live
+/// underneath. It used to close itself from a continuation of the task
+/// instead, and that close was a separate dispatcher operation, queued
+/// after the caller's own continuation: a question the caller asked about
+/// the outcome ("the file is in use, try again?") went up while this
+/// window was still the active one, took it as its owner, and was
+/// destroyed with it a moment later - with the application left
+/// disabled behind a modal loop nobody could see (2026-09-17).
 /// </para>
 ///
 /// <para>
@@ -35,7 +42,7 @@ namespace Wander.App.Views;
 /// status-bar panel) or cancelled - see the XAML.
 /// </para>
 /// </summary>
-public partial class ProgressDialog : Window, INotifyPropertyChanged {
+public partial class ProgressDialog : Window, INotifyPropertyChanged, ITransientWindow {
     /// <summary>Every window from construction to close - what <see cref="CancelAll"/> reaches.</summary>
     private static readonly List<ProgressDialog> _live = new();
 
@@ -88,16 +95,13 @@ public partial class ProgressDialog : Window, INotifyPropertyChanged {
 
 
     /// <summary>
-    /// Tell the window which task to follow. When the task completes
-    /// (success, failure, or cancellation) the window closes itself on the
-    /// UI thread. Safe to call before <c>Show</c> - completion that races the
-    /// show is honoured the moment the dispatcher starts pumping.
+    /// The work is over (success, failure, or cancellation): the window
+    /// goes, synchronously, so that by the time the caller looks at the
+    /// outcome this window is neither open nor active. UI thread only.
     /// </summary>
-    public void TrackTask(Task task) {
-        _ = task.ContinueWith(_ => Dispatcher.BeginInvoke(() => {
-            _finished = true;
-            Close();
-        }));
+    public void Finish() {
+        _finished = true;
+        Close();
     }
 
     /// <summary>Back from the status bar, where "Свернуть" put it.</summary>

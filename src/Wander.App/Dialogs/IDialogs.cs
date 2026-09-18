@@ -21,6 +21,9 @@ public enum DialogKind {
 
     /// <summary>Delete on a bookmark: take the bookmark away, or delete the folder behind it?</summary>
     BookmarkOrFolder,
+
+    /// <summary>A delete failed because another program holds the file: try again?</summary>
+    DeleteInUse,
 }
 
 public enum DialogButtons {
@@ -59,6 +62,17 @@ public sealed record ChoiceRequest(
     string Title,
     string Message,
     IReadOnlyList<string> Choices);
+
+/// <summary>
+/// A window that closes on its own schedule - when the work it shows is
+/// over, whichever window is up - and so must never own a modal question:
+/// a modal window whose owner is destroyed goes with it, leaving the
+/// application disabled behind a loop nobody can see. The operation
+/// window is one; <see cref="WpfDialogs"/> skips these when it looks for
+/// an owner.
+/// </summary>
+public interface ITransientWindow {
+}
 
 /// <summary>
 /// Every modal question the app asks goes through here, so a headless run

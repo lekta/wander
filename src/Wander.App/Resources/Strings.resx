@@ -72,6 +72,13 @@
   <data name="PreviewUnsupported" xml:space="preserve">
     <value>Для этого файла просмотр недоступен</value>
   </data>
+  <data name="PreviewFileLocked" xml:space="preserve">
+    <value>Файл занят другой программой — прочитать его нельзя</value>
+  </data>
+  <data name="PreviewFileLockedBy" xml:space="preserve">
+    <value>Файл занят: его держит {0} — прочитать нельзя, пока программа его не отпустит</value>
+    <comment>{0} — программы и их PID</comment>
+  </data>
   <data name="PreviewCounting" xml:space="preserve">
     <value>Анализ содержимого</value>
   </data>
@@ -560,6 +567,9 @@
   <data name="ActionCancel" xml:space="preserve">
     <value>Отмена</value>
   </data>
+  <data name="ActionRetry" xml:space="preserve">
+    <value>Повторить</value>
+  </data>
   <data name="RenameTitle" xml:space="preserve">
     <value>Переименовать</value>
   </data>
@@ -623,6 +633,21 @@
   </data>
   <data name="ErrorInUse" xml:space="preserve">
     <value>файл занят другой программой</value>
+  </data>
+  <data name="DeleteInUseTitle" xml:space="preserve">
+    <value>Файл занят</value>
+  </data>
+  <data name="DeleteInUseOne" xml:space="preserve">
+    <value>Не удалось удалить «{0}»: {1}.
+
+Закройте его там и нажмите «Повторить».</value>
+    <comment>{0} — имя, {1} — причина (ErrorFileInUse / ErrorInUse)</comment>
+  </data>
+  <data name="DeleteInUseMany" xml:space="preserve">
+    <value>Не удалось удалить {0} элем. — они заняты. Например, «{1}»: {2}.
+
+Закройте их там и нажмите «Повторить».</value>
+    <comment>{0} — сколько, {1} — имя первого, {2} — причина</comment>
   </data>
   <data name="MenuCmdOpenSubmenu" xml:space="preserve">
     <value>Открыть с помощью</value>

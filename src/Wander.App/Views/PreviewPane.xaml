@@ -764,6 +764,8 @@
                                Style="{StaticResource PaneDim}"
                                HorizontalAlignment="Center"
                                VerticalAlignment="Center"
+                               TextWrapping="Wrap" TextAlignment="Center"
+                               Margin="16,0"
                                Visibility="{Binding IsPlaceholderVisible, Converter={StaticResource BoolToVisibility}}"/>
 
                     <!-- Loading spinner — overlays content while content loads -->

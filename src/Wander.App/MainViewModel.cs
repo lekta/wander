@@ -3613,6 +3613,19 @@ public sealed class MainViewModel : ObservableObject {
             }
         }
 
+        await RunDeleteAsync(paths, snapshot, permanent);
+    }
+
+    /// <summary>
+    /// The delete itself, once everything there was to ask has been asked:
+    /// the operation, the listing and panels after it, the outcome. What
+    /// failed because another program holds it is put to the user by name,
+    /// with the offer to try again once they have closed it there - the
+    /// status line alone is too easy to miss for a delete that did not
+    /// happen.
+    /// </summary>
+    /// <param name="snapshot">The rows the delete started from, for where the keyboard lands.</param>
+    private async Task RunDeleteAsync(IReadOnlyList<string> paths, IReadOnlyList<FileSystemEntry> snapshot, bool permanent) {
         IReadOnlyList<DeleteResult> results;
         try {
             results = await RunWithProgressDialogAsync(
@@ -3655,14 +3668,57 @@ public sealed class MainViewModel : ObservableObject {
         }
         await trees;
 
-        if (failed > 0) {
-            var firstFail = results.First(r => r.Status == DeleteStatus.Failed);
-            string detail = firstFail.Error is null ? "" : ": " + DescribeError(firstFail.Error, firstFail.Path);
-            Status = string.Format(
-                permanent ? Strings.StatusDeletedPartly : Strings.StatusRecycledPartly, ok, failed, detail);
-        } else {
+        if (failed == 0) {
             Status = string.Format(permanent ? Strings.StatusDeleted : Strings.StatusRecycled, ok);
+
+            return;
         }
+
+        // Naming the holder asks Restart Manager, which takes a tenth of a
+        // second or more (a folder: its first few hundred files) - off the
+        // UI thread, or the question goes up behind a stall.
+        var firstFail = results.First(r => r.Status == DeleteStatus.Failed);
+        var firstError = firstFail.Error;
+        string reason = firstError is null
+            ? ""
+            : await Task.Run(() => DescribeError(firstError, firstFail.Path));
+        Status = string.Format(
+            permanent ? Strings.StatusDeletedPartly : Strings.StatusRecycledPartly,
+            ok, failed, reason.Length > 0 ? ": " + reason : "");
+        _log.Info($"Delete: {ok} done, {failed} failed - {reason}");
+
+        var busy = results
+            .Where(r => r.Status == DeleteStatus.Failed && FileInUse.Is(r.Error))
+            .ToList();
+        if (busy.Count == 0) {
+            return;
+        }
+
+        string busyReason = ReferenceEquals(busy[0], firstFail)
+            ? reason
+            : await Task.Run(() => DescribeError(busy[0].Error!, busy[0].Path));
+        var again = busy.Select(r => r.Path).ToList();
+        if (!AskRetryInUse(again, busyReason)) {
+            return;
+        }
+
+        var retry = new HashSet<string>(again, StringComparer.OrdinalIgnoreCase);
+        await RunDeleteAsync(again, snapshot.Where(e => retry.Contains(e.FullPath)).ToList(), permanent);
+    }
+
+    /// <summary>
+    /// "Could not delete it: it is open in ..." - with a button to try
+    /// again. Cancel is the default and the answer to Esc, like every
+    /// question here.
+    /// </summary>
+    private bool AskRetryInUse(IReadOnlyList<string> busy, string reason) {
+        string name = Path.GetFileName(busy[0].TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        string message = busy.Count == 1
+            ? string.Format(Strings.DeleteInUseOne, name, reason)
+            : string.Format(Strings.DeleteInUseMany, busy.Count, name, reason);
+
+        return _dialogs.Choose(new ChoiceRequest(
+            DialogKind.DeleteInUse, Strings.DeleteInUseTitle, message, new[] { Strings.ActionRetry })) == 0;
     }
 
     /// <summary>
@@ -4469,12 +4525,11 @@ public sealed class MainViewModel : ObservableObject {
         if (ex is IOException && _lockInspector is not null) {
             var lockers = _lockInspector.WhoIsLocking(path);
             if (lockers.Count > 0) {
-                string procs = string.Join(", ", lockers.Select(l => $"{l.ProcessName} (PID {l.ProcessId})"));
-                return string.Format(Strings.ErrorFileInUse, procs);
+                return string.Format(Strings.ErrorFileInUse, FileLockInfo.Describe(lockers));
             }
-            // ERROR_SHARING_VIOLATION with nobody to name: the lock was a
-            // moment's, or held by something Restart Manager does not see.
-            if (ex.HResult == unchecked((int)0x80070020)) {
+            // In use with nobody to name: the lock was a moment's, or held
+            // by something Restart Manager does not see.
+            if (FileInUse.Is(ex)) {
                 return Strings.ErrorInUse;
             }
         }
@@ -4574,9 +4629,9 @@ public sealed class MainViewModel : ObservableObject {
     /// <summary>
     /// Run an async batch op with its own <see cref="Wander.App.Views.ProgressDialog"/>.
     /// The window opens before the await, follows the operation the work
-    /// registers in <see cref="_tracker"/>, and closes itself when
-    /// <paramref name="work"/> finishes (success, failure, or user cancel).
-    /// Returns whatever the work returned; rethrows
+    /// registers in <see cref="_tracker"/>, and is closed here, before this
+    /// returns, when <paramref name="work"/> finishes (success, failure, or
+    /// user cancel). Returns whatever the work returned; rethrows
     /// <see cref="OperationCanceledException"/> when the user cancels, so
     /// callers can show a uniform message.
     ///
@@ -4585,6 +4640,15 @@ public sealed class MainViewModel : ObservableObject {
     /// runs, the way it does in Explorer. What used to be ShowDialog
     /// blocking this continuation is now the plain await below - the window
     /// is a display, not a gate.
+    /// </para>
+    ///
+    /// <para>
+    /// Closed synchronously in the finally, not by the window from a
+    /// continuation of the task: the caller may put a question about the
+    /// outcome to the user the moment this returns, and that question must
+    /// not find this window still open and active - it would take it as its
+    /// owner and be destroyed with it a moment later (2026-09-17, the
+    /// "file is in use" question after a delete).
     /// </para>
     /// </summary>
     private async Task<TResult> RunWithProgressDialogAsync<TResult>(string headline, Func<CancellationToken, Task<TResult>> work) {
@@ -4596,11 +4660,14 @@ public sealed class MainViewModel : ObservableObject {
         _operationWindows.Add(dlg);
         dlg.Closed += (_, _) => _operationWindows.Remove(dlg);
 
-        var task = work(dlg.Token);
-        dlg.TrackTask(task);
-        dlg.Show();
+        try {
+            var task = work(dlg.Token);
+            dlg.Show();
 
-        return await task.ConfigureAwait(true);
+            return await task.ConfigureAwait(true);
+        } finally {
+            dlg.Finish();
+        }
     }
 
     /// <summary>

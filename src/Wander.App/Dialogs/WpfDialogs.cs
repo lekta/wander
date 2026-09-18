@@ -61,12 +61,19 @@ public sealed class WpfDialogs : IDialogs {
     }
 
 
+    /// <summary>
+    /// The window a question lands on: the active one, the main window when
+    /// none is. Never an <see cref="ITransientWindow"/> (the operation
+    /// window): a question asked while another operation's window is
+    /// active is owned by the main window instead.
+    /// </summary>
     private static Window? ActiveWindow() {
         var app = Application.Current;
         if (app is null) {
             return null;
         }
 
-        return app.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive) ?? app.MainWindow;
+        return app.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive && w is not ITransientWindow)
+            ?? app.MainWindow;
     }
 }
