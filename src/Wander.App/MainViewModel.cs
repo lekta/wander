@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Windows;
 using System.Windows.Input;
@@ -1019,8 +1020,8 @@ public sealed class MainViewModel : ObservableObject {
     /// minimums, each way. So the pair is rebased only here - the user
     /// dragged a divider, and all three sizes are now theirs at this
     /// window. A file from before the window size was kept beside the
-    /// sizes stays as it is until then: the old bounds apply
-    /// (<see cref="PaneSizes.LegacyMax"/>), and the first drag rebases
+    /// sizes stays as it is until then, held to what leaves the list its
+    /// room (<see cref="PaneSizes.Restore"/>), and the first drag rebases
     /// it at the window it happens in.
     /// </summary>
     private void RebasePaneSizes() {
@@ -3281,6 +3282,26 @@ public sealed class MainViewModel : ObservableObject {
 
 
     /// <summary>
+    /// Delete pressed on a built-in bookmark (Downloads, Documents, the
+    /// Recycle Bin...). Those folders are never deleted from the panel, with
+    /// Shift or without: the row is switched off in the settings, which is
+    /// where it comes back from. False when the node is not such a row.
+    /// </summary>
+    public bool HideSpecialBookmark(TreeNodeViewModel bookmark) {
+        // Read before the switch: the panel is rebuilt inside the call.
+        string name = bookmark.Name;
+        string path = bookmark.FullPath;
+        if (!Bookmarks.HideSpecial(bookmark)) {
+            return false;
+        }
+
+        _log.Info($"Delete on a built-in bookmark: switched off in the settings - {path}");
+        Status = string.Format(Strings.BookmarkSwitchedOff, name);
+
+        return true;
+    }
+
+    /// <summary>
     /// Delete pressed on a bookmark. The key could mean the row or the
     /// folder behind it, and the two are far apart - one is a line in a
     /// panel, the other is the user's files - so it asks, with both answers
@@ -3753,6 +3774,8 @@ public sealed class MainViewModel : ObservableObject {
     }
 
 
+    [SuppressMessage("ReSharper", "AsyncVoidMethod",
+        Justification = "A command body, nothing awaits it; every exception is caught, logged and shown in the status bar.")]
     private async void UndoLast() {
         try {
             var action = _undo.Undo();

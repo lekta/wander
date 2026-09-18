@@ -35,6 +35,9 @@ public sealed class BookmarksController {
     private readonly ILogger _log;
     private readonly Action<TreeNodeViewModel> _wire;
     private readonly List<string> _favorites = new();
+    // The built-in rows of the current build and the settings switch behind
+    // each of them: Delete on such a row turns the switch off - see HideSpecial.
+    private readonly Dictionary<TreeNodeViewModel, Action> _specialSwitches = new();
 
 
     public BookmarksController(
@@ -101,27 +104,28 @@ public sealed class BookmarksController {
         IsBuilding = true;
         try {
             Items.Clear();
+            _specialSwitches.Clear();
 
             if (_settings.ShowBookmarkDownloads) {
-                AddSpecialFolder(Strings.SpecialFolderDownloads, ResolveKnown(f => f.GetDownloads()));
+                AddSpecialFolder(Strings.SpecialFolderDownloads, ResolveKnown(f => f.GetDownloads()), () => _settings.ShowBookmarkDownloads = false);
             }
             if (_settings.ShowBookmarkDocuments) {
-                AddSpecialFolder(Strings.SpecialFolderDocuments, ResolveKnown(f => f.GetDocuments()));
+                AddSpecialFolder(Strings.SpecialFolderDocuments, ResolveKnown(f => f.GetDocuments()), () => _settings.ShowBookmarkDocuments = false);
             }
             if (_settings.ShowBookmarkPictures) {
-                AddSpecialFolder(Strings.SpecialFolderPictures, ResolveKnown(f => f.GetPictures()));
+                AddSpecialFolder(Strings.SpecialFolderPictures, ResolveKnown(f => f.GetPictures()), () => _settings.ShowBookmarkPictures = false);
             }
             if (_settings.ShowBookmarkDesktop) {
-                AddSpecialFolder(Strings.SpecialFolderDesktop, ResolveKnown(f => f.GetDesktop()));
+                AddSpecialFolder(Strings.SpecialFolderDesktop, ResolveKnown(f => f.GetDesktop()), () => _settings.ShowBookmarkDesktop = false);
             }
             if (_settings.ShowBookmarkMusic) {
-                AddSpecialFolder(Strings.SpecialFolderMusic, ResolveKnown(f => f.GetMusic()));
+                AddSpecialFolder(Strings.SpecialFolderMusic, ResolveKnown(f => f.GetMusic()), () => _settings.ShowBookmarkMusic = false);
             }
             if (_settings.ShowBookmarkVideos) {
-                AddSpecialFolder(Strings.SpecialFolderVideos, ResolveKnown(f => f.GetVideos()));
+                AddSpecialFolder(Strings.SpecialFolderVideos, ResolveKnown(f => f.GetVideos()), () => _settings.ShowBookmarkVideos = false);
             }
             if (_settings.ShowBookmarkRecycleBin && ServiceLocator.TryGet<IShellNamespace>() is not null) {
-                AddSpecialFolder(Strings.SpecialFolderRecycleBin, ShellPaths.RecycleBin);
+                AddSpecialFolder(Strings.SpecialFolderRecycleBin, ShellPaths.RecycleBin, () => _settings.ShowBookmarkRecycleBin = false);
             }
 
             // The divider goes on the first user bookmark, and only when
@@ -298,6 +302,24 @@ public sealed class BookmarksController {
 
 
     /// <summary>
+    /// Switches a built-in row (Downloads, Documents, the Recycle Bin...) off
+    /// in the settings - what Delete on it means: these rows are settings,
+    /// not the user's bookmarks, and the folders behind them are not
+    /// deleted from this panel. The settings change rebuilds the panel.
+    /// False for any other node, a folder under a built-in row included.
+    /// </summary>
+    public bool HideSpecial(TreeNodeViewModel node) {
+        if (!_specialSwitches.TryGetValue(node, out var switchOff)) {
+            return false;
+        }
+
+        switchOff();
+
+        return true;
+    }
+
+
+    /// <summary>
     /// Adds one special-folder node. No-op when the path can't be resolved
     /// or doesn't exist on disk (e.g. the user moved the folder to a drive
     /// that is no longer there). The label is a fixed localised name, not
@@ -309,7 +331,7 @@ public sealed class BookmarksController {
     /// clickable leaf, navigated through <see cref="IShellNamespace"/>.
     /// </para>
     /// </summary>
-    private void AddSpecialFolder(string label, string? path) {
+    private void AddSpecialFolder(string label, string? path, Action switchOff) {
         if (string.IsNullOrEmpty(path)) {
             return;
         }
@@ -321,6 +343,7 @@ public sealed class BookmarksController {
             var shellNode = new TreeNodeViewModel(label, path, EntryKind.Directory, fs: null, hasChildren: false);
             _wire(shellNode);
             Items.Add(shellNode);
+            _specialSwitches[shellNode] = switchOff;
 
             return;
         }
@@ -335,6 +358,7 @@ public sealed class BookmarksController {
             label, path, EntryKind.Directory, _fs, hasChildren: true, _settings);
         _wire(node);
         Items.Add(node);
+        _specialSwitches[node] = switchOff;
     }
 
 

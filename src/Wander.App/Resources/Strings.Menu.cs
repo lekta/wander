@@ -198,6 +198,9 @@ public static partial class Strings {
     /// <summary>Удалить папку навсегда</summary>
     public static string BookmarkDeleteFolderForever => Get(nameof(BookmarkDeleteFolderForever));
 
+    /// <summary>Закладка «{0}» убрана с панели. Вернуть — Параметры → Закладки</summary>
+    public static string BookmarkSwitchedOff => Get(nameof(BookmarkSwitchedOff));
+
     /// <summary>Переместить вверх</summary>
     public static string BookmarksMoveUp => Get(nameof(BookmarksMoveUp));
 

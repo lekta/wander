@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -195,6 +196,8 @@ public partial class PreviewPane : UserControl {
     }
 
 
+    [SuppressMessage("ReSharper", "AsyncVoidEventHandlerMethod",
+        Justification = "A PropertyChanged handler is void by contract. It runs on the dispatcher, so an exception lands in App.HookCrashLogging (DispatcherUnhandledException): logged and offered as a report, not fatal.")]
     private async void OnPreviewPropertyChanged(object? sender, PropertyChangedEventArgs e) {
         switch (e.PropertyName) {
             case nameof(PreviewController.CodeText):

@@ -467,6 +467,21 @@ public partial class FolderTreesView : UserControl {
             return;
         }
 
+        // Delete on a built-in bookmark (Downloads, Documents...): the row is
+        // switched off in the settings and the folder is left alone, with
+        // Shift or without - see MainViewModel.HideSpecialBookmark. A folder
+        // under such a row is an ordinary folder and falls through.
+        if (e.Key == Key.Delete
+            && Keyboard.Modifiers is ModifierKeys.None or ModifierKeys.Shift
+            && ReferenceEquals(tree, BookmarksTree)
+            && tree.SelectedItem is TreeNodeViewModel { IsRemovableBookmark: false } builtIn
+            && Vm.HideSpecialBookmark(builtIn)) {
+
+            e.Handled = true;
+
+            return;
+        }
+
         // Delete on a bookmark row: the bookmark, or its folder? Asked
         // rather than guessed - see MainViewModel.DeleteFromBookmark. Caught
         // here, ahead of the window's own Delete binding.

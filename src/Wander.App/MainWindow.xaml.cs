@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -240,6 +241,8 @@ public partial class MainWindow : Window {
     /// their cancelling state is seen. Whatever is still running after that
     /// has the programs it started killed. Then the close is made again.
     /// </summary>
+    [SuppressMessage("ReSharper", "AsyncVoidMethod",
+        Justification = "Runs off the Closing handler, which cannot await; every exception is caught and logged, and the close goes on.")]
     private async void StopOperationsThenClose() {
         _stoppingOperations = true;
         var log = ServiceLocator.Get<Wander.Core.Logging.ILogger>();
@@ -1214,6 +1217,8 @@ public partial class MainWindow : Window {
     /// for the mouse. Built fresh per drop, because its rows close over
     /// that drop's paths and folder.
     /// </summary>
+    [SuppressMessage("ReSharper", "AsyncVoidMethod",
+        Justification = "Posted from the drop callback, nothing awaits it. It runs on the dispatcher, so an exception lands in App.HookCrashLogging (DispatcherUnhandledException): logged and offered as a report, not fatal.")]
     private async void ShowDropMenu(FrameworkElement host, DropPlan plan) {
         var target = await Vm.DescribeDropAsync(plan.Paths, plan.Target, plan.Effect == DropEffect.Move);
         var bindings = new Dictionary<MenuCommandId, MenuBinding> {

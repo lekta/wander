@@ -25,10 +25,18 @@ public class PaneSizesTests {
     }
 
     [Fact]
-    public void WithoutASavedWindow_TheOldBoundsApply() {
+    public void WithoutASavedWindow_ThePaneStaysAndTheListKeepsItsRoom() {
+        // A file from before the window size was kept: nothing to scale by.
         Assert.Equal(748, PaneSizes.Restore(748, 0, 1086, Min, Reserve));
-        Assert.Equal(PaneSizes.LegacyMax, PaneSizes.Restore(4000, 0, 1086, Min, Reserve));
+        Assert.Equal(1086 - Reserve, PaneSizes.Restore(4000, 0, 1086, Min, Reserve));
         Assert.Equal(Min, PaneSizes.Restore(10, 0, 1086, Min, Reserve));
+        // A wide pane on a wide monitor is not cut to the old fixed ceiling.
+        Assert.Equal(1000, PaneSizes.Restore(1000, 0, 2560, Min, Reserve));
+    }
+
+    [Fact]
+    public void WithoutAWindowAtAll_TheFixedCeilingStands() {
+        Assert.Equal(PaneSizes.LegacyMax, PaneSizes.Restore(4000, 1925, 0, Min, Reserve));
     }
 
     [Fact]

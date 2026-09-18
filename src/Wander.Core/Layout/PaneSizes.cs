@@ -16,8 +16,8 @@ namespace Wander.Core.Layout;
 /// </summary>
 public static class PaneSizes {
     /// <summary>
-    /// Upper bound for a size saved before the window size was recorded
-    /// beside it. Nothing can be scaled, so the old fixed ceiling stands.
+    /// Upper bound while the window size is not known at all - before the
+    /// window is up. Once it is, the bound is the window less the reserve.
     /// </summary>
     public const double LegacyMax = 900;
 
@@ -31,8 +31,16 @@ public static class PaneSizes {
     /// <param name="min">Smallest the pane may be.</param>
     /// <param name="reserve">How much of the window has to be left for everything else.</param>
     public static double Restore(double savedPane, double savedWindow, double currentWindow, double min, double reserve) {
-        if (savedWindow <= 0 || currentWindow <= 0) {
+        if (currentWindow <= 0) {
             return Clamp(savedPane, min, LegacyMax);
+        }
+        if (savedWindow <= 0) {
+            // A file from before the window size was kept beside the pane:
+            // nothing to scale by, so the pane comes back as it was - but
+            // never wider than leaves the rest its room. The fixed ceiling
+            // that stood here let a 900 px pane into a 1086 px window, and
+            // cut a wider one on a monitor that had the room (2026-09-18).
+            return Clamp(savedPane, min, Math.Max(min, currentWindow - reserve));
         }
         if (Math.Abs(savedWindow - currentWindow) <= SameWindow) {
             return savedPane;

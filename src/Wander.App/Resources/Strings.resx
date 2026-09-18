@@ -911,6 +911,10 @@
   <data name="BookmarkDeleteFolderForever" xml:space="preserve">
     <value>Удалить папку навсегда</value>
   </data>
+  <data name="BookmarkSwitchedOff" xml:space="preserve">
+    <value>Закладка «{0}» убрана с панели. Вернуть — Параметры → Закладки</value>
+    <comment>{0} — подпись встроенной закладки</comment>
+  </data>
   <data name="BookmarksMoveUp" xml:space="preserve">
     <value>Переместить вверх</value>
   </data>

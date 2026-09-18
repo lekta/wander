@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using Wander.App.Resources;
 using Wander.App.ViewModels;
@@ -218,6 +219,8 @@ public sealed class ConflictWindowViewModel : ObservableObject {
     /// than the list faster. Small files go first (see
     /// <see cref="ConflictBatch.NextToCompare"/>).
     /// </summary>
+    [SuppressMessage("ReSharper", "AsyncVoidMethod",
+        Justification = "Started from UI callbacks, nothing awaits it; every exception is caught and logged inside.")]
     private async void EnsureComparing() {
         if (_comparing) {
             return;
@@ -280,6 +283,8 @@ public sealed class ConflictWindowViewModel : ObservableObject {
     /// reading in the meantime; a folder that cannot be read keeps its
     /// answer and says so.
     /// </summary>
+    [SuppressMessage("ReSharper", "AsyncVoidMethod",
+        Justification = "Started from UI callbacks, nothing awaits it; every exception is caught and logged inside.")]
     private async void StartScan(ConflictPair pair) {
         Batch.MarkScanning(pair);
         RowOf(pair)?.RefreshChoice();
