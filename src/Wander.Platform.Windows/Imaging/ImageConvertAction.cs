@@ -82,7 +82,7 @@ public sealed class ImageConvertAction : IBuiltinAction {
         ct.ThrowIfCancellationRequested();
 
         if (options.FromPreview) {
-            return await ConvertPreviewAsync(file, input, shot, orientation, options, ct).ConfigureAwait(false);
+            return await ConvertPreviewAsync(file, shot, orientation, options, ct).ConfigureAwait(false);
         }
 
         BitmapDecoder decoder;
@@ -91,7 +91,7 @@ public sealed class ImageConvertAction : IBuiltinAction {
         } catch (Exception ex) when (ImageFormats.IsRaw(input)) {
             _log.Info($"image-convert: no system decoder for {input} ({ex.Message}), converting its preview");
 
-            return await ConvertPreviewAsync(file, input, shot, orientation, options, ct).ConfigureAwait(false);
+            return await ConvertPreviewAsync(file, shot, orientation, options, ct).ConfigureAwait(false);
         } catch (Exception ex) {
             throw new NotSupportedException(Text.Get("ImageConvertNoDecoder"), ex);
         }
@@ -106,7 +106,7 @@ public sealed class ImageConvertAction : IBuiltinAction {
     /// to turn them, exactly as the camera writes its own JPEGs.
     /// </summary>
     private async Task<byte[]> ConvertPreviewAsync(
-        FileStream file, string input, ImageMetadata? shot, int orientation, ImageConvertOptions options, CancellationToken ct) {
+        FileStream file, ImageMetadata? shot, int orientation, ImageConvertOptions options, CancellationToken ct) {
 
         file.Position = 0;
         byte[] jpeg = RawPreviewExtractor.Extract(file) ?? throw new NotSupportedException(Text.Get("ImageConvertNoPreview"));

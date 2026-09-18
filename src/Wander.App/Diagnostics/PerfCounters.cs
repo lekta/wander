@@ -19,7 +19,7 @@ namespace Wander.App.Diagnostics;
 public static class PerfCounters {
     private const long WindowMs = 1000;
 
-    private static readonly object _lock = new();
+    private static readonly Lock _lock = new();
     private static readonly Dictionary<string, (long Total, int Events)> _counts = new(StringComparer.Ordinal);
 
     private static ILogger? _log;

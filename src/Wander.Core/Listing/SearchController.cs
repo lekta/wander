@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
-using System.Threading.Tasks;
 using Wander.Core.Companions;
 using Wander.Core.FileSystem;
 using Wander.Core.Search;

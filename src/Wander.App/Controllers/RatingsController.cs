@@ -1,6 +1,4 @@
 using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
 using Wander.App.Resources;
 using Wander.App.ViewModels;
 using Wander.Core.Companions;

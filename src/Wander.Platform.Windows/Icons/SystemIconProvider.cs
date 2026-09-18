@@ -101,7 +101,7 @@ public sealed class SystemIconProvider : IIconProvider {
     /// already did.
     /// </summary>
     private readonly Dictionary<string, FileStamp> _stamps = new(StringComparer.OrdinalIgnoreCase);
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
 
     /// <summary>
     /// Second tier behind the in-memory one: survives a restart, so the
@@ -916,7 +916,7 @@ public sealed class SystemIconProvider : IIconProvider {
     /// failures stop; the thumbnail tiers go through COM interfaces of
     /// their own and are not funneled through this.
     /// </summary>
-    private static readonly object _shellIconLock = new();
+    private static readonly Lock _shellIconLock = new();
 
 
     private static byte[]? LoadShellIcon(string path, IconSize size, uint attributes = FILE_ATTRIBUTE_NORMAL) {

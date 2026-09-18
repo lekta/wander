@@ -32,7 +32,7 @@ public static class SystemVitals {
     /// </summary>
     private const long IntervalMs = 5000;
 
-    private static readonly object _lock = new();
+    private static readonly Lock _lock = new();
 
     /// <summary>
     /// Taken once: <c>GetCurrentProcess</c> opens a handle every time it is

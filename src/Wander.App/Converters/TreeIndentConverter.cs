@@ -30,7 +30,7 @@ public sealed class TreeIndentConverter : IValueConverter {
     private const double Step = 16;
 
 
-    public object Convert(object value, Type targetType, object? parameter, CultureInfo culture) {
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) {
         int depth = 0;
         var parent = value is DependencyObject start ? VisualTreeHelper.GetParent(start) : null;
         while (parent is not null) {
@@ -46,7 +46,7 @@ public sealed class TreeIndentConverter : IValueConverter {
     }
 
 
-    public object ConvertBack(object value, Type targetType, object? parameter, CultureInfo culture) {
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) {
         throw new NotSupportedException();
     }
 }

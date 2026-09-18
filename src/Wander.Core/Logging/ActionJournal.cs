@@ -27,7 +27,7 @@ public sealed class ActionJournal {
     private const int Limit = 500;
 
     private readonly Queue<(DateTime At, string Text)> _entries = new();
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
 
     private string _last = "";
 

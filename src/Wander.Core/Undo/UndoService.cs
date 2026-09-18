@@ -21,7 +21,7 @@ namespace Wander.Core.Undo;
 /// </para>
 /// </summary>
 public sealed class UndoService {
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private readonly Stack<IUndoableAction> _stack = new();
     private int _busy;
 

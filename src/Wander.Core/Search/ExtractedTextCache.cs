@@ -22,7 +22,7 @@ namespace Wander.Core.Search;
 /// </para>
 /// </summary>
 public sealed class ExtractedTextCache {
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private readonly Dictionary<string, LinkedListNode<Entry>> _index = new(StringComparer.Ordinal);
 
     /// <summary>Most recently used at the front, eviction victim at the back.</summary>

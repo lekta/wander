@@ -12,11 +12,11 @@ namespace Wander.App.Converters;
 /// Pass the desired <see cref="IconSize"/> as ConverterParameter ("Small" / "Normal" / "Large").
 /// </summary>
 public sealed class IconConverter : IValueConverter {
-    public object? Convert(object value, Type targetType, object? parameter, CultureInfo culture) {
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture) {
         return value is string path ? Load(path, ParseSize(parameter as string)) : null;
     }
 
-    public object ConvertBack(object value, Type targetType, object? parameter, CultureInfo culture) {
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) {
         throw new NotSupportedException();
     }
 

@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using System.IO;
-using System.Threading.Tasks;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Media.Media3D;
@@ -1694,7 +1693,7 @@ public sealed class PreviewController : ObservableObject {
         // A label an XMP spells its own way ("Client approved") maps to no
         // swatch, so say it in words instead of dropping it on the floor.
         CustomColorLabel = _colorLabel == 0 && !string.IsNullOrEmpty(rating?.ColorLabelName)
-            ? rating!.ColorLabelName!
+            ? rating.ColorLabelName
             : "";
 
         foreach (var choice in ColorLabelChoices) {

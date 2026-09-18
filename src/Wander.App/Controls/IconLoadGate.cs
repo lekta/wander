@@ -16,7 +16,7 @@ namespace Wander.App.Controls;
 /// </para>
 /// </summary>
 internal sealed class IconLoadGate {
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private readonly Queue<TaskCompletionSource<bool>> _urgent = new();
     private readonly Queue<TaskCompletionSource<bool>> _later = new();
     private int _free;

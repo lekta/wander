@@ -23,7 +23,7 @@ namespace Wander.App.Converters;
 /// </para>
 /// </summary>
 public sealed class RankTextConverter : IValueConverter {
-    public object Convert(object value, Type targetType, object? parameter, CultureInfo culture) {
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) {
         int rank = value switch {
             SidecarRating rating => rating.Rank ?? 0,
             int direct => direct,
@@ -34,7 +34,7 @@ public sealed class RankTextConverter : IValueConverter {
     }
 
 
-    public object ConvertBack(object value, Type targetType, object? parameter, CultureInfo culture) {
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) {
         throw new NotSupportedException();
     }
 }
@@ -55,7 +55,7 @@ public sealed class ColorLabelBrushConverter : IValueConverter {
     private static readonly IReadOnlyList<ColorLabelViewModel> _palette = ColorLabelViewModel.CreateChoices();
 
 
-    public object Convert(object value, Type targetType, object? parameter, CultureInfo culture) {
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) {
         int index = value switch {
             SidecarRating rating => rating.ColorLabel ?? 0,
             int direct => direct,
@@ -72,7 +72,7 @@ public sealed class ColorLabelBrushConverter : IValueConverter {
     }
 
 
-    public object ConvertBack(object value, Type targetType, object? parameter, CultureInfo culture) {
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) {
         throw new NotSupportedException();
     }
 }
@@ -92,7 +92,7 @@ public sealed class ColorLabelBrushConverter : IValueConverter {
 /// </para>
 /// </summary>
 public sealed class RatingBadgeVisibilityConverter : IValueConverter {
-    public object Convert(object value, Type targetType, object? parameter, CultureInfo culture) {
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) {
         var rating = value as SidecarRating;
         bool show = (parameter as string) == "Color"
             ? (rating?.ColorLabel ?? 0) > 0
@@ -102,7 +102,7 @@ public sealed class RatingBadgeVisibilityConverter : IValueConverter {
     }
 
 
-    public object ConvertBack(object value, Type targetType, object? parameter, CultureInfo culture) {
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) {
         throw new NotSupportedException();
     }
 }
@@ -119,7 +119,7 @@ public sealed class FilterStarConverter : IValueConverter {
     private const string Hollow = "\u2606";
 
 
-    public object Convert(object value, Type targetType, object? parameter, CultureInfo culture) {
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) {
         if (value is not RatingFilter filter || parameter is not string raw || !int.TryParse(raw, out int star)) {
             return Hollow;
         }
@@ -128,7 +128,7 @@ public sealed class FilterStarConverter : IValueConverter {
     }
 
 
-    public object ConvertBack(object value, Type targetType, object? parameter, CultureInfo culture) {
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) {
         throw new NotSupportedException();
     }
 }

@@ -28,7 +28,7 @@ public sealed class OperationTracker {
     /// <summary>Ten redraws a second is more than an eye needs and far less than a copy reports.</summary>
     public static readonly TimeSpan MinInterval = TimeSpan.FromMilliseconds(100);
 
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private readonly List<OperationProgress> _ops = new();
     private readonly TimeSpan _minInterval;
     private readonly Func<DateTime> _now;

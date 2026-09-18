@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -627,7 +626,7 @@ public partial class MainWindow : Window {
 
         // F2: one item is renamed in place; two or more go to the batch
         // window, which refuses a mix of files and folders on its own.
-        if (e.Key == Key.F2 && Vm.SelectedEntry is FileSystemEntry) {
+        if (e.Key == Key.F2 && Vm.SelectedEntry is not null) {
             if (Vm.SelectedEntries.Count > 1) {
                 Vm.BatchRenameCommand.Execute(null);
             } else {

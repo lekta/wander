@@ -26,7 +26,7 @@ namespace Wander.App.Highlighting;
 /// </summary>
 public static class HighlightingCatalog {
     private static bool _registered;
-    private static readonly object _lock = new();
+    private static readonly Lock _lock = new();
 
 
     public static void EnsureRegistered() {

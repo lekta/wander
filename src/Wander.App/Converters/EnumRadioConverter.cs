@@ -18,14 +18,14 @@ namespace Wander.App.Converters;
 /// </para>
 /// </summary>
 public sealed class EnumRadioConverter : IValueConverter {
-    public object Convert(object value, Type targetType, object? parameter, CultureInfo culture) {
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) {
         return value is not null
             && parameter is string target
             && string.Equals(value.ToString(), target, StringComparison.Ordinal);
     }
 
 
-    public object ConvertBack(object value, Type targetType, object? parameter, CultureInfo culture) {
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) {
         if (value is not true || parameter is not string target) {
             return Binding.DoNothing;
         }
@@ -33,7 +33,7 @@ public sealed class EnumRadioConverter : IValueConverter {
         var type = Nullable.GetUnderlyingType(targetType) ?? targetType;
 
         return type.IsEnum && Enum.TryParse(type, target, out object? parsed)
-            ? parsed!
+            ? parsed
             : Binding.DoNothing;
     }
 }

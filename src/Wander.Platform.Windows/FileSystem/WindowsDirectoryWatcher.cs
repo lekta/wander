@@ -25,7 +25,7 @@ namespace Wander.Platform.Windows.FileSystem;
 /// </summary>
 public sealed class WindowsDirectoryWatcher : IDirectoryWatcher {
     private readonly ILogger _log;
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
 
     private FileSystemWatcher? _watcher;
 

@@ -349,7 +349,7 @@ public sealed class DropTargetController {
     /// </summary>
     public static string[]? PayloadPaths(IDataObject data) {
         if (data.GetDataPresent(DataFormats.FileDrop)) {
-            return (string[])data.GetData(DataFormats.FileDrop);
+            return data.GetData(DataFormats.FileDrop) as string[];
         }
 
         return OutgoingDrag.InFlightPaths?.ToArray();

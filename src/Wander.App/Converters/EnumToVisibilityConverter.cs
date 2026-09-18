@@ -9,7 +9,7 @@ namespace Wander.App.Converters;
 /// Works with any enum (or any value where ToString is the discriminator).
 /// </summary>
 public sealed class EnumToVisibilityConverter : IValueConverter {
-    public object Convert(object value, Type targetType, object? parameter, CultureInfo culture) {
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) {
         if (value is null || parameter is not string target) {
             return Visibility.Collapsed;
         }
@@ -18,7 +18,7 @@ public sealed class EnumToVisibilityConverter : IValueConverter {
             : Visibility.Collapsed;
     }
 
-    public object ConvertBack(object value, Type targetType, object? parameter, CultureInfo culture) {
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) {
         throw new NotSupportedException();
     }
 }

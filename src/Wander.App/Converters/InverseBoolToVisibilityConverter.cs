@@ -6,7 +6,7 @@ namespace Wander.App.Converters;
 
 /// <summary>
 /// <c>true</c> hides, <c>false</c> shows — the mirror of WPF's own
-/// <see cref="BooleanToVisibilityConverter"/>.
+/// <see cref="System.Windows.Controls.BooleanToVisibilityConverter"/>.
 ///
 /// <para>
 /// Needed by anything whose visibility is driven by a flag named for the

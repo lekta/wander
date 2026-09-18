@@ -50,7 +50,7 @@ internal static class IconImageCache {
     // by the very code that exists to stop the hot path costing anything.
     private static readonly Dictionary<(IconSize Size, string Path), BitmapImage> _images = new();
     private static readonly Queue<(IconSize Size, string Path)> _thumbOrder = new();
-    private static readonly object _lock = new();
+    private static readonly Lock _lock = new();
 
 
     /// <summary>

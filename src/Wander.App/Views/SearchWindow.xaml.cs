@@ -99,7 +99,7 @@ public partial class SearchWindow : Window {
 
         // Enter runs it now, ahead of the pause and of the length floor.
         // The keyboard stays where it is so the query can be corrected.
-        if (e.Key is Key.Enter or Key.Return) {
+        if (e.Key == Key.Enter) {
             Vm.SearchCommand.Execute(null);
             e.Handled = true;
         }

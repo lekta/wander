@@ -9,7 +9,7 @@ public static class ServiceLocator {
     // is undefined behaviour, not a stale answer. A lock rather than
     // ConcurrentDictionary - the project has no DI container and no
     // concurrent collections, and every method here is a single lookup.
-    private static readonly object _gate = new();
+    private static readonly Lock _gate = new();
 
 
     public static void Register<T>(T impl) where T : class {

@@ -76,12 +76,13 @@ public sealed record ContextMenuSettings {
     public static IReadOnlyList<KnownShellEntry> TrimKnownEntries(
         IEnumerable<KnownShellEntry> known, IEnumerable<string> blocked) {
 
-        var kept = TrimKnownExtensions(known.Select(e => e.Key), blocked)
+        var rows = known.ToList();
+        var kept = TrimKnownExtensions(rows.Select(e => e.Key), blocked)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        return known
+        return rows
             .Where(e => kept.Contains(e.Key.Trim()) && seen.Add(e.Key.Trim()))
             .ToArray();
     }

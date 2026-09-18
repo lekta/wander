@@ -1,6 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
-using System.Threading.Tasks;
 using Wander.App.Resources;
 using Wander.Core.Icons;
 using Wander.Core.Rename;

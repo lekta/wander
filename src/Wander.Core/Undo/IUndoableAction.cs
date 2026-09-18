@@ -2,7 +2,7 @@ namespace Wander.Core.Undo;
 
 /// <summary>
 /// A single reversible step pushed onto <see cref="UndoService"/>. Concrete
-/// implementations live in <see cref="UndoableActions"/> (rename, move,
+/// implementations live in <c>UndoableActions.cs</c> (rename, move,
 /// create, delete, composite).
 /// </summary>
 public interface IUndoableAction {

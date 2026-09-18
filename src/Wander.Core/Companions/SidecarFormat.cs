@@ -3,7 +3,7 @@ namespace Wander.Core.Companions;
 /// <summary>
 /// Which sidecar Wander writes when a photo has none yet and the user rates
 /// it. The choice is a real one, not a preference about file extensions —
-/// see <see cref="Suffix"/> and the note on <c>Pp3</c>.
+/// see <see cref="SidecarFormats.Suffix"/> and the note on <c>Pp3</c>.
 /// </summary>
 public enum SidecarFormat {
     /// <summary>

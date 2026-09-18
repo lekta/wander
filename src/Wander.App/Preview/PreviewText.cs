@@ -1,5 +1,4 @@
 using System.IO;
-using System.Threading.Tasks;
 using Markdig;
 using Wander.App.Resources;
 using Wander.App.Util;

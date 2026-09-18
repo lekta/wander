@@ -1,8 +1,6 @@
 using System.Collections.ObjectModel;
-using System.Collections.Specialized;
 using System.ComponentModel;
 using System.IO;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
@@ -156,7 +154,6 @@ public sealed class MainViewModel : ObservableObject {
     // same way the listing is, because a pass that finishes after the user
     // has walked into another folder would push that folder's rows over
     // this one's.
-    private readonly CompanionMetadataService? _companionMetadata;
     private bool _hasRatings;
 
     // True while rows are being swapped for updated copies. The list drops
@@ -242,7 +239,7 @@ public sealed class MainViewModel : ObservableObject {
             WriteStateNow();
         };
 
-        _companionMetadata = ServiceLocator.TryGet<CompanionMetadataService>();
+        var companionMetadata = ServiceLocator.TryGet<CompanionMetadataService>();
 
         // Settings VM is owned by MainVM and shared with the dialog when it
         // opens. Built before every controller that takes it: RatingsController
@@ -254,7 +251,7 @@ public sealed class MainViewModel : ObservableObject {
         Settings = new SettingsViewModel();
 
         Ratings = new RatingsController(
-            _fs, _companions, _companionMetadata, _search, Settings, _log,
+            _fs, _companions, companionMetadata, _search, Settings, _log,
             isCurrent: _session.IsCurrent,
             publish: PublishRows,
             ask: question => _dialogs.Ask(new DialogRequest(
@@ -265,7 +262,7 @@ public sealed class MainViewModel : ObservableObject {
 
         Preview = new PreviewController(
             ServiceLocator.TryGet<IImageMetadataReader>(),
-            _companionMetadata);
+            companionMetadata);
         // A click in the footer is about the whole selection the shown file
         // is part of - split or not: the split only doubles the picture,
         // the footer under it stays the one footer of the selection.
@@ -274,7 +271,7 @@ public sealed class MainViewModel : ObservableObject {
         Preview.RevealRequested += (_, path) => RevealPath(path);
         PreviewSecond = new PreviewController(
             ServiceLocator.TryGet<IImageMetadataReader>(),
-            _companionMetadata) { ShowFooter = false };
+            companionMetadata) { ShowFooter = false };
         PreviewSecond.RatingRequested += (_, request) =>
             request.Rating = ApplyRatingFromPane(request, wholeSelection: true);
         PreviewSecond.RevealRequested += (_, path) => RevealPath(path);
@@ -325,7 +322,7 @@ public sealed class MainViewModel : ObservableObject {
         // copying / deleting / renaming those would bypass the shell's
         // restore-tracking and corrupt the bin's state. Read-only browsing
         // only in this iteration.
-        DeleteCommand = new RelayCommand(_ => _ = DeleteSelectedAsync(permanent: false), _ => _selectedEntries.Count > 0 && !IsCurrentShellNamespace);
+        DeleteCommand = new RelayCommand(() => _ = DeleteSelectedAsync(permanent: false), () => _selectedEntries.Count > 0 && !IsCurrentShellNamespace);
         RenameCommand = new RelayCommand(p => Rename(_selectedEntry, p as string), _ => _selectedEntry is not null && !IsCurrentShellNamespace);
         BatchRenameCommand = new RelayCommand(
             _ => BatchRename(),
@@ -338,9 +335,9 @@ public sealed class MainViewModel : ObservableObject {
         CopyCommand = new RelayCommand(
             _ => Copy(),
             _ => _selectedEntries.Count > 0 && (!IsCurrentShellNamespace || CurrentArchive is not null));
-        ExtractCommand = new RelayCommand(_ => _ = ExtractSelectionAsync(), _ => CanExtractSelection());
+        ExtractCommand = new RelayCommand(() => _ = ExtractSelectionAsync(), () => CanExtractSelection());
         CutCommand = new RelayCommand(_ => Cut(), _ => _selectedEntries.Count > 0 && !IsCurrentShellNamespace);
-        PasteCommand = new RelayCommand(_ => _ = PasteAsync(), _ => _clipboard.HasContent && _nav.Current is not null && !IsCurrentShellNamespace);
+        PasteCommand = new RelayCommand(() => _ = PasteAsync(), () => _clipboard.HasContent && _nav.Current is not null && !IsCurrentShellNamespace);
         NewFolderCommand = new RelayCommand(_ => NewFolder(), _ => _nav.Current is not null && !IsCurrentShellNamespace);
         RestoreFromRecycleBinCommand = new RelayCommand(
             _ => RestoreFromRecycleBin(),
@@ -388,7 +385,7 @@ public sealed class MainViewModel : ObservableObject {
         TogglePreviewCommand = new RelayCommand(_ => IsPreviewVisible = !IsPreviewVisible);
         ToggleFoldersCommand = new RelayCommand(_ => IsFoldersVisible = !IsFoldersVisible);
         UndoCommand = new RelayCommand(_ => UndoLast(), _ => _undo.CanUndo);
-        PermanentDeleteCommand = new RelayCommand(_ => _ = DeleteSelectedAsync(permanent: true), _ => _selectedEntries.Count > 0 && !IsCurrentShellNamespace);
+        PermanentDeleteCommand = new RelayCommand(() => _ = DeleteSelectedAsync(permanent: true), () => _selectedEntries.Count > 0 && !IsCurrentShellNamespace);
         OpenLogFileCommand = new RelayCommand(_ => Shell.OpenLogFile(), _ => ServiceLocator.IsRegistered<ILogFile>());
         ToggleBookmarksCommand = new RelayCommand(_ => IsBookmarksExpanded = !IsBookmarksExpanded);
         AddBookmarkCommand = new RelayCommand(p => Bookmarks.Add(p as string));

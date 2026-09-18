@@ -50,7 +50,7 @@ public sealed class ThumbnailDiskCache {
 
     private readonly string _directory;
     private readonly ILogger _log;
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
 
     private long _budgetBytes;
     private bool _enabled;

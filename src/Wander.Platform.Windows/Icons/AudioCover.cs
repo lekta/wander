@@ -30,7 +30,7 @@ internal static class AudioCover {
         new(StringComparer.OrdinalIgnoreCase);
 
     private static readonly Queue<string> _order = new();
-    private static readonly object _lock = new();
+    private static readonly Lock _lock = new();
 
 
     public static bool Supports(string path) {

@@ -12,7 +12,7 @@ namespace Wander.Platform.Windows.Logging;
 public sealed class FileLogger : ILogger, ILogFile, IDisposable {
     private readonly StreamWriter _writer;
     private readonly RepeatCollapser _collapser = new();
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
 
     // The line a run of repeats is about: its level and its message, for
     // the summary that closes the run.

@@ -908,7 +908,10 @@ public partial class FolderTreesView : UserControl {
             return;
         }
 
-        var paths = (string[])e.Data.GetData(DataFormats.FileDrop);
+        if (e.Data.GetData(DataFormats.FileDrop) is not string[] paths) {
+            return;
+        }
+
         int added = 0;
         foreach (string p in paths) {
             if (Directory.Exists(p)) {

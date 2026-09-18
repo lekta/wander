@@ -45,7 +45,7 @@ public static class PerfLog {
     /// </summary>
     private const double NoisyOnceMs = 33;
 
-    private static readonly object _lock = new();
+    private static readonly Lock _lock = new();
     private static readonly Dictionary<string, Bucket> _buckets = new(StringComparer.Ordinal);
     private static readonly double _tickToMs = 1000.0 / Stopwatch.Frequency;
 
