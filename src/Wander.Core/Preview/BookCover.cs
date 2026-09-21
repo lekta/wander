@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Xml;
 using System.Xml.Linq;
+using Wander.Core.FileSystem;
 
 namespace Wander.Core.Preview;
 
@@ -55,7 +56,7 @@ public static class BookCover {
                 return null;
             }
 
-            using var stream = File.OpenRead(path);
+            using var stream = SharedRead.Open(path);
 
             return Path.GetExtension(path).Equals(".epub", StringComparison.OrdinalIgnoreCase)
                 ? ReadEpubCover(stream)

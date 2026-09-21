@@ -6,6 +6,7 @@ using Wander.Core;
 using Wander.Core.Diagnostics;
 using Wander.Core.Icons;
 using Wander.Core.Logging;
+using Wander.Core.Operations;
 using Wander.Core.Preview;
 using Wander.Core.Shell;
 
@@ -1265,6 +1266,11 @@ public sealed class SystemIconProvider : IIconProvider {
     /// over it safely.
     /// </summary>
     private static Bitmap? LoadShellBitmap(string path, int side) {
+        // The shell's thumbnail handler cannot be stopped half-way, but a
+        // delete that runs into it waits knowing it is ours, and says so
+        // (PLAN AF, block 0, step 5). Per call, like the other static
+        // helpers here: one dictionary lookup beside a shell round-trip.
+        using var claim = ServiceLocator.TryGet<PathClaims>()?.Claim(new[] { path }, ClaimKind.Background, ClaimOwners.Thumbnail);
         IShellItem? item = null;
         try {
             int hr;

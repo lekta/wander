@@ -228,7 +228,7 @@ public sealed class SystemIOFileSystem : IFileSystem {
     }
 
     public byte[] ReadAllBytes(string path) {
-        return File.ReadAllBytes(path);
+        return SharedRead.ReadAllBytes(path);
     }
 
     public Stream OpenRead(string path) {

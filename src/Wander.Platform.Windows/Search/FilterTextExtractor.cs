@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Text;
 using Wander.Core.Logging;
+using Wander.Core.Operations;
 using Wander.Core.Search;
 
 namespace Wander.Platform.Windows.Search;
@@ -72,13 +73,16 @@ public sealed class FilterTextExtractor : IContentExtractor {
 
 
     private readonly ILogger _log;
+    private readonly PathClaims? _claims;
 
     /// <summary>Extensions already found to have no filter registered on this machine.</summary>
     private readonly HashSet<string> _withoutFilter = new(StringComparer.OrdinalIgnoreCase);
 
 
-    public FilterTextExtractor(ILogger? log = null) {
+    /// <param name="claims">Where a read is claimed, so a delete that runs into it knows it is ours.</param>
+    public FilterTextExtractor(ILogger? log = null, PathClaims? claims = null) {
         _log = log ?? NullLogger.Instance;
+        _claims = claims;
     }
 
 
@@ -108,6 +112,9 @@ public sealed class FilterTextExtractor : IContentExtractor {
             }
         }
 
+        // A document filter cannot be stopped half-way; the claim is so a
+        // delete that runs into it waits knowing it is ours, and says so.
+        using var claim = _claims?.Claim(new[] { path }, ClaimKind.Background, ClaimOwners.ContentSearch);
         IFilter? filter = null;
         int hr;
         try {

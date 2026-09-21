@@ -34,17 +34,20 @@ public sealed class ExtractionService {
     private readonly UndoService _undo;
     private readonly OperationTracker _tracker;
     private readonly ILogger _log;
+    private readonly PathClaims _claims;
 
 
+    /// <param name="claims">Where an extraction claims what it reads and writes; null keeps them to itself.</param>
     public ExtractionService(
         IShellNamespace ns, IFileSystem fs, IRecycleBin bin,
-        UndoService undo, OperationTracker tracker, ILogger log) {
+        UndoService undo, OperationTracker tracker, ILogger log, PathClaims? claims = null) {
         _ns = ns;
         _fs = fs;
         _bin = bin;
         _undo = undo;
         _tracker = tracker;
         _log = log;
+        _claims = claims ?? new PathClaims();
     }
 
 
@@ -69,6 +72,10 @@ public sealed class ExtractionService {
         }
 
         var plans = sources.Select(source => new Plan(source, Path.Combine(targetFolder, NameOf(source)))).ToList();
+        // The archive entries and where they land, for as long as the
+        // extraction runs: a delete of the archive meanwhile names it.
+        using var claim = _claims.Claim(
+            plans.SelectMany(p => new[] { p.Source, p.Destination }), ClaimKind.UserOperation, OperationVerbs.Extract);
         var results = new BatchItemResult[plans.Count];
         var queue = new List<CopyOutItem>(plans.Count);
         var queued = new List<int>(plans.Count);

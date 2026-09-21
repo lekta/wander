@@ -1,7 +1,8 @@
 {
   // Copy, cut and paste between two folders of the sandbox, each of the
   // three conflict answers on the same collision, a read-only file, a file
-  // somebody else has open, and an undo chain walked all the way back.
+  // somebody else has open, a path too long for the bin, and an undo chain
+  // walked all the way back.
   //
   // Every dialog is answered by policy and every answer is listed in the
   // report - a run that said yes to something it should have refused is
@@ -59,6 +60,20 @@
     { "do": "screenshot", "name": "locked-file" },
     { "do": "fs", "op": "unlock", "path": "{sandbox}\\attrs\\locked.txt" },
 
+    // --- A path longer than the bin takes ----------------------------
+    // A short folder with an over-long path inside: the one case the shell
+    // used to answer with its own question, "Yes" by default. The bin
+    // refuses it now, the question is ours and asked once, "stop here" by
+    // policy - and the folder is still there.
+    { "do": "fs", "op": "create", "path": "{sandbox}\\attrs\\long\\aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\\bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\\cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\\deep.txt" },
+    { "do": "navigate", "path": "{sandbox}\\attrs" },
+    { "do": "select", "names": [ "long" ] },
+    { "do": "command", "name": "delete" },
+    { "do": "assert-entries", "contains": [ "long" ] },
+    { "do": "assert-log", "scope": "all", "contains": "Recycle refused" },
+    { "do": "note", "text": "a folder with a path over 259 characters inside is refused by the bin and left whole; the question lists it by name, 'stop here' is the default - a look-with-your-eyes item" },
+    { "do": "fs", "op": "delete", "path": "{sandbox}\\attrs\\long" },
+
     // --- Read-only ----------------------------------------------------
     { "do": "select", "names": [ "readonly.txt" ] },
     { "do": "command", "name": "delete" },
@@ -81,11 +96,12 @@
     { "do": "assert-entries", "absent": [ "target" ] },
 
     {
-      // Two failures are the point of this scenario, so they are named
+      // Three failures are the point of this scenario, so they are named
       // rather than tolerated: the delete that had to fail on a locked
-      // file, and the audit line every permanent delete writes.
+      // file, the bin's refusal of an over-long path, and the audit line
+      // every permanent delete writes.
       "do": "assert-log", "scope": "all", "noErrors": true,
-      "allow": [ "Delete failed", "Permanent delete" ]
+      "allow": [ "Delete failed", "Recycle refused", "Permanent delete" ]
     }
   ]
 }

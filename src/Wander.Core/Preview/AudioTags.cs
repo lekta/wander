@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Text;
+using Wander.Core.FileSystem;
 
 namespace Wander.Core.Preview;
 
@@ -81,7 +82,7 @@ public static class AudioTags {
     /// </summary>
     public static AudioTrackInfo? Read(string path) {
         try {
-            using var stream = File.OpenRead(path);
+            using var stream = SharedRead.Open(path);
 
             return Read(stream, Path.GetExtension(path));
         } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException) {

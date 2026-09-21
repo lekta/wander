@@ -35,6 +35,21 @@ public class UndoServiceAsyncTests {
 
 
     [Fact]
+    public async Task WhatTheUndoPutsBack_IsClaimed_WhileItRuns() {
+        var (undo, tracker, log) = Setup();
+        var claims = new PathClaims();
+        var step = new Step("a", log);
+        bool claimedDuring = false;
+        step.OnUndo = () => claimedDuring = claims.IsClaimed(@"C:\back\a", ClaimKind.UserOperation);
+        undo.Push(step);
+
+        await undo.UndoAsync(tracker, default, claims);
+
+        Assert.True(claimedDuring);
+        Assert.Equal(0, claims.Count);
+    }
+
+    [Fact]
     public async Task EmptyStack_ReturnsNull() {
         var (undo, tracker, _) = Setup();
 

@@ -30,13 +30,16 @@ namespace Wander.Platform.Windows.FileSystem;
 /// still a run an item - an undo step is one item, and 10 ms of it is not
 /// what an undo of thousands waits for yet (PLAN, block 0).
 /// </para>
+///
+/// <para>
+/// Thin on purpose: a held item is reported "in use" (<see cref="FileInUse"/>)
+/// and not waited for here. The wait is the operation's, in Core
+/// (<c>BusyGate</c>), one budget for the whole batch (PLAN, block 0, step 4).
+/// </para>
 /// </summary>
 public sealed class ShellRecycleBin : IRecycleBin {
-    /// <summary>What a "something is in use" failure carries, so the caller can say so.</summary>
+    /// <summary>What the engine answers for an item that is in use, besides its own two codes.</summary>
     private const int HResultSharingViolation = unchecked((int)0x80070020);
-
-    /// <summary>How long a busy file or folder gets before the one retry.</summary>
-    private const int BusyRetryDelayMs = 300;
 
     /// <summary>
     /// MAX_PATH less its terminator. Longer than this the bin does not
@@ -71,6 +74,7 @@ public sealed class ShellRecycleBin : IRecycleBin {
     /// <c>FOFX_EARLYFAILURE</c> a busy file - or a folder with one inside,
     /// which then stays whole - is skipped in milliseconds and the rest go
     /// on; with it the engine took a second over the same answer and stopped.
+    /// The busy one comes back as a <see cref="FileInUse"/> failure.
     ///
     /// <para>
     /// A failure returned from <c>PreDeleteItem</c> ends the run for every
@@ -94,7 +98,7 @@ public sealed class ShellRecycleBin : IRecycleBin {
                 // and then the shell asks its question on screen, "Yes" by
                 // default.
                 _logger.Warn($"Recycle refused, nothing deleted: {tooLong.Length} characters is more than the bin takes - {tooLong}");
-                results[i] = Failed(path, new RecycleUnavailableException(path, "the path, or one inside it, is too long for the bin"));
+                results[i] = Failed(path, new RecycleUnavailableException(path, RecycleUnavailableReason.PathTooLong));
             } else {
                 pending.Add(i);
                 continue;
@@ -102,22 +106,7 @@ public sealed class ShellRecycleBin : IRecycleBin {
             onItemDone?.Invoke(path);
         }
 
-        var busy = new List<int>();
-        RunAll(paths, pending, results, busy, onItemDone, ct);
-
-        // Often the hold is a moment's - a thumbnail handler still reading -
-        // so everything that was busy gets one more run after a pause.
-        if (busy.Count > 0 && !ct.IsCancellationRequested) {
-            _logger.Info($"Recycle: {busy.Count} in use ({paths[busy[0]]}), retrying in {BusyRetryDelayMs} ms");
-            Thread.Sleep(BusyRetryDelayMs);
-            var again = new List<int>(busy);
-            busy.Clear();
-            RunAll(paths, again, results, busy, onItemDone, ct);
-        }
-        foreach (int i in busy) {
-            results[i] = Failed(paths[i], InUse(paths[i]));
-            onItemDone?.Invoke(paths[i]);
-        }
+        RunAll(paths, pending, results, onItemDone, ct);
 
         // Whatever is still empty was never reached: the batch was cancelled.
         return results.Select((r, i) => r ?? new RecycleResult(paths[i], null, null)).ToList();
@@ -127,12 +116,10 @@ public sealed class ShellRecycleBin : IRecycleBin {
     /// <summary>
     /// Runs <paramref name="indices"/> until each has an answer or the batch
     /// is cancelled: a refused item ends its run, and the items after it go
-    /// into the next one. A busy item is put aside into
-    /// <paramref name="busy"/> and is not reported done - it has a retry
-    /// coming.
+    /// into the next one.
     /// </summary>
     private void RunAll(
-        IReadOnlyList<string> paths, IReadOnlyList<int> indices, RecycleResult?[] results, List<int> busy,
+        IReadOnlyList<string> paths, IReadOnlyList<int> indices, RecycleResult?[] results,
         Action<string>? onItemDone, CancellationToken ct) {
         var left = indices.ToList();
         while (left.Count > 0 && !ct.IsCancellationRequested) {
@@ -148,9 +135,9 @@ public sealed class ShellRecycleBin : IRecycleBin {
                     unreached.Add(i);
                 } else if (item.Refused) {
                     _logger.Warn($"Recycle refused, nothing deleted: the shell was going to destroy {paths[i]} rather than recycle it");
-                    results[i] = Failed(paths[i], new RecycleUnavailableException(paths[i], "there is no recycle bin for it"));
+                    results[i] = Failed(paths[i], new RecycleUnavailableException(paths[i], RecycleUnavailableReason.NoBin));
                 } else if (IsBusy(item.Result)) {
-                    busy.Add(i);
+                    results[i] = Failed(paths[i], FileInUse.Error(paths[i]));
                 } else if (item.Result < 0) {
                     results[i] = Failed(paths[i], new IOException($"Recycle failed (hr=0x{item.Result:X8}) for {paths[i]}"));
                 } else {
@@ -260,11 +247,6 @@ public sealed class ShellRecycleBin : IRecycleBin {
 
     private static RecycleResult Failed(string path, Exception error) {
         return new RecycleResult(path, null, error);
-    }
-
-    /// <summary>The failure the caller can recognise and name the holder of.</summary>
-    private static IOException InUse(string path) {
-        return new IOException($"'{path}' or something inside it is in use", HResultSharingViolation);
     }
 
 
@@ -474,7 +456,7 @@ public sealed class ShellRecycleBin : IRecycleBin {
         private bool _cancelled;
 
 
-        /// <param name="onDeleted">Called with the item's place in the queue once its answer is final - not for a busy one, which has a retry coming.</param>
+        /// <param name="onDeleted">Called with the item's place in the queue once its answer is final.</param>
         /// <param name="ct">Looked at before every item.</param>
         public Sink(Action<int>? onDeleted = null, CancellationToken ct = default) {
             _onDeleted = onDeleted;
@@ -527,12 +509,10 @@ public sealed class ShellRecycleBin : IRecycleBin {
             }
 
             Deleted.Add(new ItemOutcome(hrDelete, _refused, binItemId, binFilePath));
-            if (!IsBusy(hrDelete)) {
-                try {
-                    _onDeleted?.Invoke(Deleted.Count - 1);
-                } catch (Exception) {
-                    // A progress report is not worth a failed delete.
-                }
+            try {
+                _onDeleted?.Invoke(Deleted.Count - 1);
+            } catch (Exception) {
+                // A progress report is not worth a failed delete.
             }
 
             return 0;

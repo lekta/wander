@@ -662,7 +662,7 @@
                 <DataGridTemplateColumn x:Name="IconColumn" Header="" IsReadOnly="True" CanUserSort="False">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
-                            <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Normal"
+                            <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Normal" ShowsWork="True"
                                                 Width="{DynamicResource DetailsIconSize}"
                                                 Height="{DynamicResource DetailsIconSize}"/>
                         </DataTemplate>
@@ -800,7 +800,7 @@
                             below: the size is a ceiling, not a target.
                         -->
                         <controls:AsyncIcon DockPanel.Dock="Left"
-                                            IconPath="{Binding FullPath}" IconSize="Medium"
+                                            IconPath="{Binding FullPath}" IconSize="Medium" ShowsWork="True"
                                             Width="{DynamicResource TilesImageSize}"
                                             Height="{DynamicResource TilesImageSize}"
                                             StretchDirection="DownOnly"
@@ -859,7 +859,7 @@
                         its own size. See the gallery template below.
                     -->
                     <StackPanel>
-                        <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Large"
+                        <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Large" ShowsWork="True"
                                             Width="{DynamicResource IconsImageSize}"
                                             Height="{DynamicResource IconsImageSize}"
                                             StretchDirection="DownOnly"
@@ -975,7 +975,7 @@
                         <Grid Width="{DynamicResource GalleryImageSize}"
                               Height="{DynamicResource GalleryImageSize}"
                               Margin="0,2,0,2">
-                            <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Large"
+                            <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Large" ShowsWork="True"
                                                 StretchDirection="DownOnly"
                                                 HorizontalAlignment="Center" VerticalAlignment="Center"
                                                 RenderOptions.BitmapScalingMode="HighQuality"

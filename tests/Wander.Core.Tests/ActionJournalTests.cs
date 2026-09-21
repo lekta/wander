@@ -17,6 +17,23 @@ public class ActionJournalTests {
     }
 
     [Fact]
+    public void AWarningAndAnError_CarryTheirMarks_AndNewsNone() {
+        var journal = new ActionJournal();
+
+        journal.Note("Скопировано: 3", _at);
+        journal.Note("В корзину отправлено: 1, с ошибкой: 1", _at, StatusSeverity.Warning);
+        journal.Note("Не удалось создать: нет доступа", _at, StatusSeverity.Error);
+
+        Assert.Equal(
+            new[] {
+                "2026-09-03 14:23:05  Скопировано: 3",
+                "2026-09-03 14:23:05  \u26A0 В корзину отправлено: 1, с ошибкой: 1",
+                "2026-09-03 14:23:05  \u2716 Не удалось создать: нет доступа",
+            },
+            journal.Render().Split(Environment.NewLine));
+    }
+
+    [Fact]
     public void LinesComeBackOldestFirst() {
         var journal = new ActionJournal();
 

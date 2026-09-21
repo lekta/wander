@@ -21,7 +21,7 @@
                                   the key tables and constants in Core
                                   (ContextMenuCatalog, ShellScopes,
                                   FileTypeGroups, the rename and actions
-                                  rules, OperationVerbs).
+                                  rules, OperationVerbs, ClaimOwners).
 
     Output is kept ASCII on purpose: this runs from check.bat under cmd,
     whose console codepage is not UTF-8.
@@ -80,7 +80,7 @@ foreach ($file in $sources) {
     # arm or a const from enum/name to resource key. They live in Core,
     # which cannot reference the accessor at all, and are told apart from
     # other string literals by the key's prefix.
-    foreach ($m in [regex]::Matches($text, '=>? "((?:MenuCmd|MenuReason|MenuCaption|Scope|FileType|ActionPreset|RenameError|ActionsError|Progress)[A-Za-z]+)"')) {
+    foreach ($m in [regex]::Matches($text, '=>? "((?:MenuCmd|MenuReason|MenuCaption|Scope|FileType|ActionPreset|RenameError|ActionsError|Progress|Holder)[A-Za-z]+)"')) {
         [void] $used.Add($m.Groups[1].Value)
     }
 }

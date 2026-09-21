@@ -51,6 +51,25 @@ public class ExtractionServiceTests {
     }
 
     [Fact]
+    public async Task Extract_ClaimsTheEntriesAndWhereTheyLand_WhileItRuns() {
+        var fs = new FakeFileSystem();
+        fs.Directories.Add(Target);
+        var ns = new FakeShellNamespace(fs);
+        ns.AddFile(InnerReadme, "readme");
+        var claims = new PathClaims();
+        var service = new ExtractionService(
+            ns, fs, new FakeRecycleBin(fs), new UndoService(), new OperationTracker(), NullLogger.Instance, claims);
+        bool claimedDuring = false;
+        claims.Changed += (_, _) => claimedDuring |=
+            claims.IsClaimed(InnerReadme, ClaimKind.UserOperation) && claims.IsClaimed(TargetReadme, ClaimKind.UserOperation);
+
+        await service.ExtractAsync(new[] { InnerReadme }, Target, new FakeConflictResolver(), CancellationToken.None);
+
+        Assert.True(claimedDuring);
+        Assert.Equal(0, claims.Count);
+    }
+
+    [Fact]
     public async Task Extract_Undo_SendsWhatArrivedToTheBin() {
         var (service, _, fs, bin, undo) = Setup();
 

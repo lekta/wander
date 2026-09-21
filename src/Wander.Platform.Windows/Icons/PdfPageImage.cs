@@ -1,5 +1,5 @@
+using Wander.Core.FileSystem;
 using Windows.Data.Pdf;
-using Windows.Storage;
 using Windows.Storage.Streams;
 
 namespace Wander.Platform.Windows.Icons;
@@ -59,8 +59,13 @@ internal static class PdfPageImage {
                 return null;
             }
 
-            var file = StorageFile.GetFileFromPathAsync(path).AsTask().GetAwaiter().GetResult();
-            var document = PdfDocument.LoadFromFileAsync(file).AsTask().GetAwaiter().GetResult();
+            // From a stream of our own rather than LoadFromFileAsync: the
+            // document opened that way held the file until the garbage
+            // collector got to it, and a delete in the meantime failed
+            // "in use" by Wander. Ours shares delete and is closed here.
+            using var file = SharedRead.Open(path);
+            using var source = file.AsRandomAccessStream();
+            var document = PdfDocument.LoadFromStreamAsync(source).AsTask().GetAwaiter().GetResult();
             if (document.PageCount == 0) {
                 return null;
             }

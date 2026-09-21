@@ -24,6 +24,9 @@ public enum DialogKind {
 
     /// <summary>A delete failed because another program holds the file: try again?</summary>
     DeleteInUse,
+
+    /// <summary>The recycle bin would not take these: delete them for good, or stop here?</summary>
+    RecycleUnavailable,
 }
 
 public enum DialogButtons {
@@ -57,11 +60,20 @@ public sealed record DialogRequest(
 /// default.
 /// </summary>
 /// <param name="Choices">The answers, as the buttons read, left to right.</param>
+/// <param name="CancelLabel">What the Cancel button reads, when "Cancel" would not say what it does; null is "Cancel".</param>
+/// <param name="ArmDelay">
+/// How long the answers stay disabled once the question is up: Cancel
+/// alone works from the first moment. For a question that comes up in the
+/// middle of a run of keystrokes, where an Enter meant for something else
+/// must not pick an answer that cannot be taken back.
+/// </param>
 public sealed record ChoiceRequest(
     DialogKind Kind,
     string Title,
     string Message,
-    IReadOnlyList<string> Choices);
+    IReadOnlyList<string> Choices,
+    string? CancelLabel = null,
+    TimeSpan? ArmDelay = null);
 
 /// <summary>
 /// A window that closes on its own schedule - when the work it shows is

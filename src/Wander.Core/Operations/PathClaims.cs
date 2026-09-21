@@ -12,8 +12,22 @@ public enum ClaimKind {
 
 /// <param name="Path">The claimed path - a source of the operation, not every file under it.</param>
 /// <param name="Kind">Whether the holder steps aside or is named.</param>
-/// <param name="Owner">An <see cref="OperationVerbs"/> key for a user operation; a short ASCII name of the subsystem for a background reader (it goes to the log only).</param>
+/// <param name="Owner">
+/// A resource key naming the holder: an <see cref="OperationVerbs"/> key for
+/// a user operation, a <see cref="ClaimOwners"/> key for a background reader -
+/// what a wait for the path calls it ("Wander: thumbnail").
+/// </param>
 public sealed record PathClaim(string Path, ClaimKind Kind, string Owner);
+
+
+/// <summary>What a background reader is called when it is in the way - resource keys, like <see cref="OperationVerbs"/>.</summary>
+public static class ClaimOwners {
+    /// <summary>The shell's own thumbnail of a file.</summary>
+    public const string Thumbnail = "HolderThumbnail";
+
+    /// <summary>The system's document filter, reading a file's text for the search.</summary>
+    public const string ContentSearch = "HolderContentSearch";
+}
 
 
 /// <summary>
@@ -39,7 +53,9 @@ public sealed record PathClaim(string Path, ClaimKind Kind, string Owner);
 ///
 /// <para>
 /// Thread-safe. <see cref="Changed"/> is raised outside the lock, on
-/// whatever thread made the change.
+/// whatever thread made the change - for a user operation's claim only: a
+/// background reader's come and go by the hundred while a folder scrolls
+/// past, and nothing on screen shows them.
 /// </para>
 /// </summary>
 public sealed class PathClaims {
@@ -47,8 +63,18 @@ public sealed class PathClaims {
     private readonly Dictionary<string, List<Entry>> _byPath = new(StringComparer.OrdinalIgnoreCase);
 
 
-    /// <summary>A claim appeared or went. Subscribers marshal to their own thread.</summary>
+    /// <summary>A user operation's claim appeared or went. Subscribers marshal to their own thread.</summary>
     public event EventHandler? Changed;
+
+
+    /// <summary>How many paths are claimed - the table a lookup scans, for the log.</summary>
+    public int Count {
+        get {
+            lock (_gate) {
+                return _byPath.Count;
+            }
+        }
+    }
 
 
     /// <summary>
@@ -63,7 +89,9 @@ public sealed class PathClaims {
     /// once its handle is closed - that is what the operation waits for.
     /// </param>
     public IDisposable Claim(IEnumerable<string> paths, ClaimKind kind, string owner, CancellationTokenSource? yield = null) {
-        var entries = paths.Select(p => new Entry(new PathClaim(Normalize(p), kind, owner), yield)).ToList();
+        var token = new Token(this);
+        var entries = paths.Select(p => new Entry(new PathClaim(Normalize(p), kind, owner), yield, token)).ToList();
+        token.Entries = entries;
         lock (_gate) {
             foreach (var entry in entries) {
                 if (!_byPath.TryGetValue(entry.Claim.Path, out var list)) {
@@ -72,28 +100,32 @@ public sealed class PathClaims {
                 list.Add(entry);
             }
         }
-        if (entries.Count > 0) {
+        if (entries.Count > 0 && kind == ClaimKind.UserOperation) {
             Changed?.Invoke(this, EventArgs.Empty);
         }
 
-        return new Token(this, entries);
+        return token;
     }
 
     /// <summary>
     /// Every claim an operation on <paramref name="path"/> would run into:
     /// on the path itself, on a folder above it, on anything inside it.
     /// </summary>
-    public IReadOnlyList<PathClaim> Covering(string path) {
+    /// <param name="path">What the operation is about to touch.</param>
+    /// <param name="except">The asking operation's own claim - it is never in its own way.</param>
+    public IReadOnlyList<PathClaim> Covering(string path, IDisposable? except = null) {
         lock (_gate) {
-            return Find(Normalize(path)).Select(e => e.Claim).ToList();
+            return Find(Normalize(path)).Where(e => !ReferenceEquals(e.Token, except)).Select(e => e.Claim).ToList();
         }
     }
 
     /// <summary>True when the path itself or a folder above it is claimed - what a badge on a row asks.</summary>
-    public bool IsClaimed(string path) {
+    /// <param name="path">The row's path.</param>
+    /// <param name="kind">Only claims of this kind count; null counts every claim.</param>
+    public bool IsClaimed(string path, ClaimKind? kind = null) {
         lock (_gate) {
             for (string? at = Normalize(path); !string.IsNullOrEmpty(at); at = Path.GetDirectoryName(at)) {
-                if (_byPath.ContainsKey(at)) {
+                if (_byPath.TryGetValue(at, out var list) && (kind is null || list.Any(e => e.Claim.Kind == kind))) {
                     return true;
                 }
             }
@@ -150,7 +182,7 @@ public sealed class PathClaims {
                 }
             }
         }
-        if (entries.Count > 0) {
+        if (entries.Any(e => e.Claim.Kind == ClaimKind.UserOperation)) {
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -161,33 +193,38 @@ public sealed class PathClaims {
 
 
     private sealed class Entry {
-        public Entry(PathClaim claim, CancellationTokenSource? yieldSource) {
+        public Entry(PathClaim claim, CancellationTokenSource? yieldSource, Token token) {
             Claim = claim;
             YieldSource = yieldSource;
+            Token = token;
         }
 
 
         public PathClaim Claim { get; }
 
         public CancellationTokenSource? YieldSource { get; }
+
+        /// <summary>The claim this entry came with - what <see cref="Covering"/> leaves out for its owner.</summary>
+        public Token Token { get; }
     }
 
 
     private sealed class Token : IDisposable {
         private readonly PathClaims _owner;
-        private readonly IReadOnlyList<Entry> _entries;
         private int _released;
 
 
-        public Token(PathClaims owner, IReadOnlyList<Entry> entries) {
+        public Token(PathClaims owner) {
             _owner = owner;
-            _entries = entries;
         }
+
+
+        public IReadOnlyList<Entry> Entries { get; set; } = Array.Empty<Entry>();
 
 
         public void Dispose() {
             if (Interlocked.Exchange(ref _released, 1) == 0) {
-                _owner.Release(_entries);
+                _owner.Release(Entries);
             }
         }
     }

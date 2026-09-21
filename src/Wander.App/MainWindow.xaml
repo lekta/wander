@@ -709,7 +709,35 @@
                 instead of pushing the progress bar about.
             -->
             <StatusBarItem>
-                <TextBlock Text="{Binding Status}" TextTrimming="CharacterEllipsis"/>
+                <DockPanel>
+                    <!--
+                        How much the line matters (PLAN block 0, step 8): no
+                        mark for news, one for a warning and one for an
+                        error. The words stay as they are; the mark says how
+                        to read them.
+                    -->
+                    <TextBlock DockPanel.Dock="Left" FontFamily="Segoe MDL2 Assets" FontSize="12"
+                               VerticalAlignment="Center" Margin="0,0,5,0">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding StatusSeverity}" Value="Warning">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                        <Setter Property="Text" Value="&#xE7BA;"/>
+                                        <Setter Property="Foreground" Value="{StaticResource StatusWarningGlyph}"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding StatusSeverity}" Value="Error">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                        <Setter Property="Text" Value="&#xEA39;"/>
+                                        <Setter Property="Foreground" Value="{StaticResource StatusErrorGlyph}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <TextBlock Text="{Binding Status}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                </DockPanel>
             </StatusBarItem>
         </StatusBar>
 

@@ -2,6 +2,7 @@ using System.IO;
 using Markdig;
 using Wander.App.Resources;
 using Wander.App.Util;
+using Wander.Core.FileSystem;
 using Wander.Core.Preview;
 
 namespace Wander.App.Preview;
@@ -95,9 +96,7 @@ internal static class PreviewText {
     /// </summary>
     public static async Task<PreviewTextFile?> ReadAsync(string path, CancellationToken ct) {
         try {
-            await using var file = new FileStream(
-                path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite,
-                bufferSize: 64 * 1024, useAsync: true);
+            await using var file = SharedRead.Open(path, bufferSize: 64 * 1024, FileOptions.Asynchronous);
 
             long size = file.Length;
             int budget = (int)Math.Min(size, MaxFileSize);

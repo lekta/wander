@@ -118,7 +118,13 @@ public sealed class UndoService {
     /// depend on each other, or the second could not have run.
     /// </para>
     /// </summary>
-    public async Task<UndoOutcome?> UndoAsync(OperationTracker tracker, CancellationToken ct = default) {
+    /// <param name="tracker">Where the undo shows as an operation.</param>
+    /// <param name="ct">Stops it between steps.</param>
+    /// <param name="claims">
+    /// Where what the undo puts back, and where from, is claimed while it
+    /// runs - so another operation names the undo rather than fighting it.
+    /// </param>
+    public async Task<UndoOutcome?> UndoAsync(OperationTracker tracker, CancellationToken ct = default, PathClaims? claims = null) {
         IUndoableAction action;
         lock (_gate) {
             if (_busy > 0 || !_stack.TryPop(out action!)) {
@@ -131,6 +137,8 @@ public sealed class UndoService {
         try {
             var steps = action.Steps;
             using var op = tracker.Begin(OperationVerbs.Undo, steps.Count, token: ct);
+            var touched = action.MovesOnUndo.SelectMany(m => new[] { m.From, m.To }).Concat(action.PathsAfterUndo);
+            using var claim = claims?.Claim(touched, ClaimKind.UserOperation, OperationVerbs.Undo);
             var outcome = await Task.Run(() => Unwind(action, steps, op, ct), CancellationToken.None).ConfigureAwait(false);
             if (outcome.Remaining is { } remaining) {
                 lock (_gate) {

@@ -1,4 +1,5 @@
 using System.Globalization;
+using Wander.Core.FileSystem;
 
 namespace Wander.Core.Preview;
 
@@ -35,7 +36,7 @@ internal static class ObjReader {
 
 
     public static MeshData? Read(string path) {
-        string text = File.ReadAllText(path);
+        string text = SharedRead.ReadAllText(path);
         var positions = new List<float>();
 
         // One index list per material, in the order the materials are first
@@ -172,7 +173,7 @@ internal static class ObjReader {
             }
 
             string? name = null;
-            foreach (var line in File.ReadLines(file)) {
+            foreach (var line in SharedRead.ReadLines(file)) {
                 var trimmed = line.AsSpan().Trim();
                 if (Keyword(trimmed, "newmtl", out var declared)) {
                     name = declared.ToString().Trim();

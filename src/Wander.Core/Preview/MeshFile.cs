@@ -1,3 +1,5 @@
+using Wander.Core.FileSystem;
+
 namespace Wander.Core.Preview;
 
 /// <summary>
@@ -165,7 +167,7 @@ public static class MeshFile {
 
             string ext = Path.GetExtension(path);
             MeshData? mesh = ext.ToLowerInvariant() switch {
-                ".stl" => StlReader.Read(File.ReadAllBytes(path)),
+                ".stl" => StlReader.Read(SharedRead.ReadAllBytes(path)),
                 ".obj" => ObjReader.Read(path),
                 ".glb" or ".gltf" => GltfReader.Read(path),
                 _ => null,

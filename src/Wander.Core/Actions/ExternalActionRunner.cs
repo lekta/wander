@@ -40,12 +40,15 @@ public sealed class ExternalActionRunner {
     private readonly IReadOnlyList<IBuiltinAction> _builtins;
     private readonly ILogger _log;
     private readonly Func<string> _tempFolder;
+    private readonly PathClaims _claims;
 
 
     /// <param name="tempFolder">Where the <c>{list}</c> file is written; asked for per run, the setting may change.</param>
+    /// <param name="claims">Where a run claims its inputs and outputs; null keeps them to itself.</param>
     public ExternalActionRunner(
         IFileSystem fs, IRecycleBin bin, UndoService undo, OperationTracker tracker,
-        IProcessRunner processes, IReadOnlyList<IBuiltinAction> builtins, ILogger log, Func<string> tempFolder) {
+        IProcessRunner processes, IReadOnlyList<IBuiltinAction> builtins, ILogger log, Func<string> tempFolder,
+        PathClaims? claims = null) {
         _fs = fs;
         _bin = bin;
         _undo = undo;
@@ -54,6 +57,7 @@ public sealed class ExternalActionRunner {
         _builtins = builtins;
         _log = log;
         _tempFolder = tempFolder;
+        _claims = claims ?? new PathClaims();
     }
 
 
@@ -75,6 +79,10 @@ public sealed class ExternalActionRunner {
 
         using var busy = _undo.BeginOperation();
         using var operation = _tracker.Begin(OperationVerbs.RunAction, paths.Count, token: ct);
+        // The inputs for the whole run; each output from the moment its name
+        // is chosen (RunItemAsync). A delete of either meanwhile names the
+        // action instead of pulling the file out from under the program.
+        using var claim = _claims.Claim(paths, ClaimKind.UserOperation, OperationVerbs.RunAction);
 
         IReadOnlyList<ActionItemResult> results = action.RunPerFile
             ? await RunPerFileAsync(action, paths, outputFolder, operation, ct).ConfigureAwait(false)
@@ -157,6 +165,8 @@ public sealed class ExternalActionRunner {
             output = OutputNames.Resolve(action.Output, primary, Exists, NamesIn, outputFolder);
         }
 
+        using var outputClaim = _claims.Claim(
+            output is null ? Array.Empty<string>() : new[] { output }, ClaimKind.UserOperation, OperationVerbs.RunAction);
         var started = DateTime.UtcNow;
         try {
             if (action.Kind == ActionKind.Builtin) {

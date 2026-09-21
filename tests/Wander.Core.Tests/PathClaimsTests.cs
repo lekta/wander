@@ -85,6 +85,52 @@ public class PathClaimsTests {
     }
 
     [Fact]
+    public void Covering_LeavesOutTheAskersOwnClaim() {
+        var claims = new PathClaims();
+        using var own = claims.Claim(new[] { Album }, ClaimKind.UserOperation, OperationVerbs.Move);
+        using var other = claims.Claim(new[] { Shot }, ClaimKind.UserOperation, OperationVerbs.Copy);
+
+        var found = Assert.Single(claims.Covering(Shot, except: own));
+        Assert.Equal(OperationVerbs.Copy, found.Owner);
+        Assert.Equal(2, claims.Covering(Shot).Count);
+    }
+
+    [Fact]
+    public void IsClaimed_ByKind_CountsOnlyThatKind() {
+        var claims = new PathClaims();
+        using var reader = claims.Claim(new[] { Shot }, ClaimKind.Background, ClaimOwners.Thumbnail);
+
+        Assert.True(claims.IsClaimed(Shot));
+        Assert.False(claims.IsClaimed(Shot, ClaimKind.UserOperation));
+
+        using var copy = claims.Claim(new[] { Album }, ClaimKind.UserOperation, OperationVerbs.Copy);
+
+        Assert.True(claims.IsClaimed(Shot, ClaimKind.UserOperation));
+    }
+
+    [Fact]
+    public void Count_IsTheNumberOfClaimedPaths() {
+        var claims = new PathClaims();
+        using var a = claims.Claim(new[] { Shot, Album }, ClaimKind.UserOperation, OperationVerbs.Copy);
+        using var b = claims.Claim(new[] { Shot }, ClaimKind.Background, ClaimOwners.Thumbnail);
+
+        Assert.Equal(2, claims.Count);
+    }
+
+    [Fact]
+    public void Changed_IsQuiet_ForBackgroundReaders() {
+        // A thumbnail claims and lets go of a file for every row scrolled
+        // past; nothing on screen shows those, so nobody is told.
+        var claims = new PathClaims();
+        int fired = 0;
+        claims.Changed += (_, _) => fired++;
+
+        claims.Claim(new[] { Shot }, ClaimKind.Background, ClaimOwners.Thumbnail).Dispose();
+
+        Assert.Equal(0, fired);
+    }
+
+    [Fact]
     public void Changed_FiresOnClaimAndOnRelease() {
         var claims = new PathClaims();
         int fired = 0;

@@ -275,6 +275,9 @@ public static partial class Strings {
     /// <summary>{0}: {1} %</summary>
     public static string OperationOne => Get(nameof(OperationOne));
 
+    /// <summary>{0}: подсчёт…</summary>
+    public static string OperationWeighing => Get(nameof(OperationWeighing));
+
     /// <summary>Операций: {0} — {1} %</summary>
     public static string OperationMany => Get(nameof(OperationMany));
 

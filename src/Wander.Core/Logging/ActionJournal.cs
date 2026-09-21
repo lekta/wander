@@ -26,7 +26,15 @@ public sealed class ActionJournal {
     /// </summary>
     private const int Limit = 500;
 
-    private readonly Queue<(DateTime At, string Text)> _entries = new();
+    /// <summary>
+    /// The marks in front of a warning and an error. The journal is plain
+    /// text opened in the user's editor, so these are the Unicode signs for
+    /// the status bar's glyphs, which live in an icon font no editor has.
+    /// </summary>
+    private const string WarningMark = "\u26A0 ";
+    private const string ErrorMark = "\u2716 ";
+
+    private readonly Queue<(DateTime At, string Text, StatusSeverity Severity)> _entries = new();
     private readonly Lock _lock = new();
 
     private string _last = "";
@@ -48,7 +56,10 @@ public sealed class ActionJournal {
     /// selection change rewrites the item count), and a journal of two
     /// hundred identical lines answers nothing.
     /// </summary>
-    public void Note(string? text, DateTime at) {
+    /// <param name="text">The line as the status bar showed it.</param>
+    /// <param name="at">When.</param>
+    /// <param name="severity">How much it matters - the mark it gets in <see cref="Render"/>.</param>
+    public void Note(string? text, DateTime at, StatusSeverity severity = StatusSeverity.Info) {
         if (string.IsNullOrWhiteSpace(text)) {
             return;
         }
@@ -58,7 +69,7 @@ public sealed class ActionJournal {
                 return;
             }
             _last = text;
-            _entries.Enqueue((at, text));
+            _entries.Enqueue((at, text, severity));
             while (_entries.Count > Limit) {
                 _entries.Dequeue();
             }
@@ -66,12 +77,20 @@ public sealed class ActionJournal {
     }
 
 
-    /// <summary>The journal as plain text, oldest first: "14:23:05  Скопировано: 3".</summary>
+    /// <summary>
+    /// The journal as plain text, oldest first, a line each: the time, two
+    /// spaces, the words - a warning or an error with its mark in front.
+    /// </summary>
     public string Render() {
         lock (_lock) {
             var lines = new List<string>(_entries.Count);
-            foreach (var (at, text) in _entries) {
-                lines.Add($"{at:yyyy-MM-dd HH:mm:ss}  {text}");
+            foreach (var (at, text, severity) in _entries) {
+                string mark = severity switch {
+                    StatusSeverity.Warning => WarningMark,
+                    StatusSeverity.Error => ErrorMark,
+                    _ => "",
+                };
+                lines.Add($"{at:yyyy-MM-dd HH:mm:ss}  {mark}{text}");
             }
 
             return string.Join(Environment.NewLine, lines);

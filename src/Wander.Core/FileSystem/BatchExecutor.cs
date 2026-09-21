@@ -25,14 +25,17 @@ internal sealed class BatchExecutor {
     private readonly UndoService _undo;
     private readonly OperationTracker _tracker;
     private readonly ILogger _log;
+    private readonly HeldPaths _held;
 
 
-    public BatchExecutor(IFileSystem fs, IRecycleBin bin, UndoService undo, OperationTracker tracker, ILogger log) {
+    /// <param name="held">Claims and the wait for held paths; null has no probe and nobody to name a holder.</param>
+    public BatchExecutor(IFileSystem fs, IRecycleBin bin, UndoService undo, OperationTracker tracker, ILogger log, HeldPaths? held = null) {
         _fs = fs;
         _bin = bin;
         _undo = undo;
         _tracker = tracker;
         _log = log;
+        _held = held ?? new HeldPaths(new PathClaims());
     }
 
 
@@ -95,10 +98,11 @@ internal sealed class BatchExecutor {
     /// </summary>
     public async Task<IReadOnlyList<DeleteResult>> DeleteManyAsync(
         IReadOnlyList<string> paths, bool permanent, CancellationToken ct) {
-        using var op = _tracker.Begin(
-            permanent ? OperationVerbs.DeletePermanently : OperationVerbs.Recycle, paths.Count, token: ct);
+        string verb = permanent ? OperationVerbs.DeletePermanently : OperationVerbs.Recycle;
+        using var op = _tracker.Begin(verb, paths.Count, token: ct);
+        using var claim = _held.Claims.Claim(paths, ClaimKind.UserOperation, verb);
         return await Task.Run(
-            () => DeleteManyCore(paths, permanent, op, ct),
+            () => DeleteManyCore(paths, permanent, op, claim, ct),
             ct).ConfigureAwait(false);
     }
 
@@ -111,10 +115,19 @@ internal sealed class BatchExecutor {
         // Progress counts groups, not files: the user dragged three photos,
         // not three photos and three sidecars. Bytes count everything,
         // sidecars included - the disk does not care who asked for them.
-        using var op = _tracker.Begin(isMove ? OperationVerbs.Move : OperationVerbs.Copy, groups.Count, token: ct);
+        string verb = isMove ? OperationVerbs.Move : OperationVerbs.Copy;
+        using var op = _tracker.Begin(verb, groups.Count, token: ct);
+
+        // The sources and where they go, claimed for as long as the batch
+        // runs: an operation that reaches for them meanwhile names this one
+        // instead of fighting it (PLAN AF, block 0, step 5).
+        var claimed = groups
+            .SelectMany(g => g.All)
+            .SelectMany(source => new[] { source, Path.Combine(targetFolder, NameOf(source)) });
+        using var claim = _held.Claims.Claim(claimed, ClaimKind.UserOperation, verb);
 
         return await Task.Run(
-            () => ApplyBatch(groups, targetFolder, isMove, resolver, op, ct, weigh: true),
+            () => ApplyBatch(groups, targetFolder, isMove, resolver, op, ct, weigh: true, own: claim),
             ct).ConfigureAwait(false);
     }
 
@@ -178,11 +191,12 @@ internal sealed class BatchExecutor {
     /// </summary>
     private IReadOnlyList<BatchItemResult> ApplyBatch(
         IReadOnlyList<BatchGroup> groups, string targetFolder, bool isMove, IConflictResolver resolver,
-        IOperationHandle? progress, CancellationToken ct = default, bool weigh = false) {
+        IOperationHandle? progress, CancellationToken ct = default, bool weigh = false, IDisposable? own = null) {
         using var _ = _undo.BeginOperation();
+        using var gate = _held.Begin(_log, own);
 
         var plans = groups.Select(g => Plan(g, targetFolder)).ToList();
-        var run = new Run(isMove, resolver, plans.Count) {
+        var run = new Run(isMove, resolver, plans.Count, gate) {
             Progress = progress,
             Token = ct,
         };
@@ -206,7 +220,12 @@ internal sealed class BatchExecutor {
 
         if (weigh && progress is not null) {
             var weights = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
-            progress.SetTotalBytes(Weigh(groups, weights, ct));
+            progress.SetWeighing(true);
+            try {
+                progress.SetTotalBytes(Weigh(groups, weights, ct));
+            } finally {
+                progress.SetWeighing(false);
+            }
             run.Weights = weights;
         }
 
@@ -286,6 +305,7 @@ internal sealed class BatchExecutor {
         bool anyApplied = false;
         var primaryStatus = BatchItemStatus.Ok;
         string primaryDest = primary.Dest;
+        run.GroupBusy = null;
 
         for (int m = 0; m < plan.Members.Count; m++) {
             var member = plan.Members[m];
@@ -320,8 +340,8 @@ internal sealed class BatchExecutor {
         }
 
         return failure is null
-            ? (new BatchItemResult(primary.Source, primaryDest, primaryStatus, null), anyApplied)
-            : (new BatchItemResult(primary.Source, primaryDest, BatchItemStatus.Failed, failure), anyApplied);
+            ? (new BatchItemResult(primary.Source, primaryDest, primaryStatus, null, run.GroupBusy), anyApplied)
+            : (new BatchItemResult(primary.Source, primaryDest, BatchItemStatus.Failed, failure, run.GroupBusy), anyApplied);
     }
 
     /// <summary>
@@ -341,6 +361,11 @@ internal sealed class BatchExecutor {
             // would recycle a system file.
             if (run.IsMove && SystemPathGuard.IsProtected(src, out string srcReason)) {
                 throw new IOException(srcReason);
+            }
+            // A move takes the source away: another operation of the user's
+            // on it is named, a reader of ours is told to let go.
+            if (run.IsMove) {
+                run.Gate.Check(src);
             }
 
             if (choice == ConflictResolution.Merge) {
@@ -546,13 +571,14 @@ internal sealed class BatchExecutor {
     }
 
     private IReadOnlyList<DeleteResult> DeleteManyCore(
-        IReadOnlyList<string> paths, bool permanent, IOperationHandle progress, CancellationToken ct) {
+        IReadOnlyList<string> paths, bool permanent, IOperationHandle progress, IDisposable own, CancellationToken ct) {
         using var _ = _undo.BeginOperation();
+        using var gate = _held.Begin(_log, own);
 
         var undoSteps = new List<IUndoableAction>(paths.Count);
         var results = permanent
-            ? DeleteForGood(paths, progress, ct)
-            : Recycle(paths, progress, undoSteps, ct);
+            ? DeleteForGood(paths, progress, gate, ct)
+            : Recycle(paths, progress, undoSteps, gate, ct);
 
         if (permanent) {
             // Permanent delete is not undoable - drop any history so users can't
@@ -565,7 +591,7 @@ internal sealed class BatchExecutor {
         return results;
     }
 
-    private List<DeleteResult> DeleteForGood(IReadOnlyList<string> paths, IOperationHandle progress, CancellationToken ct) {
+    private List<DeleteResult> DeleteForGood(IReadOnlyList<string> paths, IOperationHandle progress, BusyGate gate, CancellationToken ct) {
         var results = new List<DeleteResult>(paths.Count);
         foreach (string path in paths) {
             if (ct.IsCancellationRequested) {
@@ -577,6 +603,7 @@ internal sealed class BatchExecutor {
                 if (SystemPathGuard.IsProtected(path, out string guardReason)) {
                     throw new IOException(guardReason);
                 }
+                gate.Check(path);
                 if (_fs.DirectoryExists(path)) {
                     _fs.DeleteDirectory(path, recursive: true);
                 } else if (_fs.FileExists(path)) {
@@ -598,35 +625,67 @@ internal sealed class BatchExecutor {
     }
 
     /// <summary>
-    /// The guard first, item by item; what passes goes to the bin as one
-    /// batch (<see cref="IRecycleBin.SendMany"/>) and comes back with a
-    /// result each, put together again in the order asked.
+    /// The guard and the claims first, item by item; what passes goes to the
+    /// bin as one batch (<see cref="IRecycleBin.SendMany"/>) and comes back
+    /// with a result each, put together again in the order asked.
+    ///
+    /// <para>
+    /// What the bin finds held comes back "in use" in milliseconds, with the
+    /// rest of the batch done, and is sent again - all of it together - every
+    /// step of the wait while the operation's budget lasts
+    /// (<see cref="BusyGate.RetryMany"/>). Progress counts an item once, on
+    /// its first answer.
+    /// </para>
     /// </summary>
     private List<DeleteResult> Recycle(
-        IReadOnlyList<string> paths, IOperationHandle progress, List<IUndoableAction> undoSteps, CancellationToken ct) {
+        IReadOnlyList<string> paths, IOperationHandle progress, List<IUndoableAction> undoSteps, BusyGate gate,
+        CancellationToken ct) {
         var results = new DeleteResult?[paths.Count];
         var allowed = new List<int>(paths.Count);
         for (int i = 0; i < paths.Count; i++) {
-            if (SystemPathGuard.IsProtected(paths[i], out string guardReason)) {
-                var refusal = new IOException(guardReason);
+            try {
+                if (SystemPathGuard.IsProtected(paths[i], out string guardReason)) {
+                    throw new IOException(guardReason);
+                }
+                gate.Check(paths[i]);
+                allowed.Add(i);
+            } catch (IOException refusal) {
                 _log.Error($"Delete failed: {paths[i]}", refusal);
                 results[i] = new DeleteResult(paths[i], DeleteStatus.Failed, refusal);
                 progress.Advance(paths[i]);
-            } else {
-                allowed.Add(i);
             }
         }
 
-        var sent = _bin.SendMany(allowed.Select(i => paths[i]).ToList(), progress.Advance, ct);
-        for (int n = 0; n < sent.Count; n++) {
+        var targets = allowed.Select(i => paths[i]).ToList();
+        var sent = new RecycleResult[targets.Count];
+        Action<string>? advance = progress.Advance;
+        var busy = gate.RetryMany(targets, indices => {
+            var answers = _bin.SendMany(indices.Select(n => targets[n]).ToList(), advance, ct);
+            advance = null;
+            var held = new List<int>();
+            for (int k = 0; k < indices.Count; k++) {
+                sent[indices[k]] = answers[k];
+                if (FileInUse.Is(answers[k].Error)) {
+                    held.Add(indices[k]);
+                }
+            }
+
+            return held;
+        }, ct);
+
+        for (int n = 0; n < sent.Length; n++) {
             string path = sent[n].Path;
+            var report = busy.GetValueOrDefault(n);
+            // Still held when the user stopped the wait: that is the cancel
+            // it was, not a failure to report.
+            bool givenUp = ct.IsCancellationRequested && report is { Released: false };
             if (sent[n].Handle is { } handle) {
                 undoSteps.Add(new DeleteAction(_bin, handle));
                 _log.Info($"Delete (recycle): {path}");
-                results[allowed[n]] = new DeleteResult(path, DeleteStatus.Ok, null);
-            } else if (sent[n].Error is { } error) {
+                results[allowed[n]] = new DeleteResult(path, DeleteStatus.Ok, null, report);
+            } else if (sent[n].Error is { } error && !givenUp) {
                 _log.Error($"Delete failed: {path}", error);
-                results[allowed[n]] = new DeleteResult(path, DeleteStatus.Failed, error);
+                results[allowed[n]] = new DeleteResult(path, DeleteStatus.Failed, error, report);
             } else {
                 results[allowed[n]] = new DeleteResult(path, DeleteStatus.Cancelled, null);
             }
@@ -670,7 +729,14 @@ internal sealed class BatchExecutor {
             // A Replace conflict never reaches here with the target still in
             // place - ApplyEntry recycles it first - so plain no-overwrite
             // semantics are enough for both branches.
-            if (run.IsMove) {
+            //
+            // A held source is waited for (PLAN AF, block 0, step 4): a file
+            // is asked before the move, a folder has nothing to ask and the
+            // move itself is tried again while it answers "in use".
+            if (run.IsMove && _fs.DirectoryExists(src)) {
+                run.GroupBusy ??= run.Gate.Retry(src, () => _fs.MoveEntry(src, dest, bytes, run.Token), run.Token);
+            } else if (run.IsMove) {
+                run.GroupBusy ??= run.Gate.WaitForFile(src, run.Token);
                 _fs.MoveEntry(src, dest, bytes, run.Token);
             } else if (_fs.DirectoryExists(src)) {
                 _fs.CopyDirectory(src, dest, overwrite: false, bytes, run.Token);
@@ -773,10 +839,11 @@ internal sealed class BatchExecutor {
 
     /// <summary>What one batch carries between its groups.</summary>
     private sealed class Run {
-        public Run(bool isMove, IConflictResolver resolver, int itemCount) {
+        public Run(bool isMove, IConflictResolver resolver, int itemCount, BusyGate gate) {
             IsMove = isMove;
             Resolver = resolver;
             ItemCount = itemCount;
+            Gate = gate;
         }
 
 
@@ -785,6 +852,12 @@ internal sealed class BatchExecutor {
         public IConflictResolver Resolver { get; }
 
         public int ItemCount { get; }
+
+        /// <summary>Claims and the wait for held paths, for the whole batch.</summary>
+        public BusyGate Gate { get; }
+
+        /// <summary>The first held path the current group waited for; reset at each group.</summary>
+        public BusyReport? GroupBusy { get; set; }
 
         public string Verb => IsMove ? "Move" : "Copy";
 
@@ -815,8 +888,11 @@ internal sealed class BatchExecutor {
 
 // --- Batch result types (top-level so callers don't need to reach into BatchExecutor) ---
 
-public sealed record BatchItemResult(string Source, string FinalDestination, BatchItemStatus Status, Exception? Error);
+/// <param name="Busy">A source of the item was held and waited for - worth a line in the journal either way.</param>
+public sealed record BatchItemResult(
+    string Source, string FinalDestination, BatchItemStatus Status, Exception? Error, BusyReport? Busy = null);
 public enum BatchItemStatus { Ok, Skipped, Replaced, Renamed, Merged, Cancelled, Failed }
 
-public sealed record DeleteResult(string Path, DeleteStatus Status, Exception? Error);
+/// <param name="Busy">The item was held and waited for - worth a line in the journal either way.</param>
+public sealed record DeleteResult(string Path, DeleteStatus Status, Exception? Error, BusyReport? Busy = null);
 public enum DeleteStatus { Ok, Failed, Cancelled }

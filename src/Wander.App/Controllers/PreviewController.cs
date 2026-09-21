@@ -3,6 +3,7 @@ using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Media.Media3D;
+using System.Windows.Threading;
 using Wander.App.Converters;
 using Wander.App.Preview;
 using Wander.App.Resources;
@@ -14,6 +15,7 @@ using Wander.Core.Diagnostics;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
 using Wander.Core.Logging;
+using Wander.Core.Operations;
 using Wander.Core.Preview;
 using Wander.Core.Shell;
 using ImageMetadata = Wander.Core.Icons.ImageMetadata;
@@ -110,6 +112,9 @@ public sealed class PreviewController : ObservableObject {
 
     private readonly IImageMetadataReader? _metadataReader;
     private readonly CompanionMetadataService? _companionMetadata;
+    private readonly PathClaims? _claims;
+    private readonly OperationTracker? _tracker;
+    private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
 
     private bool _isVisible;
     private FileSystemEntry? _primary;
@@ -130,6 +135,10 @@ public sealed class PreviewController : ObservableObject {
 
     private CancellationTokenSource? _previewCts;
     private CancellationTokenSource? _summaryCts;
+
+    // What Release let go of, until the next load: the file Restore shows
+    // again when the operation left it where it was.
+    private string? _releasedPath;
 
     private PreviewKind _kind = PreviewKind.None;
     private bool _isLoading;
@@ -159,6 +168,8 @@ public sealed class PreviewController : ObservableObject {
     // when nobody can be named, null when the file is not held.
     private string? _lockedBy;
     private VolumeInfo? _volume;
+    private string _workLine = "";
+    private int _workLinePending;
 
     private CancellationTokenSource? _companionCts;
     private string _companionFiles = "";
@@ -175,12 +186,24 @@ public sealed class PreviewController : ObservableObject {
     private string _customColorLabel = "";
 
 
+    /// <param name="claims">What operations of the user's are working on - the footer's "running / queued" line; null shows none.</param>
+    /// <param name="tracker">Which of them is on which file right now.</param>
     public PreviewController(
         IImageMetadataReader? metadataReader,
-        CompanionMetadataService? companionMetadata) {
+        CompanionMetadataService? companionMetadata,
+        PathClaims? claims = null,
+        OperationTracker? tracker = null) {
 
         _metadataReader = metadataReader;
         _companionMetadata = companionMetadata;
+        _claims = claims;
+        _tracker = tracker;
+        if (claims is not null) {
+            claims.Changed += (_, _) => ScheduleWorkLine();
+        }
+        if (tracker is not null) {
+            tracker.Changed += (_, _) => ScheduleWorkLine();
+        }
 
         ColorLabelChoices = ColorLabelViewModel.CreateChoices();
 
@@ -203,6 +226,12 @@ public sealed class PreviewController : ObservableObject {
     /// pane only says which path the button pointed at.
     /// </summary>
     public event EventHandler<string>? RevealRequested;
+
+    /// <summary>
+    /// <see cref="Release"/> let go of the content: whatever the view holds
+    /// open by itself - the browser's page - is to be let go of too.
+    /// </summary>
+    public event EventHandler? ContentReleased;
 
 
     // --- Output properties (the pane's DataContext is this object) -----
@@ -484,6 +513,22 @@ public sealed class PreviewController : ObservableObject {
     }
 
     public bool HasLinkTarget => !string.IsNullOrEmpty(_linkTarget);
+
+    /// <summary>
+    /// "Running: copy" while an operation of the user's is on the file
+    /// shown, "Queued: ..." while it has it claimed and is busy elsewhere;
+    /// empty otherwise (PLAN AF, block 0, step 6).
+    /// </summary>
+    public string WorkLine {
+        get => _workLine;
+        private set {
+            if (SetField(ref _workLine, value)) {
+                Raise(nameof(HasWorkLine));
+            }
+        }
+    }
+
+    public bool HasWorkLine => _workLine.Length > 0;
 
     /// <summary>Target's file name, for the button caption.</summary>
     public string LinkTargetName => _linkTarget is null ? "" : Path.GetFileName(_linkTarget.TrimEnd(Path.DirectorySeparatorChar));
@@ -779,6 +824,7 @@ public sealed class PreviewController : ObservableObject {
 
         _primary = entry;
         RaiseRatingOthers();
+        UpdateWorkLine();
         if (sameFile) {
             ScheduleCompanionUpdate();
 
@@ -827,13 +873,86 @@ public sealed class PreviewController : ObservableObject {
         ScheduleSummaryUpdate();
     }
 
+    /// <summary>
+    /// Lets go of the file on show when it is one of <paramref name="paths"/>
+    /// or inside one - before a delete, a move or a rename takes them away
+    /// (PLAN AF, block 0, step 5). Nothing else makes the pane let go but a
+    /// new selection, and a video playing or a PDF on screen holds its file
+    /// for as long as it is shown. Playback stops without a word. UI thread,
+    /// before the operation starts.
+    /// </summary>
+    public void Release(IReadOnlyList<string> paths) {
+        if (_primary?.FullPath is not { } shown || !paths.Any(p => IsSameOrInside(shown, p))) {
+            return;
+        }
+
+        _previewCts?.Cancel();
+        ClearPreviewContent();
+        IsLoading = false;
+        _releasedPath = shown;
+        ContentReleased?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// The operation is over: what <see cref="Release"/> let go of is shown
+    /// again when it is still there and still what the pane is on - the
+    /// operation failed or left it alone. Anything else is the new
+    /// selection's to show.
+    /// </summary>
+    public void Restore() {
+        if (_releasedPath is not { } released) {
+            return;
+        }
+
+        _releasedPath = null;
+        if (string.Equals(_primary?.FullPath, released, StringComparison.OrdinalIgnoreCase)
+            && (File.Exists(released) || Directory.Exists(released))) {
+            SchedulePreviewUpdate();
+        }
+    }
+
 
     // --- Preview content pipeline --------------------------------------
 
     private void SchedulePreviewUpdate() {
         _previewCts?.Cancel();
         _previewCts = new CancellationTokenSource();
+        _releasedPath = null;
         _ = UpdatePreviewAsync(_previewCts.Token);
+    }
+
+    /// <summary>
+    /// The claims or the operations changed, on whatever thread: the line is
+    /// worked out again on this one, once for a burst - the tracker alone
+    /// reports ten times a second while a copy runs.
+    /// </summary>
+    private void ScheduleWorkLine() {
+        if (Interlocked.Exchange(ref _workLinePending, 1) == 0) {
+            _dispatcher.BeginInvoke(DispatcherPriority.Background, () => {
+                Interlocked.Exchange(ref _workLinePending, 0);
+                UpdateWorkLine();
+            });
+        }
+    }
+
+    private void UpdateWorkLine() {
+        if (_claims is null || _primary?.FullPath is not { } path
+            || _claims.Covering(path).FirstOrDefault(c => c.Kind == ClaimKind.UserOperation) is not { } claim) {
+            WorkLine = "";
+
+            return;
+        }
+
+        bool running = _tracker?.Snapshot().Any(op =>
+            op.Verb == claim.Owner && op.CurrentPath is { } current && IsSameOrInside(path, current)) == true;
+        WorkLine = string.Format(running ? Strings.PreviewWorkRunning : Strings.PreviewWorkQueued, Strings.Get(claim.Owner));
+    }
+
+    private static bool IsSameOrInside(string path, string root) {
+        string trimmed = Path.TrimEndingDirectorySeparator(root);
+
+        return string.Equals(path, trimmed, StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith(trimmed + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task UpdatePreviewAsync(CancellationToken ct) {
@@ -1283,7 +1402,7 @@ public sealed class PreviewController : ObservableObject {
 
     private static async Task<bool> LooksLikeTextAsync(string path, CancellationToken ct) {
         try {
-            using var file = File.OpenRead(path);
+            using var file = SharedRead.Open(path);
             var head = new byte[TextProbe.SampleSize];
             int read = await file.ReadAsync(head.AsMemory(), ct);
 
@@ -1528,7 +1647,7 @@ public sealed class PreviewController : ObservableObject {
         Fb2Preview? book;
         try {
             book = await Task.Run(() => {
-                using var file = File.OpenRead(path);
+                using var file = SharedRead.Open(path);
 
                 return Fb2Document.Read(file);
             }, ct);

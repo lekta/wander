@@ -66,6 +66,12 @@ public static partial class Strings {
     /// <summary>Полный кадр RAW</summary>
     public static string PreviewRawToggle => Get(nameof(PreviewRawToggle));
 
+    /// <summary>Идёт: {0}</summary>
+    public static string PreviewWorkRunning => Get(nameof(PreviewWorkRunning));
+
+    /// <summary>В очереди: {0}</summary>
+    public static string PreviewWorkQueued => Get(nameof(PreviewWorkQueued));
+
     /// <summary>Показать полный кадр RAW вместо встроенного превью …</summary>
     public static string PreviewRawToggleHint => Get(nameof(PreviewRawToggleHint));
 

@@ -72,17 +72,29 @@ public static partial class Strings {
     /// <summary>Отменено: {0}</summary>
     public static string StatusUndone => Get(nameof(StatusUndone));
 
-    /// <summary>Не удалось отменить: {0}</summary>
+    /// <summary>Не удалось отменить {0}: {1}</summary>
     public static string StatusUndoFailed => Get(nameof(StatusUndoFailed));
+
+    /// <summary>Откат не удался: {0}</summary>
+    public static string StatusUndoError => Get(nameof(StatusUndoError));
 
     /// <summary>Отменено: {0}; не вернулось {1}: {2}</summary>
     public static string StatusUndonePartly => Get(nameof(StatusUndonePartly));
 
-    /// <summary>Откат остановлен: {0}; остальное вернёт следующий Ctrl+Z</summary>
+    /// <summary>Откат остановлен; {0} вернёт следующий Ctrl+Z</summary>
     public static string StatusUndoStopped => Get(nameof(StatusUndoStopped));
+
+    /// <summary>«{0}»</summary>
+    public static string StatusNamedOne => Get(nameof(StatusNamedOne));
+
+    /// <summary>«{0}» и ещё {1}</summary>
+    public static string StatusNamedMany => Get(nameof(StatusNamedMany));
 
     /// <summary>Откат</summary>
     public static string ProgressUndoing => Get(nameof(ProgressUndoing));
+
+    /// <summary>Подсчёт…</summary>
+    public static string ProgressWeighing => Get(nameof(ProgressWeighing));
 
     /// <summary>Переименовано вместе со спутниками: {0}</summary>
     public static string StatusRenamedWithCompanions => Get(nameof(StatusRenamedWithCompanions));
@@ -240,6 +252,21 @@ public static partial class Strings {
     /// <summary>файл занят другой программой</summary>
     public static string ErrorInUse => Get(nameof(ErrorInUse));
 
+    /// <summary>«{0}» занят операцией Wander: {1}</summary>
+    public static string ErrorClaimedByOperation => Get(nameof(ErrorClaimedByOperation));
+
+    /// <summary>Wander: {0}</summary>
+    public static string HolderWander => Get(nameof(HolderWander));
+
+    /// <summary>миниатюра</summary>
+    public static string HolderThumbnail => Get(nameof(HolderThumbnail));
+
+    /// <summary>поиск по содержимому</summary>
+    public static string HolderContentSearch => Get(nameof(HolderContentSearch));
+
+    /// <summary>Над этим идёт операция Wander — подробности в панели просмотра</summary>
+    public static string WorkBadgeHint => Get(nameof(WorkBadgeHint));
+
     /// <summary>«{0}» не помещается в корзину: путь длиннее 259 знаков или у диска нет корзины. Ничего не удалено; Shift+Delete удаляет безвозвратно</summary>
     public static string ErrorRecycleUnavailable => Get(nameof(ErrorRecycleUnavailable));
 
@@ -251,6 +278,36 @@ public static partial class Strings {
 
     /// <summary>Не удалось удалить {0} элем. — они заняты. Например, «{1}»: {2}.  Закройте их там и нажмите «Повторить».</summary>
     public static string DeleteInUseMany => Get(nameof(DeleteInUseMany));
+
+    /// <summary>Не помещается в корзину</summary>
+    public static string RecycleUnavailableTitle => Get(nameof(RecycleUnavailableTitle));
+
+    /// <summary>Корзина не принимает — не удалено:</summary>
+    public static string RecycleUnavailableIntro => Get(nameof(RecycleUnavailableIntro));
+
+    /// <summary>• {0} — {1}</summary>
+    public static string RecycleUnavailableItem => Get(nameof(RecycleUnavailableItem));
+
+    /// <summary>Причина: путь длиннее 259 знаков — у самого элемента или у файла…</summary>
+    public static string RecycleUnavailableTooLong => Get(nameof(RecycleUnavailableTooLong));
+
+    /// <summary>Причина: у диска нет корзины.</summary>
+    public static string RecycleUnavailableNoBin => Get(nameof(RecycleUnavailableNoBin));
+
+    /// <summary>Остальные {0} — уже в корзине.</summary>
+    public static string RecycleUnavailableRestRecycled => Get(nameof(RecycleUnavailableRestRecycled));
+
+    /// <summary>Удалить безвозвратно? Удалённое так не вернуть: ни Ctrl+Z, ни корзина.</summary>
+    public static string RecycleUnavailableIrreversible => Get(nameof(RecycleUnavailableIrreversible));
+
+    /// <summary>История Ctrl+Z тоже очистится: прежние действия отменить будет нельзя.</summary>
+    public static string RecycleUnavailableClearsUndo => Get(nameof(RecycleUnavailableClearsUndo));
+
+    /// <summary>«{0}» был занят{1} — отпущен через {2:0.0} с</summary>
+    public static string StatusWasBusyOne => Get(nameof(StatusWasBusyOne));
+
+    /// <summary>«{0}» и ещё {1} были заняты{2} — отпущены через {3:0.0} с</summary>
+    public static string StatusWasBusyMany => Get(nameof(StatusWasBusyMany));
 
     /// <summary>В буфере обмена файл, которого нет на диске (вложение письма, файл внутри архива) — вставить его Wander не может</summary>
     public static string StatusClipboardVirtualFiles => Get(nameof(StatusClipboardVirtualFiles));

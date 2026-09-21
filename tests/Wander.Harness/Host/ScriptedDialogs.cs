@@ -24,10 +24,12 @@ public sealed class ScriptedDialogs : IDialogs {
     /// <summary>
     /// Kinds that answer Cancel whatever <see cref="ChoiceAnswer"/> says:
     /// "try again" repeated by policy would never end while the file stays
-    /// held. A <c>dialogs</c> step with <c>kind</c> and <c>choice</c> overrides.
+    /// held, and "delete for good" is never a scenario's default. A
+    /// <c>dialogs</c> step with <c>kind</c> and <c>choice</c> overrides.
     /// </summary>
     private readonly Dictionary<DialogKind, int> _choices = new() {
         [DialogKind.DeleteInUse] = -1,
+        [DialogKind.RecycleUnavailable] = -1,
     };
 
 

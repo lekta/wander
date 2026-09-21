@@ -120,6 +120,12 @@ public static partial class Strings {
     /// <summary>Повторить</summary>
     public static string ActionRetry => Get(nameof(ActionRetry));
 
+    /// <summary>Удалить безвозвратно</summary>
+    public static string ActionDeleteForGood => Get(nameof(ActionDeleteForGood));
+
+    /// <summary>Прервать</summary>
+    public static string ActionAbort => Get(nameof(ActionAbort));
+
     /// <summary>Открыть с помощью</summary>
     public static string MenuCmdOpenSubmenu => Get(nameof(MenuCmdOpenSubmenu));
 

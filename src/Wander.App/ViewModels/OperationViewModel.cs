@@ -36,6 +36,7 @@ public sealed class OperationViewModel : ObservableObject {
     private string _remainingText = "";
     private double _percent;
     private bool _hasBytes;
+    private bool _weighing;
     private bool _cancelling;
 
 
@@ -106,7 +107,8 @@ public sealed class OperationViewModel : ObservableObject {
         }
     }
 
-    public string PercentText => string.Format(Strings.OperationPercent, (int)Math.Round(Percent));
+    /// <summary>Empty while the sources are weighed: <see cref="ItemsText"/> says "counting" then.</summary>
+    public string PercentText => _weighing ? "" : string.Format(Strings.OperationPercent, (int)Math.Round(Percent));
 
     /// <summary>False for a delete, and for an operation whose sources could not be weighed.</summary>
     public bool HasBytes {
@@ -120,22 +122,28 @@ public sealed class OperationViewModel : ObservableObject {
         private set => SetField(ref _cancelling, value);
     }
 
-    /// <summary>One line for a narrow place: "Копирование: 45 %".</summary>
-    public string Summary => string.Format(Strings.OperationOne, Verb, (int)Math.Round(Percent));
+    /// <summary>One line for a narrow place: the verb and the percentage - or, before there are numbers, the verb and "counting".</summary>
+    public string Summary => _weighing
+        ? string.Format(Strings.OperationWeighing, Verb)
+        : string.Format(Strings.OperationOne, Verb, (int)Math.Round(Percent));
 
 
     /// <summary>Takes in a fresh snapshot. <paramref name="nowUtc"/> feeds the speed average.</summary>
     public void Update(OperationSnapshot snapshot, DateTime nowUtc) {
         Verb = Strings.Get(snapshot.Verb);
         CurrentFile = string.IsNullOrEmpty(snapshot.CurrentPath) ? "" : Path.GetFileName(snapshot.CurrentPath);
-        ItemsText = string.Format(Strings.OperationItems, snapshot.Completed, snapshot.Total);
+        _weighing = snapshot.IsWeighing;
+        ItemsText = _weighing
+            ? Strings.ProgressWeighing
+            : string.Format(Strings.OperationItems, snapshot.Completed, snapshot.Total);
         Percent = snapshot.Percent;
+        Raise(nameof(PercentText));
         Raise(nameof(Summary));
 
         // Work units are not bytes and must never be written as megabytes;
         // the percentage above is all an extraction can honestly show.
         HasBytes = snapshot.HasBytes && !snapshot.BytesAreWork;
-        if (!HasBytes) {
+        if (!HasBytes || _weighing) {
             BytesText = "";
             SpeedText = "";
             RemainingText = "";

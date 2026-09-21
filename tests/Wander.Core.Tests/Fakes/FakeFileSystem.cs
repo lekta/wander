@@ -134,10 +134,19 @@ internal class FakeFileSystem : IFileSystem {
         Directories.Add(destination);
     }
 
+    /// <summary>How many more moves (and renames) of a path fail "in use" before it goes.</summary>
+    public Dictionary<string, int> MoveInUseFor { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+
     public void MoveEntry(string source, string destination,
         IProgress<long>? bytesCopied = null, CancellationToken ct = default) {
         CallLog.Add($"MoveEntry:{source}->{destination}");
         ct.ThrowIfCancellationRequested();
+        if (MoveInUseFor.TryGetValue(source, out int left) && left > 0) {
+            MoveInUseFor[source] = left - 1;
+
+            throw FileInUse.Error(source);
+        }
 
         if (Files.TryGetValue(source, out byte[]? data)) {
             Files.Remove(source);

@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Text;
 using System.Text.Json;
+using Wander.Core.FileSystem;
 
 namespace Wander.Core.Preview;
 
@@ -41,7 +42,7 @@ internal static class GltfReader {
 
 
     public static MeshData? Read(string path) {
-        byte[] bytes = File.ReadAllBytes(path);
+        byte[] bytes = SharedRead.ReadAllBytes(path);
 
         return Path.GetExtension(path).Equals(".glb", StringComparison.OrdinalIgnoreCase)
             ? ReadGlb(bytes)
@@ -363,7 +364,7 @@ internal static class GltfReader {
                 return null;
             }
 
-            return File.Exists(full) ? File.ReadAllBytes(full) : null;
+            return File.Exists(full) ? SharedRead.ReadAllBytes(full) : null;
         } catch (Exception ex) when (ex is IOException or ArgumentException or NotSupportedException) {
             return null;
         }

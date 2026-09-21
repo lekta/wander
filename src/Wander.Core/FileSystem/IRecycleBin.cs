@@ -29,13 +29,35 @@ public sealed record RecycleHandle(
 /// undo is only ever done on an explicit answer.
 /// </summary>
 public sealed class RecycleUnavailableException : IOException {
-    public RecycleUnavailableException(string path, string reason)
-        : base($"'{path}' cannot be moved to the recycle bin: {reason}") {
+    public RecycleUnavailableException(string path, RecycleUnavailableReason reason)
+        : base($"'{path}' cannot be moved to the recycle bin: {Explain(reason)}") {
         ItemPath = path;
+        Reason = reason;
     }
 
 
     public string ItemPath { get; }
+
+    /// <summary>Why - what the question to the user names, in its own words.</summary>
+    public RecycleUnavailableReason Reason { get; }
+
+
+    private static string Explain(RecycleUnavailableReason reason) {
+        return reason switch {
+            RecycleUnavailableReason.PathTooLong => "the path, or one inside it, is too long for the bin",
+            _ => "there is no recycle bin for it",
+        };
+    }
+}
+
+
+/// <summary>Why the recycle bin will not take an item.</summary>
+public enum RecycleUnavailableReason {
+    /// <summary>The item's path, or a path inside the folder, is longer than the bin takes.</summary>
+    PathTooLong,
+
+    /// <summary>The drive has no bin: the shell was going to destroy the item rather than recycle it.</summary>
+    NoBin,
 }
 
 

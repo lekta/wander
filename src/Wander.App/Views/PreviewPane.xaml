@@ -845,6 +845,17 @@
                         </Grid>
 
                         <!--
+                            An operation of the user's has this file: running
+                            on it now, or holding it for its turn (PLAN AF,
+                            block 0, step 6). The same news as the mark on
+                            the row's icon, in words.
+                        -->
+                        <TextBlock Text="{Binding WorkLine}"
+                                   FontSize="11" Foreground="{StaticResource WorkBadgeGlyph}"
+                                   Margin="0,4,0,0" TextWrapping="Wrap"
+                                   Visibility="{Binding HasWorkLine, Converter={StaticResource BoolToVisibility}}"/>
+
+                        <!--
                             Shortcut row. What is drawn above belongs to the
                             file the .lnk points at, so the footer has to say
                             whose content that is — and, since the answer is

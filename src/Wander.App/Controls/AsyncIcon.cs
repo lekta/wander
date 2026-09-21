@@ -3,10 +3,12 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using Wander.App.Resources;
 using Wander.Core;
 using Wander.Core.Diagnostics;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
+using Wander.Core.Operations;
 
 namespace Wander.App.Controls;
 
@@ -26,10 +28,24 @@ namespace Wander.App.Controls;
 /// results that arrive after virtualization recycled the container onto a
 /// different file.
 /// </para>
+///
+/// <para>
+/// With <see cref="ShowsWork"/> on - the four views of the list - it also
+/// wears a small clock while an operation the user started is working on
+/// its path (PLAN AF, block 0, step 6): drawn over the picture here rather
+/// than by an element in the template, because a mark most cells never
+/// show must not cost every cell a visual (ARCHITECTURE, "what a tile
+/// template may not do"). The row is a record and is never replaced for it.
+/// </para>
 /// </summary>
 public sealed class AsyncIcon : Image {
     /// <summary>One second between the two attempts at a failed icon.</summary>
     private const int RetryDelayMs = 1000;
+
+    /// <summary>The clock (Segoe MDL2 Assets "Recent"), picked from three drafts on 2026-09-21.</summary>
+    private const string WorkGlyph = "\uE823";
+
+    private static readonly Typeface _workFace = new("Segoe MDL2 Assets");
 
     public static readonly DependencyProperty IconPathProperty =
         DependencyProperty.Register(
@@ -40,6 +56,11 @@ public sealed class AsyncIcon : Image {
         DependencyProperty.Register(
             nameof(IconSize), typeof(IconSize), typeof(AsyncIcon),
             new PropertyMetadata(IconSize.Normal, OnIconRequestChanged));
+
+    public static readonly DependencyProperty ShowsWorkProperty =
+        DependencyProperty.Register(
+            nameof(ShowsWork), typeof(bool), typeof(AsyncIcon),
+            new PropertyMetadata(false, (d, _) => ((AsyncIcon)d).UpdateWork()));
 
 
     // Thumbnail extraction is disk- and CPU-heavy, so it is metered rather
@@ -61,10 +82,17 @@ public sealed class AsyncIcon : Image {
     /// </summary>
     private static event Action<string>? _invalidated;
 
+    /// <summary>The claims changed: raised on the UI thread, once per burst.</summary>
+    private static event Action? _workChanged;
+
+    private static bool _workHooked;
+    private static int _workPending;
+
 
     private int _generation;
     private bool _detached;
     private bool _listening;
+    private bool _working;
 
 
     static AsyncIcon() {
@@ -122,6 +150,12 @@ public sealed class AsyncIcon : Image {
         set => SetValue(IconSizeProperty, value);
     }
 
+    /// <summary>Wear the clock while an operation of the user's claims <see cref="IconPath"/>.</summary>
+    public bool ShowsWork {
+        get => (bool)GetValue(ShowsWorkProperty);
+        set => SetValue(ShowsWorkProperty, value);
+    }
+
 
     /// <summary>
     /// The file at this path is not what it was: drop every cached picture
@@ -177,8 +211,69 @@ public sealed class AsyncIcon : Image {
     }
 
 
+    protected override void OnRender(DrawingContext dc) {
+        base.OnRender(dc);
+        if (!_working) {
+            return;
+        }
+
+        // Bottom-right on the picture, the size following the icon's: a
+        // third of it, never smaller than reads, never bigger than a mark.
+        double size = Math.Clamp(RenderSize.Height * 0.35, 9, 16);
+        var glyph = new FormattedText(
+            WorkGlyph, System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+            _workFace, size, Palette.WorkBadgeGlyph, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+        double side = Math.Max(glyph.Width, glyph.Height) + 2;
+        var plate = new Rect(RenderSize.Width - side, RenderSize.Height - side, side, side);
+        dc.DrawRoundedRectangle(Palette.WorkBadgeBackground, null, plate, 2, 2);
+        dc.DrawText(glyph, new Point(plate.X + (side - glyph.Width) / 2, plate.Y + (side - glyph.Height) / 2));
+    }
+
+
     private static void OnIconRequestChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) {
-        ((AsyncIcon)d).Reload();
+        var icon = (AsyncIcon)d;
+        icon.Reload();
+        if (e.Property == IconPathProperty) {
+            icon.UpdateWork();
+        }
+    }
+
+    /// <summary>
+    /// Subscribes to the claims once, on the first icon that shows work.
+    /// Changes arrive on whatever thread claimed or let go; they are
+    /// gathered into one pass on this dispatcher.
+    /// </summary>
+    private static void HookWork(Dispatcher dispatcher) {
+        if (_workHooked || ServiceLocator.TryGet<PathClaims>() is not { } claims) {
+            return;
+        }
+
+        _workHooked = true;
+        claims.Changed += (_, _) => {
+            if (Interlocked.Exchange(ref _workPending, 1) == 0) {
+                dispatcher.BeginInvoke(DispatcherPriority.Background, () => {
+                    Interlocked.Exchange(ref _workPending, 0);
+                    _workChanged?.Invoke();
+                });
+            }
+        };
+    }
+
+    /// <summary>Wears the clock or takes it off; a redraw only when that changes.</summary>
+    private void UpdateWork() {
+        bool working = ShowsWork && _listening && IconPath is { Length: > 0 } path
+            && ServiceLocator.TryGet<PathClaims>()?.IsClaimed(path, ClaimKind.UserOperation) == true;
+        if (working == _working) {
+            return;
+        }
+
+        _working = working;
+        if (working) {
+            ToolTip = Strings.WorkBadgeHint;
+        } else {
+            ClearValue(ToolTipProperty);
+        }
+        InvalidateVisual();
     }
 
     private static void OnSourceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) {
@@ -199,9 +294,13 @@ public sealed class AsyncIcon : Image {
         _listening = on;
         if (on) {
             _invalidated += OnInvalidated;
+            HookWork(Dispatcher);
+            _workChanged += UpdateWork;
         } else {
             _invalidated -= OnInvalidated;
+            _workChanged -= UpdateWork;
         }
+        UpdateWork();
     }
 
     private void OnInvalidated(string path) {

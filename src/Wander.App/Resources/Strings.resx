@@ -308,19 +308,36 @@
     <value>Отменено: {0}</value>
   </data>
   <data name="StatusUndoFailed" xml:space="preserve">
-    <value>Не удалось отменить: {0}</value>
+    <value>Не удалось отменить {0}: {1}</value>
+    <comment>{0} — StatusNamedOne / StatusNamedMany, {1} — причина первого</comment>
+  </data>
+  <data name="StatusUndoError" xml:space="preserve">
+    <value>Откат не удался: {0}</value>
+    <comment>Сбой самого отката, а не его шагов; {0} — причина</comment>
   </data>
   <data name="StatusUndonePartly" xml:space="preserve">
     <value>Отменено: {0}; не вернулось {1}: {2}</value>
-    <comment>{0} — описание действия, {1} — сколько шагов не удалось, {2} — причина первого</comment>
+    <comment>{0} — что вернулось (StatusNamedOne / StatusNamedMany), {1} — что нет (то же), {2} — причина первого</comment>
   </data>
   <data name="StatusUndoStopped" xml:space="preserve">
-    <value>Откат остановлен: {0}; остальное вернёт следующий Ctrl+Z</value>
-    <comment>{0} — описание действия</comment>
+    <value>Откат остановлен; {0} вернёт следующий Ctrl+Z</value>
+    <comment>{0} — что осталось в стеке (StatusNamedOne / StatusNamedMany)</comment>
+  </data>
+  <data name="StatusNamedOne" xml:space="preserve">
+    <value>«{0}»</value>
+    <comment>Файл в строке журнала; {0} — имя</comment>
+  </data>
+  <data name="StatusNamedMany" xml:space="preserve">
+    <value>«{0}» и ещё {1}</value>
+    <comment>Несколько файлов в строке журнала: первый по имени, остальные числом</comment>
   </data>
   <data name="ProgressUndoing" xml:space="preserve">
     <value>Откат</value>
     <comment>Окно операции и строка состояния во время Ctrl+Z</comment>
+  </data>
+  <data name="ProgressWeighing" xml:space="preserve">
+    <value>Подсчёт…</value>
+    <comment>Окно операции и строка состояния, пока источники взвешиваются: цифр ещё нет</comment>
   </data>
   <data name="StatusRenamedWithCompanions" xml:space="preserve">
     <value>Переименовано вместе со спутниками: {0}</value>
@@ -375,6 +392,14 @@
   </data>
   <data name="StatusRecycledPartly" xml:space="preserve">
     <value>В корзину отправлено: {0}, с ошибкой: {1}{2}</value>
+  </data>
+  <data name="StatusWasBusyOne" xml:space="preserve">
+    <value>«{0}» был занят{1} — отпущен через {2:0.0} с</value>
+    <comment>Дописывается к итогу операции через «; ». {0} — имя, {1} — « (кем)» или пусто, {2} — секунды ожидания</comment>
+  </data>
+  <data name="StatusWasBusyMany" xml:space="preserve">
+    <value>«{0}» и ещё {1} были заняты{2} — отпущены через {3:0.0} с</value>
+    <comment>{0} — имя первого, {1} — сколько ещё, {2} — « (кем держал первый)» или пусто, {3} — секунды самого долгого ожидания</comment>
   </data>
   <data name="StatusBatchDone" xml:space="preserve">
     <value>{0} {1} элем. в {2}</value>
@@ -582,6 +607,13 @@
   <data name="ActionRetry" xml:space="preserve">
     <value>Повторить</value>
   </data>
+  <data name="ActionDeleteForGood" xml:space="preserve">
+    <value>Удалить безвозвратно</value>
+  </data>
+  <data name="ActionAbort" xml:space="preserve">
+    <value>Прервать</value>
+    <comment>Кнопка отказа там, где «Отмена» не сказала бы, что происходит: вопрос об удалении безвозвратно</comment>
+  </data>
   <data name="RenameTitle" xml:space="preserve">
     <value>Переименовать</value>
   </data>
@@ -646,6 +678,32 @@
   <data name="ErrorInUse" xml:space="preserve">
     <value>файл занят другой программой</value>
   </data>
+  <data name="ErrorClaimedByOperation" xml:space="preserve">
+    <value>«{0}» занят операцией Wander: {1}</value>
+    <comment>{0} — имя, {1} — операция, которая держит файл («Копирование», «Откат»)</comment>
+  </data>
+  <data name="HolderWander" xml:space="preserve">
+    <value>Wander: {0}</value>
+    <comment>Кто держал файл, когда это фоновое чтение самого Wander; {0} — HolderThumbnail / HolderContentSearch</comment>
+  </data>
+  <data name="HolderThumbnail" xml:space="preserve">
+    <value>миниатюра</value>
+  </data>
+  <data name="HolderContentSearch" xml:space="preserve">
+    <value>поиск по содержимому</value>
+  </data>
+  <data name="WorkBadgeHint" xml:space="preserve">
+    <value>Над этим идёт операция Wander — подробности в панели просмотра</value>
+    <comment>Подсказка значка на иконке строки, пока операция пользователя держит путь</comment>
+  </data>
+  <data name="PreviewWorkRunning" xml:space="preserve">
+    <value>Идёт: {0}</value>
+    <comment>Подвал панели просмотра, когда операция сейчас работает с этим файлом; {0} — операция («Копирование»)</comment>
+  </data>
+  <data name="PreviewWorkQueued" xml:space="preserve">
+    <value>В очереди: {0}</value>
+    <comment>Подвал панели просмотра, когда операция заявила файл, но работает с другим; {0} — операция</comment>
+  </data>
   <data name="ErrorRecycleUnavailable" xml:space="preserve">
     <value>«{0}» не помещается в корзину: путь длиннее 259 знаков или у диска нет корзины. Ничего не удалено; Shift+Delete удаляет безвозвратно</value>
     <comment>{0} — имя файла или папки</comment>
@@ -664,6 +722,32 @@
 
 Закройте их там и нажмите «Повторить».</value>
     <comment>{0} — сколько, {1} — имя первого, {2} — причина</comment>
+  </data>
+  <data name="RecycleUnavailableTitle" xml:space="preserve">
+    <value>Не помещается в корзину</value>
+  </data>
+  <data name="RecycleUnavailableIntro" xml:space="preserve">
+    <value>Корзина не принимает — не удалено:</value>
+  </data>
+  <data name="RecycleUnavailableItem" xml:space="preserve">
+    <value>• {0} — {1}</value>
+    <comment>{0} — имя, {1} — папка, где лежит</comment>
+  </data>
+  <data name="RecycleUnavailableTooLong" xml:space="preserve">
+    <value>Причина: путь длиннее 259 знаков — у самого элемента или у файла внутри папки.</value>
+  </data>
+  <data name="RecycleUnavailableNoBin" xml:space="preserve">
+    <value>Причина: у диска нет корзины.</value>
+  </data>
+  <data name="RecycleUnavailableRestRecycled" xml:space="preserve">
+    <value>Остальные {0} — уже в корзине.</value>
+    <comment>{0} — сколько элементов того же удаления ушло в корзину</comment>
+  </data>
+  <data name="RecycleUnavailableIrreversible" xml:space="preserve">
+    <value>Удалить безвозвратно? Удалённое так не вернуть: ни Ctrl+Z, ни корзина.</value>
+  </data>
+  <data name="RecycleUnavailableClearsUndo" xml:space="preserve">
+    <value>История Ctrl+Z тоже очистится: прежние действия отменить будет нельзя.</value>
   </data>
   <data name="MenuCmdOpenSubmenu" xml:space="preserve">
     <value>Открыть с помощью</value>
@@ -1661,6 +1745,10 @@
   <data name="OperationOne" xml:space="preserve">
     <value>{0}: {1} %</value>
     <comment>{0} - глагол операции, {1} - проценты</comment>
+  </data>
+  <data name="OperationWeighing" xml:space="preserve">
+    <value>{0}: подсчёт…</value>
+    <comment>{0} - глагол операции; вместо процентов, пока источники взвешиваются</comment>
   </data>
   <data name="OperationMany" xml:space="preserve">
     <value>Операций: {0} — {1} %</value>

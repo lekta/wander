@@ -78,6 +78,13 @@ public sealed class MainViewModel : ObservableObject {
     /// <summary>How often a window held back by a modal question looks again.</summary>
     private static readonly TimeSpan _operationWindowRecheck = TimeSpan.FromMilliseconds(200);
 
+    /// <summary>
+    /// How long "delete for good" stays disabled once the bin's refusal is
+    /// put to the user (2026-09-21): an Enter pressed without looking, in the
+    /// middle of deleting file after file, must not reach it.
+    /// </summary>
+    private static readonly TimeSpan _deleteForGoodArmDelay = TimeSpan.FromMilliseconds(500);
+
     /// <summary>Smallest the preview pane may be, and what the file list keeps of the window beside it.</summary>
     private const double PreviewMinWidth = 120;
     private const double ListMinWidth = 240;
@@ -100,6 +107,7 @@ public sealed class MainViewModel : ObservableObject {
     private readonly IToolLocator _toolLocator;
     private readonly UndoService _undo;
     private readonly OperationTracker _tracker;
+    private readonly PathClaims _claims;
     private readonly Dispatcher _dispatcher;
     private readonly ILogger _log;
     private readonly CompanionResolver _companions;
@@ -109,6 +117,7 @@ public sealed class MainViewModel : ObservableObject {
     private readonly List<Wander.App.Views.ProgressDialog> _operationWindows = new();
 
     private string _status = "";
+    private StatusSeverity _statusSeverity;
     private string? _caretPath;
     private FileSystemEntry? _selectedEntry;
     private string? _renamingPath;
@@ -221,6 +230,7 @@ public sealed class MainViewModel : ObservableObject {
         _toolLocator = ServiceLocator.Get<IToolLocator>();
         _undo = ServiceLocator.Get<UndoService>();
         _tracker = ServiceLocator.Get<OperationTracker>();
+        _claims = ServiceLocator.Get<PathClaims>();
         _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
         _log = ServiceLocator.Get<ILogger>();
         _companions = ServiceLocator.Get<CompanionResolver>();
@@ -275,7 +285,9 @@ public sealed class MainViewModel : ObservableObject {
 
         Preview = new PreviewController(
             ServiceLocator.TryGet<IImageMetadataReader>(),
-            companionMetadata);
+            companionMetadata,
+            _claims,
+            _tracker);
         // A click in the footer is about the whole selection the shown file
         // is part of - split or not: the split only doubles the picture,
         // the footer under it stays the one footer of the selection.
@@ -302,13 +314,14 @@ public sealed class MainViewModel : ObservableObject {
 
         _nav = new NavigationController(
             new NavigationService(), _fs, TryGetShellNamespace(), _log);
-        _nav.StatusReported += (_, text) => Status = text;
+        // Its one report is a path that is not there.
+        _nav.StatusReported += (_, text) => Fail(text);
 
         Entries = new BulkObservableCollection<FileSystemEntry>();
         Operations = new ObservableCollection<OperationViewModel>();
 
         Shell = new ShellCommandsController(_shell, _log);
-        Shell.StatusReported += (_, text) => Status = text;
+        Shell.StatusReported += (_, line) => Say(line.Text, line.Severity);
 
         // The trees are created first and handed a way to look at the
         // bookmark rows, because everything that spans both panels lives
@@ -673,16 +686,19 @@ public sealed class MainViewModel : ObservableObject {
         set => _nav.AddressText = value;
     }
 
+    /// <summary>The status line as news. A warning or an error goes through <see cref="Warn"/> / <see cref="Fail"/>.</summary>
     public string Status {
         get => _status;
-        set {
-            // Noted before the property changes, so the journal holds every
-            // line the user could have seen - including the ones a second
-            // message replaced before the eye got to them. That is the
-            // whole reason it exists.
-            Journal.Note(value, DateTime.Now);
-            SetField(ref _status, value);
-        }
+        set => Say(value, StatusSeverity.Info);
+    }
+
+    /// <summary>
+    /// How much the status line matters: the status bar puts a mark in front
+    /// of a warning and an error (PLAN block 0, step 8).
+    /// </summary>
+    public StatusSeverity StatusSeverity {
+        get => _statusSeverity;
+        private set => SetField(ref _statusSeverity, value);
     }
 
     /// <summary>
@@ -1243,7 +1259,7 @@ public sealed class MainViewModel : ObservableObject {
             try {
                 _shell.Open(entry.FullPath);
             } catch (Exception ex) {
-                Status = string.Format(Strings.StatusOpenFailed, ex.Message);
+                Fail(string.Format(Strings.StatusOpenFailed, ex.Message));
             }
             return;
         }
@@ -1298,7 +1314,7 @@ public sealed class MainViewModel : ObservableObject {
 
         targetFolder ??= _nav.Current;
         if (string.IsNullOrEmpty(targetFolder) || !_fs.DirectoryExists(targetFolder)) {
-            Status = Strings.StatusNoDropTarget;
+            Fail(Strings.StatusNoDropTarget);
             return;
         }
 
@@ -1330,6 +1346,9 @@ public sealed class MainViewModel : ObservableObject {
         _log.Info($"Drop: {effect} {groups.Count} item(s) into {targetFolder}");
         var resolver = _dialogs.CreateConflictResolver(Settings.SkipIdenticalOnConflict);
         IReadOnlyList<BatchItemResult> results;
+        if (effect == DropEffect.Move) {
+            ReleasePreview(groups.SelectMany(g => g.All));
+        }
         try {
             results = await RunWithProgressDialogAsync(
                 effect == DropEffect.Move ? Strings.ProgressMoving : Strings.ProgressCopying,
@@ -1341,8 +1360,10 @@ public sealed class MainViewModel : ObservableObject {
             return;
         } catch (Exception ex) {
             _log.Error($"Drop failed: {effect} -> {targetFolder}", ex);
-            Status = string.Format(Strings.StatusDropFailed, ex.Message);
+            Fail(string.Format(Strings.StatusDropFailed, ex.Message));
             return;
+        } finally {
+            RestorePreview();
         }
 
         if (!await FollowMovedAsync(results, targetFolder, moved: effect == DropEffect.Move)) {
@@ -1484,7 +1505,7 @@ public sealed class MainViewModel : ObservableObject {
                 ok++;
             } catch (Exception ex) {
                 _log.Error($"Create shortcut failed: {src} -> {dest}", ex);
-                Status = string.Format(Strings.StatusShortcutFailed, srcName, ex.Message);
+                Fail(string.Format(Strings.StatusShortcutFailed, srcName, ex.Message));
             }
         }
 
@@ -2197,9 +2218,10 @@ public sealed class MainViewModel : ObservableObject {
             // items") while we were enumerating; the listing's own
             // "N items" must not eat that message.
             string reported = Status;
+            var reportedSeverity = StatusSeverity;
             PublishRows(epoch, items);
             if (reported != statusBeforeLoad) {
-                Status = reported;
+                Say(reported, reportedSeverity);
             }
             if (arriving && _session.IsCurrent(epoch)) {
                 // The clock keeps running: the view arms FirstScreenWatch
@@ -2222,7 +2244,7 @@ public sealed class MainViewModel : ObservableObject {
             _log.Error($"Enumerate failed: {path}", ex);
             _session.NoteListingGone();
             Entries.Clear();
-            Status = string.Format(Strings.StatusError, ex.Message);
+            Fail(string.Format(Strings.StatusError, ex.Message));
         } finally {
             // Same handoff rule as RefreshShellAsync: a superseded load
             // leaves the flag for the load that replaced it.
@@ -2280,9 +2302,9 @@ public sealed class MainViewModel : ObservableObject {
                 return;
             } catch (Exception ex) {
                 _log.Error($"Shell enumerate failed: {shellPath}", ex);
-                Status = archive is null
+                Fail(archive is null
                     ? string.Format(Strings.StatusError, ex.Message)
-                    : string.Format(Strings.StatusArchiveUnreadable, archive.ArchiveName);
+                    : string.Format(Strings.StatusArchiveUnreadable, archive.ArchiveName));
                 return;
             }
 
@@ -2319,7 +2341,7 @@ public sealed class MainViewModel : ObservableObject {
             // indistinguishable from here. Saying both beats an empty list
             // that looks like a mistake.
             if (archive is not null && items.Count == 0) {
-                Status = string.Format(Strings.StatusArchiveEmptyOrLocked, archive.ArchiveName);
+                Warn(string.Format(Strings.StatusArchiveEmptyOrLocked, archive.ArchiveName));
             }
         } finally {
             // Only release the spinner if our load is still the active one.
@@ -2805,7 +2827,45 @@ public sealed class MainViewModel : ObservableObject {
     /// see <see cref="Journal"/>.
     /// </summary>
     private void SetStatusQuietly(string text) {
+        StatusSeverity = StatusSeverity.Info;
         SetField(ref _status, text, nameof(Status));
+    }
+
+    /// <summary>A status line for something that went through only in part, or not as asked.</summary>
+    private void Warn(string text) {
+        Say(text, StatusSeverity.Warning);
+    }
+
+    /// <summary>A status line for something that did not happen: failed or refused.</summary>
+    private void Fail(string text) {
+        Say(text, StatusSeverity.Error);
+    }
+
+    private void Say(string text, StatusSeverity severity) {
+        // Noted before the property changes, so the journal holds every
+        // line the user could have seen - including the ones a second
+        // message replaced before the eye got to them. That is the whole
+        // reason it exists.
+        Journal.Note(text, DateTime.Now, severity);
+        StatusSeverity = severity;
+        SetField(ref _status, text, nameof(Status));
+    }
+
+    /// <summary>
+    /// How much an operation's outcome line matters: news when nothing
+    /// failed; a warning when some of it went through, or when all that
+    /// stopped the rest is a holder or the bin - held, claimed, too long
+    /// for the bin - things that pass or are asked about; an error when
+    /// nothing went and the reason is a failure.
+    /// </summary>
+    private static StatusSeverity OutcomeSeverity(int done, IReadOnlyList<Exception?> failures, string busyNote) {
+        if (failures.Count == 0) {
+            return busyNote.Length > 0 ? StatusSeverity.Warning : StatusSeverity.Info;
+        }
+
+        return done > 0 || failures.All(e => FileInUse.Is(e) || e is ClaimedByOperationException or RecycleUnavailableException)
+            ? StatusSeverity.Warning
+            : StatusSeverity.Error;
     }
 
 
@@ -3665,6 +3725,7 @@ public sealed class MainViewModel : ObservableObject {
     /// <param name="snapshot">The rows the delete started from, for where the keyboard lands.</param>
     private async Task RunDeleteAsync(IReadOnlyList<string> paths, IReadOnlyList<FileSystemEntry> snapshot, bool permanent) {
         IReadOnlyList<DeleteResult> results;
+        ReleasePreview(paths);
         try {
             results = await RunWithProgressDialogAsync(
                 permanent ? Strings.ProgressDeleting : Strings.ProgressRecycling,
@@ -3674,8 +3735,10 @@ public sealed class MainViewModel : ObservableObject {
             return;
         } catch (Exception ex) {
             _log.Error($"Delete batch failed", ex);
-            Status = string.Format(Strings.StatusDeleteFailed, ex.Message);
+            Fail(string.Format(Strings.StatusDeleteFailed, ex.Message));
             return;
+        } finally {
+            RestorePreview();
         }
 
         var gone = results.Where(r => r.Status == DeleteStatus.Ok).Select(r => r.Path).ToList();
@@ -3706,8 +3769,11 @@ public sealed class MainViewModel : ObservableObject {
         }
         await trees;
 
+        string waited = BusyNote(results.Select(r => r.Busy));
+        var failures = results.Where(r => r.Status == DeleteStatus.Failed).Select(r => r.Error).ToList();
+        var severity = OutcomeSeverity(ok, failures, waited);
         if (failed == 0) {
-            Status = string.Format(permanent ? Strings.StatusDeleted : Strings.StatusRecycled, ok);
+            Say(string.Format(permanent ? Strings.StatusDeleted : Strings.StatusRecycled, ok) + waited, severity);
 
             return;
         }
@@ -3720,10 +3786,23 @@ public sealed class MainViewModel : ObservableObject {
         string reason = firstError is null
             ? ""
             : await Task.Run(() => DescribeError(firstError, firstFail.Path));
-        Status = string.Format(
+        Say(string.Format(
             permanent ? Strings.StatusDeletedPartly : Strings.StatusRecycledPartly,
-            ok, failed, reason.Length > 0 ? ": " + reason : "");
+            ok, failed, reason.Length > 0 ? ": " + reason : "") + waited, severity);
         _log.Info($"Delete: {ok} done, {failed} failed - {reason}");
+
+        // Refused by the bin and still where they were. Asked about once,
+        // after the attempt: a folder with an over-long path inside is only
+        // found out by the operation itself, so no question beforehand could
+        // catch every case. The answer is the confirmation - the permanent
+        // delete's own question is not asked again; everything else it does
+        // (the guard, the Warn line, the cleared undo stack) it does.
+        var unrecyclable = results.Where(r => r.Error is RecycleUnavailableException).ToList();
+        if (unrecyclable.Count > 0 && AskDeleteForGood(unrecyclable, ok)) {
+            var forGood = unrecyclable.Select(r => r.Path).ToList();
+            var chosen = new HashSet<string>(forGood, StringComparer.OrdinalIgnoreCase);
+            await RunDeleteAsync(forGood, snapshot.Where(e => chosen.Contains(e.FullPath)).ToList(), permanent: true);
+        }
 
         var busy = results
             .Where(r => r.Status == DeleteStatus.Failed && FileInUse.Is(r.Error))
@@ -3757,6 +3836,70 @@ public sealed class MainViewModel : ObservableObject {
 
         return _dialogs.Choose(new ChoiceRequest(
             DialogKind.DeleteInUse, Strings.DeleteInUseTitle, message, new[] { Strings.ActionRetry })) == 0;
+    }
+
+    /// <summary>
+    /// Both halves of the preview let go of <paramref name="paths"/>, and of
+    /// anything inside them, before an operation takes them away - see
+    /// <see cref="PreviewController.Release"/>. Every call is paired with
+    /// <see cref="RestorePreview"/> once the operation is over.
+    /// </summary>
+    private void ReleasePreview(IEnumerable<string> paths) {
+        var list = paths.ToList();
+        Preview.Release(list);
+        PreviewSecond.Release(list);
+    }
+
+    /// <summary>What <see cref="ReleasePreview"/> let go of and the operation left in place is shown again.</summary>
+    private void RestorePreview() {
+        Preview.Restore();
+        PreviewSecond.Restore();
+    }
+
+    /// <summary>
+    /// "The bin will not take these: delete them for good?" Every refused
+    /// item is named - up to ten, then a count - with why, what the same
+    /// delete already put in the bin, and what a delete for good costs.
+    /// Both answers are named; "stop here" is the default, Enter and Esc
+    /// alike, and "delete for good" arms only after
+    /// <see cref="_deleteForGoodArmDelay"/>.
+    /// </summary>
+    /// <param name="refused">What the bin refused, each with its <see cref="RecycleUnavailableException"/>.</param>
+    /// <param name="recycled">What the same delete did put in the bin.</param>
+    private bool AskDeleteForGood(IReadOnlyList<DeleteResult> refused, int recycled) {
+        const int named = 10;
+        var lines = new List<string> { Strings.RecycleUnavailableIntro };
+        foreach (var item in refused.Take(named)) {
+            string path = item.Path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            lines.Add(string.Format(Strings.RecycleUnavailableItem, Path.GetFileName(path), Path.GetDirectoryName(path)));
+        }
+        if (refused.Count > named) {
+            lines.Add(string.Format(Strings.AndMore, refused.Count - named));
+        }
+
+        lines.Add("");
+        lines.AddRange(refused
+            .Select(r => ((RecycleUnavailableException)r.Error!).Reason)
+            .Distinct()
+            .Select(reason => reason == RecycleUnavailableReason.PathTooLong
+                ? Strings.RecycleUnavailableTooLong
+                : Strings.RecycleUnavailableNoBin));
+        if (recycled > 0) {
+            lines.Add(string.Format(Strings.RecycleUnavailableRestRecycled, recycled));
+        }
+
+        lines.Add("");
+        lines.Add(Strings.RecycleUnavailableIrreversible);
+        if (_undo.Depth > 0) {
+            lines.Add(Strings.RecycleUnavailableClearsUndo);
+        }
+
+        bool accepted = _dialogs.Choose(new ChoiceRequest(
+            DialogKind.RecycleUnavailable, Strings.RecycleUnavailableTitle, string.Join("\n", lines),
+            new[] { Strings.ActionDeleteForGood }, Strings.ActionAbort, _deleteForGoodArmDelay)) == 0;
+        _log.Info($"Recycle refused for {refused.Count} item(s): {(accepted ? "user chose to delete them for good" : "left in place")}");
+
+        return accepted;
     }
 
     /// <summary>
@@ -3800,9 +3943,8 @@ public sealed class MainViewModel : ObservableObject {
         try {
             // An operation like any other - off this thread, in the tracker,
             // cancellable, its window held back the same way.
-            string? description = _undo.NextDescription;
             var outcome = await RunWithProgressDialogAsync(
-                Strings.ProgressUndoing, ct => _undo.UndoAsync(_tracker, ct));
+                Strings.ProgressUndoing, ct => _undo.UndoAsync(_tracker, ct, _claims));
             if (outcome is null) {
                 return;
             }
@@ -3810,11 +3952,19 @@ public sealed class MainViewModel : ObservableObject {
             foreach (var failure in outcome.Failures) {
                 _log.Error($"Undo failed: {failure.Step.Description}", failure.Error);
             }
+            // The journal is the user's: the lines name files, and the reason
+            // is said in their words (PLAN block 0, step 7).
+            var (failedNames, failedReason) = outcome.Failures.Count > 0
+                ? await DescribeUndoFailuresAsync(outcome.Failures)
+                : ("", "");
+            string left = outcome.Remaining is { } remaining ? NamesOf(remaining) : "";
             var action = outcome.Undone;
             if (action is null) {
-                Status = outcome.Failures.Count > 0
-                    ? string.Format(Strings.StatusUndoFailed, outcome.Failures[0].Error.Message)
-                    : string.Format(Strings.StatusUndoStopped, description);
+                if (outcome.Failures.Count > 0) {
+                    Fail(string.Format(Strings.StatusUndoFailed, failedNames, failedReason));
+                } else {
+                    Warn(string.Format(Strings.StatusUndoStopped, left));
+                }
 
                 return;
             }
@@ -3823,10 +3973,13 @@ public sealed class MainViewModel : ObservableObject {
                 $"Undo: {action.Description}" +
                 (outcome.Cancelled ? $" - stopped, {outcome.Remaining?.Steps.Count ?? 0} steps left on the stack" : "") +
                 (outcome.Failures.Count > 0 ? $" - {outcome.Failures.Count} steps failed" : ""));
-            Status = outcome.Cancelled ? string.Format(Strings.StatusUndoStopped, action.Description)
-                : outcome.Failures.Count > 0 ? string.Format(
-                    Strings.StatusUndonePartly, action.Description, outcome.Failures.Count, outcome.Failures[0].Error.Message)
-                : string.Format(Strings.StatusUndone, action.Description);
+            if (outcome.Cancelled) {
+                Warn(string.Format(Strings.StatusUndoStopped, left));
+            } else if (outcome.Failures.Count > 0) {
+                Warn(string.Format(Strings.StatusUndonePartly, NamesOf(action), failedNames, failedReason));
+            } else {
+                Status = string.Format(Strings.StatusUndone, action.Description);
+            }
 
             // An undo that only put a rating back leaves the folder exactly
             // as it was — same files, same names, same order — so re-listing
@@ -3855,8 +4008,55 @@ public sealed class MainViewModel : ObservableObject {
             PreviewSecond.ReloadCompanions();
         } catch (Exception ex) {
             _log.Error("Undo failed", ex);
-            Status = string.Format(Strings.StatusUndoFailed, ex.Message);
+            Fail(string.Format(Strings.StatusUndoError, ex.Message));
         }
+    }
+
+    /// <summary>
+    /// The steps of an undo that did not come back, for the journal: the
+    /// files by name - the first, then how many more - and why the first did
+    /// not, in the user's words. Naming a holder asks Restart Manager, so
+    /// off this thread.
+    /// </summary>
+    private async Task<(string Names, string Reason)> DescribeUndoFailuresAsync(IReadOnlyList<UndoFailure> failures) {
+        var first = failures[0];
+        string? path = StepPath(first);
+        string reason = await Task.Run(() => DescribeError(first.Error, path ?? ""));
+        string names = path is null ? first.Step.Description : Named(path, failures.Count);
+
+        return (names, reason);
+    }
+
+    /// <summary>
+    /// The file an undo step is about: where it would have come back to, or
+    /// - for the undo of a create, which takes the item away - the path its
+    /// failure names. Null when neither says.
+    /// </summary>
+    private static string? StepPath(UndoFailure failure) {
+        if (failure.Step.PathsAfterUndo is [var back, ..]) {
+            return back;
+        }
+
+        return failure.Error switch {
+            RecycleUnavailableException refused => refused.ItemPath,
+            ClaimedByOperationException claimed => claimed.ItemPath,
+            FileNotFoundException missing => missing.FileName,
+            _ => null,
+        };
+    }
+
+    /// <summary>What an undo brings back, by name; its description when it brings nothing back to name (the undo of a create).</summary>
+    private static string NamesOf(IUndoableAction action) {
+        return action.PathsAfterUndo is [var first, ..] ? Named(first, action.PathsAfterUndo.Count) : action.Description;
+    }
+
+    /// <summary>The first file by name, the rest as a count - how a journal line names files (PLAN block 0, step 7).</summary>
+    private static string Named(string first, int count) {
+        string name = Path.GetFileName(first.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+
+        return count <= 1
+            ? string.Format(Strings.StatusNamedOne, name)
+            : string.Format(Strings.StatusNamedMany, name, count - 1);
     }
 
     private void Rename(FileSystemEntry? entry, string? newName) {
@@ -3874,6 +4074,7 @@ public sealed class MainViewModel : ObservableObject {
             IReadOnlyList<(string Path, string NewName)> plan = Settings.IntegrateCompanions
                 ? _companions.RenamePlan(entry.FullPath, newName, entry.Companions)
                 : new[] { (entry.FullPath, newName) };
+            ReleasePreview(plan.Select(p => p.Path));
             _ops.RenameMany(plan);
             // Keep the file the user just renamed selected: its path changed,
             // so "whatever was selected" would no longer match anything.
@@ -3885,7 +4086,9 @@ public sealed class MainViewModel : ObservableObject {
             }
         } catch (Exception ex) {
             _log.Error($"Rename failed: {entry.FullPath} -> {newName}", ex);
-            Status = string.Format(Strings.StatusRenameFailed, DescribeError(ex, entry.FullPath));
+            Fail(string.Format(Strings.StatusRenameFailed, DescribeError(ex, entry.FullPath)));
+        } finally {
+            RestorePreview();
         }
     }
 
@@ -3983,13 +4186,14 @@ public sealed class MainViewModel : ObservableObject {
             return;
         } catch (Exception ex) {
             _log.Error($"Action '{title}' failed", ex);
-            Status = string.Format(Strings.StatusActionFailed, title, ex.Message);
+            Fail(string.Format(Strings.StatusActionFailed, title, ex.Message));
 
             return;
         }
 
         int ok = results.Count(r => r.Status == BatchItemStatus.Ok);
-        Status = string.Format(Strings.StatusActionDone, title, ok, results.Count);
+        Say(string.Format(Strings.StatusActionDone, title, ok, results.Count),
+            ok < results.Count ? StatusSeverity.Warning : StatusSeverity.Info);
         if (ActionReport.IsNeeded(results)) {
             string message = string.Format(Strings.ActionReportHeader, ok, results.Count)
                 + "\n\n" + string.Join("\n", ActionReport.Lines(results, oneCommand: !run.RunPerFile));
@@ -4040,7 +4244,7 @@ public sealed class MainViewModel : ObservableObject {
 
         var kind = BatchRenameGate.Classify(_selectedEntries);
         if (kind == BatchRenameKind.Mixed) {
-            Status = Strings.StatusBatchRenameMixed;
+            Fail(Strings.StatusBatchRenameMixed);
 
             return;
         }
@@ -4080,13 +4284,17 @@ public sealed class MainViewModel : ObservableObject {
 
         var preview = vm.Preview;
         var renamed = preview.Rows.Where(r => r.Status == RenameRowStatus.Renamed).ToArray();
+        var plan = preview.Plan();
+        ReleasePreview(plan.Select(p => p.Path));
         try {
-            _ops.RenameMany(preview.Plan(), $"Rename {renamed.Length} items");
+            _ops.RenameMany(plan, $"Rename {renamed.Length} items");
         } catch (Exception ex) {
             _log.Error($"Batch rename failed: {renamed.Length} items in {folder}", ex);
-            Status = string.Format(Strings.StatusRenameFailed, DescribeError(ex, renamed[0].Path));
+            Fail(string.Format(Strings.StatusRenameFailed, DescribeError(ex, renamed[0].Path)));
 
             return;
+        } finally {
+            RestorePreview();
         }
 
         _log.Info($"Batch rename: {renamed.Length} items in {folder}");
@@ -4180,9 +4388,11 @@ public sealed class MainViewModel : ObservableObject {
         }
 
         Refresh();
-        Status = failures.Count == 0
-            ? string.Format(Strings.StatusRestored, restored)
-            : string.Format(Strings.StatusRestoredPartly, restored, failures.Count, failures[0]);
+        if (failures.Count == 0) {
+            Status = string.Format(Strings.StatusRestored, restored);
+        } else {
+            Warn(string.Format(Strings.StatusRestoredPartly, restored, failures.Count, failures[0]));
+        }
     }
 
 
@@ -4204,7 +4414,7 @@ public sealed class MainViewModel : ObservableObject {
             // The user did copy something; it just isn't a file on disk (an
             // Outlook attachment, something inside an open .zip). Saying so
             // beats a Paste that is silently greyed out.
-            Status = Strings.StatusClipboardVirtualFiles;
+            Fail(Strings.StatusClipboardVirtualFiles);
         }
     }
 
@@ -4246,10 +4456,13 @@ public sealed class MainViewModel : ObservableObject {
         // the paths either way.
         _clipboard.Copy(paths, ArchiveDataObject(paths));
 
-        Status = ClipboardWriteIssue()
-            ?? string.Format(
+        if (ClipboardWriteIssue() is { } issue) {
+            Warn(issue);
+        } else {
+            Status = string.Format(
                 CurrentArchive is not null ? Strings.StatusArchiveCopied : Strings.StatusCopied,
                 _selectedEntries.Count);
+        }
     }
 
     /// <summary>
@@ -4268,8 +4481,11 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
         _clipboard.Cut(WithCompanions(_selectedEntries));
-        Status = ClipboardWriteIssue()
-            ?? string.Format(Strings.StatusCut, _selectedEntries.Count);
+        if (ClipboardWriteIssue() is { } issue) {
+            Warn(issue);
+        } else {
+            Status = string.Format(Strings.StatusCut, _selectedEntries.Count);
+        }
     }
 
 
@@ -4321,7 +4537,7 @@ public sealed class MainViewModel : ObservableObject {
             string text = PathSafety.FormatReason(reason, offender, target);
             _dialogs.Ask(new DialogRequest(
                 DialogKind.CannotPaste, Strings.CannotPasteTitle, text, DialogButtons.Ok, DialogIcon.Warning));
-            Status = text;
+            Fail(text);
             return;
         }
 
@@ -4357,6 +4573,9 @@ public sealed class MainViewModel : ObservableObject {
         _log.Info($"Paste: {(wasCut ? "move" : "copy")} {groups.Count} item(s) into {target}");
         var resolver = _dialogs.CreateConflictResolver(Settings.SkipIdenticalOnConflict);
         IReadOnlyList<BatchItemResult> results;
+        if (wasCut) {
+            ReleasePreview(groups.SelectMany(g => g.All));
+        }
         try {
             results = await RunWithProgressDialogAsync(
                 wasCut ? Strings.ProgressMoving : Strings.ProgressCopying,
@@ -4368,8 +4587,10 @@ public sealed class MainViewModel : ObservableObject {
             return;
         } catch (Exception ex) {
             _log.Error($"Paste failed into {target}", ex);
-            Status = string.Format(Strings.StatusPasteFailed, ex.Message);
+            Fail(string.Format(Strings.StatusPasteFailed, ex.Message));
             return;
+        } finally {
+            RestorePreview();
         }
 
         if (wasCut) {
@@ -4425,7 +4646,7 @@ public sealed class MainViewModel : ObservableObject {
             ? _selectedEntries.Select(e => e.FullPath).ToList()
             : _selectedEntries.SelectMany(e => TopLevelOf(ns, e.FullPath)).ToList();
         if (sources.Count == 0) {
-            Status = string.Format(Strings.StatusArchiveEmptyOrLocked, _selectedEntries[0].Name);
+            Warn(string.Format(Strings.StatusArchiveEmptyOrLocked, _selectedEntries[0].Name));
             return;
         }
 
@@ -4457,7 +4678,7 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
-        var service = new ExtractionService(ns, _fs, ServiceLocator.Get<IRecycleBin>(), _undo, _tracker, _log);
+        var service = new ExtractionService(ns, _fs, ServiceLocator.Get<IRecycleBin>(), _undo, _tracker, _log, _claims);
         var resolver = _dialogs.CreateConflictResolver(Settings.SkipIdenticalOnConflict);
         _log.Info($"Extract: {sources.Count} item(s) into {target}");
 
@@ -4471,7 +4692,7 @@ public sealed class MainViewModel : ObservableObject {
             return;
         } catch (Exception ex) {
             _log.Error($"Extract failed into {target}", ex);
-            Status = string.Format(Strings.StatusExtractFailed, ex.Message);
+            Fail(string.Format(Strings.StatusExtractFailed, ex.Message));
             return;
         }
 
@@ -4492,7 +4713,7 @@ public sealed class MainViewModel : ObservableObject {
         // Nothing came out and nothing was refused: the shell walked the
         // whole batch and wrote no bytes, which is what a password does.
         if (arrived.Length == 0 && results.All(r => r.Status is BatchItemStatus.Failed)) {
-            Status = Strings.StatusArchiveLocked;
+            Fail(Strings.StatusArchiveLocked);
         }
     }
 
@@ -4514,7 +4735,7 @@ public sealed class MainViewModel : ObservableObject {
             Status = string.Format(Strings.StatusArchiveTempCopy, Path.GetFileName(copy));
         } catch (Exception ex) {
             _log.Error($"Open from archive failed: {path}", ex);
-            Status = string.Format(Strings.StatusOpenFailed, ex.Message);
+            Fail(string.Format(Strings.StatusOpenFailed, ex.Message));
         }
     }
 
@@ -4546,7 +4767,31 @@ public sealed class MainViewModel : ObservableObject {
             string detail = firstFail.Error is null ? "" : ": " + DescribeError(firstFail.Error, firstFail.Source);
             parts.Add(string.Format(Strings.StatusBatchFailed, failed, detail));
         }
-        Status = string.Join(", ", parts);
+        string waited = BusyNote(results.Select(r => r.Busy));
+        var failures = results.Where(r => r.Status == BatchItemStatus.Failed).Select(r => r.Error).ToList();
+        Say(string.Join(", ", parts) + waited, OutcomeSeverity(ok, failures, waited));
+    }
+
+    /// <summary>
+    /// "; 'a.txt' was held (Word (PID 812)) - let go after 0.4 s" for what
+    /// an operation waited out (PLAN AF), or empty when it waited for
+    /// nothing. The first by name, the rest as a count. A hold the wait did
+    /// not outlast is a failure, and is told as one.
+    /// </summary>
+    private static string BusyNote(IEnumerable<BusyReport?> reports) {
+        var released = reports.OfType<BusyReport>().Where(r => r.Released).ToList();
+        if (released.Count == 0) {
+            return "";
+        }
+
+        var first = released[0];
+        string name = Path.GetFileName(first.Path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        string holder = first.Holder is null ? "" : $" ({first.Holder})";
+        double seconds = released.Max(r => r.Waited).TotalSeconds;
+
+        return "; " + (released.Count == 1
+            ? string.Format(Strings.StatusWasBusyOne, name, holder, seconds)
+            : string.Format(Strings.StatusWasBusyMany, name, released.Count - 1, holder, seconds));
     }
 
     private void NewFolder() {
@@ -4565,7 +4810,7 @@ public sealed class MainViewModel : ObservableObject {
             _ops.CreateFolder(_nav.Current, name);
         } catch (Exception ex) {
             _log.Error($"CreateFolder failed in {_nav.Current}: {name}", ex);
-            Status = string.Format(Strings.StatusCreateFailed, ex.Message);
+            Fail(string.Format(Strings.StatusCreateFailed, ex.Message));
 
             return;
         }
@@ -4590,6 +4835,9 @@ public sealed class MainViewModel : ObservableObject {
         if (ex is RecycleUnavailableException) {
             // The journal is the user's: it names the file, not only the reason.
             return string.Format(Strings.ErrorRecycleUnavailable, Path.GetFileName(path));
+        }
+        if (ex is ClaimedByOperationException claimed) {
+            return string.Format(Strings.ErrorClaimedByOperation, Path.GetFileName(path), Strings.Get(claimed.Verb));
         }
         if (ex is IOException && _lockInspector is not null) {
             var lockers = _lockInspector.WhoIsLocking(path);

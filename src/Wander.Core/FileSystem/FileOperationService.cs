@@ -1,3 +1,4 @@
+using Wander.Core.Diagnostics;
 using Wander.Core.Logging;
 using Wander.Core.Operations;
 using Wander.Core.Undo;
@@ -38,16 +39,20 @@ public sealed class FileOperationService {
     private readonly IRecycleBin _bin;
     private readonly UndoService _undo;
     private readonly ILogger _log;
+    private readonly HeldPaths _held;
     private readonly BatchExecutor _batch;
 
 
     /// <summary>Full ctor — used by tests and the production registration in PlatformBootstrapper.</summary>
-    public FileOperationService(IFileSystem fs, IRecycleBin bin, UndoService undo, OperationTracker tracker, ILogger log) {
+    /// <param name="held">Claims and the wait for held paths; null has no probe and nobody to name a holder.</param>
+    public FileOperationService(
+        IFileSystem fs, IRecycleBin bin, UndoService undo, OperationTracker tracker, ILogger log, HeldPaths? held = null) {
         _fs = fs;
         _bin = bin;
         _undo = undo;
         _log = log;
-        _batch = new BatchExecutor(fs, bin, undo, tracker, log);
+        _held = held ?? new HeldPaths(new PathClaims());
+        _batch = new BatchExecutor(fs, bin, undo, tracker, log, _held);
     }
 
     /// <summary>Convenience ctor that pulls collaborators from the locator. Used at app startup.</summary>
@@ -57,7 +62,11 @@ public sealed class FileOperationService {
             ServiceLocator.Get<IRecycleBin>(),
             ServiceLocator.Get<UndoService>(),
             ServiceLocator.Get<OperationTracker>(),
-            ServiceLocator.Get<ILogger>()) {
+            ServiceLocator.Get<ILogger>(),
+            new HeldPaths(
+                ServiceLocator.Get<PathClaims>(),
+                ServiceLocator.TryGet<IFileBusyProbe>(),
+                ServiceLocator.TryGet<IFileLockInspector>())) {
     }
 
 
@@ -121,8 +130,9 @@ public sealed class FileOperationService {
         }
         GuardDestructive(path);
         using var _ = _undo.BeginOperation();
+        using var gate = _held.Begin(_log);
         string oldName = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-        _fs.Rename(path, newName);
+        RenameHeld(gate, path, newName);
         string parent = Path.GetDirectoryName(path) ?? "";
         string newPath = Path.Combine(parent, newName);
         _log.Info($"Rename: {path} -> {newName}");
@@ -162,6 +172,9 @@ public sealed class FileOperationService {
         }
 
         using var _ = _undo.BeginOperation();
+        // One wait for the call, not one a file: a hundred files held by a
+        // program that is not letting go cost the budget once.
+        using var gate = _held.Begin(_log);
         var steps = new List<IUndoableAction>(renames.Count);
         try {
             // Paths still occupied by members not yet renamed. A target
@@ -174,15 +187,15 @@ public sealed class FileOperationService {
                 string parent = Path.GetDirectoryName(path) ?? "";
                 if (held.Contains(Path.Combine(parent, newName))) {
                     string scratch = ScratchName(parent, newName);
-                    RenameStep(path, scratch, steps);
+                    RenameStep(gate, path, scratch, steps);
                     parked.Add((Path.Combine(parent, scratch), newName));
                 } else {
-                    RenameStep(path, newName, steps);
+                    RenameStep(gate, path, newName, steps);
                 }
             }
 
             foreach (var (scratchPath, newName) in parked) {
-                RenameStep(scratchPath, newName, steps);
+                RenameStep(gate, scratchPath, newName, steps);
             }
         } catch {
             Rollback(steps);
@@ -202,12 +215,28 @@ public sealed class FileOperationService {
     }
 
 
-    private void RenameStep(string path, string newName, List<IUndoableAction> steps) {
+    private void RenameStep(BusyGate gate, string path, string newName, List<IUndoableAction> steps) {
         string oldName = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-        _fs.Rename(path, newName);
+        RenameHeld(gate, path, newName);
         string parent = Path.GetDirectoryName(path) ?? "";
         steps.Add(new RenameAction(_fs, Path.Combine(parent, newName), oldName));
         _log.Info($"Rename: {path} -> {newName}");
+    }
+
+    /// <summary>
+    /// The rename itself, past whatever holds the path (PLAN AF, block 0):
+    /// an operation of the user's on it refuses the rename by name, a held
+    /// file is waited for, a held folder is tried again while it answers
+    /// "in use". Synchronous, like the rename: at most the budget.
+    /// </summary>
+    private void RenameHeld(BusyGate gate, string path, string newName) {
+        gate.Check(path);
+        if (_fs.DirectoryExists(path)) {
+            gate.Retry(path, () => _fs.Rename(path, newName), CancellationToken.None);
+        } else {
+            gate.WaitForFile(path, CancellationToken.None);
+            _fs.Rename(path, newName);
+        }
     }
 
     /// <summary>A name nothing in <paramref name="parent"/> has, marked as ours and transient.</summary>

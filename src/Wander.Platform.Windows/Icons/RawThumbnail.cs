@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices.WindowsRuntime;
+using Wander.Core.FileSystem;
 using Wander.Core.Icons;
 using Windows.Graphics.Imaging;
 using Windows.Storage.Streams;
@@ -55,7 +56,7 @@ internal static class RawThumbnail {
 
         byte[]? jpeg;
         try {
-            using var file = File.OpenRead(path);
+            using var file = SharedRead.Open(path);
             jpeg = RawPreviewExtractor.Extract(file);
         } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
             return null;

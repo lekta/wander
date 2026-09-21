@@ -16,6 +16,7 @@ using Wander.App.Controls;
 using Wander.App.Highlighting;
 using Wander.App.Resources;
 using Wander.App.ViewModels;
+using Wander.Core.FileSystem;
 using Wander.Core.Persistence;
 using Wander.Core.Preview;
 
@@ -188,10 +189,23 @@ public partial class PreviewPane : UserControl {
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e) {
         if (e.OldValue is PreviewController old) {
             old.PropertyChanged -= OnPreviewPropertyChanged;
+            old.ContentReleased -= OnContentReleased;
         }
         if (e.NewValue is PreviewController controller) {
             controller.PropertyChanged += OnPreviewPropertyChanged;
+            controller.ContentReleased += OnContentReleased;
             UpdateCodeEditor();
+        }
+    }
+
+    /// <summary>
+    /// The controller let go of its file for an operation (PLAN AF): the
+    /// browser leaves the page it had open - a PDF on screen holds its file.
+    /// The player is closed already: its source went with the content.
+    /// </summary>
+    private void OnContentReleased(object? sender, EventArgs e) {
+        if (WebPreview.CoreWebView2 is { } web) {
+            try { web.Navigate("about:blank"); } catch { /* the view is going away */ }
         }
     }
 
@@ -281,7 +295,7 @@ public partial class PreviewPane : UserControl {
 
         byte[] bytes;
         try {
-            bytes = await File.ReadAllBytesAsync(path);
+            bytes = await Task.Run(() => SharedRead.ReadAllBytes(path));
         } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
             DocumentPreview.Document = new FlowDocument();
 

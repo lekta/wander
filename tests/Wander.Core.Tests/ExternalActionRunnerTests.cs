@@ -51,6 +51,26 @@ public class ExternalActionRunnerTests {
     }
 
     [Fact]
+    public async Task TheInputAndTheOutput_AreClaimed_WhileTheProgramRuns() {
+        var fs = new FakeFileSystem();
+        fs.Directories.Add(Folder);
+        fs.Files[A] = new byte[] { 1 };
+        var processes = new FakeProcessRunner();
+        var claims = new PathClaims();
+        var runner = new ExternalActionRunner(
+            fs, new FakeRecycleBin(fs), new UndoService(), new OperationTracker(), processes,
+            new List<IBuiltinAction>(), NullLogger.Instance, () => Temp, claims);
+        bool claimedDuring = false;
+        processes.OnRun = (request, _) => claimedDuring =
+            claims.IsClaimed(A, ClaimKind.UserOperation) && claims.IsClaimed(OutputOf(request), ClaimKind.UserOperation);
+
+        await runner.RunAsync(_encode, new[] { A }, CancellationToken.None);
+
+        Assert.True(claimedDuring);
+        Assert.Equal(0, claims.Count);
+    }
+
+    [Fact]
     public async Task DeclaredOutput_ThatAppeared_IsOneUndoStep_ToTheBin() {
         var (runner, fs, bin, undo, processes, _) = Setup();
         processes.OnRun = (request, _) => fs.Files[OutputOf(request)] = new byte[] { 9 };

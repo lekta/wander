@@ -93,6 +93,12 @@ internal static class Palette {
     }
 
 
+    /// <summary>The clock an icon wears while an operation works on its file (AsyncIcon.ShowsWork), and the plate under it.</summary>
+    public static readonly Brush WorkBadgeGlyph = Find("WorkBadgeGlyph");
+
+    public static readonly Brush WorkBadgeBackground = Find("WorkBadgeBackground");
+
+
     private static Brush Find(string key) {
         return (Brush)Application.Current.FindResource(key);
     }

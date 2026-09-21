@@ -1,3 +1,4 @@
+using Wander.Core.FileSystem;
 using Wander.Core.Preview;
 
 namespace Wander.Platform.Windows.Icons;
@@ -54,7 +55,7 @@ internal static class AudioCover {
 
             string? beside = BesideCached(path);
 
-            return beside is null ? null : File.ReadAllBytes(beside);
+            return beside is null ? null : SharedRead.ReadAllBytes(beside);
         } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or OutOfMemoryException) {
             return null;
         }

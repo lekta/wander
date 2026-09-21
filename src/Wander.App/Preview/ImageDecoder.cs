@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Wander.Core.FileSystem;
 using Wander.Core.Icons;
 
 namespace Wander.App.Preview;
@@ -72,7 +73,7 @@ internal static class ImageDecoder {
     public static BitmapImage? RawPreview(string path) {
         byte[]? jpeg;
         try {
-            using var file = System.IO.File.OpenRead(path);
+            using var file = SharedRead.Open(path);
             jpeg = RawPreviewExtractor.Extract(file);
         } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
             return null;

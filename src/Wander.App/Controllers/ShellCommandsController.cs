@@ -32,8 +32,8 @@ public sealed class ShellCommandsController {
     }
 
 
-    /// <summary>Something to tell the user — already localised.</summary>
-    public event EventHandler<string>? StatusReported;
+    /// <summary>Something to tell the user - already localised, with how much it matters.</summary>
+    public event EventHandler<StatusLine>? StatusReported;
 
 
     /// <summary>Opens a link in the user's browser.</summary>
@@ -53,14 +53,14 @@ public sealed class ShellCommandsController {
     /// </summary>
     public void OpenLogFile() {
         if (ServiceLocator.TryGet<ILogFile>() is not { } logFile) {
-            StatusReported?.Invoke(this, Strings.StatusNoLogging);
+            StatusReported?.Invoke(this, new StatusLine(Strings.StatusNoLogging, StatusSeverity.Error));
 
             return;
         }
 
         string path = logFile.FilePath;
         if (string.IsNullOrEmpty(path) || !File.Exists(path)) {
-            StatusReported?.Invoke(this, Strings.StatusNoLogFile);
+            StatusReported?.Invoke(this, new StatusLine(Strings.StatusNoLogFile, StatusSeverity.Error));
 
             return;
         }
@@ -162,12 +162,12 @@ public sealed class ShellCommandsController {
     private void SetText(string text, string what) {
         try {
             Clipboard.SetText(text);
-            Report(Strings.StatusCopiedToClipboard, what);
+            Report(Strings.StatusCopiedToClipboard, what, StatusSeverity.Info);
         } catch (Exception ex) {
             // The OS clipboard is a shared, lockable resource — another app
             // holding it turns this into a COMException, not a bug in ours.
             _log.Warn($"Clipboard copy failed: {ex.Message}");
-            Report(Strings.StatusClipboardBusy, ex.Message);
+            Report(Strings.StatusClipboardBusy, ex.Message, StatusSeverity.Warning);
         }
     }
 
@@ -182,7 +182,12 @@ public sealed class ShellCommandsController {
     }
 
 
-    private void Report(string format, string argument) {
-        StatusReported?.Invoke(this, string.Format(format, argument));
+    /// <param name="severity">Every report here but two is of something that did not happen.</param>
+    private void Report(string format, string argument, StatusSeverity severity = StatusSeverity.Error) {
+        StatusReported?.Invoke(this, new StatusLine(string.Format(format, argument), severity));
     }
 }
+
+
+/// <summary>A status line and how much it matters - see <see cref="StatusSeverity"/>.</summary>
+public sealed record StatusLine(string Text, StatusSeverity Severity);

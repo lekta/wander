@@ -237,9 +237,11 @@ public sealed class OperationTracker {
 
         public string? CurrentPath { get; set; }
 
+        public bool IsWeighing { get; set; }
+
 
         public OperationSnapshot ToSnapshot() =>
-            new(Id, Verb, Completed, Total, CurrentPath, BytesDone, BytesTotal, BytesAreWork, StartedAtUtc, Token);
+            new(Id, Verb, Completed, Total, CurrentPath, BytesDone, BytesTotal, BytesAreWork, StartedAtUtc, Token, IsWeighing);
     }
 
 
@@ -295,6 +297,16 @@ public sealed class OperationTracker {
             _owner.RaiseThrottled();
         }
 
+        public void SetWeighing(bool weighing) {
+            if (_done) {
+                return;
+            }
+            lock (_owner._gate) {
+                _progress.IsWeighing = weighing;
+            }
+            _owner.RaiseThrottled();
+        }
+
         public void Dispose() {
             if (_done) {
                 return;
@@ -326,6 +338,13 @@ public interface IOperationHandle : IDisposable {
     /// unreadable.
     /// </summary>
     void SetTotalBytes(long totalBytes);
+
+    /// <summary>
+    /// The sources are being weighed before anything moves: there are no
+    /// numbers yet worth showing, and the display says "counting" instead of
+    /// a bar standing at zero.
+    /// </summary>
+    void SetWeighing(bool weighing);
 }
 
 
@@ -338,10 +357,11 @@ public interface IOperationHandle : IDisposable {
 /// The token the operation was started under - how the window that handed
 /// it out recognises its own operation among the others.
 /// </param>
+/// <param name="IsWeighing">The sources are still being weighed; the counts mean nothing yet.</param>
 public sealed record OperationSnapshot(
     long Id, string Verb, int Completed, int Total, string? CurrentPath,
     long BytesDone, long BytesTotal, bool BytesAreWork, DateTime StartedAtUtc,
-    CancellationToken Token = default) {
+    CancellationToken Token = default, bool IsWeighing = false) {
 
     /// <summary>Bytes are the honest measure where there are any; items otherwise.</summary>
     public bool HasBytes => BytesTotal > 0;

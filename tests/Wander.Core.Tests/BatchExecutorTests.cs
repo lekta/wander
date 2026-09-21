@@ -26,6 +26,25 @@ public class BatchExecutorTests {
     private const string RootMissing = @"C:\missing.txt";
 
 
+    /// <summary>
+    /// <see cref="Setup"/> with the held-path machinery in reach: the claims
+    /// table, a probe that is told what is held, and a wait that records its
+    /// pauses instead of sleeping them.
+    /// </summary>
+    private static (BatchExecutor Batch, FakeFileSystem Fs, FakeRecycleBin Bin, UndoService Undo, PathClaims Claims,
+        FakeBusyProbe Probe, List<TimeSpan> Pauses) SetupHeld() {
+        var fs = new FakeFileSystem();
+        var bin = new FakeRecycleBin(fs);
+        var undo = new UndoService();
+        var claims = new PathClaims();
+        var probe = new FakeBusyProbe();
+        var pauses = new List<TimeSpan>();
+        var held = new HeldPaths(claims, probe, newWait: () => new BusyWait(pauses.Add));
+        var batch = new BatchExecutor(fs, bin, undo, new OperationTracker(TimeSpan.Zero), NullLogger.Instance, held);
+
+        return (batch, fs, bin, undo, claims, probe, pauses);
+    }
+
     private static (BatchExecutor Batch, FakeFileSystem Fs, FakeRecycleBin Bin, UndoService Undo, OperationTracker Tracker) Setup() {
         var fs = new FakeFileSystem();
         var bin = new FakeRecycleBin(fs);
@@ -754,6 +773,186 @@ public class BatchExecutorTests {
         Assert.Equal(100, totalSeen);
     }
 
+    // --- Held paths (PLAN block 0, steps 4-5) ---------------------------
+
+    [Fact]
+    public async Task MoveManyAsync_AHeldFile_IsWaitedFor_ThenMoved_AndTheWaitReported() {
+        var (batch, fs, _, _, _, probe, pauses) = SetupHeld();
+        fs.Files[SrcA] = new byte[] { 1 };
+        fs.Directories.Add(DstFolder);
+        probe.HeldFor[SrcA] = 2;
+
+        var results = await batch.MoveManyAsync(new[] { SrcA }, DstFolder, new FakeConflictResolver(), default);
+
+        var result = Assert.Single(results);
+        Assert.Equal(BatchItemStatus.Ok, result.Status);
+        Assert.True(fs.FileExists(DstA));
+        Assert.Equal(new BusyReport(SrcA, null, 2 * BusyWait.DefaultStep, Released: true), result.Busy);
+        Assert.Equal(2, pauses.Count);
+    }
+
+    [Fact]
+    public async Task MoveManyAsync_FilesNeverLetGo_CostTheBudgetOnce_AndFailInUse() {
+        var (batch, fs, _, _, _, probe, pauses) = SetupHeld();
+        fs.Files[SrcA] = new byte[] { 1 };
+        fs.Files[SrcB] = new byte[] { 2 };
+        fs.Directories.Add(DstFolder);
+        probe.HeldFor[SrcA] = int.MaxValue;
+        probe.HeldFor[SrcB] = int.MaxValue;
+
+        var results = await batch.MoveManyAsync(new[] { SrcA, SrcB }, DstFolder, new FakeConflictResolver(), default);
+
+        Assert.All(results, r => Assert.Equal(BatchItemStatus.Failed, r.Status));
+        Assert.All(results, r => Assert.True(FileInUse.Is(r.Error)));
+        Assert.True(fs.FileExists(SrcA));
+        Assert.True(fs.FileExists(SrcB));
+        Assert.Equal(BusyWait.DefaultBudget, pauses.Aggregate(TimeSpan.Zero, (a, b) => a + b));
+    }
+
+    [Fact]
+    public async Task MoveManyAsync_AHeldFolder_IsTriedAgain_WhileTheMoveAnswersInUse() {
+        var (batch, fs, _, _, _, _, pauses) = SetupHeld();
+        fs.Directories.Add(RootDir);
+        fs.Directories.Add(DstFolder);
+        fs.MoveInUseFor[RootDir] = 1;
+
+        var results = await batch.MoveManyAsync(new[] { RootDir }, DstFolder, new FakeConflictResolver(), default);
+
+        Assert.Equal(BatchItemStatus.Ok, Assert.Single(results).Status);
+        Assert.True(fs.DirectoryExists(DstFolder + @"\dir"));
+        Assert.Single(pauses);
+        Assert.True(results[0].Busy?.Released);
+    }
+
+    [Fact]
+    public async Task MoveManyAsync_ASourceAnotherOperationIsWorkingOn_IsLeftAlone_AndNamed() {
+        var (batch, fs, _, _, claims, _, _) = SetupHeld();
+        fs.Files[SrcA] = new byte[] { 1 };
+        fs.Files[SrcB] = new byte[] { 2 };
+        fs.Directories.Add(DstFolder);
+        using var copy = claims.Claim(new[] { SrcA }, ClaimKind.UserOperation, OperationVerbs.Copy);
+
+        var results = await batch.MoveManyAsync(new[] { SrcA, SrcB }, DstFolder, new FakeConflictResolver(), default);
+
+        Assert.Equal(BatchItemStatus.Failed, results[0].Status);
+        Assert.Equal(OperationVerbs.Copy, Assert.IsType<ClaimedByOperationException>(results[0].Error).Verb);
+        Assert.True(fs.FileExists(SrcA));
+        Assert.Equal(BatchItemStatus.Ok, results[1].Status);
+    }
+
+    [Fact]
+    public async Task CopyManyAsync_ClaimsSourcesAndTargets_ForAsLongAsItRuns() {
+        var (batch, fs, _, _, claims, _, _) = SetupHeld();
+        fs.Files[SrcA] = new byte[] { 1 };
+        fs.Directories.Add(DstFolder);
+        bool claimedWhileAsked = false;
+        var resolver = new ScriptedResolver(request => {
+            claimedWhileAsked = claims.IsClaimed(SrcA, ClaimKind.UserOperation) && claims.IsClaimed(DstA, ClaimKind.UserOperation);
+
+            return request.Conflicts.Select(c => new ConflictAnswer(c, ConflictResolution.Replace)).ToList();
+        });
+        fs.Files[DstA] = new byte[] { 9 };
+
+        await batch.CopyManyAsync(new[] { SrcA }, DstFolder, resolver, default);
+
+        Assert.True(claimedWhileAsked);
+        Assert.Equal(0, claims.Count);
+    }
+
+    [Fact]
+    public async Task DeleteManyAsync_WhatTheBinFindsHeld_IsSentAgain_UntilLetGo() {
+        var (batch, fs, bin, undo, _, _, pauses) = SetupHeld();
+        fs.Files[RootA] = new byte[] { 1 };
+        fs.Files[RootB] = new byte[] { 2 };
+        bin.InUseFor[RootB] = 2;
+
+        var results = await batch.DeleteManyAsync(new[] { RootA, RootB }, permanent: false, default);
+
+        Assert.All(results, r => Assert.Equal(DeleteStatus.Ok, r.Status));
+        Assert.Null(results[0].Busy);
+        Assert.Equal(new BusyReport(RootB, null, 2 * BusyWait.DefaultStep, Released: true), results[1].Busy);
+        Assert.Equal(new[] { $"Recycle:{RootA}", $"Recycle:{RootB}", $"Recycle:{RootB}", $"Recycle:{RootB}" }, bin.CallLog);
+        Assert.Equal(2, pauses.Count);
+        Assert.Equal("delete of 2 items", undo.NextDescription);
+    }
+
+    [Fact]
+    public async Task DeleteManyAsync_HeldForGood_FailsInUse_AfterTheBudget() {
+        var (batch, fs, bin, _, _, _, pauses) = SetupHeld();
+        fs.Files[RootA] = new byte[] { 1 };
+        bin.InUseFor[RootA] = int.MaxValue;
+
+        var result = Assert.Single(await batch.DeleteManyAsync(new[] { RootA }, permanent: false, default));
+
+        Assert.Equal(DeleteStatus.Failed, result.Status);
+        Assert.True(FileInUse.Is(result.Error));
+        Assert.False(result.Busy?.Released);
+        Assert.Equal(BusyWait.DefaultBudget, pauses.Aggregate(TimeSpan.Zero, (a, b) => a + b));
+    }
+
+    [Fact]
+    public async Task DeleteManyAsync_CountsAHeldItemOnce_HoweverOftenItIsSent() {
+        var fs = new FakeFileSystem();
+        var bin = new FakeRecycleBin(fs);
+        var tracker = new OperationTracker(TimeSpan.Zero);
+        var held = new HeldPaths(new PathClaims(), newWait: () => new BusyWait(_ => { }));
+        var batch = new BatchExecutor(fs, bin, new UndoService(), tracker, NullLogger.Instance, held);
+        fs.Files[RootA] = new byte[] { 1 };
+        bin.InUseFor[RootA] = 3;
+        int seen = 0;
+        tracker.Changed += (_, _) => {
+            foreach (var snap in tracker.Snapshot()) {
+                seen = Math.Max(seen, snap.Completed);
+            }
+        };
+
+        await batch.DeleteManyAsync(new[] { RootA }, permanent: false, default);
+
+        Assert.Equal(1, seen);
+    }
+
+    [Fact]
+    public async Task DeleteManyAsync_AFolderAnotherOperationIsWorkingInside_NeverReachesTheBin() {
+        var (batch, fs, bin, _, claims, _, _) = SetupHeld();
+        fs.Directories.Add(RootDir);
+        fs.Files[RootDir + @"\inner.bin"] = new byte[] { 1 };
+        using var copy = claims.Claim(new[] { RootDir + @"\inner.bin" }, ClaimKind.UserOperation, OperationVerbs.Copy);
+
+        var result = Assert.Single(await batch.DeleteManyAsync(new[] { RootDir }, permanent: false, default));
+
+        Assert.Equal(DeleteStatus.Failed, result.Status);
+        Assert.IsType<ClaimedByOperationException>(result.Error);
+        Assert.True(fs.DirectoryExists(RootDir));
+        Assert.Empty(bin.CallLog);
+    }
+
+    [Fact]
+    public async Task CopyManyAsync_SaysItIsWeighing_WhileItWalksTheSources_AndNotOnceBytesMove() {
+        // "Counting" instead of a bar standing at zero: the walk of a large
+        // folder takes seconds before a single byte moves.
+        var tracker = new OperationTracker(TimeSpan.Zero);
+        var fs = new ListingProbe(() => tracker.Snapshot().Single().IsWeighing);
+        var batch = new BatchExecutor(fs, new FakeRecycleBin(fs), new UndoService(), tracker, NullLogger.Instance);
+        fs.Directories.Add(RootDir);
+        fs.Files[RootDir + @"\inner.bin"] = new byte[50];
+        fs.Files[SrcA] = new byte[100];
+        fs.Directories.Add(DstFolder);
+
+        var whileMoving = new List<bool>();
+        tracker.Changed += (_, _) => {
+            foreach (var snap in tracker.Snapshot().Where(s => s.BytesDone > 0)) {
+                whileMoving.Add(snap.IsWeighing);
+            }
+        };
+
+        await batch.CopyManyAsync(new[] { RootDir, SrcA }, DstFolder, new FakeConflictResolver(), default);
+
+        Assert.NotEmpty(fs.SeenWhileListing);
+        Assert.All(fs.SeenWhileListing, Assert.True);
+        Assert.NotEmpty(whileMoving);
+        Assert.All(whileMoving, Assert.False);
+    }
+
     [Fact]
     public async Task CopyManyAsync_ReportsBytes_WhileOneFileIsStillGoing() {
         // The point of the whole exercise: a single large file has to move
@@ -888,6 +1087,29 @@ public class BatchExecutorTests {
         Assert.Contains(SrcA, namedWhileUnfinished);
     }
 
+
+    /// <summary>
+    /// Asks <c>probe</c> every time a folder is listed - which, in a copy
+    /// with nothing to merge, only the weighing does.
+    /// </summary>
+    private sealed class ListingProbe : FakeFileSystem {
+        private readonly Func<bool> _probe;
+
+
+        public ListingProbe(Func<bool> probe) {
+            _probe = probe;
+        }
+
+
+        public List<bool> SeenWhileListing { get; } = new();
+
+
+        public override IReadOnlyList<FileSystemEntry> Enumerate(string path, SortOptions? sort = null, CancellationToken ct = default) {
+            SeenWhileListing.Add(_probe());
+
+            return base.Enumerate(path, sort, ct);
+        }
+    }
 
     /// <summary>
     /// A resolver whose answer is a function of what it was shown - for the

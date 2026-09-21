@@ -292,6 +292,39 @@ public class FileOperationServiceTests {
 
 
     [Fact]
+    public void RenameMany_AHeldFile_IsWaitedFor_ThenRenamed() {
+        var fs = new FakeFileSystem();
+        var probe = new FakeBusyProbe();
+        var pauses = new List<TimeSpan>();
+        var held = new HeldPaths(new PathClaims(), probe, newWait: () => new BusyWait(pauses.Add));
+        var ops = new FileOperationService(fs, new FakeRecycleBin(fs), new UndoService(), new OperationTracker(), NullLogger.Instance, held);
+        fs.Files[FileA] = new byte[] { 1 };
+        probe.HeldFor[FileA] = 1;
+
+        ops.RenameMany(new[] { (FileA, RenamedNewName) });
+
+        Assert.True(fs.FileExists(FileB));
+        Assert.Single(pauses);
+    }
+
+    [Fact]
+    public void RenameMany_AFileAnotherOperationIsWorkingOn_IsRefusedByName_AndNothingMoves() {
+        var fs = new FakeFileSystem();
+        var claims = new PathClaims();
+        var ops = new FileOperationService(
+            fs, new FakeRecycleBin(fs), new UndoService(), new OperationTracker(), NullLogger.Instance, new HeldPaths(claims));
+        fs.Files[FileA] = new byte[] { 1 };
+        fs.Files[DirX + @"\c.txt"] = new byte[] { 2 };
+        using var copy = claims.Claim(new[] { FileA }, ClaimKind.UserOperation, OperationVerbs.Copy);
+
+        Assert.Throws<ClaimedByOperationException>(() =>
+            ops.RenameMany(new[] { (DirX + @"\c.txt", "d.txt"), (FileA, RenamedNewName) }));
+
+        Assert.True(fs.FileExists(FileA));
+        Assert.True(fs.FileExists(DirX + @"\c.txt"));
+    }
+
+    [Fact]
     public void CreateFolder_CombinesPath() {
         var (ops, fs, _, _) = Setup();
 

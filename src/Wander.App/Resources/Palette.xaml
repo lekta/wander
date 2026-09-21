@@ -178,6 +178,21 @@
     -->
     <SolidColorBrush x:Key="RowCaretBorder" Color="#3B3B3B"/>
 
+    <!--
+        The mark on a row's icon while an operation of the user's works on
+        it (AsyncIcon.ShowsWork): Explorer's accent blue, on a plate that keeps it
+        readable over any thumbnail.
+    -->
+    <SolidColorBrush x:Key="WorkBadgeGlyph" Color="#0078D7"/>
+    <SolidColorBrush x:Key="WorkBadgeBackground" Color="#E6FFFFFF"/>
+
+    <!--
+        The mark in front of the status line (StatusSeverity): Windows 11's
+        own caution and critical colours. News has no mark at all.
+    -->
+    <SolidColorBrush x:Key="StatusWarningGlyph" Color="#9D5D00"/>
+    <SolidColorBrush x:Key="StatusErrorGlyph" Color="#C42B1C"/>
+
     <!-- The "..." button that appears on a bookmark row under the cursor. -->
     <SolidColorBrush x:Key="RowActionHover" Color="#C4E0F4"/>
 

@@ -41,6 +41,10 @@ public static class PlatformBootstrapper {
             $"elevated: {IsElevated()}");
 
         ServiceLocator.Register<IFileSystem>(new SystemIOFileSystem());
+        // Who in Wander is working on which path (PLAN AF): the file
+        // operations below claim what they touch, the thumbnail and search
+        // readers claim what they read. Before either of them.
+        ServiceLocator.Register<PathClaims>(new PathClaims());
         ServiceLocator.Register<IVolumeInfoProvider>(new WindowsVolumeInfo());
         ServiceLocator.Register<IKnownFolders>(new WindowsKnownFolders());
         ServiceLocator.Register<ISystemClipboard>(new WindowsClipboard(logger));
@@ -83,7 +87,7 @@ public static class PlatformBootstrapper {
             searchFs,
             new IContentExtractor[] {
                 new ZipDocumentExtractor(searchFs),
-                new FilterTextExtractor(logger),
+                new FilterTextExtractor(logger, ServiceLocator.Get<PathClaims>()),
                 new PlainTextExtractor(searchFs),
             },
             searchCache,
@@ -109,7 +113,7 @@ public static class PlatformBootstrapper {
             ServiceLocator.Get<IFileSystem>(), ServiceLocator.Get<IRecycleBin>(),
             ServiceLocator.Get<UndoService>(), ServiceLocator.Get<OperationTracker>(),
             ServiceLocator.Get<IProcessRunner>(), builtins, logger,
-            () => AppPaths.Tmp));
+            () => AppPaths.Tmp, ServiceLocator.Get<PathClaims>()));
 
         // Companion ("integrated item") support: the resolver knows which
         // files belong together, the metadata service reads and writes what
