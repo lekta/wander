@@ -5,7 +5,7 @@ namespace Wander.Core.FileSystem;
 /// <see cref="IOException"/> carrying ERROR_SHARING_VIOLATION. The platform
 /// layer throws the same for a recycle that failed for that reason, so one
 /// question covers a delete, a recycle, a move and a read - and the wait for
-/// a held path (<see cref="Operations.BusyGate"/>) knows what to wait out.
+/// a held path (<see cref="BusyGate"/>) knows what to wait out.
 /// </summary>
 public static class FileInUse {
     private const int SharingViolation = unchecked((int)0x80070020);

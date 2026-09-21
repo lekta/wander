@@ -304,14 +304,6 @@
 - **Три копии помощников `IShellItem`** (2026-09-21) — `CreateItem`,
   `DisplayName`, `Release`, `CreateFileOperation` в `ShellArchiveFolder`,
   `ShellRecycleBinFolder`, `ShellRecycleBin`. Место им — `ShellItemInterop`.
-- **`PdfDocument` не освобождается** (`PdfPageImage.RenderFirstPage`,
-  разведка AF 2026-09-21) — WinRT-хэндл PDF живёт до сборщика: самое долгое
-  случайное удержание файла из найденных. Делается в блоке AF.
-- **Переименование ждёт занятый файл на UI-потоке** (2026-09-21, блок 0) —
-  `FileOperationService.RenameMany` синхронный, `MainViewModel.Rename` и
-  `BatchRename` зовут его на UI-потоке; ожидание `BusyGate` (до 2 с) при
-  внешнем держателе замораживает окно. `Task.Run` вокруг либо без ожидания
-  для переименования.
 - **Папка с занятым файлом внутри — «занято» ли это для Windows** (2026-09-21,
   блок 0, не проверено) — `Directory.Move` на такой папке, вероятно, отвечает
   `ERROR_ACCESS_DENIED`, а не нарушением совместного доступа; тогда

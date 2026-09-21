@@ -50,6 +50,7 @@ src/
 │   │                   TypeAheadController, IDirectoryWatcher, SystemPathGuard,
 │   │                   SystemRootFolders, EntryVisibility, FolderChanges,
 │   │                   PathSafety, IConflictResolver, IRecycleBin, IKnownFolders,
+│   │                   BusyGate (HeldPaths), IFileBusyProbe, FileInUse, SharedRead,
 │   │                   FileSystemEntry, EntryKind, EntryComparers, SortKey,
 │   │                   SidecarRating + ColorLabels, UndoableActions,
 │   │                   FolderStatistics, IVolumeInfoProvider, TransientFiles,
@@ -67,7 +68,8 @@ src/
 │   │                   ContextMenuCatalog, MenuEntry, MenuCommandId
 │   ├── Navigation/     NavigationService, NavigationSource, RecentPaths,
 │   │                   PathCrumbs
-│   ├── Operations/     OperationTracker, OperationVerbs, TransferRate
+│   ├── Operations/     OperationTracker, OperationVerbs, TransferRate,
+│   │                   PathClaims, BusyWait
 │   ├── Persistence/    IAppStateStore, AppState, AppSettings, GalleryBackground
 │   ├── Preview/        PreviewRouter, TextProbe, EncodingProbe, AudioTags,
 │   │                   BookCover, Fb2Document, MeshFile + Obj/Stl/GltfReader
@@ -78,13 +80,14 @@ src/
 │   │                   IShellContextMenu, IShellHandlerRegistry,
 │   │                   ShellHandler, ShellExtensionCatalog, ShellEntryKey,
 │   │                   ShellScopes, ShellVerbs, RecentScopes
-│   ├── Undo/           UndoService, IUndoableAction
+│   ├── Undo/           UndoService, IUndoableAction, UndoOutcome
 │   └── ServiceLocator.cs
 │
 ├── Wander.Platform.Windows/
 │   ├── Diagnostics/    RestartManagerLockInspector
 │   ├── FileSystem/     SystemIOFileSystem, ShellRecycleBin, WindowsKnownFolders,
-│   │                   WindowsClipboard, WindowsDirectoryWatcher
+│   │                   WindowsClipboard, WindowsDirectoryWatcher,
+│   │                   WindowsFileBusyProbe
 │   ├── Icons/          SystemIconProvider, MetadataExtractorImageReader
 │   ├── Logging/        FileLogger
 │   ├── Persistence/    JsonAppStateStore
@@ -146,16 +149,16 @@ Platform.Windows` — один файл, `App.xaml.cs` (точка композ�
 ```
 === Wander dependency graph (using sweep) ===
 date   : 2026-09-21
-commit : 6c94f2a
+commit : 6ba23d2
 
 -- projects --
 Wander.App -> Wander.Core   (59 files)
 Wander.App -> Wander.Platform.Windows   (1 files)
-Wander.Core.Tests -> Wander.Core   (101 files)
+Wander.Core.Tests -> Wander.Core   (104 files)
 Wander.Harness -> Wander.App   (4 files)
 Wander.Harness -> Wander.Core   (6 files)
 Wander.Harness -> Wander.Platform.Windows   (3 files)
-Wander.Platform.Windows -> Wander.Core   (29 files)
+Wander.Platform.Windows -> Wander.Core   (31 files)
 
 -- Wander.Core: folder -> folder --
   Actions        -> FileSystem     (5 files)
@@ -170,9 +173,10 @@ Wander.Platform.Windows -> Wander.Core   (29 files)
   Companions     -> Logging        (1 files)
   Companions     -> Undo           (1 files)
   Diagnostics    -> Logging        (2 files)
-  FileSystem     -> Localization   (1 files)
-  FileSystem     -> Logging        (2 files)
-  FileSystem     -> Operations     (2 files)
+  FileSystem     -> Diagnostics    (2 files)
+  FileSystem     -> Localization   (2 files)
+  FileSystem     -> Logging        (3 files)
+  FileSystem     -> Operations     (3 files)
   FileSystem     -> Undo           (3 files)
   Listing        -> Companions     (2 files)
   Listing        -> FileSystem     (5 files)
@@ -190,7 +194,7 @@ Wander.Platform.Windows -> Wander.Core   (29 files)
   Persistence    -> FileSystem     (1 files)
   Persistence    -> Navigation     (1 files)
   Persistence    -> Rename         (1 files)
-  Preview        -> FileSystem     (1 files)
+  Preview        -> FileSystem     (6 files)
   Preview        -> Icons          (1 files)
   Rename         -> Companions     (1 files)
   Rename         -> FileSystem     (2 files)
@@ -252,7 +256,7 @@ Wander.Platform.Windows -> Wander.Core   (29 files)
   Controllers    -> ViewModels     (7 files)
   Controls       -> Converters     (1 files)
   Controls       -> Diagnostics    (1 files)
-  Controls       -> Resources      (1 files)
+  Controls       -> Resources      (2 files)
   Converters     -> Resources      (1 files)
   Converters     -> Util           (1 files)
   Converters     -> ViewModels     (1 files)
@@ -471,12 +475,50 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
     останавливался. Ошибка из `PreDeleteItem` останавливает прогон для
     всех следующих элементов, нетронутых: это отмена (`E_ABORT` по токену)
     и цена отказа (не берёт корзина — `E_FAIL`), после отказа остаток
-    просто прогоняется заново. Занятым — один общий повтор через 0,3 с
-    (уедет в Core, PLAN блок 0, шаг 4). Возврат — прогон на элемент,
-    ~15 мс (TECHDEBT).
+    просто прогоняется заново. Занятый элемент возвращается отказом
+    `FileInUse` без ожидания — ждёт операция, в Core (ниже). Возврат —
+    прогон на элемент, ~15 мс (TECHDEBT).
   - Файл, открытый с `FileShare.Delete`, уходит в корзину и возвращается
     прямо под читателем — основание решения AF (а). Дешёвая проба
     занятости — `WindowsFileBusyProbe` (`CreateFile(DELETE)`, пара мс).
+- **Занятые пути** (AF, 2026-09-21). Три слоя, снизу вверх:
+  - `PathClaims` (Operations) — кто в Wander над чем работает. Заявка —
+    **источник** операции, не каждый файл под ним; вид `UserOperation`
+    (владелец — ключ `OperationVerbs`) или `Background` (`ClaimOwners`:
+    shell-миниатюра, системный фильтр поиска — то, что прервать нельзя).
+    `Covering(path, except)` — заявки на сам путь, на папку выше и на всё
+    внутри; `IsClaimed(path, kind)` — вопрос значка, 0,5 мкс; `Changed`
+    поднимается только для операций пользователя (фоновые заявки идут
+    сотнями при прокрутке, на экране их не видно). Замер: 1,5 мкс на запрос
+    при 50 заявках, 28 при 5000, 130 при 50 000 (скан «что внутри»
+    линеен); контрольная строка на операцию — `Claims: N lookups, slowest
+    X ms, table Y paths`, `WARN` от 5 мс.
+  - `BusyWait` (Operations) — чистая политика ожидания: взгляд каждые
+    0,2 с, бюджет 2 с **на операцию**; сто файлов, которые не отпустят,
+    стоят две секунды, не двести.
+  - `HeldPaths` / `BusyGate` (FileSystem; один `BusyGate` на операцию).
+    `Check(path)` перед элементом: заявка чужой операции пользователя —
+    `ClaimedByOperationException`, элемент не трогается; фоновым —
+    `Yield`. `WaitForFile` — файл, через `IFileBusyProbe`
+    (`WindowsFileBusyProbe`, `CreateFile(DELETE)`, пара мс); `Retry` —
+    папка, у которой пробы нет: сама операция повторяется, пока отвечает
+    `FileInUse`; `RetryMany` — пачка корзины: занятые возвращаются
+    отказом и отправляются снова все вместе каждый шаг ожидания. Держателя
+    называет один раз, на первом взгляде (`IFileLockInspector` либо своя
+    заявка — «Wander: миниатюра»); итог — `BusyReport` в `DeleteResult` /
+    `BatchItemResult`, из него строка статуса. Ждут перенос,
+    переименование и корзина; безвозвратное удаление — только заявки
+    (TECHDEBT).
+  - Чтобы ждать приходилось редко: свои читатели открывают файл через
+    `SharedRead` (`FileShare.ReadWrite | Delete` — файл уходит в корзину
+    прямо под читателем, стенд); панель просмотра отпускает файл явно, до
+    операции (`PreviewController.Release` → `ContentReleased` → WebView2 на
+    `about:blank`; `Restore` в `finally` показывает снова, если файл остался
+    и выделение то же). Откат панель не отпускает (TECHDEBT).
+  - Значок «в работе» рисует сам `AsyncIcon` (`ShowsWork`, `OnRender`):
+    отметка, которой у большинства ячеек нет, не должна стоить каждой
+    ячейке визуала; один статический обработчик `PathClaims.Changed`,
+    пачка изменений — один проход по живым иконкам, `Entries` не трогается.
 - **Прогресс — в двух счётчиках сразу** (2026-09-04, блок 2). Элементы —
   то, что выделил человек; байты — то, что двигает диск, и без них копия
   одного файла на 5 ГБ держит бар на нуле.

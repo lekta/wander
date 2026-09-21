@@ -733,10 +733,16 @@ internal sealed class BatchExecutor {
             // A held source is waited for (PLAN AF, block 0, step 4): a file
             // is asked before the move, a folder has nothing to ask and the
             // move itself is tried again while it answers "in use".
+            //
+            // The wait is made for every entry, whatever the group already
+            // has to report: "x ??= Wait()" does not call Wait() once x is
+            // set, and for a folder the call is the move itself.
             if (run.IsMove && _fs.DirectoryExists(src)) {
-                run.GroupBusy ??= run.Gate.Retry(src, () => _fs.MoveEntry(src, dest, bytes, run.Token), run.Token);
+                var held = run.Gate.Retry(src, () => _fs.MoveEntry(src, dest, bytes, run.Token), run.Token);
+                run.GroupBusy ??= held;
             } else if (run.IsMove) {
-                run.GroupBusy ??= run.Gate.WaitForFile(src, run.Token);
+                var held = run.Gate.WaitForFile(src, run.Token);
+                run.GroupBusy ??= held;
                 _fs.MoveEntry(src, dest, bytes, run.Token);
             } else if (_fs.DirectoryExists(src)) {
                 _fs.CopyDirectory(src, dest, overwrite: false, bytes, run.Token);

@@ -124,6 +124,12 @@ public sealed class PathClaims {
     /// <param name="kind">Only claims of this kind count; null counts every claim.</param>
     public bool IsClaimed(string path, ClaimKind? kind = null) {
         lock (_gate) {
+            // Every cell of the list asks as it scrolls into view, and almost
+            // always nothing is claimed at all.
+            if (_byPath.Count == 0) {
+                return false;
+            }
+
             for (string? at = Normalize(path); !string.IsNullOrEmpty(at); at = Path.GetDirectoryName(at)) {
                 if (_byPath.TryGetValue(at, out var list) && (kind is null || list.Any(e => e.Claim.Kind == kind))) {
                     return true;

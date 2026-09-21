@@ -4059,7 +4059,9 @@ public sealed class MainViewModel : ObservableObject {
             : string.Format(Strings.StatusNamedMany, name, count - 1);
     }
 
-    private void Rename(FileSystemEntry? entry, string? newName) {
+    [SuppressMessage("ReSharper", "AsyncVoidMethod",
+        Justification = "A command body, nothing awaits it; every exception is caught, logged and shown in the status bar.")]
+    private async void Rename(FileSystemEntry? entry, string? newName) {
         if (entry is null || string.IsNullOrWhiteSpace(newName)) {
             return;
         }
@@ -4075,7 +4077,10 @@ public sealed class MainViewModel : ObservableObject {
                 ? _companions.RenamePlan(entry.FullPath, newName, entry.Companions)
                 : new[] { (entry.FullPath, newName) };
             ReleasePreview(plan.Select(p => p.Path));
-            _ops.RenameMany(plan);
+            // Off this thread: a file somebody holds is waited for, up to
+            // two seconds (BusyGate), and the window must not stand still
+            // for them.
+            await Task.Run(() => _ops.RenameMany(plan));
             // Keep the file the user just renamed selected: its path changed,
             // so "whatever was selected" would no longer match anything.
             string folder = Path.GetDirectoryName(entry.FullPath) ?? "";
@@ -4086,7 +4091,8 @@ public sealed class MainViewModel : ObservableObject {
             }
         } catch (Exception ex) {
             _log.Error($"Rename failed: {entry.FullPath} -> {newName}", ex);
-            Fail(string.Format(Strings.StatusRenameFailed, DescribeError(ex, entry.FullPath)));
+            string reason = await Task.Run(() => DescribeError(ex, entry.FullPath));
+            Fail(string.Format(Strings.StatusRenameFailed, reason));
         } finally {
             RestorePreview();
         }
@@ -4237,7 +4243,9 @@ public sealed class MainViewModel : ObservableObject {
     /// F2 comes here with any two rows without asking CanExecute, and a key
     /// that silently does nothing reads as broken.
     /// </summary>
-    private void BatchRename() {
+    [SuppressMessage("ReSharper", "AsyncVoidMethod",
+        Justification = "A command body, nothing awaits it; every exception is caught, logged and shown in the status bar.")]
+    private async void BatchRename() {
         if (IsCurrentShellNamespace || _nav.Current is not { } folder) {
             return;
         }
@@ -4287,10 +4295,12 @@ public sealed class MainViewModel : ObservableObject {
         var plan = preview.Plan();
         ReleasePreview(plan.Select(p => p.Path));
         try {
-            _ops.RenameMany(plan, $"Rename {renamed.Length} items");
+            // Off this thread, like the single rename: held files are waited for.
+            await Task.Run(() => _ops.RenameMany(plan, $"Rename {renamed.Length} items"));
         } catch (Exception ex) {
             _log.Error($"Batch rename failed: {renamed.Length} items in {folder}", ex);
-            Fail(string.Format(Strings.StatusRenameFailed, DescribeError(ex, renamed[0].Path)));
+            string reason = await Task.Run(() => DescribeError(ex, renamed[0].Path));
+            Fail(string.Format(Strings.StatusRenameFailed, reason));
 
             return;
         } finally {

@@ -1,11 +1,11 @@
 using System.Diagnostics;
 using System.Runtime.ExceptionServices;
 using Wander.Core.Diagnostics;
-using Wander.Core.FileSystem;
 using Wander.Core.Localization;
 using Wander.Core.Logging;
+using Wander.Core.Operations;
 
-namespace Wander.Core.Operations;
+namespace Wander.Core.FileSystem;
 
 /// <summary>
 /// A path an operation found held and waited for (PLAN AF, block 0): who

@@ -825,6 +825,28 @@ public class BatchExecutorTests {
     }
 
     [Fact]
+    public async Task MoveManyAsync_EveryMemberOfAGroupIsWaitedFor_NotOnlyTheFirstHeldOne() {
+        // The group reports its first wait; the wait itself is made for every
+        // member - for a folder it is the move, and skipping it left the
+        // folder behind under an "Ok".
+        var (batch, fs, _, _, _, probe, _) = SetupHeld();
+        fs.Files[SrcA] = new byte[] { 1 };
+        fs.Directories.Add(RootDir);
+        fs.Directories.Add(DstFolder);
+        probe.HeldFor[SrcA] = 1;
+        fs.MoveInUseFor[RootDir] = 1;
+
+        var results = await batch.MoveManyAsync(
+            new[] { new BatchGroup(SrcA, new[] { RootDir }) }, DstFolder, new FakeConflictResolver(), default);
+
+        Assert.Equal(BatchItemStatus.Ok, Assert.Single(results).Status);
+        Assert.True(fs.FileExists(DstA));
+        Assert.False(fs.DirectoryExists(RootDir));
+        Assert.True(fs.DirectoryExists(DstFolder + @"\dir"));
+        Assert.Equal(SrcA, results[0].Busy?.Path);
+    }
+
+    [Fact]
     public async Task MoveManyAsync_ASourceAnotherOperationIsWorkingOn_IsLeftAlone_AndNamed() {
         var (batch, fs, _, _, claims, _, _) = SetupHeld();
         fs.Files[SrcA] = new byte[] { 1 };
