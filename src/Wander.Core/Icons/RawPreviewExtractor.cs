@@ -23,7 +23,8 @@ namespace Wander.Core.Icons;
 /// </para>
 /// <list type="bullet">
 ///   <item><b>ISO-BMFF</b> (Canon CR3) — an MP4-style box tree with the
-///   preview in a Canon-specific <c>uuid</c> box.</item>
+///   preview in a Canon-specific <c>uuid</c> box and a full-size JPEG as
+///   the first track.</item>
 ///   <item><b>TIFF</b> (CR2, NEF, ARW, DNG, most others) — IFDs, one of
 ///   which points at a JPEG.</item>
 /// </list>
@@ -53,7 +54,16 @@ public static class RawPreviewExtractor {
     /// use. <paramref name="stream"/> must be seekable; its position is not
     /// preserved.
     /// </summary>
-    public static byte[]? Extract(Stream stream) {
+    /// <param name="fullSize">
+    /// The biggest JPEG the file carries rather than the quickest one to
+    /// read. The same thing in a TIFF-shaped RAW, which gives its biggest
+    /// either way; in a CR3 the quick one is the 1620-px <c>PRVW</c> and the
+    /// big one the full-size JPEG of the first track - 1.7 MB against
+    /// 0.3 MB, 60-110 ms to decode against ~10 (6000x4000, 2026-09-21). The
+    /// preview pane asks for it: at 1:1 zoom the small one is a third of the
+    /// picture blown up. A thumbnail does not need it.
+    /// </param>
+    public static byte[]? Extract(Stream stream, bool fullSize = false) {
         try {
             if (stream.Length < 16) {
                 return null;
@@ -66,7 +76,7 @@ public static class RawPreviewExtractor {
             }
 
             if (Ascii(head, 4) == "ftyp") {
-                return FromBmff(stream);
+                return FromBmff(stream, fullSize);
             }
             if (head[0] == 'I' && head[1] == 'I') {
                 return FromTiff(stream, littleEndian: true);
@@ -90,17 +100,122 @@ public static class RawPreviewExtractor {
         0xb9, 0xfb, 0xb7, 0xdc, 0x40, 0x6e, 0x4d, 0x16,
     };
 
-    private static byte[]? FromBmff(Stream s) {
-        long pos = 0;
-        long end = s.Length;
-        var header = new byte[16];
+    private static byte[]? FromBmff(Stream s, bool fullSize) {
+        // Top-level boxes, and for the full-size JPEG one path down the
+        // movie box: walking the rest would mean understanding the rest of
+        // the tree. In a CR3 the movie box comes first, the preview after.
+        foreach (var box in Boxes(s, 0, s.Length)) {
+            if (fullSize && box.Type == "moov" && FromFirstTrack(s, box) is { } full) {
+                return full;
+            }
+            if (box.Type == "uuid" && IsCanonPreview(s, box)) {
+                return FromPrvw(s, box.Body + 16, box.End);
+            }
+        }
 
-        // Top-level boxes only: the preview box is one of them, and walking
-        // deeper would mean understanding the rest of the tree.
-        while (pos + 8 <= end) {
+        return null;
+    }
+
+    private static bool IsCanonPreview(Stream s, Box box) {
+        var uuid = new byte[16];
+        s.Position = box.Body;
+
+        return s.Read(uuid, 0, 16) == 16 && uuid.AsSpan().SequenceEqual(_canonPreviewUuid);
+    }
+
+    /// <summary>
+    /// The full-size JPEG of a CR3: the one sample of the first track
+    /// (moov / trak / mdia / minf / stbl), its length from <c>stsz</c> and
+    /// its place from <c>co64</c> - or <c>stco</c>, the short form. The
+    /// other tracks hold sensor data, which the JPEG check turns away should
+    /// a camera ever put one first.
+    /// </summary>
+    private static byte[]? FromFirstTrack(Stream s, Box moov) {
+        if (Child(s, moov, "trak") is not { } trak
+            || Child(s, trak, "mdia") is not { } mdia
+            || Child(s, mdia, "minf") is not { } minf
+            || Child(s, minf, "stbl") is not { } stbl) {
+            return null;
+        }
+
+        long length = 0;
+        long offset = 0;
+        foreach (var box in Boxes(s, stbl.Body, stbl.End)) {
+            switch (box.Type) {
+                case "stsz":
+                    length = FirstSampleSize(s, box);
+                    break;
+
+                case "co64":
+                    offset = FirstChunkOffset(s, box, wide: true);
+                    break;
+
+                case "stco":
+                    offset = FirstChunkOffset(s, box, wide: false);
+                    break;
+            }
+        }
+
+        return length > 0 && offset > 0 ? ReadJpeg(s, offset, length) : null;
+    }
+
+    /// <summary><c>stsz</c>: one size for every sample, or zero and a table after the count.</summary>
+    private static long FirstSampleSize(Stream s, Box stsz) {
+        var buf = new byte[16];
+        int room = (int)Math.Min(stsz.End - stsz.Body, buf.Length);
+        s.Position = stsz.Body;
+        if (room < 12 || s.Read(buf, 0, room) < room) {
+            return 0;
+        }
+
+        uint common = BinaryPrimitives.ReadUInt32BigEndian(buf.AsSpan(4));
+        if (common != 0) {
+            return common;
+        }
+
+        uint count = BinaryPrimitives.ReadUInt32BigEndian(buf.AsSpan(8));
+
+        return count > 0 && room == buf.Length ? BinaryPrimitives.ReadUInt32BigEndian(buf.AsSpan(12)) : 0;
+    }
+
+    /// <summary><c>co64</c> / <c>stco</c>: the count, then 8- or 4-byte offsets.</summary>
+    private static long FirstChunkOffset(Stream s, Box box, bool wide) {
+        var buf = new byte[wide ? 16 : 12];
+        s.Position = box.Body;
+        if (box.End - box.Body < buf.Length || s.Read(buf, 0, buf.Length) < buf.Length
+            || BinaryPrimitives.ReadUInt32BigEndian(buf.AsSpan(4)) == 0) {
+            return 0;
+        }
+
+        // An offset past long.MaxValue turns negative here, and ReadJpeg
+        // turns a negative offset away.
+        return wide
+            ? (long)BinaryPrimitives.ReadUInt64BigEndian(buf.AsSpan(8))
+            : BinaryPrimitives.ReadUInt32BigEndian(buf.AsSpan(8));
+    }
+
+    private static Box? Child(Stream s, Box parent, string type) {
+        foreach (var box in Boxes(s, parent.Body, parent.End)) {
+            if (box.Type == type) {
+                return box;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The boxes from <paramref name="from"/> to <paramref name="to"/>, one
+    /// level deep. The walk ends at the first box that does not fit: a
+    /// truncated or corrupt tree is read up to the damage and no further.
+    /// </summary>
+    private static IEnumerable<Box> Boxes(Stream s, long from, long to) {
+        var header = new byte[16];
+        long pos = from;
+        while (pos + 8 <= to) {
             s.Position = pos;
             if (s.Read(header, 0, 8) < 8) {
-                return null;
+                yield break;
             }
 
             long size = BinaryPrimitives.ReadUInt32BigEndian(header);
@@ -109,31 +224,25 @@ public static class RawPreviewExtractor {
 
             if (size == 1) {
                 if (s.Read(header, 8, 8) < 8) {
-                    return null;
+                    yield break;
                 }
                 size = (long)BinaryPrimitives.ReadUInt64BigEndian(header.AsSpan(8));
                 body = pos + 16;
             } else if (size == 0) {
-                size = end - pos;
+                size = to - pos;
             }
 
-            // A box that doesn't advance would spin this loop forever.
-            if (size < 8 || pos + size > end) {
-                return null;
+            // A box that doesn't advance would spin this loop forever; one
+            // that claims more than is left - or a 64-bit size that went
+            // negative - ends it. Compared as "size > to - pos" so a huge
+            // size cannot overflow the sum.
+            if (size < body - pos || size > to - pos) {
+                yield break;
             }
 
-            if (type == "uuid") {
-                var uuid = new byte[16];
-                s.Position = body;
-                if (s.Read(uuid, 0, 16) == 16 && uuid.AsSpan().SequenceEqual(_canonPreviewUuid)) {
-                    return FromPrvw(s, body + 16, pos + size);
-                }
-            }
-
+            yield return new Box(type, body, pos + size);
             pos += size;
         }
-
-        return null;
     }
 
     /// <summary>
@@ -311,7 +420,9 @@ public static class RawPreviewExtractor {
     /// read rather than a multi-megabyte one.
     /// </summary>
     private static byte[]? ReadJpeg(Stream s, long offset, long length) {
-        if (length <= 4 || length > MaxPreviewBytes || offset < 0 || offset + length > s.Length) {
+        // "offset > Length - length", not a sum: a CR3's 64-bit chunk offset
+        // comes from the file, and one near long.MaxValue would wrap the sum.
+        if (length <= 4 || length > MaxPreviewBytes || offset < 0 || offset > s.Length - length) {
             return null;
         }
 
@@ -386,4 +497,7 @@ public static class RawPreviewExtractor {
 
 
     private readonly record struct IfdEntry(ushort Tag, uint Count, uint Value);
+
+    /// <summary>An ISO-BMFF box: its four-letter type, where its body starts and where the box ends.</summary>
+    private readonly record struct Box(string Type, long Body, long End);
 }

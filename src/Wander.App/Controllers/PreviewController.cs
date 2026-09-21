@@ -109,6 +109,22 @@ public sealed class PreviewController : ObservableObject {
     /// </summary>
     private const int ShotSummarySample = 100;
 
+    /// <summary>
+    /// How long a load runs before the veil and its spinner go up. Most
+    /// loads are over sooner, and a veil that flashes for a tenth of a
+    /// second on every arrow key through a folder of photographs is the
+    /// only thing on screen that says "slow" (2026-09-21). The listing
+    /// waits 150 ms for the same reason; a picture takes a little longer.
+    /// </summary>
+    private const int VeilDelayMs = 250;
+
+    /// <summary>
+    /// How long the selection stands on a RAW before its full-size JPEG is
+    /// decoded - see <see cref="LoadFullSizeAsync"/>. Longer than a key
+    /// repeat, shorter than the hand's way from the arrow keys to the mouse.
+    /// </summary>
+    private const int FullSizeDwellMs = 150;
+
 
     private readonly IImageMetadataReader? _metadataReader;
     private readonly CompanionMetadataService? _companionMetadata;
@@ -140,11 +156,18 @@ public sealed class PreviewController : ObservableObject {
     // again when the operation left it where it was.
     private string? _releasedPath;
 
+    // The file whose picture is on screen, which between two photographs is
+    // not the file selected - see FooterWaitsForPicture. And whether the EXIF
+    // kept with that picture is still the old file's.
+    private string? _pictureOf;
+    private bool _pictureFactsStale;
+
     private PreviewKind _kind = PreviewKind.None;
     private bool _isLoading;
     private bool _isCensusLoading;
     private string? _text;
     private ImageSource? _image;
+    private ImageSource? _zoomImage;
     private bool _isRawImage;
     private bool _showRawDecode;
     private string? _codeText;
@@ -172,7 +195,7 @@ public sealed class PreviewController : ObservableObject {
     private int _workLinePending;
 
     private CancellationTokenSource? _companionCts;
-    private string _companionFiles = "";
+    private string _summaryNote = "";
     private string _companionStatus = "";
     private string? _unityGuid;
     private string? _unityDetail;
@@ -295,8 +318,24 @@ public sealed class PreviewController : ObservableObject {
 
     public ImageSource? Image {
         get => _image;
-        private set => SetField(ref _image, value);
+        private set {
+            if (SetField(ref _image, value)) {
+                Raise(nameof(ZoomSource));
+            }
+        }
     }
+
+    /// <summary>
+    /// What the 1:1 zoom draws: the biggest picture there is of the file.
+    /// For most that is <see cref="Image"/> itself. A RAW is fitted into
+    /// the pane from its quick embedded preview, and the full-size JPEG
+    /// that arrives a moment later (<see cref="LoadFullSizeAsync"/>) goes
+    /// here and nowhere else: put in place of <see cref="Image"/>, the same
+    /// picture resampled from four times the pixels was a visible twitch a
+    /// quarter of a second after every arrow key - most of all on portrait
+    /// frames, which the pane draws biggest (2026-09-21).
+    /// </summary>
+    public ImageSource? ZoomSource => _zoomImage ?? _image;
 
     /// <summary>
     /// The file on screen is a RAW — the only case where there are two
@@ -543,7 +582,30 @@ public sealed class PreviewController : ObservableObject {
 
     public string Summary {
         get => _summary;
-        private set => SetField(ref _summary, value);
+        private set {
+            if (SetField(ref _summary, value)) {
+                Raise(nameof(SummaryHead));
+                Raise(nameof(SummaryRest));
+            }
+        }
+    }
+
+    /// <summary>The first line of <see cref="Summary"/> - the name. The footer draws <see cref="SummaryNote"/> after it.</summary>
+    public string SummaryHead => _summary.IndexOf('\n') is >= 0 and int end ? _summary[..end] : _summary;
+
+    /// <summary>The lines under the name, line break included; empty when there are none.</summary>
+    public string SummaryRest => _summary.IndexOf('\n') is >= 0 and int end ? _summary[end..] : "";
+
+    /// <summary>
+    /// The mention of the file's sidecars beside its name: "(+.xmp)", dim,
+    /// and nothing more (<see cref="CompanionLabel"/>). It used to be a line
+    /// of its own with their full names, which made the footer of a
+    /// photograph with a sidecar a line taller than its neighbour's - and
+    /// the picture above it, fitted by height, a line shorter.
+    /// </summary>
+    public string SummaryNote {
+        get => _summaryNote;
+        private set => SetField(ref _summaryNote, value);
     }
 
     // --- Companion ("integrated item") block ---------------------------
@@ -552,34 +614,30 @@ public sealed class PreviewController : ObservableObject {
     // the answer to "what is this file's GUID / how did I rate this shot"
     // belongs: next to the file, not behind a dialog.
 
-    /// <summary>Names of the companion files, comma-separated. Empty when there are none.</summary>
-    public string CompanionFiles {
-        get => _companionFiles;
-        private set {
-            if (SetField(ref _companionFiles, value)) {
-                Raise(nameof(HasCompanions));
-            }
-        }
-    }
-
-    public bool HasCompanions => _companionFiles.Length > 0;
-
     /// <summary>Unity asset GUID, or null when the selection has no <c>.meta</c>.</summary>
     public string? UnityGuid {
         get => _unityGuid;
         private set {
             if (SetField(ref _unityGuid, value)) {
                 Raise(nameof(HasUnityGuid));
+                Raise(nameof(HasUnityMeta));
             }
         }
     }
 
     public bool HasUnityGuid => !string.IsNullOrEmpty(_unityGuid);
 
+    /// <summary>A <c>.meta</c> with something to show - the only sidecar that gets rows of its own in the footer.</summary>
+    public bool HasUnityMeta => HasUnityGuid || !string.IsNullOrEmpty(_unityDetail);
+
     /// <summary>Importer name / "folder asset" — context for the GUID above.</summary>
     public string? UnityDetail {
         get => _unityDetail;
-        private set => SetField(ref _unityDetail, value);
+        private set {
+            if (SetField(ref _unityDetail, value)) {
+                Raise(nameof(HasUnityMeta));
+            }
+        }
     }
 
     /// <summary>
@@ -762,7 +820,7 @@ public sealed class PreviewController : ObservableObject {
             }
             parts.Add(DescribeKind(_volume.Kind));
 
-            return string.Join("   •   ", parts);
+            return string.Join(SummaryText.Gap, parts);
         }
     }
 
@@ -889,6 +947,9 @@ public sealed class PreviewController : ObservableObject {
         _previewCts?.Cancel();
         ClearPreviewContent();
         IsLoading = false;
+        // A footer held for a picture whose load was just cancelled
+        // (FooterWaitsForPicture) has nothing left to wait for.
+        ScheduleSummaryUpdate();
         _releasedPath = shown;
         ContentReleased?.Invoke(this, EventArgs.Empty);
     }
@@ -956,7 +1017,20 @@ public sealed class PreviewController : ObservableObject {
     }
 
     private async Task UpdatePreviewAsync(CancellationToken ct) {
-        ClearPreviewContent();
+        // Picture to picture, the one on screen stays until the next is
+        // decoded: blanking the pane for the tenth of a second between two
+        // photographs is a flash on every arrow key. It goes when the load
+        // ends on anything else (below). What the footer says about it
+        // stays with it (FooterWaitsForPicture): a footer that loses its
+        // EXIF lines for that tenth of a second and gets them back changes
+        // height twice, and a portrait picture - fitted by height - was
+        // seen to twitch with it (2026-09-21).
+        bool pictureToPicture = _isVisible && _kind == PreviewKind.Image
+            && _primary is { Kind: EntryKind.File } next
+            && PreviewRouter.Route(next.FullPath) is PreviewRoute.Image;
+        string? loadingFor = _primary?.FullPath;
+        ClearPreviewContent(keepImage: pictureToPicture);
+        _pictureFactsStale = pictureToPicture;
 
         if (!_isVisible) {
             Kind = PreviewKind.None;
@@ -990,6 +1064,10 @@ public sealed class PreviewController : ObservableObject {
                 return;
             }
             if (folder is not null) {
+                // A slow load this selection overtook never lowers its
+                // veil (it was cancelled), and the census has a spinner of
+                // its own.
+                IsLoading = false;
                 await ShowFolderCensusAsync(folder, ct);
                 return;
             }
@@ -999,7 +1077,8 @@ public sealed class PreviewController : ObservableObject {
             return;
         }
 
-        IsLoading = true;
+        bool finished = false;
+        _ = RaiseVeilWhenSlowAsync();
         try {
             string path = _primary.FullPath;
 
@@ -1064,9 +1143,33 @@ public sealed class PreviewController : ObservableObject {
         } catch (OperationCanceledException) {
             // newer selection won — ignore
         } finally {
+            finished = true;
             if (!ct.IsCancellationRequested) {
                 IsLoading = false;
+                if (_kind != PreviewKind.Image) {
+                    // The picture kept across the load, which turned out
+                    // not to be one.
+                    _zoomImage = null;
+                    Image = null;
+                }
+                if (_pictureFactsStale) {
+                    // Nor did the load get as far as reading the new
+                    // file's EXIF over the kept one's.
+                    _pictureFactsStale = false;
+                    ImageMetadata = null;
+                    IsRawImage = false;
+                }
+                _pictureOf = _kind == PreviewKind.Image ? loadingFor : null;
                 ScheduleSummaryUpdate();  // metadata might have arrived
+            }
+        }
+
+        // The veil only for a load worth announcing - see VeilDelayMs. The
+        // picture kept on screen (above) is what the wait is spent looking at.
+        async Task RaiseVeilWhenSlowAsync() {
+            await Task.Delay(VeilDelayMs);
+            if (!finished && !ct.IsCancellationRequested) {
+                IsLoading = true;
             }
         }
     }
@@ -1522,6 +1625,9 @@ public sealed class PreviewController : ObservableObject {
         BitmapSource? image = null;
         ImageMetadata? meta = null;
         bool isRaw = false;
+        // The embedded JPEG the picture was decoded from, when it was: the
+        // measure of whether the file carries a bigger one.
+        int quickBytes = 0;
 
         await Task.Run(() => {
             ct.ThrowIfCancellationRequested();
@@ -1539,9 +1645,14 @@ public sealed class PreviewController : ObservableObject {
             // applied to every picture; a file without one is unchanged.
             if (ImageFormats.IsRaw(path)) {
                 isRaw = true;
-                var raw = _showRawDecode
-                    ? ImageDecoder.File(path)
-                    : ImageDecoder.RawPreview(path) ?? ImageDecoder.File(path);
+                // The quick embedded preview first - ten milliseconds, and
+                // the pane has the picture. The full-size one follows below.
+                BitmapImage? raw = null;
+                if (!_showRawDecode && ImageDecoder.RawPreviewBytes(path, fullSize: false) is { } jpeg) {
+                    raw = ImageDecoder.Stream(jpeg);
+                    quickBytes = raw is null ? 0 : jpeg.Length;
+                }
+                raw ??= ImageDecoder.File(path);
                 image = raw is null ? null : ImageDecoder.ApplyOrientation(raw, meta?.Orientation);
 
                 return;
@@ -1555,13 +1666,58 @@ public sealed class PreviewController : ObservableObject {
             return;
         }
 
+        _pictureFactsStale = false;
         ImageMetadata = meta;
         IsRawImage = isRaw;
         if (image is not null) {
+            _zoomImage = null;
             Image = image;
             Kind = PreviewKind.Image;
+            if (quickBytes > 0) {
+                _ = LoadFullSizeAsync(path, meta?.Orientation, image, quickBytes, ct);
+            }
         } else {
             Kind = PreviewKind.Unsupported;
+        }
+    }
+
+
+    /// <summary>
+    /// The second half of a RAW: the biggest JPEG the file carries, for the
+    /// 1:1 zoom (<see cref="ZoomSource"/>) - a CR3's quick preview is
+    /// 1620 px of a 6000-px frame. The picture fitted into the pane stays
+    /// the quick one.
+    ///
+    /// <para>
+    /// Not awaited by the load - the pane is loaded once the quick one is
+    /// up - and only after the selection has stood still for a moment: a
+    /// held arrow key must not start a 24-megapixel decode, a hundred
+    /// megabytes of bitmap, for every frame it passes. A decode cannot be
+    /// stopped half-way, only not started.
+    /// </para>
+    /// </summary>
+    private async Task LoadFullSizeAsync(
+        string path, int? orientation, BitmapSource quick, int quickBytes, CancellationToken ct) {
+        try {
+            await Task.Delay(FullSizeDwellMs, ct);
+
+            var full = await Task.Run(() => {
+                ct.ThrowIfCancellationRequested();
+                // The same bytes again: the file carries one JPEG, and it
+                // is already on screen.
+                if (ImageDecoder.RawPreviewBytes(path, fullSize: true) is not { } jpeg || jpeg.Length == quickBytes) {
+                    return null;
+                }
+
+                return ImageDecoder.Stream(jpeg) is { } raw ? ImageDecoder.ApplyOrientation(raw, orientation) : null;
+            }, ct);
+
+            if (full is not null && !ct.IsCancellationRequested && ReferenceEquals(_image, quick)) {
+                _zoomImage = full;
+                Raise(nameof(ZoomSource));
+            }
+        } catch (OperationCanceledException) {
+            // The selection moved on.
         }
     }
 
@@ -1678,9 +1834,16 @@ public sealed class PreviewController : ObservableObject {
 
 
 
-    private void ClearPreviewContent() {
+    /// <param name="keepImage">Leave the picture up - the next thing to show is a picture too (<see cref="UpdatePreviewAsync"/>).</param>
+    private void ClearPreviewContent(bool keepImage = false) {
         Text = null;
-        Image = null;
+        if (!keepImage) {
+            _zoomImage = null;
+            Image = null;
+            ImageMetadata = null;
+            IsRawImage = false;
+            _pictureOf = null;
+        }
         CodeText = null;
         CodeExtension = null;
         WebUri = null;
@@ -1692,8 +1855,6 @@ public sealed class PreviewController : ObservableObject {
         ModelParts = Array.Empty<ModelPart>();
         ModelDetail = "";
         DocumentPath = null;
-        ImageMetadata = null;
-        IsRawImage = false;
         LinkTarget = null;
         _linkBroken = false;
         _archiveEntryTooBig = false;
@@ -1731,14 +1892,15 @@ public sealed class PreviewController : ObservableObject {
     }
 
     private async Task UpdateCompanionsAsync(CancellationToken ct) {
-        ClearCompanionInfo();
-
         if (!_isVisible || _companionMetadata is null || _primary is null) {
+            ClearCompanionInfo();
+
             return;
         }
 
         var companions = _primary.Companions;
         if (companions is null || companions.Count == 0) {
+            ClearCompanionInfo();
             // Nothing beside the file — but if it is a photograph, the stars
             // still appear, because "rate this raw" should not mean "go and
             // make it a sidecar first in another program".
@@ -1755,7 +1917,12 @@ public sealed class PreviewController : ObservableObject {
             return;
         }
 
-        CompanionFiles = string.Join(", ", companions.Select(Path.GetFileName));
+        // Cleared here, in the same breath as it is filled, not before the
+        // read: a block that folds for the few milliseconds of the read and
+        // unfolds again changes the footer's height twice per file, and the
+        // picture above it - a portrait one is fitted by height - twitches
+        // on every arrow key through a folder of photographs with sidecars.
+        ClearCompanionInfo();
         UnityGuid = loaded.Meta?.Guid;
         UnityDetail = DescribeMeta(loaded.Meta);
         ShowRating(loaded.RatingPath, loaded.Rating);
@@ -1845,7 +2012,7 @@ public sealed class PreviewController : ObservableObject {
             parts.Add(meta.Importer!);
         }
 
-        return parts.Count > 0 ? string.Join("   •   ", parts) : null;
+        return parts.Count > 0 ? string.Join(SummaryText.Gap, parts) : null;
     }
 
     private void SetRating(RatingField field, object? parameter, int current) {
@@ -1915,7 +2082,6 @@ public sealed class PreviewController : ObservableObject {
     }
 
     private void ClearCompanionInfo() {
-        CompanionFiles = "";
         UnityGuid = null;
         UnityDetail = null;
         CompanionStatus = "";
@@ -2052,9 +2218,23 @@ public sealed class PreviewController : ObservableObject {
         _ = UpdateSummaryAsync(_summaryCts.Token);
     }
 
+    /// <summary>
+    /// Between two photographs the picture on screen is still the previous
+    /// file's (<see cref="UpdatePreviewAsync"/>), and the footer stays with
+    /// it: the name, the size and the EXIF change once, together with the
+    /// picture, instead of the EXIF going and coming back under it. The
+    /// load's end schedules the summary again, whatever it ended on.
+    /// </summary>
+    private bool FooterWaitsForPicture(FileSystemEntry selected) {
+        return _image is not null && _pictureOf is { } shown
+            && !string.Equals(shown, selected.FullPath, StringComparison.OrdinalIgnoreCase)
+            && PreviewRouter.Route(selected.FullPath) is PreviewRoute.Image;
+    }
+
     private async Task UpdateSummaryAsync(CancellationToken ct) {
         if (!_isVisible) {
             Summary = "";
+            SummaryNote = "";
 
             return;
         }
@@ -2062,10 +2242,15 @@ public sealed class PreviewController : ObservableObject {
         // 1. Single file selected — its details, plus EXIF if the metadata
         //    reader had something to say about it.
         if (_selection.Count == 1 && _selection[0].Kind == EntryKind.File) {
-            Summary = SummaryText.ForFile(_selection[0], _imageMetadata);
+            if (!FooterWaitsForPicture(_selection[0])) {
+                Summary = SummaryText.ForFile(_selection[0], _imageMetadata);
+                SummaryNote = CompanionLabel.For(_selection[0].Name, _selection[0].Companions);
+            }
 
             return;
         }
+
+        SummaryNote = "";
 
         // 2. Single folder selected. Counts and sizes are the census
         //    panel's job now (it walks the tree once); repeating them here

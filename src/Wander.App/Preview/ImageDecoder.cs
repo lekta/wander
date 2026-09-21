@@ -69,17 +69,26 @@ internal static class ImageDecoder {
     /// when the file has no usable preview; the caller then falls back to
     /// the ordinary decode, so an unrecognised container costs nothing but
     /// the old behaviour.
+    ///
+    /// <para>
+    /// The bytes rather than the picture, because the pane asks twice: the
+    /// quick one to have something on screen at once, then the biggest one
+    /// the file carries (<paramref name="fullSize"/>) for the 1:1 zoom - a
+    /// CR3's quick 1620-px preview there is a third of the frame blown up,
+    /// and the full-size one costs 60-110 ms to decode. Most formats carry
+    /// one JPEG and answer both with the same bytes; the caller tells by
+    /// the length and does not decode it again. <see cref="Stream"/>
+    /// decodes what comes back.
+    /// </para>
     /// </summary>
-    public static BitmapImage? RawPreview(string path) {
-        byte[]? jpeg;
+    public static byte[]? RawPreviewBytes(string path, bool fullSize) {
         try {
             using var file = SharedRead.Open(path);
-            jpeg = RawPreviewExtractor.Extract(file);
+
+            return RawPreviewExtractor.Extract(file, fullSize);
         } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
             return null;
         }
-
-        return jpeg is null ? null : Stream(jpeg);
     }
 
 

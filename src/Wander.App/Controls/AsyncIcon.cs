@@ -4,11 +4,13 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Wander.App.Resources;
+using Wander.App.ViewModels;
 using Wander.Core;
 using Wander.Core.Diagnostics;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
 using Wander.Core.Operations;
+using Wander.Core.Shell;
 
 namespace Wander.App.Controls;
 
@@ -323,11 +325,11 @@ public sealed class AsyncIcon : Image {
         IconSize size = IconSize;
         var icons = ServiceLocator.Get<IIconProvider>();
 
-        byte[]? cached = icons.TryGetCachedIcon(path, size);
+        byte[]? cached = icons.TryGetCachedIcon(path, size, RowIsFolder());
         if (cached is not null) {
             // Drawn before this session: set synchronously, so scrolling
             // back over seen tiles doesn't blink.
-            if (IconImageCache.TryGetDecoded(path, size, out var decoded)) {
+            if (IconImageCache.TryGetDecoded(path, size, cached, out var decoded)) {
                 Source = decoded;
 
                 return;
@@ -369,6 +371,23 @@ public sealed class AsyncIcon : Image {
                 _ = LoadAndApplyAsync(path, size, generation, IsInViewport());
             }
         });
+    }
+
+
+    /// <summary>
+    /// Folder or file, when the row behind this icon says so - the list's
+    /// rows and the panels' nodes do, and the binding that set
+    /// <see cref="IconPath"/> read the same DataContext. The cache needs it
+    /// (<see cref="IIconProvider.TryGetCachedIcon"/>); read here rather than
+    /// bound, so no template pays a second binding per cell for it. An
+    /// archive in the panels is a node like a folder and a file to the cache.
+    /// </summary>
+    private bool? RowIsFolder() {
+        return DataContext switch {
+            FileSystemEntry row => row.Kind != EntryKind.File,
+            TreeNodeViewModel node => Archives.Of(node.FullPath) is not { IsRoot: true },
+            _ => null,
+        };
     }
 
 

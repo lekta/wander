@@ -219,25 +219,74 @@ public class ListingDiffTests {
     }
 
     [Fact]
-    public void RowGoneNearTheTop_IsWholesale() {
-        // Alignment is positional: removing an early row shifts every row
-        // below it, so the threshold honestly reports "almost nothing lines
-        // up" and the list rebuilds in one Reset. Deliberate in the original
-        // and preserved here — the shifted rows would each need a Move
-        // anyway, which is no cheaper and no less disruptive.
+    public void RowGoneNearTheTop_IsOneRemoval() {
+        // Used to be pinned as wholesale ("the shifted rows would each need
+        // a Move anyway") - they do not: the removal shifts them by itself.
+        // A rebuild here is a Reset, and a Reset scrolls the list to the
+        // top: a file deleted in another program threw the folder back to
+        // its first row (2026-09-21).
         var current = new[] { Row("a.txt"), Row("b.txt"), Row("c.txt"), Row("d.txt"), Row("e.txt") };
         var incoming = new[] { Row("b.txt"), Row("c.txt"), Row("d.txt"), Row("e.txt") };
+
+        var plan = ListingDiff.Compute(current, incoming);
+
+        var edit = Assert.Single(plan.Edits);
+        Assert.Equal(ListingEditKind.RemoveAt, edit.Kind);
+        Assert.Equal(0, edit.Index);
+    }
+
+    [Fact]
+    public void RowArrivedNearTheTop_IsOneInsert() {
+        var current = new[] { Row("b.txt"), Row("c.txt"), Row("d.txt"), Row("e.txt") };
+        var incoming = new[] { Row("a.txt"), Row("b.txt"), Row("c.txt"), Row("d.txt"), Row("e.txt") };
+
+        var plan = ListingDiff.Compute(current, incoming);
+
+        var edit = Assert.Single(plan.Edits);
+        Assert.Equal(ListingEditKind.Insert, edit.Kind);
+        Assert.Equal(incoming, Apply(current, incoming, plan));
+    }
+
+    [Fact]
+    public void RowsGoneAllOver_AreRemovalsOnly() {
+        var current = Enumerable.Range(0, 40).Select(i => Row($"{i:00}.txt")).ToArray();
+        var incoming = current.Where((_, i) => i % 4 != 0).ToArray();
+
+        var plan = ListingDiff.Compute(current, incoming);
+
+        Assert.False(plan.Wholesale);
+        Assert.All(plan.Edits, e => Assert.Equal(ListingEditKind.RemoveAt, e.Kind));
+        Assert.Equal(incoming, Apply(current, incoming, plan));
+    }
+
+    [Fact]
+    public void NothingShared_IsWholesale() {
+        var current = new[] { Row("a.txt"), Row("b.txt") };
+        var incoming = new[] { Row("x.txt"), Row("y.txt") };
+
+        Assert.True(ListingDiff.Compute(current, incoming).Wholesale);
+    }
+
+    [Fact]
+    public void TooManyChanges_AreWholesale() {
+        // A filter typed over a big folder: the order holds, but replaying
+        // thousands of removals one notification at a time is a stall.
+        var current = Enumerable.Range(0, 1000).Select(i => Row($"{i:0000}.txt")).ToArray();
+        var incoming = current.Where((_, i) => i % 2 == 0).ToArray();
 
         Assert.True(ListingDiff.Compute(current, incoming).Wholesale);
     }
 
     [Fact]
     public void HalfAligned_IsNotWholesale() {
-        // Exactly at the threshold: aligned * 2 == count keeps the
-        // reconcile path — the rebuild is for listings that share less.
+        // Exactly at the threshold: half of the shared rows still line up,
+        // which keeps the reconcile path - the rebuild is for less.
         var current = new[] { Row("a.txt"), Row("b.txt"), Row("c.txt"), Row("d.txt") };
-        var incoming = new[] { Row("a.txt"), Row("b.txt"), Row("x.txt"), Row("y.txt") };
+        var incoming = new[] { Row("a.txt"), Row("b.txt"), Row("d.txt"), Row("c.txt") };
 
-        Assert.False(ListingDiff.Compute(current, incoming).Wholesale);
+        var plan = ListingDiff.Compute(current, incoming);
+
+        Assert.False(plan.Wholesale);
+        Assert.Equal(incoming, Apply(current, incoming, plan));
     }
 }

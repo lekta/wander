@@ -56,12 +56,6 @@ public static partial class Strings {
     /// <summary>Откуда</summary>
     public static string SummaryDeletedFrom => Get(nameof(SummaryDeletedFrom));
 
-    /// <summary>Изменён</summary>
-    public static string SummaryModified => Get(nameof(SummaryModified));
-
-    /// <summary>Размер</summary>
-    public static string SummarySize => Get(nameof(SummarySize));
-
     /// <summary>Выбрано: {0} — считаем…</summary>
     public static string SummarySelectedCounting => Get(nameof(SummarySelectedCounting));
 

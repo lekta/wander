@@ -77,6 +77,14 @@ public sealed class ListingDiffPlan {
 /// </para>
 /// </summary>
 public static class ListingDiff {
+    /// <summary>
+    /// Rows gone plus rows arrived, past which the plan is a rebuild. Every
+    /// edit is a notification the bound list answers on the UI thread; a
+    /// screenful or two of them is nothing, thousands are a stall.
+    /// </summary>
+    private const int MaxReconciledChanges = 256;
+
+
     public static ListingDiffPlan Compute(
         IReadOnlyList<FileSystemEntry> current, IReadOnlyList<FileSystemEntry> incoming) {
         if (IsWholesaleChange(current, incoming)) {
@@ -124,21 +132,58 @@ public static class ListingDiff {
     }
 
 
+    /// <summary>
+    /// Is the incoming listing a different list rather than this one with
+    /// some rows gone and some arrived?
+    ///
+    /// <para>
+    /// Order is compared over the rows both listings have, each walked in
+    /// its own order. A row that left or arrived is one edit wherever it
+    /// stood, so it is stepped over. Comparing position by position instead
+    /// - which is what this did until 2026-09-21 - let one file deleted in
+    /// the first half of a folder push every row below it out of line: the
+    /// plan came out as a rebuild, the rebuild is a Reset, and a Reset puts
+    /// the scroll back at the top under the user's hands.
+    /// </para>
+    ///
+    /// <para>
+    /// The rebuild stays for what it was meant for: nothing shared (another
+    /// folder's rows), the shared rows in another order (the sort flipped),
+    /// and a change too big to replay one notification at a time (a filter
+    /// typed over five thousand rows).
+    /// </para>
+    /// </summary>
     private static bool IsWholesaleChange(
         IReadOnlyList<FileSystemEntry> current, IReadOnlyList<FileSystemEntry> incoming) {
         if (current.Count == 0 || incoming.Count == 0) {
             return true;
         }
 
+        var standing = new HashSet<string>(current.Select(e => e.FullPath), StringComparer.OrdinalIgnoreCase);
+        var arriving = new HashSet<string>(incoming.Select(e => e.FullPath), StringComparer.OrdinalIgnoreCase);
+
+        int shared = 0;
         int aligned = 0;
-        int common = Math.Min(current.Count, incoming.Count);
-        for (int i = 0; i < common; i++) {
-            if (string.Equals(current[i].FullPath, incoming[i].FullPath, StringComparison.OrdinalIgnoreCase)) {
+        int j = 0;
+        foreach (var row in current) {
+            if (!arriving.Contains(row.FullPath)) {
+                continue;
+            }
+
+            while (j < incoming.Count && !standing.Contains(incoming[j].FullPath)) {
+                j++;
+            }
+            if (j < incoming.Count
+                && string.Equals(row.FullPath, incoming[j].FullPath, StringComparison.OrdinalIgnoreCase)) {
                 aligned++;
             }
+            shared++;
+            j++;
         }
 
-        return aligned * 2 < Math.Max(current.Count, incoming.Count);
+        int changed = (current.Count - shared) + (incoming.Count - shared);
+
+        return shared == 0 || aligned * 2 < shared || changed > MaxReconciledChanges;
     }
 
 

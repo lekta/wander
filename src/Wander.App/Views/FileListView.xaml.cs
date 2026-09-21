@@ -70,6 +70,9 @@ public partial class FileListView : UserControl {
     /// </summary>
     private bool _focusFellOutOfTheList;
 
+    /// <summary>The current row left while the window was not active - see <see cref="OnCurrentRowLeft"/>.</summary>
+    private bool _currentRowFocusPending;
+
     /// <summary>The views currently unbound from the rows - see <see cref="ApplyViewAttachment"/>.</summary>
     private readonly HashSet<Selector> _detachedViews = new();
 
@@ -100,6 +103,12 @@ public partial class FileListView : UserControl {
             ClearListSelection);
         DataContextChanged += OnDataContextChanged;
         IsKeyboardFocusWithinChanged += OnKeyboardFocusWithinChanged;
+        Loaded += (_, _) => {
+            if (Window.GetWindow(this) is { } window) {
+                window.Activated -= OnWindowActivated;
+                window.Activated += OnWindowActivated;
+            }
+        };
     }
 
 
@@ -143,6 +152,7 @@ public partial class FileListView : UserControl {
         if (e.OldValue is MainViewModel old) {
             old.SelectionRestoreRequested -= RestoreListSelection;
             old.SelectionRefreshRequested -= RefreshListSelection;
+            old.CurrentRowLeft -= OnCurrentRowLeft;
             old.InlineRenameRequested -= StartRenameOn;
             old.PropertyChanged -= OnViewModelChanged;
             old.Settings.PropertyChanged -= OnSettingsChanged;
@@ -152,6 +162,7 @@ public partial class FileListView : UserControl {
         if (e.NewValue is MainViewModel vm) {
             vm.SelectionRestoreRequested += RestoreListSelection;
             vm.SelectionRefreshRequested += RefreshListSelection;
+            vm.CurrentRowLeft += OnCurrentRowLeft;
             vm.InlineRenameRequested += StartRenameOn;
             vm.PropertyChanged += OnViewModelChanged;
             vm.Settings.PropertyChanged += OnSettingsChanged;
@@ -516,7 +527,12 @@ public partial class FileListView : UserControl {
     }
 
 
-    private bool FocusRow(FileSystemEntry entry) {
+    /// <param name="reveal">
+    /// Scroll the row into view first. False for the one caller that must
+    /// not take the user anywhere (<see cref="FocusCaretRow"/>): the row is
+    /// then focused only if it already has a container.
+    /// </param>
+    private bool FocusRow(FileSystemEntry entry, bool reveal = true) {
         // The caret follows the keyboard, and this is where the keyboard is
         // put on a row deliberately. The presses WPF answers by itself
         // (an arrow inside the grid) are picked up in List_SelectionChanged.
@@ -524,8 +540,10 @@ public partial class FileListView : UserControl {
 
         switch (ActiveList()) {
             case DataGrid dg:
-                dg.ScrollIntoView(entry);
-                dg.UpdateLayout();
+                if (reveal) {
+                    dg.ScrollIntoView(entry);
+                    dg.UpdateLayout();
+                }
                 // Arrow keys in a DataGrid follow the *current cell*, not the
                 // selection. Leaving it stale is what made the next arrow
                 // press jump to a row near the top instead of the neighbour.
@@ -540,14 +558,82 @@ public partial class FileListView : UserControl {
                 return false;
 
             case ListBox lb:
-                lb.ScrollIntoView(entry);
-                lb.UpdateLayout();
+                if (reveal) {
+                    lb.ScrollIntoView(entry);
+                    lb.UpdateLayout();
+                }
 
                 return lb.ItemContainerGenerator.ContainerFromItem(entry) is ListBoxItem item
                     && item.Focus();
 
             default:
                 return false;
+        }
+    }
+
+
+    // --- The current row left the folder ---------------------------------
+
+    /// <summary>
+    /// The current row is gone - deleted here, or in the program it was
+    /// opened in - and the view model has made the next one current:
+    /// selected, the caret on it. If the keyboard was on the departed row,
+    /// it goes to that row too, so the next arrow key moves on from there.
+    /// Without this WPF hands the keyboard to the window or to the list
+    /// itself, and an arrow key starts over from the top of the folder.
+    ///
+    /// <para>
+    /// The usual way here is a file deleted in the program it was opened
+    /// in, so that program is in front and this window is not. Focus is
+    /// not touched in a window that is not active, and where the keyboard
+    /// "is" cannot be asked there; both wait for
+    /// <see cref="OnWindowActivated"/>.
+    /// </para>
+    /// </summary>
+    private void OnCurrentRowLeft() {
+        if (Window.GetWindow(this) is not { IsActive: true }) {
+            _currentRowFocusPending = true;
+
+            return;
+        }
+
+        if (KeyboardIsOurs()) {
+            FocusCaretRow();
+        }
+    }
+
+
+    private void OnWindowActivated(object? sender, EventArgs e) {
+        if (!_currentRowFocusPending) {
+            return;
+        }
+
+        _currentRowFocusPending = false;
+        // After WPF's own attempt to put the keyboard back where it was.
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() => {
+            if (DataContext is MainViewModel && KeyboardIsOurs()) {
+                FocusCaretRow();
+            }
+        }));
+    }
+
+
+    /// <summary>
+    /// Is the keyboard in this list, or nowhere - on the window, or on a
+    /// row that has left the tree? Anywhere real (the tree, the address
+    /// bar) is the user having gone there, and is left alone.
+    /// </summary>
+    private bool KeyboardIsOurs() {
+        return Keyboard.FocusedElement is null or Window
+            || (Keyboard.FocusedElement is System.Windows.Media.Visual visual
+                && (IsAncestorOf(visual) || PresentationSource.FromVisual(visual) is null));
+    }
+
+
+    /// <summary>The keyboard onto the caret's row if it is on screen, onto the list otherwise. Nothing scrolls.</summary>
+    private void FocusCaretRow() {
+        if (CaretEntry() is not { } caret || !FocusRow(caret, reveal: false)) {
+            ActiveList()?.Focus();
         }
     }
 
@@ -656,8 +742,17 @@ public partial class FileListView : UserControl {
         // keyboard back to where the user was.
         bool focusFellToTheList = ActiveList() is { } focused
             && ReferenceEquals(Keyboard.FocusedElement, focused);
+        // Fourth: the keyboard is on a row of this list, and the selection
+        // has just been put somewhere else - Ctrl+Z bringing back the file
+        // that was deleted a moment ago, while the keyboard stands on the
+        // one that took its place. Left there, the highlight is on one file
+        // and the focus rectangle and the arrow keys on another. A keyboard
+        // anywhere outside the list is still left alone.
+        bool keyboardLeftBehind = items.Count > 0 && IsKeyboardFocusWithin
+            && Keyboard.FocusedElement is FrameworkElement { DataContext: FileSystemEntry under }
+            && !items.Any(i => string.Equals(i.FullPath, under.FullPath, StringComparison.OrdinalIgnoreCase));
         bool takeFocus = _focusRowAfterRestore || Vm.FocusListAfterRestore
-            || focusFellToTheList || _focusFellOutOfTheList;
+            || focusFellToTheList || _focusFellOutOfTheList || keyboardLeftBehind;
         _focusRowAfterRestore = false;
         _focusFellOutOfTheList = false;
         Vm.FocusListAfterRestore = false;

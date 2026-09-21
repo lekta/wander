@@ -197,7 +197,7 @@
                     <!--
                         Image preview. The fitted image stays in ImgFit; a
                         transparent canvas overlays it for the FastStone-style
-                        "hold RMB to zoom 1:1" interaction. Everything is wired
+                        "hold the left button to zoom 1:1" interaction. Everything is wired
                         in code-behind (ImageZoom_* handlers).
                     -->
                     <Grid x:Name="ImagePreviewHost"
@@ -210,21 +210,35 @@
                           MouseLeftButtonDown="ImageZoom_LmbDown"
                           MouseLeftButtonUp="ImageZoom_LmbUp"
                           LostMouseCapture="ImageZoom_LostCapture">
+                        <!--
+                            Uniform both ways under a cap of the bitmap's
+                            pixel size: the cap is what keeps a small
+                            picture from being blown up. Not DownOnly -
+                            that measures against the size the file's own
+                            DPI gives, and a picture tagged 300 dpi came out
+                            at a third of what fits (1200x800 in a 900-DIP
+                            pane drawn 384x256, stand 2026-09-21).
+                        -->
                         <Image x:Name="ImgFit"
                                Source="{Binding Image}"
-                               Stretch="Uniform" StretchDirection="DownOnly"
+                               Stretch="Uniform"
                                MaxWidth="{Binding Source, RelativeSource={RelativeSource Self}, Converter={StaticResource BitmapPixelSize}, ConverterParameter=W}"
                                MaxHeight="{Binding Source, RelativeSource={RelativeSource Self}, Converter={StaticResource BitmapPixelSize}, ConverterParameter=H}"
                                Margin="8,12,8,8"
                                VerticalAlignment="Top" HorizontalAlignment="Center"
+                               RenderOptions.BitmapScalingMode="HighQuality"
                                SizeChanged="ImgFit_SizeChanged"/>
-                        <!-- Zoom view: visible only while the user holds RMB. -->
+                        <!-- Zoom view: visible only while the user holds the left button. -->
                         <Canvas x:Name="ImgZoomCanvas"
                                 Background="{Binding ContentPalette.Background}"
                                 Visibility="Collapsed"
                                 IsHitTestVisible="False">
+                            <!-- Drawn at exactly one image pixel per device pixel
+                                 (BeginImageZoom); nearest neighbour keeps a leftover
+                                 fraction of a pixel from resampling the picture. -->
                             <Image x:Name="ImgZoom"
-                                   Source="{Binding Source, ElementName=ImgFit}"/>
+                                   Source="{Binding ZoomSource}"
+                                   RenderOptions.BitmapScalingMode="NearestNeighbor"/>
                         </Canvas>
                     </Grid>
 
@@ -332,8 +346,11 @@
                                     HorizontalAlignment="Center"
                                     BorderBrush="{Binding ContentPalette.Dim}" BorderThickness="1"
                                     Visibility="{Binding HasAudioCover, Converter={StaticResource BoolToVisibility}}">
+                                <!-- Capped at its pixel size rather than DownOnly - see ImgFit. -->
                                 <Image Source="{Binding AudioCover}"
-                                       Stretch="Uniform" StretchDirection="DownOnly"
+                                       Stretch="Uniform"
+                                       MaxWidth="{Binding Source, RelativeSource={RelativeSource Self}, Converter={StaticResource BitmapPixelSize}, ConverterParameter=W}"
+                                       MaxHeight="{Binding Source, RelativeSource={RelativeSource Self}, Converter={StaticResource BitmapPixelSize}, ConverterParameter=H}"
                                        RenderOptions.BitmapScalingMode="HighQuality"/>
                             </Border>
 
@@ -828,10 +845,16 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
+                            <!--
+                                The name, the dim mention of its sidecars -
+                                "(+.xmp)" - and the lines of facts under it.
+                                One TextBlock, so the three wrap as one text.
+                            -->
                             <TextBlock Grid.Column="0"
-                                       Text="{Binding Summary}"
                                        FontSize="11" Foreground="{StaticResource TextSecondary}"
-                                       TextWrapping="Wrap"/>
+                                       TextWrapping="Wrap">
+                                <Run Text="{Binding SummaryHead, Mode=OneWay}"/><Run Text="  "/><Run Text="{Binding SummaryNote, Mode=OneWay}" Foreground="{StaticResource TextDim}"/><Run Text="{Binding SummaryRest, Mode=OneWay}"/>
+                            </TextBlock>
                             <ToggleButton x:Name="RawToggle" Grid.Column="1"
                                           Content="{x:Static res:Strings.PreviewRawToggle}"
                                           VerticalAlignment="Top"
@@ -878,20 +901,16 @@
                         </StackPanel>
 
                         <!--
-                            Companion block: what the sidecars next to
-                            this file have to say. Only the two formats
-                            Wander understands so far get a rendering of
-                            their own; the file list above them is shown
-                            for any companion at all.
+                            Unity .meta: the one sidecar with rows of its own.
+                            Every other one is the dim "(+.xmp)" beside the
+                            name and nothing here - a line naming them made
+                            the footer of a file with a sidecar taller than
+                            its neighbour's.
                         -->
                         <StackPanel Margin="0,6,0,0"
-                                    Visibility="{Binding HasCompanions, Converter={StaticResource BoolToVisibility}}">
-                            <TextBlock FontSize="11" Foreground="{StaticResource TextDim}" TextWrapping="Wrap">
-                                <Run Text="{x:Static res:Strings.PreviewIntegrated}"/><Run Text=" "/><Run Text="{Binding CompanionFiles, Mode=OneWay}"/>
-                            </TextBlock>
-
+                                    Visibility="{Binding HasUnityMeta, Converter={StaticResource BoolToVisibility}}">
                             <!-- Unity .meta — the GUID, and a button to take it away -->
-                            <StackPanel Orientation="Horizontal" Margin="0,3,0,0"
+                            <StackPanel Orientation="Horizontal"
                                         Visibility="{Binding HasUnityGuid, Converter={StaticResource BoolToVisibility}}">
                                 <TextBlock Text="GUID" FontSize="11" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"/>
                                 <TextBox Text="{Binding UnityGuid, Mode=OneWay}"

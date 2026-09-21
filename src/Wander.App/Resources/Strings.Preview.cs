@@ -57,9 +57,6 @@ public static partial class Strings {
     /// <summary>Архив повреждён или защищён</summary>
     public static string PreviewArchiveBroken => Get(nameof(PreviewArchiveBroken));
 
-    /// <summary>Вместе с файлом:</summary>
-    public static string PreviewIntegrated => Get(nameof(PreviewIntegrated));
-
     /// <summary>Скопировать GUID</summary>
     public static string PreviewCopyGuid => Get(nameof(PreviewCopyGuid));
 

@@ -33,6 +33,14 @@ public readonly record struct TileMetrics {
     public const double ImageGap = 2;
 
     /// <summary>
+    /// The frame of the tile, in layout units. Mirrored by the
+    /// <c>BorderThickness="1"</c> of the Border in the <c>TileChrome</c>
+    /// template - the content inside gets the box minus this on each side,
+    /// and without it here the caption is the part that loses them.
+    /// </summary>
+    public const double ChromeBorder = 1;
+
+    /// <summary>
     /// A line of text is this much taller than its font size. Segoe UI's
     /// default line spacing, rounded up: enough that a label of the given
     /// size fits its box, which is all this needs to be.
@@ -113,7 +121,7 @@ public readonly record struct TileMetrics {
 
         return new TileMetrics(
             contentWidth: cellWidth,
-            contentHeight: imageSize + (2 * ImageGap) + label,
+            contentHeight: imageSize + (2 * ImageGap) + label + (2 * ChromeBorder),
             margin: margin,
             imageSize: imageSize,
             labelHeight: label,
@@ -152,7 +160,7 @@ public readonly record struct TileMetrics {
 
         return new TileMetrics(
             contentWidth: cellWidth,
-            contentHeight: imageSize + (2 * ImageGap) + label,
+            contentHeight: imageSize + (2 * ImageGap) + label + (2 * ChromeBorder),
             margin: margin,
             imageSize: imageSize,
             labelHeight: label,

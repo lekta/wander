@@ -57,7 +57,7 @@ public class TileMetricsTests {
         var metrics = Icons(imageSize: 72, fontSize: fontSize);
 
         Assert.True(metrics.LabelHeight >= 3 * fontSize);
-        Assert.Equal(72 + (2 * TileMetrics.ImageGap) + metrics.LabelHeight, metrics.ContentHeight);
+        Assert.Equal(72 + (2 * TileMetrics.ImageGap) + metrics.LabelHeight + (2 * TileMetrics.ChromeBorder), metrics.ContentHeight);
     }
 
 
@@ -173,7 +173,28 @@ public class TileMetricsTests {
         // One line, where LargeIcons allows three: a wall of photographs
         // must not turn into a wall of file names.
         Assert.Equal(Math.Ceiling(11 * 1.35), metrics.LabelHeight);
-        Assert.Equal(200 + (2 * TileMetrics.ImageGap) + metrics.LabelHeight, metrics.ContentHeight);
+        Assert.Equal(200 + (2 * TileMetrics.ImageGap) + metrics.LabelHeight + (2 * TileMetrics.ChromeBorder), metrics.ContentHeight);
+    }
+
+    /// <summary>
+    /// What the template actually gets is the box minus the frame of the
+    /// tile, and the picture, the air around it and the caption have to fit
+    /// in that - not in the box. Budgeting for the box is what cut the
+    /// descenders off every gallery caption.
+    /// </summary>
+    [Theory]
+    [InlineData(8)]
+    [InlineData(11)]
+    [InlineData(24)]
+    public void InsideTheFrame_ThePictureAndItsCaptionStillFit(int fontSize) {
+        var icons = Icons(imageSize: 96, fontSize: fontSize);
+        var gallery = TileMetrics.ForGallery(cellWidth: 216, imageSize: 200, margin: 4, labelFontSize: fontSize);
+
+        foreach (var metrics in new[] { icons, gallery }) {
+            double inside = metrics.ContentHeight - (2 * TileMetrics.ChromeBorder);
+
+            Assert.True(inside >= metrics.ImageSize + (2 * TileMetrics.ImageGap) + metrics.LabelHeight);
+        }
     }
 
     [Fact]

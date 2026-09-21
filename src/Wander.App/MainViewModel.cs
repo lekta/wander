@@ -184,6 +184,10 @@ public sealed class MainViewModel : ObservableObject {
     // the selection is put back. See ReplaceRows.
     private bool _rowsReplacing;
 
+    // What ReconcileEntries found gone from under the selection or the
+    // caret, until SettleDeparture says what becomes current instead.
+    private Departure? _departure;
+
     // --- Auto-refresh ---------------------------------------------------
     // The watcher says "something changed" from a background thread, often
     // many times in a row; the timer turns that into at most one re-listing
@@ -486,7 +490,7 @@ public sealed class MainViewModel : ObservableObject {
             }
             UpdateFilterStatus(filtered.Count, _search.Source.Count);
             using (PerfLog.Measure("ui.restore")) {
-                ApplyArrival();
+                SettleDeparture(placed: ApplyArrival());
             }
         };
         _search.ItemsChanged += changed => {
@@ -554,6 +558,14 @@ public sealed class MainViewModel : ObservableObject {
     /// anywhere for — a number changed inside a row they are looking at.
     /// </summary>
     public event Action<IReadOnlyList<FileSystemEntry>>? SelectionRefreshRequested;
+
+    /// <summary>
+    /// Raised when the current row left the folder and the next one took
+    /// its place - selected, <see cref="CaretPath"/> on it; see
+    /// <c>SettleDeparture</c>. The keyboard, if it was on the departed row,
+    /// is the view's to move.
+    /// </summary>
+    public event Action? CurrentRowLeft;
 
     /// <summary>
     /// Raised when the row a restore just landed on is one the user is
@@ -2431,23 +2443,24 @@ public sealed class MainViewModel : ObservableObject {
     /// intent keeps waiting for its own folder's listing — is the session's
     /// decision; this method only carries it out against the view.
     /// </summary>
-    private void ApplyArrival() {
+    /// <returns>True when it put a selection in place - <see cref="SettleDeparture"/> then has nothing to add.</returns>
+    private bool ApplyArrival() {
         var decision = _session.DecideArrival(_nav.Current, Entries);
 
         switch (decision.Outcome) {
             case ArrivalOutcome.None:
-                return;
+                return false;
 
             case ArrivalOutcome.SelectFolder:
                 SelectExternalPath(decision.FolderPath!);
-                return;
+                return true;
 
             case ArrivalOutcome.NothingFound:
                 // Nothing to land on — and nothing for the list to take the
                 // keyboard back onto, so the request does not carry over to
                 // whichever restore happens next.
                 FocusListAfterRestore = false;
-                return;
+                return false;
 
             case ArrivalOutcome.SelectRows:
                 var found = decision.Rows;
@@ -2466,7 +2479,10 @@ public sealed class MainViewModel : ObservableObject {
                 if (decision.RenameTarget is not null) {
                     InlineRenameRequested?.Invoke(found[0]);
                 }
-                return;
+                return true;
+
+            default:
+                return false;
         }
     }
 
@@ -2640,6 +2656,10 @@ public sealed class MainViewModel : ObservableObject {
                 }
             }
         });
+        // No arrival follows a swap of rows, and nothing can leave in one -
+        // but a selection that was not among the rows at all is still
+        // settled, not left hanging.
+        SettleDeparture(placed: false);
     }
 
 
@@ -2681,6 +2701,9 @@ public sealed class MainViewModel : ObservableObject {
         var keep = new HashSet<string>(
             _selectedEntries.Select(e => e.FullPath), StringComparer.OrdinalIgnoreCase);
         string? primary = _selectedEntry?.FullPath;
+        // The rows as they stand, for which one becomes current if the
+        // current one is about to leave (SettleDeparture).
+        FileSystemEntry[]? before = keep.Count > 0 || _caretPath is not null ? Entries.ToArray() : null;
 
         FileSystemEntry[] found;
         FileSystemEntry? next = null;
@@ -2718,21 +2741,81 @@ public sealed class MainViewModel : ObservableObject {
         }
 
         if (keep.Count == 0) {
+            // Nothing selected, but the caret may have been on a row - the
+            // state a click on empty space leaves.
+            if (before is not null && _caretPath is { } caret && !Entries.Any(e => IsSamePath(e.FullPath, caret))) {
+                _departure = new Departure(before, new[] { caret }, WasSelected: false);
+            }
+
             return;
         }
 
         if (found.Length == 0) {
-            // Everything that was selected has left the folder. Saying so is
-            // the honest answer; the guard above only held the report back
-            // while the rows were mid-flight.
-            SelectedEntries = Array.Empty<FileSystemEntry>();
-            SelectedEntry = null;
+            // Everything that was selected has left the folder. What is
+            // selected instead is settled by the caller once the arrival
+            // has had its say (SettleDeparture) - until then the selection
+            // is left as it was, so the preview goes from the departed file
+            // straight to the next one and not through "nothing selected".
+            _departure = new Departure(before!, keep, WasSelected: true);
 
             return;
         }
 
         AdoptSelection(found, next!);
     }
+
+
+    /// <summary>
+    /// The current file has left the folder - deleted here, deleted in the
+    /// program it was opened in, moved away - and no arrival has said what
+    /// to select instead (<paramref name="placed"/>). The next row becomes
+    /// current (<see cref="CurrentRowFallback"/>): selected, so the preview
+    /// moves on to it, and the view is told so the keyboard follows. No
+    /// scrolling - the row took the departed one's place on screen.
+    ///
+    /// <para>
+    /// A row the filter merely hid is still in the folder: nothing is
+    /// selected in its place, and saying "nothing selected" is the honest
+    /// answer. With nothing selected to begin with, only the caret moves.
+    /// </para>
+    /// </summary>
+    private void SettleDeparture(bool placed) {
+        if (_departure is not { } departure) {
+            return;
+        }
+
+        _departure = null;
+        if (placed) {
+            return;
+        }
+
+        var gone = new HashSet<string>(departure.Paths, StringComparer.OrdinalIgnoreCase);
+        var successor = _search.Source.Any(e => gone.Contains(e.FullPath))
+            ? null
+            : CurrentRowFallback.After(departure.Before, gone, Entries);
+
+        if (departure.WasSelected) {
+            if (successor is null) {
+                SelectedEntries = Array.Empty<FileSystemEntry>();
+                SelectedEntry = null;
+
+                return;
+            }
+
+            SelectedEntry = successor;
+            SelectedEntries = new[] { successor };
+        }
+        if (successor is null) {
+            return;
+        }
+
+        CaretPath = successor.FullPath;
+        CurrentRowLeft?.Invoke();
+    }
+
+
+    /// <summary>Rows that left under the selection or the caret, waiting for <see cref="SettleDeparture"/>.</summary>
+    private sealed record Departure(IReadOnlyList<FileSystemEntry> Before, IReadOnlyCollection<string> Paths, bool WasSelected);
 
 
     /// <summary>
@@ -3910,30 +3993,15 @@ public sealed class MainViewModel : ObservableObject {
     /// to land on.
     /// </summary>
     private string[] NextAfterRemoval(IReadOnlyList<FileSystemEntry> removed) {
+        // The same rule that answers a file deleted by another program
+        // (SettleDeparture), asked ahead of the listing: the rows minus
+        // what is about to go stand in for the rows to come.
         var gone = new HashSet<string>(removed.Select(e => e.FullPath), StringComparer.OrdinalIgnoreCase);
+        var staying = Entries.Where(e => !gone.Contains(e.FullPath)).ToList();
 
-        int last = -1;
-        for (int i = 0; i < Entries.Count; i++) {
-            if (gone.Contains(Entries[i].FullPath)) {
-                last = i;
-            }
-        }
-        if (last < 0) {
-            return Array.Empty<string>();
-        }
-
-        for (int i = last + 1; i < Entries.Count; i++) {
-            if (!gone.Contains(Entries[i].FullPath)) {
-                return new[] { Entries[i].FullPath };
-            }
-        }
-        for (int i = last - 1; i >= 0; i--) {
-            if (!gone.Contains(Entries[i].FullPath)) {
-                return new[] { Entries[i].FullPath };
-            }
-        }
-
-        return Array.Empty<string>();
+        return CurrentRowFallback.After(Entries, gone, staying) is { } next
+            ? new[] { next.FullPath }
+            : Array.Empty<string>();
     }
 
 

@@ -21,14 +21,38 @@ namespace Wander.App.Preview;
 /// </summary>
 internal static class SummaryText {
     /// <summary>
-    /// One file. Recycle-bin items (<c>OriginalLocation</c> set) get
-    /// "Deleted" instead of "Modified" and a second line with the source
-    /// folder, so the user can decide whether to restore them without
-    /// context-switching.
+    /// What stands between two facts on a line: room, and nothing drawn in
+    /// it. The lines used to be strung on centred dots and led by labels
+    /// ("Size:", "Modified:"); a size and a date say what they are by
+    /// themselves, and the dots were the most frequent glyph in the footer
+    /// (2026-09-21, after the info line of FastStone).
+    /// </summary>
+    internal const string Gap = "   ";
+
+    /// <summary>Between the parts of one fact - the four numbers of an exposure.</summary>
+    private const string InnerGap = "  ";
+
+
+    /// <summary>
+    /// One file: its name, then what it is - pixels when it is a picture,
+    /// size, when it was changed - then what the camera recorded. The first
+    /// line is the name alone: the footer draws the mention of the file's
+    /// sidecars after it (<c>PreviewController.SummaryNote</c>).
+    /// Recycle-bin items (<c>OriginalLocation</c> set) say "Deleted" before
+    /// the date - the one date here that is not the obvious one - and get a
+    /// line with the source folder, so the user can decide whether to
+    /// restore them without context-switching.
     /// </summary>
     public static string ForFile(FileSystemEntry e, ImageMetadata? metadata) {
-        string timeLabel = e.OriginalLocation is not null ? Strings.SummaryDeleted : Strings.SummaryModified;
-        string summary = $"📄  {e.Name}\n{Strings.SummarySize}: {SizeFormatter.Format(e.Size)}   •   {timeLabel}: {TimeFormat.FromUtc(e.ModifiedUtc)}";
+        string when = TimeFormat.FromUtc(e.ModifiedUtc);
+        var facts = new List<string>();
+        if (metadata is { PixelWidth: int w, PixelHeight: int h }) {
+            facts.Add($"{w} × {h}");
+        }
+        facts.Add(SizeFormatter.Format(e.Size));
+        facts.Add(e.OriginalLocation is not null ? $"{Strings.SummaryDeleted}: {when}" : when);
+
+        string summary = $"📄  {e.Name}\n{string.Join(Gap, facts)}";
         if (e.OriginalLocation is not null) {
             summary += $"\n{Strings.SummaryDeletedFrom}: {e.OriginalLocation}";
         }
@@ -38,8 +62,8 @@ internal static class SummaryText {
         if (Archives.Of(e.FullPath) is { IsRoot: false } archive) {
             summary += $"\n{Strings.SummaryInsideArchive}: {archive.Archive}";
         }
-        if (metadata is { } m) {
-            summary += "\n" + FormatExif(m);
+        if (metadata is { } m && FormatExif(m, when) is { Length: > 0 } exif) {
+            summary += "\n" + exif;
         }
 
         return summary;
@@ -156,16 +180,19 @@ internal static class SummaryText {
             parts.Add(string.Join(", ", shots.PixelSizes.Select(p => $"{p.Width} × {p.Height}")));
         }
 
-        return headline + "\n" + string.Join("   •   ", parts);
+        return headline + "\n" + string.Join(Gap, parts);
     }
 
 
     /// <summary>
     /// What the camera recorded, in the order a photographer reads it:
-    /// body, then exposure, then pixels, then when. Anything the file does
-    /// not carry is simply absent rather than blank.
+    /// body, then exposure, then when. Anything the file does not carry is
+    /// simply absent rather than blank; the pixels are on the line above,
+    /// and the moment it was taken is left out when it is the date already
+    /// standing there (<paramref name="shownDate"/>) - a frame straight off
+    /// the card, which is most of them.
     /// </summary>
-    private static string FormatExif(ImageMetadata m) {
+    private static string FormatExif(ImageMetadata m, string shownDate) {
         var parts = new List<string>();
         if (ShotSummary.CameraName(m) is { } camera) {
             parts.Add(camera);
@@ -184,15 +211,12 @@ internal static class SummaryText {
             shot.Add(m.FocalLength);
         }
         if (shot.Count > 0) {
-            parts.Add(string.Join(", ", shot));
+            parts.Add(string.Join(InnerGap, shot));
         }
-        if (m.PixelWidth is int w && m.PixelHeight is int h) {
-            parts.Add($"{w} × {h}");
-        }
-        if (m.DateTaken is { } dt) {
+        if (m.DateTaken is { } dt && TimeFormat.Local(dt) != shownDate) {
             parts.Add(TimeFormat.Local(dt));
         }
 
-        return string.Join("   •   ", parts);
+        return string.Join(Gap, parts);
     }
 }

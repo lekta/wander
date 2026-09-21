@@ -117,9 +117,6 @@
   <data name="PreviewFolderEmpty" xml:space="preserve">
     <value>Папка пуста</value>
   </data>
-  <data name="PreviewIntegrated" xml:space="preserve">
-    <value>Вместе с файлом:</value>
-  </data>
   <data name="PreviewCopyGuid" xml:space="preserve">
     <value>Скопировать GUID</value>
   </data>
@@ -134,12 +131,6 @@
   </data>
   <data name="SummaryDeletedFrom" xml:space="preserve">
     <value>Откуда</value>
-  </data>
-  <data name="SummaryModified" xml:space="preserve">
-    <value>Изменён</value>
-  </data>
-  <data name="SummarySize" xml:space="preserve">
-    <value>Размер</value>
   </data>
   <data name="SummarySelectedCounting" xml:space="preserve">
     <value>Выбрано: {0} — считаем…</value>

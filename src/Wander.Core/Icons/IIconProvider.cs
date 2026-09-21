@@ -11,7 +11,15 @@ public interface IIconProvider {
     /// re-scrolled list would round-trip through a worker thread and blink
     /// its icons on every pass.
     /// </summary>
-    byte[]? TryGetCachedIcon(string path, IconSize size);
+    /// <param name="isFolder">
+    /// What the caller's row says the path is; null when it does not know.
+    /// It matters because nothing here may ask the disk: most file icons
+    /// are cached once per type, and a folder that has not been drawn yet
+    /// would otherwise be answered with the icon of a file of "its" type -
+    /// a folder named <c>fast</c> with the icon of a file with no extension.
+    /// Not knowing gets only what is cached for this one path.
+    /// </param>
+    byte[]? TryGetCachedIcon(string path, IconSize size, bool? isFolder = null);
 
     /// <summary>
     /// Applies the user's cache limits. Called at startup and whenever the

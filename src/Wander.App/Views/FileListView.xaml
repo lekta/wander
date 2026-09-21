@@ -253,7 +253,8 @@
             Border inside is the tile itself - the cell minus its margin -
             and the highlight stops between neighbours the way Explorer's
             does. A default ListBoxItem would add 4 px of padding and a 1 px
-            border the panel never budgeted for; this one has neither.
+            border the panel never budgeted for; this one has no padding, and
+            its own 1 px frame is budgeted as TileMetrics.ChromeBorder.
 
             The highlight is the container's own template, driven by
             property triggers on the container: no bindings, no extra
@@ -275,6 +276,8 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListBoxItem">
+                        <!-- BorderThickness mirrors TileMetrics.ChromeBorder; the two
+                             have to agree, or the caption loses the difference to clipping. -->
                         <Border Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="1" CornerRadius="3"

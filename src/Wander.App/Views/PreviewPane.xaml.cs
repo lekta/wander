@@ -25,7 +25,7 @@ namespace Wander.App.Views;
 
 /// <summary>
 /// Everything drawn inside the preview pane, and the three little state
-/// machines behind it: the FastStone-style hold-RMB image zoom, the video
+/// machines behind it: the FastStone-style hold-the-button image zoom, the video
 /// transport, and the WebView2 handshake for PDF / HTML / Markdown.
 ///
 /// <para>
@@ -239,12 +239,28 @@ public partial class PreviewPane : UserControl {
 
             case nameof(PreviewController.Kind):
                 // Bail out of any in-flight image-zoom state when the user
-                // switches to a different file (e.g., RMB held when changing
+                // switches to a different file (e.g., the button held when changing
                 // selection). Also reset the video transport so a freshly
                 // opened video starts paused with the play button correct.
                 ExitImageZoom();
                 ResetVideoTransport();
                 ResetModelView();
+                break;
+
+            case nameof(PreviewController.ZoomSource):
+                // Picture to picture: Kind does not change, see
+                // RefreshImageZoom. Null is the pane clearing before the
+                // next decode - the zoom waits for what comes. Loaded
+                // priority, so the new picture has been laid out.
+                if (_imageZoomActive && Controller.ZoomSource is not null) {
+                    _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, RefreshImageZoom);
+                } else if (Controller.ZoomSource is not null && ImagePreviewHost.IsMouseOver) {
+                    // A RAW's full-size JPEG arriving behind the quick one
+                    // changes nothing on screen, so SizeChanged says
+                    // nothing - and whether there is anything to zoom into
+                    // may just have changed under the cursor.
+                    _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, UpdateImageCursor);
+                }
                 break;
 
             case nameof(PreviewController.MediaUri):
@@ -394,13 +410,13 @@ public partial class PreviewPane : UserControl {
     }
 
 
-    // --- Image zoom (FastStone-style RMB-hold pan) ----------------------
+    // --- Image zoom (FastStone-style hold-and-pan) ----------------------
     //
     // When the previewed image is downscaled to fit the pane:
     //   • the cursor turns into a magnifier glyph,
-    //   • holding the right mouse button shows the image at native 1:1 with
+    //   • holding the left mouse button shows the image at native 1:1 with
     //     the pixel under the cursor anchored to the cursor's screen position,
-    //   • moving the mouse pans the 1:1 view — release RMB to return.
+    //   • moving the mouse pans the 1:1 view — release it to return.
     //
     // Geometry: as the cursor moves from (0,0) to (host.W, host.H) we map
     // linearly onto (0,0)..(src.W, src.H) image-pixel space, then position
@@ -417,15 +433,30 @@ public partial class PreviewPane : UserControl {
 
     private bool _imageZoomActive;
 
+    // Where in the host the zoom was last put - the mouse, or the other
+    // half's share of it - so a new picture under a held zoom can be put
+    // at the same place without waiting for the mouse to move.
+    private Point _zoomAt;
+
+    /// <summary>
+    /// What the 1:1 view draws and is measured by: the biggest picture the
+    /// controller has of the file, which for a RAW is not the one fitted
+    /// into the pane (<see cref="PreviewController.ZoomSource"/>).
+    /// </summary>
+    private BitmapSource? ZoomBitmap => (DataContext as PreviewController)?.ZoomSource as BitmapSource;
+
     private bool IsImageDownscaled() {
-        if (ImgFit.Source is not BitmapSource src) {
+        if (ZoomBitmap is not { } src) {
             return false;
         }
         // A few pixels of slop avoid jitter exactly at break-even. If the
-        // source is already smaller than the available render area there's
-        // nothing useful to zoom into, so we don't switch the cursor.
-        return src.PixelWidth > ImgFit.ActualWidth + 1
-            || src.PixelHeight > ImgFit.ActualHeight + 1;
+        // source at 1:1 (in DIPs, see BeginImageZoom) is already smaller
+        // than the available render area there's nothing useful to zoom
+        // into, so we don't switch the cursor.
+        var dpi = VisualTreeHelper.GetDpi(this);
+
+        return src.PixelWidth / dpi.DpiScaleX > ImgFit.ActualWidth + 1
+            || src.PixelHeight / dpi.DpiScaleY > ImgFit.ActualHeight + 1;
     }
 
     private void UpdateImageCursor() {
@@ -467,18 +498,38 @@ public partial class PreviewPane : UserControl {
 
     /// <summary>Switches to the 1:1 view; false when the picture fits whole and there is nothing to zoom into.</summary>
     private bool BeginImageZoom() {
-        if (!IsImageDownscaled() || ImgFit.Source is not BitmapSource src) {
+        if (!IsImageDownscaled()) {
             return false;
         }
 
+        // Sized and placed by UpdateZoomPosition, which every caller runs next.
         _imageZoomActive = true;
-        // 1 DIP = 1 image pixel (no DPI compensation - matches FastStone's
-        // "100 %" semantics on the user's currently configured DPI).
-        ImgZoom.Width = src.PixelWidth;
-        ImgZoom.Height = src.PixelHeight;
         ImgZoomCanvas.Visibility = Visibility.Visible;
 
         return true;
+    }
+
+    /// <summary>
+    /// A new picture under a held zoom - an arrow key while the button is
+    /// down, the file rewritten on disk. <c>Kind</c> stays Image from one
+    /// picture to the next, so nothing else notices, and the new one used
+    /// to be drawn in the old one's box: 1:1 only if the two happened to
+    /// be the same size. Now it is 1:1 at the same place, or, when it fits
+    /// whole and there is nothing to zoom into, the zoom ends.
+    /// </summary>
+    private void RefreshImageZoom() {
+        if (!_imageZoomActive) {
+            return;
+        }
+        if (!IsImageDownscaled()) {
+            // Only the half that holds the mouse speaks for the split; a
+            // follower ending on its own must not end the other one.
+            ExitImageZoom(notify: ImagePreviewHost.IsMouseCaptured);
+
+            return;
+        }
+
+        UpdateZoomPosition(_zoomAt);
     }
 
     /// <summary>The zoom follows the mouse here, and the other half of a split is told where.</summary>
@@ -528,7 +579,8 @@ public partial class PreviewPane : UserControl {
     /// and shove the image past the edge it should be pinned to.
     /// </summary>
     private void UpdateZoomPosition(Point mouse) {
-        if (ImgFit.Source is not BitmapSource src) {
+        _zoomAt = mouse;
+        if (ZoomBitmap is not { } src) {
             return;
         }
         double hw = ImagePreviewHost.ActualWidth;
@@ -537,8 +589,16 @@ public partial class PreviewPane : UserControl {
             return;
         }
 
-        double srcW = src.PixelWidth;
-        double srcH = src.PixelHeight;
+        // 1 image pixel = 1 device pixel, FastStone's "100 %": the size in
+        // DIPs is the pixel size over the monitor's scale. Read here, not
+        // kept in a field - the window may have moved to another monitor.
+        // Sized on every move rather than once, so the box always belongs
+        // to the picture now in ImgFit, not the one the zoom began on.
+        var dpi = VisualTreeHelper.GetDpi(this);
+        double srcW = src.PixelWidth / dpi.DpiScaleX;
+        double srcH = src.PixelHeight / dpi.DpiScaleY;
+        ImgZoom.Width = srcW;
+        ImgZoom.Height = srcH;
 
         // Clamp to pane interior so leaving the pane doesn't scroll past
         // the image edges. At mouse.X == 0 we show the image's left edge;
@@ -562,8 +622,10 @@ public partial class PreviewPane : UserControl {
             ? my - (my / hh) * srcH
             : PreviewImageMarginTop;
 
-        Canvas.SetLeft(ImgZoom, x);
-        Canvas.SetTop(ImgZoom, y);
+        // On whole device pixels: a fractional offset resamples the whole
+        // picture by a share of a pixel, and 1:1 stops being 1:1.
+        Canvas.SetLeft(ImgZoom, Math.Round(x * dpi.DpiScaleX) / dpi.DpiScaleX);
+        Canvas.SetTop(ImgZoom, Math.Round(y * dpi.DpiScaleY) / dpi.DpiScaleY);
     }
 
     /// <param name="notify">

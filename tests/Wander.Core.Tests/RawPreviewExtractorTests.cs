@@ -36,8 +36,12 @@ public class RawPreviewExtractorTests {
     }
 
 
-    /// <summary>CR3-shaped file: ftyp, an unrelated box, then Canon's preview uuid box.</summary>
-    private static byte[] Cr3(byte[] jpeg, byte[]? canonUuid = null) {
+    /// <summary>
+    /// CR3-shaped file: ftyp, an unrelated box, then Canon's preview uuid
+    /// box. With <paramref name="track"/>, also the full-size JPEG in an
+    /// mdat and a movie box whose first track points at it.
+    /// </summary>
+    private static byte[] Cr3(byte[] jpeg, byte[]? canonUuid = null, byte[]? track = null, bool wideOffsets = true) {
         byte[] uuid = canonUuid ?? new byte[] {
             0xea, 0xf4, 0x2b, 0x5e, 0x1c, 0x98, 0x4b, 0x88,
             0xb9, 0xfb, 0xb7, 0xdc, 0x40, 0x6e, 0x4d, 0x16,
@@ -66,9 +70,40 @@ public class RawPreviewExtractorTests {
         file.AddRange(Be32(16));                            // a box we must skip over
         file.AddRange(Encoding.ASCII.GetBytes("free"));
         file.AddRange(Enumerable.Repeat((byte)0, 8));
+        if (track is not null) {
+            const int TrackAt = 24 + 16 + 8;                // after ftyp, free and the mdat header
+            file.AddRange(Box("mdat", track));
+            file.AddRange(Moov(TrackAt, track.Length, wideOffsets));
+        }
         file.AddRange(uuidBox);
 
         return file.ToArray();
+    }
+
+    /// <summary>
+    /// A CR3 movie box cut down to the path the parser walks - moov / trak /
+    /// mdia / minf / stbl with the first sample's size and place. Real files
+    /// have tkhd, mdhd and the rest around these.
+    /// </summary>
+    private static byte[] Moov(int sampleAt, int sampleLength, bool wide) {
+        byte[] stsz = Box("stsz", Be32(0), Be32(0), Be32(1), Be32(sampleLength));
+        byte[] chunks = wide
+            ? Box("co64", Be32(0), Be32(1), Be32(0), Be32(sampleAt))
+            : Box("stco", Be32(0), Be32(1), Be32(sampleAt));
+        byte[] stbl = Box("stbl", Box("stsd", Be32(0), Be32(0)), stsz, chunks);
+
+        return Box("moov", Box("mvhd", new byte[8]), Box("trak", Box("mdia", Box("minf", stbl))));
+    }
+
+    private static byte[] Box(string type, params byte[][] body) {
+        var box = new List<byte>();
+        box.AddRange(Be32(8 + body.Sum(part => part.Length)));
+        box.AddRange(Encoding.ASCII.GetBytes(type));
+        foreach (byte[] part in body) {
+            box.AddRange(part);
+        }
+
+        return box.ToArray();
     }
 
 
@@ -160,8 +195,8 @@ public class RawPreviewExtractorTests {
         return b;
     }
 
-    private static byte[]? Extract(byte[] file) {
-        return RawPreviewExtractor.Extract(new MemoryStream(file));
+    private static byte[]? Extract(byte[] file, bool fullSize = false) {
+        return RawPreviewExtractor.Extract(new MemoryStream(file), fullSize);
     }
 
 
@@ -184,6 +219,43 @@ public class RawPreviewExtractorTests {
     [Fact]
     public void Extract_RejectsACr3PreviewThatIsNotADisplayableJpeg() {
         Assert.Null(Extract(Cr3(LosslessJpeg(padding: 500))));
+    }
+
+    /// <summary>
+    /// The preview pane's zoom: the 1620-px PRVW at 1:1 is a third of a
+    /// 6000-px frame blown up, which is what FastStone showed side by side
+    /// with it (2026-09-21).
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Extract_FullSize_TakesTheFirstTracksJpeg_InACr3(bool wideOffsets) {
+        byte[] preview = BaselineJpeg(padding: 100);
+        byte[] full = BaselineJpeg(padding: 900);
+
+        Assert.Equal(full, Extract(Cr3(preview, track: full, wideOffsets: wideOffsets), fullSize: true));
+    }
+
+    /// <summary>Thumbnails keep the small one: a fraction of the bytes to read, and more than a tile shows.</summary>
+    [Fact]
+    public void Extract_ByDefault_KeepsTheSmallCr3Preview() {
+        byte[] preview = BaselineJpeg(padding: 100);
+
+        Assert.Equal(preview, Extract(Cr3(preview, track: BaselineJpeg(padding: 900))));
+    }
+
+    [Fact]
+    public void Extract_FullSize_FallsBackToThePreview_WhenTheFirstTrackIsNotADisplayableJpeg() {
+        byte[] preview = BaselineJpeg(padding: 100);
+
+        Assert.Equal(preview, Extract(Cr3(preview, track: LosslessJpeg(padding: 900)), fullSize: true));
+    }
+
+    [Fact]
+    public void Extract_FullSize_FallsBackToThePreview_WithoutAMovieBox() {
+        byte[] preview = BaselineJpeg(padding: 100);
+
+        Assert.Equal(preview, Extract(Cr3(preview), fullSize: true));
     }
 
 

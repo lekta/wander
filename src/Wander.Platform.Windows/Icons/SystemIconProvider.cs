@@ -279,22 +279,37 @@ public sealed class SystemIconProvider : IIconProvider {
     /// exactly when the folder is trying to appear.
     ///
     /// <para>
-    /// Instead both shapes of key are looked up. A path is either a folder
-    /// or a file, so at most one of them was ever stored — checking both is
-    /// two dictionary probes against one stat, and it cannot answer wrong.
+    /// Instead the caller says which it is, when its row knows
+    /// (<paramref name="isFolder"/>), and the matching shape of key is
+    /// looked up. "Look under both, at most one was ever stored" was the
+    /// rule until 2026-09-21 and it answered wrong: a file key shared by a
+    /// whole type (<c>file|noext</c>, <c>ext|.txt</c>) is stored long before
+    /// a given folder is first drawn, so a new folder named <c>fast</c> came
+    /// up in the tree with the icon of a file with no extension - for the
+    /// session, since nothing re-asks a row that already has a picture. A
+    /// caller that does not know is answered from per-path keys only.
     /// </para>
     /// </summary>
-    public byte[]? TryGetCachedIcon(string path, IconSize size) {
+    public byte[]? TryGetCachedIcon(string path, IconSize size, bool? isFolder = null) {
         if (string.IsNullOrEmpty(path)) {
             return null;
         }
 
         lock (_lock) {
-            if (_cache.TryGetValue($"dir|{path}|{size}", out byte[]? asFolder)) {
-                return asFolder;
+            if (IsShellNamespacePath(path)) {
+                return _cache.GetValueOrDefault(BuildCacheKey(path, size, isFolder: false).Key);
             }
 
-            return _cache.TryGetValue(BuildFileCacheKey(path, size).Key, out byte[]? asFile) ? asFile : null;
+            if (isFolder != false && _cache.TryGetValue($"dir|{path}|{size}", out byte[]? asFolder)) {
+                return asFolder;
+            }
+            if (isFolder == true) {
+                return null;
+            }
+
+            var (key, perPath) = BuildFileCacheKey(path, size);
+
+            return isFolder == false || perPath ? _cache.GetValueOrDefault(key) : null;
         }
     }
 

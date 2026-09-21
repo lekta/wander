@@ -48,23 +48,38 @@ internal static class IconImageCache {
     // Keyed by a tuple rather than a formatted string: this is asked once
     // per tile appearing, and a string built per lookup is garbage produced
     // by the very code that exists to stop the hot path costing anything.
-    private static readonly Dictionary<(IconSize Size, string Path), BitmapImage> _images = new();
+    //
+    // The bytes an image was decoded from travel with it, and a hit counts
+    // only while the provider still answers with that same array. The key
+    // is a path, and a path outlives what stands on it: a folder renamed
+    // away leaves its path to be asked about once more as a file that is
+    // not there, and the next "New folder" at that path would otherwise be
+    // drawn with the picture decoded for the absence (2026-09-21).
+    private static readonly Dictionary<(IconSize Size, string Path), (byte[] From, BitmapImage Image)> _images = new();
     private static readonly Queue<(IconSize Size, string Path)> _thumbOrder = new();
     private static readonly Lock _lock = new();
 
 
     /// <summary>
-    /// The already-decoded image, if this path and size have been drawn
-    /// before. The distinction matters to <see cref="AsyncIcon"/>: a hit
+    /// The already-decoded image, if these bytes have been drawn for this
+    /// path and size before. The distinction matters to <see cref="AsyncIcon"/>: a hit
     /// here can go on screen synchronously (scrolling back over seen tiles
     /// must not blink), while a miss means a real decode — work that has no
     /// business on the UI thread, where a folder revisit used to run
     /// hundreds of them in one second.
     /// </summary>
-    public static bool TryGetDecoded(string path, IconSize size, out BitmapImage image) {
+    public static bool TryGetDecoded(string path, IconSize size, byte[] bytes, out BitmapImage image) {
         lock (_lock) {
-            return _images.TryGetValue((size, path), out image!);
+            if (_images.TryGetValue((size, path), out var hit) && ReferenceEquals(hit.From, bytes)) {
+                image = hit.Image;
+
+                return true;
+            }
         }
+
+        image = null!;
+
+        return false;
     }
 
 
@@ -73,22 +88,21 @@ internal static class IconImageCache {
     /// decoding it only if this is the first time it is asked for.
     /// </summary>
     public static BitmapImage Get(string path, IconSize size, byte[] bytes) {
-        var key = (size, path);
-
-        lock (_lock) {
-            if (_images.TryGetValue(key, out var hit)) {
-                return hit;
-            }
+        if (TryGetDecoded(path, size, bytes, out var known)) {
+            return known;
         }
 
         // Decoded outside the lock: two tiles racing on the same file at
         // worst decode it twice, which is cheaper than making every other
         // tile wait behind one decode.
         var image = IconConverter.ToImage(bytes);
+        var key = (size, path);
 
         lock (_lock) {
-            if (!_images.TryAdd(key, image)) {
-                return _images[key];
+            bool isNew = !_images.ContainsKey(key);
+            _images[key] = (bytes, image);
+            if (!isNew) {
+                return image;
             }
             if (size is IconSize.Large or IconSize.Medium) {
                 _thumbOrder.Enqueue(key);
