@@ -3,7 +3,7 @@
 Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 версии — по [SemVer](https://semver.org/lang/ru/). Даты в ISO-формате.
 
-## [Unreleased]
+## [0.4.0-beta] — 2026-09-18
 
 ### Added
 - **Меню «Действия»** в шапке, левее «Вид»: что можно сделать с
@@ -124,8 +124,6 @@
   их побайтово и, при включённой настройке «не спрашивать про одинаковые
   файлы», отвечает за вас. Раньше запись архива в диалоге конфликтов была
   заглушкой — сравнить содержимое было нечем.
-
-### Changed
 - **Две копии Wander на одних настройках не мешают друг другу.** Запущенная
   с ключом `--yield` (так стартует отладочная из Rider) при живой обычной
   копии настройки не сохраняет и пишет об этом в заголовке окна — иначе
@@ -688,6 +686,7 @@
   delete, подтверждения с Cancel по умолчанию, портативная сборка и
   CI-релиз по тегу, PolyForm Noncommercial 1.0.0.
 
+[0.4.0-beta]: https://github.com/lekta/wander/releases/tag/v0.4.0
 [0.3.1-beta]: https://github.com/lekta/wander/releases/tag/v0.3.1
 [0.3.0-beta]: https://github.com/lekta/wander/releases/tag/v0.3.0
 [0.2.1-beta]: https://github.com/lekta/wander/releases/tag/v0.2.1
