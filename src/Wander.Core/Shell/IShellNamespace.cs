@@ -31,8 +31,14 @@ public interface IShellNamespace {
     /// sentinels. They are stable enough to feed into the icon provider and
     /// back into this interface, but not necessarily into
     /// <see cref="IFileSystem"/> operations.
+    ///
+    /// <para>
+    /// <paramref name="ct"/> is looked at between items: a listing nobody
+    /// is waiting for any more - the person has moved on - ends with
+    /// <see cref="OperationCanceledException"/> instead of running out.
+    /// </para>
     /// </summary>
-    IReadOnlyList<FileSystemEntry> Enumerate(string shellPath);
+    IReadOnlyList<FileSystemEntry> Enumerate(string shellPath, CancellationToken ct = default);
 
     /// <summary>
     /// Human-readable label for the namespace itself (e.g. "Корзина" for

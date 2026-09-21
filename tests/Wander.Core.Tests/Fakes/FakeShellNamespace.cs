@@ -74,7 +74,7 @@ internal sealed class FakeShellNamespace : IShellNamespace {
         return null;
     }
 
-    public IReadOnlyList<FileSystemEntry> Enumerate(string shellPath) {
+    public IReadOnlyList<FileSystemEntry> Enumerate(string shellPath, CancellationToken ct = default) {
         var children = new List<FileSystemEntry>();
         foreach (string folder in _folders) {
             if (IsChildOf(folder, shellPath)) {

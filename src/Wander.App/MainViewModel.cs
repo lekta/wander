@@ -2091,7 +2091,7 @@ public sealed class MainViewModel : ObservableObject {
             // to list it, or we were slow to arrange what it listed — and a
             // single figure cannot tell them apart.
             using (PerfLog.Measure("bg.enumerate")) {
-                foreach (var e in _fs.Enumerate(path, sort)) {
+                foreach (var e in _fs.Enumerate(path, sort, token)) {
                     token.ThrowIfCancellationRequested();
                     if (!visibility.Allows(e)) {
                         hidden++;
@@ -2258,7 +2258,7 @@ public sealed class MainViewModel : ObservableObject {
                 // the person is looking at.
                 items = await LongWait.WatchAsync(
                     Task.Run(() => {
-                        var listed = ns.Enumerate(shellPath);
+                        var listed = ns.Enumerate(shellPath, token);
 
                         return archive is null ? listed : EntryComparers.Sort(listed, sort);
                     }, token),
@@ -2506,8 +2506,16 @@ public sealed class MainViewModel : ObservableObject {
         Ratings.Apply(targets, RatingField.ColorLabel, value);
     }
 
-    /// <summary>What a rating gesture on the list is about: the selection, or the current item alone.</summary>
+    /// <summary>
+    /// What a rating gesture on the list is about: the selection, or the
+    /// current item alone. Nothing in the Recycle Bin or inside an archive -
+    /// there is nowhere to write a sidecar there.
+    /// </summary>
     private IReadOnlyList<FileSystemEntry> RatingTargets() {
+        if (IsCurrentShellNamespace) {
+            return Array.Empty<FileSystemEntry>();
+        }
+
         return _selectedEntries.Count > 0
             ? _selectedEntries
             : _selectedEntry is { } single ? new[] { single } : Array.Empty<FileSystemEntry>();

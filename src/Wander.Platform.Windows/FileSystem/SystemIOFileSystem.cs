@@ -20,7 +20,7 @@ public sealed class SystemIOFileSystem : IFileSystem {
     }
 
 
-    public IReadOnlyList<FileSystemEntry> Enumerate(string path, SortOptions? sort = null) {
+    public IReadOnlyList<FileSystemEntry> Enumerate(string path, SortOptions? sort = null, CancellationToken ct = default) {
         var options = sort ?? SortOptions.Default;
 
         // Folder-likes go in one bucket, plain files in another. A
@@ -38,6 +38,7 @@ public sealed class SystemIOFileSystem : IFileSystem {
         // pay for its own stat call. On a folder of tens of thousands of
         // files that difference is the second or two the list spent blank.
         foreach (var info in new DirectoryInfo(path).EnumerateFileSystemInfos()) {
+            ct.ThrowIfCancellationRequested();
             if (info is DirectoryInfo dir) {
                 folderLikes.Add(BuildEntry(dir, EntryKind.Directory));
                 continue;

@@ -609,8 +609,10 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
 Две вещи, которые выглядят папками, а папками не являются: корзина
 (`shell:RecycleBinFolder`) и архив, открытый как папка. Обе за одним
 контрактом `IShellNamespace` (Core), реализация — `WindowsShellNamespace`,
-которая только диспетчеризует: корзина — старый путь через
-`Shell.Application`, архив — `ShellArchiveFolder` на `IShellItem`.
+которая только диспетчеризует: корзина — `ShellRecycleBinFolder`, архив —
+`ShellArchiveFolder`, обе на `IShellItem`. Листинг обеих (и обычной папки
+в `IFileSystem.Enumerate`) принимает `CancellationToken` и смотрит на него
+между элементами: ушёл из папки — чтение обрывается, а не дочитывается.
 
 - **Путь внутри архива — обычный parsing name.** `D:\pack.7z\sub\b.txt`
   шелл разбирает сам; Wander режет его надвое чистой функцией
@@ -630,7 +632,25 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
   и `ModifyDate` для `ArchiveFolder` врут (0 и 1899). Перечисление —
   `BHID_EnumItems`; папка/файл — `SFGAO_FOLDER`; размер и дата —
   `IShellItem2` (`PKEY_Size`, `PKEY_DateModified`), у папок внутри размера
-  нет. Корзина остаётся на `Shell.Application`: её колонки он отдаёт верно.
+  нет.
+- **Корзина — тот же `IShellItem2`** (с 2026-09-21; раньше
+  `Shell.Application`, у него `Items()` — один непрерываемый вызов, ~5 с
+  на холодной корзине). Имя — `System.FileName`: как на диске, с
+  расширением (display name прячет `.lnk` всегда, остальные — по
+  настройке Проводника, а `RecycleHandle` несёт настоящий путь; запасное
+  имя — последняя часть `SIGDN_NORMALDISPLAY`, у элемента корзины это
+  исходный путь). `FullPath` — `SIGDN_FILESYSPATH`
+  (`$R…`), время удаления — `PKEY_Recycle_DateDeleted` точным FILETIME (в
+  `ModifiedUtc`: по нему сортировка и сопоставление в `Restore`), «откуда»
+  — `PKEY_Recycle_DeletedFrom`, у удалённой папки настоящий размер.
+  `Restore` остаётся на `Shell.Application` (нужны глаголы элемента) и
+  находит элемент по тому же `System.FileName` (`ExtendedProperty`).
+- **Корзина перечисляется на своём STA-потоке** (`OnOwnApartment`). Её
+  shell-папка — apartment-threaded; созданная с потока пула, она попадает в
+  общий host-STA процесса: вызовы маршалятся, а долгий вызов там держит
+  overlay-запросы значков (`SHGetFileInfo`) — четыре слота `AsyncIcon` и
+  следующую папку с ними. Контрольные строки лога: `Recycle bin: opened …
+  first row after … rows in …` и `Recycle bin: listing abandoned at …`.
 - **Байты — только копирующим движком шелла.** `BHID_Stream` и
   `IDataObject` для `ArchiveFolder` отвечают `E_NOINTERFACE`;
   `IFileOperation::CopyItem` с `FOF_NO_UI` извлекает всё. Отсюда

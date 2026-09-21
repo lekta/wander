@@ -226,7 +226,16 @@
   `.html` исполняются (`IsScriptEnabled` глобальный, PDF-viewer без него не
   работает). Per-navigation или `NavigateToString`.
 - **Иконки грузятся с MTA** — apartment-threaded thumbnail-провайдеры могут
-  вернуть пусто; выделенный STA-воркер, если всплывёт.
+  вернуть пусто; выделенный STA-воркер, если всплывёт. Замер 2026-09-21:
+  `GetOverlayIndex` (`SHGetFileInfo` + `SHGFI_OVERLAYINDEX`) с потока пула
+  ждёт общий host-STA процесса — любой долгий вызов там держит все четыре
+  слота `AsyncIcon` разом (`slow shell load` с одинаковым временем у
+  четырёх папок). Корзину оттуда убрали (ARCHITECTURE, «Shell-namespace»);
+  без неё то же было на `D:\Dev\lekta\Wander` (~1,9 с, 2026-09-17), виновник
+  неизвестен — вероятно, сам overlay-обработчик. `GetImage` не блокируется.
+- **Слот значка не отпускается при уходе из папки** (2026-09-18) —
+  `stillWanted` проверяется до shell-вызова, начатый вызов не отменить:
+  зависшие значки покинутой папки держат значки следующей.
 
 ### Контекстное меню (shell)
 
@@ -293,11 +302,11 @@
 - **`ShellRecycleBin.Restore` — локали и STA**: глагол ищется по строке
   (`Restore` / `Восстановить`), `GetDetailsOf(1/2)` не проверены на не-en;
   занятый target молча получает «(1)»; зовётся с UI-потока — при уходе undo
-  в async нужен STA-поток.
-- **COM RCW не освобождаются явно** — `Shell.Application` в
-  `WindowsShellNamespace` пересоздаётся на каждый `Refresh`, промежуточные
-  `IShellFolder` и `ShellRecycleBin` оставлены сборщику; `IContextMenu`
-  освобождаем.
+  в async нужен STA-поток. На каждый элемент — полный обход корзины
+  (`Items()`, ~0,35 с на 1433), на UI-потоке.
+- **COM RCW не освобождаются явно** — промежуточные `IShellFolder` и
+  `Shell.Application` в `ShellRecycleBin` оставлены сборщику; `IContextMenu`
+  и листинги корзины / архивов освобождаем.
 - **Корзина: статичная иконка** — empty / full запрашивается раз за сессию;
   инвалидировать при Restore / Empty или `SHChangeNotifyRegister`.
 - **Одиночные `Copy` / `Move` / `Delete` синхронные** — зовут только тесты.

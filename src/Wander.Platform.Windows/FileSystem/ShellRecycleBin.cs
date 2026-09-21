@@ -156,7 +156,7 @@ public sealed class ShellRecycleBin : IRecycleBin {
         for (int i = 0; i < count; i++) {
             dynamic item = items.Item(i);
             string origDir = (string)(bin.GetDetailsOf(item, 1) ?? "");
-            string itemName = (string)(item.Name ?? "");
+            string itemName = RealName((object)item);
             string fullOrig = Path.Combine(origDir, itemName);
 
             if (!string.Equals(fullOrig, handle.OriginalPath, StringComparison.OrdinalIgnoreCase)) {
@@ -206,6 +206,28 @@ public sealed class ShellRecycleBin : IRecycleBin {
         _logger.Info($"Restored from recycle: {handle.OriginalPath}");
     }
 
+
+    /// <summary>
+    /// The name the file had on disk. <c>FolderItem.Name</c> is the display
+    /// name: a shortcut never shows its <c>.lnk</c> there, and nothing shows
+    /// an extension with "hide known extensions" on - while the handle
+    /// carries the real path, so <c>Ctrl+Z</c> after deleting a shortcut
+    /// found nothing to restore. <c>System.FileName</c> is unaffected by
+    /// either. Takes an object, not dynamic: a call with a dynamic argument
+    /// is itself bound at run time, once per item in the bin.
+    /// </summary>
+    private static string RealName(object folderItem) {
+        dynamic item = folderItem;
+        try {
+            if (item.ExtendedProperty("System.FileName") is string real && real.Length > 0) {
+                return real;
+            }
+        } catch {
+            // An item without the property falls back to what it shows.
+        }
+
+        return (string)(item.Name ?? "");
+    }
 
     /// <summary>
     /// Known localized forms of the recycle-bin "Restore" verb. Extend as

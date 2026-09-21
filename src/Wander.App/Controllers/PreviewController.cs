@@ -1670,10 +1670,15 @@ public sealed class PreviewController : ObservableObject {
     /// <summary>
     /// Offers the rating row for a picture that has no sidecar yet. Only
     /// pictures: a rating on a spreadsheet is a file nobody asked for, and
-    /// the sidecar formats Wander writes are photo formats.
+    /// the sidecar formats Wander writes are photo formats. And only where
+    /// a sidecar can be written: next to a <c>$R</c> file in the Recycle
+    /// Bin it is litter, inside an archive it is impossible.
     /// </summary>
     private void OfferRating(FileSystemEntry entry) {
         if (RatingRequested is null || entry.IsFolderLike || !ImageFormats.IsImage(entry.Name)) {
+            return;
+        }
+        if (entry.OriginalLocation is not null || Archives.Of(entry.FullPath) is not null) {
             return;
         }
 

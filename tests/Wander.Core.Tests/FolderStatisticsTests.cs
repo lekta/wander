@@ -232,7 +232,7 @@ public class FolderStatisticsTests {
     /// pointing at its own ancestor looks like from the outside.
     /// </summary>
     private sealed class LoopingFileSystem : FakeFileSystem {
-        public override IReadOnlyList<FileSystemEntry> Enumerate(string path, SortOptions? sort = null) {
+        public override IReadOnlyList<FileSystemEntry> Enumerate(string path, SortOptions? sort = null, CancellationToken ct = default) {
             return new[] {
                 new FileSystemEntry(
                     Name: "loop",
@@ -275,8 +275,8 @@ public class FolderStatisticsTests {
             _forbidden = forbidden;
         }
 
-        public override IReadOnlyList<FileSystemEntry> Enumerate(string path, SortOptions? sort = null) {
-            return Throw(path) ? throw new UnauthorizedAccessException(path) : base.Enumerate(path, sort);
+        public override IReadOnlyList<FileSystemEntry> Enumerate(string path, SortOptions? sort = null, CancellationToken ct = default) {
+            return Throw(path) ? throw new UnauthorizedAccessException(path) : base.Enumerate(path, sort, ct);
         }
 
         private bool Throw(string path) {

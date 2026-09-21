@@ -19,7 +19,7 @@ internal class FakeFileSystem : IFileSystem {
     }
 
 
-    public virtual IReadOnlyList<FileSystemEntry> Enumerate(string path, SortOptions? sort = null) {
+    public virtual IReadOnlyList<FileSystemEntry> Enumerate(string path, SortOptions? sort = null, CancellationToken ct = default) {
         var options = sort ?? SortOptions.Default;
 
         var folderLikes = new List<FileSystemEntry>();

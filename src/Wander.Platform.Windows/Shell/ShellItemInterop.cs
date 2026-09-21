@@ -56,6 +56,12 @@ internal static class ShellItemInterop {
     /// <summary>The name of the item, unaffected by "hide known extensions".</summary>
     internal const uint SIGDN_PARENTRELATIVEPARSING = 0x80018001;
 
+    /// <summary>What Explorer shows. For an item in the Recycle Bin - the full path it was deleted from.</summary>
+    internal const uint SIGDN_NORMALDISPLAY = 0x00000000;
+
+    /// <summary>Where the item is on disk. For an item in the Recycle Bin - its <c>$R</c> file.</summary>
+    internal const uint SIGDN_FILESYSPATH = 0x80058000;
+
     internal const uint CLSCTX_INPROC_SERVER = 0x1;
 
     internal const int E_ABORT = unchecked((int)0x80004004);
@@ -64,6 +70,13 @@ internal static class ShellItemInterop {
     /// <summary>System.Size and System.DateModified, both from the storage property set.</summary>
     internal static PROPERTYKEY PKEY_Size = new(new("b725f130-47ef-101a-a5f1-02608c9eebac"), 12);
     internal static PROPERTYKEY PKEY_DateModified = new(new("b725f130-47ef-101a-a5f1-02608c9eebac"), 14);
+
+    /// <summary>System.FileName - the name on disk, extension included whatever Explorer is set to hide.</summary>
+    internal static PROPERTYKEY PKEY_FileName = new(new("41cf5ae0-f75a-4806-bd87-59c7d9248eb9"), 100);
+
+    /// <summary>System.Recycle.DeletedFrom and System.Recycle.DateDeleted - the bin's own two columns.</summary>
+    internal static PROPERTYKEY PKEY_Recycle_DeletedFrom = new(new("9b174b33-40ff-11d2-a27e-00c04fc30871"), 2);
+    internal static PROPERTYKEY PKEY_Recycle_DateDeleted = new(new("9b174b33-40ff-11d2-a27e-00c04fc30871"), 3);
 
 
     [StructLayout(LayoutKind.Sequential)]

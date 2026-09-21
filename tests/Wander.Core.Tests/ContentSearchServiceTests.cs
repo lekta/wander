@@ -469,8 +469,8 @@ public class ContentSearchServiceTests {
         public HashSet<string> Hidden { get; } = new(StringComparer.OrdinalIgnoreCase);
 
 
-        public override IReadOnlyList<FileSystemEntry> Enumerate(string path, SortOptions? sort = null) {
-            var entries = base.Enumerate(path, sort);
+        public override IReadOnlyList<FileSystemEntry> Enumerate(string path, SortOptions? sort = null, CancellationToken ct = default) {
+            var entries = base.Enumerate(path, sort, ct);
             var marked = new List<FileSystemEntry>(entries.Count);
             foreach (var entry in entries) {
                 marked.Add(Hidden.Contains(entry.FullPath) ? entry with { IsHidden = true } : entry);
@@ -491,12 +491,12 @@ public class ContentSearchServiceTests {
         }
 
 
-        public override IReadOnlyList<FileSystemEntry> Enumerate(string path, SortOptions? sort = null) {
+        public override IReadOnlyList<FileSystemEntry> Enumerate(string path, SortOptions? sort = null, CancellationToken ct = default) {
             if (string.Equals(path, _refused, StringComparison.OrdinalIgnoreCase)) {
                 throw new UnauthorizedAccessException(path);
             }
 
-            return base.Enumerate(path, sort);
+            return base.Enumerate(path, sort, ct);
         }
     }
 

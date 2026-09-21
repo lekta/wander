@@ -10,8 +10,14 @@ public interface IFileSystem {
     /// <see cref="SortOptions.Default"/> (name A→Z, folders first) — the
     /// sane default for callers that don't expose sort to the user
     /// (tree view, tests, ad-hoc enumerations).
+    ///
+    /// <para>
+    /// <paramref name="ct"/> is looked at between entries: a folder of tens
+    /// of thousands of files, or one on a slow share, stops being read with
+    /// <see cref="OperationCanceledException"/> once nobody waits for it.
+    /// </para>
     /// </summary>
-    IReadOnlyList<FileSystemEntry> Enumerate(string path, SortOptions? sort = null);
+    IReadOnlyList<FileSystemEntry> Enumerate(string path, SortOptions? sort = null, CancellationToken ct = default);
     IReadOnlyList<FileSystemEntry> GetRoots();
 
     /// <summary>Returns metadata for a single path or null if it doesn't exist.</summary>

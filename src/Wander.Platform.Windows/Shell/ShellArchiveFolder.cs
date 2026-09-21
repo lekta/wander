@@ -18,9 +18,8 @@ namespace Wander.Platform.Windows.Shell;
 /// <para>
 /// Everything goes through <c>IShellItem</c>, never <c>Shell.Application</c>:
 /// the latter answers 0 for <c>FolderItem.Size</c> and 1899 for
-/// <c>ModifyDate</c> on <c>ArchiveFolder</c> entries. The Recycle Bin, whose
-/// columns it does report correctly, keeps using it - see
-/// <see cref="WindowsShellNamespace"/>.
+/// <c>ModifyDate</c> on <c>ArchiveFolder</c> entries. The Recycle Bin is
+/// listed the same way - see <see cref="ShellRecycleBinFolder"/>.
 /// </para>
 ///
 /// <para>
@@ -106,7 +105,7 @@ public sealed class ShellArchiveFolder {
     /// unreadable disk. An archive that is merely empty (or fully
     /// encrypted, which looks the same from here) returns no rows instead.
     /// </exception>
-    public IReadOnlyList<FileSystemEntry> Enumerate(string path) {
+    public IReadOnlyList<FileSystemEntry> Enumerate(string path, CancellationToken ct = default) {
         var folder = CreateItem(path);
         if (folder is null) {
             throw new IOException($"Cannot open '{path}' as a folder.");
@@ -126,7 +125,7 @@ public sealed class ShellArchiveFolder {
             }
 
             try {
-                return ReadAll(items);
+                return ReadAll(items, ct);
             } finally {
                 Release(items);
             }
@@ -196,7 +195,7 @@ public sealed class ShellArchiveFolder {
 
     // --- Enumeration ----------------------------------------------------
 
-    private IReadOnlyList<FileSystemEntry> ReadAll(IEnumShellItems items) {
+    private IReadOnlyList<FileSystemEntry> ReadAll(IEnumShellItems items, CancellationToken ct) {
         var result = new List<FileSystemEntry>();
         var batch = new IShellItem[1];
 
@@ -204,10 +203,11 @@ public sealed class ShellArchiveFolder {
             var item = batch[0];
             batch[0] = null!;
             try {
+                ct.ThrowIfCancellationRequested();
                 if (BuildEntry(item) is { } entry) {
                     result.Add(entry);
                 }
-            } catch (Exception ex) {
+            } catch (Exception ex) when (ex is not OperationCanceledException) {
                 _log.Warn($"Archive enumerate: skipped an entry ({ex.Message})");
             } finally {
                 Release(item);
