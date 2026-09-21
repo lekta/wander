@@ -145,17 +145,17 @@ Platform.Windows` — один файл, `App.xaml.cs` (точка композ�
 <!-- deps:generated:begin -->
 ```
 === Wander dependency graph (using sweep) ===
-date   : 2026-09-17
-commit : d66b509
+date   : 2026-09-21
+commit : 6c94f2a
 
 -- projects --
 Wander.App -> Wander.Core   (59 files)
 Wander.App -> Wander.Platform.Windows   (1 files)
-Wander.Core.Tests -> Wander.Core   (98 files)
+Wander.Core.Tests -> Wander.Core   (101 files)
 Wander.Harness -> Wander.App   (4 files)
 Wander.Harness -> Wander.Core   (6 files)
 Wander.Harness -> Wander.Platform.Windows   (3 files)
-Wander.Platform.Windows -> Wander.Core   (28 files)
+Wander.Platform.Windows -> Wander.Core   (29 files)
 
 -- Wander.Core: folder -> folder --
   Actions        -> FileSystem     (5 files)
@@ -203,15 +203,17 @@ Wander.Platform.Windows -> Wander.Core   (28 files)
   Shell          -> Operations     (1 files)
   Shell          -> Persistence    (2 files)
   Shell          -> Undo           (1 files)
+  Undo           -> Operations     (1 files)
 
 -- Wander.Core: levels --
-  0: (root), Icons, Layout, Localization, Logging, Operations, Undo
-  1: Diagnostics, FileSystem
-  2: Companions, Navigation, Preview
-  3: Actions, Rename, Search
-  4: Listing, Persistence
-  5: Shell
-  6: Menu
+  0: (root), Icons, Layout, Localization, Logging, Operations
+  1: Diagnostics, Undo
+  2: FileSystem
+  3: Companions, Navigation, Preview
+  4: Actions, Rename, Search
+  5: Listing, Persistence
+  6: Shell
+  7: Menu
 
 -- Wander.Platform.Windows: folder -> folder --
   (root)         -> Diagnostics    (1 files)
@@ -222,10 +224,12 @@ Wander.Platform.Windows -> Wander.Core   (28 files)
   (root)         -> Persistence    (1 files)
   (root)         -> Search         (1 files)
   (root)         -> Shell          (1 files)
+  FileSystem     -> Shell          (1 files)
 
 -- Wander.Platform.Windows: levels --
-  0: Diagnostics, FileSystem, Icons, Imaging, Logging, Persistence, Search, Shell
-  1: (root)
+  0: Diagnostics, Icons, Imaging, Logging, Persistence, Search, Shell
+  1: FileSystem
+  2: (root)
 
 -- Wander.App: folder -> folder --
   (root)         -> Controllers    (2 files)
@@ -417,6 +421,62 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
   `CanUndo == false` в полёте (`Ctrl+Z` игнорируется, как в Explorer).
   Стек под одним локом; `Changed` поднимается вне лока и может прийти с
   фонового потока — подписчик маршалит сам. Не переживает рестарт.
+- **Откат — операция** (2026-09-21). `UndoService.UndoAsync`: с пула, в
+  `OperationTracker` (`OperationVerbs.Undo`), под тем же busy-счётчиком.
+  Связка разматывается по `IUndoableAction.Steps`, последний шаг первым.
+  Отмена — несделанные шаги возвращаются в стек под тем же описанием
+  (`WithSteps`), следующий `Ctrl+Z` продолжает. Сбой шага — в
+  `UndoOutcome.Failures`, остальные шаги всё равно откатываются, сбойный в
+  стек не возвращается: иначе элемент, которого уже нет в корзине, запирает
+  всё под собой. `UndoOutcome.Undone` — то, что вернулось на деле, по нему
+  `UndoLast` ведёт выделение и `FollowRelocated`.
+- **Окно операции — через 400 мс работы, без фокуса** (2026-09-21,
+  `RunWithProgressDialogAsync`, у всех операций). Короткое удаление, откат
+  переименования, мгновенный отказ окна не показывают вовсе — раньше оно
+  мелькало и забирало фокус; строка состояния показывает операцию с первого
+  мгновения. Появляется без активации (`ShowActivated = false`): человек к
+  этому времени занят другим. Модальный вопрос (окно совпадений задаётся
+  изнутри операции) пережидается — `ComponentDispatcher.IsThreadModal`.
+- **Корзина — на `IFileOperation`, в обе стороны** (`ShellRecycleBin`,
+  стенд 2026-09-21). Причины, все измерены:
+  - `SHFileOperation` с `FOF_ALLOWUNDO` файл на пути длиннее `MAX_PATH`
+    удалял **безвозвратно и молча** (rc 0, в корзине пусто). Движок же
+    говорит заранее: в `PreDeleteItem` нет `TSF_DELETE_RECYCLE_IF_POSSIBLE` —
+    значит, уничтожит; приёмник отвечает `E_FAIL`, файл остаётся,
+    наверх — `RecycleUnavailableException`. Короткая папка с длинным путём
+    внутри проверку движка проходит, и оболочка задаёт свой вопрос поверх
+    `FOF_NO_UI` («Да» по умолчанию) — поэтому до движка стоит свой обход
+    (`TooLongForBin`, порог 259; граница не измерена, документная).
+  - `PostDeleteItem` отдаёт созданный элемент корзины; его id-list
+    (base64) — в `RecycleHandle.BinItemId`. `Restore` — один `MoveItem`,
+    10–20 мс, без обхода корзины (было 0,35 с на элемент при 1433), без
+    глагола по локализованному имени, без разбора даты. Строка панели
+    корзины несёт `BinFilePath` (`$R…`) — поиск обходом до совпадения,
+    ~80 мс. Путь, удалённый дважды, возвращается правильной версией.
+  - Занятое имя при возврате: движок под `FOF_NO_UI` ответил бы «заменить»
+    сам, поэтому имя решается до него — `UniqueNames`;
+    `FOF_RENAMEONCOLLISION` — сетка на гонку. Пропавшая папка создаётся.
+  - `MoveItem` из корзины оставляет `$I…` без пары; корзина его не
+    показывает, убираем сами (`RemoveIndexFile`).
+  - Каждый прогон — на своём STA-потоке (`OwnApartment`, без очереди
+    сообщений — движку она не нужна), все RCW освобождаются до выхода.
+  - **Удаление — пачкой, один прогон движка** (`IRecycleBin.SendMany`,
+    `BatchExecutor.Recycle`; у интерфейса реализация по умолчанию — цикл
+    `Send`, ею живут фейки): 3 мс на файл против 11 (1000 файлов — 3,1 с;
+    300 через боевой класс — 0,94 с). Результат, `BinItemId` и колбэк
+    прогресса — на элемент, колбэки идут в порядке очереди. Без
+    `FOFX_EARLYFAILURE`: занятый файл (`0x80270027`) и папка с занятым
+    внутри (`0x80270028`, остаётся **целой**) пропускаются за миллисекунды,
+    остальные проходят; с флагом движок думал над тем же 1021 мс и
+    останавливался. Ошибка из `PreDeleteItem` останавливает прогон для
+    всех следующих элементов, нетронутых: это отмена (`E_ABORT` по токену)
+    и цена отказа (не берёт корзина — `E_FAIL`), после отказа остаток
+    просто прогоняется заново. Занятым — один общий повтор через 0,3 с
+    (уедет в Core, PLAN блок 0, шаг 4). Возврат — прогон на элемент,
+    ~15 мс (TECHDEBT).
+  - Файл, открытый с `FileShare.Delete`, уходит в корзину и возвращается
+    прямо под читателем — основание решения AF (а). Дешёвая проба
+    занятости — `WindowsFileBusyProbe` (`CreateFile(DELETE)`, пара мс).
 - **Прогресс — в двух счётчиках сразу** (2026-09-04, блок 2). Элементы —
   то, что выделил человек; байты — то, что двигает диск, и без них копия
   одного файла на 5 ГБ держит бар на нуле.
@@ -643,9 +703,8 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
   (`$R…`), время удаления — `PKEY_Recycle_DateDeleted` точным FILETIME (в
   `ModifiedUtc`: по нему сортировка и сопоставление в `Restore`), «откуда»
   — `PKEY_Recycle_DeletedFrom`, у удалённой папки настоящий размер.
-  `Restore` остаётся на `Shell.Application` (нужны глаголы элемента) и
-  находит элемент по тому же `System.FileName` (`ExtendedProperty`).
-- **Корзина перечисляется на своём STA-потоке** (`OnOwnApartment`). Её
+  `Restore` находит строку панели по её `$R`-файлу (`RecycleHandle.BinFilePath`).
+- **Корзина перечисляется на своём STA-потоке** (`OwnApartment.Run`). Её
   shell-папка — apartment-threaded; созданная с потока пула, она попадает в
   общий host-STA процесса: вызовы маршалятся, а долгий вызов там держит
   overlay-запросы значков (`SHGetFileInfo`) — четыре слота `AsyncIcon` и

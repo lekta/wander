@@ -114,19 +114,19 @@ internal sealed class BatchExecutor {
         using var op = _tracker.Begin(isMove ? OperationVerbs.Move : OperationVerbs.Copy, groups.Count, token: ct);
 
         return await Task.Run(
-            () => {
-                var weights = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
-                op.SetTotalBytes(Weigh(groups, weights, ct));
-
-                return ApplyBatch(groups, targetFolder, isMove, resolver, op, ct, weights);
-            },
+            () => ApplyBatch(groups, targetFolder, isMove, resolver, op, ct, weigh: true),
             ct).ConfigureAwait(false);
     }
 
     /// <summary>
-    /// How many bytes the batch is about to move, counted before it starts:
-    /// a file is its own size, a folder is the walk of it. Zero when nothing
-    /// could be measured, and the display falls back to counting items.
+    /// How many bytes the batch is about to move, counted before anything
+    /// moves - and <b>after</b> the question about collisions
+    /// (<see cref="AskUpFront"/>): the walk of a large tree takes seconds,
+    /// and with the walk first the operation stood there empty for all of
+    /// them before a question that a Cancel makes the walk pointless for
+    /// (2026-09-21). A file is its own size, a folder is the walk of it. Zero
+    /// when nothing could be measured, and the display falls back to counting
+    /// items.
     ///
     /// <para>
     /// The walk carries the same depth guard as every other walk in Wander
@@ -178,15 +178,13 @@ internal sealed class BatchExecutor {
     /// </summary>
     private IReadOnlyList<BatchItemResult> ApplyBatch(
         IReadOnlyList<BatchGroup> groups, string targetFolder, bool isMove, IConflictResolver resolver,
-        IOperationHandle? progress, CancellationToken ct = default,
-        IReadOnlyDictionary<string, long>? weights = null) {
+        IOperationHandle? progress, CancellationToken ct = default, bool weigh = false) {
         using var _ = _undo.BeginOperation();
 
         var plans = groups.Select(g => Plan(g, targetFolder)).ToList();
         var run = new Run(isMove, resolver, plans.Count) {
             Progress = progress,
             Token = ct,
-            Weights = weights,
         };
 
         // An item already where it is being sent is not a collision, and
@@ -204,6 +202,12 @@ internal sealed class BatchExecutor {
         if (!AskUpFront(plans, run)) {
             _log.Info($"Batch {(isMove ? "move" : "copy")} cancelled by user before start ({plans.Count} items)");
             return plans.Select(p => Cancelled(p)).ToList();
+        }
+
+        if (weigh && progress is not null) {
+            var weights = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+            progress.SetTotalBytes(Weigh(groups, weights, ct));
+            run.Weights = weights;
         }
 
         var results = new List<BatchItemResult>(plans.Count);
@@ -545,43 +549,10 @@ internal sealed class BatchExecutor {
         IReadOnlyList<string> paths, bool permanent, IOperationHandle progress, CancellationToken ct) {
         using var _ = _undo.BeginOperation();
 
-        var results = new List<DeleteResult>(paths.Count);
         var undoSteps = new List<IUndoableAction>(paths.Count);
-
-        foreach (string path in paths) {
-            if (ct.IsCancellationRequested) {
-                results.Add(new DeleteResult(path, DeleteStatus.Cancelled, null));
-                continue;
-            }
-
-            try {
-                if (SystemPathGuard.IsProtected(path, out string guardReason)) {
-                    throw new IOException(guardReason);
-                }
-
-                if (permanent) {
-                    if (_fs.DirectoryExists(path)) {
-                        _fs.DeleteDirectory(path, recursive: true);
-                    } else if (_fs.FileExists(path)) {
-                        _fs.DeleteFile(path);
-                    } else {
-                        throw new FileNotFoundException("Path not found", path);
-                    }
-                    _log.Warn($"Permanent delete: {path}");
-                    results.Add(new DeleteResult(path, DeleteStatus.Ok, null));
-                } else {
-                    var handle = _bin.Send(path);
-                    undoSteps.Add(new DeleteAction(_bin, handle));
-                    _log.Info($"Delete (recycle): {path}");
-                    results.Add(new DeleteResult(path, DeleteStatus.Ok, null));
-                }
-            } catch (Exception ex) {
-                _log.Error($"Delete failed: {path}", ex);
-                results.Add(new DeleteResult(path, DeleteStatus.Failed, ex));
-            }
-
-            progress.Advance(path);
-        }
+        var results = permanent
+            ? DeleteForGood(paths, progress, ct)
+            : Recycle(paths, progress, undoSteps, ct);
 
         if (permanent) {
             // Permanent delete is not undoable - drop any history so users can't
@@ -592,6 +563,76 @@ internal sealed class BatchExecutor {
         }
 
         return results;
+    }
+
+    private List<DeleteResult> DeleteForGood(IReadOnlyList<string> paths, IOperationHandle progress, CancellationToken ct) {
+        var results = new List<DeleteResult>(paths.Count);
+        foreach (string path in paths) {
+            if (ct.IsCancellationRequested) {
+                results.Add(new DeleteResult(path, DeleteStatus.Cancelled, null));
+                continue;
+            }
+
+            try {
+                if (SystemPathGuard.IsProtected(path, out string guardReason)) {
+                    throw new IOException(guardReason);
+                }
+                if (_fs.DirectoryExists(path)) {
+                    _fs.DeleteDirectory(path, recursive: true);
+                } else if (_fs.FileExists(path)) {
+                    _fs.DeleteFile(path);
+                } else {
+                    throw new FileNotFoundException("Path not found", path);
+                }
+                _log.Warn($"Permanent delete: {path}");
+                results.Add(new DeleteResult(path, DeleteStatus.Ok, null));
+            } catch (Exception ex) {
+                _log.Error($"Delete failed: {path}", ex);
+                results.Add(new DeleteResult(path, DeleteStatus.Failed, ex));
+            }
+
+            progress.Advance(path);
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// The guard first, item by item; what passes goes to the bin as one
+    /// batch (<see cref="IRecycleBin.SendMany"/>) and comes back with a
+    /// result each, put together again in the order asked.
+    /// </summary>
+    private List<DeleteResult> Recycle(
+        IReadOnlyList<string> paths, IOperationHandle progress, List<IUndoableAction> undoSteps, CancellationToken ct) {
+        var results = new DeleteResult?[paths.Count];
+        var allowed = new List<int>(paths.Count);
+        for (int i = 0; i < paths.Count; i++) {
+            if (SystemPathGuard.IsProtected(paths[i], out string guardReason)) {
+                var refusal = new IOException(guardReason);
+                _log.Error($"Delete failed: {paths[i]}", refusal);
+                results[i] = new DeleteResult(paths[i], DeleteStatus.Failed, refusal);
+                progress.Advance(paths[i]);
+            } else {
+                allowed.Add(i);
+            }
+        }
+
+        var sent = _bin.SendMany(allowed.Select(i => paths[i]).ToList(), progress.Advance, ct);
+        for (int n = 0; n < sent.Count; n++) {
+            string path = sent[n].Path;
+            if (sent[n].Handle is { } handle) {
+                undoSteps.Add(new DeleteAction(_bin, handle));
+                _log.Info($"Delete (recycle): {path}");
+                results[allowed[n]] = new DeleteResult(path, DeleteStatus.Ok, null);
+            } else if (sent[n].Error is { } error) {
+                _log.Error($"Delete failed: {path}", error);
+                results[allowed[n]] = new DeleteResult(path, DeleteStatus.Failed, error);
+            } else {
+                results[allowed[n]] = new DeleteResult(path, DeleteStatus.Cancelled, null);
+            }
+        }
+
+        return results.Select(r => r!).ToList();
     }
 
     private void PushComposite(IReadOnlyList<IUndoableAction> steps, bool isMove, int itemCount, string? verbOverride = null) {
@@ -762,7 +803,7 @@ internal sealed class BatchExecutor {
         public CancellationToken Token { get; init; }
 
         /// <summary>What the up-front walk weighed, by source path; null for the sync entry points.</summary>
-        public IReadOnlyDictionary<string, long>? Weights { get; init; }
+        public IReadOnlyDictionary<string, long>? Weights { get; set; }
 
 
         public ConflictResolution? AnswerFor(string source) {

@@ -62,6 +62,7 @@ public static class PlatformBootstrapper {
         }
         ServiceLocator.Register<IAppStateStore>(new JsonAppStateStore(owner));
         ServiceLocator.Register<IFileLockInspector>(new RestartManagerLockInspector());
+        ServiceLocator.Register<IFileBusyProbe>(new WindowsFileBusyProbe());
         ServiceLocator.Register<IShortcutService>(new ShellShortcutService());
         ServiceLocator.Register<IShellNamespace>(new WindowsShellNamespace(logger));
         ServiceLocator.Register<IShellContextMenu>(new ShellContextMenu(logger));

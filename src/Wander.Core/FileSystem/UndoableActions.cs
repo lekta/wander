@@ -82,6 +82,8 @@ public sealed class CompositeAction : IUndoableAction {
 
     public string Description { get; }
 
+    public IReadOnlyList<IUndoableAction> Steps => _actions;
+
 
     /// <summary>Everything the members put back, in their original order.</summary>
     public IReadOnlyList<string> PathsAfterUndo =>
@@ -102,6 +104,10 @@ public sealed class CompositeAction : IUndoableAction {
     public IReadOnlyList<(string From, string To)> MovesOnUndo =>
         _actions.Reverse().SelectMany(a => a.MovesOnUndo).ToArray();
 
+
+    public IUndoableAction WithSteps(IReadOnlyList<IUndoableAction> steps) {
+        return new CompositeAction(Description, steps);
+    }
 
     public void Undo() {
         // Reverse order so dependent ops unwind correctly.

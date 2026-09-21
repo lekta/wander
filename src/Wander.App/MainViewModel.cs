@@ -66,6 +66,18 @@ public sealed class MainViewModel : ObservableObject {
     /// </summary>
     private const int ManualViewModeLimit = 128;
 
+    /// <summary>
+    /// How long an operation runs before its window comes up (2026-09-21).
+    /// Most are over long before that - a delete of one file, an undo of a
+    /// rename, a refusal that takes no time at all - and a window flashing
+    /// up and taking the focus for them is worse than none. The status bar
+    /// shows the operation from its first moment either way.
+    /// </summary>
+    private static readonly TimeSpan _operationWindowDelay = TimeSpan.FromMilliseconds(400);
+
+    /// <summary>How often a window held back by a modal question looks again.</summary>
+    private static readonly TimeSpan _operationWindowRecheck = TimeSpan.FromMilliseconds(200);
+
     /// <summary>Smallest the preview pane may be, and what the file list keeps of the window beside it.</summary>
     private const double PreviewMinWidth = 120;
     private const double ListMinWidth = 240;
@@ -3786,12 +3798,35 @@ public sealed class MainViewModel : ObservableObject {
         Justification = "A command body, nothing awaits it; every exception is caught, logged and shown in the status bar.")]
     private async void UndoLast() {
         try {
-            var action = _undo.Undo();
-            if (action is null) {
+            // An operation like any other - off this thread, in the tracker,
+            // cancellable, its window held back the same way.
+            string? description = _undo.NextDescription;
+            var outcome = await RunWithProgressDialogAsync(
+                Strings.ProgressUndoing, ct => _undo.UndoAsync(_tracker, ct));
+            if (outcome is null) {
                 return;
             }
-            _log.Info($"Undo: {action.Description}");
-            Status = string.Format(Strings.StatusUndone, action.Description);
+
+            foreach (var failure in outcome.Failures) {
+                _log.Error($"Undo failed: {failure.Step.Description}", failure.Error);
+            }
+            var action = outcome.Undone;
+            if (action is null) {
+                Status = outcome.Failures.Count > 0
+                    ? string.Format(Strings.StatusUndoFailed, outcome.Failures[0].Error.Message)
+                    : string.Format(Strings.StatusUndoStopped, description);
+
+                return;
+            }
+
+            _log.Info(
+                $"Undo: {action.Description}" +
+                (outcome.Cancelled ? $" - stopped, {outcome.Remaining?.Steps.Count ?? 0} steps left on the stack" : "") +
+                (outcome.Failures.Count > 0 ? $" - {outcome.Failures.Count} steps failed" : ""));
+            Status = outcome.Cancelled ? string.Format(Strings.StatusUndoStopped, action.Description)
+                : outcome.Failures.Count > 0 ? string.Format(
+                    Strings.StatusUndonePartly, action.Description, outcome.Failures.Count, outcome.Failures[0].Error.Message)
+                : string.Format(Strings.StatusUndone, action.Description);
 
             // An undo that only put a rating back leaves the folder exactly
             // as it was — same files, same names, same order — so re-listing
@@ -4131,10 +4166,12 @@ public sealed class MainViewModel : ObservableObject {
             }
 
             try {
-                // ModifiedUtc carries the deletion time for bin entries —
-                // that is what the enumerator puts there.
+                // ModifiedUtc carries the deletion time for bin entries, and
+                // FullPath the $R file the bin keeps the item in - that is
+                // what the enumerator puts there, and what Restore finds it by.
                 bin.Restore(new RecycleHandle(
-                    Path.Combine(entry.OriginalLocation, entry.Name), entry.ModifiedUtc));
+                    Path.Combine(entry.OriginalLocation, entry.Name), entry.ModifiedUtc,
+                    BinFilePath: entry.FullPath));
                 restored++;
             } catch (Exception ex) {
                 _log.Error($"Restore failed: {entry.Name}", ex);
@@ -4550,6 +4587,10 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     private string DescribeError(Exception ex, string path) {
+        if (ex is RecycleUnavailableException) {
+            // The journal is the user's: it names the file, not only the reason.
+            return string.Format(Strings.ErrorRecycleUnavailable, Path.GetFileName(path));
+        }
         if (ex is IOException && _lockInspector is not null) {
             var lockers = _lockInspector.WhoIsLocking(path);
             if (lockers.Count > 0) {
@@ -4656,7 +4697,12 @@ public sealed class MainViewModel : ObservableObject {
 
     /// <summary>
     /// Run an async batch op with its own <see cref="Wander.App.Views.ProgressDialog"/>.
-    /// The window opens before the await, follows the operation the work
+    /// The window comes up once the work has run for
+    /// <see cref="_operationWindowDelay"/> - never, when it is over sooner -
+    /// and without taking the focus: it appears in the middle of whatever
+    /// the user went on to do. It waits out a modal question (the conflict
+    /// window is asked from inside the work) rather than come up over it.
+    /// It follows the operation the work
     /// registers in <see cref="_tracker"/>, and is closed here, before this
     /// returns, when <paramref name="work"/> finishes (success, failure, or
     /// user cancel). Returns whatever the work returned; rethrows
@@ -4684,13 +4730,20 @@ public sealed class MainViewModel : ObservableObject {
         // the operation registers under that token several layers down.
         var dlg = new Wander.App.Views.ProgressDialog(headline, _tracker) {
             Owner = Application.Current?.MainWindow,
+            ShowActivated = false,
         };
         _operationWindows.Add(dlg);
         dlg.Closed += (_, _) => _operationWindows.Remove(dlg);
 
         try {
             var task = work(dlg.Token);
-            dlg.Show();
+            await Task.WhenAny(task, Task.Delay(_operationWindowDelay)).ConfigureAwait(true);
+            while (!task.IsCompleted && System.Windows.Interop.ComponentDispatcher.IsThreadModal) {
+                await Task.WhenAny(task, Task.Delay(_operationWindowRecheck)).ConfigureAwait(true);
+            }
+            if (!task.IsCompleted) {
+                dlg.Show();
+            }
 
             return await task.ConfigureAwait(true);
         } finally {

@@ -75,6 +75,15 @@ public static partial class Strings {
     /// <summary>Не удалось отменить: {0}</summary>
     public static string StatusUndoFailed => Get(nameof(StatusUndoFailed));
 
+    /// <summary>Отменено: {0}; не вернулось {1}: {2}</summary>
+    public static string StatusUndonePartly => Get(nameof(StatusUndonePartly));
+
+    /// <summary>Откат остановлен: {0}; остальное вернёт следующий Ctrl+Z</summary>
+    public static string StatusUndoStopped => Get(nameof(StatusUndoStopped));
+
+    /// <summary>Откат</summary>
+    public static string ProgressUndoing => Get(nameof(ProgressUndoing));
+
     /// <summary>Переименовано вместе со спутниками: {0}</summary>
     public static string StatusRenamedWithCompanions => Get(nameof(StatusRenamedWithCompanions));
 
@@ -230,6 +239,9 @@ public static partial class Strings {
 
     /// <summary>файл занят другой программой</summary>
     public static string ErrorInUse => Get(nameof(ErrorInUse));
+
+    /// <summary>«{0}» не помещается в корзину: путь длиннее 259 знаков или у диска нет корзины. Ничего не удалено; Shift+Delete удаляет безвозвратно</summary>
+    public static string ErrorRecycleUnavailable => Get(nameof(ErrorRecycleUnavailable));
 
     /// <summary>Файл занят</summary>
     public static string DeleteInUseTitle => Get(nameof(DeleteInUseTitle));

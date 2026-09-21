@@ -43,6 +43,22 @@ public interface IUndoableAction {
     /// </summary>
     IReadOnlyList<(string From, string To)> MovesOnUndo => Array.Empty<(string, string)>();
 
+    /// <summary>
+    /// The independent steps this action is made of, in the order they were
+    /// done - itself, unless it is a bundle. <see cref="UndoService.UndoAsync"/>
+    /// unwinds a bundle step by step, last first: that is where its progress,
+    /// its cancellation and "the rest still came back" after one failure
+    /// come from.
+    /// </summary>
+    IReadOnlyList<IUndoableAction> Steps => new[] { this };
+
+    /// <summary>
+    /// A bundle of some of <see cref="Steps"/>, under the same description -
+    /// what was undone and what is left of an undo stopped half-way. Never
+    /// asked of an action that is its own only step.
+    /// </summary>
+    IUndoableAction WithSteps(IReadOnlyList<IUndoableAction> steps) => this;
+
     /// <summary>Reverse the original effect. May throw — caller logs.</summary>
     void Undo();
 }

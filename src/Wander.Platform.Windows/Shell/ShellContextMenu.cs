@@ -225,15 +225,27 @@ internal sealed class ShellContextMenuSession : IShellContextMenuSession {
             }
         }
 
-        if (parent is null || children.Count == 0) {
+        if (parent is null) {
             return null;
         }
 
-        var menuIid = IID_IContextMenu;
-        int hr = parent.GetUIObjectOf(
-            GetActiveWindow(), (uint)children.Count, children.ToArray(), ref menuIid, IntPtr.Zero, out object menu);
+        // The folder is wanted for this one call; the menu keeps what it
+        // needs. Left to the collector the wrapper - and with it the shell's
+        // hold on the folder - lives for as long as the collector pleases,
+        // and the folder reads as "in use by Wander" to a rename or an eject.
+        try {
+            if (children.Count == 0) {
+                return null;
+            }
 
-        return hr >= 0 ? menu as IContextMenu : null;
+            var menuIid = IID_IContextMenu;
+            int hr = parent.GetUIObjectOf(
+                GetActiveWindow(), (uint)children.Count, children.ToArray(), ref menuIid, IntPtr.Zero, out object menu);
+
+            return hr >= 0 ? menu as IContextMenu : null;
+        } finally {
+            Marshal.ReleaseComObject(parent);
+        }
     }
 
     private IContextMenu? BindBackgroundMenu() {
@@ -254,12 +266,17 @@ internal sealed class ShellContextMenuSession : IShellContextMenuSession {
         }
 
         // The folder-background menu comes from the *view* object, not from
-        // GetUIObjectOf — that one needs items to act on.
-        var menuIid = IID_IContextMenu;
+        // GetUIObjectOf — that one needs items to act on. The folder itself
+        // is let go at once - see BindSelectionMenu.
+        try {
+            var menuIid = IID_IContextMenu;
 
-        return folder.CreateViewObject(GetActiveWindow(), ref menuIid, out object menu) >= 0
-            ? menu as IContextMenu
-            : null;
+            return folder.CreateViewObject(GetActiveWindow(), ref menuIid, out object menu) >= 0
+                ? menu as IContextMenu
+                : null;
+        } finally {
+            Marshal.ReleaseComObject(folder);
+        }
     }
 
 

@@ -544,6 +544,28 @@ public class BatchExecutorTests {
     }
 
     [Fact]
+    public async Task DeleteManyAsync_Recycle_KeepsTheOrderAsked_WhateverHappenedToEachItem() {
+        // The bin takes the batch as a whole and the guard takes items out of
+        // it beforehand; the results still line up with what was asked.
+        var (batch, fs, _, undo, _) = Setup();
+        string protectedPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.Windows), "notepad.exe");
+        string missing = Path.Combine(DstFolder, "never-was.txt");
+        fs.Files[RootA] = new byte[] { 1 };
+        fs.Files[RootB] = new byte[] { 2 };
+
+        var results = await batch.DeleteManyAsync(
+            new[] { RootA, missing, protectedPath, RootB }, permanent: false, CancellationToken.None);
+
+        Assert.Equal(new[] { RootA, missing, protectedPath, RootB }, results.Select(r => r.Path));
+        Assert.Equal(
+            new[] { DeleteStatus.Ok, DeleteStatus.Failed, DeleteStatus.Failed, DeleteStatus.Ok },
+            results.Select(r => r.Status));
+        Assert.IsType<FileNotFoundException>(results[1].Error);
+        Assert.Equal("delete of 2 items", undo.NextDescription);
+    }
+
+    [Fact]
     public void MoveMany_ProtectedSource_FailsThatItem() {
         var (batch, fs, _, _, _) = Setup();
         string protectedSrc = Environment.GetFolderPath(Environment.SpecialFolder.System);
@@ -701,6 +723,35 @@ public class BatchExecutorTests {
 
         Assert.Equal(160, totalSeen);
         Assert.Equal(160, biggestSeen);
+    }
+
+    [Fact]
+    public async Task CopyManyAsync_AsksAboutCollisions_BeforeWeighingTheSources() {
+        // The walk of a large source takes seconds; with the walk first the
+        // operation stood there empty for all of them, and a Cancel in the
+        // question made every one of them wasted.
+        var (batch, fs, _, _, tracker) = Setup();
+        fs.Files[SrcA] = new byte[100];
+        fs.Directories.Add(DstFolder);
+        fs.Files[Path.Combine(DstFolder, Path.GetFileName(SrcA))] = new byte[7];
+
+        long totalWhenAsked = -1;
+        long totalSeen = 0;
+        tracker.Changed += (_, _) => {
+            foreach (var snap in tracker.Snapshot()) {
+                totalSeen = Math.Max(totalSeen, snap.BytesTotal);
+            }
+        };
+        var resolver = new ScriptedResolver(request => {
+            totalWhenAsked = tracker.Snapshot()[0].BytesTotal;
+
+            return request.Conflicts.Select(c => new ConflictAnswer(c, ConflictResolution.Replace)).ToList();
+        });
+
+        await batch.CopyManyAsync(new[] { SrcA }, DstFolder, resolver, default);
+
+        Assert.Equal(0, totalWhenAsked);
+        Assert.Equal(100, totalSeen);
     }
 
     [Fact]

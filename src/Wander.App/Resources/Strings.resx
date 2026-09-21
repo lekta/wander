@@ -310,6 +310,18 @@
   <data name="StatusUndoFailed" xml:space="preserve">
     <value>Не удалось отменить: {0}</value>
   </data>
+  <data name="StatusUndonePartly" xml:space="preserve">
+    <value>Отменено: {0}; не вернулось {1}: {2}</value>
+    <comment>{0} — описание действия, {1} — сколько шагов не удалось, {2} — причина первого</comment>
+  </data>
+  <data name="StatusUndoStopped" xml:space="preserve">
+    <value>Откат остановлен: {0}; остальное вернёт следующий Ctrl+Z</value>
+    <comment>{0} — описание действия</comment>
+  </data>
+  <data name="ProgressUndoing" xml:space="preserve">
+    <value>Откат</value>
+    <comment>Окно операции и строка состояния во время Ctrl+Z</comment>
+  </data>
   <data name="StatusRenamedWithCompanions" xml:space="preserve">
     <value>Переименовано вместе со спутниками: {0}</value>
   </data>
@@ -633,6 +645,10 @@
   </data>
   <data name="ErrorInUse" xml:space="preserve">
     <value>файл занят другой программой</value>
+  </data>
+  <data name="ErrorRecycleUnavailable" xml:space="preserve">
+    <value>«{0}» не помещается в корзину: путь длиннее 259 знаков или у диска нет корзины. Ничего не удалено; Shift+Delete удаляет безвозвратно</value>
+    <comment>{0} — имя файла или папки</comment>
   </data>
   <data name="DeleteInUseTitle" xml:space="preserve">
     <value>Файл занят</value>

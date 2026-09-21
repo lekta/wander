@@ -1,4 +1,3 @@
-using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using Wander.Core.FileSystem;
 using Wander.Core.Logging;
@@ -23,8 +22,8 @@ namespace Wander.Platform.Windows.Shell;
 /// </list>
 ///
 /// <para>
-/// Restoring stays where it was, <c>ShellRecycleBin.Restore</c>: it needs
-/// the item's verbs, and those are <c>Shell.Application</c>'s.
+/// Restoring is <c>ShellRecycleBin.Restore</c>'s; a row from here is found
+/// again by its <c>$R</c> file, which is what <c>FullPath</c> carries.
 /// </para>
 /// </summary>
 internal sealed class ShellRecycleBinFolder {
@@ -45,40 +44,9 @@ internal sealed class ShellRecycleBinFolder {
     /// </summary>
     /// <exception cref="OperationCanceledException">The person moved on before the listing ended.</exception>
     public IReadOnlyList<FileSystemEntry> Enumerate(CancellationToken ct) {
-        return OnOwnApartment(() => ReadAll(ct));
+        return OwnApartment.Run("Wander recycle bin listing", () => ReadAll(ct));
     }
 
-
-    /// <summary>
-    /// Runs <paramref name="work"/> on a thread of its own, in its own STA.
-    /// The bin's shell folder is apartment-threaded, and the listing is
-    /// asked for from a pool thread (MTA): created there, the object lands
-    /// in the process-wide host STA, every call is marshalled to it, and
-    /// whatever else lives in that one apartment - the overlay lookups of
-    /// the icon loader - queues behind the bin's cold start (2026-09-18:
-    /// four icon slots held for 4.8 s, the next folder with them). On its
-    /// own apartment the calls are direct and nobody waits.
-    /// </summary>
-    private static T OnOwnApartment<T>(Func<T> work) {
-        T result = default!;
-        ExceptionDispatchInfo? failure = null;
-        var thread = new Thread(() => {
-            try {
-                result = work();
-            } catch (Exception ex) {
-                failure = ExceptionDispatchInfo.Capture(ex);
-            }
-        }) {
-            IsBackground = true,
-            Name = "Wander recycle bin listing",
-        };
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        thread.Join();
-        failure?.Throw();
-
-        return result;
-    }
 
     private IReadOnlyList<FileSystemEntry> ReadAll(CancellationToken ct) {
         var watch = System.Diagnostics.Stopwatch.StartNew();

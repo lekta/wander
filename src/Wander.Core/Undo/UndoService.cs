@@ -1,3 +1,5 @@
+using Wander.Core.Operations;
+
 namespace Wander.Core.Undo;
 
 /// <summary>
@@ -93,6 +95,56 @@ public sealed class UndoService {
     }
 
 
+    /// <summary>
+    /// Pop the most recent action and undo it as an operation of its own:
+    /// off the caller's thread, in the tracker like a copy or a delete, step
+    /// by step for a bundle. Null when the stack was empty or busy.
+    ///
+    /// <para>
+    /// An undo is a file operation run backwards - a restore for a delete, a
+    /// move back for a move - so it can take as long and is treated alike:
+    /// it shows progress, <see cref="CanUndo"/> is false while it runs, and
+    /// it can be cancelled. Cancelled, the steps not reached yet go back on
+    /// the stack under the same description, and the next <c>Ctrl+Z</c> goes
+    /// on from there. A step that fails is reported and left behind - the
+    /// rest still comes back; putting the failed one on the stack again would
+    /// wedge everything under it behind an item that is, say, no longer in
+    /// the bin.
+    /// </para>
+    ///
+    /// <para>
+    /// What is left goes on top of whatever an operation finishing meanwhile
+    /// has pushed: slightly out of order, and harmless - the two do not
+    /// depend on each other, or the second could not have run.
+    /// </para>
+    /// </summary>
+    public async Task<UndoOutcome?> UndoAsync(OperationTracker tracker, CancellationToken ct = default) {
+        IUndoableAction action;
+        lock (_gate) {
+            if (_busy > 0 || !_stack.TryPop(out action!)) {
+                return null;
+            }
+            _busy++;
+        }
+        RaiseChanged();
+
+        try {
+            var steps = action.Steps;
+            using var op = tracker.Begin(OperationVerbs.Undo, steps.Count, token: ct);
+            var outcome = await Task.Run(() => Unwind(action, steps, op, ct), CancellationToken.None).ConfigureAwait(false);
+            if (outcome.Remaining is { } remaining) {
+                lock (_gate) {
+                    _stack.Push(remaining);
+                }
+            }
+
+            return outcome;
+        } finally {
+            EndOperation();
+        }
+    }
+
+
     /// <summary>Drops the entire history — used after permanent delete.</summary>
     public void Clear() {
         lock (_gate) {
@@ -127,6 +179,43 @@ public sealed class UndoService {
         RaiseChanged();
     }
 
+
+    private static UndoOutcome Unwind(
+        IUndoableAction action, IReadOnlyList<IUndoableAction> steps, IOperationHandle op, CancellationToken ct) {
+        var undone = new List<IUndoableAction>(steps.Count);
+        var failures = new List<UndoFailure>();
+        int next = steps.Count - 1;
+
+        // Last step first, so dependent ones unwind correctly.
+        for (; next >= 0; next--) {
+            if (ct.IsCancellationRequested) {
+                break;
+            }
+
+            var step = steps[next];
+            string? path = step.PathsAfterUndo.Count > 0 ? step.PathsAfterUndo[0] : null;
+            if (path is not null) {
+                op.SetCurrentPath(path);
+            }
+            try {
+                step.Undo();
+                undone.Add(step);
+            } catch (Exception ex) {
+                failures.Add(new UndoFailure(step, ex));
+            }
+            op.Advance(path ?? step.Description);
+        }
+
+        // Back into the order they were done in - that is what a bundle holds.
+        undone.Reverse();
+        bool whole = undone.Count == steps.Count;
+
+        return new UndoOutcome(
+            Undone: undone.Count == 0 ? null : whole ? action : action.WithSteps(undone),
+            Remaining: next < 0 ? null : action.WithSteps(steps.Take(next + 1).ToList()),
+            Failures: failures,
+            Cancelled: next >= 0);
+    }
 
     private void RaiseChanged() {
         Changed?.Invoke(this, EventArgs.Empty);

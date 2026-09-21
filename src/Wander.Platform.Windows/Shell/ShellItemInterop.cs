@@ -50,6 +50,33 @@ internal static class ShellItemInterop {
     /// </summary>
     internal const uint FOF_NO_UI = 0x0004 | 0x0010 | 0x0400 | 0x0200;
 
+    /// <summary>A name already taken at the target gets the shell's own "copy" suffix instead of being replaced.</summary>
+    internal const uint FOF_RENAMEONCOLLISION = 0x0008;
+
+    /// <summary>Deleting means the recycle bin.</summary>
+    internal const uint FOF_ALLOWUNDO = 0x0040;
+
+    /// <summary>
+    /// Ask before destroying what the bin cannot take. Goes through
+    /// <see cref="FOF_NO_UI"/>: a folder with an over-long path inside
+    /// brings up the shell's own question, "Yes" by default (stand of
+    /// 2026-09-21) - the last net under <c>ShellRecycleBin</c>'s own check,
+    /// and better than the silence without it.
+    /// </summary>
+    internal const uint FOF_WANTNUKEWARNING = 0x4000;
+
+    internal const uint FOFX_RECYCLEONDELETE = 0x00080000;
+
+    /// <summary>The first failure ends the run instead of being skipped over.</summary>
+    internal const uint FOFX_EARLYFAILURE = 0x00100000;
+
+    /// <summary>
+    /// In the flags <c>PreDeleteItem</c> is handed: the engine means to
+    /// recycle this item. Missing on a delete that asked for the bin, it
+    /// means the item is about to be destroyed instead.
+    /// </summary>
+    internal const uint TSF_DELETE_RECYCLE_IF_POSSIBLE = 0x0080;
+
     /// <summary>Full parsing path - inside an archive that is what the address bar shows.</summary>
     internal const uint SIGDN_DESKTOPABSOLUTEPARSING = 0x80028000;
 
@@ -65,6 +92,14 @@ internal static class ShellItemInterop {
     internal const uint CLSCTX_INPROC_SERVER = 0x1;
 
     internal const int E_ABORT = unchecked((int)0x80004004);
+    internal const int E_FAIL = unchecked((int)0x80004005);
+
+    /// <summary>
+    /// The copy engine's two "somebody has it open": the first for a file,
+    /// the second for a folder with such a file inside (stand of 2026-09-21).
+    /// </summary>
+    internal const int COPYENGINE_E_SHARING_VIOLATION_SRC = unchecked((int)0x80270027);
+    internal const int COPYENGINE_E_SHARING_VIOLATION_DEST = unchecked((int)0x80270028);
 
 
     /// <summary>System.Size and System.DateModified, both from the storage property set.</summary>
@@ -403,6 +438,15 @@ internal static class ShellItemInterop {
     [DllImport("shell32.dll")]
     internal static extern int SHGetIDListFromObject(
         [MarshalAs(UnmanagedType.IUnknown)] object punk, out IntPtr ppidl);
+
+    /// <summary>The item an absolute id list names - whether it still exists is found out on first use.</summary>
+    [DllImport("shell32.dll")]
+    internal static extern int SHCreateItemFromIDList(IntPtr pidl, ref Guid riid,
+        [MarshalAs(UnmanagedType.Interface)] out object ppv);
+
+    /// <summary>Bytes in an id list, terminator included.</summary>
+    [DllImport("shell32.dll")]
+    internal static extern uint ILGetSize(IntPtr pidl);
 
     /// <summary>
     /// An item array over absolute id lists. This one rather than
