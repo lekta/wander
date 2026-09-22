@@ -314,7 +314,15 @@ public sealed class MainViewModel : ObservableObject {
             ServiceLocator.TryGet<IImageMetadataReader>(),
             companionMetadata,
             _claims,
-            _tracker);
+            _tracker) {
+            // Both are assigned further down this constructor; the pane asks
+            // only once something is on show. A row of a search inside files
+            // carries its snippet, and the query is the search's (PLAN B6).
+            Listing = () => Entries!,
+            FindTextFor = entry => entry.MatchSnippet is not null && ContentSearch!.TextQuery.Length > 0
+                ? ContentSearch.TextQuery
+                : null,
+        };
         // A click in the footer is about the whole selection the shown file
         // is part of - split or not: the split only doubles the picture,
         // the footer under it stays the one footer of the selection.
@@ -3531,7 +3539,10 @@ public sealed class MainViewModel : ObservableObject {
         ServiceLocator.Get<IIconProvider>().ConfigureCache(new ThumbnailCacheOptions(
             Settings.ThumbnailMemoryEntries,
             Settings.ThumbnailDiskCacheEnabled,
-            Settings.ThumbnailDiskCacheMb * 1024L * 1024L));
+            Settings.ThumbnailDiskCacheMb * 1024L * 1024L,
+            // The system scale: a visual in no window reports it, and the
+            // window's own may not exist yet at startup.
+            ThumbnailCacheOptions.SideFor(System.Windows.Media.VisualTreeHelper.GetDpi(new System.Windows.Media.DrawingVisual()).DpiScaleX)));
     }
 
 

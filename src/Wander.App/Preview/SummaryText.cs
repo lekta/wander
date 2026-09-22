@@ -145,21 +145,55 @@ internal static class SummaryText {
 
 
     /// <summary>
+    /// Several items, on one line: how many, their sidecars, the files
+    /// inside when folders are among them, the pictures when not all of
+    /// them are, the size. A number is said once - "23 selected, 23 files
+    /// inside, 23 pictures" was the same 23 three times (2026-09-22) - and
+    /// the EXIF the pictures share goes on a second line.
+    /// </summary>
+    /// <param name="selected">The rows selected.</param>
+    /// <param name="companions">Sidecar paths folded into those rows; counted in the size.</param>
+    /// <param name="filesInside">Files counted under the selection, sidecars included; said only when <paramref name="hasFolders"/>.</param>
+    /// <param name="shots">What the pictures among the selection share, or null when there are none.</param>
+    /// <param name="read">How many pictures were actually opened for it - fewer than <c>Shots</c> when the selection was capped.</param>
+    public static string ForSelection(
+        int selected, IReadOnlyList<string> companions, bool hasFolders, int filesInside, long size,
+        ShotSummary? shots, int read) {
+        string head = string.Format(Strings.SummarySelected, selected);
+        if (companions.Count > 0) {
+            // "(+23 .xmp)" - the single file's footer says "(+.xmp)", this
+            // is the same mark with a count.
+            var kinds = companions
+                .Select(c => Path.GetExtension(c) is { Length: > 0 } ext ? ext : Path.GetFileName(c))
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+            head += $" (+{companions.Count} {string.Join(", ", kinds)})";
+        }
+        var facts = new List<string> { head };
+        if (hasFolders) {
+            facts.Add(string.Format(Strings.SummaryFilesInside, filesInside));
+        }
+        if (shots is not null && shots.Shots != selected) {
+            facts.Add(string.Format(Strings.SummaryShots, shots.Shots));
+        }
+        facts.Add(SizeFormatter.Format(size));
+        string text = string.Join(Gap, facts);
+        if (shots is not null && ForShots(shots, read) is { Length: > 0 } exif) {
+            text += "\n" + exif;
+        }
+
+        return text;
+    }
+
+
+    /// <summary>
     /// What several pictures have in common, under the count. The same
     /// order as one picture's line - body, exposure, pixels - with the two
     /// or three values a field is allowed to vary over listed after a
     /// comma, and a field that varies more than that left out
-    /// (<see cref="ShotSummary"/>). Nothing is said when nothing is shared.
+    /// (<see cref="ShotSummary"/>). Empty when nothing is shared and the
+    /// EXIF was read in full.
     /// </summary>
-    /// <param name="read">How many pictures were actually opened for it - fewer than <c>Shots</c> when the selection was capped.</param>
-    public static string ForShots(ShotSummary shots, int read) {
-        string headline = read < shots.Shots
-            ? string.Format(Strings.SummaryShotsSample, shots.Shots, read)
-            : string.Format(Strings.SummaryShots, shots.Shots);
-        if (shots.IsEmpty) {
-            return headline;
-        }
-
+    private static string ForShots(ShotSummary shots, int read) {
         var parts = new List<string>();
         if (shots.Cameras.Count > 0) {
             parts.Add(string.Join(", ", shots.Cameras));
@@ -179,8 +213,11 @@ internal static class SummaryText {
         if (shots.PixelSizes.Count > 0) {
             parts.Add(string.Join(", ", shots.PixelSizes.Select(p => $"{p.Width} × {p.Height}")));
         }
+        if (read < shots.Shots) {
+            parts.Add(string.Format(Strings.SummaryShotsSample, read));
+        }
 
-        return headline + "\n" + string.Join(Gap, parts);
+        return string.Join(Gap, parts);
     }
 
 

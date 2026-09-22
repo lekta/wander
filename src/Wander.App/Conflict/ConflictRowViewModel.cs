@@ -3,6 +3,7 @@ using Wander.App.Resources;
 using Wander.App.Util;
 using Wander.App.ViewModels;
 using Wander.Core.FileSystem;
+using Wander.Core.Preview;
 
 namespace Wander.App.Conflict;
 
@@ -155,6 +156,20 @@ public sealed class ConflictRowViewModel : ObservableObject {
     /// </summary>
     public bool IsComparing => Verdict.ContentUndecided;
 
+    /// <summary>
+    /// Two files the preview can draw: the row offers to open them side by
+    /// side (PLAN Q5). Not for folders, and not for a file meeting a folder.
+    /// </summary>
+    public bool CanCompare => !Pair.IsFolderPair && Verdict.SameKind
+        && Conflict.Source.Kind == EntryKind.File
+        && PreviewRouter.Route(SourcePath) != PreviewRoute.Unsupported;
+
+    /// <summary>What we are copying - the left of a comparison.</summary>
+    public FileSystemEntry Source => Conflict.Source;
+
+    /// <summary>What is already there - the right of a comparison.</summary>
+    public FileSystemEntry Target => Conflict.ExistingTarget;
+
 
     private FileConflictInfo Conflict => Pair.Conflict;
 
@@ -168,6 +183,7 @@ public sealed class ConflictRowViewModel : ObservableObject {
         Raise(nameof(VerdictText));
         Raise(nameof(HasVerdictText));
         Raise(nameof(IsComparing));
+        Raise(nameof(CanCompare));
     }
 
     /// <summary>

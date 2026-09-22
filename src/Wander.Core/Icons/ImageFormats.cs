@@ -28,6 +28,8 @@ public static class ImageFormats {
     /// </summary>
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
         ".png", ".jpg", ".jpeg", ".bmp", ".ico", ".tif", ".tiff", ".gif", ".webp",
+        // No codec in Windows: decoded by Wander (Imaging/TgaDecoder).
+        ".tga",
         ".cr2", ".cr3", ".nef", ".arw", ".dng", ".raf", ".orf", ".rw2",
     };
 

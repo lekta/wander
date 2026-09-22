@@ -811,7 +811,8 @@
                                     DragOver="OnDragOver"
                                     Drop="OnDrop"
                                     DragStartRequested="FileList_DragStartRequested"
-                                    ContextMenuRequested="FileList_ContextMenuRequested"/>
+                                    ContextMenuRequested="FileList_ContextMenuRequested"
+                                    FullscreenRequested="FileList_FullscreenRequested"/>
             </Border>
 
             <!-- Splitter between right pane and preview -->

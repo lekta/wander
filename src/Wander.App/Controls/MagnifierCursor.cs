@@ -84,7 +84,9 @@ internal static class MagnifierCursor {
         }
 
         ms.Position = 0;
-        return new Cursor(ms);
+        // Scaled with the display, as the system cursors are: 32 px at 150 %
+        // was a cursor two thirds the size of the arrow beside it (PLAN AM).
+        return new Cursor(ms, scaleWithDpi: true);
     }
 
 

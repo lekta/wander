@@ -34,7 +34,7 @@ public class PreviewPairTests {
 
     [Fact]
     public void AFileThePaneCannotDraw_NoPair() {
-        Assert.Null(PreviewPair.Of(new[] { _a, File("setup.exe") }, _listing));
+        Assert.Null(PreviewPair.Of(new[] { _a, File("data.bin") }, _listing));
     }
 
     [Fact]

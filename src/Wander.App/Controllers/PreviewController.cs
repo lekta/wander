@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -18,6 +19,7 @@ using Wander.Core.Imaging;
 using Wander.Core.Logging;
 using Wander.Core.Operations;
 using Wander.Core.Preview;
+using Wander.Core.Search;
 using Wander.Core.Shell;
 using ImageMetadata = Wander.Core.Icons.ImageMetadata;
 
@@ -126,6 +128,28 @@ public sealed class PreviewController : ObservableObject {
     /// </summary>
     private const int FullSizeDwellMs = 150;
 
+    /// <summary>
+    /// Selection changes closer together than this are a held arrow key
+    /// (PLAN AK, step 5): a picture not decoded yet waits
+    /// <see cref="BurstDelayMs"/> before its decode starts - one that cannot
+    /// be stopped half-way - in case the key moves on first. A picture
+    /// already decoded is shown at once either way.
+    /// </summary>
+    private const int BurstMs = 150;
+
+    private const int BurstDelayMs = 90;
+
+    /// <summary>
+    /// The picture area is reported in steps of this many device pixels. The
+    /// footer grows and shrinks by a line between files, and a box that
+    /// followed it pixel by pixel would miss the decoded neighbours, keyed by
+    /// the box they were fitted to.
+    /// </summary>
+    private const int BoxStep = 64;
+
+    /// <summary>How long the pane stays one size before a picture too small for it is decoded again.</summary>
+    private const int BoxSettleMs = 300;
+
     /// <summary>The chart of levels in the footer, in layout units - the Canvas in PreviewPane.xaml.</summary>
     private const double HistogramWidth = 96;
 
@@ -202,6 +226,9 @@ public sealed class PreviewController : ObservableObject {
     private double _modelRadius = 1;
     private string _modelDetail = "";
     private ImageSource? _audioCover;
+    private ImageSource? _executableIcon;
+    private string _executableTitle = "";
+    private IReadOnlyList<PreviewFact> _executableFacts = Array.Empty<PreviewFact>();
     private string? _documentPath;
     private ImageMetadata? _imageMetadata;
     private string _summary = "";
@@ -258,6 +285,25 @@ public sealed class PreviewController : ObservableObject {
     // One sensor decode at a time: a second of work that cannot be stopped
     // half-way, and a held arrow key must not queue one per frame passed.
     private readonly SemaphoreSlim _rawDecodeGate = new(1, 1);
+
+    // Pictures decoded for the pane - the one on show and its neighbours -
+    // and the picture area they are fitted to, in device pixels (0 until
+    // the pane reports it: pictures are then decoded whole).
+    private readonly PictureCache _pictures = new();
+    private double _boxWidth;
+    private double _boxHeight;
+    private CancellationTokenSource? _boxCts;
+
+    // The pixels of the whole frame on show - what the pane caps the
+    // fitted copy at. Infinite when there is no picture.
+    private double _imageCapWidth = double.PositiveInfinity;
+    private double _imageCapHeight = double.PositiveInfinity;
+
+    // When the selection last moved, and whether it moved in a burst - see
+    // BurstMs; and where from, which says which neighbour comes next.
+    private long _primaryChangedAt;
+    private bool _primaryBurst;
+    private string? _previousPrimaryPath;
 
 
     /// <param name="claims">What operations of the user's are working on - the footer's "running / queued" line; null shows none.</param>
@@ -328,6 +374,28 @@ public sealed class PreviewController : ObservableObject {
     /// belongs to the selection as a whole.
     /// </summary>
     public bool ShowFooter { get; init; } = true;
+
+    /// <summary>
+    /// The rows of the list in their order - where the pane finds the
+    /// pictures around the one on show, to decode them ahead
+    /// (<see cref="PreviewNeighbors"/>). Null decodes nothing ahead: the
+    /// second half of a split has no "next".
+    /// </summary>
+    public Func<IReadOnlyList<FileSystemEntry>>? Listing { get; init; }
+
+    /// <summary>
+    /// The text a row was found by, when it came from a search inside
+    /// files - what the pane's find field opens with (PLAN B6). Null for
+    /// every other row.
+    /// </summary>
+    public Func<FileSystemEntry, string?>? FindTextFor { get; init; }
+
+    /// <summary>
+    /// Raised with every text the pane has just shown: what to find in it
+    /// at once, or null. The pane opens its find field on the first match
+    /// without taking the keyboard - the user is walking the results.
+    /// </summary>
+    public string? FindRequest { get; private set; }
 
     public PreviewKind Kind {
         get => _kind;
@@ -402,6 +470,23 @@ public sealed class PreviewController : ObservableObject {
 
     /// <summary>What the 1:1 zoom draws: <see cref="ZoomSource"/>, or it through the tone curve. Sized by ZoomSource.</summary>
     public ImageSource? ZoomDisplay => !Peeking && _zoomInstead is not null ? _zoomInstead : ZoomSource;
+
+    /// <summary>
+    /// Device pixels of the whole frame on show, across - the most the
+    /// fitted picture is drawn at. Not <see cref="Image"/>'s own size: that
+    /// is decoded to the pane (PLAN AK, step 3) and would hold a picture
+    /// smaller than the pane below what it could show.
+    /// </summary>
+    public double ImageCapWidth {
+        get => _imageCapWidth;
+        private set => SetField(ref _imageCapWidth, value);
+    }
+
+    /// <inheritdoc cref="ImageCapWidth"/>
+    public double ImageCapHeight {
+        get => _imageCapHeight;
+        private set => SetField(ref _imageCapHeight, value);
+    }
 
     /// <summary>
     /// A RAW's sensor decode is on its way (<see cref="ShowRawDecode"/>):
@@ -505,6 +590,24 @@ public sealed class PreviewController : ObservableObject {
     }
 
     public bool HasAudioCover => _audioCover is not null;
+
+    /// <summary>A program's or a library's own icon, big - the card's picture (PLAN B7).</summary>
+    public ImageSource? ExecutableIcon {
+        get => _executableIcon;
+        private set => SetField(ref _executableIcon, value);
+    }
+
+    /// <summary>What the program calls itself - its description, or the file name when it has none.</summary>
+    public string ExecutableTitle {
+        get => _executableTitle;
+        private set => SetField(ref _executableTitle, value);
+    }
+
+    /// <summary>The card's lines: version, publisher, platform, signature - whichever the file has.</summary>
+    public IReadOnlyList<PreviewFact> ExecutableFacts {
+        get => _executableFacts;
+        private set => SetField(ref _executableFacts, value);
+    }
 
     public bool HasAudioText => _audio is not null;
 
@@ -1157,6 +1260,12 @@ public sealed class PreviewController : ObservableObject {
             && entry.Size == _primary.Size
             && entry.ModifiedUtc == _primary.ModifiedUtc;
 
+        if (!sameFile) {
+            long now = Stopwatch.GetTimestamp();
+            _primaryBurst = _primaryChangedAt != 0 && Stopwatch.GetElapsedTime(_primaryChangedAt, now).TotalMilliseconds < BurstMs;
+            _primaryChangedAt = now;
+            _previousPrimaryPath = _primary?.FullPath;
+        }
         _primary = entry;
         RaiseRatingOthers();
         UpdateWorkLine();
@@ -1169,6 +1278,40 @@ public sealed class PreviewController : ObservableObject {
         SchedulePreviewUpdate();
         ScheduleSummaryUpdate();
         ScheduleCompanionUpdate();
+    }
+
+    /// <summary>
+    /// The room the pane has for a picture, in device pixels - what a
+    /// picture is decoded to (PLAN AK, step 3). Grown past the picture on
+    /// show, the picture is decoded again at the new size once the pane has
+    /// settled.
+    /// </summary>
+    public void SetViewport(double width, double height) {
+        double w = Math.Ceiling(Math.Max(0, width) / BoxStep) * BoxStep;
+        double h = Math.Ceiling(Math.Max(0, height) / BoxStep) * BoxStep;
+        if (w == _boxWidth && h == _boxHeight) {
+            return;
+        }
+
+        _boxWidth = w;
+        _boxHeight = h;
+        _boxCts?.Cancel();
+        if (_kind != PreviewKind.Image || _image is not BitmapSource shown
+            || !PictureFit.TooSmall(shown.PixelWidth, shown.PixelHeight, (int)_imageCapWidth, (int)_imageCapHeight, w, h)) {
+            return;
+        }
+
+        _boxCts = new CancellationTokenSource();
+        _ = RefitWhenSettledAsync(_boxCts.Token);
+
+        async Task RefitWhenSettledAsync(CancellationToken ct) {
+            try {
+                await Task.Delay(BoxSettleMs, ct);
+                SchedulePreviewUpdate();
+            } catch (OperationCanceledException) {
+                // The pane is still moving.
+            }
+        }
     }
 
     /// <summary>The surround's colours changed - see <see cref="ContentPalette"/>.</summary>
@@ -1202,6 +1345,10 @@ public sealed class PreviewController : ObservableObject {
     public void SetCurrentFolder(string? path, string name) {
         if (_currentFolderPath == path && _currentFolderName == name) {
             return;
+        }
+        if (_currentFolderPath != path) {
+            // The neighbours decoded ahead were this folder's.
+            _pictures.Clear();
         }
         _currentFolderPath = path;
         _currentFolderName = name;
@@ -1439,6 +1586,8 @@ public sealed class PreviewController : ObservableObject {
                     // not to be one.
                     _zoomImage = null;
                     Image = null;
+                    ImageCapWidth = double.PositiveInfinity;
+                    ImageCapHeight = double.PositiveInfinity;
                 }
                 if (_pictureFactsStale) {
                     // Nor did the load get as far as reading the new
@@ -1449,6 +1598,10 @@ public sealed class PreviewController : ObservableObject {
                 }
                 _pictureOf = _kind == PreviewKind.Image ? loadingFor : null;
                 ScheduleSummaryUpdate();  // metadata might have arrived
+                // Raised every time, the same text too: it is about this file.
+                FindRequest = _kind is PreviewKind.Text or PreviewKind.Code or PreviewKind.Document
+                    && _primary is { } shown ? FindTextFor?.Invoke(shown) : null;
+                Raise(nameof(FindRequest));
             }
         }
 
@@ -1575,6 +1728,14 @@ public sealed class PreviewController : ObservableObject {
 
             case PreviewRoute.Text:
                 await LoadTextAsync(path, ct);
+                break;
+
+            case PreviewRoute.Executable:
+                await LoadExecutableAsync(path, ct);
+                break;
+
+            case PreviewRoute.DocumentText:
+                await LoadDocumentTextAsync(path, ct);
                 break;
 
             // A shortcut is resolved before we get here; one pointing at
@@ -1748,9 +1909,9 @@ public sealed class PreviewController : ObservableObject {
     /// than back on the UI thread. A failure is an icon that stays blank -
     /// the name is what the row is for.
     /// </summary>
-    private static ImageSource? LoadIcon(string path) {
+    private static ImageSource? LoadIcon(string path, IconSize size = IconSize.Small) {
         try {
-            byte[]? bytes = ServiceLocator.Get<IIconProvider>().GetIcon(path, IconSize.Small);
+            byte[]? bytes = ServiceLocator.Get<IIconProvider>().GetIcon(path, size);
 
             return bytes is null ? null : IconConverter.ToImage(bytes);
         } catch {
@@ -1910,111 +2071,178 @@ public sealed class PreviewController : ObservableObject {
 
 
     private async Task LoadImageAsync(string path, CancellationToken ct) {
-        BitmapSource? image = null;
-        ImageMetadata? meta = null;
-        bool isRaw = false;
-        // The embedded JPEG the picture was decoded from, when it was: the
-        // measure of whether the file carries a bigger one.
-        int quickBytes = 0;
-
-        await Task.Run(() => {
-            ct.ThrowIfCancellationRequested();
-            if (_metadataReader is not null) {
-                meta = _metadataReader.Read(path);
+        // The cache knows files by their row: a shortcut's target and an
+        // archive entry's scratch copy are decoded every time, as before.
+        var entry = _primary;
+        string? key = entry is not null && string.Equals(entry.FullPath, path, StringComparison.OrdinalIgnoreCase)
+            ? PictureCache.KeyOf(entry, _boxWidth, _boxHeight)
+            : null;
+        if (key is null || !_pictures.TryGet(key, out var picture)) {
+            // A held arrow key: this picture is likely gone before its
+            // decode ends, and a decode cannot be stopped half-way.
+            if (_primaryBurst) {
+                await Task.Delay(BurstDelayMs, ct);
             }
 
-            // Nothing WIC decodes here turns the picture by itself: the RAW
-            // decode and the embedded preview ignore the container's tag,
-            // and BitmapImage leaves a JPEG the way the sensor stored it. The
-            // camera records the turn in EXIF and every viewer applies it -
-            // Explorer, Photos, a browser - so a portrait JPEG shown as it is
-            // lies on its side here and nowhere else (found 2026-09-16 on a
-            // preview taken out of a RAW as it is, tag and all). The tag is
-            // applied to every picture; a file without one is unchanged.
-            if (ImageFormats.IsRaw(path)) {
-                isRaw = true;
-                // The quick embedded preview first - ten milliseconds, and
-                // the pane has the picture. The bigger one follows below:
-                // the full-size JPEG, or with the RAW switch on the sensor
-                // decode. Without a preview the sensor decode is all there is.
-                BitmapImage? raw = null;
-                if (ImageDecoder.RawPreviewBytes(path, fullSize: false) is { } jpeg) {
-                    raw = ImageDecoder.Stream(jpeg);
-                    quickBytes = raw is null ? 0 : jpeg.Length;
-                }
-                raw ??= ImageDecoder.File(path);
-                image = raw is null ? null : ImageDecoder.ApplyOrientation(raw, meta?.Orientation);
+            double boxWidth = _boxWidth;
+            double boxHeight = _boxHeight;
+            var decoded = await Task.Run(() => {
+                using var measure = PerfLog.Measure("bg.preview-decode");
+
+                return PictureLoader.Decode(path, _metadataReader, boxWidth, boxHeight, ct);
+            }, ct);
+            if (ct.IsCancellationRequested) {
+                return;
+            }
+            if (decoded is null) {
+                _pictureFactsStale = false;
+                ImageMetadata = null;
+                IsRawImage = false;
+                Kind = PreviewKind.Unsupported;
 
                 return;
             }
 
-            var plain = ImageDecoder.File(path);
-            image = plain is null ? null : ImageDecoder.ApplyOrientation(plain, meta?.Orientation);
-        }, ct);
-
-        if (ct.IsCancellationRequested) {
-            return;
+            picture = decoded;
+            if (key is not null) {
+                _pictures.Put(key, picture);
+            }
         }
 
+        ShowPicture(path, picture, ct);
+        // PLAN AK, step 1: from the selection moving to the picture being
+        // put up; a line in the log only for the slow ones (PerfLog).
+        PerfLog.Note("preview.shown", Stopwatch.GetElapsedTime(_primaryChangedAt).TotalMilliseconds);
+        _ = DecodeNeighborsAsync(ct);
+    }
+
+
+    /// <summary>Puts a decoded picture up and starts what follows it: the whole frame for the zoom, the sensor decode.</summary>
+    private void ShowPicture(string path, DecodedPicture picture, CancellationToken ct) {
         _pictureFactsStale = false;
-        ImageMetadata = meta;
-        IsRawImage = isRaw;
-        if (image is not null) {
-            // Only a CR3 carries a bigger JPEG than its quick one: a
-            // TIFF-shaped RAW already gave its biggest, and asking again
-            // read those megabytes a second time to find the same length.
-            bool decode = _showRawDecode && quickBytes > 0;
-            bool fullJpeg = !decode && quickBytes > 0
-                && Path.GetExtension(path).Equals(".cr3", StringComparison.OrdinalIgnoreCase);
-            // Before the picture goes up: the helpers wait for the bigger one.
-            _fullPending = decode || fullJpeg;
-            _zoomImage = null;
-            Image = image;
-            Kind = PreviewKind.Image;
-            ScheduleHelpers();
-            if (decode) {
-                _ = LoadRawDecodeAsync(path, meta?.Orientation, image, ct);
-            } else if (fullJpeg) {
-                _ = LoadFullSizeAsync(path, meta?.Orientation, image, quickBytes, ct);
-            }
-        } else {
-            Kind = PreviewKind.Unsupported;
+        ImageMetadata = picture.Meta;
+        IsRawImage = picture.IsRaw;
+
+        bool decode = _showRawDecode && picture.Embedded is not null;
+        // Only a CR3 carries a bigger JPEG than its quick one: a TIFF-shaped
+        // RAW already gave its biggest, and asking again read those
+        // megabytes a second time to find the same length.
+        bool bigger = !decode && picture.Embedded is not null
+            && Path.GetExtension(path).Equals(".cr3", StringComparison.OrdinalIgnoreCase);
+        bool whole = !decode && !bigger && picture.Downscaled;
+        // Before the picture goes up: the helpers wait for the bigger one.
+        _fullPending = decode || bigger || whole;
+        _zoomImage = null;
+        ImageCapWidth = picture.NaturalWidth;
+        ImageCapHeight = picture.NaturalHeight;
+        Image = picture.Fit;
+        Kind = PreviewKind.Image;
+        ScheduleHelpers();
+        if (decode) {
+            _ = LoadRawDecodeAsync(path, picture.Meta?.Orientation, picture.Fit, ct);
+        } else if (bigger || whole) {
+            _ = LoadFullSizeAsync(path, picture, bigger, ct);
         }
     }
 
 
     /// <summary>
-    /// The second half of a RAW: the biggest JPEG the file carries, for the
-    /// 1:1 zoom (<see cref="ZoomSource"/>) - a CR3's quick preview is
-    /// 1620 px of a 6000-px frame. The picture fitted into the pane stays
-    /// the quick one.
+    /// The pictures around the one on show, decoded into the cache while
+    /// the user looks (PLAN AK, step 4) - the next arrow key finds its
+    /// picture ready. One at a time, the likelier first, and dropped with
+    /// the load that started it: the selection moved, and the neighbours
+    /// are someone else's now.
+    /// </summary>
+    private async Task DecodeNeighborsAsync(CancellationToken ct) {
+        if (Listing is null || _primary is not { } current) {
+            return;
+        }
+
+        var neighbors = PreviewNeighbors.Of(Listing(), current, _previousPrimaryPath);
+        double boxWidth = _boxWidth;
+        double boxHeight = _boxHeight;
+        try {
+            foreach (var neighbor in neighbors) {
+                string key = PictureCache.KeyOf(neighbor, boxWidth, boxHeight);
+                if (_pictures.Contains(key)) {
+                    continue;
+                }
+
+                var decoded = await Task.Run(() => {
+                    using var measure = PerfLog.Measure("bg.preview-ahead");
+
+                    return PictureLoader.Decode(neighbor.FullPath, _metadataReader, boxWidth, boxHeight, ct);
+                }, ct);
+                if (ct.IsCancellationRequested) {
+                    return;
+                }
+                if (decoded is not null) {
+                    _pictures.Put(key, decoded);
+                }
+            }
+        } catch (OperationCanceledException) {
+            // The selection moved on.
+        } catch (Exception ex) {
+            // A neighbour that cannot be read is found out when it is shown.
+            ServiceLocator.Get<ILogger>().Info($"Preview: decoding ahead failed - {ex.Message}");
+        }
+    }
+
+
+    /// <summary>
+    /// The second half of a picture: the whole frame, for the 1:1 zoom
+    /// (<see cref="ZoomSource"/>) - the fitted one is decoded to the pane
+    /// (PLAN AK, step 3), and a CR3's quick preview is 1620 px of a 6000-px
+    /// frame. The fitted picture stays on screen: put in its place, the same
+    /// picture resampled from four times the pixels was a visible twitch a
+    /// quarter of a second after every arrow key. The exception is a CR3 in
+    /// a pane wider than its quick preview: then the fitted one is too small,
+    /// and a copy of the big JPEG fitted to the pane takes its place.
     ///
     /// <para>
-    /// Not awaited by the load - the pane is loaded once the quick one is
+    /// Not awaited by the load - the pane is loaded once the fitted one is
     /// up - and only after the selection has stood still for a moment: a
     /// held arrow key must not start a 24-megapixel decode, a hundred
     /// megabytes of bitmap, for every frame it passes. A decode cannot be
     /// stopped half-way, only not started.
     /// </para>
     /// </summary>
-    private async Task LoadFullSizeAsync(
-        string path, int? orientation, BitmapSource quick, int quickBytes, CancellationToken ct) {
+    /// <param name="bigger">A CR3: its biggest JPEG is another one than the quick one it was fitted from.</param>
+    private async Task LoadFullSizeAsync(string path, DecodedPicture picture, bool bigger, CancellationToken ct) {
+        var fit = picture.Fit;
         try {
             await Task.Delay(FullSizeDwellMs, ct);
 
-            var full = await Task.Run(() => {
+            double boxWidth = _boxWidth;
+            double boxHeight = _boxHeight;
+            var (full, refit) = await Task.Run(() => {
                 ct.ThrowIfCancellationRequested();
-                // The same bytes again: the file carries one JPEG, and it
-                // is already on screen.
-                if (ImageDecoder.RawPreviewBytes(path, fullSize: true) is not { } jpeg || jpeg.Length == quickBytes) {
-                    return null;
+                using var measure = PerfLog.Measure("bg.preview-whole");
+                int? orientation = picture.Meta?.Orientation;
+                // The same bytes again: the file carries one JPEG.
+                if (bigger && ImageDecoder.RawPreviewBytes(path, fullSize: true) is { } jpeg
+                    && jpeg.Length != picture.Embedded?.Length
+                    && ImageDecoder.Stream(jpeg) is { } raw) {
+                    var whole = ImageDecoder.ApplyOrientation(raw, orientation);
+                    var sharper = PictureFit.TooSmall(
+                        fit.PixelWidth, fit.PixelHeight, whole.PixelWidth, whole.PixelHeight, boxWidth, boxHeight)
+                        ? PictureLoader.Refit(jpeg, orientation, boxWidth, boxHeight)
+                        : null;
+
+                    return (whole, sharper);
                 }
 
-                return ImageDecoder.Stream(jpeg) is { } raw ? ImageDecoder.ApplyOrientation(raw, orientation) : null;
+                return (PictureLoader.Whole(path, picture), (BitmapSource?)null);
             }, ct);
 
-            if (full is not null && !ct.IsCancellationRequested && ReferenceEquals(_image, quick)) {
+            if (!ct.IsCancellationRequested && ReferenceEquals(_image, fit) && full is not null) {
                 _zoomImage = full;
+                if (refit is not null) {
+                    ImageCapWidth = full.PixelWidth;
+                    ImageCapHeight = full.PixelHeight;
+                    fit = refit;
+                    Image = refit;
+                }
                 Raise(nameof(ZoomSource));
                 Raise(nameof(ZoomDisplay));
             }
@@ -2024,7 +2252,7 @@ public sealed class PreviewController : ObservableObject {
 
         // The wait is over, a bigger picture or none: the helpers measure
         // on what there is.
-        if (!ct.IsCancellationRequested && ReferenceEquals(_image, quick)) {
+        if (!ct.IsCancellationRequested && ReferenceEquals(_image, fit)) {
             _fullPending = false;
             ScheduleHelpers();
         }
@@ -2067,6 +2295,8 @@ public sealed class PreviewController : ObservableObject {
             _fullPending = false;
             if (decoded is not null) {
                 _zoomImage = null;
+                ImageCapWidth = decoded.PixelWidth;
+                ImageCapHeight = decoded.PixelHeight;
                 Image = decoded;
             }
             ScheduleHelpers();
@@ -2089,6 +2319,76 @@ public sealed class PreviewController : ObservableObject {
         }
 
         Text = PreviewText.Clip(file);
+        Kind = PreviewKind.Text;
+    }
+
+
+    /// <summary>
+    /// A program or a library: a card of what it says about itself (PLAN
+    /// B7) instead of "no preview". Nothing is run - the header is a few
+    /// hundred bytes, the version resource and the signature are read by
+    /// Windows without loading the file as code.
+    /// </summary>
+    private async Task LoadExecutableAsync(string path, CancellationToken ct) {
+        var reader = ServiceLocator.TryGet<IExecutableInfoReader>();
+        var (info, icon) = await Task.Run(() => (reader?.Read(path), LoadIcon(path, IconSize.Large)), ct);
+        if (ct.IsCancellationRequested) {
+            return;
+        }
+        if (info is null) {
+            Kind = PreviewKind.Unsupported;
+
+            return;
+        }
+
+        ExecutableIcon = icon;
+        ExecutableTitle = info.Description ?? Path.GetFileName(path);
+        ExecutableFacts = ExecutableCard.Facts(info);
+        Kind = PreviewKind.Executable;
+    }
+
+
+    /// <summary>
+    /// A Word, Office, OpenDocument or EPUB file, as its text (PLAN B5) -
+    /// read the way the content search reads it, and cached with it: a
+    /// document searched a minute ago shows at once. The note on top says
+    /// what is missing, so a table read as a column of words is not taken
+    /// for the document.
+    /// </summary>
+    private async Task LoadDocumentTextAsync(string path, CancellationToken ct) {
+        if (ServiceLocator.TryGet<ContentSearchService>() is not { } search) {
+            Kind = PreviewKind.Unsupported;
+
+            return;
+        }
+
+        // The row, when the file is the one selected; a shortcut's target
+        // or an archive entry's copy is stamped here, off this thread.
+        var primary = _primary;
+        (string? Text, long Size) read;
+        try {
+            read = await Task.Run(() => {
+                var entry = primary is { } p && string.Equals(p.FullPath, path, StringComparison.OrdinalIgnoreCase)
+                    ? p
+                    : new FileSystemEntry(Path.GetFileName(path), path, EntryKind.File, SizeOf(path),
+                        File.GetLastWriteTimeUtc(path), false, false, false, false);
+                long size = entry.Size ?? 0;
+
+                return size > PreviewText.BookMaxFileSize ? (null, size) : (search.DocumentText(entry, ct), size);
+            }, ct);
+        } catch (OperationCanceledException) {
+            return;
+        }
+        if (ct.IsCancellationRequested) {
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(read.Text)) {
+            Kind = PreviewKind.Unsupported;
+
+            return;
+        }
+
+        Text = Strings.PreviewDocumentTextNote + "\n\n" + PreviewText.Clip(new PreviewTextFile(read.Text, false, read.Size));
         Kind = PreviewKind.Text;
     }
 
@@ -2203,6 +2503,8 @@ public sealed class PreviewController : ObservableObject {
         if (!keepImage) {
             _zoomImage = null;
             Image = null;
+            ImageCapWidth = double.PositiveInfinity;
+            ImageCapHeight = double.PositiveInfinity;
             ImageMetadata = null;
             IsRawImage = false;
             _pictureOf = null;
@@ -2215,6 +2517,8 @@ public sealed class PreviewController : ObservableObject {
         MediaUri = null;
         Audio = null;
         AudioCover = null;
+        ExecutableIcon = null;
+        ExecutableFacts = Array.Empty<PreviewFact>();
         ModelParts = Array.Empty<ModelPart>();
         ModelDetail = "";
         DocumentPath = null;
@@ -2658,17 +2962,20 @@ public sealed class PreviewController : ObservableObject {
             // the whole listing there, so they are added up as they stand.
             // Folders inside contribute nothing - the shell reports no size
             // for them, and guessing one would be worse than leaving it out.
+            bool hasFolders = _selection.Any(en => en.Kind == EntryKind.Directory);
             if (Archives.Inside(_selection[0].FullPath)) {
                 var files = _selection.Where(en => en.Kind == EntryKind.File).ToList();
-                Summary = string.Format(
-                    Strings.SummarySelected, _selection.Count, files.Count,
-                    SizeFormatter.Format(files.Sum(en => en.Size ?? 0)));
+                Summary = SummaryText.ForSelection(
+                    _selection.Count, [], hasFolders, files.Count, files.Sum(en => en.Size ?? 0), null, 0);
 
                 return;
             }
 
             Summary = string.Format(Strings.SummarySelectedCounting, _selection.Count);
-            var paths = _selection.Select(en => en.FullPath).ToArray();
+            // Sidecars folded into a row are files the selection carries:
+            // copied, moved and deleted with it, so counted and weighed too.
+            var companions = _selection.SelectMany(en => en.Companions ?? []).ToArray();
+            var paths = _selection.Select(en => en.FullPath).Concat(companions).ToArray();
             // Pictures among the selection: what they have in common goes
             // under the count. Read on the same worker, after the sizes,
             // so a selection of two thousand RAW files still gets its
@@ -2686,12 +2993,7 @@ public sealed class PreviewController : ObservableObject {
             if (ct.IsCancellationRequested) {
                 return;
             }
-            string text = string.Format(
-                Strings.SummarySelected, _selection.Count, count, SizeFormatter.Format(size));
-            if (shots is not null) {
-                text += "\n" + SummaryText.ForShots(shots, read);
-            }
-            Summary = text;
+            Summary = SummaryText.ForSelection(_selection.Count, companions, hasFolders, count, size, shots, read);
 
             return;
         }

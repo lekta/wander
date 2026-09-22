@@ -81,6 +81,16 @@ public partial class ConflictWindow : Window {
         OnOk(sender, e);
     }
 
+    /// <summary>
+    /// A pair's two files side by side, in a window of their own (PLAN Q5).
+    /// Not modal: this window's question stays open while the user looks.
+    /// </summary>
+    private void OnCompare(object sender, RoutedEventArgs e) {
+        if (((FrameworkElement)sender).DataContext is ConflictRowViewModel row) {
+            ServiceLocator.TryGet<IPairViewer>()?.Show(row.Source, row.Target, this);
+        }
+    }
+
     private void OnCancel(object sender, RoutedEventArgs e) {
         Result = null;
         DialogResult = false;

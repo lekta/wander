@@ -398,6 +398,31 @@ public class ContentSearchServiceTests {
     }
 
 
+    // --- Document text for the preview pane ------------------------------
+
+    [Fact]
+    public void DocumentText_ReadOnceThenFromTheCache() {
+        var fs = new FakeFileSystem();
+        var extractor = new CountingExtractor("chapter one");
+        var service = new ContentSearchService(fs, new IContentExtractor[] { extractor }, new ExtractedTextCache());
+        var doc = new FileSystemEntry("a.doc", @"C:\root\a.doc", EntryKind.File, 10, DateTime.MinValue, false, false, false, false);
+
+        Assert.Equal("chapter one", service.DocumentText(doc, default));
+        Assert.Equal("chapter one", service.DocumentText(doc, default));
+        Assert.Equal(1, extractor.Calls);
+    }
+
+    [Fact]
+    public void DocumentText_NoFormatExtractor_Null() {
+        var fs = new FakeFileSystem();
+        fs.Files[@"C:\root\a.bin"] = Text("looks like text");
+        var service = new ContentSearchService(fs, new IContentExtractor[] { new PlainTextExtractor(fs) }, new ExtractedTextCache());
+        var file = new FileSystemEntry("a.bin", @"C:\root\a.bin", EntryKind.File, 15, DateTime.MinValue, false, false, false, false);
+
+        Assert.Null(service.DocumentText(file, default));
+    }
+
+
     // --- Scaffolding ---------------------------------------------------
 
     private static FakeFileSystem Tree() {

@@ -82,6 +82,8 @@ public partial class App : Application {
         // Every modal question goes through this seam; the harness swaps
         // in a scripted answerer before it builds the view model.
         ServiceLocator.Register<IDialogs>(new WpfDialogs());
+        // The compare window, for the conflict window's pairs (PLAN Q5).
+        ServiceLocator.Register<Conflict.IPairViewer>(new Views.CompareWindow.Viewer());
         HookCrashLogging();
         // WPF answers an unrefused session end with Shutdown.
         SessionEnding += (_, _) => IsShuttingDown = true;

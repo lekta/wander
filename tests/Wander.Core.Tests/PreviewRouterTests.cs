@@ -26,7 +26,11 @@ public class PreviewRouterTests {
     [InlineData(".prefab", PreviewRoute.MaybeText)]
     [InlineData(".txt", PreviewRoute.Text)]
     [InlineData(".lnk", PreviewRoute.Shortcut)]
-    [InlineData(".exe", PreviewRoute.Unsupported)]
+    [InlineData(".exe", PreviewRoute.Executable)]
+    [InlineData(".dll", PreviewRoute.Executable)]
+    [InlineData(".doc", PreviewRoute.DocumentText)]
+    [InlineData(".docx", PreviewRoute.DocumentText)]
+    [InlineData(".bin", PreviewRoute.Unsupported)]
     [InlineData(".zip", PreviewRoute.Unsupported)]
     public void Extension_DecidesTheRoute(string extension, PreviewRoute expected) {
         Assert.Equal(expected, PreviewRouter.ForExtension(extension));

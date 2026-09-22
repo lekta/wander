@@ -38,12 +38,19 @@ namespace Wander.App.Views;
 public partial class PreviewPane : UserControl {
     private bool _webInitialized;
 
+    // A scroll made to follow the other text of a comparison - not the user's.
+    private bool _followingScroll;
+
     public PreviewPane() {
         InitializeComponent();
         // Wander's own .xshd definitions (batch, ShaderLab, YAML) have to be
         // in the manager before the first file asks for one.
         HighlightingCatalog.EnsureRegistered();
         DataContextChanged += OnDataContextChanged;
+        Loaded += (_, _) => {
+            DpiScale = VisualTreeHelper.GetDpi(this).DpiScaleX;
+            ReportViewport();
+        };
 
         // The audio player has the same three events as the MediaElement,
         // just not as routed ones, so they are hooked here rather than in
@@ -62,6 +69,19 @@ public partial class PreviewPane : UserControl {
     /// </summary>
     private PreviewController Controller => (PreviewController)DataContext;
 
+    public static readonly DependencyProperty DpiScaleProperty = DependencyProperty.Register(
+        nameof(DpiScale), typeof(double), typeof(PreviewPane), new PropertyMetadata(1.0));
+
+    /// <summary>
+    /// Device pixels per layout unit on the monitor the pane is on - what
+    /// the pictures' caps divide their pixels by (PLAN AM). A property to
+    /// bind to, so a move to another monitor redoes them.
+    /// </summary>
+    public double DpiScale {
+        get => (double)GetValue(DpiScaleProperty);
+        private set => SetValue(DpiScaleProperty, value);
+    }
+
 
     /// <summary>
     /// True while the keyboard is inside the code viewer. The window asks
@@ -77,6 +97,13 @@ public partial class PreviewPane : UserControl {
     /// pictures are looked at in the same place.
     /// </summary>
     public event EventHandler<Point?>? ZoomMoved;
+
+    /// <summary>
+    /// The text on show was scrolled by the user - to these offsets,
+    /// across and down. The compare window passes it to the other text
+    /// (<see cref="FollowTextScroll"/>), so the two are read side by side.
+    /// </summary>
+    public event EventHandler<Point>? TextScrolled;
 
 
     /// <summary>
@@ -186,6 +213,75 @@ public partial class PreviewPane : UserControl {
     }
 
 
+    /// <summary>Scrolls the text on show to the other text's offsets - see <see cref="TextScrolled"/>.</summary>
+    public void FollowTextScroll(Point offset) {
+        _followingScroll = true;
+        try {
+            switch (Controller.Kind) {
+                case PreviewKind.Text:
+                    PlainText.ScrollToHorizontalOffset(offset.X);
+                    PlainText.ScrollToVerticalOffset(offset.Y);
+                    break;
+
+                case PreviewKind.Code:
+                    CodeEditor.ScrollToHorizontalOffset(offset.X);
+                    CodeEditor.ScrollToVerticalOffset(offset.Y);
+                    break;
+
+                case PreviewKind.Document:
+                    DocumentPreview.ScrollToHorizontalOffset(offset.X);
+                    DocumentPreview.ScrollToVerticalOffset(offset.Y);
+                    break;
+            }
+        } finally {
+            _followingScroll = false;
+        }
+    }
+
+
+    protected override void OnDpiChanged(System.Windows.DpiScale oldDpi, System.Windows.DpiScale newDpi) {
+        base.OnDpiChanged(oldDpi, newDpi);
+        DpiScale = newDpi.DpiScaleX;
+        ReportViewport();
+    }
+
+
+    private void ContentArea_SizeChanged(object sender, SizeChangedEventArgs e) {
+        ReportViewport();
+    }
+
+    /// <summary>
+    /// A scroll of the text on show - not of the find field, not of the
+    /// folder census - goes out as <see cref="TextScrolled"/>. The echo of
+    /// a followed scroll comes back with the same offsets and changes
+    /// nothing on the other side.
+    /// </summary>
+    private void ContentArea_ScrollChanged(object sender, ScrollChangedEventArgs e) {
+        if (_followingScroll || TextScrolled is null || !IsFindable
+            || (e.HorizontalChange == 0 && e.VerticalChange == 0)
+            || e.OriginalSource is not DependencyObject source || FindBar.IsAncestorOf(source)) {
+            return;
+        }
+
+        TextScrolled(this, new Point(e.HorizontalOffset, e.VerticalOffset));
+    }
+
+    /// <summary>
+    /// Tells the controller how many device pixels a picture has here - the
+    /// content area less ImgFit's margin (8,12,8,8) - so it decodes one to
+    /// that size (PLAN AK, step 3).
+    /// </summary>
+    private void ReportViewport() {
+        if (DataContext is not PreviewController controller || ContentArea.ActualWidth <= 0) {
+            return;
+        }
+
+        var dpi = VisualTreeHelper.GetDpi(this);
+        controller.SetViewport(
+            (ContentArea.ActualWidth - 16) * dpi.DpiScaleX,
+            (ContentArea.ActualHeight - 20) * dpi.DpiScaleY);
+    }
+
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e) {
         if (e.OldValue is PreviewController old) {
             old.PropertyChanged -= OnPreviewPropertyChanged;
@@ -195,6 +291,7 @@ public partial class PreviewPane : UserControl {
             controller.PropertyChanged += OnPreviewPropertyChanged;
             controller.ContentReleased += OnContentReleased;
             UpdateCodeEditor();
+            ReportViewport();
         }
     }
 
@@ -245,6 +342,9 @@ public partial class PreviewPane : UserControl {
                 ExitImageZoom();
                 ResetVideoTransport();
                 ResetModelView();
+                if (!IsFindable) {
+                    CloseFind(keepKeyboard: false);
+                }
                 break;
 
             case nameof(PreviewController.ZoomSource):
@@ -276,6 +376,10 @@ public partial class PreviewPane : UserControl {
 
             case nameof(PreviewController.ModelParts):
                 ShowModel();
+                break;
+
+            case nameof(PreviewController.FindRequest):
+                OnFindRequest(Controller.FindRequest);
                 break;
         }
     }
@@ -340,6 +444,11 @@ public partial class PreviewPane : UserControl {
         }
 
         DocumentPreview.Document = document;
+        // A query handed over before the document was read (OnFindRequest).
+        if (_pendingFind is not null) {
+            _pendingFind = null;
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => RunFind(0));
+        }
     }
 
 
@@ -1306,5 +1415,272 @@ public partial class PreviewPane : UserControl {
         _modelZoom = Math.Clamp(_modelZoom * (e.Delta > 0 ? 0.85 : 1.0 / 0.85), ModelMinZoom, ModelMaxZoom);
         PlaceModelCamera();
         e.Handled = true;
+    }
+
+
+    // --- Find in the text (PLAN B6) ---------------------------------------
+
+    // Where the query occurs: offsets into the plain text or the code, or
+    // ranges of the rich-text document - its text is spread over runs, and
+    // an offset into the whole means nothing to a TextPointer. The one on
+    // show is _findAt; -1 is none.
+    private IReadOnlyList<int> _findOffsets = Array.Empty<int>();
+    private readonly List<TextRange> _findRanges = new();
+    private int _findAt = -1;
+
+    // Set while the field is filled from code: its TextChanged is not the user typing.
+    private bool _fillingFind;
+
+    // A query handed over before the rich-text document was read (LoadDocumentAsync).
+    private string? _pendingFind;
+
+    private bool IsFindable => Controller.Kind is PreviewKind.Text or PreviewKind.Code or PreviewKind.Document;
+
+    private int FindCountOf => Controller.Kind == PreviewKind.Document ? _findRanges.Count : _findOffsets.Count;
+
+    /// <summary>
+    /// Opens the find field over the text, with the keyboard in it -
+    /// Ctrl+F when the keyboard is in this pane and the pane shows text.
+    /// Starts from what is selected in the text, when that is one line.
+    /// False when this pane has nothing to find in; the window's own Ctrl+F
+    /// then stands.
+    /// </summary>
+    public bool OpenFind() {
+        if (!IsKeyboardFocusWithin || !IsFindable) {
+            return false;
+        }
+
+        if (SelectedLine() is { } selected) {
+            FillFind(selected);
+        }
+        FindBar.Visibility = Visibility.Visible;
+        FindBox.Focus();
+        FindBox.SelectAll();
+        RunFind(CaretOffset());
+
+        return true;
+    }
+
+
+    /// <summary>
+    /// The text just shown came from a search inside files: the field opens
+    /// with that search's query on its first match, and the keyboard stays
+    /// where it is - the user is walking the results with the arrow keys.
+    /// Null closes nothing: a field the user opened stays, and finds again
+    /// in the new text.
+    /// </summary>
+    private void OnFindRequest(string? query) {
+        if (query is null) {
+            if (FindBar.IsVisible) {
+                AfterTextChanged();
+            }
+
+            return;
+        }
+
+        FillFind(query);
+        FindBar.Visibility = Visibility.Visible;
+        if (Controller.Kind == PreviewKind.Document && _findRanges.Count == 0 && DocumentPreview.Document.Blocks.Count == 0) {
+            _pendingFind = query;
+
+            return;
+        }
+
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => RunFind(0));
+    }
+
+    /// <summary>The text changed under an open field: the same query, found again from the top.</summary>
+    private void AfterTextChanged() {
+        if (!IsFindable) {
+            CloseFind(keepKeyboard: false);
+
+            return;
+        }
+
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => RunFind(0));
+    }
+
+    private void FillFind(string text) {
+        _fillingFind = true;
+        FindBox.Text = text;
+        _fillingFind = false;
+    }
+
+    private void RunFind(int from) {
+        if (FindBar.Visibility != Visibility.Visible || !IsFindable) {
+            return;
+        }
+
+        string query = FindBox.Text;
+        _findRanges.Clear();
+        _findOffsets = Array.Empty<int>();
+        switch (Controller.Kind) {
+            case PreviewKind.Text:
+                _findOffsets = TextFind.All(PlainText.Text, query);
+                _findAt = TextFind.FirstFrom(_findOffsets, from);
+                break;
+
+            case PreviewKind.Code:
+                _findOffsets = TextFind.All(CodeEditor.Text, query);
+                _findAt = TextFind.FirstFrom(_findOffsets, from);
+                break;
+
+            case PreviewKind.Document:
+                FindInDocument(query);
+                _findAt = _findRanges.Count > 0 ? 0 : -1;
+                break;
+        }
+        ShowMatch();
+    }
+
+    /// <summary>
+    /// Every occurrence in the rich-text document, run by run. One that
+    /// crosses a change of formatting is not found - the price of not
+    /// flattening the document into text and back.
+    /// </summary>
+    private void FindInDocument(string query) {
+        if (query.Length == 0) {
+            return;
+        }
+
+        var pointer = DocumentPreview.Document.ContentStart;
+        while (pointer is not null && _findRanges.Count < TextFind.MaxMatches) {
+            if (pointer.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text) {
+                string run = pointer.GetTextInRun(LogicalDirection.Forward);
+                foreach (int hit in TextFind.All(run, query)) {
+                    var start = pointer.GetPositionAtOffset(hit);
+                    var end = start?.GetPositionAtOffset(query.Length);
+                    if (start is not null && end is not null) {
+                        _findRanges.Add(new TextRange(start, end));
+                    }
+                }
+            }
+            pointer = pointer.GetNextContextPosition(LogicalDirection.Forward);
+        }
+    }
+
+    private void StepFind(bool backwards) {
+        _findAt = TextFind.Step(_findAt, FindCountOf, backwards);
+        ShowMatch();
+    }
+
+    /// <summary>Selects the match on show, scrolls it into view, and says which of how many it is.</summary>
+    private void ShowMatch() {
+        int count = FindCountOf;
+        string total = count >= TextFind.MaxMatches ? $"{count}+" : count.ToString();
+        FindCount.Text = count > 0 ? string.Format(Strings.PreviewFindCount, _findAt + 1, total)
+            : FindBox.Text.Length > 0 ? Strings.PreviewFindNone
+            : "";
+        if (_findAt < 0 || _findAt >= count) {
+            return;
+        }
+
+        int length = FindBox.Text.Length;
+        switch (Controller.Kind) {
+            case PreviewKind.Text:
+                int start = _findOffsets[_findAt];
+                PlainText.Select(start, length);
+                PlainText.ScrollToLine(PlainText.GetLineIndexFromCharacterIndex(start));
+                break;
+
+            case PreviewKind.Code:
+                int at = _findOffsets[_findAt];
+                CodeEditor.Select(at, length);
+                var location = CodeEditor.Document.GetLocation(at);
+                CodeEditor.ScrollTo(location.Line, location.Column);
+                break;
+
+            case PreviewKind.Document:
+                var range = _findRanges[_findAt];
+                DocumentPreview.Selection.Select(range.Start, range.End);
+                var rect = range.Start.GetCharacterRect(LogicalDirection.Forward);
+                if (rect.Top < 0 || rect.Bottom > DocumentPreview.ViewportHeight) {
+                    DocumentPreview.ScrollToVerticalOffset(DocumentPreview.VerticalOffset + rect.Top - (DocumentPreview.ViewportHeight / 3));
+                }
+                break;
+        }
+    }
+
+    /// <param name="keepKeyboard">Esc in the field: the keyboard goes back to the text, not to the list.</param>
+    private void CloseFind(bool keepKeyboard) {
+        FindBar.Visibility = Visibility.Collapsed;
+        _findOffsets = Array.Empty<int>();
+        _findRanges.Clear();
+        _findAt = -1;
+        _pendingFind = null;
+        if (!keepKeyboard) {
+            return;
+        }
+
+        switch (Controller.Kind) {
+            case PreviewKind.Text:
+                PlainText.Focus();
+                break;
+
+            case PreviewKind.Code:
+                CodeEditor.TextArea.Focus();
+                break;
+
+            case PreviewKind.Document:
+                DocumentPreview.Focus();
+                break;
+        }
+    }
+
+    /// <summary>Where a search from the caret starts: the caret of the text on show.</summary>
+    private int CaretOffset() {
+        return Controller.Kind switch {
+            PreviewKind.Text => PlainText.SelectionStart,
+            PreviewKind.Code => CodeEditor.SelectionStart,
+            _ => 0,
+        };
+    }
+
+    /// <summary>The selected text of the text on show, when it is one short line - what Ctrl+F starts with.</summary>
+    private string? SelectedLine() {
+        string selected = Controller.Kind switch {
+            PreviewKind.Text => PlainText.SelectedText,
+            PreviewKind.Code => CodeEditor.SelectedText,
+            PreviewKind.Document => DocumentPreview.Selection.Text,
+            _ => "",
+        };
+
+        return selected.Length is > 0 and <= 200 && !selected.Contains('\n') ? selected : null;
+    }
+
+    private void FindBox_TextChanged(object sender, TextChangedEventArgs e) {
+        if (_fillingFind) {
+            return;
+        }
+
+        // Typing on: from the match on show, so a longer query stays where it was.
+        int from = _findAt >= 0 && _findAt < _findOffsets.Count ? _findOffsets[_findAt] : CaretOffset();
+        RunFind(from);
+    }
+
+    private void FindBox_PreviewKeyDown(object sender, KeyEventArgs e) {
+        switch (e.Key) {
+            case Key.Enter:
+                StepFind(backwards: Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
+                e.Handled = true;
+                break;
+
+            case Key.Escape:
+                CloseFind(keepKeyboard: true);
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private void FindPrevious_Click(object sender, RoutedEventArgs e) {
+        StepFind(backwards: true);
+    }
+
+    private void FindNext_Click(object sender, RoutedEventArgs e) {
+        StepFind(backwards: false);
+    }
+
+    private void FindClose_Click(object sender, RoutedEventArgs e) {
+        CloseFind(keepKeyboard: FindBox.IsKeyboardFocusWithin);
     }
 }

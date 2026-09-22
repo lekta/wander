@@ -212,4 +212,91 @@ public static partial class Strings {
 
     /// <summary>Резкость {0} из 100 - по самым чётким краям в середине кадра; отдельные точки считаются за долю грани</summary>
     public static string HelperSharpScoreTip => Get(nameof(HelperSharpScoreTip));
+
+    /// <summary>Версия</summary>
+    public static string PreviewExeVersion => Get(nameof(PreviewExeVersion));
+
+    /// <summary>Продукт</summary>
+    public static string PreviewExeProduct => Get(nameof(PreviewExeProduct));
+
+    /// <summary>Издатель</summary>
+    public static string PreviewExeCompany => Get(nameof(PreviewExeCompany));
+
+    /// <summary>Права</summary>
+    public static string PreviewExeCopyright => Get(nameof(PreviewExeCopyright));
+
+    /// <summary>Платформа</summary>
+    public static string PreviewExePlatform => Get(nameof(PreviewExePlatform));
+
+    /// <summary>Подпись</summary>
+    public static string PreviewExeSignature => Get(nameof(PreviewExeSignature));
+
+    /// <summary>программа с окнами</summary>
+    public static string PreviewExeWindowsApp => Get(nameof(PreviewExeWindowsApp));
+
+    /// <summary>консольная программа</summary>
+    public static string PreviewExeConsoleApp => Get(nameof(PreviewExeConsoleApp));
+
+    /// <summary>драйвер или системный модуль</summary>
+    public static string PreviewExeNative => Get(nameof(PreviewExeNative));
+
+    /// <summary>модуль EFI</summary>
+    public static string PreviewExeEfi => Get(nameof(PreviewExeEfi));
+
+    /// <summary>библиотека</summary>
+    public static string PreviewExeLibrary => Get(nameof(PreviewExeLibrary));
+
+    /// <summary>{0} — подпись действительна</summary>
+    public static string PreviewExeSignedBy => Get(nameof(PreviewExeSignedBy));
+
+    /// <summary>подпись действительна</summary>
+    public static string PreviewExeSigned => Get(nameof(PreviewExeSigned));
+
+    /// <summary>подпись не подтверждается — файл изменён после подписи или сертификату нет доверия</summary>
+    public static string PreviewExeSignatureInvalid => Get(nameof(PreviewExeSignatureInvalid));
+
+    /// <summary>нет встроенной подписи</summary>
+    public static string PreviewExeUnsigned => Get(nameof(PreviewExeUnsigned));
+
+    /// <summary>Только текст — форматирование не разобрано</summary>
+    public static string PreviewDocumentTextNote => Get(nameof(PreviewDocumentTextNote));
+
+    /// <summary>{0} из {1}</summary>
+    public static string PreviewFindCount => Get(nameof(PreviewFindCount));
+
+    /// <summary>Не найдено</summary>
+    public static string PreviewFindNone => Get(nameof(PreviewFindNone));
+
+    /// <summary>Предыдущее (Shift+Enter)</summary>
+    public static string PreviewFindPrevious => Get(nameof(PreviewFindPrevious));
+
+    /// <summary>Следующее (Enter)</summary>
+    public static string PreviewFindNext => Get(nameof(PreviewFindNext));
+
+    /// <summary>Закрыть (Esc)</summary>
+    public static string PreviewFindClose => Get(nameof(PreviewFindClose));
+
+    /// <summary>Найти в тексте</summary>
+    public static string PreviewFindBox => Get(nameof(PreviewFindBox));
+
+    /// <summary>Сравнить — {0}</summary>
+    public static string CompareTitle => Get(nameof(CompareTitle));
+
+    /// <summary>Наложить: обе картинки на одном месте, Пробел переключает</summary>
+    public static string CompareOverlay => Get(nameof(CompareOverlay));
+
+    /// <summary>Показать другую (Пробел)</summary>
+    public static string CompareSwitch => Get(nameof(CompareSwitch));
+
+    /// <summary>Сравнить: два файла рядом, тексты прокручиваются вместе</summary>
+    public static string CompareOpen => Get(nameof(CompareOpen));
+
+    /// <summary>Сравнить — {0} ↔ {1}</summary>
+    public static string CompareTitlePair => Get(nameof(CompareTitlePair));
+
+    /// <summary>A: {0}</summary>
+    public static string CompareSideA => Get(nameof(CompareSideA));
+
+    /// <summary>B: {0}</summary>
+    public static string CompareSideB => Get(nameof(CompareSideB));
 }

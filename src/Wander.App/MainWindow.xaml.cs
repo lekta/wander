@@ -487,6 +487,26 @@ public partial class MainWindow : Window {
         Preview.IsCodeEditorFocused || _previewSecond?.IsCodeEditorFocused == true;
 
 
+    // --- Full screen (PLAN Q5) ----------------------------------------------
+
+    /// <summary>
+    /// Enter or Space on a picture in the gallery. The window walks the
+    /// list on its own; closed, it leaves the list on the picture it ended
+    /// on, with the keyboard back in the list.
+    /// </summary>
+    private void FileList_FullscreenRequested(object? sender, FileSystemEntry entry) {
+        var window = new Views.FullscreenWindow(entry, () => Vm.Entries, Vm.Helpers, Vm.Preview.ContentPalette);
+        window.PlaceOver(this);
+        window.Closed += (_, _) => {
+            if (!string.Equals(window.Current.FullPath, entry.FullPath, StringComparison.OrdinalIgnoreCase)) {
+                Vm.RevealPath(window.Current.FullPath);
+            }
+            FileList.FocusList();
+        };
+        window.Show();
+    }
+
+
     // --- Global hotkeys not bound to commands ---------------------------
 
     // Alt is held and the review helpers are off the picture meanwhile.
@@ -649,14 +669,11 @@ public partial class MainWindow : Window {
             return;
         }
 
-        // Ctrl+F: focus the search box. Skip when the user is typing inside
-        // the code preview — AvalonEdit owns Ctrl+F there for its own search
-        // panel, and stealing it would be surprising.
-        // Ctrl+Shift+F: the search window, with its own criteria.
-        // Ctrl+F: the box in the toolbar, which is the quick filter.
-        // Both skipped while the user is typing inside the code preview —
-        // AvalonEdit owns Ctrl+F there for its own search panel, and
-        // stealing it would be surprising.
+        // Ctrl+Shift+F: the search window, with its own criteria - skipped
+        // inside the code preview.
+        // Ctrl+F: the find field of the preview when the keyboard is in a
+        // pane showing text (the code preview included); otherwise the box
+        // in the toolbar, which is the quick filter.
         if (e.Key == Key.F && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift)) {
             if (!IsCodeEditorFocused) {
                 OpenSearchWindow();
@@ -667,6 +684,13 @@ public partial class MainWindow : Window {
         }
 
         if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control) {
+            // The keyboard in a pane showing text: find in that text
+            // (PLAN B6), not a filter over the list.
+            if (Preview.OpenFind() || _previewSecond?.OpenFind() == true) {
+                e.Handled = true;
+
+                return;
+            }
             if (!IsCodeEditorFocused) {
                 SearchBox.Focus();
                 SearchBox.SelectAll();

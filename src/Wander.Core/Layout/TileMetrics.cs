@@ -132,14 +132,15 @@ public readonly record struct TileMetrics {
 
     /// <summary>
     /// The Tiles grid — a row of icon plus two lines of text, so its height
-    /// is whichever of the two is taller plus the padding inside the tile.
+    /// is whichever of the two is taller plus the padding inside the tile
+    /// and the frame around it (the same <c>TileChrome</c> as the other two).
     /// </summary>
     public static TileMetrics ForTiles(double cellWidth, double iconSize, double labelFontSize) {
         double label = TextLine(labelFontSize) + TextLine(TilesKindFontSize(labelFontSize));
 
         return new TileMetrics(
             contentWidth: cellWidth,
-            contentHeight: Math.Max(iconSize, label) + (2 * TilesPadding),
+            contentHeight: Math.Max(iconSize, label) + (2 * TilesPadding) + (2 * ChromeBorder),
             margin: TilesMargin,
             imageSize: iconSize,
             labelHeight: label,

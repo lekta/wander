@@ -10,6 +10,7 @@ using Wander.Core.Icons;
 using Wander.Core.Logging;
 using Wander.Core.Operations;
 using Wander.Core.Persistence;
+using Wander.Core.Preview;
 using Wander.Core.Search;
 using Wander.Core.Shell;
 using Wander.Core.Undo;
@@ -19,6 +20,7 @@ using Wander.Platform.Windows.Icons;
 using Wander.Platform.Windows.Imaging;
 using Wander.Platform.Windows.Logging;
 using Wander.Platform.Windows.Persistence;
+using Wander.Platform.Windows.Preview;
 using Wander.Platform.Windows.Search;
 using Wander.Platform.Windows.Shell;
 
@@ -73,6 +75,7 @@ public static class PlatformBootstrapper {
         ServiceLocator.Register<IShellHandlerRegistry>(new ShellHandlerRegistry(logger));
         ServiceLocator.Register<IImageMetadataReader>(new MetadataExtractorImageReader());
         ServiceLocator.Register<ISharpnessProbe>(new SharpnessProbe());
+        ServiceLocator.Register<IExecutableInfoReader>(new WindowsExecutableInfo());
 
         // Search inside files. The extractors are tried in this order, and
         // the order is the whole design: the zip-based documents first

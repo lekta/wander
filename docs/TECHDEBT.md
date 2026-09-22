@@ -239,6 +239,17 @@
   transverse, EXIF 7; для 5 нужен transpose (`RawThumbnail` через WIC
   даёт его). Камеры пишут 1, 3, 6, 8 — не проявлялось. `AfGeometry.Orient`
   сделан по EXIF; проверить стендом на файле с 5 и 7.
+- **TGA, который не разобрался, уходит в шелл** (блок 5, 2026-09-22):
+  `.tga` в `_thumbnailableExtensions`, и при провале `TgaThumbnail` —
+  `LoadShellBitmap`, то есть запись значка в `thumbcache_*.db`, от которой
+  `LoadJumboImage` бережёт. Провал TGA — сразу значок по расширению.
+- **CR3 в панели шире 1620 px вырастает через 150 мс** (блок 5): потолок
+  картинки — размер быстрого превью, полный JPEG приходит после задержки и
+  заменяет вписанную копию (`LoadFullSizeAsync`, `PictureFit.TooSmall`).
+  Размер полного кадра без чтения его байтов — из дорожки `moov`.
+- **`Ctrl+Shift+F` не работает в просмотре кода** (`MainWindow`,
+  `IsCodeEditorFocused`): защита ради «своей панели поиска AvalonEdit»,
+  которую никто не ставит (`SearchPanel.Install` нет).
 
 ## Контекстное меню (shell)
 
@@ -328,6 +339,13 @@
 - **`Core/Actions/` нет в дереве папок ARCHITECTURE** (замечено 2026-09-22,
   блок 3) — каталог действий описан текстом, а в списке папок Core его
   строки нет; дописать строку рядом с `Companions/`.
+- **`deps.ps1` видит только `using`** (блок 5, 2026-09-22): полное имя
+  (`Views.CompareWindow` из `Conflict`) и обращение к корневому
+  `Wander.App` (`MainViewModel` из `Views`) в граф не попадают — цикл
+  `Conflict → Views → Dialogs → Conflict` сканер пропустил, развёрнут
+  руками через `IPairViewer`. Искать и квалифицированные имена.
+- **`BitmapPixelSize` в ресурсах `MainWindow.xaml` не используется** —
+  объявлен, привязок нет (с блока 5 это `IMultiValueConverter`).
 - **Порядок членов никто не сверяет** — сканер (138 → 39 нарушений) жил в
   scratchpad; шаг в `check.bat` или режим `metrics.ps1`.
 - **Восемь градаций серого текста в `Palette.xaml`** (`#333` … `#9A9A9A`) и

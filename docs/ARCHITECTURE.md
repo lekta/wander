@@ -149,16 +149,16 @@ Platform.Windows` — один файл, `App.xaml.cs` (точка композ�
 ```
 === Wander dependency graph (using sweep) ===
 date   : 2026-09-22
-commit : fcff8ee
+commit : 731dbc3
 
 -- projects --
-Wander.App -> Wander.Core   (64 files)
+Wander.App -> Wander.Core   (70 files)
 Wander.App -> Wander.Platform.Windows   (1 files)
-Wander.Core.Tests -> Wander.Core   (119 files)
+Wander.Core.Tests -> Wander.Core   (125 files)
 Wander.Harness -> Wander.App   (4 files)
 Wander.Harness -> Wander.Core   (6 files)
 Wander.Harness -> Wander.Platform.Windows   (3 files)
-Wander.Platform.Windows -> Wander.Core   (32 files)
+Wander.Platform.Windows -> Wander.Core   (34 files)
 
 -- Wander.Core: folder -> folder --
   Actions        -> FileSystem     (5 files)
@@ -195,7 +195,7 @@ Wander.Platform.Windows -> Wander.Core   (32 files)
   Persistence    -> FileSystem     (1 files)
   Persistence    -> Navigation     (1 files)
   Persistence    -> Rename         (1 files)
-  Preview        -> FileSystem     (6 files)
+  Preview        -> FileSystem     (7 files)
   Preview        -> Icons          (1 files)
   Rename         -> Companions     (1 files)
   Rename         -> FileSystem     (2 files)
@@ -227,12 +227,13 @@ Wander.Platform.Windows -> Wander.Core   (32 files)
   (root)         -> Imaging        (1 files)
   (root)         -> Logging        (1 files)
   (root)         -> Persistence    (1 files)
+  (root)         -> Preview        (1 files)
   (root)         -> Search         (1 files)
   (root)         -> Shell          (1 files)
   FileSystem     -> Shell          (1 files)
 
 -- Wander.Platform.Windows: levels --
-  0: Diagnostics, Icons, Imaging, Logging, Persistence, Search, Shell
+  0: Diagnostics, Icons, Imaging, Logging, Persistence, Preview, Search, Shell
   1: FileSystem
   2: (root)
 
@@ -271,20 +272,21 @@ Wander.Platform.Windows -> Wander.Core   (32 files)
   DragPreview    -> Resources      (3 files)
   DragPreview    -> Util           (1 files)
   DragPreview    -> ViewModels     (1 files)
-  Preview        -> Resources      (2 files)
+  Preview        -> Resources      (3 files)
   Preview        -> Util           (2 files)
   Util           -> Resources      (1 files)
   ViewModels     -> Resources      (9 files)
   ViewModels     -> Util           (1 files)
-  Views          -> Controllers    (1 files)
+  Views          -> Conflict       (1 files)
+  Views          -> Controllers    (3 files)
   Views          -> Controls       (3 files)
   Views          -> Converters     (1 files)
   Views          -> Dialogs        (3 files)
   Views          -> DragPreview    (1 files)
   Views          -> Highlighting   (1 files)
-  Views          -> Resources      (6 files)
+  Views          -> Resources      (7 files)
   Views          -> Util           (3 files)
-  Views          -> ViewModels     (6 files)
+  Views          -> ViewModels     (8 files)
 
 -- Wander.App: levels --
   0: Highlighting, Menu, Resources

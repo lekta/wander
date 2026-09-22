@@ -3,6 +3,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
+using Wander.Core.Imaging;
 
 namespace Wander.App.Preview;
 
@@ -58,8 +59,64 @@ internal static class ImageDecoder {
     /// bypass when the source is a private <c>MemoryStream</c>.
     /// </para>
     /// </summary>
-    public static BitmapImage? Stream(byte[] bytes) {
-        return Decode(bi => bi.StreamSource = new MemoryStream(bytes));
+    /// <param name="width">Decode down to this many pixels across, as <see cref="File(string, int)"/>; null for the whole frame.</param>
+    public static BitmapImage? Stream(byte[] bytes, int? width = null) {
+        return Decode(bi => {
+            if (width is { } w) {
+                bi.DecodePixelWidth = w;
+            }
+            bi.StreamSource = new MemoryStream(bytes);
+        });
+    }
+
+
+    /// <summary>
+    /// A TGA texture, which WIC has no codec for (PLAN B8): decoded by
+    /// Core's <see cref="TgaDecoder"/>, straight alpha as it comes. Null
+    /// when it cannot be read or is not a TGA this reads.
+    /// </summary>
+    public static BitmapSource? Tga(string path) {
+        try {
+            byte[] bytes;
+            using (var file = SharedRead.Open(path)) {
+                bytes = new byte[file.Length];
+                file.ReadExactly(bytes);
+            }
+            if (TgaDecoder.Decode(bytes) is not { } image) {
+                return null;
+            }
+
+            var bitmap = BitmapSource.Create(
+                image.Width, image.Height, 96, 96, PixelFormats.Bgra32, null, image.Pixels, image.Stride);
+            bitmap.Freeze();
+
+            return bitmap;
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or OutOfMemoryException) {
+            return null;
+        }
+    }
+
+
+    /// <summary>
+    /// The stored size of a picture file, read from its header without
+    /// decoding a pixel - what decides the size it is decoded at
+    /// (<c>PictureFit</c>). Null when WIC cannot read the header.
+    /// </summary>
+    public static (int Width, int Height)? StoredSize(string path) {
+        try {
+            using var file = SharedRead.Open(path);
+
+            return StoredSize(file);
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+            return null;
+        }
+    }
+
+    /// <inheritdoc cref="StoredSize(string)"/>
+    public static (int Width, int Height)? StoredSize(byte[] bytes) {
+        using var stream = new MemoryStream(bytes, writable: false);
+
+        return StoredSize(stream);
     }
 
 
@@ -126,6 +183,20 @@ internal static class ImageDecoder {
         group.Children.Add(new RotateTransform(degrees));
 
         return group;
+    }
+
+
+    private static (int Width, int Height)? StoredSize(System.IO.Stream stream) {
+        try {
+            var decoder = BitmapDecoder.Create(
+                stream, BitmapCreateOptions.DelayCreation | BitmapCreateOptions.IgnoreColorProfile, BitmapCacheOption.None);
+            var frame = decoder.Frames[0];
+
+            return (frame.PixelWidth, frame.PixelHeight);
+        } catch {
+            // No codec, or not a picture after all: decoded whole, as before.
+            return null;
+        }
     }
 
 

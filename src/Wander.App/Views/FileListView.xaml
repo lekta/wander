@@ -244,8 +244,14 @@
                 </DataTrigger>
             </Style.Triggers>
         </Style>
+        <!--
+            No frame on a cell: the default one is 1 px of the selection
+            colour on every side, drawn over the same colour, and it made
+            the row 2 px taller than the height in the settings (PLAN AM).
+        -->
         <Style TargetType="DataGridCell">
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="BorderThickness" Value="0"/>
         </Style>
         <!--
             The tile container. The panel arranges it at the cell rectangle;

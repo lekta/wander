@@ -59,13 +59,16 @@ public static partial class Strings {
     /// <summary>Выбрано: {0} — считаем…</summary>
     public static string SummarySelectedCounting => Get(nameof(SummarySelectedCounting));
 
-    /// <summary>Выбрано: {0} — внутри {1} файлов, {2}</summary>
+    /// <summary>Выбрано: {0}</summary>
     public static string SummarySelected => Get(nameof(SummarySelected));
 
-    /// <summary>📷  Снимков: {0}</summary>
+    /// <summary>файлов внутри: {0}</summary>
+    public static string SummaryFilesInside => Get(nameof(SummaryFilesInside));
+
+    /// <summary>📷 {0}</summary>
     public static string SummaryShots => Get(nameof(SummaryShots));
 
-    /// <summary>📷  Снимков: {0} — EXIF по первым {1}</summary>
+    /// <summary>EXIF по первым {0}</summary>
     public static string SummaryShotsSample => Get(nameof(SummaryShotsSample));
 
     /// <summary>Недавние папки (F4)</summary>

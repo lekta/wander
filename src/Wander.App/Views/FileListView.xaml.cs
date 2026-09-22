@@ -20,6 +20,7 @@ using Wander.Core.Diagnostics;
 using Wander.Core.FileSystem;
 using Wander.Core.Layout;
 using Wander.Core.Logging;
+using Wander.Core.Preview;
 
 namespace Wander.App.Views;
 
@@ -120,6 +121,12 @@ public partial class FileListView : UserControl {
 
     /// <summary>The list wants its context menu shown.</summary>
     public event EventHandler<FileListMenuRequest>? ContextMenuRequested;
+
+    /// <summary>
+    /// Enter or Space on a picture in the gallery: the window shows it full
+    /// screen (PLAN Q5). The row is the one the keyboard is on.
+    /// </summary>
+    public event EventHandler<FileSystemEntry>? FullscreenRequested;
 
 
     private MainViewModel Vm => (MainViewModel)DataContext;
@@ -1164,6 +1171,19 @@ public partial class FileListView : UserControl {
         }
 
         if (TryRateFromKeyboard(e.Key)) {
+            e.Handled = true;
+
+            return;
+        }
+
+        // Enter or Space on a picture in the gallery: full screen, as in a
+        // viewer (PLAN Q5). Anything else keeps Enter = open.
+        if (Vm.ViewMode == ViewMode.Gallery && e.Key is Key.Enter or Key.Space
+            && Keyboard.Modifiers == ModifierKeys.None && Vm.RenamingPath is null
+            && Vm.SelectedEntries.Count == 1 && Vm.SelectedEntry is { Kind: EntryKind.File } picture
+            && PreviewRouter.Route(picture.FullPath) is PreviewRoute.Image or PreviewRoute.Animation
+            && FullscreenRequested is not null) {
+            FullscreenRequested(this, picture);
             e.Handled = true;
 
             return;

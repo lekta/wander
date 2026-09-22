@@ -137,8 +137,12 @@
     <comment>{0} — количество выбранных элементов</comment>
   </data>
   <data name="SummarySelected" xml:space="preserve">
-    <value>Выбрано: {0} — внутри {1} файлов, {2}</value>
-    <comment>{0} — выбрано элементов, {1} — файлов внутри, {2} — размер</comment>
+    <value>Выбрано: {0}</value>
+    <comment>{0} — выбрано элементов; спутники, файлы внутри папок, снимки и размер дописываются на ту же строку</comment>
+  </data>
+  <data name="SummaryFilesInside" xml:space="preserve">
+    <value>файлов внутри: {0}</value>
+    <comment>Только когда в выделении есть папки: иначе число файлов уже сказано</comment>
   </data>
   <data name="NavBack" xml:space="preserve">
     <value>Назад (Alt+←)</value>
@@ -1374,6 +1378,100 @@
   <data name="PreviewModelDetail" xml:space="preserve">
     <value>{0:N0} треугольников · {1:N0} вершин</value>
   </data>
+  <data name="PreviewExeVersion" xml:space="preserve">
+    <value>Версия</value>
+  </data>
+  <data name="PreviewExeProduct" xml:space="preserve">
+    <value>Продукт</value>
+  </data>
+  <data name="PreviewExeCompany" xml:space="preserve">
+    <value>Издатель</value>
+  </data>
+  <data name="PreviewExeCopyright" xml:space="preserve">
+    <value>Права</value>
+  </data>
+  <data name="PreviewExePlatform" xml:space="preserve">
+    <value>Платформа</value>
+  </data>
+  <data name="PreviewExeSignature" xml:space="preserve">
+    <value>Подпись</value>
+  </data>
+  <data name="PreviewExeWindowsApp" xml:space="preserve">
+    <value>программа с окнами</value>
+  </data>
+  <data name="PreviewExeConsoleApp" xml:space="preserve">
+    <value>консольная программа</value>
+  </data>
+  <data name="PreviewExeNative" xml:space="preserve">
+    <value>драйвер или системный модуль</value>
+  </data>
+  <data name="PreviewExeEfi" xml:space="preserve">
+    <value>модуль EFI</value>
+  </data>
+  <data name="PreviewExeLibrary" xml:space="preserve">
+    <value>библиотека</value>
+  </data>
+  <data name="PreviewExeSignedBy" xml:space="preserve">
+    <value>{0} — подпись действительна</value>
+    <comment>{0} — имя из сертификата подписи</comment>
+  </data>
+  <data name="PreviewExeSigned" xml:space="preserve">
+    <value>подпись действительна</value>
+  </data>
+  <data name="PreviewExeSignatureInvalid" xml:space="preserve">
+    <value>подпись не подтверждается — файл изменён после подписи или сертификату нет доверия</value>
+  </data>
+  <data name="PreviewExeUnsigned" xml:space="preserve">
+    <value>нет встроенной подписи</value>
+    <comment>Системные файлы часто подписаны каталогом, а не внутри файла</comment>
+  </data>
+  <data name="PreviewDocumentTextNote" xml:space="preserve">
+    <value>Только текст — форматирование не разобрано</value>
+  </data>
+  <data name="PreviewFindCount" xml:space="preserve">
+    <value>{0} из {1}</value>
+    <comment>{0} — номер совпадения, {1} — сколько всего</comment>
+  </data>
+  <data name="PreviewFindNone" xml:space="preserve">
+    <value>Не найдено</value>
+  </data>
+  <data name="PreviewFindPrevious" xml:space="preserve">
+    <value>Предыдущее (Shift+Enter)</value>
+  </data>
+  <data name="PreviewFindNext" xml:space="preserve">
+    <value>Следующее (Enter)</value>
+  </data>
+  <data name="PreviewFindClose" xml:space="preserve">
+    <value>Закрыть (Esc)</value>
+  </data>
+  <data name="PreviewFindBox" xml:space="preserve">
+    <value>Найти в тексте</value>
+  </data>
+  <data name="CompareTitle" xml:space="preserve">
+    <value>Сравнить — {0}</value>
+    <comment>{0} — имя файла, когда у обоих оно одно</comment>
+  </data>
+  <data name="CompareOverlay" xml:space="preserve">
+    <value>Наложить: обе картинки на одном месте, Пробел переключает</value>
+  </data>
+  <data name="CompareSwitch" xml:space="preserve">
+    <value>Показать другую (Пробел)</value>
+  </data>
+  <data name="CompareOpen" xml:space="preserve">
+    <value>Сравнить: два файла рядом, тексты прокручиваются вместе</value>
+  </data>
+  <data name="CompareTitlePair" xml:space="preserve">
+    <value>Сравнить — {0} ↔ {1}</value>
+    <comment>Имена файлов разные: {0} слева, {1} справа</comment>
+  </data>
+  <data name="CompareSideA" xml:space="preserve">
+    <value>A: {0}</value>
+    <comment>{0} — папка левого файла; в режиме наложения</comment>
+  </data>
+  <data name="CompareSideB" xml:space="preserve">
+    <value>B: {0}</value>
+    <comment>{0} — папка правого файла; в режиме наложения</comment>
+  </data>
   <data name="HotkeyGroupNavigation" xml:space="preserve">
     <value>Навигация</value>
   </data>
@@ -1813,11 +1911,12 @@
     <value>Метка снята — файлов: {0}</value>
   </data>
   <data name="SummaryShots" xml:space="preserve">
-    <value>📷  Снимков: {0}</value>
+    <value>📷 {0}</value>
+    <comment>Снимков в выделении; пишется, только когда выделены не одни снимки</comment>
   </data>
   <data name="SummaryShotsSample" xml:space="preserve">
-    <value>📷  Снимков: {0} — EXIF по первым {1}</value>
-    <comment>{0} — снимков в выделении, {1} — сколько из них прочитано для сводки</comment>
+    <value>EXIF по первым {0}</value>
+    <comment>{0} — сколько снимков прочитано для сводки, когда выделено больше</comment>
   </data>
   <data name="TitleYielding" xml:space="preserve">
     <value>{0} — настройки не сохраняются</value>

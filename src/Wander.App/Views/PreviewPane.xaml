@@ -32,202 +32,202 @@
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
         <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility"/>
 
-        <!--
-            The helpers' buttons (RAWHELPERS). Two letters said nothing to
-            anyone but their author (2026-09-22), so each one draws what it
-            does: everything in a circle of the same size, the marks in the
-            colour they appear in over the picture.
-        -->
-        <DrawingImage x:Key="IconHelperFocus">
-            <DrawingImage.Drawing>
-                <DrawingGroup>
-                    <GeometryDrawing Brush="Transparent" Geometry="M0,0 L16,0 L16,16 L0,16 Z"/>
-                    <GeometryDrawing>
-                        <GeometryDrawing.Pen>
-                            <Pen Brush="{StaticResource IconRing}" Thickness="1"/>
-                        </GeometryDrawing.Pen>
-                        <GeometryDrawing.Geometry>
-                            <EllipseGeometry Center="8,8" RadiusX="7" RadiusY="7"/>
-                        </GeometryDrawing.Geometry>
-                    </GeometryDrawing>
-                    <!-- The edge, and what peaking puts along it. -->
-                    <GeometryDrawing>
-                        <GeometryDrawing.Pen>
-                            <Pen Brush="{StaticResource ReviewPeaking}" Thickness="1.6"/>
-                        </GeometryDrawing.Pen>
-                        <GeometryDrawing.Geometry>
-                            <PathGeometry Figures="M4,11.5 L12,4.5"/>
-                        </GeometryDrawing.Geometry>
-                    </GeometryDrawing>
-                    <GeometryDrawing Brush="{StaticResource ReviewPeaking}">
-                        <GeometryDrawing.Geometry>
-                            <GeometryGroup>
-                                <EllipseGeometry Center="4.5,7.5" RadiusX="1" RadiusY="1"/>
-                                <EllipseGeometry Center="8.5,11.5" RadiusX="1" RadiusY="1"/>
-                                <EllipseGeometry Center="11.5,8.5" RadiusX="1" RadiusY="1"/>
-                            </GeometryGroup>
-                        </GeometryDrawing.Geometry>
-                    </GeometryDrawing>
-                </DrawingGroup>
-            </DrawingImage.Drawing>
-        </DrawingImage>
-
-        <DrawingImage x:Key="IconHelperAf">
-            <DrawingImage.Drawing>
-                <DrawingGroup>
-                    <GeometryDrawing Brush="Transparent" Geometry="M0,0 L16,0 L16,16 L0,16 Z"/>
-                    <GeometryDrawing>
-                        <GeometryDrawing.Pen>
-                            <Pen Brush="{StaticResource IconRing}" Thickness="1"/>
-                        </GeometryDrawing.Pen>
-                        <GeometryDrawing.Geometry>
-                            <EllipseGeometry Center="8,8" RadiusX="7" RadiusY="7"/>
-                        </GeometryDrawing.Geometry>
-                    </GeometryDrawing>
-                    <!-- The camera's focus frame. -->
-                    <GeometryDrawing>
-                        <GeometryDrawing.Pen>
-                            <Pen Brush="{StaticResource ReviewAfFocused}" Thickness="1.6"/>
-                        </GeometryDrawing.Pen>
-                        <GeometryDrawing.Geometry>
-                            <RectangleGeometry Rect="4.5,4.5,7,7"/>
-                        </GeometryDrawing.Geometry>
-                    </GeometryDrawing>
-                </DrawingGroup>
-            </DrawingImage.Drawing>
-        </DrawingImage>
-
-        <!-- Sharpness: an edge that rises steeply - what the score measures. -->
-        <DrawingImage x:Key="IconHelperSharp">
-            <DrawingImage.Drawing>
-                <DrawingGroup>
-                    <GeometryDrawing Brush="Transparent" Geometry="M0,0 L16,0 L16,16 L0,16 Z"/>
-                    <GeometryDrawing>
-                        <GeometryDrawing.Pen>
-                            <Pen Brush="{StaticResource IconRing}" Thickness="1"/>
-                        </GeometryDrawing.Pen>
-                        <GeometryDrawing.Geometry>
-                            <EllipseGeometry Center="8,8" RadiusX="7" RadiusY="7"/>
-                        </GeometryDrawing.Geometry>
-                    </GeometryDrawing>
-                    <GeometryDrawing>
-                        <GeometryDrawing.Pen>
-                            <Pen Brush="{StaticResource ReviewSharp}" Thickness="1.6" LineJoin="Round"/>
-                        </GeometryDrawing.Pen>
-                        <GeometryDrawing.Geometry>
-                            <PathGeometry Figures="M3.5,11.5 L8,4.5 L12.5,11.5"/>
-                        </GeometryDrawing.Geometry>
-                    </GeometryDrawing>
-                </DrawingGroup>
-            </DrawingImage.Drawing>
-        </DrawingImage>
-
-        <!-- Clipping: the range from black to white, with the two ends that are gone. -->
-        <DrawingImage x:Key="IconHelperClip">
-            <DrawingImage.Drawing>
-                <DrawingGroup>
-                    <GeometryDrawing Brush="Transparent" Geometry="M0,0 L16,0 L16,16 L0,16 Z"/>
-                    <GeometryDrawing>
-                        <GeometryDrawing.Brush>
-                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                <GradientStop Color="#3D5AFE" Offset="0"/>
-                                <GradientStop Color="#3D5AFE" Offset="0.16"/>
-                                <GradientStop Color="#000000" Offset="0.2"/>
-                                <GradientStop Color="#FFFFFF" Offset="0.8"/>
-                                <GradientStop Color="#FF3B30" Offset="0.84"/>
-                                <GradientStop Color="#FF3B30" Offset="1"/>
-                            </LinearGradientBrush>
-                        </GeometryDrawing.Brush>
-                        <GeometryDrawing.Pen>
-                            <Pen Brush="{StaticResource IconRing}" Thickness="1"/>
-                        </GeometryDrawing.Pen>
-                        <GeometryDrawing.Geometry>
-                            <EllipseGeometry Center="8,8" RadiusX="7" RadiusY="7"/>
-                        </GeometryDrawing.Geometry>
-                    </GeometryDrawing>
-                    <GeometryDrawing>
-                        <GeometryDrawing.Pen>
-                            <Pen Brush="{StaticResource IconRing}" Thickness="1"/>
-                        </GeometryDrawing.Pen>
-                        <GeometryDrawing.Geometry>
-                            <PathGeometry Figures="M8,1.2 L8,14.8"/>
-                        </GeometryDrawing.Geometry>
-                    </GeometryDrawing>
-                </DrawingGroup>
-            </DrawingImage.Drawing>
-        </DrawingImage>
-
-        <!-- The chart itself, in miniature. -->
-        <DrawingImage x:Key="IconHelperHistogram">
-            <DrawingImage.Drawing>
-                <DrawingGroup>
-                    <GeometryDrawing Brush="Transparent" Geometry="M0,0 L16,0 L16,16 L0,16 Z"/>
-                    <GeometryDrawing>
-                        <GeometryDrawing.Pen>
-                            <Pen Brush="{StaticResource IconRing}" Thickness="1"/>
-                        </GeometryDrawing.Pen>
-                        <GeometryDrawing.Geometry>
-                            <EllipseGeometry Center="8,8" RadiusX="7" RadiusY="7"/>
-                        </GeometryDrawing.Geometry>
-                    </GeometryDrawing>
-                    <GeometryDrawing Brush="{StaticResource ReviewSharp}"
-                                     Geometry="M4,11 L5.2,11 L5.2,8.5 L4,8.5 Z
-                                               M5.7,11 L6.9,11 L6.9,6 L5.7,6 Z
-                                               M7.4,11 L8.6,11 L8.6,4.5 L7.4,4.5 Z
-                                               M9.1,11 L10.3,11 L10.3,7 L9.1,7 Z
-                                               M10.8,11 L12,11 L12,9.5 L10.8,9.5 Z"/>
-                </DrawingGroup>
-            </DrawingImage.Drawing>
-        </DrawingImage>
-
-        <!-- Shadows lifted: the same range with its dark end raised. -->
-        <DrawingImage x:Key="IconHelperShadows">
-            <DrawingImage.Drawing>
-                <DrawingGroup>
-                    <GeometryDrawing Brush="Transparent" Geometry="M0,0 L16,0 L16,16 L0,16 Z"/>
-                    <GeometryDrawing>
-                        <GeometryDrawing.Brush>
-                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                <GradientStop Color="#7A7A7A" Offset="0"/>
-                                <GradientStop Color="#A6A6A6" Offset="0.45"/>
-                                <GradientStop Color="#FFFFFF" Offset="1"/>
-                            </LinearGradientBrush>
-                        </GeometryDrawing.Brush>
-                        <GeometryDrawing.Pen>
-                            <Pen Brush="{StaticResource IconRing}" Thickness="1"/>
-                        </GeometryDrawing.Pen>
-                        <GeometryDrawing.Geometry>
-                            <EllipseGeometry Center="8,8" RadiusX="7" RadiusY="7"/>
-                        </GeometryDrawing.Geometry>
-                    </GeometryDrawing>
-                </DrawingGroup>
-            </DrawingImage.Drawing>
-        </DrawingImage>
-
-        <!-- Highlights pulled down: the same range with its bright end lowered. -->
-        <DrawingImage x:Key="IconHelperHighlights">
-            <DrawingImage.Drawing>
-                <DrawingGroup>
-                    <GeometryDrawing Brush="Transparent" Geometry="M0,0 L16,0 L16,16 L0,16 Z"/>
-                    <GeometryDrawing>
-                        <GeometryDrawing.Brush>
-                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                <GradientStop Color="#000000" Offset="0"/>
-                                <GradientStop Color="#5E5E5E" Offset="0.55"/>
-                                <GradientStop Color="#9A9A9A" Offset="1"/>
-                            </LinearGradientBrush>
-                        </GeometryDrawing.Brush>
-                        <GeometryDrawing.Pen>
-                            <Pen Brush="{StaticResource IconRing}" Thickness="1"/>
-                        </GeometryDrawing.Pen>
-                        <GeometryDrawing.Geometry>
-                            <EllipseGeometry Center="8,8" RadiusX="7" RadiusY="7"/>
-                        </GeometryDrawing.Geometry>
-                    </GeometryDrawing>
-                </DrawingGroup>
-            </DrawingImage.Drawing>
-        </DrawingImage>
-
+        <!--
+            The helpers' buttons (RAWHELPERS). Two letters said nothing to
+            anyone but their author (2026-09-22), so each one draws what it
+            does: everything in a circle of the same size, the marks in the
+            colour they appear in over the picture.
+        -->
+        <DrawingImage x:Key="IconHelperFocus">
+            <DrawingImage.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="Transparent" Geometry="M0,0 L16,0 L16,16 L0,16 Z"/>
+                    <GeometryDrawing>
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="{StaticResource IconRing}" Thickness="1"/>
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <EllipseGeometry Center="8,8" RadiusX="7" RadiusY="7"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <!-- The edge, and what peaking puts along it. -->
+                    <GeometryDrawing>
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="{StaticResource ReviewPeaking}" Thickness="1.6"/>
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <PathGeometry Figures="M4,11.5 L12,4.5"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <GeometryDrawing Brush="{StaticResource ReviewPeaking}">
+                        <GeometryDrawing.Geometry>
+                            <GeometryGroup>
+                                <EllipseGeometry Center="4.5,7.5" RadiusX="1" RadiusY="1"/>
+                                <EllipseGeometry Center="8.5,11.5" RadiusX="1" RadiusY="1"/>
+                                <EllipseGeometry Center="11.5,8.5" RadiusX="1" RadiusY="1"/>
+                            </GeometryGroup>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                </DrawingGroup>
+            </DrawingImage.Drawing>
+        </DrawingImage>
+
+        <DrawingImage x:Key="IconHelperAf">
+            <DrawingImage.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="Transparent" Geometry="M0,0 L16,0 L16,16 L0,16 Z"/>
+                    <GeometryDrawing>
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="{StaticResource IconRing}" Thickness="1"/>
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <EllipseGeometry Center="8,8" RadiusX="7" RadiusY="7"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <!-- The camera's focus frame. -->
+                    <GeometryDrawing>
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="{StaticResource ReviewAfFocused}" Thickness="1.6"/>
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <RectangleGeometry Rect="4.5,4.5,7,7"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                </DrawingGroup>
+            </DrawingImage.Drawing>
+        </DrawingImage>
+
+        <!-- Sharpness: an edge that rises steeply - what the score measures. -->
+        <DrawingImage x:Key="IconHelperSharp">
+            <DrawingImage.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="Transparent" Geometry="M0,0 L16,0 L16,16 L0,16 Z"/>
+                    <GeometryDrawing>
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="{StaticResource IconRing}" Thickness="1"/>
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <EllipseGeometry Center="8,8" RadiusX="7" RadiusY="7"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <GeometryDrawing>
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="{StaticResource ReviewSharp}" Thickness="1.6" LineJoin="Round"/>
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <PathGeometry Figures="M3.5,11.5 L8,4.5 L12.5,11.5"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                </DrawingGroup>
+            </DrawingImage.Drawing>
+        </DrawingImage>
+
+        <!-- Clipping: the range from black to white, with the two ends that are gone. -->
+        <DrawingImage x:Key="IconHelperClip">
+            <DrawingImage.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="Transparent" Geometry="M0,0 L16,0 L16,16 L0,16 Z"/>
+                    <GeometryDrawing>
+                        <GeometryDrawing.Brush>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                <GradientStop Color="#3D5AFE" Offset="0"/>
+                                <GradientStop Color="#3D5AFE" Offset="0.16"/>
+                                <GradientStop Color="#000000" Offset="0.2"/>
+                                <GradientStop Color="#FFFFFF" Offset="0.8"/>
+                                <GradientStop Color="#FF3B30" Offset="0.84"/>
+                                <GradientStop Color="#FF3B30" Offset="1"/>
+                            </LinearGradientBrush>
+                        </GeometryDrawing.Brush>
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="{StaticResource IconRing}" Thickness="1"/>
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <EllipseGeometry Center="8,8" RadiusX="7" RadiusY="7"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <GeometryDrawing>
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="{StaticResource IconRing}" Thickness="1"/>
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <PathGeometry Figures="M8,1.2 L8,14.8"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                </DrawingGroup>
+            </DrawingImage.Drawing>
+        </DrawingImage>
+
+        <!-- The chart itself, in miniature. -->
+        <DrawingImage x:Key="IconHelperHistogram">
+            <DrawingImage.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="Transparent" Geometry="M0,0 L16,0 L16,16 L0,16 Z"/>
+                    <GeometryDrawing>
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="{StaticResource IconRing}" Thickness="1"/>
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <EllipseGeometry Center="8,8" RadiusX="7" RadiusY="7"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <GeometryDrawing Brush="{StaticResource ReviewSharp}"
+                                     Geometry="M4,11 L5.2,11 L5.2,8.5 L4,8.5 Z
+                                               M5.7,11 L6.9,11 L6.9,6 L5.7,6 Z
+                                               M7.4,11 L8.6,11 L8.6,4.5 L7.4,4.5 Z
+                                               M9.1,11 L10.3,11 L10.3,7 L9.1,7 Z
+                                               M10.8,11 L12,11 L12,9.5 L10.8,9.5 Z"/>
+                </DrawingGroup>
+            </DrawingImage.Drawing>
+        </DrawingImage>
+
+        <!-- Shadows lifted: the same range with its dark end raised. -->
+        <DrawingImage x:Key="IconHelperShadows">
+            <DrawingImage.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="Transparent" Geometry="M0,0 L16,0 L16,16 L0,16 Z"/>
+                    <GeometryDrawing>
+                        <GeometryDrawing.Brush>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                <GradientStop Color="#7A7A7A" Offset="0"/>
+                                <GradientStop Color="#A6A6A6" Offset="0.45"/>
+                                <GradientStop Color="#FFFFFF" Offset="1"/>
+                            </LinearGradientBrush>
+                        </GeometryDrawing.Brush>
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="{StaticResource IconRing}" Thickness="1"/>
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <EllipseGeometry Center="8,8" RadiusX="7" RadiusY="7"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                </DrawingGroup>
+            </DrawingImage.Drawing>
+        </DrawingImage>
+
+        <!-- Highlights pulled down: the same range with its bright end lowered. -->
+        <DrawingImage x:Key="IconHelperHighlights">
+            <DrawingImage.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="Transparent" Geometry="M0,0 L16,0 L16,16 L0,16 Z"/>
+                    <GeometryDrawing>
+                        <GeometryDrawing.Brush>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                <GradientStop Color="#000000" Offset="0"/>
+                                <GradientStop Color="#5E5E5E" Offset="0.55"/>
+                                <GradientStop Color="#9A9A9A" Offset="1"/>
+                            </LinearGradientBrush>
+                        </GeometryDrawing.Brush>
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="{StaticResource IconRing}" Thickness="1"/>
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <EllipseGeometry Center="8,8" RadiusX="7" RadiusY="7"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                </DrawingGroup>
+            </DrawingImage.Drawing>
+        </DrawingImage>
+
         <!--
             A review helper's switch in the footer (RAWHELPERS): a picture of
             what it does, the words in the tooltip. Flat at rest, tinted while on - a
@@ -360,6 +360,30 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- The find field's arrows and cross (B6): flat, as the glyphs in the toolbar's search box. -->
+        <Style x:Key="FindGlyphButton" TargetType="Button">
+            <Setter Property="Width" Value="22"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource TextMuted}"/>
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="2">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource ControlHover}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
 
             <Grid>
@@ -374,7 +398,8 @@
                 </Grid.ColumnDefinitions>
 
                 <!-- Content area -->
-                <Grid Grid.Row="0">
+                <Grid x:Name="ContentArea" Grid.Row="0" SizeChanged="ContentArea_SizeChanged"
+                      ScrollViewer.ScrollChanged="ContentArea_ScrollChanged">
                     <!--
                         The content surround, same palette as the gallery's.
                         A photograph judged against a grey wall and then
@@ -412,6 +437,9 @@
                                         <Setter Property="Visibility" Value="Visible"/>
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding Kind}" Value="Archive">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Kind}" Value="Executable">
                                         <Setter Property="Visibility" Value="Visible"/>
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding Kind}" Value="None">
@@ -457,12 +485,23 @@
                         <Image x:Name="ImgFit"
                                Source="{Binding DisplayImage}"
                                Stretch="Uniform"
-                               MaxWidth="{Binding Image, Converter={StaticResource BitmapPixelSize}, ConverterParameter=W}"
-                               MaxHeight="{Binding Image, Converter={StaticResource BitmapPixelSize}, ConverterParameter=H}"
                                Margin="8,12,8,8"
                                VerticalAlignment="Top" HorizontalAlignment="Center"
                                RenderOptions.BitmapScalingMode="HighQuality"
-                               SizeChanged="ImgFit_SizeChanged"/>
+                               SizeChanged="ImgFit_SizeChanged">
+                            <Image.MaxWidth>
+                                <MultiBinding Converter="{StaticResource BitmapPixelSize}" ConverterParameter="W">
+                                    <Binding Path="ImageCapWidth"/>
+                                    <Binding Path="DpiScale" RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                                </MultiBinding>
+                            </Image.MaxWidth>
+                            <Image.MaxHeight>
+                                <MultiBinding Converter="{StaticResource BitmapPixelSize}" ConverterParameter="H">
+                                    <Binding Path="ImageCapHeight"/>
+                                    <Binding Path="DpiScale" RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                                </MultiBinding>
+                            </Image.MaxHeight>
+                        </Image>
                         <!--
                             Review helpers over the picture: sized to what
                             ImgFit came out at and placed the way it is, so
@@ -532,11 +571,23 @@
                     <controls:GifImage x:Name="GifPreview"
                                        GifUri="{Binding GifUri}"
                                        Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Gif}"
-                                       Stretch="Uniform" StretchDirection="DownOnly"
-                                       MaxWidth="{Binding Source, RelativeSource={RelativeSource Self}, Converter={StaticResource BitmapPixelSize}, ConverterParameter=W}"
-                                       MaxHeight="{Binding Source, RelativeSource={RelativeSource Self}, Converter={StaticResource BitmapPixelSize}, ConverterParameter=H}"
+                                       Stretch="Uniform"
                                        Margin="8,12,8,8"
-                                       VerticalAlignment="Top" HorizontalAlignment="Center"/>
+                                       VerticalAlignment="Top" HorizontalAlignment="Center"
+                                       RenderOptions.BitmapScalingMode="HighQuality">
+                        <controls:GifImage.MaxWidth>
+                            <MultiBinding Converter="{StaticResource BitmapPixelSize}" ConverterParameter="W">
+                                <Binding Path="Source" RelativeSource="{RelativeSource Self}"/>
+                                <Binding Path="DpiScale" RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                            </MultiBinding>
+                        </controls:GifImage.MaxWidth>
+                        <controls:GifImage.MaxHeight>
+                            <MultiBinding Converter="{StaticResource BitmapPixelSize}" ConverterParameter="H">
+                                <Binding Path="Source" RelativeSource="{RelativeSource Self}"/>
+                                <Binding Path="DpiScale" RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                            </MultiBinding>
+                        </controls:GifImage.MaxHeight>
+                    </controls:GifImage>
 
                     <!--
                         Video and audio: one MediaElement, one transport.
@@ -635,9 +686,20 @@
                                 <!-- Capped at its pixel size rather than DownOnly - see ImgFit. -->
                                 <Image Source="{Binding AudioCover}"
                                        Stretch="Uniform"
-                                       MaxWidth="{Binding Source, RelativeSource={RelativeSource Self}, Converter={StaticResource BitmapPixelSize}, ConverterParameter=W}"
-                                       MaxHeight="{Binding Source, RelativeSource={RelativeSource Self}, Converter={StaticResource BitmapPixelSize}, ConverterParameter=H}"
-                                       RenderOptions.BitmapScalingMode="HighQuality"/>
+                                       RenderOptions.BitmapScalingMode="HighQuality">
+                                    <Image.MaxWidth>
+                                        <MultiBinding Converter="{StaticResource BitmapPixelSize}" ConverterParameter="W">
+                                            <Binding Path="Source" RelativeSource="{RelativeSource Self}"/>
+                                            <Binding Path="DpiScale" RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                                        </MultiBinding>
+                                    </Image.MaxWidth>
+                                    <Image.MaxHeight>
+                                        <MultiBinding Converter="{StaticResource BitmapPixelSize}" ConverterParameter="H">
+                                            <Binding Path="Source" RelativeSource="{RelativeSource Self}"/>
+                                            <Binding Path="DpiScale" RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                                        </MultiBinding>
+                                    </Image.MaxHeight>
+                                </Image>
                             </Border>
 
                             <TextBlock Text="{Binding AudioTitle}"
@@ -801,9 +863,15 @@
                                    HorizontalAlignment="Center"/>
                     </Grid>
 
-                    <!-- Plain text -->
-                    <TextBox Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Text}"
+                    <!--
+                        Plain text. The selection shows without the keyboard:
+                        a match the find field went to (B6) is highlighted
+                        while the keyboard stays in the list.
+                    -->
+                    <TextBox x:Name="PlainText"
+                             Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Text}"
                              Text="{Binding Text, Mode=OneWay}"
+                             IsInactiveSelectionHighlightEnabled="True"
                              IsReadOnly="True"
                              FontFamily="Consolas" FontSize="11"
                              Background="Transparent" BorderThickness="0"
@@ -831,6 +899,7 @@
                     <RichTextBox x:Name="DocumentPreview"
                                  Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Document}"
                                  IsReadOnly="True" IsDocumentEnabled="True"
+                                 IsInactiveSelectionHighlightEnabled="True"
                                  Background="{StaticResource InputBackground}" BorderThickness="0"
                                  VerticalScrollBarVisibility="Auto"
                                  HorizontalScrollBarVisibility="Auto"
@@ -1062,6 +1131,41 @@
                         </StackPanel>
                     </ScrollViewer>
 
+                    <!--
+                        A program or a library (B7): its icon, what it calls
+                        itself, and the facts it carries - in the census's
+                        clothes, as the archive listing is.
+                    -->
+                    <ScrollViewer Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Executable}"
+                                  VerticalScrollBarVisibility="Auto" Padding="12,10,12,10">
+                        <StackPanel>
+                            <Image Source="{Binding ExecutableIcon}"
+                                   Width="64" Height="64" HorizontalAlignment="Left"
+                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+                            <TextBlock Text="{Binding ExecutableTitle}"
+                                       Style="{StaticResource PaneText}"
+                                       FontSize="14" FontWeight="SemiBold"
+                                       Margin="0,8,0,10" TextWrapping="Wrap"/>
+                            <ItemsControl ItemsSource="{Binding ExecutableFacts}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,2,0,2">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="84"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding Label}"
+                                                       Style="{StaticResource PaneDim}"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Value}"
+                                                       Style="{StaticResource PaneText}"
+                                                       TextWrapping="Wrap"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+
                     <!-- Placeholder (None / Unsupported) -->
                     <TextBlock Text="{Binding PlaceholderText}"
                                Style="{StaticResource PaneDim}"
@@ -1096,6 +1200,34 @@
                             </Ellipse.Triggers>
                         </Ellipse>
                     </Grid>
+
+                    <!--
+                        Find in the text on show (B6): Ctrl+F with the
+                        keyboard in the pane, or opened by a result of a
+                        search inside files. Top right, over the text, as a
+                        browser's; the web view keeps its own.
+                    -->
+                    <Border x:Name="FindBar" Visibility="Collapsed"
+                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,20,0"
+                            Background="{StaticResource InputBackground}"
+                            BorderBrush="{StaticResource Separator}" BorderThickness="1" CornerRadius="3"
+                            Padding="4,1">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBox x:Name="FindBox" Width="160" BorderThickness="0"
+                                     VerticalContentAlignment="Center"
+                                     ToolTip="{x:Static res:Strings.PreviewFindBox}"
+                                     TextChanged="FindBox_TextChanged"
+                                     PreviewKeyDown="FindBox_PreviewKeyDown"/>
+                            <TextBlock x:Name="FindCount" Foreground="{StaticResource TextDim}" FontSize="11"
+                                       VerticalAlignment="Center" Margin="6,0,4,0"/>
+                            <Button Style="{StaticResource FindGlyphButton}" Content="&#xE70E;"
+                                    ToolTip="{x:Static res:Strings.PreviewFindPrevious}" Click="FindPrevious_Click"/>
+                            <Button Style="{StaticResource FindGlyphButton}" Content="&#xE70D;"
+                                    ToolTip="{x:Static res:Strings.PreviewFindNext}" Click="FindNext_Click"/>
+                            <Button Style="{StaticResource FindGlyphButton}" Content="&#xE711;"
+                                    ToolTip="{x:Static res:Strings.PreviewFindClose}" Click="FindClose_Click"/>
+                        </StackPanel>
+                    </Border>
                 </Grid>
 
                 <!--

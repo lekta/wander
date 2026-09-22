@@ -125,6 +125,9 @@ public sealed class SystemIconProvider : IIconProvider {
     private readonly ThumbnailDiskCache? _disk;
     private int _memoryBudget = MaxCachedThumbnails;
 
+    // Pixels of a Large thumbnail - ThumbnailCacheOptions.ThumbnailSide.
+    private volatile int _thumbSide = ThumbnailCacheOptions.Default.ThumbnailSide;
+
 
     public SystemIconProvider(ThumbnailDiskCache? disk = null) {
         _disk = disk;
@@ -175,7 +178,7 @@ public sealed class SystemIconProvider : IIconProvider {
             byte[]? bytes;
             var asked = System.Diagnostics.Stopwatch.StartNew();
             using (PerfLog.Measure("bg.thumb-shell")) {
-                bytes = LoadIcon(path, size, isFolder);
+                bytes = LoadIcon(path, size, isFolder, _thumbSide);
             }
             // The PERF line says a shell call was slow; only this one says
             // which file. A single extraction can take seconds (a dead
@@ -217,9 +220,18 @@ public sealed class SystemIconProvider : IIconProvider {
     public void ConfigureCache(ThumbnailCacheOptions options) {
         lock (_lock) {
             _memoryBudget = Math.Max(1, options.MemoryEntries);
+            if (_thumbSide != options.ThumbnailSide) {
+                // Thumbnails drawn at the old size: the disk tier has the
+                // size in its key, the memory one is dropped.
+                _thumbSide = options.ThumbnailSide;
+                _cache.Clear();
+                _thumbnailOrder.Clear();
+                _missing.Clear();
+                _stamps.Clear();
+            }
             TrimMemory();
         }
-        _disk?.Configure(options.DiskEnabled, options.DiskBudgetBytes);
+        _disk?.Configure(options.DiskEnabled, options.DiskBudgetBytes, options.ThumbnailSide);
     }
 
 
@@ -518,7 +530,7 @@ public sealed class SystemIconProvider : IIconProvider {
         }
     }
 
-    private static byte[]? LoadIcon(string path, IconSize size, bool isFolder) {
+    private static byte[]? LoadIcon(string path, IconSize size, bool isFolder, int thumbSide) {
         // shell:RecycleBinFolder and similar sentinels can't go through
         // SHGetFileInfo by path — those calls just fail because there's
         // no file. Route them through PIDL-based icon lookup instead.
@@ -539,7 +551,7 @@ public sealed class SystemIconProvider : IIconProvider {
         }
 
         return size switch {
-            IconSize.Large => LoadJumboImage(path),
+            IconSize.Large => LoadJumboImage(path, thumbSide),
             IconSize.Medium => LoadMediumImage(path),
             _ => LoadShellIcon(path, size),
         };
@@ -609,6 +621,9 @@ public sealed class SystemIconProvider : IIconProvider {
         // the shell's per-file cost is felt.
         if (thumbTarget is null && RawThumbnail.Render(path, MediumSize) is { } rawThumb) {
             return rawThumb;
+        }
+        if (thumbTarget is null && TgaThumbnail.Render(path, MediumSize) is { } tgaThumb) {
+            return tgaThumb;
         }
 
         using Bitmap? bmp = LoadShellBitmap(source, MediumSize);
@@ -990,7 +1005,8 @@ public sealed class SystemIconProvider : IIconProvider {
     // Large — IShellItemImageFactory + manual overlay composition.
     // ------------------------------------------------------------------
 
-    private static byte[]? LoadJumboImage(string path) {
+    /// <param name="side">Pixels of a thumbnail - of a picture, a cover, a page; the icon of a file without one stays 256 (the shell's jumbo list).</param>
+    private static byte[]? LoadJumboImage(string path, int side) {
         // Routing: files with a real thumbnail provider (images, videos, PDFs,
         // folders with content peek) go through IShellItemImageFactory so we
         // get true thumbnails. Everything else — text, code, .exe, .lnk — uses
@@ -1005,7 +1021,7 @@ public sealed class SystemIconProvider : IIconProvider {
         // so a sub-optimal write from us could later make Explorer's display
         // of the same file look blurrier than before Wander ran. Splitting
         // the paths keeps icon-only writes out of the shared cache.
-        if (TryRenderBookCover(path, JumboSize) is { } cover) {
+        if (TryRenderBookCover(path, side) is { } cover) {
             return cover;
         }
 
@@ -1014,7 +1030,7 @@ public sealed class SystemIconProvider : IIconProvider {
         // a book gets the book's cover, arrow included - the cover branch
         // above only knows the .lnk itself.
         string? linkTarget = ExistingLinkTarget(path);
-        if (linkTarget is not null && TryRenderLinkedCover(linkTarget, path, JumboSize) is { } linkedCover) {
+        if (linkTarget is not null && TryRenderLinkedCover(linkTarget, path, side) is { } linkedCover) {
             return linkedCover;
         }
 
@@ -1028,12 +1044,16 @@ public sealed class SystemIconProvider : IIconProvider {
         // Bitmap this path never produces. Overlays on the RAW itself are
         // not a case that occurs — the arrow is the only overlay Wander has
         // ever seen — so returning here loses nothing.
-        if (thumbTarget is null && RawThumbnail.Render(path, JumboSize) is { } rawThumb) {
+        if (thumbTarget is null && RawThumbnail.Render(path, side) is { } rawThumb) {
             return rawThumb;
+        }
+        // No codec and no provider for TGA on Windows: decoded here (PLAN B8).
+        if (thumbTarget is null && TgaThumbnail.Render(path, side) is { } tgaThumb) {
+            return tgaThumb;
         }
 
         Bitmap? baseBmp = IsThumbnailable(source)
-            ? LoadShellBitmap(source, JumboSize)
+            ? LoadShellBitmap(source, side)
             : LoadIconBitmapJumbo(path);
 
         if (baseBmp is null) {
@@ -1104,6 +1124,8 @@ public sealed class SystemIconProvider : IIconProvider {
         // Images
         ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".tif", ".tiff",
         ".ico", ".heic", ".heif", ".svg",
+        // Decoded by Wander itself - TgaThumbnail
+        ".tga",
         // RAW
         ".cr2", ".cr3", ".nef", ".arw", ".dng", ".raf", ".orf", ".rw2",
         // Video

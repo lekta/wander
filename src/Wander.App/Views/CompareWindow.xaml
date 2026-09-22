@@ -1,0 +1,50 @@
+<Window x:Class="Wander.App.Views.CompareWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="clr-namespace:Wander.App.Views"
+        xmlns:res="clr-namespace:Wander.App.Resources"
+        Width="1100" Height="720" MinWidth="600" MinHeight="360"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        UseLayoutRounding="True"
+        Background="{StaticResource ChromeBackground}">
+    <!--
+        Two files side by side (PLAN Q5): two preview panes, each with its
+        own controller, so each draws what the main pane would - a picture,
+        a text, a document. Texts scroll together, a held zoom looks at the
+        same place of both pictures, and two pictures can be laid on one
+        place and flicked between (A/B). Not modal: it is for looking, and
+        the window it came from waits for its own answer.
+    -->
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition x:Name="ColumnA" Width="*"/>
+            <ColumnDefinition x:Name="ColumnB" Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Which side is which: the folder over each column, as in the conflict window. -->
+        <TextBlock x:Name="HeaderA" Grid.Row="0" Grid.Column="0" Margin="12,8,6,6"
+                   FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+        <DockPanel x:Name="HeaderBPanel" Grid.Row="0" Grid.Column="1" Margin="6,6,8,4">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <ToggleButton x:Name="OverlayToggle" Content="A/B" Padding="8,2" Margin="0,0,4,0"
+                              ToolTip="{x:Static res:Strings.CompareOverlay}"
+                              Visibility="Collapsed"
+                              Checked="Overlay_Changed" Unchecked="Overlay_Changed"/>
+                <Button x:Name="SwitchButton" Content="&#xE8AB;" FontFamily="Segoe MDL2 Assets" Padding="8,3"
+                        ToolTip="{x:Static res:Strings.CompareSwitch}"
+                        Visibility="Collapsed"
+                        Click="Switch_Click"/>
+            </StackPanel>
+            <TextBlock x:Name="HeaderB" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                       VerticalAlignment="Center"/>
+        </DockPanel>
+
+        <views:PreviewPane x:Name="PaneA" Grid.Row="1" Grid.Column="0" BorderThickness="0,1,0,0"/>
+        <views:PreviewPane x:Name="PaneB" Grid.Row="1" Grid.Column="1" BorderThickness="1,1,0,0"/>
+    </Grid>
+</Window>

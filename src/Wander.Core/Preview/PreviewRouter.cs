@@ -48,6 +48,16 @@ public enum PreviewRoute {
 
     /// <summary>Plain text, no highlighting.</summary>
     Text,
+
+    /// <summary>A program or a library: a card of what its header, version and signature say (PLAN B7).</summary>
+    Executable,
+
+    /// <summary>
+    /// A document Wander does not lay out - Word, the Office and
+    /// OpenDocument formats, EPUB: its text, as the content search reads it
+    /// (PLAN B5).
+    /// </summary>
+    DocumentText,
 }
 
 
@@ -130,6 +140,20 @@ public static class PreviewRouter {
         ".pdf", ".html", ".htm", ".mht", ".mhtml",
     };
 
+    /// <summary>Windows programs and libraries, and the installer packages signed the same way.</summary>
+    private static readonly HashSet<string> _executable = new(StringComparer.OrdinalIgnoreCase) {
+        ".exe", ".dll", ".sys", ".msi", ".ocx", ".scr", ".cpl", ".drv",
+    };
+
+    /// <summary>
+    /// Documents shown as their text: what the content search's extractors
+    /// read - the zip-and-XML ones in Core, <c>.doc</c> through the system's
+    /// filter. <c>.rtf</c> is not here: the rich-text view lays it out.
+    /// </summary>
+    private static readonly HashSet<string> _documentText = new(StringComparer.OrdinalIgnoreCase) {
+        ".doc", ".dot", ".docx", ".xlsx", ".pptx", ".odt", ".ods", ".odp", ".epub",
+    };
+
 
     /// <summary>What plays as video - the same list the router sends to the video branch.</summary>
     public static IReadOnlySet<string> Video => _video;
@@ -192,6 +216,12 @@ public static class PreviewRouter {
         }
         if (ext.Equals(".rtf", StringComparison.OrdinalIgnoreCase)) {
             return PreviewRoute.Document;
+        }
+        if (_documentText.Contains(ext)) {
+            return PreviewRoute.DocumentText;
+        }
+        if (_executable.Contains(ext)) {
+            return PreviewRoute.Executable;
         }
         if (ext.Equals(".md", StringComparison.OrdinalIgnoreCase) ||
             ext.Equals(".markdown", StringComparison.OrdinalIgnoreCase)) {

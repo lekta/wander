@@ -89,6 +89,12 @@
                                Foreground="{StaticResource TextWarning}" FontSize="11"
                                VerticalAlignment="Center" Margin="8,0,0,0"
                                Visibility="{Binding IsFolderReplace, Converter={StaticResource BoolToVisibility}}"/>
+                    <!-- The two side by side, in a window of their own (Q5). -->
+                    <Button Content="&#xE8F9;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                            Padding="5,1" Margin="8,0,0,0" VerticalAlignment="Center"
+                            ToolTip="{x:Static res:Strings.CompareOpen}"
+                            Visibility="{Binding CanCompare, Converter={StaticResource BoolToVisibility}}"
+                            Click="OnCompare"/>
                 </WrapPanel>
 
                 <Grid>

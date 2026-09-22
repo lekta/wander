@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Wander.Core.Icons;
 using Wander.Core.Logging;
 
 namespace Wander.Platform.Windows.Icons;
@@ -54,6 +55,7 @@ public sealed class ThumbnailDiskCache {
 
     private long _budgetBytes;
     private bool _enabled;
+    private int _side = ThumbnailCacheOptions.BaseSide;
     private int _writesSinceTrim;
 
 
@@ -69,10 +71,12 @@ public sealed class ThumbnailDiskCache {
     public string Directory => _directory;
 
 
-    public void Configure(bool enabled, long budgetBytes) {
+    /// <param name="side">Pixels of the thumbnails written from now on - part of the key, see <see cref="TryBuildFileName"/>.</param>
+    public void Configure(bool enabled, long budgetBytes, int side = ThumbnailCacheOptions.BaseSide) {
         lock (_lock) {
             _enabled = enabled;
             _budgetBytes = Math.Max(0, budgetBytes);
+            _side = side;
         }
 
         if (!enabled) {
@@ -276,7 +280,9 @@ public sealed class ThumbnailDiskCache {
     /// <summary>
     /// Cache file for a source path, or null when the file cannot be
     /// stamped (gone, or a shell-namespace pseudo-path that has no
-    /// on-disk identity to key on).
+    /// on-disk identity to key on). The side is in the key when it is not
+    /// the base one (PLAN AM: bigger thumbnails at 150 % and up), so the
+    /// cache made at 256 px stays valid.
     /// </summary>
     private string? TryBuildFileName(string sourcePath) {
         try {
@@ -285,7 +291,12 @@ public sealed class ThumbnailDiskCache {
                 return null;
             }
 
-            string key = $"v{Generation}|{sourcePath.ToLowerInvariant()}|{info.LastWriteTimeUtc.Ticks}|{info.Length}";
+            int side;
+            lock (_lock) {
+                side = _side;
+            }
+            string version = side == ThumbnailCacheOptions.BaseSide ? $"v{Generation}" : $"v{Generation}s{side}";
+            string key = $"{version}|{sourcePath.ToLowerInvariant()}|{info.LastWriteTimeUtc.Ticks}|{info.Length}";
             byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(key));
 
             return Path.Combine(_directory, Convert.ToHexString(hash, 0, 16) + ".png");
