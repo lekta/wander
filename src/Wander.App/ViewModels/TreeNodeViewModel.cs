@@ -20,8 +20,8 @@ public sealed class TreeNodeViewModel : ObservableObject {
 
 
     public TreeNodeViewModel(string name, string fullPath, EntryKind kind, IFileSystem? fs, bool hasChildren, SettingsViewModel? settings = null, bool isHidden = false) {
-        Name = name;
-        FullPath = fullPath;
+        _name = name;
+        _fullPath = fullPath;
         Kind = kind;
         _fs = fs;
         _settings = settings;
@@ -36,8 +36,19 @@ public sealed class TreeNodeViewModel : ObservableObject {
     }
 
 
-    public string Name { get; }
-    public string FullPath { get; }
+    private string _name;
+    /// <summary>The row's label: the folder's name, or a bookmark's own title. Changes only when the folder is renamed (<see cref="Follow"/>).</summary>
+    public string Name {
+        get => _name;
+        private set => SetField(ref _name, value);
+    }
+
+    private string _fullPath;
+    public string FullPath {
+        get => _fullPath;
+        private set => SetField(ref _fullPath, value);
+    }
+
     public EntryKind Kind { get; }
     public bool IsHidden { get; }
     public ObservableCollection<TreeNodeViewModel> Children { get; }
@@ -210,6 +221,12 @@ public sealed class TreeNodeViewModel : ObservableObject {
     /// </summary>
     public async Task RefreshChildrenAsync() {
         if (!_loaded) {
+            // Never enumerated, so the only thing that can be stale is the
+            // chevron: the empty folder on screen just got its first
+            // subfolder ("New folder" in it, or one created outside), or
+            // a folder lost its last one. Asked of the disk again.
+            await ReprobeChevronAsync();
+
             return;
         }
 
@@ -241,18 +258,36 @@ public sealed class TreeNodeViewModel : ObservableObject {
             return;
         }
 
+        // The rule is Core's (BranchReconcile, tested): rows still there
+        // keep their objects, and with them what is open and selected
+        // under them; the rest is inserted, moved and removed around them.
         List<TreeNodeViewModel>? added = null;
-        for (int i = 0; i < fresh.Count; i++) {
-            int existing = IndexOfChild(fresh[i].FullPath, i);
-            if (existing < 0) {
-                Children.Insert(i, fresh[i]);
-                (added ??= new List<TreeNodeViewModel>()).Add(fresh[i]);
-            } else if (existing != i) {
-                Children.Move(existing, i);
+        var edits = BranchReconcile.Plan(
+            Children.Select(c => c.FullPath).ToList(),
+            fresh.Select(f => f.FullPath).ToList());
+        foreach (var edit in edits) {
+            switch (edit.Kind) {
+                case BranchEditKind.Insert:
+                    Children.Insert(edit.Index, fresh[edit.Index]);
+                    (added ??= new List<TreeNodeViewModel>()).Add(fresh[edit.Index]);
+                    break;
+                case BranchEditKind.Move:
+                    Children.Move(edit.From, edit.Index);
+                    break;
+                case BranchEditKind.Remove:
+                    // Let go of the highlight first. A TreeViewItem whose
+                    // selected descendant is removed selects itself (WPF,
+                    // TreeViewItem.OnItemsChanged), and the panel took that
+                    // for a click on the parent: the open folder dragged
+                    // into another branch navigated into the branch it had
+                    // just left (2026-09-22). Whoever moved the folder puts
+                    // the highlight where it belongs (ExpandTo).
+                    if (Children[edit.Index].FindSelected() is { } selected) {
+                        selected.IsSelected = false;
+                    }
+                    Children.RemoveAt(edit.Index);
+                    break;
             }
-        }
-        while (Children.Count > fresh.Count) {
-            Children.RemoveAt(Children.Count - 1);
         }
 
         if (added is not null && _fs is not null) {
@@ -261,6 +296,37 @@ public sealed class TreeNodeViewModel : ObservableObject {
 
         foreach (var child in Children) {
             _ = child.RefreshChildrenAsync();
+        }
+    }
+
+
+    /// <summary>
+    /// The folder this row stands on, or one above it, was renamed by
+    /// Wander: the row and everything under it take the new path and
+    /// stay - open if open, selected if selected, in place. Re-reading
+    /// the level instead would bring the folder back as a fresh, closed
+    /// row: the tree closing itself, one rename at a time.
+    /// </summary>
+    public void Follow(string oldRoot, string newRoot) {
+        // Nothing to do below a row that is neither above the folder nor
+        // inside it - the whole other half of the panel.
+        if (!IsUnderOrEqual(oldRoot, FullPath) && !IsUnderOrEqual(FullPath, oldRoot)) {
+            return;
+        }
+
+        // Ordinal: a rename that only changes case is still a new label.
+        if (PathRewrite.Under(FullPath, oldRoot, newRoot) is { } moved
+            && !string.Equals(moved, FullPath, StringComparison.Ordinal)) {
+            // Only the renamed folder's own row changes its label; the
+            // rows under it keep their names and only their paths move.
+            if (PathsEqual(FullPath, oldRoot)) {
+                Name = Path.GetFileName(moved);
+            }
+            FullPath = moved;
+        }
+
+        foreach (var child in Children) {
+            child.Follow(oldRoot, newRoot);
         }
     }
 
@@ -360,6 +426,31 @@ public sealed class TreeNodeViewModel : ObservableObject {
             _settings, entry.IsHidden);
     }
 
+
+    /// <summary>
+    /// The chevron of a row that has never been opened, asked of the disk
+    /// again: a leaf that has gained a subfolder gets its chevron back, a
+    /// row whose last subfolder is gone loses it. Same optimism as
+    /// <see cref="ProbeForChevrons"/> - the answer lands a beat later, and
+    /// a row opened in the meantime knows better.
+    /// </summary>
+    private async Task ReprobeChevronAsync() {
+        if (_fs is null) {
+            return;
+        }
+
+        // An archive keeps its chevron unasked, as in ProbeForChevrons.
+        bool? has = await Task.Run(() => Archives.Contains(FullPath) ? null : (bool?)_fs.HasSubdirectories(FullPath));
+        if (has is null || _loaded) {
+            return;
+        }
+
+        if (!has.Value) {
+            SetLeaf();
+        } else if (Children.Count == 0) {
+            Children.Add(_placeholder);
+        }
+    }
 
     /// <summary>
     /// The probe's verdict landing: no subfolders, so no chevron. A node
@@ -475,17 +566,6 @@ public sealed class TreeNodeViewModel : ObservableObject {
                 child.IsExpanded = false;
             }
         }
-    }
-
-
-    private int IndexOfChild(string path, int from) {
-        for (int i = from; i < Children.Count; i++) {
-            if (PathsEqual(Children[i].FullPath, path)) {
-                return i;
-            }
-        }
-
-        return -1;
     }
 
 

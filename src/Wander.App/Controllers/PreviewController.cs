@@ -162,6 +162,10 @@ public sealed class PreviewController : ObservableObject {
     private string? _pictureOf;
     private bool _pictureFactsStale;
 
+    // The file the footer's summary is about; null when it is about several,
+    // a folder or nothing - see FooterWaitsForPicture.
+    private string? _summaryOf;
+
     private PreviewKind _kind = PreviewKind.None;
     private bool _isLoading;
     private bool _isCensusLoading;
@@ -195,6 +199,11 @@ public sealed class PreviewController : ObservableObject {
     private int _workLinePending;
 
     private CancellationTokenSource? _companionCts;
+    // The file the rating row and the GUID were filled for. Between two
+    // files they stay up until the next file's sidecar is read (see
+    // UpdateCompanionsAsync), and a click there must not land on the next
+    // file with the previous one's stars.
+    private string? _companionsOf;
     private string _summaryNote = "";
     private string _companionStatus = "";
     private string? _unityGuid;
@@ -964,6 +973,13 @@ public sealed class PreviewController : ObservableObject {
         if (_releasedPath is not { } released) {
             return;
         }
+        // Another operation still at work on it - a long move of the video
+        // on show, while a rename that started earlier ends. Opened again
+        // now, the move's last step fails "in use" and leaves a duplicate.
+        // That operation's own end brings it back.
+        if (_claims?.Covering(released).Any(c => c.Kind == ClaimKind.UserOperation) == true) {
+            return;
+        }
 
         _releasedPath = null;
         if (string.Equals(_primary?.FullPath, released, StringComparison.OrdinalIgnoreCase)
@@ -1058,7 +1074,11 @@ public sealed class PreviewController : ObservableObject {
                 } catch (OperationCanceledException) {
                     // A newer selection took over; it will draw its own.
                 } finally {
-                    IsLoading = false;
+                    // Not when overtaken: the veil is the newer load's by
+                    // then, and it lowers it itself.
+                    if (!ct.IsCancellationRequested) {
+                        IsLoading = false;
+                    }
                 }
 
                 return;
@@ -1673,7 +1693,10 @@ public sealed class PreviewController : ObservableObject {
             _zoomImage = null;
             Image = image;
             Kind = PreviewKind.Image;
-            if (quickBytes > 0) {
+            // Only a CR3 carries a bigger JPEG than its quick one: a
+            // TIFF-shaped RAW already gave its biggest, and asking again
+            // read those megabytes a second time to find the same length.
+            if (quickBytes > 0 && Path.GetExtension(path).Equals(".cr3", StringComparison.OrdinalIgnoreCase)) {
                 _ = LoadFullSizeAsync(path, meta?.Orientation, image, quickBytes, ct);
             }
         } else {
@@ -1905,6 +1928,7 @@ public sealed class PreviewController : ObservableObject {
             // still appear, because "rate this raw" should not mean "go and
             // make it a sidecar first in another program".
             OfferRating(_primary);
+            _companionsOf = _primary.FullPath;
 
             return;
         }
@@ -1932,6 +1956,7 @@ public sealed class PreviewController : ObservableObject {
         if (loaded.RatingPath is null) {
             OfferRating(_primary);
         }
+        _companionsOf = _primary.FullPath;
     }
 
     private (UnityMetaInfo? Meta, string? RatingPath, SidecarRating? Rating) Load(IReadOnlyList<string> companions) {
@@ -2019,6 +2044,12 @@ public sealed class PreviewController : ObservableObject {
         if (RatingRequested is not { } write || _primary is null || !TryReadIndex(parameter, out int clicked)) {
             return;
         }
+        // The stars on show are still the previous file's: its sidecar is
+        // being read. "current" would be theirs, and a click meant as "set
+        // three" could clear this file's rating instead.
+        if (!IsCompanionBlockFor(_primary)) {
+            return;
+        }
 
         // Whether the click sets or clears is the host's call: clicking
         // what is already set clears it, but "already set" is a question
@@ -2068,7 +2099,7 @@ public sealed class PreviewController : ObservableObject {
     }
 
     private void CopyGuid() {
-        if (string.IsNullOrEmpty(_unityGuid)) {
+        if (string.IsNullOrEmpty(_unityGuid) || _primary is null || !IsCompanionBlockFor(_primary)) {
             return;
         }
         try {
@@ -2081,7 +2112,12 @@ public sealed class PreviewController : ObservableObject {
         }
     }
 
+    private bool IsCompanionBlockFor(FileSystemEntry entry) {
+        return string.Equals(_companionsOf, entry.FullPath, StringComparison.OrdinalIgnoreCase);
+    }
+
     private void ClearCompanionInfo() {
+        _companionsOf = null;
         UnityGuid = null;
         UnityDetail = null;
         CompanionStatus = "";
@@ -2224,9 +2260,16 @@ public sealed class PreviewController : ObservableObject {
     /// it: the name, the size and the EXIF change once, together with the
     /// picture, instead of the EXIF going and coming back under it. The
     /// load's end schedules the summary again, whatever it ended on.
+    ///
+    /// <para>
+    /// Only while the footer is about that picture: coming from several
+    /// files selected, it said "3 selected" and would go on saying it under
+    /// the next photograph until it decoded.
+    /// </para>
     /// </summary>
     private bool FooterWaitsForPicture(FileSystemEntry selected) {
         return _image is not null && _pictureOf is { } shown
+            && string.Equals(_summaryOf, shown, StringComparison.OrdinalIgnoreCase)
             && !string.Equals(shown, selected.FullPath, StringComparison.OrdinalIgnoreCase)
             && PreviewRouter.Route(selected.FullPath) is PreviewRoute.Image;
     }
@@ -2235,22 +2278,29 @@ public sealed class PreviewController : ObservableObject {
         if (!_isVisible) {
             Summary = "";
             SummaryNote = "";
+            _summaryOf = null;
 
             return;
         }
 
         // 1. Single file selected — its details, plus EXIF if the metadata
-        //    reader had something to say about it.
+        //    reader had something to say about it. EXIF still kept with
+        //    another file's picture is not this file's (a footer not held
+        //    for it, see FooterWaitsForPicture) - the load's end brings its own.
         if (_selection.Count == 1 && _selection[0].Kind == EntryKind.File) {
             if (!FooterWaitsForPicture(_selection[0])) {
-                Summary = SummaryText.ForFile(_selection[0], _imageMetadata);
+                bool othersFacts = _pictureFactsStale
+                    && !string.Equals(_pictureOf, _selection[0].FullPath, StringComparison.OrdinalIgnoreCase);
+                Summary = SummaryText.ForFile(_selection[0], othersFacts ? null : _imageMetadata);
                 SummaryNote = CompanionLabel.For(_selection[0].Name, _selection[0].Companions);
+                _summaryOf = _selection[0].FullPath;
             }
 
             return;
         }
 
         SummaryNote = "";
+        _summaryOf = null;
 
         // 2. Single folder selected. Counts and sizes are the census
         //    panel's job now (it walks the tree once); repeating them here

@@ -825,6 +825,25 @@ public class BatchExecutorTests {
     }
 
     [Fact]
+    public async Task MoveManyAsync_AHeldFolder_OnAnotherVolume_IsNotTriedAgain() {
+        // Across volumes the move is a copy and then a delete: the delete
+        // that met the held file has taken the rest, and a second go would
+        // copy onto the copy - or, cancelled in the wait, have Ctrl+Z bin
+        // the only whole copy as a "partial" one.
+        var (batch, fs, _, undo, _, _, pauses) = SetupHeld();
+        fs.Directories.Add(RootDir);
+        fs.Directories.Add(@"D:\dst");
+        fs.MoveInUseFor[RootDir] = 1;
+
+        var results = await batch.MoveManyAsync(new[] { RootDir }, @"D:\dst", new FakeConflictResolver(), default);
+
+        Assert.Equal(BatchItemStatus.Failed, Assert.Single(results).Status);
+        Assert.True(FileInUse.Is(results[0].Error));
+        Assert.Empty(pauses);
+        Assert.False(undo.CanUndo);
+    }
+
+    [Fact]
     public async Task MoveManyAsync_EveryMemberOfAGroupIsWaitedFor_NotOnlyTheFirstHeldOne() {
         // The group reports its first wait; the wait itself is made for every
         // member - for a folder it is the move, and skipping it left the

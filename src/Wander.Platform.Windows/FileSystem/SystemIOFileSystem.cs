@@ -231,6 +231,10 @@ public sealed class SystemIOFileSystem : IFileSystem {
         return SharedRead.ReadAllBytes(path);
     }
 
+    public byte[] ReadAllBytesForUpdate(string path) {
+        return File.ReadAllBytes(path);
+    }
+
     public Stream OpenRead(string path) {
         return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, bufferSize: 4096, FileOptions.SequentialScan);
     }

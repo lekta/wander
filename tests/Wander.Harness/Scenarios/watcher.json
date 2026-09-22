@@ -39,10 +39,25 @@
     { "do": "note", "text": "a write into an existing file kept the selection and did not change the count" },
     { "do": "screenshot", "name": "content-changed" },
 
+    // --- The selected file deleted from outside -----------------------
+    //
+    // Opened in a viewer and thrown out there: the next row takes its
+    // place, selected, the way Del leaves it - and the last row hands over
+    // to the one before it (CurrentRowFallback, 2026-09-21).
+    { "do": "fs", "op": "delete", "path": "{sandbox}\\photos\\sub\\SUB_004.jpg" },
+    { "do": "sleep", "ms": 1500 },
+    { "do": "assert-entries", "absent": [ "SUB_004.jpg" ], "count": 10, "selected": [ "SUB_005.jpg" ] },
+    { "do": "select", "names": [ "SUB_010.jpg" ] },
+    { "do": "fs", "op": "delete", "path": "{sandbox}\\photos\\sub\\SUB_010.jpg" },
+    { "do": "sleep", "ms": 1500 },
+    { "do": "assert-entries", "absent": [ "SUB_010.jpg" ], "count": 9, "selected": [ "SUB_009.jpg" ] },
+    { "do": "note", "text": "a selected file deleted from outside handed the selection to the next row, the last one to the row before it" },
+
     // --- And gone again -----------------------------------------------
+    // A row that was not selected leaves the selection where it was.
     { "do": "fs", "op": "delete", "path": "{sandbox}\\photos\\sub\\from-outside.txt" },
     { "do": "sleep", "ms": 1500 },
-    { "do": "assert-entries", "absent": [ "from-outside.txt" ], "count": 10 },
+    { "do": "assert-entries", "absent": [ "from-outside.txt" ], "count": 8, "selected": [ "SUB_009.jpg" ] },
 
     { "do": "assert-log", "scope": "all", "noErrors": true }
   ]

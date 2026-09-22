@@ -1416,6 +1416,9 @@
   <data name="HotkeyTreeEscape" xml:space="preserve">
     <value>Вернуть фокус в список</value>
   </data>
+  <data name="HotkeyTreeRename" xml:space="preserve">
+    <value>Переименовать папку под курсором</value>
+  </data>
   <data name="HotkeyGroupFileOps" xml:space="preserve">
     <value>Файловые операции</value>
   </data>

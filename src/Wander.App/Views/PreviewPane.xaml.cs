@@ -253,6 +253,11 @@ public partial class PreviewPane : UserControl {
                 // next decode - the zoom waits for what comes. Loaded
                 // priority, so the new picture has been laid out.
                 if (_imageZoomActive && Controller.ZoomSource is not null) {
+                    // Sized for the new picture before the next frame - the
+                    // binding puts it in the old one's box, and a frame of
+                    // that is a squeezed picture. Whether it still needs
+                    // zooming waits for the layout.
+                    UpdateZoomPosition(_zoomAt);
                     _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, RefreshImageZoom);
                 } else if (Controller.ZoomSource is not null && ImagePreviewHost.IsMouseOver) {
                     // A RAW's full-size JPEG arriving behind the quick one

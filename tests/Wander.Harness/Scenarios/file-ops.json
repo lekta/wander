@@ -2,7 +2,7 @@
   // Copy, cut and paste between two folders of the sandbox, each of the
   // three conflict answers on the same collision, a read-only file, a file
   // somebody else has open, a path too long for the bin, and an undo chain
-  // walked all the way back.
+  // walked back through the pastes.
   //
   // Every dialog is answered by policy and every answer is listed in the
   // report - a run that said yes to something it should have refused is
@@ -49,6 +49,20 @@
     { "do": "assert-entries", "absent": [ "IMG_0003.jpg" ] },
     { "do": "note", "text": "a cut file left the folder it was cut from" },
 
+    // --- Undo back through the pastes ---------------------------------
+    // Before anything permanent: a permanent delete - the locked file below
+    // - drops the whole history, and until 2026-09-21 this chain stood
+    // after it and every undo in it was "not available here". Back through
+    // the cut, the Replace and the Rename paste: the three first copies
+    // are what is left.
+    { "do": "command", "name": "undo" },
+    { "do": "assert-entries", "contains": [ "IMG_0003.jpg" ] },
+    { "do": "command", "name": "undo" },
+    { "do": "command", "name": "undo" },
+    { "do": "assert-entries", "count": 3, "contains": [ "IMG_0001.jpg", "IMG_0002.jpg", "IMG_0003.jpg" ] },
+    { "do": "note", "text": "three undos took the folder back to the first paste" },
+    { "do": "screenshot", "name": "after-undo-chain" },
+
     // --- A file somebody else has open -------------------------------
     { "do": "navigate", "path": "{sandbox}\\attrs" },
     { "do": "fs", "op": "lock", "path": "{sandbox}\\attrs\\locked.txt" },
@@ -80,13 +94,6 @@
     { "do": "screenshot", "name": "readonly-deleted" },
     { "do": "command", "name": "undo" },
     { "do": "assert-entries", "contains": [ "readonly.txt" ] },
-
-    // --- Undo all the way back ---------------------------------------
-    { "do": "navigate", "path": "{sandbox}\\photos\\target" },
-    { "do": "command", "name": "undo" },
-    { "do": "command", "name": "undo" },
-    { "do": "command", "name": "undo" },
-    { "do": "screenshot", "name": "after-undo-chain" },
 
     // Tidy up: permanent, because the recycle bin is the one part of the
     // machine a sandbox run does touch.

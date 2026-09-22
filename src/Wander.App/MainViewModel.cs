@@ -67,6 +67,13 @@ public sealed class MainViewModel : ObservableObject {
     private const int ManualViewModeLimit = 128;
 
     /// <summary>
+    /// The parameter a menu's "Paste" runs <see cref="PasteCommand"/> with:
+    /// into the one folder selected or targeted, as in Explorer's row menu.
+    /// Ctrl+V runs it without one - see <see cref="PasteAsync"/>.
+    /// </summary>
+    internal const string PasteIntoSelection = "into-selection";
+
+    /// <summary>
     /// How long an operation runs before its window comes up (2026-09-21).
     /// Most are over long before that - a delete of one file, an undo of a
     /// rename, a refusal that takes no time at all - and a window flashing
@@ -187,6 +194,10 @@ public sealed class MainViewModel : ObservableObject {
     // What ReconcileEntries found gone from under the selection or the
     // caret, until SettleDeparture says what becomes current instead.
     private Departure? _departure;
+
+    // The rows in Entries are search results, not a listing of the folder -
+    // until the next listing lands (SyncEntries).
+    private bool _entriesAreResults;
 
     // --- Auto-refresh ---------------------------------------------------
     // The watcher says "something changed" from a background thread, often
@@ -346,7 +357,11 @@ public sealed class MainViewModel : ObservableObject {
 
         _tracker.Changed += OnTrackerChanged;
 
-        OpenCommand = new RelayCommand(p => OpenEntry(p as FileSystemEntry ?? _selectedEntry), _ => _selectedEntry is not null);
+        // The row of the list, or the folder a panel made the target - the
+        // default row of a panel row's menu was greyed out otherwise.
+        OpenCommand = new RelayCommand(
+            p => OpenEntry(p as FileSystemEntry ?? _selectedEntry ?? (ExternalTargetFolder is null ? null : _selectedEntries[0])),
+            _ => _selectedEntry is not null || ExternalTargetFolder is not null);
         // Destructive ops are blocked inside shell namespaces (Recycle Bin):
         // the entries' FullPaths point at $Recycle.Bin backing files, and
         // copying / deleting / renaming those would bypass the shell's
@@ -367,7 +382,9 @@ public sealed class MainViewModel : ObservableObject {
             _ => _selectedEntries.Count > 0 && (!IsCurrentShellNamespace || CurrentArchive is not null));
         ExtractCommand = new RelayCommand(() => _ = ExtractSelectionAsync(), () => CanExtractSelection());
         CutCommand = new RelayCommand(_ => Cut(), _ => _selectedEntries.Count > 0 && !IsCurrentShellNamespace);
-        PasteCommand = new RelayCommand(() => _ = PasteAsync(), () => _clipboard.HasContent && _nav.Current is not null && !IsCurrentShellNamespace);
+        PasteCommand = new RelayCommand(
+            p => _ = PasteAsync(intoSelection: p is PasteIntoSelection),
+            _ => _clipboard.HasContent && _nav.Current is not null && !IsCurrentShellNamespace);
         NewFolderCommand = new RelayCommand(_ => NewFolder(), _ => _nav.Current is not null && !IsCurrentShellNamespace);
         RestoreFromRecycleBinCommand = new RelayCommand(
             _ => RestoreFromRecycleBin(),
@@ -450,7 +467,10 @@ public sealed class MainViewModel : ObservableObject {
             _log);
 
         SearchResults = new SearchResultsController(ContentSearch, _fs, Settings, _dispatcher);
-        SearchResults.RowsChanged += (_, rows) => Entries.ReplaceAll(rows);
+        SearchResults.RowsChanged += (_, rows) => {
+            _entriesAreResults = true;
+            Entries.ReplaceAll(rows);
+        };
         SearchResults.StatusReported += (_, text) => Status = text;
 
         ContentSearch.Started += BeginSearchResults;
@@ -1453,28 +1473,47 @@ public sealed class MainViewModel : ObservableObject {
     /// </summary>
     /// <returns>True when the listing was re-pointed; the caller then must not re-list the old path.</returns>
     private async Task<bool> FollowRelocatedAsync(IReadOnlyList<(string From, string To)> moves, string? target) {
-        bool followed = false;
         var touched = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (target is not null) {
             touched.Add(target);
         }
         foreach (var (from, to) in moves) {
-            foreach (string? parent in new[] { Path.GetDirectoryName(from), Path.GetDirectoryName(to) }) {
+            string? fromParent = Path.GetDirectoryName(from);
+            string? toParent = Path.GetDirectoryName(to);
+            foreach (string? parent in new[] { fromParent, toParent }) {
                 if (parent is { Length: > 0 }) {
                     touched.Add(parent);
                 }
             }
-            Bookmarks.Follow(from, to);
-            followed |= _nav.RewritePaths(from, to);
+            // A rename - same parent, new name - keeps its rows in the
+            // panels, open if they were open; the re-read below then finds
+            // them under the new name. A move lands in another branch and
+            // is re-read there. Ahead of the bookmarks: their panel is
+            // rebuilt from the rows as they stand.
+            if (string.Equals(fromParent, toParent, StringComparison.OrdinalIgnoreCase)) {
+                Trees.Follow(from, to);
+            }
         }
 
         // One re-read per folder, whatever was dropped: a panel row only
         // enumerates while it is open, and it is folders that show there.
+        // Before the history is rewritten: re-pointing the open folder is
+        // a navigation, and a navigation looks for its row in the panel it
+        // came from. Looked for before the target branch had the moved
+        // folder in it, the row was not there, and the search fell back to
+        // the drives tree - which opened down to the folder as well
+        // (2026-09-22).
         await Task.WhenAll(touched.Select(Trees.RefreshForAsync));
-        if (followed) {
-            // The navigation above looked for its row before the target's
-            // branch had the moved folder in it.
-            ExpandCurrentInTrees();
+
+        bool followed = false;
+        foreach (var (from, to) in moves) {
+            Bookmarks.Follow(from, to);
+            if (_nav.RewritePaths(from, to)) {
+                followed = true;
+                // Control line (REDESIGN.md): the listing was re-pointed
+                // without a navigation, which is what NavigateTo logs.
+                _log.Info($"Listing follows: {from} -> {to}");
+            }
         }
 
         return followed;
@@ -2064,7 +2103,11 @@ public sealed class MainViewModel : ObservableObject {
         // Nothing selected means nothing to put back, and an intent that
         // asks for nothing would only stop ReconcileEntries doing its own
         // job below.
-        if (_session.Arrival is null && _nav.Current is { } staying && _selectedEntries.Count > 0) {
+        // Not for a folder a panel made the target (no primary): that one
+        // is not a row to put back - ReconcileEntries leaves it alone - and
+        // putting it back when it happens to be a row would light it in
+        // the list beside the panel's own highlight.
+        if (_session.Arrival is null && _nav.Current is { } staying && _selectedEntry is not null && _selectedEntries.Count > 0) {
             _session.SetArrival(
                 ArrivalIntent.Rows(staying, _selectedEntries.Select(e => e.FullPath).ToArray()));
         }
@@ -2403,6 +2446,16 @@ public sealed class MainViewModel : ObservableObject {
         // hitch a person notices when opening a folder.
         using var applying = PerfLog.Measure("list.apply");
 
+        // Search results on the way out: another list, whatever rows the
+        // two share. Reconciled against them, a folder opened from the
+        // results kept their scroll.
+        if (_entriesAreResults) {
+            _entriesAreResults = false;
+            Entries.ReplaceAll(items);
+
+            return;
+        }
+
         // What to do lives in Core (ListingDiff), where tests reach it;
         // this method only replays the answer against the bound collection.
         var plan = ListingDiff.Compute(Entries, items);
@@ -2452,6 +2505,15 @@ public sealed class MainViewModel : ObservableObject {
                 return false;
 
             case ArrivalOutcome.SelectFolder:
+                // The row selected in the folder left behind is not in this
+                // listing, and SettleDeparture leaves a placed selection
+                // alone - so it is let go of here, first: F2, Alt+Enter and
+                // "Open with" read SelectedEntry, and a click on a folder in
+                // the tree left them acting on a file of the previous folder.
+                // Before SelectExternalPath, which tells the preview itself.
+                if (_departure is { WasSelected: true }) {
+                    SelectedEntry = null;
+                }
                 SelectExternalPath(decision.FolderPath!);
                 return true;
 
@@ -2698,12 +2760,26 @@ public sealed class MainViewModel : ObservableObject {
         // the rows below, so it never holds entries that have left the list;
         // we just do not tell the view where to go.
         bool ownsSelection = _session.Arrival is null;
+        // A folder a panel made the target (SelectExternalPath: a set with
+        // no primary, which a row selected in the list never is) is not a
+        // row of this list, even when the folder happens to be listed -
+        // the highlight is the panel's. It is neither put back into the
+        // list nor counted as having left it: a re-listing of the open
+        // folder while the keyboard stood on a panel row used to clear the
+        // target, and the next Delete then did nothing (2026-09-22).
+        bool external = _selectedEntry is null && _selectedEntries.Count > 0;
         var keep = new HashSet<string>(
-            _selectedEntries.Select(e => e.FullPath), StringComparer.OrdinalIgnoreCase);
+            external ? Array.Empty<string>() : _selectedEntries.Select(e => e.FullPath),
+            StringComparer.OrdinalIgnoreCase);
         string? primary = _selectedEntry?.FullPath;
         // The rows as they stand, for which one becomes current if the
-        // current one is about to leave (SettleDeparture).
-        FileSystemEntry[]? before = keep.Count > 0 || _caretPath is not null ? Entries.ToArray() : null;
+        // current one is about to leave (SettleDeparture). Search results
+        // are not the folder's rows: a result that is not in the listing
+        // did not leave the folder, and nothing takes its place.
+        _departure = null;
+        FileSystemEntry[]? before = (keep.Count > 0 || _caretPath is not null) && !_entriesAreResults
+            ? Entries.ToArray()
+            : null;
 
         FileSystemEntry[] found;
         FileSystemEntry? next = null;
@@ -2750,6 +2826,14 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
+        if (found.Length == 0 && before is null) {
+            // The selection was among search results and is not in the
+            // folder's listing: nothing selected is the honest answer.
+            SelectedEntries = Array.Empty<FileSystemEntry>();
+            SelectedEntry = null;
+
+            return;
+        }
         if (found.Length == 0) {
             // Everything that was selected has left the folder. What is
             // selected instead is settled by the caller once the arrival
@@ -3563,6 +3647,10 @@ public sealed class MainViewModel : ObservableObject {
         var entry = _fs.GetEntry(path);
         SelectedEntries = entry is null ? Array.Empty<FileSystemEntry>() : new[] { entry };
         Preview.SetPrimary(entry);
+        // Control line (REDESIGN.md): every change of the operation target
+        // that did not come from the list, so a "Delete did the wrong
+        // thing" can be read from the log.
+        _log.Info($"Target: {path}");
     }
 
 
@@ -4152,8 +4240,17 @@ public sealed class MainViewModel : ObservableObject {
             // Keep the file the user just renamed selected: its path changed,
             // so "whatever was selected" would no longer match anything.
             string folder = Path.GetDirectoryName(entry.FullPath) ?? "";
-            _session.SetArrival(ArrivalIntent.Rows(folder, new[] { Path.Combine(folder, newName) }));
+            string renamed = Path.Combine(folder, newName);
+            _session.SetArrival(ArrivalIntent.Rows(folder, new[] { renamed }));
             Refresh();
+            // A folder has things pointing at it that a file has not: a
+            // bookmark on it or inside it, "Back" into it, its rows in
+            // the panels. They follow the new name the way they follow a
+            // move. Not awaited: the listing above must not wait for the
+            // panels to re-read.
+            if (entry.Kind == EntryKind.Directory) {
+                _ = FollowRelocatedAsync(new[] { (entry.FullPath, renamed) }, target: null);
+            }
             if (plan.Count > 1) {
                 Status = string.Format(Strings.StatusRenamedWithCompanions, plan.Count - 1);
             }
@@ -4426,6 +4523,49 @@ public sealed class MainViewModel : ObservableObject {
         RenamingPath = null;
     }
 
+    /// <summary>
+    /// <c>F2</c> on a row of a folder panel. The operation is the list's
+    /// (<see cref="Rename"/>: guard, log, undo, the wait for a holder), on
+    /// a folder that need not be a row of the listing - the open folder or
+    /// one above it, a bookmark, a branch three levels down. What
+    /// remembers the path follows the new name the way it follows a move
+    /// (<see cref="FollowRelocatedAsync"/>); the listing is re-read only
+    /// when the folder is one of its rows, or is it or above it.
+    /// </summary>
+    /// <returns>The folder's new path, or null when nothing was renamed.</returns>
+    public async Task<string?> RenameFolderAsync(string path, string newName) {
+        string folder = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        string? parent = Path.GetDirectoryName(folder);
+        if (string.IsNullOrWhiteSpace(newName) || string.IsNullOrEmpty(parent)
+            || string.Equals(newName, Path.GetFileName(folder), StringComparison.Ordinal)) {
+            return null;
+        }
+
+        string renamed = Path.Combine(parent, newName);
+        try {
+            ReleasePreview(new[] { folder });
+            await Task.Run(() => _ops.RenameMany(new[] { (folder, newName) }));
+        } catch (Exception ex) {
+            _log.Error($"Rename failed: {folder} -> {newName}", ex);
+            string reason = await Task.Run(() => DescribeError(ex, folder));
+            Fail(string.Format(Strings.StatusRenameFailed, reason));
+
+            return null;
+        } finally {
+            RestorePreview();
+        }
+
+        if (!await FollowRelocatedAsync(new[] { (folder, renamed) }, target: null)
+            && IsSamePath(parent, _nav.Current)) {
+            // A row of the open folder: the listing shows it under its new
+            // name. No arrival of its own - the highlight is the panel's,
+            // and the list gave its selection up for it.
+            Refresh();
+        }
+
+        return renamed;
+    }
+
 
     // --- Restoring from the recycle bin ---------------------------------
     /// <summary>
@@ -4602,12 +4742,40 @@ public sealed class MainViewModel : ObservableObject {
         return _companions.Group(expanded);
     }
 
-    private async Task PasteAsync() {
+    /// <summary>
+    /// The folder a panel made the operation target
+    /// (<see cref="SelectExternalPath"/>): a set of one folder with no
+    /// primary, which a row selected in the list never is. Null when the
+    /// list holds the selection, or the target is not a folder.
+    /// </summary>
+    private string? ExternalTargetFolder =>
+        _selectedEntry is null && _selectedEntries is [{ Kind: EntryKind.Directory } folder] ? folder.FullPath : null;
+
+    /// <param name="intoSelection">
+    /// From a menu: the one folder selected in the list or targeted in a
+    /// panel is what the paste goes into, as in Explorer's row menu. Ctrl+V
+    /// in the list pastes into the open folder whatever row is selected;
+    /// with the keyboard in a panel, into the row under the cursor.
+    /// </param>
+    private async Task PasteAsync(bool intoSelection) {
         if (!_clipboard.HasContent || _nav.Current is null) {
             return;
         }
 
-        string target = _nav.Current;
+        // Where it goes, and why - the why is in the log, because "it went
+        // into the wrong folder" has to be readable there (2026-09-22).
+        string target;
+        string how;
+        if (ExternalTargetFolder is { } targeted) {
+            target = targeted;
+            how = "panel row";
+        } else if (intoSelection && _selectedEntries is [{ Kind: EntryKind.Directory } row]) {
+            target = row.FullPath;
+            how = "selected row";
+        } else {
+            target = _nav.Current;
+            how = "open folder";
+        }
         var sources = _clipboard.Paths.ToList();
 
         var reason = PathSafety.DetectSelfDrop(sources, target, out string? offender);
@@ -4634,7 +4802,7 @@ public sealed class MainViewModel : ObservableObject {
         if (_clipboard.IsCut && PathSafety.AllAlreadyIn(sources, target)) {
             _clipboard.Clear();
             Status = Strings.StatusCutAlreadyHere;
-            _log.Info($"Paste: cut into its own folder, cut dropped ({sources.Count} item(s) in {target})");
+            _log.Info($"Paste: cut into its own folder, cut dropped ({sources.Count} item(s) in {target}, {how})");
             return;
         }
 
@@ -4648,7 +4816,7 @@ public sealed class MainViewModel : ObservableObject {
         // conflict dialog.
         var groups = await Task.Run(() => GroupPathsWithCompanions(sources));
 
-        _log.Info($"Paste: {(wasCut ? "move" : "copy")} {groups.Count} item(s) into {target}");
+        _log.Info($"Paste: {(wasCut ? "move" : "copy")} {groups.Count} item(s) into {target} ({how})");
         var resolver = _dialogs.CreateConflictResolver(Settings.SkipIdenticalOnConflict);
         IReadOnlyList<BatchItemResult> results;
         if (wasCut) {

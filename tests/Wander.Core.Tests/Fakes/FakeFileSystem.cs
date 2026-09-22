@@ -96,6 +96,10 @@ internal class FakeFileSystem : IFileSystem {
             : throw new System.IO.FileNotFoundException("Not found", path);
     }
 
+    public byte[] ReadAllBytesForUpdate(string path) {
+        return ReadAllBytes(path);
+    }
+
     public System.IO.Stream OpenRead(string path) {
         return new System.IO.MemoryStream(ReadAllBytes(path), writable: false);
     }

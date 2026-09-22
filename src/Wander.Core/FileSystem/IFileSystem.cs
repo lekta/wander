@@ -70,6 +70,16 @@ public interface IFileSystem {
     byte[] ReadAllBytes(string path);
 
     /// <summary>
+    /// The same bytes, read to be changed and written back - a rating put
+    /// into a sidecar. Not shared with a writer, unlike
+    /// <see cref="ReadAllBytes"/> (which reads what Wander only looks at): a
+    /// <c>.pp3</c> RawTherapee is in the middle of saving fails "in use"
+    /// here, rather than being read half-written and written back so, with
+    /// the edit settings cut off (2026-09-21).
+    /// </summary>
+    byte[] ReadAllBytesForUpdate(string path);
+
+    /// <summary>
     /// The file's bytes as a stream, for the one reader that must not load
     /// the whole thing: "are these two the same?" over files of any size
     /// (<see cref="FileContentComparer"/>). Shared read access - the file

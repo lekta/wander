@@ -105,6 +105,15 @@ public sealed class BusyGate : IDisposable {
     /// <summary>A claims lookup slower than this is worth a warning (PLAN block 0, step 5).</summary>
     private const double SlowLookupMs = 5;
 
+    /// <summary>
+    /// How many of a batch's held items are named (<see cref="RetryMany"/>).
+    /// The status line and the question name the first; each name is a
+    /// Restart Manager session of a tenth of a second or more, asked before
+    /// the wait and past a cancel - a sync client holding three hundred files
+    /// was half a minute of nothing.
+    /// </summary>
+    private const int NamedHeldItems = 3;
+
     private readonly HeldPaths _held;
     private readonly BusyWait _wait;
     private readonly ILogger _log;
@@ -234,7 +243,10 @@ public sealed class BusyGate : IDisposable {
             return new Dictionary<int, BusyReport>();
         }
 
-        var holders = held.ToDictionary(i => i, i => NameHolder(paths[i]));
+        var holders = new Dictionary<int, string?>(held.Count);
+        foreach (int i in held) {
+            holders[i] = holders.Count < NamedHeldItems && !ct.IsCancellationRequested ? NameHolder(paths[i]) : null;
+        }
         var released = new Dictionary<int, TimeSpan>();
         var left = _wait.Remaining;
         bool first = true;

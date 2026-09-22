@@ -416,7 +416,7 @@
                                 user is the one who decides whether
                                 it goes.
                             -->
-                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
+                            <TextBlock x:Name="NameLabel" Text="{Binding Name}" VerticalAlignment="Center"
                                        TextTrimming="CharacterEllipsis"
                                        ToolTip="{Binding FullPath}">
                                 <TextBlock.Style>
@@ -509,7 +509,7 @@
                         <StackPanel Orientation="Horizontal" Background="Transparent">
                             <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Small"
                                                 Width="16" Height="16" Margin="0,0,4,0"/>
-                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="NameLabel" Text="{Binding Name}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </HierarchicalDataTemplate>
                 </TreeView.ItemTemplate>

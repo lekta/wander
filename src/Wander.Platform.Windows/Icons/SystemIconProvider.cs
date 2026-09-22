@@ -73,6 +73,18 @@ public sealed class SystemIconProvider : IIconProvider {
     /// </summary>
     private static readonly IconSize[] _sizes = Enum.GetValues<IconSize>();
 
+    /// <summary>
+    /// Types whose icon is in the file itself - a program's embedded icon,
+    /// an .ico being its own picture, an internet shortcut's favicon - so
+    /// the shell answers each file differently and no per-extension slot can
+    /// hold them. Keyed by path like a .lnk. Until 2026-09-21 they shared the
+    /// extension slot, and every .exe of the session wore the icon of the
+    /// first one drawn in the three small sizes.
+    /// </summary>
+    private static readonly HashSet<string> _ownIconExtensions = new(StringComparer.OrdinalIgnoreCase) {
+        ".exe", ".ico", ".cur", ".ani", ".scr", ".cpl", ".url", ".website", ".appref-ms",
+    };
+
     private readonly Dictionary<string, byte[]> _cache = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
@@ -432,6 +444,9 @@ public sealed class SystemIconProvider : IIconProvider {
         if (ext.Equals(".lnk", StringComparison.OrdinalIgnoreCase)) {
             return ($"lnk|{path}|{size}", true);
         }
+        if (_ownIconExtensions.Contains(ext)) {
+            return ($"own|{path}|{size}", true);
+        }
 
         // A book drawn from its own cover is that one book's picture, so it
         // cannot share the per-extension slot the other .fb2 files use. The
@@ -493,6 +508,7 @@ public sealed class SystemIconProvider : IIconProvider {
         yield return $"shell|{path.ToLowerInvariant()}|{size}";
         yield return $"dir|{path}|{size}";
         yield return $"lnk|{path}|{size}";
+        yield return $"own|{path}|{size}";
         yield return $"book|{path}|{size}";
         if (size == IconSize.Large) {
             yield return $"thumb|{path}";

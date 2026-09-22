@@ -380,11 +380,14 @@ public sealed class AsyncIcon : Image {
     /// <see cref="IconPath"/> read the same DataContext. The cache needs it
     /// (<see cref="IIconProvider.TryGetCachedIcon"/>); read here rather than
     /// bound, so no template pays a second binding per cell for it. An
-    /// archive in the panels is a node like a folder and a file to the cache.
+    /// archive in the panels is a node like a folder and a file to the cache,
+    /// and so is a bookmark whose folder is gone: the provider asks the disk,
+    /// finds no folder there and files its icon under a file's key.
     /// </summary>
     private bool? RowIsFolder() {
         return DataContext switch {
             FileSystemEntry row => row.Kind != EntryKind.File,
+            TreeNodeViewModel { IsMissing: true } => false,
             TreeNodeViewModel node => Archives.Of(node.FullPath) is not { IsRoot: true },
             _ => null,
         };

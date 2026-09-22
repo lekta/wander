@@ -1,15 +1,20 @@
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Wander.App.Controls;
 using Wander.App.DragPreview;
 using Wander.App.Resources;
 using Wander.App.Util;
 using Wander.App.ViewModels;
+using Wander.Core;
+using Wander.Core.Logging;
 using Wander.Core.Navigation;
 using Wander.Core.Shell;
 
@@ -41,6 +46,8 @@ public partial class FolderTreesView : UserControl {
     // --- Tree expand/collapse gesture state -----------------------------
     private bool _userClickedExpander;
     private bool _altWasHeld;
+    /// <summary>The highlight is being put back where a closing branch took it from - see <see cref="OnTreeSelectionChanged"/>.</summary>
+    private bool _restoringSelection;
 
     // --- Tree as drag source / operation target -------------------------
     /// <summary>
@@ -76,11 +83,29 @@ public partial class FolderTreesView : UserControl {
     private Point _treeRightDragOrigin;
     private bool _treeRightDragArmed;
 
+    /// <summary>
+    /// The row last made the operation target, with its panel. A right
+    /// click targets a row without selecting it, and this is where the
+    /// menu's "Rename" then finds the row it is about.
+    /// </summary>
+    private (TreeView Tree, TreeNodeViewModel Node)? _targetRow;
+
+    // --- Rename ---------------------------------------------------------
+    /// <summary>How wide the editor is at least, over a label only as wide as its name.</summary>
+    private const double RenameEditorMinWidth = 180;
+
+    private RenameAdorner? _renameAdorner;
+    private AdornerLayer? _renameLayer;
+    private TextBox? _renameBox;
+    private TreeView? _renameTree;
+
 
 
     public FolderTreesView() {
         InitializeComponent();
         DataContextChanged += OnDataContextChanged;
+        Tree.IsKeyboardFocusWithinChanged += Tree_IsKeyboardFocusWithinChanged;
+        BookmarksTree.IsKeyboardFocusWithinChanged += Tree_IsKeyboardFocusWithinChanged;
     }
 
 
@@ -250,13 +275,54 @@ public partial class FolderTreesView : UserControl {
 
 
     /// <summary>
+    /// The keyboard left a panel and nobody took it: WPF answers the
+    /// removal of a focused row by handing focus to the window, and that
+    /// is what happens to the row of a folder deleted from the panel, or
+    /// of one whose level was rebuilt. The panel takes the keyboard back
+    /// onto the row now highlighted - the parent the listing fell back to
+    /// - so the next arrow key and the next Delete are about something;
+    /// arriving there targets the row (MainWindow.OnZoneFocusChanged).
+    /// Deferred, because the highlight moves in the same breath as the
+    /// removal; only onto a highlighted row that is on screen, because
+    /// focusing the first row instead would select it.
+    /// </summary>
+    private void Tree_IsKeyboardFocusWithinChanged(object sender, DependencyPropertyChangedEventArgs e) {
+        if (e.NewValue is true || sender is not TreeView tree || Keyboard.FocusedElement is not Window) {
+            return;
+        }
+
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, () => {
+            if (Keyboard.FocusedElement is Window && tree.IsVisible
+                && tree.SelectedItem is { } selected && ContainerFor(tree, selected) is { } row) {
+                row.Focus();
+            }
+        });
+    }
+
+
+    /// <summary>
     /// The keyboard belongs on a row, not on the tree: a TreeView with focus
     /// and no focused item resumes the arrow keys from wherever the cursor
     /// happened to be. Same reasoning as FileListView.FocusList.
+    ///
+    /// <para>
+    /// A highlighted row inside a closed branch (a chevron closed over it)
+    /// is opened up to first: the keyboard arriving in the panel means
+    /// looking at the cursor, and focusing some other row instead would
+    /// select that row - a TreeViewItem selects itself on focus.
+    /// </para>
     /// </summary>
-    private static bool FocusTree(TreeView tree) {
-        if (tree.SelectedItem is { } selected && ContainerFor(tree, selected) is { } container) {
-            return container.Focus();
+    private bool FocusTree(TreeView tree) {
+        if (tree.SelectedItem is TreeNodeViewModel selected) {
+            if (ContainerFor(tree, selected) is null && !string.IsNullOrEmpty(selected.FullPath)) {
+                Vm.Trees.RevealIn(
+                    ReferenceEquals(tree, BookmarksTree) ? NavigationSource.Bookmark : NavigationSource.Drives,
+                    selected.FullPath);
+                tree.UpdateLayout();
+            }
+            if (ContainerFor(tree, selected) is { } container) {
+                return container.Focus();
+            }
         }
 
         if (tree.Items.Count > 0 && tree.ItemContainerGenerator.ContainerFromIndex(0) is TreeViewItem first) {
@@ -295,7 +361,7 @@ public partial class FolderTreesView : UserControl {
     // --- Tree: selection -----------------------------------------------
 
     private void Tree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e) {
-        OnTreeSelectionChanged(sender, e.NewValue, NavigationSource.Drives);
+        OnTreeSelectionChanged(sender, e.OldValue, e.NewValue, NavigationSource.Drives);
     }
 
 
@@ -312,8 +378,8 @@ public partial class FolderTreesView : UserControl {
     /// habit back for anyone who has it.
     /// </para>
     /// </summary>
-    private void OnTreeSelectionChanged(object sender, object? item, NavigationSource source) {
-        if (item is not TreeNodeViewModel node || string.IsNullOrEmpty(node.FullPath)) {
+    private void OnTreeSelectionChanged(object sender, object? previous, object? item, NavigationSource source) {
+        if (_restoringSelection || item is not TreeNodeViewModel node || string.IsNullOrEmpty(node.FullPath)) {
             return;
         }
 
@@ -322,11 +388,32 @@ public partial class FolderTreesView : UserControl {
         // folder holding the archive, and treated as a click that echo
         // navigated straight back out - the archive never got listed.
         if (Vm.Trees.IsSyncingSelection) {
+            Trace($"tree: highlight {node.Name} (sync)");
+
             return;
         }
 
         if (_treeClickNavigates) {
             NavigateFromTree(node.FullPath, source);
+
+            return;
+        }
+
+        // A branch just closed over the highlighted row, and the TreeView
+        // moved the highlight onto the branch (TreeView.HandleSelectionAnd
+        // Collapsed) - before anyone was asked. A chevron is about opening
+        // and closing, nothing else: the highlight goes back onto the row
+        // it was on, hidden now as in Explorer, and nothing is navigated
+        // or targeted. Undone rather than prevented, because it cannot be
+        // prevented (2026-09-22).
+        if (!node.IsExpanded && previous is TreeNodeViewModel hidden && IsInside(hidden.FullPath, node.FullPath)) {
+            Trace($"tree: highlight {node.Name} (branch closed over {hidden.Name}; put back)");
+            _restoringSelection = true;
+            try {
+                hidden.IsSelected = true;
+            } finally {
+                _restoringSelection = false;
+            }
 
             return;
         }
@@ -348,7 +435,18 @@ public partial class FolderTreesView : UserControl {
         // is on becomes what the file operations act on.
         if (sender is TreeView { IsKeyboardFocusWithin: true } tree) {
             TargetTreeNode(tree);
+
+            return;
         }
+
+        // Control line (REDESIGN.md): a highlight that moved with no click,
+        // no keyboard in the panel and no sync behind it - the TreeView's
+        // own doing, and the kind of move nobody could see in the log.
+        Trace($"tree: highlight {node.Name} (no gesture; was {(previous as TreeNodeViewModel)?.Name ?? "none"})");
+    }
+
+    private static void Trace(string line) {
+        (ServiceLocator.TryGet<ILogger>() ?? NullLogger.Instance).Info(line);
     }
 
 
@@ -369,6 +467,7 @@ public partial class FolderTreesView : UserControl {
             return;
         }
 
+        _targetRow = (tree, node);
         FolderTargeted?.Invoke(this, node.FullPath);
     }
 
@@ -439,6 +538,12 @@ public partial class FolderTreesView : UserControl {
     /// </summary>
     private void Tree_PreviewKeyDown(object sender, KeyEventArgs e) {
         if (sender is not TreeView tree) {
+            return;
+        }
+
+        // A name is being edited: the keys are the editor's, which sits
+        // inside the panel and sees them after this - RenameBox_PreviewKeyDown.
+        if (_renameBox is not null) {
             return;
         }
 
@@ -575,30 +680,51 @@ public partial class FolderTreesView : UserControl {
     /// <summary>
     /// A right-button press on a bookmark row arms a drag of its folder, as
     /// in the drives tree (<see cref="Tree_PreviewMouseRightButtonDown"/>);
-    /// released in place, it still opens the row menu below. Not handled:
-    /// the press reaches the row the way it did before there was a drag.
+    /// released in place, it opens a menu below. Handled on a row, as in
+    /// the drives tree: left to the row, the press would focus it, and a
+    /// TreeViewItem selects itself on focus - a right click is about the
+    /// row's menu, not about moving the highlight (2026-09-22).
     /// </summary>
     private void BookmarksTree_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e) {
+        if (PressBelongsToRenameEditor(e.OriginalSource)) {
+            return;
+        }
+
         // The "..." button is a control, not a grip - same as for the left button.
         _treeMenuNode = ListVisuals.IsInsideControl(e.OriginalSource) ? null : NodeAt(e.OriginalSource);
         _treeRightDragArmed = _treeMenuNode is not null;
         _treeRightDragOrigin = e.GetPosition(this);
+        e.Handled = _treeMenuNode is not null;
     }
 
-    /// <summary>The same menu, from the right mouse button.</summary>
+    /// <summary>
+    /// The same menu, from the right mouse button - on the user's own
+    /// bookmark rows. Every other row with a folder behind it - a built-in
+    /// one, a folder under a bookmark - gets the folder's menu, targeted
+    /// the way the drives tree does it: "Paste" and "Rename" there are
+    /// about the row. Until 2026-09-22 those rows had no menu at all.
+    /// </summary>
     private void BookmarksTree_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e) {
         _treeRightDragArmed = false;
         // Armed here, not in the drives tree: a release over that one must
         // not find this row waiting.
         _treeMenuNode = null;
-        if (NodeAt(e.OriginalSource) is { } node && sender is FrameworkElement host) {
-            ShowBookmarkMenu(host, node);
-            e.Handled = true;
+        if (NodeAt(e.OriginalSource) is not { } node || sender is not FrameworkElement host) {
+            return;
         }
+
+        if (node.IsRemovableBookmark) {
+            ShowBookmarkMenu(host, node);
+        } else {
+            _targetRow = (BookmarksTree, node);
+            FolderTargeted?.Invoke(this, node.FullPath);
+            ContextMenuRequested?.Invoke(this, new FolderMenuRequest(host, node.FullPath));
+        }
+        e.Handled = true;
     }
 
     private void Bookmarks_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e) {
-        OnTreeSelectionChanged(sender, e.NewValue, NavigationSource.Bookmark);
+        OnTreeSelectionChanged(sender, e.OldValue, e.NewValue, NavigationSource.Bookmark);
     }
 
 
@@ -608,6 +734,12 @@ public partial class FolderTreesView : UserControl {
         // Cleared first: every path out of this handler that is not "the
         // user pressed a row" must leave the selection change silent.
         _treeClickNavigates = false;
+
+        if (PressBelongsToRenameEditor(e.OriginalSource)) {
+            _treeDragNode = null;
+
+            return;
+        }
 
         if (HitTestExpander(e.OriginalSource as DependencyObject)) {
             _userClickedExpander = true;
@@ -712,11 +844,16 @@ public partial class FolderTreesView : UserControl {
     /// highlighted set on screen.
     /// </summary>
     private void Tree_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e) {
+        if (PressBelongsToRenameEditor(e.OriginalSource)) {
+            return;
+        }
+
         _treeMenuNode = NodeAt(e.OriginalSource);
         if (_treeMenuNode is null) {
             return;
         }
 
+        _targetRow = ((TreeView)sender, _treeMenuNode);
         FolderTargeted?.Invoke(this, _treeMenuNode.FullPath);
         _treeRightDragArmed = true;
         _treeRightDragOrigin = e.GetPosition(this);
@@ -797,6 +934,264 @@ public partial class FolderTreesView : UserControl {
         }
 
         return false;
+    }
+
+
+    // --- Rename ---------------------------------------------------------
+    // F2 on a row, or "Rename" in its menu: the folder is renamed where its
+    // name is read, with the editor the list lays over a row (RenameAdorner)
+    // and the operation behind the list's rename - guard, log, undo, the
+    // wait for a holder (MainViewModel.RenameFolderAsync). The row stays
+    // where it is, open if it was open: the panels follow the new path
+    // instead of re-reading the level (TreeNodeViewModel.Follow).
+
+    /// <summary>A name is being edited in a panel: the keyboard is the editor's, and the window's shortcuts wait.</summary>
+    public bool IsRenaming => _renameBox is not null;
+
+
+    /// <summary>
+    /// Whether <see cref="StartRename"/> has a row to open its editor on
+    /// for <paramref name="path"/> - what greys the menu's "Rename". No
+    /// disk here: it is asked on every requery of the commands.
+    /// </summary>
+    public bool CanRename(string path) {
+        return RenameTarget(path) is not null;
+    }
+
+
+    /// <summary>
+    /// Opens the editor on the row standing on <paramref name="path"/>:
+    /// the row under the keyboard cursor, or the one a right click made
+    /// the target. False when no such row is on screen, or the row is not
+    /// one that can be renamed - a drive, a shell folder, an archive or a
+    /// folder inside one, a bookmark whose folder is gone, a built-in
+    /// bookmark (its label is Windows's name for the folder, not the
+    /// folder's).
+    /// </summary>
+    public bool StartRename(string path) {
+        var target = RenameTarget(path);
+        if (target is null || Archives.Contains(target.Value.Node.FullPath)) {
+            return false;
+        }
+
+        var (tree, node) = target.Value;
+        tree.UpdateLayout();
+        if (ContainerFor(tree, node) is not { } container) {
+            return false;
+        }
+
+        // The editor sits over the name label and needs the label's
+        // adorner layer - the panel's scroll viewport's, so it moves and
+        // clips with the row.
+        var label = ListVisuals.FindDescendant<TextBlock>(container, "NameLabel");
+        if (label is null || AdornerLayer.GetAdornerLayer(label) is not { } layer) {
+            return false;
+        }
+
+        HideRenameEditor();
+        var box = new TextBox {
+            // The row, for the commit and for the Escape that puts the
+            // keyboard back on it.
+            DataContext = node,
+            Text = node.Name,
+            FontSize = label.FontSize,
+            Padding = new Thickness(0),
+            // Wrapped so the whole name stays in view, as in the list; the
+            // minimum width is the editor's own, because a label here is
+            // exactly as wide as the name it shows.
+            TextWrapping = TextWrapping.Wrap,
+        };
+        box.PreviewKeyDown += RenameBox_PreviewKeyDown;
+        box.PreviewTextInput += RenameBox_PreviewTextInput;
+        box.LostKeyboardFocus += RenameBox_LostKeyboardFocus;
+        _renameTree = tree;
+        _renameBox = box;
+        _renameLayer = layer;
+        _renameAdorner = new RenameAdorner(label, box, RenameEditorMinWidth);
+        layer.Add(_renameAdorner);
+        layer.UpdateLayout();
+        box.Focus();
+        box.SelectAll();
+
+        return true;
+    }
+
+
+    /// <summary>
+    /// The row on <paramref name="path"/> a rename would be about, with
+    /// its panel: the cursor of the panel that has the keyboard, then the
+    /// other panel's, then the row last made the target. Null when none
+    /// of them stands on the path, or the one that does cannot be renamed.
+    /// </summary>
+    private (TreeView Tree, TreeNodeViewModel Node)? RenameTarget(string path) {
+        var first = BookmarksTree.IsKeyboardFocusWithin ? BookmarksTree : Tree;
+        var second = ReferenceEquals(first, Tree) ? BookmarksTree : Tree;
+        var candidates = new (TreeView? Tree, TreeNodeViewModel? Node)[] {
+            (first, first.SelectedItem as TreeNodeViewModel),
+            (second, second.SelectedItem as TreeNodeViewModel),
+            (_targetRow?.Tree, _targetRow?.Node),
+        };
+        foreach (var (tree, node) in candidates) {
+            if (tree is not null && node is not null && IsSamePath(node.FullPath, path)) {
+                return IsRenamable(tree, node) ? (tree, node) : null;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Not a drive (in either panel), a shell folder, a bookmark whose
+    /// folder is gone, or a built-in bookmark row ("Downloads",
+    /// "Documents"): that label is the name Windows gives the folder, not
+    /// the folder's own, and the row is a setting. A folder under it is an
+    /// ordinary folder. Archives are refused by <see cref="StartRename"/>,
+    /// which may ask the disk.
+    /// </summary>
+    private bool IsRenamable(TreeView tree, TreeNodeViewModel node) {
+        if (string.IsNullOrEmpty(node.FullPath)
+            || node.FullPath.StartsWith("shell:", StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrEmpty(Path.GetDirectoryName(node.FullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)))
+            || node.IsMissing) {
+            return false;
+        }
+
+        return node.IsRemovableBookmark
+            || !ReferenceEquals(tree, BookmarksTree)
+            || !Vm.Bookmarks.Items.Contains(node);
+    }
+
+    private static bool IsSamePath(string a, string b) {
+        return string.Equals(
+            a.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            b.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>True when <paramref name="path"/> is strictly inside <paramref name="folder"/>.</summary>
+    private static bool IsInside(string path, string folder) {
+        string root = folder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        return root.Length > 0
+            && path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void RenameBox_PreviewKeyDown(object sender, KeyEventArgs e) {
+        // Enter and Escape are the panel's (open the folder, back to the
+        // list) and the window's (open, clear the selection) before they
+        // are the editor's, so both are settled here. Up and Down would
+        // walk the cursor out from under the editor.
+        switch (e.Key) {
+            case Key.Enter:
+                CommitInlineRename((TextBox)sender, takeFocus: true);
+                e.Handled = true;
+                break;
+            case Key.Escape:
+                CancelInlineRename();
+                e.Handled = true;
+                break;
+            case Key.Up or Key.Down:
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private void RenameBox_PreviewTextInput(object sender, TextCompositionEventArgs e) {
+        // The characters Windows will not take in a name are refused as
+        // they are typed, as in the list - a rename rejected after the
+        // fact would only lose what was typed.
+        if (e.Text.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) {
+            e.Handled = true;
+            Vm.Status = Strings.InvalidFileNameChars + "\\ / : * ? \" < > |";
+        }
+    }
+
+    private void RenameBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e) {
+        // Clicking away commits, as in Explorer and in the list. Escape has
+        // already taken the editor down by the time focus leaves, so a
+        // cancelled edit falls out of CommitInlineRename on its own.
+        CommitInlineRename((TextBox)sender, takeFocus: false);
+    }
+
+    /// <summary>
+    /// A press in a panel while a name is being edited. Inside the editor
+    /// it is the editor's - a caret move, its own menu - and true comes
+    /// back so the caller leaves it alone. Anywhere else it applies the
+    /// edit, the way Explorer does, and the press goes on to whatever it
+    /// was for.
+    /// </summary>
+    private bool PressBelongsToRenameEditor(object originalSource) {
+        if (_renameBox is not { } box) {
+            return false;
+        }
+        if (ListVisuals.IsInsideTextBox(originalSource)) {
+            return true;
+        }
+
+        CommitInlineRename(box, takeFocus: false);
+
+        return false;
+    }
+
+    /// <summary>
+    /// Applies the edited name. <paramref name="takeFocus"/> separates the
+    /// two ways an edit ends: Enter means the user is still in the panel
+    /// and the keyboard belongs on the row; a click elsewhere means they
+    /// have moved on, and the highlight is theirs to place.
+    /// </summary>
+    [SuppressMessage("ReSharper", "AsyncVoidMethod",
+        Justification = "An event handler's tail. RenameFolderAsync reports its own failures; the rest runs on the dispatcher, where an exception lands in App.HookCrashLogging.")]
+    private async void CommitInlineRename(TextBox box, bool takeFocus) {
+        // Taking the editor down is itself a loss of focus, and that
+        // arrives here too: only the editor still up is committed.
+        if (!ReferenceEquals(box, _renameBox) || _renameTree is not { } tree) {
+            return;
+        }
+
+        var node = (TreeNodeViewModel)box.DataContext;
+        string newName = box.Text;
+        HideRenameEditor();
+        if (takeFocus) {
+            FocusTree(tree);
+        }
+        if (string.IsNullOrWhiteSpace(newName) || newName == node.Name) {
+            return;
+        }
+
+        string? renamed = await Vm.RenameFolderAsync(node.FullPath, newName);
+        if (renamed is null || !takeFocus) {
+            return;
+        }
+
+        // The row is back under its new name - the same one in the drives
+        // tree, a rebuilt one in the bookmarks panel - and is what the next
+        // operation is about.
+        var panel = ReferenceEquals(tree, BookmarksTree) ? NavigationSource.Bookmark : NavigationSource.Drives;
+        Vm.Trees.RevealIn(panel, renamed);
+        tree.UpdateLayout();
+        TargetTreeNode(tree);
+        FocusTree(tree);
+    }
+
+    private void CancelInlineRename() {
+        var tree = _renameTree;
+        HideRenameEditor();
+        if (tree is not null) {
+            FocusTree(tree);
+        }
+    }
+
+    /// <summary>Takes the editor down. Idempotent, and quiet about focus: the caller decides where the keyboard goes.</summary>
+    private void HideRenameEditor() {
+        _renameBox = null;
+        _renameTree = null;
+        if (_renameAdorner is not { } adorner) {
+            return;
+        }
+
+        _renameAdorner = null;
+        _renameLayer?.Remove(adorner);
+        _renameLayer = null;
     }
 
 

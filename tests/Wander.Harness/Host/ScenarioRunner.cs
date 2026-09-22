@@ -172,6 +172,16 @@ public sealed class ScenarioRunner {
             case "tree-expand":
                 await TreeExpandAsync(step);
                 break;
+            case "tree-rename":
+                await TreeRenameAsync(step);
+                break;
+            case "tree-target":
+                TreeTarget(step);
+                await YieldAsync();
+                break;
+            case "assert-tree":
+                AssertTree(step);
+                break;
             case "bookmark":
                 Bookmark(step);
                 await WaitIdleAsync(step);
@@ -556,6 +566,121 @@ public sealed class ScenarioRunner {
             await WaitIdleAsync(step);
         }
         _vm.Trees.Select(node);
+    }
+
+    /// <summary>
+    /// F2 on a panel row, from the view model's side: the editor and the
+    /// key are WPF's and cannot be driven from here (no input emulation);
+    /// what lies under them can - the operation, the rows following the
+    /// new name in both panels, the listing when the folder is open, the
+    /// bookmarks.
+    /// </summary>
+    private async Task TreeRenameAsync(JsonElement step) {
+        EnsureInSandbox("tree-rename");
+        string path = _context.Expand(step.Require("path"));
+        if (!IsInSandbox(path)) {
+            throw new InvalidOperationException($"refusing 'tree-rename' outside the sandbox: '{path}'");
+        }
+
+        string to = step.Require("to");
+        if (await _vm.RenameFolderAsync(path, to) is null) {
+            throw new InvalidOperationException($"'{path}' was not renamed to '{to}' (the log says why)");
+        }
+        await WaitIdleAsync(step);
+    }
+
+    /// <summary>
+    /// The row on the path becomes the operation target, the way the
+    /// keyboard cursor on it does (FolderTreesView.TargetTreeNode): the
+    /// row is selected in its panel, the list gives up its selection, and
+    /// the folder is what Delete, Ctrl+C and Paste are about.
+    /// </summary>
+    private void TreeTarget(JsonElement step) {
+        string path = _context.Expand(step.Require("path"));
+        var node = FindTreeRow(path, IsBookmarkPanel(step))
+            ?? throw new InvalidOperationException($"'{path}' is not a row on screen");
+        _vm.Trees.Select(node);
+        _window.FileList.ClearSelection();
+        _vm.SelectExternalPath(node.FullPath);
+    }
+
+    /// <summary>
+    /// A row of a panel as the panel shows it now: whether it is there, has
+    /// a chevron, is open, is selected, what it is labelled. Nothing is
+    /// opened on the way - an assertion about a chevron must not change
+    /// what it looks at - so a closed branch on the way is a scenario
+    /// mistake (tree-expand first).
+    /// </summary>
+    private void AssertTree(JsonElement step) {
+        string path = _context.Expand(step.Require("path"));
+        var node = FindTreeRow(path, IsBookmarkPanel(step));
+        if (step.Bool("exists") == false) {
+            if (node is not null) {
+                throw new InvalidOperationException($"'{path}' is still a row in the panel");
+            }
+
+            return;
+        }
+        if (node is null) {
+            throw new InvalidOperationException($"'{path}' is not a row in the panel");
+        }
+
+        if (step.Bool("chevron") is { } chevron && node.Children.Count > 0 != chevron) {
+            throw new InvalidOperationException($"'{path}' {(chevron ? "has no chevron" : "still has a chevron")}");
+        }
+        if (step.Bool("expanded") is { } expanded && node.IsExpanded != expanded) {
+            throw new InvalidOperationException($"'{path}' is {(node.IsExpanded ? "open" : "closed")}, expected {(expanded ? "open" : "closed")}");
+        }
+        if (step.Bool("selected") is { } selected && node.IsSelected != selected) {
+            throw new InvalidOperationException($"'{path}' is {(node.IsSelected ? "" : "not ")}selected");
+        }
+        if (step.Str("name") is { } name && !string.Equals(node.Name, name, StringComparison.Ordinal)) {
+            throw new InvalidOperationException($"'{path}' is labelled '{node.Name}', expected '{name}'");
+        }
+    }
+
+    private static bool IsBookmarkPanel(JsonElement step) {
+        return string.Equals(step.Str("panel"), "bookmark", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// The row on <paramref name="path"/>, walking open branches only. Null
+    /// when the level that would hold it is on screen and the row is not
+    /// in it; a closed branch or a level that is not there at all throws,
+    /// because "absent" must not be confused with "not looked at".
+    /// </summary>
+    private TreeNodeViewModel? FindTreeRow(string path, bool bookmarks) {
+        string wanted = Normalise(path);
+        string parent = Normalise(Path.GetDirectoryName(wanted) ?? "");
+        string panel = bookmarks ? "bookmarks" : "drives";
+        IReadOnlyList<TreeNodeViewModel> level = bookmarks
+            ? _vm.Bookmarks.Items.ToList()
+            : _vm.Trees.Roots.ToList();
+
+        TreeNodeViewModel? above = null;
+        while (true) {
+            var next = level.FirstOrDefault(n => !string.IsNullOrEmpty(n.FullPath) && IsUnderOrEqual(wanted, n.FullPath));
+            if (next is null) {
+                if (above is not null && Normalise(above.FullPath) == parent) {
+                    return null;
+                }
+
+                throw new InvalidOperationException(
+                    $"'{path}' is not reachable in the {panel} panel: " +
+                    (above is null ? "no root holds it" : $"'{above.FullPath}' has no open child on the way") +
+                    $" (rows: {string.Join(", ", level.Select(n => n.Name))})");
+            }
+            if (Normalise(next.FullPath) == wanted) {
+                return next;
+            }
+            if (!next.IsExpanded) {
+                throw new InvalidOperationException(
+                    $"'{next.FullPath}' is closed; assert-tree and tree-target do not open branches - tree-expand it first");
+            }
+
+            above = next;
+            level = next.Children.ToList();
+        }
     }
 
     /// <summary>

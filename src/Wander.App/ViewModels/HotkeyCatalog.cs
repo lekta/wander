@@ -54,6 +54,7 @@ public static class HotkeyCatalog {
             new HotkeyRow("← / → в дереве", Strings.HotkeyTreeExpand),
             new HotkeyRow("Enter в дереве", Strings.HotkeyTreeEnter),
             new HotkeyRow("Esc в дереве", Strings.HotkeyTreeEscape),
+            new HotkeyRow("F2 в дереве", Strings.HotkeyTreeRename),
         }),
         new HotkeyGroup(Strings.HotkeyGroupFileOps, new[] {
             new HotkeyRow("Ctrl + C", Strings.HotkeyCopy),

@@ -1,9 +1,11 @@
 {
   // The two panels: a branch opened by hand stays open across a refresh, a
-  // subfolder created in the list shows up in the branch, and a bookmark
+  // subfolder created, renamed, moved and pasted into from the list shows
+  // up right in the branch, a folder renamed from its row keeps its open
+  // branch and takes the listing and its bookmark along, and a bookmark
   // added and removed lands where it should. The checklist rows about
-  // dragging, chevron clicks and the divider need a mouse and stay with the
-  // person.
+  // dragging, chevron clicks, the F2 editor itself and the divider need a
+  // mouse or a keyboard and stay with the person.
   "name": "tree-bookmarks",
   "sandbox": "default",
   "profiles": [ "photos", "raw", "big" ],
@@ -28,6 +30,76 @@
     { "do": "note", "text": "a folder created in the list turned up in the open branch" },
     { "do": "screenshot", "name": "tree-new-folder" },
 
+    // --- A folder renamed in the list: the branch follows -------------
+    { "do": "select", "names": [ "from-the-list" ] },
+    { "do": "rename", "name": "from-the-list", "to": "renamed-in-list" },
+    { "do": "assert-tree", "path": "{sandbox}\\photos\\renamed-in-list" },
+    { "do": "assert-tree", "path": "{sandbox}\\photos\\from-the-list", "exists": false },
+    { "do": "note", "text": "a folder renamed in the list shows under its new name in the open branch" },
+
+    // --- The chevron comes back to a folder that gains its first subfolder
+    // Until 2026-09-22 a row that had lost its chevron (an empty folder)
+    // never got it back: the folder on screen gained a subfolder and its
+    // branch could not be opened to see it.
+    { "do": "navigate", "path": "{sandbox}\\photos\\renamed-in-list" },
+    { "do": "sleep", "ms": 1200 },
+    { "do": "assert-tree", "path": "{sandbox}\\photos\\renamed-in-list", "chevron": false, "selected": true },
+    { "do": "command", "name": "new-folder" },
+    { "do": "rename", "name": "Новая папка", "to": "inner" },
+    { "do": "sleep", "ms": 1200 },
+    { "do": "assert-tree", "path": "{sandbox}\\photos\\renamed-in-list", "chevron": true },
+    { "do": "tree-expand", "path": "{sandbox}\\photos\\renamed-in-list" },
+    { "do": "assert-tree", "path": "{sandbox}\\photos\\renamed-in-list\\inner" },
+    { "do": "note", "text": "an empty folder got its chevron back when its first subfolder was created in it" },
+
+    // --- F2 on the row of the open folder: the listing follows, the branch stays open
+    { "do": "tree-rename", "path": "{sandbox}\\photos\\renamed-in-list", "to": "renamed-in-tree" },
+    { "do": "assert-path", "is": "{sandbox}\\photos\\renamed-in-tree" },
+    { "do": "assert-tree", "path": "{sandbox}\\photos\\renamed-in-tree", "expanded": true, "selected": true },
+    { "do": "assert-tree", "path": "{sandbox}\\photos\\renamed-in-tree\\inner" },
+    { "do": "assert-tree", "path": "{sandbox}\\photos\\renamed-in-list", "exists": false },
+    { "do": "note", "text": "the open folder renamed from its panel row: the listing moved with it, the branch stayed open" },
+    { "do": "command", "name": "undo" },
+    { "do": "assert-path", "is": "{sandbox}\\photos\\renamed-in-list" },
+    { "do": "assert-tree", "path": "{sandbox}\\photos\\renamed-in-list", "expanded": true },
+    { "do": "assert-tree", "path": "{sandbox}\\photos\\renamed-in-tree", "exists": false },
+    { "do": "note", "text": "Ctrl+Z took the name, the listing and the branch back" },
+
+    // --- Dropped into another branch: both re-read, undo brings it back
+    { "do": "navigate", "path": "{sandbox}\\photos" },
+    { "do": "tree-expand", "path": "{sandbox}\\raw" },
+    { "do": "drop", "paths": [ "{sandbox}\\photos\\renamed-in-list" ], "target": "{sandbox}\\raw", "effect": "Move" },
+    { "do": "wait-idle" },
+    { "do": "assert-tree", "path": "{sandbox}\\raw\\renamed-in-list" },
+    { "do": "assert-tree", "path": "{sandbox}\\photos\\renamed-in-list", "exists": false },
+    { "do": "assert-entries", "absent": [ "renamed-in-list" ] },
+    { "do": "note", "text": "a folder dropped into another branch left the one it was in and appeared in the other" },
+    { "do": "command", "name": "undo" },
+    { "do": "assert-tree", "path": "{sandbox}\\photos\\renamed-in-list" },
+    { "do": "assert-tree", "path": "{sandbox}\\raw\\renamed-in-list", "exists": false },
+    { "do": "assert-entries", "contains": [ "renamed-in-list" ] },
+
+    // --- Paste goes into the row that is the target, not into the open folder
+    { "do": "select", "names": [ "IMG_0001.jpg" ] },
+    { "do": "command", "name": "copy" },
+    { "do": "tree-target", "path": "{sandbox}\\photos\\renamed-in-list" },
+    { "do": "command", "name": "paste" },
+    { "do": "wait-idle" },
+    { "do": "assert-path", "is": "{sandbox}\\photos" },
+    { "do": "navigate", "path": "{sandbox}\\photos\\renamed-in-list" },
+    { "do": "assert-entries", "contains": [ "IMG_0001.jpg", "inner" ] },
+    { "do": "note", "text": "paste with a panel row as the target went into that folder, not into the open one" },
+
+    // --- A bookmark on a folder follows its rename ---------------------
+    { "do": "bookmark", "op": "add", "path": "{sandbox}\\photos\\renamed-in-list" },
+    { "do": "assert-tree", "path": "{sandbox}\\photos\\renamed-in-list", "panel": "bookmark" },
+    { "do": "tree-rename", "path": "{sandbox}\\photos\\renamed-in-list", "to": "bookmarked" },
+    { "do": "assert-tree", "path": "{sandbox}\\photos\\bookmarked", "panel": "bookmark" },
+    { "do": "assert-log", "scope": "all", "contains": "Bookmark followed" },
+    { "do": "note", "text": "the bookmark followed the folder to its new name" },
+    { "do": "bookmark", "op": "remove", "path": "{sandbox}\\photos\\bookmarked" },
+    { "do": "screenshot", "name": "tree-after-follow" },
+
     // --- Bookmarks ---------------------------------------------------
     { "do": "bookmark", "op": "add", "path": "{sandbox}\\raw" },
     { "do": "tree-expand", "path": "{sandbox}\\raw", "panel": "bookmark" },
@@ -46,9 +118,10 @@
     // Clean up after ourselves: the sandbox is reused between runs, and a
     // scenario that leaves rubbish behind makes the next run's counts lie.
     { "do": "navigate", "path": "{sandbox}\\photos" },
-    { "do": "select", "names": [ "from-the-list" ] },
+    { "do": "select", "names": [ "bookmarked" ] },
     { "do": "command", "name": "permanent-delete" },
-    { "do": "assert-entries", "absent": [ "from-the-list" ] },
+    { "do": "assert-entries", "absent": [ "bookmarked" ] },
+    { "do": "assert-tree", "path": "{sandbox}\\photos\\bookmarked", "exists": false },
 
     {
       // The tidy-up above is a permanent delete, and every one of those

@@ -200,6 +200,13 @@ public class UndoableActionsTests {
     }
 
     [Fact]
+    public void RenameAction_MovesOnUndo_IsFromTheNewNameBackToTheOld() {
+        var action = new RenameAction(new FakeFileSystem(), NewPath, OldName);
+
+        Assert.Equal(new[] { (NewPath, @"C:\old.txt") }, action.MovesOnUndo);
+    }
+
+    [Fact]
     public void CreateAndDeleteActions_MoveNothing() {
         var fs = new FakeFileSystem();
         fs.Files[GonePath] = new byte[] { 7 };

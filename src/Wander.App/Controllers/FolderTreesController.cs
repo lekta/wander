@@ -126,6 +126,20 @@ public sealed class FolderTreesController {
 
 
     /// <summary>
+    /// A folder was renamed: every row on it or under it, in either panel,
+    /// takes the new path and stays where it is
+    /// (<see cref="TreeNodeViewModel.Follow"/>). Called ahead of the
+    /// re-read of the level, which then finds the row already under its
+    /// new name and keeps it instead of replacing it with a closed one.
+    /// </summary>
+    public void Follow(string oldRoot, string newRoot) {
+        foreach (var node in BothPanels()) {
+            node.Follow(oldRoot, newRoot);
+        }
+    }
+
+
+    /// <summary>
     /// Opens whichever panel the navigation came from down to
     /// <paramref name="path"/> and highlights the row.
     ///

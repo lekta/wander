@@ -253,7 +253,7 @@ public sealed class CompanionMetadataService {
             throw new FileNotFoundException("No sidecar to write to", path);
         }
 
-        byte[] original = _fs.ReadAllBytes(path);
+        byte[] original = _fs.ReadAllBytesForUpdate(path);
         bool pp3 = IsPp3(path);
         var before = pp3 ? Pp3Sidecar.Read(original) : XmpSidecar.Read(original);
 

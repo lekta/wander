@@ -495,13 +495,22 @@ public partial class MainWindow : Window {
             return;
         }
 
-        // While a name is being edited the editor owns the keyboard, and the
-        // window's own shortcuts do not apply — the same as anywhere else in
-        // Windows while a text field has focus. This is a tunnelling handler,
-        // so without the guard it runs *before* the editor's: Esc cleared the
-        // whole selection here and only then reached the editor to cancel.
-        if (Vm.RenamingPath is not null) {
+        // While a name is being edited - in the list or in a folder panel -
+        // the editor owns the keyboard, and the window's own shortcuts do
+        // not apply, the same as anywhere else in Windows while a text
+        // field has focus. This is a tunnelling handler, so without the
+        // guard it runs *before* the editor's: Esc cleared the whole
+        // selection here and only then reached the editor to cancel.
+        if (Vm.RenamingPath is not null || FolderTrees.IsRenaming) {
             return;
+        }
+
+        // A Delete that will do nothing leaves no trace otherwise, and
+        // "Delete works every other time" (2026-09-22) could not be read
+        // from the log. One line per such press; the key goes on as usual.
+        if (e.Key == Key.Delete && !Vm.DeleteCommand.CanExecute(null)) {
+            ServiceLocator.Get<Wander.Core.Logging.ILogger>().Info(
+                $"Delete: no target (keyboard in {ZoneOf(Keyboard.FocusedElement)?.ToString() ?? "window"})");
         }
 
         // Ctrl+C with the keyboard in the preview pane and text selected
@@ -627,14 +636,8 @@ public partial class MainWindow : Window {
             }
         }
 
-        // F2: one item is renamed in place; two or more go to the batch
-        // window, which refuses a mix of files and folders on its own.
-        if (e.Key == Key.F2 && Vm.SelectedEntry is not null) {
-            if (Vm.SelectedEntries.Count > 1) {
-                Vm.BatchRenameCommand.Execute(null);
-            } else {
-                FileList.StartRename();
-            }
+        if (e.Key == Key.F2 && CanStartRename()) {
+            StartRename();
             e.Handled = true;
             return;
         }
@@ -906,8 +909,27 @@ public partial class MainWindow : Window {
         // user is looking at and not about the list they just left.
         if (zone is WindowZone.Bookmarks or WindowZone.Drives) {
             _lastFolderPane = zone.Value;
-            FolderTrees.TargetSelected(PaneSource(zone.Value));
+            var pane = PaneSource(zone.Value);
+            if (IsInsideMenu(e.OldFocus)) {
+                // The keyboard coming back from a context menu is not an
+                // arrival. The row the menu was opened on is the target,
+                // and the menu's command runs only now - after the menu
+                // has closed and the keyboard has returned (WPF's
+                // MenuItem.InvokeClickAfterRender): re-targeting here made
+                // "Open in terminal" and "Paste" on a row act on the open
+                // folder instead (2026-09-22). The row under the cursor
+                // becomes the target again a moment later, once that
+                // command has had its turn - so a dismissed menu leaves no
+                // hidden target behind either.
+                Dispatcher.BeginInvoke(DispatcherPriority.Background, () => FolderTrees.TargetSelected(pane));
+            } else {
+                FolderTrees.TargetSelected(pane);
+            }
         }
+    }
+
+    private static bool IsInsideMenu(IInputElement? element) {
+        return ListVisuals.Ancestors(element).Any(hit => hit is ContextMenu);
     }
 
 
@@ -1086,13 +1108,47 @@ public partial class MainWindow : Window {
     }
 
     /// <summary>
+    /// <c>F2</c> and "Rename", from the key or a menu: the list's row when
+    /// the list has the selection, else the folder a panel made the target
+    /// - the row under its cursor, the one right-clicked, the folder just
+    /// opened from it (<see cref="MainViewModel.SelectExternalPath"/>). One
+    /// item is edited in place; two or more go to the batch window, which
+    /// refuses a mix of files and folders on its own.
+    /// </summary>
+    private void StartRename() {
+        var vm = Vm;
+        if (vm.SelectedEntry is not null) {
+            if (vm.SelectedEntries.Count > 1) {
+                vm.BatchRenameCommand.Execute(null);
+            } else {
+                FileList.StartRename();
+            }
+
+            return;
+        }
+
+        if (vm.SelectedEntries is [{ } target]) {
+            FolderTrees.StartRename(target.FullPath);
+        }
+    }
+
+    private bool CanStartRename() {
+        var vm = Vm;
+
+        return vm.SelectedEntry is not null
+            || (vm.SelectedEntries is [{ } target] && FolderTrees.CanRename(target.FullPath));
+    }
+
+
+    /// <summary>
     /// Maps every built-in menu id onto the command that runs it. Most come
-    /// straight off the ViewModel; Rename is the exception — it needs the
-    /// name prompt, which lives here in the view.
+    /// straight off the ViewModel; Rename is the exception - it opens an
+    /// editor in the view, over a row of the list or of a folder panel
+    /// (<see cref="StartRename"/>).
     /// </summary>
     private Dictionary<MenuCommandId, MenuBinding> BuildMenuBindings() {
+        var rename = new RelayCommand(_ => StartRename(), _ => CanStartRename());
         var vm = Vm;
-        var rename = new RelayCommand(_ => FileList.StartRename(), _ => vm.SelectedEntry is not null);
 
         return new Dictionary<MenuCommandId, MenuBinding> {
             [MenuCommandId.Open] = new(vm.OpenCommand),
@@ -1101,7 +1157,10 @@ public partial class MainWindow : Window {
 
             [MenuCommandId.Cut] = new(vm.CutCommand),
             [MenuCommandId.Copy] = new(vm.CopyCommand),
-            [MenuCommandId.Paste] = new(vm.PasteCommand),
+            // A menu's Paste goes into the one folder selected or targeted
+            // (a row of the list, a row of a panel); Ctrl+V, bound in XAML
+            // without the parameter, into the open folder.
+            [MenuCommandId.Paste] = new(vm.PasteCommand, MainViewModel.PasteIntoSelection),
             [MenuCommandId.CopyPath] = new(vm.CopyPathCommand),
             [MenuCommandId.CopyName] = new(vm.CopyNameCommand),
             [MenuCommandId.CreateShortcut] = new(vm.CreateShortcutCommand),

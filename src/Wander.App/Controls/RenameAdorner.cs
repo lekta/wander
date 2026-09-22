@@ -25,13 +25,22 @@ namespace Wander.App.Controls;
 /// the name is edited where it is read - grown to the editor's own height
 /// when the label's line is shorter than a TextBox needs.
 /// </para>
+///
+/// <para>
+/// <paramref name="minWidth"/> is for a label that is exactly as wide as
+/// the name it shows - a tree row - where the editor would otherwise
+/// wrap a longer name after a few characters. It grows to the right,
+/// over the empty part of the row.
+/// </para>
 /// </summary>
 public sealed class RenameAdorner : Adorner {
     private readonly TextBox _editor;
+    private readonly double _minWidth;
 
 
-    public RenameAdorner(UIElement label, TextBox editor) : base(label) {
+    public RenameAdorner(UIElement label, TextBox editor, double minWidth = 0) : base(label) {
         _editor = editor;
+        _minWidth = minWidth;
         AddVisualChild(editor);
         AddLogicalChild(editor);
     }
@@ -47,9 +56,10 @@ public sealed class RenameAdorner : Adorner {
 
     protected override Size MeasureOverride(Size constraint) {
         var box = AdornedElement.RenderSize;
-        _editor.Measure(new Size(box.Width, double.PositiveInfinity));
+        double width = Math.Max(box.Width, _minWidth);
+        _editor.Measure(new Size(width, double.PositiveInfinity));
 
-        return new Size(box.Width, Math.Max(box.Height, _editor.DesiredSize.Height));
+        return new Size(width, Math.Max(box.Height, _editor.DesiredSize.Height));
     }
 
 

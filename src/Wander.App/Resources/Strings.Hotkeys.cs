@@ -78,6 +78,9 @@ public static partial class Strings {
     /// <summary>Вернуть фокус в список</summary>
     public static string HotkeyTreeEscape => Get(nameof(HotkeyTreeEscape));
 
+    /// <summary>Переименовать папку под курсором</summary>
+    public static string HotkeyTreeRename => Get(nameof(HotkeyTreeRename));
+
     /// <summary>Файловые операции</summary>
     public static string HotkeyGroupFileOps => Get(nameof(HotkeyGroupFileOps));
 

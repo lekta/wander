@@ -92,7 +92,7 @@ public sealed class ShellRecycleBin : IRecycleBin {
             string path = paths[i];
             if (!File.Exists(path) && !Directory.Exists(path)) {
                 results[i] = Failed(path, new FileNotFoundException("Cannot recycle non-existent path", path));
-            } else if (TooLongForBin(path) is { } tooLong) {
+            } else if (TooLongForBin(path, ct) is { } tooLong) {
                 // Ours, before the engine sees the item: a folder that is
                 // short itself and long inside passes the engine's own test,
                 // and then the shell asks its question on screen, "Yes" by
@@ -214,9 +214,12 @@ public sealed class ShellRecycleBin : IRecycleBin {
     /// <summary>
     /// The first path the bin would not take: the item's own, or one inside
     /// the folder. A junction is not walked into - the bin takes the link,
-    /// not what it points at.
+    /// not what it points at. A cancel stops the walk: the batch it belongs
+    /// to recycles nothing more once cancelled (<see cref="RunAll"/>), and a
+    /// folder of a few hundred thousand files on a share took minutes that
+    /// Cancel could not shorten.
     /// </summary>
-    private static string? TooLongForBin(string path) {
+    private static string? TooLongForBin(string path, CancellationToken ct) {
         if (path.Length > MaxRecyclablePath) {
             return path;
         }
@@ -234,7 +237,7 @@ public sealed class ShellRecycleBin : IRecycleBin {
             ShouldIncludePredicate = (ref System.IO.Enumeration.FileSystemEntry entry) =>
                 entry.Directory.Length + 1 + entry.FileName.Length > MaxRecyclablePath,
             ShouldRecursePredicate = (ref System.IO.Enumeration.FileSystemEntry entry) =>
-                (entry.Attributes & FileAttributes.ReparsePoint) == 0,
+                (entry.Attributes & FileAttributes.ReparsePoint) == 0 && !ct.IsCancellationRequested,
         };
 
         return tooLong.FirstOrDefault();

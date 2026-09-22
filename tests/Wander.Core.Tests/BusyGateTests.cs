@@ -141,6 +141,21 @@ public class BusyGateTests {
     }
 
     [Fact]
+    public void RetryMany_NamesTheFirstFewHeld_NotEveryOne() {
+        // Each name is a Restart Manager session, asked before the wait: a
+        // batch of held files named one by one stood still for half a minute.
+        var (held, _, _, _) = Setup(new FileLockInfo(812, "Sync"));
+        var paths = Enumerable.Range(0, 10).Select(n => $@"C:\photos\{n}.cr3").ToArray();
+
+        using var gate = held.Begin(NullLogger.Instance);
+        var reports = gate.RetryMany(paths, indices => indices, default);
+
+        Assert.Equal(10, reports.Count);
+        Assert.Equal(3, reports.Values.Count(r => r.Holder is not null));
+        Assert.Equal("Sync (PID 812)", reports[0].Holder);
+    }
+
+    [Fact]
     public void RetryMany_Cancelled_KeepsWhatWasDone_AndReportsTheRestHeld() {
         var (held, _, _, _) = Setup();
         using var cts = new CancellationTokenSource();

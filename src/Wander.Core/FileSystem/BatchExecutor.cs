@@ -570,6 +570,10 @@ internal sealed class BatchExecutor {
         return Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
     }
 
+    private static bool SameRoot(string a, string b) {
+        return string.Equals(Path.GetPathRoot(a), Path.GetPathRoot(b), StringComparison.OrdinalIgnoreCase);
+    }
+
     private IReadOnlyList<DeleteResult> DeleteManyCore(
         IReadOnlyList<string> paths, bool permanent, IOperationHandle progress, IDisposable own, CancellationToken ct) {
         using var _ = _undo.BeginOperation();
@@ -737,9 +741,17 @@ internal sealed class BatchExecutor {
             // The wait is made for every entry, whatever the group already
             // has to report: "x ??= Wait()" does not call Wait() once x is
             // set, and for a folder the call is the move itself.
-            if (run.IsMove && _fs.DirectoryExists(src)) {
+            //
+            // Not across volumes: there a folder move is a copy and then a
+            // delete, and a delete that meets a held file has already taken
+            // everything else. Trying the move again copies onto the copy,
+            // and a Cancel during the wait took the finished copy for a
+            // partial one - Ctrl+Z then binned the only whole copy there was.
+            if (run.IsMove && _fs.DirectoryExists(src) && SameRoot(src, dest)) {
                 var held = run.Gate.Retry(src, () => _fs.MoveEntry(src, dest, bytes, run.Token), run.Token);
                 run.GroupBusy ??= held;
+            } else if (run.IsMove && _fs.DirectoryExists(src)) {
+                _fs.MoveEntry(src, dest, bytes, run.Token);
             } else if (run.IsMove) {
                 var held = run.Gate.WaitForFile(src, run.Token);
                 run.GroupBusy ??= held;

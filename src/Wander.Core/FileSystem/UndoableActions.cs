@@ -8,10 +8,18 @@ namespace Wander.Core.FileSystem;
 internal sealed record RenameAction(IFileSystem Fs, string NewPath, string OldName) : IUndoableAction {
     public string Description => $"Rename to '{Path.GetFileName(NewPath)}'";
 
-    public IReadOnlyList<string> PathsAfterUndo =>
-        new[] { Path.Combine(Path.GetDirectoryName(NewPath) ?? "", OldName) };
+    public IReadOnlyList<string> PathsAfterUndo => new[] { OldPath };
+
+    /// <summary>
+    /// The name goes back, so whatever remembers the path under the new
+    /// name - the open folder when this is it or one above it, the
+    /// history, a bookmark, a panel row - follows to the old one.
+    /// </summary>
+    public IReadOnlyList<(string From, string To)> MovesOnUndo => new[] { (NewPath, OldPath) };
 
     public void Undo() => Fs.Rename(NewPath, OldName);
+
+    private string OldPath => Path.Combine(Path.GetDirectoryName(NewPath) ?? "", OldName);
 }
 
 /// <summary>
