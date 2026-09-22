@@ -1,8 +1,10 @@
 using MetadataExtractor;
 using MetadataExtractor.Formats.Exif;
+using MetadataExtractor.Formats.Exif.Makernotes;
 using MetadataExtractor.Formats.Jpeg;
 using MetadataExtractor.Formats.Png;
 using Wander.Core.Icons;
+using Wander.Core.Imaging;
 
 namespace Wander.Platform.Windows.Icons;
 
@@ -51,7 +53,28 @@ public sealed class MetadataExtractorImageReader : IImageMetadataReader {
                 FocalLengthMm: Number(sub, ExifDirectoryBase.TagFocalLength),
                 Position: Position(dirs.OfType<GpsDirectory>().FirstOrDefault()),
                 Copyright: ifd0?.GetString(ExifDirectoryBase.TagCopyright),
-                Rating: Int(ifd0, ExifDirectoryBase.TagRating));
+                Rating: Int(ifd0, ExifDirectoryBase.TagRating),
+                AfPoints: AfPoints(dirs.OfType<CanonMakernoteDirectory>().FirstOrDefault(), orientation));
+        } catch {
+            return null;
+        }
+    }
+
+
+    /// <summary>
+    /// Where a Canon focused (<see cref="CanonAfInfo"/>), turned upright.
+    /// Null for other makers, for a frame focused by hand, and for a record
+    /// that does not read - no areas is the whole answer then, not an error.
+    /// </summary>
+    private static IReadOnlyList<AfPoint>? AfPoints(CanonMakernoteDirectory? canon, int? orientation) {
+        try {
+            if (canon?.GetObject(CanonMakernoteDirectory.TagAfInfoArray2) is not ushort[] record) {
+                return null;
+            }
+
+            var points = CanonAfInfo.Parse(record);
+
+            return points.Count == 0 ? null : AfGeometry.Orient(points, orientation);
         } catch {
             return null;
         }

@@ -26,6 +26,8 @@
         <conv:RankTextConverter x:Key="RankText"/>
         <conv:ColorLabelBrushConverter x:Key="ColorLabelBrush"/>
         <conv:RatingBadgeVisibilityConverter x:Key="RatingBadge"/>
+        <conv:SharpnessLevelConverter x:Key="SharpnessLevel"/>
+        <conv:SharpnessBadgeConverter x:Key="SharpnessBadge"/>
         <conv:FilterStarConverter x:Key="FilterStarGlyph"/>
         <conv:CutRowConverter x:Key="IsCutRow"/>
         <conv:CaretRowConverter x:Key="IsCaretRow"/>
@@ -386,6 +388,17 @@
                                FontSize="10" Foreground="{StaticResource BadgeRating}"
                                VerticalAlignment="Center"/>
                 </StackPanel>
+            </Border>
+        </DataTemplate>
+
+        <!-- The sharpness score in the other corner, while the gallery's sharpness pass has scored the photo. -->
+        <DataTemplate x:Key="GallerySharpnessBadge">
+            <Border Background="{StaticResource BadgeBackground}" CornerRadius="2"
+                    Padding="3,0" Margin="2">
+                <TextBlock Text="{Binding Sharpness, Converter={StaticResource SharpnessBadge}}"
+                           FontSize="10" FontWeight="SemiBold"
+                           Foreground="{Binding Sharpness, Converter={StaticResource SharpnessLevel}}"
+                           VerticalAlignment="Center"/>
             </Border>
         </DataTemplate>
 
@@ -1005,6 +1018,17 @@
                             -->
                             <ContentControl x:Name="Badge"
                                             HorizontalAlignment="Left" VerticalAlignment="Bottom"/>
+                            <!--
+                                How sharp the photo is (RAWHELPERS, step 6):
+                                the number in this corner, coloured by level.
+                                Empty the same way the rating badge is, until
+                                the pass has scored the photo. The cell itself
+                                is not dimmed by it: a wall of faded
+                                photographs is harder to judge, not easier
+                                (2026-09-22).
+                            -->
+                            <ContentControl x:Name="SharpBadge"
+                                            HorizontalAlignment="Right" VerticalAlignment="Bottom"/>
                         </Grid>
                         <!--
                             Written for the selected state, capped by the
@@ -1021,6 +1045,11 @@
                                      Value="Visible">
                             <Setter TargetName="Badge" Property="Content" Value="{Binding}"/>
                             <Setter TargetName="Badge" Property="ContentTemplate" Value="{StaticResource GalleryRatingBadge}"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding Sharpness, Converter={StaticResource SharpnessBadge}, ConverterParameter=Badge}"
+                                     Value="Visible">
+                            <Setter TargetName="SharpBadge" Property="Content" Value="{Binding}"/>
+                            <Setter TargetName="SharpBadge" Property="ContentTemplate" Value="{StaticResource GallerySharpnessBadge}"/>
                         </DataTrigger>
                         <!--
                             Every cell but the selected one: one line,

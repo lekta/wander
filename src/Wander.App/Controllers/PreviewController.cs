@@ -14,6 +14,7 @@ using Wander.Core.Companions;
 using Wander.Core.Diagnostics;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
+using Wander.Core.Imaging;
 using Wander.Core.Logging;
 using Wander.Core.Operations;
 using Wander.Core.Preview;
@@ -125,6 +126,18 @@ public sealed class PreviewController : ObservableObject {
     /// </summary>
     private const int FullSizeDwellMs = 150;
 
+    /// <summary>The chart of levels in the footer, in layout units - the Canvas in PreviewPane.xaml.</summary>
+    private const double HistogramWidth = 96;
+
+    private const double HistogramHeight = 28;
+
+    /// <summary>
+    /// The share of clipped or crushed pixels from which the chart's
+    /// arrows light up. A few stray pixels of a specular highlight are not
+    /// the frame burning out.
+    /// </summary>
+    private const double ClipNoticeShare = 0.001;
+
 
     private readonly IImageMetadataReader? _metadataReader;
     private readonly CompanionMetadataService? _companionMetadata;
@@ -216,6 +229,32 @@ public sealed class PreviewController : ObservableObject {
     private int _rank;
     private int _colorLabel;
     private string _customColorLabel = "";
+
+    // The review helpers (RAWHELPERS): which are on, and what they made of
+    // the pictures on screen - the fitted one and the zoom's. What was
+    // measured is kept as long as the pictures are, so switching a second
+    // helper on does not measure again; it goes with them and when every
+    // helper is off.
+    private ReviewHelpers? _helpers;
+    private CancellationTokenSource? _helpersCts;
+    private ReviewOverlay.Cache? _helpersCache;
+    private ImageSource? _shownInstead;
+    private ImageSource? _overlay;
+    private ImageSource? _zoomInstead;
+    private ImageSource? _zoomOverlay;
+    private HistogramData? _histogram;
+    private PointCollection[]? _histogramOutline;
+    private double? _sharpnessScore;
+
+    // A bigger picture of the file is on its way - the full JPEG of a CR3,
+    // the sensor decode - and what is measured on the quick one would be
+    // withdrawn when it lands (ReviewOverlay.Request.FullReady).
+    private bool _fullPending;
+    private bool _isRawDecoding;
+
+    // One sensor decode at a time: a second of work that cannot be stopped
+    // half-way, and a held arrow key must not queue one per frame passed.
+    private readonly SemaphoreSlim _rawDecodeGate = new(1, 1);
 
 
     /// <param name="claims">What operations of the user's are working on - the footer's "running / queued" line; null shows none.</param>
@@ -330,9 +369,21 @@ public sealed class PreviewController : ObservableObject {
         private set {
             if (SetField(ref _image, value)) {
                 Raise(nameof(ZoomSource));
+                // What the helpers made is about the picture that went.
+                _helpersCts?.Cancel();
+                _helpersCache = null;
+                ShowHelpers(null);
             }
         }
     }
+
+    /// <summary>
+    /// What the pane fits into its width: the picture, or the picture
+    /// through a helper's tone curve - except while Alt is held
+    /// (<see cref="ReviewHelpers.Peek"/>). The size cap stays
+    /// <see cref="Image"/>'s: the helper's copy may be smaller than the frame.
+    /// </summary>
+    public ImageSource? DisplayImage => !Peeking && _shownInstead is not null ? _shownInstead : _image;
 
     /// <summary>
     /// What the 1:1 zoom draws: the biggest picture there is of the file.
@@ -345,6 +396,19 @@ public sealed class PreviewController : ObservableObject {
     /// frames, which the pane draws biggest (2026-09-21).
     /// </summary>
     public ImageSource? ZoomSource => _zoomImage ?? _image;
+
+    /// <summary>What the 1:1 zoom draws: <see cref="ZoomSource"/>, or it through the tone curve. Sized by ZoomSource.</summary>
+    public ImageSource? ZoomDisplay => !Peeking && _zoomInstead is not null ? _zoomInstead : ZoomSource;
+
+    /// <summary>
+    /// A RAW's sensor decode is on its way (<see cref="ShowRawDecode"/>):
+    /// the quick preview is on screen meanwhile, and a small spinner in the
+    /// corner says the real frame is coming.
+    /// </summary>
+    public bool IsRawDecoding {
+        get => _isRawDecoding;
+        private set => SetField(ref _isRawDecoding, value);
+    }
 
     /// <summary>
     /// The file on screen is a RAW — the only case where there are two
@@ -360,8 +424,9 @@ public sealed class PreviewController : ObservableObject {
     /// The embedded one is what makes the pane instant (~10 ms against
     /// ~1150 ms) but it is a small JPEG the camera baked with its own
     /// rendering; the sensor decode is the actual frame. A mode rather than
-    /// a per-file choice — someone comparing shots wants it to stay on —
-    /// and the button stays lit to say why the pane got slow.
+    /// a per-file choice — someone comparing shots wants it to stay on.
+    /// The embedded one still goes up first and the decode replaces it when
+    /// ready (<see cref="LoadRawDecodeAsync"/>).
     /// </summary>
     public bool ShowRawDecode {
         get => _showRawDecode;
@@ -859,6 +924,187 @@ public sealed class PreviewController : ObservableObject {
         >= 0.85 => Palette.VolumeBarFilling,
         _ => Palette.VolumeBarNormal,
     };
+
+
+    // --- Review helpers (RAWHELPERS) -----------------------------------
+    // Marks and numbers over a photograph while picking the keepers: edges
+    // in focus, clipped channels, the levels, where the camera focused, a
+    // look into the shadows. Only shown, never written: the file stays as
+    // the camera made it.
+
+    /// <summary>The switches - for the buttons in the footer.</summary>
+    public ReviewHelpers? Helpers => _helpers;
+
+    /// <summary>What the helpers draw over the fitted picture: peaking, clipping, autofocus frames. Null when nothing, and while Alt is held.</summary>
+    public ImageSource? Overlay => Peeking ? null : _overlay;
+
+    /// <summary>The same over the 1:1 zoom, at the zoom's resolution.</summary>
+    public ImageSource? ZoomOverlay => Peeking ? null : _zoomOverlay;
+
+    /// <summary>The levels of the picture on screen, while the histogram helper is on.</summary>
+    public HistogramData? Histogram {
+        get => _histogram;
+        private set {
+            if (SetField(ref _histogram, value)) {
+                Raise(nameof(HasHistogram));
+                Raise(nameof(HistogramOver));
+                Raise(nameof(HistogramUnder));
+                Raise(nameof(HistogramTip));
+            }
+        }
+    }
+
+    public bool HasHistogram => _histogram is not null;
+
+    /// <summary>The red, green and blue of <see cref="Histogram"/>, as outlines on a chart of <see cref="HistogramWidth"/> by <see cref="HistogramHeight"/>.</summary>
+    public PointCollection? HistogramRed => _histogramOutline?[0];
+
+    public PointCollection? HistogramGreen => _histogramOutline?[1];
+
+    public PointCollection? HistogramBlue => _histogramOutline?[2];
+
+    /// <summary>Enough of the frame burnt out to say so: the arrow at the right of the chart.</summary>
+    public bool HistogramOver => _histogram?.Over >= ClipNoticeShare;
+
+    /// <summary>Enough of it crushed to black: the arrow at the left.</summary>
+    public bool HistogramUnder => _histogram?.Under >= ClipNoticeShare;
+
+    /// <summary>The two shares in words, for the chart's tooltip.</summary>
+    public string HistogramTip => _histogram is null
+        ? ""
+        : string.Format(Strings.HelperHistNote, _histogram.Over * 100, _histogram.Under * 100);
+
+    /// <summary>The sharpness score of the picture shown, 0..100, while the sharpness helper is on; null when there is none to give.</summary>
+    public double? SharpnessScore {
+        get => _sharpnessScore;
+        private set {
+            if (SetField(ref _sharpnessScore, value)) {
+                Raise(nameof(HasSharpnessScore));
+                Raise(nameof(SharpnessText));
+                Raise(nameof(SharpnessTip));
+            }
+        }
+    }
+
+    public bool HasSharpnessScore => _sharpnessScore is not null;
+
+    public string SharpnessText => _sharpnessScore is { } score ? score.ToString("0") : "";
+
+    public string SharpnessTip => _sharpnessScore is { } score
+        ? string.Format(Strings.HelperSharpScoreTip, score)
+        : "";
+
+    /// <summary>Some helper is switched on.</summary>
+    public bool HelpersActive => _helpers?.AnyOn == true;
+
+    private bool Peeking => _helpers?.Peek == true;
+
+
+    /// <summary>
+    /// The switches to follow. One set for the window: both halves of a
+    /// split show the same helpers, and the footer's buttons edit it.
+    /// </summary>
+    public void SetHelpers(ReviewHelpers helpers) {
+        _helpers = helpers;
+        helpers.PropertyChanged += (_, e) => {
+            // Alt held or let go: the same pictures, shown or hidden.
+            if (e.PropertyName == nameof(ReviewHelpers.Peek)) {
+                RaiseShown();
+
+                return;
+            }
+
+            ScheduleHelpers();
+        };
+        Raise(nameof(Helpers));
+        ScheduleHelpers();
+    }
+
+
+    /// <summary>
+    /// Works the helpers out again for the pictures on screen - a switch
+    /// moved, a new picture is up, the bigger one arrived. With every
+    /// helper off it costs nothing and keeps nothing.
+    /// </summary>
+    private void ScheduleHelpers() {
+        _helpersCts?.Cancel();
+        _helpersCts = null;
+        Raise(nameof(HelpersActive));
+        if (_helpers is not { AnyOn: true } helpers) {
+            _helpersCache = null;
+            ShowHelpers(null);
+
+            return;
+        }
+        if (_kind != PreviewKind.Image || _image is not BitmapSource fit || ZoomSource is not BitmapSource full) {
+            return;
+        }
+
+        // Tied to the load as well: a new selection cancels it with the
+        // load that brought these pictures.
+        _helpersCts = CancellationTokenSource.CreateLinkedTokenSource(_previewCts?.Token ?? CancellationToken.None);
+        var request = new ReviewOverlay.Request(
+            helpers.Peaking, helpers.Sharpness, helpers.Clipping, helpers.Histogram, helpers.AfPoints,
+            helpers.Shadows ? ToneCurve.Shadows : helpers.Highlights ? ToneCurve.Highlights : null,
+            _imageMetadata?.AfPoints, FullReady: !_fullPending,
+            ColorOf(Palette.ReviewPeaking), ColorOf(Palette.ReviewUnder),
+            ColorOf(Palette.ReviewAfFocused), ColorOf(Palette.ReviewAfOther),
+            HistogramWidth, HistogramHeight);
+        _ = RecomputeHelpersAsync(fit, full, request, _helpersCache, _helpersCts.Token);
+    }
+
+    private async Task RecomputeHelpersAsync(
+        BitmapSource fit, BitmapSource full, ReviewOverlay.Request request, ReviewOverlay.Cache? cache, CancellationToken ct) {
+        ReviewOverlay.Result result;
+        try {
+            result = await Task.Run(() => {
+                using var measure = PerfLog.Measure("bg.helpers");
+
+                return ReviewOverlay.Build(fit, full, request, cache, ct);
+            }, ct);
+        } catch (OperationCanceledException) {
+            return;
+        } catch (Exception ex) {
+            ServiceLocator.Get<ILogger>().Warn($"Preview: review helpers failed - {ex.Message}");
+
+            return;
+        }
+
+        // Only for the pictures it was worked out for: the selection may
+        // have moved on while it ran, or the bigger picture arrived.
+        if (ct.IsCancellationRequested || !ReferenceEquals(_image, fit) || !ReferenceEquals(ZoomSource, full)) {
+            return;
+        }
+
+        _helpersCache = result.Cache;
+        ShowHelpers(result);
+    }
+
+    private void ShowHelpers(ReviewOverlay.Result? result) {
+        _shownInstead = result?.Instead;
+        _overlay = result?.Overlay;
+        _zoomInstead = result?.ZoomInstead;
+        _zoomOverlay = result?.ZoomOverlay;
+        RaiseShown();
+        _histogramOutline = result?.Outline;
+        Raise(nameof(HistogramRed));
+        Raise(nameof(HistogramGreen));
+        Raise(nameof(HistogramBlue));
+        Histogram = result?.Histogram;
+        SharpnessScore = result?.Score;
+    }
+
+    /// <summary>What the pane draws for the pictures - with the helpers, or without them while Alt is held.</summary>
+    private void RaiseShown() {
+        Raise(nameof(DisplayImage));
+        Raise(nameof(Overlay));
+        Raise(nameof(ZoomDisplay));
+        Raise(nameof(ZoomOverlay));
+    }
+
+    private static Color ColorOf(Brush brush) {
+        return brush is SolidColorBrush solid ? solid.Color : Colors.Magenta;
+    }
 
 
     // --- Inputs from MainViewModel -------------------------------------
@@ -1666,9 +1912,11 @@ public sealed class PreviewController : ObservableObject {
             if (ImageFormats.IsRaw(path)) {
                 isRaw = true;
                 // The quick embedded preview first - ten milliseconds, and
-                // the pane has the picture. The full-size one follows below.
+                // the pane has the picture. The bigger one follows below:
+                // the full-size JPEG, or with the RAW switch on the sensor
+                // decode. Without a preview the sensor decode is all there is.
                 BitmapImage? raw = null;
-                if (!_showRawDecode && ImageDecoder.RawPreviewBytes(path, fullSize: false) is { } jpeg) {
+                if (ImageDecoder.RawPreviewBytes(path, fullSize: false) is { } jpeg) {
                     raw = ImageDecoder.Stream(jpeg);
                     quickBytes = raw is null ? 0 : jpeg.Length;
                 }
@@ -1690,13 +1938,21 @@ public sealed class PreviewController : ObservableObject {
         ImageMetadata = meta;
         IsRawImage = isRaw;
         if (image is not null) {
-            _zoomImage = null;
-            Image = image;
-            Kind = PreviewKind.Image;
             // Only a CR3 carries a bigger JPEG than its quick one: a
             // TIFF-shaped RAW already gave its biggest, and asking again
             // read those megabytes a second time to find the same length.
-            if (quickBytes > 0 && Path.GetExtension(path).Equals(".cr3", StringComparison.OrdinalIgnoreCase)) {
+            bool decode = _showRawDecode && quickBytes > 0;
+            bool fullJpeg = !decode && quickBytes > 0
+                && Path.GetExtension(path).Equals(".cr3", StringComparison.OrdinalIgnoreCase);
+            // Before the picture goes up: the helpers wait for the bigger one.
+            _fullPending = decode || fullJpeg;
+            _zoomImage = null;
+            Image = image;
+            Kind = PreviewKind.Image;
+            ScheduleHelpers();
+            if (decode) {
+                _ = LoadRawDecodeAsync(path, meta?.Orientation, image, ct);
+            } else if (fullJpeg) {
                 _ = LoadFullSizeAsync(path, meta?.Orientation, image, quickBytes, ct);
             }
         } else {
@@ -1738,9 +1994,69 @@ public sealed class PreviewController : ObservableObject {
             if (full is not null && !ct.IsCancellationRequested && ReferenceEquals(_image, quick)) {
                 _zoomImage = full;
                 Raise(nameof(ZoomSource));
+                Raise(nameof(ZoomDisplay));
             }
         } catch (OperationCanceledException) {
             // The selection moved on.
+        }
+
+        // The wait is over, a bigger picture or none: the helpers measure
+        // on what there is.
+        if (!ct.IsCancellationRequested && ReferenceEquals(_image, quick)) {
+            _fullPending = false;
+            ScheduleHelpers();
+        }
+    }
+
+
+    /// <summary>
+    /// The sensor decode of a RAW, with the RAW switch on
+    /// (<see cref="ShowRawDecode"/>). The quick preview is up at once, as
+    /// with the switch off, and the real frame takes its place about a
+    /// second later - it used to be the other way round: a second of veil
+    /// over nothing on every file, and a spinner over the middle of the
+    /// picture once there was one (2026-09-22).
+    ///
+    /// <para>
+    /// Not started for a selection passing through (the same dwell as
+    /// <see cref="LoadFullSizeAsync"/>), and one at a time: a decode cannot
+    /// be stopped half-way, and one queued per frame passed would keep the
+    /// disk and a core busy long after the arrow key was let go. One
+    /// cancelled while it waits leaves before it starts.
+    /// </para>
+    /// </summary>
+    private async Task LoadRawDecodeAsync(string path, int? orientation, BitmapSource quick, CancellationToken ct) {
+        bool gated = false;
+        try {
+            await Task.Delay(FullSizeDwellMs, ct);
+            IsRawDecoding = true;
+            await _rawDecodeGate.WaitAsync(ct);
+            gated = true;
+
+            var decoded = await Task.Run(() => {
+                ct.ThrowIfCancellationRequested();
+
+                return ImageDecoder.File(path) is { } raw ? ImageDecoder.ApplyOrientation(raw, orientation) : null;
+            }, ct);
+            if (ct.IsCancellationRequested || !ReferenceEquals(_image, quick)) {
+                return;
+            }
+
+            _fullPending = false;
+            if (decoded is not null) {
+                _zoomImage = null;
+                Image = decoded;
+            }
+            ScheduleHelpers();
+        } catch (OperationCanceledException) {
+            // The selection moved on; its own load owns the spinner now.
+        } finally {
+            if (gated) {
+                _rawDecodeGate.Release();
+            }
+            if (!ct.IsCancellationRequested) {
+                IsRawDecoding = false;
+            }
         }
     }
 
@@ -1859,6 +2175,8 @@ public sealed class PreviewController : ObservableObject {
 
     /// <param name="keepImage">Leave the picture up - the next thing to show is a picture too (<see cref="UpdatePreviewAsync"/>).</param>
     private void ClearPreviewContent(bool keepImage = false) {
+        // A sensor decode of the file before is cancelled with its load.
+        IsRawDecoding = false;
         Text = null;
         if (!keepImage) {
             _zoomImage = null;

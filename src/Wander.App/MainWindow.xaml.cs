@@ -489,6 +489,36 @@ public partial class MainWindow : Window {
 
     // --- Global hotkeys not bound to commands ---------------------------
 
+    // Alt is held and the review helpers are off the picture meanwhile.
+    private bool _peeking;
+
+
+    protected override void OnPreviewKeyUp(KeyEventArgs e) {
+        base.OnPreviewKeyUp(e);
+        if (_peeking && e.Key == Key.System && e.SystemKey is Key.LeftAlt or Key.RightAlt) {
+            StopPeeking();
+            // Handled, or letting go would put the window into menu mode:
+            // the toolbar holds a real Menu, and Alt alone is its key.
+            e.Handled = true;
+        }
+    }
+
+
+    /// <summary>Alt+Tab with Alt held: the key-up lands in another window, so the marks would stay off.</summary>
+    protected override void OnDeactivated(EventArgs e) {
+        base.OnDeactivated(e);
+        StopPeeking();
+    }
+
+
+    private void StopPeeking() {
+        if (_peeking) {
+            _peeking = false;
+            Vm.Helpers.SetPeek(false);
+        }
+    }
+
+
     protected override void OnPreviewKeyDown(KeyEventArgs e) {
         base.OnPreviewKeyDown(e);
         if (e.Handled) {
@@ -532,6 +562,16 @@ public partial class MainWindow : Window {
             BeginAddressEdit();
             e.Handled = true;
             return;
+        }
+
+        // Alt by itself, with a review helper on: the marks come off the
+        // picture for as long as it is held - "and how does it look without
+        // them". Not handled here, so the chords below still work; the
+        // release is (see OnPreviewKeyUp).
+        if (e.Key == Key.System && e.SystemKey is Key.LeftAlt or Key.RightAlt
+            && !_peeking && Vm.Helpers.AnyOn) {
+            _peeking = true;
+            Vm.Helpers.SetPeek(true);
         }
 
         // Alt+D: the same thing under the name the rest of Windows uses for

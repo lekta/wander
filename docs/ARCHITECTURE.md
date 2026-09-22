@@ -148,17 +148,17 @@ Platform.Windows` — один файл, `App.xaml.cs` (точка композ�
 <!-- deps:generated:begin -->
 ```
 === Wander dependency graph (using sweep) ===
-date   : 2026-09-21
-commit : 10d70bf
+date   : 2026-09-22
+commit : afd7689
 
 -- projects --
-Wander.App -> Wander.Core   (59 files)
+Wander.App -> Wander.Core   (61 files)
 Wander.App -> Wander.Platform.Windows   (1 files)
-Wander.Core.Tests -> Wander.Core   (106 files)
+Wander.Core.Tests -> Wander.Core   (115 files)
 Wander.Harness -> Wander.App   (4 files)
 Wander.Harness -> Wander.Core   (6 files)
 Wander.Harness -> Wander.Platform.Windows   (3 files)
-Wander.Platform.Windows -> Wander.Core   (31 files)
+Wander.Platform.Windows -> Wander.Core   (32 files)
 
 -- Wander.Core: folder -> folder --
   Actions        -> FileSystem     (5 files)
@@ -179,7 +179,7 @@ Wander.Platform.Windows -> Wander.Core   (31 files)
   FileSystem     -> Operations     (3 files)
   FileSystem     -> Undo           (3 files)
   Listing        -> Companions     (2 files)
-  Listing        -> FileSystem     (6 files)
+  Listing        -> FileSystem     (7 files)
   Listing        -> Icons          (1 files)
   Listing        -> Search         (1 files)
   Menu           -> Actions        (3 files)
@@ -210,7 +210,7 @@ Wander.Platform.Windows -> Wander.Core   (31 files)
   Undo           -> Operations     (1 files)
 
 -- Wander.Core: levels --
-  0: (root), Icons, Layout, Localization, Logging, Operations
+  0: (root), Icons, Imaging, Layout, Localization, Logging, Operations
   1: Diagnostics, Undo
   2: FileSystem
   3: Companions, Navigation, Preview
@@ -251,7 +251,7 @@ Wander.Platform.Windows -> Wander.Core   (31 files)
   Conflict       -> ViewModels     (2 files)
   Controllers    -> Converters     (1 files)
   Controllers    -> Preview        (1 files)
-  Controllers    -> Resources      (6 files)
+  Controllers    -> Resources      (7 files)
   Controllers    -> Util           (1 files)
   Controllers    -> ViewModels     (7 files)
   Controls       -> Converters     (1 files)
@@ -274,7 +274,7 @@ Wander.Platform.Windows -> Wander.Core   (31 files)
   ViewModels     -> Resources      (9 files)
   ViewModels     -> Util           (1 files)
   Views          -> Controllers    (1 files)
-  Views          -> Controls       (2 files)
+  Views          -> Controls       (3 files)
   Views          -> Converters     (1 files)
   Views          -> Dialogs        (3 files)
   Views          -> DragPreview    (1 files)

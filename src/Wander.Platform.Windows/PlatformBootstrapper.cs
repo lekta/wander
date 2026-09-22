@@ -72,6 +72,7 @@ public static class PlatformBootstrapper {
         ServiceLocator.Register<IShellContextMenu>(new ShellContextMenu(logger));
         ServiceLocator.Register<IShellHandlerRegistry>(new ShellHandlerRegistry(logger));
         ServiceLocator.Register<IImageMetadataReader>(new MetadataExtractorImageReader());
+        ServiceLocator.Register<ISharpnessProbe>(new SharpnessProbe());
 
         // Search inside files. The extractors are tried in this order, and
         // the order is the whole design: the zip-based documents first

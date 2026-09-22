@@ -281,6 +281,26 @@
     <SolidColorBrush x:Key="ColorLabel4" Color="#3E7CC4"/>
     <SolidColorBrush x:Key="ColorLabel5" Color="#8A5CB8"/>
 
+    <!-- The review helpers over a photograph (RAWHELPERS): peaking edges,
+         crushed shadows, autofocus frames, the chart of levels, how sharp
+         the frame is. Clipped highlights paint in the colour of the
+         channel that clipped and are not here: that colour is the
+         information. -->
+    <SolidColorBrush x:Key="ReviewPeaking" Color="#FF2BD6"/>
+    <SolidColorBrush x:Key="ReviewUnder" Color="#3D5AFE"/>
+    <SolidColorBrush x:Key="ReviewAfFocused" Color="#34D058"/>
+    <SolidColorBrush x:Key="ReviewAfOther" Color="#B0B0B0"/>
+    <SolidColorBrush x:Key="ReviewChartPlate" Color="#CC202020"/>
+    <SolidColorBrush x:Key="ReviewChartRed" Color="#99FF4040"/>
+    <SolidColorBrush x:Key="ReviewChartGreen" Color="#9940E040"/>
+    <SolidColorBrush x:Key="ReviewChartBlue" Color="#994080FF"/>
+    <SolidColorBrush x:Key="ReviewChartOver" Color="#FF5A5A"/>
+    <SolidColorBrush x:Key="ReviewChartUnder" Color="#6F8BFF"/>
+    <SolidColorBrush x:Key="ReviewToggleOn" Color="#330078D7"/>
+    <SolidColorBrush x:Key="ReviewSharpGood" Color="#2E9E48"/>
+    <SolidColorBrush x:Key="ReviewSharpSoft" Color="#C98A00"/>
+    <SolidColorBrush x:Key="ReviewSharpMissed" Color="#D13438"/>
+
     <!-- What the drag leaving Wander would do, on the plaque under the cursor. -->
     <SolidColorBrush x:Key="DragMove" Color="SteelBlue"/>
     <SolidColorBrush x:Key="DragCopy" Color="SeaGreen"/>

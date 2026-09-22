@@ -185,6 +185,11 @@ public sealed class MainViewModel : ObservableObject {
     // this one's.
     private bool _hasRatings;
 
+    // "Sharp is lighter" in the gallery: a second pass over the photographs,
+    // like the ratings one, run only in the gallery with the sharpness
+    // helper on.
+    private readonly SharpnessController _sharpness;
+
     // True while rows are being swapped for updated copies. The list drops
     // a replaced object out of its selection and says so, and that report
     // would clear the preview and the status line for the two frames until
@@ -320,6 +325,22 @@ public sealed class MainViewModel : ObservableObject {
         Preview.PropertyChanged += (_, e) => {
             if (e.PropertyName == nameof(PreviewController.ShowRawDecode)) {
                 PreviewSecond.ShowRawDecode = Preview.ShowRawDecode;
+            }
+        };
+        // One set of review helpers for the window: the strip edits it,
+        // both halves of the pane draw what it says.
+        Helpers = new ReviewHelpers();
+        Preview.SetHelpers(Helpers);
+        PreviewSecond.SetHelpers(Helpers);
+        _sharpness = new SharpnessController(
+            ServiceLocator.TryGet<ISharpnessProbe>(), _log,
+            isCurrent: _session.IsCurrent,
+            rows: () => _search.Source,
+            publish: PublishRows);
+        _sharpness.StatusReported += (_, text) => Status = text;
+        Helpers.PropertyChanged += (_, e) => {
+            if (e.PropertyName == nameof(ReviewHelpers.Sharpness)) {
+                UpdateSharpnessPass();
             }
         };
         Ratings.CompanionsChanged += (_, _) => {
@@ -643,6 +664,13 @@ public sealed class MainViewModel : ObservableObject {
     /// nothing and draws nothing.
     /// </summary>
     public PreviewController PreviewSecond { get; }
+
+    /// <summary>
+    /// Which review helpers are on (RAWHELPERS). The buttons on the strip
+    /// over the list bind to it; the preview pane and the gallery's
+    /// sharpness pass follow it.
+    /// </summary>
+    public ReviewHelpers Helpers { get; }
 
     /// <summary>
     /// Two files side by side in the preview column. Decided by the
@@ -969,6 +997,7 @@ public sealed class MainViewModel : ObservableObject {
             if (SetField(ref _viewMode, value)) {
                 Raise(nameof(ContentPalette));
                 PushPalette();
+                UpdateSharpnessPass();
             }
         }
     }
@@ -977,6 +1006,11 @@ public sealed class MainViewModel : ObservableObject {
     private void PushPalette() {
         Preview.SetPalette(ContentPalette);
         PreviewSecond.SetPalette(ContentPalette);
+    }
+
+    /// <summary>The sharpness pass runs while the gallery is on screen with the sharpness helper on.</summary>
+    private void UpdateSharpnessPass() {
+        _sharpness.SetActive(_viewMode == ViewMode.Gallery && Helpers.Sharpness);
     }
 
     /// <summary>
@@ -2285,6 +2319,7 @@ public sealed class MainViewModel : ObservableObject {
                 FolderArrived?.Invoke(path, started);
             }
             Ratings.StartPass(items, path, sort, epoch, arriving);
+            _sharpness.StartPass(items, path, epoch);
         } catch (OperationCanceledException) {
             return;
         } catch (Exception ex) when (ex is DirectoryNotFoundException or DriveNotFoundException) {
@@ -2377,6 +2412,7 @@ public sealed class MainViewModel : ObservableObject {
             // guessing either: the Recycle Bin is a list of things to
             // decide about, not a folder to look at.
             Ratings.Cancel();
+            _sharpness.Cancel();
             HasRatings = false;
             // Always, not only when slow as on disk: shell listings are few,
             // and their cost is the number the bin's slowness (AD2) is
@@ -2437,7 +2473,9 @@ public sealed class MainViewModel : ObservableObject {
         // every file's stamp; the thumbnail caches are keyed by path alone
         // and would go on showing the old picture, so they are told here.
         AsyncIcon.DropStale(items);
-        _search.SetSource(items);
+        // Rows listed or rated before the sharpness pass came round would
+        // wash its answers out of the list; they are put back here.
+        _search.SetSource(_sharpness.Decorate(items));
     }
 
 
@@ -3100,6 +3138,7 @@ public sealed class MainViewModel : ObservableObject {
         _listLoadCts?.Cancel();
         _session.InvalidateListings();
         Ratings.Cancel();
+        _sharpness.Cancel();
         IsListLoading = false;
         RenamingPath = null;
 

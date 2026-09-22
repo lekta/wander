@@ -169,6 +169,10 @@ public sealed class ScenarioRunner {
                     await WaitIdleAsync(step);
                     break;
                 }
+            case "helpers":
+                SetHelpers(step.Strings("on"));
+                await WaitIdleAsync(step);
+                break;
             case "tree-expand":
                 await TreeExpandAsync(step);
                 break;
@@ -451,6 +455,26 @@ public sealed class ScenarioRunner {
             ? Enum.Parse(type, value, ignoreCase: true)
             : Convert.ChangeType(value, type, System.Globalization.CultureInfo.InvariantCulture);
         property.SetValue(_vm.Settings, converted);
+    }
+
+    /// <summary>
+    /// The review helpers named in <paramref name="on"/> switched on, every
+    /// other one off - the step says the whole set, the way the strip over
+    /// the list would leave it.
+    /// </summary>
+    private void SetHelpers(string[] on) {
+        var switches = typeof(ReviewHelpers).GetProperties()
+            .Where(p => p.PropertyType == typeof(bool) && p.GetSetMethod() is not null)
+            .ToArray();
+        foreach (string name in on) {
+            if (!switches.Any(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase))) {
+                throw new InvalidDataException($"no helper '{name}'");
+            }
+        }
+
+        foreach (var property in switches) {
+            property.SetValue(_vm.Helpers, on.Contains(property.Name, StringComparer.OrdinalIgnoreCase));
+        }
     }
 
     private void ApplyDialogPolicy(JsonElement step) {

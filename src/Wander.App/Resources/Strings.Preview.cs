@@ -185,4 +185,52 @@ public static partial class Strings {
 
     /// <summary>Звёзды и метка ставятся всему выделению: этому файлу и ещё {0}. Цифры и Shift+цифры в галерее делают то же.</summary>
     public static string PreviewRatingOthersHint => Get(nameof(PreviewRatingOthersHint));
+
+    /// <summary>Фк</summary>
+    public static string HelperFocus => Get(nameof(HelperFocus));
+
+    /// <summary>Фокус-пикинг: чёткие края по полному кадру - где резко. Alt - без подсветки</summary>
+    public static string HelperFocusTip => Get(nameof(HelperFocusTip));
+
+    /// <summary>Рз</summary>
+    public static string HelperSharp => Get(nameof(HelperSharp));
+
+    /// <summary>Резкость 0-100 в точке фокуса (без неё - в центре кадра): у кнопок и на миниатюрах галереи</summary>
+    public static string HelperSharpTip => Get(nameof(HelperSharpTip));
+
+    /// <summary>Кл</summary>
+    public static string HelperClip => Get(nameof(HelperClip));
+
+    /// <summary>Клиппинг: пересветы цветом канала, недосвет синим. Alt - без подсветки</summary>
+    public static string HelperClipTip => Get(nameof(HelperClipTip));
+
+    /// <summary>Гс</summary>
+    public static string HelperHist => Get(nameof(HelperHist));
+
+    /// <summary>Гистограмма по каналам; стрелки - пересвет и недосвет</summary>
+    public static string HelperHistTip => Get(nameof(HelperHistTip));
+
+    /// <summary>Тн</summary>
+    public static string HelperShadows => Get(nameof(HelperShadows));
+
+    /// <summary>Поднять тени: что есть в тёмном</summary>
+    public static string HelperShadowsTip => Get(nameof(HelperShadowsTip));
+
+    /// <summary>Св</summary>
+    public static string HelperHighlights => Get(nameof(HelperHighlights));
+
+    /// <summary>Приглушить света: что есть в ярком</summary>
+    public static string HelperHighlightsTip => Get(nameof(HelperHighlightsTip));
+
+    /// <summary>Пересвет {0:0.0} %, недосвет {1:0.0} %</summary>
+    public static string HelperHistNote => Get(nameof(HelperHistNote));
+
+    /// <summary>AF</summary>
+    public static string HelperAf => Get(nameof(HelperAf));
+
+    /// <summary>Точка фокуса камеры: зелёная - в фокусе (Canon)</summary>
+    public static string HelperAfTip => Get(nameof(HelperAfTip));
+
+    /// <summary>Резкость {0} из 100 - по самым чётким краям в точке фокуса. 70 и выше - резко, 45-70 - мягко, ниже - мимо</summary>
+    public static string HelperSharpScoreTip => Get(nameof(HelperSharpScoreTip));
 }

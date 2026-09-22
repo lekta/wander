@@ -33,7 +33,12 @@ public sealed record FileSystemEntry(
     // OriginalLocation is: the row on screen is the only place it is ever
     // read, and a parallel dictionary keyed by path would have to be kept
     // in step with a collection that already knows how to carry it.
-    string? MatchSnippet = null) {
+    string? MatchSnippet = null,
+    // How sharp the photo is at its focus point, 0..100 (Imaging/Sharpness.
+    // Score) - the number on a gallery cell. Filled by a pass that runs only
+    // in the gallery with the sharpness helper on (Listing/SharpListing);
+    // null for everything else, and until the pass has been round.
+    double? Sharpness = null) {
 
     /// <summary>True when this row stands for a file plus its sidecar(s).</summary>
     public bool HasCompanions => Companions is { Count: > 0 };
@@ -75,6 +80,7 @@ public sealed record FileSystemEntry(
             && LinksToDirectory == other.LinksToDirectory
             && OriginalLocation == other.OriginalLocation
             && Rating == other.Rating
+            && Sharpness == other.Sharpness
             && SameCompanions(Companions, other.Companions);
     }
 

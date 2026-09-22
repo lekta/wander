@@ -1,3 +1,5 @@
+using Wander.Core.Imaging;
+
 namespace Wander.Core.Icons;
 
 /// <summary>
@@ -33,4 +35,10 @@ public sealed record ImageMetadata(
     GeoPosition? Position = null,
     string? Copyright = null,
     /// <summary>Stars 1..5 as Windows stores them in EXIF; null when unrated.</summary>
-    int? Rating = null);
+    int? Rating = null,
+    /// <summary>
+    /// Where the camera focused, over the picture turned upright by
+    /// <see cref="Orientation"/>; null when it did not say (a maker other than
+    /// Canon, focus by hand).
+    /// </summary>
+    IReadOnlyList<AfPoint>? AfPoints = null);

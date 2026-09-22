@@ -79,6 +79,22 @@ internal static class Palette {
 
     public static readonly Brush VolumeBarFull = Find("VolumeBarFull");
 
+    /// <summary>What the review helpers mark a photograph with: edges in focus, crushed shadows, autofocus frames.</summary>
+    public static readonly Brush ReviewPeaking = Find("ReviewPeaking");
+
+    public static readonly Brush ReviewUnder = Find("ReviewUnder");
+
+    public static readonly Brush ReviewAfFocused = Find("ReviewAfFocused");
+
+    public static readonly Brush ReviewAfOther = Find("ReviewAfOther");
+
+    /// <summary>The sharpness score by level: sharp, soft, missed.</summary>
+    public static readonly Brush ReviewSharpGood = Find("ReviewSharpGood");
+
+    public static readonly Brush ReviewSharpSoft = Find("ReviewSharpSoft");
+
+    public static readonly Brush ReviewSharpMissed = Find("ReviewSharpMissed");
+
 
     /// <summary>
     /// A frozen pen from a palette brush - what the adorners draw their

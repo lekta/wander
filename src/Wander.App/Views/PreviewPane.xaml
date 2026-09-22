@@ -31,6 +31,41 @@
         <conv:RankStarConverter x:Key="RankStar"/>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
         <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility"/>
+        <conv:SharpnessLevelConverter x:Key="SharpnessLevel"/>
+
+        <!--
+            A review helper's switch in the footer (RAWHELPERS): two letters,
+            the words in the tooltip. Flat at rest, tinted while on - a
+            helper left on changes what every picture looks like, and the
+            footer is where to see why.
+        -->
+        <Style x:Key="HelperToggle" TargetType="ToggleButton">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+            <Setter Property="VerticalAlignment" Value="Top"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bd" Height="18" CornerRadius="2"
+                                Background="Transparent" BorderBrush="Transparent" BorderThickness="1"
+                                Padding="2,0">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource ControlHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource ReviewToggleOn}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource OptionRingChecked}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
         <!--
             Text drawn on the content surround, which is the gallery's
@@ -218,16 +253,67 @@
                             DPI gives, and a picture tagged 300 dpi came out
                             at a third of what fits (1200x800 in a 900-DIP
                             pane drawn 384x256, stand 2026-09-21).
+
+                            The source is DisplayImage - the picture, or what
+                            a review helper shows in its place (a tone curve,
+                            the sharpness map) - and the cap is the picture's:
+                            the helper's copy may be smaller than the frame.
                         -->
                         <Image x:Name="ImgFit"
-                               Source="{Binding Image}"
+                               Source="{Binding DisplayImage}"
                                Stretch="Uniform"
-                               MaxWidth="{Binding Source, RelativeSource={RelativeSource Self}, Converter={StaticResource BitmapPixelSize}, ConverterParameter=W}"
-                               MaxHeight="{Binding Source, RelativeSource={RelativeSource Self}, Converter={StaticResource BitmapPixelSize}, ConverterParameter=H}"
+                               MaxWidth="{Binding Image, Converter={StaticResource BitmapPixelSize}, ConverterParameter=W}"
+                               MaxHeight="{Binding Image, Converter={StaticResource BitmapPixelSize}, ConverterParameter=H}"
                                Margin="8,12,8,8"
                                VerticalAlignment="Top" HorizontalAlignment="Center"
                                RenderOptions.BitmapScalingMode="HighQuality"
                                SizeChanged="ImgFit_SizeChanged"/>
+                        <!--
+                            Review helpers over the picture: sized to what
+                            ImgFit came out at and placed the way it is, so
+                            the marks lie on the pixels they are about at any
+                            width of the pane. Peaking is measured on the
+                            full frame and shrunk keeping every mark, so a
+                            one-pixel edge stays visible at pane size.
+                        -->
+                        <Image x:Name="ImgOverlay"
+                               Source="{Binding Overlay}"
+                               IsHitTestVisible="False"
+                               Stretch="Fill"
+                               Width="{Binding ActualWidth, ElementName=ImgFit}"
+                               Height="{Binding ActualHeight, ElementName=ImgFit}"
+                               Margin="8,12,8,8"
+                               VerticalAlignment="Top" HorizontalAlignment="Center"
+                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                        <!--
+                            The sensor decode of a RAW on its way (RAW switch
+                            on): the quick preview is on screen, so the wait
+                            is a small spinner in the corner rather than a
+                            veil over the picture.
+                        -->
+                        <Ellipse Width="14" Height="14" StrokeThickness="2"
+                                 Stroke="{StaticResource AccentStroke}" Fill="Transparent"
+                                 StrokeDashArray="3,2"
+                                 Margin="0,16,16,0"
+                                 HorizontalAlignment="Right" VerticalAlignment="Top"
+                                 IsHitTestVisible="False"
+                                 RenderTransformOrigin="0.5,0.5"
+                                 Visibility="{Binding IsRawDecoding, Converter={StaticResource BoolToVisibility}}">
+                            <Ellipse.RenderTransform>
+                                <RotateTransform x:Name="RawSpinnerRotate" Angle="0"/>
+                            </Ellipse.RenderTransform>
+                            <Ellipse.Triggers>
+                                <EventTrigger RoutedEvent="Loaded">
+                                    <BeginStoryboard>
+                                        <Storyboard RepeatBehavior="Forever">
+                                            <DoubleAnimation Storyboard.TargetName="RawSpinnerRotate"
+                                                             Storyboard.TargetProperty="Angle"
+                                                             From="0" To="360" Duration="0:0:1"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </EventTrigger>
+                            </Ellipse.Triggers>
+                        </Ellipse>
                         <!-- Zoom view: visible only while the user holds the left button. -->
                         <Canvas x:Name="ImgZoomCanvas"
                                 Background="{Binding ContentPalette.Background}"
@@ -237,7 +323,12 @@
                                  (BeginImageZoom); nearest neighbour keeps a leftover
                                  fraction of a pixel from resampling the picture. -->
                             <Image x:Name="ImgZoom"
-                                   Source="{Binding ZoomSource}"
+                                   Source="{Binding ZoomDisplay}"
+                                   RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                            <!-- The helpers at the zoom's resolution; sized and placed with ImgZoom (UpdateZoomPosition). -->
+                            <Image x:Name="ImgZoomOverlay"
+                                   Source="{Binding ZoomOverlay}"
+                                   Stretch="Fill"
                                    RenderOptions.BitmapScalingMode="NearestNeighbor"/>
                         </Canvas>
                     </Grid>
@@ -855,16 +946,89 @@
                                        TextWrapping="Wrap">
                                 <Run Text="{Binding SummaryHead, Mode=OneWay}"/><Run Text="  "/><Run Text="{Binding SummaryNote, Mode=OneWay}" Foreground="{StaticResource TextDim}"/><Run Text="{Binding SummaryRest, Mode=OneWay}"/>
                             </TextBlock>
-                            <ToggleButton x:Name="RawToggle" Grid.Column="1"
-                                          Content="{x:Static res:Strings.PreviewRawToggle}"
-                                          VerticalAlignment="Top"
-                                          Margin="8,0,0,0" Padding="8,1"
-                                          MinWidth="44"
-                                          FontSize="11"
-                                          Focusable="False"
-                                          ToolTip="{x:Static res:Strings.PreviewRawToggleHint}"
-                                          IsChecked="{Binding ShowRawDecode, Mode=TwoWay}"
-                                          Visibility="{Binding IsRawImage, Converter={StaticResource BoolToVisibility}}"/>
+                            <!--
+                                Right of the name: the review helpers'
+                                switches and the sharpness score, the RAW
+                                switch, the chart of levels (RAWHELPERS).
+                                The helpers only over a picture.
+                            -->
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                                <StackPanel Orientation="Horizontal" Margin="8,0,0,0"
+                                            Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Image}">
+                                    <ToggleButton Style="{StaticResource HelperToggle}"
+                                                  IsChecked="{Binding Helpers.Peaking}"
+                                                  Content="{x:Static res:Strings.HelperFocus}"
+                                                  ToolTip="{x:Static res:Strings.HelperFocusTip}"/>
+                                    <ToggleButton Style="{StaticResource HelperToggle}"
+                                                  IsChecked="{Binding Helpers.AfPoints}"
+                                                  Content="{x:Static res:Strings.HelperAf}"
+                                                  ToolTip="{x:Static res:Strings.HelperAfTip}"/>
+                                    <ToggleButton Style="{StaticResource HelperToggle}"
+                                                  IsChecked="{Binding Helpers.Sharpness}"
+                                                  Content="{x:Static res:Strings.HelperSharp}"
+                                                  ToolTip="{x:Static res:Strings.HelperSharpTip}"/>
+                                    <ToggleButton Style="{StaticResource HelperToggle}"
+                                                  IsChecked="{Binding Helpers.Clipping}"
+                                                  Content="{x:Static res:Strings.HelperClip}"
+                                                  ToolTip="{x:Static res:Strings.HelperClipTip}"/>
+                                    <ToggleButton Style="{StaticResource HelperToggle}"
+                                                  IsChecked="{Binding Helpers.Histogram}"
+                                                  Content="{x:Static res:Strings.HelperHist}"
+                                                  ToolTip="{x:Static res:Strings.HelperHistTip}"/>
+                                    <ToggleButton Style="{StaticResource HelperToggle}"
+                                                  IsChecked="{Binding Helpers.Shadows}"
+                                                  Content="{x:Static res:Strings.HelperShadows}"
+                                                  ToolTip="{x:Static res:Strings.HelperShadowsTip}"/>
+                                    <ToggleButton Style="{StaticResource HelperToggle}"
+                                                  IsChecked="{Binding Helpers.Highlights}"
+                                                  Content="{x:Static res:Strings.HelperHighlights}"
+                                                  ToolTip="{x:Static res:Strings.HelperHighlightsTip}"/>
+                                    <!-- The score of the picture shown, coloured by level; the scale in the tooltip. -->
+                                    <TextBlock Text="{Binding SharpnessText}"
+                                               Foreground="{Binding SharpnessScore, Converter={StaticResource SharpnessLevel}}"
+                                               ToolTip="{Binding SharpnessTip}"
+                                               FontSize="11" FontWeight="SemiBold"
+                                               Margin="4,1,0,0" VerticalAlignment="Top"
+                                               Visibility="{Binding HasSharpnessScore, Converter={StaticResource BoolToVisibility}}"/>
+                                </StackPanel>
+                                <ToggleButton x:Name="RawToggle"
+                                              Content="{x:Static res:Strings.PreviewRawToggle}"
+                                              VerticalAlignment="Top"
+                                              Margin="8,0,0,0" Padding="8,1"
+                                              MinWidth="44"
+                                              FontSize="11"
+                                              Focusable="False"
+                                              ToolTip="{x:Static res:Strings.PreviewRawToggleHint}"
+                                              IsChecked="{Binding ShowRawDecode, Mode=TwoWay}"
+                                              Visibility="{Binding IsRawImage, Converter={StaticResource BoolToVisibility}}"/>
+                                <!--
+                                    Levels by channel. No words: an arrow
+                                    lights at the side that clipped - left
+                                    for shadows crushed, right for highlights
+                                    burnt - and the shares are in the tooltip.
+                                -->
+                                <Border Margin="8,0,0,0" Padding="2,2" CornerRadius="2"
+                                        Background="{StaticResource ReviewChartPlate}"
+                                        VerticalAlignment="Top"
+                                        ToolTip="{Binding HistogramTip}"
+                                        Visibility="{Binding HasHistogram, Converter={StaticResource BoolToVisibility}}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="&lt;" FontSize="11" FontWeight="Bold" Width="8"
+                                                   Foreground="{StaticResource ReviewChartUnder}"
+                                                   VerticalAlignment="Center" TextAlignment="Center"
+                                                   Visibility="{Binding HistogramUnder, Converter={StaticResource BoolToVisibility}}"/>
+                                        <Canvas Width="96" Height="28" Margin="1,0" ClipToBounds="True">
+                                            <Polygon Points="{Binding HistogramRed}" Fill="{StaticResource ReviewChartRed}"/>
+                                            <Polygon Points="{Binding HistogramGreen}" Fill="{StaticResource ReviewChartGreen}"/>
+                                            <Polygon Points="{Binding HistogramBlue}" Fill="{StaticResource ReviewChartBlue}"/>
+                                        </Canvas>
+                                        <TextBlock Text="&gt;" FontSize="11" FontWeight="Bold" Width="8"
+                                                   Foreground="{StaticResource ReviewChartOver}"
+                                                   VerticalAlignment="Center" TextAlignment="Center"
+                                                   Visibility="{Binding HistogramOver, Converter={StaticResource BoolToVisibility}}"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
                         </Grid>
 
                         <!--

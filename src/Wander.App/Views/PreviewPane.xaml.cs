@@ -604,6 +604,11 @@ public partial class PreviewPane : UserControl {
         double srcH = src.PixelHeight / dpi.DpiScaleY;
         ImgZoom.Width = srcW;
         ImgZoom.Height = srcH;
+        // The helpers' marks are a picture of the same pixels; they are
+        // sized and placed with it rather than bound, so the two can never
+        // be a frame apart.
+        ImgZoomOverlay.Width = srcW;
+        ImgZoomOverlay.Height = srcH;
 
         // Clamp to pane interior so leaving the pane doesn't scroll past
         // the image edges. At mouse.X == 0 we show the image's left edge;
@@ -629,8 +634,12 @@ public partial class PreviewPane : UserControl {
 
         // On whole device pixels: a fractional offset resamples the whole
         // picture by a share of a pixel, and 1:1 stops being 1:1.
-        Canvas.SetLeft(ImgZoom, Math.Round(x * dpi.DpiScaleX) / dpi.DpiScaleX);
-        Canvas.SetTop(ImgZoom, Math.Round(y * dpi.DpiScaleY) / dpi.DpiScaleY);
+        double left = Math.Round(x * dpi.DpiScaleX) / dpi.DpiScaleX;
+        double top = Math.Round(y * dpi.DpiScaleY) / dpi.DpiScaleY;
+        Canvas.SetLeft(ImgZoom, left);
+        Canvas.SetTop(ImgZoom, top);
+        Canvas.SetLeft(ImgZoomOverlay, left);
+        Canvas.SetTop(ImgZoomOverlay, top);
     }
 
     /// <param name="notify">

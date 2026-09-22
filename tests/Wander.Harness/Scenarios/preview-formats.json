@@ -30,6 +30,18 @@
     { "do": "wait-idle" },
     { "do": "screenshot", "name": "image-dng" },
 
+    // --- Review helpers (RAWHELPERS) ------------------------------------
+    // Drawn over the picture, not checked: the shots are for the eye - the
+    // marks have to lie on the picture, the chart in its corner.
+    { "do": "select", "names": [ "IMG_0002.CR3" ] },
+    { "do": "helpers", "on": [ "Peaking", "Clipping" ] },
+    { "do": "screenshot", "name": "helpers-peaking-clipping" },
+    { "do": "helpers", "on": [ "Sharpness", "Histogram", "AfPoints" ] },
+    { "do": "screenshot", "name": "helpers-score-histogram-af" },
+    { "do": "helpers", "on": [ "Shadows" ] },
+    { "do": "screenshot", "name": "helpers-shadows" },
+    { "do": "helpers", "on": [] },
+
     // --- Documents ----------------------------------------------------
     { "do": "navigate", "path": "{sandbox}\\docs" },
     { "do": "select", "names": [ "manual.pdf" ] },

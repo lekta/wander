@@ -363,6 +363,9 @@ public static partial class Strings {
     /// <summary>Оценка {0} — файлов: {1}</summary>
     public static string StatusRatingApplied => Get(nameof(StatusRatingApplied));
 
+    /// <summary>Резкость: {0} из {1}</summary>
+    public static string StatusSharpness => Get(nameof(StatusSharpness));
+
     /// <summary>Оценка снята — файлов: {0}</summary>
     public static string StatusRatingCleared => Get(nameof(StatusRatingCleared));
 
