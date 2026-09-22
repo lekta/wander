@@ -58,7 +58,11 @@ public sealed class ImageConvertAction : IBuiltinAction {
     public string Name => ActionPresets.ImageConvert;
 
 
-    public async Task RunAsync(string input, string output, string arguments, CancellationToken ct) {
+    public async Task RunAsync(string input, string? output, string arguments, CancellationToken ct) {
+        if (output is null) {
+            throw new InvalidOperationException($"Built-in action '{Name}' writes a file and needs a declared output.");
+        }
+
         var options = ImageConvertOptions.Parse(arguments);
         byte[] encoded = await ConvertAsync(input, options, ct).ConfigureAwait(false);
         // The last moment a cancel costs nothing: nothing is on disk yet.

@@ -27,6 +27,14 @@ public static class BuildInfo {
     public static string Version { get; } = SplitVersion(InformationalVersion);
 
     /// <summary>
+    /// This machine's build counter - the fourth number of
+    /// <c>AssemblyFileVersion</c>, stamped by the csproj from
+    /// <c>build-number.txt</c> (PLAN AH). 0 for a release build and for CI,
+    /// where the counter does not exist: three numbers name the build there.
+    /// </summary>
+    public static int BuildNumber { get; } = ReadBuildNumber();
+
+    /// <summary>
     /// The commit, cut to the five characters that fit in a line and still
     /// name one build. Empty when the SDK found no git metadata — a source
     /// drop, or a build from a tarball.
@@ -56,9 +64,10 @@ public static class BuildInfo {
 
     /// <summary>
     /// The one line that names this build:
-    /// <c>v0.2.1-beta D, 96e5e, 31.08.26</c>. Version, configuration,
-    /// commit, date — everything a bug report has to carry, short enough to
-    /// sit in a menu row and in the first line of the log.
+    /// <c>v0.2.1-beta.137 D, 96e5e, 31.08.26</c>. Version, build number,
+    /// configuration, commit, date — everything a bug report has to carry,
+    /// short enough to sit in a menu row and in the first line of the log.
+    /// The build number is left out where there is none (a release).
     /// </summary>
     public static string Line { get; } = BuildLine();
 
@@ -88,6 +97,16 @@ public static class BuildInfo {
         return sha.Length > length ? sha[..length] : sha;
     }
 
+    private static int ReadBuildNumber() {
+        string? version = Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version;
+        string[] parts = version?.Split('.') ?? [];
+
+        return parts.Length >= 4
+            && int.TryParse(parts[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out int number)
+            ? number
+            : 0;
+    }
+
     private static string ReadBuildDate() {
         var asm = Assembly.GetEntryAssembly();
         foreach (var meta in asm?.GetCustomAttributes<AssemblyMetadataAttribute>() ?? []) {
@@ -108,7 +127,7 @@ public static class BuildInfo {
 
     private static string BuildLine() {
         var parts = new List<string> {
-            $"v{Version} {(IsDebug ? 'D' : 'R')}",
+            $"v{Version}{(BuildNumber > 0 ? "." + BuildNumber : string.Empty)} {(IsDebug ? 'D' : 'R')}",
         };
 
         // Both are empty in a build with no git metadata and no stamp; the

@@ -91,6 +91,13 @@ public sealed record CustomAction {
     /// <summary>Shipped with Wander: cannot be deleted, is edited by copying, is switched off with <see cref="Enabled"/>.</summary>
     public bool IsPreset { get; init; }
 
+    /// <summary>
+    /// A tool for looking at Wander itself, not for using it: shown only
+    /// while the debug menu is on (<c>AppSettings.ShowDebugMenu</c>), and
+    /// never in the actions table, which is about what the user set up.
+    /// </summary>
+    public bool DebugOnly { get; init; }
+
     public bool Enabled { get; init; } = true;
 
     /// <summary>

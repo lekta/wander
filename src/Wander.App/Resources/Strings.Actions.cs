@@ -98,6 +98,12 @@ public static partial class Strings {
     /// <summary>Выполняется действие</summary>
     public static string ProgressRunningAction => Get(nameof(ProgressRunningAction));
 
+    /// <summary>Отладочная операция</summary>
+    public static string ProgressDebug => Get(nameof(ProgressDebug));
+
+    /// <summary>Отладочная операция: готово {0} из {1}</summary>
+    public static string StatusDebugDone => Get(nameof(StatusDebugDone));
+
     /// <summary>{0}: готово {1} из {2}</summary>
     public static string StatusActionDone => Get(nameof(StatusActionDone));
 

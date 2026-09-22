@@ -111,7 +111,7 @@ src/
     ├── Converters/     Icon, EnumEquals, EnumRadio, EnumToVisibility,
     │                   BitmapPixelSize, RankStar + RatingConverters, CutRow,
     │                   TreeIndent, TileSecondLine, PixelsToThickness
-    ├── Diagnostics/    CrashReporter, PerfCounters, UiStallWatch
+    ├── Diagnostics/    CrashReporter, PerfCounters, UiStallWatch, DebugOperation
     ├── DragPreview/    DragPreviewWindow, OutgoingDrag, DropTargetController,
     │                   DropTargetAdorner, DragAction, NativeMethods
     ├── Highlighting/   HighlightingCatalog + *.xshd
@@ -149,12 +149,12 @@ Platform.Windows` — один файл, `App.xaml.cs` (точка композ�
 ```
 === Wander dependency graph (using sweep) ===
 date   : 2026-09-22
-commit : 4837f75
+commit : fcff8ee
 
 -- projects --
-Wander.App -> Wander.Core   (63 files)
+Wander.App -> Wander.Core   (64 files)
 Wander.App -> Wander.Platform.Windows   (1 files)
-Wander.Core.Tests -> Wander.Core   (117 files)
+Wander.Core.Tests -> Wander.Core   (119 files)
 Wander.Harness -> Wander.App   (4 files)
 Wander.Harness -> Wander.Core   (6 files)
 Wander.Harness -> Wander.Platform.Windows   (3 files)
@@ -1239,7 +1239,17 @@ false — набор в `SearchController`; true — `Query` очищается,
   `WindowsProcessRunner` в Platform: `UseShellExecute = false`, оба потока
   сливаются на ходу (иначе полный пайп вешает программу), stderr читается
   только при скрытой консоли, `Kill(entireProcessTree)`. Встроенные
-  обработчики — `IBuiltinAction` по имени в `Program`.
+  обработчики — `IBuiltinAction` по имени в `Program`; выход у них
+  необязателен (`output` = null) — действие может не производить файла.
+- **Отладочные действия** (PLAN AI2, 2026-09-22) — `CustomAction.DebugOnly`:
+  строка каталога, которую меню показывают только при включённом меню
+  отладки (`ContextMenuTarget.ShowDebug` из `Settings.ShowDebugMenu`), а
+  таблица настроек не показывает вовсе (`SettingsViewModel`, `_debugActions`;
+  в `state.json` такие строки не попадают). Сейчас их две — `HoldFileAction`
+  (Core): держит выделенный файл `FileShare.None` 5 или 30 секунд. Занятость
+  получается настоящая, вместе со всем, что раннер и так делает: заявка
+  путей (`PathClaims`), прогресс, часы на значке, отказ другой операции,
+  `IFileBusyProbe` и Restart Manager с Wander в держателях.
 - **Групповое переименование** — `Core/Rename/`: `RenameRules` (найти /
   заменить, шаблон, регистр — фиксированный порядок применения;
   расширение меняется только регистром) → `RenamePlanner.Preview` — чистая
@@ -2087,8 +2097,23 @@ Wander` — так задумано, отдельной папки для отл
   `KnownShellExtensions` — подрезается при сохранении,
   `HiddenContextMenuItems`).
 
+`AppState.Version` — форма файла (`AppState.CurrentVersion`, сейчас 1,
+2026-09-22): поднимается, когда изменение потерялось бы или было бы
+прочитано неверно старой сборкой. Файл более новой формы старая сборка
+**не перезаписывает** (`JsonAppStateStore.Save`), читает как обычно; полное
+правило «кто пишет, когда на машине несколько версий» — PLAN AD11.
+
 Миграционного слоя **нет**: `Load` ловит исключение → `new AppState()`
 (до 1.0 схема ломается).
+
+**Номер сборки** (PLAN AH, 2026-09-22) — четвёртое число `FileVersion`,
+`BuildInfo.BuildNumber`. Счётчик — `src/Wander.App/build-number.txt`, вне
+гита, свой на машину; цель `StampBuildNumber` в `Wander.App.csproj` крутит
+его на любой обычной сборке (кроме `-p:WanderRelease=true`, дизайн-сборок
+IDE и временного `*_wpftmp`-проекта), `version.ps1` сбрасывает в 0. У
+релиза и у CI номера нет — `BuildInfo.Line` тогда без четвёртого числа.
+`LastRunVersion` в `state.json` хранит `BuildInfo.Version` (три числа и
+суффикс): кэш миниатюр сбрасывает смена версии, не пересборка.
 
 **`logs\session-*.log`** — `FileLogger`: открытие папки, операции, конфликты,
 ошибки; в тестах `NullLogger`. Ротация — `LogFolders.Sweep` при старте на

@@ -34,6 +34,12 @@ $outDir = Join-Path $repoRoot 'publish'
 
 Write-Host "Publishing Wander (Release, portable single-file)..." -ForegroundColor Cyan
 
+# Номер сборки (PLAN AH). Для -Install собираем как обычно, с номером: это
+# рабочая копия человека, и по номеру видно, какая именно. Всё остальное —
+# то, что уезжает пользователю: WanderRelease=true, четвёртое число 0,
+# версия названа тремя числами, как в гите.
+$release = if ($Install) { @() } else { @('-p:WanderRelease=true') }
+
 dotnet publish src\Wander.App `
     -c Release `
     -r win-x64 `
@@ -41,6 +47,7 @@ dotnet publish src\Wander.App `
     -p:PublishSingleFile=true `
     -p:IncludeNativeLibrariesForSelfExtract=true `
     -p:EnableCompressionInSingleFile=true `
+    @release `
     -o $outDir
 
 # dotnet — нативный процесс, Stop его код возврата не видит. Без этой

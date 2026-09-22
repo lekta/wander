@@ -303,7 +303,7 @@ public static class ContextMenuBuilder {
     /// </summary>
     private static List<MenuEntry> ContextActionRows(ContextMenuTarget t) {
         var rows = t.Actions
-            .Where(a => a.Enabled && a.Placement != ActionPlacement.Header)
+            .Where(a => a.Enabled && Shown(a, t) && a.Placement != ActionPlacement.Header)
             .Select(a => (Action: a, State: StateOf(a, t)))
             .Where(r => r.State == ActionState.Applicable)
             .ToList();
@@ -331,7 +331,7 @@ public static class ContextMenuBuilder {
     /// </summary>
     private static List<MenuEntry> HeaderActionRows(ContextMenuTarget t) {
         var rows = t.Actions
-            .Where(a => t.IsWritable && a.Enabled && a.Placement != ActionPlacement.ContextMenu)
+            .Where(a => t.IsWritable && a.Enabled && Shown(a, t) && a.Placement != ActionPlacement.ContextMenu)
             .Select(a => (Action: a, State: StateOf(a, t)))
             .Where(r => r.State is ActionState.Applicable or ActionState.ToolMissing)
             .ToList();
@@ -389,6 +389,11 @@ public static class ContextMenuBuilder {
         if (children.Count > 0) {
             items.Add(Sub(id, children));
         }
+    }
+
+    /// <summary>A debug-only row belongs to the menus only while the debug menu is on.</summary>
+    private static bool Shown(CustomAction action, ContextMenuTarget t) {
+        return !action.DebugOnly || t.ShowDebug;
     }
 
     private static ActionState StateOf(CustomAction action, ContextMenuTarget t) {

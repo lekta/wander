@@ -681,6 +681,33 @@ public class ContextMenuBuilderTests {
     }
 
     [Fact]
+    public void DebugOnlyActions_AreOfferedOnlyWhileTheDebugMenuIsOn() {
+        var hold = _forAll with { Id = "hold", DebugOnly = true };
+        var target = SelectionOf(File("a.mp4")) with { Actions = new[] { _forVideo, hold } };
+
+        var off = ContextMenuBuilder.Build(target, ContextMenuSettings.Default);
+        var on = ContextMenuBuilder.Build(target with { ShowDebug = true }, ContextMenuSettings.Default);
+
+        Assert.Equal(new[] { _forVideo.Id }, Find(off, MenuCommandId.ActionsSubmenu)!.Children.Select(e => e.Argument));
+        Assert.Equal(new[] { _forVideo.Id, "hold" }, Find(on, MenuCommandId.ActionsSubmenu)!.Children.Select(e => e.Argument));
+    }
+
+    [Fact]
+    public void HeaderMenu_KeepsDebugOnlyActionsToTheDebugMenuToo() {
+        var hold = _forAll with { Id = "hold", DebugOnly = true };
+        var target = new ContextMenuTarget {
+            Place = MenuPlace.Header, Selection = new[] { File("a.mp4") }, FolderPath = Folder,
+            Actions = new[] { hold },
+        };
+
+        var off = ContextMenuBuilder.Build(target, ContextMenuSettings.Default);
+        var on = ContextMenuBuilder.Build(target with { ShowDebug = true }, ContextMenuSettings.Default);
+
+        Assert.DoesNotContain(Find(off, MenuCommandId.ActionsSubmenu)!.Children, e => e.Argument == "hold");
+        Assert.Contains(Find(on, MenuCommandId.ActionsSubmenu)!.Children, e => e.Argument == "hold");
+    }
+
+    [Fact]
     public void Background_OffersFolderActions_ForTheFolderOnScreen() {
         var target = Background() with { Actions = new[] { _forFolders, _forVideo } };
 

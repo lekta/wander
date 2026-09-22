@@ -37,6 +37,8 @@ if ($Suffix -and $Suffix -notmatch '^[0-9A-Za-z.-]+$') {
 $repoRoot      = Split-Path -Parent $PSScriptRoot
 $propsPath     = Join-Path $repoRoot 'Directory.Build.props'
 $changelogPath = Join-Path $repoRoot 'docs\CHANGELOG.md'
+# Счётчик сборки (PLAN AH): в гите его нет, сбрасывает только смена версии.
+$buildNumberPath = Join-Path $repoRoot 'src\Wander.App\build-number.txt'
 
 foreach ($p in @($propsPath, $changelogPath)) {
     if (-not (Test-Path $p)) { throw "File not found: $p" }
@@ -122,6 +124,10 @@ $changelog = $changelog.Insert($firstLink.Index, "[$informational]: $releaseUrl"
 
 Write-Text $changelogPath $changelog
 
+# --- Счётчик сборки --------------------------------------------------------
+
+Write-Text $buildNumberPath "0`r`n"
+
 # --- Итог ------------------------------------------------------------------
 
 $mode = if ($DryRun) { ' (DRY RUN - nothing written)' } else { '' }
@@ -133,6 +139,8 @@ Write-Host "    Version              = $Version"
 Write-Host "    InformationalVersion = $informational"
 Write-Host "    FileVersion          = $fileVersion"
 Write-Host "    AssemblyVersion      = 0.0.0.0  (left alone on purpose)" -ForegroundColor DarkGray
+Write-Host "  src/Wander.App/build-number.txt"
+Write-Host "    build counter        = 0  (next local build is 1)"
 Write-Host "  docs/CHANGELOG.md"
 Write-Host "    + section [$informational] - $today"
 Write-Host "    + link ref -> $releaseUrl"

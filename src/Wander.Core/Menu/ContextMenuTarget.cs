@@ -51,6 +51,12 @@ public sealed record ContextMenuTarget {
 
     public bool CanPaste { get; init; }
 
+    /// <summary>
+    /// The debug menu is on (<c>AppSettings.ShowDebugMenu</c>), so the
+    /// catalog's <see cref="CustomAction.DebugOnly"/> rows are offered too.
+    /// </summary>
+    public bool ShowDebug { get; init; }
+
 
     /// <summary>Exactly one item under the cursor — the precondition for Rename / Properties.</summary>
     public bool IsSingle => Selection.Count == 1;

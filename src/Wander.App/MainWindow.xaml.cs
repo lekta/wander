@@ -1132,6 +1132,7 @@ public partial class MainWindow : Window {
             CanPaste = vm.PasteCommand.CanExecute(null),
             Actions = vm.Settings.Actions,
             MissingTools = vm.MissingTools,
+            ShowDebug = vm.Settings.ShowDebugMenu,
         };
     }
 

@@ -31,6 +31,9 @@ public static class ActionPresets {
     /// <summary>The built-in picture encoder's name.</summary>
     public const string ImageConvert = "image-convert";
 
+    /// <summary>The built-in "hold this file open" debug handler's name.</summary>
+    public const string HoldFile = HoldFileAction.ActionName;
+
     /// <summary>The programs the settings page lists, in its order.</summary>
     public static readonly IReadOnlyList<ExternalTool> Tools = new[] {
         new ExternalTool(Ffmpeg, "FFmpeg", "Gyan.FFmpeg"),
@@ -137,6 +140,16 @@ public static class ActionPresets {
             TitleKey = "ActionPresetDocxMarkdown",
             Types = new FileTypeSelector(FileTypeGroup.All, "*.docx"),
         },
+
+        // --- Debug ---
+        // Behind the debug menu (PLAN AI2) and out of the actions table:
+        // they produce nothing and are there to make a file busy on demand.
+        Hold("preset:debug-hold-short", 5) with {
+            TitleKey = "ActionPresetDebugHoldShort",
+        },
+        Hold("preset:debug-hold-long", 30) with {
+            TitleKey = "ActionPresetDebugHoldLong",
+        },
     };
 
 
@@ -157,6 +170,21 @@ public static class ActionPresets {
             Category = ActionCategory.Convert,
             IsPreset = true,
             RequiredTool = tool,
+        };
+    }
+
+    /// <summary>A debug hold of <paramref name="seconds"/>: any file, no output, no tool.</summary>
+    private static CustomAction Hold(string id, int seconds) {
+        return new CustomAction {
+            Id = id,
+            Types = new FileTypeSelector(FileTypeGroup.All),
+            Kind = ActionKind.Builtin,
+            Program = HoldFile,
+            Arguments = $"{HoldFileAction.SecondsKey}={seconds}",
+            Output = string.Empty,
+            Category = ActionCategory.Actions,
+            IsPreset = true,
+            DebugOnly = true,
         };
     }
 

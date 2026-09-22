@@ -14,4 +14,7 @@ public static class OperationVerbs {
     public const string Extract = "ProgressExtracting";
     public const string RunAction = "ProgressRunningAction";
     public const string Undo = "ProgressUndoing";
+
+    /// <summary>The debug menu's fake operation (PLAN AI1). Touches no disk.</summary>
+    public const string Debug = "ProgressDebug";
 }

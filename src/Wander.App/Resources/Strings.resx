@@ -206,6 +206,24 @@
   <data name="MenuLogsHint" xml:space="preserve">
     <value>Открыть файл журнала текущего сеанса</value>
   </data>
+  <data name="MenuDebugOperation" xml:space="preserve">
+    <value>Операция</value>
+  </data>
+  <data name="MenuDebugOperationHint" xml:space="preserve">
+    <value>Поддельная операция: ничего не читает и не пишет, показывает окно прогресса и строку состояния</value>
+  </data>
+  <data name="MenuDebugOperationPlain" xml:space="preserve">
+    <value>Ровно</value>
+  </data>
+  <data name="MenuDebugOperationFails" xml:space="preserve">
+    <value>Ошибка на 4-м</value>
+  </data>
+  <data name="MenuDebugOperationCancels" xml:space="preserve">
+    <value>Отмена посреди</value>
+  </data>
+  <data name="MenuDebugOperationThree" xml:space="preserve">
+    <value>Три сразу</value>
+  </data>
   <data name="MenuExit" xml:space="preserve">
     <value>Выход</value>
   </data>
@@ -2209,9 +2227,25 @@
   <data name="ActionPresetDocxMarkdown" xml:space="preserve">
     <value>DOCX → Markdown (pandoc)</value>
   </data>
+  <data name="ActionPresetDebugHoldShort" xml:space="preserve">
+    <value>Отладка: занять на 5 с</value>
+    <comment>Пункт «Действия», виден только при включённом меню отладки</comment>
+  </data>
+  <data name="ActionPresetDebugHoldLong" xml:space="preserve">
+    <value>Отладка: занять на 30 с</value>
+    <comment>Пункт «Действия», виден только при включённом меню отладки</comment>
+  </data>
   <data name="ProgressRunningAction" xml:space="preserve">
     <value>Выполняется действие</value>
     <comment>Окно операции и строка состояния во время своего действия или конвертации</comment>
+  </data>
+  <data name="ProgressDebug" xml:space="preserve">
+    <value>Отладочная операция</value>
+    <comment>Окно операции и строка состояния во время поддельной операции из меню отладки</comment>
+  </data>
+  <data name="StatusDebugDone" xml:space="preserve">
+    <value>Отладочная операция: готово {0} из {1}</value>
+    <comment>{0} — сколько удалось, {1} — сколько было</comment>
   </data>
   <data name="StatusActionDone" xml:space="preserve">
     <value>{0}: готово {1} из {2}</value>

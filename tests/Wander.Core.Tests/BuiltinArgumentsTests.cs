@@ -72,7 +72,7 @@ public class BuiltinArgumentsTests {
             new ImageConvertOptions(ImageTarget.Jpeg, 85, 1920),
             ImageConvertOptions.Parse(shrink.Arguments));
         Assert.All(
-            ActionPresets.All.Where(p => p.Kind == ActionKind.Builtin),
+            ActionPresets.All.Where(p => p.Program == ActionPresets.ImageConvert),
             p => ImageConvertOptions.Parse(p.Arguments));
     }
 

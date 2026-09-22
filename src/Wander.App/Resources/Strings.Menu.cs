@@ -87,6 +87,24 @@ public static partial class Strings {
     /// <summary>Открыть файл журнала текущего сеанса</summary>
     public static string MenuLogsHint => Get(nameof(MenuLogsHint));
 
+    /// <summary>Операция</summary>
+    public static string MenuDebugOperation => Get(nameof(MenuDebugOperation));
+
+    /// <summary>Поддельная операция: ничего не читает и не пишет, только показывает окно прогресса</summary>
+    public static string MenuDebugOperationHint => Get(nameof(MenuDebugOperationHint));
+
+    /// <summary>Ровно</summary>
+    public static string MenuDebugOperationPlain => Get(nameof(MenuDebugOperationPlain));
+
+    /// <summary>Ошибка на 4-м</summary>
+    public static string MenuDebugOperationFails => Get(nameof(MenuDebugOperationFails));
+
+    /// <summary>Отмена посреди</summary>
+    public static string MenuDebugOperationCancels => Get(nameof(MenuDebugOperationCancels));
+
+    /// <summary>Три сразу</summary>
+    public static string MenuDebugOperationThree => Get(nameof(MenuDebugOperationThree));
+
     /// <summary>Журнал действий за сеанс — открыть в текстовом просмотрщике</summary>
     public static string JournalTooltip => Get(nameof(JournalTooltip));
 

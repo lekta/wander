@@ -206,10 +206,9 @@ public sealed class ExternalActionRunner {
     private async Task RunBuiltinAsync(CustomAction action, string input, string? output, CancellationToken ct) {
         var handler = _builtins.FirstOrDefault(b => string.Equals(b.Name, action.Program, StringComparison.OrdinalIgnoreCase))
             ?? throw new InvalidOperationException($"No built-in action named '{action.Program}'.");
-        if (output is null) {
-            throw new InvalidOperationException($"Built-in action '{action.Program}' declares no output.");
-        }
 
+        // No output is a valid shape: an action that produces no file, only
+        // an effect on its input. The handler that does need one says so.
         await handler.RunAsync(input, output, action.Arguments, ct).ConfigureAwait(false);
     }
 

@@ -6,6 +6,9 @@
 # Claude Code per-machine settings (project-shared settings live in settings.json)
 .claude/settings.local.json
 
+# Build counter (PLAN AH): свой на каждой машине, у релиза и у CI его нет
+src/Wander.App/build-number.txt
+
 # dotenv files
 .env
 

@@ -273,9 +273,9 @@ public class ExternalActionRunnerTests {
 
         public string Name { get; }
 
-        public List<(string Input, string Output, string Arguments)> Calls { get; } = new();
+        public List<(string Input, string? Output, string Arguments)> Calls { get; } = new();
 
-        public Task RunAsync(string input, string output, string arguments, CancellationToken ct) {
+        public Task RunAsync(string input, string? output, string arguments, CancellationToken ct) {
             Calls.Add((input, output, arguments));
 
             return Task.CompletedTask;

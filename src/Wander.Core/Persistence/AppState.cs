@@ -12,6 +12,28 @@ namespace Wander.Core.Persistence;
 /// the top-level shape.
 /// </summary>
 public sealed record AppState {
+    /// <summary>
+    /// The shape of this file, as a number that goes up whenever a change
+    /// here would be lost or misread by an older Wander (PLAN AD11,
+    /// decision of 2026-09-22). Older builds still run and still write:
+    /// what they must not do is write over a file of a newer shape, and
+    /// this is what they compare against.
+    ///
+    /// <para>
+    /// Raise it when a field's meaning changes or a block appears that an
+    /// older build would drop on its next write; a field an older build
+    /// simply ignores and carries through costs nothing and stays at the
+    /// same number. The full rule - which copy is allowed to write when
+    /// several versions of Wander live on one machine - is still open
+    /// (PLAN AD11).
+    /// </para>
+    /// </summary>
+    public const int CurrentVersion = 1;
+
+
+    /// <summary>The shape this file was written in; see <see cref="CurrentVersion"/>. 0 in files written before it existed.</summary>
+    public int Version { get; init; } = CurrentVersion;
+
     /// <summary>Where the user left off — folder, expansions, panes, view mode.</summary>
     public SessionState Session { get; init; } = new();
 
@@ -62,8 +84,10 @@ public sealed record AppState {
     public AppSettings Settings { get; init; } = new();
 
     /// <summary>
-    /// Informational version of the build that last wrote this file, commit
-    /// hash and all.
+    /// Version of the build that last wrote this file - the three numbers
+    /// and the suffix (<c>0.5.0-beta</c>), without the commit and without
+    /// the build number of PLAN AH: a rebuild of the same version is the
+    /// same version here.
     ///
     /// <para>
     /// Read for one thing: dropping the thumbnail cache after an update.

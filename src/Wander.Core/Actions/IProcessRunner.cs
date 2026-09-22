@@ -53,7 +53,11 @@ public interface IBuiltinAction {
     string Name { get; }
 
     /// <param name="input">The selected file.</param>
-    /// <param name="output">Where to write; already unique, see <see cref="OutputNames"/>.</param>
+    /// <param name="output">
+    /// Where to write; already unique, see <see cref="OutputNames"/>. Null
+    /// for an action that declares no output and produces no file - the
+    /// debug hold of PLAN AI2 only keeps its input open.
+    /// </param>
     /// <param name="arguments">The action's own <c>key=value;...</c> settings.</param>
-    Task RunAsync(string input, string output, string arguments, CancellationToken ct);
+    Task RunAsync(string input, string? output, string arguments, CancellationToken ct);
 }

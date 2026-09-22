@@ -56,6 +56,41 @@
   </ItemGroup>
 
   <!--
+    Номер сборки — четвёртое число FileVersion (PLAN AH). Счётчик лежит в
+    build-number.txt рядом с проектом и в гит не попадает: номер свой на
+    каждой машине, а у релиза и у CI его нет вовсе — там четвёртое число 0.
+    Крутится на любой обычной сборке (Debug из Rider, check.bat,
+    publish.ps1 -Install) и сбрасывается только version.ps1, то есть сменой
+    версии. Не крутится на релизной сборке (WanderRelease), на дизайн-
+    сборках IDE, которые идут по нескольку раз в минуту, и во временном
+    проекте компиляции XAML (_TargetAssemblyProjectName) — он лежит в этой
+    же папке и без исключения давал бы +2 за сборку.
+
+    Цена: атрибуты сборки меняются каждый раз, поэтому Wander.App
+    перекомпилируется всегда, даже когда в коде не менялось ничего. Это
+    секунды, и монотонность номера важнее.
+  -->
+  <Target Name="StampBuildNumber" BeforeTargets="GetAssemblyAttributes"
+          Condition="'$(WanderRelease)' != 'true' and '$(DesignTimeBuild)' != 'true'
+                     and '$(_TargetAssemblyProjectName)' == ''">
+    <PropertyGroup>
+      <BuildNumberFile>$(MSBuildProjectDirectory)\build-number.txt</BuildNumberFile>
+    </PropertyGroup>
+    <ReadLinesFromFile File="$(BuildNumberFile)" Condition="Exists('$(BuildNumberFile)')">
+      <Output TaskParameter="Lines" ItemName="_PreviousBuildNumberLine"/>
+    </ReadLinesFromFile>
+    <PropertyGroup>
+      <_PreviousBuildNumber>@(_PreviousBuildNumberLine)</_PreviousBuildNumber>
+      <!-- Нет файла, пустой, испорченный руками — всё это ноль, а не падение сборки. -->
+      <_PreviousBuildNumber
+          Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(_PreviousBuildNumber)', '^\d+$'))">0</_PreviousBuildNumber>
+      <BuildNumber>$([MSBuild]::Add($(_PreviousBuildNumber), 1))</BuildNumber>
+      <FileVersion>$(Version).$(BuildNumber)</FileVersion>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(BuildNumberFile)" Lines="$(BuildNumber)" Overwrite="true" Encoding="ascii"/>
+  </Target>
+
+  <!--
     Определения подсветки для форматов, которых нет в поставке AvalonEdit
     (bat/cmd, Unity-шейдеры, YAML и сериализованные ассеты Unity).
     Читаются из сборки в Highlighting/HighlightingCatalog.cs.

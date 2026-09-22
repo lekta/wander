@@ -597,13 +597,22 @@ public sealed class SettingsViewModel : ObservableObject {
     private IReadOnlyList<ToolPath> _toolPaths = Array.Empty<ToolPath>();
 
     /// <summary>
+    /// The catalog's debug-only rows (PLAN AI2). Kept out of the table -
+    /// there is nothing to edit on them and the page is about what the user
+    /// set up - and handed to the menus with the rest, which show them only
+    /// while the debug menu is on. Never stored: with no row of their own
+    /// they follow the code like any untouched preset.
+    /// </summary>
+    private readonly List<CustomAction> _debugActions = new();
+
+    /// <summary>
     /// The actions table: presets merged with what the user stored, in
     /// catalog order (<see cref="ActionCatalog.Merge"/>).
     /// </summary>
     public ObservableCollection<ActionRowViewModel> ActionRows { get; } = new();
 
     /// <summary>The catalog as it stands, presets included - what the menus and the runner read.</summary>
-    public IReadOnlyList<CustomAction> Actions => ActionRows.Select(r => r.Action).ToArray();
+    public IReadOnlyList<CustomAction> Actions => ActionRows.Select(r => r.Action).Concat(_debugActions).ToArray();
 
     /// <summary>The "Программы" page: one block per program the catalog needs.</summary>
     public ObservableCollection<ToolRowViewModel> ToolRows { get; } = new();
@@ -971,7 +980,12 @@ public sealed class SettingsViewModel : ObservableObject {
 
     private void RebuildActionRows(IReadOnlyList<CustomAction> stored) {
         ActionRows.Clear();
+        _debugActions.Clear();
         foreach (var action in ActionCatalog.Merge(ActionPresets.All, stored)) {
+            if (action.DebugOnly) {
+                _debugActions.Add(action);
+                continue;
+            }
             ActionRows.Add(NewActionRow(action));
         }
         OnActionsChanged();

@@ -35,6 +35,12 @@ using Wander.Core.Undo;
 namespace Wander.App;
 
 public sealed class MainViewModel : ObservableObject {
+    /// <summary>
+    /// The debug menu's fourth operation row: not a scenario of its own,
+    /// three plain ones at the same time (PLAN AI1).
+    /// </summary>
+    private const string ThreeAtOnce = "ThreeAtOnce";
+
     /// <summary>How long a folder may take to list before the spinner shows.</summary>
     private const int SpinnerDelayMs = 150;
 
@@ -459,6 +465,7 @@ public sealed class MainViewModel : ObservableObject {
         UndoCommand = new RelayCommand(_ => UndoLast(), _ => _undo.CanUndo);
         PermanentDeleteCommand = new RelayCommand(() => _ = DeleteSelectedAsync(permanent: true), () => _selectedEntries.Count > 0 && !IsCurrentShellNamespace);
         OpenLogFileCommand = new RelayCommand(_ => Shell.OpenLogFile(), _ => ServiceLocator.IsRegistered<ILogFile>());
+        DebugOperationCommand = new RelayCommand(p => _ = RunDebugOperationAsync(p as string));
         ToggleBookmarksCommand = new RelayCommand(_ => IsBookmarksExpanded = !IsBookmarksExpanded);
         AddBookmarkCommand = new RelayCommand(p => Bookmarks.Add(p as string));
         RemoveBookmarkCommand = new RelayCommand(p => Bookmarks.Remove((p as TreeNodeViewModel)?.FullPath));
@@ -1190,6 +1197,9 @@ public sealed class MainViewModel : ObservableObject {
     public RelayCommand UndoCommand { get; }
     public RelayCommand PermanentDeleteCommand { get; }
     public RelayCommand OpenLogFileCommand { get; }
+
+    /// <summary>The debug menu's fake operation; the parameter names the scenario (PLAN AI1).</summary>
+    public RelayCommand DebugOperationCommand { get; }
     public RelayCommand ToggleBookmarksCommand { get; }
     public RelayCommand ToggleFoldersCommand { get; }
     public RelayCommand AddBookmarkCommand { get; }
@@ -1902,7 +1912,7 @@ public sealed class MainViewModel : ObservableObject {
             },
             Favorites = Bookmarks.Paths.ToArray(),
             Settings = Settings.ToRecord(),
-            LastRunVersion = Diagnostics.CrashReporter.AppVersion(),
+            LastRunVersion = BuildInfo.Version,
         });
 
         // Only when the pane pair changed: the state is written after every
@@ -1915,8 +1925,10 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     /// <summary>
-    /// Wipes the thumbnail cache when the build that wrote <c>state.json</c>
-    /// is not this one. See <see cref="AppState.LastRunVersion"/> for why:
+    /// Wipes the thumbnail cache when the version that wrote
+    /// <c>state.json</c> is not this one - the three numbers and the suffix,
+    /// so the commit and the build number of AH do not drop it every time
+    /// the project is rebuilt. See <see cref="AppState.LastRunVersion"/> for why:
     /// nothing in a thumbnail's key says which version drew it, so a decoding
     /// fix would otherwise never reach the pictures already on disk.
     ///
@@ -1927,7 +1939,7 @@ public sealed class MainViewModel : ObservableObject {
     /// </para>
     /// </summary>
     private void DropThumbnailCacheOnUpgrade(string lastVersion) {
-        string current = Diagnostics.CrashReporter.AppVersion();
+        string current = BuildInfo.Version;
         if (string.Equals(lastVersion, current, StringComparison.Ordinal)) {
             return;
         }
@@ -5281,6 +5293,46 @@ public sealed class MainViewModel : ObservableObject {
         } finally {
             dlg.Finish();
         }
+    }
+
+    /// <summary>
+    /// The debug menu's "Операция" (PLAN AI1). The parameter is a
+    /// <see cref="Diagnostics.DebugOperationScenario"/> by name, or
+    /// <see cref="ThreeAtOnce"/> - three plain runs side by side, which is
+    /// about the status bar rather than about any one of them.
+    /// </summary>
+    private async Task RunDebugOperationAsync(string? scenarioName) {
+        if (scenarioName == ThreeAtOnce) {
+            await Task.WhenAll(Enumerable.Range(0, 3)
+                .Select(_ => RunDebugScenarioAsync(Diagnostics.DebugOperationScenario.Plain)));
+
+            return;
+        }
+
+        if (!Enum.TryParse(scenarioName, out Diagnostics.DebugOperationScenario scenario)) {
+            _log.Warn($"Debug operation: no scenario named '{scenarioName}'");
+
+            return;
+        }
+
+        await RunDebugScenarioAsync(scenario);
+    }
+
+    /// <summary>One debug run, in a window of its own, ending in the status line like a real one.</summary>
+    private async Task RunDebugScenarioAsync(Diagnostics.DebugOperationScenario scenario) {
+        Diagnostics.DebugOperationOutcome outcome;
+        try {
+            outcome = await RunWithProgressDialogAsync(
+                Strings.ProgressDebug,
+                ct => Diagnostics.DebugOperation.RunAsync(scenario, _tracker, _log, ct));
+        } catch (OperationCanceledException) {
+            Status = Strings.StatusCancelled;
+
+            return;
+        }
+
+        Say(string.Format(Strings.StatusDebugDone, outcome.Ok, outcome.Total),
+            outcome.Ok < outcome.Total ? StatusSeverity.Warning : StatusSeverity.Info);
     }
 
     /// <summary>

@@ -28,6 +28,8 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Publish (portable single-file)
+        # WanderRelease=true: счётчик сборки (PLAN AH) не крутится и в гите
+        # его нет, так что у релиза четвёртое число — 0.
         run: |
           dotnet publish src/Wander.App `
             -c Release `
@@ -36,6 +38,7 @@ jobs:
             -p:PublishSingleFile=true `
             -p:IncludeNativeLibrariesForSelfExtract=true `
             -p:EnableCompressionInSingleFile=true `
+            -p:WanderRelease=true `
             -o publish
 
       - name: Compute checksum

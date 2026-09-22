@@ -109,6 +109,8 @@ public static class PlatformBootstrapper {
         ServiceLocator.Register<IToolLocator>(new WindowsToolLocator());
         var builtins = new IBuiltinAction[] {
             new ImageConvertAction(ServiceLocator.Get<IImageMetadataReader>(), logger),
+            // Debug only (PLAN AI2): makes a file genuinely busy on demand.
+            new HoldFileAction(),
         };
         ServiceLocator.Register<ExternalActionRunner>(new ExternalActionRunner(
             ServiceLocator.Get<IFileSystem>(), ServiceLocator.Get<IRecycleBin>(),

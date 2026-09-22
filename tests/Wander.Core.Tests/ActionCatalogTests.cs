@@ -209,16 +209,25 @@ public class ActionCatalogTests {
         Assert.All(all, p => Assert.StartsWith("ActionPreset", p.TitleKey));
         Assert.All(all, p => Assert.Equal(string.Empty, p.Title));
         Assert.All(all, p => Assert.True(p.IsPreset));
-        Assert.All(all, p => Assert.Equal(ActionCategory.Convert, p.Category));
+        // Everything shipped is a conversion, bar the debug tools of AI2,
+        // which sit among the user's own actions.
+        Assert.All(all.Where(p => !p.DebugOnly), p => Assert.Equal(ActionCategory.Convert, p.Category));
+        Assert.All(all.Where(p => p.DebugOnly), p => Assert.Equal(ActionCategory.Actions, p.Category));
     }
 
     [Fact]
     public void Presets_AreRunnableAsWritten() {
         foreach (var preset in ActionPresets.All) {
             if (preset.Kind == ActionKind.Builtin) {
-                Assert.Equal(ActionPresets.ImageConvert, preset.Program);
                 Assert.Equal(string.Empty, preset.RequiredTool);
-                Assert.NotEqual(string.Empty, preset.Output);
+                if (preset.DebugOnly) {
+                    // The hold produces nothing: its whole effect is on its input.
+                    Assert.Equal(ActionPresets.HoldFile, preset.Program);
+                    Assert.Equal(string.Empty, preset.Output);
+                } else {
+                    Assert.Equal(ActionPresets.ImageConvert, preset.Program);
+                    Assert.NotEqual(string.Empty, preset.Output);
+                }
                 continue;
             }
 
@@ -232,7 +241,7 @@ public class ActionCatalogTests {
 
     [Fact]
     public void Presets_OnlyLibreOffice_LeavesItsOutputUndeclared() {
-        var undeclared = ActionPresets.All.Where(p => p.Output.Length == 0).ToArray();
+        var undeclared = ActionPresets.All.Where(p => !p.DebugOnly && p.Output.Length == 0).ToArray();
 
         Assert.Single(undeclared);
         Assert.Equal(ActionPresets.LibreOffice, undeclared[0].RequiredTool);
@@ -266,6 +275,17 @@ public class ActionCatalogTests {
         Assert.Equal(big, bigPreset.Types.Matches(entry));
         Assert.False(ImageConvertOptions.Parse(smallPreset.Arguments).FullSizePreview);
         Assert.True(ImageConvertOptions.Parse(bigPreset.Arguments).FullSizePreview);
+    }
+
+    [Fact]
+    public void DebugPresets_AreTheHold_AndAreMarkedDebugOnly() {
+        var debug = ActionPresets.All.Where(p => p.DebugOnly).ToArray();
+
+        Assert.Equal(2, debug.Length);
+        Assert.All(debug, p => Assert.Equal(ActionKind.Builtin, p.Kind));
+        Assert.All(debug, p => Assert.Equal(ActionPresets.HoldFile, p.Program));
+        Assert.All(debug, p => Assert.Equal(FileTypeGroup.All, p.Types.Group));
+        Assert.Equal(new[] { 5, 30 }, debug.Select(p => BuiltinArguments.Parse(p.Arguments).GetInt("seconds", 0, 0, 600)));
     }
 
     [Fact]

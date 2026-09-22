@@ -345,6 +345,27 @@
                             <MenuItem Header="{x:Static res:Strings.MenuLogs}"
                                       Command="{Binding OpenLogFileCommand}"
                                       ToolTip="{x:Static res:Strings.MenuLogsHint}"/>
+                            <!--
+                                Операция, которая ничего не трогает (PLAN AI1):
+                                окно прогресса, строка состояния, отмена и
+                                несколько операций разом — на заказ.
+                                CommandParameter — имя DebugOperationScenario.
+                            -->
+                            <MenuItem Header="{x:Static res:Strings.MenuDebugOperation}"
+                                      ToolTip="{x:Static res:Strings.MenuDebugOperationHint}">
+                                <MenuItem Header="{x:Static res:Strings.MenuDebugOperationPlain}"
+                                          Command="{Binding DebugOperationCommand}"
+                                          CommandParameter="Plain"/>
+                                <MenuItem Header="{x:Static res:Strings.MenuDebugOperationFails}"
+                                          Command="{Binding DebugOperationCommand}"
+                                          CommandParameter="FailsOnFourth"/>
+                                <MenuItem Header="{x:Static res:Strings.MenuDebugOperationCancels}"
+                                          Command="{Binding DebugOperationCommand}"
+                                          CommandParameter="CancelsMidway"/>
+                                <MenuItem Header="{x:Static res:Strings.MenuDebugOperationThree}"
+                                          Command="{Binding DebugOperationCommand}"
+                                          CommandParameter="ThreeAtOnce"/>
+                            </MenuItem>
                         </MenuItem>
                         <Separator/>
                         <MenuItem Header="{x:Static res:Strings.MenuExit}" Command="{Binding ExitCommand}"/>
