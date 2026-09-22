@@ -254,15 +254,25 @@ public class ActionCatalogTests {
     }
 
     [Theory]
-    [InlineData("IMG_1.CR3", true)]
-    [InlineData("a.nef", true)]
-    [InlineData("a.jpg", false)]
-    public void RawPreview_IsOfferedForRawFilesOnly(string name, bool expected) {
-        var preset = ActionPresets.All.Single(p => p.Id == "preset:raw-preview");
+    [InlineData("IMG_1.CR3", true, true)]
+    [InlineData("a.nef", false, true)]
+    [InlineData("a.jpg", false, false)]
+    public void RawPreviews_SmallOnlyForCr3_BigForEveryRaw(string name, bool small, bool big) {
         var entry = new FileSystemEntry(name, @"C:\" + name, EntryKind.File, 1, DateTime.MinValue, false, false, false, false);
+        var smallPreset = ActionPresets.All.Single(p => p.Id == "preset:raw-preview");
+        var bigPreset = ActionPresets.All.Single(p => p.Id == "preset:raw-preview-full");
 
-        Assert.Equal(expected, preset.Types.Matches(entry));
-        Assert.True(ImageConvertOptions.Parse(preset.Arguments).FromPreview);
+        Assert.Equal(small, smallPreset.Types.Matches(entry));
+        Assert.Equal(big, bigPreset.Types.Matches(entry));
+        Assert.False(ImageConvertOptions.Parse(smallPreset.Arguments).FullSizePreview);
+        Assert.True(ImageConvertOptions.Parse(bigPreset.Arguments).FullSizePreview);
+    }
+
+    [Fact]
+    public void RawPreviews_LeadTheList() {
+        Assert.Equal(
+            new[] { "preset:raw-preview", "preset:raw-preview-full" },
+            ActionPresets.All.Take(2).Select(p => p.Id));
     }
 
 

@@ -2138,7 +2138,10 @@
     <value>Нет декодера для этого формата, и превью внутри не нашлось</value>
   </data>
   <data name="ActionPresetRawPreview" xml:space="preserve">
-    <value>Превью из RAW (JPEG)</value>
+    <value>Маленькое превью из RAW (JPEG)</value>
+  </data>
+  <data name="ActionPresetRawPreviewFull" xml:space="preserve">
+    <value>Большое превью из RAW (JPEG)</value>
   </data>
   <data name="ActionsAdd" xml:space="preserve">
     <value>Добавить</value>

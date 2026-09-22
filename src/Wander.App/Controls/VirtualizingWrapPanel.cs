@@ -361,9 +361,20 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo {
         switch (args.Action) {
             case NotifyCollectionChangedAction.Remove:
             case NotifyCollectionChangedAction.Replace:
+                DropContainers(args.Position, args.ItemUICount);
+                break;
             case NotifyCollectionChangedAction.Move:
-                PerfCounters.Add("layout.discard", args.ItemUICount);
-                RemoveInternalChildRange(args.Position.Index, args.ItemUICount);
+                // The generator files a moved row as unrealised at its new
+                // place and lets go of its container, so the child leaves
+                // from where it stood - OldPosition. Position is the new
+                // place, and its Index there is the container before it:
+                // -1 for a row moved to the top of the list. Dropping at
+                // Position took the whole list down (2026-09-22): a
+                // restore from the recycle bin re-lists it, the diff moves
+                // a row up, RemoveInternalChildRange(-1, 1) throws in the
+                // middle of the notification, and every pass after that
+                // finds a child the generator no longer knows.
+                DropContainers(args.OldPosition, args.ItemUICount);
                 break;
             case NotifyCollectionChangedAction.Reset:
                 // Counted off the range markers rather than off
@@ -555,6 +566,23 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo {
                 RemoveInternalChildRange(i, 1);
             }
         }
+    }
+
+
+    /// <summary>
+    /// Lets go of the children whose containers the generator has just
+    /// dropped - a row removed, replaced or moved. A row that was not
+    /// realised has no container to drop, and the position the generator
+    /// gives for it is relative to the container before it, Index -1 above
+    /// the first one; so for it nothing is touched.
+    /// </summary>
+    private void DropContainers(GeneratorPosition position, int count) {
+        if (count == 0) {
+            return;
+        }
+
+        PerfCounters.Add("layout.discard", count);
+        RemoveInternalChildRange(position.Index, count);
     }
 
 

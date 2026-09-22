@@ -109,7 +109,8 @@ public sealed class ImageConvertAction : IBuiltinAction {
         FileStream file, ImageMetadata? shot, int orientation, ImageConvertOptions options, CancellationToken ct) {
 
         file.Position = 0;
-        byte[] jpeg = RawPreviewExtractor.Extract(file) ?? throw new NotSupportedException(Text.Get("ImageConvertNoPreview"));
+        byte[] jpeg = RawPreviewExtractor.Extract(file, options.FullSizePreview)
+            ?? throw new NotSupportedException(Text.Get("ImageConvertNoPreview"));
         ct.ThrowIfCancellationRequested();
 
         using var preview = new InMemoryRandomAccessStream();

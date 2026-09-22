@@ -77,17 +77,19 @@ public class BuiltinArgumentsTests {
     }
 
     [Theory]
-    [InlineData("format=jpeg", false, false)]
-    [InlineData("format=jpeg;source=file", false, false)]
-    [InlineData("format=jpeg;source=Preview", true, true)]
-    [InlineData("format=jpeg;source=preview;maxside=1920", true, false)]
-    [InlineData("format=png;source=preview", true, false)]
+    [InlineData("format=jpeg", false, false, false)]
+    [InlineData("format=jpeg;source=file", false, false, false)]
+    [InlineData("format=jpeg;source=Preview", true, false, true)]
+    [InlineData("format=jpeg;source=preview-full", true, true, true)]
+    [InlineData("format=jpeg;source=preview;maxside=1920", true, false, false)]
+    [InlineData("format=png;source=preview-full", true, true, false)]
     public void Options_FromPreview_KeepTheJpegAsIs_OnlyWhenNothingChangesIt(
-        string arguments, bool fromPreview, bool asIs) {
+        string arguments, bool fromPreview, bool fullSize, bool asIs) {
 
         var options = ImageConvertOptions.Parse(arguments);
 
         Assert.Equal(fromPreview, options.FromPreview);
+        Assert.Equal(fullSize, options.FullSizePreview);
         Assert.Equal(asIs, options.KeepsPreviewAsIs);
     }
 

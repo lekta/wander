@@ -46,6 +46,21 @@ public static class ActionPresets {
     private static readonly string _rawMask = string.Join(';', ImageFormats.Raw.Order(StringComparer.OrdinalIgnoreCase).Select(e => "*" + e));
 
     public static readonly IReadOnlyList<CustomAction> All = new[] {
+        // --- RAW ---
+        // First in the list: the conversions a RAW is right-clicked for.
+        // The JPEGs the camera put inside the RAW, taken out as they are.
+        // Only a CR3 carries a small one apart from the big one (1620 px
+        // against full size); a TIFF-shaped RAW gives its biggest either
+        // way, so there the small row would repeat the big one.
+        Builtin("preset:raw-preview", "format=jpeg;source=preview", "{name}_spv.jpg") with {
+            TitleKey = "ActionPresetRawPreview",
+            Types = new FileTypeSelector(FileTypeGroup.All, "*.cr3"),
+        },
+        Builtin("preset:raw-preview-full", "format=jpeg;source=preview-full", "{name}_lpv.jpg") with {
+            TitleKey = "ActionPresetRawPreviewFull",
+            Types = new FileTypeSelector(FileTypeGroup.All, _rawMask),
+        },
+
         // --- Video ---
         Tool("preset:video-mp4", Ffmpeg, FileTypeGroup.Video,
             "-i {path} -c:v libx264 -crf 23 -preset medium -c:a aac -movflags +faststart {out}", "{name}.mp4") with {
@@ -97,11 +112,6 @@ public static class ActionPresets {
         },
         Builtin("preset:image-shrink", "format=jpeg;quality=85;maxside=1920", "{name}_1920.jpg") with {
             TitleKey = "ActionPresetImageShrink",
-        },
-        // The JPEG the camera put inside the RAW, taken out as it is.
-        Builtin("preset:raw-preview", "format=jpeg;source=preview", "{name}.jpg") with {
-            TitleKey = "ActionPresetRawPreview",
-            Types = new FileTypeSelector(FileTypeGroup.All, _rawMask),
         },
         // ffmpeg reads the ordinary picture formats and none of the RAW
         // containers, so this one is offered by mask rather than for every

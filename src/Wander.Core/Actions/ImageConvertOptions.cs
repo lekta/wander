@@ -14,15 +14,21 @@ public enum ImageTarget {
 /// <summary>
 /// What the built-in picture encoder (<see cref="ActionPresets.ImageConvert"/>)
 /// is asked to do, read from its arguments:
-/// <c>format=jpeg|png|bmp|tiff|gif; quality=1..100; maxside=N; source=preview</c>.
+/// <c>format=jpeg|png|bmp|tiff|gif; quality=1..100; maxside=N; source=preview|preview-full</c>.
 /// The decisions that are arithmetic rather than imaging live here - the
 /// size a picture is scaled to, and whether its metadata can travel whole.
 /// </summary>
 /// <param name="FromPreview">
 /// Take the JPEG a RAW file carries instead of decoding the sensor data
-/// (<c>source=preview</c>).
+/// (<c>source=preview</c> or <c>preview-full</c>).
 /// </param>
-public sealed record ImageConvertOptions(ImageTarget Format, int Quality, int MaxSide, bool FromPreview = false) {
+/// <param name="FullSizePreview">
+/// The biggest JPEG the file carries rather than the quickest one
+/// (<c>source=preview-full</c>): in a CR3 the full-size JPEG instead of the
+/// 1620-px one; a TIFF-shaped RAW gives its biggest either way.
+/// </param>
+public sealed record ImageConvertOptions(
+    ImageTarget Format, int Quality, int MaxSide, bool FromPreview = false, bool FullSizePreview = false) {
     public const int DefaultQuality = 90;
 
 
@@ -52,9 +58,10 @@ public sealed record ImageConvertOptions(ImageTarget Format, int Quality, int Ma
         };
 
         string? source = args.Get("source");
-        bool fromPreview = source?.ToLowerInvariant() switch {
-            null or "" or "file" => false,
-            "preview" => true,
+        var (fromPreview, fullSize) = source?.ToLowerInvariant() switch {
+            null or "" or "file" => (false, false),
+            "preview" => (true, false),
+            "preview-full" => (true, true),
             _ => throw new FormatException(Text.Format("ActionsErrorImageSource", source)),
         };
 
@@ -62,7 +69,8 @@ public sealed record ImageConvertOptions(ImageTarget Format, int Quality, int Ma
             target,
             args.GetInt("quality", DefaultQuality, 1, 100),
             args.GetInt("maxside", 0, 0, 65535),
-            fromPreview);
+            fromPreview,
+            fullSize);
     }
 
 
