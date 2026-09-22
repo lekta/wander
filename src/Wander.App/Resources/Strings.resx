@@ -2272,39 +2272,20 @@
   <data name="MenuCmdDropCancel" xml:space="preserve">
     <value>Отмена</value>
   </data>
-  <data name="HelperFocus" xml:space="preserve">
-    <value>Фк</value>
-    <comment>Кнопка хелпера в футере панели просмотра; расшифровка — в подсказке</comment>
-  </data>
   <data name="HelperFocusTip" xml:space="preserve">
-    <value>Фокус-пикинг: чёткие края по полному кадру — где резко. Alt — без подсветки</value>
-  </data>
-  <data name="HelperSharp" xml:space="preserve">
-    <value>Рз</value>
+    <value>Фокус-пикинг: чёткие грани по полному кадру — где резко. Alt — без подсветки</value>
   </data>
   <data name="HelperSharpTip" xml:space="preserve">
-    <value>Резкость 0–100 в точке фокуса (без неё — в центре кадра): у кнопок и на миниатюрах галереи</value>
-  </data>
-  <data name="HelperClip" xml:space="preserve">
-    <value>Кл</value>
+    <value>Резкость 0–100 по середине кадра: у кнопок и на миниатюрах галереи</value>
   </data>
   <data name="HelperClipTip" xml:space="preserve">
     <value>Клиппинг: пересветы цветом канала, недосвет синим. Alt — без подсветки</value>
   </data>
-  <data name="HelperHist" xml:space="preserve">
-    <value>Гс</value>
-  </data>
   <data name="HelperHistTip" xml:space="preserve">
     <value>Гистограмма по каналам; стрелки — пересвет и недосвет</value>
   </data>
-  <data name="HelperShadows" xml:space="preserve">
-    <value>Тн</value>
-  </data>
   <data name="HelperShadowsTip" xml:space="preserve">
     <value>Поднять тени: что есть в тёмном</value>
-  </data>
-  <data name="HelperHighlights" xml:space="preserve">
-    <value>Св</value>
   </data>
   <data name="HelperHighlightsTip" xml:space="preserve">
     <value>Приглушить света: что есть в ярком</value>
@@ -2313,18 +2294,11 @@
     <value>Пересвет {0:0.0} %, недосвет {1:0.0} %</value>
     <comment>Подсказка гистограммы; {0} — доля пикселей с каналом на 255, {1} — доля чёрных, в процентах</comment>
   </data>
-  <data name="StatusSharpness" xml:space="preserve">
-    <value>Резкость: {0} из {1}</value>
-    <comment>Проход резкости по галерее; {0} — посчитано, {1} — всего снимков</comment>
-  </data>
-  <data name="HelperAf" xml:space="preserve">
-    <value>AF</value>
-  </data>
   <data name="HelperAfTip" xml:space="preserve">
     <value>Точка фокуса камеры: зелёная — в фокусе (Canon)</value>
   </data>
   <data name="HelperSharpScoreTip" xml:space="preserve">
-    <value>Резкость {0} из 100 — по самым чётким краям в точке фокуса. 70 и выше — резко, 45–70 — мягко, ниже — мимо</value>
+    <value>Резкость {0} из 100 — по самым чётким краям в середине кадра; отдельные точки (шум, снег, блики) считаются за долю грани. 70 и выше — резко, 45–70 — мягко, ниже — мимо</value>
     <comment>{0} — балл резкости снимка</comment>
   </data>
 </root>

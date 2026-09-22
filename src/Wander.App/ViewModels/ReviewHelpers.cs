@@ -8,9 +8,9 @@ namespace Wander.App.ViewModels;
 /// [decision: per session].
 ///
 /// <para>
-/// Shadows and highlights exclude each other - two curves for one
-/// picture, and both at once would be neither - and the setter that turns
-/// one on turns the other off.
+/// Nothing here excludes anything: shadows and highlights work at opposite
+/// ends of the range, so both at once is a frame opened up from both sides,
+/// which is a fair thing to ask for.
 /// </para>
 /// </summary>
 public sealed class ReviewHelpers : ObservableObject {
@@ -51,21 +51,13 @@ public sealed class ReviewHelpers : ObservableObject {
     /// <summary>The picture shown with its shadows lifted.</summary>
     public bool Shadows {
         get => _shadows;
-        set {
-            if (SetField(ref _shadows, value) && value) {
-                Highlights = false;
-            }
-        }
+        set => SetField(ref _shadows, value);
     }
 
-    /// <summary>The picture shown with its highlights opened up.</summary>
+    /// <summary>The picture shown with its highlights opened up. Together with <see cref="Shadows"/> when both are wanted: each works at its own end.</summary>
     public bool Highlights {
         get => _highlights;
-        set {
-            if (SetField(ref _highlights, value) && value) {
-                Shadows = false;
-            }
-        }
+        set => SetField(ref _highlights, value);
     }
 
     /// <summary>The autofocus areas the camera recorded, framed over the picture.</summary>

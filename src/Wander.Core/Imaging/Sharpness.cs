@@ -26,69 +26,143 @@ public static class Sharpness {
     /// <summary>Crispness is stored in a byte as crispness times this; 255 is about 4.</summary>
     public const int Unit = 64;
 
+    /// <summary>Rows of the map one worker takes at a time. Keeps the window buffers small and warm.</summary>
+    private const int BandRows = 64;
+
 
     /// <summary>
-    /// Crispness per pixel, times <see cref="Unit"/>. Zero where there is no
-    /// edge to judge: a gradient or a local contrast under
-    /// <paramref name="minContrast"/> is noise or a flat patch, and the
-    /// one-pixel border has no full neighbourhood.
+    /// The crispness of every point of the frame - see <see cref="CrispMap"/>.
     /// </summary>
+    /// <param name="step">
+    /// Measure one point per this many pixels each way. The neighbourhood
+    /// is still read at full resolution; only the number of answers goes
+    /// down, which is what makes a mark for a thumbnail affordable.
+    /// </param>
     /// <param name="radius">Half the side of the window the local contrast is taken over.</param>
-    public static byte[] Crispness(byte[] luma, int w, int h, int radius = 3, int minContrast = 24) {
-        var crisp = new byte[w * h];
+    /// <param name="minContrast">Below this a gradient, or the contrast around it, is noise or a flat patch.</param>
+    public static CrispMap Measure(byte[] luma, int w, int h, int step = 1, int radius = 3, int minContrast = 24) {
+        int mw = (w + step - 1) / step;
+        int mh = (h + step - 1) / step;
+        var values = new byte[mw * mh];
         if (w < 3 || h < 3) {
-            return crisp;
+            return new CrispMap(values, mw, mh);
         }
 
-        var (low, high) = LocalRange(luma, w, h, radius);
-        Parallel.For(1, h - 1, y => {
-            int up = (y - 1) * w;
-            int row = y * w;
-            int down = (y + 1) * w;
-            for (int x = 1; x < w - 1; x++) {
-                int range = high[row + x] - low[row + x];
-                if (range < minContrast) {
+        int bands = (mh + BandRows - 1) / BandRows;
+        Parallel.For(0, bands, band => {
+            int first = band * BandRows;
+            int last = Math.Min(mh, first + BandRows) - 1;
+            int top = Math.Max(0, first * step - radius);
+            int bottom = Math.Min(h - 1, last * step + radius);
+
+            // The window's darkest and brightest across each row, at the
+            // sampled columns only - the half of the work that both the
+            // rows above and the rows below share.
+            var low = new byte[(bottom - top + 1) * mw];
+            var high = new byte[(bottom - top + 1) * mw];
+            for (int y = top; y <= bottom; y++) {
+                int src = y * w;
+                int dst = (y - top) * mw;
+                for (int mx = 0; mx < mw; mx++) {
+                    int x = mx * step;
+                    byte lo = 255;
+                    byte hi = 0;
+                    for (int k = Math.Max(0, x - radius); k <= Math.Min(w - 1, x + radius); k++) {
+                        byte v = luma[src + k];
+                        lo = Math.Min(lo, v);
+                        hi = Math.Max(hi, v);
+                    }
+                    low[dst + mx] = lo;
+                    high[dst + mx] = hi;
+                }
+            }
+
+            for (int my = first; my <= last; my++) {
+                int y = my * step;
+                if (y < 1 || y > h - 2) {
                     continue;
                 }
 
-                int gx = luma[up + x + 1] + 2 * luma[row + x + 1] + luma[down + x + 1]
-                    - luma[up + x - 1] - 2 * luma[row + x - 1] - luma[down + x - 1];
-                int gy = luma[down + x - 1] + 2 * luma[down + x] + luma[down + x + 1]
-                    - luma[up + x - 1] - 2 * luma[up + x] - luma[up + x + 1];
-                double gradient = Math.Sqrt(gx * gx + gy * gy);
-                if (gradient < minContrast) {
-                    continue;
-                }
+                int up = (y - 1) * w;
+                int row = y * w;
+                int down = (y + 1) * w;
+                int from = Math.Max(top, y - radius) - top;
+                int to = Math.Min(bottom, y + radius) - top;
+                for (int mx = 0; mx < mw; mx++) {
+                    int x = mx * step;
+                    if (x < 1 || x > w - 2) {
+                        continue;
+                    }
 
-                crisp[row + x] = (byte)Math.Clamp(Math.Round(Unit * gradient / range), 1, 255);
+                    byte lo = 255;
+                    byte hi = 0;
+                    for (int k = from; k <= to; k++) {
+                        lo = Math.Min(lo, low[k * mw + mx]);
+                        hi = Math.Max(hi, high[k * mw + mx]);
+                    }
+                    int range = hi - lo;
+                    if (range < minContrast) {
+                        continue;
+                    }
+
+                    int gx = luma[up + x + 1] + 2 * luma[row + x + 1] + luma[down + x + 1]
+                        - luma[up + x - 1] - 2 * luma[row + x - 1] - luma[down + x - 1];
+                    int gy = luma[down + x - 1] + 2 * luma[down + x] + luma[down + x + 1]
+                        - luma[up + x - 1] - 2 * luma[up + x] - luma[up + x + 1];
+                    double gradient = Math.Sqrt(gx * gx + gy * gy);
+                    if (gradient < minContrast) {
+                        continue;
+                    }
+
+                    values[my * mw + mx] = (byte)Math.Clamp(Math.Round(Unit * gradient / range), 1, 255);
+                }
             }
         });
 
-        return crisp;
+        return new CrispMap(values, mw, mh);
     }
 
 
     /// <summary>
-    /// The sharpness of <paramref name="area"/> as 0..100: the crispness of
-    /// its crispest edges (the <paramref name="quantile"/> of the edge
-    /// pixels) placed between <paramref name="soft"/> and
-    /// <paramref name="crisp"/>. Null when the area has fewer than
-    /// <paramref name="minEdges"/> edge pixels - a clear sky has nothing to
-    /// be sharp about.
+    /// The sharpness of <paramref name="area"/> as 0..100, from two things:
+    /// how crisp its crispest edges are (the <paramref name="quantile"/> of
+    /// the edge points, placed between <paramref name="soft"/> and
+    /// <paramref name="crisp"/>), and how much of the area's edges are crisp
+    /// and continuous at all - <paramref name="crispEdges"/>, the peaking
+    /// mask after <see cref="FocusPeaking.Continuous"/>.
+    ///
+    /// <para>
+    /// The second half is what keeps a frame of falling snow, or of sensor
+    /// noise, from reading as sharp: every speck of it is a crisp edge, and
+    /// the crispest of them says nothing about focus. Below
+    /// <paramref name="fullShare"/> of the edges being crisp and continuous
+    /// the score is scaled down in proportion.
+    /// </para>
+    ///
+    /// <para>
+    /// Null when the area has fewer than <paramref name="minEdges"/> edge
+    /// points - a clear sky has nothing to be sharp about.
+    /// </para>
     /// </summary>
     public static double? Score(
-        byte[] crispness, int w, int h, RectI? area = null,
-        double quantile = 0.98, double soft = 1.5, double crisp = 3.0, int minEdges = 200) {
-        var r = area ?? new RectI(0, 0, w, h);
+        CrispMap map, byte[] crispEdges, RectI? area = null,
+        double quantile = 0.98, double soft = 1.5, double crisp = 3.0,
+        int minEdges = 200, double fullShare = 0.03) {
+        var r = area ?? new RectI(0, 0, map.Width, map.Height);
         var histogram = new int[256];
         int edges = 0;
-        for (int y = Math.Max(0, r.Y); y < Math.Min(h, r.Y + r.Height); y++) {
-            for (int x = Math.Max(0, r.X); x < Math.Min(w, r.X + r.Width); x++) {
-                byte c = crispness[y * w + x];
-                if (c != 0) {
-                    histogram[c]++;
-                    edges++;
+        long continuous = 0;
+        for (int y = Math.Max(0, r.Y); y < Math.Min(map.Height, r.Y + r.Height); y++) {
+            for (int x = Math.Max(0, r.X); x < Math.Min(map.Width, r.X + r.Width); x++) {
+                int at = y * map.Width + x;
+                byte c = map.Values[at];
+                if (c == 0) {
+                    continue;
                 }
+
+                histogram[c]++;
+                edges++;
+                continuous += crispEdges[at];
             }
         }
         if (edges < minEdges) {
@@ -106,74 +180,27 @@ public static class Sharpness {
             }
         }
 
-        double value = (level / (double)Unit - soft) / (crisp - soft);
+        double howCrisp = (level / (double)Unit - soft) / (crisp - soft);
+        double howMuch = fullShare <= 0 ? 1 : continuous / 255.0 / edges / fullShare;
 
-        return Math.Round(100 * Math.Clamp(value, 0, 1));
+        return Math.Round(100 * Math.Clamp(howCrisp, 0, 1) * Math.Clamp(howMuch, 0, 1));
     }
 
 
     /// <summary>
-    /// Where a frame's sharpness is judged: around the autofocus area the
-    /// camera reports in focus (the first one, when none says so), twice its
-    /// size each way so the subject's own edges are in; without one, the
-    /// middle half of the frame each way.
+    /// Where a frame's sharpness is judged: the middle half of it each way.
+    ///
+    /// <para>
+    /// Not the autofocus area, although the camera records one and the pane
+    /// draws it. Two frames of the same group of people (2026-09-22) carry
+    /// an area in the top corner of the frame, over the ceiling, while the
+    /// faces are what the lens was focused on at three metres - and scored
+    /// by that corner the missed frame came out ahead of the hit. The area
+    /// is worth drawing, because the eye can see whether it makes sense; it
+    /// is not worth trusting with the number.
+    /// </para>
     /// </summary>
-    /// <param name="af">Autofocus areas over the same picture as <paramref name="w"/> by <paramref name="h"/>.</param>
-    public static RectI Area(int w, int h, IReadOnlyList<AfPoint>? af) {
-        var point = af?.FirstOrDefault(p => p.InFocus) ?? af?.FirstOrDefault();
-        if (point is null) {
-            return new RectI(w / 4, h / 4, w / 2, h / 2);
-        }
-
-        int left = (int)Math.Round((point.X - point.W) * w);
-        int top = (int)Math.Round((point.Y - point.H) * h);
-        int right = (int)Math.Round((point.X + point.W) * w);
-        int bottom = (int)Math.Round((point.Y + point.H) * h);
-        left = Math.Clamp(left, 0, w);
-        top = Math.Clamp(top, 0, h);
-        right = Math.Clamp(right, left, w);
-        bottom = Math.Clamp(bottom, top, h);
-
-        return new RectI(left, top, right - left, bottom - top);
-    }
-
-
-    /// <summary>Darkest and brightest luma in the square of side 2r + 1 around each pixel, clipped at the frame.</summary>
-    private static (byte[] Low, byte[] High) LocalRange(byte[] luma, int w, int h, int r) {
-        var rowLow = new byte[w * h];
-        var rowHigh = new byte[w * h];
-        Parallel.For(0, h, y => {
-            int row = y * w;
-            for (int x = 0; x < w; x++) {
-                byte low = 255;
-                byte high = 0;
-                for (int k = Math.Max(0, x - r); k <= Math.Min(w - 1, x + r); k++) {
-                    byte v = luma[row + k];
-                    low = Math.Min(low, v);
-                    high = Math.Max(high, v);
-                }
-                rowLow[row + x] = low;
-                rowHigh[row + x] = high;
-            }
-        });
-
-        var low = new byte[w * h];
-        var high = new byte[w * h];
-        Parallel.For(0, h, y => {
-            int from = Math.Max(0, y - r);
-            int to = Math.Min(h - 1, y + r);
-            for (int x = 0; x < w; x++) {
-                byte lo = 255;
-                byte hi = 0;
-                for (int k = from; k <= to; k++) {
-                    lo = Math.Min(lo, rowLow[k * w + x]);
-                    hi = Math.Max(hi, rowHigh[k * w + x]);
-                }
-                low[y * w + x] = lo;
-                high[y * w + x] = hi;
-            }
-        });
-
-        return (low, high);
+    public static RectI Area(int w, int h) {
+        return new RectI(w / 4, h / 4, w / 2, h / 2);
     }
 }

@@ -1,6 +1,8 @@
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Wander.Core;
+using Wander.Core.Icons;
 using Wander.Core.Imaging;
 
 namespace Wander.App.Preview;
@@ -31,6 +33,20 @@ internal static class ReviewOverlay {
     // the clipped channels as bits, then shadows, then peaking.
     private const byte UnderIndex = 8;
     private const byte PeakIndex = 9;
+
+    /// <summary>
+    /// How much the measured peaking of pictures already looked at may take.
+    /// A bit per pixel, so a 24-megapixel frame is three megabytes and the
+    /// budget holds a dozen of them - and walking back and forth between two
+    /// frames, which is what culling is, costs nothing after the first pass.
+    /// </summary>
+    private const long PeaksBudget = 32L * 1024 * 1024;
+
+    private static readonly Lock _peaksLock = new();
+
+    // Newest first; the key is the file, its stamp and which of its pictures
+    // was measured.
+    private static readonly List<(string Key, byte[] Bits, int Length)> _peaks = [];
 
     // A channel that clipped paints in its own colour, two channels in
     // their mix, all three white - the colours say which channel went, and
@@ -66,18 +82,16 @@ internal static class ReviewOverlay {
 
         ImageSource? instead = null;
         ImageSource? zoomInstead = null;
-        if (request.Gamma is { } gamma) {
-            var lut = ToneCurve.Lut(gamma);
-            instead = Toned(ToneCurve.Apply(fitWork, lut));
+        if (request.Curve is { } curve) {
+            instead = Toned(ToneCurve.Apply(fitWork, curve));
             if (request.FullReady) {
-                zoomInstead = same ? instead : Toned(ToneCurve.Apply(Full(), lut));
+                zoomInstead = same ? instead : Toned(ToneCurve.Apply(Full(), curve));
             }
         }
         ct.ThrowIfCancellationRequested();
 
         if (request.Peaking && request.FullReady && peaks is null) {
-            var big = Full();
-            peaks = FocusPeaking.Mask(Sharpness.Crispness(Luma.Of(big), big.Width, big.Height));
+            peaks = Peaks(full, request, Full);
         }
         ct.ThrowIfCancellationRequested();
 
@@ -86,7 +100,7 @@ internal static class ReviewOverlay {
             ? (same ? peaks : FocusPeaking.Shrink(peaks, full.PixelWidth, full.PixelHeight, w, h))
             : null;
         var overlay = Compose(
-            Marks(w, h, request.Clipping ? Clipping.Mask(fitWork) : null, fitPeaks, request),
+            Marks(w, h, request.Clipping ? Clipping.Mask(fitWork) : null, fitPeaks, request.Peak, request.Under),
             af, w, h, Math.Max(w, h) / 700.0, request);
         ct.ThrowIfCancellationRequested();
 
@@ -97,20 +111,102 @@ internal static class ReviewOverlay {
             } else {
                 var clipped = request.Clipping ? Clipping.Mask(Full()) : null;
                 zoomOverlay = Compose(
-                    Marks(full.PixelWidth, full.PixelHeight, clipped, request.Peaking ? peaks : null, request),
+                    Marks(full.PixelWidth, full.PixelHeight, clipped, request.Peaking ? peaks : null, request.Peak, request.Under),
                     af, full.PixelWidth, full.PixelHeight, 2, request);
             }
         }
         ct.ThrowIfCancellationRequested();
 
         var histogram = request.Histogram ? Histogram.Compute(fitWork) : null;
-        double? score = request.Sharpness && request.FullReady ? Score(full, request.Af) : null;
+        // Through the same probe the gallery's cells use, on the same
+        // picture - the JPEG the file carries - so the number under the
+        // buttons and the number on the cell cannot disagree. It remembers
+        // what it measured, so this is a lookup after the first time.
+        double? score = request.Sharpness && request.Path is { } path
+            ? ServiceLocator.TryGet<ISharpnessProbe>()?.Score(path)
+            : null;
 
         return new Result(
             instead, overlay, zoomInstead, zoomOverlay,
             histogram, histogram is null ? null : Outline(histogram, request.ChartWidth, request.ChartHeight),
             score,
             new Cache(fit, fitWork, full, peaks));
+    }
+
+
+    /// <summary>
+    /// The crisp edges of the big picture, measured once per file per
+    /// session: the answer is kept (packed to a bit per pixel), so going
+    /// back to a frame does not measure it again.
+    /// </summary>
+    private static byte[] Peaks(BitmapSource full, Request request, Func<BgraImage> pixels) {
+        int length = full.PixelWidth * full.PixelHeight;
+        string key = $"{request.Path}|{request.Stamp.Ticks}|{request.Stamp.Size}|{length}|{(request.Noisy ? "raw" : "")}";
+        lock (_peaksLock) {
+            int at = _peaks.FindIndex(e => e.Key == key);
+            if (at >= 0) {
+                var found = _peaks[at];
+                _peaks.RemoveAt(at);
+                _peaks.Insert(0, found);
+
+                return Unpack(found.Bits, found.Length);
+            }
+        }
+
+        var big = pixels();
+        var luma = Luma.Of(big);
+        if (request.Noisy) {
+            // The sensor decode is not denoised, and every grain of it is a
+            // crisp little edge.
+            luma = Luma.Denoise(luma, big.Width, big.Height);
+        }
+        var map = Sharpness.Measure(luma, big.Width, big.Height);
+        // Without the specks: dust and noise are crisp pixel by pixel, and a
+        // frame dusted all over says nothing about focus.
+        var marks = FocusPeaking.Continuous(FocusPeaking.Mask(map), map.Width, map.Height);
+
+        // The weights (an edge against a speck) are not kept: what is drawn
+        // only asks whether a pixel is marked. The score is measured
+        // elsewhere, off the file itself.
+        var bits = Pack(marks);
+        lock (_peaksLock) {
+            _peaks.RemoveAll(e => e.Key == key);
+            _peaks.Insert(0, (key, bits, marks.Length));
+            long total = 0;
+            for (int i = 0; i < _peaks.Count; i++) {
+                total += _peaks[i].Bits.Length;
+                if (total > PeaksBudget) {
+                    _peaks.RemoveRange(i, _peaks.Count - i);
+                    break;
+                }
+            }
+        }
+
+        return marks;
+    }
+
+
+    private static byte[] Pack(byte[] mask) {
+        var bits = new byte[(mask.Length + 7) / 8];
+        for (int i = 0; i < mask.Length; i++) {
+            if (mask[i] != 0) {
+                bits[i >> 3] |= (byte)(1 << (i & 7));
+            }
+        }
+
+        return bits;
+    }
+
+
+    private static byte[] Unpack(byte[] bits, int length) {
+        var mask = new byte[length];
+        for (int i = 0; i < length; i++) {
+            if ((bits[i >> 3] & (1 << (i & 7))) != 0) {
+                mask[i] = 255;
+            }
+        }
+
+        return mask;
     }
 
 
@@ -132,30 +228,6 @@ internal static class ReviewOverlay {
         bgra.CopyPixels(pixels, stride, 0);
 
         return new BgraImage(pixels, w, h, stride);
-    }
-
-
-    /// <summary>
-    /// The sharpness score (<see cref="Sharpness.Score"/>) of the picture at
-    /// its own resolution, over <see cref="Sharpness.Area"/> - only that
-    /// part of it is read. The gallery's probe reads the same part of the
-    /// same JPEG, so the two numbers agree.
-    /// </summary>
-    public static double? Score(BitmapSource full, IReadOnlyList<AfPoint>? af) {
-        var area = Sharpness.Area(full.PixelWidth, full.PixelHeight, af);
-        if (area.Width < 3 || area.Height < 3) {
-            return null;
-        }
-
-        BitmapSource bgra = full.Format == PixelFormats.Bgra32
-            ? full
-            : new FormatConvertedBitmap(full, PixelFormats.Bgra32, null, 0);
-        int stride = area.Width * 4;
-        var pixels = new byte[stride * area.Height];
-        bgra.CopyPixels(new Int32Rect(area.X, area.Y, area.Width, area.Height), pixels, stride, 0);
-        var crop = new BgraImage(pixels, area.Width, area.Height, stride);
-
-        return Sharpness.Score(Sharpness.Crispness(Luma.Of(crop), crop.Width, crop.Height), crop.Width, crop.Height);
     }
 
 
@@ -214,7 +286,7 @@ internal static class ReviewOverlay {
     /// patches, and a line under a patch would be lost. Null when there is
     /// nothing to mark.
     /// </summary>
-    private static BitmapSource? Marks(int w, int h, byte[]? clipped, byte[]? peaks, Request request) {
+    public static BitmapSource? Marks(int w, int h, byte[]? clipped, byte[]? peaks, Color peak, Color under) {
         if (clipped is null && peaks is null) {
             return null;
         }
@@ -240,7 +312,7 @@ internal static class ReviewOverlay {
             }
         });
 
-        var colors = new List<Color>(_clipColors) { request.Under, request.Peak };
+        var colors = new List<Color>(_clipColors) { under, peak };
         var bitmap = BitmapSource.Create(w, h, 96, 96, PixelFormats.Indexed4, new BitmapPalette(colors), pixels, stride);
         bitmap.Freeze();
 
@@ -260,9 +332,12 @@ internal static class ReviewOverlay {
             return marks;
         }
 
-        var group = new DrawingGroup();
-        // The whole frame, drawn in nothing: what makes the picture w by h
-        // rather than the box round the frames.
+        // Clipped to the frame, and with the frame drawn in nothing under
+        // everything: between them the picture is exactly w by h, whatever
+        // the frames and their pens do near the edges. Without the clip a
+        // pen hanging over the edge grew the picture by a pixel and a half,
+        // and the overlay sat that much off the zoom (stand 2026-09-22).
+        var group = new DrawingGroup { ClipGeometry = new RectangleGeometry(new Rect(0, 0, w, h)) };
         group.Children.Add(new GeometryDrawing(Brushes.Transparent, null, new RectangleGeometry(new Rect(0, 0, w, h))));
         if (marks is not null) {
             group.Children.Add(new ImageDrawing(marks, new Rect(0, 0, w, h)));
@@ -281,18 +356,23 @@ internal static class ReviewOverlay {
 
 
     /// <summary>
-    /// What to work out: the switches that are on, the curve to show the
-    /// picture through (null for none), where the camera focused, the
-    /// colours to mark with and the size of the chart.
+    /// What to work out: the switches that are on, the table to show the
+    /// picture through (null for none - see <see cref="ToneCurve"/>), where
+    /// the camera focused, the colours to mark with and the size of the chart.
     /// </summary>
     /// <param name="FullReady">
     /// The big picture is the one that stays. False for the moment a CR3
     /// shows its quick preview and its full JPEG is on the way: what is
     /// measured on the quick one would be withdrawn a moment later.
     /// </param>
+    /// <param name="Noisy">
+    /// The picture came off the sensor rather than out of the camera's JPEG
+    /// (the RAW switch): it is not denoised, and peaking has to take the
+    /// grain out first - see <see cref="Luma.Denoise"/>.
+    /// </param>
     public sealed record Request(
-        bool Peaking, bool Sharpness, bool Clipping, bool Histogram, bool AfPoints, double? Gamma,
-        IReadOnlyList<AfPoint>? Af, bool FullReady,
+        bool Peaking, bool Sharpness, bool Clipping, bool Histogram, bool AfPoints, byte[]? Curve,
+        IReadOnlyList<AfPoint>? Af, bool FullReady, string? Path, FileStamp Stamp, bool Noisy,
         Color Peak, Color Under, Color AfFocused, Color AfOther, double ChartWidth, double ChartHeight);
 
     /// <summary>

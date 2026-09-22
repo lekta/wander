@@ -26,7 +26,6 @@
         <conv:RankTextConverter x:Key="RankText"/>
         <conv:ColorLabelBrushConverter x:Key="ColorLabelBrush"/>
         <conv:RatingBadgeVisibilityConverter x:Key="RatingBadge"/>
-        <conv:SharpnessLevelConverter x:Key="SharpnessLevel"/>
         <conv:SharpnessBadgeConverter x:Key="SharpnessBadge"/>
         <conv:FilterStarConverter x:Key="FilterStarGlyph"/>
         <conv:CutRowConverter x:Key="IsCutRow"/>
@@ -397,7 +396,7 @@
                     Padding="3,0" Margin="2">
                 <TextBlock Text="{Binding Sharpness, Converter={StaticResource SharpnessBadge}}"
                            FontSize="10" FontWeight="SemiBold"
-                           Foreground="{Binding Sharpness, Converter={StaticResource SharpnessLevel}}"
+                           Foreground="{StaticResource ReviewSharp}"
                            VerticalAlignment="Center"/>
             </Border>
         </DataTemplate>
@@ -996,6 +995,20 @@
                                                 HorizontalAlignment="Center" VerticalAlignment="Center"
                                                 RenderOptions.BitmapScalingMode="HighQuality"
                                                 UseLayoutRounding="True"/>
+                            <!--
+                                The review helpers over the cell's picture
+                                (RAWHELPERS): the tone curve and the peaking
+                                marks, worked out for the cells on screen and
+                                nothing else. Empty while no helper that shows
+                                on a cell is on.
+                            -->
+                            <controls:ReviewThumb Entry="{Binding}"
+                                                  Side="{DynamicResource GalleryImageSize}"
+                                                  StretchDirection="DownOnly"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                  IsHitTestVisible="False"
+                                                  RenderOptions.BitmapScalingMode="HighQuality"
+                                                  UseLayoutRounding="True"/>
                             <!--
                                 Rating badge: stars and the colour label
                                 over the corner of the picture. On the

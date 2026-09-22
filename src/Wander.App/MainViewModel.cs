@@ -8,6 +8,7 @@ using System.Windows.Threading;
 using Wander.App.Controllers;
 using Wander.App.Controls;
 using Wander.App.Dialogs;
+using Wander.App.Preview;
 using Wander.App.Resources;
 using Wander.App.Util;
 using Wander.App.ViewModels;
@@ -337,12 +338,15 @@ public sealed class MainViewModel : ObservableObject {
             isCurrent: _session.IsCurrent,
             rows: () => _search.Source,
             publish: PublishRows);
-        _sharpness.StatusReported += (_, text) => Status = text;
         Helpers.PropertyChanged += (_, e) => {
             if (e.PropertyName == nameof(ReviewHelpers.Sharpness)) {
-                UpdateSharpnessPass();
+                _sharpness.SetActive(Helpers.Sharpness);
             }
         };
+        // The gallery's cells draw the helpers themselves and ask for the
+        // score of the frame they are on as they come on screen.
+        ReviewThumb.Follow(Helpers);
+        ReviewThumb.ScoreWanted += entry => _sharpness.Want(entry);
         Ratings.CompanionsChanged += (_, _) => {
             Preview.ReloadCompanions();
             PreviewSecond.ReloadCompanions();
@@ -997,7 +1001,6 @@ public sealed class MainViewModel : ObservableObject {
             if (SetField(ref _viewMode, value)) {
                 Raise(nameof(ContentPalette));
                 PushPalette();
-                UpdateSharpnessPass();
             }
         }
     }
@@ -1006,11 +1009,6 @@ public sealed class MainViewModel : ObservableObject {
     private void PushPalette() {
         Preview.SetPalette(ContentPalette);
         PreviewSecond.SetPalette(ContentPalette);
-    }
-
-    /// <summary>The sharpness pass runs while the gallery is on screen with the sharpness helper on.</summary>
-    private void UpdateSharpnessPass() {
-        _sharpness.SetActive(_viewMode == ViewMode.Gallery && Helpers.Sharpness);
     }
 
     /// <summary>
@@ -2059,6 +2057,7 @@ public sealed class MainViewModel : ObservableObject {
         if (decision.Stale is { Count: > 0 } stale) {
             foreach (string path in stale) {
                 AsyncIcon.Invalidate(path);
+                ReviewThumbs.Invalidate(path);
             }
         }
 
@@ -2319,7 +2318,7 @@ public sealed class MainViewModel : ObservableObject {
                 FolderArrived?.Invoke(path, started);
             }
             Ratings.StartPass(items, path, sort, epoch, arriving);
-            _sharpness.StartPass(items, path, epoch);
+            _sharpness.Listed(path, epoch);
         } catch (OperationCanceledException) {
             return;
         } catch (Exception ex) when (ex is DirectoryNotFoundException or DriveNotFoundException) {

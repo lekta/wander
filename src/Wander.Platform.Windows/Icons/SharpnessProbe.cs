@@ -1,3 +1,4 @@
+using System.IO;
 using System.Runtime.InteropServices.WindowsRuntime;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
@@ -10,27 +11,62 @@ namespace Wander.Platform.Windows.Icons;
 /// <summary>
 /// The sharpness score of one photograph, for the gallery's pass
 /// (RAWHELPERS, step 6) - the same number the preview pane shows for it:
-/// <see cref="Sharpness.Score"/> over <see cref="Sharpness.Area"/>, at the
-/// picture's own resolution. Shrunk, a missed frame reads as crisp as the
+/// <see cref="Sharpness.Score"/> over <see cref="Sharpness.Area"/> - the
+/// middle of the frame - at the picture's own resolution. Shrunk, a missed frame reads as crisp as the
 /// hit (stand 2026-09-22), so only the area is decoded, not a smaller
 /// copy of the whole.
 ///
 /// <para>
 /// A RAW is measured on the biggest JPEG it carries; one that carries none
 /// is left unscored rather than decoded from the sensor, which costs a
-/// second a frame. The pixels are read as stored, unturned, so the
-/// autofocus area is turned back to match (<see cref="AfGeometry.Restore"/>).
+/// second a frame. The pixels are read as stored, unturned, which the
+/// middle of the frame does not care about.
 /// </para>
 /// </summary>
 public sealed class SharpnessProbe : ISharpnessProbe {
-    private readonly MetadataExtractorImageReader _metadata = new();
+    /// <summary>How many answers are kept. Past this the cache starts over.</summary>
+    private const int CacheLimit = 4000;
 
 
+    private readonly Lock _lock = new();
+    private readonly Dictionary<string, (FileStamp Stamp, double? Score)> _scored = new(StringComparer.OrdinalIgnoreCase);
+
+
+    /// <summary>
+    /// The score of the picture at <paramref name="path"/>. Measured once a
+    /// session per file: the answer is kept until the file changes, so a
+    /// helper switched off and on again, or a folder walked back into, costs
+    /// a lookup rather than a decode.
+    /// </summary>
     public double? Score(string path) {
+        FileStamp stamp;
         try {
-            var shot = _metadata.Read(path);
-            var af = shot?.AfPoints is { } points ? AfGeometry.Restore(points, shot.Orientation) : null;
+            var file = new FileInfo(path);
+            stamp = FileStamp.Of(file.LastWriteTimeUtc, file.Length);
+        } catch {
+            return null;
+        }
 
+        lock (_lock) {
+            if (_scored.TryGetValue(path, out var kept) && kept.Stamp == stamp) {
+                return kept.Score;
+            }
+        }
+
+        double? score = Measure(path);
+        lock (_lock) {
+            if (_scored.Count >= CacheLimit) {
+                _scored.Clear();
+            }
+            _scored[path] = (stamp, score);
+        }
+
+        return score;
+    }
+
+
+    private static double? Measure(string path) {
+        try {
             if (ImageFormats.IsRaw(path)) {
                 using var raw = SharedRead.Open(path);
                 if (RawPreviewExtractor.Extract(raw, fullSize: true) is not { } jpeg) {
@@ -41,13 +77,13 @@ public sealed class SharpnessProbe : ISharpnessProbe {
                 memory.WriteAsync(jpeg.AsBuffer()).AsTask().GetAwaiter().GetResult();
                 memory.Seek(0);
 
-                return ScoreAsync(memory, af).GetAwaiter().GetResult();
+                return ScoreAsync(memory).GetAwaiter().GetResult();
             }
 
             using var file = SharedRead.Open(path);
             using var stream = file.AsRandomAccessStream();
 
-            return ScoreAsync(stream, af).GetAwaiter().GetResult();
+            return ScoreAsync(stream).GetAwaiter().GetResult();
         } catch {
             // Unreadable, not a picture after all, a codec that refused it:
             // the frame simply goes unscored.
@@ -56,9 +92,9 @@ public sealed class SharpnessProbe : ISharpnessProbe {
     }
 
 
-    private static async Task<double?> ScoreAsync(IRandomAccessStream input, IReadOnlyList<AfPoint>? af) {
+    private static async Task<double?> ScoreAsync(IRandomAccessStream input) {
         var decoder = await BitmapDecoder.CreateAsync(input);
-        var area = Sharpness.Area((int)decoder.PixelWidth, (int)decoder.PixelHeight, af);
+        var area = Sharpness.Area((int)decoder.PixelWidth, (int)decoder.PixelHeight);
         if (area.Width < 3 || area.Height < 3) {
             return null;
         }
@@ -76,8 +112,9 @@ public sealed class SharpnessProbe : ISharpnessProbe {
             ColorManagementMode.DoNotColorManage);
 
         var crop = new BgraImage(pixels.DetachPixelData(), area.Width, area.Height, area.Width * 4);
-        var crisp = Sharpness.Crispness(Luma.Of(crop), crop.Width, crop.Height);
+        var map = Sharpness.Measure(Luma.Of(crop), crop.Width, crop.Height);
+        var crisp = FocusPeaking.Continuous(FocusPeaking.Mask(map), map.Width, map.Height);
 
-        return Sharpness.Score(crisp, crop.Width, crop.Height);
+        return Sharpness.Score(map, crisp);
     }
 }

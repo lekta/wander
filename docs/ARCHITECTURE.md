@@ -149,12 +149,12 @@ Platform.Windows` — один файл, `App.xaml.cs` (точка композ�
 ```
 === Wander dependency graph (using sweep) ===
 date   : 2026-09-22
-commit : afd7689
+commit : 4837f75
 
 -- projects --
-Wander.App -> Wander.Core   (61 files)
+Wander.App -> Wander.Core   (63 files)
 Wander.App -> Wander.Platform.Windows   (1 files)
-Wander.Core.Tests -> Wander.Core   (115 files)
+Wander.Core.Tests -> Wander.Core   (117 files)
 Wander.Harness -> Wander.App   (4 files)
 Wander.Harness -> Wander.Core   (6 files)
 Wander.Harness -> Wander.Platform.Windows   (3 files)
@@ -178,6 +178,7 @@ Wander.Platform.Windows -> Wander.Core   (32 files)
   FileSystem     -> Logging        (3 files)
   FileSystem     -> Operations     (3 files)
   FileSystem     -> Undo           (3 files)
+  Icons          -> Imaging        (1 files)
   Listing        -> Companions     (2 files)
   Listing        -> FileSystem     (7 files)
   Listing        -> Icons          (1 files)
@@ -210,8 +211,8 @@ Wander.Platform.Windows -> Wander.Core   (32 files)
   Undo           -> Operations     (1 files)
 
 -- Wander.Core: levels --
-  0: (root), Icons, Imaging, Layout, Localization, Logging, Operations
-  1: Diagnostics, Undo
+  0: (root), Imaging, Layout, Localization, Logging, Operations
+  1: Diagnostics, Icons, Undo
   2: FileSystem
   3: Companions, Navigation, Preview
   4: Actions, Rename, Search
@@ -242,6 +243,7 @@ Wander.Platform.Windows -> Wander.Core   (32 files)
   (root)         -> Dialogs        (3 files)
   (root)         -> DragPreview    (1 files)
   (root)         -> Menu           (1 files)
+  (root)         -> Preview        (1 files)
   (root)         -> Resources      (4 files)
   (root)         -> Util           (3 files)
   (root)         -> ViewModels     (2 files)
@@ -251,13 +253,14 @@ Wander.Platform.Windows -> Wander.Core   (32 files)
   Conflict       -> ViewModels     (2 files)
   Controllers    -> Converters     (1 files)
   Controllers    -> Preview        (1 files)
-  Controllers    -> Resources      (7 files)
+  Controllers    -> Resources      (6 files)
   Controllers    -> Util           (1 files)
   Controllers    -> ViewModels     (7 files)
   Controls       -> Converters     (1 files)
   Controls       -> Diagnostics    (1 files)
-  Controls       -> Resources      (2 files)
-  Controls       -> ViewModels     (1 files)
+  Controls       -> Preview        (1 files)
+  Controls       -> Resources      (3 files)
+  Controls       -> ViewModels     (2 files)
   Converters     -> Resources      (1 files)
   Converters     -> Util           (1 files)
   Converters     -> ViewModels     (1 files)
@@ -1950,6 +1953,75 @@ Delete failed` лежал в файле, а прогон отчитывался 
 сценария `"state"`, `Program.SeedState`): это не профиль песочницы, потому
 что читается раньше, чем любой профиль мог бы отработать. Файла нет —
 прогон падает сразу, а не проходит молча.
+
+## Хелперы отсмотра — `Wander.Core/Imaging/`
+
+Папка уровня 0, ссылок наружу нет: чистые функции над `BgraImage`
+(`byte[] Pixels, Width, Height, Stride`) — факты на входе, числа и маски на
+выходе, тесты на синтетике. WPF и путей к файлам тут нет; App подаёт
+пиксели и забирает маски (`Preview/ReviewOverlay`), Platform меряет файл
+(`Icons/SharpnessProbe`).
+
+**Мера одна на всё — крутизна края** (`Sharpness.Measure` → `CrispMap`):
+градиент Собеля, делённый на местный контраст (окно 7×7). У ступеньки
+между соседними пикселями около 4, у края шириной w — около 4/w; от
+контраста сцены и света не зависит, чем и отличается от голого градиента.
+Первая версия пикинга отмечала верхние 3 % градиентов — кадр и он же
+размытый давали 3,04 % и 3,17 % отметок, причём у размытого на контрастном
+переднем плане; по крутизне та же пара даёт 1,11 % и 0,06 % (стенд
+2026-09-22). Мерить можно только в родном разрешении: уменьшение сужает
+края, и превью 1620 px промахнувшегося кадра читается как попавший.
+
+**Что считается на чём.** Пикинг и балл — полный кадр (у RAW это вшитый
+JPEG, у CR3 большой). Клиппинг, гистограмма и кривые — рабочая копия
+≤ 2560 px: им разрешение не нужно. Миниатюрам галереи маска считается с
+шагом 2 (`Measure(step)`): соседей мера читает настоящих, ответов просит
+вчетверо меньше, а ячейка в 200 px разницы не видит.
+
+**Точки против линий** (`FocusPeaking.Continuous`). Связное пятно меньше
+шести точек выбрасывается; вытянутое (длиннее своей ширины в 2,5 раза) или
+крупное (от 200 точек — текстура) считается гранью в полный вес; мелкое
+круглое — снег, блик, пылинка, зерно — весит вчетверо меньше. Балл
+(`Sharpness.Score`) берёт 98-й перцентиль крутизны по области и умножает на
+долю таких «настоящих» граней среди всех краёв области (полный вес с 3 %).
+
+**Балл меряется по середине кадра, а не по точке AF.** Camera Canon
+записывает зону автофокуса в makernote, и обычно она на объекте, но два
+кадра одной сцены (2026-09-22, R8, RF50/1.8, дистанция фокусировки 2,8 м)
+несут зону в левом верхнем углу, над потолком, — разбор проверен по
+структуре записи, это данные камеры. По такой зоне промахнувшийся кадр
+получал 100, а попавший 95; по середине кадра — 27 и 91. Рамка при этом
+рисуется: глазами видно, когда камера пишет ерунду.
+
+**Режим RAW.** Декод сенсора (WIC) не шарпится и не давится по шуму:
+настоящие грани в нём мягче порога, а зерно — чёткое, и подсветка
+рассыпалась пылью по кадру (4,6 % отметок против 0,85 % у JPEG той же
+сцены). Перед замером идёт `Luma.Denoise` — медиана 3×3: одиночные точки
+уходят, ступенька остаётся. Балл в этом режиме всё равно меряется по
+вшитому JPEG, поэтому число в панели и число на миниатюре не расходятся.
+
+**Что живёт между кадрами.** Балл — в `SharpnessProbe` по пути и штампу
+файла (до 4000 записей). Маски пикинга — в `ReviewOverlay`, упакованные по
+биту на пиксель (24 Мп = 3 МБ), бюджет 32 МБ: ходить по паре кадров
+туда-сюда — обычный жест отбора, и второй раз он бесплатный. Рендеры ячеек
+галереи — в `ReviewThumbs`, 120 штук.
+
+**Наложения.** Метки клиппинга и пикинга — одна палитровая картинка
+`Indexed4` (4 бита на пиксель; на 24 Мп 12 МБ вместо 96 у Pbgra32), рамки
+AF — геометрия поверх неё, всё вместе `DrawingImage` с клипом по кадру
+(без клипа перо рамки у края раздувало картинку на полтора пикселя, и
+наложение в лупе уезжало). Панель рисует наложение поверх вписанной
+картинки (`ImgOverlay` размером с `ImgFit`), лупа — своё, в разрешении
+кадра, размер и место ему ставит `UpdateZoomPosition` вместе с картинкой.
+
+**Кто когда считает.** В панели — `PreviewController.ScheduleHelpers`:
+токен привязан к загрузке картинки, результат публикуется, только если обе
+картинки те же (`ReferenceEquals`); пока у CR3 не приехал большой JPEG,
+пикинг и балл ждут (`Request.FullReady`) — что померено на быстром превью,
+пришлось бы отзывать. В галерее считает не проход по папке, а сами ячейки:
+`ReviewThumb` заказывает своё при появлении на экране и отменяет при уходе,
+`SharpnessController` отвечает на заказы балла и складывает ответы в строки
+пачками (строка, заменённая по одной, — это перестроенная строка).
 
 ## Состояние и логи
 

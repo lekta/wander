@@ -288,7 +288,7 @@
          information. -->
     <SolidColorBrush x:Key="ReviewPeaking" Color="#FF2BD6"/>
     <SolidColorBrush x:Key="ReviewUnder" Color="#3D5AFE"/>
-    <SolidColorBrush x:Key="ReviewAfFocused" Color="#34D058"/>
+    <SolidColorBrush x:Key="ReviewAfFocused" Color="#FF2BD6"/>
     <SolidColorBrush x:Key="ReviewAfOther" Color="#B0B0B0"/>
     <SolidColorBrush x:Key="ReviewChartPlate" Color="#CC202020"/>
     <SolidColorBrush x:Key="ReviewChartRed" Color="#99FF4040"/>
@@ -297,9 +297,8 @@
     <SolidColorBrush x:Key="ReviewChartOver" Color="#FF5A5A"/>
     <SolidColorBrush x:Key="ReviewChartUnder" Color="#6F8BFF"/>
     <SolidColorBrush x:Key="ReviewToggleOn" Color="#330078D7"/>
-    <SolidColorBrush x:Key="ReviewSharpGood" Color="#2E9E48"/>
-    <SolidColorBrush x:Key="ReviewSharpSoft" Color="#C98A00"/>
-    <SolidColorBrush x:Key="ReviewSharpMissed" Color="#D13438"/>
+    <SolidColorBrush x:Key="ReviewSharp" Color="#C838E8"/>
+    <SolidColorBrush x:Key="IconRing" Color="#9A9A9A"/>
 
     <!-- What the drag leaving Wander would do, on the plaque under the cursor. -->
     <SolidColorBrush x:Key="DragMove" Color="SteelBlue"/>

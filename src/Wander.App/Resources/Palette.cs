@@ -88,13 +88,6 @@ internal static class Palette {
 
     public static readonly Brush ReviewAfOther = Find("ReviewAfOther");
 
-    /// <summary>The sharpness score by level: sharp, soft, missed.</summary>
-    public static readonly Brush ReviewSharpGood = Find("ReviewSharpGood");
-
-    public static readonly Brush ReviewSharpSoft = Find("ReviewSharpSoft");
-
-    public static readonly Brush ReviewSharpMissed = Find("ReviewSharpMissed");
-
 
     /// <summary>
     /// A frozen pen from a palette brush - what the adorners draw their

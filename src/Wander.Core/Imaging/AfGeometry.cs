@@ -15,20 +15,6 @@ public static class AfGeometry {
     }
 
 
-    /// <summary>
-    /// The way back: areas over the upright picture put over the frame as
-    /// stored - for whoever reads the pixels without turning them. Every
-    /// orientation undoes itself except the quarter turns, which undo each
-    /// other.
-    /// </summary>
-    public static IReadOnlyList<AfPoint> Restore(IReadOnlyList<AfPoint> points, int? orientation) {
-        return Orient(points, orientation switch {
-            6 => 8,
-            8 => 6,
-            _ => orientation,
-        });
-    }
-
 
     // EXIF: 2 mirror, 3 half turn, 4 flip, 5 transpose, 6 quarter turn
     // clockwise, 7 transverse, 8 quarter turn counter-clockwise.

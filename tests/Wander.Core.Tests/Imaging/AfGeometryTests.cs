@@ -28,25 +28,4 @@ public class AfGeometryTests {
         Assert.Equal(h, upright.H, 9);
         Assert.True(upright.InFocus);
     }
-
-
-    [Theory]
-    [InlineData(1)]
-    [InlineData(2)]
-    [InlineData(3)]
-    [InlineData(4)]
-    [InlineData(5)]
-    [InlineData(6)]
-    [InlineData(7)]
-    [InlineData(8)]
-    public void Restore_UndoesOrient(int orientation) {
-        var stored = new AfPoint(0.2, 0.1, 0.1, 0.3, InFocus: false);
-
-        var back = Assert.Single(AfGeometry.Restore(AfGeometry.Orient(new[] { stored }, orientation), orientation));
-
-        Assert.Equal(stored.X, back.X, 9);
-        Assert.Equal(stored.Y, back.Y, 9);
-        Assert.Equal(stored.W, back.W, 9);
-        Assert.Equal(stored.H, back.H, 9);
-    }
 }

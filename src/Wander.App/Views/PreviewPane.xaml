@@ -31,11 +31,206 @@
         <conv:RankStarConverter x:Key="RankStar"/>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
         <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility"/>
-        <conv:SharpnessLevelConverter x:Key="SharpnessLevel"/>
 
+        <!--
+            The helpers' buttons (RAWHELPERS). Two letters said nothing to
+            anyone but their author (2026-09-22), so each one draws what it
+            does: everything in a circle of the same size, the marks in the
+            colour they appear in over the picture.
+        -->
+        <DrawingImage x:Key="IconHelperFocus">
+            <DrawingImage.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="Transparent" Geometry="M0,0 L16,0 L16,16 L0,16 Z"/>
+                    <GeometryDrawing>
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="{StaticResource IconRing}" Thickness="1"/>
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <EllipseGeometry Center="8,8" RadiusX="7" RadiusY="7"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <!-- The edge, and what peaking puts along it. -->
+                    <GeometryDrawing>
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="{StaticResource ReviewPeaking}" Thickness="1.6"/>
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <PathGeometry Figures="M4,11.5 L12,4.5"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <GeometryDrawing Brush="{StaticResource ReviewPeaking}">
+                        <GeometryDrawing.Geometry>
+                            <GeometryGroup>
+                                <EllipseGeometry Center="4.5,7.5" RadiusX="1" RadiusY="1"/>
+                                <EllipseGeometry Center="8.5,11.5" RadiusX="1" RadiusY="1"/>
+                                <EllipseGeometry Center="11.5,8.5" RadiusX="1" RadiusY="1"/>
+                            </GeometryGroup>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                </DrawingGroup>
+            </DrawingImage.Drawing>
+        </DrawingImage>
+
+        <DrawingImage x:Key="IconHelperAf">
+            <DrawingImage.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="Transparent" Geometry="M0,0 L16,0 L16,16 L0,16 Z"/>
+                    <GeometryDrawing>
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="{StaticResource IconRing}" Thickness="1"/>
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <EllipseGeometry Center="8,8" RadiusX="7" RadiusY="7"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <!-- The camera's focus frame. -->
+                    <GeometryDrawing>
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="{StaticResource ReviewAfFocused}" Thickness="1.6"/>
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <RectangleGeometry Rect="4.5,4.5,7,7"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                </DrawingGroup>
+            </DrawingImage.Drawing>
+        </DrawingImage>
+
+        <!-- Sharpness: an edge that rises steeply - what the score measures. -->
+        <DrawingImage x:Key="IconHelperSharp">
+            <DrawingImage.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="Transparent" Geometry="M0,0 L16,0 L16,16 L0,16 Z"/>
+                    <GeometryDrawing>
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="{StaticResource IconRing}" Thickness="1"/>
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <EllipseGeometry Center="8,8" RadiusX="7" RadiusY="7"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <GeometryDrawing>
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="{StaticResource ReviewSharp}" Thickness="1.6" LineJoin="Round"/>
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <PathGeometry Figures="M3.5,11.5 L8,4.5 L12.5,11.5"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                </DrawingGroup>
+            </DrawingImage.Drawing>
+        </DrawingImage>
+
+        <!-- Clipping: the range from black to white, with the two ends that are gone. -->
+        <DrawingImage x:Key="IconHelperClip">
+            <DrawingImage.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="Transparent" Geometry="M0,0 L16,0 L16,16 L0,16 Z"/>
+                    <GeometryDrawing>
+                        <GeometryDrawing.Brush>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                <GradientStop Color="#3D5AFE" Offset="0"/>
+                                <GradientStop Color="#3D5AFE" Offset="0.16"/>
+                                <GradientStop Color="#000000" Offset="0.2"/>
+                                <GradientStop Color="#FFFFFF" Offset="0.8"/>
+                                <GradientStop Color="#FF3B30" Offset="0.84"/>
+                                <GradientStop Color="#FF3B30" Offset="1"/>
+                            </LinearGradientBrush>
+                        </GeometryDrawing.Brush>
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="{StaticResource IconRing}" Thickness="1"/>
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <EllipseGeometry Center="8,8" RadiusX="7" RadiusY="7"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <GeometryDrawing>
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="{StaticResource IconRing}" Thickness="1"/>
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <PathGeometry Figures="M8,1.2 L8,14.8"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                </DrawingGroup>
+            </DrawingImage.Drawing>
+        </DrawingImage>
+
+        <!-- The chart itself, in miniature. -->
+        <DrawingImage x:Key="IconHelperHistogram">
+            <DrawingImage.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="Transparent" Geometry="M0,0 L16,0 L16,16 L0,16 Z"/>
+                    <GeometryDrawing>
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="{StaticResource IconRing}" Thickness="1"/>
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <EllipseGeometry Center="8,8" RadiusX="7" RadiusY="7"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <GeometryDrawing Brush="{StaticResource ReviewSharp}"
+                                     Geometry="M4,11 L5.2,11 L5.2,8.5 L4,8.5 Z
+                                               M5.7,11 L6.9,11 L6.9,6 L5.7,6 Z
+                                               M7.4,11 L8.6,11 L8.6,4.5 L7.4,4.5 Z
+                                               M9.1,11 L10.3,11 L10.3,7 L9.1,7 Z
+                                               M10.8,11 L12,11 L12,9.5 L10.8,9.5 Z"/>
+                </DrawingGroup>
+            </DrawingImage.Drawing>
+        </DrawingImage>
+
+        <!-- Shadows lifted: the same range with its dark end raised. -->
+        <DrawingImage x:Key="IconHelperShadows">
+            <DrawingImage.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="Transparent" Geometry="M0,0 L16,0 L16,16 L0,16 Z"/>
+                    <GeometryDrawing>
+                        <GeometryDrawing.Brush>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                <GradientStop Color="#7A7A7A" Offset="0"/>
+                                <GradientStop Color="#A6A6A6" Offset="0.45"/>
+                                <GradientStop Color="#FFFFFF" Offset="1"/>
+                            </LinearGradientBrush>
+                        </GeometryDrawing.Brush>
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="{StaticResource IconRing}" Thickness="1"/>
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <EllipseGeometry Center="8,8" RadiusX="7" RadiusY="7"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                </DrawingGroup>
+            </DrawingImage.Drawing>
+        </DrawingImage>
+
+        <!-- Highlights pulled down: the same range with its bright end lowered. -->
+        <DrawingImage x:Key="IconHelperHighlights">
+            <DrawingImage.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="Transparent" Geometry="M0,0 L16,0 L16,16 L0,16 Z"/>
+                    <GeometryDrawing>
+                        <GeometryDrawing.Brush>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                <GradientStop Color="#000000" Offset="0"/>
+                                <GradientStop Color="#5E5E5E" Offset="0.55"/>
+                                <GradientStop Color="#9A9A9A" Offset="1"/>
+                            </LinearGradientBrush>
+                        </GeometryDrawing.Brush>
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="{StaticResource IconRing}" Thickness="1"/>
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <EllipseGeometry Center="8,8" RadiusX="7" RadiusY="7"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                </DrawingGroup>
+            </DrawingImage.Drawing>
+        </DrawingImage>
+
         <!--
-            A review helper's switch in the footer (RAWHELPERS): two letters,
-            the words in the tooltip. Flat at rest, tinted while on - a
+            A review helper's switch in the footer (RAWHELPERS): a picture of
+            what it does, the words in the tooltip. Flat at rest, tinted while on - a
             helper left on changes what every picture looks like, and the
             footer is where to see why.
         -->
@@ -291,9 +486,9 @@
                             is a small spinner in the corner rather than a
                             veil over the picture.
                         -->
-                        <Ellipse Width="14" Height="14" StrokeThickness="2"
-                                 Stroke="{StaticResource AccentStroke}" Fill="Transparent"
-                                 StrokeDashArray="3,2"
+                        <Ellipse Width="22" Height="22" StrokeThickness="3"
+                                 Stroke="{StaticResource AccentStroke}" Fill="{StaticResource ReviewChartPlate}"
+                                 StrokeDashArray="4,2"
                                  Margin="0,16,16,0"
                                  HorizontalAlignment="Right" VerticalAlignment="Top"
                                  IsHitTestVisible="False"
@@ -915,121 +1110,30 @@
                         BorderBrush="{StaticResource Separator}" BorderThickness="0,1,0,0"
                         Padding="8,6" Background="{StaticResource ChromeBackground}"
                         Visibility="{Binding ShowFooter, Converter={StaticResource BoolToVisibility}}">
-                    <StackPanel>
+                    <!--
+                        The file's details on the left, the review helpers'
+                        switches and their chart on the right (RAWHELPERS).
+                        Two columns rather than a row inside the first line:
+                        the chart is taller than that line, and inside it it
+                        pushed the stars down the footer for nothing - beside
+                        them there is room to spare (2026-09-22).
+                    -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
                         <!--
-                            The file's details, and — for RAW — the switch
-                            between its two pictures, right of the name.
-
-                            RAW files carry the small JPEG the camera
-                            embedded (instant, and what the pane shows by
-                            default) and the sensor decode (the real frame,
-                            about a second). The toggle stays on once
-                            pressed, so a whole folder can be looked at that
-                            way. It lives here with the rest of the file's
-                            details rather than over the picture — nothing
-                            should sit on top of what you came to look at —
-                            and top-aligned, so it lands on the name line
-                            however many lines of detail follow.
+                            The name, the dim mention of its sidecars -
+                            "(+.xmp)" - and the lines of facts under it, the
+                            sharpness score after the last of them. One
+                            TextBlock, so they wrap as one text.
                         -->
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <!--
-                                The name, the dim mention of its sidecars -
-                                "(+.xmp)" - and the lines of facts under it.
-                                One TextBlock, so the three wrap as one text.
-                            -->
-                            <TextBlock Grid.Column="0"
-                                       FontSize="11" Foreground="{StaticResource TextSecondary}"
-                                       TextWrapping="Wrap">
-                                <Run Text="{Binding SummaryHead, Mode=OneWay}"/><Run Text="  "/><Run Text="{Binding SummaryNote, Mode=OneWay}" Foreground="{StaticResource TextDim}"/><Run Text="{Binding SummaryRest, Mode=OneWay}"/>
-                            </TextBlock>
-                            <!--
-                                Right of the name: the review helpers'
-                                switches and the sharpness score, the RAW
-                                switch, the chart of levels (RAWHELPERS).
-                                The helpers only over a picture.
-                            -->
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
-                                <StackPanel Orientation="Horizontal" Margin="8,0,0,0"
-                                            Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Image}">
-                                    <ToggleButton Style="{StaticResource HelperToggle}"
-                                                  IsChecked="{Binding Helpers.Peaking}"
-                                                  Content="{x:Static res:Strings.HelperFocus}"
-                                                  ToolTip="{x:Static res:Strings.HelperFocusTip}"/>
-                                    <ToggleButton Style="{StaticResource HelperToggle}"
-                                                  IsChecked="{Binding Helpers.AfPoints}"
-                                                  Content="{x:Static res:Strings.HelperAf}"
-                                                  ToolTip="{x:Static res:Strings.HelperAfTip}"/>
-                                    <ToggleButton Style="{StaticResource HelperToggle}"
-                                                  IsChecked="{Binding Helpers.Sharpness}"
-                                                  Content="{x:Static res:Strings.HelperSharp}"
-                                                  ToolTip="{x:Static res:Strings.HelperSharpTip}"/>
-                                    <ToggleButton Style="{StaticResource HelperToggle}"
-                                                  IsChecked="{Binding Helpers.Clipping}"
-                                                  Content="{x:Static res:Strings.HelperClip}"
-                                                  ToolTip="{x:Static res:Strings.HelperClipTip}"/>
-                                    <ToggleButton Style="{StaticResource HelperToggle}"
-                                                  IsChecked="{Binding Helpers.Histogram}"
-                                                  Content="{x:Static res:Strings.HelperHist}"
-                                                  ToolTip="{x:Static res:Strings.HelperHistTip}"/>
-                                    <ToggleButton Style="{StaticResource HelperToggle}"
-                                                  IsChecked="{Binding Helpers.Shadows}"
-                                                  Content="{x:Static res:Strings.HelperShadows}"
-                                                  ToolTip="{x:Static res:Strings.HelperShadowsTip}"/>
-                                    <ToggleButton Style="{StaticResource HelperToggle}"
-                                                  IsChecked="{Binding Helpers.Highlights}"
-                                                  Content="{x:Static res:Strings.HelperHighlights}"
-                                                  ToolTip="{x:Static res:Strings.HelperHighlightsTip}"/>
-                                    <!-- The score of the picture shown, coloured by level; the scale in the tooltip. -->
-                                    <TextBlock Text="{Binding SharpnessText}"
-                                               Foreground="{Binding SharpnessScore, Converter={StaticResource SharpnessLevel}}"
-                                               ToolTip="{Binding SharpnessTip}"
-                                               FontSize="11" FontWeight="SemiBold"
-                                               Margin="4,1,0,0" VerticalAlignment="Top"
-                                               Visibility="{Binding HasSharpnessScore, Converter={StaticResource BoolToVisibility}}"/>
-                                </StackPanel>
-                                <ToggleButton x:Name="RawToggle"
-                                              Content="{x:Static res:Strings.PreviewRawToggle}"
-                                              VerticalAlignment="Top"
-                                              Margin="8,0,0,0" Padding="8,1"
-                                              MinWidth="44"
-                                              FontSize="11"
-                                              Focusable="False"
-                                              ToolTip="{x:Static res:Strings.PreviewRawToggleHint}"
-                                              IsChecked="{Binding ShowRawDecode, Mode=TwoWay}"
-                                              Visibility="{Binding IsRawImage, Converter={StaticResource BoolToVisibility}}"/>
-                                <!--
-                                    Levels by channel. No words: an arrow
-                                    lights at the side that clipped - left
-                                    for shadows crushed, right for highlights
-                                    burnt - and the shares are in the tooltip.
-                                -->
-                                <Border Margin="8,0,0,0" Padding="2,2" CornerRadius="2"
-                                        Background="{StaticResource ReviewChartPlate}"
-                                        VerticalAlignment="Top"
-                                        ToolTip="{Binding HistogramTip}"
-                                        Visibility="{Binding HasHistogram, Converter={StaticResource BoolToVisibility}}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="&lt;" FontSize="11" FontWeight="Bold" Width="8"
-                                                   Foreground="{StaticResource ReviewChartUnder}"
-                                                   VerticalAlignment="Center" TextAlignment="Center"
-                                                   Visibility="{Binding HistogramUnder, Converter={StaticResource BoolToVisibility}}"/>
-                                        <Canvas Width="96" Height="28" Margin="1,0" ClipToBounds="True">
-                                            <Polygon Points="{Binding HistogramRed}" Fill="{StaticResource ReviewChartRed}"/>
-                                            <Polygon Points="{Binding HistogramGreen}" Fill="{StaticResource ReviewChartGreen}"/>
-                                            <Polygon Points="{Binding HistogramBlue}" Fill="{StaticResource ReviewChartBlue}"/>
-                                        </Canvas>
-                                        <TextBlock Text="&gt;" FontSize="11" FontWeight="Bold" Width="8"
-                                                   Foreground="{StaticResource ReviewChartOver}"
-                                                   VerticalAlignment="Center" TextAlignment="Center"
-                                                   Visibility="{Binding HistogramOver, Converter={StaticResource BoolToVisibility}}"/>
-                                    </StackPanel>
-                                </Border>
-                            </StackPanel>
-                        </Grid>
+                        <TextBlock FontSize="11" Foreground="{StaticResource TextSecondary}"
+                                   TextWrapping="Wrap">
+                            <Run Text="{Binding SummaryHead, Mode=OneWay}"/><Run Text="  "/><Run Text="{Binding SummaryNote, Mode=OneWay}" Foreground="{StaticResource TextDim}"/><Run Text="{Binding SummaryRest, Mode=OneWay}"/><Run Text="   "/><Run Text="{Binding SharpnessText, Mode=OneWay}" Foreground="{StaticResource ReviewSharp}" FontWeight="SemiBold" ToolTip="{Binding SharpnessTip}"/>
+                        </TextBlock>
 
                         <!--
                             An operation of the user's has this file: running
@@ -1160,7 +1264,96 @@
                         -->
                         <TextBlock Text="{Binding CompanionStatus}"
                                    FontSize="11" Foreground="{StaticResource TextDim}" TextWrapping="Wrap"/>
-                    </StackPanel>
+                        </StackPanel>
+                        <!--
+                            The review helpers' switches (RAWHELPERS), only
+                            over a picture, and the RAW switch beside them:
+                            a RAW carries the small JPEG the camera embedded
+                            (instant, and what the pane shows by default) and
+                            the sensor decode (the real frame, about a
+                            second). The switch stays on once pressed, so a
+                            whole folder can be looked at that way.
+                        -->
+                            <StackPanel Grid.Column="1" VerticalAlignment="Top">
+                                <StackPanel Orientation="Horizontal">
+                                <StackPanel Orientation="Horizontal" Margin="8,0,0,0"
+                                            Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Image}">
+                                    <ToggleButton Style="{StaticResource HelperToggle}"
+                                                  IsChecked="{Binding Helpers.Peaking}"
+                                                  ToolTip="{x:Static res:Strings.HelperFocusTip}">
+                                        <Image Source="{StaticResource IconHelperFocus}" Width="14" Height="14"/>
+                                    </ToggleButton>
+                                    <ToggleButton Style="{StaticResource HelperToggle}"
+                                                  IsChecked="{Binding Helpers.AfPoints}"
+                                                  ToolTip="{x:Static res:Strings.HelperAfTip}">
+                                        <Image Source="{StaticResource IconHelperAf}" Width="14" Height="14"/>
+                                    </ToggleButton>
+                                    <ToggleButton Style="{StaticResource HelperToggle}"
+                                                  IsChecked="{Binding Helpers.Sharpness}"
+                                                  ToolTip="{x:Static res:Strings.HelperSharpTip}">
+                                        <Image Source="{StaticResource IconHelperSharp}" Width="14" Height="14"/>
+                                    </ToggleButton>
+                                    <ToggleButton Style="{StaticResource HelperToggle}"
+                                                  IsChecked="{Binding Helpers.Clipping}"
+                                                  ToolTip="{x:Static res:Strings.HelperClipTip}">
+                                        <Image Source="{StaticResource IconHelperClip}" Width="14" Height="14"/>
+                                    </ToggleButton>
+                                    <ToggleButton Style="{StaticResource HelperToggle}"
+                                                  IsChecked="{Binding Helpers.Histogram}"
+                                                  ToolTip="{x:Static res:Strings.HelperHistTip}">
+                                        <Image Source="{StaticResource IconHelperHistogram}" Width="14" Height="14"/>
+                                    </ToggleButton>
+                                    <ToggleButton Style="{StaticResource HelperToggle}"
+                                                  IsChecked="{Binding Helpers.Shadows}"
+                                                  ToolTip="{x:Static res:Strings.HelperShadowsTip}">
+                                        <Image Source="{StaticResource IconHelperShadows}" Width="14" Height="14"/>
+                                    </ToggleButton>
+                                    <ToggleButton Style="{StaticResource HelperToggle}"
+                                                  IsChecked="{Binding Helpers.Highlights}"
+                                                  ToolTip="{x:Static res:Strings.HelperHighlightsTip}">
+                                        <Image Source="{StaticResource IconHelperHighlights}" Width="14" Height="14"/>
+                                    </ToggleButton>
+                                </StackPanel>
+                                <ToggleButton x:Name="RawToggle"
+                                              Content="{x:Static res:Strings.PreviewRawToggle}"
+                                              VerticalAlignment="Top"
+                                              Margin="8,0,0,0" Padding="8,1"
+                                              MinWidth="44"
+                                              FontSize="11"
+                                              Focusable="False"
+                                              ToolTip="{x:Static res:Strings.PreviewRawToggleHint}"
+                                              IsChecked="{Binding ShowRawDecode, Mode=TwoWay}"
+                                              Visibility="{Binding IsRawImage, Converter={StaticResource BoolToVisibility}}"/>
+                                </StackPanel>
+                                <!--
+                                    Levels by channel. No words: a bright bar
+                                    stands at the side that clipped - left for
+                                    shadows crushed, right for highlights
+                                    burnt - as tall as the share that went,
+                                    full height at a twentieth of the frame.
+                                    The shares themselves are in the tooltip.
+                                -->
+                                <Border Margin="8,4,0,0" HorizontalAlignment="Right" Padding="2,2" CornerRadius="2"
+                                        Background="{StaticResource ReviewChartPlate}"
+                                        VerticalAlignment="Top"
+                                        ToolTip="{Binding HistogramTip}"
+                                        Visibility="{Binding HasHistogram, Converter={StaticResource BoolToVisibility}}">
+                                    <Grid Width="96" Height="56" ClipToBounds="True">
+                                        <Canvas>
+                                            <Polygon Points="{Binding HistogramRed}" Fill="{StaticResource ReviewChartRed}"/>
+                                            <Polygon Points="{Binding HistogramGreen}" Fill="{StaticResource ReviewChartGreen}"/>
+                                            <Polygon Points="{Binding HistogramBlue}" Fill="{StaticResource ReviewChartBlue}"/>
+                                        </Canvas>
+                                        <Rectangle Width="3" Height="{Binding HistogramUnderBar}"
+                                                   Fill="{StaticResource ReviewChartUnder}"
+                                                   HorizontalAlignment="Left" VerticalAlignment="Bottom"/>
+                                        <Rectangle Width="3" Height="{Binding HistogramOverBar}"
+                                                   Fill="{StaticResource ReviewChartOver}"
+                                                   HorizontalAlignment="Right" VerticalAlignment="Bottom"/>
+                                    </Grid>
+                                </Border>
+                            </StackPanel>
+                    </Grid>
                 </Border>
             </Grid>
 </UserControl>

@@ -1,27 +1,31 @@
 namespace Wander.Core.Imaging;
 
 /// <summary>
-/// A gamma curve over the levels, to look into the shadows or the
-/// highlights of a frame without developing it. Below 1 lifts the
-/// shadows; above 1 spreads the top of the range apart. Black and white
-/// stay where they are either way.
+/// Two curves for looking into a frame without developing it: one that
+/// lifts the shadows, one that pulls the highlights down. Each works at
+/// its own end of the range and leaves the other alone - the middle moves
+/// by a few levels, black stays black, white stays white.
+///
+/// <para>
+/// A plain gamma was the first try and it was wrong: gamma 0.6 lifts the
+/// midtones by a third, so the frame read as a different exposure rather
+/// than as the same frame with its shadows opened (2026-09-22).
+/// </para>
 /// </summary>
 public static class ToneCurve {
-    /// <summary>Lifts the shadows.</summary>
-    public const double Shadows = 0.6;
-
-    /// <summary>Opens up the highlights.</summary>
-    public const double Highlights = 1.7;
+    /// <summary>How far the end is pulled by default: 0 is nothing, 1 would be the whole way.</summary>
+    public const double Amount = 0.55;
 
 
-    /// <summary>The curve as a table: level in, level out.</summary>
-    public static byte[] Lut(double gamma) {
-        var lut = new byte[256];
-        for (int i = 0; i < 256; i++) {
-            lut[i] = (byte)Math.Round(255 * Math.Pow(i / 255.0, gamma));
-        }
+    /// <summary>The shadows lifted, as a table: level in, level out.</summary>
+    public static byte[] Shadows(double amount = Amount) {
+        return Build(amount, lift: true);
+    }
 
-        return lut;
+
+    /// <summary>The highlights pulled down, so what is in them can be seen.</summary>
+    public static byte[] Highlights(double amount = Amount) {
+        return Build(amount, lift: false);
     }
 
 
@@ -40,5 +44,25 @@ public static class ToneCurve {
         });
 
         return image with { Pixels = pixels };
+    }
+
+
+    /// <summary>
+    /// The curve: a gamma of <c>1 - amount</c> applied through a weight that
+    /// is one at the end being worked on and falls away as a cube, so by the
+    /// middle almost nothing of it is left. <paramref name="lift"/> works the
+    /// dark end; the bright end is the same curve on the upside-down range.
+    /// </summary>
+    private static byte[] Build(double amount, bool lift) {
+        double gamma = 1 - Math.Clamp(amount, 0, 0.9);
+        var lut = new byte[256];
+        for (int i = 0; i < 256; i++) {
+            double value = lift ? i / 255.0 : 1 - i / 255.0;
+            double weight = (1 - value) * (1 - value) * (1 - value);
+            double moved = weight * Math.Pow(value, gamma) + (1 - weight) * value;
+            lut[i] = (byte)Math.Round(255 * (lift ? moved : 1 - moved));
+        }
+
+        return lut;
     }
 }

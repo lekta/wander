@@ -129,14 +129,17 @@ public sealed class PreviewController : ObservableObject {
     /// <summary>The chart of levels in the footer, in layout units - the Canvas in PreviewPane.xaml.</summary>
     private const double HistogramWidth = 96;
 
-    private const double HistogramHeight = 28;
+    private const double HistogramHeight = 56;
 
     /// <summary>
-    /// The share of clipped or crushed pixels from which the chart's
-    /// arrows light up. A few stray pixels of a specular highlight are not
-    /// the frame burning out.
+    /// The share of the frame that is gone before the chart's bar stands at
+    /// its full height. A twentieth is a lot; a few stray pixels of a
+    /// specular highlight (below <see cref="ClipNoticeShare"/>) are not
+    /// worth a line at all.
     /// </summary>
-    private const double ClipNoticeShare = 0.001;
+    private const double FullClipShare = 0.05;
+
+    private const double ClipNoticeShare = 0.0005;
 
 
     private readonly IImageMetadataReader? _metadataReader;
@@ -947,8 +950,8 @@ public sealed class PreviewController : ObservableObject {
         private set {
             if (SetField(ref _histogram, value)) {
                 Raise(nameof(HasHistogram));
-                Raise(nameof(HistogramOver));
-                Raise(nameof(HistogramUnder));
+                Raise(nameof(HistogramOverBar));
+                Raise(nameof(HistogramUnderBar));
                 Raise(nameof(HistogramTip));
             }
         }
@@ -963,11 +966,11 @@ public sealed class PreviewController : ObservableObject {
 
     public PointCollection? HistogramBlue => _histogramOutline?[2];
 
-    /// <summary>Enough of the frame burnt out to say so: the arrow at the right of the chart.</summary>
-    public bool HistogramOver => _histogram?.Over >= ClipNoticeShare;
+    /// <summary>How tall the bar at the right of the chart stands: the share of the frame burnt out.</summary>
+    public double HistogramOverBar => ClipBar(_histogram?.Over);
 
-    /// <summary>Enough of it crushed to black: the arrow at the left.</summary>
-    public bool HistogramUnder => _histogram?.Under >= ClipNoticeShare;
+    /// <summary>The same at the left, for what is crushed to black.</summary>
+    public double HistogramUnderBar => ClipBar(_histogram?.Under);
 
     /// <summary>The two shares in words, for the chart's tooltip.</summary>
     public string HistogramTip => _histogram is null
@@ -1031,7 +1034,10 @@ public sealed class PreviewController : ObservableObject {
         _helpersCts = null;
         Raise(nameof(HelpersActive));
         if (_helpers is not { AnyOn: true } helpers) {
-            _helpersCache = null;
+            // The cache stays: it belongs to the picture, not to the
+            // switches, and a helper switched off and on again on the same
+            // photograph must not measure it a second time. It goes when the
+            // picture does (the Image setter).
             ShowHelpers(null);
 
             return;
@@ -1045,8 +1051,9 @@ public sealed class PreviewController : ObservableObject {
         _helpersCts = CancellationTokenSource.CreateLinkedTokenSource(_previewCts?.Token ?? CancellationToken.None);
         var request = new ReviewOverlay.Request(
             helpers.Peaking, helpers.Sharpness, helpers.Clipping, helpers.Histogram, helpers.AfPoints,
-            helpers.Shadows ? ToneCurve.Shadows : helpers.Highlights ? ToneCurve.Highlights : null,
-            _imageMetadata?.AfPoints, FullReady: !_fullPending,
+            helpers.Shadows ? ToneCurve.Shadows() : helpers.Highlights ? ToneCurve.Highlights() : null,
+            _imageMetadata?.AfPoints, FullReady: !_fullPending, _primary?.FullPath,
+            FileStamp.Of(_primary?.ModifiedUtc ?? default, _primary?.Size), Noisy: _showRawDecode,
             ColorOf(Palette.ReviewPeaking), ColorOf(Palette.ReviewUnder),
             ColorOf(Palette.ReviewAfFocused), ColorOf(Palette.ReviewAfOther),
             HistogramWidth, HistogramHeight);
@@ -1101,6 +1108,21 @@ public sealed class PreviewController : ObservableObject {
         Raise(nameof(ZoomDisplay));
         Raise(nameof(ZoomOverlay));
     }
+
+    /// <summary>
+    /// The height of a clipping bar, in layout units: nothing at all below
+    /// a twentieth of a percent of the frame, the chart's full height at
+    /// <see cref="FullClipShare"/>, and never thinner than three units in
+    /// between - a bar that cannot be seen says nothing.
+    /// </summary>
+    private static double ClipBar(double? share) {
+        if (share is not { } value || value < ClipNoticeShare) {
+            return 0;
+        }
+
+        return Math.Max(3, Math.Round(HistogramHeight * Math.Clamp(value / FullClipShare, 0, 1)));
+    }
+
 
     private static Color ColorOf(Brush brush) {
         return brush is SolidColorBrush solid ? solid.Color : Colors.Magenta;

@@ -51,6 +51,22 @@ internal static class Synthetic {
     }
 
 
+    /// <summary>
+    /// Crisp specks on a flat field, every <paramref name="spacing"/> pixels:
+    /// stars, falling snow, the noise of a sensor decode.
+    /// </summary>
+    public static byte[] Dots(int w, int h, int spacing, byte field = 40, byte dot = 220) {
+        var luma = Flat(w, h, field);
+        for (int y = spacing; y < h - spacing; y += spacing) {
+            for (int x = spacing; x < w - spacing; x += spacing) {
+                luma[y * w + x] = dot;
+            }
+        }
+
+        return luma;
+    }
+
+
     /// <summary>A grey frame with a square of another colour in it.</summary>
     public static BgraImage Square(int w, int h, RectI square, byte inside, byte outside = 128) {
         int stride = w * 4;
