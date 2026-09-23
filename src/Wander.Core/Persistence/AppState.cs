@@ -123,19 +123,13 @@ public sealed record SessionState {
     /// </summary>
     public NavigationStop? LastPath { get; init; }
 
-    /// <summary>Last view mode (Details / Tiles / LargeIcons / Gallery) as a string.</summary>
-    public string? ViewMode { get; init; }
-
     /// <summary>
-    /// Folders where the user picked a view by hand, and which one. The
-    /// automatic gallery stays out of these.
-    ///
-    /// <para>
-    /// Session-bucket rather than a setting, and capped: this is "where I
-    /// left off in that folder", not a preference, and a list that grew
-    /// with every folder ever visited would be a slow leak in
-    /// <c>state.json</c>. Oldest entries fall off first.
-    /// </para>
+    /// Legacy (up to 0.4.x): folders where the user picked a view by hand.
+    /// Read once, on the first start after the update, and moved into
+    /// <c>folders.json</c> (<c>IFolderSettingsStore</c>); never written
+    /// again, so the next save leaves it empty. The "last view" that sat
+    /// beside it is not carried over: the default view is a setting now
+    /// (<c>AppSettings.DefaultViewMode</c>, decision 2026-09-23).
     /// </summary>
     public IReadOnlyList<FolderViewMode> ManualViewModes { get; init; } = Array.Empty<FolderViewMode>();
 
@@ -203,9 +197,9 @@ public sealed record SessionState {
 
 
 /// <summary>
-/// One folder the user assigned a view to by hand. The mode is a string
-/// for the same reason the session's own is: a reordered enum must not
-/// silently reinterpret what was saved.
+/// Legacy shape of one pinned view (see <see cref="SessionState.ManualViewModes"/>).
+/// The mode is a string so that a reordered enum cannot silently
+/// reinterpret what was saved.
 /// </summary>
 public sealed record FolderViewMode(string Path, string Mode);
 

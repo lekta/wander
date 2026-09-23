@@ -11,6 +11,7 @@ using Wander.App;
 using Wander.App.Dialogs;
 using Wander.App.ViewModels;
 using Wander.Core.FileSystem;
+using Wander.Core.Folders;
 using Wander.Core.Navigation;
 
 namespace Wander.Harness.Host;

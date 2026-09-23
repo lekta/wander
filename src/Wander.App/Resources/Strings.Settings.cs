@@ -267,6 +267,12 @@ public static partial class Strings {
     /// <summary>Доля изображений для включения (%)</summary>
     public static string SettingsAutoGalleryPercent => Get(nameof(SettingsAutoGalleryPercent));
 
+    /// <summary>Вид по умолчанию</summary>
+    public static string SettingsDefaultViewMode => Get(nameof(SettingsDefaultViewMode));
+
+    /// <summary>Для папок без закрепления и не со снимками...</summary>
+    public static string SettingsDefaultViewModeHint => Get(nameof(SettingsDefaultViewModeHint));
+
     /// <summary>Клавиатура</summary>
     public static string SettingsCategoryHotkeys => Get(nameof(SettingsCategoryHotkeys));
 

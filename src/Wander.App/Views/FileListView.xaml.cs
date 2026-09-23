@@ -18,6 +18,7 @@ using Wander.App.ViewModels;
 using Wander.Core;
 using Wander.Core.Diagnostics;
 using Wander.Core.FileSystem;
+using Wander.Core.Folders;
 using Wander.Core.Layout;
 using Wander.Core.Logging;
 using Wander.Core.Preview;

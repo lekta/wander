@@ -117,6 +117,23 @@ public sealed class SystemIOFileSystem : IFileSystem {
         return null;
     }
 
+    public DateTime? GetCreationTimeUtc(string path) {
+        try {
+            if (Directory.Exists(path)) {
+                return Directory.GetCreationTimeUtc(path);
+            }
+            if (File.Exists(path)) {
+                return File.GetCreationTimeUtc(path);
+            }
+        } catch (IOException) {
+            // A share that went away between the two calls, a volume that
+            // does not keep the time: "unknown" is the honest answer.
+        } catch (UnauthorizedAccessException) {
+        }
+
+        return null;
+    }
+
 
     public void CreateDirectory(string path) {
         Directory.CreateDirectory(path);

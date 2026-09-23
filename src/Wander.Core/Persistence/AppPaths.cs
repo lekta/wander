@@ -50,6 +50,9 @@ public static class AppPaths {
 
     public static string StateFile => Path.Combine(DataRoot, "state.json");
 
+    /// <summary>Per-folder records (<c>IFolderSettingsStore</c>): pinned views, later more.</summary>
+    public static string FoldersFile => Path.Combine(DataRoot, "folders.json");
+
     public static string Logs => Path.Combine(DataRoot, "logs");
 
     public static string Thumbs => Path.Combine(DataRoot, "thumbs");

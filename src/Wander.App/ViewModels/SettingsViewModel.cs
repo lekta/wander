@@ -5,6 +5,7 @@ using Wander.Core;
 using Wander.Core.Actions;
 using Wander.Core.Companions;
 using Wander.Core.FileSystem;
+using Wander.Core.Folders;
 using Wander.Core.Layout;
 using Wander.Core.Menu;
 using Wander.Core.Persistence;
@@ -440,6 +441,12 @@ public sealed class SettingsViewModel : ObservableObject {
         set => SetField(ref _autoGalleryPercent, ClampInt(value, 1, 100));
     }
 
+    private ViewMode _defaultViewMode;
+    public ViewMode DefaultViewMode {
+        get => _defaultViewMode;
+        set => SetField(ref _defaultViewMode, value);
+    }
+
 
     // --- Ratings --------------------------------------------------------
     private SidecarFormat _rawRatingFormat;
@@ -695,6 +702,7 @@ public sealed class SettingsViewModel : ObservableObject {
         GalleryDarkLevel = s.GalleryDarkLevel;
         AutoGallery = s.AutoGallery;
         AutoGalleryPercent = s.AutoGalleryPercent;
+        DefaultViewMode = s.DefaultViewMode;
         RawRatingFormat = s.RawRatingFormat;
         ConfirmCreateSidecar = s.ConfirmCreateSidecar;
         ThumbnailDiskCacheEnabled = s.ThumbnailDiskCacheEnabled;
@@ -920,6 +928,7 @@ public sealed class SettingsViewModel : ObservableObject {
             GalleryDarkLevel = GalleryDarkLevel,
             AutoGallery = AutoGallery,
             AutoGalleryPercent = AutoGalleryPercent,
+            DefaultViewMode = DefaultViewMode,
             RawRatingFormat = RawRatingFormat,
             ConfirmCreateSidecar = ConfirmCreateSidecar,
             ThumbnailDiskCacheEnabled = ThumbnailDiskCacheEnabled,

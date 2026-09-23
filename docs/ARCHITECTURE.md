@@ -148,17 +148,17 @@ Platform.Windows` — один файл, `App.xaml.cs` (точка композ�
 <!-- deps:generated:begin -->
 ```
 === Wander dependency graph (using sweep) ===
-date   : 2026-09-22
-commit : 731dbc3
+date   : 2026-09-23
+commit : 59c51ea
 
 -- projects --
 Wander.App -> Wander.Core   (70 files)
 Wander.App -> Wander.Platform.Windows   (1 files)
-Wander.Core.Tests -> Wander.Core   (125 files)
+Wander.Core.Tests -> Wander.Core   (129 files)
 Wander.Harness -> Wander.App   (4 files)
 Wander.Harness -> Wander.Core   (6 files)
 Wander.Harness -> Wander.Platform.Windows   (3 files)
-Wander.Platform.Windows -> Wander.Core   (34 files)
+Wander.Platform.Windows -> Wander.Core   (35 files)
 
 -- Wander.Core: folder -> folder --
   Actions        -> FileSystem     (5 files)
@@ -178,6 +178,7 @@ Wander.Platform.Windows -> Wander.Core   (34 files)
   FileSystem     -> Logging        (3 files)
   FileSystem     -> Operations     (3 files)
   FileSystem     -> Undo           (3 files)
+  Folders        -> FileSystem     (1 files)
   Icons          -> Imaging        (1 files)
   Listing        -> Companions     (2 files)
   Listing        -> FileSystem     (7 files)
@@ -193,6 +194,7 @@ Wander.Platform.Windows -> Wander.Core   (34 files)
   Persistence    -> Actions        (1 files)
   Persistence    -> Companions     (1 files)
   Persistence    -> FileSystem     (1 files)
+  Persistence    -> Folders        (2 files)
   Persistence    -> Navigation     (1 files)
   Persistence    -> Rename         (1 files)
   Preview        -> FileSystem     (7 files)
@@ -214,7 +216,7 @@ Wander.Platform.Windows -> Wander.Core   (34 files)
   0: (root), Imaging, Layout, Localization, Logging, Operations
   1: Diagnostics, Icons, Undo
   2: FileSystem
-  3: Companions, Navigation, Preview
+  3: Companions, Folders, Navigation, Preview
   4: Actions, Rename, Search
   5: Listing, Persistence
   6: Shell
@@ -1452,13 +1454,19 @@ RefreshFolderAsync (листинг + свёртка, пул)
 RAW набирает ровно 50 %. Минимума нет. Расширения — `Icons/ImageFormats`,
 один список (раньше два в `PreviewController` расходились).
 
-`_viewMode` (на экране) и `_userViewMode` (выбор человека; в `state.json`).
-`SetViewMode` пишет обе и помечает папку в `_manualViewModeFolders`;
-`AutoSelectViewMode` только при **входе**: `Gallery` либо `_userViewMode`
-(иначе галерея расползается); в помеченной — тот вид, что там выбрали.
-Пометки — `SessionState.ManualViewModes` (пары путь → имя режима строкой,
-потолок 128, вытеснение старых): не предпочтение, а «где остановился»,
-рядом с `LastPath`. Не `desktop.ini` (PLAN H1).
+**Вид — у папки** (2026-09-23, REDESIGN AG + Z1). `Folders/ViewChoice.Decide`
+(Core, тест) — одно правило на приходе в любую папку, включая корзину и
+архив: закрепление папки → оно; автогалерея включена, не корзина и папка со
+снимками (`ImageFolderProbe`, считается лениво) → «Галерея»; иначе —
+`AppSettings.DefaultViewMode` (из коробки «Крупные значки»). Ответ — вид и
+причина (`ViewReason`: закреплён / авто: снимки / по умолчанию), причина —
+подпись «Эта папка · …» в меню «Вид». `F5` и перечитывание вид не трогают
+(`arriving`). Выбор в меню и `Ctrl+Shift+1/2/6/7` — **закрепление за
+открытой папкой**, «Автоматически» снимает его, «Сделать видом по умолчанию»
+пишет настройку и снимает закрепление с этой папки (иначе она не пошла бы за
+следующим умолчанием). `ViewMode` (enum) живёт в `Core/Folders`. Хранение
+закреплений — `FolderSettingsBook`, ниже («База параметров папок»). Не
+`desktop.ini` (PLAN H1).
 
 ### Фон галереи — палитра
 
@@ -2090,7 +2098,8 @@ Wander` — так задумано, отдельной папки для отл
   восстановление раскроет свёрнутого родителя), `ViewMode`,
   `IsPreviewVisible`, `PreviewWidth`, `IsFoldersVisible` (панель папок
   убрана — колонка и её сплиттер в 0, `FoldersWidth` ждёт), `IsBookmarksExpanded`,
-  `RecentPaths`, `ManualViewModes`, `BookmarksHeight`, `FoldersWidth`,
+  `RecentPaths`, `ManualViewModes` (легаси, читается один раз для миграции в
+  `folders.json`), `BookmarksHeight`, `FoldersWidth`,
   `LayoutWindowWidth` / `LayoutWindowHeight` — окно, долей которого были
   три размера панелей: `PaneSizes.Restore` (Core/Layout, тест) возвращает
   пиксели как были, если окно того же размера, и ту же долю нового окна,
@@ -2117,7 +2126,7 @@ Wander` — так задумано, отдельной папки для отл
   виртуальному экрану с полосой заголовка.
 - `Settings` — `AppSettings`: `RestoreLastFolder`, `ShowHidden`, `ShowSystem`,
   `ConfirmRecycle`, сортировка, метрики видов, чекбоксы закладок,
-  `TreeKeyboardNavigates`, `TreeScrollsSideways`, `ShowDebugMenu`,
+  `TreeKeyboardNavigates`, `TreeScrollsSideways`, `DefaultViewMode`, `ShowDebugMenu`,
   `LogActions`, `LogPaths`, `VisibleFirstLoading`, галерея, контекстное меню
   (`ShellExtensionsEnabled`, `BlockedShellExtensions`,
   `KnownShellExtensions` — подрезается при сохранении,
@@ -2131,6 +2140,31 @@ Wander` — так задумано, отдельной папки для отл
 
 Миграционного слоя **нет**: `Load` ловит исключение → `new AppState()`
 (до 1.0 схема ломается).
+
+**`folders.json`** — база параметров папок (Z1, 2026-09-23):
+`Folders/FolderSettingsBook` (Core, тест) держит записи `FolderRecord`
+(путь, дата создания UTC, день последнего захода, закреплённый вид; поля
+необязательные — сортировка и прочее добавятся без смены версии), ключ —
+путь без регистра и хвостового разделителя. Хранятся только папки, которым
+есть что помнить (снял закрепление — запись ушла); потолок
+`DefaultCapacity` = 3000, вытеснение по дню захода. `IFolderSettingsStore`
+(Core) → `JsonFolderSettingsStore` (Platform, рядом с `JsonAppStateStore`,
+тот же `InstanceLock`): своя `Version` = 1, файл новее сборки не
+перезаписывается, запись через `.tmp` + `Move`, `--yield` не пишет.
+Читается синхронно в `RestoreState` вместе с `state.json` (тысячи строк —
+миллисекунды); пишется из `WriteStateNow` по флагу `_foldersDirty` — тем же
+дебаунсом 500 мс. На приходе: дата создания читается на пуле вместе с
+листингом (`IFileSystem.GetCreationTimeUtc`), `Touch` двигает день захода;
+у папки **без** записи `AdoptCandidates` (те же дата и том, другой путь)
+проверяются `DirectoryExists` там же на пуле, и ровно один пропавший
+кандидат усыновляется (`Adopt`) — так закрепление находит папку,
+переименованную снаружи; две копии с одной датой (robocopy `/DCOPY:T`) —
+ничего. Переименование и перенос Wander'ом — `Follow` из
+`FollowRelocatedAsync` (там же `NavigationController.RewriteRecentPaths`
+для MRU адресной строки, AD3-хвост). Миграция: `SessionState.ManualViewModes`
+(до 128 закреплений 0.4.x) читаются один раз в книгу, если у папки ещё нет
+записи, и больше не пишутся; глобальный `SessionState.ViewMode` не
+переносится — умолчание стало настройкой (решение 2026-09-23).
 
 **Номер сборки** (PLAN AH, 2026-09-22) — четвёртое число `FileVersion`,
 `BuildInfo.BuildNumber`. Счётчик — `src/Wander.App/build-number.txt`, вне

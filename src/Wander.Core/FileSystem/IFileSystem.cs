@@ -24,6 +24,13 @@ public interface IFileSystem {
     FileSystemEntry? GetEntry(string path);
 
     /// <summary>
+    /// When the file or folder was created, or null when the path does not
+    /// exist or the volume will not say. The second half of a folder's key
+    /// in <c>folders.json</c>: a folder renamed outside Wander keeps it.
+    /// </summary>
+    DateTime? GetCreationTimeUtc(string path);
+
+    /// <summary>
     /// Cheap probe: does <paramref name="path"/> contain at least one subdirectory?
     /// Used by the tree view to decide whether to draw an expand chevron without
     /// loading the full content of the directory.

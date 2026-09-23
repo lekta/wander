@@ -389,6 +389,28 @@
             <StackPanel>
                 <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
 
+                <!-- The view a folder gets when nothing else decides: no
+                     pin on it, not a folder of pictures. Here, above the
+                     gallery switch, because the two are the same rule
+                     (ViewChoice) read top to bottom. -->
+                <TextBlock Text="{x:Static res:Strings.SettingsDefaultViewMode}" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                <StackPanel Orientation="Horizontal">
+                    <RadioButton GroupName="DefaultViewMode" Margin="0,0,16,0"
+                                 Content="{x:Static res:Strings.MenuViewDetails}"
+                                 IsChecked="{Binding Owner.DefaultViewMode, Converter={StaticResource EnumRadio}, ConverterParameter=Details}"/>
+                    <RadioButton GroupName="DefaultViewMode" Margin="0,0,16,0"
+                                 Content="{x:Static res:Strings.MenuViewTiles}"
+                                 IsChecked="{Binding Owner.DefaultViewMode, Converter={StaticResource EnumRadio}, ConverterParameter=Tiles}"/>
+                    <RadioButton GroupName="DefaultViewMode" Margin="0,0,16,0"
+                                 Content="{x:Static res:Strings.MenuViewLargeIcons}"
+                                 IsChecked="{Binding Owner.DefaultViewMode, Converter={StaticResource EnumRadio}, ConverterParameter=LargeIcons}"/>
+                    <RadioButton GroupName="DefaultViewMode"
+                                 Content="{x:Static res:Strings.MenuViewGallery}"
+                                 IsChecked="{Binding Owner.DefaultViewMode, Converter={StaticResource EnumRadio}, ConverterParameter=Gallery}"/>
+                </StackPanel>
+                <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,6,0,18"
+                           Text="{x:Static res:Strings.SettingsDefaultViewModeHint}"/>
+
                 <CheckBox Content="{x:Static res:Strings.SettingsAutoGallery}"
                           IsChecked="{Binding Owner.AutoGallery}"/>
                 <Grid Margin="0,6,0,0">

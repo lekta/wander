@@ -85,4 +85,31 @@ public class RecentPathsTests {
     public void Constructor_RejectsNonPositiveCapacity() {
         Assert.Throws<ArgumentOutOfRangeException>(() => new RecentPaths(0));
     }
+
+    [Fact]
+    public void Rewrite_MovesTheFolderAndWhatIsUnderIt() {
+        var recent = new RecentPaths();
+        recent.Load(new[] { @"D:\foo\sub", Bar, Foo });
+
+        Assert.True(recent.Rewrite(Foo, @"E:\moved"));
+        Assert.Equal(new[] { @"E:\moved\sub", Bar, @"E:\moved" }, recent.Items);
+    }
+
+    [Fact]
+    public void Rewrite_DropsAnEntryThatLandsOnAnotherOne() {
+        var recent = new RecentPaths();
+        recent.Load(new[] { Foo, Bar });
+
+        Assert.True(recent.Rewrite(Foo, Bar));
+        Assert.Equal(new[] { Bar }, recent.Items);
+    }
+
+    [Fact]
+    public void Rewrite_UnrelatedList_IsNotAChange() {
+        var recent = new RecentPaths();
+        recent.Load(new[] { Bar });
+
+        Assert.False(recent.Rewrite(Foo, Baz));
+        Assert.Equal(new[] { Bar }, recent.Items);
+    }
 }

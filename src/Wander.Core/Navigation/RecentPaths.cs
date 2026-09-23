@@ -76,6 +76,34 @@ public sealed class RecentPaths {
     }
 
 
+    /// <summary>
+    /// A folder was renamed or moved by Wander: entries at or under
+    /// <paramref name="oldRoot"/> now name the new place
+    /// (<see cref="FileSystem.PathRewrite.Under"/>). An entry that lands on
+    /// one already in the list is dropped rather than doubled. Returns true
+    /// when anything changed.
+    /// </summary>
+    public bool Rewrite(string oldRoot, string newRoot) {
+        bool changed = false;
+        for (int i = 0; i < _items.Count; i++) {
+            if (FileSystem.PathRewrite.Under(_items[i], oldRoot, newRoot) is not { } moved) {
+                continue;
+            }
+
+            int clash = IndexOf(moved);
+            if (clash >= 0 && clash != i) {
+                _items.RemoveAt(i);
+                i--;
+            } else {
+                _items[i] = moved;
+            }
+            changed = true;
+        }
+
+        return changed;
+    }
+
+
     private int IndexOf(string path) {
         string needle = Normalize(path);
         for (int i = 0; i < _items.Count; i++) {

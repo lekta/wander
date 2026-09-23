@@ -36,6 +36,33 @@ public static partial class Strings {
     /// <summary>Крупные значки</summary>
     public static string MenuViewLargeIcons => Get(nameof(MenuViewLargeIcons));
 
+    /// <summary>Эта папка · {0} - {0} почему такой вид</summary>
+    public static string MenuViewThisFolder => Get(nameof(MenuViewThisFolder));
+
+    /// <summary>Закрепить этот вид за открытой папкой</summary>
+    public static string MenuViewPinHint => Get(nameof(MenuViewPinHint));
+
+    /// <summary>Автоматически</summary>
+    public static string MenuViewAuto => Get(nameof(MenuViewAuto));
+
+    /// <summary>Снять закрепление: галерея для снимков, иначе вид по умолчанию</summary>
+    public static string MenuViewAutoHint => Get(nameof(MenuViewAutoHint));
+
+    /// <summary>Сделать видом по умолчанию</summary>
+    public static string MenuViewMakeDefault => Get(nameof(MenuViewMakeDefault));
+
+    /// <summary>Для папок без закрепления; с открытой папки закрепление снимается</summary>
+    public static string MenuViewMakeDefaultHint => Get(nameof(MenuViewMakeDefaultHint));
+
+    /// <summary>закреплён</summary>
+    public static string ViewReasonPinned => Get(nameof(ViewReasonPinned));
+
+    /// <summary>авто: снимки</summary>
+    public static string ViewReasonPictures => Get(nameof(ViewReasonPictures));
+
+    /// <summary>по умолчанию</summary>
+    public static string ViewReasonDefault => Get(nameof(ViewReasonDefault));
+
     /// <summary>Сортировка</summary>
     public static string MenuSortBy => Get(nameof(MenuSortBy));
 

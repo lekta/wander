@@ -2458,4 +2458,38 @@
     <value>Резкость {0} из 100 — по самым чётким краям в середине кадра; отдельные точки (шум, снег, блики) считаются за долю грани. 70 и выше — резко, 45–70 — мягко, ниже — мимо</value>
     <comment>{0} — балл резкости снимка</comment>
   </data>
+  <data name="MenuViewThisFolder" xml:space="preserve">
+    <value>Эта папка · {0}</value>
+    <comment>{0} — почему у папки такой вид: закреплён / авто: снимки / по умолчанию</comment>
+  </data>
+  <data name="MenuViewPinHint" xml:space="preserve">
+    <value>Закрепить этот вид за открытой папкой</value>
+  </data>
+  <data name="MenuViewAuto" xml:space="preserve">
+    <value>Автоматически</value>
+  </data>
+  <data name="MenuViewAutoHint" xml:space="preserve">
+    <value>Снять закрепление: галерея для папки со снимками, иначе вид по умолчанию</value>
+  </data>
+  <data name="MenuViewMakeDefault" xml:space="preserve">
+    <value>Сделать видом по умолчанию</value>
+  </data>
+  <data name="MenuViewMakeDefaultHint" xml:space="preserve">
+    <value>Этот вид получат папки без закрепления; с открытой папки закрепление снимается</value>
+  </data>
+  <data name="ViewReasonPinned" xml:space="preserve">
+    <value>закреплён</value>
+  </data>
+  <data name="ViewReasonPictures" xml:space="preserve">
+    <value>авто: снимки</value>
+  </data>
+  <data name="ViewReasonDefault" xml:space="preserve">
+    <value>по умолчанию</value>
+  </data>
+  <data name="SettingsDefaultViewMode" xml:space="preserve">
+    <value>Вид по умолчанию</value>
+  </data>
+  <data name="SettingsDefaultViewModeHint" xml:space="preserve">
+    <value>Для папок без закрепления и не со снимками. Выбор вида в меню «Вид» закрепляет его только за открытой папкой.</value>
+  </data>
 </root>

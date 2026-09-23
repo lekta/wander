@@ -7,7 +7,7 @@ namespace Wander.Core.Listing;
 /// <summary>
 /// Answers one question about a folder listing: is this a folder of
 /// pictures? The gallery view switches itself on when it is (see
-/// <c>MainViewModel.AutoSelectViewMode</c>).
+/// <c>Folders/ViewChoice</c>).
 ///
 /// <para>
 /// The whole difficulty is the denominator. A folder of a hundred RAW files

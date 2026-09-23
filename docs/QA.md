@@ -149,7 +149,7 @@ exe), переменная `WANDER_DATA_DIR`, иначе `%LOCALAPPDATA%\Wander`
 | Хелперы отсмотра (пикинг, резкость, клиппинг, гистограмма, кривые, точка AF) | `SharpnessTests`, `FocusPeakingTests`, `ToneCurveTests`, `CanonAfInfoTests`, `AfGeometryTests`, `LumaTests`, `HistogramTests`, `ClippingTests`, `SharpListingTests`; харнесс: шаг `helpers` в `preview-formats` (скриншоты) | Просмотр (совпадение наложения с картинкой при разной ширине панели, в лупе, в сплите, при 125 / 150 %); Скорость (прокрутка галереи с включённым пикингом) | `bg.helpers`, `bg.sharpness` |
 | Галерея, оценки, сайдкары | `RatingFilterTests`, `RatingToggleTests`, `ImageFolderProbeTests`, `CompanionMetadataServiceTests`; харнесс: клик по звезде не пересобирает | Фокус (клик по звезде, `Shift`+цифры); Просмотр | `bg.ratings`, тик сторожа |
 | Контекстное меню, shell | `ContextMenuBuilderTests`, `ShellExtensionCatalogTests`; харнесс: меню строится без исключений | Обмен с системой (сторонние пункты запускаются) | время `QueryContextMenu`, owner-drawn в логе |
-| Настройки, `state.json`, палитра | `AppPathsTests`, `PaneSizesTests`; `check-resources.ps1` (ключи XAML); харнесс: `state` из фикстур, все страницы настроек открываются | После обновления; две копии на одних данных (`--yield`) — только вживую | `WARN` при загрузке состояния, `State loaded` / `State written`, `Pane sizes:`, `Started with --yield` |
+| Настройки, `state.json`, `folders.json`, палитра | `AppPathsTests`, `PaneSizesTests`, `ViewChoiceTests`, `FolderSettingsBookTests`; `check-resources.ps1` (ключи XAML); харнесс: `state` из фикстур, все страницы настроек открываются | После обновления; две копии на одних данных (`--yield`) — только вживую; Просмотр и галерея («Вид — у папки») | `WARN` при загрузке состояния, `State loaded` / `State written`, `Pane sizes:`, `Started with --yield` |
 | Дерево, закладки, сторож | `FolderChangesTests`, `NavigationFallbackTests`, `BranchReconcileTests` (уровень панели: строки живут, вставки / перестановки / удаления вокруг), `UndoableActionsTests` (пары `MovesOnUndo`), `NavigationServiceTests` (`RewritePaths`); харнесс: `tree-bookmarks` (таблица сценариев), внешнее создание файла в песочнице → строка появилась | Дерево и закладки | `nav.trees`, `nav.watch`, `Delete: no target` |
 | Архивы как папки, извлечение, панель просмотра | `ArchivePathTests`, `ExtractionServiceTests`, `PreviewRouterTests`; харнесс: `selfcheck` (ассоциации машины) + сценарий `archives` | Файловые операции; Обмен с системой (наружу — только глазами) | `Extract:`, `Extract (temporary copy)`, `Archive enumerate`, «Archives open as folders» в первых строках лога |
 | Действия, каталог, запуск; групповое переименование | `ActionApplicabilityTests`, `CommandLineTests`, `ExternalActionRunnerTests`, `ActionCatalogTests`, `ActionReportTests`, `BuiltinArgumentsTests`, `ContextMenuBuilderTests`, `RenamePlannerTests`; харнесс: `smoke-walk` (меню), `focus-keys` (`F2`) — окна действий и переименования он не поднимает | **Действия** — целиком; Ход операции (окно действия) | `Action '…'`, `image-convert:`, `Batch rename:`, `Rename:` |
@@ -675,6 +675,19 @@ exe), переменная `WANDER_DATA_DIR`, иначе `%LOCALAPPDATA%\Wander`
 
 ### Просмотр и галерея
 
+- [ ] **Вид — у папки** (2026-09-23): в папке A выбрать «Плитка» — подпись
+      меню «Эта папка · закреплён», в папке B вид не сменился; вернуться в
+      A — «Плитка»; «Автоматически» в A — вид по правилу, галочка на
+      «Автоматически»; «Сделать видом по умолчанию» в B — этот вид у всех
+      незакреплённых папок и в «Настройки» → «Галерея»; перезапуск —
+      закрепления на месте, `folders.json` в папке данных, в `state.json`
+      `ManualViewModes` пуст; автогалерея выключена → папка со снимками
+      показана видом по умолчанию, не видом прошлой папки; корзина — вид по
+      умолчанию, архив со снимками — галерея; `F2` закреплённой папки в
+      Wander и переименование снаружи (Проводник) — закрепление на месте (в
+      логе `Folder record follows a rename made outside`); `Ctrl+Z`
+      переименования — тоже; недавний путь адресной строки после переноса
+      папки — новый.
 - [ ] Панель просмотра: картинка, RAW, текст, код, PDF, 3D, аудио, веб,
       папка, диск — по разу.
 - [ ] Занятый файл (PowerShell держит без общего доступа) в панели — «кто

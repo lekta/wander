@@ -203,6 +203,16 @@ public sealed class NavigationController : ObservableObject {
     }
 
     /// <summary>
+    /// A folder was renamed or moved by Wander: recent places at or under
+    /// it now name the new path (<see cref="RecentPaths.Rewrite"/>).
+    /// </summary>
+    public void RewriteRecentPaths(string oldRoot, string newRoot) {
+        if (_recent.Rewrite(oldRoot, newRoot)) {
+            PublishRecentPaths();
+        }
+    }
+
+    /// <summary>
     /// The typed-path route: existence is checked on the pool, and the
     /// navigation happens only if the user has not gone somewhere else
     /// while the disk was answering — a slow "yes" from a spun-down drive

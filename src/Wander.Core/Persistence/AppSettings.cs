@@ -1,6 +1,7 @@
 using Wander.Core.Actions;
 using Wander.Core.Companions;
 using Wander.Core.FileSystem;
+using Wander.Core.Folders;
 
 namespace Wander.Core.Persistence;
 
@@ -271,6 +272,16 @@ public sealed record AppSettings {
     /// not count). Strictly more than this share.
     /// </summary>
     public int AutoGalleryPercent { get; init; } = 50;
+
+    /// <summary>
+    /// The view for a folder that has no pin of its own and is not a
+    /// folder of pictures - the third branch of <see cref="ViewChoice"/>.
+    /// A preference, not "where I left off": picking a view by hand pins
+    /// it to that folder alone; this changes through "Make the default
+    /// view" in the View menu or here. Large icons out of the box
+    /// (decision 2026-09-23).
+    /// </summary>
+    public ViewMode DefaultViewMode { get; init; } = ViewMode.LargeIcons;
 
 
     // --- Ratings --------------------------------------------------------

@@ -60,6 +60,17 @@ internal class FakeFileSystem : IFileSystem {
         return null;
     }
 
+    /// <summary>Creation times by path; a path without one answers "unknown", like a volume that keeps none.</summary>
+    public Dictionary<string, DateTime> CreationTimes { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public DateTime? GetCreationTimeUtc(string path) {
+        if (!Directories.Contains(path) && !Files.ContainsKey(path)) {
+            return null;
+        }
+
+        return CreationTimes.TryGetValue(path, out var created) ? created : null;
+    }
+
     public bool HasSubdirectories(string path) {
         foreach (string d in Directories) {
             string? parent = System.IO.Path.GetDirectoryName(d);

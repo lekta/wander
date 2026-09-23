@@ -212,19 +212,31 @@
                                            Margin="6,1,0,0" VerticalAlignment="Center"/>
                             </StackPanel>
                         </MenuItem.Header>
+                        <!--
+                            The four views below are a choice for the open
+                            folder: picking one pins it there (ViewChoice,
+                            FolderSettingsBook). The caption says so and why
+                            the folder is drawn the way it is; the two items
+                            after the views unpin it or move the choice into
+                            the settings as the default.
+                        -->
+                        <MenuItem Header="{Binding ViewCaption}" IsEnabled="False"/>
                         <MenuItem Header="{x:Static res:Strings.MenuViewDetails}"
                                   InputGestureText="Ctrl+Shift+6"
                                   IsCheckable="True"
+                                  ToolTip="{x:Static res:Strings.MenuViewPinHint}"
                                   IsChecked="{Binding ViewMode, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=Details}"
                                   Command="{Binding SetViewModeCommand}" CommandParameter="Details"/>
                         <MenuItem Header="{x:Static res:Strings.MenuViewTiles}"
                                   InputGestureText="Ctrl+Shift+7"
                                   IsCheckable="True"
+                                  ToolTip="{x:Static res:Strings.MenuViewPinHint}"
                                   IsChecked="{Binding ViewMode, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=Tiles}"
                                   Command="{Binding SetViewModeCommand}" CommandParameter="Tiles"/>
                         <MenuItem Header="{x:Static res:Strings.MenuViewLargeIcons}"
                                   InputGestureText="Ctrl+Shift+2"
                                   IsCheckable="True"
+                                  ToolTip="{x:Static res:Strings.MenuViewPinHint}"
                                   IsChecked="{Binding ViewMode, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=LargeIcons}"
                                   Command="{Binding SetViewModeCommand}" CommandParameter="LargeIcons"/>
                         <!--
@@ -236,8 +248,18 @@
                         <MenuItem Header="{x:Static res:Strings.MenuViewGallery}"
                                   InputGestureText="Ctrl+Shift+1"
                                   IsCheckable="True"
+                                  ToolTip="{x:Static res:Strings.MenuViewPinHint}"
                                   IsChecked="{Binding ViewMode, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=Gallery}"
                                   Command="{Binding SetViewModeCommand}" CommandParameter="Gallery"/>
+                        <Separator/>
+                        <MenuItem Header="{x:Static res:Strings.MenuViewAuto}"
+                                  IsCheckable="True"
+                                  ToolTip="{x:Static res:Strings.MenuViewAutoHint}"
+                                  IsChecked="{Binding IsViewAuto, Mode=OneWay}"
+                                  Command="{Binding SetViewAutoCommand}"/>
+                        <MenuItem Header="{x:Static res:Strings.MenuViewMakeDefault}"
+                                  ToolTip="{x:Static res:Strings.MenuViewMakeDefaultHint}"
+                                  Command="{Binding MakeDefaultViewCommand}"/>
                         <!--
                             The gallery background is not here on purpose. It
                             is the control you reach for while looking at the

@@ -70,6 +70,7 @@ public static class PlatformBootstrapper {
                 : "Started with --yield: no owning instance yet, state.json is written until one appears");
         }
         ServiceLocator.Register<IAppStateStore>(new JsonAppStateStore(owner));
+        ServiceLocator.Register<IFolderSettingsStore>(new JsonFolderSettingsStore(owner));
         ServiceLocator.Register<IFileLockInspector>(new RestartManagerLockInspector());
         ServiceLocator.Register<IFileBusyProbe>(new WindowsFileBusyProbe());
         ServiceLocator.Register<IShortcutService>(new ShellShortcutService());

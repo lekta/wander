@@ -17,6 +17,7 @@ using Wander.Core.Actions;
 using Wander.Core.Companions;
 using Wander.Core.Diagnostics;
 using Wander.Core.FileSystem;
+using Wander.Core.Folders;
 using Wander.Core.Icons;
 using Wander.Core.Layout;
 using Wander.Core.Listing;
@@ -68,12 +69,6 @@ public sealed class MainViewModel : ObservableObject {
     private const int StateSaveDelayMs = 500;
 
     /// <summary>
-    /// How many folders may keep a hand-picked view. See
-    /// <see cref="_manualViewModes"/> for why the list is capped.
-    /// </summary>
-    private const int ManualViewModeLimit = 128;
-
-    /// <summary>
     /// The parameter a menu's "Paste" runs <see cref="PasteCommand"/> with:
     /// into the one folder selected or targeted, as in Explorer's row menu.
     /// Ctrl+V runs it without one - see <see cref="PasteAsync"/>.
@@ -113,6 +108,7 @@ public sealed class MainViewModel : ObservableObject {
     private readonly IFileSystem _fs;
     private readonly IShellLauncher _shell;
     private readonly IAppStateStore _stateStore;
+    private readonly IFolderSettingsStore _folderStore;
     private readonly IDialogs _dialogs;
     private readonly IFileLockInspector? _lockInspector;
     private readonly NavigationController _nav;
@@ -136,24 +132,22 @@ public sealed class MainViewModel : ObservableObject {
     private FileSystemEntry? _selectedEntry;
     private string? _renamingPath;
     private IReadOnlyList<FileSystemEntry> _selectedEntries = Array.Empty<FileSystemEntry>();
-    // Two view modes, not one. _viewMode is what is on screen; _userViewMode
-    // is what the user last asked for, and it is the one that persists. The
-    // gallery switching itself on in a folder of photographs must not
-    // rewrite the choice the user made — otherwise one visit to a photo
-    // folder turns every folder into a gallery for good.
-    private ViewMode _viewMode = ViewMode.Details;
-    private ViewMode _userViewMode = ViewMode.Details;
+    // What is on screen and why (ViewChoice). The choice itself is not
+    // stored here: a pin lives in _folders, the default in the settings,
+    // and the gallery switching itself on in a folder of photographs is a
+    // decision made again on the next arrival.
+    private ViewMode _viewMode = ViewMode.LargeIcons;
+    private ViewReason _viewReason = ViewReason.Default;
 
-    // Folders where the user picked a view by hand, and which one. Kept in
-    // insertion order so ManualViewModeLimit drops the oldest, and
-    // persisted in the session bucket of state.json: "the gallery stops
-    // guessing here" has to survive a restart, or the promise lasts until
-    // teatime.
-    //
-    // Capped rather than unbounded: this grows one entry per folder the
-    // user ever set a view in, and state.json is loaded on every launch.
-    private readonly Dictionary<string, ViewMode> _manualViewModes = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Queue<string> _manualViewModeOrder = new();
+    // The records about folders - pinned views today (FolderSettingsBook,
+    // folders.json). Written through _folderStore when a call reported a
+    // change; the flag rides the same debounced save as state.json.
+    private FolderSettingsBook _folders = new();
+    private bool _foldersDirty;
+
+    // Creation time of the open folder, read on the pool with its listing:
+    // the second half of its key in the book (FolderRecord.CreatedUtc).
+    private DateTime? _currentCreatedUtc;
 
     private bool _isPreviewVisible;
     private double _previewWidth = 280;
@@ -250,6 +244,7 @@ public sealed class MainViewModel : ObservableObject {
         _fs = ServiceLocator.Get<IFileSystem>();
         _shell = ServiceLocator.Get<IShellLauncher>();
         _stateStore = ServiceLocator.Get<IAppStateStore>();
+        _folderStore = ServiceLocator.Get<IFolderSettingsStore>();
         _dialogs = ServiceLocator.Get<IDialogs>();
         _lockInspector = ServiceLocator.TryGet<IFileLockInspector>();
         _ops = ServiceLocator.Get<FileOperationService>();
@@ -430,6 +425,8 @@ public sealed class MainViewModel : ObservableObject {
             _ => IsCurrentRecycleBin && _selectedEntries.Count > 0);
         RefreshCommand = new RelayCommand(_ => RefreshOrRerunSearch());
         SetViewModeCommand = new RelayCommand(p => SetViewMode(p as string));
+        SetViewAutoCommand = new RelayCommand(_ => SetViewAuto());
+        MakeDefaultViewCommand = new RelayCommand(_ => MakeDefaultView());
         SetGalleryBackgroundCommand = new RelayCommand(p => SetGalleryBackground(p as string));
         FilterColorChoices = ColorLabelViewModel.CreateChoices();
         SetFilterRankCommand = new RelayCommand(p => SetFilterRank(p as string));
@@ -1007,10 +1004,10 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     /// <summary>
-    /// The view on screen. Written both by the user (through
-    /// <see cref="SetViewModeCommand"/>, which also remembers the choice)
-    /// and by <see cref="AutoSelectViewMode"/>; persistence hangs off the
-    /// former only, which is why this setter saves nothing.
+    /// The view on screen. Written by the user (<see cref="SetViewModeCommand"/>,
+    /// which also pins the choice to the open folder) and by
+    /// <see cref="ChooseView"/> on arrival; the setter itself saves nothing
+    /// - what persists is the pin and the default, not the screen.
     /// </summary>
     public ViewMode ViewMode {
         get => _viewMode;
@@ -1021,6 +1018,27 @@ public sealed class MainViewModel : ObservableObject {
             }
         }
     }
+
+    /// <summary>Why the open folder is drawn the way it is - the caption of the View menu.</summary>
+    public ViewReason ViewReason {
+        get => _viewReason;
+        private set {
+            if (SetField(ref _viewReason, value)) {
+                Raise(nameof(ViewCaption));
+                Raise(nameof(IsViewAuto));
+            }
+        }
+    }
+
+    /// <summary>"This folder: pinned / auto: pictures / default" - the View menu's caption.</summary>
+    public string ViewCaption => string.Format(Strings.MenuViewThisFolder, _viewReason switch {
+        ViewReason.Pinned => Strings.ViewReasonPinned,
+        ViewReason.Pictures => Strings.ViewReasonPictures,
+        _ => Strings.ViewReasonDefault,
+    });
+
+    /// <summary>The check mark on "Automatically": no pin on the open folder.</summary>
+    public bool IsViewAuto => _viewReason != ViewReason.Pinned;
 
     /// <summary>The preview panes draw on the same surround as the list; they are told when it changes.</summary>
     private void PushPalette() {
@@ -1194,6 +1212,13 @@ public sealed class MainViewModel : ObservableObject {
     public RelayCommand ExtractCommand { get; }
 
     public RelayCommand SetViewModeCommand { get; }
+
+    /// <summary>Takes the pin off the open folder; the view is chosen for it again.</summary>
+    public RelayCommand SetViewAutoCommand { get; }
+
+    /// <summary>The view on screen becomes the setting for folders without a pin.</summary>
+    public RelayCommand MakeDefaultViewCommand { get; }
+
     public RelayCommand SetGalleryBackgroundCommand { get; }
     public RelayCommand SetSortKeyCommand { get; }
     public RelayCommand ToggleSortAscendingCommand { get; }
@@ -1560,6 +1585,11 @@ public sealed class MainViewModel : ObservableObject {
         bool followed = false;
         foreach (var (from, to) in moves) {
             Bookmarks.Follow(from, to);
+            // The book and the address bar's recent places follow too
+            // (AD3): a pinned view or a recent path naming the old place
+            // would otherwise go stale on the spot.
+            _foldersDirty |= _folders.Follow(from, to) > 0;
+            _nav.RewriteRecentPaths(from, to);
             if (_nav.RewritePaths(from, to)) {
                 followed = true;
                 // Control line (REDESIGN.md): the listing was re-pointed
@@ -1567,6 +1597,7 @@ public sealed class MainViewModel : ObservableObject {
                 _log.Info($"Listing follows: {from} -> {to}");
             }
         }
+        SaveState();
 
         return followed;
     }
@@ -1715,19 +1746,29 @@ public sealed class MainViewModel : ObservableObject {
         // the settings say.
         ApplyLogSettings();
 
-        if (!string.IsNullOrEmpty(session.ViewMode) && Enum.TryParse<ViewMode>(session.ViewMode, out var mode)) {
-            _userViewMode = mode;
-            _viewMode = mode;
-            Raise(nameof(ViewMode));
-        }
+        // Until the first folder lands and ChooseView decides, the list
+        // wears the default rather than a hard-coded view.
+        _viewMode = Settings.DefaultViewMode;
+        Raise(nameof(ViewMode));
 
-        // A mode name that no longer parses (a renamed enum member in a
-        // future version, a hand-edited file) is dropped rather than
-        // guessed at: the automatic choice is a fine fallback.
+        // The records about folders - read in one go like state.json; a
+        // few thousand one-line records parse in milliseconds. The pins of
+        // 0.4.x lived in state.json (SessionState.ManualViewModes): carried
+        // over once, into the book, unless the book already has a word on
+        // that folder. A mode name that no longer parses (a renamed enum
+        // member, a hand-edited file) is dropped rather than guessed at: the
+        // automatic choice is a fine fallback.
+        _folders = new FolderSettingsBook(_folderStore.Load());
+        var today = DateOnly.FromDateTime(DateTime.Now);
         foreach (var folder in session.ManualViewModes) {
-            if (!string.IsNullOrEmpty(folder.Path) && Enum.TryParse<ViewMode>(folder.Mode, out var saved)) {
-                RememberManualViewMode(folder.Path, saved);
+            if (!string.IsNullOrEmpty(folder.Path)
+                && Enum.TryParse<ViewMode>(folder.Mode, out var saved)
+                && _folders.Find(folder.Path) is null) {
+                _foldersDirty |= _folders.SetView(folder.Path, saved, createdUtc: null, today);
             }
+        }
+        if (_foldersDirty) {
+            _log.Info($"Pinned views moved from state.json into folders.json: {session.ManualViewModes.Count}");
         }
 
         _isPreviewVisible = session.IsPreviewVisible;
@@ -1905,11 +1946,6 @@ public sealed class MainViewModel : ObservableObject {
                 LastPath = _nav.Current is not null
                     ? new NavigationStop(_nav.Current, _nav.CurrentSource ?? NavigationSource.External)
                     : null,
-                ViewMode = _userViewMode.ToString(),
-                ManualViewModes = _manualViewModeOrder
-                    .Where(_manualViewModes.ContainsKey)
-                    .Select(p => new FolderViewMode(p, _manualViewModes[p].ToString()))
-                    .ToArray(),
                 ExpandedPaths = Trees.CollectExpanded(),
                 // The pair the user set, not the scaled sizes on screen -
                 // see RebasePaneSizes.
@@ -1927,6 +1963,11 @@ public sealed class MainViewModel : ObservableObject {
             Settings = Settings.ToRecord(),
             LastRunVersion = BuildInfo.Version,
         });
+
+        if (_foldersDirty) {
+            _foldersDirty = false;
+            _folderStore.Save(_folders.Records);
+        }
 
         // Only when the pane pair changed: the state is written after every
         // navigation, and the line is about the panes.
@@ -2229,9 +2270,26 @@ public sealed class MainViewModel : ObservableObject {
         var started = System.Diagnostics.Stopwatch.StartNew();
         var spinnerDelay = Task.Delay(SpinnerDelayMs);
 
+        // Only a folder being walked into gets its creation time read and
+        // its record looked up; a re-read of the folder on screen changes
+        // neither the view (ViewChoice) nor the book.
+        var known = arriving && _folders.Find(path) is null ? _folders.Records : null;
+
         var work = Task.Run(() => {
             var items = new List<FileSystemEntry>();
             int hidden = 0;
+            DateTime? created = arriving ? _fs.GetCreationTimeUtc(path) : null;
+            // A folder with no record may be one the book knows under a
+            // former name (renamed outside Wander): the candidates by
+            // creation time, and a stat on each to see whose path is gone -
+            // here, on the pool, never on the UI thread.
+            IReadOnlyList<string>? vacated = null;
+            if (known is not null && created is { } birth) {
+                vacated = FolderSettingsBook.AdoptCandidates(known, path, birth)
+                    .Where(c => !_fs.DirectoryExists(c.Path))
+                    .Select(c => c.Path)
+                    .ToList();
+            }
 
             // Timed separately from the fold below it: "the folder was slow
             // to open" has two quite different answers — the disk was slow
@@ -2252,11 +2310,11 @@ public sealed class MainViewModel : ObservableObject {
             // sidecar next to a main file the user chose not to see stays
             // visible on its own rather than disappearing with it.
             if (!integrate) {
-                return (Items: (IReadOnlyList<FileSystemEntry>)items, Hidden: hidden);
+                return (Items: (IReadOnlyList<FileSystemEntry>)items, Hidden: hidden, Created: created, Vacated: vacated);
             }
 
             using (PerfLog.Measure("bg.companions")) {
-                return (Items: _companions.Collapse(items), Hidden: hidden);
+                return (Items: _companions.Collapse(items), Hidden: hidden, Created: created, Vacated: vacated);
             }
         }, token);
 
@@ -2290,7 +2348,7 @@ public sealed class MainViewModel : ObservableObject {
         }
 
         try {
-            var (items, hidden) = await work;
+            var (items, hidden, created, vacated) = await work;
             if (token.IsCancellationRequested) {
                 return;
             }
@@ -2316,7 +2374,7 @@ public sealed class MainViewModel : ObservableObject {
                 // the operations between them.
                 Journal.Note(string.Format(Strings.JournalOpenedFolder, path), DateTime.Now);
                 using (PerfLog.Measure("ui.autoview")) {
-                    AutoSelectViewMode(items, path);
+                    ChooseView(items, path, created, vacated, inRecycleBin: false);
                 }
             }
             // One line per slow arrival, with what it cost and how much
@@ -2433,9 +2491,10 @@ public sealed class MainViewModel : ObservableObject {
                 // opening them, so they belong in the journal the same way.
                 Journal.Note(string.Format(Strings.JournalOpenedFolder, shellPath), DateTime.Now);
             }
-            // No sidecars in a shell namespace, and no picture-folder
-            // guessing either: the Recycle Bin is a list of things to
-            // decide about, not a folder to look at.
+            // No sidecars in a shell namespace. The view is chosen below as
+            // on disk - by the names in an archive; the Recycle Bin is a
+            // list of things to decide about, not a folder to look at, and
+            // ViewChoice keeps it out of the gallery.
             Ratings.Cancel();
             _sharpness.Cancel();
             HasRatings = false;
@@ -2443,6 +2502,9 @@ public sealed class MainViewModel : ObservableObject {
             // and their cost is the number the bin's slowness (AD2) is
             // decided on.
             _log.Info($"Folder listed in {started.ElapsedMilliseconds} ms: {items.Count} shown - {shellPath}");
+            if (arriving) {
+                ChooseView(items, shellPath, createdUtc: null, vacated: null, inRecycleBin: archive is null);
+            }
             PublishRows(epoch, items.ToList());
 
             // Timed like any other folder: an archive is one to the person
@@ -3334,34 +3396,60 @@ public sealed class MainViewModel : ObservableObject {
 
 
     /// <summary>
-    /// The user picking a view, as opposed to Wander picking one. Both
-    /// halves matter: the choice becomes the one that persists, and the
-    /// folder it was made in is marked as spoken for, so the gallery does
-    /// not switch itself back on the next time the user walks in.
+    /// The user picking a view, as opposed to Wander picking one: the
+    /// choice is pinned to the open folder - and only to it, the default for
+    /// every other folder is a setting - so the gallery does not switch
+    /// itself back on the next time the user walks in.
     /// </summary>
     private void SetViewMode(string? name) {
         if (!Enum.TryParse<ViewMode>(name, out var mode)) {
             return;
         }
 
-        _userViewMode = mode;
         ViewMode = mode;
         if (_nav.Current is { Length: > 0 } here) {
-            RememberManualViewMode(here, mode);
+            _foldersDirty |= _folders.SetView(here, mode, _currentCreatedUtc, DateOnly.FromDateTime(DateTime.Now));
+            ViewReason = ViewReason.Pinned;
+            _log.Info($"View pinned: {mode} - {here}");
         }
         SaveState();
     }
 
-
-    private void RememberManualViewMode(string path, ViewMode mode) {
-        if (!_manualViewModes.ContainsKey(path)) {
-            _manualViewModeOrder.Enqueue(path);
+    /// <summary>
+    /// "Automatically": the pin comes off the open folder and the view is
+    /// chosen for it again, by the rows on screen.
+    /// </summary>
+    private void SetViewAuto() {
+        if (_nav.Current is not { Length: > 0 } here) {
+            return;
         }
-        _manualViewModes[path] = mode;
 
-        while (_manualViewModeOrder.Count > ManualViewModeLimit) {
-            _manualViewModes.Remove(_manualViewModeOrder.Dequeue());
+        if (_folders.SetView(here, null, null, DateOnly.FromDateTime(DateTime.Now))) {
+            _foldersDirty = true;
+            _log.Info($"View unpinned - {here}");
         }
+        ApplyViewDecision(ViewChoice.Decide(
+            pinned: null, Settings.AutoGallery, IsCurrentRecycleBin,
+            () => ImageFolderProbe.IsImageFolder(_search.Source, _companions, Settings.AutoGalleryPercent),
+            Settings.DefaultViewMode));
+        SaveState();
+    }
+
+    /// <summary>
+    /// The view on screen becomes the default for folders without a pin
+    /// (<see cref="AppSettings.DefaultViewMode"/>). The open folder's own
+    /// pin comes off with it: pinned, it would not follow the next default
+    /// (decision B13).
+    /// </summary>
+    private void MakeDefaultView() {
+        Settings.DefaultViewMode = ViewMode;
+        if (_nav.Current is { Length: > 0 } here
+            && _folders.SetView(here, null, null, DateOnly.FromDateTime(DateTime.Now))) {
+            _foldersDirty = true;
+        }
+        ViewReason = ViewReason.Default;
+        _log.Info($"Default view: {ViewMode}");
+        SaveState();
     }
 
 
@@ -3373,38 +3461,38 @@ public sealed class MainViewModel : ObservableObject {
 
 
     /// <summary>
-    /// Picks the view for a folder we have just arrived in: the gallery
-    /// when the folder is mostly pictures, otherwise whatever the user
-    /// chose last.
-    ///
-    /// <para>
-    /// The second half is as important as the first. Without it the gallery
-    /// would be sticky — one photo folder and every text folder afterwards
-    /// is a wall of generic icons — so leaving a folder of photographs puts
-    /// the user's own view back.
-    /// </para>
-    ///
-    /// <para>
-    /// Silent in a folder where the user has chosen a view by hand this
-    /// session, and silent altogether when the setting is off.
-    /// </para>
+    /// The view for a folder just arrived in - <see cref="ViewChoice"/> over
+    /// the folder's pin, the settings and the rows. Before the rule runs,
+    /// the book learns of the arrival: the record is touched (visit day,
+    /// creation time), and a folder with no record may adopt the record of
+    /// its former name - <paramref name="vacated"/> are the candidates the
+    /// pool found gone from disk (<see cref="FolderSettingsBook.Adopt"/>).
     /// </summary>
-    private void AutoSelectViewMode(IReadOnlyList<FileSystemEntry> items, string path) {
-        // A folder the user has assigned a view to keeps it, and keeps it
-        // across restarts. That is what "the automation stays out of this
-        // folder" has to mean to be worth saying.
-        if (_manualViewModes.TryGetValue(path, out var chosen)) {
-            ViewMode = chosen;
-
-            return;
+    private void ChooseView(
+        IReadOnlyList<FileSystemEntry> items, string path, DateTime? createdUtc,
+        IReadOnlyList<string>? vacated, bool inRecycleBin) {
+        var today = DateOnly.FromDateTime(DateTime.Now);
+        _currentCreatedUtc = createdUtc;
+        if (createdUtc is { } birth && vacated is { Count: > 0 }
+            && _folders.Adopt(path, birth, vacated) is { } former) {
+            _foldersDirty = true;
+            _log.Info($"Folder record follows a rename made outside: {former} -> {path}");
         }
-        if (!Settings.AutoGallery) {
-            return;
+        _foldersDirty |= _folders.Touch(path, createdUtc, today);
+        if (_foldersDirty) {
+            SaveState();
         }
 
-        ViewMode = ImageFolderProbe.IsImageFolder(items, _companions, Settings.AutoGalleryPercent)
-            ? ViewMode.Gallery
-            : _userViewMode;
+        ApplyViewDecision(ViewChoice.Decide(
+            _folders.Find(path)?.View, Settings.AutoGallery, inRecycleBin,
+            () => ImageFolderProbe.IsImageFolder(items, _companions, Settings.AutoGalleryPercent),
+            Settings.DefaultViewMode));
+    }
+
+
+    private void ApplyViewDecision(ViewDecision decision) {
+        ViewMode = decision.Mode;
+        ViewReason = decision.Reason;
     }
 
 
