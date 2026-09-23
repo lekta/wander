@@ -521,7 +521,7 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo {
 
         _reportedTemplate = template;
         int visuals = CountVisuals(container);
-        ServiceLocator.Get<ILogger>().Info($"LAYOUT {owner.Name} container: {visuals} visuals");
+        Log.Info($"LAYOUT {owner.Name} container: {visuals} visuals");
     }
 
 

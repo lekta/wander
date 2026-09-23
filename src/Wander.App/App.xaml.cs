@@ -163,12 +163,11 @@ public partial class App : Application {
                 return;
             }
 
-            var log = ServiceLocator.Get<ILogger>();
             string line = $"HEADLESS window {window.GetType().Name} at ({window.Left:F0}, {window.Top:F0}), active={window.IsActive}";
             if (window.Left <= -20000 && window.Top <= -20000) {
-                log.Info(line);
+                Log.Info(line);
             } else {
-                log.Warn(line + " - ON SCREEN");
+                Log.Warn(line + " - ON SCREEN");
             }
         }));
         EventManager.RegisterClassHandler(typeof(System.Windows.Controls.ContextMenu), System.Windows.Controls.ContextMenu.OpenedEvent,
@@ -178,7 +177,7 @@ public partial class App : Application {
 
         static void WarnPopup(string what, object sender) {
             if (Headless) {
-                ServiceLocator.Get<ILogger>().Warn($"HEADLESS {what} opened ({sender.GetType().Name}) - ON SCREEN");
+                Log.Warn($"HEADLESS {what} opened ({sender.GetType().Name}) - ON SCREEN");
             }
         }
     }
@@ -190,7 +189,7 @@ public partial class App : Application {
         var now = DateTime.UtcNow;
         int removed = TempFiles.Sweep(now, AppPaths.DataTmp) + TempFiles.Sweep(now, AppPaths.SystemTmp);
         if (removed > 0) {
-            ServiceLocator.Get<ILogger>().Info($"Temporary copies: {removed} folder(s) swept");
+            Log.Info($"Temporary copies: {removed} folder(s) swept");
         }
     }
 
@@ -201,12 +200,11 @@ public partial class App : Application {
     /// nothing on the way to the first frame needs the answer.
     /// </summary>
     private static void SweepLogs() {
-        var log = ServiceLocator.Get<ILogger>();
         string? current = ServiceLocator.TryGet<ILogFile>()?.FilePath;
         _ = Task.Run(() => {
             var (logs, crashes) = LogFolders.Sweep(AppPaths.Logs, AppPaths.Crashes, current);
             if (logs > 0 || crashes > 0) {
-                log.Info($"Log retention: removed {logs} logs, {crashes} crash bundles");
+                Log.Info($"Log retention: removed {logs} logs, {crashes} crash bundles");
             }
         });
     }
@@ -255,7 +253,7 @@ public partial class App : Application {
     /// the whole process down.
     /// </summary>
     private void HookCrashLogging() {
-        var log = ServiceLocator.Get<ILogger>();
+        var log = Log.Current;
 
         DispatcherUnhandledException += (_, args) => {
             log.Error("Unhandled dispatcher exception", args.Exception);

@@ -146,7 +146,7 @@ public static class CrashReporter {
 
         var includeLog = new CheckBox {
             Content = new TextBlock {
-                Text = Strings.CrashIncludeLog,
+                Text = Log.RevealPaths ? Strings.CrashIncludeLog : Strings.CrashIncludeLogMasked,
                 TextWrapping = TextWrapping.Wrap,
             },
             IsChecked = true,
@@ -189,8 +189,9 @@ public static class CrashReporter {
 
         // Session log: FileLogger flushes every line and holds the file with
         // shared-read, so a copy taken here contains everything up to the
-        // crash itself. Only bundled with the user's explicit consent — the
-        // log contains real file paths from the session.
+        // crash itself. Only bundled with the user's explicit consent - with
+        // real paths switched on (AppSettings.LogPaths) the log names the
+        // user's files.
         if (includeLog && ServiceLocator.TryGet<ILogFile>() is { } logFile) {
             string logPath = logFile.FilePath;
             if (!string.IsNullOrEmpty(logPath) && File.Exists(logPath)) {
@@ -213,23 +214,34 @@ public static class CrashReporter {
         sb.AppendLine(EnvironmentSummary());
         sb.AppendLine();
         sb.AppendLine("--- Exception ---");
-        sb.AppendLine(ex.ToString());
+        sb.AppendLine(Shown(ex.ToString()));
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Text of the exception the way the session log has it: paths masked
+    /// unless the user asked for real ones (<c>AppSettings.LogPaths</c>).
+    /// The report is where the log goes, and it should not say more.
+    /// </summary>
+    private static string Shown(string text) {
+        return Log.RevealPaths ? text : LogMask.Scrub(text);
     }
 
 
     // --- GitHub issue ----------------------------------------------------
 
     private static string BuildIssueUrl(Exception ex, bool fatal) {
-        string title = $"Crash: {ex.GetType().Name}: {Truncate(ex.Message, 80)}";
+        string title = $"Crash: {ex.GetType().Name}: {Truncate(Shown(ex.Message), 80)}";
         string body =
             "**What happened**\n" +
             "<!-- What were you doing when the error appeared? -->\n\n" +
             "**Environment**\n```\n" + EnvironmentSummary() + "\n```\n\n" +
-            $"**Exception** (fatal: {fatal})\n```\n" + Truncate(ex.ToString(), MaxStackChars) + "\n```\n\n" +
+            $"**Exception** (fatal: {fatal})\n```\n" + Truncate(Shown(ex.ToString()), MaxStackChars) + "\n```\n\n" +
             "_A crash bundle (crash.txt + session log) was saved locally by Wander; " +
-            "attach the zip here if you are comfortable sharing it — the log contains " +
-            "file paths from your session._";
+            "attach the zip here if you are comfortable sharing it — " +
+            (Log.RevealPaths
+                ? "the log contains file paths from your session._"
+                : "file paths in the log are replaced with tokens._");
         return $"{NewIssueUrl}?title={Uri.EscapeDataString(title)}&body={Uri.EscapeDataString(body)}";
     }
 

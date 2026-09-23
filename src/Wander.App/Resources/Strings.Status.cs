@@ -240,6 +240,9 @@ public static partial class Strings {
     /// <summary>Приложить журнал этого сеанса — с ним разбираться гораздо…</summary>
     public static string CrashIncludeLog => Get(nameof(CrashIncludeLog));
 
+    /// <summary>Приложить журнал этого сеанса — с ним разбираться гораздо…; пути заменены метками</summary>
+    public static string CrashIncludeLogMasked => Get(nameof(CrashIncludeLogMasked));
+
     /// <summary>Подготовить отчёт</summary>
     public static string CrashPrepare => Get(nameof(CrashPrepare));
 

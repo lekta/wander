@@ -18,6 +18,7 @@ using Wander.Core;
 using Wander.Core.Actions;
 using Wander.Core.FileSystem;
 using Wander.Core.Layout;
+using Wander.Core.Logging;
 using Wander.Core.Menu;
 using Wander.Core.Navigation;
 using Wander.Core.Operations;
@@ -61,6 +62,12 @@ public partial class MainWindow : Window {
     private OutgoingDrag _outgoing = null!;
 
 
+    static MainWindow() {
+        // The action trace: a menu is a window of its own, and a click in it
+        // never reaches this window's mouse handlers.
+        EventManager.RegisterClassHandler(typeof(MenuItem), MenuItem.ClickEvent, new RoutedEventHandler(TraceMenuItem));
+    }
+
     public MainWindow() {
         InitializeComponent();
         // Here rather than anywhere later: the window is shown by
@@ -93,8 +100,7 @@ public partial class MainWindow : Window {
 
         using var self = System.Diagnostics.Process.GetCurrentProcess();
         double ms = (DateTime.Now - self.StartTime).TotalMilliseconds;
-        ServiceLocator.Get<Wander.Core.Logging.ILogger>()
-            .Info($"Startup: first frame {ms:F0} ms after process start");
+        Log.Info($"Startup: first frame {ms:F0} ms after process start");
     }
 
 
@@ -118,8 +124,7 @@ public partial class MainWindow : Window {
         // - so there they are stopped on the spot and the close goes on.
         if (Vm.HasActiveOperations && !_operationsStopped) {
             if (App.IsShuttingDown) {
-                ServiceLocator.Get<Wander.Core.Logging.ILogger>()
-                    .Info($"Shutdown with {Vm.Operations.Count} operation(s) running: cancelled without waiting");
+                Log.Info($"Shutdown with {Vm.Operations.Count} operation(s) running: cancelled without waiting");
                 App.AbandonOperations();
             } else {
                 e.Cancel = true;
@@ -245,7 +250,7 @@ public partial class MainWindow : Window {
         Justification = "Runs off the Closing handler, which cannot await; every exception is caught and logged, and the close goes on.")]
     private async void StopOperationsThenClose() {
         _stoppingOperations = true;
-        var log = ServiceLocator.Get<Wander.Core.Logging.ILogger>();
+        var log = Log.Current;
         try {
             var tracker = ServiceLocator.Get<OperationTracker>();
             var watch = System.Diagnostics.Stopwatch.StartNew();
@@ -301,7 +306,7 @@ public partial class MainWindow : Window {
         Vm.Entries.CollectionChanged += (_, _) => _shellMenus.Invalidate();
         // Quiet unless something is slow: what the UI thread spends time
         // on lands in the session log — see Core/Diagnostics/PerfLog.
-        var log = ServiceLocator.Get<Wander.Core.Logging.ILogger>();
+        var log = Log.Current;
         Wander.Core.Diagnostics.PerfLog.Start(log);
         Diagnostics.PerfCounters.Start(log);
         Diagnostics.SystemVitals.Start(log);
@@ -541,6 +546,7 @@ public partial class MainWindow : Window {
 
     protected override void OnPreviewKeyDown(KeyEventArgs e) {
         base.OnPreviewKeyDown(e);
+        TraceKey(e);
         if (e.Handled) {
             return;
         }
@@ -557,10 +563,10 @@ public partial class MainWindow : Window {
 
         // A Delete that will do nothing leaves no trace otherwise, and
         // "Delete works every other time" (2026-09-22) could not be read
-        // from the log. One line per such press; the key goes on as usual.
-        if (e.Key == Key.Delete && !Vm.DeleteCommand.CanExecute(null)) {
-            ServiceLocator.Get<Wander.Core.Logging.ILogger>().Info(
-                $"Delete: no target (keyboard in {ZoneOf(Keyboard.FocusedElement)?.ToString() ?? "window"})");
+        // from the log. One line per such press, in the action trace; the
+        // key goes on as usual.
+        if (e.Key == Key.Delete && Log.Details && !Vm.DeleteCommand.CanExecute(null)) {
+            Log.Detail($"Delete: no target (keyboard in {ZoneOf(Keyboard.FocusedElement)?.ToString() ?? "window"})");
         }
 
         // Ctrl+C with the keyboard in the preview pane and text selected
@@ -963,6 +969,9 @@ public partial class MainWindow : Window {
     /// </summary>
     private void OnZoneFocusChanged(object sender, KeyboardFocusChangedEventArgs e) {
         var zone = ZoneOf(e.NewFocus);
+        if (Log.Details && ZoneOf(e.OldFocus) is var was && was != zone) {
+            Log.Detail($"Focus: {ZoneName(was, e.OldFocus)} -> {ZoneName(zone, e.NewFocus)}");
+        }
         FileListZone.BorderBrush = zone == WindowZone.FileList ? Palette.FocusOutline : Brushes.Transparent;
         FolderTrees.ShowFocusOutline(
             zone is WindowZone.Bookmarks or WindowZone.Drives ? PaneSource(zone.Value) : null,
@@ -1360,5 +1369,121 @@ public partial class MainWindow : Window {
         menu.PlacementTarget = host;
         menu.Placement = PlacementMode.MousePoint;
         menu.IsOpen = true;
+    }
+
+
+    // --- Action trace (AppSettings.LogActions) ---------------------------
+    // Keys, clicks, menu items and the keyboard moving between zones, into
+    // the session log - for chasing a bug by what the user did. Nothing
+    // here decides anything; with the switch off it is one flag read per
+    // press. Paths in the lines are masked like every other (Log).
+
+    protected override void OnPreviewMouseDown(MouseButtonEventArgs e) {
+        base.OnPreviewMouseDown(e);
+        if (Log.Details) {
+            string times = e.ClickCount > 1 ? $" x{e.ClickCount}" : "";
+            Log.Detail($"Click: {e.ChangedButton}{times} in {ZoneName(ZoneOf(e.OriginalSource), e.OriginalSource)} on {ClickTarget(e.OriginalSource)}");
+        }
+    }
+
+
+    /// <summary>
+    /// A key: the chord and where the keyboard is. A held key once, not at
+    /// the repeat rate; a lone modifier not at all. What is typed - into a
+    /// field, or a letter jumping to a name in the list - is only "typed"
+    /// unless real paths are on, because it spells names; a digit on the
+    /// list is a rating and says which.
+    /// </summary>
+    private void TraceKey(KeyEventArgs e) {
+        if (!Log.Details || e.IsRepeat) {
+            return;
+        }
+
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftShift or Key.RightShift or Key.LeftAlt or Key.RightAlt
+            or Key.LWin or Key.RWin or Key.ImeProcessed or Key.DeadCharProcessed) {
+            return;
+        }
+
+        var focused = Keyboard.FocusedElement;
+        bool inField = focused is TextBoxBase;
+        bool plain = (Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Alt | ModifierKeys.Windows)) == 0;
+        bool letter = key is (>= Key.A and <= Key.Z) or (>= Key.Oem1 and <= Key.Oem102) or Key.Space;
+        bool digit = key is (>= Key.D0 and <= Key.D9) or (>= Key.NumPad0 and <= Key.NumPad9);
+        string name = !Log.RevealPaths && plain && (letter || (digit && inField)) ? "(typed)" : key.ToString();
+
+        Log.Detail($"Key: {Chord(Keyboard.Modifiers)}{name} in {ZoneName(ZoneOf(focused), focused)}{(inField ? ", text field" : "")}");
+    }
+
+    private static void TraceMenuItem(object sender, RoutedEventArgs e) {
+        if (Log.Details && sender is MenuItem item) {
+            Log.Detail($"Menu: {item.Header as string ?? (item.Header as TextBlock)?.Text ?? Named(item)}");
+        }
+    }
+
+    private static string Chord(ModifierKeys modifiers) {
+        return (modifiers.HasFlag(ModifierKeys.Control) ? "Ctrl+" : "")
+            + (modifiers.HasFlag(ModifierKeys.Shift) ? "Shift+" : "")
+            + (modifiers.HasFlag(ModifierKeys.Alt) ? "Alt+" : "")
+            + (modifiers.HasFlag(ModifierKeys.Windows) ? "Win+" : "");
+    }
+
+    /// <summary>A zone by name, or the kind of element the keyboard is on outside every zone - a menu, the window itself.</summary>
+    private static string ZoneName(WindowZone? zone, object? element) {
+        return zone?.ToString() ?? element?.GetType().Name ?? "nowhere";
+    }
+
+    /// <summary>
+    /// What a click landed on: a row of the list or a folder of a panel by
+    /// its path, a button or a field (and whose row it is in), otherwise
+    /// the nearest named element.
+    /// </summary>
+    private static string ClickTarget(object source) {
+        FrameworkElement? control = null;
+        FrameworkElement? named = null;
+        object? item = null;
+        foreach (var hit in ListVisuals.Ancestors(source)) {
+            if (hit is ScrollBar) {
+                return "scroll bar";
+            }
+            if (control is null && hit is ButtonBase or MenuItem or TextBoxBase) {
+                control = (FrameworkElement)hit;
+            }
+            if (item is null && hit is FrameworkElement { DataContext: FileSystemEntry or TreeNodeViewModel } row) {
+                item = row.DataContext;
+            }
+            if (named is null && hit is FrameworkElement { Name.Length: > 0 } element && !element.Name.StartsWith("PART_", StringComparison.Ordinal)) {
+                named = element;
+            }
+        }
+
+        string? what = control switch {
+            TextBoxBase => "text field",
+            { } button => $"button {Named(button)}",
+            null => null,
+        };
+        string? where = item switch {
+            FileSystemEntry entry => $"row {entry.FullPath}",
+            TreeNodeViewModel folder => $"folder {folder.FullPath}",
+            _ => null,
+        };
+
+        if (what is not null) {
+            return where is null ? what : $"{what} of {where}";
+        }
+
+        return where ?? named?.Name ?? source.GetType().Name;
+    }
+
+    /// <summary>A control in a word: its name, else its tooltip, else its command, else its kind.</summary>
+    private static string Named(FrameworkElement control) {
+        if (control.Name.Length > 0) {
+            return control.Name;
+        }
+        if (control.ToolTip is string tip) {
+            return tip;
+        }
+
+        return (control as ICommandSource)?.Command is RoutedCommand command ? command.Name : control.GetType().Name;
     }
 }

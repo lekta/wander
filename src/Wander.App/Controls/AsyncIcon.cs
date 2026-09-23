@@ -9,6 +9,7 @@ using Wander.Core;
 using Wander.Core.Diagnostics;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
+using Wander.Core.Logging;
 using Wander.Core.Operations;
 using Wander.Core.Shell;
 
@@ -486,8 +487,7 @@ public sealed class AsyncIcon : Image {
         // Superseded loads are routine and stay silent.
         if (image is null) {
             if (generation == _generation) {
-                ServiceLocator.Get<Wander.Core.Logging.ILogger>().Info(
-                    $"[icon-diag] no icon from provider ({size}) — {path}");
+                Log.Info($"[icon-diag] no icon from provider ({size}) — {path}");
             }
 
             return;

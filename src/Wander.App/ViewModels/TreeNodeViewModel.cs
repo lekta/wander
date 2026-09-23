@@ -250,7 +250,7 @@ public sealed class TreeNodeViewModel : ObservableObject {
         // otherwise nowhere in the log.
         var fresh = await LongWait.WatchAsync(
             Task.Run(ReadChildFolders),
-            ServiceLocator.TryGet<ILogger>() ?? NullLogger.Instance,
+            Log.Current,
             $"tree: listing {FullPath}");
         if (!_loaded) {
             // Collapsed and dropped while the disk was answering: the

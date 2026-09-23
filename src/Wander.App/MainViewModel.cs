@@ -259,7 +259,7 @@ public sealed class MainViewModel : ObservableObject {
         _tracker = ServiceLocator.Get<OperationTracker>();
         _claims = ServiceLocator.Get<PathClaims>();
         _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
-        _log = ServiceLocator.Get<ILogger>();
+        _log = Log.Current;
         _companions = ServiceLocator.Get<CompanionResolver>();
         // Without a system clipboard registered the controller keeps its
         // paths to itself, exactly as it did before the mirroring existed.
@@ -859,6 +859,8 @@ public sealed class MainViewModel : ObservableObject {
                 return;
             }
             if (SetField(ref _selectedEntries, value)) {
+                // The action trace: what is selected now, whoever moved it.
+                Log.Detail($"Selection: {value.Count} item(s){(value.Count > 0 ? ", first " + value[0].FullPath : "")}");
                 NoteSelectionKind();
                 SyncPreviewSelection();
                 Raise(nameof(SelectionSummary));
@@ -1709,6 +1711,9 @@ public sealed class MainViewModel : ObservableObject {
         // subscribed until the constructor's turn-on block, which is
         // what replaced the old _restoring flag.
         Settings.ApplyFrom(state.Settings);
+        // Before the first navigation, so its lines are written the way
+        // the settings say.
+        ApplyLogSettings();
 
         if (!string.IsNullOrEmpty(session.ViewMode) && Enum.TryParse<ViewMode>(session.ViewMode, out var mode)) {
             _userViewMode = mode;
@@ -1952,7 +1957,8 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
-        _log.Info($"Version changed ('{lastVersion}' -> '{current}'), dropping the thumbnail cache");
+        // No quotes round the versions: the log masks quoted words as names.
+        _log.Info($"Version changed ({(lastVersion.Length > 0 ? lastVersion : "none")} -> {current}), dropping the thumbnail cache");
         var icons = ServiceLocator.Get<IIconProvider>();
 
         _ = Task.Run(() => {
@@ -2907,17 +2913,20 @@ public sealed class MainViewModel : ObservableObject {
 
 
     /// <summary>
-    /// The current file has left the folder - deleted here, deleted in the
-    /// program it was opened in, moved away - and no arrival has said what
-    /// to select instead (<paramref name="placed"/>). The next row becomes
-    /// current (<see cref="CurrentRowFallback"/>): selected, so the preview
-    /// moves on to it, and the view is told so the keyboard follows. No
-    /// scrolling - the row took the departed one's place on screen.
+    /// The current file has left the list - deleted here, deleted in the
+    /// program it was opened in, moved away, hidden by the filter - and no
+    /// arrival has said what to select instead (<paramref name="placed"/>).
+    /// The next row becomes current (<see cref="CurrentRowFallback"/>):
+    /// selected, so the preview moves on to it, and the view is told so the
+    /// keyboard follows. No scrolling - the row took the departed one's
+    /// place on screen.
     ///
     /// <para>
-    /// A row the filter merely hid is still in the folder: nothing is
-    /// selected in its place, and saying "nothing selected" is the honest
-    /// answer. With nothing selected to begin with, only the caret moves.
+    /// A row the filter hid goes the same way as a deleted one (decided
+    /// 2026-09-22): a photo rated out of a "three stars and up" filter used
+    /// to leave nothing selected and the keyboard on the window, and the
+    /// next arrow key went nowhere. With nothing selected to begin with,
+    /// only the caret moves.
     /// </para>
     /// </summary>
     private void SettleDeparture(bool placed) {
@@ -2930,10 +2939,7 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
-        var gone = new HashSet<string>(departure.Paths, StringComparer.OrdinalIgnoreCase);
-        var successor = _search.Source.Any(e => gone.Contains(e.FullPath))
-            ? null
-            : CurrentRowFallback.After(departure.Before, gone, Entries);
+        var successor = CurrentRowFallback.After(departure.Before, departure.Paths, Entries);
 
         if (departure.WasSelected) {
             if (successor is null) {
@@ -3447,6 +3453,11 @@ public sealed class MainViewModel : ObservableObject {
             AppPaths.UseSystemTemp = Settings.UseSystemTemp;
         }
 
+        if (e.PropertyName is nameof(SettingsViewModel.LogActions) or nameof(SettingsViewModel.LogPaths)) {
+            // From the next line on; what is written stays as it was.
+            ApplyLogSettings();
+        }
+
         // Tile geometry and the icon column's width are projections of the
         // size settings, not settings of their own: the knob that moved has
         // already come through here and saved. Falling through would just
@@ -3543,6 +3554,16 @@ public sealed class MainViewModel : ObservableObject {
             // The system scale: a visual in no window reports it, and the
             // window's own may not exist yet at startup.
             ThumbnailCacheOptions.SideFor(System.Windows.Media.VisualTreeHelper.GetDpi(new System.Windows.Media.DrawingVisual()).DpiScaleX)));
+    }
+
+    /// <summary>
+    /// What the session log may say - the two debug switches, copied where
+    /// the logger reads them: Core has no settings to ask, the same as for
+    /// the cache limits above.
+    /// </summary>
+    private void ApplyLogSettings() {
+        Log.Details = Settings.LogActions;
+        Log.RevealPaths = Settings.LogPaths;
     }
 
 
@@ -3708,10 +3729,10 @@ public sealed class MainViewModel : ObservableObject {
         var entry = _fs.GetEntry(path);
         SelectedEntries = entry is null ? Array.Empty<FileSystemEntry>() : new[] { entry };
         Preview.SetPrimary(entry);
-        // Control line (REDESIGN.md): every change of the operation target
-        // that did not come from the list, so a "Delete did the wrong
-        // thing" can be read from the log.
-        _log.Info($"Target: {path}");
+        // Control line (REDESIGN.md), in the action trace: every change of
+        // the operation target that did not come from the list, so a
+        // "Delete did the wrong thing" can be read from the log.
+        Log.Detail($"Target: {path}");
     }
 
 
@@ -4316,7 +4337,7 @@ public sealed class MainViewModel : ObservableObject {
                 Status = string.Format(Strings.StatusRenamedWithCompanions, plan.Count - 1);
             }
         } catch (Exception ex) {
-            _log.Error($"Rename failed: {entry.FullPath} -> {newName}", ex);
+            _log.Error($"Rename failed: {entry.FullPath} -> {Log.Path(newName)}", ex);
             string reason = await Task.Run(() => DescribeError(ex, entry.FullPath));
             Fail(string.Format(Strings.StatusRenameFailed, reason));
         } finally {
@@ -4607,7 +4628,7 @@ public sealed class MainViewModel : ObservableObject {
             ReleasePreview(new[] { folder });
             await Task.Run(() => _ops.RenameMany(new[] { (folder, newName) }));
         } catch (Exception ex) {
-            _log.Error($"Rename failed: {folder} -> {newName}", ex);
+            _log.Error($"Rename failed: {folder} -> {Log.Path(newName)}", ex);
             string reason = await Task.Run(() => DescribeError(ex, folder));
             Fail(string.Format(Strings.StatusRenameFailed, reason));
 
@@ -4661,7 +4682,7 @@ public sealed class MainViewModel : ObservableObject {
                     BinFilePath: entry.FullPath));
                 restored++;
             } catch (Exception ex) {
-                _log.Error($"Restore failed: {entry.Name}", ex);
+                _log.Error($"Restore failed: {Log.Path(entry.Name)}", ex);
                 failures.Add(entry.Name);
             }
         }
@@ -5116,7 +5137,7 @@ public sealed class MainViewModel : ObservableObject {
         try {
             _ops.CreateFolder(_nav.Current, name);
         } catch (Exception ex) {
-            _log.Error($"CreateFolder failed in {_nav.Current}: {name}", ex);
+            _log.Error($"CreateFolder failed in {_nav.Current}: {Log.Path(name)}", ex);
             Fail(string.Format(Strings.StatusCreateFailed, ex.Message));
 
             return;

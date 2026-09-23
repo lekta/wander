@@ -75,6 +75,10 @@
             <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <!-- A row taking the keyboard scrolls the panel up and down to
+                 it, not sideways to the end of a long name, unless the
+                 setting asks for that: TreeViewItem_RequestBringIntoView. -->
+            <EventSetter Event="FrameworkElement.RequestBringIntoView" Handler="TreeViewItem_RequestBringIntoView"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TreeViewItem">

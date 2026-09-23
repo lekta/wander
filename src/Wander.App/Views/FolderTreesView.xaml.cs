@@ -90,6 +90,10 @@ public partial class FolderTreesView : UserControl {
     /// </summary>
     private (TreeView Tree, TreeNodeViewModel Node)? _targetRow;
 
+    // --- Tree scrolling -------------------------------------------------
+    /// <summary>A scroll into view with its sideways part pinned is on its way - see <see cref="TreeViewItem_RequestBringIntoView"/>.</summary>
+    private bool _pinningSideways;
+
     // --- Rename ---------------------------------------------------------
     /// <summary>How wide the editor is at least, over a label only as wide as its name.</summary>
     private const double RenameEditorMinWidth = 180;
@@ -249,6 +253,16 @@ public partial class FolderTreesView : UserControl {
     /// Opens <paramref name="pane"/> down to the current folder and puts the
     /// keyboard on its row — the tail of <c>Ctrl+1</c> and
     /// <c>Ctrl+Shift+E</c>.
+    ///
+    /// <para>
+    /// Except the drives tree while the folder on screen came from the
+    /// bookmarks: its row is still lit where the user left it, and the
+    /// keyboard goes back there (decided 2026-09-22) - <c>Ctrl+1</c> back
+    /// and forth is going between two places, not asking twice where the
+    /// one open folder is. Only a drives tree with nothing lit is opened
+    /// down to that folder. With the arrow keys opening folders, arriving
+    /// on the row opens it, as an arrow key landing there would.
+    /// </para>
     /// </summary>
     public void RevealAndFocus(NavigationSource pane) {
         if (pane == NavigationSource.Bookmark) {
@@ -259,6 +273,17 @@ public partial class FolderTreesView : UserControl {
         }
 
         var tree = pane == NavigationSource.Bookmark ? BookmarksTree : Tree;
+        if (pane == NavigationSource.Drives
+            && Vm.Nav.CurrentSource == NavigationSource.Bookmark
+            && Tree.SelectedItem is TreeNodeViewModel { FullPath.Length: > 0 } left) {
+            FocusTree(Tree);
+            if (Vm.Settings.TreeKeyboardNavigates) {
+                NavigateFromTree(left.FullPath, NavigationSource.Drives);
+            }
+
+            return;
+        }
+
         Vm.RevealCurrentIn(pane);
         tree.UpdateLayout();
         FocusTree(tree);
@@ -388,7 +413,7 @@ public partial class FolderTreesView : UserControl {
         // folder holding the archive, and treated as a click that echo
         // navigated straight back out - the archive never got listed.
         if (Vm.Trees.IsSyncingSelection) {
-            Trace($"tree: highlight {node.Name} (sync)");
+            Log.Detail($"tree: highlight {node.FullPath} (sync)");
 
             return;
         }
@@ -407,7 +432,7 @@ public partial class FolderTreesView : UserControl {
         // or targeted. Undone rather than prevented, because it cannot be
         // prevented (2026-09-22).
         if (!node.IsExpanded && previous is TreeNodeViewModel hidden && IsInside(hidden.FullPath, node.FullPath)) {
-            Trace($"tree: highlight {node.Name} (branch closed over {hidden.Name}; put back)");
+            Log.Detail($"tree: highlight {node.FullPath} (branch closed over {hidden.FullPath}; put back)");
             _restoringSelection = true;
             try {
                 hidden.IsSelected = true;
@@ -442,11 +467,7 @@ public partial class FolderTreesView : UserControl {
         // Control line (REDESIGN.md): a highlight that moved with no click,
         // no keyboard in the panel and no sync behind it - the TreeView's
         // own doing, and the kind of move nobody could see in the log.
-        Trace($"tree: highlight {node.Name} (no gesture; was {(previous as TreeNodeViewModel)?.Name ?? "none"})");
-    }
-
-    private static void Trace(string line) {
-        (ServiceLocator.TryGet<ILogger>() ?? NullLogger.Instance).Info(line);
+        Log.Detail($"tree: highlight {node.FullPath} (no gesture; was {(previous as TreeNodeViewModel)?.FullPath ?? "none"})");
     }
 
 
@@ -826,6 +847,38 @@ public partial class FolderTreesView : UserControl {
     private void Tree_PreviewMouseWheel(object sender, MouseWheelEventArgs e) {
         if (ListVisuals.TryShiftScrollHorizontally((DependencyObject)sender, e)) {
             e.Handled = true;
+        }
+    }
+
+
+    /// <summary>
+    /// A row asking to be scrolled into view. WPF asks it for the row taking
+    /// the keyboard - a click, an arrow key, a row selected while the panel
+    /// has focus. Up and down is what that is for; sideways it pulled the
+    /// panel right to show the whole of a long name, and the chevrons and
+    /// the levels above left the screen on every click (2026-09-22). Unless
+    /// <c>AppSettings.TreeScrollsSideways</c> wants that, the request goes
+    /// out again with its sideways part pinned to what is on screen now.
+    /// </summary>
+    private void TreeViewItem_RequestBringIntoView(object sender, RequestBringIntoViewEventArgs e) {
+        if (_pinningSideways
+            || Vm.Settings.TreeScrollsSideways
+            || e.TargetObject is not FrameworkElement target
+            || ListVisuals.Ancestors(target).OfType<ScrollContentPresenter>().FirstOrDefault() is not { } viewport) {
+            return;
+        }
+
+        // The viewport's left edge and width in the row's own coordinates:
+        // a rectangle spanning exactly what is on screen sideways asks for
+        // no sideways scroll at all, and its height is the row's own.
+        var rect = e.TargetRect.IsEmpty ? new Rect(target.RenderSize) : e.TargetRect;
+        double left = viewport.TranslatePoint(new Point(0, 0), target).X;
+        e.Handled = true;
+        _pinningSideways = true;
+        try {
+            target.BringIntoView(new Rect(left, rect.Y, viewport.ActualWidth, rect.Height));
+        } finally {
+            _pinningSideways = false;
         }
     }
 

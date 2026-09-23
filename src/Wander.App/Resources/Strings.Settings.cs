@@ -168,6 +168,21 @@ public static partial class Strings {
     /// <summary>Когда выключено, в основном меню больше не появится пункт…</summary>
     public static string SettingsDebugHint => Get(nameof(SettingsDebugHint));
 
+    /// <summary>Журнал запуска</summary>
+    public static string SettingsLogGroup => Get(nameof(SettingsLogGroup));
+
+    /// <summary>Подробно: клавиши, клики, выделение</summary>
+    public static string SettingsLogActions => Get(nameof(SettingsLogActions));
+
+    /// <summary>Каждое нажатие, клик и смена выделения в списке и в панелях папок…</summary>
+    public static string SettingsLogActionsHint => Get(nameof(SettingsLogActionsHint));
+
+    /// <summary>Писать пути к файлам</summary>
+    public static string SettingsLogPaths => Get(nameof(SettingsLogPaths));
+
+    /// <summary>Выключено — пути и имена в журнале и в отчёте об ошибке заменены метка…</summary>
+    public static string SettingsLogPathsHint => Get(nameof(SettingsLogPathsHint));
+
     /// <summary>Сброс настроек</summary>
     public static string SettingsResetGroup => Get(nameof(SettingsResetGroup));
 
@@ -335,6 +350,12 @@ public static partial class Strings {
 
     /// <summary>Поведение проводника. Выключено — стрелки двигают курсор, открывает En</summary>
     public static string SettingsTreeKeyboardNavigatesHint => Get(nameof(SettingsTreeKeyboardNavigatesHint));
+
+    /// <summary>Дерево само прокручивается вбок к длинному имени</summary>
+    public static string SettingsTreeScrollsSideways => Get(nameof(SettingsTreeScrollsSideways));
+
+    /// <summary>Имя папки шире панели — панель уезжает вправо, чтобы показать его цел</summary>
+    public static string SettingsTreeScrollsSidewaysHint => Get(nameof(SettingsTreeScrollsSidewaysHint));
 
     /// <summary>Показывать скрытые файлы</summary>
     public static string PanelShowHidden => Get(nameof(PanelShowHidden));

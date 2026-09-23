@@ -134,6 +134,15 @@ public sealed record AppSettings {
     /// </summary>
     public bool TreeKeyboardNavigates { get; init; } = false;
 
+    /// <summary>
+    /// Whether a folder panel scrolls sideways by itself to show the whole
+    /// name of the row the keyboard lands on. Off by default (2026-09-22):
+    /// a name wider than the panel pulled it right on every click and every
+    /// arrow key, and the chevrons and the levels above went off the left
+    /// edge. Up and down follow the row either way.
+    /// </summary>
+    public bool TreeScrollsSideways { get; init; } = false;
+
 
     // --- Companions ("integrated items") -------------------------------
     /// <summary>
@@ -409,6 +418,24 @@ public sealed record AppSettings {
     // --- Debug ---------------------------------------------------------
     /// <summary>Whether the "Debug" submenu is visible in the main menu.</summary>
     public bool ShowDebugMenu { get; init; } = true;
+
+    /// <summary>
+    /// The session log also traces what the user does: every key pressed in
+    /// the window, every click and where it landed, every change of the
+    /// selection in the list and in the folder panels. Off by default -
+    /// that is a line every keystroke, wanted while chasing a bug like "the
+    /// selection slips every other time" and noise otherwise.
+    /// </summary>
+    public bool LogActions { get; init; }
+
+    /// <summary>
+    /// The session log and the crash report name files by their real paths.
+    /// Off by default (2026-09-22): the log is what gets attached to a bug
+    /// report, so paths and names in it are tokens that keep the drive, the
+    /// depth, the extension and which lines are about the same file, and
+    /// nothing anybody could read a name from (<c>Core/Logging/LogMask</c>).
+    /// </summary>
+    public bool LogPaths { get; init; }
 }
 
 

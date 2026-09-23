@@ -48,7 +48,7 @@ public partial class ConflictWindow : Window {
         var vm = new ConflictWindowViewModel(
             new ConflictBatch(request, skipIdentical),
             ServiceLocator.Get<IFileSystem>(),
-            ServiceLocator.Get<ILogger>());
+            Log.Current);
 
         var window = new ConflictWindow(vm) {
             Owner = Application.Current?.MainWindow,

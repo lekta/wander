@@ -62,7 +62,7 @@ public sealed class FileOperationService {
             ServiceLocator.Get<IRecycleBin>(),
             ServiceLocator.Get<UndoService>(),
             ServiceLocator.Get<OperationTracker>(),
-            ServiceLocator.Get<ILogger>(),
+            Log.Current,
             new HeldPaths(
                 ServiceLocator.Get<PathClaims>(),
                 ServiceLocator.TryGet<IFileBusyProbe>(),
@@ -135,7 +135,7 @@ public sealed class FileOperationService {
         RenameHeld(gate, path, newName);
         string parent = Path.GetDirectoryName(path) ?? "";
         string newPath = Path.Combine(parent, newName);
-        _log.Info($"Rename: {path} -> {newName}");
+        _log.Info($"Rename: {path} -> {Log.Path(newName)}");
         _undo.Push(new RenameAction(_fs, newPath, oldName));
     }
 
@@ -220,7 +220,7 @@ public sealed class FileOperationService {
         RenameHeld(gate, path, newName);
         string parent = Path.GetDirectoryName(path) ?? "";
         steps.Add(new RenameAction(_fs, Path.Combine(parent, newName), oldName));
-        _log.Info($"Rename: {path} -> {newName}");
+        _log.Info($"Rename: {path} -> {Log.Path(newName)}");
     }
 
     /// <summary>

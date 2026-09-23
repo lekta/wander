@@ -32,12 +32,15 @@ public static class PlatformBootstrapper {
         var logger = new FileLogger();
         ServiceLocator.Register<ILogger>(logger);
         ServiceLocator.Register<ILogFile>(logger);
-        logger.Info($"=== Wander session start ({DateTime.Now:yyyy-MM-dd HH:mm:ss}) ===");
-        logger.Info($"Log file: {logger.FilePath}");
-        logger.Info($"Data root: {AppPaths.DataRoot} ({AppPaths.Source})");
+        // Through the interface: a $"..." line has its paths masked value by
+        // value there (LogMessage), and "(env)" after the data root stays.
+        ILogger header = logger;
+        header.Info($"=== Wander session start ({DateTime.Now:yyyy-MM-dd HH:mm:ss}) ===");
+        header.Info($"Log file: {logger.FilePath}");
+        header.Info($"Data root: {AppPaths.DataRoot} ({AppPaths.Source})");
         // Environment header — makes a lone session log self-sufficient for
         // bug reports (CrashReporter bundles this log as-is).
-        logger.Info(
+        header.Info(
             $"{BuildInfo.Line}; {RuntimeInformation.OSDescription} ({RuntimeInformation.OSArchitecture}); " +
             $"{RuntimeInformation.FrameworkDescription}; culture {CultureInfo.CurrentCulture.Name}/{CultureInfo.CurrentUICulture.Name}; " +
             $"elevated: {IsElevated()}");

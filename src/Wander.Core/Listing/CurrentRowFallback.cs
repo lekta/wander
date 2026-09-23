@@ -5,13 +5,14 @@ namespace Wander.Core.Listing;
 /// <summary>
 /// Which row becomes the current one when the current one has left the
 /// folder - deleted here, deleted in the program it was opened in, moved
-/// away.
+/// away - or only the list, hidden by the filter.
 ///
 /// <para>
 /// The next surviving row in the order the folder stood in, so whatever
 /// took the departed file's place on screen is what the keyboard is on; the
 /// nearest surviving row before it when it was the last. One rule for every
-/// way a file can leave (decided 2026-09-21): looking through photographs
+/// way a file can leave (decided 2026-09-21; the filter joined it
+/// 2026-09-22): looking through photographs
 /// and throwing one out, the next thing wanted is the next photograph -
 /// selected, in the preview, under the arrow keys - and not a folder with
 /// nothing selected, which is what Explorer leaves. What keeps a second

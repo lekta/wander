@@ -678,6 +678,9 @@
   <data name="CrashIncludeLog" xml:space="preserve">
     <value>Приложить журнал этого сеанса — с ним разбираться гораздо проще, но в нём есть пути к файлам, с которыми ты работал</value>
   </data>
+  <data name="CrashIncludeLogMasked" xml:space="preserve">
+    <value>Приложить журнал этого сеанса — с ним разбираться гораздо проще; пути и имена файлов в нём заменены метками</value>
+  </data>
   <data name="CrashPrepare" xml:space="preserve">
     <value>Подготовить отчёт</value>
   </data>
@@ -973,6 +976,21 @@
   </data>
   <data name="SettingsDebugHint" xml:space="preserve">
     <value>Когда выключено, в основном меню больше не появится пункт «Отладка» (включая «Журнал»). Чтобы вернуть, открой этот раздел настроек снова — он остаётся доступен независимо от состояния флажка.</value>
+  </data>
+  <data name="SettingsLogGroup" xml:space="preserve">
+    <value>Журнал запуска</value>
+  </data>
+  <data name="SettingsLogActions" xml:space="preserve">
+    <value>Подробно: клавиши, клики, выделение</value>
+  </data>
+  <data name="SettingsLogActionsHint" xml:space="preserve">
+    <value>Каждое нажатие, клик и смена выделения в списке и в панелях папок — строкой в журнале, чтобы было видно, что делали перед ошибкой. Журнал растёт быстрее.</value>
+  </data>
+  <data name="SettingsLogPaths" xml:space="preserve">
+    <value>Писать пути к файлам</value>
+  </data>
+  <data name="SettingsLogPathsHint" xml:space="preserve">
+    <value>Выключено — пути и имена в журнале и в отчёте об ошибке заменены метками: диск, глубина и расширение видны, имена — нет; одна папка в пределах сеанса — одна метка. Включите, когда журнал нужен вам самим. Первые строки сеанса, до чтения настроек, обезличены всегда.</value>
   </data>
   <data name="SettingsResetGroup" xml:space="preserve">
     <value>Сброс настроек</value>
@@ -1705,6 +1723,12 @@
   </data>
   <data name="SettingsTreeKeyboardNavigatesHint" xml:space="preserve">
     <value>Поведение проводника. Выключено — стрелки двигают курсор, открывает Enter.</value>
+  </data>
+  <data name="SettingsTreeScrollsSideways" xml:space="preserve">
+    <value>Дерево само прокручивается вбок к длинному имени</value>
+  </data>
+  <data name="SettingsTreeScrollsSidewaysHint" xml:space="preserve">
+    <value>Имя папки шире панели — панель уезжает вправо, чтобы показать его целиком, и шевроны уходят за левый край. Выключено — панель прокручивается только вверх и вниз; вбок — Shift + колесо.</value>
   </data>
   <data name="PanelShowHidden" xml:space="preserve">
     <value>Показывать скрытые файлы</value>

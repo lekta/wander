@@ -1099,14 +1099,11 @@ public sealed class SystemIconProvider : IIconProvider {
     }
 
 
-    // Diagnostic logging — wired through the standard ILogger so the user
-    // can read what happened via Debug → Logs. Resolved on first use rather
-    // than in a field initialiser: this type is built by the bootstrapper
-    // itself, and a static initialiser would run in the middle of it.
-    private static ILogger? _log;
+    // Diagnostic logging - the session log, so the user can read what
+    // happened via Debug -> Logs. Asked for on each line (Log), not held:
+    // this type is built by the bootstrapper itself.
     private static void IconLog(string msg) {
-        _log ??= ServiceLocator.Get<ILogger>();
-        _log.Info("[icon] " + msg);
+        Log.Info("[icon] " + msg);
     }
 
 

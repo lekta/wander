@@ -113,6 +113,9 @@
                 <CheckBox Content="{x:Static res:Strings.SettingsTreeKeyboardNavigates}"
                           ToolTip="{x:Static res:Strings.SettingsTreeKeyboardNavigatesHint}"
                           IsChecked="{Binding Owner.TreeKeyboardNavigates}"/>
+                <CheckBox Content="{x:Static res:Strings.SettingsTreeScrollsSideways}"
+                          ToolTip="{x:Static res:Strings.SettingsTreeScrollsSidewaysHint}"
+                          IsChecked="{Binding Owner.TreeScrollsSideways}"/>
                 <CheckBox Content="{x:Static res:Strings.SettingsConfirmRecycle}"
                           ToolTip="{x:Static res:Strings.SettingsConfirmRecycleHint}"
                           IsChecked="{Binding Owner.ConfirmRecycle}"/>
@@ -1132,6 +1135,17 @@
                           IsChecked="{Binding Owner.ShowDebugMenu}"/>
                 <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,10,0,0"
                            Text="{x:Static res:Strings.SettingsDebugHint}"/>
+
+                <!-- What the session log says. By default events and no
+                     paths - it is what goes out with a bug report; the
+                     action trace and real paths are for chasing a bug. -->
+                <TextBlock Text="{x:Static res:Strings.SettingsLogGroup}" FontWeight="SemiBold" Margin="0,24,0,4"/>
+                <CheckBox Content="{x:Static res:Strings.SettingsLogActions}"
+                          ToolTip="{x:Static res:Strings.SettingsLogActionsHint}"
+                          IsChecked="{Binding Owner.LogActions}"/>
+                <CheckBox Content="{x:Static res:Strings.SettingsLogPaths}"
+                          ToolTip="{x:Static res:Strings.SettingsLogPathsHint}"
+                          IsChecked="{Binding Owner.LogPaths}"/>
 
                 <!-- Сброс живёт здесь, а не в строке кнопок диалога: он нужен
                      раз в год, а места рядом с ОК / Применить / Отмена

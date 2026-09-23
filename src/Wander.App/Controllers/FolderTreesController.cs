@@ -9,8 +9,8 @@ namespace Wander.App.Controllers;
 
 /// <summary>
 /// The two folder panels as one thing: the drives tree it owns outright, and
-/// the machinery both panels share — node bookkeeping, the single highlight
-/// that moves between them, and expanding either one down to a path.
+/// the machinery both panels share — node bookkeeping, where each panel's
+/// highlight goes, and expanding either one down to a path.
 ///
 /// <para>
 /// The bookmarks panel keeps its own rows (<see cref="BookmarksController"/>
@@ -25,7 +25,6 @@ public sealed class FolderTreesController {
     private readonly IFileSystem _fs;
     private readonly SettingsViewModel _settings;
     private readonly Func<IEnumerable<TreeNodeViewModel>> _bookmarkRows;
-    private TreeNodeViewModel? _selected;
 
 
     public FolderTreesController(
@@ -150,22 +149,27 @@ public sealed class FolderTreesController {
     /// longer reachable through any bookmark — typically because the user
     /// removed the bookmark since the history entry was recorded.
     /// </para>
+    ///
+    /// <para>
+    /// A folder opened from the bookmarks leaves the drives tree's row lit
+    /// where it was - dimmed, the tree has no keyboard - and <c>Ctrl+1</c>
+    /// into the drives tree goes back to it (decided 2026-09-22). Anything
+    /// else lands in the drives tree, and the bookmark row lit before goes
+    /// out: the bookmarks never point at a folder that is not open.
+    /// <c>IsSelected</c> is two-way bound, so a row left lit stays drawn
+    /// lit - which is why the rows are let go of by hand.
+    /// </para>
     /// </summary>
     public void ExpandTo(string path, NavigationSource source) {
         IsSyncingSelection = true;
         try {
-            // Clear the previously selected row first. IsSelected is two-way
-            // bound, so leaving it set keeps the prior bookmark/drive row
-            // visually highlighted when navigation jumps between panels.
-            if (_selected is not null) {
-                _selected.IsSelected = false;
-                _selected = null;
+            Unlight(_bookmarkRows());
+            if (source == NavigationSource.Bookmark && TryExpandAndSelect(_bookmarkRows(), path)) {
+                return;
             }
 
-            bool ok = source == NavigationSource.Bookmark && TryExpandAndSelect(_bookmarkRows(), path);
-            if (!ok) {
-                TryExpandAndSelect(Roots, path);
-            }
+            Unlight(Roots);
+            TryExpandAndSelect(Roots, path);
         } finally {
             IsSyncingSelection = false;
         }
@@ -174,29 +178,24 @@ public sealed class FolderTreesController {
 
     /// <summary>
     /// Expands one named panel down to <paramref name="path"/> and selects
-    /// its row — what <c>Ctrl+2</c> and <c>Ctrl+Shift+E</c> point the
+    /// its row — what <c>Ctrl+1</c> and <c>Ctrl+Shift+E</c> point the
     /// keyboard at. False when the folder is not reachable in that panel (a
-    /// path outside every bookmark, typically); the highlight is then put
-    /// back where it was rather than leaving both panels blank.
+    /// path outside every bookmark, typically); the panel's highlight is
+    /// then put back where it was. The other panel keeps its own either way.
     /// </summary>
     public bool RevealIn(NavigationSource panel, string path) {
         IsSyncingSelection = true;
         try {
-            var previous = _selected;
-            if (previous is not null) {
-                // Cleared before the search: FindSelected looks for a selected
-                // row and would otherwise find this one.
-                previous.IsSelected = false;
-                _selected = null;
-            }
-
-            if (TryExpandAndSelect(panel == NavigationSource.Bookmark ? _bookmarkRows() : Roots, path)) {
+            var rows = panel == NavigationSource.Bookmark ? _bookmarkRows() : Roots;
+            // Let go of before the search: a lit row left behind would be a
+            // second highlight in the panel.
+            var previous = Unlight(rows);
+            if (TryExpandAndSelect(rows, path)) {
                 return true;
             }
 
             if (previous is not null) {
                 previous.IsSelected = true;
-                _selected = previous;
             }
 
             return false;
@@ -207,16 +206,13 @@ public sealed class FolderTreesController {
 
 
     /// <summary>
-    /// Moves the highlight onto one row. <c>IsSelected</c> is two-way bound,
-    /// so whatever had it has to be told to let go — otherwise two rows stay
-    /// highlighted once the panel is rebuilt underneath them.
+    /// Moves the highlight of the panel holding <paramref name="node"/> onto
+    /// it - a bookmark just moved, which is a new row after the rebuild; a
+    /// row a harness scenario points at. The other panel keeps its own.
     /// </summary>
     public void Select(TreeNodeViewModel node) {
-        if (_selected is not null) {
-            _selected.IsSelected = false;
-        }
+        Unlight(Holds(_bookmarkRows(), node) ? _bookmarkRows() : Roots);
         node.IsSelected = true;
-        _selected = node;
     }
 
 
@@ -247,11 +243,39 @@ public sealed class FolderTreesController {
     }
 
 
-    private bool TryExpandAndSelect(IEnumerable<TreeNodeViewModel> nodes, string path) {
+    private static bool TryExpandAndSelect(IEnumerable<TreeNodeViewModel> nodes, string path) {
         foreach (var node in nodes) {
             if (node.TryExpandToPath(path, select: true)) {
-                _selected = node.FindSelected();
+                return true;
+            }
+        }
 
+        return false;
+    }
+
+
+    /// <summary>
+    /// Takes the highlight off the one row of a panel that carries it and
+    /// says which that was. Asked of the rows themselves rather than
+    /// remembered: the arrow keys move a panel's highlight without asking
+    /// anybody, and a remembered row went stale on the first one.
+    /// </summary>
+    private static TreeNodeViewModel? Unlight(IEnumerable<TreeNodeViewModel> rows) {
+        foreach (var row in rows) {
+            if (row.FindSelected() is { } lit) {
+                lit.IsSelected = false;
+
+                return lit;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>True when <paramref name="node"/> is one of <paramref name="rows"/> or inside an open one.</summary>
+    private static bool Holds(IEnumerable<TreeNodeViewModel> rows, TreeNodeViewModel node) {
+        foreach (var row in rows) {
+            if (ReferenceEquals(row, node) || Holds(row.Children, node)) {
                 return true;
             }
         }

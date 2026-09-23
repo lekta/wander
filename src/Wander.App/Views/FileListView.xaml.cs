@@ -339,7 +339,7 @@ public partial class FileListView : UserControl {
                 return;
             }
 
-            FirstScreenWatch.Begin(path, clock, VisibleIcons(), ServiceLocator.Get<ILogger>());
+            FirstScreenWatch.Begin(path, clock, VisibleIcons(), Log.Current);
         }));
     }
 

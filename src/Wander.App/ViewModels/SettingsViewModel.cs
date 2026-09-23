@@ -537,6 +537,13 @@ public sealed class SettingsViewModel : ObservableObject {
         set => SetField(ref _treeKeyboardNavigates, value);
     }
 
+    private bool _treeScrollsSideways;
+    /// <inheritdoc cref="AppSettings.TreeScrollsSideways"/>
+    public bool TreeScrollsSideways {
+        get => _treeScrollsSideways;
+        set => SetField(ref _treeScrollsSideways, value);
+    }
+
 
     // --- Context menu ---------------------------------------------------
     /// <summary>
@@ -627,6 +634,20 @@ public sealed class SettingsViewModel : ObservableObject {
         set => SetField(ref _showDebugMenu, value);
     }
 
+    private bool _logActions;
+    /// <inheritdoc cref="AppSettings.LogActions"/>
+    public bool LogActions {
+        get => _logActions;
+        set => SetField(ref _logActions, value);
+    }
+
+    private bool _logPaths;
+    /// <inheritdoc cref="AppSettings.LogPaths"/>
+    public bool LogPaths {
+        get => _logPaths;
+        set => SetField(ref _logPaths, value);
+    }
+
 
     // --- Category list (used by the dialog) ---------------------------
     public ObservableCollection<SettingsCategoryViewModel> Categories { get; }
@@ -687,6 +708,7 @@ public sealed class SettingsViewModel : ObservableObject {
         ShowBookmarkVideos = s.ShowBookmarkVideos;
         ShowBookmarkRecycleBin = s.ShowBookmarkRecycleBin;
         TreeKeyboardNavigates = s.TreeKeyboardNavigates;
+        TreeScrollsSideways = s.TreeScrollsSideways;
         ShellExtensionsEnabled = s.ShellExtensionsEnabled;
         _showSystemShellExtensions = s.ShowSystemShellExtensions;
         Raise(nameof(ShowSystemShellExtensions));
@@ -701,6 +723,8 @@ public sealed class SettingsViewModel : ObservableObject {
         _toolPaths = s.ToolPaths;
         RebuildActionRows(s.CustomActions);
         ShowDebugMenu = s.ShowDebugMenu;
+        LogActions = s.LogActions;
+        LogPaths = s.LogPaths;
     }
 
 
@@ -909,6 +933,7 @@ public sealed class SettingsViewModel : ObservableObject {
             ShowBookmarkVideos = ShowBookmarkVideos,
             ShowBookmarkRecycleBin = ShowBookmarkRecycleBin,
             TreeKeyboardNavigates = TreeKeyboardNavigates,
+            TreeScrollsSideways = TreeScrollsSideways,
             ShellExtensionsEnabled = ShellExtensionsEnabled,
             // Persisted as "what is off", so a future Wander release that
             // adds menu entries shows them by default instead of inheriting
@@ -922,6 +947,8 @@ public sealed class SettingsViewModel : ObservableObject {
             CustomActions = ActionCatalog.ToStored(ActionPresets.All, Actions),
             ToolPaths = _toolPaths,
             ShowDebugMenu = ShowDebugMenu,
+            LogActions = LogActions,
+            LogPaths = LogPaths,
         };
     }
 

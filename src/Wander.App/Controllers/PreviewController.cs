@@ -1175,7 +1175,7 @@ public sealed class PreviewController : ObservableObject {
         } catch (OperationCanceledException) {
             return;
         } catch (Exception ex) {
-            ServiceLocator.Get<ILogger>().Warn($"Preview: review helpers failed - {ex.Message}");
+            Log.Warn($"Preview: review helpers failed - {ex.Message}");
 
             return;
         }
@@ -1786,7 +1786,7 @@ public sealed class PreviewController : ObservableObject {
             return null;
         }
 
-        var log = ServiceLocator.Get<ILogger>();
+        var log = Log.Current;
         try {
             // The queue and the unpacking watched as one wait: what the
             // person sees is a spinner, and which half of it is slow is
@@ -1837,7 +1837,7 @@ public sealed class PreviewController : ObservableObject {
         Kind = PreviewKind.Archive;
 
         var listing = await LongWait.WatchAsync(
-            Task.Run(() => ReadArchive(path, ct), ct), ServiceLocator.Get<ILogger>(), $"preview: listing {path}");
+            Task.Run(() => ReadArchive(path, ct), ct), Log.Current, $"preview: listing {path}");
         if (ct.IsCancellationRequested) {
             return;
         }
@@ -2184,7 +2184,7 @@ public sealed class PreviewController : ObservableObject {
             // The selection moved on.
         } catch (Exception ex) {
             // A neighbour that cannot be read is found out when it is shown.
-            ServiceLocator.Get<ILogger>().Info($"Preview: decoding ahead failed - {ex.Message}");
+            Log.Info($"Preview: decoding ahead failed - {ex.Message}");
         }
     }
 

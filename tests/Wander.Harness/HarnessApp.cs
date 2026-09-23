@@ -47,7 +47,7 @@ public sealed class HarnessApp : Wander.App.App {
     protected override void OnStartup(StartupEventArgs e) {
         base.OnStartup(e);
 
-        _log = new CapturingLogger(ServiceLocator.Get<ILogger>(), ServiceLocator.Get<ILogFile>());
+        _log = new CapturingLogger(Log.Current, ServiceLocator.Get<ILogFile>());
         ServiceLocator.Register<ILogger>(_log);
         ServiceLocator.Register<ILogFile>(_log);
         ServiceLocator.Register<IDialogs>(_dialogs);
@@ -71,6 +71,10 @@ public sealed class HarnessApp : Wander.App.App {
         // App.WatchWindowsWhenHeadless.
         Wander.App.App.WatchWindowsWhenHeadless();
         var window = new MainWindow();
+        // Real paths in the log: a run is read by whoever wrote the scenario,
+        // and steps assert on paths (assert-log). A user's log masks them
+        // by default (AppSettings.LogPaths); here they are the sandbox's.
+        ((MainViewModel)window.DataContext).Settings.LogPaths = true;
         window.Show();
         _log.Info($"HARNESS window at ({window.Left:F0}, {window.Top:F0}), taskbar={window.ShowInTaskbar}, active={window.IsActive}");
         Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() => _ = RunAsync()));

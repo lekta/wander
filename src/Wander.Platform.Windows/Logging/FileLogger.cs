@@ -8,6 +8,14 @@ namespace Wander.Platform.Windows.Logging;
 /// <c>session-yyyyMMdd-HHmmss.log</c> under <see cref="AppPaths.Logs"/>
 /// (<c>%LOCALAPPDATA%\Wander\logs\</c> by default). Writes are line-based, timestamped,
 /// and synchronously flushed so a crash still leaves a useful tail.
+///
+/// <para>
+/// Unless real paths are on (<see cref="Log.RevealPaths"/>), every line and
+/// every exception is masked (<see cref="LogMask.Scrub"/>) before it is
+/// written or handed on: a <c>$"..."</c> line arrives with its values
+/// masked already, and this catches the rest - a finished string, an
+/// exception message naming a file, a stack trace.
+/// </para>
 /// </summary>
 public sealed class FileLogger : ILogger, ILogFile, IDisposable {
     private readonly StreamWriter _writer;
@@ -88,6 +96,9 @@ public sealed class FileLogger : ILogger, ILogFile, IDisposable {
         if (_disposed) {
             return;
         }
+        if (!Log.RevealPaths) {
+            message = LogMask.Scrub(message);
+        }
         lock (_lock) {
             // Only warnings and errors are collapsed. An INFO line is the
             // chronology itself, and two identical ones a second apart are
@@ -141,7 +152,7 @@ public sealed class FileLogger : ILogger, ILogFile, IDisposable {
             _writer.Write($"{DateTime.Now:HH:mm:ss.fff} {level,-5} ");
             _writer.WriteLine(message);
             if (ex is not null) {
-                _writer.WriteLine(ex);
+                _writer.WriteLine(Log.RevealPaths ? ex.ToString() : LogMask.Scrub(ex.ToString()));
             }
         } catch {
             // A logger that throws would be a permanent UX outage; swallow.
