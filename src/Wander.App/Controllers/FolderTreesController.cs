@@ -1,303 +1,126 @@
-using System.Collections.ObjectModel;
-using System.Collections.Specialized;
-using System.ComponentModel;
 using Wander.App.ViewModels;
-using Wander.Core.FileSystem;
 using Wander.Core.Navigation;
+using Wander.Core.Panels;
+using Wander.Core.Workspace;
 
 namespace Wander.App.Controllers;
 
 /// <summary>
-/// The two folder panels as one thing: the drives tree it owns outright, and
-/// the machinery both panels share — node bookkeeping, where each panel's
-/// highlight goes, and expanding either one down to a path.
-///
-/// <para>
-/// The bookmarks panel keeps its own rows (<see cref="BookmarksController"/>
-/// builds them from a list only it knows), so this class is handed a way to
-/// look at them rather than a copy of them. Everything that has to consider
-/// both panels — refreshing, revealing, moving the highlight — lives here
-/// exactly because it has to consider both: split between the two owners it
-/// would be written twice and agree only by accident.
-/// </para>
+/// The two folder panels as drawn: the lines of each, kept in step with the
+/// model (<see cref="WorkspaceController"/>). A projection - every decision
+/// about what is open, lit or where the open folder is was made by the
+/// model's rules; this only turns the state into lines, reusing a line
+/// whose key survived so its container, and the keyboard on it, stay.
 /// </summary>
 public sealed class FolderTreesController {
-    private readonly IFileSystem _fs;
-    private readonly SettingsViewModel _settings;
-    private readonly Func<IEnumerable<TreeNodeViewModel>> _bookmarkRows;
-
-
-    public FolderTreesController(
-        IFileSystem fs, SettingsViewModel settings, Func<IEnumerable<TreeNodeViewModel>> bookmarkRows) {
-        _fs = fs;
-        _settings = settings;
-        _bookmarkRows = bookmarkRows;
-    }
-
-
-    /// <summary>A row was opened or closed, so the session state is stale.</summary>
-    public event EventHandler? ExpansionChanged;
-
-
-    /// <summary>The drives tree. Bound by the lower half of the left panel.</summary>
-    public ObservableCollection<TreeNodeViewModel> Roots { get; } = new();
-
     /// <summary>
-    /// True while <see cref="ExpandTo"/> or <see cref="RevealIn"/> is moving
-    /// the highlight itself. The panels' selection handlers treat a change
-    /// arriving under this flag as an echo of a navigation, not as a click.
-    /// It used to be harmless either way, because the row picked was the
-    /// current folder and the view drops those; inside an archive the row
-    /// is the folder the archive lives in, and taken for a click that echo
-    /// navigated straight back out of the archive (2026-09-02).
+    /// Past this many edits the panel is refilled in one go: a branch of
+    /// thousands of folders opened one insert at a time would lay the panel
+    /// out thousands of times.
     /// </summary>
-    public bool IsSyncingSelection { get; private set; }
+    private const int MaxIncrementalEdits = 256;
+
+    private readonly WorkspaceController _workspace;
 
 
-    /// <summary>Fills the drives tree. Called once, at startup.</summary>
-    public void LoadRoots() {
-        Roots.Clear();
-        foreach (var root in _fs.GetRoots()) {
-            // Chevron first, question later: asking a drive whether it has
-            // subfolders spins it up, and at startup that wait would sit
-            // between the user and the first frame. ProbeForChevrons
-            // removes the chevron from an empty drive once it has answered.
-            var node = new TreeNodeViewModel(
-                root.Name, root.FullPath, EntryKind.Drive, _fs, hasChildren: true, _settings);
-            Roots.Add(node);
-            Wire(node);
-        }
-        TreeNodeViewModel.ProbeForChevrons(_fs, Roots.ToList());
+    public FolderTreesController(WorkspaceController workspace) {
+        _workspace = workspace;
+        _workspace.StateChanged += (_, state) => Project(state);
     }
 
 
-    /// <summary>
-    /// Puts one node and everything under it under this controller's
-    /// bookkeeping: expansions get remembered, and children that appear
-    /// later — a branch is enumerated the first time it opens — get the same
-    /// treatment without anyone having to remember to ask.
-    ///
-    /// <para>
-    /// Public because the bookmarks panel builds nodes of its own and they
-    /// have to behave the same way.
-    /// </para>
-    /// </summary>
-    public void Wire(TreeNodeViewModel node) {
-        node.PropertyChanged += OnNodePropertyChanged;
-        node.Children.CollectionChanged += OnChildrenChanged;
-        foreach (var child in node.Children) {
-            Wire(child);
-        }
+    /// <summary>The lines of both panels were brought in step with the model.</summary>
+    public event EventHandler? Projected;
+
+
+    /// <summary>The bookmarks panel's lines. Bound by the upper half of the left panel.</summary>
+    public BulkObservableCollection<TreeNodeViewModel> BookmarkLines { get; } = new();
+
+    /// <summary>The drives panel's lines. Bound by the lower half.</summary>
+    public BulkObservableCollection<TreeNodeViewModel> DriveLines { get; } = new();
+
+
+    /// <summary>The lines of one panel.</summary>
+    public IReadOnlyList<TreeNodeViewModel> Lines(Pane pane) {
+        return pane == Pane.Bookmarks ? BookmarkLines : DriveLines;
     }
 
-
-    /// <summary>
-    /// Re-reads every expanded branch of both panels. What is expanded stays
-    /// expanded - <see cref="TreeNodeViewModel.RefreshChildrenAsync"/>
-    /// reconciles rather than rebuilds - so this is safe to hang off F5.
-    /// </summary>
-    public void RefreshAll() {
-        foreach (var node in BothPanels()) {
-            _ = node.RefreshChildrenAsync();
-        }
+    /// <summary>The line under a panel's cursor, when it is drawn.</summary>
+    public TreeNodeViewModel? CaretLine(Pane pane) {
+        return Lines(pane).FirstOrDefault(l => l.IsCaret);
     }
 
-
-    /// <summary>
-    /// The narrow version: one folder gained or lost a subfolder, so only
-    /// the rows standing on that folder are re-read. Both panels can be
-    /// showing the same path, and a path can appear twice within one of
-    /// them, so this does not stop at the first hit.
-    /// </summary>
-    public void RefreshFor(string path) {
-        _ = RefreshForAsync(path);
+    /// <summary>The line of <paramref name="pane"/> on <paramref name="path"/>: the cursor's when it stands there, else the first drawn.</summary>
+    public TreeNodeViewModel? LineAt(Pane pane, string path) {
+        return CaretLine(pane) is { } caret && PanelPaths.Same(caret.FullPath, path)
+            ? caret
+            : Lines(pane).FirstOrDefault(l => PanelPaths.Same(l.FullPath, path));
     }
 
-
     /// <summary>
-    /// <see cref="RefreshFor"/> that can be waited for: a caller about to
-    /// highlight a row the re-read is only now bringing in - a folder just
-    /// moved into an open branch - needs the row there first.
-    /// </summary>
-    public Task RefreshForAsync(string path) {
-        return Task.WhenAll(BothPanels().Select(node => node.RefreshBranch(path)));
-    }
-
-
-    /// <summary>
-    /// A folder was renamed: every row on it or under it, in either panel,
-    /// takes the new path and stays where it is
-    /// (<see cref="TreeNodeViewModel.Follow"/>). Called ahead of the
-    /// re-read of the level, which then finds the row already under its
-    /// new name and keeps it instead of replacing it with a closed one.
-    /// </summary>
-    public void Follow(string oldRoot, string newRoot) {
-        foreach (var node in BothPanels()) {
-            node.Follow(oldRoot, newRoot);
-        }
-    }
-
-
-    /// <summary>
-    /// Opens whichever panel the navigation came from down to
-    /// <paramref name="path"/> and highlights the row.
-    ///
-    /// <para>
-    /// Source-aware: a navigation that originated in the bookmarks panel
-    /// (including replayed history) re-expands only the bookmarks tree,
-    /// never the drives tree. Falls back to drives when the path is no
-    /// longer reachable through any bookmark — typically because the user
-    /// removed the bookmark since the history entry was recorded.
-    /// </para>
-    ///
-    /// <para>
-    /// A folder opened from the bookmarks leaves the drives tree's row lit
-    /// where it was - dimmed, the tree has no keyboard - and <c>Ctrl+1</c>
-    /// into the drives tree goes back to it (decided 2026-09-22). Anything
-    /// else lands in the drives tree, and the bookmark row lit before goes
-    /// out: the bookmarks never point at a folder that is not open.
-    /// <c>IsSelected</c> is two-way bound, so a row left lit stays drawn
-    /// lit - which is why the rows are let go of by hand.
-    /// </para>
-    /// </summary>
-    public void ExpandTo(string path, NavigationSource source) {
-        IsSyncingSelection = true;
-        try {
-            Unlight(_bookmarkRows());
-            if (source == NavigationSource.Bookmark && TryExpandAndSelect(_bookmarkRows(), path)) {
-                return;
-            }
-
-            Unlight(Roots);
-            TryExpandAndSelect(Roots, path);
-        } finally {
-            IsSyncingSelection = false;
-        }
-    }
-
-
-    /// <summary>
-    /// Expands one named panel down to <paramref name="path"/> and selects
-    /// its row — what <c>Ctrl+1</c> and <c>Ctrl+Shift+E</c> point the
-    /// keyboard at. False when the folder is not reachable in that panel (a
-    /// path outside every bookmark, typically); the panel's highlight is
-    /// then put back where it was. The other panel keeps its own either way.
-    /// </summary>
-    public bool RevealIn(NavigationSource panel, string path) {
-        IsSyncingSelection = true;
-        try {
-            var rows = panel == NavigationSource.Bookmark ? _bookmarkRows() : Roots;
-            // Let go of before the search: a lit row left behind would be a
-            // second highlight in the panel.
-            var previous = Unlight(rows);
-            if (TryExpandAndSelect(rows, path)) {
-                return true;
-            }
-
-            if (previous is not null) {
-                previous.IsSelected = true;
-            }
-
-            return false;
-        } finally {
-            IsSyncingSelection = false;
-        }
-    }
-
-
-    /// <summary>
-    /// Moves the highlight of the panel holding <paramref name="node"/> onto
-    /// it - a bookmark just moved, which is a new row after the rebuild; a
-    /// row a harness scenario points at. The other panel keeps its own.
-    /// </summary>
-    public void Select(TreeNodeViewModel node) {
-        Unlight(Holds(_bookmarkRows(), node) ? _bookmarkRows() : Roots);
-        node.IsSelected = true;
-    }
-
-
-    /// <summary>
-    /// Every expanded path in both panels, tagged with its panel.
-    ///
-    /// <para>
-    /// Deduped on (path, panel). The same path can legitimately appear in
-    /// both — a user favourite that is also reachable through drives — and
-    /// those are two separate expansion states, so both are kept.
-    /// </para>
+    /// Every open line of both panels, tagged with its panel - what the
+    /// session keeps. Only lines on screen: a row closed with an open branch
+    /// under it keeps that branch open for the session, but saving it would
+    /// open the closed row on the next start.
     /// </summary>
     public List<NavigationStop> CollectExpanded() {
         var result = new List<NavigationStop>();
-        foreach (var root in Roots) {
-            root.CollectExpanded(result, NavigationSource.Drives);
-        }
-        foreach (var bookmark in _bookmarkRows()) {
-            bookmark.CollectExpanded(result, NavigationSource.Bookmark);
+        foreach (var (pane, source) in new[] { (Pane.Drives, NavigationSource.Drives), (Pane.Bookmarks, NavigationSource.Bookmark) }) {
+            foreach (var line in PanelView.Rows(_workspace.State.Panel(pane))) {
+                if (line.IsExpanded) {
+                    result.Add(new NavigationStop(line.Path, source));
+                }
+            }
         }
 
         return result.Distinct().ToList();
     }
 
 
-    private IEnumerable<TreeNodeViewModel> BothPanels() {
-        return Roots.Concat(_bookmarkRows());
+    private void Project(WorkspaceState state) {
+        Project(BookmarkLines, state, Pane.Bookmarks);
+        Project(DriveLines, state, Pane.Drives);
+        Projected?.Invoke(this, EventArgs.Empty);
     }
-
-
-    private static bool TryExpandAndSelect(IEnumerable<TreeNodeViewModel> nodes, string path) {
-        foreach (var node in nodes) {
-            if (node.TryExpandToPath(path, select: true)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
 
     /// <summary>
-    /// Takes the highlight off the one row of a panel that carries it and
-    /// says which that was. Asked of the rows themselves rather than
-    /// remembered: the arrow keys move a panel's highlight without asking
-    /// anybody, and a remembered row went stale on the first one.
+    /// One panel's lines brought in step: inserted, moved and removed around
+    /// the lines that stay (the rule is BranchReconcile's, over the lines'
+    /// keys), then every line told what the state says of it.
     /// </summary>
-    private static TreeNodeViewModel? Unlight(IEnumerable<TreeNodeViewModel> rows) {
-        foreach (var row in rows) {
-            if (row.FindSelected() is { } lit) {
-                lit.IsSelected = false;
+    private static void Project(BulkObservableCollection<TreeNodeViewModel> lines, WorkspaceState state, Pane pane) {
+        var fresh = PanelView.Rows(state.Panel(pane));
+        var kept = new Dictionary<string, TreeNodeViewModel>(StringComparer.OrdinalIgnoreCase);
+        foreach (var line in lines) {
+            kept.TryAdd(line.Key, line);
+        }
 
-                return lit;
+        var edits = BranchReconcile.Plan(lines.Select(l => l.Key).ToList(), fresh.Select(f => f.Key).ToList());
+        if (edits.Count > MaxIncrementalEdits) {
+            lines.ReplaceAll(fresh.Select(f => kept.TryGetValue(f.Key, out var line) ? line : new TreeNodeViewModel(f.Key, f.Row)).ToList());
+        } else {
+            foreach (var edit in edits) {
+                switch (edit.Kind) {
+                    case BranchEditKind.Insert:
+                        lines.Insert(edit.Index, new TreeNodeViewModel(fresh[edit.Index].Key, fresh[edit.Index].Row));
+                        break;
+                    case BranchEditKind.Move:
+                        lines.Move(edit.From, edit.Index);
+                        break;
+                    case BranchEditKind.Remove:
+                        lines.RemoveAt(edit.Index);
+                        break;
+                }
             }
         }
 
-        return null;
-    }
-
-    /// <summary>True when <paramref name="node"/> is one of <paramref name="rows"/> or inside an open one.</summary>
-    private static bool Holds(IEnumerable<TreeNodeViewModel> rows, TreeNodeViewModel node) {
-        foreach (var row in rows) {
-            if (ReferenceEquals(row, node) || Holds(row.Children, node)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-
-    private void OnChildrenChanged(object? sender, NotifyCollectionChangedEventArgs e) {
-        if (e.NewItems is null) {
-            return;
-        }
-
-        foreach (TreeNodeViewModel added in e.NewItems) {
-            Wire(added);
-        }
-    }
-
-
-    private void OnNodePropertyChanged(object? sender, PropertyChangedEventArgs e) {
-        if (e.PropertyName == nameof(TreeNodeViewModel.IsExpanded)) {
-            ExpansionChanged?.Invoke(this, EventArgs.Empty);
+        var highlight = state.Highlight(pane);
+        string? location = state.Panel(pane).Location;
+        string? menuSubject = state.Menu?.Subject is { Kind: TargetKind.PanelRow } subject && subject.Pane == pane
+            ? subject.Folder
+            : null;
+        for (int i = 0; i < fresh.Length; i++) {
+            lines[i].Update(fresh[i], highlight, location, menuSubject);
         }
     }
 }

@@ -16,11 +16,15 @@ namespace Wander.Core.FileSystem;
 /// </summary>
 public sealed class FolderChanges {
     private readonly HashSet<string> _paths = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<(string From, string To)> _renames = new();
     private bool _structural;
 
 
     /// <summary>True when nothing has been noted since the last <see cref="Clear"/>.</summary>
     public bool IsEmpty => !_structural && _paths.Count == 0;
+
+    /// <summary>The renames noted, old path to new, in the order they happened.</summary>
+    public IReadOnlyList<(string From, string To)> Renames => _renames;
 
     /// <summary>
     /// True when the folder's composition changed and the only honest answer
@@ -51,12 +55,16 @@ public sealed class FolderChanges {
         if (change.Path.Length > 0) {
             _paths.Add(change.Path);
         }
+        if (change.OldPath is { Length: > 0 } old && change.Path.Length > 0) {
+            _renames.Add((old, change.Path));
+        }
     }
 
 
     public void Clear() {
         _structural = false;
         _paths.Clear();
+        _renames.Clear();
     }
 
 

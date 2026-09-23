@@ -3,10 +3,12 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Threading;
 using Wander.App.Util;
 using Wander.App.ViewModels;
 using Wander.Core;
 using Wander.Core.FileSystem;
+using Wander.Core.Layout;
 using Wander.Core.Shell;
 
 namespace Wander.App.DragPreview;
@@ -36,14 +38,31 @@ public readonly record struct DropPlan(IReadOnlyList<string> Paths, string Targe
 /// The controller decides but never acts: <see cref="PlanDrop"/> answers
 /// with a plan and the caller runs it through the view model, so the file
 /// operation keeps going through the one path that logs it, guards it and
-/// makes it undoable.
+/// makes it undoable. The same goes for going deeper while a drag is held
+/// (U1): the rule is <see cref="DragHover"/>'s, the act the window's
+/// (<see cref="HoverOpened"/>); scrolling at the edge (U2,
+/// <see cref="EdgeScroll"/>) is done here, on a timer, as the one thing a
+/// drag held still gets no events for.
 /// </para>
 /// </summary>
 public sealed class DropTargetController {
+    /// <summary>How often a held drag is looked at - the hover's clock and the edge scroll's step.</summary>
+    private const int TickMs = 40;
+
     private readonly Func<string?> _currentFolder;
+    private readonly DispatcherTimer _tick;
 
     private DropTargetAdorner? _adorner;
     private AdornerLayer? _adornerLayer;
+
+    // --- A held drag -------------------------------------------------------
+    private DragHoverState _hover = DragHoverState.None;
+    private FrameworkElement? _hoverElement;
+    private IReadOnlyCollection<string> _dragged = Array.Empty<string>();
+    private ScrollViewer? _scroller;
+    private Point _scrollPoint;
+    private double _scrollCarry;
+    private long _lastTickMs;
 
 
     /// <param name="currentFolder">
@@ -52,7 +71,19 @@ public sealed class DropTargetController {
     /// </param>
     public DropTargetController(Func<string?> currentFolder) {
         _currentFolder = currentFolder;
+        _tick = new DispatcherTimer(DispatcherPriority.Input) { Interval = TimeSpan.FromMilliseconds(TickMs) };
+        _tick.Tick += OnTick;
     }
+
+
+    /// <summary>
+    /// A place held long enough under a drag to go deeper (decision B18):
+    /// open the panel line (<see cref="DragHoverOutcome.Expand"/>) or go into
+    /// the folder of the list (<see cref="DragHoverOutcome.Enter"/>). The
+    /// element is the line or row under the cursor. Nothing is undone if the
+    /// drop does not happen (decision B19).
+    /// </summary>
+    public event Action<DragHoverDecision, FrameworkElement>? HoverOpened;
 
 
     /// <summary>Folder the drop would go into, or null when there is none.</summary>
@@ -113,10 +144,12 @@ public sealed class DropTargetController {
             e.Effects = DragDropEffects.None;
             Reset();
             SetHighlight(null);
+            EndHover();
 
             return;
         }
 
+        Follow(e, paths);
         string? target = ResolveTarget(e, out bool aimed);
         if (target is null) {
             e.Effects = DragDropEffects.None;
@@ -245,10 +278,23 @@ public sealed class DropTargetController {
     }
 
 
-    /// <summary>Takes the highlight down and forgets the last target.</summary>
+    /// <summary>Takes the highlight down and forgets the last target - and the hover.</summary>
     public void Clear() {
         SetHighlight(null);
         Reset();
+        EndHover();
+    }
+
+    /// <summary>
+    /// The drag left the places that take it deeper - off the window, onto
+    /// the bookmarks strip: the hover starts over, the edge stops scrolling.
+    /// </summary>
+    public void EndHover() {
+        _tick.Stop();
+        _hover = DragHoverState.None;
+        _hoverElement = null;
+        _scroller = null;
+        _scrollCarry = 0;
     }
 
 
@@ -371,17 +417,10 @@ public sealed class DropTargetController {
     private static UIElement? FindHighlightElement(DragEventArgs e) {
         foreach (var hit in ListVisuals.Ancestors(e.OriginalSource)) {
             switch (hit) {
-                case TreeViewItem tvi when tvi.DataContext is TreeNodeViewModel:
-                    // RenderSize of a TreeViewItem includes its expanded
-                    // children - adorning that would paint the highlight over
-                    // the whole subtree. Our row template (FolderTreesView,
-                    // WanderTreeViewItem) names the row border "Row"; the
-                    // stock Aero2 template calls it "Bd". Looking for the
-                    // stock name only was what lit up the whole branch of an
-                    // open folder (2026-09-16).
-                    return tvi.Template?.FindName("Row", tvi) as UIElement
-                        ?? tvi.Template?.FindName("Bd", tvi) as UIElement
-                        ?? tvi;
+                case ListBoxItem line when line.DataContext is TreeNodeViewModel:
+                    // A line of a folder panel: the row border the template
+                    // names "Row", without the section rule above it.
+                    return line.Template?.FindName("Row", line) as UIElement ?? line;
 
                 case ListBoxItem lbi when lbi.DataContext is FileSystemEntry { Kind: EntryKind.Directory }:
                     return lbi;
@@ -392,6 +431,120 @@ public sealed class DropTargetController {
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// A drag over a surface: what is under the cursor for the hover, where
+    /// it is for the edge scroll - the timer does the rest while the drag is
+    /// held still and no event comes.
+    /// </summary>
+    private void Follow(DragEventArgs e, IReadOnlyCollection<string> dragged) {
+        long now = Environment.TickCount64;
+        var (target, element) = HoverTargetOf(e);
+        _hover = DragHover.Track(_hover, target, now);
+        _hoverElement = element;
+        _dragged = dragged;
+        _scroller = ListVisuals.Ancestors(e.OriginalSource).OfType<ScrollViewer>().FirstOrDefault();
+        if (_scroller is not null) {
+            _scrollPoint = e.GetPosition(_scroller);
+        }
+        if (!_tick.IsEnabled) {
+            _lastTickMs = now;
+            _scrollCarry = 0;
+            _tick.Start();
+        }
+    }
+
+    /// <summary>
+    /// The place a drag could go deeper into, and its line or row: a panel
+    /// line - closed, with subfolders; a folder of the list, or a shortcut to
+    /// one. An archive, the Recycle Bin, a shell place are never opened into.
+    /// </summary>
+    private (HoverTarget?, FrameworkElement?) HoverTargetOf(DragEventArgs e) {
+        foreach (var hit in ListVisuals.Ancestors(e.OriginalSource)) {
+            switch (hit) {
+                case ListBoxItem { DataContext: TreeNodeViewModel line } item when !string.IsNullOrEmpty(line.FullPath):
+                    return (new HoverTarget(line.FullPath, HoverSurface.Panel,
+                        CanOpen: line.HasChevron && !line.IsExpanded && !IsContainer(line.FullPath)), item);
+
+                case ListBoxItem { DataContext: FileSystemEntry entry } row:
+                    return ListRow(entry, row);
+
+                case DataGridRow { DataContext: FileSystemEntry entry } row:
+                    return ListRow(entry, row);
+            }
+        }
+
+        return (null, null);
+    }
+
+    private (HoverTarget?, FrameworkElement?) ListRow(FileSystemEntry entry, FrameworkElement row) {
+        string? folder = entry.Kind == EntryKind.Directory
+            ? entry.FullPath
+            : entry.FullPath.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)
+                && ResolveShortcutTarget(entry.FullPath) is { } resolved && Directory.Exists(resolved)
+                ? resolved
+                : null;
+        if (folder is null) {
+            return (null, null);
+        }
+
+        return (new HoverTarget(folder, HoverSurface.List, CanOpen: !IsContainer(folder) && !IsContainer(_currentFolder())), row);
+    }
+
+    private static bool IsContainer(string? path) {
+        return path is null || Archives.Contains(path) || path.StartsWith("shell:", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>A held drag: the edge scrolls, and a place held long enough opens.</summary>
+    private void OnTick(object? sender, EventArgs e) {
+        long now = Environment.TickCount64;
+        long elapsed = now - _lastTickMs;
+        _lastTickMs = now;
+        ScrollAtEdge(elapsed);
+
+        var decision = DragHover.Decide(_hover, now, DelayOf(_hover.Target), _dragged);
+        if (decision.Outcome is DragHoverOutcome.Expand or DragHoverOutcome.Enter && _hoverElement is { } element) {
+            _hover = _hover with { Done = true };
+            HoverOpened?.Invoke(decision, element);
+        }
+    }
+
+    /// <summary>
+    /// The surface under a drag held near its top or bottom scrolls that way
+    /// (<see cref="EdgeScroll"/>). A list that scrolls by rows counts its
+    /// offset in rows: the step is turned into them and handed over whole,
+    /// the rest carried to the next tick, so a slow speed still moves.
+    /// </summary>
+    private void ScrollAtEdge(long elapsedMs) {
+        if (_scroller is not { ActualHeight: > 0 } scroller) {
+            return;
+        }
+
+        double speed = EdgeScroll.Along(_scrollPoint.Y, scroller.ActualHeight);
+        if (speed == 0) {
+            _scrollCarry = 0;
+
+            return;
+        }
+
+        _scrollCarry += EdgeScroll.Step(speed, elapsedMs) * scroller.ViewportHeight / scroller.ActualHeight;
+        double whole = Math.Truncate(_scrollCarry);
+        if (whole != 0) {
+            scroller.ScrollToVerticalOffset(scroller.VerticalOffset + whole);
+            _scrollCarry -= whole;
+        }
+    }
+
+    /// <summary>
+    /// How long a place has to be held: twice the system's hover time on a
+    /// panel line, three times on a folder of the list - going into a folder
+    /// changes more than opening a branch (decision B18).
+    /// </summary>
+    private static int DelayOf(HoverTarget? target) {
+        double hover = SystemParameters.MouseHoverTime.TotalMilliseconds;
+
+        return (int)(target?.Surface == HoverSurface.Panel ? hover * 2 : hover * 3);
     }
 
     private void Reset() {

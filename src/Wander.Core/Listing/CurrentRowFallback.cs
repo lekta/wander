@@ -27,11 +27,20 @@ public static class CurrentRowFallback {
     /// <returns>The row of <paramref name="after"/> to make current; null when none is left or nothing of <paramref name="departed"/> stood in <paramref name="before"/>.</returns>
     public static FileSystemEntry? After(
         IReadOnlyList<FileSystemEntry> before, IReadOnlyCollection<string> departed, IReadOnlyList<FileSystemEntry> after) {
+        string? next = After(before.Select(r => r.FullPath).ToList(), departed, after.Select(r => r.FullPath).ToList());
+
+        return next is null
+            ? null
+            : after.First(r => string.Equals(r.FullPath, next, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>The same, over the rows' paths.</summary>
+    public static string? After(IReadOnlyList<string> before, IReadOnlyCollection<string> departed, IReadOnlyList<string> after) {
         var gone = new HashSet<string>(departed, StringComparer.OrdinalIgnoreCase);
 
         int at = -1;
         for (int i = before.Count - 1; i >= 0; i--) {
-            if (gone.Contains(before[i].FullPath)) {
+            if (gone.Contains(before[i])) {
                 at = i;
                 break;
             }
@@ -40,18 +49,18 @@ public static class CurrentRowFallback {
             return null;
         }
 
-        var standing = new Dictionary<string, FileSystemEntry>(after.Count, StringComparer.OrdinalIgnoreCase);
-        foreach (var row in after) {
-            standing[row.FullPath] = row;
+        var standing = new Dictionary<string, string>(after.Count, StringComparer.OrdinalIgnoreCase);
+        foreach (string row in after) {
+            standing[row] = row;
         }
 
         for (int i = at + 1; i < before.Count; i++) {
-            if (standing.TryGetValue(before[i].FullPath, out var next)) {
+            if (standing.TryGetValue(before[i], out string? next)) {
                 return next;
             }
         }
         for (int i = at - 1; i >= 0; i--) {
-            if (standing.TryGetValue(before[i].FullPath, out var previous)) {
+            if (standing.TryGetValue(before[i], out string? previous)) {
                 return previous;
             }
         }

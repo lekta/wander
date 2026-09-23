@@ -137,20 +137,20 @@ exe), переменная `WANDER_DATA_DIR`, иначе `%LOCALAPPDATA%\Wander`
 
 | Трогал | Автоматически | Руками (раздел ниже) | В логе |
 |---|---|---|---|
-| Навигация, `FolderSession`, приземление | `FolderSessionTests`, `ListingDiffTests`; харнесс: серия навигаций, выделение после подъёма | Скорость; Фокус | `nav.*`, `list.apply`, `ui.stall`, `First screen painted` |
+| Навигация, `FolderSession`, приземление | `FolderSessionTests`, `ListingDiffTests`, `ListRulesTests` (`ListingArrival`), `PathFollowingTests`; харнесс: серия навигаций, выделение после подъёма | Скорость; Фокус | `nav.*`, `list.apply`, `ui.stall`, `First screen painted`, `WS ListingLanded` (с `LogActions`) |
 | Иконки, миниатюры, шлюз, приоритеты | харнесс: холодная `photos`, счётчики | Скорость (все пункты — трижды ломали друг друга); Дерево (иконки после запуска) | `bg.thumb-*`, `icon.decode-ui`, `layout.*`, `[icon-diag]`, `slow shell load` |
 | Шаблон плитки, `VirtualizingWrapPanel`, `TileLayout` | `TileLayoutTests`, `TileMetricsTests`; харнесс: проходы раскладки в простое = 0, `visuals` на шаблон | Скорость (смена вида); Фокус (`F2` в четырёх видах); Просмотр (миниатюры не прыгают); Файловые операции (корзина в «Плитке») | `LAYOUT … visuals`, `COUNT layout.*`, `layout.realise` |
-| Выделение, фокус, области, rename | `GridNavigationTests`, `WindowZonesTests`; харнесс: клавиатурные сценарии, `Keyboard.FocusedElement` | Фокус, выделение и клавиатура — целиком | — |
+| Выделение, фокус, области, rename; модель окна (`Core/Workspace`, `WorkspaceController`, исполнитель в `MainWindow`) | `GridNavigationTests`, `WindowZonesTests`, `KeyboardRulesTests`, `ListRulesTests`, `PanelRulesTests`, `TargetRulesTests`, `MenuContextTests`, `PreviewSubjectTests`; харнесс: клавиатурные сценарии, `post`, `assert-state`, `assert-focus` | Фокус, выделение и клавиатура — целиком; Дерево и закладки | `WS …`, `WS target:` (с `LogActions`) |
 | Файловые операции, undo, конфликты, спутники | `BatchExecutorTests`, `FileOperationServiceTests`, `CompanionResolverTests`, `ConflictVerdictTests`, `ConflictBatchTests`, `MergeScannerTests`, `FileContentComparerTests`, `PathSafetyTests`; харнесс на песочнице (нужен шов диалогов) | Файловые операции; **Окно совпадений имён** (харнесс его не поднимает: `ScriptedDialogs` отвечает по политике); Обмен с системой | `ERROR` / `WARN`, строки операций |
 | Прогресс, окно операции, строка состояния, выход при операциях | `OperationTrackerTests` (в том числе `WhenIdle`), `TransferRateTests`, `BatchExecutorTests` (байты, отмена внутри файла) | **Ход операции** — целиком, окно и выход при операциях харнесс не проверяет | `cancelled part-way`, `Cannot size … for the progress bar` |
-| Буфер обмена, DnD | `ClipboardControllerTests`; харнесс: системный буфер читается из процесса | Обмен с системой — только вживую | — |
+| Буфер обмена, DnD | `ClipboardControllerTests`, `DragHoverTests`, `EdgeScrollTests`; харнесс: системный буфер читается из процесса | Обмен с системой — только вживую; Дерево и закладки (вглубь, у края) | — |
 | Поиск, экстракторы | `ContentSearchServiceTests`, `NameFilterTests`, `ContentExtractorTests`; харнесс на `docs` / `big` | Просмотр (результаты в видах) | счётчик «не прочитано», время поиска |
 | Панель просмотра, форматы | `AudioTagsTests`, `MeshFileTests`, `Fb2DocumentTests`, `EncodingProbeTests`, `PreviewRouterTests`, `PreviewPairTests`, `ShotSummaryTests`; харнесс: скриншот каждой ветки (сплит и сводку по нескольким не рисует) | Просмотр и галерея | `nav.preview`, ошибки биндингов (трассировка) |
 | Хелперы отсмотра (пикинг, резкость, клиппинг, гистограмма, кривые, точка AF) | `SharpnessTests`, `FocusPeakingTests`, `ToneCurveTests`, `CanonAfInfoTests`, `AfGeometryTests`, `LumaTests`, `HistogramTests`, `ClippingTests`, `SharpListingTests`; харнесс: шаг `helpers` в `preview-formats` (скриншоты) | Просмотр (совпадение наложения с картинкой при разной ширине панели, в лупе, в сплите, при 125 / 150 %); Скорость (прокрутка галереи с включённым пикингом) | `bg.helpers`, `bg.sharpness` |
-| Галерея, оценки, сайдкары | `RatingFilterTests`, `RatingToggleTests`, `ImageFolderProbeTests`, `CompanionMetadataServiceTests`; харнесс: клик по звезде не пересобирает | Фокус (клик по звезде, `Shift`+цифры); Просмотр | `bg.ratings`, тик сторожа |
+| Галерея, оценки, сайдкары | `RatingFilterTests`, `RatingToggleTests`, `ImageFolderProbeTests`, `DesktopIniTests`, `CompanionMetadataServiceTests`; харнесс: клик по звезде не пересобирает | Фокус (клик по звезде, `Shift`+цифры); Просмотр | `bg.ratings`, тик сторожа |
 | Контекстное меню, shell | `ContextMenuBuilderTests`, `ShellExtensionCatalogTests`; харнесс: меню строится без исключений | Обмен с системой (сторонние пункты запускаются) | время `QueryContextMenu`, owner-drawn в логе |
-| Настройки, `state.json`, `folders.json`, палитра | `AppPathsTests`, `PaneSizesTests`, `ViewChoiceTests`, `FolderSettingsBookTests`; `check-resources.ps1` (ключи XAML); харнесс: `state` из фикстур, все страницы настроек открываются | После обновления; две копии на одних данных (`--yield`) — только вживую; Просмотр и галерея («Вид — у папки») | `WARN` при загрузке состояния, `State loaded` / `State written`, `Pane sizes:`, `Started with --yield` |
-| Дерево, закладки, сторож | `FolderChangesTests`, `NavigationFallbackTests`, `BranchReconcileTests` (уровень панели: строки живут, вставки / перестановки / удаления вокруг), `UndoableActionsTests` (пары `MovesOnUndo`), `NavigationServiceTests` (`RewritePaths`); харнесс: `tree-bookmarks` (таблица сценариев), внешнее создание файла в песочнице → строка появилась | Дерево и закладки | `nav.trees`, `nav.watch`, `Delete: no target` |
+| Настройки, `state.json`, `folders.json`, палитра | `AppPathsTests`, `PaneSizesTests`, `ViewChoiceTests`, `FolderSettingsBookTests`; `check-resources.ps1` (ключи XAML); харнесс: `state` из фикстур (`state-upgrade`: `assert-folders`), все страницы настроек открываются | После обновления; две копии на одних данных (`--yield`) — только вживую; Просмотр и галерея («Вид — у папки») | `WARN` при загрузке состояния, `State loaded` / `State written`, `Pane sizes:`, `Started with --yield` |
+| Дерево, закладки, сторож | `PanelRulesTests`, `PanelKeyNavigationTests`, `PanelViewTests`, `PanelPathsTests`, `TreeNavThrottleTests`, `FolderChangesTests`, `NavigationFallbackTests`, `BranchReconcileTests` (уровень панели: строки живут, вставки / перестановки / удаления вокруг), `PathFollowingTests`, `UndoableActionsTests` (пары `MovesOnUndo`), `NavigationServiceTests` (`RewritePaths`); харнесс: `tree-bookmarks` (таблица сценариев), внешнее создание файла в песочнице → строка появилась | Дерево и закладки | `nav.trees`, `nav.watch`, `WS …` (с `LogActions`) |
 | Архивы как папки, извлечение, панель просмотра | `ArchivePathTests`, `ExtractionServiceTests`, `PreviewRouterTests`; харнесс: `selfcheck` (ассоциации машины) + сценарий `archives` | Файловые операции; Обмен с системой (наружу — только глазами) | `Extract:`, `Extract (temporary copy)`, `Archive enumerate`, «Archives open as folders» в первых строках лога |
 | Действия, каталог, запуск; групповое переименование | `ActionApplicabilityTests`, `CommandLineTests`, `ExternalActionRunnerTests`, `ActionCatalogTests`, `ActionReportTests`, `BuiltinArgumentsTests`, `ContextMenuBuilderTests`, `RenamePlannerTests`; харнесс: `smoke-walk` (меню), `focus-keys` (`F2`) — окна действий и переименования он не поднимает | **Действия** — целиком; Ход операции (окно действия) | `Action '…'`, `image-convert:`, `Batch rename:`, `Rename:` |
 | Сборка, поставка, версия | `check.bat run`, `size-report.ps1` | После обновления; чистая машина | `Startup: first frame` |
@@ -273,7 +273,32 @@ exe), переменная `WANDER_DATA_DIR`, иначе `%LOCALAPPDATA%\Wander`
       `Alt+Enter` по-прежнему свойства.
 - [ ] **Выделение переживает смену вида** (2026-09-03): три строки в
       Таблице → Плитки → Значки → Галерея → Таблица — подсвечены все три в
-      каждом виде, `Ctrl+C` копирует три.
+      каждом виде, `Ctrl+C` копирует три; рамка и клавиатура на той же
+      строке (2026-09-23).
+- [ ] **Клавиатура после диалога** (2026-09-23): «Параметры» или групповое
+      переименование, открытые с клавиатурой в дереве, закрыть — клавиатура
+      в дереве на той же строке; из списка — в списке, на строке в рамке.
+- [ ] **Убранная панель отдаёт клавиатуру списку** (2026-09-23): `Ctrl+B`,
+      пока клавиатура в панели, — клавиатура в списке на строке в рамке;
+      свернуть закладки, пока клавиатура в них, — то же.
+- [ ] **Окно в фоне** (2026-09-23, K-2): пока окно неактивно, снаружи
+      удалить файл, на котором клавиатура, и вернуться `Alt+Tab` — выделен
+      и с клавиатурой следующий; вернуться щелчком по другой строке —
+      клавиатура там, куда щёлкнули.
+- [ ] **Уход клавиатуры не снимает выделение** (2026-09-23, B2): выделить
+      файлы, `Tab` / `Ctrl+1` в панель — выделение списка на месте,
+      бледное, `Delete` спрашивает про строку панели; `Ctrl+2` — выделение
+      снова яркое, то же. Выделен файл в A, клик по папке B в дереве,
+      `Alt+←` — в A выделен тот же файл (Н10).
+- [ ] **Выход из правки имени** (2026-09-23): `Enter` — строка под новым
+      именем выделена, клавиатура на ней; клик по другой строке —
+      выделена она, переименованная выделение не перехватывает; файл,
+      созданный снаружи во время правки, редактор не закрывает (L-11).
+- [ ] **Рамка выделения за край** (2026-09-23, U2): протянуть рамку ниже
+      списка — он прокручивается сам, у края медленно, дальше быстрее,
+      рамка тянется за содержимым; строки, ушедшие за край внутри рамки,
+      остаются выделенными и снимаются, вернувшись в вид вне рамки. Во всех
+      четырёх видах (в Таблице — TECHDEBT, «Рамка в Таблице»).
 
 ### Дерево (диски) и панель закладок
 
@@ -311,9 +336,9 @@ exe), переменная `WANDER_DATA_DIR`, иначе `%LOCALAPPDATA%\Wander`
 - [ ] **Клавиатура после удаления из панели** (2026-09-22): в дереве
       встать клавишами на открытую папку, `Delete` — список ушёл в
       родителя, рамка клавиатуры на его строке в панели, второй `Delete`
-      спрашивает уже про родителя (в логе нет `Delete: no target`; строка
-      пишется только с «Подробно: клавиши, клики, выделение» в «Отладке»);
-      то же для подпапки не текущей ветки — рамка на соседе или родителе.
+      спрашивает уже про родителя (с «Подробно: клавиши, клики, выделение»
+      в «Отладке» — `WS target:` на родителе в логе); то же для подпапки не
+      текущей ветки — рамка на соседе или родителе.
 - [ ] **`Ctrl+1` в «Диски» — туда, где их оставили** (2026-09-22): открыть
       папку X в «Дисках», `Ctrl+1` → закладки, открыть закладку B —
       строка X в «Дисках» бледно подсвечена; `Ctrl+1` → курсор на X, дерево
@@ -390,6 +415,26 @@ exe), переменная `WANDER_DATA_DIR`, иначе `%LOCALAPPDATA%\Wander`
       галочки работают.
 - [ ] У закладки работают «…», `Ctrl+↑/↓`, бросок папки на полосу «+» и в
       пустое место; делитель двигается и переживает перезапуск.
+- [ ] **Клавиши панели** (2026-09-23, B26): `↑` / `↓` / `Home` / `End` /
+      `PgUp` / `PgDn` двигают курсор без перехода, `Enter` открывает; `←` —
+      свернуть, на свёрнутой — к родителю; `→` — раскрыть, на раскрытой — к
+      первой подпапке; буквы — к строке по имени; `Shift+F10` и клавиша
+      меню — меню строки под курсором. Со «стрелки открывают папку» —
+      одиночное нажатие открывает сразу, зажатая стрелка — папку остановки.
+- [ ] **Где я** (2026-09-23): имя открытой папки жирным в панели, откуда
+      открыли, куда бы ни ушёл курсор; активный цвет подсветки — только у
+      панели с клавиатурой.
+- [ ] **Большая ветка** (2026-09-23): папка с тысячами подпапок
+      раскрывается без паузы, прокрутка ровная, шевроны доходят следом.
+- [ ] **Возврат в окно перечитывает раскрытое** (2026-09-23, P-24):
+      создать подпапку снаружи в раскрытой ветке, вернуться в окно — строка
+      появилась, раскрытое и курсор на месте; не чаще раза в 5 с.
+- [ ] **Перетаскивание вглубь и у края** (2026-09-23, U1 / U2): файл
+      держать над свёрнутой папкой панели — через ~0,8 с раскрывается; над
+      папкой в списке — через ~1,2 с входит в неё; у верхнего и нижнего края
+      панели и списка — прокрутка, быстрее дальше за край; увёл курсор с
+      папки раньше — ничего не открылось; `Esc` или бросок вне окна —
+      дальше ничего не открывается.
 
 ### Файловые операции
 
@@ -812,7 +857,7 @@ exe), переменная `WANDER_DATA_DIR`, иначе `%LOCALAPPDATA%\Wander`
 | Первый кадр | `Startup: first frame N ms`, три запуска релизного exe | ~1650–2050 мс (PERFORMANCE) |
 | Неответ UI | `PERF ui.stall` | одиночные < 400 мс, частые < 100; на холодной папке — сотни, не секунды |
 | Первый экран | `First screen painted in N ms` по профилю `photos` холодно / тепло | базлайн снять |
-| Шаблон плитки | `LAYOUT <вид> container: N visuals` | Tiles 8, Icons 6, Gallery 9 (без оценки) |
+| Шаблон плитки | `LAYOUT <вид> container: N visuals` | Tiles 8, Icons 8 (с 2026-09-23: место под бейдж оценки, J4), Gallery 9 (без оценки) |
 | Реализации на навигацию | `COUNT layout.new: N in K passes` | K = 1 |
 | Раскладка в простое | харнесс: проходы за 5 с без ввода | 0 |
 | Миниатюры RAW | `bg.thumb-shell` / `RawThumbnail`, мс на файл | ~3 мс WinRT, 75 через оболочку — регресс |
@@ -939,13 +984,28 @@ path}` (только в песочнице; `delete` не ругается на 
 он тут есть, — выделить и снять; нет — строка в отчёте, не падение),
 `helpers {on[]}` (хелперы отсмотра `ReviewHelpers` по именам свойств:
 названные включены, остальные выключены; `[]` — все выключить),
-`tree-expand path [panel: drives|bookmark] [expand: false]`,
+`tree-expand path [panel: drives|bookmark] [expand: false]` (шевроны
+событиями модели, курсор панели в конце на строке),
 `tree-rename {path, to}` (папка панели через `RenameFolderAsync`; редактор
-и клавиша `F2` остаются человеку), `tree-target path [panel]` (строка —
-цель операций, как курсор клавиатуры в панели: `Delete`, `copy`, `paste`
-про неё), `assert-tree {path, panel, exists: false | chevron | expanded |
-selected | name}` (строка панели как она есть; закрытые ветки по пути не
-раскрывает — сначала `tree-expand`),
+и клавиша `F2` остаются человеку), `tree-target path [panel]` (курсор
+панели на строку и клавиатура в панели — два факта, из которых модель
+выводит цель: `Delete`, `copy`, `paste` про неё), `assert-tree {path,
+panel, exists: false | chevron | expanded | selected | name}` (строка
+панели как она нарисована, `selected` — под курсором панели; закрытые
+ветки по пути не раскрывает — сначала `tree-expand`),
+`post {event, …}` (событие модели окна полями JSON: `WindowActivated`,
+`WindowDeactivated`, `ZoneEntered {zone, reason}`, `CaretMoved`,
+`ChevronToggled {open, all}`, `RowClicked`, `RowActivated`,
+`CaretMoveRequested {key, pageSize}`, `PanelsRefreshRequested`,
+`PaneHidden {zones[]}`, `DialogOpened`, `DialogClosed`, `ViewModeChanged`;
+`panel: bookmark` — закладки; ждёт тишины), `assert-state {field, value}`
+(факт модели: `folder`, `keyboard.zone`, `keyboard.lastZone`,
+`drives.caret` / `.location`, `bookmarks.caret` / `.location`,
+`list.caret`, `list.primary`, `target` — вид цели, `target.folder`;
+`list.selection` с `names[]` в любом порядке; нет значения — «ничего»),
+`assert-focus {zone, row}` (куда исполнитель поставил клавиатуру: зона,
+`none` — никуда; `row` — имя в списке, путь в панели),
+`assert-folders {pinned: {путь: вид}}` (`folders.json` после записи),
 `bookmark {op: add|remove, path}`, `search {name, text, subfolders,
 binaries, searchTimeoutMs}`, `soak {minutes, maxWorkingSetGrowthMb,
 maxHandleGrowth, seed}`, `assert-log {contains | regex | absent | noErrors
@@ -969,9 +1029,20 @@ crumbs[]}`, `assert-pane {minList}` (ширина окна, панели про�
 хоткея); с 2026-09-03 `focus-keys` жмёт его в таблице, `archives` — в
 плитках.
 
-`tree-expand` идёт по уровням, а не зовёт `Trees.ExpandTo`: ветка читает
-детей с диска в момент раскрытия, и путь на шесть уровней вниз до этого
-просто не находится.
+`tree-expand` идёт по уровням — `ChevronToggled` на каждый и ожидание, пока
+уровень прочитан (`LevelState.Loaded`): ветка читает детей с диска в
+момент раскрытия, и путь на шесть уровней вниз до этого просто не
+находится.
+
+`post` и `assert-state` (блок 2, 2026-09-23) проверяют взаимодействие без
+WPF-ввода: событие уходит в `WorkspaceController` тем же путём, что от
+вью, состояние читается из модели; `assert-focus` — что сделал
+исполнитель. Окно харнесса никогда не активно, поэтому активация —
+`post WindowActivated`, а не ожидание: так до проверки доходит P-24.
+Отложенный до активации перенос клавиатуры (K-2) живёт в исполнителе
+окна, а харнессу исполнитель отвечает сразу — K-2 проверяется глазами
+(«Фокус», «Окно в фоне»). Логику цели харнесс не повторяет —
+`tree-target` сообщает факты, цель выводит модель.
 
 `assert-entries scope: visible` считает то, что показывает список, а не
 `Entries`. Разница не теоретическая: **маска имени фильтрует вид, а не
@@ -1004,14 +1075,14 @@ crumbs[]}`, `assert-pane {minList}` (ширина окна, панели про�
 |---|---|---|
 | `smoke-walk` | photos, raw, big | все виды, превью JPEG / CR3 / DNG, 5000 файлов, создание → rename → корзина → undo |
 | `focus-keys` | photos | «Фокус, выделение и клавиатура»: стрелки на краях сетки, `F2` в четырёх видах, три выделенных через все виды, выделение после delete / undo / up, `Enter` в таблице |
-| `tree-bookmarks` | photos, raw, big | ветка не сворачивается после `F5`; папка, созданная и переименованная в списке, отражается в ветке; шеврон возвращается пустой папке с первой подпапкой; `tree-rename` открытой папки ведёт листинг и держит ветку раскрытой, `undo` возвращает; `drop` папки в другую ветку и обратно; `paste` в строку-цель, не в открытую папку; закладка следует за переименованием; закладка добавляется и снимается |
+| `tree-bookmarks` | photos, raw, big | ветка не сворачивается после `F5`; папка, созданная и переименованная в списке, отражается в ветке; шеврон возвращается пустой папке с первой подпапкой; `tree-rename` открытой папки ведёт листинг и держит ветку раскрытой, `undo` возвращает; подпапка, созданная снаружи, появляется в раскрытой ветке по `post WindowActivated` (P-24); `drop` папки в другую ветку и обратно; цель — строка панели, выделение списка на месте (`assert-state`, B2); `paste` в строку-цель, не в открытую папку; закладка следует за переименованием; закладка добавляется и снимается |
 | `file-ops` | photos, attrs | copy / cut / paste между папками, три ответа на один конфликт, цепочка undo по вставкам (до безвозвратного удаления — оно чистит историю; до 2026-09-21 цепочка стояла после и не проверяла ничего), занятый файл, путь длиннее корзины, read-only |
 | `search` | docs, code, big | маска по имени, `needle42` по содержимому во всех форматах, четыре кодировки, подпапки, поиск по 5000 |
 | `preview-formats` | photos, raw, docs, code, media, links | по скриншоту на ветку панели (26 при нынешнем наборе фикстур; чего не хватило — в отчёте); хелперы отсмотра на CR3 — три скриншота |
 | `watcher` | photos | появилось / исчезло / изменилось снаружи — без единого `refresh`; выделенный удалён снаружи — выделен следующий, последний — предыдущий |
 | `archives` | archives | zip / 7z / rar / tar.gz как папки: вход по пути и по Enter, подпапка, `up`, крошки; архив как узел дерева (`tree-expand` до папки внутри, zip и rar); `solid.rar` в панели просмотра — три выделения, копия не переделывается (лог глазами); панель просмотра на архиве и на записи (скриншоты, глазами); delete / cut / new-folder внутри не срабатывают; `copy` -> `paste` в обычную папку -> `undo`; `drop` записи из архива в папку с эффектом Move -> извлечение, запись осталась в архиве, `undo`; настоящая папка `plain.zip`; защищённый паролем архив |
 | `soak` | photos, raw, big, names | случайная навигация, плато WS и handles, `SYS` в логе |
-| `state-upgrade` | photos, attrs | старт на `state.json` чужой сборки: настройки из файла применились (скрытые видны, а они по умолчанию выключены), пропавшие закладки — строки, а не ошибки |
+| `state-upgrade` | photos, attrs | старт на `state.json` чужой сборки: настройки из файла применились (скрытые видны, а они по умолчанию выключены), закрепления видов переехали в `folders.json` (`assert-folders`), пропавшие закладки — строки, а не ошибки |
 
 Что клавиатурой и мышью не воспроизводится (`Shift`-выделение, DnD,
 чужие пункты меню), помечено в сценариях шагом `note` и попадает в отчёт

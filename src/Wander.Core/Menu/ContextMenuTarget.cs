@@ -43,6 +43,13 @@ public sealed record ContextMenuTarget {
     public bool IsBackground { get; init; }
 
     /// <summary>
+    /// The menu is about a row of a folder panel, not of the list. No
+    /// "Create shortcut" there (decision B8): a shortcut to that folder would
+    /// land in whichever folder is open, which the row says nothing about.
+    /// </summary>
+    public bool IsPanelRow { get; init; }
+
+    /// <summary>
     /// True inside a shell namespace (the Recycle Bin today). Entries there
     /// are backed by <c>$Recycle.Bin</c> files, so every filesystem verb is
     /// suppressed — same reason the commands themselves refuse to run.

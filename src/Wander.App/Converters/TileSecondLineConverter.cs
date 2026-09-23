@@ -5,9 +5,11 @@ using Wander.Core.FileSystem;
 namespace Wander.App.Converters;
 
 /// <summary>
-/// The second line of a tile: the file's kind in a folder listing, its
-/// folder in a search result - results come from everywhere, and "File"
-/// repeated down the column says nothing the path would not say better.
+/// The second line of a tile: the file's kind in a folder listing - its
+/// stars, once it has any (J4, decision B28: no new visual in the tile, and
+/// a photograph's kind is not news) - and its folder in a search result:
+/// results come from everywhere, and "File" repeated down the column says
+/// nothing the path would not say better.
 ///
 /// <para>
 /// One converter over the row instead of a Style with a DataTrigger on
@@ -27,8 +29,13 @@ public sealed class TileSecondLineConverter : IValueConverter {
         if (value is not FileSystemEntry entry) {
             return null;
         }
+        if (ShowFolder) {
+            return entry.ParentFolder;
+        }
 
-        return ShowFolder ? entry.ParentFolder : entry.Kind.ToString();
+        int rank = entry.Rating?.Rank ?? 0;
+
+        return rank > 0 ? new string('★', Math.Min(rank, 5)) : entry.Kind.ToString();
     }
 
 

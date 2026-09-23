@@ -409,4 +409,75 @@ public class FolderSessionTests {
             WatchOutcome.Idle,
             session.DecideWatchTick(busy: false, rows: Array.Empty<FileSystemEntry>()).Outcome);
     }
+
+    /// <summary>L-5, decision B7: a rename another program made is handed to the re-listing, old name to new.</summary>
+    [Fact]
+    public void ARenameElsewhere_IsHandedToTheRelisting() {
+        var session = new FolderSession();
+        session.NoteChange(new DirectoryChange(@"C:\folder\b.txt", Structural: true) { OldPath = @"C:\folder\a.txt" });
+
+        var decision = session.DecideWatchTick(busy: false, new[] { Row("a.txt") });
+
+        Assert.Equal(WatchOutcome.Relist, decision.Outcome);
+        Assert.Equal(new[] { (@"C:\folder\a.txt", @"C:\folder\b.txt") }, decision.Renames);
+    }
+
+    /// <summary>L-11: a tick while a name is edited or a rename is on its way holds the rename too, for the tick after.</summary>
+    [Fact]
+    public void ABusyTick_HoldsTheRenames_ForTheNextOne() {
+        var session = new FolderSession();
+        session.NoteChange(new DirectoryChange(@"C:\folder\b.txt", Structural: true) { OldPath = @"C:\folder\a.txt" });
+
+        Assert.Equal(WatchOutcome.Hold, session.DecideWatchTick(busy: true, Array.Empty<FileSystemEntry>()).Outcome);
+
+        Assert.Single(session.DecideWatchTick(busy: false, Array.Empty<FileSystemEntry>()).Renames!);
+    }
+
+
+    // --- An operation's intent, and a folder that moved -----------------------------------
+
+    /// <summary>L-8, N8: an operation's intent for another folder is not kept - it would take the selection the next time anyone walked in.</summary>
+    [Fact]
+    public void AnOperationsIntent_ForAnotherFolder_IsNotKept() {
+        var session = new FolderSession();
+        session.BeginListing(@"C:\folder", out _);
+        session.NoteListed(@"C:\folder");
+
+        Assert.False(session.SetArrivalHere(ArrivalIntent.Rows(@"C:\folder\sub", new[] { @"C:\folder\sub\x.txt" }, takeFocus: true)));
+        Assert.Null(session.Arrival);
+
+        Assert.True(session.SetArrivalHere(ArrivalIntent.Rows(@"C:\folder", new[] { @"C:\folder\x.txt" })));
+        Assert.NotNull(session.Arrival);
+    }
+
+    /// <summary>F-1: the folder on screen moved - it is still the one listed, and walking back into it lands where the user was.</summary>
+    [Fact]
+    public void AMovedFolder_KeepsItsListingAndItsMemory() {
+        var session = new FolderSession();
+        session.BeginListing(@"C:\folder", out _);
+        session.NoteListed(@"C:\folder");
+        session.RememberSelection(@"C:\folder\a.txt");
+
+        session.RewriteMemory(@"C:\folder", @"D:\moved");
+
+        session.BeginListing(@"D:\moved", out bool arriving);
+        Assert.False(arriving);
+        session.NoteListed(@"D:\moved");
+        session.OnNavigating(@"D:\elsewhere", null);
+        session.OnNavigating(@"D:\moved", null);
+        Assert.Equal(new[] { @"D:\moved\a.txt" }, session.Arrival!.Paths);
+    }
+
+    /// <summary>F-1: a pending intent inside the moved folder follows it.</summary>
+    [Fact]
+    public void AMovedFolder_TakesThePendingIntentAlong() {
+        var session = new FolderSession();
+        session.SetArrival(ArrivalIntent.Rows(@"C:\folder", new[] { @"C:\folder\a.txt" }, renameTarget: @"C:\folder\a.txt"));
+
+        session.RewriteMemory(@"C:\folder", @"D:\moved");
+
+        Assert.Equal(@"D:\moved", session.Arrival!.ForFolder);
+        Assert.Equal(new[] { @"D:\moved\a.txt" }, session.Arrival.Paths);
+        Assert.Equal(@"D:\moved\a.txt", session.Arrival.RenameTarget);
+    }
 }

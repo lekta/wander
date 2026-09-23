@@ -153,6 +153,38 @@ public sealed class ClipboardController {
     }
 
 
+    /// <summary>
+    /// A folder Wander moved or renamed: paths held from inside it follow it,
+    /// so a paste of files cut there finds them (decision B22). Mirrored to
+    /// the system anew only while the system clipboard still holds our list
+    /// - checked before writing; whatever another program has put there
+    /// since is not touched (pillar 3), and our list is left to the next
+    /// <see cref="SyncFromSystem"/>. A clipboard that cannot be read this
+    /// time is not written either: our own paste follows, the rest waits. A
+    /// shell object out of an archive names nothing on disk and is left
+    /// alone.
+    /// </summary>
+    /// <returns>True when a path changed.</returns>
+    public bool Rewrite(string from, string to) {
+        if (_sharedShellObject || !_paths.Any(p => PathRewrite.Under(p, from, to) is not null)) {
+            return false;
+        }
+
+        var held = _system?.GetFiles();
+        if (held is { } files && !(Same(files.Paths, _paths) && files.IsCut == IsCut)) {
+            return false;
+        }
+
+        _paths = _paths.Select(p => PathRewrite.Under(p, from, to) ?? p).ToList();
+        if (held is not null && !_system!.SetFiles(_paths, IsCut)) {
+            LastSystemIssue = SystemIssue.WriteFailed;
+        }
+        RaiseChanged();
+
+        return true;
+    }
+
+
     private void Capture(IEnumerable<string> paths, bool isCut, object? systemObject = null) {
         _paths = paths?.ToList() ?? new List<string>();
         IsCut = isCut;

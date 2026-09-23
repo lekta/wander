@@ -68,6 +68,18 @@
     // --- Dropped into another branch: both re-read, undo brings it back
     { "do": "navigate", "path": "{sandbox}\\photos" },
     { "do": "tree-expand", "path": "{sandbox}\\raw" },
+
+    // --- P-24: a folder made outside Wander turns up in an open branch
+    // once the window comes back. The harness window is never the active
+    // one, so the activation is posted to the model rather than waited for.
+    { "do": "fs", "op": "delete", "path": "{sandbox}\\raw\\made-outside" },
+    { "do": "fs", "op": "mkdir", "path": "{sandbox}\\raw\\made-outside" },
+    { "do": "post", "event": "WindowActivated" },
+    { "do": "assert-tree", "path": "{sandbox}\\raw\\made-outside" },
+    { "do": "assert-state", "field": "folder", "value": "{sandbox}\\photos" },
+    { "do": "note", "text": "the open branch was read again when the window came back (P-24, B23); the open folder did not move" },
+    { "do": "fs", "op": "delete", "path": "{sandbox}\\raw\\made-outside" },
+    { "do": "command", "name": "refresh" },
     { "do": "drop", "paths": [ "{sandbox}\\photos\\renamed-in-list" ], "target": "{sandbox}\\raw", "effect": "Move" },
     { "do": "wait-idle" },
     { "do": "assert-tree", "path": "{sandbox}\\raw\\renamed-in-list" },
@@ -83,6 +95,10 @@
     { "do": "select", "names": [ "IMG_0001.jpg" ] },
     { "do": "command", "name": "copy" },
     { "do": "tree-target", "path": "{sandbox}\\photos\\renamed-in-list" },
+    { "do": "assert-state", "field": "target", "value": "PanelRow" },
+    { "do": "assert-state", "field": "target.folder", "value": "{sandbox}\\photos\\renamed-in-list" },
+    { "do": "assert-state", "field": "list.selection", "names": [ "IMG_0001.jpg" ] },
+    { "do": "note", "text": "the keyboard in the panel: the target is the row there, and the list keeps its selection (B2)" },
     { "do": "command", "name": "paste" },
     { "do": "wait-idle" },
     { "do": "assert-path", "is": "{sandbox}\\photos" },

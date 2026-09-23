@@ -20,16 +20,17 @@ public readonly record struct ViewDecision(ViewMode Mode, ViewReason Reason);
 /// <summary>
 /// Which view a folder gets on arrival. One rule, in this order: a pin the
 /// user put on the folder wins; otherwise the gallery, when the folder is
-/// mostly pictures and the automatic gallery is on; otherwise the default
-/// from the settings. Only on arrival - F5 and a re-read after an operation
-/// keep whatever is on screen, and the caller knows the difference.
+/// mostly pictures - or its <c>desktop.ini</c> says it is one of pictures
+/// (H1) - and the automatic gallery is on; otherwise the default from the
+/// settings. Only on arrival - F5 and a re-read after an operation keep
+/// whatever is on screen, and the caller knows the difference.
 ///
 /// <para>
 /// Facts in, decision out: the caller supplies the pin (from
-/// <see cref="FolderSettingsBook"/>), the settings and a predicate for "is
-/// this a folder of pictures". The predicate is a function rather than a
-/// value because it costs a pass over the listing, and a pinned folder
-/// should not pay for it.
+/// <see cref="FolderSettingsBook"/>), the settings, the hint and a predicate
+/// for "is this a folder of pictures". The predicate is a function rather
+/// than a value because it costs a pass over the listing, and a pinned or
+/// hinted folder should not pay for it.
 /// </para>
 /// </summary>
 public static class ViewChoice {
@@ -41,12 +42,14 @@ public static class ViewChoice {
     /// </param>
     /// <param name="looksLikePictures">Is the listing mostly pictures - evaluated only when it can matter.</param>
     /// <param name="defaultMode">The view for folders nothing else has an opinion on.</param>
+    /// <param name="picturesHint">The folder's <c>desktop.ini</c> says it is one of pictures (<see cref="DesktopIni"/>).</param>
     public static ViewDecision Decide(
-        ViewMode? pinned, bool autoGallery, bool inRecycleBin, Func<bool> looksLikePictures, ViewMode defaultMode) {
+        ViewMode? pinned, bool autoGallery, bool inRecycleBin, Func<bool> looksLikePictures, ViewMode defaultMode,
+        bool picturesHint = false) {
         if (pinned is { } mode) {
             return new ViewDecision(mode, ViewReason.Pinned);
         }
-        if (autoGallery && !inRecycleBin && looksLikePictures()) {
+        if (autoGallery && !inRecycleBin && (picturesHint || looksLikePictures())) {
             return new ViewDecision(ViewMode.Gallery, ViewReason.Pictures);
         }
 

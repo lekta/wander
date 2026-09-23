@@ -78,36 +78,123 @@ public sealed class ListingDiffPlan {
 /// </summary>
 public static class ListingDiff {
     /// <summary>
-    /// Rows gone plus rows arrived, past which the plan is a rebuild. Every
-    /// edit is a notification the bound list answers on the UI thread; a
-    /// screenful or two of them is nothing, thousands are a stall.
+    /// Edits of any kind - rows gone, arrived, moved, rewritten - past which
+    /// the plan is a rebuild. Every edit is a notification the bound list
+    /// answers on the UI thread; a screenful or two of them is nothing,
+    /// thousands are a stall - and so is the replay itself, each move a
+    /// shift of the working copy.
     /// </summary>
     private const int MaxReconciledChanges = 256;
 
 
+    /// <summary>
+    /// Is the incoming listing a different list rather than this one with
+    /// some rows gone, arrived, moved or rewritten - and if not, the edits.
+    ///
+    /// <para>
+    /// The rows both listings have stay put when they keep their order: the
+    /// longest run of them that does (a longest increasing subsequence of
+    /// their new places, n log n) stays, and only the rest move. One photo
+    /// whose date put it at the other end of the folder is one move - a walk
+    /// that moved every row into line behind it took the whole folder, came
+    /// out as a rebuild, and the rebuild's Reset put the scroll back at the
+    /// top under the user's hands. So did comparing position by position,
+    /// until 2026-09-21: one file deleted near the top pushed every row
+    /// below it out of line.
+    /// </para>
+    ///
+    /// <para>
+    /// The rebuild stays for what it was meant for: nothing shared (another
+    /// folder's rows), fewer than half of the shared rows in their order (the
+    /// sort flipped), and a change too big to replay one notification at a
+    /// time (a filter typed over five thousand rows, a checkout that rewrote
+    /// the dates of thousands of files).
+    /// </para>
+    /// </summary>
     public static ListingDiffPlan Compute(
         IReadOnlyList<FileSystemEntry> current, IReadOnlyList<FileSystemEntry> incoming) {
-        if (IsWholesaleChange(current, incoming)) {
+        if (current.Count == 0 || incoming.Count == 0) {
             return ListingDiffPlan.Rebuild;
         }
 
-        // The plan's indices must mean "the list as it stands mid-replay",
-        // so the algorithm runs against a working copy and records what it
-        // does to it.
-        var work = new List<FileSystemEntry>(current);
-        var edits = new List<ListingEdit>();
+        var placeOf = new Dictionary<string, int>(incoming.Count, StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < incoming.Count; i++) {
+            placeOf.TryAdd(incoming[i].FullPath, i);
+        }
 
-        var wanted = new HashSet<string>(incoming.Select(e => e.FullPath), StringComparer.OrdinalIgnoreCase);
-        for (int i = work.Count - 1; i >= 0; i--) {
-            if (!wanted.Contains(work[i].FullPath)) {
-                edits.Add(new ListingEdit(ListingEditKind.RemoveAt, i));
-                work.RemoveAt(i);
+        // The shared rows in the order they stand, by where they go.
+        var order = new List<int>(current.Count);
+        var sharedPaths = new List<string>(current.Count);
+        int rewritten = 0;
+        foreach (var row in current) {
+            if (placeOf.TryGetValue(row.FullPath, out int at)) {
+                order.Add(at);
+                sharedPaths.Add(row.FullPath);
+                if (!row.SaysTheSameAs(incoming[at])) {
+                    rewritten++;
+                }
             }
         }
 
+        int shared = order.Count;
+        if (shared == 0) {
+            return ListingDiffPlan.Rebuild;
+        }
+
+        var stays = LongestRun(order);
+        var moving = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (int k = 0; k < shared; k++) {
+            if (!stays[k]) {
+                moving.Add(sharedPaths[k]);
+            }
+        }
+
+        int changed = (current.Count - shared) + (incoming.Count - shared) + moving.Count + rewritten;
+        if ((shared - moving.Count) * 2 < shared || changed > MaxReconciledChanges) {
+            return ListingDiffPlan.Rebuild;
+        }
+
+        return ListingDiffPlan.Of(Replay(current, incoming, placeOf, moving));
+    }
+
+
+    /// <summary>
+    /// The edits, against a working copy so every index means "the list as
+    /// it stands mid-replay". A row that is going to move and stands where
+    /// another belongs steps out to the end, out of the way, and comes back
+    /// to its own place when its turn comes: two moves for it, none for the
+    /// rows around it.
+    /// </summary>
+    private static List<ListingEdit> Replay(
+        IReadOnlyList<FileSystemEntry> current, IReadOnlyList<FileSystemEntry> incoming,
+        Dictionary<string, int> placeOf, HashSet<string> moving) {
+        var work = new List<FileSystemEntry>(current);
+        var edits = new List<ListingEdit>();
+        var standing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        for (int i = work.Count - 1; i >= 0; i--) {
+            if (!placeOf.ContainsKey(work[i].FullPath)) {
+                edits.Add(new ListingEdit(ListingEditKind.RemoveAt, i));
+                work.RemoveAt(i);
+            } else {
+                standing.Add(work[i].FullPath);
+            }
+        }
+
+        // The rows stepped out to the end, waiting there for their turn.
+        int parked = 0;
         for (int i = 0; i < incoming.Count; i++) {
             var want = incoming[i];
-            int at = IndexOfPath(work, want.FullPath, i);
+            while (i < work.Count - parked && moving.Contains(work[i].FullPath)
+                && !string.Equals(work[i].FullPath, want.FullPath, StringComparison.OrdinalIgnoreCase)) {
+                edits.Add(new ListingEdit(ListingEditKind.Move, i, work.Count - 1));
+                var aside = work[i];
+                work.RemoveAt(i);
+                work.Add(aside);
+                parked++;
+            }
+
+            int at = standing.Contains(want.FullPath) ? IndexOfPath(work, want.FullPath, i) : -1;
             if (at < 0) {
                 edits.Add(new ListingEdit(ListingEditKind.Insert, i, Entry: want));
                 work.Insert(i, want);
@@ -115,6 +202,9 @@ public static class ListingDiff {
                 continue;
             }
             if (at != i) {
+                if (at >= work.Count - parked) {
+                    parked--;
+                }
                 edits.Add(new ListingEdit(ListingEditKind.Move, at, i));
                 var moved = work[at];
                 work.RemoveAt(at);
@@ -128,64 +218,42 @@ public static class ListingDiff {
             }
         }
 
-        return ListingDiffPlan.Of(edits);
+        return edits;
     }
-
 
     /// <summary>
-    /// Is the incoming listing a different list rather than this one with
-    /// some rows gone and some arrived?
-    ///
-    /// <para>
-    /// Order is compared over the rows both listings have, each walked in
-    /// its own order. A row that left or arrived is one edit wherever it
-    /// stood, so it is stepped over. Comparing position by position instead
-    /// - which is what this did until 2026-09-21 - let one file deleted in
-    /// the first half of a folder push every row below it out of line: the
-    /// plan came out as a rebuild, the rebuild is a Reset, and a Reset puts
-    /// the scroll back at the top under the user's hands.
-    /// </para>
-    ///
-    /// <para>
-    /// The rebuild stays for what it was meant for: nothing shared (another
-    /// folder's rows), the shared rows in another order (the sort flipped),
-    /// and a change too big to replay one notification at a time (a filter
-    /// typed over five thousand rows).
-    /// </para>
+    /// Which of <paramref name="order"/> make up a longest increasing run -
+    /// patience sorting, with the chain walked back from its tail.
     /// </summary>
-    private static bool IsWholesaleChange(
-        IReadOnlyList<FileSystemEntry> current, IReadOnlyList<FileSystemEntry> incoming) {
-        if (current.Count == 0 || incoming.Count == 0) {
-            return true;
+    private static bool[] LongestRun(IReadOnlyList<int> order) {
+        var tails = new List<int>();
+        var previous = new int[order.Count];
+        for (int k = 0; k < order.Count; k++) {
+            int lo = 0;
+            int hi = tails.Count;
+            while (lo < hi) {
+                int mid = (lo + hi) / 2;
+                if (order[tails[mid]] < order[k]) {
+                    lo = mid + 1;
+                } else {
+                    hi = mid;
+                }
+            }
+            previous[k] = lo > 0 ? tails[lo - 1] : -1;
+            if (lo == tails.Count) {
+                tails.Add(k);
+            } else {
+                tails[lo] = k;
+            }
         }
 
-        var standing = new HashSet<string>(current.Select(e => e.FullPath), StringComparer.OrdinalIgnoreCase);
-        var arriving = new HashSet<string>(incoming.Select(e => e.FullPath), StringComparer.OrdinalIgnoreCase);
-
-        int shared = 0;
-        int aligned = 0;
-        int j = 0;
-        foreach (var row in current) {
-            if (!arriving.Contains(row.FullPath)) {
-                continue;
-            }
-
-            while (j < incoming.Count && !standing.Contains(incoming[j].FullPath)) {
-                j++;
-            }
-            if (j < incoming.Count
-                && string.Equals(row.FullPath, incoming[j].FullPath, StringComparison.OrdinalIgnoreCase)) {
-                aligned++;
-            }
-            shared++;
-            j++;
+        var stays = new bool[order.Count];
+        for (int k = tails.Count > 0 ? tails[^1] : -1; k >= 0; k = previous[k]) {
+            stays[k] = true;
         }
 
-        int changed = (current.Count - shared) + (incoming.Count - shared);
-
-        return shared == 0 || aligned * 2 < shared || changed > MaxReconciledChanges;
+        return stays;
     }
-
 
     private static int IndexOfPath(List<FileSystemEntry> rows, string path, int from) {
         for (int i = from; i < rows.Count; i++) {

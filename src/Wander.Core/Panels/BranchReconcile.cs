@@ -1,4 +1,4 @@
-namespace Wander.Core.Navigation;
+namespace Wander.Core.Panels;
 
 /// <summary>What one <see cref="BranchEdit"/> does to the level it is applied to.</summary>
 public enum BranchEditKind {

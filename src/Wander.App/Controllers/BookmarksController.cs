@@ -1,11 +1,10 @@
-using System.Collections.ObjectModel;
 using System.IO;
 using Wander.App.Resources;
 using Wander.App.ViewModels;
 using Wander.Core;
 using Wander.Core.FileSystem;
 using Wander.Core.Logging;
-using Wander.Core.Navigation;
+using Wander.Core.Panels;
 using Wander.Core.Shell;
 
 namespace Wander.App.Controllers;
@@ -15,11 +14,11 @@ namespace Wander.App.Controllers;
 /// the user's own list under them.
 ///
 /// <para>
-/// Owns the whole of that state — the ordered list of favourite paths and
-/// the nodes built from it — and nothing else. What it cannot own it is
-/// handed: wiring a fresh node into the window's tree bookkeeping is the
-/// trees' business, so it arrives as one delegate rather than as a
-/// reference back to the view model.
+/// Owns the list of favourite paths and says what the panel's top rows are
+/// (<see cref="BuildRows"/>) - values the window's model is handed whole
+/// (<c>BookmarksChanged</c>); what is open under them, where the cursor is
+/// and where the open folder is are the model's, kept by path, so building
+/// the rows again loses none of it.
 /// </para>
 ///
 /// <para>
@@ -33,38 +32,24 @@ public sealed class BookmarksController {
     private readonly IFileSystem _fs;
     private readonly SettingsViewModel _settings;
     private readonly ILogger _log;
-    private readonly Action<TreeNodeViewModel> _wire;
     private readonly List<string> _favorites = new();
-    // The built-in rows of the current build and the settings switch behind
+    // The built-in rows of the last build and the settings switch behind
     // each of them: Delete on such a row turns the switch off - see HideSpecial.
-    private readonly Dictionary<TreeNodeViewModel, Action> _specialSwitches = new();
+    private readonly Dictionary<string, Action> _specialSwitches = new(StringComparer.OrdinalIgnoreCase);
 
 
-    public BookmarksController(
-        IFileSystem fs, SettingsViewModel settings, ILogger log, Action<TreeNodeViewModel> wire) {
+    public BookmarksController(IFileSystem fs, SettingsViewModel settings, ILogger log) {
         _fs = fs;
         _settings = settings;
         _log = log;
-        _wire = wire;
     }
 
 
     /// <summary>Something to tell the user — already localised.</summary>
     public event EventHandler<string>? StatusReported;
 
-    /// <summary>The list changed and is worth persisting.</summary>
+    /// <summary>The list changed and is worth persisting - and the panel's rows are to be built again.</summary>
     public event EventHandler? Changed;
-
-
-    /// <summary>The rows, in panel order. Bound by the left panel.</summary>
-    public ObservableCollection<TreeNodeViewModel> Items { get; } = new();
-
-
-    /// <summary>
-    /// True while <see cref="Build"/> is replacing the rows. Saving session
-    /// state during a rebuild would record a half-built panel.
-    /// </summary>
-    public bool IsBuilding { get; private set; }
 
 
     /// <summary>The user's own bookmarks, in order — what gets persisted.</summary>
@@ -79,84 +64,47 @@ public sealed class BookmarksController {
 
 
     /// <summary>
-    /// Rebuilds the panel from the current settings and the saved list.
-    /// Idempotent; every row is a fresh instance, so callers should be ready
-    /// for a binding refresh.
+    /// The panel's top rows as the settings and the list say now: the
+    /// special folders switched on, then the user's own, a rule above the
+    /// first of them when there is a special folder to divide it from.
     /// </summary>
-    /// <param name="persistedStops">
-    /// Expanded branches loaded at startup. Merged with what is expanded on
-    /// screen right now, because a rebuild would otherwise close everything
-    /// the user had opened this session.
-    /// </param>
-    public void Build(IReadOnlyList<NavigationStop> persistedStops) {
-        var live = new List<NavigationStop>();
-        foreach (var b in Items) {
-            b.CollectExpanded(live, NavigationSource.Bookmark);
+    public IReadOnlyList<PanelRow> BuildRows() {
+        var rows = new List<PanelRow>();
+        _specialSwitches.Clear();
+
+        if (_settings.ShowBookmarkDownloads) {
+            AddSpecialFolder(rows, Strings.SpecialFolderDownloads, ResolveKnown(f => f.GetDownloads()), () => _settings.ShowBookmarkDownloads = false);
         }
-        var stops = new HashSet<NavigationStop>(live);
-        foreach (var stop in persistedStops) {
-            // Drives-side entries describe the lower tree and don't belong here.
-            if (stop.Source == NavigationSource.Bookmark) {
-                stops.Add(stop);
-            }
+        if (_settings.ShowBookmarkDocuments) {
+            AddSpecialFolder(rows, Strings.SpecialFolderDocuments, ResolveKnown(f => f.GetDocuments()), () => _settings.ShowBookmarkDocuments = false);
+        }
+        if (_settings.ShowBookmarkPictures) {
+            AddSpecialFolder(rows, Strings.SpecialFolderPictures, ResolveKnown(f => f.GetPictures()), () => _settings.ShowBookmarkPictures = false);
+        }
+        if (_settings.ShowBookmarkDesktop) {
+            AddSpecialFolder(rows, Strings.SpecialFolderDesktop, ResolveKnown(f => f.GetDesktop()), () => _settings.ShowBookmarkDesktop = false);
+        }
+        if (_settings.ShowBookmarkMusic) {
+            AddSpecialFolder(rows, Strings.SpecialFolderMusic, ResolveKnown(f => f.GetMusic()), () => _settings.ShowBookmarkMusic = false);
+        }
+        if (_settings.ShowBookmarkVideos) {
+            AddSpecialFolder(rows, Strings.SpecialFolderVideos, ResolveKnown(f => f.GetVideos()), () => _settings.ShowBookmarkVideos = false);
+        }
+        if (_settings.ShowBookmarkRecycleBin && ServiceLocator.TryGet<IShellNamespace>() is not null) {
+            AddSpecialFolder(rows, Strings.SpecialFolderRecycleBin, ShellPaths.RecycleBin, () => _settings.ShowBookmarkRecycleBin = false);
         }
 
-        IsBuilding = true;
-        try {
-            Items.Clear();
-            _specialSwitches.Clear();
-
-            if (_settings.ShowBookmarkDownloads) {
-                AddSpecialFolder(Strings.SpecialFolderDownloads, ResolveKnown(f => f.GetDownloads()), () => _settings.ShowBookmarkDownloads = false);
-            }
-            if (_settings.ShowBookmarkDocuments) {
-                AddSpecialFolder(Strings.SpecialFolderDocuments, ResolveKnown(f => f.GetDocuments()), () => _settings.ShowBookmarkDocuments = false);
-            }
-            if (_settings.ShowBookmarkPictures) {
-                AddSpecialFolder(Strings.SpecialFolderPictures, ResolveKnown(f => f.GetPictures()), () => _settings.ShowBookmarkPictures = false);
-            }
-            if (_settings.ShowBookmarkDesktop) {
-                AddSpecialFolder(Strings.SpecialFolderDesktop, ResolveKnown(f => f.GetDesktop()), () => _settings.ShowBookmarkDesktop = false);
-            }
-            if (_settings.ShowBookmarkMusic) {
-                AddSpecialFolder(Strings.SpecialFolderMusic, ResolveKnown(f => f.GetMusic()), () => _settings.ShowBookmarkMusic = false);
-            }
-            if (_settings.ShowBookmarkVideos) {
-                AddSpecialFolder(Strings.SpecialFolderVideos, ResolveKnown(f => f.GetVideos()), () => _settings.ShowBookmarkVideos = false);
-            }
-            if (_settings.ShowBookmarkRecycleBin && ServiceLocator.TryGet<IShellNamespace>() is not null) {
-                AddSpecialFolder(Strings.SpecialFolderRecycleBin, ShellPaths.RecycleBin, () => _settings.ShowBookmarkRecycleBin = false);
-            }
-
-            // The divider goes on the first user bookmark, and only when
-            // there is a special folder above it to be divided from.
-            bool startsSection = Items.Count > 0;
-            foreach (string path in _favorites) {
-                var node = BuildFolderNode(path, startsSection);
-                if (node is null) {
-                    continue;
-                }
-                Items.Add(node);
+        // The divider goes on the first user bookmark, and only when there
+        // is a special folder above it to be divided from.
+        bool startsSection = rows.Count > 0;
+        foreach (string path in _favorites) {
+            if (BuildFolderRow(path, startsSection) is { } row) {
+                rows.Add(row);
                 startsSection = false;
             }
-
-            foreach (var stop in stops) {
-                foreach (var b in Items) {
-                    if (b.TryExpandToPath(stop.Path, select: false, expandTarget: true)) {
-                        break;
-                    }
-                }
-            }
-
-            // One pass for the whole panel: every row above was drawn with
-            // a chevron on faith, and the disk answers off the UI thread.
-            // Shell namespaces and missing bookmarks are built without a
-            // filesystem and there is nothing to ask about them.
-            TreeNodeViewModel.ProbeForChevrons(
-                _fs, Items.Where(b => b.HasFileSystem).ToList());
-        } finally {
-            IsBuilding = false;
         }
+
+        return rows;
     }
 
 
@@ -190,8 +138,8 @@ public sealed class BookmarksController {
 
     /// <summary>
     /// Drops one user bookmark. Reached from the row menu and from the
-    /// "this folder is gone" panel, which knows the path but has no tree
-    /// node to hand over.
+    /// "this folder is gone" panel, which knows the path but has no row to
+    /// hand over.
     /// </summary>
     public void Remove(string? path) {
         if (string.IsNullOrEmpty(path)) {
@@ -214,36 +162,27 @@ public sealed class BookmarksController {
     /// <summary>
     /// Moves one user bookmark up or down its section of the panel.
     /// Special folders are not in the list, so the move can never carry a
-    /// bookmark across the divider.
-    ///
-    /// <para>
-    /// Returns the rebuilt row — <see cref="Build"/> creates fresh
-    /// instances, and the caller needs the new one to put the keyboard back
-    /// on the row so a second <c>Ctrl+Up</c> keeps working.
-    /// </para>
+    /// bookmark across the divider. The panel's cursor stays on it: the
+    /// model keeps the cursor by path. False when nothing moved.
     /// </summary>
-    public TreeNodeViewModel? Move(TreeNodeViewModel? node, int delta) {
-        if (node is null || string.IsNullOrEmpty(node.FullPath)) {
-            return null;
+    public bool Move(string? path, int delta) {
+        if (string.IsNullOrEmpty(path)) {
+            return false;
         }
 
-        string path = node.FullPath;
         int from = IndexOf(path);
-        if (from < 0) {
-            return null;
-        }
-
         int to = from + delta;
-        if (to < 0 || to >= _favorites.Count) {
-            return null;
+        if (from < 0 || to < 0 || to >= _favorites.Count) {
+            return false;
         }
 
+        string moved = _favorites[from];
         _favorites.RemoveAt(from);
-        _favorites.Insert(to, path);
-        _log.Info($"Bookmark moved: {path} ({from} -> {to})");
+        _favorites.Insert(to, moved);
+        _log.Info($"Bookmark moved: {moved} ({from} -> {to})");
         Changed?.Invoke(this, EventArgs.Empty);
 
-        return Items.FirstOrDefault(b => string.Equals(b.FullPath, path, StringComparison.OrdinalIgnoreCase));
+        return true;
     }
 
 
@@ -306,10 +245,10 @@ public sealed class BookmarksController {
     /// in the settings - what Delete on it means: these rows are settings,
     /// not the user's bookmarks, and the folders behind them are not
     /// deleted from this panel. The settings change rebuilds the panel.
-    /// False for any other node, a folder under a built-in row included.
+    /// False when <paramref name="path"/> is no built-in row.
     /// </summary>
-    public bool HideSpecial(TreeNodeViewModel node) {
-        if (!_specialSwitches.TryGetValue(node, out var switchOff)) {
+    public bool HideSpecial(string path) {
+        if (!_specialSwitches.TryGetValue(path, out var switchOff)) {
             return false;
         }
 
@@ -320,57 +259,38 @@ public sealed class BookmarksController {
 
 
     /// <summary>
-    /// Adds one special-folder node. No-op when the path can't be resolved
+    /// Adds one special-folder row. None when the path can't be resolved
     /// or doesn't exist on disk (e.g. the user moved the folder to a drive
     /// that is no longer there). The label is a fixed localised name, not
-    /// the on-disk folder name, so the user sees a stable caption.
-    ///
-    /// <para>
-    /// Shell-namespace paths (Recycle Bin) take a different route: no
-    /// <see cref="IFileSystem"/> probe and no lazy children — the node is a
-    /// clickable leaf, navigated through <see cref="IShellNamespace"/>.
-    /// </para>
+    /// the on-disk folder name, so the user sees a stable caption. A shell
+    /// location (the Recycle Bin) is a leaf: presented as a list in the
+    /// right pane, not browsed in the panel.
     /// </summary>
-    private void AddSpecialFolder(string label, string? path, Action switchOff) {
+    private void AddSpecialFolder(List<PanelRow> rows, string label, string? path, Action switchOff) {
         if (string.IsNullOrEmpty(path)) {
             return;
         }
 
-        if (ServiceLocator.TryGet<IShellNamespace>() is { } shell && shell.IsShellPath(path)) {
-            // No tree children for shell namespaces in this iteration —
-            // Recycle Bin is presented as a flat list in the right pane,
-            // not browseable from the bookmarks tree.
-            var shellNode = new TreeNodeViewModel(label, path, EntryKind.Directory, fs: null, hasChildren: false);
-            _wire(shellNode);
-            Items.Add(shellNode);
-            _specialSwitches[shellNode] = switchOff;
-
+        bool isShell = ServiceLocator.TryGet<IShellNamespace>() is { } shell && shell.IsShellPath(path);
+        if (!isShell && !_fs.DirectoryExists(path)) {
             return;
         }
 
-        if (!_fs.DirectoryExists(path)) {
-            return;
-        }
-
-        // Optimistic chevron; Build's ProbeForChevrons pass corrects the
-        // leaves off the UI thread rather than asking the disk here.
-        var node = new TreeNodeViewModel(
-            label, path, EntryKind.Directory, _fs, hasChildren: true, _settings);
-        _wire(node);
-        Items.Add(node);
-        _specialSwitches[node] = switchOff;
+        rows.Add(new PanelRow(path, label, isShell ? PanelRowKind.Shell : PanelRowKind.Folder) { Role = PanelRowRole.BuiltInBookmark });
+        _specialSwitches[path] = switchOff;
     }
 
 
     /// <summary>
     /// One user bookmark. A folder that is no longer on disk still gets a
     /// row — dropping it would look like Wander forgot the bookmark, and
-    /// the user is the one who decides whether it goes. The row is built
-    /// without an <see cref="IFileSystem"/> so it has no chevron and no
-    /// children to enumerate; clicking it lands on the "this folder is
-    /// gone" panel in the file area.
+    /// the user is the one who decides whether it goes: no chevron, and
+    /// clicking it lands on the "this folder is gone" panel in the file
+    /// area. A bookmark inside an archive is not missing, and not a folder
+    /// either - the answer the Recycle Bin gets: a leaf. One on the archive
+    /// itself opens like the archive's row under its folder.
     /// </summary>
-    private TreeNodeViewModel? BuildFolderNode(string path, bool startsSection) {
+    private PanelRow? BuildFolderRow(string path, bool startsSection) {
         if (string.IsNullOrEmpty(path)) {
             return null;
         }
@@ -381,26 +301,16 @@ public sealed class BookmarksController {
             name = path;
         }
 
-        // A bookmark inside an archive is not a directory and never will
-        // be, but it is not missing either — the same answer the Recycle
-        // Bin gets. It has no children to enumerate, so it is a leaf. A
-        // bookmark on the archive itself is the tree row it would be under
-        // its folder, and expands the same way.
         bool isShell = ServiceLocator.TryGet<IShellNamespace>() is { } shell && shell.IsShellPath(path);
         bool isArchive = isShell && Archives.Of(path) is { IsRoot: true };
         bool exists = isArchive || (!isShell && _fs.DirectoryExists(path));
-        var node = new TreeNodeViewModel(
-            name, path, EntryKind.Directory,
-            exists ? _fs : null,
-            hasChildren: exists,
-            _settings) {
-            IsRemovableBookmark = true,
-            StartsUserSection = startsSection,
+        var kind = isArchive ? PanelRowKind.Archive : isShell ? PanelRowKind.Shell : PanelRowKind.Folder;
+
+        return new PanelRow(path, name, kind) {
+            Role = PanelRowRole.OwnBookmark,
+            StartsSection = startsSection,
             IsMissing = !exists && !isShell,
         };
-        _wire(node);
-
-        return node;
     }
 
 

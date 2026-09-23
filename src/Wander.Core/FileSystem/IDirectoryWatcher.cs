@@ -24,6 +24,14 @@ namespace Wander.Core.FileSystem;
 public readonly record struct DirectoryChange(string Path, bool Structural) {
     /// <summary>The watcher lost track; the folder is in an unknown state and has to be re-listed.</summary>
     public static readonly DirectoryChange Unknown = new("", Structural: true);
+
+
+    /// <summary>
+    /// For a rename, the name it had: <see cref="Path"/> is the one it has
+    /// now. What lets a selection go after the file to its new name rather
+    /// than to its neighbour (decision B7).
+    /// </summary>
+    public string? OldPath { get; init; }
 }
 
 

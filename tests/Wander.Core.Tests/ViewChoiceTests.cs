@@ -63,7 +63,27 @@ public class ViewChoiceTests {
         ViewChoice.Decide(ViewMode.Tiles, autoGallery: true, inRecycleBin: false, Probe, ViewMode.Details);
         ViewChoice.Decide(null, autoGallery: false, inRecycleBin: false, Probe, ViewMode.Details);
         ViewChoice.Decide(null, autoGallery: true, inRecycleBin: true, Probe, ViewMode.Details);
+        ViewChoice.Decide(null, autoGallery: true, inRecycleBin: false, Probe, ViewMode.Details, picturesHint: true);
 
         Assert.Equal(0, probes);
+    }
+
+    /// <summary>H1: desktop.ini says "pictures" - the gallery, with no pictures to count yet.</summary>
+    [Fact]
+    public void APicturesHint_MakesAGallery() {
+        var decision = ViewChoice.Decide(null, autoGallery: true, inRecycleBin: false, () => false, ViewMode.Details, picturesHint: true);
+
+        Assert.Equal(new ViewDecision(ViewMode.Gallery, ViewReason.Pictures), decision);
+    }
+
+    /// <summary>H1: the hint is only a hint - the setting, the bin and a pin still decide.</summary>
+    [Fact]
+    public void APicturesHint_DefersToTheSettingTheBinAndAPin() {
+        Assert.Equal(ViewReason.Default,
+            ViewChoice.Decide(null, autoGallery: false, inRecycleBin: false, () => false, ViewMode.Details, picturesHint: true).Reason);
+        Assert.Equal(ViewReason.Default,
+            ViewChoice.Decide(null, autoGallery: true, inRecycleBin: true, () => false, ViewMode.Details, picturesHint: true).Reason);
+        Assert.Equal(new ViewDecision(ViewMode.Tiles, ViewReason.Pinned),
+            ViewChoice.Decide(ViewMode.Tiles, autoGallery: true, inRecycleBin: false, () => false, ViewMode.Details, picturesHint: true));
     }
 }

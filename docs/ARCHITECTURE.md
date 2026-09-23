@@ -56,20 +56,25 @@ src/
 │   │                   FolderStatistics, IVolumeInfoProvider, TransientFiles,
 │   │                   BatchGroup, ConflictVerdict, ConflictBatch, ConflictPair,
 │   │                   MergeScanner, FileContentComparer
+│   ├── Folders/        ViewChoice, FolderSettingsBook, FolderRecord, ViewMode,
+│   │                   DesktopIni
 │   ├── Icons/          IIconProvider, IImageMetadataReader, IconSize, ImageMetadata,
 │   │                   ImageFormats, RawPreviewExtractor, ThumbnailCacheOptions
 │   ├── Layout/         TileLayout, TileMetrics, GridNavigation,
-│   │                   WindowZones, WindowPlacement
-│   ├── Listing/        FolderSession, ListingDiff, ArrivalIntent, RatedListing,
+│   │                   WindowZones, WindowPlacement, DragHover, EdgeScroll
+│   ├── Listing/        FolderSession, ListingDiff, ArrivalIntent, ListingArrival
+│   │                   (+ ListState), CurrentRowFallback, RatedListing,
 │   │                   SearchController, ImageFolderProbe
 │   ├── Localization/   ITextSource
 │   ├── Logging/        ILogger, ILogFile, NullLogger
 │   ├── Menu/           ContextMenuBuilder, ContextMenuTarget, ContextMenuSettings,
 │   │                   ContextMenuCatalog, MenuEntry, MenuCommandId
 │   ├── Navigation/     NavigationService, NavigationSource, RecentPaths,
-│   │                   PathCrumbs
+│   │                   PathCrumbs, PathFollowing
 │   ├── Operations/     OperationTracker, OperationVerbs, TransferRate,
 │   │                   PathClaims, BusyWait
+│   ├── Panels/         PanelState, PanelRow, PanelLevel, PanelView, PanelPaths,
+│   │                   PanelKeyNavigation, TreeNavThrottle, BranchReconcile, Pane
 │   ├── Persistence/    IAppStateStore, AppState, AppSettings, GalleryBackground
 │   ├── Preview/        PreviewRouter, TextProbe, EncodingProbe, AudioTags,
 │   │                   BookCover, Fb2Document, MeshFile + Obj/Stl/GltfReader
@@ -81,6 +86,9 @@ src/
 │   │                   ShellHandler, ShellExtensionCatalog, ShellEntryKey,
 │   │                   ShellScopes, ShellVerbs, RecentScopes
 │   ├── Undo/           UndoService, IUndoableAction, UndoOutcome
+│   ├── Workspace/      WorkspaceState, события, эффекты, WorkspaceReducer,
+│   │                   NavigationRules, PanelRules, ListRules, KeyboardRules,
+│   │                   TargetRules + Target, MenuContext, PreviewSubject
 │   └── ServiceLocator.cs
 │
 ├── Wander.Platform.Windows/
@@ -100,14 +108,15 @@ src/
     ├── Conflict/       ConflictWindow (+ ConflictWindowViewModel,
     │                   ConflictRowViewModel), DispatcherConflictResolver,
     │                   InteractiveConflictResolver
-    ├── Controllers/    NavigationController, PreviewController, RatingsController,
-    │                   BookmarksController, FolderTreesController,
+    ├── Controllers/    WorkspaceController, NavigationController, PreviewController,
+    │                   RatingsController, BookmarksController, FolderTreesController,
     │                   ContentSearchController, SearchResultsController,
     │                   ShellCommandsController
     ├── Controls/       AsyncIcon + IconLoadGate + FirstScreenWatch, GifImage,
     │                   IconImageCache, MagnifierCursor, NumericField,
     │                   RubberBandAdorner + RubberBandController,
-    │                   RenameAdorner, VirtualizingWrapPanel
+    │                   RenameAdorner, VirtualizingWrapPanel, FolderPanelList,
+    │                   FileListBox, FileDataGrid
     ├── Converters/     Icon, EnumEquals, EnumRadio, EnumToVisibility,
     │                   BitmapPixelSize, RankStar + RatingConverters, CutRow,
     │                   TreeIndent, TileSecondLine, PixelsToThickness
@@ -149,12 +158,12 @@ Platform.Windows` — один файл, `App.xaml.cs` (точка композ�
 ```
 === Wander dependency graph (using sweep) ===
 date   : 2026-09-23
-commit : 59c51ea
+commit : 4845b8f
 
 -- projects --
-Wander.App -> Wander.Core   (70 files)
+Wander.App -> Wander.Core   (71 files)
 Wander.App -> Wander.Platform.Windows   (1 files)
-Wander.Core.Tests -> Wander.Core   (129 files)
+Wander.Core.Tests -> Wander.Core   (144 files)
 Wander.Harness -> Wander.App   (4 files)
 Wander.Harness -> Wander.Core   (6 files)
 Wander.Harness -> Wander.Platform.Windows   (3 files)
@@ -181,7 +190,7 @@ Wander.Platform.Windows -> Wander.Core   (35 files)
   Folders        -> FileSystem     (1 files)
   Icons          -> Imaging        (1 files)
   Listing        -> Companions     (2 files)
-  Listing        -> FileSystem     (7 files)
+  Listing        -> FileSystem     (8 files)
   Listing        -> Icons          (1 files)
   Listing        -> Search         (1 files)
   Menu           -> Actions        (3 files)
@@ -211,9 +220,16 @@ Wander.Platform.Windows -> Wander.Core   (35 files)
   Shell          -> Persistence    (2 files)
   Shell          -> Undo           (1 files)
   Undo           -> Operations     (1 files)
+  Workspace      -> FileSystem     (3 files)
+  Workspace      -> Layout         (7 files)
+  Workspace      -> Listing        (5 files)
+  Workspace      -> Menu           (1 files)
+  Workspace      -> Navigation     (5 files)
+  Workspace      -> Panels         (8 files)
+  Workspace      -> Preview        (1 files)
 
 -- Wander.Core: levels --
-  0: (root), Imaging, Layout, Localization, Logging, Operations
+  0: (root), Imaging, Layout, Localization, Logging, Operations, Panels
   1: Diagnostics, Icons, Undo
   2: FileSystem
   3: Companions, Folders, Navigation, Preview
@@ -221,6 +237,7 @@ Wander.Platform.Windows -> Wander.Core   (35 files)
   5: Listing, Persistence
   6: Shell
   7: Menu
+  8: Workspace
 
 -- Wander.Platform.Windows: folder -> folder --
   (root)         -> Diagnostics    (1 files)
@@ -245,7 +262,7 @@ Wander.Platform.Windows -> Wander.Core   (35 files)
   (root)         -> Diagnostics    (1 files)
   (root)         -> Dialogs        (3 files)
   (root)         -> DragPreview    (1 files)
-  (root)         -> Menu           (1 files)
+  (root)         -> Menu           (2 files)
   (root)         -> Preview        (1 files)
   (root)         -> Resources      (4 files)
   (root)         -> Util           (3 files)
@@ -263,6 +280,7 @@ Wander.Platform.Windows -> Wander.Core   (35 files)
   Controls       -> Diagnostics    (1 files)
   Controls       -> Preview        (1 files)
   Controls       -> Resources      (3 files)
+  Controls       -> Util           (1 files)
   Controls       -> ViewModels     (2 files)
   Converters     -> Resources      (1 files)
   Converters     -> Util           (1 files)
@@ -280,7 +298,7 @@ Wander.Platform.Windows -> Wander.Core   (35 files)
   ViewModels     -> Resources      (9 files)
   ViewModels     -> Util           (1 files)
   Views          -> Conflict       (1 files)
-  Views          -> Controllers    (3 files)
+  Views          -> Controllers    (4 files)
   Views          -> Controls       (3 files)
   Views          -> Converters     (1 files)
   Views          -> Dialogs        (3 files)
@@ -649,6 +667,127 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
   только что возвращённое, `Ctrl+Z` стал бы деструктивным); операция не
   деструктивна, логируется, `SystemPathGuard` не нужен — место решает шелл.
 
+## Модель окна — `Core/Workspace/`, `Core/Panels/`
+
+С блока 2 (2026-09-23) панели, выделение списка, цель операций и
+клавиатура — одно состояние и правила в Core под тестами; вью переводят
+ввод в события и рисуют состояние.
+
+```
+вью / VM / пул ─событие─▶ WorkspaceController.Post ─▶ WorkspaceReducer.Apply(состояние, событие)
+                                 ▲  очередь: событие от исполнения эффекта        │
+                                 │  ждёт конца текущего                           ▼
+                                 └─ эффекты ◀── StateChanged (проекция панелей, VM) ◀─ (состояние, эффекты)
+     Navigate, ReadBranch, ProbeChevrons, ScheduleThrottle — сам;
+     FocusZone, FocusRow, ApplyListSelection, OpenEditor — окну (ViewEffectRequested)
+```
+
+- **Состояние** — `WorkspaceState`, неизменяемые record'ы: `Folder` (путь,
+  панель-источник), `List` (`Listing/ListState`: выделение путями, главная,
+  каретка), `Bookmarks` / `Drives` (`PanelState`: уровни по пути с эпохой,
+  раскрытое, `Location` — место открытой папки, `Caret`, `Editing`,
+  `Revealing` — раскрытие вглубь в пути), `Keyboard` (зона, последняя
+  зона, окно активно, зона до диалога), `Menu` (снимок открытого меню),
+  настройки для правил, часы троттла. Производное не хранится: цель
+  (`TargetRules`), подсветка панели (`Highlight`), видимые строки
+  (`PanelView.Rows`), предмет панели просмотра (`PreviewSubject`).
+- **События** несут причину: ввод панели (`RowClicked`, `RowActivated`,
+  `ChevronToggled` с `Alt`, `CaretMoveRequested` — клавиши, `CaretMoved` —
+  поиск по буквам), ввод списка (`ListSelectionChanged`, `ListCaretMoved`),
+  окно (`ZoneEntered(зона, причина)`, `MenuOpened` / `Closed`,
+  `WindowActivated` / `Deactivated`, `PaneHidden`, `DialogOpened` /
+  `Closed`, `OptionsChanged`), факты (`Navigated`, `BranchRead` с эпохой,
+  `ChevronsProbed`, `BookmarksChanged`, `Relocated`, `Removed`,
+  `FolderChanged`, `ListingLanded`, `ViewModeChanged`, `ThrottleElapsed`).
+  Неизвестная причина ничего не выделяет и не раскрывает.
+- **Правила — модули в фиксированном порядке** (`WorkspaceReducer`):
+  каждый владеет своим срезом, читает итог предыдущих, друг друга не
+  зовёт, клавиатуру, мышь, часы и диск не читает.
+  1. `NavigationRules` — что открывает папку: клик, `Enter`, «стрелки
+     открывают» через `TreeNavThrottle` (сейчас / в момент T / никогда,
+     срабатывание — событие `ThrottleElapsed`), `Ctrl+1` в «Диски» на их
+     курсор; уже открытая не открывается снова.
+  2. `PanelRules` — строки, раскрытое, место, курсор. Уровень читается
+     эффектом `ReadBranch` на пуле, ответ с устаревшей эпохой
+     отбрасывается; раскрытие до пути — асинхронный спуск (`Revealing`);
+     пересборка закладок и перечитывание держат раскрытое, курсор и место
+     по пути; ушедшая строка отдаёт курсор соседу; `WindowActivated`
+     перечитывает раскрытые уровни, не чаще раза в 5 с. Сама панель не
+     сворачивается никогда.
+  3. `ListRules` + `Listing/ListingArrival` — выделение после приземления
+     строк: намерение (`FolderSession.DecideArrival`), иначе по путям;
+     переименованная строка — под новым именем (пара «было → стало» от
+     своей операции и от сторожа); ушедшая выделенная — преемник
+     (`CurrentRowFallback`, любая причина, кроме ухода из результатов
+     поиска); прокрутка — только к тому, что попросили. В список выделение
+     возвращает эффект `ApplyListSelection`.
+  4. `KeyboardRules` — зона, меню, активность окна и куда клавиатуре идти,
+     сравнивая состояние до и после события: упала из панели — на её
+     курсор, из строки списка — на каретку без прокрутки; панель убрана — в
+     список; диалог закрыт — в панель, где была, иначе в список; строки
+     операции — на главную, если клавиатура в списке или (после диалога)
+     нигде; ушла строка с кареткой — на преемника без прокрутки; смена
+     вида — на каретку в новом виде; в панели — на строке курсора.
+- **Исполнитель** — `Controllers/WorkspaceController` (App): очередь
+  событий (вложенного `Apply` нет, порядок трассы — порядок модели),
+  `StateChanged` до эффектов (строка, куда шлют клавиатуру, уже
+  нарисована), чтение уровней и проба шевронов на пуле, таймер троттла.
+  Трасса — `WS <событие>; effects: …` строкой на событие и `WS target: …` на
+  смену производной цели, под `LogActions`.
+- **Адаптеры** — тонкий код-бихайнд. `FolderTreesView`: ввод панелей в
+  события, `FocusRow` (строка не нарисована — когда проекция её нарисует).
+  `FileListView`: выделение пользователя — `ListSelectionChanged` (не во
+  время `IsSyncingRows`), исполнение `ApplySelection` одним вызовом
+  (`FileListBox.ReplaceSelection` = `SetSelectedItems`, у `FileDataGrid` —
+  `BeginUpdateSelectedItems`), `FocusRow` по
+  `ItemContainerGenerator.StatusChanged` без `UpdateLayout`, `OpenEditor`.
+  `MainWindow`: причина прихода фокуса (`ReasonFor`: записанная окном до
+  вызова; прежний элемент отсоединён или новый — окно → падение; кнопка
+  мыши → клик; старый фокус в меню → меню; `Activated` → активация) и
+  исполнение `FocusZone` / `FocusRow`. Неактивное окно: перенос ждёт
+  `Activated` (активировали кликом — решает клик); харнессу
+  (`App.Headless`) — сразу, его окно не бывает активным.
+- **Цель и меню** — `TargetRules` (чем команда оперирует: строки списка,
+  строка панели, фон папки) и `MenuContext` (снимок предмета и фактов его
+  места при открытии меню; команда из меню получает его параметром
+  `MenuCall`, с хоткея — цель сейчас). Рамка «о чём меню» — флаг строки
+  панели.
+- **Панель — плоский список**: `Controls/FolderPanelList` — `ListBox` с
+  выключенным выделением WPF, строки — `PanelView.Rows` с отступом по
+  глубине, `TreeNodeViewModel` — проекция строки с четырьмя OneWay-флагами
+  (курсор, активна, место — жирное имя, предмет меню);
+  `FolderTreesController` сверяет строки по ключам (`BranchReconcile`),
+  больше 256 правок — одной заменой. Клавиши — `PanelKeyNavigation`: `↑` /
+  `↓`, `←` свернуть / к родителю, `→` раскрыть / к первому ребёнку,
+  `Home`, `End`, `PgUp`, `PgDn`; буквы — `TypeAheadController`. UIA видит
+  список, не дерево.
+- **Следование за путём** — `Navigation/PathFollowing`: перенос или
+  переименование Wander'ом → держатели по порядку: панели (и перечитать
+  затронутые уровни), закладки, книга видов, MRU адреса, память выделения
+  (`FolderSession.RewriteMemory`: и открытая папка, и намерение), буфер
+  (`ClipboardController.Rewrite` — только пока системный буфер держит наш
+  список), история последней: её навигация читает уже переписанное.
+
+| WPF делает | Ответ |
+|---|---|
+| выкидывает заменённый объект из `SelectedItems` (`Replace`, `Reset`) | отчёты списка во время `IsSyncingRows` не шлются; выделение возвращает `ApplyListSelection` |
+| присвоение `SelectedItem` схлопывает многовыделение | `SelectedItem` не привязан ни в одном виде |
+| `SelectedItems.Add` линейный — массовое выделение квадратичное | `ReplaceSelection` одним вызовом |
+| удалённый элемент с фокусом отдаёт его ближайшему фокусируемому предку (сам список) или окну | `ZoneEntered(…, FocusFell)` → `FocusRow` по правилу |
+| исполняет пункт меню после закрытия и возврата фокуса | пункт получает снимок `MenuContext` |
+| после модального диалога фокус — первому фокусируемому | `DialogOpened` / `DialogClosed` → `FocusZone` по правилу |
+| свёрнутый элемент фокус не держит | `PaneHidden` до сворачивания → `FocusZone(список)` |
+| прокручивает к строке с фокусом по обеим осям | `Line_RequestBringIntoView`: горизонталь — видимая |
+| стрелки `DataGrid` идут от текущей ячейки | `FocusRow` ставит `CurrentCell` |
+| двойной клик по строке дерева раскрывает | событие `ChevronToggled` |
+
+Тесты — `WorkspaceScene` (модель на событиях, диск — дерево папок):
+`PanelRulesTests`, `KeyboardRulesTests`, `ListRulesTests`,
+`TargetRulesTests`, `MenuContextTests`, `PreviewSubjectTests`; рядом —
+`PanelKeyNavigation`, `PanelView`, `TreeNavThrottle`, `PathFollowing`,
+`DragHover`, `EdgeScroll`. Харнесс — `post`, `assert-state`,
+`assert-focus` (QA.md).
+
 ## Навигация и дерево
 
 - **`NavigationFallback`** (Core, тест, 2026-09-17) — куда идти, когда
@@ -672,7 +811,7 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
 - **Панель наследуется в обе стороны.** `GoUp` берёт источник текущей
   записи, `DescendSource` — на спуске: шаг вглубь из закладок остаётся
   `Bookmark`. Меняет панель только явный выбор в другой или недостижимый
-  путь (`ExpandTreeToCurrent` падает на `Roots`).
+  путь (место — в «Дисках», `PanelRules`).
 - **Пропавшая папка — состояние.** `MissingFolderPath` взводится в фоне по
   `DirectoryNotFoundException` / `DriveNotFoundException`, не проверкой
   перед навигацией (синхронный поход на шару = зависание). Поверх пустого
@@ -688,39 +827,30 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
   фокуса, удавшаяся навигация). `RecentPaths` (Core) — MRU 20 папок без
   дублей, `AppState.Session.RecentPaths`, кнопка-треугольник / `F4`.
 - **Память выделения и намерение прибытия** — `FolderSession` (ниже):
-  64 папки LRU; подъём вверх выделяет покинутую папку
-  (`PlanArrivalSelection`); удаление — следующий уцелевший
-  (`NextAfterRemoval`), вставка — вставленное; те два поднимают
-  `FocusListAfterRestore` (шли за модальным диалогом, строка перестроена,
-  фокус на окне).
-- **Дерево** — lazy-load, листья без шеврона, раскрытые пути в `AppState`,
-  авто-раскрытие на текущую папку, **никогда не сворачивается само**.
-- **Подсветка — у каждой панели своя** (2026-09-22, REDESIGN §6.5).
-  `FolderTreesController` не помнит подсвеченную строку, а спрашивает у
-  строк панели (`Unlight` через `FindSelected`): стрелки двигают
-  подсветку WPF, и запомненная строка протухала на первой же (Н5).
-  Переход из закладок строку «Дисков» не трогает — она остаётся
-  неактивной подсветкой; переход откуда угодно ещё гасит строку закладок;
-  `RevealIn` трогает одну панель. `Ctrl+1` из закладок в «Диски» при
-  открытой папке из закладок (`FolderTreesView.RevealAndFocus`) — фокус
-  на эту строку (со «стрелки открывают» — и переход); строки нет —
-  раскрытие открытой папки, как раньше.
+  64 папки LRU; подъём вверх выделяет покинутую папку; удаление —
+  следующий уцелевший (`NextAfterRemoval`), вставка — вставленное, оба с
+  клавиатурой (шли за модальным диалогом). Намерение операции — только для
+  открытой папки (`SetArrivalHere`): вставленное в подпапку не ждёт захода
+  туда, чтобы забрать выделение.
+- **Панели** — модель окна (выше): уровни читаются фоном, листья без
+  шеврона (проба фоном, перепроба на `FolderChanged`), раскрытые пути в
+  `AppState`, раскрытие до открытой папки, **никогда не сворачиваются
+  сами**.
+- **Подсветка — у каждой панели своя**: курсор панели — в модели, активная
+  подсветка — только у панели с клавиатурой, у прочих — неактивная. Переход
+  из закладок курсор «Дисков» не трогает; переход откуда угодно ещё гасит
+  курсор закладок. `Ctrl+1` из закладок в «Диски» при открытой папке из
+  закладок — на их курсор (со «стрелки открывают» — и переход); курсора
+  нет — раскрытие открытой папки.
 - **Панель не уезжает вбок к длинному имени.** WPF прокручивает к строке,
-  получившей фокус, по обеим осям (`OnGotFocus` → `BringIntoView`
-  заголовка); `TreeViewItem_RequestBringIntoView` (стиль
-  `WanderTreeViewItem`) гасит запрос и выпускает его заново с
-  горизонталью, равной видимой части `ScrollContentPresenter`, — вверх-вниз
-  как было. Выключается `AppSettings.TreeScrollsSideways`.
-- **Переименование папки — тот же путь, что перенос** (2026-09-22):
-  `FollowRelocatedAsync` ведёт закладки, историю и листинг; строки
-  панелей при том же родителе переписываются на месте
-  (`TreeNodeViewModel.Follow`), а не пересобираются — иначе ветка
-  сворачивалась бы на каждом переименовании; сверка уровня — правило Core
-  `BranchReconcile` (тест), панель только применяет правки. Шеврон
-  незагруженного узла перепроверяется при `RefreshFor` — лист, получивший
-  подпапку, раньше шеврон не возвращал. Цель панели (`SelectedEntries` без
-  `SelectedEntry`) — не строка списка: перечитывание её не ищет и не
-  снимает, `Paste` идёт в неё.
+  получившей фокус, по обеим осям (`OnGotFocus` → `BringIntoView`);
+  `FolderTreesView.Line_RequestBringIntoView` гасит запрос и выпускает его
+  заново с горизонталью, равной видимой части `ScrollContentPresenter`, —
+  вверх-вниз как было. Выключается `AppSettings.TreeScrollsSideways`.
+- **Переименование папки — тот же путь, что перенос**: `FollowRelocated`
+  по правилу `PathFollowing` (модель окна); строки панелей переписываются
+  на месте событием `Relocated`, ветка не сворачивается, уровни родителей
+  перечитываются (`FolderChanged`).
 - **Листинг вне UI-потока** — `RefreshFolderAsync` (и `RefreshShellAsync`)
   в `Task.Run` с отменой: следующая навигация отменяет предыдущую, побеждает
   последняя; спиннер только после 150 мс.
@@ -851,19 +981,18 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
   `Source.FullPath`. Папка внутри архива не распаковывается никогда
   (`SourceReachable` = false): слияние — это обход, обойти может только
   шелл; её ответы — заменить / оставить / под новым именем.
-- **Дерево и закладки.** Архив — узел в обеих панелях (как в панели
-  навигации Проводника): `TreeNodeViewModel.ReadChildFolders` добавляет к
-  папкам файлы, для которых `Archives.Of(path) is { IsRoot: true }`,
-  вставляя их среди папок по имени; узел с `Archives.Contains(FullPath)`
-  читает детей через `IShellNamespace.Enumerate` (только папки), не через
-  `IFileSystem`. `ProbeForChevrons` архивные узлы пропускает — иначе каждая
-  папка с архивами открывала бы их все через шелл в фоне; пустой архив
-  теряет шеврон при раскрытии. `ExpandTo(here)` находит путь внутри архива
-  как любой другой; программное выделение при этом не навигация
-  (`FolderTreesController.IsSyncingSelection` — без неё подсветка
-  контейнера уводила из архива). `NodeAt` и `DropTargetController` считают
-  архивные узлы, как `shell:`: ни меню, ни цели drop. Закладка на архив —
-  раскрываемый узел; на путь внутри — лист, не «пропавшая», как у корзины.
+- **Дерево и закладки.** Архив — строка в обеих панелях (как в панели
+  навигации Проводника): чтение уровня (`WorkspaceController.ReadLevel`,
+  на пуле) добавляет к папкам файлы, для которых `Archives.Of(path) is {
+  IsRoot: true }`, вставляя их среди папок по имени; уровень под
+  `Archives.Contains(path)` читается через `IShellNamespace.Enumerate`
+  (только папки), не через `IFileSystem`. Шеврон архива не пробуется
+  (`PanelRow.IsProbed`) — иначе каждая папка с архивами открывала бы их все
+  через шелл в фоне; пустой архив теряет шеврон при раскрытии. Раскрытие до
+  пути внутри архива — как до любого другого. Панель и `DropTargetController`
+  считают архивные строки, как `shell:`: ни меню, ни цели drop. Закладка на
+  архив — раскрываемая строка; на путь внутри — лист, не «пропавшая», как у
+  корзины.
 - **Наружу — шелловским объектом данных** (2026-09-03). `CF_HDROP` с путём
   внутри архива принимающая программа читает как несуществующий файл,
   поэтому `IShellNamespace.CreateDataObject(paths)` собирает тот же объект,
@@ -922,17 +1051,21 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
   поедет не то, за что взялись.
 - **`RubberBandController`** (App) — адорнер, захват мыши, пересечение с
   контейнерами; только с пустого места (`ListVisuals.IsChrome` — полоса
-  прокрутки, заголовки, разделители); невиртуализованные не попадают.
-  Нажатие взводит (`Arm`), прямоугольник появляется на системном пороге
-  перетаскивания (`Begin`): без порога клик в зазор между плитками ловил
-  обоих соседей.
-- **Каретка** (App, 2026-09-03) — `MainViewModel.CaretPath`, строка, от
-  которой пойдёт следующая стрелка, и рамка в шаблоне контейнера
-  (`CaretRowConverter`, триггер последним). Путь, а не строка: строки
-  заменяются на каждом перечитывании. Ставится там, где клавиатуру кладут
-  на строку осознанно (`FocusRow`, нажатие на строку), и подхватывается из
-  `List_SelectionChanged` для нажатий, на которые отвечает WPF. Читают
-  `TryEnterList` и `CaretIndex`.
+  прокрутки, заголовки, разделители). Нажатие взводит (`Arm`),
+  прямоугольник появляется на системном пороге перетаскивания (`Begin`):
+  без порога клик в зазор между плитками ловил обоих соседей. У верхнего и
+  нижнего края (и за ним) список прокручивается по `EdgeScroll`, угол
+  нажатия привязан к содержимому, а не к экрану; строка, ушедшая за экран
+  внутри прямоугольника, остаётся выделенной, пока не вернётся на экран
+  вне его (у невидимой нет контейнера для проверки).
+- **Каретка** — `ListState.Caret` модели (`MainViewModel.CaretPath` — её
+  проекция), строка, от которой пойдёт следующая стрелка, и рамка в
+  шаблоне контейнера (`CaretRowConverter`, триггер последним). Путь, а не
+  строка: строки заменяются на каждом перечитывании. Сообщает список:
+  нажатие на строку и клавиатура, положенная на строку жестом
+  (`ListCaretMoved`), отчёт о выделении (строка с фокусом, иначе последняя
+  выделенная; снятое выделение каретку не трогает). Читают `TryEnterList`
+  и `CaretIndex`.
 - **`EntryVisibility`** (Core) — `ShowHidden` / `ShowSystem` /
   `HideSystemRootFolders` одним значением; список и дерево фильтруют им
   обоим; в фон передаётся снимком. Третий флаг — `SystemRootFolders`
@@ -979,8 +1112,11 @@ undo его нет.
 События пачками с фона → троттл на `DispatcherTimer` 500 мс, повторяющемся
 (перезапускаемый при непрерывном потоке не сработал бы), спрашивает
 `FolderSession.DecideWatchTick`, гасит себя на холостом тике. Пока правится
-имя или идёт своя операция — `Hold`, изменения ждут следующего тика.
-Ошибка вотчера (переполнение буфера) = изменение, вотчер переподнимается.
+имя, своё переименование ещё не приземлилось или идёт своя операция —
+`Hold`, изменения ждут следующего тика. Ошибка вотчера (переполнение
+буфера) = изменение, вотчер переподнимается. Переименование сторож отдаёт
+парой (`DirectoryChange.OldPath`, из `OnRenamed`): `FolderChanges.Renames`
+→ решение тика → приземление листинга, и выделение идёт за новым именем.
 
 Решение тика несёт ещё и `Stale` — все пути, которые сторож назвал в этой
 пачке, **включая** структурные. Это не про строки, а про кэши: миниатюры
@@ -1010,38 +1146,34 @@ UI-потоке. Второй заход на ту же проблему — с�
   обогнанное намерение, планирует умолчание (подъём — покинутая папка,
   иначе память LRU 64). `DecideArrival` — единственное потребление
   намерения (чужой листинг и пустой список оставляют ждать).
-  `DecideWatchTick` поверх `FolderChanges`: стоп / подождать / перечитать /
-  перечитать строки; идемпотентен.
+  `SetArrivalHere` — намерение операции только для папки на экране.
+  `RewriteMemory` — папка перенесена Wander'ом: открытая папка, память и
+  намерение идут за ней. `DecideWatchTick` поверх `FolderChanges`: стоп /
+  подождать / перечитать (с парами переименований) / перечитать строки;
+  идемпотентен.
 - **`ListingDiff`** — «текущие строки + свежий листинг → план»
   (`RemoveAt` / `Insert` / `Move` / `Replace` / пересобрать). Неизменённая
-  строка не порождает правки и не теряет контейнер. Пересборка (`Reset`,
-  панель при нём уходит в начало прокрутки) — только когда общего нет,
-  общие строки идут в другом порядке (сортировка) или ушло + пришло больше
-  256. Порядок сравнивается по общим строкам, не позиция в позицию: до
-  2026-09-21 один файл, удалённый в первой половине папки, сдвигал всё ниже
-  и отматывал список наверх.
-- **`CurrentRowFallback`** — текущий файл ушёл из папки (`Del`, удалён в
-  программе, где был открыт, перенесён): текущим становится следующий
-  уцелевший, иначе ближайший перед ним — **выделен**, каретка и клавиатура
-  на нём, без прокрутки [решение 2026-09-21: одно правило на все случаи; в
-  Проводнике — рамка без выделения, и панель просмотра осталась бы пустой].
-  `ReconcileEntries` уход только замечает (`Departure`) и выделение не
-  гасит; `SettleDeparture` решает после `ApplyArrival`: намерение поставило
-  своё (переименование, откат, `Del` со своим `NextAfterRemoval` — то же
-  правило, спрошенное заранее) — больше ничего; иначе преемник. Поэтому
-  панель идёт с ушедшего снимка сразу на следующий, не через «ничего не
-  выделено». Строка, которую лишь спрятал фильтр (оценку сменили под
-  фильтром по звёздам), уходит так же [решение 2026-09-22; до него
-  выделение снималось и клавиатура падала на окно]. `CurrentRowLeft` →
-  `FileListView`: клавиатура на строку, если была в списке или нигде; окно
-  не активно — после `Activated`.
+  строка не порождает правки и не теряет контейнер. Двигаются только строки
+  вне наибольшей возрастающей подпоследовательности новых мест (n log n):
+  один снимок, уехавший по дате в другой конец, — один `Move`; мешающая
+  переезжающая строка отходит в конец и возвращается на своё место.
+  Пересборка (`Reset`, список уходит в начало прокрутки) — только когда
+  общего нет, общих строк в своём порядке меньше половины (сортировка) или
+  правок любого вида больше 256.
+- **`CurrentRowFallback`** — выделенный файл ушёл из списка (`Del`, удалён
+  в программе, где был открыт, перенесён, спрятан фильтром или настройкой):
+  текущим становится следующий уцелевший, иначе ближайший перед ним —
+  **выделен**, каретка и клавиатура на нём, без прокрутки [решения
+  2026-09-21 и 2026-09-22: одно правило на все причины; в Проводнике —
+  рамка без выделения, и панель просмотра осталась бы пустой]. Спрашивает
+  `ListingArrival` (модель окна) после приземления строк; `Del` задаёт его
+  заранее (`NextAfterRemoval`) намерением с клавиатурой.
 - **`ArrivalIntent`** — одно отложенное намерение «что выделить, когда
   долетит»: установка заменяет, применение одно.
 
-Инварианты — `FolderSessionTests` / `ListingDiffTests`. У VM осознанно:
-правило спиннера (тайминг вокруг `Task.WhenAny`), восстановление статуса
-операции поверх «N элементов», мост `FocusListAfterRestore` — тестируемого
-содержания нет.
+Инварианты — `FolderSessionTests` / `ListingDiffTests` / `ListRulesTests`.
+У VM осознанно: правило спиннера (тайминг вокруг `Task.WhenAny`),
+восстановление статуса операции поверх «N элементов».
 
 ## Поиск
 
@@ -1376,13 +1508,17 @@ MainViewModel.ApplyRating(строки, поле, значение)
 ```
 
 - **Выделение.** `record` не правится на месте — замена, список выкидывает
-  объект из `SelectedItems`. `ReconcileEntries` оборачивает **любую**
-  пересборку `Entries` (точечную и `SyncEntries`): выделение по путям до и
-  после; `_rowsReplacing` глушит `SelectedEntry` / `SelectedEntries` на
-  время (иначе три замены проводили панель просмотра по трём чужим фото).
-  Возврат — `SelectionRefreshRequested`: без прокрутки и фокуса (в отличие
-  от `SelectionRestoreRequested`). Порядок: сначала «главный»
-  (`SelectedItem` схлопывает множественное), потом набор.
+  объект из `SelectedItems`. Любая пересборка `Entries` (точечная и
+  `SyncEntries`) идёт под `IsSyncingRows` — отчёты списка на это время не
+  шлются (иначе три замены проводили панель просмотра по трём чужим фото),
+  затем приземление (`ListingLanded`, причина `RowsReplaced` у точечной):
+  модель возвращает выделение по путям одним вызовом, без прокрутки и
+  фокуса.
+- **Оценка видна во всех видах** (J4): «Таблица» — столбец; «Галерея» и
+  «Крупные значки» — бейдж: пустой `ContentControl`, шаблон подкладывает
+  триггер на `Rating` (у значков — светлая плашка `IconsRatingBadge`,
+  +2 визуала на ячейку без оценки: 6 → 8); «Плитка» — звёзды второй
+  строкой вместо типа (`TileSecondLineConverter`), без нового визуала.
 - **Сторож** — `DirectoryChange` + `FolderChanges`: изменился состав →
   `Refresh()`; изменилось содержимое известных строк → перечитать их;
   неизвестный файл → `Refresh()`. Прежнее глушение по времени **теряло**
@@ -1408,17 +1544,16 @@ MainViewModel.ApplyRating(строки, поле, значение)
   отдаёт объединение только если **все** члены — метаданные.
 - **`Ctrl+Z` переноса** — `IUndoableAction.MovesOnUndo`: пары «где
   сейчас → куда вернётся» (`MoveAction`; `CompositeAction` — в порядке
-  отката), `UndoLast` ведёт по ним листинг, историю и закладки через
-  `FollowRelocatedAsync` — тот же шаг, что после броска или `Ctrl+V`
-  (`PathRewrite.Under`, `NavigationService.RewritePaths`,
-  `Bookmarks.Follow`); открытая папка, вернувшаяся на место, не
+  отката), `UndoLast` ведёт по ним всех держателей пути через
+  `FollowRelocated` — тот же шаг, что после броска или `Ctrl+V`
+  (`PathFollowing`, модель окна); открытая папка, вернувшаяся на место, не
   оставляет список на опустевшем пути.
 
 ### Проход по оценкам — второй
 
 ```
 RefreshFolderAsync (листинг + свёртка, пул)
-   ├→ AutoSelectViewMode() — только при входе, не на F5
+   ├→ ChooseView() — только при входе, не на F5
    ├→ _search.SetSource() — строки на экране
    └→ StartRatingPass() → RatedListing.WithRatings() (пул, отмена) → SetSource() с Rating
 ```
@@ -1465,8 +1600,13 @@ RAW набирает ровно 50 %. Минимума нет. Расширен�
 открытой папкой**, «Автоматически» снимает его, «Сделать видом по умолчанию»
 пишет настройку и снимает закрепление с этой папки (иначе она не пошла бы за
 следующим умолчанием). `ViewMode` (enum) живёт в `Core/Folders`. Хранение
-закреплений — `FolderSettingsBook`, ниже («База параметров папок»). Не
-`desktop.ini` (PLAN H1).
+закреплений — `FolderSettingsBook`, ниже («База параметров папок»).
+Подсказка чужого `desktop.ini` (H1, 2026-09-23): перечисление видело файл
+(флаг до фильтра видимости — он скрытый и системный) — на приходе, на пуле
+с листингом, читается `[ViewState] FolderType=` (`Folders/DesktopIni`,
+тест); `Pictures` / `Photos` — ещё один факт `ViewChoice.Decide`:
+«Галерея» с причиной «авто: снимки» и без снимков в листинге. Не пишется
+(Z1).
 
 ### Фон галереи — палитра
 
@@ -1484,11 +1624,12 @@ RAW набирает ровно 50 %. Минимума нет. Расширен�
 
 | Кто | За что |
 |---|---|
-| `MainWindow` | тулбар, адрес, статус-бар, глобальные хоткеи, сборка меню, исполнение областей и геометрии (решения — `Core/Layout/`) |
-| `Views/FolderTreesView` | обе панели папок: клик открывает, шеврон раскрывает, drag узла, правый клик — цель, `Shift` + колесо, коалесированный обход, полоса «+» |
-| `Views/FileListView` | все виды и общие жесты: выделение, рамка, взведение drag, двойной клик, rename на месте, type-ahead, `Ctrl` + колесо, меню |
+| `MainWindow` | тулбар, адрес, статус-бар, глобальные хоткеи, сборка меню, причины прихода фокуса и исполнение эффектов вью (модель окна), геометрия (решения — `Core/Layout/`) |
+| `Controllers/WorkspaceController` | исполнитель модели окна: очередь событий, эффекты, трасса |
+| `Views/FolderTreesView` | обе панели папок как адаптер модели: ввод в события, фокус на строку курсора, drag строки, редактор имени, `Shift` + колесо, полоса «+» |
+| `Views/FileListView` | все виды и общие жесты: выделение (отчёт модели, применение одним вызовом), рамка, взведение drag, двойной клик, rename на месте, type-ahead, `Ctrl` + колесо, меню |
 | `Views/PreviewPane` | панель просмотра, зум, транспорт, WebView2 |
-| `DragPreview/DropTargetController` | приём drop: папка под курсором, разрешён ли, что сделает, подсветка |
+| `DragPreview/DropTargetController` | приём drop: папка под курсором, разрешён ли, что сделает, подсветка; удержание над папкой и прокрутка у края |
 | `DragPreview/OutgoingDrag` | перетаскивание наружу: плашка, курсор, формулировка |
 
 **`MainViewModel` живёт при окне** (корень `Wander.App`, namespace
@@ -1499,15 +1640,23 @@ RAW набирает ровно 50 %. Минимума нет. Расширен�
 выполняет VM (тем же путём с логом, guard, undo). `Execute` держит обвязку
 (отказ, `Handled`, снятие подсветки в `finally`). Один на все поверхности.
 Проверки повторяются на самом drop'е, не с последнего `DragOver`
-(модификаторы меняются между движением и отпусканием).
+(модификаторы меняются между движением и отпусканием). Удерживаемый drag —
+на его таймере (40 мс): у края поверхности прокрутка (`Layout/EdgeScroll`:
+зона 24 px, до 1500 px/с, рост квадратичный), над папкой после задержки
+(`Layout/DragHover`: панель — 2 × `MouseHoverTime`, список — 3 ×) —
+`HoverOpened`: окно раскрывает строку панели (`ChevronToggled`) или входит
+в папку списка; архив, корзина, перетаскиваемая папка и всё под ней — нет;
+отката нет. Сброс — уход за окно (`DragLeave` вне границ), бросок, полоса
+закладок.
 
 Граница окно ↔ список: `DragStartRequested` (жест у того, за что
 схватились; drag ведёт `OutgoingDrag`; загорание полосы закладок сообщает
 окно), `ContextMenuRequested` (модель — Core, шелл добавляет окно); вниз
-`FocusList()`, `FocusRow()`, `ClearSelection()`, `StartRename()`. Окно ↔
-панели: `ContextMenuRequested`, `FolderTargeted` (список отдаёт выделение),
-`FocusListRequested` (`Esc`); вниз `FocusBookmarks()` / `FocusDrives()` /
-`HasBookmarks` / `PaneOf()` / `ShowFocusOutline()` / `RevealAndFocus()`;
+`FocusList()`, `ClearSelection()`, `StartRename()` и эффекты модели
+`ApplySelection()`, `FocusRow()`, `OpenEditor()`. Окно ↔ панели:
+`ContextMenuRequested`, `FocusListRequested` (`Esc`); вниз
+`FocusBookmarks()` / `FocusDrives()` / `HasBookmarks` / `PaneOf()` /
+`ShowFocusOutline()` / `RevealAndFocus()` / `FocusRow()`;
 `Connect(drops, drag)` — общие `DropTargetController` и `OutgoingDrag`.
 
 ### Клавиатурные области
@@ -1537,19 +1686,20 @@ RAW набирает ровно 50 %. Минимума нет. Расширен�
   меняется цвет), `OnZoneFocusChanged` на `GotKeyboardFocus` **окна**.
   `GridSplitter` из обхода убран (WPF делает его фокусируемым) — размер
   панелей только мышью.
-- **`Ctrl+1`** — `WindowZones.FolderPane`: раскрыть дерево в **той** панели,
-  из которой открыли (`RevealCurrentIn`), повтор переключает; не из дерева —
-  `_lastFolderPane`. В «Диски» при открытой папке из закладок — на строку,
-  которую «Диски» держат, раскрытие — только если её нет (2026-09-22,
-  «Навигация и дерево»). `Ctrl+Shift+E` — то же без переключения; `Ctrl+2`
-  — список.
-- **В дереве стрелки не навигируют**: `SelectedItemChanged` летит от мыши,
-  клавиатуры и программно; навигирует только мышь (флаг в
-  `Tree_PreviewMouseLeftButtonDown`); клавиатура переносит цель операций
-  (`TargetTreeNode` = `SelectExternalPath`), список отпускает выделение;
-  вход — `Enter` в `Tree_PreviewKeyDown` (иначе `KeyBinding` окна открыл бы
-  выделенное в списке). Клик по уже выделенной строке события не рождает —
-  `PreviewMouseLeftButtonDown` отрабатывает сам: мышью «открыть» всегда.
+- **`Ctrl+1`** — `WindowZones.FolderPane`: раскрыть панель, из которой
+  открыли, до открытой папки (правило модели на `ZoneEntered` с причиной
+  «хоткей»), повтор переключает; не из панели — `_lastFolderPane`. В
+  «Диски» при открытой папке из закладок — на их курсор, раскрытие — только
+  если курсора нет. `Ctrl+Shift+E` — то же без переключения; `Ctrl+2` —
+  список. `Tab` в панель без места — на прошлый курсор панели, иначе на
+  первую строку, без навигации.
+- **В панели стрелки двигают курсор, не открывают**: клавиши панели —
+  события модели (`CaretMoveRequested`), открывает клик (`RowClicked`, в
+  том числе по строке курсора), `Enter` (`RowActivated`) и — с настройкой
+  «стрелки открывают» — сама стрелка через троттл. Ключи ловит
+  `List_PreviewKeyDown` панели раньше `KeyBinding` окна. Выделение списка
+  от прихода клавиатуры в панель не снимается — рисуется неактивным;
+  цель — по зоне клавиатуры.
 - **Зачем контролы**: пока три `ItemsControl` жили в окне, каждый режим —
   правка в четырёх местах. Режим = контейнер и триггер видимости в
   `FileListView`, жесты — стиль `ListGestures`; галерея добавилась
@@ -1592,7 +1742,7 @@ PLAN R2/R3):
   `ContentControl`, `DataTemplate.Trigger` подкладывает `Content` (11 → 9 /
   13 визуалов).
 
-Нижняя планка — картинка + подпись, 5 визуалов; продуктовые 6–9 против
+Нижняя планка — картинка + подпись, 5 визуалов; продуктовые 8–9 против
 18–23. `LAYOUT <вид> container: N visuals` в журнале — регресс виден.
 
 ### TileLayout + VirtualizingWrapPanel
@@ -1752,15 +1902,15 @@ SYS ws=431 private=360 gen=167/155/134 alloc=+45 loh=6 handles=1060 threads=40 c
   на `Background` после отрисовки перехода; листинг уже пришёл — очистка
   пропускается, один своп; медленная — очистка сразу и спиннер. Порядок
   держится очередью `Background`.
-- **Остальной диск на пуле**: `TreeNodeViewModel.RefreshChildrenAsync`
-  (`F5`, тумблеры; сверка на диспетчере), `PruneMissingAsync`,
-  `OpenStartFolderAsync`, открытие файла для панели, размер кэша. Синхронным
-  остался `Enumerate` уровня при первом раскрытии (TECHDEBT).
-- **Клавиатура дерева коалесируется** (`NavigateFromTree`, `TreeNavBurstMs`
-  / `TreeNavSettleMs`); тот же метод гасит навигацию в уже текущий путь —
-  эхо `ExpandTo`, которое затирало `ArrivalIntent`.
-- **Шевроны оптимистичные**: уровень одним `Enumerate`, `ProbeForChevrons`
-  снимает у листьев фоном.
+- **Остальной диск на пуле**: уровни панелей и корни дисков
+  (`ReadBranch` модели окна; ответ с эпохой, сверка — правилом),
+  `PruneMissingAsync`, `OpenStartFolderAsync`, открытие файла для панели,
+  размер кэша.
+- **Клавиатура панели коалесируется** (`TreeNavThrottle`: одиночное
+  нажатие — сразу, серия на хвосте перехода — один переход после покоя,
+  таймер — исполнителя); навигация в уже открытую папку гасится правилом.
+- **Шевроны оптимистичные**: строка с шевроном, пока проба фоном
+  (`ProbeChevrons`) не скажет, что подпапок нет.
 - **Иконки**: `SHGetFileInfo` сериализован (`_shellIconLock` — под
   конкуренцией возвращал пусто для handler-иконок, жертва менялась);
   негативный кэш `_missing` только для миниатюр (у Small / Normal null —
@@ -1871,10 +2021,9 @@ false` — сплит только на картинку, футер один и
 - **Подсветка кода**: AvalonEdit по расширению включая `.diff` / `.patch`;
   свои `Highlighting/*.xshd` (`Batch`, `ShaderLab`, `YAML` — ассеты Unity)
   через `HighlightingCatalog.EnsureRegistered()`; битый `.xshd` пропускается.
-- **Выбор папки в дереве** — в обход `SelectedEntry` (двусторонне связан с
-  `SelectedItem`, элемент не из списка откатывается в `null`):
-  `SelectExternalPath` ставит `SelectedEntries` и `Preview.SetPrimary`,
-  применяется после листинга.
+- **Строка панели в панели просмотра** — предмет `PreviewSubject` (цель —
+  строка панели): запись папки читается на пуле (`ShowPanelFolder`) и
+  показывается, если цель ещё она.
 - Футер: пусто → папка (рекурсивно, async); файл → имя / размер / дата +
   EXIF (`MetadataExtractor`, RAW включая CR2 / CR3 / NEF / ARW / DNG); папка
   → count + size; мульти → агрегат. Под ним — спутники: список, GUID из
@@ -2159,9 +2308,9 @@ Wander` — так задумано, отдельной папки для отл
 проверяются `DirectoryExists` там же на пуле, и ровно один пропавший
 кандидат усыновляется (`Adopt`) — так закрепление находит папку,
 переименованную снаружи; две копии с одной датой (robocopy `/DCOPY:T`) —
-ничего. Переименование и перенос Wander'ом — `Follow` из
-`FollowRelocatedAsync` (там же `NavigationController.RewriteRecentPaths`
-для MRU адресной строки, AD3-хвост). Миграция: `SessionState.ManualViewModes`
+ничего. Переименование и перенос Wander'ом — `Follow` по правилу
+`PathFollowing` (модель окна; там же MRU адресной строки, память выделения
+и буфер, AD3-хвост). Миграция: `SessionState.ManualViewModes`
 (до 128 закреплений 0.4.x) читаются один раз в книгу, если у папки ещё нет
 записи, и больше не пишутся; глобальный `SessionState.ViewMode` не
 переносится — умолчание стало настройкой (решение 2026-09-23).
@@ -2220,8 +2369,10 @@ M s: сообщение`» — при смене строки, раз в мин�
 имени — `(typed)`, пока пути маскируются), `Click:` (кнопка мыши, зона,
 строка / папка / кнопка), `Menu:` (класс-обработчик `MenuItem.Click`:
 меню — своё окно), `Focus:` (зона → зона), `Selection:`
-(`MainViewModel.SelectedEntries`) и контрольные строки 0.4.1 `Target:`,
-`tree: highlight`, `Delete: no target`.
+(проекция выделения модели) и трасса модели окна: `WS <событие>;
+effects: …` строкой на событие (`WorkspaceController`) и `WS target: …` на
+смену производной цели. Контрольные строки 0.4.1 (`Target:`, `tree:
+highlight`, `Delete: no target`) сняты с блоком 2 — их заменила трасса.
 
 **`thumbs\*.png`** — `ThumbnailDiskCache` (Platform): имя SHA-256 от «путь +
 mtime + размер» (изменившийся файл — другое имя, инвалидации не нужно);

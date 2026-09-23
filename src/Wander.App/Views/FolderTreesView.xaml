@@ -5,15 +5,16 @@
              xmlns:controls="clr-namespace:Wander.App.Controls"
              xmlns:res="clr-namespace:Wander.App.Resources">
     <!--
-        The two folder panels: bookmarks on top, the drives tree below, a
+        The two folder panels: bookmarks on top, the drives below, a
         draggable divider between them.
 
-        Everything that is "how a folder panel behaves" lives here — the row
-        template both trees share, the expand/collapse semantics, the drag of
-        a node, the right click that targets a folder without opening it, and
-        the bookmarks strip that accepts a dropped folder. MainWindow keeps
-        what surrounds the pane and answers the four things this control
-        cannot finish on its own: the context menu, the operation target, the
+        Each panel is a plain list of the lines the model says are shown
+        (decision P3, REDESIGN 4.7): the indent is the line's depth, the
+        tree is only in what the list is made from. What is lit, open, the
+        open folder's place and what a menu is about are flags on the line,
+        bound one way; clicks and keys go to the model as events
+        (code-behind). MainWindow keeps what surrounds the pane and answers
+        what this control cannot finish on its own: the context menu, the
         keyboard going back to the list, and running a drop through the view
         model.
     -->
@@ -22,76 +23,31 @@
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
 
         <!--
-            The expander chevron. Its own style so the row template can put
-            it in a fixed-width column and the hit test in code-behind can
-            keep recognising it by type (ToggleButton).
+            One line of either panel. The highlight spans the whole line,
+            the way Explorer draws it, and only the content is indented.
+            Colours are Explorer's: #E5F3FB on hover, #CCE8FF lit in the
+            panel with the keyboard, #E8E8E8 lit in the other one. The
+            chevron is not a button: a click on it is an event for the
+            model (FolderTreesView), and a button would keep its own state.
+            Hidden folders fade to 0.55, as in the file list.
         -->
-        <Style x:Key="TreeExpander" TargetType="ToggleButton">
-            <Setter Property="Focusable" Value="False"/>
-            <Setter Property="Width" Value="16"/>
-            <Setter Property="Height" Value="16"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ToggleButton">
-                        <Border Background="Transparent" Width="16" Height="16">
-                            <Path x:Name="Arrow"
-                                  Data="M 0,0 L 5,4.5 L 0,9 Z"
-                                  Fill="{StaticResource TreeChevron}"
-                                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Arrow" Property="Data" Value="M 0,0 L 9,0 L 4.5,5 Z"/>
-                                <Setter TargetName="Arrow" Property="Fill" Value="{StaticResource TreeChevronExpanded}"/>
-                            </Trigger>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Arrow" Property="Fill" Value="{StaticResource TreeChevronHover}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <!--
-            Shared TreeViewItem style for the bookmarks and drives panels.
-
-            Retemplated rather than restyled, because the stock template
-            cannot do the one thing that matters here: highlight and accept
-            clicks across the *whole row*, the way Explorer does. Nesting is
-            what indents the stock template, so its highlight starts at the
-            label; here the row border spans the full width and only its
-            content is indented (TreeIndentConverter).
-
-            Colours are Explorer's: #E5F3FB on hover, #CCE8FF selected,
-            #E8E8E8 for a selection in a panel that lost focus.
-
-            The Hidden/System cues match the file list — Hidden fades to
-            0.55 opacity, System goes italic, both stack.
-        -->
-        <Style x:Key="WanderTreeViewItem" TargetType="TreeViewItem">
-            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
-            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
+        <Style x:Key="PanelLine" TargetType="controls:FolderPanelItem">
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="HorizontalContentAlignment" Value="Left"/>
-            <!-- A row taking the keyboard scrolls the panel up and down to
+            <Setter Property="Padding" Value="0"/>
+            <!-- A line taking the keyboard scrolls the panel up and down to
                  it, not sideways to the end of a long name, unless the
-                 setting asks for that: TreeViewItem_RequestBringIntoView. -->
-            <EventSetter Event="FrameworkElement.RequestBringIntoView" Handler="TreeViewItem_RequestBringIntoView"/>
+                 setting asks for that: Line_RequestBringIntoView. -->
+            <EventSetter Event="FrameworkElement.RequestBringIntoView" Handler="Line_RequestBringIntoView"/>
             <Setter Property="Template">
                 <Setter.Value>
-                    <ControlTemplate TargetType="TreeViewItem">
+                    <ControlTemplate TargetType="controls:FolderPanelItem">
                         <StackPanel>
                             <!--
                                 The thin rule between the special folders
-                                and the user's own bookmarks. It lives in
-                                the row template, above the row, so it
-                                spans the panel's full width — a border on
-                                the row content would start after the
-                                chevron column and read as an indented
-                                underline. Inert in the drives tree: no
-                                node there sets the flag.
+                                and the user's own bookmarks, above the line
+                                so it spans the panel's full width. Inert in
+                                the drives: no row there sets the flag.
                             -->
                             <Border x:Name="SectionRule"
                                     Height="1"
@@ -102,56 +58,74 @@
                                     Background="Transparent"
                                     MinHeight="22"
                                     SnapsToDevicePixels="True">
-                                <Grid Margin="{Binding RelativeSource={RelativeSource AncestorType=TreeViewItem}, Converter={StaticResource TreeIndent}}">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="16"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <ToggleButton x:Name="Expander"
-                                                  Grid.Column="0"
-                                                  Style="{StaticResource TreeExpander}"
-                                                  ClickMode="Press"
-                                                  IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"/>
+                                <Grid>
+                                    <Grid Margin="{Binding Depth, Converter={StaticResource TreeIndent}}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="16"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Border x:Name="Chevron"
+                                                Grid.Column="0"
+                                                Width="16" Height="16"
+                                                Background="Transparent"
+                                                Visibility="Hidden">
+                                            <Path x:Name="Arrow"
+                                                  Data="M 0,0 L 5,4.5 L 0,9 Z"
+                                                  Fill="{StaticResource TreeChevron}"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <!--
+                                            Alignment comes from the item style,
+                                            not baked in: the drives keep their
+                                            lines only as wide as their names
+                                            (so long paths scroll sideways),
+                                            while the bookmarks stretch them so
+                                            the "..." menu can sit at the right
+                                            edge.
+                                        -->
+                                        <ContentPresenter Grid.Column="1"
+                                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                          VerticalAlignment="Center"/>
+                                    </Grid>
                                     <!--
-                                        Alignment comes from the item style,
-                                        not baked in: the drives tree keeps
-                                        its rows only as wide as their names
-                                        (so long paths scroll sideways),
-                                        while the bookmarks tree stretches
-                                        them so the "…" menu can sit at the
-                                        right edge.
+                                        What a context menu is open for
+                                        (decision B4): the caret's frame,
+                                        drawn over the line without taking
+                                        room, the highlight staying where it
+                                        was.
                                     -->
-                                    <ContentPresenter x:Name="PART_Header"
-                                                      Grid.Column="1"
-                                                      ContentSource="Header"
-                                                      HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                                      VerticalAlignment="Center"/>
+                                    <Border x:Name="MenuFrame"
+                                            BorderThickness="1"
+                                            BorderBrush="Transparent"
+                                            IsHitTestVisible="False"/>
                                 </Grid>
                             </Border>
-                            <ItemsPresenter x:Name="ItemsHost"/>
                         </StackPanel>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsExpanded" Value="False">
-                                <Setter TargetName="ItemsHost" Property="Visibility" Value="Collapsed"/>
-                            </Trigger>
-                            <Trigger Property="HasItems" Value="False">
-                                <Setter TargetName="Expander" Property="Visibility" Value="Hidden"/>
+                            <DataTrigger Binding="{Binding HasChevron}" Value="True">
+                                <Setter TargetName="Chevron" Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                <Setter TargetName="Arrow" Property="Data" Value="M 0,0 L 9,0 L 4.5,5 Z"/>
+                                <Setter TargetName="Arrow" Property="Fill" Value="{StaticResource TreeChevronExpanded}"/>
+                            </DataTrigger>
+                            <Trigger Property="IsMouseOver" SourceName="Chevron" Value="True">
+                                <Setter TargetName="Arrow" Property="Fill" Value="{StaticResource TreeChevronHover}"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" SourceName="Row" Value="True">
                                 <Setter TargetName="Row" Property="Background" Value="{StaticResource RowHover}"/>
                             </Trigger>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Row" Property="Background" Value="{StaticResource RowSelected}"/>
-                            </Trigger>
-                            <MultiTrigger>
-                                <MultiTrigger.Conditions>
-                                    <Condition Property="IsSelected" Value="True"/>
-                                    <Condition Property="IsSelectionActive" Value="False"/>
-                                </MultiTrigger.Conditions>
+                            <DataTrigger Binding="{Binding IsCaret}" Value="True">
                                 <Setter TargetName="Row" Property="Background" Value="{StaticResource RowSelectedInactive}"/>
-                            </MultiTrigger>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                <Setter TargetName="Row" Property="Background" Value="{StaticResource RowSelected}"/>
+                            </DataTrigger>
                             <DataTrigger Binding="{Binding StartsUserSection}" Value="True">
                                 <Setter TargetName="SectionRule" Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsMenuSubject}" Value="True">
+                                <Setter TargetName="MenuFrame" Property="BorderBrush" Value="{StaticResource RowCaretBorder}"/>
                             </DataTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -165,13 +139,46 @@
         </Style>
 
         <!--
+            The name of a line. The open folder's place is drawn bold - "where
+            I am", when the cursor has moved off it (decision B24). A bookmark
+            whose folder is gone stays in the list, greyed and italic:
+            removing the row would look like Wander lost the bookmark; the
+            user is the one who decides whether it goes.
+        -->
+        <Style x:Key="PanelLineName" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsLocation}" Value="True">
+                    <Setter Property="FontWeight" Value="SemiBold"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsMissing}" Value="True">
+                    <Setter Property="Foreground" Value="{StaticResource TextDisabled}"/>
+                    <Setter Property="FontStyle" Value="Italic"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- The panel itself: no chrome of its own but the frame the focus outline paints. -->
+        <Style x:Key="PanelList" TargetType="controls:FolderPanelList">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True"/>
+            <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel"/>
+        </Style>
+
+        <!--
             Right-click on the empty part of a navigation panel. Not the file
             menu — nothing was clicked — but the handful of settings that get
             flipped often enough that walking to Параметры for them is the
             annoying part: what the listing shows, whether the arrow keys
             open folders, whether deleting asks first.
 
-            One instance shared by both trees. A ContextMenu is not in the
+            One instance shared by both panels. A ContextMenu is not in the
             visual tree, so its DataContext does not inherit; PlacementTarget
             is how it reaches the window's own.
         -->
@@ -203,12 +210,12 @@
     <Grid Background="{StaticResource PaneBackground}">
         <Grid.RowDefinitions>
             <!--
-                Header, tree and the "+" strip share one row, so the
+                Header, list and the "+" strip share one row, so the
                 divider has a single height to move. Splitting them
                 across rows is what made dragging the divider grow the
                 "+" strip instead of the bookmarks: a splitter with
                 PreviousAndNext resizes the rows it sits between, and
-                the row above it was the strip's, not the tree's.
+                the row above it was the strip's, not the list's.
             -->
             <RowDefinition x:Name="BookmarksRow" Height="200" MinHeight="56"/>
             <RowDefinition Height="Auto"/>
@@ -217,7 +224,7 @@
 
         <!--
             The "keyboard is here" outline belongs to the whole
-            bookmarks region, not to the tree inside it: the header
+            bookmarks region, not to the list inside it: the header
             and the "+" strip are part of the same panel, and a
             frame that starts below the header and stops above the
             strip reads as a box around nothing in particular. The
@@ -267,7 +274,7 @@
                 Drop zone for new bookmarks. Sits at the bottom of
                 the bookmarks region, right above the divider, and is
                 deliberately narrower than the panel so it reads as a
-                target rather than as another row of the tree.
+                target rather than as another line of the panel.
 
                 Not a button: nothing happens on a click, so it must
                 not offer a hand cursor or light up under an idle
@@ -301,70 +308,47 @@
                 but DragOver/Drop are intentionally NOT attached here:
                 the parent BookmarksPanel handles all drop events so
                 that drops anywhere in this region (header, empty
-                area, between items) add the dragged folder(s) as
+                area, between lines) add the dragged folder(s) as
                 bookmarks rather than copying into the current folder.
             -->
-            <TreeView x:Name="BookmarksTree"
-                      ContextMenu="{StaticResource PanelSettingsMenu}"
-                      ItemsSource="{Binding Bookmarks.Items}"
-                      SelectedItemChanged="Bookmarks_SelectedItemChanged"
-                      PreviewMouseLeftButtonDown="Tree_PreviewMouseLeftButtonDown"
-                      PreviewMouseLeftButtonUp="Tree_PreviewMouseLeftButtonUp"
-                      PreviewMouseMove="Tree_PreviewMouseMove"
-                      PreviewMouseWheel="Tree_PreviewMouseWheel"
-                      PreviewMouseRightButtonDown="BookmarksTree_PreviewMouseRightButtonDown"
-                      PreviewMouseRightButtonUp="BookmarksTree_PreviewMouseRightButtonUp"
-                      PreviewKeyDown="Tree_PreviewKeyDown"
-                      TreeViewItem.Expanded="TreeViewItem_Expanded"
-                      TreeViewItem.Collapsed="TreeViewItem_Collapsed"
-                      AllowDrop="True"
-                      Visibility="{Binding IsBookmarksExpanded, Converter={StaticResource BoolToVisibility}}"
-                      BorderThickness="0"
-                      Background="Transparent">
-                <TreeView.ItemContainerStyle>
+            <controls:FolderPanelList x:Name="BookmarksList"
+                                      Style="{StaticResource PanelList}"
+                                      ContextMenu="{StaticResource PanelSettingsMenu}"
+                                      ItemsSource="{Binding Trees.BookmarkLines}"
+                                      PreviewMouseLeftButtonDown="List_PreviewMouseLeftButtonDown"
+                                      PreviewMouseLeftButtonUp="List_PreviewMouseLeftButtonUp"
+                                      PreviewMouseMove="List_PreviewMouseMove"
+                                      PreviewMouseWheel="List_PreviewMouseWheel"
+                                      PreviewMouseRightButtonDown="List_PreviewMouseRightButtonDown"
+                                      PreviewMouseRightButtonUp="List_PreviewMouseRightButtonUp"
+                                      PreviewKeyDown="List_PreviewKeyDown"
+                                      PreviewKeyUp="List_PreviewKeyUp"
+                                      PreviewTextInput="List_PreviewTextInput"
+                                      AllowDrop="True"
+                                      Visibility="{Binding IsBookmarksExpanded, Converter={StaticResource BoolToVisibility}}">
+                <controls:FolderPanelList.ItemContainerStyle>
                     <!--
-                        Stretched rows, unlike the drives tree: the
-                        "…" menu button lives at the right edge, so
-                        the row has to reach it. Bookmark names are
-                        short, so nothing is lost by giving up the
-                        horizontal scroll here.
+                        Stretched lines, unlike the drives: the "..." menu
+                        button lives at the right edge, so the line has to
+                        reach it. Bookmark names are short, so nothing is
+                        lost by giving up the sideways scroll here.
                     -->
-                    <Style TargetType="TreeViewItem" BasedOn="{StaticResource WanderTreeViewItem}">
+                    <Style TargetType="controls:FolderPanelItem" BasedOn="{StaticResource PanelLine}">
                         <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                     </Style>
-                </TreeView.ItemContainerStyle>
-                <TreeView.ItemTemplate>
-                    <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                        <!--
-                            The row's menu is built in code-behind
-                            (BookmarkRowMenu_Click), not declared
-                            here. A ContextMenu declared inside a
-                            DataTemplate lives in its own name scope
-                            and its own visual tree, so the
-                            ElementName binding that used to reach
-                            the window for the command never
-                            resolved — the menu opened and the item
-                            did nothing.
-                        -->
+                </controls:FolderPanelList.ItemContainerStyle>
+                <controls:FolderPanelList.ItemTemplate>
+                    <DataTemplate>
                         <DockPanel Background="Transparent">
                             <!--
-                                The row's own menu, reachable without
-                                the right mouse button. Only the
-                                user's own bookmarks get it — the
-                                special folders are toggled in
-                                settings and have nothing to remove.
-                                It opens the same menu the right
-                                click does.
-
-                                Always visible rather than on hover:
-                                a TreeViewItem's IsMouseOver covers
-                                its whole subtree, so hovering a child
-                                would light the parent's button too,
-                                and there is no way to reach the row
-                                border's own hover state from inside
-                                the item template. A muted glyph on
-                                the handful of rows that have one is
-                                the cheaper trade.
+                                The line's own menu, reachable without
+                                the right mouse button. Only the user's
+                                own bookmarks get it - the special
+                                folders are toggled in settings and have
+                                nothing to remove. It opens the same menu
+                                the right click does. Always visible
+                                rather than on hover: a muted glyph on the
+                                handful of lines that have one.
                             -->
                             <Button DockPanel.Dock="Right"
                                     Width="18" Height="18"
@@ -406,54 +390,21 @@
                                 binding: the converter asks the shell
                                 on the spot, and a branch of forty
                                 folders is forty synchronous shell
-                                calls on the dispatcher, taken while
-                                the tree is trying to draw.
+                                calls on the dispatcher.
                             -->
                             <controls:AsyncIcon DockPanel.Dock="Left"
                                                 IconPath="{Binding FullPath}" IconSize="Small"
                                                 Width="16" Height="16" Margin="0,0,4,0"/>
-                            <!--
-                                A bookmark whose folder is gone
-                                stays in the list, greyed and
-                                italic. Removing the row would look
-                                like Wander lost the bookmark; the
-                                user is the one who decides whether
-                                it goes.
-                            -->
-                            <TextBlock x:Name="NameLabel" Text="{Binding Name}" VerticalAlignment="Center"
+                            <TextBlock x:Name="NameLabel" Text="{Binding Name}"
+                                       Style="{StaticResource PanelLineName}"
                                        TextTrimming="CharacterEllipsis"
-                                       ToolTip="{Binding FullPath}">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsMissing}" Value="True">
-                                                <Setter Property="Foreground" Value="{StaticResource TextDisabled}"/>
-                                                <Setter Property="FontStyle" Value="Italic"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
+                                       ToolTip="{Binding FullPath}"/>
                         </DockPanel>
-                    </HierarchicalDataTemplate>
-                </TreeView.ItemTemplate>
-            </TreeView>
+                    </DataTemplate>
+                </controls:FolderPanelList.ItemTemplate>
+            </controls:FolderPanelList>
         </DockPanel>
         </Border>
-
-        <!--
-            "Add bookmark" strip. It sits at the bottom of the
-            bookmarks region, right above the divider, and is
-            deliberately narrower than the panel so it reads as a
-            control rather than as another row of the tree. No
-            caption — a "+" and a tooltip; the text that used to be
-            here was a permanent instruction for something the user
-            learns once. Flat fill, no border, no gradient.
-
-            Two ways in: click adds the folder that is currently
-            open, drag-and-drop adds whatever is dropped on it.
-        -->
-
 
         <GridSplitter x:Name="BookmarksSplitter"
                       Grid.Row="1"
@@ -483,41 +434,36 @@
             <!--
                 No top margin: the outline is this panel's own edge, and
                 a four-pixel gap under the splitter put it where the eye
-                does not look for it. The rows keep their air from the
-                row template's MinHeight.
+                does not look for it. The lines keep their air from the
+                line template's MinHeight.
             -->
-            <TreeView x:Name="Tree"
-                      ContextMenu="{StaticResource PanelSettingsMenu}"
-                      ItemsSource="{Binding Trees.Roots}"
-                      SelectedItemChanged="Tree_SelectedItemChanged"
-                      PreviewMouseLeftButtonDown="Tree_PreviewMouseLeftButtonDown"
-                      PreviewMouseLeftButtonUp="Tree_PreviewMouseLeftButtonUp"
-                      PreviewMouseMove="Tree_PreviewMouseMove"
-                      PreviewMouseRightButtonDown="Tree_PreviewMouseRightButtonDown"
-                      PreviewMouseRightButtonUp="Tree_PreviewMouseRightButtonUp"
-                      PreviewMouseWheel="Tree_PreviewMouseWheel"
-                      PreviewKeyDown="Tree_PreviewKeyDown"
-                      TreeViewItem.Expanded="TreeViewItem_Expanded"
-                      TreeViewItem.Collapsed="TreeViewItem_Collapsed"
-                      AllowDrop="True"
-                      Background="Transparent"
-                      BorderThickness="1"
-                      BorderBrush="Transparent"
-                      DragOver="OnDragOver"
-                      Drop="OnDrop">
-                <TreeView.ItemContainerStyle>
-                    <Style TargetType="TreeViewItem" BasedOn="{StaticResource WanderTreeViewItem}"/>
-                </TreeView.ItemContainerStyle>
-                <TreeView.ItemTemplate>
-                    <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+            <controls:FolderPanelList x:Name="DrivesList"
+                                      Style="{StaticResource PanelList}"
+                                      ContextMenu="{StaticResource PanelSettingsMenu}"
+                                      ItemsSource="{Binding Trees.DriveLines}"
+                                      ItemContainerStyle="{StaticResource PanelLine}"
+                                      PreviewMouseLeftButtonDown="List_PreviewMouseLeftButtonDown"
+                                      PreviewMouseLeftButtonUp="List_PreviewMouseLeftButtonUp"
+                                      PreviewMouseMove="List_PreviewMouseMove"
+                                      PreviewMouseRightButtonDown="List_PreviewMouseRightButtonDown"
+                                      PreviewMouseRightButtonUp="List_PreviewMouseRightButtonUp"
+                                      PreviewMouseWheel="List_PreviewMouseWheel"
+                                      PreviewKeyDown="List_PreviewKeyDown"
+                                      PreviewKeyUp="List_PreviewKeyUp"
+                                      PreviewTextInput="List_PreviewTextInput"
+                                      AllowDrop="True"
+                                      DragOver="OnDragOver"
+                                      Drop="OnDrop">
+                <controls:FolderPanelList.ItemTemplate>
+                    <DataTemplate>
                         <StackPanel Orientation="Horizontal" Background="Transparent">
                             <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Small"
                                                 Width="16" Height="16" Margin="0,0,4,0"/>
-                            <TextBlock x:Name="NameLabel" Text="{Binding Name}" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="NameLabel" Text="{Binding Name}" Style="{StaticResource PanelLineName}"/>
                         </StackPanel>
-                    </HierarchicalDataTemplate>
-                </TreeView.ItemTemplate>
-            </TreeView>
+                    </DataTemplate>
+                </controls:FolderPanelList.ItemTemplate>
+            </controls:FolderPanelList>
         </DockPanel>
     </Grid>
 </UserControl>

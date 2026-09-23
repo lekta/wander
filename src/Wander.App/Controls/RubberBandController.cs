@@ -2,7 +2,10 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Threading;
+using Wander.App.Util;
 using Wander.Core.FileSystem;
+using Wander.Core.Layout;
 
 namespace Wander.App.Controls;
 
@@ -27,30 +30,47 @@ namespace Wander.App.Controls;
 /// </para>
 ///
 /// <para>
+/// Held at the top or the bottom of the list - or past it - the list scrolls
+/// that way (U2, <see cref="EdgeScroll"/>), and the rectangle stretches with
+/// it: its far corner stays on the content it was pressed on, not on the
+/// screen. A row that scrolls out of view while inside the rectangle stays
+/// selected - out of view it has no container to hit-test - until it is back
+/// in view and outside.
+/// </para>
+///
+/// <para>
 /// Implementation notes:
 /// </para>
 /// <list type="bullet">
 ///   <item>The marquee is one <see cref="RubberBandAdorner"/> on the host's
-///   adorner layer; each mouse move repaints it.</item>
+///   adorner layer; each mouse move and each scroll step repaints it.</item>
 ///   <item>Hit-testing walks the host's items and transforms each realised
-///   container's bounds back into host coordinates. Virtualised items are
-///   skipped — they are off-screen, so a visible rectangle cannot cover
-///   them anyway.</item>
+///   container's bounds back into host coordinates.</item>
 ///   <item>Mouse capture on the host guarantees the MouseUp even if the
 ///   cursor leaves the control; <c>LostMouseCapture</c> is the safety net.</item>
 /// </list>
 /// </summary>
 public sealed class RubberBandController {
+    /// <summary>How often a held rectangle looks at the edge.</summary>
+    private const int TickMs = 40;
+
     private readonly Func<IReadOnlyList<FileSystemEntry>> _items;
     private readonly Action<ItemsControl, IEnumerable<FileSystemEntry>> _setSelection;
     private readonly Action<ItemsControl> _clearSelection;
+    private readonly DispatcherTimer _tick;
 
     private ItemsControl? _host;
+    private ScrollViewer? _scroller;
     private AdornerLayer? _layer;
     private RubberBandAdorner? _adorner;
     private HashSet<FileSystemEntry>? _baseSelection;
+    private readonly HashSet<FileSystemEntry> _swept = new(ReferenceEqualityComparer.Instance);
     private Point _origin;
+    private double _originOffset;
+    private Point _current;
     private bool _armed;
+    private double _scrollCarry;
+    private long _lastTickMs;
 
 
     public RubberBandController(
@@ -60,6 +80,8 @@ public sealed class RubberBandController {
         _items = items;
         _setSelection = setSelection;
         _clearSelection = clearSelection;
+        _tick = new DispatcherTimer(DispatcherPriority.Input) { Interval = TimeSpan.FromMilliseconds(TickMs) };
+        _tick.Tick += OnTick;
     }
 
 
@@ -91,7 +113,10 @@ public sealed class RubberBandController {
         }
 
         _host = host;
+        _scroller = ListVisuals.FindDescendant<ScrollViewer>(host);
         _origin = e.GetPosition(host);
+        _originOffset = PixelOffset();
+        _current = _origin;
         _armed = true;
         host.CaptureMouse();
         host.LostMouseCapture += OnLostCapture;
@@ -103,35 +128,21 @@ public sealed class RubberBandController {
             return;
         }
 
-        Point current = e.GetPosition(_host);
+        _current = e.GetPosition(_host);
         if (_armed) {
-            if (!PastThreshold(current)) {
+            if (!PastThreshold(_current)) {
                 return;
             }
 
             Begin();
         }
 
-        if (_adorner is not null) {
-            _adorner.CurrentPoint = current;
-            _adorner.InvalidateVisual();
-        }
-        var rect = new Rect(_origin, current);
-
-        // Base (already-selected at gesture start, empty in non-additive
-        // mode) ∪ everything intersecting the rectangle.
-        var selection = new HashSet<FileSystemEntry>(_baseSelection);
-        foreach (var entry in _items()) {
-            if (TryGetContainerRect(_host, entry, out Rect itemRect) && rect.IntersectsWith(itemRect)) {
-                selection.Add(entry);
-            }
-        }
-
-        _setSelection(_host, selection);
+        Sweep();
     }
 
 
     public void End() {
+        _tick.Stop();
         if (!IsActive && !_armed) {
             return;
         }
@@ -149,9 +160,12 @@ public sealed class RubberBandController {
         }
 
         _host = null;
+        _scroller = null;
         _layer = null;
         _adorner = null;
         _baseSelection = null;
+        _swept.Clear();
+        _scrollCarry = 0;
     }
 
 
@@ -162,6 +176,8 @@ public sealed class RubberBandController {
     private void Begin() {
         _armed = false;
         IsActive = true;
+        _lastTickMs = Environment.TickCount64;
+        _tick.Start();
         _layer = _host is null ? null : AdornerLayer.GetAdornerLayer(_host);
         if (_layer is null) {
             // No adorner layer (extremely rare) — proceed without visuals,
@@ -176,6 +192,83 @@ public sealed class RubberBandController {
             CurrentPoint = _origin,
         };
         _layer.Add(_adorner);
+    }
+
+    /// <summary>
+    /// The rectangle from the corner pressed - where that content is now,
+    /// scrolled or not - to the cursor, and the selection it makes: what it
+    /// holds on screen, what it held as it scrolled out of view, and what
+    /// was selected before with Ctrl.
+    /// </summary>
+    private void Sweep() {
+        if (_host is null || _baseSelection is null) {
+            return;
+        }
+
+        var start = new Point(_origin.X, _origin.Y - (PixelOffset() - _originOffset));
+        if (_adorner is not null) {
+            _adorner.StartPoint = start;
+            _adorner.CurrentPoint = _current;
+            _adorner.InvalidateVisual();
+        }
+
+        var rect = new Rect(start, _current);
+        var selection = new HashSet<FileSystemEntry>(_baseSelection);
+        foreach (var entry in _items()) {
+            if (TryGetContainerRect(_host, entry, out Rect itemRect)) {
+                if (rect.IntersectsWith(itemRect)) {
+                    _swept.Add(entry);
+                } else {
+                    _swept.Remove(entry);
+                }
+            }
+            if (_swept.Contains(entry)) {
+                selection.Add(entry);
+            }
+        }
+
+        _setSelection(_host, selection);
+    }
+
+    /// <summary>A rectangle held at the edge: the list scrolls, and the rectangle stretches with it.</summary>
+    private void OnTick(object? sender, EventArgs e) {
+        long now = Environment.TickCount64;
+        long elapsed = now - _lastTickMs;
+        _lastTickMs = now;
+        if (!IsActive || _host is null || _scroller is not { ActualHeight: > 0 } scroller) {
+            return;
+        }
+
+        double y = _host.TranslatePoint(_current, scroller).Y;
+        double speed = EdgeScroll.Along(y, scroller.ActualHeight);
+        if (speed == 0) {
+            _scrollCarry = 0;
+
+            return;
+        }
+
+        // A list that scrolls by rows counts its offset in rows: the step is
+        // turned into them and handed over whole, the rest carried on.
+        _scrollCarry += EdgeScroll.Step(speed, elapsed) * scroller.ViewportHeight / scroller.ActualHeight;
+        double whole = Math.Truncate(_scrollCarry);
+        if (whole == 0) {
+            return;
+        }
+
+        scroller.ScrollToVerticalOffset(scroller.VerticalOffset + whole);
+        _scrollCarry -= whole;
+        // The new rows are realised on the next layout pass; the selection
+        // follows once they are.
+        _host.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, Sweep);
+    }
+
+    /// <summary>How far the list is scrolled, in pixels - a list that scrolls by rows converts at its rows' height.</summary>
+    private double PixelOffset() {
+        if (_scroller is not { ViewportHeight: > 0 } scroller) {
+            return 0;
+        }
+
+        return scroller.VerticalOffset * scroller.ActualHeight / scroller.ViewportHeight;
     }
 
 

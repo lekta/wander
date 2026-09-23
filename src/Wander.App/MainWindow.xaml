@@ -803,7 +803,6 @@
             <views:FolderTreesView x:Name="FolderTrees"
                                    Grid.Column="0"
                                    ContextMenuRequested="FolderTrees_ContextMenuRequested"
-                                   FolderTargeted="FolderTrees_FolderTargeted"
                                    FocusListRequested="FolderTrees_FocusListRequested"
                                    DropMenuRequested="FolderTrees_DropMenuRequested"/>
 

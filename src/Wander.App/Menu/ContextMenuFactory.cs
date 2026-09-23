@@ -9,11 +9,21 @@ using Wander.Core;
 using Wander.Core.Icons;
 using Wander.Core.Menu;
 using Wander.Core.Shell;
+using Wander.Core.Workspace;
 
 namespace Wander.App.Menu;
 
 /// <summary>What a <see cref="MenuCommandId"/> actually runs, plus its argument if it takes one.</summary>
 public sealed record MenuBinding(ICommand Command, object? Parameter = null);
+
+
+/// <summary>
+/// The parameter an item of a context menu runs its command with: the
+/// menu's snapshot, taken as it opened, and the item's own argument (a
+/// catalog action's id). A command that gets one acts on the snapshot's
+/// subject; with none - from a key - on the target as it is at that moment.
+/// </summary>
+public sealed record MenuCall(MenuContext Context, object? Argument);
 
 
 /// <summary>
@@ -79,11 +89,15 @@ public sealed class ContextMenuFactory {
     }
 
 
-    public ContextMenu Build(IReadOnlyList<MenuEntry> model, IShellContextMenuSession? session) {
+    /// <param name="context">
+    /// The menu's snapshot, handed to every item's command (<see cref="MenuCall"/>);
+    /// null for a menu whose bindings carry everything themselves (the drop menu).
+    /// </param>
+    public ContextMenu Build(IReadOnlyList<MenuEntry> model, IShellContextMenuSession? session, MenuContext? context = null) {
         var menu = new ContextMenu();
         var pending = new PendingShellCommand();
 
-        Fill(menu.Items, model, pending);
+        Fill(menu.Items, model, pending, context);
 
         menu.Closed += (sender, _) => {
             // Submenus raise SubmenuClosed, not Closed, but a stray bubble
@@ -106,23 +120,23 @@ public sealed class ContextMenuFactory {
     /// Operations menu. The shell is never asked there, so there is no
     /// session and nothing to invoke once the menu closes.
     /// </summary>
-    public void Populate(ItemCollection items, IReadOnlyList<MenuEntry> model) {
+    public void Populate(ItemCollection items, IReadOnlyList<MenuEntry> model, MenuContext? context = null) {
         items.Clear();
-        Fill(items, model, pending: null);
+        Fill(items, model, pending: null, context);
     }
 
 
-    private void Fill(ItemCollection items, IReadOnlyList<MenuEntry> model, PendingShellCommand? pending) {
+    private void Fill(ItemCollection items, IReadOnlyList<MenuEntry> model, PendingShellCommand? pending, MenuContext? context) {
         foreach (var entry in model) {
             if (entry.IsSeparator) {
                 items.Add(new Separator());
                 continue;
             }
-            items.Add(CreateItem(entry, pending));
+            items.Add(CreateItem(entry, pending, context));
         }
     }
 
-    private MenuItem CreateItem(MenuEntry entry, PendingShellCommand? pending) {
+    private MenuItem CreateItem(MenuEntry entry, PendingShellCommand? pending, MenuContext? context) {
         var item = new MenuItem {
             Header = EscapeHeader(entry.Header),
             InputGestureText = entry.Gesture ?? string.Empty,
@@ -147,7 +161,7 @@ public sealed class ContextMenuFactory {
         }
 
         if (entry.HasChildren) {
-            Fill(item.Items, entry.Children, pending);
+            Fill(item.Items, entry.Children, pending, context);
 
             return item;
         }
@@ -178,8 +192,11 @@ public sealed class ContextMenuFactory {
         if (_bindings.TryGetValue(entry.Id, out var binding)) {
             item.Command = binding.Command;
             // A row that names its own argument (a catalog action's id)
-            // wins over the binding's fixed one.
-            item.CommandParameter = entry.Argument ?? binding.Parameter;
+            // wins over the binding's fixed one; the menu's snapshot rides
+            // along with it, so the item acts on what the menu was opened
+            // on, whenever WPF gets round to running it.
+            object? argument = entry.Argument ?? binding.Parameter;
+            item.CommandParameter = context is null ? argument : new MenuCall(context, argument);
         } else {
             // An id with no binding is a wiring bug, not a user-facing
             // state; showing it greyed is the least confusing failure.

@@ -20,8 +20,10 @@ using Wander.Core.Diagnostics;
 using Wander.Core.FileSystem;
 using Wander.Core.Folders;
 using Wander.Core.Layout;
+using Wander.Core.Listing;
 using Wander.Core.Logging;
 using Wander.Core.Preview;
+using Wander.Core.Workspace;
 
 namespace Wander.App.Views;
 
@@ -52,38 +54,28 @@ public partial class FileListView : UserControl {
     private Point _rightDragOrigin;
     private bool _rightDragArmed;
 
-    // A committed rename re-lists the folder asynchronously, so the row to
-    // put the keyboard on does not exist yet when the editor closes. This
-    // says "the next selection restore is mine" — undo and refresh must not
-    // steal focus from wherever the user actually is.
-    private bool _focusRowAfterRestore;
-
     /// <summary>Set on right-button-down: did the click land on empty space?</summary>
     private bool _contextIsBackground;
 
     /// <summary>Jump-to-name from the keyboard; see <see cref="List_PreviewTextInput"/>.</summary>
     private readonly TypeAheadController _typeAhead = new();
 
-
-    /// <summary>
-    /// The keyboard was in here and went nowhere — the row that had it was
-    /// rebuilt out of existence and focus fell back onto the window. See
-    /// <see cref="OnKeyboardFocusWithinChanged"/>.
-    /// </summary>
-    private bool _focusFellOutOfTheList;
-
-    /// <summary>The current row left while the window was not active - see <see cref="OnCurrentRowLeft"/>.</summary>
-    private bool _currentRowFocusPending;
-
     /// <summary>The views currently unbound from the rows - see <see cref="ApplyViewAttachment"/>.</summary>
     private readonly HashSet<Selector> _detachedViews = new();
 
     /// <summary>
-    /// True while <see cref="SetListSelection"/> is putting a selection on
-    /// row by row. The selection handler steps aside for the round and is
-    /// told once at the end.
+    /// True while a selection is being put on in one call (<see cref="PutSelection"/>).
+    /// The selection handler steps aside for it; the user's own is reported
+    /// once at the end, the model's not at all - it is the model's already.
     /// </summary>
     private bool _applyingSelection;
+
+    /// <summary>
+    /// A row the keyboard was sent to that the list has not made a container
+    /// for yet - scrolled to a moment ago, in a view just switched on. The
+    /// list's generator says when it has (<see cref="OnContainersGenerated"/>).
+    /// </summary>
+    private FileSystemEntry? _pendingFocus;
 
     /// <summary>The inline rename editor while a name is being edited, and the layer it sits in - see the rename section.</summary>
     private RenameAdorner? _renameAdorner;
@@ -104,13 +96,9 @@ public partial class FileListView : UserControl {
             SetListSelection,
             ClearListSelection);
         DataContextChanged += OnDataContextChanged;
-        IsKeyboardFocusWithinChanged += OnKeyboardFocusWithinChanged;
-        Loaded += (_, _) => {
-            if (Window.GetWindow(this) is { } window) {
-                window.Activated -= OnWindowActivated;
-                window.Activated += OnWindowActivated;
-            }
-        };
+        foreach (var view in new ItemsControl[] { DetailsView, TilesView, IconsView, GalleryView }) {
+            view.ItemContainerGenerator.StatusChanged += OnContainersGenerated;
+        }
     }
 
 
@@ -133,45 +121,14 @@ public partial class FileListView : UserControl {
     private MainViewModel Vm => (MainViewModel)DataContext;
 
 
-    /// <summary>
-    /// Notices the keyboard leaving for nowhere.
-    ///
-    /// <para>
-    /// A rebuild that replaces the focused row leaves WPF with nothing to
-    /// move focus to, so it hands it to the window. That is not the user
-    /// going somewhere — it is the list dropping them — and the next
-    /// selection restore takes it back. Focus landing on a real element (the
-    /// address bar, the tree, the search box) is the user going somewhere,
-    /// and is left alone.
-    /// </para>
-    /// </summary>
-    private void OnKeyboardFocusWithinChanged(object sender, DependencyPropertyChangedEventArgs e) {
-        if (IsKeyboardFocusWithin) {
-            _focusFellOutOfTheList = false;
-
-            return;
-        }
-
-        _focusFellOutOfTheList = Keyboard.FocusedElement is null or Window;
-    }
-
-
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e) {
         if (e.OldValue is MainViewModel old) {
-            old.SelectionRestoreRequested -= RestoreListSelection;
-            old.SelectionRefreshRequested -= RefreshListSelection;
-            old.CurrentRowLeft -= OnCurrentRowLeft;
-            old.InlineRenameRequested -= StartRenameOn;
             old.PropertyChanged -= OnViewModelChanged;
             old.Settings.PropertyChanged -= OnSettingsChanged;
             old.FolderArrived -= OnFolderArrived;
             old.Entries.CollectionChanged -= OnEntriesChanged;
         }
         if (e.NewValue is MainViewModel vm) {
-            vm.SelectionRestoreRequested += RestoreListSelection;
-            vm.SelectionRefreshRequested += RefreshListSelection;
-            vm.CurrentRowLeft += OnCurrentRowLeft;
-            vm.InlineRenameRequested += StartRenameOn;
             vm.PropertyChanged += OnViewModelChanged;
             vm.Settings.PropertyChanged += OnSettingsChanged;
             vm.FolderArrived += OnFolderArrived;
@@ -221,40 +178,16 @@ public partial class FileListView : UserControl {
             ShowSearchColumns();
         } else if (e.PropertyName == nameof(MainViewModel.ViewMode)) {
             ApplyViewAttachment();
-            KeepFocusAcrossViewSwap();
+            // The four views are four controls, and the one that had the
+            // keyboard has just collapsed under it. Whether the keyboard
+            // follows into the new one is the model's to say (K-5); the row
+            // it lands on is made by the new view's next layout pass.
+            Vm.Workspace.Post(new ViewModeChanged());
         } else if (e.PropertyName == nameof(MainViewModel.RenamingPath) && Vm.RenamingPath is null) {
             // The view model ended the edit - a commit, an Escape, or a
             // listing rebuilt under the editor. The editor goes with it.
             HideRenameEditor();
         }
-    }
-
-
-    /// <summary>
-    /// Carries the keyboard from one view to the next when the mode changes.
-    ///
-    /// <para>
-    /// The four views are four controls, and switching mode collapses the one
-    /// that had the keyboard. Focus then falls to the window, and the file
-    /// area is left looking selected but answering to nothing — walk into a
-    /// folder of photographs, which turns the gallery on by itself, and the
-    /// next arrow key went nowhere. Only done when the area already had the
-    /// keyboard: a mode changed from the toolbar or the settings dialog must
-    /// not pull focus out of wherever the user is.
-    /// </para>
-    /// </summary>
-    private void KeepFocusAcrossViewSwap() {
-        if (!IsKeyboardFocusWithin) {
-            return;
-        }
-
-        // After the swap, not during it: the incoming control is still
-        // collapsed at this point and cannot take focus.
-        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => {
-            if (DataContext is MainViewModel) {
-                FocusList();
-            }
-        }));
     }
 
 
@@ -451,24 +384,22 @@ public partial class FileListView : UserControl {
 
 
     // --- Public surface used by MainWindow -----------------------------
-    // FocusList, ClearSelection and StartRename (in the rename section);
-    // everything else here is this control's own business.
+    // FocusList, ClearSelection and StartRename (in the rename section), and
+    // the model's effects on the list: ApplySelection, FocusRow, OpenEditor.
+    // Everything else here is this control's own business.
 
     /// <summary>
-    /// Hands the keyboard back to the list — to the selected row when there
-    /// is one. Focusing the container itself is not enough: a list with
-    /// focus but no focused item leaves the arrow keys resuming from
-    /// wherever the cursor was last, which is usually the top.
+    /// Hands the keyboard back to the list - onto the row it was on (the
+    /// caret), else the selected one. Focusing the container itself is not
+    /// enough: a list with focus but no focused item leaves the arrow keys
+    /// resuming from wherever the cursor was last, which is usually the top.
     /// </summary>
     public void FocusList() {
-        if (Vm.SelectedEntry is { } entry) {
-            // Falling back to the list itself is right only when there is
-            // nothing to stand on. When there *is* a row and its container
-            // simply has not been realised yet, taking the fallback leaves
-            // the keyboard on the list with no row under it — which is the
-            // state where the next arrow key starts from the top instead of
-            // from where the user was.
-            FocusRowWhenReady(entry);
+        if ((CaretEntry() ?? Vm.SelectedEntry) is { } entry) {
+            if (!IsSamePath(entry.FullPath, Vm.CaretPath)) {
+                Vm.Workspace.Post(new ListCaretMoved(entry.FullPath));
+            }
+            FocusEntry(entry, scroll: true);
 
             return;
         }
@@ -480,6 +411,54 @@ public partial class FileListView : UserControl {
     /// <summary>Clears the selection in whichever container is on screen.</summary>
     public void ClearSelection() {
         SelectionController.ClearActive(ActiveList());
+    }
+
+
+    /// <summary>
+    /// The model's selection (ApplyListSelection) put on the list on screen
+    /// as it is - in one call, and not told back: it is the model's already.
+    /// What it mends is the list's own doing: a row rebuilt or replaced drops
+    /// out of a WPF selection on the way (REDESIGN 4.8).
+    /// <paramref name="scroll"/> brings the main row into view, the table's
+    /// current row on it.
+    /// </summary>
+    public void ApplySelection(ListState list, bool scroll) {
+        if (ActiveList() is not { } host) {
+            return;
+        }
+
+        var rows = EntriesOf(list.Selection, list.Primary);
+        PutSelection(host, rows, report: false);
+        if (scroll && rows.Count > 0) {
+            if (host is DataGrid grid) {
+                grid.CurrentItem = rows[0];
+            }
+            ScrollRowIntoView(host, rows[0]);
+        }
+    }
+
+
+    /// <summary>
+    /// The model's FocusRow on the list: the keyboard onto the row on
+    /// <paramref name="path"/>. <paramref name="scroll"/> brings it into
+    /// view and waits for the list to make its container if it has to;
+    /// without it, a row off screen leaves the keyboard on the list itself -
+    /// nothing moves under the user.
+    /// </summary>
+    public void FocusRow(string path, bool scroll) {
+        if (EntryAt(path) is { } entry) {
+            FocusEntry(entry, scroll);
+        } else {
+            ActiveList()?.Focus();
+        }
+    }
+
+
+    /// <summary>The model's OpenEditor: the name editor on the row on <paramref name="path"/> - while it is the one selected.</summary>
+    public void OpenEditor(string path) {
+        if (Vm.SelectedEntry is { } entry && IsSamePath(entry.FullPath, path)) {
+            StartRename();
+        }
     }
 
 
@@ -496,61 +475,34 @@ public partial class FileListView : UserControl {
 
 
     /// <summary>
-    /// Puts the keyboard on one row. Returns false when the row has no
-    /// realised container (virtualised away), so the caller can fall back
-    /// to focusing the list itself.
+    /// Puts the keyboard on a row. A row the list has not made a container
+    /// for yet - scrolled to a moment ago, in a view just switched on - gets
+    /// it once the list has made one (<see cref="OnContainersGenerated"/>),
+    /// the list itself holding the keyboard meanwhile. No layout pass is
+    /// forced for it: that realised a screenful of rows with their icons on
+    /// the spot, up to half a second (TECHDEBT ui.restore).
     /// </summary>
-    /// <summary>
-    /// Puts the keyboard on a row, waiting for it to exist if it does not yet.
-    ///
-    /// <para>
-    /// <see cref="FocusRow"/> can only focus a container the panel has
-    /// realised, and right after a listing lands there may not be one: the
-    /// rows arrived a moment ago, the panel is still generating containers,
-    /// and a folder that is also loading thumbnails and expanding a tree
-    /// branch gives it plenty of reason to be late. Failing there is silent —
-    /// the row ends up selected but the keyboard stays on the list, and the
-    /// next arrow key resumes from the top instead of the row. One retry
-    /// after the layout pass is enough; anything still missing then is a row
-    /// that genuinely is not in the list.
-    /// </para>
-    /// </summary>
-    private void FocusRowWhenReady(FileSystemEntry entry) {
-        if (FocusRow(entry)) {
+    private void FocusEntry(FileSystemEntry entry, bool scroll) {
+        _pendingFocus = null;
+        if (TryFocusEntry(entry, scroll)) {
             return;
         }
 
-        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => {
-            if (DataContext is not MainViewModel || !Vm.Entries.Contains(entry)) {
-                return;
-            }
-
-            if (!FocusRow(entry)) {
-                // Still nothing to stand on. The list itself is a worse place
-                // for the keyboard than the row, but a better one than the
-                // window — from here Tab and the arrow keys still work.
-                ActiveList()?.Focus();
-            }
-        }));
+        if (scroll) {
+            _pendingFocus = entry;
+        }
+        if (ActiveList() is { IsKeyboardFocusWithin: false } list) {
+            list.Focus();
+        }
     }
 
 
-    /// <param name="reveal">
-    /// Scroll the row into view first. False for the one caller that must
-    /// not take the user anywhere (<see cref="FocusCaretRow"/>): the row is
-    /// then focused only if it already has a container.
-    /// </param>
-    private bool FocusRow(FileSystemEntry entry, bool reveal = true) {
-        // The caret follows the keyboard, and this is where the keyboard is
-        // put on a row deliberately. The presses WPF answers by itself
-        // (an arrow inside the grid) are picked up in List_SelectionChanged.
-        Vm.CaretPath = entry.FullPath;
-
+    /// <summary>The keyboard onto the row's container, if the list has made it.</summary>
+    private bool TryFocusEntry(FileSystemEntry entry, bool scroll) {
         switch (ActiveList()) {
             case DataGrid dg:
-                if (reveal) {
+                if (scroll) {
                     dg.ScrollIntoView(entry);
-                    dg.UpdateLayout();
                 }
                 // Arrow keys in a DataGrid follow the *current cell*, not the
                 // selection. Leaving it stale is what made the next arrow
@@ -558,21 +510,17 @@ public partial class FileListView : UserControl {
                 if (dg.Columns.Count > 0) {
                     dg.CurrentCell = new DataGridCellInfo(entry, dg.Columns[0]);
                 }
-                if (dg.ItemContainerGenerator.ContainerFromItem(entry) is DataGridRow row
-                    && ListVisuals.FindDescendant<DataGridCell>(row) is { } cell) {
-                    return cell.Focus();
-                }
 
-                return false;
+                return dg.ItemContainerGenerator.ContainerFromItem(entry) is DataGridRow row
+                    && ListVisuals.FindDescendant<DataGridCell>(row) is { } cell
+                    && cell.Focus();
 
             case ListBox lb:
-                if (reveal) {
+                if (scroll) {
                     lb.ScrollIntoView(entry);
-                    lb.UpdateLayout();
                 }
 
-                return lb.ItemContainerGenerator.ContainerFromItem(entry) is ListBoxItem item
-                    && item.Focus();
+                return lb.ItemContainerGenerator.ContainerFromItem(entry) is ListBoxItem item && item.Focus();
 
             default:
                 return false;
@@ -580,69 +528,35 @@ public partial class FileListView : UserControl {
     }
 
 
-    // --- The current row left the folder ---------------------------------
-
     /// <summary>
-    /// The current row is gone - deleted here, or in the program it was
-    /// opened in - and the view model has made the next one current:
-    /// selected, the caret on it. If the keyboard was on the departed row,
-    /// it goes to that row too, so the next arrow key moves on from there.
-    /// Without this WPF hands the keyboard to the window or to the list
-    /// itself, and an arrow key starts over from the top of the folder.
-    ///
-    /// <para>
-    /// The usual way here is a file deleted in the program it was opened
-    /// in, so that program is in front and this window is not. Focus is
-    /// not touched in a window that is not active, and where the keyboard
-    /// "is" cannot be asked there; both wait for
-    /// <see cref="OnWindowActivated"/>.
-    /// </para>
+    /// A list made containers: the row waiting for the keyboard takes it if
+    /// its container is among them and the keyboard is still in the list.
     /// </summary>
-    private void OnCurrentRowLeft() {
-        if (Window.GetWindow(this) is not { IsActive: true }) {
-            _currentRowFocusPending = true;
-
+    private void OnContainersGenerated(object? sender, EventArgs e) {
+        if (_pendingFocus is not { } entry
+            || sender is not ItemContainerGenerator { Status: GeneratorStatus.ContainersGenerated } generator
+            || ActiveList() is not { } list || !ReferenceEquals(list.ItemContainerGenerator, generator)) {
             return;
         }
 
-        if (KeyboardIsOurs()) {
-            FocusCaretRow();
-        }
-    }
+        if (!IsKeyboardFocusWithin) {
+            _pendingFocus = null;
 
-
-    private void OnWindowActivated(object? sender, EventArgs e) {
-        if (!_currentRowFocusPending) {
             return;
         }
-
-        _currentRowFocusPending = false;
-        // After WPF's own attempt to put the keyboard back where it was.
-        Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() => {
-            if (DataContext is MainViewModel && KeyboardIsOurs()) {
-                FocusCaretRow();
-            }
-        }));
+        if (TryFocusEntry(entry, scroll: false)) {
+            _pendingFocus = null;
+        }
     }
 
 
     /// <summary>
-    /// Is the keyboard in this list, or nowhere - on the window, or on a
-    /// row that has left the tree? Anywhere real (the tree, the address
-    /// bar) is the user having gone there, and is left alone.
+    /// The user put the keyboard on a row - an arrow at the edge of the grid,
+    /// a letter typed, the way back out of the editor: the caret goes with it.
     /// </summary>
-    private bool KeyboardIsOurs() {
-        return Keyboard.FocusedElement is null or Window
-            || (Keyboard.FocusedElement is System.Windows.Media.Visual visual
-                && (IsAncestorOf(visual) || PresentationSource.FromVisual(visual) is null));
-    }
-
-
-    /// <summary>The keyboard onto the caret's row if it is on screen, onto the list otherwise. Nothing scrolls.</summary>
-    private void FocusCaretRow() {
-        if (CaretEntry() is not { } caret || !FocusRow(caret, reveal: false)) {
-            ActiveList()?.Focus();
-        }
+    private void TakeRow(FileSystemEntry entry) {
+        Vm.Workspace.Post(new ListCaretMoved(entry.FullPath));
+        FocusEntry(entry, scroll: true);
     }
 
 
@@ -662,11 +576,8 @@ public partial class FileListView : UserControl {
             return;
         }
 
-        // A selection being put on by the code below arrives one row at a
-        // time and raises this on every add, and every raise walks the
-        // whole of SelectedItems again - 5000 rows cost 12.5 million walked
-        // rows and eleven seconds (measured, PLAN block 0 step 0.7).
-        // SetListSelection reports once, when it is done.
+        // A selection put on in one call (PutSelection) reports itself
+        // when it is done, if it is the user's.
         if (_applyingSelection) {
             return;
         }
@@ -675,30 +586,41 @@ public partial class FileListView : UserControl {
     }
 
     /// <summary>
-    /// Hands the control's current selection to the view model. One call
-    /// per real selection change - the user's, or one finished round of
-    /// <see cref="SetListSelection"/>.
+    /// Tells the model what the control's selection is now - the user's
+    /// doing: a click, a key, a sweep, Ctrl+A; one report per change. Not
+    /// while the view model lays the rows down again: the list drops a
+    /// rebuilt or replaced row out of its selection on its own (REDESIGN
+    /// 4.8), and the model puts the selection back once the rows have landed.
     /// </summary>
     private void ReportSelection(object host) {
-        var entries = new List<FileSystemEntry>();
-        switch (host) {
-            case DataGrid dg:
-                foreach (var item in dg.SelectedItems) {
-                    if (item is FileSystemEntry fe) {
-                        entries.Add(fe);
-                    }
-                }
-                break;
-            case ListBox lb:
-                foreach (var item in lb.SelectedItems) {
-                    if (item is FileSystemEntry fe) {
-                        entries.Add(fe);
-                    }
-                }
-                break;
+        if (Vm.IsSyncingRows) {
+            return;
         }
-        Vm.SelectedEntries = entries;
-        UpdateCaret(entries);
+
+        var selected = SelectedEntriesOf(host);
+        var primary = (host as Selector)?.SelectedItem as FileSystemEntry ?? selected.FirstOrDefault();
+        Vm.Workspace.Post(new ListSelectionChanged(
+            selected.Select(e => e.FullPath).ToArray(), primary?.FullPath, CaretAfter(selected)));
+    }
+
+    private static List<FileSystemEntry> SelectedEntriesOf(object host) {
+        var entries = new List<FileSystemEntry>();
+        System.Collections.IList? items = host switch {
+            DataGrid dg => dg.SelectedItems,
+            ListBox lb => lb.SelectedItems,
+            _ => null,
+        };
+        if (items is null) {
+            return entries;
+        }
+
+        foreach (var item in items) {
+            if (item is FileSystemEntry fe) {
+                entries.Add(fe);
+            }
+        }
+
+        return entries;
     }
 
 
@@ -715,112 +637,15 @@ public partial class FileListView : UserControl {
     /// whole thing exists for.
     /// </para>
     /// </summary>
-    private void UpdateCaret(IReadOnlyList<FileSystemEntry> selected) {
-        // Nothing here walks the listing: a marquee over five thousand
-        // files raises this once per file (ApplyDelta adds them one at a
-        // time), and a scan of the rows in each of those would be the
-        // gesture's cost squared.
+    private string? CaretAfter(IReadOnlyList<FileSystemEntry> selected) {
+        // Nothing here walks the listing: a selection report comes once per
+        // change, and a scan of the rows in each would be a sweep's cost
+        // multiplied by the folder.
         if (Keyboard.FocusedElement is FrameworkElement { DataContext: FileSystemEntry focused }) {
-            Vm.CaretPath = focused.FullPath;
-
-            return;
+            return focused.FullPath;
         }
 
-        if (selected.Count > 0) {
-            Vm.CaretPath = selected[^1].FullPath;
-        }
-    }
-
-
-    /// <summary>
-    /// Puts the selection back after a refresh reconciled the list. Only the
-    /// controls know about multi-selection (SelectedItems is theirs, not the
-    /// view model's), so the VM asks and this does it.
-    /// </summary>
-    private void RestoreListSelection(IReadOnlyList<FileSystemEntry> items) {
-        // Two reasons to take the keyboard back: a rename that just ended
-        // (the row is the one the user was editing) and an operation that
-        // ran behind a modal dialog, which left focus on the window.
-        // Third reason, and the one no caller can predict: the listing that
-        // just landed replaced the row that had the keyboard, so focus fell
-        // back onto the list itself. That is the dotted rectangle round the
-        // whole area after Alt+Left — and, because a list with focus but no
-        // focused row resumes from the top, the reason the next arrow press
-        // jumped to the first item. The restored selection takes the
-        // keyboard back to where the user was.
-        bool focusFellToTheList = ActiveList() is { } focused
-            && ReferenceEquals(Keyboard.FocusedElement, focused);
-        // Fourth: the keyboard is on a row of this list, and the selection
-        // has just been put somewhere else - Ctrl+Z bringing back the file
-        // that was deleted a moment ago, while the keyboard stands on the
-        // one that took its place. Left there, the highlight is on one file
-        // and the focus rectangle and the arrow keys on another. A keyboard
-        // anywhere outside the list is still left alone.
-        bool keyboardLeftBehind = items.Count > 0 && IsKeyboardFocusWithin
-            && Keyboard.FocusedElement is FrameworkElement { DataContext: FileSystemEntry under }
-            && !items.Any(i => string.Equals(i.FullPath, under.FullPath, StringComparison.OrdinalIgnoreCase));
-        bool takeFocus = _focusRowAfterRestore || Vm.FocusListAfterRestore
-            || focusFellToTheList || _focusFellOutOfTheList || keyboardLeftBehind;
-        _focusRowAfterRestore = false;
-        _focusFellOutOfTheList = false;
-        Vm.FocusListAfterRestore = false;
-
-        if (items.Count == 0) {
-            return;
-        }
-
-        // By delta, like every other selection change here. Clearing first
-        // takes SelectedItem to null on the way, and SelectedItem is bound
-        // two-way to SelectedEntry — so a refresh that put the selection
-        // back exactly where it was still told the preview pane the file
-        // had gone and come back, and it reloaded. Writing a rating into a
-        // sidecar is enough to cause one of those refreshes, which is how a
-        // click on a star ended up re-decoding a RAW.
-        switch (ActiveList()) {
-            case DataGrid dg:
-                SetListSelection(dg, items);
-                dg.CurrentItem = items[0];
-                dg.ScrollIntoView(items[0]);
-                break;
-            case ListBox lb:
-                SetListSelection(lb, items);
-                lb.ScrollIntoView(items[0]);
-                break;
-        }
-
-        // Only after a rename: the row the user was just editing is the row
-        // the keyboard belongs on. A refresh or an undo triggered from
-        // somewhere else must leave focus where it is.
-        if (takeFocus) {
-            FocusRowWhenReady(items[0]);
-        }
-    }
-
-
-    /// <summary>
-    /// Puts the selection back on rows that were swapped for updated copies.
-    ///
-    /// <para>
-    /// Deliberately thinner than <see cref="RestoreListSelection"/>: no
-    /// scrolling, no <c>CurrentItem</c>, no focus. Nothing moved and nothing
-    /// finished — a number inside a row the user is looking at changed, and
-    /// the only thing to repair is that the list dropped the replaced object
-    /// out of its selection on the way.
-    /// </para>
-    /// </summary>
-    private void RefreshListSelection(IReadOnlyList<FileSystemEntry> items) {
-        if (items.Count == 0) {
-            return;
-        }
-
-        switch (ActiveList()) {
-            case DataGrid dg:
-                SetListSelection(dg, items);
-                break;
-            case ListBox lb:
-                SetListSelection(lb, items);
-                break;
-        }
+        return selected.Count > 0 ? selected[^1].FullPath : Vm.CaretPath;
     }
 
 
@@ -831,62 +656,106 @@ public partial class FileListView : UserControl {
         }
     }
 
+    /// <summary>The user's selection from a gesture of this control's own - a sweep, a key at the grid's edge, a letter typed, a right-click outside the selection.</summary>
     private void SetListSelection(ItemsControl host, IEnumerable<FileSystemEntry> items) {
-        // Set the selection by delta — clearing+adding everything would
-        // collapse and re-expand the control's selection, causing visible
-        // flicker on ListBox and unnecessary SelectionChanged churn.
-        //
-        // The handler stands aside for the whole round rather than running
-        // on every add: see List_SelectionChanged. Measured because the
-        // shape is suspicious; PerfLog only writes a line once a category
-        // is slow, so this one appearing in the log is itself the answer.
-        bool changed;
+        PutSelection(host, items.ToList(), report: true);
+    }
+
+    /// <summary>
+    /// Makes <paramref name="rows"/> the selection in one call (AB), the first
+    /// of them the control's selected item - unless it is that already.
+    /// <paramref name="report"/>: tell the model, when it is the user's.
+    /// </summary>
+    private void PutSelection(ItemsControl host, IReadOnlyList<FileSystemEntry> rows, bool report) {
+        if (IsSelectedAlready(host, rows)) {
+            return;
+        }
+
+        // Measured because the shape used to be suspicious (a selection put
+        // on row by row is quadratic inside WPF); PerfLog only writes a line
+        // once a category is slow, so this one appearing in the log is
+        // itself the answer.
         using (PerfLog.Measure("ui.selection-apply")) {
             _applyingSelection = true;
             try {
-                changed = host switch {
-                    ListBox lb => ApplyDelta(lb.SelectedItems, items),
-                    DataGrid dg => ApplyDelta(dg.SelectedItems, items),
-                    _ => false,
-                };
+                switch (host) {
+                    case FileListBox lb:
+                        lb.ReplaceSelection(rows);
+                        break;
+                    case FileDataGrid dg:
+                        dg.ReplaceSelection(rows);
+                        break;
+                }
             } finally {
                 _applyingSelection = false;
             }
         }
 
-        // Only when something moved, so that a delta which turned out to be
-        // a no-op stays as silent as it was when the control raised the
-        // event itself.
-        if (changed) {
+        if (report) {
             ReportSelection(host);
         }
     }
 
-    /// <returns>True when the selection actually moved.</returns>
-    private static bool ApplyDelta(System.Collections.IList currentSelection, IEnumerable<FileSystemEntry> targetItems) {
-        bool changed = false;
-        var target = new HashSet<FileSystemEntry>(targetItems);
-        for (int i = currentSelection.Count - 1; i >= 0; i--) {
-            if (currentSelection[i] is FileSystemEntry existing && !target.Contains(existing)) {
-                currentSelection.RemoveAt(i);
-                changed = true;
+    /// <summary>The control's selection is exactly these rows - the same objects, whatever the order.</summary>
+    private static bool IsSelectedAlready(ItemsControl host, IReadOnlyList<FileSystemEntry> rows) {
+        System.Collections.IList? current = host switch {
+            ListBox lb => lb.SelectedItems,
+            DataGrid dg => dg.SelectedItems,
+            _ => null,
+        };
+        if (current is null || current.Count != rows.Count) {
+            return false;
+        }
+
+        var wanted = new HashSet<object>(rows, ReferenceEqualityComparer.Instance);
+        foreach (var item in current) {
+            if (!wanted.Contains(item)) {
+                return false;
             }
         }
 
-        var present = new HashSet<FileSystemEntry>();
-        foreach (var o in currentSelection) {
-            if (o is FileSystemEntry fe) {
-                present.Add(fe);
-            }
+        return true;
+    }
+
+
+    /// <summary>The list's row on <paramref name="path"/>, or null.</summary>
+    private FileSystemEntry? EntryAt(string? path) {
+        if (path is null) {
+            return null;
         }
-        foreach (var entry in target) {
-            if (!present.Contains(entry)) {
-                currentSelection.Add(entry);
-                changed = true;
+
+        foreach (var entry in Vm.Entries) {
+            if (IsSamePath(entry.FullPath, path)) {
+                return entry;
             }
         }
 
-        return changed;
+        return null;
+    }
+
+    /// <summary>The list's rows on <paramref name="paths"/>, the main one first.</summary>
+    private List<FileSystemEntry> EntriesOf(IReadOnlyList<string> paths, string? primary) {
+        var byPath = new Dictionary<string, FileSystemEntry>(Vm.Entries.Count, StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in Vm.Entries) {
+            byPath.TryAdd(entry.FullPath, entry);
+        }
+
+        var rows = new List<FileSystemEntry>(paths.Count);
+        FileSystemEntry? main = null;
+        if (primary is not null && byPath.TryGetValue(primary, out main)) {
+            rows.Add(main);
+        }
+        foreach (string path in paths) {
+            if (byPath.TryGetValue(path, out var row) && !ReferenceEquals(row, main)) {
+                rows.Add(row);
+            }
+        }
+
+        return rows;
+    }
+
+    private static bool IsSamePath(string? a, string? b) {
+        return a is not null && b is not null && string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
     }
 
 
@@ -945,7 +814,7 @@ public partial class FileListView : UserControl {
         // A press on a row is where the keyboard would go next, whoever
         // ends up handling it — WPF, when the press is left to it, moves
         // focus without telling anyone.
-        Vm.CaretPath = clicked.FullPath;
+        Vm.Workspace.Post(new ListCaretMoved(clicked.FullPath));
 
         if (_selection.TryArmDeferred(sender, clicked, Vm.SelectedEntries, Keyboard.Modifiers)) {
             TakeKeyboardOnClick(sender as ItemsControl, clicked);
@@ -980,9 +849,7 @@ public partial class FileListView : UserControl {
         // keyboard is already in the list: the caret is where the user put
         // it, and clearing the selection does not move it.
         if (row is not null) {
-            if (!FocusRow(row)) {
-                host.Focus();
-            }
+            FocusEntry(row, scroll: true);
 
             return;
         }
@@ -1317,7 +1184,9 @@ public partial class FileListView : UserControl {
         }
 
         if (Vm.SelectedEntry is { } selected && entries.Contains(selected)) {
-            return FocusRow(selected);
+            TakeRow(selected);
+
+            return true;
         }
 
         // Nothing selected, but the focus rectangle is still on the row the
@@ -1326,14 +1195,16 @@ public partial class FileListView : UserControl {
         // the rectangle is rather than at its top edge.
         if (CaretEntry() is { } caret) {
             SetListSelection(list, new[] { caret });
+            TakeRow(caret);
 
-            return FocusRow(caret);
+            return true;
         }
 
         var entry = key is Key.Down or Key.Right ? entries[0] : entries[^1];
         SetListSelection(list, new[] { entry });
+        TakeRow(entry);
 
-        return FocusRow(entry);
+        return true;
     }
 
 
@@ -1396,7 +1267,7 @@ public partial class FileListView : UserControl {
         SetListSelection(list, extend
             ? Range(entries, AnchorIndex(list, entries, index), target)
             : new[] { entries[target] });
-        FocusRow(entries[target]);
+        TakeRow(entries[target]);
 
         return true;
     }
@@ -1503,7 +1374,7 @@ public partial class FileListView : UserControl {
 
         if (sender is ItemsControl host) {
             SetListSelection(host, new[] { entries[target] });
-            FocusRow(entries[target]);
+            TakeRow(entries[target]);
         }
         e.Handled = true;
     }
@@ -1527,24 +1398,11 @@ public partial class FileListView : UserControl {
     private void ApplyViewAttachment() {
         var active = ActiveList();
         Selector[] views = { DetailsView, TilesView, IconsView, GalleryView };
-        // Read before anything is unbound. The controls own multi-selection
-        // (SelectedItems is theirs, not the view model's), so a view that is
-        // about to be bound has to be told what is selected - SelectedEntry
-        // alone would land one row of it.
-        var selection = Vm.SelectedEntries;
 
         foreach (var view in views) {
             if (ShouldDetach(view, active) && _detachedViews.Add(view)) {
-                // SelectedItem is bound two-way, and a Selector losing its
-                // items clears it - so both halves have to go before the
-                // rows do, or the view on its way out writes null over the
-                // view model's selection. Two steps because the two
-                // families bind it differently: the table has its binding
-                // on the element (ClearBinding removes it), the tile views
-                // get theirs from the TilePanel style, which a local null
-                // overrides without being asked to write through.
-                BindingOperations.ClearBinding(view, Selector.SelectedItemProperty);
-                view.SelectedItem = null;
+                // The selection on its way out is the control emptying, not
+                // the user deselecting anything (List_SelectionChanged).
                 view.ItemsSource = null;
             }
         }
@@ -1553,27 +1411,18 @@ public partial class FileListView : UserControl {
         foreach (var view in views) {
             if (!ShouldDetach(view, active) && _detachedViews.Remove(view)) {
                 view.SetBinding(ItemsControl.ItemsSourceProperty, new Binding(nameof(MainViewModel.Entries)));
-                view.SetBinding(Selector.SelectedItemProperty,
-                    new Binding(nameof(MainViewModel.SelectedEntry)) { Mode = BindingMode.TwoWay });
                 attached = true;
             }
         }
 
         // Every control keeps its own SelectedItems, so the view coming on
-        // screen is handed the selection whether or not it was just bound.
-        // Before, only the table (the one view that gets rebound) received
-        // it: three rows picked there showed as one in the tiles while
-        // Ctrl+C still copied three. Applied by delta - unchanged is a
-        // no-op. A view that has just been bound is also scrolled to the
-        // top, so that one is brought back to the selection.
-        if (active is { } host && selection.Count > 0) {
-            SetListSelection(host, selection);
-            if (attached) {
-                if (host is DataGrid grid) {
-                    grid.CurrentItem = selection[0];
-                }
-                ScrollRowIntoView(host, selection[0]);
-            }
+        // screen is handed the model's selection whether or not it was just
+        // bound: three rows picked in the table showed as one in the tiles
+        // while Ctrl+C still copied three. Unchanged is a no-op. A view that
+        // has just been bound is also scrolled to the top, so that one is
+        // brought back to the selection.
+        if (active is not null && Vm.SelectedEntries.Count > 0) {
+            ApplySelection(Vm.Workspace.State.List, scroll: attached);
         }
     }
 
@@ -1629,20 +1478,6 @@ public partial class FileListView : UserControl {
         }
 
         Vm.RenameCommand.Execute(input);
-    }
-
-
-    /// <summary>
-    /// The view model asked for the editor on a row it just put the
-    /// selection on — a folder that has only this second been created.
-    /// Checked against the selection rather than trusted: the restore that
-    /// carried the request is what set it, and anything that overtook it
-    /// means the row is no longer the one to edit.
-    /// </summary>
-    private void StartRenameOn(FileSystemEntry entry) {
-        if (ReferenceEquals(Vm.SelectedEntry, entry)) {
-            StartRename();
-        }
     }
 
 
@@ -1778,7 +1613,9 @@ public partial class FileListView : UserControl {
             // selection happens to be by now.
             var edited = ((FrameworkElement)sender).DataContext as FileSystemEntry;
             Vm.CancelRename();
-            if (edited is null || !FocusRow(edited)) {
+            if (EntryAt(edited?.FullPath) is { } row) {
+                TakeRow(row);
+            } else {
                 FocusList();
             }
             e.Handled = true;
@@ -1847,9 +1684,9 @@ public partial class FileListView : UserControl {
         // The re-listing that follows is asynchronous, so the renamed row is
         // focused twice over: now (it is still there under its old name,
         // which keeps the keyboard inside the list) and again when the new
-        // listing lands and the selection is restored onto the new name.
-        _focusRowAfterRestore = takeFocus;
-        Vm.CommitRename(box.Text);
+        // listing lands, the model sending the keyboard onto the new name
+        // (K-4).
+        Vm.CommitRename(box.Text, takeFocus);
         if (takeFocus) {
             FocusList();
         }

@@ -396,6 +396,27 @@
             </Border>
         </DataTemplate>
 
+        <!--
+            The same badge for Large icons (J4): the gallery's shape on the
+            window's light surround rather than on a photograph's dark one -
+            a pale plate and the amber the rest of the light chrome draws
+            stars in. Same trick as the gallery: only rated cells build it.
+        -->
+        <DataTemplate x:Key="IconsRatingBadge">
+            <Border Background="{StaticResource WorkBadgeBackground}" BorderBrush="{StaticResource Separator}"
+                    BorderThickness="1" CornerRadius="2" Padding="3,0" Margin="2">
+                <StackPanel Orientation="Horizontal">
+                    <Ellipse Width="7" Height="7" Margin="0,0,3,0"
+                             VerticalAlignment="Center"
+                             Visibility="{Binding Rating, Converter={StaticResource RatingBadge}, ConverterParameter=Color}"
+                             Fill="{Binding Rating, Converter={StaticResource ColorLabelBrush}}"/>
+                    <TextBlock Text="{Binding Rating, Converter={StaticResource RankText}}"
+                               FontSize="10" Foreground="{StaticResource RatingStar}"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+
         <!-- The sharpness score in the other corner, while the gallery's sharpness pass has scored the photo. -->
         <DataTemplate x:Key="GallerySharpnessBadge">
             <Border Background="{StaticResource BadgeBackground}" CornerRadius="2"
@@ -502,7 +523,6 @@
         -->
         <Style x:Key="TilePanel" TargetType="ListBox" BasedOn="{StaticResource ListGestures}">
             <Setter Property="ItemsSource" Value="{Binding Entries}"/>
-            <Setter Property="SelectedItem" Value="{Binding SelectedEntry}"/>
             <Setter Property="SelectionMode" Value="Extended"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="AllowDrop" Value="True"/>
@@ -647,11 +667,10 @@
 
         <Grid>
         <!-- Details -->
-        <DataGrid x:Name="DetailsView"
+        <controls:FileDataGrid x:Name="DetailsView"
                   Style="{StaticResource ListGestures}"
                   Visibility="{Binding ViewMode, Converter={StaticResource EnumToVisibility}, ConverterParameter=Details}"
                   ItemsSource="{Binding Entries}"
-                  SelectedItem="{Binding SelectedEntry}"
                   AutoGenerateColumns="False" IsReadOnly="True"
                   SelectionMode="Extended" SelectionUnit="FullRow"
                   ClipboardCopyMode="None"
@@ -762,10 +781,10 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
             </DataGrid.Columns>
-        </DataGrid>
+        </controls:FileDataGrid>
 
         <!-- Tiles -->
-        <ListBox x:Name="TilesView"
+        <controls:FileListBox x:Name="TilesView"
                  Style="{StaticResource TilePanel}"
                  ItemContainerStyle="{StaticResource TilesItem}"
                  FontSize="{Binding Settings.TilesMetrics.LabelFontSize}"
@@ -846,10 +865,10 @@
                     </DockPanel>
                 </DataTemplate>
             </ListBox.ItemTemplate>
-        </ListBox>
+        </controls:FileListBox>
 
         <!-- Large icons -->
-        <ListBox x:Name="IconsView"
+        <controls:FileListBox x:Name="IconsView"
                  Style="{StaticResource TilePanel}"
                  ItemContainerStyle="{StaticResource IconsItem}"
                  FontSize="{Binding Settings.IconsMetrics.LabelFontSize}"
@@ -878,8 +897,16 @@
                         The image size is a ceiling, not a target
                         (StretchDirection=DownOnly): what is smaller keeps
                         its own size. See the gallery template below.
+
+                        A Grid rather than a StackPanel only so the rating
+                        badge (J4) can sit over the picture's corner: the
+                        picture and the badge share the first row.
                     -->
-                    <StackPanel>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
                         <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Large" ShowsWork="True"
                                             Width="{DynamicResource IconsImageSize}"
                                             Height="{DynamicResource IconsImageSize}"
@@ -888,6 +915,19 @@
                                             HorizontalAlignment="Center"
                                             RenderOptions.BitmapScalingMode="HighQuality"
                                             UseLayoutRounding="True"/>
+                        <!--
+                            The rating badge over the picture's lower left
+                            corner, as in the gallery: empty - two visuals
+                            and nothing drawn - until the trigger below gives
+                            a rated cell its template.
+                        -->
+                        <ContentControl x:Name="Badge"
+                                        Width="{DynamicResource IconsImageSize}"
+                                        Height="{DynamicResource IconsImageSize}"
+                                        Margin="0,2,0,2"
+                                        HorizontalAlignment="Center"
+                                        HorizontalContentAlignment="Left" VerticalContentAlignment="Bottom"
+                                        Focusable="False"/>
                         <!--
                             Written for the selected state - whole name,
                             wrapped, no cap - and the trigger below puts the
@@ -901,13 +941,18 @@
                             resource works, and MinHeight - which nothing
                             has to lift - can stay here.
                         -->
-                        <TextBlock x:Name="NameLabel" Text="{Binding Name}"
+                        <TextBlock x:Name="NameLabel" Grid.Row="1" Text="{Binding Name}"
                                    TextAlignment="Center"
                                    TextWrapping="Wrap"
                                    TextTrimming="None"
                                    MinHeight="{DynamicResource IconsLabelHeight}"/>
-                    </StackPanel>
+                    </Grid>
                     <DataTemplate.Triggers>
+                        <DataTrigger Binding="{Binding Rating, Converter={StaticResource RatingBadge}, ConverterParameter=Badge}"
+                                     Value="Visible">
+                            <Setter TargetName="Badge" Property="Content" Value="{Binding}"/>
+                            <Setter TargetName="Badge" Property="ContentTemplate" Value="{StaticResource IconsRatingBadge}"/>
+                        </DataTrigger>
                         <!--
                             Every cell but the selected one: the name is cut
                             to the three lines the grid budgets for it
@@ -930,7 +975,7 @@
                     </DataTemplate.Triggers>
                 </DataTemplate>
             </ListBox.ItemTemplate>
-        </ListBox>
+        </controls:FileListBox>
 
         <!--
             Gallery (PLAN J). Structurally the LargeIcons grid with bigger
@@ -949,7 +994,7 @@
             highlight brighter than the photographs it frames or with text
             nobody can read.
         -->
-        <ListBox x:Name="GalleryView"
+        <controls:FileListBox x:Name="GalleryView"
                  Style="{StaticResource TilePanel}"
                  ItemContainerStyle="{StaticResource GalleryItem}"
                  FontSize="{Binding Settings.GalleryMetrics.LabelFontSize}"
@@ -1086,7 +1131,7 @@
                     </DataTemplate.Triggers>
                 </DataTemplate>
             </ListBox.ItemTemplate>
-        </ListBox>
+        </controls:FileListBox>
 
         <!--
             Loading overlay for slow list enumerations (shell

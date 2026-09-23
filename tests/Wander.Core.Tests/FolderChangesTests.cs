@@ -153,4 +153,20 @@ public class FolderChangesTests {
 
         Assert.Single(FolderChanges.RowsFor(rows, new[] { @"c:\SHOOT\img_1.cr3.PP3" })!);
     }
+
+    /// <summary>Decision B7: a rename is kept as a pair, in the order they came, until answered.</summary>
+    [Fact]
+    public void Renames_AreKeptAsPairs_UntilCleared() {
+        var changes = new FolderChanges();
+
+        changes.Note(new DirectoryChange(@"C:\shoot\b.jpg", Structural: true) { OldPath = @"C:\shoot\a.jpg" });
+        changes.Note(new DirectoryChange(@"C:\shoot\c.jpg", Structural: true) { OldPath = @"C:\shoot\b.jpg" });
+        changes.Note(new DirectoryChange(@"C:\shoot\d.jpg", Structural: true));
+
+        Assert.Equal(new[] { (@"C:\shoot\a.jpg", @"C:\shoot\b.jpg"), (@"C:\shoot\b.jpg", @"C:\shoot\c.jpg") }, changes.Renames);
+        Assert.True(changes.NeedsRelisting);
+
+        changes.Clear();
+        Assert.Empty(changes.Renames);
+    }
 }

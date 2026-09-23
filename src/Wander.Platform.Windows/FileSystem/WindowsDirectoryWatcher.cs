@@ -111,14 +111,16 @@ public sealed class WindowsDirectoryWatcher : IDirectoryWatcher {
     /// <para>
     /// A rename <em>out of</em> our own scratch file is therefore a content
     /// change: the name that vanished was never in the listing, and the name
-    /// that appeared was already in it. Every other rename is structural.
+    /// that appeared was already in it. Every other rename is structural,
+    /// and carries the name it had - a selection goes after the file.
     /// </para>
     /// </summary>
     private void OnRenamed(object sender, RenamedEventArgs e) {
-        Report(e.FullPath, structural: !TransientFiles.IsTransient(e.OldFullPath));
+        bool structural = !TransientFiles.IsTransient(e.OldFullPath);
+        Report(e.FullPath, structural, structural ? e.OldFullPath : null);
     }
 
-    private void Report(string path, bool structural) {
+    private void Report(string path, bool structural, string? oldPath = null) {
         // Our own scratch file, which exists for a few milliseconds in the
         // middle of an atomic replace. Reporting it would make every write
         // to a sidecar look like a file appearing and disappearing in the
@@ -127,7 +129,7 @@ public sealed class WindowsDirectoryWatcher : IDirectoryWatcher {
             return;
         }
 
-        Changed?.Invoke(this, new DirectoryChange(path, structural));
+        Changed?.Invoke(this, new DirectoryChange(path, structural) { OldPath = oldPath });
     }
 
     /// <summary>

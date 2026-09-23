@@ -277,6 +277,62 @@ public class ListingDiffTests {
         Assert.True(ListingDiff.Compute(current, incoming).Wholesale);
     }
 
+    /// <summary>
+    /// One photo whose new date put it at the far end of the folder is one
+    /// move, not a walk of every row behind it - which used to come out as
+    /// a rebuild and throw the scroll back to the top (TECHDEBT, 2026-09-21).
+    /// </summary>
+    [Fact]
+    public void OneRowMovedFarDown_IsOneMove() {
+        var current = Enumerable.Range(0, 1000).Select(i => Row($"{i:0000}.jpg")).ToArray();
+        var incoming = current.Skip(1).Append(current[0]).ToArray();
+
+        var plan = ListingDiff.Compute(current, incoming);
+
+        Assert.False(plan.Wholesale);
+        var edit = Assert.Single(plan.Edits);
+        Assert.Equal(ListingEditKind.Move, edit.Kind);
+        Assert.Equal(incoming, Apply(current, incoming, plan));
+    }
+
+    [Fact]
+    public void OneRowMovedFarUp_IsOneMove() {
+        var current = Enumerable.Range(0, 1000).Select(i => Row($"{i:0000}.jpg")).ToArray();
+        var incoming = current.Take(999).Prepend(current[999]).ToArray();
+
+        var plan = ListingDiff.Compute(current, incoming);
+
+        Assert.Equal(ListingEditKind.Move, Assert.Single(plan.Edits).Kind);
+        Assert.Equal(incoming, Apply(current, incoming, plan));
+    }
+
+    /// <summary>Rows scattered around a folder that otherwise keeps its order land where they belong, a couple of moves each at most.</summary>
+    [Fact]
+    public void ScatteredMoves_LandOnTheIncomingListing() {
+        var current = Enumerable.Range(0, 60).Select(i => Row($"{i:00}.jpg")).ToArray();
+        var incoming = current.ToList();
+        foreach (var (from, to) in new[] { (5, 50), (40, 2), (17, 59), (30, 0) }) {
+            var row = incoming[from];
+            incoming.RemoveAt(from);
+            incoming.Insert(to, row);
+        }
+
+        var plan = ListingDiff.Compute(current, incoming);
+
+        Assert.False(plan.Wholesale);
+        Assert.True(plan.Edits.Count <= 8);
+        Assert.Equal(incoming, Apply(current, incoming, plan));
+    }
+
+    /// <summary>A checkout that rewrote the dates of thousands of files: past the ceiling, rewritten rows count as well.</summary>
+    [Fact]
+    public void ThousandsRewritten_AreWholesale() {
+        var current = Enumerable.Range(0, 1000).Select(i => Row($"{i:0000}.txt", size: 1)).ToArray();
+        var incoming = Enumerable.Range(0, 1000).Select(i => Row($"{i:0000}.txt", size: 2)).ToArray();
+
+        Assert.True(ListingDiff.Compute(current, incoming).Wholesale);
+    }
+
     [Fact]
     public void HalfAligned_IsNotWholesale() {
         // Exactly at the threshold: half of the shared rows still line up,

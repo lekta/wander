@@ -22,8 +22,10 @@ using Wander.Core.Logging;
 using Wander.Core.Menu;
 using Wander.Core.Navigation;
 using Wander.Core.Operations;
+using Wander.Core.Panels;
 using Wander.Core.Persistence;
 using Wander.Core.Shell;
+using Wander.Core.Workspace;
 
 
 namespace Wander.App;
@@ -83,8 +85,16 @@ public partial class MainWindow : Window {
         // a cross-process call on an exclusively-opened resource, and
         // PasteCommand.CanExecute runs dozens of times a second. Activation
         // is the one moment the answer has to be right — to paste, the user
-        // has to come back to this window anyway.
-        Activated += (_, _) => (DataContext as MainViewModel)?.SyncClipboardFromSystem();
+        // has to come back to this window anyway. The panels read their open
+        // levels again then as well (P-24).
+        Activated += (_, _) => {
+            _justActivated = true;
+            if (DataContext is MainViewModel vm) {
+                vm.SyncClipboardFromSystem();
+                vm.NoteWindowActivated();
+            }
+            MoveKeyboardOnceActive();
+        };
     }
 
 
@@ -292,8 +302,18 @@ public partial class MainWindow : Window {
         // back to is the one the view model is listing, and there is no view
         // model yet when the window is constructed.
         _drops = new DropTargetController(() => Vm.CurrentPath);
+        _drops.HoverOpened += OnDragHoverOpened;
         _outgoing = new OutgoingDrag(_drops, () => FolderTrees.ClearBookmarkTarget());
         FolderTrees.Connect(_drops, _outgoing);
+        // A drag leaving the window: the hover and the edge scroll stop.
+        // DragLeave bubbles up from every element the cursor leaves inside
+        // the window as well; only a point outside it is the drag gone.
+        DragLeave += (_, e) => {
+            var at = e.GetPosition(this);
+            if (at.X < 0 || at.Y < 0 || at.X >= ActualWidth || at.Y >= ActualHeight) {
+                _drops.EndHover();
+            }
+        };
         // A third-party command can create, rename or delete behind our
         // back, so a successful one invalidates both the listing and the
         // cached shell answer.
@@ -313,6 +333,7 @@ public partial class MainWindow : Window {
         Diagnostics.UiStallWatch.Start(Dispatcher);
         // Bubbling, so it sees focus landing anywhere in the window.
         GotKeyboardFocus += OnZoneFocusChanged;
+        Vm.Workspace.ViewEffectRequested += OnViewEffectRequested;
         if (App.IsSmokeRun) {
             StartSmokeCountdown();
         }
@@ -387,11 +408,9 @@ public partial class MainWindow : Window {
         } else {
             // The keyboard must not vanish with the pane: a collapsed
             // element cannot hold focus, and WPF would drop it on the
-            // window, where the next arrow key does nothing. The list is
-            // where it goes - the same place Esc in a tree sends it.
-            if (ZoneOf(Keyboard.FocusedElement) is WindowZone.Bookmarks or WindowZone.Drives) {
-                FocusZone(WindowZone.FileList);
-            }
+            // window, where the next arrow key does nothing. Told before
+            // the pane goes; the model sends the keyboard on (K-8).
+            Vm.Workspace.Post(new PaneHidden(new[] { WindowZone.Bookmarks, WindowZone.Drives }));
             FoldersColumn.Width = new GridLength(0);
             FoldersSplitterColumn.Width = new GridLength(0);
             FolderTrees.Visibility = Visibility.Collapsed;
@@ -533,6 +552,7 @@ public partial class MainWindow : Window {
     protected override void OnDeactivated(EventArgs e) {
         base.OnDeactivated(e);
         StopPeeking();
+        (DataContext as MainViewModel)?.NoteWindowDeactivated();
     }
 
 
@@ -559,14 +579,6 @@ public partial class MainWindow : Window {
         // selection here and only then reached the editor to cancel.
         if (Vm.RenamingPath is not null || FolderTrees.IsRenaming) {
             return;
-        }
-
-        // A Delete that will do nothing leaves no trace otherwise, and
-        // "Delete works every other time" (2026-09-22) could not be read
-        // from the log. One line per such press, in the action trace; the
-        // key goes on as usual.
-        if (e.Key == Key.Delete && Log.Details && !Vm.DeleteCommand.CanExecute(null)) {
-            Log.Detail($"Delete: no target (keyboard in {ZoneOf(Keyboard.FocusedElement)?.ToString() ?? "window"})");
         }
 
         // Ctrl+C with the keyboard in the preview pane and text selected
@@ -706,8 +718,8 @@ public partial class MainWindow : Window {
             }
         }
 
-        if (e.Key == Key.F2 && CanStartRename()) {
-            StartRename();
+        if (e.Key == Key.F2 && CanStartRename(null)) {
+            StartRename(null);
             e.Handled = true;
             return;
         }
@@ -820,19 +832,84 @@ public partial class MainWindow : Window {
     /// </summary>
     private WindowZone _lastFolderPane = WindowZone.Drives;
 
+    /// <summary>
+    /// Why the keyboard is about to move, when the window moves it itself -
+    /// Tab, Ctrl+1, Ctrl+Shift+E, the model sending it somewhere: set just
+    /// before the focus call, taken by the focus change it causes
+    /// (<see cref="ReasonFor"/>).
+    /// </summary>
+    private ZoneReason? _pendingReason;
+
+    /// <summary>The window was just activated: the next focus change is WPF putting the keyboard back.</summary>
+    private bool _justActivated;
 
     /// <summary>
-    /// Puts the keyboard back in the file list. Called after a modal dialog
-    /// closes: WPF hands focus to the owner window and then picks whatever
-    /// focusable element it finds first, which is nowhere the user was.
+    /// The last keyboard move the model asked for while the window was not
+    /// the active one - carried out once it is (K-2): a window in the
+    /// background cannot take the keyboard, and WPF puts back what it had
+    /// when it comes to the front.
     /// </summary>
-    public void FocusWorkArea() {
-        FocusZone(WindowZone.FileList);
+    private WorkspaceEffect? _moveWhenActive;
+
+
+    /// <summary>
+    /// What the model asks of the controls: the keyboard into a zone or onto
+    /// a line (KeyboardRules) - its arrival told with the model's reason, a
+    /// dialog's return or the application putting it there; the list's
+    /// selection put back after its rows landed; the name editor on a row.
+    /// </summary>
+    private void OnViewEffectRequested(WorkspaceEffect effect) {
+        switch (effect) {
+            case ApplyListSelection apply:
+                FileList.ApplySelection(apply.List, apply.Scroll);
+                break;
+            case OpenEditor editor:
+                FileList.OpenEditor(editor.Path);
+                break;
+            // Not headless: the harness's window is never the active one, and
+            // the keyboard moving inside it is what its steps look at.
+            case Core.Workspace.FocusZone or FocusRow when !IsActive && !App.Headless:
+                _moveWhenActive = effect;
+                break;
+            case FocusZone zone:
+                _pendingReason = zone.Reason;
+                FocusZone(zone.Zone);
+                _pendingReason = null;
+                break;
+            case FocusRow row:
+                _pendingReason = ZoneReason.Programmatic;
+                if (row.Surface == WindowZone.FileList) {
+                    FileList.FocusRow(row.Path, row.Scroll);
+                } else {
+                    FolderTrees.FocusRow(row.Surface == WindowZone.Bookmarks ? Pane.Bookmarks : Pane.Drives, row.Path);
+                }
+                _pendingReason = null;
+                break;
+        }
+    }
+
+    /// <summary>
+    /// The keyboard move that waited for the window to come to the front -
+    /// after WPF's own putting back of what the keyboard had, which would
+    /// otherwise land on top of it. Brought to the front by a click, the
+    /// click says where the keyboard goes, and the move is dropped.
+    /// </summary>
+    private void MoveKeyboardOnceActive() {
+        if (_moveWhenActive is not { } waiting) {
+            return;
+        }
+
+        _moveWhenActive = null;
+        if (Mouse.LeftButton == MouseButtonState.Pressed || Mouse.RightButton == MouseButtonState.Pressed) {
+            return;
+        }
+
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, () => OnViewEffectRequested(waiting));
     }
 
 
-    /// <summary>Which zone an element belongs to, or null for the chrome between them.</summary>
-    private WindowZone? ZoneOf(object? source) {
+    /// <summary>Which zone an element belongs to, or null for the chrome between them. Internal: the harness asks it too (assert-focus).</summary>
+    internal WindowZone? ZoneOf(object? source) {
         // The folder panels answer for themselves — which of the two a row
         // belongs to is the control's business, not the window's.
         if (FolderTrees.PaneOf(source) is { } pane) {
@@ -866,7 +943,10 @@ public partial class MainWindow : Window {
     private void CycleZone(int delta) {
         var from = ZoneOf(Keyboard.FocusedElement) ?? WindowZone.FileList;
         foreach (var zone in WindowZones.Ring(from, delta)) {
-            if (FocusZone(zone)) {
+            _pendingReason = ZoneReason.Tab;
+            bool took = FocusZone(zone);
+            _pendingReason = null;
+            if (took) {
                 return;
             }
         }
@@ -944,7 +1024,17 @@ public partial class MainWindow : Window {
             FolderTrees.HasBookmarks);
 
         _lastFolderPane = target;
+        // Where the panel's cursor lands is the model's answer to the
+        // keyboard arriving for this reason. The keyboard may not move at
+        // all - Ctrl+Shift+E pressed in the panel it opens - and then the
+        // reason is told without a focus change to carry it.
+        var reason = toggle ? ZoneReason.PanelKey : ZoneReason.RevealKey;
+        _pendingReason = reason;
         FolderTrees.RevealAndFocus(PaneSource(target));
+        if (_pendingReason is not null) {
+            _pendingReason = null;
+            Vm.NoteKeyboardZone(target, reason);
+        }
     }
 
 
@@ -963,9 +1053,18 @@ public partial class MainWindow : Window {
 
 
     /// <summary>
-    /// Repaints the "you are here" outline. Hung off the window rather than
-    /// the individual controls because focus can land anywhere, including on
-    /// chrome that belongs to no zone at all.
+    /// Repaints the "you are here" outline and tells the view model where
+    /// the keyboard is. Hung off the window rather than the individual
+    /// controls because focus can land anywhere, including on chrome that
+    /// belongs to no zone at all.
+    ///
+    /// <para>
+    /// The zone is one of the facts the operation target is read from
+    /// (TargetRules), never a trigger that moves it: the keyboard arriving
+    /// in a panel takes nothing away from the list, and coming back from a
+    /// context menu changes nothing - the menu's items run on the menu's
+    /// own snapshot (MenuContext), whenever WPF gets round to running them.
+    /// </para>
     /// </summary>
     private void OnZoneFocusChanged(object sender, KeyboardFocusChangedEventArgs e) {
         var zone = ZoneOf(e.NewFocus);
@@ -977,32 +1076,48 @@ public partial class MainWindow : Window {
             zone is WindowZone.Bookmarks or WindowZone.Drives ? PaneSource(zone.Value) : null,
             Palette.FocusOutline);
 
-        // Arriving in a folder panel moves the operation target with the
-        // keyboard, so the first Delete after Tab is about the folder the
-        // user is looking at and not about the list they just left.
         if (zone is WindowZone.Bookmarks or WindowZone.Drives) {
             _lastFolderPane = zone.Value;
-            var pane = PaneSource(zone.Value);
-            if (IsInsideMenu(e.OldFocus)) {
-                // The keyboard coming back from a context menu is not an
-                // arrival. The row the menu was opened on is the target,
-                // and the menu's command runs only now - after the menu
-                // has closed and the keyboard has returned (WPF's
-                // MenuItem.InvokeClickAfterRender): re-targeting here made
-                // "Open in terminal" and "Paste" on a row act on the open
-                // folder instead (2026-09-22). The row under the cursor
-                // becomes the target again a moment later, once that
-                // command has had its turn - so a dismissed menu leaves no
-                // hidden target behind either.
-                Dispatcher.BeginInvoke(DispatcherPriority.Background, () => FolderTrees.TargetSelected(pane));
-            } else {
-                FolderTrees.TargetSelected(pane);
-            }
+        }
+
+        // A move inside one zone - the arrows of a panel, a line focused as
+        // the cursor is drawn - is nothing new to the model; an arrival is,
+        // and so is the window moving the keyboard for a reason of its own.
+        var reason = ReasonFor(e);
+        if (zone != Vm.Workspace.State.Keyboard.Zone
+            || reason is ZoneReason.Tab or ZoneReason.PanelKey or ZoneReason.RevealKey or ZoneReason.FocusFell) {
+            Vm.NoteKeyboardZone(zone, reason);
         }
     }
 
-    private static bool IsInsideMenu(IInputElement? element) {
-        return ListVisuals.Ancestors(element).Any(hit => hit is ContextMenu);
+    /// <summary>
+    /// Why the keyboard came to where it is (REDESIGN 4.4): the reason the
+    /// window gave before moving it; the element that had it taken away -
+    /// WPF hands the keyboard to the nearest focusable thing that is left,
+    /// the list around a row, or the window; a mouse button down - a click;
+    /// coming out of a menu; the window's activation putting it back.
+    /// Anything else is unknown, and an unknown reason moves nothing in the
+    /// model.
+    /// </summary>
+    private ZoneReason ReasonFor(KeyboardFocusChangedEventArgs e) {
+        bool activated = _justActivated;
+        _justActivated = false;
+        if (_pendingReason is { } pending) {
+            _pendingReason = null;
+
+            return pending;
+        }
+        if (e.NewFocus is Window || (e.OldFocus is Visual old && PresentationSource.FromVisual(old) is null)) {
+            return ZoneReason.FocusFell;
+        }
+        if (Mouse.LeftButton == MouseButtonState.Pressed || Mouse.RightButton == MouseButtonState.Pressed) {
+            return ZoneReason.Click;
+        }
+        if (ListVisuals.Ancestors(e.OldFocus).Any(hit => hit is System.Windows.Controls.ContextMenu or MenuItem)) {
+            return ZoneReason.MenuReturn;
+        }
+
+        return activated ? ZoneReason.Activation : ZoneReason.Unknown;
     }
 
 
@@ -1010,12 +1125,20 @@ public partial class MainWindow : Window {
 
     /// <summary>
     /// Switches the address strip from breadcrumbs to the editable path and
-    /// puts the caret in it. The TextBox is Collapsed until the flag flips
-    /// and a collapsed element cannot take focus, hence the queued
-    /// Focus/SelectAll.
+    /// puts the caret in it. The TextBox is Collapsed until the flag flips;
+    /// the binding shows it at once, and laid out here it takes the keyboard
+    /// at once too - a Tab, Alt+D and the model all see where it went. Only
+    /// a box that still refuses it gets it once the layout has run.
     /// </summary>
     private void BeginAddressEdit() {
         Vm.Nav.IsEditingAddress = true;
+        AddressBox.UpdateLayout();
+        if (AddressBox.Focus()) {
+            AddressBox.SelectAll();
+
+            return;
+        }
+
         Dispatcher.BeginInvoke(new Action(() => {
             AddressBox.Focus();
             AddressBox.SelectAll();
@@ -1093,17 +1216,25 @@ public partial class MainWindow : Window {
 
 
     private void FileList_ContextMenuRequested(object? sender, FileListMenuRequest e) {
-        ShowContextMenu(e.Host, e.Placement, e.IsBackground);
+        ShowContextMenu(e.Host, e.Placement, Vm.MenuContextForList(e.IsBackground));
     }
 
-    private void ShowContextMenu(FrameworkElement host, PlacementMode placement, bool isBackground, string? folderPath = null) {
+    /// <summary>
+    /// Builds and opens a context menu about <paramref name="context"/> -
+    /// the snapshot taken as it opens. Every item runs with that snapshot as
+    /// its parameter, and while the menu is open its subject is the target
+    /// the rest of the window describes - a panel row it is about is framed.
+    /// </summary>
+    private void ShowContextMenu(FrameworkElement host, PlacementMode placement, MenuContext context) {
         if (_contextMenus is null) {
             return;
         }
 
         var vm = Vm;
         var settings = vm.MenuSettings;
-        var target = MenuTarget(isBackground, folderPath);
+        var target = MenuTarget(context);
+        bool isBackground = context.Subject.Kind == TargetKind.Background;
+        string? primary = context.Subject.Primary?.FullPath;
 
         // Remember the file type that was right-clicked. The "Добавить"
         // picker in settings leads with these — of the eight hundred
@@ -1112,7 +1243,7 @@ public partial class MainWindow : Window {
         // Only real file types: the picker's list is a list of extensions,
         // and "фон папки" is already one of the scopes the table always has.
         if (!isBackground) {
-            vm.Settings.NoteMenuScope(ShellScopes.ExtensionOf(vm.SelectedEntry?.FullPath));
+            vm.Settings.NoteMenuScope(ShellScopes.ExtensionOf(primary));
         }
 
         var session = QueryShellMenu(target, settings);
@@ -1123,7 +1254,7 @@ public partial class MainWindow : Window {
             // blocklist is — verb first, label as the fallback.
             string scope = isBackground
                 ? ShellScopes.DirectoryBackground
-                : ShellScopes.ExtensionOf(vm.SelectedEntry?.FullPath) ?? ShellScopes.Directory;
+                : ShellScopes.ExtensionOf(primary) ?? ShellScopes.Directory;
 
             vm.Settings.NoteShellExtensions(session.Items
                 .Where(item => !item.IsSeparator)
@@ -1140,29 +1271,20 @@ public partial class MainWindow : Window {
             return;
         }
 
-        var menu = _contextMenus.Build(model, session);
+        var menu = _contextMenus.Build(model, session, context);
         menu.DataContext = vm;
         menu.PlacementTarget = host;
         menu.Placement = placement;
+        menu.Opened += (_, _) => vm.NoteMenuOpened(context);
+        menu.Closed += (_, _) => vm.NoteMenuClosed(context);
         menu.IsOpen = true;
     }
 
-    /// <summary>What both menus are told about the list as it is now.</summary>
-    private ContextMenuTarget MenuTarget(bool isBackground, string? folderPath = null) {
+    /// <summary>What a menu about <paramref name="context"/> is built from: the snapshot, plus the settings it does not hold.</summary>
+    private ContextMenuTarget MenuTarget(MenuContext context, MenuPlace place = MenuPlace.Context) {
         var vm = Vm;
 
-        return new ContextMenuTarget {
-            Selection = isBackground ? Array.Empty<FileSystemEntry>() : vm.SelectedEntries,
-            FolderPath = folderPath ?? vm.CurrentPath,
-            IsBackground = isBackground,
-            IsReadOnlyLocation = vm.IsCurrentShellNamespace,
-            IsRecycleBin = vm.IsCurrentRecycleBin,
-            IsArchive = vm.CurrentArchive is not null,
-            // "Every one of them is an archive", not "one of them is": the
-            // row extracts what is selected, and a mixed selection has no
-            // single answer to what that would mean.
-            SelectionIsArchive = !isBackground && vm.SelectionIsArchive,
-            CanPaste = vm.PasteCommand.CanExecute(null),
+        return context.ToMenuTarget(vm.CurrentPath, place) with {
             Actions = vm.Settings.Actions,
             MissingTools = vm.MissingTools,
             ShowDebug = vm.Settings.ShowDebugMenu,
@@ -1182,35 +1304,39 @@ public partial class MainWindow : Window {
     }
 
     /// <summary>
-    /// <c>F2</c> and "Rename", from the key or a menu: the list's row when
-    /// the list has the selection, else the folder a panel made the target
-    /// - the row under its cursor, the one right-clicked, the folder just
-    /// opened from it (<see cref="MainViewModel.SelectExternalPath"/>). One
-    /// item is edited in place; two or more go to the batch window, which
-    /// refuses a mix of files and folders on its own.
+    /// <c>F2</c> and "Rename", from the key or a menu: on the surface the
+    /// target is on (TargetRules.Rename) - the list's row, a panel's row
+    /// under its cursor or right-clicked. One item is edited in place; two
+    /// or more go to the batch window, which refuses a mix of files and
+    /// folders on its own.
     /// </summary>
-    private void StartRename() {
+    private void StartRename(object? parameter) {
         var vm = Vm;
-        if (vm.SelectedEntry is not null) {
-            if (vm.SelectedEntries.Count > 1) {
-                vm.BatchRenameCommand.Execute(null);
-            } else {
+        var target = vm.ResolveTarget(parameter).Target;
+        switch (TargetRules.Rename(target)) {
+            case RenameRoute.ListBatch:
+                vm.BatchRenameCommand.Execute(parameter);
+                break;
+            case RenameRoute.ListRow:
                 FileList.StartRename();
-            }
-
-            return;
-        }
-
-        if (vm.SelectedEntries is [{ } target]) {
-            FolderTrees.StartRename(target.FullPath);
+                break;
+            case RenameRoute.PanelRow:
+                FolderTrees.StartRename(target.Pane, target.Folder!);
+                break;
         }
     }
 
-    private bool CanStartRename() {
-        var vm = Vm;
+    private bool CanStartRename(object? parameter) {
+        var (target, place) = Vm.ResolveTarget(parameter);
+        if (place.IsReadOnly) {
+            return false;
+        }
 
-        return vm.SelectedEntry is not null
-            || (vm.SelectedEntries is [{ } target] && FolderTrees.CanRename(target.FullPath));
+        return TargetRules.Rename(target) switch {
+            RenameRoute.ListRow or RenameRoute.ListBatch => true,
+            RenameRoute.PanelRow => FolderTrees.CanRename(target.Pane, target.Folder!),
+            _ => false,
+        };
     }
 
 
@@ -1218,10 +1344,11 @@ public partial class MainWindow : Window {
     /// Maps every built-in menu id onto the command that runs it. Most come
     /// straight off the ViewModel; Rename is the exception - it opens an
     /// editor in the view, over a row of the list or of a folder panel
-    /// (<see cref="StartRename"/>).
+    /// (<see cref="StartRename"/>). A menu hands each command its snapshot
+    /// (MenuCall); a key runs the same command with none.
     /// </summary>
     private Dictionary<MenuCommandId, MenuBinding> BuildMenuBindings() {
-        var rename = new RelayCommand(_ => StartRename(), _ => CanStartRename());
+        var rename = new RelayCommand(StartRename, CanStartRename);
         var vm = Vm;
 
         return new Dictionary<MenuCommandId, MenuBinding> {
@@ -1231,10 +1358,9 @@ public partial class MainWindow : Window {
 
             [MenuCommandId.Cut] = new(vm.CutCommand),
             [MenuCommandId.Copy] = new(vm.CopyCommand),
-            // A menu's Paste goes into the one folder selected or targeted
-            // (a row of the list, a row of a panel); Ctrl+V, bound in XAML
-            // without the parameter, into the open folder.
-            [MenuCommandId.Paste] = new(vm.PasteCommand, MainViewModel.PasteIntoSelection),
+            // A menu's Paste goes into the one folder its row is, when it
+            // is one (TargetRules.PasteFolder); Ctrl+V into the open folder.
+            [MenuCommandId.Paste] = new(vm.PasteCommand),
             [MenuCommandId.CopyPath] = new(vm.CopyPathCommand),
             [MenuCommandId.CopyName] = new(vm.CopyNameCommand),
             [MenuCommandId.CreateShortcut] = new(vm.CreateShortcutCommand),
@@ -1273,16 +1399,19 @@ public partial class MainWindow : Window {
     }
 
     /// <summary>
-    /// Fills the menu for the selection as it is at the moment it opens.
-    /// The shell is not asked: the header offers Wander's own verbs only.
+    /// Fills the menu for the target as it is at the moment it opens - the
+    /// list's rows, or a panel's row when the keyboard was there; the open
+    /// folder when there is nothing. The shell is not asked: the header
+    /// offers Wander's own verbs only.
     /// </summary>
     private void RebuildOperationsMenu() {
         if (_contextMenus is null) {
             return;
         }
 
-        var target = MenuTarget(isBackground: false) with { Place = MenuPlace.Header };
-        _contextMenus.Populate(OperationsMenu.Items, ContextMenuBuilder.Build(target, Vm.MenuSettings));
+        var vm = Vm;
+        var context = vm.MenuContextFor(vm.Target);
+        _contextMenus.Populate(OperationsMenu.Items, ContextMenuBuilder.Build(MenuTarget(context, MenuPlace.Header), vm.MenuSettings), context);
     }
 
 
@@ -1299,23 +1428,12 @@ public partial class MainWindow : Window {
     }
 
 
-    /// <summary>
-    /// A folder panel targeted a folder: the row under the keyboard cursor,
-    /// or the one that was right-clicked. The list gives up its selection
-    /// for it, so exactly one highlighted set is on screen — that is what
-    /// tells the user which of the two the next Delete is about.
-    /// </summary>
-    private void FolderTrees_FolderTargeted(object? sender, string path) {
-        FileList.ClearSelection();
-        Vm.SelectExternalPath(path);
-    }
-
     private void FolderTrees_FocusListRequested(object? sender, EventArgs e) {
         FileList.FocusList();
     }
 
     private void FolderTrees_ContextMenuRequested(object? sender, FolderMenuRequest e) {
-        ShowContextMenu(e.Host, PlacementMode.MousePoint, isBackground: false, folderPath: e.Folder);
+        ShowContextMenu(e.Host, e.Placement, Vm.MenuContextFor(Target.OfPanelRow(e.Pane, e.Folder)));
     }
 
 
@@ -1339,6 +1457,24 @@ public partial class MainWindow : Window {
 
     private void FolderTrees_DropMenuRequested(object? sender, DropMenuRequest e) {
         ShowDropMenu(e.Host, e.Plan);
+    }
+
+    /// <summary>
+    /// A drag held long enough over a place to go deeper (U1): a closed panel
+    /// line opens - the model's own chevron - and a folder of the list is
+    /// gone into, as a double click there would.
+    /// </summary>
+    private void OnDragHoverOpened(DragHoverDecision decision, FrameworkElement element) {
+        Log.Detail($"Drag: held over {decision.Path} - {decision.Outcome}");
+        switch (decision.Outcome) {
+            case DragHoverOutcome.Expand when FolderTrees.PaneOf(element) is { } source:
+                Vm.Workspace.Post(new ChevronToggled(
+                    source == NavigationSource.Bookmark ? Pane.Bookmarks : Pane.Drives, decision.Path!, Open: true, All: false));
+                break;
+            case DragHoverOutcome.Enter:
+                Vm.NavigateTo(decision.Path!, NavigationSource.RightPane);
+                break;
+        }
     }
 
     /// <summary>

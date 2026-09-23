@@ -1,4 +1,4 @@
-using Wander.Core.Navigation;
+using Wander.Core.Panels;
 
 namespace Wander.Core.Tests;
 

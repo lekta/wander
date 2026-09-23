@@ -8,6 +8,7 @@ using System.Windows.Threading;
 using Wander.App.Controllers;
 using Wander.App.Controls;
 using Wander.App.Dialogs;
+using Wander.App.Menu;
 using Wander.App.Preview;
 using Wander.App.Resources;
 using Wander.App.Util;
@@ -25,12 +26,14 @@ using Wander.Core.Logging;
 using Wander.Core.Menu;
 using Wander.Core.Navigation;
 using Wander.Core.Operations;
+using Wander.Core.Panels;
 using Wander.Core.Persistence;
 using Wander.Core.Preview;
 using Wander.Core.Rename;
 using Wander.Core.Search;
 using Wander.Core.Shell;
 using Wander.Core.Undo;
+using Wander.Core.Workspace;
 
 
 namespace Wander.App;
@@ -67,13 +70,6 @@ public sealed class MainViewModel : ObservableObject {
     /// See the constructor's note at <see cref="_stateSaveTimer"/>.
     /// </summary>
     private const int StateSaveDelayMs = 500;
-
-    /// <summary>
-    /// The parameter a menu's "Paste" runs <see cref="PasteCommand"/> with:
-    /// into the one folder selected or targeted, as in Explorer's row menu.
-    /// Ctrl+V runs it without one - see <see cref="PasteAsync"/>.
-    /// </summary>
-    internal const string PasteIntoSelection = "into-selection";
 
     /// <summary>
     /// How long an operation runs before its window comes up (2026-09-21).
@@ -132,6 +128,23 @@ public sealed class MainViewModel : ObservableObject {
     private FileSystemEntry? _selectedEntry;
     private string? _renamingPath;
     private IReadOnlyList<FileSystemEntry> _selectedEntries = Array.Empty<FileSystemEntry>();
+
+    // What the next operation is about is not a fact of its own (REDESIGN
+    // 4.3): it is read (TargetRules) from where the keyboard is, where each
+    // panel's cursor stands and the open menu - the window's model
+    // (Workspace) - and the list's selection above. _target is its last
+    // reading, redone whenever one of those changes.
+    private Target _target = Target.None;
+
+    // The place of the last panel row asked about (PlaceOf): an archive's
+    // row asks the disk whether it is one, and CanExecute asks constantly.
+    private (Target Row, PlaceFacts Place)? _panelPlace;
+
+    // The panel row's folder the preview shows, or is reading off the UI
+    // thread to show - see ShowPanelFolder.
+    private string? _panelFolderPath;
+    private CancellationTokenSource? _panelFolderCts;
+
     // What is on screen and why (ViewChoice). The choice itself is not
     // stored here: a pin lives in _folders, the default in the settings,
     // and the gallery switching itself on in a folder of photographs is a
@@ -171,8 +184,6 @@ public sealed class MainViewModel : ObservableObject {
     private bool _isBookmarksExpanded = true;
     private bool _isFoldersVisible = true;
     private bool _isPreviewSplit;
-    private (FileSystemEntry First, FileSystemEntry Second)? _previewPair;
-    private IReadOnlyList<NavigationStop> _persistedExpandedPaths = Array.Empty<NavigationStop>();
     private string? _missingFolderPath;
 
     private CancellationTokenSource? _listLoadCts;
@@ -191,15 +202,26 @@ public sealed class MainViewModel : ObservableObject {
     // helper on.
     private readonly SharpnessController _sharpness;
 
-    // True while rows are being swapped for updated copies. The list drops
-    // a replaced object out of its selection and says so, and that report
-    // would clear the preview and the status line for the two frames until
-    // the selection is put back. See ReplaceRows.
-    private bool _rowsReplacing;
+    // True while Entries is being laid down again (SyncEntries, ReplaceRows):
+    // the list drops rebuilt and replaced rows out of its selection on its
+    // own, and what it reports meanwhile is not the user's doing - the
+    // model puts the selection back once the rows have landed.
+    private bool _syncingRows;
 
-    // What ReconcileEntries found gone from under the selection or the
-    // caret, until SettleDeparture says what becomes current instead.
-    private Departure? _departure;
+    // The folder whose rows landed last: rows of another one are an arrival.
+    private string? _landedFolder;
+
+    // Rows renamed or moved since the last landing, old path to new - ours
+    // and the ones the watcher saw - for the selection to follow (B7).
+    private readonly List<(string From, string To)> _landingRenames = new();
+
+    // Renames of ours that have not landed yet: the watcher's tick waits
+    // for them (L-11) - the editor is gone before the rename is done.
+    private int _renamesInFlight;
+
+    // A folder move is being followed: the navigation it causes is the
+    // listing going after the folder, not the user going somewhere.
+    private bool _followingMove;
 
     // The rows in Entries are search results, not a listing of the folder -
     // until the next listing lands (SyncEntries).
@@ -372,57 +394,57 @@ public sealed class MainViewModel : ObservableObject {
         Shell = new ShellCommandsController(_shell, _log);
         Shell.StatusReported += (_, line) => Say(line.Text, line.Severity);
 
-        // The trees are created first and handed a way to look at the
-        // bookmark rows, because everything that spans both panels lives
-        // with them. The lambda is not called during construction, so the
-        // bookmarks panel being one line away is fine (hence the !).
-        Trees = new FolderTreesController(_fs, Settings, () => Bookmarks!.Items);
-
-        // Wiring a fresh node is the trees' bookkeeping, not the panel's, so
-        // the controller is handed that one operation and owns everything
-        // else about bookmarks itself.
-        Bookmarks = new BookmarksController(_fs, Settings, _log, Trees.Wire);
+        // The window's model (REDESIGN 4): both panels, where the keyboard
+        // is, the open menu. A folder a panel opens is opened the way a
+        // click on its row always has been - the folder itself selected.
+        // The panels are its projection; the bookmarks hand it their rows.
+        Workspace = new WorkspaceController(
+            _fs, TryGetShellNamespace(), () => Settings.Visibility,
+            NavigateAndSelectFolder, _dispatcher, _log);
+        Workspace.StateChanged += OnWorkspaceChanged;
+        Trees = new FolderTreesController(Workspace);
+        Bookmarks = new BookmarksController(_fs, Settings, _log);
         Bookmarks.StatusReported += (_, text) => Status = text;
         Bookmarks.Changed += (_, _) => {
-            Bookmarks.Build(_persistedExpandedPaths);
+            PostBookmarks();
             SaveState();
             RaiseMissingFolder();
         };
 
         _tracker.Changed += OnTrackerChanged;
 
-        // The row of the list, or the folder a panel made the target - the
-        // default row of a panel row's menu was greyed out otherwise.
-        OpenCommand = new RelayCommand(
-            p => OpenEntry(p as FileSystemEntry ?? _selectedEntry ?? (ExternalTargetFolder is null ? null : _selectedEntries[0])),
-            _ => _selectedEntry is not null || ExternalTargetFolder is not null);
+        // Every verb below acts on what TargetRules says it acts on: from a
+        // key, the target as it is now; from a menu, the menu's snapshot,
+        // handed to the command as its parameter (MenuCall). Whether it may
+        // is a question about the place of that target (PlaceFacts), not
+        // about the folder open in the list: a folder right-clicked in the
+        // drives tree while the Recycle Bin is open has every verb.
+        OpenCommand = new RelayCommand(Open, p => p is FileSystemEntry || TargetRules.Open(ResolveTarget(p).Target) != OpenRoute.None);
         // Destructive ops are blocked inside shell namespaces (Recycle Bin):
         // the entries' FullPaths point at $Recycle.Bin backing files, and
         // copying / deleting / renaming those would bypass the shell's
         // restore-tracking and corrupt the bin's state. Read-only browsing
         // only in this iteration.
-        DeleteCommand = new RelayCommand(() => _ = DeleteSelectedAsync(permanent: false), () => _selectedEntries.Count > 0 && !IsCurrentShellNamespace);
-        RenameCommand = new RelayCommand(p => Rename(_selectedEntry, p as string), _ => _selectedEntry is not null && !IsCurrentShellNamespace);
+        DeleteCommand = new RelayCommand(p => _ = DeleteTargetAsync(p, permanent: false), CanDelete);
+        // The name from the prompt: confirmed with its own Enter, so the
+        // keyboard goes onto the renamed row, as after the inline editor's.
+        RenameCommand = new RelayCommand(p => Rename(_selectedEntry, p as string, takeFocus: true), _ => _selectedEntry is not null && !IsCurrentShellNamespace);
         BatchRenameCommand = new RelayCommand(
-            _ => BatchRename(),
-            _ => !IsCurrentShellNamespace
-                && BatchRenameGate.Classify(_selectedEntries) is BatchRenameKind.Files or BatchRenameKind.Folders);
+            BatchRename,
+            p => ListRowsOf(p) is { } rows
+                && BatchRenameGate.Classify(rows) is BatchRenameKind.Files or BatchRenameKind.Folders);
         // Copy is the one clipboard verb an archive still answers: it puts
         // the paths inside the archive on the clipboard, and Paste in a real
         // folder turns them into an extraction. The bin stays excluded -
         // pasting a $Recycle.Bin backing path copies a mangled file.
-        CopyCommand = new RelayCommand(
-            _ => Copy(),
-            _ => _selectedEntries.Count > 0 && (!IsCurrentShellNamespace || CurrentArchive is not null));
-        ExtractCommand = new RelayCommand(() => _ = ExtractSelectionAsync(), () => CanExtractSelection());
-        CutCommand = new RelayCommand(_ => Cut(), _ => _selectedEntries.Count > 0 && !IsCurrentShellNamespace);
-        PasteCommand = new RelayCommand(
-            p => _ = PasteAsync(intoSelection: p is PasteIntoSelection),
-            _ => _clipboard.HasContent && _nav.Current is not null && !IsCurrentShellNamespace);
+        CopyCommand = new RelayCommand(Copy, CanCopy);
+        ExtractCommand = new RelayCommand(p => _ = ExtractSelectionAsync(p), CanExtractSelection);
+        CutCommand = new RelayCommand(Cut, CanCut);
+        PasteCommand = new RelayCommand(p => _ = PasteAsync(p), CanPaste);
         NewFolderCommand = new RelayCommand(_ => NewFolder(), _ => _nav.Current is not null && !IsCurrentShellNamespace);
         RestoreFromRecycleBinCommand = new RelayCommand(
             _ => RestoreFromRecycleBin(),
-            _ => IsCurrentRecycleBin && _selectedEntries.Count > 0);
+            p => ResolveTarget(p).Place.IsRecycleBin && ListRowsOf(p) is not null);
         RefreshCommand = new RelayCommand(_ => RefreshOrRerunSearch());
         SetViewModeCommand = new RelayCommand(p => SetViewMode(p as string));
         SetViewAutoCommand = new RelayCommand(_ => SetViewAuto());
@@ -442,8 +464,9 @@ public sealed class MainViewModel : ObservableObject {
         OptionsCommand = new RelayCommand(_ => OpenSettingsDialog());
         ConfigureActionsCommand = new RelayCommand(
             _ => OpenSettingsDialog(Settings.Categories.OfType<ActionsSettingsCategory>().FirstOrDefault()));
-        RunActionCommand = new RelayCommand(p => _ = RunActionAsync(p as string), _ => !IsCurrentShellNamespace);
-        RunActionToFolderCommand = new RelayCommand(p => _ = RunActionAsync(p as string, pickFolder: true), _ => !IsCurrentShellNamespace);
+        // The row carries the action's id - through a MenuCall from the menus.
+        RunActionCommand = new RelayCommand(p => _ = RunActionAsync(p), p => !ResolveTarget(p).Place.IsReadOnly);
+        RunActionToFolderCommand = new RelayCommand(p => _ = RunActionAsync(p, pickFolder: true), p => !ResolveTarget(p).Place.IsReadOnly);
         // GitHub's template chooser lets the user pick "Bug report" or
         // "Feature request"; nothing is pre-filled, so no session data is
         // involved — unlike the crash path, which bundles diagnostics.
@@ -453,22 +476,23 @@ public sealed class MainViewModel : ObservableObject {
         // Properties falls back to the folder being listed, so a background
         // right-click (and Alt+Enter with nothing selected) opens the
         // folder's own sheet — Explorer parity.
-        PropertiesCommand = new RelayCommand(_ => ShowProperties(), _ => PropertiesTarget() is not null);
-        OpenWithCommand = new RelayCommand(_ => OpenWith(), _ => _selectedEntry is not null && !IsCurrentShellNamespace);
-        OpenInTerminalCommand = new RelayCommand(_ => OpenInTerminal(), _ => TerminalFolder() is not null);
+        PropertiesCommand = new RelayCommand(ShowProperties, p => TargetRules.PropertiesOf(ResolveTarget(p).Target, _nav.Current) is not null);
+        OpenWithCommand = new RelayCommand(OpenWith, p => OpenWithTarget(p) is not null);
+        OpenInTerminalCommand = new RelayCommand(OpenInTerminal, p => TerminalFolder(p) is not null);
         CopyPathCommand = new RelayCommand(
-            _ => Shell.CopyPaths(SelectedPathsOrCurrent()), _ => PropertiesTarget() is not null);
+            p => Shell.CopyPaths(TargetRules.CopyPaths(ResolveTarget(p).Target, _nav.Current)),
+            p => TargetRules.CopyPaths(ResolveTarget(p).Target, _nav.Current).Count > 0);
         CopyNameCommand = new RelayCommand(
-            _ => Shell.CopyNames(_selectedEntries.Select(e => e.Name).ToArray()),
-            _ => _selectedEntries.Count > 0);
+            p => Shell.CopyNames(TargetRules.Items(ResolveTarget(p).Target).Select(e => e.Name).ToArray()),
+            p => TargetRules.Items(ResolveTarget(p).Target).Count > 0);
         CreateShortcutCommand = new RelayCommand(
-            _ => CreateShortcutsForSelection(),
-            _ => _selectedEntries.Count > 0 && _nav.Current is not null && !IsCurrentShellNamespace);
+            CreateShortcutsForSelection,
+            p => ListRowsOf(p) is not null && _nav.Current is not null && !ResolveTarget(p).Place.IsReadOnly);
         OpenJournalCommand = new RelayCommand(_ => OpenJournal(), _ => Journal.Count > 0);
         TogglePreviewCommand = new RelayCommand(_ => IsPreviewVisible = !IsPreviewVisible);
         ToggleFoldersCommand = new RelayCommand(_ => IsFoldersVisible = !IsFoldersVisible);
         UndoCommand = new RelayCommand(_ => UndoLast(), _ => _undo.CanUndo);
-        PermanentDeleteCommand = new RelayCommand(() => _ = DeleteSelectedAsync(permanent: true), () => _selectedEntries.Count > 0 && !IsCurrentShellNamespace);
+        PermanentDeleteCommand = new RelayCommand(p => _ = DeleteTargetAsync(p, permanent: true), CanDelete);
         OpenLogFileCommand = new RelayCommand(_ => Shell.OpenLogFile(), _ => ServiceLocator.IsRegistered<ILogFile>());
         DebugOperationCommand = new RelayCommand(p => _ = RunDebugOperationAsync(p as string));
         ToggleBookmarksCommand = new RelayCommand(_ => IsBookmarksExpanded = !IsBookmarksExpanded);
@@ -542,13 +566,7 @@ public sealed class MainViewModel : ObservableObject {
                 return;
             }
 
-            using (PerfLog.Measure("ui.rows")) {
-                ReconcileEntries(() => SyncEntries(filtered));
-            }
-            UpdateFilterStatus(filtered.Count, _search.Source.Count);
-            using (PerfLog.Measure("ui.restore")) {
-                SettleDeparture(placed: ApplyArrival());
-            }
+            LandRows(filtered);
         };
         _search.ItemsChanged += changed => {
             if (ContentSearch.IsShowingResults) {
@@ -572,7 +590,6 @@ public sealed class MainViewModel : ObservableObject {
             }
         };
 
-        Trees.LoadRoots();
         RestoreState();
         // Restored settings decide how big the thumbnail caches may be; the
         // provider starts idle until it is told. Same for where scratch
@@ -590,47 +607,18 @@ public sealed class MainViewModel : ObservableObject {
         // RestoreState re-opens: they are the saved state coming back, not
         // a change worth saving.
         Settings.PropertyChanged += OnSettingsChanged;
-        Trees.ExpansionChanged += (_, _) => SaveState();
+        Workspace.StateChanged += (before, after) => {
+            if (!ReferenceEquals(before.Drives.Expanded, after.Drives.Expanded)
+                || !ReferenceEquals(before.Bookmarks.Expanded, after.Bookmarks.Expanded)) {
+                SaveState();
+            }
+        };
         // The restored view mode and palette decide the surround; the panes
         // were built before either was known.
         PushPalette();
         _ = LocateToolsAsync();
     }
 
-
-    /// <summary>
-    /// Raised after a refresh has reconciled <see cref="Entries"/>, carrying
-    /// the rows that should be selected again. The view owns multi-selection
-    /// (SelectedItems lives on the controls, not here), so it does the actual
-    /// selecting.
-    /// </summary>
-    public event Action<IReadOnlyList<FileSystemEntry>>? SelectionRestoreRequested;
-
-    /// <summary>
-    /// Raised after rows were swapped for updated copies in place, carrying
-    /// the rows that were selected before. Distinct from
-    /// <see cref="SelectionRestoreRequested"/> in exactly one way, and it is
-    /// the whole reason it exists: this one must not scroll and must not
-    /// move the keyboard. Nothing happened that the user should be taken
-    /// anywhere for — a number changed inside a row they are looking at.
-    /// </summary>
-    public event Action<IReadOnlyList<FileSystemEntry>>? SelectionRefreshRequested;
-
-    /// <summary>
-    /// Raised when the current row left the folder and the next one took
-    /// its place - selected, <see cref="CaretPath"/> on it; see
-    /// <c>SettleDeparture</c>. The keyboard, if it was on the departed row,
-    /// is the view's to move.
-    /// </summary>
-    public event Action? CurrentRowLeft;
-
-    /// <summary>
-    /// Raised when the row a restore just landed on is one the user is
-    /// expected to name — a folder that has only just been created. The
-    /// in-place editor lives in the row template, so opening it is the
-    /// view's job; the view model only says which row and when.
-    /// </summary>
-    public event Action<FileSystemEntry>? InlineRenameRequested;
 
     /// <summary>
     /// The rows of a folder the user walked into have landed. Carries the
@@ -800,126 +788,303 @@ public sealed class MainViewModel : ObservableObject {
     /// <para>
     /// A path rather than a row: rows are replaced on every re-listing and
     /// on every rating written, and a caret held as an object would either
-    /// go stale or force the list to be rebuilt to move it. The list sets
-    /// it; the row templates read it through
-    /// <see cref="Converters.CaretRowConverter"/>.
+    /// go stale or force the list to be rebuilt to move it. The window's
+    /// model holds it (<c>WorkspaceState.List</c>); the row templates read it
+    /// through <see cref="Converters.CaretRowConverter"/>.
     /// </para>
     /// </summary>
-    public string? CaretPath {
-        get => _caretPath;
-        set {
+    public string? CaretPath => _caretPath;
+
+    /// <summary>The list's main selected row - what Enter opens and F2 renames. The model's (<c>WorkspaceState.List</c>), as a row.</summary>
+    public FileSystemEntry? SelectedEntry => _selectedEntry;
+
+    /// <summary>The list's selected rows - the model's (<c>WorkspaceState.List</c>), as rows.</summary>
+    public IReadOnlyList<FileSystemEntry> SelectedEntries => _selectedEntries;
+
+    /// <summary>
+    /// The rows are being laid down again: what the list says about its
+    /// selection meanwhile is its own doing, not the user's (REDESIGN 4.8).
+    /// </summary>
+    public bool IsSyncingRows => _syncingRows;
+
+    /// <summary>
+    /// What the next operation is about (REDESIGN 4.3) - the rows of the
+    /// list, a row of a panel, or nothing. Read, never set: it follows the
+    /// window's model (<see cref="Workspace"/> - the keyboard, each panel's
+    /// cursor, the open menu) and the list's selection.
+    /// </summary>
+    public Target Target => _target;
+
+    /// <summary>The window's model and its one executor - the panels, the keyboard, the open menu.</summary>
+    public WorkspaceController Workspace { get; }
+
+    /// <summary>
+    /// The keyboard is in <paramref name="zone"/> now, for
+    /// <paramref name="reason"/>. Null for no zone (the window itself, a
+    /// menu, the preview): the target then means what it meant in the last.
+    /// </summary>
+    public void NoteKeyboardZone(WindowZone? zone, ZoneReason reason) {
+        Workspace.Post(new ZoneEntered(zone, reason));
+    }
+
+    /// <summary>
+    /// A context menu is open on <paramref name="context"/>: until it closes,
+    /// its subject is the target - the preview and the status bar describe
+    /// what the menu is about.
+    /// </summary>
+    public void NoteMenuOpened(MenuContext context) {
+        Workspace.Post(new MenuOpened(context));
+    }
+
+    /// <summary>The menu opened on <paramref name="context"/> has closed.</summary>
+    public void NoteMenuClosed(MenuContext context) {
+        Workspace.Post(new MenuClosed(context));
+    }
+
+    /// <summary>The window became the active one: the panels read their open levels again, once in a while (P-24).</summary>
+    public void NoteWindowActivated() {
+        Workspace.Post(new WindowActivated(WorkspaceController.Now));
+    }
+
+    public void NoteWindowDeactivated() {
+        Workspace.Post(new WindowDeactivated());
+    }
+
+    /// <summary>
+    /// Shows one of the window's modal dialogs, the model told around it:
+    /// a closing dialog leaves the keyboard wherever WPF's first-focusable
+    /// search lands in the owner window, and the model puts it back in the
+    /// panel it was in, else in the list (K-3).
+    /// </summary>
+    private bool? ShowModal(Window dialog) {
+        Workspace.Post(new DialogOpened());
+        try {
+            return dialog.ShowDialog();
+        } finally {
+            Workspace.Post(new DialogClosed());
+        }
+    }
+
+    /// <summary>
+    /// What a command runs on, and the place it is in: the menu's snapshot
+    /// when the command came from a menu (<see cref="MenuCall"/>), the
+    /// target as it is now when it came from a key or a button.
+    /// </summary>
+    public (Target Target, PlaceFacts Place) ResolveTarget(object? parameter) {
+        return parameter is MenuCall call
+            ? (call.Context.Subject, call.Context.Place)
+            : (_target, PlaceOf(_target));
+    }
+
+    /// <summary>The snapshot for a menu about <paramref name="subject"/>, taken now.</summary>
+    public MenuContext MenuContextFor(Target subject) {
+        return MenuContext.For(subject, PlaceOf(subject), _clipboard.HasContent, SelectionIsArchive);
+    }
+
+    /// <summary>
+    /// The snapshot for the list's own menu: its selection, or - on empty
+    /// space - the open folder.
+    /// </summary>
+    public MenuContext MenuContextForList(bool isBackground) {
+        return MenuContextFor(isBackground
+            ? Target.OfBackground(_nav.Current)
+            : Target.OfRows(_selectedEntries, _selectedEntry));
+    }
+
+    /// <summary>
+    /// The target read again from its facts. Logged once per change of what
+    /// it is (N11) - not per event behind it: the keyboard arriving in a
+    /// panel and the panel's cursor moving there used to log it twice.
+    /// </summary>
+    private void UpdateTarget() {
+        var next = TargetRules.Of(TargetRules.FactsOf(Workspace.State) with {
+            ListSelection = _selectedEntries,
+            ListPrimary = _selectedEntry,
+        });
+        bool moved = !next.SameAs(_target);
+        _target = next;
+        if (moved) {
+            // The model's trace (WorkspaceController): the derived target,
+            // one line per change of it - not per event behind it (N11).
+            Log.Detail($"WS target: {next.Describe()}");
+        }
+    }
+
+    /// <summary>The model moved: the list's selection and caret as rows, and the target read again.</summary>
+    private void OnWorkspaceChanged(WorkspaceState before, WorkspaceState after) {
+        if (!ReferenceEquals(before.List, after.List)) {
+            ProjectList(after.List);
+        }
+        OnTargetFactsChanged();
+    }
+
+    /// <summary>
+    /// The list's selection and caret from the model, as rows of the listing
+    /// on screen - what the preview, the status bar and every command read.
+    /// The rows are looked up anew each time: a rating swaps a row for an
+    /// updated copy under the same path, and the selection must hold the
+    /// copy on screen.
+    /// </summary>
+    private void ProjectList(ListState list) {
+        var byPath = new Dictionary<string, FileSystemEntry>(Entries.Count, StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in Entries) {
+            byPath.TryAdd(entry.FullPath, entry);
+        }
+
+        var rows = new List<FileSystemEntry>(list.Selection.Length);
+        foreach (string path in list.Selection) {
+            if (byPath.TryGetValue(path, out var row)) {
+                rows.Add(row);
+            }
+        }
+        var primary = list.Primary is { } main && byPath.TryGetValue(main, out var found) ? found : rows.FirstOrDefault();
+
+        bool rowsMoved = rows.Count != _selectedEntries.Count || rows.Where((r, i) => !ReferenceEquals(r, _selectedEntries[i])).Any();
+        bool primaryMoved = !ReferenceEquals(primary, _selectedEntry);
+        bool caretMoved = !string.Equals(list.Caret, _caretPath, StringComparison.Ordinal);
+        _selectedEntries = rows;
+        _selectedEntry = primary;
+        _caretPath = list.Caret;
+
+        if (rowsMoved) {
+            // The action trace: what is selected now, whoever moved it.
+            Log.Detail($"Selection: {rows.Count} item(s){(rows.Count > 0 ? ", first " + rows[0].FullPath : "")}");
+            Raise(nameof(SelectedEntries));
+            NoteSelectionKind();
+        }
+        if (primaryMoved) {
+            Raise(nameof(SelectedEntry));
+        }
+        if (caretMoved) {
+            Raise(nameof(CaretPath));
+        }
+
+        if (rowsMoved || primaryMoved) {
+            UpdateTarget();
+            SyncPreviewSelection();
+            Raise(nameof(SelectionSummary));
+        } else if (caretMoved && rows.Count > 1) {
             // Inside a multi-selection the caret is the file the user just
             // added - the one the preview should be showing.
-            if (SetField(ref _caretPath, value) && _selectedEntries.Count > 1) {
-                RefreshPreviewPrimary();
-            }
+            RefreshPreviewPrimary();
         }
     }
 
-    public FileSystemEntry? SelectedEntry {
-        get => _selectedEntry;
-        set {
-            // Nothing the list says about the selection while its rows are
-            // being swapped is the truth. It drops each replaced object as
-            // it goes and moves SelectedItem onto whichever selected row is
-            // still standing, so a plain three-row update walked the preview
-            // through three other photographs before landing back on the
-            // right one. ReconcileEntries assigns the real value when the
-            // swap is over.
-            if (_rowsReplacing) {
-                return;
-            }
-            if (SetField(ref _selectedEntry, value)) {
-                RefreshPreviewPrimary();
-            }
+    /// <summary>A fact the target is read from changed: the preview and the status bar follow a target that moved.</summary>
+    private void OnTargetFactsChanged() {
+        var was = _target;
+        UpdateTarget();
+        if (!was.SameAs(_target)) {
+            SyncPreviewSelection();
+            Raise(nameof(SelectionSummary));
         }
     }
 
     /// <summary>
-    /// Set by an operation that ran behind a modal dialog: by the time the
-    /// dialog closes, the row that had the keyboard has been rebuilt out of
-    /// existence and focus is left sitting on the window. The list takes it
-    /// back together with the restored selection — losing the keyboard after
-    /// every operation is one of the Explorer habits this project exists to
-    /// avoid. Consumed once, by <c>FileListView.RestoreListSelection</c>.
+    /// The place of <paramref name="target"/>. A panel row is its own place -
+    /// an ordinary folder, unless it is in an archive or is the bin; rows of
+    /// the list and the empty space are in the open folder.
     /// </summary>
-    public bool FocusListAfterRestore { get; set; }
-
-
-    public IReadOnlyList<FileSystemEntry> SelectedEntries {
-        get => _selectedEntries;
-        set {
-            // Same reason as SelectedEntry above: while rows are being
-            // swapped the list reports a selection it is about to get back,
-            // and the status bar must not count that out loud.
-            if (_rowsReplacing) {
-                return;
-            }
-            if (SetField(ref _selectedEntries, value)) {
-                // The action trace: what is selected now, whoever moved it.
-                Log.Detail($"Selection: {value.Count} item(s){(value.Count > 0 ? ", first " + value[0].FullPath : "")}");
-                NoteSelectionKind();
-                SyncPreviewSelection();
-                Raise(nameof(SelectionSummary));
-            }
+    private PlaceFacts PlaceOf(Target target) {
+        if (target.Kind != TargetKind.PanelRow) {
+            return new PlaceFacts(IsCurrentShellNamespace, IsCurrentRecycleBin, CurrentArchive is not null);
         }
+
+        if (_panelPlace is not { } known || !known.Row.SameAs(target)) {
+            known = (target, new PlaceFacts(IsReadOnly: IsShellPath(target.Folder), IsRecycleBin: false, IsArchive: false));
+            _panelPlace = known;
+        }
+
+        return known.Place;
+    }
+
+    /// <summary>The rows of the list a command is about, or null when it is about something else.</summary>
+    private IReadOnlyList<FileSystemEntry>? ListRowsOf(object? parameter) {
+        return ResolveTarget(parameter).Target is { Kind: TargetKind.ListRows } target ? target.Rows : null;
     }
 
     /// <summary>
-    /// Hands the selection to the preview. The footer always describes the
-    /// whole selection; the picture above it is the active file, or - when
-    /// the selection is exactly two files the pane can draw - both of
-    /// them, upper one first in listing order whichever was clicked last
-    /// (<see cref="PrimaryForPane"/>).
+    /// Hands the target to the preview. The footer describes all of it; the
+    /// picture above is the active row, or - for exactly two files the pane
+    /// can draw - both, upper one first in listing order whichever was
+    /// clicked last (<see cref="PreviewSubject"/>). A panel row's folder is
+    /// read off the UI thread and shown once it is (<see cref="ShowPanelFolder"/>).
     /// </summary>
     private void SyncPreviewSelection() {
-        var pair = PreviewPair.Of(_selectedEntries, Entries);
-        _previewPair = pair;
-        Preview.SetSelection(_selectedEntries);
-        if (pair is { } p) {
+        var subject = PreviewSubject.Of(_target, _caretPath, Entries);
+        if (subject.Kind == PreviewSubjectKind.Folder) {
+            ShowPanelFolder(subject.Folder!);
+
+            return;
+        }
+
+        _panelFolderCts?.Cancel();
+        _panelFolderPath = null;
+        Preview.SetSelection(subject.Selection);
+        if (subject.Pair is { } p) {
             PreviewSecond.SetSelection(new[] { p.Second });
             PreviewSecond.SetPrimary(p.Second);
         } else {
             PreviewSecond.SetSelection(Array.Empty<FileSystemEntry>());
             PreviewSecond.SetPrimary(null);
         }
-        RefreshPreviewPrimary();
-        IsPreviewSplit = pair is not null;
+        Preview.SetPrimary(subject.Primary);
+        IsPreviewSplit = subject.Pair is not null;
     }
 
     /// <summary>
-    /// Points the main pane at the file it should be showing. Called from
-    /// every setter that can change the answer, because the list reports
-    /// its current item, its selection and its caret as three separate
-    /// events in no fixed order; each call is cheap when nothing moved.
+    /// Points the main pane at the file it should be showing when only the
+    /// active row may have moved. Called from every setter that can change
+    /// the answer, because the list reports its current item, its selection
+    /// and its caret as three separate events in no fixed order; each call is
+    /// cheap when nothing moved. A panel row's folder is not re-read for it.
     /// </summary>
     private void RefreshPreviewPrimary() {
-        Preview.SetPrimary(PrimaryForPane(ActiveEntry()));
+        var subject = PreviewSubject.Of(_target, _caretPath, Entries);
+        if (subject.Kind != PreviewSubjectKind.Folder) {
+            Preview.SetPrimary(subject.Primary);
+        }
     }
 
     /// <summary>
-    /// The file the preview follows. In a multi-selection it is the row
-    /// with the focus rectangle when that row is part of the selection -
-    /// the one a Ctrl+click just added, which is what "show me this one
-    /// too" means; the list's own current item stays on the first row
-    /// selected and would show the wrong picture. One file selected, the
-    /// current item is the truth.
+    /// A panel row's folder in the preview: read on the pool - the row is not
+    /// in the listing, and a stat on the UI thread per arrow key was the old
+    /// price of it - and shown if it is still the target by then. What was
+    /// on show stays until it is.
     /// </summary>
-    private FileSystemEntry? ActiveEntry() {
-        if (_caretPath is { Length: > 0 } caret && _selectedEntries.Count > 1) {
-            foreach (var entry in _selectedEntries) {
-                if (PathsEqual(entry.FullPath, caret)) {
-                    return entry;
-                }
-            }
+    private void ShowPanelFolder(string folder) {
+        if (_panelFolderPath is { } shown && PathsEqual(shown, folder)) {
+            return;
         }
 
-        return _selectedEntry;
+        _panelFolderPath = folder;
+        _panelFolderCts?.Cancel();
+        _panelFolderCts = new CancellationTokenSource();
+        _ = ShowPanelFolderAsync(folder, _panelFolderCts.Token);
     }
 
-    /// <summary>What the main pane shows: the upper file of a split pair, otherwise the active file.</summary>
-    private FileSystemEntry? PrimaryForPane(FileSystemEntry? entry) {
-        return _previewPair is { } p ? p.First : entry;
+    private async Task ShowPanelFolderAsync(string folder, CancellationToken ct) {
+        FileSystemEntry? entry;
+        try {
+            entry = await Task.Run(() => _fs.GetEntry(folder), ct);
+        } catch (OperationCanceledException) {
+            return;
+        } catch (Exception ex) {
+            _log.Warn($"Panel row not readable: {folder} ({ex.Message})");
+            entry = null;
+        }
+        if (ct.IsCancellationRequested || _target.Kind != TargetKind.PanelRow || !PathsEqual(_target.Folder!, folder)) {
+            return;
+        }
+
+        // Gone, or not a folder on disk (the bin, a folder of an archive):
+        // the pane describes the open folder, as it did before.
+        var shown = entry is null ? Array.Empty<FileSystemEntry>() : new[] { entry };
+        Preview.SetSelection(shown);
+        Preview.SetPrimary(entry);
+        PreviewSecond.SetSelection(Array.Empty<FileSystemEntry>());
+        PreviewSecond.SetPrimary(null);
+        IsPreviewSplit = false;
     }
 
     /// <summary>
@@ -932,8 +1097,9 @@ public sealed class MainViewModel : ObservableObject {
     public bool SelectionIsArchive { get; private set; }
 
     /// <summary>
-    /// "Выбрано: 3 · 1.2 MB" — what the selection amounts to, for the status
-    /// bar. Empty when nothing is selected, so the field disappears rather
+    /// "Выбрано: 3 · 1.2 MB" - what the target amounts to, for the status
+    /// bar: the list's rows, or a panel row's folder while the keyboard is
+    /// there. Empty when there is no target, so the field disappears rather
     /// than showing a zero.
     ///
     /// <para>
@@ -946,13 +1112,14 @@ public sealed class MainViewModel : ObservableObject {
     /// </summary>
     public string SelectionSummary {
         get {
-            if (_selectedEntries.Count == 0) {
+            var items = TargetRules.Items(_target);
+            if (items.Count == 0) {
                 return "";
             }
 
             long bytes = 0;
             int folders = 0;
-            foreach (var entry in _selectedEntries) {
+            foreach (var entry in items) {
                 if (entry.IsFolderLike) {
                     folders++;
                 } else {
@@ -961,7 +1128,7 @@ public sealed class MainViewModel : ObservableObject {
             }
 
             string text = string.Format(
-                Strings.StatusSelection, _selectedEntries.Count, SizeFormatter.Format(bytes));
+                Strings.StatusSelection, items.Count, SizeFormatter.Format(bytes));
 
             return folders == 0
                 ? text
@@ -1337,6 +1504,30 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     // --- Opening an entry -----------------------------------------------
+
+    /// <summary>
+    /// Enter and "Open": the list's current row is opened, a panel row's
+    /// folder is gone to - the same as a click on the row. A row handed in
+    /// directly is opened as it is.
+    /// </summary>
+    private void Open(object? parameter) {
+        if (parameter is FileSystemEntry entry) {
+            OpenEntry(entry);
+
+            return;
+        }
+
+        var target = ResolveTarget(parameter).Target;
+        switch (TargetRules.Open(target)) {
+            case OpenRoute.ListRow:
+                OpenEntry(target.Primary);
+                break;
+            case OpenRoute.PanelRow:
+                NavigateAndSelectFolder(target.Folder!, target.Pane == Pane.Bookmarks ? NavigationSource.Bookmark : NavigationSource.Drives);
+                break;
+        }
+    }
+
     public void OpenEntry(FileSystemEntry? entry) {
         if (entry is null) {
             return;
@@ -1475,7 +1666,7 @@ public sealed class MainViewModel : ObservableObject {
             RestorePreview();
         }
 
-        if (!await FollowMovedAsync(results, targetFolder, moved: effect == DropEffect.Move)) {
+        if (!FollowMoved(results, targetFolder, moved: effect == DropEffect.Move)) {
             Refresh();
         }
         ReportBatchResults(results, effect == DropEffect.Move ? Strings.VerbMoved : Strings.VerbCopied, targetFolder);
@@ -1525,7 +1716,7 @@ public sealed class MainViewModel : ObservableObject {
     /// is gone" over its old path.
     /// </summary>
     /// <returns>True when the listing was re-pointed; the caller then must not re-list the old path.</returns>
-    private async Task<bool> FollowMovedAsync(IReadOnlyList<BatchItemResult> results, string target, bool moved) {
+    private bool FollowMoved(IReadOnlyList<BatchItemResult> results, string target, bool moved) {
         var landed = results
             .Where(r => r.Status is BatchItemStatus.Ok or BatchItemStatus.Replaced or BatchItemStatus.Renamed or BatchItemStatus.Merged)
             .ToList();
@@ -1537,64 +1728,88 @@ public sealed class MainViewModel : ObservableObject {
             ? landed.Select(r => (r.Source, r.FinalDestination)).ToArray()
             : Array.Empty<(string, string)>();
 
-        return await FollowRelocatedAsync(moves, target);
+        return FollowRelocated(moves, target);
     }
 
 
     /// <summary>
-    /// <see cref="FollowMovedAsync"/> from the moves alone - and what
+    /// <see cref="FollowMoved"/> from the moves alone - and what
     /// <c>Ctrl+Z</c> of a move runs, with the pairs pointing back
     /// (<see cref="IUndoableAction.MovesOnUndo"/>). The panels re-read both
     /// ends of every move, and <paramref name="target"/>: a copy moves
     /// nothing, yet the folder it went into gained a subfolder.
     /// </summary>
     /// <returns>True when the listing was re-pointed; the caller then must not re-list the old path.</returns>
-    private async Task<bool> FollowRelocatedAsync(IReadOnlyList<(string From, string To)> moves, string? target) {
+    private bool FollowRelocated(IReadOnlyList<(string From, string To)> moves, string? target) {
+        // Who is told, and in what order, is PathFollowing's rule (REDESIGN
+        // 4.12); what each does with it is its own.
+        var plan = PathFollowing.Plan(moves);
+
+        // The panels: every row on a moved folder, or under it, takes the new
+        // path where it stands, in both panels - open if it was open, the
+        // cursor still on it (PanelRules) - and every folder that lost or
+        // gained a subfolder is read again: a panel level is only read while
+        // it is open, and it is folders that show there. All of it ahead of
+        // the history, which navigates: the open folder's place is looked
+        // for in a level being read again, and the model waits for that
+        // answer rather than giving up on a level that does not hold the
+        // folder yet (2026-09-22).
         var touched = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (target is not null) {
             touched.Add(target);
         }
-        foreach (var (from, to) in moves) {
-            string? fromParent = Path.GetDirectoryName(from);
-            string? toParent = Path.GetDirectoryName(to);
-            foreach (string? parent in new[] { fromParent, toParent }) {
+        foreach (var (_, from, to) in plan.Where(s => s.Holder == PathHolder.Panels)) {
+            Workspace.Post(new Relocated(from, to));
+            foreach (string? parent in new[] { Path.GetDirectoryName(from), Path.GetDirectoryName(to) }) {
                 if (parent is { Length: > 0 }) {
                     touched.Add(parent);
                 }
             }
-            // A rename - same parent, new name - keeps its rows in the
-            // panels, open if they were open; the re-read below then finds
-            // them under the new name. A move lands in another branch and
-            // is re-read there. Ahead of the bookmarks: their panel is
-            // rebuilt from the rows as they stand.
-            if (string.Equals(fromParent, toParent, StringComparison.OrdinalIgnoreCase)) {
-                Trees.Follow(from, to);
-            }
+        }
+        foreach (string folder in touched) {
+            Workspace.Post(new FolderChanged(folder));
         }
 
-        // One re-read per folder, whatever was dropped: a panel row only
-        // enumerates while it is open, and it is folders that show there.
-        // Before the history is rewritten: re-pointing the open folder is
-        // a navigation, and a navigation looks for its row in the panel it
-        // came from. Looked for before the target branch had the moved
-        // folder in it, the row was not there, and the search fell back to
-        // the drives tree - which opened down to the folder as well
-        // (2026-09-22).
-        await Task.WhenAll(touched.Select(Trees.RefreshForAsync));
-
         bool followed = false;
-        foreach (var (from, to) in moves) {
-            Bookmarks.Follow(from, to);
-            // The book and the address bar's recent places follow too
-            // (AD3): a pinned view or a recent path naming the old place
-            // would otherwise go stale on the spot.
-            _foldersDirty |= _folders.Follow(from, to) > 0;
-            _nav.RewriteRecentPaths(from, to);
-            if (_nav.RewritePaths(from, to)) {
-                followed = true;
-                // Control line (REDESIGN.md): the listing was re-pointed
-                // without a navigation, which is what NavigateTo logs.
-                _log.Info($"Listing follows: {from} -> {to}");
+        foreach (var (holder, from, to) in plan.Where(s => s.Holder != PathHolder.Panels)) {
+            switch (holder) {
+                case PathHolder.Bookmarks:
+                    Bookmarks.Follow(from, to);
+                    break;
+                case PathHolder.FolderBook:
+                    _foldersDirty |= _folders.Follow(from, to) > 0;
+                    break;
+                case PathHolder.RecentPaths:
+                    _nav.RewriteRecentPaths(from, to);
+                    break;
+                case PathHolder.SelectionMemory:
+                    // Where the user was in each folder, the folder whose
+                    // rows are on screen, and the rows selected there: a
+                    // re-listing after the move is not an arrival, and the
+                    // selection follows its rows to the new path.
+                    _session.RewriteMemory(from, to);
+                    _landedFolder = PathRewrite.Under(_landedFolder, from, to) ?? _landedFolder;
+                    _landingRenames.Add((from, to));
+                    break;
+                case PathHolder.Clipboard:
+                    // Files cut inside the moved folder are found by the paste
+                    // (decision B22) - while the clipboard is still ours.
+                    _clipboard.Rewrite(from, to);
+                    break;
+                case PathHolder.History:
+                    _followingMove = true;
+                    try {
+                        if (_nav.RewritePaths(from, to)) {
+                            followed = true;
+                            // Written always, like a navigation: the listing
+                            // was re-pointed without one, and NavigateTo is
+                            // what would have logged it.
+                            _log.Info($"Listing follows: {from} -> {to}");
+                        }
+                    } finally {
+                        _followingMove = false;
+                    }
+                    break;
             }
         }
         SaveState();
@@ -1607,7 +1822,7 @@ public sealed class MainViewModel : ObservableObject {
     /// <paramref name="paths"/> - they just lost or regained an item, and
     /// the watcher only covers the folder on screen.
     /// </summary>
-    private Task RefreshTreesAboveAsync(IEnumerable<string> paths) {
+    private void RefreshTreesAbove(IEnumerable<string> paths) {
         var parents = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (string path in paths) {
             if (Path.GetDirectoryName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)) is { Length: > 0 } parent) {
@@ -1615,7 +1830,19 @@ public sealed class MainViewModel : ObservableObject {
             }
         }
 
-        return Task.WhenAll(parents.Select(Trees.RefreshForAsync));
+        foreach (string parent in parents) {
+            Workspace.Post(new FolderChanged(parent));
+        }
+    }
+
+    /// <summary>The bookmarks' rows handed to the model whole: it keeps what is open, the cursor and the place by path.</summary>
+    private void PostBookmarks() {
+        Workspace.Post(new BookmarksChanged(Bookmarks.BuildRows()));
+    }
+
+    /// <summary>The settings the model's rules read, copied in.</summary>
+    private void PostWorkspaceOptions() {
+        Workspace.Post(new OptionsChanged(new WorkspaceOptions(Settings.TreeKeyboardNavigates, Settings.ShowHidden)));
     }
 
     private void CreateShortcuts(IReadOnlyList<string> sources, string targetFolder) {
@@ -1795,41 +2022,23 @@ public sealed class MainViewModel : ObservableObject {
         // A remembered branch whose folder has gone opens as far as it
         // still goes; one on a medium that is not the machine's own stays
         // closed (NavigationFallback.AfterRestore). Answered here, on the UI
-        // thread, like the expanding below that reads the same folders.
-        _persistedExpandedPaths = session.ExpandedPaths
+        // thread.
+        var expanded = session.ExpandedPaths
             .Select(stop => NavigationFallback.AfterRestore(stop.Path, IsStillThere, VolumeKindOf) is { } path
                 ? stop with { Path = path }
                 : null)
             .OfType<NavigationStop>()
             .ToArray();
-        // Drives-side expansions are restored immediately. Bookmark-side
-        // ones wait until the bookmarks panel is built below — its rows are
-        // not there yet, and the matching VM instances do not exist either.
-        // expandTarget:true so the saved node itself is shown as expanded,
-        // not just its ancestors (a saved stop means "this node's children
-        // were visible at close").
-        foreach (var stop in _persistedExpandedPaths) {
-            if (stop.Source == NavigationSource.Bookmark) {
-                continue;
-            }
-            foreach (var root in Trees.Roots) {
-                if (root.TryExpandToPath(stop.Path, select: false, expandTarget: true)) {
-                    break;
-                }
-            }
-        }
 
-        // Build the bookmarks tree *before* the initial navigation —
-        // OnNavigationChanged → Trees.ExpandTo walks the bookmarks
-        // for source=Bookmark, and if it's still empty the expander
-        // falls back to drives, defeating the whole point of the
-        // restored source.
-        Bookmarks.Build(_persistedExpandedPaths);
-        // Consumed: from here on the panels themselves are the record
-        // of what is expanded. Keeping the startup set around made
-        // every later rebuild (a bookmark added, a special folder
-        // switched on) re-open branches the user had since collapsed.
-        _persistedExpandedPaths = Array.Empty<NavigationStop>();
+        // The model's settings first: they decide how it reads. The
+        // bookmarks before the first navigation - a folder opened from them
+        // has its place looked for among them, and with none there it would
+        // fall back to the drives. Then the panels come up: the branches
+        // saved open open again, their levels read off the UI thread, the
+        // drives listed there too - nothing of it before the first frame.
+        PostWorkspaceOptions();
+        PostBookmarks();
+        Workspace.Post(new WorkspaceStarted(expanded));
 
         // Before the first navigation: that navigation pushes the
         // restored folder onto the list, and it should land on top of
@@ -1863,14 +2072,15 @@ public sealed class MainViewModel : ObservableObject {
     private async Task OpenStartFolderAsync(NavigationStop? remembered) {
         // Read here, on the UI thread, and carried into the pool.
         string? work = Settings.ResolveWorkFolder();
-        var (restored, home) = remembered is null
-            ? (null, null)
-            : await Task.Run(() => {
-                string? back = NavigationFallback.AfterRestore(remembered.Path, CanOpen, VolumeKindOf);
-                string? parked = back is null && work is not null && _fs.DirectoryExists(work) ? work : null;
+        var (restored, home, first) = await Task.Run(() => {
+            string? back = remembered is null ? null : NavigationFallback.AfterRestore(remembered.Path, CanOpen, VolumeKindOf);
+            string? parked = remembered is not null && back is null && work is not null && _fs.DirectoryExists(work) ? work : null;
+            // The drives are listed on the pool as well: the panel reads
+            // them there, and this is before the first frame.
+            string? drive = back is null && parked is null ? _fs.GetRoots().FirstOrDefault()?.FullPath : null;
 
-                return (back, parked);
-            });
+            return (back, parked, drive);
+        });
         if (_nav.Current is not null) {
             return;
         }
@@ -1883,7 +2093,7 @@ public sealed class MainViewModel : ObservableObject {
         } else if (home is not null) {
             _log.Info($"Start: {remembered!.Path} is not on this machine's own drives any more, opening the working folder {home}");
             _nav.NavigateTo(home, NavigationSource.External);
-        } else if (Trees.Roots.FirstOrDefault()?.FullPath is { } first) {
+        } else if (first is not null) {
             _nav.NavigateTo(first, NavigationSource.External);
         }
         // The initial navigation ends in SaveState like any other, and the
@@ -1926,10 +2136,6 @@ public sealed class MainViewModel : ObservableObject {
     /// the timer runs out.
     /// </summary>
     private void SaveState() {
-        if (Bookmarks.IsBuilding) {
-            return;
-        }
-
         _stateSaveTimer.Stop();
         _stateSaveTimer.Start();
     }
@@ -2023,9 +2229,12 @@ public sealed class MainViewModel : ObservableObject {
         // whatever was selected there last time).
         _session.OnNavigating(_nav.Current, _selectedEntry?.FullPath);
 
-        // The focus rectangle belongs to the folder being left. The arrival
-        // puts it wherever the selection lands.
-        CaretPath = null;
+        // Renames noted for the rows of the folder being left mean nothing
+        // in the next one - unless this navigation is the listing following
+        // that folder to where it moved.
+        if (!_followingMove) {
+            _landingRenames.Clear();
+        }
 
         // What kind of place this is, asked once and read everywhere below:
         // the refresh picks its back end by it, and every command's
@@ -2114,8 +2323,13 @@ public sealed class MainViewModel : ObservableObject {
     /// </summary>
     private void OnWatchTick(object? sender, EventArgs e) {
         var decision = _session.DecideWatchTick(
-            busy: RenamingPath is not null || HasActiveOperations,
+            busy: RenamingPath is not null || _renamesInFlight > 0 || HasActiveOperations,
             rows: _search.Source);
+        // Renames another program made ride with the re-listing: a selected
+        // file follows its new name (decision B7).
+        if (decision.Renames is { Count: > 0 } renames) {
+            _landingRenames.AddRange(renames);
+        }
 
         // Before anything is re-read: what the caches hold about these files
         // is a picture of the file as it was. A re-listing does not fix it —
@@ -2141,7 +2355,7 @@ public sealed class MainViewModel : ObservableObject {
                 // Subfolders are rows in the panels as well as in the list,
                 // and the composition that changed is theirs too.
                 if (decision.RefreshTrees && _nav.Current is { Length: > 0 } here) {
-                    Trees.RefreshFor(here);
+                    Workspace.Post(new FolderChanged(here));
                 }
                 break;
 
@@ -2153,25 +2367,20 @@ public sealed class MainViewModel : ObservableObject {
 
 
     // --- Folder panels ---------------------------------------------------
-    // The panels themselves are FolderTreesController's. These two say
-    // *which* folder to open them to, which is the only part that needs to
-    // know where the user is standing.
+    // The panels are the model's (Workspace) and drawn by
+    // FolderTreesController. What the view model tells the model is where
+    // the user is standing.
 
 
     /// <summary>
-    /// Opens one named panel down to the folder on screen and puts the
-    /// highlight there — what <c>Ctrl+2</c> and <c>Ctrl+Shift+E</c> point
-    /// the keyboard at. False when the folder is not reachable in that
-    /// panel.
+    /// The open folder moved: the model puts its place in the panel it was
+    /// opened from and opens that panel down to it (PanelRules).
     /// </summary>
-    public bool RevealCurrentIn(NavigationSource panel) {
-        return _nav.Current is { } here && Trees.RevealIn(panel, here);
-    }
-
-
     private void ExpandCurrentInTrees() {
         if (_nav.Current is { } here) {
-            Trees.ExpandTo(here, _nav.CurrentSource ?? NavigationSource.External);
+            Workspace.Post(new Navigated(
+                here, _nav.CurrentSource ?? NavigationSource.External,
+                _followingMove ? NavigationKind.Rewrite : NavigationKind.Go));
         }
     }
 
@@ -2194,23 +2403,10 @@ public sealed class MainViewModel : ObservableObject {
         }
 
         // A rebuild of the list drops the row the editor was sitting on, so
-        // the editor goes with it.
+        // the editor goes with it. What was selected stays selected by path
+        // once the new listing lands - the model's rule (ListingArrival), no
+        // intent needed for it.
         RenamingPath = null;
-
-        // Default intent: whatever is selected now stays selected once the
-        // new listing lands. Callers that know better (rename, undo, a click
-        // in the tree) have already filled this in.
-        // Nothing selected means nothing to put back, and an intent that
-        // asks for nothing would only stop ReconcileEntries doing its own
-        // job below.
-        // Not for a folder a panel made the target (no primary): that one
-        // is not a row to put back - ReconcileEntries leaves it alone - and
-        // putting it back when it happens to be a row would light it in
-        // the list beside the panel's own highlight.
-        if (_session.Arrival is null && _nav.Current is { } staying && _selectedEntry is not null && _selectedEntries.Count > 0) {
-            _session.SetArrival(
-                ArrivalIntent.Rows(staying, _selectedEntries.Select(e => e.FullPath).ToArray()));
-        }
 
         // Any in-flight shell enumeration from a previous navigation is
         // stale now — cancel it so its delayed SetSource doesn't clobber
@@ -2278,6 +2474,7 @@ public sealed class MainViewModel : ObservableObject {
         var work = Task.Run(() => {
             var items = new List<FileSystemEntry>();
             int hidden = 0;
+            bool sawDesktopIni = false;
             DateTime? created = arriving ? _fs.GetCreationTimeUtc(path) : null;
             // A folder with no record may be one the book knows under a
             // former name (renamed outside Wander): the candidates by
@@ -2298,6 +2495,11 @@ public sealed class MainViewModel : ObservableObject {
             using (PerfLog.Measure("bg.enumerate")) {
                 foreach (var e in _fs.Enumerate(path, sort, token)) {
                     token.ThrowIfCancellationRequested();
+                    // Seen before the visibility filter: the file is hidden
+                    // and a system one, and the setting that hides it has
+                    // nothing to say about what it tells.
+                    sawDesktopIni |= e.Kind == EntryKind.File
+                        && string.Equals(e.Name, DesktopIni.FileName, StringComparison.OrdinalIgnoreCase);
                     if (!visibility.Allows(e)) {
                         hidden++;
                         continue;
@@ -2306,15 +2508,19 @@ public sealed class MainViewModel : ObservableObject {
                 }
             }
 
+            // What the folder's desktop.ini says it is (H1) - asked only on
+            // arrival, when the view is chosen, and only when there is one.
+            bool picturesHint = arriving && sawDesktopIni && ReadsAsPictures(path);
+
             // Folding companions happens after the visibility filters, so a
             // sidecar next to a main file the user chose not to see stays
             // visible on its own rather than disappearing with it.
             if (!integrate) {
-                return (Items: (IReadOnlyList<FileSystemEntry>)items, Hidden: hidden, Created: created, Vacated: vacated);
+                return (Items: (IReadOnlyList<FileSystemEntry>)items, Hidden: hidden, Created: created, Vacated: vacated, Hint: picturesHint);
             }
 
             using (PerfLog.Measure("bg.companions")) {
-                return (Items: _companions.Collapse(items), Hidden: hidden, Created: created, Vacated: vacated);
+                return (Items: _companions.Collapse(items), Hidden: hidden, Created: created, Vacated: vacated, Hint: picturesHint);
             }
         }, token);
 
@@ -2348,7 +2554,7 @@ public sealed class MainViewModel : ObservableObject {
         }
 
         try {
-            var (items, hidden, created, vacated) = await work;
+            var (items, hidden, created, vacated, picturesHint) = await work;
             if (token.IsCancellationRequested) {
                 return;
             }
@@ -2374,7 +2580,7 @@ public sealed class MainViewModel : ObservableObject {
                 // the operations between them.
                 Journal.Note(string.Format(Strings.JournalOpenedFolder, path), DateTime.Now);
                 using (PerfLog.Measure("ui.autoview")) {
-                    ChooseView(items, path, created, vacated, inRecycleBin: false);
+                    ChooseView(items, path, created, vacated, inRecycleBin: false, picturesHint);
                 }
             }
             // One line per slow arrival, with what it cost and how much
@@ -2616,61 +2822,50 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     /// <summary>
-    /// Does whatever the pending <see cref="ArrivalIntent"/> asked for, now
-    /// that a listing has landed. What that is — including whether the
-    /// intent keeps waiting for its own folder's listing — is the session's
-    /// decision; this method only carries it out against the view.
+    /// A listing's rows land on the list: laid down against the rows on
+    /// screen (<see cref="SyncEntries"/>), then told to the window's model -
+    /// what stood before, why, what the pending intent came to, the renames
+    /// since the last landing. What is selected, where the keyboard goes and
+    /// putting the selection back on the list are the model's
+    /// (ListingArrival); the list's own reports while the rows are laid down
+    /// are its doing, not the user's (<see cref="IsSyncingRows"/>).
     /// </summary>
-    /// <returns>True when it put a selection in place - <see cref="SettleDeparture"/> then has nothing to add.</returns>
-    private bool ApplyArrival() {
-        var decision = _session.DecideArrival(_nav.Current, Entries);
-
-        switch (decision.Outcome) {
-            case ArrivalOutcome.None:
-                return false;
-
-            case ArrivalOutcome.SelectFolder:
-                // The row selected in the folder left behind is not in this
-                // listing, and SettleDeparture leaves a placed selection
-                // alone - so it is let go of here, first: F2, Alt+Enter and
-                // "Open with" read SelectedEntry, and a click on a folder in
-                // the tree left them acting on a file of the previous folder.
-                // Before SelectExternalPath, which tells the preview itself.
-                if (_departure is { WasSelected: true }) {
-                    SelectedEntry = null;
-                }
-                SelectExternalPath(decision.FolderPath!);
-                return true;
-
-            case ArrivalOutcome.NothingFound:
-                // Nothing to land on — and nothing for the list to take the
-                // keyboard back onto, so the request does not carry over to
-                // whichever restore happens next.
-                FocusListAfterRestore = false;
-                return false;
-
-            case ArrivalOutcome.SelectRows:
-                var found = decision.Rows;
-                // Added to, never overwritten. The flag also carries a
-                // request that nobody in this listing made — an operation
-                // that ran behind a modal dialog, a view mode that swapped
-                // the control out from under the keyboard — and clearing it
-                // here is what left the file area without focus after
-                // walking into a gallery folder, so that the next Backspace
-                // went to whatever had the keyboard instead.
-                FocusListAfterRestore |= decision.TakeFocus;
-                SelectedEntry = found[0];
-                SelectedEntries = found;
-                SelectionRestoreRequested?.Invoke(found);
-
-                if (decision.RenameTarget is not null) {
-                    InlineRenameRequested?.Invoke(found[0]);
-                }
-                return true;
-
-            default:
-                return false;
+    private void LandRows(IReadOnlyList<FileSystemEntry> rows) {
+        var before = PathsOf(Entries);
+        var reason = _entriesAreResults ? ListingReason.ResultsLeft
+            : IsSamePath(_nav.Current, _landedFolder) ? ListingReason.Relist
+            : ListingReason.Arrival;
+        using (PerfLog.Measure("ui.rows")) {
+            _syncingRows = true;
+            try {
+                SyncEntries(rows);
+            } catch (Exception ex) when (ex is not OutOfMemoryException) {
+                // A list control threw in the middle of the notification: the
+                // plan is half applied and the other listeners never heard of
+                // it. Said now, not minutes later by a finalizer, and the rows
+                // laid down whole (TECHDEBT, 2026-09-22).
+                _log.Error("Listing: laying the rows down failed; laid down whole", ex);
+                Entries.ReplaceAll(rows);
+            } finally {
+                _syncingRows = false;
+            }
         }
+        _landedFolder = _nav.Current;
+        UpdateFilterStatus(rows.Count, _search.Source.Count);
+        using (PerfLog.Measure("ui.restore")) {
+            PostLanding(before, reason, _session.DecideArrival(_nav.Current, Entries));
+        }
+    }
+
+    /// <summary>The rows on screen landed for <paramref name="reason"/>: the model is told, with the renames since the last landing.</summary>
+    private void PostLanding(IReadOnlyList<string> before, ListingReason reason, ArrivalDecision intent) {
+        var renames = _landingRenames.ToArray();
+        _landingRenames.Clear();
+        Workspace.Post(new ListingLanded(before, PathsOf(Entries), reason, intent, renames));
+    }
+
+    private static string[] PathsOf(IEnumerable<FileSystemEntry> rows) {
+        return rows.Select(r => r.FullPath).ToArray();
     }
 
     // --- Ratings and the rating filter ---------------------------------
@@ -2821,19 +3016,16 @@ public sealed class MainViewModel : ObservableObject {
 
     /// <summary>
     /// Swaps updated copies of rows into <see cref="Entries"/> without
-    /// touching anything else, and puts the selection back on them.
-    ///
-    /// <para>
-    /// A record cannot be edited in place, so the row has to be replaced —
-    /// and the list drops a replaced object out of its selection on the way.
-    /// <see cref="_rowsReplacing"/> holds the two properties that would
-    /// otherwise broadcast that gap (the preview would clear and reload, the
-    /// status bar would count down and back up) until the selection is
-    /// restored.
-    /// </para>
+    /// touching anything else - a rating arriving, a size changing. A record
+    /// cannot be edited in place, so the row is replaced, and the list drops
+    /// a replaced object out of its selection on the way: the model puts the
+    /// selection back (ListingArrival), nothing scrolling, the keyboard where
+    /// it was.
     /// </summary>
     private void ReplaceRows(IReadOnlyList<FileSystemEntry> changed) {
-        ReconcileEntries(() => {
+        var paths = PathsOf(Entries);
+        _syncingRows = true;
+        try {
             foreach (var entry in changed) {
                 for (int i = 0; i < Entries.Count; i++) {
                     if (IsSamePath(Entries[i].FullPath, entry.FullPath)) {
@@ -2842,212 +3034,12 @@ public sealed class MainViewModel : ObservableObject {
                     }
                 }
             }
-        });
-        // No arrival follows a swap of rows, and nothing can leave in one -
-        // but a selection that was not among the rows at all is still
-        // settled, not left hanging.
-        SettleDeparture(placed: false);
-    }
-
-
-    /// <summary>
-    /// Runs a rebuild of <see cref="Entries"/> with the selection held
-    /// steady across it.
-    ///
-    /// <para>
-    /// <b>Why this wraps every rebuild and not just some.</b> A
-    /// <c>FileSystemEntry</c> is a record and cannot be edited in place, so
-    /// any change to a row — a rating arriving, a size changing, a listing
-    /// coming back from disk — replaces the object. The list drops a
-    /// replaced object out of its selection, and unless somebody puts it
-    /// back, the selection is gone. It used to be put back only when a
-    /// caller had filled in an <see cref="ArrivalIntent"/>
-    /// (navigation, rename, undo) — which meant the second rebuild of every
-    /// listing, the one where the ratings arrive, silently dropped whatever
-    /// the user had selected. That is the bug this closes, and it closes it
-    /// for every future rebuild too rather than for the one that was
-    /// noticed.
-    /// </para>
-    ///
-    /// <para>
-    /// When a caller <em>has</em> left an <see cref="ArrivalIntent"/>,
-    /// this keeps out of the way: that caller knows something better than
-    /// "whatever was selected before" — the new name after a rename, what
-    /// an undo put back — and <see cref="ApplyArrival"/> runs right after
-    /// with scrolling and focus, which is right there and wrong here.
-    /// </para>
-    /// </summary>
-    private void ReconcileEntries(Action rebuild) {
-        // A caller that left an intent knows something better than
-        // "whatever was selected before" — the new name after a rename, what
-        // an undo put back — and ApplyArrival runs right after with
-        // scrolling and focus. We still put the view model back in step with
-        // the rows below, so it never holds entries that have left the list;
-        // we just do not tell the view where to go.
-        bool ownsSelection = _session.Arrival is null;
-        // A folder a panel made the target (SelectExternalPath: a set with
-        // no primary, which a row selected in the list never is) is not a
-        // row of this list, even when the folder happens to be listed -
-        // the highlight is the panel's. It is neither put back into the
-        // list nor counted as having left it: a re-listing of the open
-        // folder while the keyboard stood on a panel row used to clear the
-        // target, and the next Delete then did nothing (2026-09-22).
-        bool external = _selectedEntry is null && _selectedEntries.Count > 0;
-        var keep = new HashSet<string>(
-            external ? Array.Empty<string>() : _selectedEntries.Select(e => e.FullPath),
-            StringComparer.OrdinalIgnoreCase);
-        string? primary = _selectedEntry?.FullPath;
-        // The rows as they stand, for which one becomes current if the
-        // current one is about to leave (SettleDeparture). Search results
-        // are not the folder's rows: a result that is not in the listing
-        // did not leave the folder, and nothing takes its place.
-        _departure = null;
-        FileSystemEntry[]? before = (keep.Count > 0 || _caretPath is not null) && !_entriesAreResults
-            ? Entries.ToArray()
-            : null;
-
-        FileSystemEntry[] found;
-        FileSystemEntry? next = null;
-
-        _rowsReplacing = true;
-        try {
-            rebuild();
-
-            found = keep.Count == 0
-                ? Array.Empty<FileSystemEntry>()
-                : Entries.Where(e => keep.Contains(e.FullPath)).ToArray();
-
-            if (found.Length > 0) {
-                next = found.FirstOrDefault(e => IsSamePath(e.FullPath, primary)) ?? found[0];
-
-                // Order matters, and it is not obvious: SelectedEntry is
-                // bound to the list's SelectedItem, and assigning that
-                // collapses an extended selection down to the single row.
-                // So the primary goes back first and the rest of the set
-                // after it — the other way round throws the set away again.
-                _selectedEntry = next;
-                Raise(nameof(SelectedEntry));
-
-                if (ownsSelection) {
-                    // No scrolling and no focus move: nothing happened that
-                    // the user should be taken anywhere for. Raised inside
-                    // the guard because the view restores the rows one at a
-                    // time, and each step is another report of a selection
-                    // that is still half-built.
-                    SelectionRefreshRequested?.Invoke(found);
-                }
-            }
         } finally {
-            _rowsReplacing = false;
+            _syncingRows = false;
         }
 
-        if (keep.Count == 0) {
-            // Nothing selected, but the caret may have been on a row - the
-            // state a click on empty space leaves.
-            if (before is not null && _caretPath is { } caret && !Entries.Any(e => IsSamePath(e.FullPath, caret))) {
-                _departure = new Departure(before, new[] { caret }, WasSelected: false);
-            }
-
-            return;
-        }
-
-        if (found.Length == 0 && before is null) {
-            // The selection was among search results and is not in the
-            // folder's listing: nothing selected is the honest answer.
-            SelectedEntries = Array.Empty<FileSystemEntry>();
-            SelectedEntry = null;
-
-            return;
-        }
-        if (found.Length == 0) {
-            // Everything that was selected has left the folder. What is
-            // selected instead is settled by the caller once the arrival
-            // has had its say (SettleDeparture) - until then the selection
-            // is left as it was, so the preview goes from the departed file
-            // straight to the next one and not through "nothing selected".
-            _departure = new Departure(before!, keep, WasSelected: true);
-
-            return;
-        }
-
-        AdoptSelection(found, next!);
-    }
-
-
-    /// <summary>
-    /// The current file has left the list - deleted here, deleted in the
-    /// program it was opened in, moved away, hidden by the filter - and no
-    /// arrival has said what to select instead (<paramref name="placed"/>).
-    /// The next row becomes current (<see cref="CurrentRowFallback"/>):
-    /// selected, so the preview moves on to it, and the view is told so the
-    /// keyboard follows. No scrolling - the row took the departed one's
-    /// place on screen.
-    ///
-    /// <para>
-    /// A row the filter hid goes the same way as a deleted one (decided
-    /// 2026-09-22): a photo rated out of a "three stars and up" filter used
-    /// to leave nothing selected and the keyboard on the window, and the
-    /// next arrow key went nowhere. With nothing selected to begin with,
-    /// only the caret moves.
-    /// </para>
-    /// </summary>
-    private void SettleDeparture(bool placed) {
-        if (_departure is not { } departure) {
-            return;
-        }
-
-        _departure = null;
-        if (placed) {
-            return;
-        }
-
-        var successor = CurrentRowFallback.After(departure.Before, departure.Paths, Entries);
-
-        if (departure.WasSelected) {
-            if (successor is null) {
-                SelectedEntries = Array.Empty<FileSystemEntry>();
-                SelectedEntry = null;
-
-                return;
-            }
-
-            SelectedEntry = successor;
-            SelectedEntries = new[] { successor };
-        }
-        if (successor is null) {
-            return;
-        }
-
-        CaretPath = successor.FullPath;
-        CurrentRowLeft?.Invoke();
-    }
-
-
-    /// <summary>Rows that left under the selection or the caret, waiting for <see cref="SettleDeparture"/>.</summary>
-    private sealed record Departure(IReadOnlyList<FileSystemEntry> Before, IReadOnlyCollection<string> Paths, bool WasSelected);
-
-
-    /// <summary>
-    /// Takes the restored selection as the view model's own, without
-    /// pushing any of it back at the list.
-    ///
-    /// <para>
-    /// The fields are assigned directly rather than through the properties
-    /// because the list is already showing exactly this selection — it was
-    /// just put there — and going through <see cref="SelectedEntry"/> would
-    /// send it round again through the binding that collapses an extended
-    /// selection. Everyone who needs telling is told here instead.
-    /// </para>
-    /// </summary>
-    private void AdoptSelection(IReadOnlyList<FileSystemEntry> selection, FileSystemEntry primary) {
-        _selectedEntries = selection;
-        _selectedEntry = primary;
-        NoteSelectionKind();
-
-        Raise(nameof(SelectedEntries));
-        Raise(nameof(SelectedEntry));
-        Raise(nameof(SelectionSummary));
-        SyncPreviewSelection();
+        Workspace.Post(new ListingLanded(
+            paths, paths, ListingReason.RowsReplaced, ArrivalDecision.None, Array.Empty<(string, string)>()));
     }
 
 
@@ -3201,7 +3193,7 @@ public sealed class MainViewModel : ObservableObject {
         // there caches its subfolders from the moment it was opened, and
         // nothing else re-reads them. F5 is where the whole window catches
         // up with the disk, not just the middle of it.
-        Trees.RefreshAll();
+        Workspace.Post(new PanelsRefreshRequested());
 
         if (ContentSearch.IsShowingResults || ContentSearch.IsDeep) {
             ContentSearch.Rerun();
@@ -3468,9 +3460,10 @@ public sealed class MainViewModel : ObservableObject {
     /// its former name - <paramref name="vacated"/> are the candidates the
     /// pool found gone from disk (<see cref="FolderSettingsBook.Adopt"/>).
     /// </summary>
+    /// <param name="picturesHint">The folder's desktop.ini says it is one of pictures (H1).</param>
     private void ChooseView(
         IReadOnlyList<FileSystemEntry> items, string path, DateTime? createdUtc,
-        IReadOnlyList<string>? vacated, bool inRecycleBin) {
+        IReadOnlyList<string>? vacated, bool inRecycleBin, bool picturesHint = false) {
         var today = DateOnly.FromDateTime(DateTime.Now);
         _currentCreatedUtc = createdUtc;
         if (createdUtc is { } birth && vacated is { Count: > 0 }
@@ -3486,7 +3479,19 @@ public sealed class MainViewModel : ObservableObject {
         ApplyViewDecision(ViewChoice.Decide(
             _folders.Find(path)?.View, Settings.AutoGallery, inRecycleBin,
             () => ImageFolderProbe.IsImageFolder(items, _companions, Settings.AutoGalleryPercent),
-            Settings.DefaultViewMode));
+            Settings.DefaultViewMode, picturesHint));
+    }
+
+    /// <summary>
+    /// Whether the folder's desktop.ini says it is one of pictures. On the
+    /// pool, with the listing; a file that cannot be read says nothing.
+    /// </summary>
+    private bool ReadsAsPictures(string folder) {
+        try {
+            return DesktopIni.SaysPictures(_fs.ReadAllBytes(Path.Combine(folder, DesktopIni.FileName)));
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+            return false;
+        }
     }
 
 
@@ -3573,10 +3578,19 @@ public sealed class MainViewModel : ObservableObject {
         if (e.PropertyName == nameof(SettingsViewModel.ShowHidden) ||
             e.PropertyName == nameof(SettingsViewModel.ShowSystem)) {
             Refresh();
-            // File-list filter is one half; tree (drives + bookmarks) caches
-            // its loaded children, so it needs an explicit reload to drop or
-            // surface hidden / system folders.
-            Trees.RefreshAll();
+            // File-list filter is one half; the panels keep the levels they
+            // have read, and read them again to drop or surface hidden and
+            // system folders - the hidden ones through the model's own
+            // setting, which also takes a cursor off a hidden row (P-19).
+            if (e.PropertyName == nameof(SettingsViewModel.ShowHidden)) {
+                PostWorkspaceOptions();
+            } else {
+                Workspace.Post(new PanelsRefreshRequested());
+            }
+        }
+
+        if (e.PropertyName == nameof(SettingsViewModel.TreeKeyboardNavigates)) {
+            PostWorkspaceOptions();
         }
 
         if (e.PropertyName == nameof(SettingsViewModel.IntegrateCompanions)) {
@@ -3609,7 +3623,7 @@ public sealed class MainViewModel : ObservableObject {
             e.PropertyName == nameof(SettingsViewModel.ShowBookmarkMusic) ||
             e.PropertyName == nameof(SettingsViewModel.ShowBookmarkVideos) ||
             e.PropertyName == nameof(SettingsViewModel.ShowBookmarkRecycleBin)) {
-            Bookmarks.Build(_persistedExpandedPaths);
+            PostBookmarks();
         }
 
         if (e.PropertyName == nameof(SettingsViewModel.AutoRefresh)) {
@@ -3708,7 +3722,7 @@ public sealed class MainViewModel : ObservableObject {
         // Read before the switch: the panel is rebuilt inside the call.
         string name = bookmark.Name;
         string path = bookmark.FullPath;
-        if (!Bookmarks.HideSpecial(bookmark)) {
+        if (!bookmark.IsBuiltInBookmark || !Bookmarks.HideSpecial(path)) {
             return false;
         }
 
@@ -3743,8 +3757,7 @@ public sealed class MainViewModel : ObservableObject {
                 break;
 
             case 1:
-                SelectExternalPath(bookmark.FullPath);
-                _ = DeleteSelectedAsync(permanent, confirmed: true);
+                _ = DeleteFolderAsync(bookmark.FullPath, permanent);
                 break;
 
             default:
@@ -3785,42 +3798,12 @@ public sealed class MainViewModel : ObservableObject {
 
 
     /// <summary>
-    /// Moves a bookmark and puts the keyboard back on it. The row is a new
-    /// instance after the rebuild, so the caller cannot keep the old one.
+    /// Moves a bookmark up or down. The panel's cursor stays on it - the
+    /// model keeps the cursor by path (P-16), so a second Ctrl+Up has the
+    /// same row under it. False when nothing moved.
     /// </summary>
-    public TreeNodeViewModel? MoveBookmark(TreeNodeViewModel? node, int delta) {
-        var moved = Bookmarks.Move(node, delta);
-        if (moved is not null) {
-            Trees.Select(moved);
-        }
-
-        return moved;
-    }
-
-
-    /// <summary>
-    /// Makes one path — a folder picked in the tree or the bookmarks — the
-    /// current selection: the commands that read
-    /// <see cref="SelectedEntries"/> act on it, and the preview pane shows
-    /// its census.
-    ///
-    /// <para>
-    /// <see cref="SelectedEntry"/> is deliberately left alone and the
-    /// preview is told directly. That property is two-way bound to the
-    /// list's <c>SelectedItem</c>, and assigning an item the list does not
-    /// contain makes the list push <c>null</c> straight back — which is
-    /// exactly the case here, since a folder is never inside its own
-    /// listing.
-    /// </para>
-    /// </summary>
-    public void SelectExternalPath(string path) {
-        var entry = _fs.GetEntry(path);
-        SelectedEntries = entry is null ? Array.Empty<FileSystemEntry>() : new[] { entry };
-        Preview.SetPrimary(entry);
-        // Control line (REDESIGN.md), in the action trace: every change of
-        // the operation target that did not come from the list, so a
-        // "Delete did the wrong thing" can be read from the log.
-        Log.Detail($"Target: {path}");
+    public bool MoveBookmark(string path, int delta) {
+        return Bookmarks.Move(path, delta);
     }
 
 
@@ -3861,9 +3844,9 @@ public sealed class MainViewModel : ObservableObject {
         _session.SetArrival(ArrivalIntent.Rows(folder, new[] { path }, takeFocus: true));
 
         // Already there: no navigation will happen, so no listing will land
-        // to consume the intent — apply it right away instead.
+        // to consume the intent - the rows on screen land again for it.
         if (IsSamePath(folder, _nav.Current)) {
-            ApplyArrival();
+            PostLanding(PathsOf(Entries), ListingReason.Relist, _session.DecideArrival(_nav.Current, Entries));
 
             return;
         }
@@ -3896,12 +3879,7 @@ public sealed class MainViewModel : ObservableObject {
             DataContext = Settings,
             Owner = Application.Current?.MainWindow,
         };
-        dlg.ShowDialog();
-
-        // Closing a modal dialog leaves the keyboard wherever WPF's first-
-        // focusable search happens to land in the owner window. Put it back
-        // on the list, which is where it was when the dialog opened.
-        (Application.Current?.MainWindow as MainWindow)?.FocusWorkArea();
+        ShowModal(dlg);
         // A tool may have been installed or pointed at, a row added.
         _ = LocateToolsAsync();
     }
@@ -3909,25 +3887,14 @@ public sealed class MainViewModel : ObservableObject {
 
     // --- Context-menu verbs ---------------------------------------------
     // These exist because the context menu needs them; the toolbar and the
-    // hotkey table are unchanged. What is left here is target resolution —
-    // the selection if there is one, the listed folder otherwise, so the
-    // same command backs both the item menu and the background menu. The
-    // call to the system itself is ShellCommandsController's.
+    // hotkey table are unchanged. What each acts on is TargetRules' answer
+    // for the target (ResolveTarget) - the rows, a panel row's folder, or
+    // the open folder when there is nothing - so the same command backs the
+    // item menu, the background menu and the key. The call to the system
+    // itself is ShellCommandsController's.
 
-    /// <summary>Selected item, or the folder being listed when nothing is selected.</summary>
-    private string? PropertiesTarget() {
-        return _selectedEntry?.FullPath ?? _nav.Current;
-    }
-
-    /// <summary>What "copy path" acts on: the selection, else the current folder.</summary>
-    private IReadOnlyList<string> SelectedPathsOrCurrent() {
-        return _selectedEntries.Count > 0
-            ? _selectedEntries.Select(e => e.FullPath).ToArray()
-            : new[] { _nav.Current ?? "" };
-    }
-
-    private void ShowProperties() {
-        if (PropertiesTarget() is { } path) {
+    private void ShowProperties(object? parameter) {
+        if (TargetRules.PropertiesOf(ResolveTarget(parameter).Target, _nav.Current) is { } path) {
             Shell.ShowProperties(path);
         }
     }
@@ -3941,52 +3908,101 @@ public sealed class MainViewModel : ObservableObject {
         Shell.OpenJournal(Journal);
     }
 
-    private void OpenWith() {
-        if (_selectedEntry is { } entry) {
+    private void OpenWith(object? parameter) {
+        if (OpenWithTarget(parameter) is { } entry) {
             Shell.OpenWith(entry.FullPath);
         }
     }
 
-    private void OpenInTerminal() {
-        if (TerminalFolder() is { } folder) {
+    /// <summary>The one file "Open with" is about: the list's current row, in a place its programs can reach.</summary>
+    private FileSystemEntry? OpenWithTarget(object? parameter) {
+        var (target, place) = ResolveTarget(parameter);
+
+        return target.Kind == TargetKind.ListRows && !place.IsReadOnly ? target.Primary : null;
+    }
+
+    private void OpenInTerminal(object? parameter) {
+        if (TerminalFolder(parameter) is { } folder) {
             Shell.OpenInTerminal(folder);
         }
     }
 
-    /// <summary>Folder a terminal should start in: the selected folder, else the current one.</summary>
-    private string? TerminalFolder() {
-        if (IsCurrentShellNamespace) {
-            return null;
-        }
-        if (_selectedEntries.Count == 1 && _selectedEntries[0].Kind == EntryKind.Directory) {
-            return _selectedEntries[0].FullPath;
-        }
+    /// <summary>Folder a terminal should start in (TargetRules), unless the target's place is not a folder on disk.</summary>
+    private string? TerminalFolder(object? parameter) {
+        var (target, place) = ResolveTarget(parameter);
 
-        return _nav.Current;
+        return place.IsReadOnly ? null : TargetRules.TerminalFolder(target, _nav.Current);
     }
 
 
-    private void CreateShortcutsForSelection() {
-        if (_selectedEntries.Count == 0 || _nav.Current is null) {
+    /// <summary>Shortcuts to the list's rows, in the open folder. Not offered for a panel row (decision B8).</summary>
+    private void CreateShortcutsForSelection(object? parameter) {
+        if (ListRowsOf(parameter) is not { } rows || _nav.Current is null) {
             return;
         }
-        CreateShortcuts(_selectedEntries.Select(e => e.FullPath).ToList(), _nav.Current);
+        CreateShortcuts(rows.Select(e => e.FullPath).ToList(), _nav.Current);
     }
 
 
     // --- Destructive / clipboard ops (always confirm, Cancel-default) --
 
+    /// <summary>Delete and Shift+Delete: the target's items, where the place allows it.</summary>
+    private bool CanDelete(object? parameter) {
+        var (target, place) = ResolveTarget(parameter);
+
+        return TargetRules.Items(target).Count > 0 && !place.IsReadOnly;
+    }
+
+    private async Task DeleteTargetAsync(object? parameter, bool permanent) {
+        if (!CanDelete(parameter)) {
+            return;
+        }
+
+        var items = await ItemsToActOnAsync(ResolveTarget(parameter).Target);
+        await DeleteAsync(items, permanent);
+    }
+
+    /// <summary>
+    /// The folder of a bookmark, asked about and confirmed already (the
+    /// bookmark question) - deleted as if it were the target.
+    /// </summary>
+    private async Task DeleteFolderAsync(string path, bool permanent) {
+        var items = await ItemsToActOnAsync(Target.OfPanelRow(Pane.Bookmarks, path));
+        await DeleteAsync(items, permanent, confirmed: true);
+    }
+
+    /// <summary>
+    /// The target's items as the operations need them. A panel row's folder
+    /// is read from the disk here, off the UI thread and only now that it is
+    /// acted on: its attributes decide the read-only question, and none of
+    /// that is worth a stat on every step of the panel's cursor.
+    /// </summary>
+    private async Task<IReadOnlyList<FileSystemEntry>> ItemsToActOnAsync(Target target) {
+        if (target.Kind != TargetKind.PanelRow) {
+            return TargetRules.Items(target);
+        }
+
+        string folder = target.Folder!;
+        var entry = await Task.Run(() => _fs.GetEntry(folder));
+        if (entry is null) {
+            _log.Info($"Panel row is gone: {folder}");
+        }
+
+        return entry is null ? Array.Empty<FileSystemEntry>() : new[] { entry };
+    }
+
+    /// <param name="snapshot">What to delete.</param>
+    /// <param name="permanent">Past the bin.</param>
     /// <param name="confirmed">
     /// The user has already said "to the bin" in so many words (the bookmark
     /// question); the recycle confirmation would only ask it again. A
     /// permanent delete is confirmed regardless.
     /// </param>
-    private async Task DeleteSelectedAsync(bool permanent, bool confirmed = false) {
-        if (_selectedEntries.Count == 0) {
+    private async Task DeleteAsync(IReadOnlyList<FileSystemEntry> snapshot, bool permanent, bool confirmed = false) {
+        if (snapshot.Count == 0) {
             return;
         }
 
-        var snapshot = _selectedEntries.ToList();
         var paths = WithCompanions(snapshot);
         int extras = paths.Count - snapshot.Count;
 
@@ -4086,10 +4102,13 @@ public sealed class MainViewModel : ObservableObject {
         int ok = gone.Count;
         int failed = results.Count(r => r.Status == DeleteStatus.Failed);
 
-        // The panels show folders too, and a folder deleted from a tree is
-        // usually not in the listing at all. Started before the listing
-        // moves, awaited after it.
-        var trees = RefreshTreesAboveAsync(gone);
+        // The panels show folders too, and a folder deleted from a panel is
+        // usually not in the listing at all: its rows go at once - a cursor
+        // on one goes to its neighbour (P-14) - and the folders above are
+        // read again. Before the listing moves: going to the nearest
+        // survivor is a navigation, and it puts the cursor there (P-13).
+        Workspace.Post(new Removed(gone));
+        RefreshTreesAbove(gone);
         if (NavigationFallback.AfterDelete(gone, _nav.Current) is { } fallback) {
             // The folder on screen went, or one above it: the listing goes
             // to the nearest survivor, the way Up would, rather than showing
@@ -4104,11 +4123,10 @@ public sealed class MainViewModel : ObservableObject {
             // wrong.
             if (ok > 0 && _nav.Current is { } folder) {
                 var next = NextAfterRemoval(snapshot);
-                _session.SetArrival(ArrivalIntent.Rows(folder, next, takeFocus: next.Length > 0));
+                _session.SetArrivalHere(ArrivalIntent.Rows(folder, next, takeFocus: next.Length > 0));
             }
             Refresh();
         }
-        await trees;
 
         string waited = BusyNote(results.Select(r => r.Busy));
         var failures = results.Where(r => r.Status == DeleteStatus.Failed).Select(r => r.Error).ToList();
@@ -4252,7 +4270,7 @@ public sealed class MainViewModel : ObservableObject {
     /// </summary>
     private string[] NextAfterRemoval(IReadOnlyList<FileSystemEntry> removed) {
         // The same rule that answers a file deleted by another program
-        // (SettleDeparture), asked ahead of the listing: the rows minus
+        // (ListingArrival), asked ahead of the listing: the rows minus
         // what is about to go stand in for the rows to come.
         var gone = new HashSet<string>(removed.Select(e => e.FullPath), StringComparer.OrdinalIgnoreCase);
         var staying = Entries.Where(e => !gone.Contains(e.FullPath)).ToList();
@@ -4316,15 +4334,15 @@ public sealed class MainViewModel : ObservableObject {
             // it left would show "folder is gone".
             if (action.MetadataTargets.Count > 0) {
                 _ = Ratings.RefreshRowsAsync(action.MetadataTargets);
-            } else if (!await FollowRelocatedAsync(action.MovesOnUndo, target: null)) {
+            } else if (!FollowRelocated(action.MovesOnUndo, target: null)) {
                 // Point the user at what came back, not at wherever the
                 // selection happened to be.
-                _session.SetArrival(ArrivalIntent.Rows(_nav.Current!, action.PathsAfterUndo.ToArray()));
+                _session.SetArrivalHere(ArrivalIntent.Rows(_nav.Current!, action.PathsAfterUndo.ToArray()));
                 Refresh();
                 // Nothing moved, yet something came back - a folder out of
                 // the bin reappears in its parent's branch too.
                 if (action.MovesOnUndo.Count == 0) {
-                    await RefreshTreesAboveAsync(action.PathsAfterUndo);
+                    RefreshTreesAbove(action.PathsAfterUndo);
                 }
             }
 
@@ -4387,7 +4405,8 @@ public sealed class MainViewModel : ObservableObject {
 
     [SuppressMessage("ReSharper", "AsyncVoidMethod",
         Justification = "A command body, nothing awaits it; every exception is caught, logged and shown in the status bar.")]
-    private async void Rename(FileSystemEntry? entry, string? newName) {
+    /// <param name="takeFocus">Confirmed with Enter: the keyboard goes onto the renamed row once it lands (K-4).</param>
+    private async void Rename(FileSystemEntry? entry, string? newName, bool takeFocus) {
         if (entry is null || string.IsNullOrWhiteSpace(newName)) {
             return;
         }
@@ -4395,6 +4414,11 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
+        // The watcher's tick waits for this one (L-11): the editor is gone
+        // already, and a re-listing while the rename is on its way saw the
+        // old name gone and the new one not yet known - and selected the
+        // neighbour for a moment.
+        _renamesInFlight++;
         try {
             // Companions ride along under the matching new name, as one
             // undo step — renaming Sprite.png and leaving Sprite.png.meta
@@ -4407,11 +4431,18 @@ public sealed class MainViewModel : ObservableObject {
             // two seconds (BusyGate), and the window must not stand still
             // for them.
             await Task.Run(() => _ops.RenameMany(plan));
-            // Keep the file the user just renamed selected: its path changed,
-            // so "whatever was selected" would no longer match anything.
+            // The rename rides with the next landing: a selection on the row
+            // follows the new name (decision B7), whatever else happened to
+            // the selection meanwhile. A folder's pair is added by
+            // FollowRelocated below, with everything else that follows it.
             string folder = Path.GetDirectoryName(entry.FullPath) ?? "";
             string renamed = Path.Combine(folder, newName);
-            _session.SetArrival(ArrivalIntent.Rows(folder, new[] { renamed }));
+            if (entry.Kind != EntryKind.Directory) {
+                _landingRenames.Add((entry.FullPath, renamed));
+            }
+            if (takeFocus) {
+                _session.SetArrivalHere(ArrivalIntent.Rows(folder, new[] { renamed }, takeFocus: true));
+            }
             Refresh();
             // A folder has things pointing at it that a file has not: a
             // bookmark on it or inside it, "Back" into it, its rows in
@@ -4419,7 +4450,7 @@ public sealed class MainViewModel : ObservableObject {
             // move. Not awaited: the listing above must not wait for the
             // panels to re-read.
             if (entry.Kind == EntryKind.Directory) {
-                _ = FollowRelocatedAsync(new[] { (entry.FullPath, renamed) }, target: null);
+                FollowRelocated(new[] { (entry.FullPath, renamed) }, target: null);
             }
             if (plan.Count > 1) {
                 Status = string.Format(Strings.StatusRenamedWithCompanions, plan.Count - 1);
@@ -4429,6 +4460,7 @@ public sealed class MainViewModel : ObservableObject {
             string reason = await Task.Run(() => DescribeError(ex, entry.FullPath));
             Fail(string.Format(Strings.StatusRenameFailed, reason));
         } finally {
+            _renamesInFlight--;
             RestorePreview();
         }
     }
@@ -4449,15 +4481,18 @@ public sealed class MainViewModel : ObservableObject {
 
 
     /// <summary>
-    /// Runs the catalog action <paramref name="id"/> over the selection, in
-    /// the order the list shows it, in an operation window of its own. What
-    /// applies is Core's call, asked again here: the menu that offered the
-    /// row was built a moment ago. The outputs arrive through the folder
+    /// Runs the catalog action named by <paramref name="parameter"/> (its id,
+    /// or a <see cref="MenuCall"/> carrying it) over the target's items, in
+    /// the order the list shows them, in an operation window of its own.
+    /// What applies is Core's call, asked again here: the menu that offered
+    /// the row was built a moment ago. The outputs arrive through the folder
     /// watcher, so nothing is re-listed.
     /// </summary>
     /// <param name="pickFolder">Ask where the outputs go before running; beside their sources otherwise.</param>
-    private async Task RunActionAsync(string? id, bool pickFolder = false) {
-        if (IsCurrentShellNamespace || id is null) {
+    private async Task RunActionAsync(object? parameter, bool pickFolder = false) {
+        var (target, place) = ResolveTarget(parameter);
+        string? id = parameter is MenuCall call ? call.Argument as string : parameter as string;
+        if (place.IsReadOnly || id is null) {
             return;
         }
 
@@ -4469,16 +4504,17 @@ public sealed class MainViewModel : ObservableObject {
         }
 
         string? folder = _nav.Current;
-        var state = ActionApplicability.For(action, _selectedEntries, folder is not null, tool => !MissingTools.Contains(tool));
+        var items = TargetRules.Items(target);
+        var state = ActionApplicability.For(action, items, folder is not null, tool => !MissingTools.Contains(tool));
         if (state != ActionState.Applicable) {
             _log.Info($"Action '{action.DisplayTitle}' not run: {state}");
 
             return;
         }
 
-        // Nothing selected and still applicable: an action for folders, on
+        // Nothing targeted and still applicable: an action for folders, on
         // the folder on screen.
-        var paths = _selectedEntries.Count > 0 ? InListOrder(_selectedEntries) : new[] { folder! };
+        var paths = items.Count > 0 ? InListOrder(items) : new[] { folder! };
 
         string? outputFolder = null;
         if (pickFolder) {
@@ -4580,12 +4616,13 @@ public sealed class MainViewModel : ObservableObject {
     /// </summary>
     [SuppressMessage("ReSharper", "AsyncVoidMethod",
         Justification = "A command body, nothing awaits it; every exception is caught, logged and shown in the status bar.")]
-    private async void BatchRename() {
-        if (IsCurrentShellNamespace || _nav.Current is not { } folder) {
+    private async void BatchRename(object? parameter) {
+        if (ResolveTarget(parameter).Place.IsReadOnly || _nav.Current is not { } folder
+            || ListRowsOf(parameter) is not { } selection) {
             return;
         }
 
-        var kind = BatchRenameGate.Classify(_selectedEntries);
+        var kind = BatchRenameGate.Classify(selection);
         if (kind == BatchRenameKind.Mixed) {
             Fail(Strings.StatusBatchRenameMixed);
 
@@ -4597,7 +4634,7 @@ public sealed class MainViewModel : ObservableObject {
 
         // The counter runs down the list as it is on screen, not in the
         // order the rows were clicked.
-        var chosen = new HashSet<string>(_selectedEntries.Select(e => e.FullPath), StringComparer.OrdinalIgnoreCase);
+        var chosen = new HashSet<string>(selection.Select(e => e.FullPath), StringComparer.OrdinalIgnoreCase);
         var items = Entries.Where(e => chosen.Contains(e.FullPath)).Select(RenameItem.From).ToArray();
         var context = new RenameContext(
             path => _fs.FileExists(path) || _fs.DirectoryExists(path),
@@ -4610,8 +4647,7 @@ public sealed class MainViewModel : ObservableObject {
         var dlg = new Wander.App.Views.BatchRenameWindow(vm) {
             Owner = Application.Current?.MainWindow,
         };
-        bool accepted = dlg.ShowDialog() == true;
-        (Application.Current?.MainWindow as MainWindow)?.FocusWorkArea();
+        bool accepted = ShowModal(dlg) == true;
         if (!accepted) {
             return;
         }
@@ -4647,7 +4683,7 @@ public sealed class MainViewModel : ObservableObject {
             .Select(r => Path.Combine(Path.GetDirectoryName(r.Path) ?? "", r.NewName))
             .ToArray();
         // The renamed rows are new rows: the keyboard went with the old ones.
-        _session.SetArrival(ArrivalIntent.Rows(folder, arrived, takeFocus: true));
+        _session.SetArrivalHere(ArrivalIntent.Rows(folder, arrived, takeFocus: true));
         Refresh();
         Status = string.Format(Strings.StatusBatchRenamed, renamed.Length);
     }
@@ -4676,8 +4712,11 @@ public sealed class MainViewModel : ObservableObject {
     /// Applies the edited name to whichever row the editor belongs to. The
     /// entry is looked up by path rather than taken from the selection: a
     /// commit on lost focus can arrive after the selection has moved on.
+    /// <paramref name="takeFocus"/>: committed with Enter - the user is still
+    /// on the row, and the keyboard goes onto it under its new name (K-4);
+    /// committed by a click elsewhere, the keyboard is where the click put it.
     /// </summary>
-    public void CommitRename(string? newName) {
+    public void CommitRename(string? newName, bool takeFocus) {
         string? path = RenamingPath;
         RenamingPath = null;
         if (path is null) {
@@ -4686,7 +4725,7 @@ public sealed class MainViewModel : ObservableObject {
 
         var entry = Entries.FirstOrDefault(
             e => string.Equals(e.FullPath, path, StringComparison.OrdinalIgnoreCase));
-        Rename(entry, newName);
+        Rename(entry, newName, takeFocus);
     }
 
     public void CancelRename() {
@@ -4699,7 +4738,7 @@ public sealed class MainViewModel : ObservableObject {
     /// a folder that need not be a row of the listing - the open folder or
     /// one above it, a bookmark, a branch three levels down. What
     /// remembers the path follows the new name the way it follows a move
-    /// (<see cref="FollowRelocatedAsync"/>); the listing is re-read only
+    /// (<see cref="FollowRelocated"/>); the listing is re-read only
     /// when the folder is one of its rows, or is it or above it.
     /// </summary>
     /// <returns>The folder's new path, or null when nothing was renamed.</returns>
@@ -4725,11 +4764,13 @@ public sealed class MainViewModel : ObservableObject {
             RestorePreview();
         }
 
-        if (!await FollowRelocatedAsync(new[] { (folder, renamed) }, target: null)
+        if (!FollowRelocated(new[] { (folder, renamed) }, target: null)
             && IsSamePath(parent, _nav.Current)) {
             // A row of the open folder: the listing shows it under its new
-            // name. No arrival of its own - the highlight is the panel's,
-            // and the list gave its selection up for it.
+            // name. The list keeps its selection while the keyboard is in a
+            // panel (decision B2); where it held the folder, it follows the
+            // new name - the rename rides with the landing - rather than
+            // taking it for a row that left.
             Refresh();
         }
 
@@ -4830,12 +4871,28 @@ public sealed class MainViewModel : ObservableObject {
     }
 
 
-    private void Copy() {
-        if (_selectedEntries.Count == 0) {
+    /// <summary>Copy: the target's items, where the place allows it - an archive included, the bin not.</summary>
+    private bool CanCopy(object? parameter) {
+        var (target, place) = ResolveTarget(parameter);
+
+        return TargetRules.Items(target).Count > 0 && (!place.IsReadOnly || place.IsArchive);
+    }
+
+    /// <summary>Cut: the target's items, where the place can be written to.</summary>
+    private bool CanCut(object? parameter) {
+        var (target, place) = ResolveTarget(parameter);
+
+        return TargetRules.Items(target).Count > 0 && !place.IsReadOnly;
+    }
+
+    private void Copy(object? parameter) {
+        if (!CanCopy(parameter)) {
             return;
         }
 
-        var paths = WithCompanions(_selectedEntries).ToList();
+        var (target, place) = ResolveTarget(parameter);
+        var items = TargetRules.Items(target);
+        var paths = WithCompanions(items).ToList();
 
         // From inside an archive the paths name no file another program
         // could open, so what goes out to the system is the shell's own
@@ -4847,9 +4904,7 @@ public sealed class MainViewModel : ObservableObject {
         if (ClipboardWriteIssue() is { } issue) {
             Warn(issue);
         } else {
-            Status = string.Format(
-                CurrentArchive is not null ? Strings.StatusArchiveCopied : Strings.StatusCopied,
-                _selectedEntries.Count);
+            Status = string.Format(place.IsArchive ? Strings.StatusArchiveCopied : Strings.StatusCopied, items.Count);
         }
     }
 
@@ -4864,15 +4919,17 @@ public sealed class MainViewModel : ObservableObject {
             : null;
     }
 
-    private void Cut() {
-        if (_selectedEntries.Count == 0) {
+    private void Cut(object? parameter) {
+        if (!CanCut(parameter)) {
             return;
         }
-        _clipboard.Cut(WithCompanions(_selectedEntries));
+
+        var items = TargetRules.Items(ResolveTarget(parameter).Target);
+        _clipboard.Cut(WithCompanions(items));
         if (ClipboardWriteIssue() is { } issue) {
             Warn(issue);
         } else {
-            Status = string.Format(Strings.StatusCut, _selectedEntries.Count);
+            Status = string.Format(Strings.StatusCut, items.Count);
         }
     }
 
@@ -4913,39 +4970,37 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     /// <summary>
-    /// The folder a panel made the operation target
-    /// (<see cref="SelectExternalPath"/>): a set of one folder with no
-    /// primary, which a row selected in the list never is. Null when the
-    /// list holds the selection, or the target is not a folder.
+    /// Paste, where there is something to paste and a folder to take it
+    /// that can be written to (<see cref="TargetRules.PasteFolder"/>).
     /// </summary>
-    private string? ExternalTargetFolder =>
-        _selectedEntry is null && _selectedEntries is [{ Kind: EntryKind.Directory } folder] ? folder.FullPath : null;
+    private bool CanPaste(object? parameter) {
+        var (target, place) = ResolveTarget(parameter);
 
-    /// <param name="intoSelection">
-    /// From a menu: the one folder selected in the list or targeted in a
-    /// panel is what the paste goes into, as in Explorer's row menu. Ctrl+V
-    /// in the list pastes into the open folder whatever row is selected;
-    /// with the keyboard in a panel, into the row under the cursor.
-    /// </param>
-    private async Task PasteAsync(bool intoSelection) {
-        if (!_clipboard.HasContent || _nav.Current is null) {
+        return _clipboard.HasContent && !place.IsReadOnly
+            && TargetRules.PasteFolder(target, _nav.Current, fromMenu: parameter is MenuCall) is not null;
+    }
+
+    /// <summary>
+    /// Pastes into the folder <see cref="TargetRules.PasteFolder"/> names:
+    /// a panel row under the cursor or right-clicked, the one folder a row
+    /// menu was opened on, the open folder otherwise - Ctrl+V in the list
+    /// pastes into the open folder whatever row is selected, as in Explorer.
+    /// </summary>
+    private async Task PasteAsync(object? parameter) {
+        if (!CanPaste(parameter)) {
             return;
         }
 
         // Where it goes, and why - the why is in the log, because "it went
         // into the wrong folder" has to be readable there (2026-09-22).
-        string target;
-        string how;
-        if (ExternalTargetFolder is { } targeted) {
-            target = targeted;
-            how = "panel row";
-        } else if (intoSelection && _selectedEntries is [{ Kind: EntryKind.Directory } row]) {
-            target = row.FullPath;
-            how = "selected row";
-        } else {
-            target = _nav.Current;
-            how = "open folder";
-        }
+        var subject = ResolveTarget(parameter).Target;
+        string target = TargetRules.PasteFolder(subject, _nav.Current, fromMenu: parameter is MenuCall)!;
+        string how = subject.Kind switch {
+            TargetKind.PanelRow => "panel row",
+            TargetKind.Background => "folder background",
+            TargetKind.ListRows when !IsSamePath(target, _nav.Current) => "selected row",
+            _ => "open folder",
+        };
         var sources = _clipboard.Paths.ToList();
 
         var reason = PathSafety.DetectSelfDrop(sources, target, out string? offender);
@@ -5013,13 +5068,16 @@ public sealed class MainViewModel : ObservableObject {
             _clipboard.Clear();
         }
         // Select what just arrived — the whole point of the operation is now
-        // on screen, and the keyboard should already be on it.
+        // on screen, and the keyboard should already be on it. Only in the
+        // folder on screen (N8): pasted into a subfolder, the rows are not
+        // in this listing, and an intent left waiting for them took the
+        // selection and the keyboard whenever anyone walked in there later.
         var arrived = results
             .Where(r => r.Status is BatchItemStatus.Ok or BatchItemStatus.Replaced or BatchItemStatus.Renamed or BatchItemStatus.Merged)
             .Select(r => r.FinalDestination)
             .ToArray();
-        _session.SetArrival(ArrivalIntent.Rows(target, arrived, takeFocus: arrived.Length > 0));
-        if (!await FollowMovedAsync(results, target, moved: wasCut)) {
+        _session.SetArrivalHere(ArrivalIntent.Rows(target, arrived, takeFocus: arrived.Length > 0));
+        if (!FollowMoved(results, target, moved: wasCut)) {
             Refresh();
         }
         ReportBatchResults(results, wasCut ? Strings.VerbMoved : Strings.VerbCopied, target);
@@ -5028,11 +5086,11 @@ public sealed class MainViewModel : ObservableObject {
     // --- Archives: extraction and the temporary copy --------------------
 
     /// <summary>
-    /// True when "Извлечь…" has something to work on: rows inside an
-    /// archive, or archives selected in an ordinary folder.
+    /// True when "Извлечь…" has something to work on: rows of the list inside
+    /// an archive, or archives selected in an ordinary folder.
     /// </summary>
-    private bool CanExtractSelection() {
-        return _selectedEntries.Count > 0
+    private bool CanExtractSelection(object? parameter) {
+        return ListRowsOf(parameter) is not null
             && TryGetShellNamespace() is not null
             && (CurrentArchive is not null || SelectionIsArchive);
     }
@@ -5053,8 +5111,8 @@ public sealed class MainViewModel : ObservableObject {
     /// folder it is everything the archive holds, which is what the shell's
     /// own "Извлечь все…" does one row above.
     /// </summary>
-    private async Task ExtractSelectionAsync() {
-        if (!CanExtractSelection() || TryGetShellNamespace() is not { } ns) {
+    private async Task ExtractSelectionAsync(object? parameter) {
+        if (!CanExtractSelection(parameter) || TryGetShellNamespace() is not { } ns) {
             return;
         }
 
@@ -5119,9 +5177,7 @@ public sealed class MainViewModel : ObservableObject {
             .Where(r => r.Status is BatchItemStatus.Ok or BatchItemStatus.Replaced or BatchItemStatus.Renamed or BatchItemStatus.Merged)
             .Select(r => r.FinalDestination)
             .ToArray();
-        if (string.Equals(_nav.Current, target, StringComparison.OrdinalIgnoreCase)) {
-            _session.SetArrival(ArrivalIntent.Rows(target, arrived, takeFocus: arrived.Length > 0));
-        }
+        _session.SetArrivalHere(ArrivalIntent.Rows(target, arrived, takeFocus: arrived.Length > 0));
 
         Refresh();
         ReportBatchResults(results, Strings.VerbExtracted, target);
@@ -5236,7 +5292,7 @@ public sealed class MainViewModel : ObservableObject {
         // are both for the listing Refresh is about to start — the row does
         // not exist to select, let alone edit, until it lands.
         string created = Path.Combine(_nav.Current, name);
-        _session.SetArrival(ArrivalIntent.Rows(
+        _session.SetArrivalHere(ArrivalIntent.Rows(
             _nav.Current, new[] { created }, takeFocus: true, renameTarget: created));
         Refresh();
 
@@ -5244,7 +5300,7 @@ public sealed class MainViewModel : ObservableObject {
         // are standing on just gained one. Leaving it to the watcher would
         // not do: its tick is held for as long as the editor we just opened
         // is up.
-        Trees.RefreshFor(_nav.Current);
+        Workspace.Post(new FolderChanged(_nav.Current));
     }
 
     private string DescribeError(Exception ex, string path) {

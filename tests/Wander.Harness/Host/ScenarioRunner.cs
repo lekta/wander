@@ -8,11 +8,17 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Threading;
 using Wander.App;
+using Wander.App.Controllers;
 using Wander.App.Dialogs;
 using Wander.App.ViewModels;
+using Wander.Core;
 using Wander.Core.FileSystem;
 using Wander.Core.Folders;
+using Wander.Core.Layout;
 using Wander.Core.Navigation;
+using Wander.Core.Panels;
+using Wander.Core.Persistence;
+using Wander.Core.Workspace;
 
 namespace Wander.Harness.Host;
 
@@ -141,7 +147,8 @@ public sealed class ScenarioRunner {
                         _vm.BeginRename(entry);
                         await YieldAsync();
                     }
-                    _vm.CommitRename(step.Require("to"));
+                    // As with Enter: the renamed row selected once it lands.
+                    _vm.CommitRename(step.Require("to"), takeFocus: true);
                     await WaitIdleAsync(step);
                     break;
                 }
@@ -208,6 +215,19 @@ public sealed class ScenarioRunner {
                 break;
             case "assert-pane":
                 AssertPane(step);
+                break;
+            case "post":
+                _vm.Workspace.Post(EventOf(step));
+                await WaitIdleAsync(step);
+                break;
+            case "assert-state":
+                AssertState(step);
+                break;
+            case "assert-focus":
+                AssertFocus(step);
+                break;
+            case "assert-folders":
+                AssertFolders(step);
                 break;
             case "drop":
                 Drop(step);
@@ -391,6 +411,9 @@ public sealed class ScenarioRunner {
             items.Add(entry);
         }
         list.FocusList();
+        // Selecting in the list is the keyboard being there - told
+        // directly, as the harness window never has the keyboard.
+        _vm.NoteKeyboardZone(WindowZone.FileList, ZoneReason.Programmatic);
     }
 
     private void RaiseKey(string keyName, int repeat) {
@@ -551,46 +574,45 @@ public sealed class ScenarioRunner {
     // --- Panels, search, soak ------------------------------------------
 
     /// <summary>
-    /// Opens one of the two panels down to a folder, a level at a time.
-    /// Level by level rather than in one call because a branch reads its
-    /// children off the disk when it opens: asking for a path six levels
-    /// down before any of them has loaded finds nothing, which is why the
-    /// controller's own <c>ExpandTo</c> is not what a scenario wants.
+    /// Opens one of the two panels down to a folder, a level at a time, the
+    /// way chevrons would - each one an event for the window's model, and
+    /// each level waited for: a branch reads its children off the disk when
+    /// it opens, and asking for a path six levels down before any of them
+    /// has come in finds nothing. The panel's cursor ends on the row.
     /// </summary>
     private async Task TreeExpandAsync(JsonElement step) {
-        string path = Normalise(_context.Expand(step.Require("path")));
-        bool bookmarks = string.Equals(step.Str("panel"), "bookmark", StringComparison.OrdinalIgnoreCase);
-        IReadOnlyList<TreeNodeViewModel> level = bookmarks
-            ? _vm.Bookmarks.Items.ToList()
-            : _vm.Trees.Roots.ToList();
+        string path = _context.Expand(step.Require("path"));
+        var pane = IsBookmarkPanel(step) ? Pane.Bookmarks : Pane.Drives;
+        var top = _vm.Workspace.State.Panel(pane).TopHolding(path)
+            ?? throw new InvalidOperationException(
+                $"'{path}' is not reachable in the {pane} panel (rows: {string.Join(", ", _vm.Trees.Lines(pane).Select(l => l.Name))})");
 
-        TreeNodeViewModel? node = null;
-        while (true) {
-            var next = level.FirstOrDefault(n => IsUnderOrEqual(path, n.FullPath));
-            if (next is null) {
-                throw new InvalidOperationException(
-                    $"'{path}' is not reachable in the {(bookmarks ? "bookmarks" : "drives")} panel " +
-                    $"(rows: {string.Join(", ", level.Select(n => n.Name))})");
-            }
-
-            node = next;
-            if (Normalise(node.FullPath) == path) {
-                break;
-            }
-
-            node.IsExpanded = true;
-            await WaitIdleAsync(step);
-            level = node.Children.ToList();
-        }
-
-        // The row itself is expanded too unless the scenario only wanted it
+        var chain = PanelPaths.Chain(top.Path, path).ToList();
+        // The row itself is opened too unless the scenario only wanted it
         // brought into view - "expanded" in this panel means "its children
         // are visible", which is what a chevron click does.
-        if (step.Bool("expand") != false) {
-            node.IsExpanded = true;
-            await WaitIdleAsync(step);
+        if (step.Bool("expand") == false) {
+            chain.RemoveAt(chain.Count - 1);
         }
-        _vm.Trees.Select(node);
+        foreach (string row in chain) {
+            if (!_vm.Workspace.State.Panel(pane).IsExpanded(row)) {
+                _vm.Workspace.Post(new ChevronToggled(pane, row, Open: true, All: false));
+            }
+            await WaitLevelAsync(pane, row);
+        }
+        _vm.Workspace.Post(new CaretMoved(pane, path));
+        await WaitIdleAsync(step);
+    }
+
+    /// <summary>The level under <paramref name="path"/> read, or ten seconds gone.</summary>
+    private async Task WaitLevelAsync(Pane pane, string path) {
+        var clock = Stopwatch.StartNew();
+        while (_vm.Workspace.State.Panel(pane).LevelOf(path).State != LevelState.Loaded) {
+            if (clock.ElapsedMilliseconds > 10_000) {
+                throw new InvalidOperationException($"the level under '{path}' in the {pane} panel was not read in 10 s");
+            }
+            await Task.Delay(20);
+        }
     }
 
     /// <summary>
@@ -615,52 +637,54 @@ public sealed class ScenarioRunner {
     }
 
     /// <summary>
-    /// The row on the path becomes the operation target, the way the
-    /// keyboard cursor on it does (FolderTreesView.TargetTreeNode): the
-    /// row is selected in its panel, the list gives up its selection, and
-    /// the folder is what Delete, Ctrl+C and Paste are about.
+    /// The keyboard in a panel, its cursor on the row on the path - the two
+    /// facts the target is read from (TargetRules), reported the way the
+    /// window and the panel report them. The row is selected in its panel;
+    /// the list keeps its selection (decision B2); the folder is what
+    /// Delete, Ctrl+C and Paste are about. The zone is told directly: the
+    /// harness window is never active and never has the keyboard.
     /// </summary>
     private void TreeTarget(JsonElement step) {
         string path = _context.Expand(step.Require("path"));
-        var node = FindTreeRow(path, IsBookmarkPanel(step))
+        bool bookmarks = IsBookmarkPanel(step);
+        var line = FindTreeRow(path, bookmarks)
             ?? throw new InvalidOperationException($"'{path}' is not a row on screen");
-        _vm.Trees.Select(node);
-        _window.FileList.ClearSelection();
-        _vm.SelectExternalPath(node.FullPath);
+        _vm.Workspace.Post(new CaretMoved(bookmarks ? Pane.Bookmarks : Pane.Drives, line.FullPath));
+        _vm.NoteKeyboardZone(bookmarks ? WindowZone.Bookmarks : WindowZone.Drives, ZoneReason.Programmatic);
     }
 
     /// <summary>
     /// A row of a panel as the panel shows it now: whether it is there, has
-    /// a chevron, is open, is selected, what it is labelled. Nothing is
-    /// opened on the way - an assertion about a chevron must not change
-    /// what it looks at - so a closed branch on the way is a scenario
-    /// mistake (tree-expand first).
+    /// a chevron, is open, is lit (under the panel's cursor), what it is
+    /// labelled. Nothing is opened on the way - an assertion about a chevron
+    /// must not change what it looks at - so a closed branch on the way is a
+    /// scenario mistake (tree-expand first).
     /// </summary>
     private void AssertTree(JsonElement step) {
         string path = _context.Expand(step.Require("path"));
-        var node = FindTreeRow(path, IsBookmarkPanel(step));
+        var line = FindTreeRow(path, IsBookmarkPanel(step));
         if (step.Bool("exists") == false) {
-            if (node is not null) {
+            if (line is not null) {
                 throw new InvalidOperationException($"'{path}' is still a row in the panel");
             }
 
             return;
         }
-        if (node is null) {
+        if (line is null) {
             throw new InvalidOperationException($"'{path}' is not a row in the panel");
         }
 
-        if (step.Bool("chevron") is { } chevron && node.Children.Count > 0 != chevron) {
+        if (step.Bool("chevron") is { } chevron && line.HasChevron != chevron) {
             throw new InvalidOperationException($"'{path}' {(chevron ? "has no chevron" : "still has a chevron")}");
         }
-        if (step.Bool("expanded") is { } expanded && node.IsExpanded != expanded) {
-            throw new InvalidOperationException($"'{path}' is {(node.IsExpanded ? "open" : "closed")}, expected {(expanded ? "open" : "closed")}");
+        if (step.Bool("expanded") is { } expanded && line.IsExpanded != expanded) {
+            throw new InvalidOperationException($"'{path}' is {(line.IsExpanded ? "open" : "closed")}, expected {(expanded ? "open" : "closed")}");
         }
-        if (step.Bool("selected") is { } selected && node.IsSelected != selected) {
-            throw new InvalidOperationException($"'{path}' is {(node.IsSelected ? "" : "not ")}selected");
+        if (step.Bool("selected") is { } selected && line.IsCaret != selected) {
+            throw new InvalidOperationException($"'{path}' is {(line.IsCaret ? "" : "not ")}lit");
         }
-        if (step.Str("name") is { } name && !string.Equals(node.Name, name, StringComparison.Ordinal)) {
-            throw new InvalidOperationException($"'{path}' is labelled '{node.Name}', expected '{name}'");
+        if (step.Str("name") is { } name && !string.Equals(line.Name, name, StringComparison.Ordinal)) {
+            throw new InvalidOperationException($"'{path}' is labelled '{line.Name}', expected '{name}'");
         }
     }
 
@@ -669,43 +693,28 @@ public sealed class ScenarioRunner {
     }
 
     /// <summary>
-    /// The row on <paramref name="path"/>, walking open branches only. Null
-    /// when the level that would hold it is on screen and the row is not
-    /// in it; a closed branch or a level that is not there at all throws,
-    /// because "absent" must not be confused with "not looked at".
+    /// The line on <paramref name="path"/> among the lines the panel draws.
+    /// Null when the row it would be under is drawn open and the line is not
+    /// there; a closed branch, or a row above it that is not drawn at all,
+    /// throws - "absent" must not be confused with "not looked at".
     /// </summary>
     private TreeNodeViewModel? FindTreeRow(string path, bool bookmarks) {
-        string wanted = Normalise(path);
-        string parent = Normalise(Path.GetDirectoryName(wanted) ?? "");
-        string panel = bookmarks ? "bookmarks" : "drives";
-        IReadOnlyList<TreeNodeViewModel> level = bookmarks
-            ? _vm.Bookmarks.Items.ToList()
-            : _vm.Trees.Roots.ToList();
-
-        TreeNodeViewModel? above = null;
-        while (true) {
-            var next = level.FirstOrDefault(n => !string.IsNullOrEmpty(n.FullPath) && IsUnderOrEqual(wanted, n.FullPath));
-            if (next is null) {
-                if (above is not null && Normalise(above.FullPath) == parent) {
-                    return null;
-                }
-
-                throw new InvalidOperationException(
-                    $"'{path}' is not reachable in the {panel} panel: " +
-                    (above is null ? "no root holds it" : $"'{above.FullPath}' has no open child on the way") +
-                    $" (rows: {string.Join(", ", level.Select(n => n.Name))})");
-            }
-            if (Normalise(next.FullPath) == wanted) {
-                return next;
-            }
-            if (!next.IsExpanded) {
-                throw new InvalidOperationException(
-                    $"'{next.FullPath}' is closed; assert-tree and tree-target do not open branches - tree-expand it first");
-            }
-
-            above = next;
-            level = next.Children.ToList();
+        var pane = bookmarks ? Pane.Bookmarks : Pane.Drives;
+        var lines = _vm.Trees.Lines(pane);
+        if (lines.FirstOrDefault(l => PanelPaths.Same(l.FullPath, path)) is { } line) {
+            return line;
         }
+
+        string? parent = PanelPaths.Parent(path);
+        var above = parent is null ? null : lines.FirstOrDefault(l => PanelPaths.Same(l.FullPath, parent));
+        if (above is { IsExpanded: true }) {
+            return null;
+        }
+
+        throw new InvalidOperationException(
+            above is null
+                ? $"'{path}' is not reachable in the {pane} panel (rows: {string.Join(", ", lines.Select(l => l.Name))})"
+                : $"'{above.FullPath}' is closed; assert-tree and tree-target do not open branches - tree-expand it first");
     }
 
     /// <summary>
@@ -980,6 +989,143 @@ public sealed class ScenarioRunner {
                     $"breadcrumbs end with [{string.Join(" > ", tail)}], expected [{string.Join(" > ", crumbs)}]");
             }
         }
+    }
+
+
+    // --- The window's model ---------------------------------------------------
+    // Events go in the way the views post them, and the state comes out -
+    // what used to be checkable only through WPF input the harness cannot
+    // make (REDESIGN 4.10, the harness rows). The window is never the active one
+    // here, so WindowActivated is posted rather than waited for.
+
+    /// <summary>
+    /// A model event from a step: <c>"event"</c> names it, the rest are its
+    /// fields - <c>"panel": "bookmark"</c> for the bookmarks, <c>"zone"</c>
+    /// and <c>"reason"</c> by their names, paths with <c>{sandbox}</c>.
+    /// </summary>
+    private WorkspaceEvent EventOf(JsonElement step) {
+        string name = step.Require("event");
+        long now = WorkspaceController.Now;
+        var pane = IsBookmarkPanel(step) ? Pane.Bookmarks : Pane.Drives;
+
+        return name.ToLowerInvariant() switch {
+            "windowactivated" => new WindowActivated(now),
+            "windowdeactivated" => new WindowDeactivated(),
+            "zoneentered" => new ZoneEntered(ZoneNamed(step.Str("zone")), Enum.Parse<ZoneReason>(step.Str("reason") ?? "Programmatic", ignoreCase: true)),
+            "caretmoved" => new CaretMoved(pane, _context.Expand(step.Require("path"))),
+            "chevrontoggled" => new ChevronToggled(pane, _context.Expand(step.Require("path")), step.Bool("open") ?? true, step.Bool("all") ?? false),
+            "rowclicked" => new RowClicked(pane, _context.Expand(step.Require("path")), now),
+            "rowactivated" => new RowActivated(pane, now),
+            "caretmoverequested" => new CaretMoveRequested(pane, Enum.Parse<PanelKey>(step.Require("key"), ignoreCase: true), step.Int("pageSize", 10), now),
+            "panelsrefreshrequested" => new PanelsRefreshRequested(),
+            "panehidden" => new PaneHidden(step.Strings("zones").Select(z => Enum.Parse<WindowZone>(z, ignoreCase: true)).ToArray()),
+            "dialogopened" => new DialogOpened(),
+            "dialogclosed" => new DialogClosed(),
+            "viewmodechanged" => new ViewModeChanged(),
+            _ => throw new InvalidDataException($"unknown event '{name}'"),
+        };
+    }
+
+    /// <summary>
+    /// One fact of the model against <c>"value"</c> - absent or null for
+    /// "none". Paths compare as paths; <c>list.selection</c> compares names,
+    /// in any order.
+    /// </summary>
+    private void AssertState(JsonElement step) {
+        string field = step.Require("field");
+        string? expected = step.Str("value") is { } value ? _context.Expand(value) : null;
+        var state = _vm.Workspace.State;
+
+        if (field.Equals("list.selection", StringComparison.OrdinalIgnoreCase)) {
+            var names = state.List.Selection.Select(Path.GetFileName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var wanted = step.Strings("names").ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (!names.SetEquals(wanted)) {
+                throw new InvalidOperationException($"list.selection is [{string.Join(", ", names)}], expected [{string.Join(", ", wanted)}]");
+            }
+
+            return;
+        }
+
+        (string? actual, bool path) = field.ToLowerInvariant() switch {
+            "folder" => (state.Folder.Path, true),
+            "keyboard.zone" => (state.Keyboard.Zone?.ToString(), false),
+            "keyboard.lastzone" => (state.Keyboard.LastZone.ToString(), false),
+            "drives.caret" => (state.Drives.Caret, true),
+            "drives.location" => (state.Drives.Location, true),
+            "bookmarks.caret" => (state.Bookmarks.Caret, true),
+            "bookmarks.location" => (state.Bookmarks.Location, true),
+            "list.caret" => (state.List.Caret, true),
+            "list.primary" => (state.List.Primary, true),
+            "target" => (_vm.Target.Kind.ToString(), false),
+            "target.folder" => (_vm.Target.Folder, true),
+            _ => throw new InvalidDataException($"unknown state field '{field}'"),
+        };
+        bool same = path
+            ? PanelPaths.Same(actual, expected) || (actual is null && expected is null)
+            : string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase);
+        if (!same) {
+            throw new InvalidOperationException($"{field} is '{actual ?? "none"}', expected '{expected ?? "none"}'");
+        }
+    }
+
+    /// <summary>
+    /// Where the executor put the keyboard: the zone (<c>"none"</c> for
+    /// none) and, with <c>"row"</c>, the row - a name in the list, a path in
+    /// a panel. The window is never active here, so the window's own
+    /// record of its focus is read when the keyboard device has none.
+    /// </summary>
+    private void AssertFocus(JsonElement step) {
+        var focused = Keyboard.FocusedElement as DependencyObject ?? FocusManager.GetFocusedElement(_window) as DependencyObject;
+        string zone = _window.ZoneOf(focused)?.ToString() ?? "none";
+        string expected = step.Require("zone");
+        if (!string.Equals(zone, expected, StringComparison.OrdinalIgnoreCase)) {
+            throw new InvalidOperationException($"the keyboard is in '{zone}', expected '{expected}'");
+        }
+        if (step.Str("row") is not { } row) {
+            return;
+        }
+
+        string wanted = _context.Expand(row);
+        switch ((focused as FrameworkElement)?.DataContext) {
+            case FileSystemEntry entry when string.Equals(entry.Name, wanted, StringComparison.OrdinalIgnoreCase):
+            case TreeNodeViewModel line when PanelPaths.Same(line.FullPath, wanted):
+                return;
+            case var other:
+                throw new InvalidOperationException($"the keyboard is on '{Describe(other)}', expected '{row}'");
+        }
+
+        static string Describe(object? on) {
+            return on switch {
+                FileSystemEntry entry => entry.Name,
+                TreeNodeViewModel line => line.FullPath,
+                _ => "no row",
+            };
+        }
+    }
+
+    /// <summary>
+    /// The views pinned to folders, as folders.json has them once the
+    /// pending save is written: every folder named in <c>"pinned"</c>, with
+    /// its view.
+    /// </summary>
+    private void AssertFolders(JsonElement step) {
+        _vm.FlushState();
+        var records = ServiceLocator.Get<IFolderSettingsStore>().Load();
+        foreach (var pin in step.GetProperty("pinned").EnumerateObject()) {
+            string folder = _context.Expand(pin.Name);
+            var record = records.FirstOrDefault(r => PanelPaths.Same(r.Path, folder))
+                ?? throw new InvalidOperationException($"folders.json has no record of '{folder}' ({records.Count} records)");
+            string view = pin.Value.GetString() ?? "";
+            if (!string.Equals(record.View?.ToString(), view, StringComparison.OrdinalIgnoreCase)) {
+                throw new InvalidOperationException($"'{folder}' is pinned to {record.View?.ToString() ?? "nothing"}, expected {view}");
+            }
+        }
+    }
+
+    private static WindowZone? ZoneNamed(string? name) {
+        return name is null || name.Equals("none", StringComparison.OrdinalIgnoreCase)
+            ? null
+            : Enum.Parse<WindowZone>(name, ignoreCase: true);
     }
 
 

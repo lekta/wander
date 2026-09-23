@@ -73,11 +73,17 @@ public enum WatchOutcome {
 /// a path: a photograph deleted and replaced under the same name keeps
 /// showing the deleted one otherwise.
 /// </param>
+/// <param name="Renames">
+/// The renames in this burst, old path to new, for the re-listing: a
+/// selected file renamed by another program stays selected under its new
+/// name (decision B7).
+/// </param>
 public sealed record WatchTickDecision(
     WatchOutcome Outcome,
     bool RefreshTrees = false,
     IReadOnlyList<FileSystemEntry>? Rows = null,
-    IReadOnlyList<string>? Stale = null) {
+    IReadOnlyList<string>? Stale = null,
+    IReadOnlyList<(string From, string To)>? Renames = null) {
 
     public static readonly WatchTickDecision Idle = new(WatchOutcome.Idle);
     public static readonly WatchTickDecision Hold = new(WatchOutcome.Hold);
@@ -198,6 +204,56 @@ public sealed class FolderSession {
     /// </summary>
     public void SetArrival(ArrivalIntent intent) {
         _arrival = intent;
+    }
+
+    /// <summary>
+    /// The intent of an operation, kept only when it is about the folder on
+    /// screen (N8). Pasted into a subfolder, the rows are not in this
+    /// listing, and an intent left waiting for that folder took the
+    /// selection and the keyboard the next time anyone walked in, whatever
+    /// for. A navigation's own intent is <see cref="SetArrival"/>'s.
+    /// </summary>
+    /// <returns>True when it was kept.</returns>
+    public bool SetArrivalHere(ArrivalIntent intent) {
+        if (!IsSamePath(intent.ForFolder, _listedPath)) {
+            return false;
+        }
+
+        _arrival = intent;
+
+        return true;
+    }
+
+    /// <summary>
+    /// A folder Wander moved or renamed: what is remembered about it and
+    /// under it follows (REDESIGN 4.12) - the folder on screen, where the
+    /// user was in each folder, and the pending intent - so walking back in
+    /// lands where they left.
+    /// </summary>
+    public void RewriteMemory(string from, string to) {
+        _listedPath = Moved(_listedPath, from, to);
+        if (_arrival is { } pending) {
+            _arrival = pending with {
+                ForFolder = Moved(pending.ForFolder, from, to),
+                Paths = pending.Paths.Select(p => Moved(p, from, to)!).ToArray(),
+                RenameTarget = Moved(pending.RenameTarget, from, to),
+            };
+        }
+
+        var moved = _selectionMemory
+            .Where(m => PathRewrite.Under(m.Key, from, to) is not null || PathRewrite.Under(m.Value, from, to) is not null)
+            .ToList();
+        foreach (var (folder, row) in moved) {
+            _selectionMemory.Remove(folder);
+            _selectionMemory[Moved(folder, from, to)!] = Moved(row, from, to)!;
+        }
+        if (moved.Count > 0) {
+            var order = _selectionMemoryOrder.Select(f => Moved(f, from, to)!).ToList();
+            _selectionMemoryOrder.Clear();
+            foreach (string folder in order) {
+                _selectionMemoryOrder.Enqueue(folder);
+            }
+        }
     }
 
 
@@ -354,9 +410,10 @@ public sealed class FolderSession {
         // different set of files than the one on screen, and only a fresh
         // listing can say what it is now.
         if (_pendingChanges.NeedsRelisting) {
+            var renames = _pendingChanges.Renames.ToArray();
             _pendingChanges.Clear();
 
-            return new WatchTickDecision(WatchOutcome.Relist, RefreshTrees: true, Stale: stale);
+            return new WatchTickDecision(WatchOutcome.Relist, RefreshTrees: true, Stale: stale, Renames: renames);
         }
 
         // Nothing appeared or vanished — some files were written to. If
@@ -382,6 +439,10 @@ public sealed class FolderSession {
 
     private static bool IsSamePath(string? a, string? b) {
         return a is not null && b is not null && string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? Moved(string? path, string from, string to) {
+        return path is null ? null : PathRewrite.Under(path, from, to) ?? path;
     }
 
 

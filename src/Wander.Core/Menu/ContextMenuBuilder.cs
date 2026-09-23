@@ -149,8 +149,10 @@ public static class ContextMenuBuilder {
         if (fs && t.RenameKind is BatchRenameKind.Files or BatchRenameKind.Folders) {
             fileGroup.Add(Cmd(MenuCommandId.BatchRename));
         }
+        if (!t.IsPanelRow) {
+            fileGroup.Add(Cmd(MenuCommandId.CreateShortcut, fs));
+        }
         fileGroup.AddRange(new[] {
-            Cmd(MenuCommandId.CreateShortcut, fs),
             MenuEntry.Divider,
             Cmd(MenuCommandId.Delete, fs),
         });
@@ -259,7 +261,7 @@ public static class ContextMenuBuilder {
         if (any && (t.SelectionIsArchive || t.IsArchive)) {
             items.Add(Cmd(MenuCommandId.Extract));
         }
-        if (fs && any) {
+        if (fs && any && !t.IsPanelRow) {
             items.Add(Cmd(MenuCommandId.CreateShortcut));
         }
         items.Add(Cmd(MenuCommandId.CopyPath));

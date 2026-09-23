@@ -16,6 +16,13 @@
   "steps": [
     { "do": "wait-idle" },
     { "do": "screenshot", "name": "started-on-old-state" },
+
+    // The 0.3.0 fixture pins views in state.json (ManualViewModes); since
+    // block 2, step 8 they live in folders.json, carried over once on the
+    // first start, each folder with its own view.
+    { "do": "assert-log", "scope": "all", "contains": "Pinned views moved from state.json into folders.json" },
+    { "do": "assert-folders", "pinned": { "D:\\Dev": "LargeIcons", "D:\\Raw\\26.06 \u0441\u044A\u0451\u043C\u043A\u0430": "Gallery" } },
+    { "do": "note", "text": "the fixture's pinned views are in folders.json now; the global last view is not carried over (B12)" },
     { "do": "note", "text": "bookmarks in the panel come from the fixture and point at folders that do not exist - rows, not errors" },
 
     { "do": "navigate", "path": "{sandbox}\\attrs" },

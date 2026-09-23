@@ -927,6 +927,38 @@ public class ContextMenuBuilderTests {
     }
 
 
+    // --- A row of a folder panel (decision B8) ------------------------------
+
+    /// <summary>
+    /// A shortcut to a folder right-clicked in a panel would land in the
+    /// folder open in the list, which the row says nothing about - so the
+    /// row's menu does not offer one, in either shape.
+    /// </summary>
+    [Fact]
+    public void PanelRow_OffersNoShortcut() {
+        var row = new ContextMenuTarget { Selection = new[] { Dir("sub") }, FolderPath = Folder, IsPanelRow = true, CanPaste = true };
+
+        var menu = ContextMenuBuilder.Build(row, ContextMenuSettings.Default);
+        var header = ContextMenuBuilder.Build(row with { Place = MenuPlace.Header }, ContextMenuSettings.Default);
+
+        Assert.DoesNotContain(Flatten(menu), e => e.Id == MenuCommandId.CreateShortcut);
+        Assert.DoesNotContain(Flatten(header), e => e.Id == MenuCommandId.CreateShortcut);
+        // The rest of the folder's verbs stay.
+        var file = Find(menu, MenuCommandId.FileSubmenu)!.Children;
+        Assert.True(Enabled(file, MenuCommandId.Paste));
+        Assert.True(Enabled(file, MenuCommandId.Rename));
+        Assert.True(Enabled(file, MenuCommandId.Delete));
+        AssertSeparatorsAreSane(file);
+    }
+
+    [Fact]
+    public void ListRow_StillOffersAShortcut() {
+        var menu = ContextMenuBuilder.Build(SelectionOf(Dir("sub")), ContextMenuSettings.Default);
+
+        Assert.True(Enabled(Find(menu, MenuCommandId.FileSubmenu)!.Children, MenuCommandId.CreateShortcut));
+    }
+
+
     // --- Helpers ----------------------------------------------------------
 
     private static readonly CustomAction _forVideo = new() {

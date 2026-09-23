@@ -219,6 +219,57 @@ public class ClipboardControllerTests {
         Assert.False(clip.HasContent);
     }
 
+    /// <summary>F-2, decision B22: files cut inside a folder Wander then moved follow it, here and on the system clipboard.</summary>
+    [Fact]
+    public void Rewrite_CutFilesInsideAMovedFolder_FollowIt() {
+        var system = new FakeSystemClipboard();
+        var clip = new ClipboardController(system);
+        clip.Cut(new[] { FileA, FileB, @"C:\other\x.txt" });
+
+        Assert.True(clip.Rewrite(@"C:\src", @"D:\moved"));
+
+        var moved = new[] { @"D:\moved\a.txt", @"D:\moved\b.txt", @"C:\other\x.txt" };
+        Assert.Equal(moved, clip.Paths);
+        Assert.True(clip.IsCut);
+        Assert.Equal(moved, system.Content!.Value.Paths);
+    }
+
+    /// <summary>Decision B22, pillar 3: the system clipboard holds another program's content now - nothing is touched.</summary>
+    [Fact]
+    public void Rewrite_WithSomethingElseOnTheClipboard_TouchesNothing() {
+        var system = new FakeSystemClipboard();
+        var clip = new ClipboardController(system);
+        clip.Cut(new[] { FileA });
+        system.Content = new ClipboardFiles(new[] { @"E:\theirs.txt" }, IsCut: false);
+
+        Assert.False(clip.Rewrite(@"C:\src", @"D:\moved"));
+        Assert.Equal(new[] { FileA }, clip.Paths);
+        Assert.Equal(new[] { @"E:\theirs.txt" }, system.Content!.Value.Paths);
+    }
+
+    /// <summary>A clipboard that cannot be read is not written: our own paste follows, the system's copy waits for the next sync.</summary>
+    [Fact]
+    public void Rewrite_WhenTheClipboardCannotBeRead_FollowsHereOnly() {
+        var system = new FakeSystemClipboard();
+        var clip = new ClipboardController(system);
+        clip.Cut(new[] { FileA });
+        system.Fails = true;
+
+        Assert.True(clip.Rewrite(@"C:\src", @"D:\moved"));
+        Assert.Equal(new[] { @"D:\moved\a.txt" }, clip.Paths);
+        Assert.DoesNotContain(system.CallLog, c => c.StartsWith("Set:cut:D:", StringComparison.Ordinal));
+    }
+
+    /// <summary>A move that has nothing to do with the held paths changes nothing.</summary>
+    [Fact]
+    public void Rewrite_ElsewhereChangesNothing() {
+        var clip = new ClipboardController();
+        clip.Copy(new[] { FileA });
+
+        Assert.False(clip.Rewrite(@"C:\srcs", @"D:\moved"));
+        Assert.Equal(new[] { FileA }, clip.Paths);
+    }
+
     [Fact]
     public void Sync_WhenClipboardCannotBeRead_KeepsWhatWeHave() {
         var system = new FakeSystemClipboard();
