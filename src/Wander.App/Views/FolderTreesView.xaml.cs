@@ -124,7 +124,7 @@ public partial class FolderTreesView : UserControl {
 
     /// <summary>
     /// Puts the keyboard in the bookmarks panel. False when it is put away
-    /// or empty — there is nothing to focus there, and the caller moves on
+    /// or empty - there is nothing to focus there, and the caller moves on
     /// to the next zone.
     /// </summary>
     public bool FocusBookmarks() {
@@ -137,7 +137,7 @@ public partial class FolderTreesView : UserControl {
     }
 
     /// <summary>
-    /// Which panel an element belongs to, or null when it is neither — the
+    /// Which panel an element belongs to, or null when it is neither - the
     /// header, the divider, the strip, or something outside the control.
     /// </summary>
     public NavigationSource? PaneOf(object? source) {
@@ -314,7 +314,7 @@ public partial class FolderTreesView : UserControl {
 
     /// <summary>
     /// The bookmarks region owns a fixed pixel height that the divider
-    /// changes. Collapsed, it falls back to Auto — the header row is all
+    /// changes. Collapsed, it falls back to Auto - the header row is all
     /// that is left, and everything below it moves up.
     /// </summary>
     private void ApplyBookmarksLayout() {
@@ -907,7 +907,7 @@ public partial class FolderTreesView : UserControl {
     // --- Drop target ------------------------------------------------------------------------
     //
     // Where a drop would land, whether it is allowed and what it would do is
-    // DropTargetController's answer — one instance for every surface, shared
+    // DropTargetController's answer - one instance for every surface, shared
     // with the file list. What is left here is the XAML wiring and running
     // the plan through the view model.
 
@@ -927,12 +927,12 @@ public partial class FolderTreesView : UserControl {
     //
     // Two-mode dispatch by hit location:
     //  - Drop ON an existing bookmark line that is a real filesystem folder
-    //    → copy/move into that folder. We forward the event to the standard
+    //    -> copy/move into that folder. We forward the event to the standard
     //    OnDragOver/OnDrop pair, which re-resolves the target via the line's
     //    DataContext and shares all the same self-drop / effect-choice /
     //    highlight machinery the drives panel uses.
     //  - Drop on the header, empty area, or a shell-namespace bookmark
-    //    (Recycle Bin can't accept drops) → register the dragged folders
+    //    (Recycle Bin can't accept drops) -> register the dragged folders
     //    as new bookmarks.
     // We decide the mode BEFORE delegating; OnDragOver's own ResolveDropTarget
     // would otherwise fall back to Vm.CurrentPath for empty area, which would
@@ -950,7 +950,7 @@ public partial class FolderTreesView : UserControl {
         }
 
         if (DropTargetController.IsOverDroppableBookmarkFolder(e)) {
-            // Defer to the standard handler — same effect, same highlight,
+            // Defer to the standard handler - same effect, same highlight,
             // same self-drop protection as the drives panel.
             OnDragOver(sender, e);
             return;
@@ -1002,7 +1002,7 @@ public partial class FolderTreesView : UserControl {
             return;
         }
         // Link cursor (arrow with curved-arrow overlay) reads as "make a
-        // reference here" — closest stock cursor to "bookmark".
+        // reference here" - closest stock cursor to "bookmark".
         e.Effects = DragDropEffects.Link;
         e.Handled = true;
     }
@@ -1021,7 +1021,7 @@ public partial class FolderTreesView : UserControl {
 
     /// <summary>
     /// Bookmarks every folder in the drop, and says so when there were
-    /// none — the strip and the empty area below the bookmarks answer a
+    /// none - the strip and the empty area below the bookmarks answer a
     /// drop the same way, they only differ in what they clean up
     /// afterwards.
     /// </summary>
@@ -1050,7 +1050,7 @@ public partial class FolderTreesView : UserControl {
 
     /// <summary>
     /// A drag is worth reacting to when it carries at least one folder that
-    /// is not bookmarked already — dropping a folder that is in the list
+    /// is not bookmarked already - dropping a folder that is in the list
     /// would do nothing, so the strip should not promise otherwise.
     /// </summary>
     private bool CanAcceptBookmarkDrop(DragEventArgs e) {
@@ -1063,7 +1063,7 @@ public partial class FolderTreesView : UserControl {
 
     /// <summary>
     /// Lights the drop strip while a drag it can accept is over the
-    /// bookmarks. This is the strip's only reactive state — it is not a
+    /// bookmarks. This is the strip's only reactive state - it is not a
     /// button, so an idle mouse passing over it changes nothing.
     /// </summary>
     private void SetBookmarkDropZoneActive(bool active) {

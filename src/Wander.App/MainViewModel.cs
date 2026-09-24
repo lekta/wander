@@ -1216,7 +1216,7 @@ public sealed class MainViewModel : ObservableObject {
 
     /// <summary>
     /// True when everything selected is an archive Wander can open — the
-    /// precondition for "Извлечь…" outside an archive. A field rather than
+    /// precondition for "Извлечь..." outside an archive. A field rather than
     /// a computed property for the same reason as
     /// <see cref="IsCurrentShellNamespace"/>: the answer ends in a
     /// <c>File.Exists</c> per row, and <c>CanExecute</c> asks constantly.
@@ -5236,7 +5236,7 @@ public sealed class MainViewModel : ObservableObject {
     // --- Archives: extraction and the temporary copy --------------------
 
     /// <summary>
-    /// True when "Извлечь…" has something to work on: rows of the list inside
+    /// True when "Извлечь..." has something to work on: rows of the list inside
     /// an archive, or archives selected in an ordinary folder.
     /// </summary>
     private bool CanExtractSelection(object? parameter) {
@@ -5256,10 +5256,10 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     /// <summary>
-    /// "Извлечь…" — asks where, then extracts. Inside an archive the
+    /// "Извлечь..." — asks where, then extracts. Inside an archive the
     /// selection is what comes out; on an archive standing in an ordinary
     /// folder it is everything the archive holds, which is what the shell's
-    /// own "Извлечь все…" does one row above.
+    /// own "Извлечь все..." does one row above.
     /// </summary>
     private async Task ExtractSelectionAsync(object? parameter) {
         if (!CanExtractSelection(parameter) || TryGetShellNamespace() is not { } ns
@@ -5276,7 +5276,7 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     /// <summary>
-    /// "Извлечь рядом" (2026-09-23): what "Извлечь…" takes out, into the
+    /// "Извлечь рядом" (2026-09-23): what "Извлечь..." takes out, into the
     /// folder the archive sits in, with no question at all - a name already
     /// there is kept and the newcomer gets "(1)" (pillar 2: asking nothing,
     /// it may not replace anything). Archives picked in search results can
@@ -5305,7 +5305,7 @@ public sealed class MainViewModel : ObservableObject {
     /// <summary>
     /// What an extraction takes out of <paramref name="rows"/>: inside an
     /// archive the rows themselves; archives in an ordinary folder give
-    /// everything they hold, which is what the shell's own "Извлечь все…"
+    /// everything they hold, which is what the shell's own "Извлечь все..."
     /// does one row above. Null, said in the status bar, when that is nothing.
     /// </summary>
     private IReadOnlyList<string>? ExtractionSources(IShellNamespace ns, IReadOnlyList<FileSystemEntry> rows) {
