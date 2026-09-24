@@ -321,10 +321,13 @@ public sealed record AppSettings {
     public int ThumbnailDiskCacheMb { get; init; } = 256;
 
     /// <summary>
-    /// How many thumbnails to hold in RAM. At roughly 100 KB apiece, 512 is
-    /// tens of megabytes — a full screen of tiles many times over.
+    /// Ceiling on the decoded pictures held in memory, in megabytes: the
+    /// thumbnails and the preview's frames together (PictureMemory,
+    /// 2026-09-24). 0 is a sixteenth of the machine's memory. Replaces the
+    /// count of thumbnails that was here: the count said nothing about the
+    /// megabytes, and a thumbnail is four times bigger at 200 %.
     /// </summary>
-    public int ThumbnailMemoryEntries { get; init; } = 512;
+    public int PictureMemoryMb { get; init; }
 
 
     // --- Bookmarks -----------------------------------------------------

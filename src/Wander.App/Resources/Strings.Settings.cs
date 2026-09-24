@@ -114,8 +114,11 @@ public static partial class Strings {
     /// <summary>Кэш на диске, не больше (МБ)</summary>
     public static string SettingsThumbnailDiskMb => Get(nameof(SettingsThumbnailDiskMb));
 
-    /// <summary>Кэш в памяти (миниатюр)</summary>
-    public static string SettingsThumbnailMemory => Get(nameof(SettingsThumbnailMemory));
+    /// <summary>Память под картинки (МБ)</summary>
+    public static string SettingsPictureMemory => Get(nameof(SettingsPictureMemory));
+
+    /// <summary>Миниатюры и кадры панели просмотра вместе. 0 — шестнадцатая часть памяти компьютера, здесь {0} МБ.</summary>
+    public static string SettingsPictureMemoryHint => Get(nameof(SettingsPictureMemoryHint));
 
     /// <summary>Очистить кэш</summary>
     public static string SettingsClearCache => Get(nameof(SettingsClearCache));

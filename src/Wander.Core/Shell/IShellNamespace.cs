@@ -78,6 +78,12 @@ public interface IShellNamespace {
     /// Cancellation stops the engine between items; whatever landed before
     /// that stays on disk and is the caller's to undo.
     /// </para>
+    ///
+    /// <para>
+    /// A run that fails throws: an <see cref="IOException"/> naming the cause
+    /// when the engine gave one (a full disk, a read-only medium), and
+    /// <see cref="ArchiveLockedException"/> when it stopped without one.
+    /// </para>
     /// </summary>
     /// <param name="progress">Reports each item's path as it is finished.</param>
     /// <param name="work">
@@ -126,6 +132,20 @@ public interface IShellNamespace {
 /// "%" rather than "MB".
 /// </summary>
 public readonly record struct CopyOutWork(long Done, long Total);
+
+
+/// <summary>
+/// The shell walked an extraction, wrote nothing and named no cause - what
+/// a zip with a password does when there is no window to ask for it in.
+/// A cause the engine does name (the disk is full, the medium is
+/// read-only) comes as an ordinary <see cref="IOException"/> instead, and
+/// is told in its own words rather than as a password nobody set.
+/// </summary>
+public sealed class ArchiveLockedException : IOException {
+    public ArchiveLockedException()
+        : base("The shell aborted the extraction without a reason - the archive may be password-protected.") {
+    }
+}
 
 
 /// <summary>One thing to copy out of a namespace.</summary>

@@ -6,6 +6,7 @@ using Wander.Core.Actions;
 using Wander.Core.Companions;
 using Wander.Core.FileSystem;
 using Wander.Core.Folders;
+using Wander.Core.Imaging;
 using Wander.Core.Layout;
 using Wander.Core.Menu;
 using Wander.Core.Persistence;
@@ -476,11 +477,20 @@ public sealed class SettingsViewModel : ObservableObject {
         set => SetField(ref _thumbnailDiskCacheMb, ClampInt(value, 16, 8192));
     }
 
-    private int _thumbnailMemoryEntries;
-    public int ThumbnailMemoryEntries {
-        get => _thumbnailMemoryEntries;
-        set => SetField(ref _thumbnailMemoryEntries, ClampInt(value, 64, 8192));
+    /// <summary>
+    /// The ceiling on decoded pictures in memory, in megabytes; 0 leaves it
+    /// to the machine - a sixteenth of its memory (<see cref="PictureMemory"/>).
+    /// </summary>
+    private int _pictureMemoryMb;
+    public int PictureMemoryMb {
+        get => _pictureMemoryMb;
+        set => SetField(ref _pictureMemoryMb, value <= 0 ? 0 : ClampInt(value, 128, 65536));
     }
+
+    /// <summary>What 0 means on this machine, in words under the field: "0 - a sixteenth of the memory, 1024 MB here".</summary>
+    public string PictureMemoryHint => string.Format(
+        Strings.SettingsPictureMemoryHint,
+        PictureMemory.Megabytes(PictureMemory.Budget(0, GC.GetGCMemoryInfo().TotalAvailableMemoryBytes)));
 
     /// <summary>
     /// Where the cache lives and how big it is right now, refreshed when the
@@ -707,7 +717,7 @@ public sealed class SettingsViewModel : ObservableObject {
         ConfirmCreateSidecar = s.ConfirmCreateSidecar;
         ThumbnailDiskCacheEnabled = s.ThumbnailDiskCacheEnabled;
         ThumbnailDiskCacheMb = s.ThumbnailDiskCacheMb;
-        ThumbnailMemoryEntries = s.ThumbnailMemoryEntries;
+        PictureMemoryMb = s.PictureMemoryMb;
         ShowBookmarkDownloads = s.ShowBookmarkDownloads;
         ShowBookmarkDocuments = s.ShowBookmarkDocuments;
         ShowBookmarkPictures = s.ShowBookmarkPictures;
@@ -933,7 +943,7 @@ public sealed class SettingsViewModel : ObservableObject {
             ConfirmCreateSidecar = ConfirmCreateSidecar,
             ThumbnailDiskCacheEnabled = ThumbnailDiskCacheEnabled,
             ThumbnailDiskCacheMb = ThumbnailDiskCacheMb,
-            ThumbnailMemoryEntries = ThumbnailMemoryEntries,
+            PictureMemoryMb = PictureMemoryMb,
             ShowBookmarkDownloads = ShowBookmarkDownloads,
             ShowBookmarkDocuments = ShowBookmarkDocuments,
             ShowBookmarkPictures = ShowBookmarkPictures,

@@ -20,6 +20,7 @@ using Wander.Core.Diagnostics;
 using Wander.Core.FileSystem;
 using Wander.Core.Folders;
 using Wander.Core.Icons;
+using Wander.Core.Imaging;
 using Wander.Core.Layout;
 using Wander.Core.Listing;
 using Wander.Core.Logging;
@@ -341,7 +342,7 @@ public sealed class MainViewModel : ObservableObject {
                 DialogKind.CreateSidecar, Strings.ConfirmCreateSidecarTitle, question,
                 DialogButtons.YesNo, DialogIcon.Question)));
         Ratings.HasRatingsChanged += (_, value) => HasRatings = value;
-        Ratings.StatusReported += (_, text) => Status = text;
+        Ratings.StatusReported += (_, line) => Say(line.Text, line.Severity);
 
         Preview = new PreviewController(
             ServiceLocator.TryGet<IImageMetadataReader>(),
@@ -643,6 +644,13 @@ public sealed class MainViewModel : ObservableObject {
     /// time the first screen from there (<c>FirstScreenWatch</c>).
     /// </summary>
     public event Action<string, System.Diagnostics.Stopwatch>? FolderArrived;
+
+    /// <summary>
+    /// Every line the status bar is given, repeats included - the property
+    /// does not change for the same words twice. The full screen covers the
+    /// status bar and says a warning or an error itself (PLAN Q5).
+    /// </summary>
+    public event EventHandler<StatusLine>? StatusSaid;
 
 
     public BulkObservableCollection<FileSystemEntry> Entries { get; }
@@ -3283,6 +3291,7 @@ public sealed class MainViewModel : ObservableObject {
         Journal.Note(text, DateTime.Now, severity);
         StatusSeverity = severity;
         SetField(ref _status, text, nameof(Status));
+        StatusSaid?.Invoke(this, new StatusLine(text, severity));
     }
 
     /// <summary>
@@ -3782,7 +3791,7 @@ public sealed class MainViewModel : ObservableObject {
             UpdateFolderWatch();
         }
 
-        if (e.PropertyName == nameof(SettingsViewModel.ThumbnailMemoryEntries) ||
+        if (e.PropertyName == nameof(SettingsViewModel.PictureMemoryMb) ||
             e.PropertyName == nameof(SettingsViewModel.ThumbnailDiskCacheEnabled) ||
             e.PropertyName == nameof(SettingsViewModel.ThumbnailDiskCacheMb)) {
             // A lowered limit bites now, not at the next start.
@@ -3794,13 +3803,20 @@ public sealed class MainViewModel : ObservableObject {
 
 
     /// <summary>
-    /// Pushes the user's cache limits into the icon provider. Called on every
-    /// relevant settings change and once at startup — the provider deliberately
-    /// knows nothing about <see cref="AppSettings"/>.
+    /// Pushes the user's cache limits into the icon provider and the picture
+    /// caches. Called on every relevant settings change and once at startup -
+    /// the provider deliberately knows nothing about <see cref="AppSettings"/>.
     /// </summary>
     private void ApplyThumbnailCacheSettings() {
+        // The pictures' budget: the megabytes set, or a sixteenth of the
+        // machine - its memory, not what is free this moment (PictureMemory).
+        // A quarter for the decoded thumbnails, the rest for the frames of
+        // every preview together.
+        long budget = PictureMemory.Budget(Settings.PictureMemoryMb, GC.GetGCMemoryInfo().TotalAvailableMemoryBytes);
+        IconImageCache.SetLimit(PictureMemory.Thumbnails(budget));
+        PictureCache.SetLimit(PictureMemory.Frames(budget));
         ServiceLocator.Get<IIconProvider>().ConfigureCache(new ThumbnailCacheOptions(
-            Settings.ThumbnailMemoryEntries,
+            ThumbnailCacheOptions.Default.MemoryEntries,
             Settings.ThumbnailDiskCacheEnabled,
             Settings.ThumbnailDiskCacheMb * 1024L * 1024L,
             // The system scale: a visual in no window reports it, and the
@@ -5373,9 +5389,12 @@ public sealed class MainViewModel : ObservableObject {
         Refresh();
         ReportBatchResults(results, Strings.VerbExtracted, target);
 
-        // Nothing came out and nothing was refused: the shell walked the
-        // whole batch and wrote no bytes, which is what a password does.
-        if (arrived.Length == 0 && results.All(r => r.Status is BatchItemStatus.Failed)) {
+        // Nothing came out, and the shell named no cause: it walked the whole
+        // batch and wrote no bytes, which is what a password does. A cause
+        // it did name - a full disk, a read-only medium - is already said
+        // above, in its own words.
+        if (arrived.Length == 0 && results.All(r => r.Status is BatchItemStatus.Failed)
+            && results.Any(r => r.Error is ArchiveLockedException)) {
             Fail(Strings.StatusArchiveLocked);
         }
     }

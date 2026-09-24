@@ -417,6 +417,8 @@ Windows-слоя регистрирует свои реализации сам. 
 | `CrashReporter._offeredThisSession` | худшее у гонки нефатальных — второй диалог; fatal-путь флаг игнорирует |
 | `UiStallWatch._worker`, `HighlightingCatalog._registered` | once-флаги (второй под `_lock`) |
 | `MagnifierCursor._cached`, `ShellHandlerRegistry._searchPath` | ленивые неизменяемые: гонка строит то же значение дважды |
+| `SystemPathGuard._userFolders` | `Lazy`, папки профиля из `IKnownFolders` (`TryGet`) при первом вызове гарда — после бутстраппера; в тестах — только `Environment`, без «Загрузок» |
+| `PictureCache._frames` | доля кадров в бюджете картинок (`PictureMemory`), общая на все панели просмотра — только UI-поток; предел пишет `MainViewModel` из настроек |
 
 `SystemIconProvider`: `_cache` / `_missing` / `_thumbnailOrder` — поля
 **экземпляра** под `_lock`; статика там — lock-объекты (set-once `_log`

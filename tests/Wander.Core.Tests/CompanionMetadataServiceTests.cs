@@ -364,6 +364,23 @@ public class CompanionMetadataServiceTests {
         Assert.False(fs.FileExists(@"C:\photos\ghost.CR2.pp3"));
     }
 
+    /// <summary>A skipped photo is not a silent one: the caller hears which, and why, to tell the user.</summary>
+    [Fact]
+    public void ApplyRatingToMany_TellsWhichItCouldNotWrite() {
+        var (service, _, _) = Build();
+        var targets = new[] {
+            new CompanionMetadataService.RatingTarget(@"C:\photos\ghost.CR2", @"C:\photos\ghost.CR2.pp3"),
+            new CompanionMetadataService.RatingTarget(@"C:\photos\IMG_1234.CR2", Pp3Path),
+        };
+        var failed = new List<(string Path, Exception Error)>();
+
+        service.ApplyRatingToMany(targets, RatingField.Rank, 1, SidecarFormat.Xmp, (path, ex) => failed.Add((path, ex)));
+
+        var (path, error) = Assert.Single(failed);
+        Assert.Equal(@"C:\photos\ghost.CR2", path);
+        Assert.IsType<FileNotFoundException>(error);
+    }
+
     [Fact]
     public void ApplyRatingToMany_WithNothingToDo_TouchesNothing() {
         var (service, _, undo) = Build();

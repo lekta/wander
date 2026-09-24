@@ -145,6 +145,24 @@ internal static class PictureLoader {
 
 
     /// <summary>
+    /// What <see cref="Decode"/> would hold for <paramref name="path"/> in a
+    /// box this size, in bytes: at most the box for what is decoded to it (a
+    /// JPEG, a RAW's embedded preview) - nothing read for that; the whole
+    /// frame, off its headers, for the rest. 0 when the headers do not say.
+    /// Off the UI thread: it may read the file.
+    /// </summary>
+    public static long DecodedBytes(string path, IImageMetadataReader? reader, double boxWidth, double boxHeight) {
+        bool fitted = ImageFormats.IsRaw(path) || _jpeg.Contains(Path.GetExtension(path));
+        if (fitted && boxWidth >= 1 && boxHeight >= 1) {
+            return PictureMemory.BytesOf((int)boxWidth, (int)boxHeight);
+        }
+
+        return ShapeOf(path, reader) is { } shape
+            ? PictureMemory.DecodedBytes((int)shape.Width, (int)shape.Height, fitted, boxWidth, boxHeight)
+            : 0;
+    }
+
+    /// <summary>
     /// A fitted copy decoded from a bigger frame now in memory - the full
     /// JPEG of a CR3, when the pane is wider than its quick preview.
     /// </summary>

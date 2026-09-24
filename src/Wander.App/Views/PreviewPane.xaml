@@ -494,7 +494,7 @@
             <Border Padding="2,2" CornerRadius="2"
                     Background="{StaticResource ReviewChartPlate}"
                     ToolTip="{Binding HistogramTip}">
-                <Grid Width="96" Height="56" ClipToBounds="True">
+                <Grid Width="64" Height="36" ClipToBounds="True">
                     <Canvas>
                         <Polygon Points="{Binding HistogramRed}" Fill="{StaticResource ReviewChartRed}"/>
                         <Polygon Points="{Binding HistogramGreen}" Fill="{StaticResource ReviewChartGreen}"/>
@@ -528,7 +528,13 @@
             </Style.Triggers>
         </Style>
 
-        <Style x:Key="FooterHistogram" TargetType="ContentPresenter">
+        <!--
+            On a Border around the chart, not on its ContentPresenter: a
+            presenter whose Content is bound sets its own DataContext, the
+            triggers of its style then look at nothing, and the chart never
+            came up (stand, 2026-09-24).
+        -->
+        <Style x:Key="FooterHistogram" TargetType="Border">
             <Setter Property="Visibility" Value="Collapsed"/>
             <Style.Triggers>
                 <MultiDataTrigger>
@@ -719,11 +725,14 @@
                                 Background="{Binding ContentPalette.Background}"
                                 Visibility="Collapsed"
                                 IsHitTestVisible="False">
-                            <!-- Drawn at exactly one image pixel per device pixel
-                                 (BeginImageZoom); nearest neighbour keeps a leftover
-                                 fraction of a pixel from resampling the picture. -->
+                            <!-- Drawn at exactly one frame pixel per device pixel
+                                 (UpdateZoomPosition); nearest neighbour keeps a leftover
+                                 fraction of a pixel from resampling the picture. Filled
+                                 to the frame: until the whole frame comes, the copy
+                                 there is smaller and is stretched to it. -->
                             <Image x:Name="ImgZoom"
                                    Source="{Binding ZoomDisplay}"
+                                   Stretch="Fill"
                                    RenderOptions.BitmapScalingMode="NearestNeighbor"/>
                             <!-- The helpers at the zoom's resolution; sized and placed with ImgZoom (UpdateZoomPosition). -->
                             <Image x:Name="ImgZoomOverlay"
@@ -1329,6 +1338,16 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
+                            <!--
+                                A big program's signature is checked only
+                                when asked (PLAN B7): under the lines, level
+                                with their values.
+                            -->
+                            <Button Content="{x:Static res:Strings.PreviewExeCheckSignature}"
+                                    ToolTip="{x:Static res:Strings.PreviewExeCheckSignatureHint}"
+                                    Command="{Binding CheckSignatureCommand}"
+                                    Visibility="{Binding CanCheckSignature, Converter={StaticResource BoolToVisibility}}"
+                                    HorizontalAlignment="Left" Margin="84,6,0,0" Padding="8,1" FontSize="11"/>
                         </StackPanel>
                     </ScrollViewer>
 
@@ -1337,18 +1356,24 @@
                         screen, and each half of a split, where one footer
                         cannot speak for two pictures. In the lower left
                         corner, on a thin dark plate; the stars, the score
-                        and the switches stand at 30% of their strength
-                        until the mouse comes down to them or the rating
-                        changes (PreviewPane, "The picture's bar"). The
-                        chart of levels beside them is at full strength: it
-                        was switched on to be read, and a fifth of it is
-                        not a chart.
+                        and the switches stand at BarAtRest of their
+                        strength - a trace in the pane, nothing full
+                        screen - until the mouse comes down to them or the
+                        rating changes (PreviewPane, "The picture's bar").
+                        The chart of levels is in the other corner
+                        (PictureChart). Over a picture, and over anything
+                        else that takes a rating - a video with its
+                        sidecar, a RAW that did not decode: the footer
+                        leaves the stars to the bar, and they must be
+                        somewhere. Over a clip or a song, above the
+                        transport.
                     -->
                     <StackPanel x:Name="PictureBar" Orientation="Horizontal"
-                                HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="8,0,8,8">
+                                HorizontalAlignment="Left" VerticalAlignment="Bottom">
                         <StackPanel.Style>
                             <Style TargetType="StackPanel">
                                 <Setter Property="Visibility" Value="Collapsed"/>
+                                <Setter Property="Margin" Value="8,0,8,8"/>
                                 <Style.Triggers>
                                     <MultiDataTrigger>
                                         <MultiDataTrigger.Conditions>
@@ -1364,6 +1389,19 @@
                                         </MultiDataTrigger.Conditions>
                                         <Setter Property="Visibility" Value="Visible"/>
                                     </MultiDataTrigger>
+                                    <MultiDataTrigger>
+                                        <MultiDataTrigger.Conditions>
+                                            <Condition Binding="{Binding ShowPictureBar}" Value="True"/>
+                                            <Condition Binding="{Binding HasRating}" Value="True"/>
+                                        </MultiDataTrigger.Conditions>
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </MultiDataTrigger>
+                                    <DataTrigger Binding="{Binding Kind}" Value="Video">
+                                        <Setter Property="Margin" Value="8,0,8,48"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Kind}" Value="Audio">
+                                        <Setter Property="Margin" Value="8,0,8,48"/>
+                                    </DataTrigger>
                                 </Style.Triggers>
                             </Style>
                         </StackPanel.Style>
@@ -1399,10 +1437,36 @@
                                                   Visibility="{Binding PictureBarSwitches, Converter={StaticResource BoolToVisibility}}"/>
                             </StackPanel>
                         </Border>
-                        <ContentPresenter Margin="6,0,0,0" VerticalAlignment="Bottom"
-                                          Content="{Binding}" ContentTemplate="{StaticResource HistogramChart}"
-                                          Visibility="{Binding HasHistogram, Converter={StaticResource BoolToVisibility}}"/>
                     </StackPanel>
+
+                    <!--
+                        The chart of levels for the picture's bar, in the
+                        lower right corner (2026-09-24): beside the stars it
+                        stood out along the edge, alone once they were
+                        away. It comes and goes with the bar full screen;
+                        in the pane, where the bar stays as a trace, it
+                        stays whole - it was switched on to be read. The
+                        zoom hides it with the bar. The visibility is on
+                        the Border, not on the presenter (FooterHistogram).
+                    -->
+                    <Border x:Name="PictureChart" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="8,0,8,8">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <MultiDataTrigger>
+                                        <MultiDataTrigger.Conditions>
+                                            <Condition Binding="{Binding ShowPictureBar}" Value="True"/>
+                                            <Condition Binding="{Binding HasHistogram}" Value="True"/>
+                                        </MultiDataTrigger.Conditions>
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </MultiDataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <ContentPresenter x:Name="PictureChartFace"
+                                          Content="{Binding}" ContentTemplate="{StaticResource HistogramChart}"/>
+                    </Border>
 
                     <!-- Placeholder (None / Unsupported) -->
                     <TextBlock Text="{Binding PlaceholderText}"
@@ -1614,9 +1678,10 @@
                         <!-- The helpers' switches and the chart (HelperSwitches, HistogramChart). -->
                             <StackPanel Grid.Column="1" VerticalAlignment="Top">
                                 <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource HelperSwitches}"/>
-                                <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource HistogramChart}"
-                                                  Margin="8,4,0,0" HorizontalAlignment="Right" VerticalAlignment="Top"
-                                                  Style="{StaticResource FooterHistogram}"/>
+                                <Border Margin="8,4,0,0" HorizontalAlignment="Right" VerticalAlignment="Top"
+                                        Style="{StaticResource FooterHistogram}">
+                                    <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource HistogramChart}"/>
+                                </Border>
                             </StackPanel>
                     </Grid>
                 </Border>

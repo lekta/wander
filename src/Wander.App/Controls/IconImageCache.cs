@@ -1,6 +1,7 @@
 using System.Windows.Media.Imaging;
 using Wander.App.Converters;
 using Wander.Core.Icons;
+using Wander.Core.Imaging;
 
 namespace Wander.App.Controls;
 
@@ -20,14 +21,14 @@ namespace Wander.App.Controls;
 /// </para>
 ///
 /// <para>
-/// Bounded by count, oldest-first, and only the thumbnail sizes (Medium and
-/// Large — one image per file) are counted: Small and Normal are keyed by
+/// Bounded oldest-first, and only the thumbnail sizes (Medium and Large -
+/// one image per file) are counted: Small and Normal are keyed by
 /// extension, so there are as many of them as there are file types on the
-/// machine and they cost a few kilobytes each. A large one is around a
-/// quarter of a megabyte decoded, which is what
-/// <see cref="ThumbnailBudget"/> is sized against; a medium one is a
-/// sixteenth of that, so counting the two together is deliberately generous
-/// rather than exact.
+/// machine and they cost a few kilobytes each. Bounded twice: by count, and
+/// by the bytes they hold against the thumbnails' share of the picture
+/// budget (<see cref="PictureMemory"/>, 2026-09-24) - a large one is a
+/// quarter of a megabyte at 256 px, and four times that at 512 px, the
+/// side a 200 % display gets.
 /// </para>
 /// </summary>
 internal static class IconImageCache {
@@ -58,6 +59,11 @@ internal static class IconImageCache {
     private static readonly Dictionary<(IconSize Size, string Path), (byte[] From, BitmapImage Image)> _images = new();
     private static readonly Queue<(IconSize Size, string Path)> _thumbOrder = new();
     private static readonly Lock _lock = new();
+
+    // What the thumbnails hold decoded, and may - SetLimit.
+    private static long _thumbBytes;
+    private static long _thumbLimit = PictureMemory.Thumbnails(
+        PictureMemory.Budget(0, GC.GetGCMemoryInfo().TotalAvailableMemoryBytes));
 
 
     /// <summary>
@@ -99,20 +105,32 @@ internal static class IconImageCache {
         var key = (size, path);
 
         lock (_lock) {
-            bool isNew = !_images.ContainsKey(key);
+            bool isNew = !_images.TryGetValue(key, out var old);
             _images[key] = (bytes, image);
-            if (!isNew) {
+            if (!IsThumbnail(size)) {
                 return image;
             }
-            if (size is IconSize.Large or IconSize.Medium) {
+
+            _thumbBytes += BytesOf(image) - (isNew ? 0 : BytesOf(old.Image));
+            if (isNew) {
                 _thumbOrder.Enqueue(key);
-                while (_thumbOrder.Count > ThumbnailBudget) {
-                    _images.Remove(_thumbOrder.Dequeue());
-                }
             }
+            Trim();
         }
 
         return image;
+    }
+
+
+    /// <summary>
+    /// The thumbnails' share of the picture budget changed - the settings'
+    /// ceiling, or the machine's sixteenth. A lower one bites now.
+    /// </summary>
+    public static void SetLimit(long bytes) {
+        lock (_lock) {
+            _thumbLimit = bytes;
+            Trim();
+        }
     }
 
 
@@ -126,7 +144,9 @@ internal static class IconImageCache {
     public static void Forget(string path) {
         lock (_lock) {
             foreach (var size in _sizes) {
-                _images.Remove((size, path));
+                if (_images.Remove((size, path), out var gone) && IsThumbnail(size)) {
+                    _thumbBytes -= BytesOf(gone.Image);
+                }
             }
         }
     }
@@ -141,6 +161,26 @@ internal static class IconImageCache {
         lock (_lock) {
             _images.Clear();
             _thumbOrder.Clear();
+            _thumbBytes = 0;
         }
+    }
+
+
+    /// <summary>Caller holds the lock. Drops the oldest thumbnails while there are too many or they hold too much.</summary>
+    private static void Trim() {
+        while (_thumbOrder.Count > 0 && (_thumbOrder.Count > ThumbnailBudget || _thumbBytes > _thumbLimit)) {
+            // A key forgotten meanwhile is in the queue with nothing behind it.
+            if (_images.Remove(_thumbOrder.Dequeue(), out var gone)) {
+                _thumbBytes -= BytesOf(gone.Image);
+            }
+        }
+    }
+
+    private static bool IsThumbnail(IconSize size) {
+        return size is IconSize.Large or IconSize.Medium;
+    }
+
+    private static long BytesOf(BitmapSource image) {
+        return PictureMemory.BytesOf(image.PixelWidth, image.PixelHeight, image.Format.BitsPerPixel);
     }
 }

@@ -48,6 +48,13 @@ public sealed class WindowsExecutableInfo : IExecutableInfoReader {
             // shows what the header and the signature say.
         }
 
+        return new ExecutableInfo(
+            Blank(version?.FileDescription), Blank(version?.CompanyName), Blank(version?.ProductName),
+            Blank(version?.FileVersion), Blank(version?.ProductVersion), Blank(version?.LegalCopyright),
+            pe);
+    }
+
+    public SignatureInfo ReadSignature(string path) {
         var signature = Verify(path);
         string? signer = null;
         if (signature != SignatureState.None) {
@@ -62,10 +69,7 @@ public sealed class WindowsExecutableInfo : IExecutableInfoReader {
             }
         }
 
-        return new ExecutableInfo(
-            Blank(version?.FileDescription), Blank(version?.CompanyName), Blank(version?.ProductName),
-            Blank(version?.FileVersion), Blank(version?.ProductVersion), Blank(version?.LegalCopyright),
-            pe, signature, signer);
+        return new SignatureInfo(signature, signer);
     }
 
 

@@ -9,6 +9,7 @@ using Wander.App.Resources;
 using Wander.App.ViewModels;
 using Wander.Core.Companions;
 using Wander.Core.FileSystem;
+using Wander.Core.Logging;
 using Wander.Core.Preview;
 
 namespace Wander.App.Views;
@@ -20,9 +21,13 @@ namespace Wander.App.Views;
 /// Right keeps that side alone on the screen. Covers the monitor the main
 /// window is on; the keyboard is its own while it is open. Each picture
 /// carries its stars and the helpers' switches on its bar, and a digit
-/// rates it - of two, the one under the mouse.
+/// rates it - of two, the one under the mouse; Ctrl+Z takes it back. Z
+/// zooms to 1:1 and stays there until Z again.
 /// </summary>
 public partial class FullscreenWindow : Window {
+    /// <summary>How long a warning or an error stays over the picture.</summary>
+    private const int NoticeMs = 4000;
+
     private readonly MainViewModel _vm;
     private readonly FullscreenPlan _plan;
 
@@ -49,6 +54,9 @@ public partial class FullscreenWindow : Window {
     // Alt is held and the review helpers are off the pictures meanwhile.
     private bool _peeking;
 
+    // Takes the notice away again (OnStatusSaid).
+    private DispatcherTimer? _noticeTimer;
+
 
     private FullscreenWindow(MainViewModel vm, FullscreenPlan plan) {
         InitializeComponent();
@@ -69,6 +77,7 @@ public partial class FullscreenWindow : Window {
         UpdateTitle();
         vm.Entries.CollectionChanged += OnEntriesChanged;
         vm.Ratings.CompanionsChanged += OnRatingsWritten;
+        vm.StatusSaid += OnStatusSaid;
 
         // Maximised on the monitor it was placed on: the owner's. Not in a
         // headless run - maximising would bring a parked window on screen.
@@ -82,6 +91,8 @@ public partial class FullscreenWindow : Window {
             _closed = true;
             vm.Entries.CollectionChanged -= OnEntriesChanged;
             vm.Ratings.CompanionsChanged -= OnRatingsWritten;
+            vm.StatusSaid -= OnStatusSaid;
+            _noticeTimer?.Stop();
             StopPeeking();
             _mainViewer.Detach();
             _sideViewer?.Detach();
@@ -117,6 +128,13 @@ public partial class FullscreenWindow : Window {
 
             return;
         }
+        // The system menu's two keys: a window without a frame has nothing
+        // to offer there, and its "Restore" would take the full screen apart.
+        if (e.Key == Key.System && e.SystemKey is Key.Space or Key.F10) {
+            e.Handled = true;
+
+            return;
+        }
         if (TryRate(e.Key)) {
             e.Handled = true;
 
@@ -124,6 +142,16 @@ public partial class FullscreenWindow : Window {
         }
 
         var modifiers = Keyboard.Modifiers;
+        // Ctrl+Z as in the main window, whose binding does not reach here: a
+        // digit pressed by mistake is taken back without leaving the picture.
+        if (modifiers == ModifierKeys.Control && e.Key == Key.Z) {
+            if (_vm.UndoCommand.CanExecute(null)) {
+                _vm.UndoCommand.Execute(null);
+            }
+            e.Handled = true;
+
+            return;
+        }
         // Shift and an arrow: the picture on the right - brought up beside
         // the one on show, or walked on while the left one stays.
         if (modifiers == ModifierKeys.Shift && e.Key is Key.Left or Key.Up or Key.Right or Key.Down) {
@@ -144,6 +172,11 @@ public partial class FullscreenWindow : Window {
             case Key.Escape:
             case Key.Enter:
                 Close();
+                e.Handled = true;
+                break;
+
+            case Key.Z:
+                ToggleZoom(split);
                 e.Handled = true;
                 break;
 
@@ -194,6 +227,11 @@ public partial class FullscreenWindow : Window {
             StopPeeking();
             // Handled, or letting go would put the window into menu mode:
             // the next key would go to a system menu nobody can see.
+            e.Handled = true;
+        }
+        // Letting go of F10 is menu mode too, and Alt+Space the system menu
+        // itself - see OnPreviewKeyDown.
+        if (e.Key == Key.System && e.SystemKey is Key.Space or Key.F10) {
             e.Handled = true;
         }
     }
@@ -273,11 +311,18 @@ public partial class FullscreenWindow : Window {
     /// <summary>Splits the screen: <paramref name="entry"/> on the right, the picture on show stays on the left.</summary>
     private void OpenSide(FileSystemEntry entry, int stood) {
         if (_sidePane is null || _sideViewer is null) {
-            _sidePane = new PreviewPane { PictureMargin = new Thickness(0) };
+            _sidePane = new PreviewPane { PictureMargin = new Thickness(0), BarAtRest = 0 };
             _sideViewer = NewViewer(_sidePane);
             Room.Children.Add(_sidePane);
             // A held zoom looks at the same place of both, while there are two.
             _zoomLink = PreviewPane.Link(_mainPane, _sidePane, () => _side is not null);
+            // The mouse down by either bar brings up both (2026-09-24): the
+            // stars and the levels of the two are read side by side. The two
+            // panes themselves, not the roles - KeepSide swaps those.
+            var first = _mainPane;
+            var second = _sidePane;
+            first.BarReached += (_, reached) => second.ReachBarWith(reached);
+            second.BarReached += (_, reached) => first.ReachBarWith(reached);
         }
 
         ShowSide(entry, stood);
@@ -366,21 +411,40 @@ public partial class FullscreenWindow : Window {
             return false;
         }
 
-        if (Rated() is { } picture) {
-            _vm.RatePicture(picture, colour ? RatingField.ColorLabel : RatingField.Rank, digit);
+        if (Rated() is { } rated) {
+            _vm.RatePicture(rated.Picture, colour ? RatingField.ColorLabel : RatingField.Rank, digit);
+            // The bar comes up with the key, whatever it changed: what was
+            // set is seen - and so is a rating that already was the one
+            // pressed, or one that could not be written.
+            rated.Pane.FlashBar();
         }
 
         return true;
     }
 
-    /// <summary>What a digit rates: the picture on show; of two, the one the mouse is over, none when it is over neither.</summary>
-    private FileSystemEntry? Rated() {
-        if (_side is null) {
-            return Current;
+    /// <summary>
+    /// Z: the 1:1 zoom that stays until Z again (2026-09-24). A zoom on
+    /// anywhere goes off - both pictures of a pair, whichever the mouse is
+    /// over; otherwise it comes on on the picture under the mouse, or the
+    /// left one, and the other follows it.
+    /// </summary>
+    private void ToggleZoom(bool split) {
+        var side = split ? _sidePane : null;
+        var pane = _mainPane.IsZoomed ? _mainPane
+            : side is { IsZoomed: true } ? side
+            : side is { IsMouseOver: true } ? side
+            : _mainPane;
+        pane.ToggleZoom();
+    }
+
+    /// <summary>What a digit rates, and on which pane: the picture on show; of two, the one the mouse is over, none when it is over neither.</summary>
+    private (FileSystemEntry Picture, PreviewPane Pane)? Rated() {
+        if (_side is not { } side || _sidePane is not { } sidePane) {
+            return (Current, _mainPane);
         }
 
-        return _mainPane.IsMouseOver ? Current
-            : _sidePane?.IsMouseOver == true ? _side
+        return _mainPane.IsMouseOver ? (Current, _mainPane)
+            : sidePane.IsMouseOver ? (side, sidePane)
             : null;
     }
 
@@ -480,5 +544,37 @@ public partial class FullscreenWindow : Window {
             _peeking = false;
             _vm.Helpers.SetPeek(false);
         }
+    }
+
+    /// <summary>
+    /// A line for the status bar, which this window covers: a warning or an
+    /// error is said here for a few seconds - a rating that could not be
+    /// written, an undo that failed. News is not: the bar shows the stars.
+    /// </summary>
+    private void OnStatusSaid(object? sender, StatusLine line) {
+        if (line.Severity == StatusSeverity.Info) {
+            return;
+        }
+        if (!Dispatcher.CheckAccess()) {
+            _ = Dispatcher.BeginInvoke(() => OnStatusSaid(sender, line));
+
+            return;
+        }
+        if (_closed) {
+            return;
+        }
+
+        if (_noticeTimer is null) {
+            _noticeTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(NoticeMs) };
+            _noticeTimer.Tick += (_, _) => {
+                _noticeTimer.Stop();
+                Notice.Visibility = Visibility.Collapsed;
+            };
+        }
+
+        NoticeText.Text = line.Text;
+        Notice.Visibility = Visibility.Visible;
+        _noticeTimer.Stop();
+        _noticeTimer.Start();
     }
 }

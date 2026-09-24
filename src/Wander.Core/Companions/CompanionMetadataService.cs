@@ -160,8 +160,13 @@ public sealed class CompanionMetadataService {
     /// that stops on the one read-only file in it.
     /// </para>
     /// </summary>
+    /// <param name="failed">
+    /// Told about each photo whose write failed, with why - the caller
+    /// says so to the user; the result list only has the ones that went.
+    /// </param>
     public IReadOnlyList<RatingResult> ApplyRatingToMany(
-        IReadOnlyList<RatingTarget> targets, RatingField field, int value, SidecarFormat createFormat) {
+        IReadOnlyList<RatingTarget> targets, RatingField field, int value, SidecarFormat createFormat,
+        Action<string, Exception>? failed = null) {
         var steps = new List<IUndoableAction>();
         var results = new List<RatingResult>();
 
@@ -183,6 +188,7 @@ public sealed class CompanionMetadataService {
                 }
             } catch (Exception ex) {
                 _log.Warn($"Rating {field}={value} failed for {target.MainPath}: {ex.Message}");
+                failed?.Invoke(target.MainPath, ex);
             }
         }
 

@@ -303,6 +303,23 @@ public class ExtractionServiceTests {
         Assert.Empty(ns.CopiedOut);
     }
 
+    /// <summary>
+    /// "Extract here" on a flash drive: the archive sits in its root, and
+    /// the root takes the extraction. The guard is about taking a root
+    /// away, not about adding to it.
+    /// </summary>
+    [Fact]
+    public async Task Extract_IntoADriveRoot_Works() {
+        var (service, _, fs, _, _) = Setup();
+        fs.Directories.Add(@"E:\");
+
+        var results = await service.ExtractAsync(
+            new[] { InnerReadme }, @"E:\", new FakeConflictResolver(), CancellationToken.None);
+
+        Assert.Equal(BatchItemStatus.Ok, Assert.Single(results).Status);
+        Assert.True(fs.FileExists(@"E:\readme.txt"));
+    }
+
     [Fact]
     public async Task Extract_WhenTheShellRefuses_ReportsFailureAndPushesNoUndo() {
         var (service, ns, fs, _, undo) = Setup();
@@ -314,6 +331,24 @@ public class ExtractionServiceTests {
         Assert.Equal(BatchItemStatus.Failed, Assert.Single(results).Status);
         Assert.False(fs.FileExists(TargetReadme));
         Assert.Equal(0, undo.Depth);
+    }
+
+    /// <summary>
+    /// The window says "password" only when the shell named no cause, and it
+    /// can tell only by the item's error: that is where the kind of
+    /// failure has to arrive, not flattened into a message.
+    /// </summary>
+    [Fact]
+    public async Task Extract_WhenTheShellStopsWithoutACause_TheItemCarriesItAsLocked() {
+        var (service, ns, _, _, _) = Setup();
+        ns.CopyOutFailure = new ArchiveLockedException();
+
+        var results = await service.ExtractAsync(
+            new[] { InnerReadme }, Target, new FakeConflictResolver(), CancellationToken.None);
+
+        var result = Assert.Single(results);
+        Assert.Equal(BatchItemStatus.Failed, result.Status);
+        Assert.IsType<ArchiveLockedException>(result.Error);
     }
 
 

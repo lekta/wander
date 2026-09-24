@@ -13,7 +13,12 @@ public sealed record PreviewFact(string Label, string Value);
 /// carry is not a line - an empty "Copyright:" says nothing.
 /// </summary>
 internal static class ExecutableCard {
-    public static IReadOnlyList<PreviewFact> Facts(ExecutableInfo info) {
+    /// <param name="signature">
+    /// The signature's line: what it says (<see cref="Signature"/>), or that
+    /// it is being checked, or not checked yet. Always there, so the lines
+    /// below it do not move when the answer comes.
+    /// </param>
+    public static IReadOnlyList<PreviewFact> Facts(ExecutableInfo info, string signature) {
         var facts = new List<PreviewFact>();
         // The product version when it differs: an installer of "7-Zip 24.08"
         // is file version 24.8.0.0, and both are worth knowing only apart.
@@ -25,14 +30,19 @@ internal static class ExecutableCard {
         Add(facts, Strings.PreviewExeProduct, info.Product);
         Add(facts, Strings.PreviewExeCompany, info.Company);
         Add(facts, Strings.PreviewExePlatform, Platform(info.Pe));
-        Add(facts, Strings.PreviewExeSignature, info.Signature switch {
-            SignatureState.Valid => info.Signer is { } signer ? string.Format(Strings.PreviewExeSignedBy, signer) : Strings.PreviewExeSigned,
-            SignatureState.Invalid => Strings.PreviewExeSignatureInvalid,
-            _ => Strings.PreviewExeUnsigned,
-        });
+        Add(facts, Strings.PreviewExeSignature, signature);
         Add(facts, Strings.PreviewExeCopyright, info.Copyright);
 
         return facts;
+    }
+
+    /// <summary>What the signature says, as the card's line has it.</summary>
+    public static string Signature(SignatureInfo signature) {
+        return signature.State switch {
+            SignatureState.Valid => signature.Signer is { } signer ? string.Format(Strings.PreviewExeSignedBy, signer) : Strings.PreviewExeSigned,
+            SignatureState.Invalid => Strings.PreviewExeSignatureInvalid,
+            _ => Strings.PreviewExeUnsigned,
+        };
     }
 
 

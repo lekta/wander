@@ -155,9 +155,9 @@ public sealed class ExternalActionRunner {
 
         if (action.Output.Length > 0) {
             // The output lands beside its source or where the user said,
-            // and either way that is a write.
+            // and either way that is a write - into a drive root as well.
             string outputDir = outputFolder ?? Path.GetDirectoryName(primary) ?? workingDir;
-            if (SystemPathGuard.IsProtected(outputDir, out string reason)) {
+            if (!SystemPathGuard.MayWriteInto(outputDir, out string reason)) {
                 _log.Warn($"Action '{title}' refused for {primary}: {reason}");
 
                 return Failed(primary, null, new IOException(reason));

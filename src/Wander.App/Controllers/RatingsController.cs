@@ -77,8 +77,8 @@ public sealed class RatingsController {
     /// <summary>Whether this folder has anything rated — the filter bar hangs off it.</summary>
     public event EventHandler<bool>? HasRatingsChanged;
 
-    /// <summary>Something to tell the user — already localised.</summary>
-    public event EventHandler<string>? StatusReported;
+    /// <summary>Something to tell the user - already localised, with how much it matters.</summary>
+    public event EventHandler<StatusLine>? StatusReported;
 
     /// <summary>A row's companions changed, so the preview's footer is stale.</summary>
     public event EventHandler? CompanionsChanged;
@@ -184,8 +184,10 @@ public sealed class RatingsController {
             return empty;
         }
 
-        var results = _metadata.ApplyRatingToMany(targets, field, value, _settings.RawRatingFormat);
-        ApplyResults(results, field);
+        var failures = new List<(string Path, Exception Error)>();
+        var results = _metadata.ApplyRatingToMany(
+            targets, field, value, _settings.RawRatingFormat, (path, ex) => failures.Add((path, ex)));
+        ApplyResults(results, field, failures);
 
         return results;
     }
@@ -234,6 +236,9 @@ public sealed class RatingsController {
         }
 
         _search.Replace(updated);
+        // Said as a write says it: a row the rating filter hides changes
+        // nothing on the list, and a picture full screen may be that row.
+        CompanionsChanged?.Invoke(this, EventArgs.Empty);
     }
 
 
@@ -321,11 +326,27 @@ public sealed class RatingsController {
     }
 
 
-    private void ApplyResults(IReadOnlyList<CompanionMetadataService.RatingResult> results, RatingField field) {
-        if (results.Count == 0) {
+    /// <summary>
+    /// Puts what was written on the rows and says how it went. A write that
+    /// failed is said too, even when nothing went at all: the stars stay as
+    /// they were, and without a line the key pressed looks ignored.
+    /// </summary>
+    private void ApplyResults(
+        IReadOnlyList<CompanionMetadataService.RatingResult> results, RatingField field,
+        IReadOnlyList<(string Path, Exception Error)> failures) {
+        bool shown = results.Count > 0 && ShowResults(results);
+        if (failures.Count > 0) {
+            StatusReported?.Invoke(this, Refusal(shown ? Done(results, field) : null, failures));
+
             return;
         }
+        if (shown) {
+            StatusReported?.Invoke(this, new StatusLine(Done(results, field), StatusSeverity.Info));
+        }
+    }
 
+    /// <summary>The written ratings on their rows; false when none of the rows is in the listing any more.</summary>
+    private bool ShowResults(IReadOnlyList<CompanionMetadataService.RatingResult> results) {
         var updated = new List<FileSystemEntry>(results.Count);
         foreach (var result in results) {
             if (FindInSource(result.MainPath) is not { } row) {
@@ -340,7 +361,7 @@ public sealed class RatingsController {
         }
 
         if (updated.Count == 0) {
-            return;
+            return false;
         }
 
         _search.Replace(updated);
@@ -349,18 +370,48 @@ public sealed class RatingsController {
         }
         CompanionsChanged?.Invoke(this, EventArgs.Empty);
 
-        if (field == RatingField.ColorLabel) {
-            StatusReported?.Invoke(this, (results[0].Rating.ColorLabel ?? 0) > 0
-                ? string.Format(Strings.StatusColorApplied, results.Count)
-                : string.Format(Strings.StatusColorCleared, results.Count));
+        return true;
+    }
 
-            return;
+    /// <summary>What the written ones say now: the stars or the label set or cleared, and on how many files.</summary>
+    private static string Done(IReadOnlyList<CompanionMetadataService.RatingResult> results, RatingField field) {
+        if (field == RatingField.ColorLabel) {
+            return (results[0].Rating.ColorLabel ?? 0) > 0
+                ? string.Format(Strings.StatusColorApplied, results.Count)
+                : string.Format(Strings.StatusColorCleared, results.Count);
         }
 
         int rank = results[0].Rating.Rank ?? 0;
-        StatusReported?.Invoke(this, rank > 0
+
+        return rank > 0
             ? string.Format(Strings.StatusRatingApplied, rank, results.Count)
-            : string.Format(Strings.StatusRatingCleared, results.Count));
+            : string.Format(Strings.StatusRatingCleared, results.Count);
+    }
+
+    /// <summary>
+    /// The line for writes that failed: after what did go through, a
+    /// warning; when nothing went, an error naming the file, or the count.
+    /// The reason when it is one the user can act on; the log has the rest.
+    /// </summary>
+    private static StatusLine Refusal(string? done, IReadOnlyList<(string Path, Exception Error)> failures) {
+        string reason = Reason(failures[0].Error);
+        if (done is not null) {
+            string detail = reason.Length > 0 ? ": " + reason : "";
+
+            return new StatusLine(done + ", " + string.Format(Strings.StatusBatchFailed, failures.Count, detail), StatusSeverity.Warning);
+        }
+
+        string suffix = reason.Length > 0 ? " (" + reason + ")" : "";
+
+        return new StatusLine(failures.Count == 1
+            ? string.Format(Strings.StatusRatingNotWritten, Path.GetFileName(failures[0].Path), suffix)
+            : string.Format(Strings.StatusRatingNotWrittenMany, failures.Count, suffix), StatusSeverity.Error);
+    }
+
+    private static string Reason(Exception error) {
+        return FileInUse.Is(error) ? Strings.ErrorInUse
+            : error is UnauthorizedAccessException ? Strings.ErrorNoWriteAccess
+            : "";
     }
 
 

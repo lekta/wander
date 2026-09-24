@@ -60,12 +60,14 @@ public sealed class ExtractionService {
     /// shape a copy or a move reports, so the status bar formats all three
     /// the same way.
     /// </returns>
-    /// <exception cref="IOException">The target folder is a protected system path.</exception>
+    /// <exception cref="IOException">The target folder is in the Windows tree (<see cref="SystemPathGuard.MayWriteInto"/>).</exception>
     public async Task<IReadOnlyList<BatchItemResult>> ExtractAsync(
         IReadOnlyList<string> sources, string targetFolder,
         IConflictResolver resolver, CancellationToken ct) {
 
-        if (SystemPathGuard.IsProtected(targetFolder, out string guardReason)) {
+        // Adding to the folder, not taking it away: a drive root or the
+        // profile takes an extraction, the Windows tree does not.
+        if (!SystemPathGuard.MayWriteInto(targetFolder, out string guardReason)) {
             _log.Warn($"Extract refused: {targetFolder} ({guardReason})");
 
             throw new IOException(guardReason);

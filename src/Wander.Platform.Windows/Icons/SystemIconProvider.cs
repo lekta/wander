@@ -1119,7 +1119,7 @@ public sealed class SystemIconProvider : IIconProvider {
     /// </summary>
     private static readonly HashSet<string> _thumbnailableExtensions = new(StringComparer.OrdinalIgnoreCase) {
         // Images
-        ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".tif", ".tiff",
+        ".png", ".jpg", ".jpeg", ".jpe", ".jfif", ".gif", ".bmp", ".webp", ".tif", ".tiff",
         ".ico", ".heic", ".heif", ".svg",
         // Decoded by Wander itself - TgaThumbnail
         ".tga",

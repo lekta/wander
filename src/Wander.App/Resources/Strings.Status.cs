@@ -375,6 +375,15 @@ public static partial class Strings {
     /// <summary>Метка снята — файлов: {0}</summary>
     public static string StatusColorCleared => Get(nameof(StatusColorCleared));
 
+    /// <summary>Не записано в сайдкар: {0}{1}</summary>
+    public static string StatusRatingNotWritten => Get(nameof(StatusRatingNotWritten));
+
+    /// <summary>Не записано в сайдкары — файлов: {0}{1}</summary>
+    public static string StatusRatingNotWrittenMany => Get(nameof(StatusRatingNotWrittenMany));
+
+    /// <summary>нет прав на запись</summary>
+    public static string ErrorNoWriteAccess => Get(nameof(ErrorNoWriteAccess));
+
     /// <summary>{0} — настройки не сохраняются</summary>
     public static string TitleYielding => Get(nameof(TitleYielding));
 }

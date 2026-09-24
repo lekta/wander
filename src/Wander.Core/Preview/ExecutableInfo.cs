@@ -13,17 +13,28 @@ public enum SignatureState {
 
 /// <summary>
 /// What the preview card says about a program or a library (PLAN B7): the
-/// version resource, the PE header, the signature. Any of it may be
-/// missing; the card shows what there is.
+/// version resource and the PE header - the file's first kilobytes. Any of
+/// it may be missing; the card shows what there is. The signature is read
+/// apart (<see cref="SignatureInfo"/>).
 /// </summary>
-/// <param name="Signer">Who signed it - the certificate's name - when it is signed.</param>
 public sealed record ExecutableInfo(
     string? Description, string? Company, string? Product, string? FileVersion, string? ProductVersion,
-    string? Copyright, PeFacts? Pe, SignatureState Signature, string? Signer);
+    string? Copyright, PeFacts? Pe);
+
+
+/// <summary>What a program's signature says, and who signed it - the certificate's name - when it holds.</summary>
+public sealed record SignatureInfo(SignatureState State, string? Signer);
 
 
 /// <summary>Reads <see cref="ExecutableInfo"/> for a file; the version resource and the signature are Windows'.</summary>
 public interface IExecutableInfoReader {
-    /// <summary>Null when the file cannot be read at all.</summary>
+    /// <summary>The version resource and the header, at once. Null when the file cannot be read at all.</summary>
     ExecutableInfo? Read(string path);
+
+    /// <summary>
+    /// The signature. Checking it hashes the whole file - seconds for an
+    /// installer of a gigabyte - and cannot be stopped once started: the
+    /// caller decides when that is worth it (2026-09-24).
+    /// </summary>
+    SignatureInfo ReadSignature(string path);
 }

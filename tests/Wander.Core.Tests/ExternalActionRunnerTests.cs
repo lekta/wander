@@ -151,6 +151,20 @@ public class ExternalActionRunnerTests {
         Assert.Equal(BatchItemStatus.Failed, results[0].Status);
     }
 
+    /// <summary>A file in the root of a flash drive: its output lands beside it, in the root.</summary>
+    [Fact]
+    public async Task OutputFolder_ThatIsADriveRoot_TakesTheOutput() {
+        var (runner, fs, _, _, processes, _) = Setup();
+        fs.Directories.Add(@"E:\");
+        fs.Files[@"E:\clip.mov"] = new byte[] { 3 };
+
+        var results = await runner.RunAsync(_encode, new[] { @"E:\clip.mov" }, CancellationToken.None);
+
+        Assert.Single(processes.Requests);
+        Assert.Equal(BatchItemStatus.Ok, results[0].Status);
+        Assert.Equal(@"E:\clip.mp4", results[0].Output);
+    }
+
     [Fact]
     public async Task OutputNeverLandsOnAnExistingFile() {
         var (runner, fs, _, _, processes, _) = Setup();

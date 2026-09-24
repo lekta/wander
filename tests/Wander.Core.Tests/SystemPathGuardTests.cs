@@ -11,6 +11,7 @@ public class SystemPathGuardTests {
     private static readonly string _windowsDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
     private static readonly string _programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
     private static readonly string _userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    private static readonly string _documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
 
 
     [Fact]
@@ -22,7 +23,8 @@ public class SystemPathGuardTests {
     [Fact]
     public void NetworkShareRoot_IsProtected_ButItsFoldersAreNot() {
         Assert.True(SystemPathGuard.IsProtected(@"\\server\share", out string reason));
-        Assert.Contains("network share", reason);
+        // The reason is the app's text; with none registered, its key.
+        Assert.Equal("GuardShareRoot", reason);
         Assert.True(SystemPathGuard.IsProtected(@"\\server\share\", out _));
         Assert.False(SystemPathGuard.IsProtected(@"\\server\share\folder", out _));
     }
@@ -52,9 +54,37 @@ public class SystemPathGuardTests {
     }
 
     [Fact]
-    public void UserProfileRoot_IsProtected_ButDocumentsAreNot() {
+    public void UserProfileRoot_IsProtected_ButWhatIsInItsFoldersIsNot() {
         Assert.True(SystemPathGuard.IsProtected(_userProfile, out _));
-        Assert.False(SystemPathGuard.IsProtected(Path.Combine(_userProfile, "Documents", "notes.txt"), out _));
+        Assert.False(SystemPathGuard.IsProtected(Path.Combine(_documents, "notes.txt"), out _));
+    }
+
+    /// <summary>
+    /// The folders Windows keeps for the user are not ours to move, rename
+    /// or delete (decided 2026-09-24); what is inside them is the user's.
+    /// </summary>
+    [Fact]
+    public void UserFolders_AreProtected_ButTheirContentsAreNot() {
+        Assert.True(SystemPathGuard.IsProtected(_documents, out string reason));
+        Assert.Equal("GuardUserFolder", reason);
+        Assert.True(SystemPathGuard.IsProtected(
+            Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), out _));
+        Assert.True(SystemPathGuard.IsProtected(
+            Environment.GetFolderPath(Environment.SpecialFolder.MyPictures) + @"\", out _));
+        Assert.False(SystemPathGuard.IsProtected(Path.Combine(_documents, "Projects"), out _));
+    }
+
+    [Fact]
+    public void AppData_AndTheThreeInIt_AreProtected_ButAnAppsFolderIsNot() {
+        string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        string appData = Path.GetDirectoryName(local)!;
+
+        Assert.True(SystemPathGuard.IsProtected(appData, out _));
+        Assert.True(SystemPathGuard.IsProtected(local, out _));
+        Assert.True(SystemPathGuard.IsProtected(Path.Combine(appData, "LocalLow"), out _));
+        Assert.True(SystemPathGuard.IsProtected(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), out _));
+        Assert.False(SystemPathGuard.IsProtected(Path.Combine(local, "SomeApp"), out _));
     }
 
     [Fact]
@@ -75,5 +105,29 @@ public class SystemPathGuardTests {
         Assert.False(SystemPathGuard.IsProtected("", out _));
         Assert.False(SystemPathGuard.IsProtected("   ", out _));
         Assert.False(SystemPathGuard.IsProtected("\0<>|", out _));
+    }
+
+
+    // --- Writing into a folder -------------------------------------------
+
+    /// <summary>
+    /// "Extract here" on a flash drive, an action's output beside a file in
+    /// the profile: adding to a root is not taking it away.
+    /// </summary>
+    [Fact]
+    public void DriveRoot_ProfileAndUserFolders_TakeWrites() {
+        Assert.True(SystemPathGuard.MayWriteInto(@"E:\", out _));
+        Assert.True(SystemPathGuard.MayWriteInto(@"C:\", out _));
+        Assert.True(SystemPathGuard.MayWriteInto(@"\\server\share", out _));
+        Assert.True(SystemPathGuard.MayWriteInto(_userProfile, out _));
+        Assert.True(SystemPathGuard.MayWriteInto(_documents, out _));
+    }
+
+    [Fact]
+    public void WindowsTree_TakesNoWrites_TheFolderItselfIncluded() {
+        Assert.False(SystemPathGuard.MayWriteInto(_windowsDir, out string reason));
+        Assert.Equal("GuardWindowsTree", reason);
+        Assert.False(SystemPathGuard.MayWriteInto(Path.Combine(_windowsDir, "Temp"), out _));
+        Assert.False(SystemPathGuard.MayWriteInto(_windowsDir.ToUpperInvariant() + @"\System32\", out _));
     }
 }

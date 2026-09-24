@@ -572,8 +572,10 @@
                         <ColumnDefinition Width="220"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="{x:Static res:Strings.SettingsThumbnailMemory}" Style="{StaticResource FieldLabel}" Grid.Column="0"/>
-                    <TextBox Text="{Binding Owner.ThumbnailMemoryEntries, UpdateSourceTrigger=Explicit}"
+                    <TextBlock Text="{x:Static res:Strings.SettingsPictureMemory}" Style="{StaticResource FieldLabel}" Grid.Column="0"
+                               ToolTip="{Binding Owner.PictureMemoryHint}"/>
+                    <TextBox Text="{Binding Owner.PictureMemoryMb, UpdateSourceTrigger=Explicit}"
+                             ToolTip="{Binding Owner.PictureMemoryHint}"
                              Grid.Column="1" HorizontalAlignment="Left"/>
                 </Grid>
 

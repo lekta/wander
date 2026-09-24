@@ -27,6 +27,13 @@ internal static class NativeFilter {
 
 
     internal const int SOk = 0;
+
+    /// <summary>What <see cref="LoadIFilter"/> answers for an extension with no filter registered.</summary>
+    internal const int EFail = unchecked((int)0x80004005);
+
+    /// <summary>REGDB_E_CLASSNOTREG: a registration that names a filter which is not installed.</summary>
+    internal const int ClassNotRegistered = unchecked((int)0x80040154);
+
     internal const int FilterEEndOfChunks = unchecked((int)0x80041700);
     internal const int FilterENoMoreText = unchecked((int)0x80041701);
     internal const int FilterENoText = unchecked((int)0x80041705);

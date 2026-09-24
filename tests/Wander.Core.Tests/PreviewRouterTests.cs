@@ -13,6 +13,8 @@ public class PreviewRouterTests {
     [Theory]
     [InlineData(".png", PreviewRoute.Image)]
     [InlineData(".jpeg", PreviewRoute.Image)]
+    [InlineData(".jfif", PreviewRoute.Image)]
+    [InlineData(".jpe", PreviewRoute.Image)]
     [InlineData(".cr3", PreviewRoute.Image)]
     [InlineData(".mp4", PreviewRoute.Video)]
     [InlineData(".flac", PreviewRoute.Audio)]

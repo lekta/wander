@@ -104,7 +104,7 @@ public sealed class FilterTextExtractor : IContentExtractor {
 
     public string? Extract(string path, CancellationToken token) {
         // A folder of PDFs on a machine without a PDF filter would
-        // otherwise pay a failing COM lookup per file; one failure is
+        // otherwise pay a failing COM lookup per file; one "no filter" is
         // enough to know about all of them.
         lock (_withoutFilter) {
             if (_withoutFilter.Contains(Path.GetExtension(path))) {
@@ -128,7 +128,17 @@ public sealed class FilterTextExtractor : IContentExtractor {
         }
 
         if (hr != NativeFilter.SOk || filter is null) {
-            RememberNoFilter(Path.GetExtension(path));
+            // Only a filter that is not there speaks for every file of the
+            // extension. Measured 2026-09-24: an extension with no
+            // PersistentHandler answers E_FAIL, while a filter that is there
+            // turns one file down with a reason of its own - Word's "~$"
+            // owner file, an empty or garbled .doc: FILTER_E_UNKNOWNFORMAT;
+            // held shut: STG_E_SHAREVIOLATION; cut short: STG_E_DOCFILECORRUPT.
+            // Those are the one file's, and the next .doc is read as usual.
+            if (hr is NativeFilter.EFail or NativeFilter.ClassNotRegistered) {
+                _log.Info($"IFilter: none registered for {Path.GetExtension(path)} (0x{hr:X8})");
+                RememberNoFilter(Path.GetExtension(path));
+            }
 
             return null;
         }

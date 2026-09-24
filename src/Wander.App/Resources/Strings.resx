@@ -698,6 +698,26 @@
     <value>«{0}» занят операцией Wander: {1}</value>
     <comment>{0} — имя, {1} — операция, которая держит файл («Копирование», «Откат»)</comment>
   </data>
+  <data name="GuardDriveRoot" xml:space="preserve">
+    <value>«{0}» — корень диска, его нельзя переместить или удалить</value>
+    <comment>Причина отказа гарда (Core, SystemPathGuard); {0} — путь</comment>
+  </data>
+  <data name="GuardShareRoot" xml:space="preserve">
+    <value>«{0}» — корень сетевой папки, его нельзя переместить или удалить</value>
+    <comment>Причина отказа гарда; {0} — путь</comment>
+  </data>
+  <data name="GuardSystemFolder" xml:space="preserve">
+    <value>«{0}» — системная папка, её нельзя переместить, переименовать или удалить</value>
+    <comment>Причина отказа гарда: Windows, Program Files, ProgramData, Users, сам профиль; {0} — путь</comment>
+  </data>
+  <data name="GuardUserFolder" xml:space="preserve">
+    <value>«{0}» — системная папка профиля, её нельзя переместить, переименовать или удалить; внутри — можно</value>
+    <comment>Причина отказа гарда: Рабочий стол, Документы, Загрузки, Изображения, Музыка, Видео, AppData; {0} — путь</comment>
+  </data>
+  <data name="GuardWindowsTree" xml:space="preserve">
+    <value>«{0}» — в системной папке Windows, Wander её не меняет</value>
+    <comment>Причина отказа гарда: удаление, перенос, запись внутрь папки Windows; {0} — путь</comment>
+  </data>
   <data name="HolderWander" xml:space="preserve">
     <value>Wander: {0}</value>
     <comment>Кто держал файл, когда это фоновое чтение самого Wander; {0} — HolderThumbnail / HolderContentSearch</comment>
@@ -924,8 +944,12 @@
   <data name="SettingsThumbnailDiskMb" xml:space="preserve">
     <value>Кэш на диске, не больше (МБ)</value>
   </data>
-  <data name="SettingsThumbnailMemory" xml:space="preserve">
-    <value>Кэш в памяти (миниатюр)</value>
+  <data name="SettingsPictureMemory" xml:space="preserve">
+    <value>Память под картинки (МБ)</value>
+  </data>
+  <data name="SettingsPictureMemoryHint" xml:space="preserve">
+    <value>Миниатюры и кадры панели просмотра вместе. 0 — шестнадцатая часть памяти компьютера, здесь {0} МБ.</value>
+    <comment>{0} — сколько это мегабайт на этой машине</comment>
   </data>
   <data name="SettingsClearCache" xml:space="preserve">
     <value>Очистить кэш</value>
@@ -934,7 +958,7 @@
     <value>Миниатюра строится один раз на файл и переиспользуется, пока файл не изменится: в ключ входят путь, размер и время правки, так что устаревшую картинку показать нельзя в принципе. Папку кэша можно удалить руками в любой момент — Wander соберёт её заново.</value>
   </data>
   <data name="SettingsThumbnailsLimitsHint" xml:space="preserve">
-    <value>Значения зажимаются в разумные пределы автоматически: 16…8192 МБ на диске, 64…8192 миниатюр в памяти. Стандартные: 256 МБ и 512.</value>
+    <value>Значения зажимаются в разумные пределы автоматически: 16…8192 МБ на диске, 128…65536 МБ под картинки в памяти. Стандартные: 256 МБ на диске, под картинки — 0, то есть по памяти компьютера.</value>
   </data>
   <data name="SettingsCacheOff" xml:space="preserve">
     <value>Кэш на диске выключен.</value>
@@ -1327,6 +1351,18 @@
   <data name="StatusRatingCleared" xml:space="preserve">
     <value>Оценка снята — файлов: {0}</value>
   </data>
+  <data name="StatusRatingNotWritten" xml:space="preserve">
+    <value>Не записано в сайдкар: {0}{1}</value>
+    <comment>Оценка или метка не записалась; {0} — имя снимка, {1} — причина в скобках или пусто</comment>
+  </data>
+  <data name="StatusRatingNotWrittenMany" xml:space="preserve">
+    <value>Не записано в сайдкары — файлов: {0}{1}</value>
+    <comment>{0} — сколько, {1} — причина первого в скобках или пусто</comment>
+  </data>
+  <data name="ErrorNoWriteAccess" xml:space="preserve">
+    <value>нет прав на запись</value>
+    <comment>Причина отказа записи: файл только для чтения или закрыт правами</comment>
+  </data>
   <data name="FilterRatingHint" xml:space="preserve">
     <value>Показывать снимки с этой оценкой и выше. С Ctrl — добавить или убрать одну оценку. Повторный щелчок снимает фильтр.</value>
   </data>
@@ -1438,6 +1474,20 @@
   </data>
   <data name="PreviewExeSigned" xml:space="preserve">
     <value>подпись действительна</value>
+  </data>
+  <data name="PreviewExeSignatureChecking" xml:space="preserve">
+    <value>проверяется…</value>
+    <comment>Строка «Подпись» в карточке программы, пока идёт проверка</comment>
+  </data>
+  <data name="PreviewExeSignatureNotChecked" xml:space="preserve">
+    <value>не проверялась ({0})</value>
+    <comment>Большой файл: подпись проверяется только по кнопке; {0} — размер файла</comment>
+  </data>
+  <data name="PreviewExeCheckSignature" xml:space="preserve">
+    <value>Проверить</value>
+  </data>
+  <data name="PreviewExeCheckSignatureHint" xml:space="preserve">
+    <value>Проверка подписи читает файл целиком — у большого это десятки секунд, и начатую не прервать</value>
   </data>
   <data name="PreviewExeSignatureInvalid" xml:space="preserve">
     <value>подпись не подтверждается — файл изменён после подписи или сертификату нет доверия</value>

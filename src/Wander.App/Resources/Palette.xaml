@@ -304,6 +304,11 @@
          (PLAN Q5): a dark tint of a fifth, the picture shows through. -->
     <SolidColorBrush x:Key="PictureBarPlate" Color="#33000000"/>
 
+    <!-- A warning or an error said over a picture full screen, where the
+         status bar is covered: dark and near opaque, to read over any frame. -->
+    <SolidColorBrush x:Key="FullscreenNoticePlate" Color="#E6202020"/>
+    <SolidColorBrush x:Key="FullscreenNoticeText" Color="#F2F2F2"/>
+
     <!-- What the drag leaving Wander would do, on the plaque under the cursor. -->
     <SolidColorBrush x:Key="DragMove" Color="SteelBlue"/>
     <SolidColorBrush x:Key="DragCopy" Color="SeaGreen"/>

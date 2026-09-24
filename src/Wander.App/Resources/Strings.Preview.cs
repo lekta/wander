@@ -258,6 +258,18 @@ public static partial class Strings {
     /// <summary>нет встроенной подписи</summary>
     public static string PreviewExeUnsigned => Get(nameof(PreviewExeUnsigned));
 
+    /// <summary>проверяется…</summary>
+    public static string PreviewExeSignatureChecking => Get(nameof(PreviewExeSignatureChecking));
+
+    /// <summary>не проверялась ({0})</summary>
+    public static string PreviewExeSignatureNotChecked => Get(nameof(PreviewExeSignatureNotChecked));
+
+    /// <summary>Проверить</summary>
+    public static string PreviewExeCheckSignature => Get(nameof(PreviewExeCheckSignature));
+
+    /// <summary>Проверка подписи читает файл целиком — у большого это десятки секунд, и начатую не прервать</summary>
+    public static string PreviewExeCheckSignatureHint => Get(nameof(PreviewExeCheckSignatureHint));
+
     /// <summary>Только текст — форматирование не разобрано</summary>
     public static string PreviewDocumentTextNote => Get(nameof(PreviewDocumentTextNote));
 

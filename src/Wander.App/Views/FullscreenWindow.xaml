@@ -13,8 +13,9 @@
         on the picture's bar. One picture, walked with the arrows; or two
         side by side, the second pane made in code on the first split and
         kept in column 1 (FullscreenWindow.Place). The pictures meet the
-        screen's edges, with none of the pane's margin (PictureMargin). Esc
-        and Enter close.
+        screen's edges, with none of the pane's margin (PictureMargin), and
+        the picture's bar is away until called for (BarAtRest). Z pins the
+        1:1 zoom (PreviewPane.ToggleZoom). Esc and Enter close.
     -->
     <Grid x:Name="Room">
         <Grid.ColumnDefinitions>
@@ -22,6 +23,19 @@
             <ColumnDefinition x:Name="SecondColumn" Width="0"/>
         </Grid.ColumnDefinitions>
 
-        <views:PreviewPane x:Name="PaneA" BorderThickness="0" PictureMargin="0"/>
+        <views:PreviewPane x:Name="PaneA" BorderThickness="0" PictureMargin="0" BarAtRest="0"/>
+
+        <!--
+            What the status bar would say, for a warning or an error: the
+            window covers it. A rating that could not be written, an undo
+            that failed. For a few seconds, over the middle of the bottom
+            edge; a click goes through it to the picture.
+        -->
+        <Border x:Name="Notice" Grid.ColumnSpan="2" Panel.ZIndex="1" Visibility="Collapsed" IsHitTestVisible="False"
+                HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="16,0,16,48"
+                Background="{StaticResource FullscreenNoticePlate}" CornerRadius="3" Padding="12,6">
+            <TextBlock x:Name="NoticeText" Foreground="{StaticResource FullscreenNoticeText}"
+                       FontSize="13" TextWrapping="Wrap" MaxWidth="720"/>
+        </Border>
     </Grid>
 </Window>

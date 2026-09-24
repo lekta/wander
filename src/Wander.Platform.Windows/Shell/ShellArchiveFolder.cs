@@ -31,6 +31,13 @@ namespace Wander.Platform.Windows.Shell;
 /// </para>
 /// </summary>
 public sealed class ShellArchiveFolder {
+    // Failures that name no cause: the run was stopped, by us or by a
+    // handler that had a question and no window to ask it in (Failure).
+    private const int ErrorCancelled = unchecked((int)0x800704C7);
+    private const int CopyEngineUserCancelled = unchecked((int)0x80270000);
+    private const int CopyEngineCancelled = unchecked((int)0x80270001);
+
+
     /// <summary>
     /// The shell handlers that make an archive browsable. An extension
     /// whose ProgID is one of these opens as a folder; anything else -
@@ -175,13 +182,13 @@ public sealed class ShellArchiveFolder {
 
             ct.ThrowIfCancellationRequested();
             hr = operation.PerformOperations();
-            Check(hr, "PerformOperations");
 
-            // A cancelled run reports aborted too, and the caller is the one
-            // that knows which of the two happened.
+            // A cancelled run fails or reports aborted too, and the caller is
+            // the one that knows which of the two happened.
             ct.ThrowIfCancellationRequested();
-            if (operation.GetAnyOperationsAborted(out bool aborted) >= 0 && aborted) {
-                throw new IOException("The shell aborted the extraction - the archive may be password-protected.");
+            bool aborted = operation.GetAnyOperationsAborted(out bool any) >= 0 && any;
+            if (hr < 0 || aborted) {
+                throw Failure(hr, sink.FirstFailure);
             }
         } finally {
             foreach (var source in sources) {
@@ -298,6 +305,27 @@ public sealed class ShellArchiveFolder {
         }
     }
 
+    /// <summary>
+    /// What a run that failed or was aborted is reported as. An item's own
+    /// answer is asked first, then the run's: one that names a cause - the
+    /// disk is full, the medium is read-only - is told in the system's
+    /// words. A run that stopped with nothing to name is what a zip with a
+    /// password does with no window to ask in.
+    /// </summary>
+    private static IOException Failure(int runResult, int itemResult) {
+        int cause = Names(itemResult) ? itemResult : Names(runResult) ? runResult : 0;
+        if (cause == 0) {
+            return new ArchiveLockedException();
+        }
+
+        return new IOException(Marshal.GetExceptionForHR(cause)?.Message ?? $"0x{cause:X8}", cause);
+    }
+
+    /// <summary>A failure that says what went wrong - not a bare "failed" or "cancelled".</summary>
+    private static bool Names(int hr) {
+        return hr < 0 && hr is not (E_FAIL or E_ABORT or ErrorCancelled or CopyEngineUserCancelled or CopyEngineCancelled);
+    }
+
     private static void Release(object? comObject) {
         if (comObject is not null && Marshal.IsComObject(comObject)) {
             Marshal.ReleaseComObject(comObject);
@@ -371,6 +399,10 @@ public sealed class ShellArchiveFolder {
         }
 
 
+        /// <summary>The first item's failure the engine reported, 0 while there is none - see <see cref="Failure"/>.</summary>
+        public int FirstFailure { get; private set; }
+
+
         public int PreCopyItem(uint dwFlags, IShellItem psiItem, IShellItem? psiDestinationFolder, string? pszNewName) {
             return _ct.IsCancellationRequested ? E_ABORT : 0;
         }
@@ -379,6 +411,8 @@ public sealed class ShellArchiveFolder {
             string? pszNewName, int hrCopy, IShellItem? psiNewlyCreated) {
             if (hrCopy >= 0) {
                 _progress?.Report(DisplayName(psiItem, SIGDN_DESKTOPABSOLUTEPARSING));
+            } else if (FirstFailure == 0) {
+                FirstFailure = hrCopy;
             }
 
             return 0;

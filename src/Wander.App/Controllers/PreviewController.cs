@@ -130,6 +130,13 @@ public sealed class PreviewController : ObservableObject {
     private const int FullSizeDwellMs = 150;
 
     /// <summary>
+    /// A program bigger than this has its signature checked only when asked
+    /// (2026-09-24): the check reads the whole file and cannot be stopped
+    /// once started - an installer of 3 GB is tens of seconds of disk.
+    /// </summary>
+    private const long SignatureByItselfBytes = 200L * 1024 * 1024;
+
+    /// <summary>
     /// Selection changes closer together than this are a held arrow key
     /// (PLAN AK, step 5): a picture not decoded yet waits
     /// <see cref="BurstDelayMs"/> before its decode starts - one that cannot
@@ -151,10 +158,22 @@ public sealed class PreviewController : ObservableObject {
     /// <summary>How long the pane stays one size before a picture too small for it is decoded again.</summary>
     private const int BoxSettleMs = 300;
 
-    /// <summary>The chart of levels in the footer, in layout units - the Canvas in PreviewPane.xaml.</summary>
-    private const double HistogramWidth = 96;
+    /// <summary>
+    /// How long a picture waits for a pane that has not said its size yet -
+    /// one just shown: the second half of a split, full screen. It comes
+    /// with the pane's first layout; past this the picture is decoded whole,
+    /// as it would have been.
+    /// </summary>
+    private const int BoxWaitMs = 500;
 
-    private const double HistogramHeight = 56;
+    /// <summary>
+    /// The chart of levels, in layout units - the Canvas in PreviewPane.xaml.
+    /// A third smaller than it was (2026-09-24): in the corner of a picture
+    /// full screen, 96 x 56 stood out over the frame.
+    /// </summary>
+    private const double HistogramWidth = 64;
+
+    private const double HistogramHeight = 36;
 
     /// <summary>
     /// The share of the frame that is gone before the chart's bar stands at
@@ -296,6 +315,14 @@ public sealed class PreviewController : ObservableObject {
     // half-way, and a held arrow key must not queue one per frame passed.
     private readonly SemaphoreSlim _rawDecodeGate = new(1, 1);
 
+    // One signature check at a time, for the same reason: each reads its
+    // whole file (PLAN B7). And the program on the card while its
+    // signature is still to come - what the check is for.
+    private readonly SemaphoreSlim _signatureGate = new(1, 1);
+    private string? _executablePath;
+    private ExecutableInfo? _executableInfo;
+    private bool _canCheckSignature;
+
     // Pictures decoded for the pane - the one on show and its neighbours -
     // and the picture area they are fitted to, in device pixels (0 until
     // the pane reports it: pictures are then decoded whole).
@@ -303,6 +330,9 @@ public sealed class PreviewController : ObservableObject {
     private double _boxWidth;
     private double _boxHeight;
     private CancellationTokenSource? _boxCts;
+
+    // Completed by the pane's first size (SetViewport) - see BoxWaitMs.
+    private TaskCompletionSource? _boxKnown;
 
     // The pixels of the whole frame on show - what the pane caps the
     // fitted copy at. Infinite when there is no picture.
@@ -343,6 +373,7 @@ public sealed class PreviewController : ObservableObject {
         SetColorLabelCommand = new RelayCommand(p => SetRating(RatingField.ColorLabel, p, _colorLabel), _ => HasRating);
         CopyGuidCommand = new RelayCommand(_ => CopyGuid(), _ => HasUnityGuid);
         GoToLinkTargetCommand = new RelayCommand(_ => GoToLinkTarget(), _ => HasLinkTarget);
+        CheckSignatureCommand = new RelayCommand(_ => CheckSignatureNow(), _ => CanCheckSignature);
     }
 
 
@@ -652,6 +683,23 @@ public sealed class PreviewController : ObservableObject {
         private set => SetField(ref _executableFacts, value);
     }
 
+    /// <summary>
+    /// The program on the card is too big for its signature to be checked
+    /// unasked (<see cref="SignatureByItselfBytes"/>), and it has not been:
+    /// the card offers the check.
+    /// </summary>
+    public bool CanCheckSignature {
+        get => _canCheckSignature;
+        private set {
+            if (SetField(ref _canCheckSignature, value)) {
+                CheckSignatureCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+    /// <summary>Checks the big program's signature - see <see cref="CanCheckSignature"/>.</summary>
+    public RelayCommand CheckSignatureCommand { get; }
+
     public bool HasAudioText => _audio is not null;
 
     /// <summary>
@@ -934,8 +982,16 @@ public sealed class PreviewController : ObservableObject {
     }
 
 
+    /// <summary>
+    /// "Select a file" when there is none, "no preview" when it could not be
+    /// shown. Not while a file's first load is still on its way: a pane
+    /// just shown - the second half of a split, a picture full screen -
+    /// has nothing up yet, and "select a file" over a selected file until
+    /// the picture comes is a frame that says the wrong thing (pillar 4).
+    /// </summary>
     public bool IsPlaceholderVisible =>
-        _isVisible && (_kind == PreviewKind.None || _kind == PreviewKind.Unsupported);
+        _isVisible && (_kind == PreviewKind.Unsupported
+            || (_kind == PreviewKind.None && _primary is not { Kind: EntryKind.File }));
 
     public string PlaceholderText =>
         _kind == PreviewKind.None ? Strings.PreviewSelectFile
@@ -1285,6 +1341,11 @@ public sealed class PreviewController : ObservableObject {
             return;
         }
         _isVisible = visible;
+        if (!visible) {
+            // A pane nobody sees holds no frames: the split's second half
+            // between pairs, the pane put away (PictureMemory).
+            _pictures.Clear();
+        }
         Raise(nameof(IsPlaceholderVisible));
         SchedulePreviewUpdate();
         ScheduleSummaryUpdate();
@@ -1314,6 +1375,7 @@ public sealed class PreviewController : ObservableObject {
             _previousPrimaryPath = _primary?.FullPath;
         }
         _primary = entry;
+        Raise(nameof(IsPlaceholderVisible));
         RaiseRatingOthers();
         UpdateWorkLine();
         if (sameFile) {
@@ -1342,6 +1404,10 @@ public sealed class PreviewController : ObservableObject {
 
         _boxWidth = w;
         _boxHeight = h;
+        if (w > 0 && h > 0) {
+            _boxKnown?.TrySetResult();
+            _boxKnown = null;
+        }
         _boxCts?.Cancel();
         if (_kind != PreviewKind.Image || _image is not BitmapSource shown
             || !PictureFit.TooSmall(shown.PixelWidth, shown.PixelHeight, (int)_imageCapWidth, (int)_imageCapHeight, w, h)) {
@@ -2139,12 +2205,27 @@ public sealed class PreviewController : ObservableObject {
 
 
     private async Task LoadImageAsync(string path, CancellationToken ct) {
+        // A pane just shown has not been laid out: with no box the picture
+        // would be decoded whole - a 45-megapixel JPEG is hundreds of
+        // milliseconds and a couple of hundred megabytes - for a pane that
+        // says its size a frame or two later.
+        if (_boxWidth <= 0 || _boxHeight <= 0) {
+            _boxKnown ??= new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            await Task.WhenAny(_boxKnown.Task, Task.Delay(BoxWaitMs, ct));
+            ct.ThrowIfCancellationRequested();
+        }
+
         // The cache knows files by their row: a shortcut's target and an
         // archive entry's scratch copy are decoded every time, as before.
         var entry = _primary;
         string? key = entry is not null && string.Equals(entry.FullPath, path, StringComparison.OrdinalIgnoreCase)
             ? PictureCache.KeyOf(entry, _boxWidth, _boxHeight)
             : null;
+        if (key is not null) {
+            // The picture on show stays in the cache whatever the pictures
+            // decoded ahead of it need.
+            _pictures.Keep(new[] { key });
+        }
         if (key is null || !_pictures.TryGet(key, out var picture)) {
             // A held arrow key: this picture is likely gone before its
             // decode ends, and a decode cannot be stopped half-way.
@@ -2152,28 +2233,34 @@ public sealed class PreviewController : ObservableObject {
                 await Task.Delay(BurstDelayMs, ct);
             }
 
-            double boxWidth = _boxWidth;
-            double boxHeight = _boxHeight;
-            var decoded = await Task.Run(() => {
-                using var measure = PerfLog.Measure("bg.preview-decode");
+            // Asked again after the wait: the picture decoded ahead that
+            // the selection has just come to may have been finished meanwhile.
+            if (key is null || !_pictures.TryGet(key, out picture)) {
+                double boxWidth = _boxWidth;
+                double boxHeight = _boxHeight;
+                var decoded = await Task.Run(() => {
+                    using var measure = PerfLog.Measure("bg.preview-decode");
 
-                return PictureLoader.Decode(path, _metadataReader, boxWidth, boxHeight, ct);
-            }, ct);
-            if (ct.IsCancellationRequested) {
-                return;
-            }
-            if (decoded is null) {
-                _pictureFactsStale = false;
-                ImageMetadata = null;
-                IsRawImage = false;
-                Kind = PreviewKind.Unsupported;
+                    return PictureLoader.Decode(path, _metadataReader, boxWidth, boxHeight, ct);
+                }, ct);
+                // Kept even when the selection has moved on: it may come
+                // straight back, and the work is done.
+                if (decoded is not null && key is not null && _isVisible) {
+                    _pictures.Put(key, decoded);
+                }
+                if (ct.IsCancellationRequested) {
+                    return;
+                }
+                if (decoded is null) {
+                    _pictureFactsStale = false;
+                    ImageMetadata = null;
+                    IsRawImage = false;
+                    Kind = PreviewKind.Unsupported;
 
-                return;
-            }
+                    return;
+                }
 
-            picture = decoded;
-            if (key is not null) {
-                _pictures.Put(key, picture);
+                picture = decoded;
             }
         }
 
@@ -2232,9 +2319,11 @@ public sealed class PreviewController : ObservableObject {
     /// <summary>
     /// The pictures around the one on show, decoded into the cache while
     /// the user looks (PLAN AK, step 4) - the next arrow key finds its
-    /// picture ready. One at a time, the likelier first, and dropped with
+    /// picture ready. One at a time, the likelier first, and stopped with
     /// the load that started it: the selection moved, and the neighbours
-    /// are someone else's now.
+    /// are someone else's now - but one finished by then is kept, the
+    /// selection may have moved onto it. One that would not fit in what the
+    /// frames' share has left (<see cref="PictureMemory"/>) is not decoded.
     /// </summary>
     private async Task DecodeNeighborsAsync(CancellationToken ct) {
         if (Listing is null || _primary is not { } current) {
@@ -2244,10 +2333,21 @@ public sealed class PreviewController : ObservableObject {
         var neighbors = PreviewNeighbors.Of(Listing(), current, _previousPrimaryPath);
         double boxWidth = _boxWidth;
         double boxHeight = _boxHeight;
+        // What stays while they come in: the picture on show and all of
+        // them - dropped to make room for one another, they would be
+        // decoded twice.
+        _pictures.Keep(neighbors.Select(n => PictureCache.KeyOf(n, boxWidth, boxHeight))
+            .Append(PictureCache.KeyOf(current, boxWidth, boxHeight)));
         try {
             foreach (var neighbor in neighbors) {
                 string key = PictureCache.KeyOf(neighbor, boxWidth, boxHeight);
                 if (_pictures.Contains(key)) {
+                    continue;
+                }
+
+                long bytes = await Task.Run(
+                    () => PictureLoader.DecodedBytes(neighbor.FullPath, _metadataReader, boxWidth, boxHeight), ct);
+                if (!_pictures.Fits(bytes)) {
                     continue;
                 }
 
@@ -2256,11 +2356,13 @@ public sealed class PreviewController : ObservableObject {
 
                     return PictureLoader.Decode(neighbor.FullPath, _metadataReader, boxWidth, boxHeight, ct);
                 }, ct);
+                // Kept even when the selection has moved on: it may have
+                // moved onto this very picture, which then waits for no decode.
+                if (decoded is not null && _isVisible) {
+                    _pictures.Put(key, decoded);
+                }
                 if (ct.IsCancellationRequested) {
                     return;
-                }
-                if (decoded is not null) {
-                    _pictures.Put(key, decoded);
                 }
             }
         } catch (OperationCanceledException) {
@@ -2410,11 +2512,19 @@ public sealed class PreviewController : ObservableObject {
     /// A program or a library: a card of what it says about itself (PLAN
     /// B7) instead of "no preview". Nothing is run - the header is a few
     /// hundred bytes, the version resource and the signature are read by
-    /// Windows without loading the file as code.
+    /// Windows without loading the file as code. The version, the header
+    /// and the icon come at once, the signature after them: its check reads
+    /// the whole file. A program the selection stands on for a moment is
+    /// checked then, one at a time; a big one only when asked.
     /// </summary>
     private async Task LoadExecutableAsync(string path, CancellationToken ct) {
-        var reader = ServiceLocator.TryGet<IExecutableInfoReader>();
-        var (info, icon) = await Task.Run(() => (reader?.Read(path), LoadIcon(path, IconSize.Large)), ct);
+        if (ServiceLocator.TryGet<IExecutableInfoReader>() is not { } reader) {
+            Kind = PreviewKind.Unsupported;
+
+            return;
+        }
+
+        var (info, icon, size) = await Task.Run(() => (reader.Read(path), LoadIcon(path, IconSize.Large), SizeOf(path)), ct);
         if (ct.IsCancellationRequested) {
             return;
         }
@@ -2424,10 +2534,62 @@ public sealed class PreviewController : ObservableObject {
             return;
         }
 
+        bool byItself = size <= SignatureByItselfBytes;
+        _executablePath = path;
+        _executableInfo = info;
         ExecutableIcon = icon;
         ExecutableTitle = info.Description ?? Path.GetFileName(path);
-        ExecutableFacts = ExecutableCard.Facts(info);
+        ExecutableFacts = ExecutableCard.Facts(info, byItself
+            ? Strings.PreviewExeSignatureChecking
+            : string.Format(Strings.PreviewExeSignatureNotChecked, SizeFormatter.Format(size)));
+        CanCheckSignature = !byItself;
         Kind = PreviewKind.Executable;
+        if (byItself) {
+            _ = CheckSignatureAsync(reader, path, info, dwell: true, ct);
+        }
+    }
+
+    /// <summary>The button on a big program's card: its signature, now.</summary>
+    private void CheckSignatureNow() {
+        if (!CanCheckSignature || _executablePath is not { } path || _executableInfo is not { } info
+            || ServiceLocator.TryGet<IExecutableInfoReader>() is not { } reader) {
+            return;
+        }
+
+        CanCheckSignature = false;
+        ExecutableFacts = ExecutableCard.Facts(info, Strings.PreviewExeSignatureChecking);
+        _ = CheckSignatureAsync(reader, path, info, dwell: false, _previewCts?.Token ?? CancellationToken.None);
+    }
+
+    /// <summary>
+    /// The signature, onto the card's line. Waits for the check before it -
+    /// one at a time - and for the selection to stand still first when
+    /// <paramref name="dwell"/>; a selection that moves on meanwhile takes
+    /// the check with it. Started, it runs to the end: nothing stops
+    /// <c>WinVerifyTrust</c> half-way, and the answer about a file no
+    /// longer on the card is dropped.
+    /// </summary>
+    private async Task CheckSignatureAsync(
+        IExecutableInfoReader reader, string path, ExecutableInfo info, bool dwell, CancellationToken ct) {
+        bool gated = false;
+        try {
+            if (dwell) {
+                await Task.Delay(FullSizeDwellMs, ct);
+            }
+            await _signatureGate.WaitAsync(ct);
+            gated = true;
+
+            var signature = await Task.Run(() => reader.ReadSignature(path));
+            if (!ct.IsCancellationRequested && ReferenceEquals(_executableInfo, info)) {
+                ExecutableFacts = ExecutableCard.Facts(info, ExecutableCard.Signature(signature));
+            }
+        } catch (OperationCanceledException) {
+            // The selection moved on before the check began.
+        } finally {
+            if (gated) {
+                _signatureGate.Release();
+            }
+        }
     }
 
 
@@ -2605,6 +2767,10 @@ public sealed class PreviewController : ObservableObject {
         ExecutableIcon = null;
         ExecutableTitle = "";
         ExecutableFacts = Array.Empty<PreviewFact>();
+        // A signature check still running is about the program that went.
+        _executablePath = null;
+        _executableInfo = null;
+        CanCheckSignature = false;
         ModelParts = Array.Empty<ModelPart>();
         ModelDetail = "";
         DocumentPath = null;
