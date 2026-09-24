@@ -112,10 +112,10 @@ public partial class FileListView : UserControl {
     public event EventHandler<FileListMenuRequest>? ContextMenuRequested;
 
     /// <summary>
-    /// Enter or Space on a picture in the gallery: the window shows it full
-    /// screen (PLAN Q5). The row is the one the keyboard is on.
+    /// Enter or Space on pictures in the gallery: the window shows them full
+    /// screen (PLAN Q5) - one, a pair, or the selection one by one.
     /// </summary>
-    public event EventHandler<FileSystemEntry>? FullscreenRequested;
+    public event EventHandler<FullscreenPlan>? FullscreenRequested;
 
 
     private MainViewModel Vm => (MainViewModel)DataContext;
@@ -1044,14 +1044,14 @@ public partial class FileListView : UserControl {
             return;
         }
 
-        // Enter or Space on a picture in the gallery: full screen, as in a
-        // viewer (PLAN Q5). Anything else keeps Enter = open.
+        // Enter or Space on pictures in the gallery: full screen, as in a
+        // viewer (PLAN Q5) - one, two together, or more one by one. A
+        // selection with anything but pictures keeps Enter = open.
         if (Vm.ViewMode == ViewMode.Gallery && e.Key is Key.Enter or Key.Space
             && Keyboard.Modifiers == ModifierKeys.None && Vm.RenamingPath is null
-            && Vm.SelectedEntries.Count == 1 && Vm.SelectedEntry is { Kind: EntryKind.File } picture
-            && PreviewRouter.Route(picture.FullPath) is PreviewRoute.Image or PreviewRoute.Animation
-            && FullscreenRequested is not null) {
-            FullscreenRequested(this, picture);
+            && FullscreenRequested is not null
+            && FullscreenPlan.Of(Vm.SelectedEntries, Vm.Entries, Vm.CaretPath) is { } plan) {
+            FullscreenRequested(this, plan);
             e.Handled = true;
 
             return;

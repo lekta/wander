@@ -6,11 +6,22 @@
         ShowInTaskbar="False"
         UseLayoutRounding="True">
     <!--
-        One picture over the whole screen (PLAN Q5): Enter or Space on a
-        picture in the gallery. The pane is the preview pane, with its own
+        Pictures on their own over the whole screen (PLAN Q5): Enter or Space
+        on pictures in the gallery. A pane is the preview pane, with its own
         controller and without its footer - the hold-to-zoom, the helpers
-        and the decode ahead come with it. The arrows walk the pictures of
-        the list; Esc and Enter close, and the list is left on the last one.
+        and the decode ahead come with it, and the stars and switches ride
+        on the picture's bar. One picture, walked with the arrows; or two
+        side by side, the second pane made in code on the first split and
+        kept in column 1 (FullscreenWindow.Place). The pictures meet the
+        screen's edges, with none of the pane's margin (PictureMargin). Esc
+        and Enter close.
     -->
-    <views:PreviewPane x:Name="Pane" BorderThickness="0"/>
+    <Grid x:Name="Room">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition x:Name="SecondColumn" Width="0"/>
+        </Grid.ColumnDefinitions>
+
+        <views:PreviewPane x:Name="PaneA" BorderThickness="0" PictureMargin="0"/>
+    </Grid>
 </Window>

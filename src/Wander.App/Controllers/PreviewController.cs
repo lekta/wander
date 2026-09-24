@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Windows.Media;
@@ -260,6 +261,14 @@ public sealed class PreviewController : ObservableObject {
     private int _colorLabel;
     private string _customColorLabel = "";
 
+    // The rating last shown and whose it was: a change to it that is not a
+    // change of file is news (RatingChanged).
+    private string? _ratedFile;
+    private int _ratedRank;
+    private int _ratedColor;
+
+    private bool _showPictureBar;
+
     // The review helpers (RAWHELPERS): which are on, and what they made of
     // the pictures on screen - the fitted one and the zoom's. What was
     // measured is kept as long as the pictures are, so switching a second
@@ -353,6 +362,13 @@ public sealed class PreviewController : ObservableObject {
     /// </summary>
     public event EventHandler? ContentReleased;
 
+    /// <summary>
+    /// The rating of the file on show changed while it was on show - a
+    /// star, a digit, an undo; not a walk to another file. The picture's
+    /// bar comes up for a moment to show it (PLAN Q5).
+    /// </summary>
+    public event EventHandler? RatingChanged;
+
 
     // --- Output properties (the pane's DataContext is this object) -----
 
@@ -374,6 +390,20 @@ public sealed class PreviewController : ObservableObject {
     /// belongs to the selection as a whole.
     /// </summary>
     public bool ShowFooter { get; init; } = true;
+
+    /// <summary>
+    /// The picture carries its own stars and readouts - the score, the
+    /// levels - on a bar over its lower edge (PLAN Q5, 2026-09-24): full
+    /// screen, and each half of a split, where one footer cannot speak for
+    /// two pictures. The footer then leaves them out.
+    /// </summary>
+    public bool ShowPictureBar {
+        get => _showPictureBar;
+        set => SetField(ref _showPictureBar, value);
+    }
+
+    /// <summary>The picture's bar carries the helpers' switches as well: full screen, where there is no footer to hold them.</summary>
+    public bool PictureBarSwitches { get; init; }
 
     /// <summary>
     /// The rows of the list in their order - where the pane finds the
@@ -1112,17 +1142,20 @@ public sealed class PreviewController : ObservableObject {
     /// </summary>
     public void SetHelpers(ReviewHelpers helpers) {
         _helpers = helpers;
-        helpers.PropertyChanged += (_, e) => {
-            // Alt held or let go: the same pictures, shown or hidden.
-            if (e.PropertyName == nameof(ReviewHelpers.Peek)) {
-                RaiseShown();
-
-                return;
-            }
-
-            ScheduleHelpers();
-        };
+        helpers.PropertyChanged += OnHelpersChanged;
         Raise(nameof(Helpers));
+        ScheduleHelpers();
+    }
+
+
+    private void OnHelpersChanged(object? sender, PropertyChangedEventArgs e) {
+        // Alt held or let go: the same pictures, shown or hidden.
+        if (e.PropertyName == nameof(ReviewHelpers.Peek)) {
+            RaiseShown();
+
+            return;
+        }
+
         ScheduleHelpers();
     }
 
@@ -1307,9 +1340,17 @@ public sealed class PreviewController : ObservableObject {
         async Task RefitWhenSettledAsync(CancellationToken ct) {
             try {
                 await Task.Delay(BoxSettleMs, ct);
-                SchedulePreviewUpdate();
             } catch (OperationCanceledException) {
                 // The pane is still moving.
+                return;
+            }
+
+            // Asked again: meanwhile the bigger picture of a RAW may have
+            // landed fitted to this box, and loading over it would put the
+            // quick preview back up for a moment - a blink of softness.
+            if (_kind == PreviewKind.Image && _image is BitmapSource now
+                && PictureFit.TooSmall(now.PixelWidth, now.PixelHeight, (int)_imageCapWidth, (int)_imageCapHeight, _boxWidth, _boxHeight)) {
+                SchedulePreviewUpdate();
             }
         }
     }
@@ -1401,6 +1442,19 @@ public sealed class PreviewController : ObservableObject {
             && (File.Exists(released) || Directory.Exists(released))) {
             SchedulePreviewUpdate();
         }
+    }
+
+    /// <summary>
+    /// The pane is gone for good - a window of its own closed: stops
+    /// following the helpers, which outlive it and would keep it alive with
+    /// every picture it decoded, and lets go of those.
+    /// </summary>
+    public void Detach() {
+        if (_helpers is { } helpers) {
+            helpers.PropertyChanged -= OnHelpersChanged;
+        }
+        SetVisible(false);
+        _pictures.Clear();
     }
 
 
@@ -2573,6 +2627,7 @@ public sealed class PreviewController : ObservableObject {
             // make it a sidecar first in another program".
             OfferRating(_primary);
             _companionsOf = _primary.FullPath;
+            NoteRatingShown(_primary.FullPath);
 
             return;
         }
@@ -2601,6 +2656,7 @@ public sealed class PreviewController : ObservableObject {
             OfferRating(_primary);
         }
         _companionsOf = _primary.FullPath;
+        NoteRatingShown(_primary.FullPath);
     }
 
     private (UnityMetaInfo? Meta, string? RatingPath, SidecarRating? Rating) Load(IReadOnlyList<string> companions) {
@@ -2723,6 +2779,7 @@ public sealed class PreviewController : ObservableObject {
         // lagging a frame behind the click in the meantime.
         _ratingTarget = null;
         ShowRating(_ratingPath ?? "", request.Rating);
+        NoteRatingShown(request.Entry.FullPath);
     }
 
 
@@ -2758,6 +2815,22 @@ public sealed class PreviewController : ObservableObject {
 
     private bool IsCompanionBlockFor(FileSystemEntry entry) {
         return string.Equals(_companionsOf, entry.FullPath, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// The stars and the swatch now on show are <paramref name="path"/>'s.
+    /// The same file with another rating than a moment ago is
+    /// <see cref="RatingChanged"/>; another file is only remembered.
+    /// </summary>
+    private void NoteRatingShown(string path) {
+        bool changed = string.Equals(_ratedFile, path, StringComparison.OrdinalIgnoreCase)
+            && (_ratedRank != _rank || _ratedColor != _colorLabel);
+        _ratedFile = path;
+        _ratedRank = _rank;
+        _ratedColor = _colorLabel;
+        if (changed) {
+            RatingChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     private void ClearCompanionInfo() {

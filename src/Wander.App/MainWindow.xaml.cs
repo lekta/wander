@@ -389,6 +389,8 @@ public partial class MainWindow : Window {
                 break;
 
             case nameof(MainViewModel.PreviewPairShapes):
+                // Raised for each new pair once its shapes are in.
+                _zoomLink?.Reset();
                 ApplyPreviewSplitOrientation();
                 break;
 
@@ -456,6 +458,9 @@ public partial class MainWindow : Window {
 
     private Views.PreviewPane? _previewSecond;
 
+    /// <summary>The two halves' held-button zoom, tied; a new pair lines up afresh.</summary>
+    private ZoomLink? _zoomLink;
+
     /// <summary>How the split on screen is turned; null while there is none - see <see cref="ApplyPreviewSplitOrientation"/>.</summary>
     private bool? _splitStacked;
 
@@ -465,6 +470,8 @@ public partial class MainWindow : Window {
     /// controller has already let go of the file.
     /// </summary>
     private void ApplyPreviewSplit() {
+        // Another pair, or none: whatever lined the last one up is theirs.
+        _zoomLink?.Reset();
         if (!Vm.IsPreviewSplit) {
             Preview.ShowSecond(null, stacked: true);
             _splitStacked = null;
@@ -475,18 +482,8 @@ public partial class MainWindow : Window {
         if (_previewSecond is null) {
             _previewSecond = new Views.PreviewPane { DataContext = Vm.PreviewSecond };
             // Zoom on either half looks at the same place of the other
-            // picture. The end of a zoom always goes across, split or not,
-            // so a half put away mid-zoom does not come back zoomed.
-            Preview.ZoomMoved += (_, at) => {
-                if (at is null || Vm.IsPreviewSplit) {
-                    _previewSecond?.FollowZoom(at);
-                }
-            };
-            _previewSecond.ZoomMoved += (_, at) => {
-                if (at is null || Vm.IsPreviewSplit) {
-                    Preview.FollowZoom(at);
-                }
-            };
+            // picture, while the split is on screen.
+            _zoomLink = Views.PreviewPane.Link(Preview, _previewSecond, () => Vm.IsPreviewSplit);
         }
         ApplyPreviewSplitOrientation();
     }
@@ -530,20 +527,20 @@ public partial class MainWindow : Window {
     // --- Full screen (PLAN Q5) ----------------------------------------------
 
     /// <summary>
-    /// Enter or Space on a picture in the gallery. The window walks the
-    /// list on its own; closed, it leaves the list on the picture it ended
-    /// on, with the keyboard back in the list.
+    /// Enter or Space on pictures in the gallery (<see cref="FullscreenPlan"/>).
+    /// The window walks on its own; closed, it leaves the keyboard back in
+    /// the list - on the picture a single one ended on; a pair or a walked
+    /// selection leaves the selection as it was.
     /// </summary>
-    private void FileList_FullscreenRequested(object? sender, FileSystemEntry entry) {
-        var window = new Views.FullscreenWindow(entry, () => Vm.Entries, Vm.Helpers, Vm.Preview.ContentPalette);
-        window.PlaceOver(this);
+    private void FileList_FullscreenRequested(object? sender, FullscreenPlan plan) {
+        var window = Views.FullscreenWindow.Open(plan, Vm, this);
         window.Closed += (_, _) => {
-            if (!string.Equals(window.Current.FullPath, entry.FullPath, StringComparison.OrdinalIgnoreCase)) {
+            if (plan.Mode == FullscreenMode.Single
+                && !string.Equals(window.Current.FullPath, plan.Start.FullPath, StringComparison.OrdinalIgnoreCase)) {
                 Vm.RevealPath(window.Current.FullPath);
             }
             FileList.FocusList();
         };
-        window.Show();
     }
 
 

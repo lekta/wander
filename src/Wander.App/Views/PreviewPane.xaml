@@ -299,6 +299,9 @@
         -->
         <Style x:Key="RatingStar" TargetType="Button">
             <Setter Property="Command" Value="{Binding SetRankCommand}"/>
+            <!-- A click leaves the keyboard where it was: a star with it
+                 took the next Space for a second click. -->
+            <Setter Property="Focusable" Value="False"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Foreground" Value="{StaticResource RatingStar}"/>
@@ -338,6 +341,7 @@
         -->
         <Style x:Key="ColorLabelSwatch" TargetType="Button">
             <Setter Property="Command" Value="{Binding DataContext.SetColorLabelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+            <Setter Property="Focusable" Value="False"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Margin" Value="1,0"/>
             <Setter Property="Template">
@@ -384,6 +388,167 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!--
+            What the footer and the picture's bar (PLAN Q5) both carry, drawn
+            once: the stars and the swatches, the helpers' switches, the
+            chart of levels. Each is shown through a ContentPresenter whose
+            content is the controller itself.
+        -->
+        <DataTemplate x:Key="RatingControls">
+            <StackPanel Orientation="Horizontal">
+                <Button Style="{StaticResource RatingStar}" CommandParameter="1"
+                        Content="{Binding Rank, Converter={StaticResource RankStar}, ConverterParameter=1}"/>
+                <Button Style="{StaticResource RatingStar}" CommandParameter="2"
+                        Content="{Binding Rank, Converter={StaticResource RankStar}, ConverterParameter=2}"/>
+                <Button Style="{StaticResource RatingStar}" CommandParameter="3"
+                        Content="{Binding Rank, Converter={StaticResource RankStar}, ConverterParameter=3}"/>
+                <Button Style="{StaticResource RatingStar}" CommandParameter="4"
+                        Content="{Binding Rank, Converter={StaticResource RankStar}, ConverterParameter=4}"/>
+                <Button Style="{StaticResource RatingStar}" CommandParameter="5"
+                        Content="{Binding Rank, Converter={StaticResource RankStar}, ConverterParameter=5}"/>
+
+                <ItemsControl ItemsSource="{Binding ColorLabelChoices}"
+                              Margin="10,0,0,0" VerticalAlignment="Center">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Style="{StaticResource ColorLabelSwatch}"
+                                    CommandParameter="{Binding Index}"
+                                    ToolTip="{Binding Name}"/>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </DataTemplate>
+
+        <!--
+            The review helpers' switches (RAWHELPERS), only over a picture,
+            and the RAW switch beside them: a RAW carries the small JPEG the
+            camera embedded (instant, and what the pane shows by default)
+            and the sensor decode (the real frame, about a second). The
+            switch stays on once pressed, so a whole folder can be looked at
+            that way.
+        -->
+        <DataTemplate x:Key="HelperSwitches">
+            <StackPanel Orientation="Horizontal">
+                <StackPanel Orientation="Horizontal" Margin="8,0,0,0"
+                            Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Image}">
+                    <ToggleButton Style="{StaticResource HelperToggle}"
+                                  IsChecked="{Binding Helpers.Peaking}"
+                                  ToolTip="{x:Static res:Strings.HelperFocusTip}">
+                        <Image Source="{StaticResource IconHelperFocus}" Width="14" Height="14"/>
+                    </ToggleButton>
+                    <ToggleButton Style="{StaticResource HelperToggle}"
+                                  IsChecked="{Binding Helpers.AfPoints}"
+                                  ToolTip="{x:Static res:Strings.HelperAfTip}">
+                        <Image Source="{StaticResource IconHelperAf}" Width="14" Height="14"/>
+                    </ToggleButton>
+                    <ToggleButton Style="{StaticResource HelperToggle}"
+                                  IsChecked="{Binding Helpers.Sharpness}"
+                                  ToolTip="{x:Static res:Strings.HelperSharpTip}">
+                        <Image Source="{StaticResource IconHelperSharp}" Width="14" Height="14"/>
+                    </ToggleButton>
+                    <ToggleButton Style="{StaticResource HelperToggle}"
+                                  IsChecked="{Binding Helpers.Clipping}"
+                                  ToolTip="{x:Static res:Strings.HelperClipTip}">
+                        <Image Source="{StaticResource IconHelperClip}" Width="14" Height="14"/>
+                    </ToggleButton>
+                    <ToggleButton Style="{StaticResource HelperToggle}"
+                                  IsChecked="{Binding Helpers.Histogram}"
+                                  ToolTip="{x:Static res:Strings.HelperHistTip}">
+                        <Image Source="{StaticResource IconHelperHistogram}" Width="14" Height="14"/>
+                    </ToggleButton>
+                    <ToggleButton Style="{StaticResource HelperToggle}"
+                                  IsChecked="{Binding Helpers.Shadows}"
+                                  ToolTip="{x:Static res:Strings.HelperShadowsTip}">
+                        <Image Source="{StaticResource IconHelperShadows}" Width="14" Height="14"/>
+                    </ToggleButton>
+                    <ToggleButton Style="{StaticResource HelperToggle}"
+                                  IsChecked="{Binding Helpers.Highlights}"
+                                  ToolTip="{x:Static res:Strings.HelperHighlightsTip}">
+                        <Image Source="{StaticResource IconHelperHighlights}" Width="14" Height="14"/>
+                    </ToggleButton>
+                </StackPanel>
+                <ToggleButton Content="{x:Static res:Strings.PreviewRawToggle}"
+                              VerticalAlignment="Top"
+                              Margin="8,0,0,0" Padding="8,1"
+                              MinWidth="44"
+                              FontSize="11"
+                              Focusable="False"
+                              ToolTip="{x:Static res:Strings.PreviewRawToggleHint}"
+                              IsChecked="{Binding ShowRawDecode, Mode=TwoWay}"
+                              Visibility="{Binding IsRawImage, Converter={StaticResource BoolToVisibility}}"/>
+            </StackPanel>
+        </DataTemplate>
+
+        <!--
+            Levels by channel. No words: a bright bar stands at the side that
+            clipped - left for shadows crushed, right for highlights burnt -
+            as tall as the share that went, full height at a twentieth of the
+            frame. The shares themselves are in the tooltip.
+        -->
+        <DataTemplate x:Key="HistogramChart">
+            <Border Padding="2,2" CornerRadius="2"
+                    Background="{StaticResource ReviewChartPlate}"
+                    ToolTip="{Binding HistogramTip}">
+                <Grid Width="96" Height="56" ClipToBounds="True">
+                    <Canvas>
+                        <Polygon Points="{Binding HistogramRed}" Fill="{StaticResource ReviewChartRed}"/>
+                        <Polygon Points="{Binding HistogramGreen}" Fill="{StaticResource ReviewChartGreen}"/>
+                        <Polygon Points="{Binding HistogramBlue}" Fill="{StaticResource ReviewChartBlue}"/>
+                    </Canvas>
+                    <Rectangle Width="3" Height="{Binding HistogramUnderBar}"
+                               Fill="{StaticResource ReviewChartUnder}"
+                               HorizontalAlignment="Left" VerticalAlignment="Bottom"/>
+                    <Rectangle Width="3" Height="{Binding HistogramOverBar}"
+                               Fill="{StaticResource ReviewChartOver}"
+                               HorizontalAlignment="Right" VerticalAlignment="Bottom"/>
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <!--
+            The stars, the chart and the score are in the footer only while
+            the picture has no bar of its own to carry them (ShowPictureBar):
+            split, one footer under two pictures cannot say whose they are.
+        -->
+        <Style x:Key="FooterRating" TargetType="StackPanel">
+            <Setter Property="Visibility" Value="Collapsed"/>
+            <Style.Triggers>
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding HasRating}" Value="True"/>
+                        <Condition Binding="{Binding ShowPictureBar}" Value="False"/>
+                    </MultiDataTrigger.Conditions>
+                    <Setter Property="Visibility" Value="Visible"/>
+                </MultiDataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="FooterHistogram" TargetType="ContentPresenter">
+            <Setter Property="Visibility" Value="Collapsed"/>
+            <Style.Triggers>
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding HasHistogram}" Value="True"/>
+                        <Condition Binding="{Binding ShowPictureBar}" Value="False"/>
+                    </MultiDataTrigger.Conditions>
+                    <Setter Property="Visibility" Value="Visible"/>
+                </MultiDataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="FooterSharpness" TargetType="Run">
+            <Setter Property="Text" Value="{Binding SharpnessText, Mode=OneWay}"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding ShowPictureBar}" Value="True">
+                    <Setter Property="Text" Value=""/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
     </UserControl.Resources>
 
             <Grid>
@@ -399,7 +564,8 @@
 
                 <!-- Content area -->
                 <Grid x:Name="ContentArea" Grid.Row="0" SizeChanged="ContentArea_SizeChanged"
-                      ScrollViewer.ScrollChanged="ContentArea_ScrollChanged">
+                      ScrollViewer.ScrollChanged="ContentArea_ScrollChanged"
+                      MouseMove="ContentArea_MouseMove" MouseLeave="ContentArea_MouseLeave">
                     <!--
                         The content surround, same palette as the gallery's.
                         A photograph judged against a grey wall and then
@@ -485,7 +651,7 @@
                         <Image x:Name="ImgFit"
                                Source="{Binding DisplayImage}"
                                Stretch="Uniform"
-                               Margin="8,12,8,8"
+                               Margin="{Binding PictureMargin, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                VerticalAlignment="Top" HorizontalAlignment="Center"
                                RenderOptions.BitmapScalingMode="HighQuality"
                                SizeChanged="ImgFit_SizeChanged">
@@ -516,7 +682,7 @@
                                Stretch="Fill"
                                Width="{Binding ActualWidth, ElementName=ImgFit}"
                                Height="{Binding ActualHeight, ElementName=ImgFit}"
-                               Margin="8,12,8,8"
+                               Margin="{Binding PictureMargin, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                VerticalAlignment="Top" HorizontalAlignment="Center"
                                RenderOptions.BitmapScalingMode="HighQuality"/>
                         <!--
@@ -572,7 +738,7 @@
                                        GifUri="{Binding GifUri}"
                                        Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Gif}"
                                        Stretch="Uniform"
-                                       Margin="8,12,8,8"
+                                       Margin="{Binding PictureMargin, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                        VerticalAlignment="Top" HorizontalAlignment="Center"
                                        RenderOptions.BitmapScalingMode="HighQuality">
                         <controls:GifImage.MaxWidth>
@@ -1166,6 +1332,78 @@
                         </StackPanel>
                     </ScrollViewer>
 
+                    <!--
+                        The picture's own bar (PLAN Q5, 2026-09-24): full
+                        screen, and each half of a split, where one footer
+                        cannot speak for two pictures. In the lower left
+                        corner, on a thin dark plate; the stars, the score
+                        and the switches stand at 30% of their strength
+                        until the mouse comes down to them or the rating
+                        changes (PreviewPane, "The picture's bar"). The
+                        chart of levels beside them is at full strength: it
+                        was switched on to be read, and a fifth of it is
+                        not a chart.
+                    -->
+                    <StackPanel x:Name="PictureBar" Orientation="Horizontal"
+                                HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="8,0,8,8">
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <MultiDataTrigger>
+                                        <MultiDataTrigger.Conditions>
+                                            <Condition Binding="{Binding ShowPictureBar}" Value="True"/>
+                                            <Condition Binding="{Binding Kind}" Value="Image"/>
+                                        </MultiDataTrigger.Conditions>
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </MultiDataTrigger>
+                                    <MultiDataTrigger>
+                                        <MultiDataTrigger.Conditions>
+                                            <Condition Binding="{Binding ShowPictureBar}" Value="True"/>
+                                            <Condition Binding="{Binding Kind}" Value="Gif"/>
+                                        </MultiDataTrigger.Conditions>
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </MultiDataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
+                        <Border x:Name="PictureControls" VerticalAlignment="Bottom"
+                                Background="{StaticResource PictureBarPlate}" CornerRadius="3" Padding="6,2">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasRating}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding PictureBarSwitches}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding HasSharpnessScore}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <StackPanel Orientation="Horizontal">
+                                <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource RatingControls}"
+                                                  VerticalAlignment="Center"
+                                                  Visibility="{Binding HasRating, Converter={StaticResource BoolToVisibility}}"/>
+                                <!-- The sharpness score beside the stars: a fact about this picture, as quiet as they are. -->
+                                <TextBlock Text="{Binding SharpnessText}" ToolTip="{Binding SharpnessTip}"
+                                           Margin="8,0,0,0" VerticalAlignment="Center" FontSize="12"
+                                           Foreground="{StaticResource ReviewSharp}"
+                                           Visibility="{Binding HasSharpnessScore, Converter={StaticResource BoolToVisibility}}"/>
+                                <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource HelperSwitches}"
+                                                  VerticalAlignment="Center"
+                                                  Visibility="{Binding PictureBarSwitches, Converter={StaticResource BoolToVisibility}}"/>
+                            </StackPanel>
+                        </Border>
+                        <ContentPresenter Margin="6,0,0,0" VerticalAlignment="Bottom"
+                                          Content="{Binding}" ContentTemplate="{StaticResource HistogramChart}"
+                                          Visibility="{Binding HasHistogram, Converter={StaticResource BoolToVisibility}}"/>
+                    </StackPanel>
+
                     <!-- Placeholder (None / Unsupported) -->
                     <TextBlock Text="{Binding PlaceholderText}"
                                Style="{StaticResource PaneDim}"
@@ -1264,7 +1502,7 @@
                         -->
                         <TextBlock FontSize="11" Foreground="{StaticResource TextSecondary}"
                                    TextWrapping="Wrap">
-                            <Run Text="{Binding SummaryHead, Mode=OneWay}"/><Run Text="  "/><Run Text="{Binding SummaryNote, Mode=OneWay}" Foreground="{StaticResource TextDim}"/><Run Text="{Binding SummaryRest, Mode=OneWay}"/><Run Text="   "/><Run Text="{Binding SharpnessText, Mode=OneWay}" Foreground="{StaticResource ReviewSharp}" FontWeight="SemiBold" ToolTip="{Binding SharpnessTip}"/>
+                            <Run Text="{Binding SummaryHead, Mode=OneWay}"/><Run Text="  "/><Run Text="{Binding SummaryNote, Mode=OneWay}" Foreground="{StaticResource TextDim}"/><Run Text="{Binding SummaryRest, Mode=OneWay}"/><Run Text="   "/><Run Style="{StaticResource FooterSharpness}" Foreground="{StaticResource ReviewSharp}" FontWeight="SemiBold" ToolTip="{Binding SharpnessTip}"/>
                         </TextBlock>
 
                         <!--
@@ -1343,32 +1581,8 @@
                             stars to say "there is nowhere to write this
                             yet"); the block above was hiding the offer.
                         -->
-                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0"
-                                    Visibility="{Binding HasRating, Converter={StaticResource BoolToVisibility}}">
-                            <Button Style="{StaticResource RatingStar}" CommandParameter="1"
-                                    Content="{Binding Rank, Converter={StaticResource RankStar}, ConverterParameter=1}"/>
-                            <Button Style="{StaticResource RatingStar}" CommandParameter="2"
-                                    Content="{Binding Rank, Converter={StaticResource RankStar}, ConverterParameter=2}"/>
-                            <Button Style="{StaticResource RatingStar}" CommandParameter="3"
-                                    Content="{Binding Rank, Converter={StaticResource RankStar}, ConverterParameter=3}"/>
-                            <Button Style="{StaticResource RatingStar}" CommandParameter="4"
-                                    Content="{Binding Rank, Converter={StaticResource RankStar}, ConverterParameter=4}"/>
-                            <Button Style="{StaticResource RatingStar}" CommandParameter="5"
-                                    Content="{Binding Rank, Converter={StaticResource RankStar}, ConverterParameter=5}"/>
-
-                            <ItemsControl ItemsSource="{Binding ColorLabelChoices}"
-                                          Margin="10,0,0,0" VerticalAlignment="Center">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Button Style="{StaticResource ColorLabelSwatch}"
-                                                CommandParameter="{Binding Index}"
-                                                ToolTip="{Binding Name}"/>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0" Style="{StaticResource FooterRating}">
+                            <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource RatingControls}"/>
 
                             <TextBlock Text="{Binding CustomColorLabel}"
                                        FontSize="11" Foreground="{StaticResource TextDim}"
@@ -1397,93 +1611,12 @@
                         <TextBlock Text="{Binding CompanionStatus}"
                                    FontSize="11" Foreground="{StaticResource TextDim}" TextWrapping="Wrap"/>
                         </StackPanel>
-                        <!--
-                            The review helpers' switches (RAWHELPERS), only
-                            over a picture, and the RAW switch beside them:
-                            a RAW carries the small JPEG the camera embedded
-                            (instant, and what the pane shows by default) and
-                            the sensor decode (the real frame, about a
-                            second). The switch stays on once pressed, so a
-                            whole folder can be looked at that way.
-                        -->
+                        <!-- The helpers' switches and the chart (HelperSwitches, HistogramChart). -->
                             <StackPanel Grid.Column="1" VerticalAlignment="Top">
-                                <StackPanel Orientation="Horizontal">
-                                <StackPanel Orientation="Horizontal" Margin="8,0,0,0"
-                                            Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Image}">
-                                    <ToggleButton Style="{StaticResource HelperToggle}"
-                                                  IsChecked="{Binding Helpers.Peaking}"
-                                                  ToolTip="{x:Static res:Strings.HelperFocusTip}">
-                                        <Image Source="{StaticResource IconHelperFocus}" Width="14" Height="14"/>
-                                    </ToggleButton>
-                                    <ToggleButton Style="{StaticResource HelperToggle}"
-                                                  IsChecked="{Binding Helpers.AfPoints}"
-                                                  ToolTip="{x:Static res:Strings.HelperAfTip}">
-                                        <Image Source="{StaticResource IconHelperAf}" Width="14" Height="14"/>
-                                    </ToggleButton>
-                                    <ToggleButton Style="{StaticResource HelperToggle}"
-                                                  IsChecked="{Binding Helpers.Sharpness}"
-                                                  ToolTip="{x:Static res:Strings.HelperSharpTip}">
-                                        <Image Source="{StaticResource IconHelperSharp}" Width="14" Height="14"/>
-                                    </ToggleButton>
-                                    <ToggleButton Style="{StaticResource HelperToggle}"
-                                                  IsChecked="{Binding Helpers.Clipping}"
-                                                  ToolTip="{x:Static res:Strings.HelperClipTip}">
-                                        <Image Source="{StaticResource IconHelperClip}" Width="14" Height="14"/>
-                                    </ToggleButton>
-                                    <ToggleButton Style="{StaticResource HelperToggle}"
-                                                  IsChecked="{Binding Helpers.Histogram}"
-                                                  ToolTip="{x:Static res:Strings.HelperHistTip}">
-                                        <Image Source="{StaticResource IconHelperHistogram}" Width="14" Height="14"/>
-                                    </ToggleButton>
-                                    <ToggleButton Style="{StaticResource HelperToggle}"
-                                                  IsChecked="{Binding Helpers.Shadows}"
-                                                  ToolTip="{x:Static res:Strings.HelperShadowsTip}">
-                                        <Image Source="{StaticResource IconHelperShadows}" Width="14" Height="14"/>
-                                    </ToggleButton>
-                                    <ToggleButton Style="{StaticResource HelperToggle}"
-                                                  IsChecked="{Binding Helpers.Highlights}"
-                                                  ToolTip="{x:Static res:Strings.HelperHighlightsTip}">
-                                        <Image Source="{StaticResource IconHelperHighlights}" Width="14" Height="14"/>
-                                    </ToggleButton>
-                                </StackPanel>
-                                <ToggleButton x:Name="RawToggle"
-                                              Content="{x:Static res:Strings.PreviewRawToggle}"
-                                              VerticalAlignment="Top"
-                                              Margin="8,0,0,0" Padding="8,1"
-                                              MinWidth="44"
-                                              FontSize="11"
-                                              Focusable="False"
-                                              ToolTip="{x:Static res:Strings.PreviewRawToggleHint}"
-                                              IsChecked="{Binding ShowRawDecode, Mode=TwoWay}"
-                                              Visibility="{Binding IsRawImage, Converter={StaticResource BoolToVisibility}}"/>
-                                </StackPanel>
-                                <!--
-                                    Levels by channel. No words: a bright bar
-                                    stands at the side that clipped - left for
-                                    shadows crushed, right for highlights
-                                    burnt - as tall as the share that went,
-                                    full height at a twentieth of the frame.
-                                    The shares themselves are in the tooltip.
-                                -->
-                                <Border Margin="8,4,0,0" HorizontalAlignment="Right" Padding="2,2" CornerRadius="2"
-                                        Background="{StaticResource ReviewChartPlate}"
-                                        VerticalAlignment="Top"
-                                        ToolTip="{Binding HistogramTip}"
-                                        Visibility="{Binding HasHistogram, Converter={StaticResource BoolToVisibility}}">
-                                    <Grid Width="96" Height="56" ClipToBounds="True">
-                                        <Canvas>
-                                            <Polygon Points="{Binding HistogramRed}" Fill="{StaticResource ReviewChartRed}"/>
-                                            <Polygon Points="{Binding HistogramGreen}" Fill="{StaticResource ReviewChartGreen}"/>
-                                            <Polygon Points="{Binding HistogramBlue}" Fill="{StaticResource ReviewChartBlue}"/>
-                                        </Canvas>
-                                        <Rectangle Width="3" Height="{Binding HistogramUnderBar}"
-                                                   Fill="{StaticResource ReviewChartUnder}"
-                                                   HorizontalAlignment="Left" VerticalAlignment="Bottom"/>
-                                        <Rectangle Width="3" Height="{Binding HistogramOverBar}"
-                                                   Fill="{StaticResource ReviewChartOver}"
-                                                   HorizontalAlignment="Right" VerticalAlignment="Bottom"/>
-                                    </Grid>
-                                </Border>
+                                <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource HelperSwitches}"/>
+                                <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource HistogramChart}"
+                                                  Margin="8,4,0,0" HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                  Style="{StaticResource FooterHistogram}"/>
                             </StackPanel>
                     </Grid>
                 </Border>

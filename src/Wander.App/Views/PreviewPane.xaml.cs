@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Media.Media3D;
 using System.Windows.Threading;
@@ -46,6 +47,7 @@ public partial class PreviewPane : UserControl {
         // Wander's own .xshd definitions (batch, ShaderLab, YAML) have to be
         // in the manager before the first file asks for one.
         HighlightingCatalog.EnsureRegistered();
+        PictureControls.Opacity = BarDimmed;
         DataContextChanged += OnDataContextChanged;
         Loaded += (_, _) => {
             DpiScale = VisualTreeHelper.GetDpi(this).DpiScaleX;
@@ -82,6 +84,22 @@ public partial class PreviewPane : UserControl {
         private set => SetValue(DpiScaleProperty, value);
     }
 
+    public static readonly DependencyProperty PictureMarginProperty = DependencyProperty.Register(
+        nameof(PictureMargin), typeof(Thickness), typeof(PreviewPane),
+        new PropertyMetadata(new Thickness(4), (d, _) => ((PreviewPane)d).ReportViewport()));
+
+    /// <summary>
+    /// The room between a picture and the pane's edges (2026-09-24): thin in
+    /// the pane, none full screen - there the picture meets the screen's
+    /// edges. The fitted picture, its helpers' marks and an animation keep
+    /// it; the 1:1 zoom and the decode size read it (UpdateZoomPosition,
+    /// ReportViewport).
+    /// </summary>
+    public Thickness PictureMargin {
+        get => (Thickness)GetValue(PictureMarginProperty);
+        set => SetValue(PictureMarginProperty, value);
+    }
+
 
     /// <summary>
     /// True while the keyboard is inside the code viewer. The window asks
@@ -91,19 +109,39 @@ public partial class PreviewPane : UserControl {
     public bool IsCodeEditorFocused => CodeEditor.IsKeyboardFocusWithin;
 
     /// <summary>
-    /// The held-button zoom moved to a point of the picture area, given as
-    /// shares of it (0..1 each way), or ended (null). The window passes it
-    /// to the other half of a split (<see cref="FollowZoom"/>), so both
-    /// pictures are looked at in the same place.
-    /// </summary>
-    public event EventHandler<Point?>? ZoomMoved;
-
-    /// <summary>
     /// The text on show was scrolled by the user - to these offsets,
     /// across and down. The compare window passes it to the other text
     /// (<see cref="FollowTextScroll"/>), so the two are read side by side.
     /// </summary>
     public event EventHandler<Point>? TextScrolled;
+
+    /// <summary>
+    /// The held-button zoom moved, or ended - see <see cref="ZoomMove"/>.
+    /// Only <see cref="Link"/> listens: it passes the move to the other
+    /// pane of a pair (<see cref="FollowZoom"/>).
+    /// </summary>
+    private event EventHandler<ZoomMove>? ZoomMoved;
+
+
+    /// <summary>
+    /// Ties the held-button zoom of two panes (PLAN Q5): the one under the
+    /// mouse leads, the other shows the same place of its own picture - or
+    /// stands still while the right button is held as well, which is how
+    /// two frames framed apart are lined up (<see cref="ZoomLink"/>). The
+    /// end of a zoom always goes across, so a half put away mid-zoom does
+    /// not come back zoomed.
+    /// </summary>
+    /// <param name="first">One pane of the pair - the upper or the left one.</param>
+    /// <param name="second">The other.</param>
+    /// <param name="live">Whether a move goes across now - the split is on screen; null for always.</param>
+    /// <returns>The link, for a new pair to line up afresh (<see cref="ZoomLink.Reset"/>).</returns>
+    public static ZoomLink Link(PreviewPane first, PreviewPane second, Func<bool>? live = null) {
+        var link = new ZoomLink();
+        first.ZoomMoved += (_, move) => Relay(link, second, move, fromFirst: true, live);
+        second.ZoomMoved += (_, move) => Relay(link, first, move, fromFirst: false, live);
+
+        return link;
+    }
 
 
     /// <summary>
@@ -206,25 +244,6 @@ public partial class PreviewPane : UserControl {
         return new Size(grid.ActualWidth, Math.Max(0, grid.ActualHeight - footer));
     }
 
-    /// <summary>
-    /// Shows the other half's zoom here: the same share of this picture,
-    /// without taking the mouse. Null ends it. A picture that fits whole
-    /// has nothing to zoom into and stays as it is.
-    /// </summary>
-    public void FollowZoom(Point? share) {
-        if (share is not { } at) {
-            ExitImageZoom(notify: false);
-
-            return;
-        }
-        if (!_imageZoomActive && !BeginImageZoom()) {
-            return;
-        }
-
-        UpdateZoomPosition(new Point(at.X * ImagePreviewHost.ActualWidth, at.Y * ImagePreviewHost.ActualHeight));
-    }
-
-
     /// <summary>Scrolls the text on show to the other text's offsets - see <see cref="TextScrolled"/>.</summary>
     public void FollowTextScroll(Point offset) {
         _followingScroll = true;
@@ -280,8 +299,8 @@ public partial class PreviewPane : UserControl {
 
     /// <summary>
     /// Tells the controller how many device pixels a picture has here - the
-    /// content area less ImgFit's margin (8,12,8,8) - so it decodes one to
-    /// that size (PLAN AK, step 3).
+    /// content area less the picture's margin (<see cref="PictureMargin"/>) -
+    /// so it decodes one to that size (PLAN AK, step 3).
     /// </summary>
     private void ReportViewport() {
         if (DataContext is not PreviewController controller || ContentArea.ActualWidth <= 0) {
@@ -289,19 +308,22 @@ public partial class PreviewPane : UserControl {
         }
 
         var dpi = VisualTreeHelper.GetDpi(this);
+        var margin = PictureMargin;
         controller.SetViewport(
-            (ContentArea.ActualWidth - 16) * dpi.DpiScaleX,
-            (ContentArea.ActualHeight - 20) * dpi.DpiScaleY);
+            (ContentArea.ActualWidth - margin.Left - margin.Right) * dpi.DpiScaleX,
+            (ContentArea.ActualHeight - margin.Top - margin.Bottom) * dpi.DpiScaleY);
     }
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e) {
         if (e.OldValue is PreviewController old) {
             old.PropertyChanged -= OnPreviewPropertyChanged;
             old.ContentReleased -= OnContentReleased;
+            old.RatingChanged -= OnRatingChanged;
         }
         if (e.NewValue is PreviewController controller) {
             controller.PropertyChanged += OnPreviewPropertyChanged;
             controller.ContentReleased += OnContentReleased;
+            controller.RatingChanged += OnRatingChanged;
             UpdateCodeEditor();
             ReportViewport();
         }
@@ -549,13 +571,10 @@ public partial class PreviewPane : UserControl {
     // the 1:1 image so that mapped pixel sits under the cursor. This
     // matches FastStone / IrfanView "navigator" zoom.
 
-    // Mirror of the Margin attribute on ImgFit (8,12,8,8) so the zoom view
-    // can match the fit view's placement on the non-panning axis. Keep in
-    // sync if the XAML margin ever changes.
-    private const double PreviewImageMarginTop = 12;
-    // Left/right margins are symmetric — the centering math (hw - srcW)/2
-    // produces the same X whether you account for them or not, so no
-    // constant needed for X.
+    // On the axis that does not pan the zoom view is placed as the fitted
+    // picture is: PictureMargin.Top from the top. Left and right margins are
+    // equal, and the centring math (hw - srcW)/2 gives the same X with or
+    // without them.
 
     private bool _imageZoomActive;
 
@@ -614,7 +633,7 @@ public partial class PreviewPane : UserControl {
             return;
         }
 
-        MoveImageZoom(e.GetPosition(ImagePreviewHost));
+        MoveImageZoom(e.GetPosition(ImagePreviewHost), alone: e.RightButton == MouseButtonState.Pressed);
         // Capture so we still get the LMB-up if the user lifts the button
         // outside the host (e.g., over the splitter). LostMouseCapture is
         // our cleanup path.
@@ -631,8 +650,47 @@ public partial class PreviewPane : UserControl {
         // Sized and placed by UpdateZoomPosition, which every caller runs next.
         _imageZoomActive = true;
         ImgZoomCanvas.Visibility = Visibility.Visible;
+        // Nothing over the pixels being looked at: the picture's bar steps
+        // aside until the zoom ends (ExitImageZoom).
+        ReachBar(false);
+        PictureBar.Opacity = 0;
 
         return true;
+    }
+
+    /// <summary>
+    /// Shows the other half's zoom here: the same share of this picture,
+    /// without taking the mouse. Null ends it. A picture that fits whole
+    /// has nothing to zoom into and stays as it is.
+    /// </summary>
+    private void FollowZoom(Point? share) {
+        if (share is not { } at) {
+            ExitImageZoom(notify: false);
+
+            return;
+        }
+        if (!_imageZoomActive && !BeginImageZoom()) {
+            return;
+        }
+
+        UpdateZoomPosition(new Point(at.X * ImagePreviewHost.ActualWidth, at.Y * ImagePreviewHost.ActualHeight));
+    }
+
+    /// <summary>One pane's zoom, handed to the other through the link - see <see cref="Link"/>.</summary>
+    private static void Relay(ZoomLink link, PreviewPane other, ZoomMove move, bool fromFirst, Func<bool>? live) {
+        if (move.Share is not { } at) {
+            link.End();
+            other.FollowZoom(null);
+
+            return;
+        }
+        if (live?.Invoke() == false) {
+            return;
+        }
+
+        if (link.Lead(fromFirst, at.X, at.Y, move.Alone) is { } follows) {
+            other.FollowZoom(new Point(follows.X, follows.Y));
+        }
     }
 
     /// <summary>
@@ -659,13 +717,15 @@ public partial class PreviewPane : UserControl {
     }
 
     /// <summary>The zoom follows the mouse here, and the other half of a split is told where.</summary>
-    private void MoveImageZoom(Point mouse) {
+    /// <param name="mouse">Where the mouse is, in the picture area.</param>
+    /// <param name="alone">The right button is held as well: the other half stays where it is.</param>
+    private void MoveImageZoom(Point mouse, bool alone) {
         UpdateZoomPosition(mouse);
 
         double hw = ImagePreviewHost.ActualWidth;
         double hh = ImagePreviewHost.ActualHeight;
         if (hw > 0 && hh > 0) {
-            ZoomMoved?.Invoke(this, new Point(Math.Clamp(mouse.X / hw, 0, 1), Math.Clamp(mouse.Y / hh, 0, 1)));
+            ZoomMoved?.Invoke(this, new ZoomMove(new Point(Math.Clamp(mouse.X / hw, 0, 1), Math.Clamp(mouse.Y / hh, 0, 1)), alone));
         }
     }
 
@@ -684,7 +744,7 @@ public partial class PreviewPane : UserControl {
             ExitImageZoom();
             return;
         }
-        MoveImageZoom(e.GetPosition(ImagePreviewHost));
+        MoveImageZoom(e.GetPosition(ImagePreviewHost), alone: e.RightButton == MouseButtonState.Pressed);
     }
 
     private void ImageZoom_LostCapture(object sender, MouseEventArgs e) {
@@ -746,12 +806,13 @@ public partial class PreviewPane : UserControl {
 
         // Y axis: pan only if image is taller than the pane.
         // When it fits, anchor to the top with the same margin ImgFit
-        // uses — ImgFit has VerticalAlignment="Top" + Margin="8,12,8,8",
-        // so the fit view places the image at y=12. Centring vertically
-        // here would visibly jump the image down when the user holds LMB.
+        // uses - ImgFit is VerticalAlignment="Top" with PictureMargin, so
+        // the fit view places the image at y = PictureMargin.Top. Centring
+        // vertically here would visibly jump the image down when the user
+        // holds LMB.
         double y = srcH > hh
             ? my - (my / hh) * srcH
-            : PreviewImageMarginTop;
+            : PictureMargin.Top;
 
         // On whole device pixels: a fractional offset resamples the whole
         // picture by a share of a pixel, and 1:1 stops being 1:1.
@@ -773,13 +834,84 @@ public partial class PreviewPane : UserControl {
         }
         _imageZoomActive = false;
         ImgZoomCanvas.Visibility = Visibility.Collapsed;
+        PictureBar.Opacity = 1;
         if (ImagePreviewHost.IsMouseCaptured) {
             ImagePreviewHost.ReleaseMouseCapture();
         }
         UpdateImageCursor();
         if (notify) {
-            ZoomMoved?.Invoke(this, null);
+            ZoomMoved?.Invoke(this, new ZoomMove(null, false));
         }
+    }
+
+
+    // --- The picture's bar (PLAN Q5) -------------------------------------
+    //
+    // Full screen and in each half of a split a picture carries its own
+    // stars and sharpness score (and, full screen, the helpers' switches)
+    // in its lower left corner. They are there for a moment and the picture
+    // for the rest, so they stand at 30% of their strength (2026-09-24)
+    // until the mouse comes down to them or the rating changes - a digit
+    // pressed, a star clicked, an undo - and then for a moment more.
+
+    private const double BarDimmed = 0.3;
+
+    /// <summary>How near the bottom edge the mouse brings the bar up, in layout units.</summary>
+    private const double BarReach = 96;
+
+    /// <summary>How long a changed rating holds the bar up.</summary>
+    private const int BarFlashMs = 1500;
+
+    private const int BarFadeMs = 60;
+
+    // The mouse is down by the bar; the bar is up at full strength.
+    private bool _barReached;
+    private bool _barUp;
+
+    // Holds the bar up for a moment after the rating changed.
+    private DispatcherTimer? _barFlash;
+
+
+    private void ContentArea_MouseMove(object sender, MouseEventArgs e) {
+        ReachBar(!_imageZoomActive && e.GetPosition(ContentArea).Y >= ContentArea.ActualHeight - BarReach);
+    }
+
+    private void ContentArea_MouseLeave(object sender, MouseEventArgs e) {
+        ReachBar(false);
+    }
+
+    private void ReachBar(bool reached) {
+        if (_barReached == reached) {
+            return;
+        }
+
+        _barReached = reached;
+        UpdateBar();
+    }
+
+    private void OnRatingChanged(object? sender, EventArgs e) {
+        if (_barFlash is null) {
+            _barFlash = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(BarFlashMs) };
+            _barFlash.Tick += (_, _) => {
+                _barFlash.Stop();
+                UpdateBar();
+            };
+        }
+
+        _barFlash.Stop();
+        _barFlash.Start();
+        UpdateBar();
+    }
+
+    /// <summary>Full strength while the mouse is down by the bar or a new rating is being shown; a fifth otherwise.</summary>
+    private void UpdateBar() {
+        bool up = _barReached || _barFlash?.IsEnabled == true;
+        if (up == _barUp) {
+            return;
+        }
+
+        _barUp = up;
+        PictureControls.BeginAnimation(OpacityProperty, new DoubleAnimation(up ? 1 : BarDimmed, TimeSpan.FromMilliseconds(BarFadeMs)));
     }
 
 
@@ -1695,4 +1827,12 @@ public partial class PreviewPane : UserControl {
     private void FindClose_Click(object sender, RoutedEventArgs e) {
         CloseFind(keepKeyboard: FindBox.IsKeyboardFocusWithin);
     }
+
+
+    /// <summary>
+    /// Where the held-button zoom went: a place of the picture area as
+    /// shares of it (0..1 each way), or null when it ended.
+    /// </summary>
+    /// <param name="Alone">The right button is held as well: the other pane of a pair stays where it is.</param>
+    private readonly record struct ZoomMove(Point? Share, bool Alone);
 }

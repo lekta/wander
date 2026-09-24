@@ -125,6 +125,7 @@ public sealed class MainViewModel : ObservableObject {
     private readonly Dispatcher _dispatcher;
     private readonly ILogger _log;
     private readonly CompanionResolver _companions;
+    private readonly CompanionMetadataService? _companionMetadata;
 
     // The operation windows currently open, minimised ones included: how the
     // status-bar panel gets one back on screen, or stops it.
@@ -321,6 +322,7 @@ public sealed class MainViewModel : ObservableObject {
         };
 
         var companionMetadata = ServiceLocator.TryGet<CompanionMetadataService>();
+        _companionMetadata = companionMetadata;
 
         // Settings VM is owned by MainVM and shared with the dialog when it
         // opens. Built before every controller that takes it: RatingsController
@@ -355,16 +357,16 @@ public sealed class MainViewModel : ObservableObject {
                 : null,
         };
         // A click in the footer is about the whole selection the shown file
-        // is part of - split or not: the split only doubles the picture,
-        // the footer under it stays the one footer of the selection.
+        // is part of. Split, each picture carries its own stars on its bar,
+        // and a click there is about that picture alone (2026-09-24).
         Preview.RatingRequested += (_, request) =>
-            request.Rating = ApplyRatingFromPane(request, wholeSelection: true);
+            request.Rating = ApplyRatingFromPane(request, wholeSelection: !IsPreviewSplit);
         Preview.RevealRequested += (_, path) => RevealPath(path);
         PreviewSecond = new PreviewController(
             ServiceLocator.TryGet<IImageMetadataReader>(),
-            companionMetadata) { ShowFooter = false };
+            companionMetadata) { ShowFooter = false, ShowPictureBar = true };
         PreviewSecond.RatingRequested += (_, request) =>
-            request.Rating = ApplyRatingFromPane(request, wholeSelection: true);
+            request.Rating = ApplyRatingFromPane(request, wholeSelection: false);
         PreviewSecond.RevealRequested += (_, path) => RevealPath(path);
         // One RAW switch for both halves: it lives in the footer, and the
         // footer belongs to the selection, not to the upper picture.
@@ -701,6 +703,9 @@ public sealed class MainViewModel : ObservableObject {
         private set {
             if (SetField(ref _isPreviewSplit, value)) {
                 PreviewSecond.SetVisible(_isPreviewVisible && value);
+                // Split, the first picture's stars and levels move from the
+                // footer onto its own bar, as the second's are on its.
+                Preview.ShowPictureBar = value;
             }
         }
     }
@@ -712,6 +717,28 @@ public sealed class MainViewModel : ObservableObject {
     /// picture or has not been read.
     /// </summary>
     public (PictureShape? First, PictureShape? Second) PreviewPairShapes { get; private set; }
+
+    /// <summary>
+    /// A preview for pictures shown on their own - the full screen (PLAN
+    /// Q5): the window's helpers, surround and RAW switch; stars on its bar
+    /// that write to the picture it shows, not to the selection. The window
+    /// feeds it and lets it go (<see cref="PreviewController.Detach"/>).
+    /// </summary>
+    /// <param name="listing">What it decodes ahead from - the rows the window walks; null for a half of a pair.</param>
+    public PreviewController NewPictureViewer(Func<IReadOnlyList<FileSystemEntry>>? listing) {
+        var viewer = new PreviewController(ServiceLocator.TryGet<IImageMetadataReader>(), _companionMetadata) {
+            ShowFooter = false,
+            ShowPictureBar = true,
+            PictureBarSwitches = true,
+            Listing = listing,
+        };
+        viewer.RatingRequested += (_, request) => request.Rating = ApplyRatingFromPane(request, wholeSelection: false);
+        viewer.SetHelpers(Helpers);
+        viewer.SetPalette(ContentPalette);
+        viewer.ShowRawDecode = Preview.ShowRawDecode;
+
+        return viewer;
+    }
 
     /// <summary>
     /// User preferences. XAML binds to this (e.g. tile sizes) and the
@@ -3015,11 +3042,9 @@ public sealed class MainViewModel : ObservableObject {
     /// here; so does every star and swatch in the preview footer.
     /// </summary>
     public void SetRankForSelection(string? parameter) {
-        if (!int.TryParse(parameter, out int rank) || rank < 0 || rank > Pp3Sidecar.MaxRank) {
-            return;
+        if (int.TryParse(parameter, out int rank)) {
+            Rate(RatingTargets(), RatingField.Rank, rank);
         }
-
-        Ratings.Apply(RatingTargets(), RatingField.Rank, rank);
     }
 
     /// <summary>
@@ -3029,16 +3054,38 @@ public sealed class MainViewModel : ObservableObject {
     /// zero clears outright.
     /// </summary>
     public void SetColorForSelection(int color) {
-        if (color < 0 || color > ColorLabels.Max) {
+        Rate(RatingTargets(), RatingField.ColorLabel, color);
+    }
+
+    /// <summary>
+    /// A digit on a picture shown on its own - full screen (PLAN Q5): the
+    /// gallery's keys, for that one file rather than for the selection.
+    /// </summary>
+    public void RatePicture(FileSystemEntry picture, RatingField field, int digit) {
+        if (IsCurrentShellNamespace) {
             return;
         }
 
-        var targets = RatingTargets();
-        int value = color == 0
-            ? 0
-            : RatingToggle.Resolve(color, targets.Select(e => e.Rating?.ColorLabel));
+        // The row as the list has it now: the one a viewer holds can be a
+        // star behind.
+        Rate(new[] { Ratings.FindInSource(picture.FullPath) ?? picture }, field, digit);
+    }
 
-        Ratings.Apply(targets, RatingField.ColorLabel, value);
+    /// <summary>
+    /// A digit's worth of rating on <paramref name="targets"/>: stars are
+    /// set and 0 clears; a colour every target already carries comes off
+    /// again (<see cref="RatingToggle"/>). A digit past the scale does nothing.
+    /// </summary>
+    private void Rate(IReadOnlyList<FileSystemEntry> targets, RatingField field, int digit) {
+        int max = field == RatingField.Rank ? Pp3Sidecar.MaxRank : ColorLabels.Max;
+        if (digit < 0 || digit > max) {
+            return;
+        }
+
+        int value = field == RatingField.ColorLabel && digit > 0
+            ? RatingToggle.Resolve(digit, targets.Select(e => e.Rating?.ColorLabel))
+            : digit;
+        Ratings.Apply(targets, field, value);
     }
 
     /// <summary>

@@ -300,6 +300,10 @@
     <SolidColorBrush x:Key="ReviewSharp" Color="#C838E8"/>
     <SolidColorBrush x:Key="IconRing" Color="#9A9A9A"/>
 
+    <!-- Under the stars and switches a picture carries in its corner
+         (PLAN Q5): a dark tint of a fifth, the picture shows through. -->
+    <SolidColorBrush x:Key="PictureBarPlate" Color="#33000000"/>
+
     <!-- What the drag leaving Wander would do, on the plaque under the cursor. -->
     <SolidColorBrush x:Key="DragMove" Color="SteelBlue"/>
     <SolidColorBrush x:Key="DragCopy" Color="SeaGreen"/>

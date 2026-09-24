@@ -66,17 +66,17 @@ public partial class CompareWindow : Window {
         // so the panes do not start the other way round.
         Arrange(Width, Height);
 
-        // A held zoom looks at the same place of both; a text scrolled on
-        // one side scrolls the other.
-        PaneA.ZoomMoved += (_, at) => PaneB.FollowZoom(at);
-        PaneB.ZoomMoved += (_, at) => PaneA.FollowZoom(at);
+        // A held zoom looks at the same place of both - the right button
+        // held too moves one alone, to line them up; a text scrolled on one
+        // side scrolls the other.
+        PreviewPane.Link(PaneA, PaneB);
         PaneA.TextScrolled += (_, at) => PaneB.FollowTextScroll(at);
         PaneB.TextScrolled += (_, at) => PaneA.FollowTextScroll(at);
 
         App.ParkIfHeadless(this);
         Closed += (_, _) => {
-            _a.SetVisible(false);
-            _b.SetVisible(false);
+            _a.Detach();
+            _b.Detach();
             PaneA.ReleaseWebView();
             PaneB.ReleaseWebView();
         };

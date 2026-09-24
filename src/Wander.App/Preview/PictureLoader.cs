@@ -27,6 +27,13 @@ internal sealed record DecodedPicture(
 /// the decoded ones are kept by <see cref="PictureCache"/>.
 /// </summary>
 internal static class PictureLoader {
+    /// <summary>
+    /// How far the frame's shape in the EXIF may stray from the embedded
+    /// preview's before the two are taken for different pictures: rounding
+    /// to whole pixels, nothing more.
+    /// </summary>
+    private const double SameShape = 0.02;
+
     private static readonly HashSet<string> _jpeg = new(StringComparer.OrdinalIgnoreCase) {
         ".jpg", ".jpeg", ".jpe", ".jfif",
     };
@@ -59,7 +66,7 @@ internal static class PictureLoader {
             if (ImageDecoder.RawPreviewBytes(path, fullSize: false) is { } jpeg
                 && Fitted(ImageDecoder.StoredSize(jpeg), orientation, boxWidth, boxHeight,
                     whole => ImageDecoder.Stream(jpeg, whole)) is { } embedded) {
-                return embedded with { Meta = meta, IsRaw = true, Embedded = jpeg };
+                return WholeFrame(embedded, meta) with { Meta = meta, IsRaw = true, Embedded = jpeg };
             }
 
             ct.ThrowIfCancellationRequested();
@@ -156,6 +163,33 @@ internal static class PictureLoader {
         return new DecodedPicture(
             fit, null, false, null, Downscaled: true,
             turned ? whole.Height : whole.Width, turned ? whole.Width : whole.Height);
+    }
+
+    /// <summary>
+    /// A RAW's embedded preview capped at the frame the camera recorded, not
+    /// at its own pixels (2026-09-24). Full screen, a CR3's 1620-px preview
+    /// came up at 1620 and grew when the full JPEG landed a quarter of a
+    /// second later; drawn at the frame's size from the start, the picture
+    /// only sharpens then - and the sensor decode, when it comes, lands at
+    /// the same size too. The frame's size is the EXIF's, taken only when it
+    /// is bigger than the preview and of the same shape.
+    /// </summary>
+    private static DecodedPicture WholeFrame(DecodedPicture preview, ImageMetadata? meta) {
+        if (meta is not { PixelWidth: > 0, PixelHeight: > 0 }) {
+            return preview;
+        }
+
+        bool turned = meta.Orientation is >= 5 and <= 8;
+        int width = turned ? meta.PixelHeight.Value : meta.PixelWidth.Value;
+        int height = turned ? meta.PixelWidth.Value : meta.PixelHeight.Value;
+        double shape = width / (double)height;
+        double previewShape = preview.NaturalWidth / (double)preview.NaturalHeight;
+        if (width <= preview.NaturalWidth || height <= preview.NaturalHeight
+            || Math.Abs(shape - previewShape) > previewShape * SameShape) {
+            return preview;
+        }
+
+        return preview with { NaturalWidth = width, NaturalHeight = height };
     }
 
     private static DecodedPicture? Whole(BitmapImage? bitmap, int? orientation) {
