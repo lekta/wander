@@ -289,6 +289,18 @@ public class ActionCatalogTests {
     }
 
     [Fact]
+    public void DebugPresets_HoldFiles_NotFolders() {
+        // A folder cannot be opened as a stream: the hold is not offered on one.
+        var file = new FileSystemEntry("a.txt", @"C:\a.txt", EntryKind.File, 1, DateTime.MinValue, false, false, false, false);
+        var folder = new FileSystemEntry("sub", @"C:\sub", EntryKind.Directory, null, DateTime.MinValue, false, false, false, false);
+
+        Assert.All(ActionPresets.All.Where(p => p.DebugOnly), p => {
+            Assert.True(p.Types.Matches(file));
+            Assert.False(p.Types.Matches(folder));
+        });
+    }
+
+    [Fact]
     public void RawPreviews_LeadTheList() {
         Assert.Equal(
             new[] { "preset:raw-preview", "preset:raw-preview-full" },

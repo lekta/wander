@@ -36,7 +36,7 @@ internal static class ExecutableCard {
     }
 
 
-    /// <summary>"x64, консольная программа, .NET".</summary>
+    /// <summary>Processor, kind of program, .NET: "x64, console program, .NET" in the card's words.</summary>
     private static string? Platform(PeFacts? pe) {
         if (pe is null) {
             return null;

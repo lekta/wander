@@ -1051,7 +1051,11 @@ public partial class FileListView : UserControl {
             && Keyboard.Modifiers == ModifierKeys.None && Vm.RenamingPath is null
             && FullscreenRequested is not null
             && FullscreenPlan.Of(Vm.SelectedEntries, Vm.Entries, Vm.CaretPath) is { } plan) {
-            FullscreenRequested(this, plan);
+            // Not on a held key: full screen closes on its own Enter, and
+            // the repeat would open it again, and again.
+            if (!e.IsRepeat) {
+                FullscreenRequested(this, plan);
+            }
             e.Handled = true;
 
             return;

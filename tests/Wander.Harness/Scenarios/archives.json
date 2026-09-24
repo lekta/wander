@@ -121,16 +121,21 @@
     { "do": "note", "text": "look with your eyes on tree-archive.png: the tree highlights docs inside nested.zip, not the archives folder" },
 
     // --- The other formats --------------------------------------------
+    // "ifOpensAsFolder": with WinRAR or 7-Zip owning .rar / .gz the shell
+    // does not open them as folders, and Wander follows the association
+    // (2026-09-17). Such steps are reported as "skipped" with the reason
+    // instead of failing; they run again as soon as Wander opens the format
+    // itself, past the association (PLAN, block 6).
     { "do": "navigate", "path": "{sandbox}\\archives\\nested.7z" },
     { "do": "assert-entries", "count": 2, "contains": [ "docs", "readme.txt" ] },
-    { "do": "navigate", "path": "{sandbox}\\archives\\nested.tar.gz" },
-    { "do": "assert-entries", "min": 1 },
-    { "do": "navigate", "path": "{sandbox}\\archives\\nested.rar" },
-    { "do": "assert-entries", "count": 2, "contains": [ "docs", "readme.txt" ] },
+    { "do": "navigate", "path": "{sandbox}\\archives\\nested.tar.gz", "ifOpensAsFolder": "{sandbox}\\archives\\nested.tar.gz" },
+    { "do": "assert-entries", "min": 1, "ifOpensAsFolder": "{sandbox}\\archives\\nested.tar.gz" },
+    { "do": "navigate", "path": "{sandbox}\\archives\\nested.rar", "ifOpensAsFolder": "{sandbox}\\archives\\nested.rar" },
+    { "do": "assert-entries", "count": 2, "contains": [ "docs", "readme.txt" ], "ifOpensAsFolder": "{sandbox}\\archives\\nested.rar" },
     { "do": "navigate", "path": "{sandbox}\\archives" },
-    { "do": "tree-expand", "path": "{sandbox}\\archives\\nested.rar" },
-    { "do": "tree-expand", "path": "{sandbox}\\archives\\nested.rar\\docs", "expand": false },
-    { "do": "note", "text": "nested.rar is a row in the drives tree too and expands into docs - a .rar the tree had once missed in the wild (TECHDEBT)" },
+    { "do": "tree-expand", "path": "{sandbox}\\archives\\nested.rar", "ifOpensAsFolder": "{sandbox}\\archives\\nested.rar" },
+    { "do": "tree-expand", "path": "{sandbox}\\archives\\nested.rar\\docs", "expand": false, "ifOpensAsFolder": "{sandbox}\\archives\\nested.rar" },
+    { "do": "note", "text": "nested.rar is a row in the drives tree too and expands into docs - a .rar the tree had once missed in the wild (TECHDEBT)", "ifOpensAsFolder": "{sandbox}\\archives\\nested.rar" },
 
     // --- A solid RAR: the slow kind, six entries in one stream --------
     // The preview unpacks one entry at a time and keeps the copies, so
@@ -139,17 +144,17 @@
     // here; the log is left for the eye, and only the first unpacking of
     // text1.txt is asserted.
     { "do": "preview", "on": true },
-    { "do": "navigate", "path": "{sandbox}\\archives\\solid.rar" },
-    { "do": "assert-entries", "count": 6, "contains": [ "text1.txt", "text6.txt" ] },
-    { "do": "select", "names": [ "text1.txt" ] },
-    { "do": "wait-idle" },
-    { "do": "select", "names": [ "text2.txt" ] },
-    { "do": "wait-idle" },
-    { "do": "select", "names": [ "text1.txt" ] },
-    { "do": "wait-idle" },
-    { "do": "screenshot", "name": "preview-solid-rar" },
-    { "do": "assert-log", "scope": "all", "regex": "Extract \\(temporary copy\\): .*solid\\.rar\\\\text1\\.txt" },
-    { "do": "note", "text": "look in the log: text1.txt out of solid.rar was unpacked once, not twice - the second selection reused the copy; SLOW lines appear only if the shell took over five seconds" },
+    { "do": "navigate", "path": "{sandbox}\\archives\\solid.rar", "ifOpensAsFolder": "{sandbox}\\archives\\solid.rar" },
+    { "do": "assert-entries", "count": 6, "contains": [ "text1.txt", "text6.txt" ], "ifOpensAsFolder": "{sandbox}\\archives\\solid.rar" },
+    { "do": "select", "names": [ "text1.txt" ], "ifOpensAsFolder": "{sandbox}\\archives\\solid.rar" },
+    { "do": "wait-idle", "ifOpensAsFolder": "{sandbox}\\archives\\solid.rar" },
+    { "do": "select", "names": [ "text2.txt" ], "ifOpensAsFolder": "{sandbox}\\archives\\solid.rar" },
+    { "do": "wait-idle", "ifOpensAsFolder": "{sandbox}\\archives\\solid.rar" },
+    { "do": "select", "names": [ "text1.txt" ], "ifOpensAsFolder": "{sandbox}\\archives\\solid.rar" },
+    { "do": "wait-idle", "ifOpensAsFolder": "{sandbox}\\archives\\solid.rar" },
+    { "do": "screenshot", "name": "preview-solid-rar", "ifOpensAsFolder": "{sandbox}\\archives\\solid.rar" },
+    { "do": "assert-log", "scope": "all", "regex": "Extract \\(temporary copy\\): .*solid\\.rar\\\\text1\\.txt", "ifOpensAsFolder": "{sandbox}\\archives\\solid.rar" },
+    { "do": "note", "text": "look in the log: text1.txt out of solid.rar was unpacked once, not twice - the second selection reused the copy; SLOW lines appear only if the shell took over five seconds", "ifOpensAsFolder": "{sandbox}\\archives\\solid.rar" },
     { "do": "preview", "on": false },
 
     // --- A folder that is merely named like an archive ----------------

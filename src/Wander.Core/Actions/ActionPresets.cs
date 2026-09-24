@@ -173,11 +173,15 @@ public static class ActionPresets {
         };
     }
 
-    /// <summary>A debug hold of <paramref name="seconds"/>: any file, no output, no tool.</summary>
+    /// <summary>
+    /// A debug hold of <paramref name="seconds"/>: any file, no output, no
+    /// tool. Files only - the mask keeps it off folders, which a
+    /// <c>FileStream</c> cannot open.
+    /// </summary>
     private static CustomAction Hold(string id, int seconds) {
         return new CustomAction {
             Id = id,
-            Types = new FileTypeSelector(FileTypeGroup.All),
+            Types = new FileTypeSelector(FileTypeGroup.All, "*"),
             Kind = ActionKind.Builtin,
             Program = HoldFile,
             Arguments = $"{HoldFileAction.SecondsKey}={seconds}",

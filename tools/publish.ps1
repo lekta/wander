@@ -38,7 +38,9 @@ Write-Host "Publishing Wander (Release, portable single-file)..." -ForegroundCol
 # рабочая копия человека, и по номеру видно, какая именно. Всё остальное —
 # то, что уезжает пользователю: WanderRelease=true, четвёртое число 0,
 # версия названа тремя числами, как в гите.
-$release = if ($Install) { @() } else { @('-p:WanderRelease=true') }
+# @(...) around the if: an if used as a value unrolls a one-item array into a
+# bare string, and PowerShell 5.1 splats a string char by char.
+$release = @(if (-not $Install) { '-p:WanderRelease=true' })
 
 dotnet publish src\Wander.App `
     -c Release `

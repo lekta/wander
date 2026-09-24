@@ -18,6 +18,7 @@ using Wander.Core.Layout;
 using Wander.Core.Navigation;
 using Wander.Core.Panels;
 using Wander.Core.Persistence;
+using Wander.Core.Shell;
 using Wander.Core.Workspace;
 
 namespace Wander.Harness.Host;
@@ -74,6 +75,12 @@ public sealed class ScenarioRunner {
         for (int i = 0; i < scenario.Steps.Count; i++) {
             var step = scenario.Steps[i];
             string verb = step.Str("do") ?? "?";
+            if (NotOpenedAsFolderHere(step) is { } reason) {
+                _report.Step(i + 1, Describe(step), "skipped", 0, reason);
+                _log.Info($"HARNESS step {i + 1} skipped: {reason}");
+
+                continue;
+            }
             var clock = Stopwatch.StartNew();
             int logStart = _log.Count;
             _log.Info($"HARNESS step {i + 1}: {Describe(step)}");
@@ -1191,6 +1198,27 @@ public sealed class ScenarioRunner {
         // inside "...\wander-sandbox\formats".
         return full.Equals(root, StringComparison.OrdinalIgnoreCase)
             || full.StartsWith(root + "\\", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Why a step is not run on this machine, or null to run it. A step may
+    /// name an archive with <c>ifOpensAsFolder</c>: when WinRAR or 7-Zip owns
+    /// .rar or .gz, the shell does not open it as a folder and neither does
+    /// Wander, which follows the association - the step would fail for the
+    /// machine's reason, not the application's. The question goes to the
+    /// application rather than the registry, so the day Wander opens such
+    /// archives on its own (PLAN, block 6) the steps run again untouched.
+    /// </summary>
+    private string? NotOpenedAsFolderHere(JsonElement step) {
+        if (step.Str("ifOpensAsFolder") is not { } archive) {
+            return null;
+        }
+
+        string path = _context.Expand(archive);
+
+        return Archives.Of(path) is null
+            ? $"{Path.GetFileName(path)} does not open as a folder on this machine (association; see 'Archives open as folders' in the log)"
+            : null;
     }
 
     private string SaveScreenshot(string name) {

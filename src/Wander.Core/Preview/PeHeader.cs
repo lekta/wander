@@ -69,7 +69,9 @@ public static class PeHeader {
 
         int pe = BinaryPrimitives.ReadInt32LittleEndian(bytes[0x3C..]);
         // "PE\0\0", the 20-byte COFF header, and the optional header's magic.
-        if (pe < 0x40 || pe + 26 > bytes.Length
+        // Against the length minus 26, not the pointer plus 26: a pointer
+        // near int.MaxValue would wrap round and pass.
+        if (pe < 0x40 || pe > bytes.Length - 26
             || bytes[pe] != 'P' || bytes[pe + 1] != 'E' || bytes[pe + 2] != 0 || bytes[pe + 3] != 0) {
             return null;
         }

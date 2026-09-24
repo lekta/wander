@@ -755,8 +755,10 @@ public partial class MainWindow : Window {
         // zone handles its own: the search box, the address bar, the trees.
         // Don't mark handled — those handlers run after this one. The rename
         // editor is handled by the guard above, because clearing the
-        // selection first would be destructive.
-        if (e.Key == Key.Escape && ZoneOf(Keyboard.FocusedElement) is WindowZone.FileList or null) {
+        // selection first would be destructive. Not on a held key: Esc that
+        // closed full screen goes on repeating here, and a pair or a walked
+        // selection comes back from full screen as it was.
+        if (e.Key == Key.Escape && !e.IsRepeat && ZoneOf(Keyboard.FocusedElement) is WindowZone.FileList or null) {
             FileList.ClearSelection();
         }
     }

@@ -52,11 +52,17 @@ public static class TgaDecoder {
         }
 
         int at = HeaderSize + idLength;
+        if (at > file.Length) {
+            return null;
+        }
+
         byte[]? palette = null;
         if (mapType == 1) {
             int entryBytes = (mapDepth + 7) / 8;
             int mapBytes = mapLength * entryBytes;
-            if (entryBytes is < 2 or > 4 || at + mapBytes > file.Length) {
+            // The depths Color reads. 9 to 14 bits round up to two bytes,
+            // and Color would look for a third one.
+            if (mapDepth is not (15 or 16 or 24 or 32) || at + mapBytes > file.Length) {
                 return null;
             }
             // The map as BGRA, indexed from mapFirst.
@@ -68,10 +74,19 @@ public static class TgaDecoder {
         }
 
         int pixelBytes = (depth + 7) / 8;
-        var pixels = new byte[width * height * 4];
         int count = width * height;
-        int written = 0;
         var source = file[at..];
+        // Bytes enough for the pixels the header promises, before the buffer
+        // for them is made: eighteen bytes of header must not cost a
+        // gigabyte. A run-length packet holds at most 128 pixels, in no
+        // fewer than one byte of its own and one pixel.
+        long least = rle ? (count + 127L) / 128 * (1 + pixelBytes) : (long)count * pixelBytes;
+        if (source.Length < least) {
+            return null;
+        }
+
+        var pixels = new byte[count * 4];
+        int written = 0;
         int read = 0;
         Span<byte> one = stackalloc byte[4];
         while (written < count) {

@@ -1041,7 +1041,7 @@
                              IsReadOnly="True"
                              FontFamily="Consolas" FontSize="11"
                              Background="Transparent" BorderThickness="0"
-                             AcceptsReturn="True" TextWrapping="NoWrap"
+                             AcceptsReturn="True" TextWrapping="{Binding TextWrap}"
                              VerticalScrollBarVisibility="Auto"
                              HorizontalScrollBarVisibility="Auto"
                              Padding="6"/>

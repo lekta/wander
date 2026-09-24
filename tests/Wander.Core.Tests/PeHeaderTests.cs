@@ -40,6 +40,15 @@ public class PeHeaderTests {
         Assert.Null(PeHeader.Parse(bytes));
     }
 
+    /// <summary>A pointer this close to int.MaxValue wrapped round in "pointer + 26" and read past the buffer.</summary>
+    [Fact]
+    public void PointerNearIntMax_Null() {
+        var bytes = Pe(machine: 0x8664, wide: true, subsystem: 3, dll: false, clr: false);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(0x3C), int.MaxValue - 10);
+
+        Assert.Null(PeHeader.Parse(bytes));
+    }
+
     [Fact]
     public void CoreAssembly_DotNetLibrary() {
         using var file = File.OpenRead(typeof(PeHeader).Assembly.Location);

@@ -68,6 +68,46 @@ public sealed class ContentSearchService {
     }
 
 
+    /// <summary>
+    /// A document's text for the preview pane (PLAN B5): the same
+    /// extractors and cache the search reads it with, the format-specific
+    /// ones only - the catch-all would show a binary as text. Null when
+    /// none claims the file or the one that did could not read it.
+    /// </summary>
+    public string? DocumentText(FileSystemEntry entry, CancellationToken token) {
+        long size = entry.Size ?? 0;
+        if (_cache.Get(entry.FullPath, size, entry.ModifiedUtc) is { } cached) {
+            return cached;
+        }
+
+        foreach (var extractor in _extractors) {
+            token.ThrowIfCancellationRequested();
+            if (!extractor.IsExpensive || !extractor.CanExtract(entry.FullPath)) {
+                continue;
+            }
+
+            string? text;
+            try {
+                text = extractor.Extract(entry.FullPath, token);
+            } catch (OperationCanceledException) {
+                throw;
+            } catch (Exception ex) {
+                _log.Warn($"Extractor {extractor.GetType().Name} failed on {entry.FullPath}: {ex.Message}");
+
+                return null;
+            }
+            if (text is not null) {
+                _cache.Put(entry.FullPath, size, entry.ModifiedUtc, text);
+            }
+
+            // The first that claims the file answers for it, as in a search.
+            return text;
+        }
+
+        return null;
+    }
+
+
     private SearchOutcome Run(
         SearchRequest request,
         Action<IReadOnlyList<SearchHit>> onBatch,
@@ -239,46 +279,6 @@ public sealed class ContentSearchService {
         }
 
         return hits;
-    }
-
-
-    /// <summary>
-    /// A document's text for the preview pane (PLAN B5): the same
-    /// extractors and cache the search reads it with, the format-specific
-    /// ones only - the catch-all would show a binary as text. Null when
-    /// none claims the file or the one that did could not read it.
-    /// </summary>
-    public string? DocumentText(FileSystemEntry entry, CancellationToken token) {
-        long size = entry.Size ?? 0;
-        if (_cache.Get(entry.FullPath, size, entry.ModifiedUtc) is { } cached) {
-            return cached;
-        }
-
-        foreach (var extractor in _extractors) {
-            token.ThrowIfCancellationRequested();
-            if (!extractor.IsExpensive || !extractor.CanExtract(entry.FullPath)) {
-                continue;
-            }
-
-            string? text;
-            try {
-                text = extractor.Extract(entry.FullPath, token);
-            } catch (OperationCanceledException) {
-                throw;
-            } catch (Exception ex) {
-                _log.Warn($"Extractor {extractor.GetType().Name} failed on {entry.FullPath}: {ex.Message}");
-
-                return null;
-            }
-            if (text is not null) {
-                _cache.Put(entry.FullPath, size, entry.ModifiedUtc, text);
-            }
-
-            // The first that claims the file answers for it, as in a search.
-            return text;
-        }
-
-        return null;
     }
 
 

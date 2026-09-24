@@ -93,6 +93,38 @@ public class TgaDecoderTests {
         Assert.Null(TgaDecoder.Decode(file));
     }
 
+    /// <summary>12-bit entries are two bytes each; reading them as 24-bit colours went past the entry.</summary>
+    [Fact]
+    public void ColourMapOfAnOddDepth_Null() {
+        var header = Header(type: 1, depth: 8, width: 1, height: 1, descriptor: 0x20);
+        header[1] = 1;      // a colour map
+        header[5] = 1;      // one entry
+        header[7] = 12;     // of 12 bits
+        var file = Concat(header, new byte[] { 1, 2 }, new byte[] { 0 });
+
+        Assert.Null(TgaDecoder.Decode(file));
+    }
+
+    [Fact]
+    public void IdFieldPastTheEnd_Null() {
+        var file = Tga(type: 2, depth: 24, width: 1, height: 1, descriptor: 0, _red);
+        file[0] = 200;      // an image id longer than the whole file
+
+        Assert.Null(TgaDecoder.Decode(file));
+    }
+
+    /// <summary>A header that promises 16k x 16k with nothing after it is refused before the buffer for the pixels is made.</summary>
+    [Fact]
+    public void HeaderAlone_ForAHugePicture_Null() {
+        foreach (int type in new[] { 2, 10 }) {
+            var header = Header(type, depth: 32, width: 0, height: 0, descriptor: 0x20);
+            header[13] = 0x40;  // 16384 wide
+            header[15] = 0x40;  // and high
+
+            Assert.Null(TgaDecoder.Decode(header));
+        }
+    }
+
 
     private static byte[] Tga(int type, int depth, int width, int height, int descriptor, byte[] data) {
         return Concat(Header(type, depth, width, height, descriptor), data);

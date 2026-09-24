@@ -39,6 +39,14 @@ public class PictureWalkTests {
         Assert.Equal(3, PictureWalk.Step(without, Path("b.cr3"), 2, +1));
     }
 
+    /// <summary>The row that took the place is a picture itself: forward lands on it, not past it.</summary>
+    [Fact]
+    public void GoneFromTheList_ForwardLandsOnThePictureInItsPlace() {
+        var without = _rows.Where(r => r.Name != "c.gif").ToArray();
+
+        Assert.Equal(4, PictureWalk.Step(without, Path("c.gif"), 4, +1));
+    }
+
     [Fact]
     public void GoneFromTheList_BackGoesToTheRowBefore() {
         var without = _rows.Where(r => r.Name != "c.gif").ToArray();

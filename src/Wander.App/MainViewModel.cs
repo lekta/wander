@@ -724,7 +724,7 @@ public sealed class MainViewModel : ObservableObject {
     /// that write to the picture it shows, not to the selection. The window
     /// feeds it and lets it go (<see cref="PreviewController.Detach"/>).
     /// </summary>
-    /// <param name="listing">What it decodes ahead from - the rows the window walks; null for a half of a pair.</param>
+    /// <param name="listing">What it decodes ahead from - the rows the window walks, for either half of a pair too.</param>
     public PreviewController NewPictureViewer(Func<IReadOnlyList<FileSystemEntry>>? listing) {
         var viewer = new PreviewController(ServiceLocator.TryGet<IImageMetadataReader>(), _companionMetadata) {
             ShowFooter = false,

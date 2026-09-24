@@ -96,7 +96,7 @@ public sealed class HarnessApp : Wander.App.App {
 
         report.Write(_log, _dialogs);
         RunJournal.Append(
-            _context.Scenario.Name, report.Passed, _context.Scenario.Steps.Count, _clock.Elapsed,
+            _context.Scenario.Name, report.Passed, _context.Scenario.Steps.Count - report.Skipped, _clock.Elapsed,
             code switch { 0 => "ok", 2 => "fail", _ => "crash" });
         // The exit question would be answered by policy, but its "no" is
         // what WPF ignores during Shutdown: running operations are stopped

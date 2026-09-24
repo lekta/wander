@@ -12,7 +12,7 @@ namespace Wander.App.Converters;
 /// Why XAML-binding instead of code-behind: a <c>DependencyPropertyDescriptor</c>
 /// hook on <c>Image.SourceProperty</c> fires after WPF's first measure pass
 /// for that Source, so the layout briefly sees an unconstrained Image and
-/// stretches small bitmaps. A binding participates in measure directly —
+/// stretches small bitmaps. A binding participates in measure directly -
 /// the cap is in place the first time WPF asks for the desired size, no race.
 ///
 /// <para>

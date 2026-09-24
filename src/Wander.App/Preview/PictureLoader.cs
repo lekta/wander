@@ -19,7 +19,19 @@ namespace Wander.App.Preview;
 /// <param name="NaturalHeight">Same.</param>
 internal sealed record DecodedPicture(
     BitmapSource Fit, ImageMetadata? Meta, bool IsRaw, byte[]? Embedded, bool Downscaled,
-    int NaturalWidth, int NaturalHeight);
+    int NaturalWidth, int NaturalHeight) {
+    /// <summary>
+    /// The frame the camera recorded, when it is bigger than the embedded
+    /// preview the fit came from (<c>PictureLoader.WholeFrame</c>); 0
+    /// otherwise. The cap only while a frame that big is on its way - a
+    /// CR3's full JPEG, the sensor decode; a preview that is all there is
+    /// stays at its own size.
+    /// </summary>
+    public int FrameWidth { get; init; }
+
+    /// <summary>Same as <see cref="FrameWidth"/>.</summary>
+    public int FrameHeight { get; init; }
+}
 
 
 /// <summary>
@@ -166,13 +178,16 @@ internal static class PictureLoader {
     }
 
     /// <summary>
-    /// A RAW's embedded preview capped at the frame the camera recorded, not
-    /// at its own pixels (2026-09-24). Full screen, a CR3's 1620-px preview
+    /// A RAW's embedded preview with the frame the camera recorded beside
+    /// its own pixels (2026-09-24). Full screen, a CR3's 1620-px preview
     /// came up at 1620 and grew when the full JPEG landed a quarter of a
-    /// second later; drawn at the frame's size from the start, the picture
+    /// second later; capped at the frame's size from the start, the picture
     /// only sharpens then - and the sensor decode, when it comes, lands at
-    /// the same size too. The frame's size is the EXIF's, taken only when it
-    /// is bigger than the preview and of the same shape.
+    /// the same size too. Whether a frame that big is coming is the
+    /// controller's to say (ShowPicture): a RAW with nothing bigger than
+    /// its small preview stays at the preview's size, not stretched soft.
+    /// The frame's size is the EXIF's, taken only when it is bigger than
+    /// the preview and of the same shape.
     /// </summary>
     private static DecodedPicture WholeFrame(DecodedPicture preview, ImageMetadata? meta) {
         if (meta is not { PixelWidth: > 0, PixelHeight: > 0 }) {
@@ -189,7 +204,7 @@ internal static class PictureLoader {
             return preview;
         }
 
-        return preview with { NaturalWidth = width, NaturalHeight = height };
+        return preview with { FrameWidth = width, FrameHeight = height };
     }
 
     private static DecodedPicture? Whole(BitmapImage? bitmap, int? orientation) {

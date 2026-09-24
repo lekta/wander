@@ -68,6 +68,7 @@ public partial class FullscreenWindow : Window {
         }
         UpdateTitle();
         vm.Entries.CollectionChanged += OnEntriesChanged;
+        vm.Ratings.CompanionsChanged += OnRatingsWritten;
 
         // Maximised on the monitor it was placed on: the owner's. Not in a
         // headless run - maximising would bring a parked window on screen.
@@ -80,6 +81,7 @@ public partial class FullscreenWindow : Window {
         Closed += (_, _) => {
             _closed = true;
             vm.Entries.CollectionChanged -= OnEntriesChanged;
+            vm.Ratings.CompanionsChanged -= OnRatingsWritten;
             StopPeeking();
             _mainViewer.Detach();
             _sideViewer?.Detach();
@@ -416,6 +418,20 @@ public partial class FullscreenWindow : Window {
     }
 
     private void OnEntriesChanged(object? sender, NotifyCollectionChangedEventArgs e) {
+        ScheduleRefresh();
+    }
+
+    /// <summary>
+    /// A rating was written. The list says so too, but not about a row the
+    /// rating filter hides and goes on hiding: a picture already out of the
+    /// filter, rated again, changes nothing on the list.
+    /// </summary>
+    private void OnRatingsWritten(object? sender, EventArgs e) {
+        ScheduleRefresh();
+    }
+
+    /// <summary>Once for a burst: a rating written is a row replaced and a companion changed.</summary>
+    private void ScheduleRefresh() {
         if (_rowsPending) {
             return;
         }

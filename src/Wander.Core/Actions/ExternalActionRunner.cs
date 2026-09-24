@@ -171,7 +171,7 @@ public sealed class ExternalActionRunner {
         try {
             if (action.Kind == ActionKind.Builtin) {
                 await RunBuiltinAsync(action, primary, output, ct).ConfigureAwait(false);
-                _log.Info($"Action '{title}': {primary} -> {output} [Ok, {Elapsed(started)}]");
+                _log.Info($"Action '{title}': {primary} -> {output ?? "(no declared output)"} [Ok, {Elapsed(started)}]");
 
                 return new ActionItemResult(primary, output, BatchItemStatus.Ok, 0, string.Empty, null);
             }

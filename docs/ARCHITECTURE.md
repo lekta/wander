@@ -60,6 +60,7 @@ src/
 │   │                   DesktopIni
 │   ├── Icons/          IIconProvider, IImageMetadataReader, IconSize, ImageMetadata,
 │   │                   ImageFormats, RawPreviewExtractor, ThumbnailCacheOptions
+│   ├── Imaging/        хелперы отсмотра (раздел ниже), PictureFit, TgaDecoder
 │   ├── Layout/         TileLayout, TileMetrics, GridNavigation,
 │   │                   WindowZones, WindowPlacement, DragHover, EdgeScroll
 │   ├── Listing/        FolderSession, ListingDiff, ArrivalIntent, ListingArrival
@@ -77,7 +78,9 @@ src/
 │   │                   PanelKeyNavigation, TreeNavThrottle, BranchReconcile, Pane
 │   ├── Persistence/    IAppStateStore, AppState, AppSettings, GalleryBackground
 │   ├── Preview/        PreviewRouter, TextProbe, EncodingProbe, AudioTags,
-│   │                   BookCover, Fb2Document, MeshFile + Obj/Stl/GltfReader
+│   │                   BookCover, Fb2Document, MeshFile + Obj/Stl/GltfReader,
+│   │                   PreviewNeighbors, TextFind, PeHeader + ExecutableInfo,
+│   │                   SplitOrientation, FullscreenPlan, PictureWalk, ZoomLink
 │   ├── Search/         ContentSearchService, IContentExtractor, ContentMatcher,
 │   │                   NameFilter, SearchExpression, SearchRequest, SearchHit,
 │   │                   SearchScope, BinaryTextSearch, ExtractedTextCache
@@ -96,9 +99,10 @@ src/
 │   ├── FileSystem/     SystemIOFileSystem, ShellRecycleBin, WindowsKnownFolders,
 │   │                   WindowsClipboard, WindowsDirectoryWatcher,
 │   │                   WindowsFileBusyProbe
-│   ├── Icons/          SystemIconProvider, MetadataExtractorImageReader
+│   ├── Icons/          SystemIconProvider, MetadataExtractorImageReader, TgaThumbnail
 │   ├── Logging/        FileLogger
 │   ├── Persistence/    JsonAppStateStore
+│   ├── Preview/        WindowsExecutableInfo
 │   ├── Search/         FilterTextExtractor, NativeFilter
 │   ├── Shell/          ShellLauncher, ShellShortcutService, WindowsShellNamespace,
 │   │                   ShellContextMenu, ShellContextMenuInterop, ShellMenuIcons
@@ -107,7 +111,7 @@ src/
 └── Wander.App/
     ├── Conflict/       ConflictWindow (+ ConflictWindowViewModel,
     │                   ConflictRowViewModel), DispatcherConflictResolver,
-    │                   InteractiveConflictResolver
+    │                   InteractiveConflictResolver, IPairViewer
     ├── Controllers/    WorkspaceController, NavigationController, PreviewController,
     │                   RatingsController, BookmarksController, FolderTreesController,
     │                   ContentSearchController, SearchResultsController,
@@ -126,7 +130,8 @@ src/
     ├── Highlighting/   HighlightingCatalog + *.xshd
     ├── Menu/           ContextMenuFactory, ShellMenuCache
     ├── Preview/        ImageDecoder, ModelBuilder + ModelScene, PreviewText,
-    │                   SummaryText — раскодирование для панели просмотра
+    │                   SummaryText, PictureLoader, PictureCache, ExecutableCard
+    │                   — раскодирование для панели просмотра
     ├── Resources/      Strings*.resx, AppTextSource, MenuStyles, Palette
     ├── Util/           SelectionController, ListVisuals, SizeFormatter,
     │                   NumberFormat, TimeFormat, DurationFormat,
@@ -138,7 +143,8 @@ src/
     │                   GalleryPalette, ObservableObject,
     │                   ViewMode, PreviewKind, DropEffect
     ├── Views/          FileListView, FolderTreesView, PreviewPane, SearchWindow,
-    │                   SettingsWindow, ShellScopePicker, ProgressDialog
+    │                   SettingsWindow, ShellScopePicker, ProgressDialog,
+    │                   FullscreenWindow, CompareWindow
     ├── MainViewModel.cs — при окне, не в ViewModels/ (см. «Окно и его контролы»)
     ├── MainWindow.xaml(.cs)
     └── App.xaml(.cs)
@@ -157,13 +163,13 @@ Platform.Windows` — один файл, `App.xaml.cs` (точка композ�
 <!-- deps:generated:begin -->
 ```
 === Wander dependency graph (using sweep) ===
-date   : 2026-09-23
-commit : 4845b8f
+date   : 2026-09-24
+commit : 3b52b5d
 
 -- projects --
 Wander.App -> Wander.Core   (71 files)
 Wander.App -> Wander.Platform.Windows   (1 files)
-Wander.Core.Tests -> Wander.Core   (144 files)
+Wander.Core.Tests -> Wander.Core   (148 files)
 Wander.Harness -> Wander.App   (4 files)
 Wander.Harness -> Wander.Core   (6 files)
 Wander.Harness -> Wander.Platform.Windows   (3 files)
@@ -206,7 +212,7 @@ Wander.Platform.Windows -> Wander.Core   (35 files)
   Persistence    -> Folders        (2 files)
   Persistence    -> Navigation     (1 files)
   Persistence    -> Rename         (1 files)
-  Preview        -> FileSystem     (7 files)
+  Preview        -> FileSystem     (9 files)
   Preview        -> Icons          (1 files)
   Rename         -> Companions     (1 files)
   Rename         -> FileSystem     (2 files)
@@ -224,7 +230,7 @@ Wander.Platform.Windows -> Wander.Core   (35 files)
   Workspace      -> Layout         (7 files)
   Workspace      -> Listing        (5 files)
   Workspace      -> Menu           (1 files)
-  Workspace      -> Navigation     (5 files)
+  Workspace      -> Navigation     (4 files)
   Workspace      -> Panels         (8 files)
   Workspace      -> Preview        (1 files)
 
@@ -304,7 +310,8 @@ Wander.Platform.Windows -> Wander.Core   (35 files)
   Views          -> Dialogs        (3 files)
   Views          -> DragPreview    (1 files)
   Views          -> Highlighting   (1 files)
-  Views          -> Resources      (7 files)
+  Views          -> Preview        (1 files)
+  Views          -> Resources      (8 files)
   Views          -> Util           (3 files)
   Views          -> ViewModels     (8 files)
 
@@ -1421,12 +1428,13 @@ false — набор в `SearchController`; true — `Query` очищается,
   только при скрытой консоли, `Kill(entireProcessTree)`. Встроенные
   обработчики — `IBuiltinAction` по имени в `Program`; выход у них
   необязателен (`output` = null) — действие может не производить файла.
-- **Отладочные действия** (PLAN AI2, 2026-09-22) — `CustomAction.DebugOnly`:
+- **Отладочные действия** (AI2, 2026-09-22) — `CustomAction.DebugOnly`:
   строка каталога, которую меню показывают только при включённом меню
   отладки (`ContextMenuTarget.ShowDebug` из `Settings.ShowDebugMenu`), а
   таблица настроек не показывает вовсе (`SettingsViewModel`, `_debugActions`;
   в `state.json` такие строки не попадают). Сейчас их две — `HoldFileAction`
-  (Core): держит выделенный файл `FileShare.None` 5 или 30 секунд. Занятость
+  (Core): держит выделенный файл `FileShare.None` 5 или 30 секунд; маска `*`
+  — только файлы, папку поток не откроет. Занятость
   получается настоящая, вместе со всем, что раннер и так делает: заявка
   путей (`PathClaims`), прогресс, часы на значке, отказ другой операции,
   `IFileBusyProbe` и Restart Manager с Wander в держателях.
@@ -2029,12 +2037,13 @@ a₁·a₂ > r². Форма — из заголовков (`PictureLoader.Shape
 | `Gif` | `Controls/GifImage` |
 | `Video` | `MediaElement` |
 | `Audio` | тот же транспорт, карточка трека; играет `MediaPlayer` |
-| `Text` | `TextBox` |
+| `Text` | `TextBox`; документ текстом — с переносом (`TextWrap`) |
 | `Code` | AvalonEdit |
 | `Document` | `RichTextBox` (RTF) |
 | `Web` | WebView2 — PDF / HTML / MHTML / Markdown / FB2 |
 | `Model` | `Viewport3D` — STL / OBJ / glTF / GLB |
 | `Folder` | перепись + блок тома на корне |
+| `Executable` | карточка программы: значок, строки `ExecutableCard` |
 
 - `Audio` и `Video` делят `MediaUri` и транспорт (второй — копия автомата).
   Проигрыватель разный обязательно: `MediaElement` работает, пока его
@@ -2071,10 +2080,72 @@ a₁·a₂ > r². Форма — из заголовков (`PictureLoader.Shape
   виден левый во весь экран. Панель прозрачна, пока её контроллер ничего
   не показывает (`Kind` None и не `IsLoading`): первое декодирование не
   показывает «выберите файл». Строки после оценки берутся заново
-  (`RatingsController.FindInSource` — находит и скрытую фильтром).
+  (`RatingsController.FindInSource` — находит и скрытую фильтром) по
+  `Entries.CollectionChanged` и `Ratings.CompanionsChanged`: строка, которая
+  была скрыта фильтром и скрытой осталась, список не меняет. Окно
+  закрывается на KeyDown, и автоповтор держащей клавиши уходит в главное:
+  `Enter` / `Space` в галерее и `Esc` в списке с `IsRepeat` ничего не
+  делают — иначе окно открывалось бы снова, а выделение пары снималось.
 - **Отступ картинки** — `PreviewPane.PictureMargin` (DP, 4 px, на полном
   экране 0): на него смотрят `ImgFit`, `ImgOverlay`, `GifPreview`, размер
   декода (`ReportViewport`) и зум (`UpdateZoomPosition`, ось без прокрутки).
+- **Декод под поле и соседи** (AK, 2026-09-22). Поле — `SetViewport`:
+  место под картинку минус отступ, в пикселях устройства, с шагом
+  `BoxStep` = 64. `PictureLoader.Decode` (App, на пуле): JPEG и встроенный
+  JPEG у RAW — под поле (`PictureFit.DecodeWidth`, Core, тест: от 95 % поля
+  — целиком; масштаб в DCT), остальное целиком; выход — `DecodedPicture`
+  (вписанный кадр, натуральный размер, кадр камеры, встроенный JPEG, признак
+  «уменьшен»). Поле выросло мимо кадра — перерез через `BoxSettleMs` = 300
+  (`PictureFit.TooSmall`). `PictureCache` — три кадра, UI-поток, ключ путь +
+  время + размер + поле; соседи — `PreviewNeighbors.Of` (Core, тест: выше и
+  ниже, только картинки, первым — по направлению движения), по одному после
+  показа (`DecodeNeighborsAsync`, отмена вместе с загрузкой) и только для
+  кадра из своей строки: цель ярлыка и копия записи архива декодируются
+  каждый раз, а соседи записи — пути внутри архива. Серия — смена чаще
+  `BurstMs` = 150: промах кэша ждёт `BurstDelayMs` = 90. `preview.shown` —
+  от смены выделения до показа, раз на смену (`_shownMeasured`): перерез,
+  RAW и показ панели — не смена. Бюджета в байтах у кэша нет — PLAN AK.
+- **DPI** (AM, 2026-09-22): `BitmapPixelSizeConverter` —
+  `IMultiValueConverter`, пиксели картинки ÷ `PreviewPane.DpiScale`
+  (обновляется на `Loaded` и `OnDpiChanged`) для `ImgFit`, `GifPreview`,
+  обложки аудио; `MagnifierCursor` — `scaleWithDpi`. Крупная миниатюра —
+  `ThumbnailCacheOptions.SideFor` по системному масштабу
+  (`MainViewModel.ApplyThumbnailCacheSettings`, `GetDpi` от
+  `DrawingVisual`), не по монитору окна; ключ диска — `v2s{side}`, когда
+  сторона не 256.
+- **Карточка программы** (B7, 2026-09-22): `PreviewRoute.Executable` →
+  `LoadExecutableAsync` (пул) → `IExecutableInfoReader` (Core) ←
+  `WindowsExecutableInfo` (Platform): `FileVersionInfo`, `PeHeader.Parse`
+  (Core, тест: первые 4 КБ — машина, подсистема, DLL, CLR-каталог),
+  `WinVerifyTrust` без UI и сети (`WTD_REVOKE_NONE`,
+  `CACHE_ONLY_URL_RETRIEVAL`; `TRUST_E_NOSIGNATURE` — «нет подписи», иной
+  код — «не подтверждается»; каталожные подписи не смотрятся) →
+  `ExecutableCard.Facts` (App, подписи из ресурсов, пустое не пишется).
+  `WinVerifyTrust` хэширует весь файл — PLAN, B7-хвост.
+- **Документ текстом** (B5, 2026-09-22): `PreviewRoute.DocumentText` →
+  `ContentSearchService.DocumentText` — только форматные («дорогие»)
+  экстракторы: общий текстовый показал бы бинарник буквами; кэш общий с
+  поиском → `Kind = Text`, `TextWrap = Wrap`, пометка первой строкой.
+  `ZipDocumentExtractor` ставит `\n` после элементов с локальными именами
+  `_lineEnds` (p, h, h1–h6, li, tr, table-row, row, si, br — по одному
+  списку на все форматы, не разбор каждого; 2026-09-24): и в панели абзац
+  — строка, и сниппет поиска — строка абзаца.
+- **Поиск в тексте** (B6, 2026-09-22): `TextFind` (Core, тест) — смещения,
+  первое от каретки, шаг по кругу. `PreviewPane`: `FindBar`, совпадения —
+  смещения в тексте и коде, диапазоны в RTF (по run'ам: через смену
+  формата не находится); `ForgetMatches` на смене `Text`, `CodeText`,
+  `DocumentPath` (2026-09-24: старые смещения выделяли за концом нового
+  текста); RTF, дочитанный после конца загрузки, ищется заново в
+  `LoadDocumentAsync`. Подхват — `PreviewController.FindRequest` в конце
+  загрузки, запрос даёт `FindTextFor` (`MainViewModel`: строка с
+  `MatchSnippet` и `ContentSearch.TextQuery`). `MainWindow`: `Ctrl+F` —
+  сначала `OpenFind` панелей (вторая половина сплита вложена в первую и
+  отвечает сама — `SecondSlot`), иначе поле фильтра.
+- **TGA** (B8, 2026-09-22): `TgaDecoder` (Core, тест) → `BgraImage`, до
+  выделения буфера проверяет палитру, поле id и объём данных; панель —
+  `ImageDecoder.Tga` (`BitmapSource.Create`, Bgra32), миниатюры —
+  `TgaThumbnail` (Platform, WinRT-кодер PNG, файлы до 64 МБ); `.tga` в
+  `ImageFormats.All`.
 - **`PreviewRouter`** (Core) — «расширение → `PreviewRoute`», без диска;
   `Route` (каким загрузчиком) ≠ `Kind` (каким контролом): Markdown, FB2, PDF
   — три пути в один WebView2. Таблица — **порядок правил**: `.webp` —
@@ -2100,8 +2171,9 @@ a₁·a₂ > r². Форма — из заголовков (`PictureLoader.Shape
 - **`App/Preview/`**: `ImageDecoder` (кэш URI, обложка в размер, встроенное
   превью RAW, поворот по EXIF), `ModelBuilder` + `ModelScene` (Core →
   `MeshGeometry3D`, центр и радиус), `PreviewText` (бюджет, кодировка,
-  обрезка, Markdown, HTML-обёртка), `SummaryText` (подпись). Контроллеру —
-  конвейер.
+  обрезка, Markdown, HTML-обёртка), `SummaryText` (подпись), `PictureLoader`
+  (декод под поле), `PictureCache`, `ExecutableCard` (строки карточки).
+  Контроллеру — конвейер.
 - **Ярлык прозрачен**: `.lnk` резолвится `IShortcutService`, рисуется цель;
   `LinkTarget` в футере и «Перейти к оригиналу» → `MainViewModel.RevealPath`
   (`_revealPathAfterListing`, `ApplyPendingReveal`; в той же папке — сразу).
@@ -2140,11 +2212,14 @@ a₁·a₂ > r². Форма — из заголовков (`PictureLoader.Shape
   вертикальных кадрах, их панель рисует крупнее. Одинаковые байты (форматы
   с одним JPEG) второй раз не декодируются; зум под сменой картинки —
   `PreviewPane.RefreshImageZoom`. Предел вписанного (`ImageCapWidth` /
-  `Height`) — размер всего кадра из EXIF, не превью
-  (`PictureLoader.WholeFrame`, 2026-09-24: больше превью и той же формы в
-  пределах 2 %): иначе на полном экране CR3 вырастал с 1620 px, когда
-  приходил большой JPEG, а так превью сразу растянуто и только
-  дорезчивается. Отложенный рефит под новый размер области
+  `Height`) у RAW — размер всего кадра из EXIF (`DecodedPicture.FrameWidth`,
+  `PictureLoader.WholeFrame`, 2026-09-24: больше превью и той же формы в
+  пределах 2 %), но только пока кадр такого размера придёт — решает
+  `ShowPicture`: большой JPEG CR3 (`bigger`) или декод с матрицы
+  (`decode`). Иначе на полном экране CR3 вырастал с 1620 px, когда приходил
+  большой JPEG, а так превью сразу растянуто и только дорезчивается; у RAW
+  с одним маленьким превью (ARW, RAF, часть DNG) предел — само превью: ему
+  нечем дорезчиться, растянутое осталось бы мыльным. Отложенный рефит под новый размер области
   (`SetViewport` → `RefitWhenSettledAsync`) переспрашивает `TooSmall` в
   момент срабатывания: большой JPEG мог уже лечь. Миниатюрам —
   только быстрый. Размеры в футере из EXIF. **Панель между картинками не
@@ -2381,8 +2456,9 @@ Wander` — так задумано, отдельной папки для отл
 `AppState.Version` — форма файла (`AppState.CurrentVersion`, сейчас 1,
 2026-09-22): поднимается, когда изменение потерялось бы или было бы
 прочитано неверно старой сборкой. Файл более новой формы старая сборка
-**не перезаписывает** (`JsonAppStateStore.Save`), читает как обычно; полное
-правило «кто пишет, когда на машине несколько версий» — PLAN AD11.
+**не перезаписывает** (`JsonAppStateStore.Save`), читает как обычно; файл
+без поля читается текущей формой. Полное правило «кто пишет, когда на
+машине несколько версий» не решено — BACKLOG, «Сборка и поставка» (AD11).
 
 Миграционного слоя **нет**: `Load` ловит исключение → `new AppState()`
 (до 1.0 схема ломается).
@@ -2412,7 +2488,7 @@ Wander` — так задумано, отдельной папки для отл
 записи, и больше не пишутся; глобальный `SessionState.ViewMode` не
 переносится — умолчание стало настройкой (решение 2026-09-23).
 
-**Номер сборки** (PLAN AH, 2026-09-22) — четвёртое число `FileVersion`,
+**Номер сборки** (AH, 2026-09-22) — четвёртое число `FileVersion`,
 `BuildInfo.BuildNumber`. Счётчик — `src/Wander.App/build-number.txt`, вне
 гита, свой на машину; цель `StampBuildNumber` в `Wander.App.csproj` крутит
 его на любой обычной сборке (кроме `-p:WanderRelease=true`, дизайн-сборок

@@ -211,6 +211,7 @@ public sealed class PreviewController : ObservableObject {
     private bool _isLoading;
     private bool _isCensusLoading;
     private string? _text;
+    private System.Windows.TextWrapping _textWrap = System.Windows.TextWrapping.NoWrap;
     private ImageSource? _image;
     private ImageSource? _zoomImage;
     private bool _isRawImage;
@@ -309,10 +310,12 @@ public sealed class PreviewController : ObservableObject {
     private double _imageCapHeight = double.PositiveInfinity;
 
     // When the selection last moved, and whether it moved in a burst - see
-    // BurstMs; and where from, which says which neighbour comes next.
+    // BurstMs; and where from, which says which neighbour comes next. And
+    // whether the picture it moved to has been measured yet (preview.shown).
     private long _primaryChangedAt;
     private bool _primaryBurst;
     private string? _previousPrimaryPath;
+    private bool _shownMeasured;
 
 
     /// <param name="claims">What operations of the user's are working on - the footer's "running / queued" line; null shows none.</param>
@@ -463,6 +466,16 @@ public sealed class PreviewController : ObservableObject {
     public string? Text {
         get => _text;
         private set => SetField(ref _text, value);
+    }
+
+    /// <summary>
+    /// How <see cref="Text"/> wraps. A document read as its text (PLAN B5)
+    /// is prose, a paragraph to a line, and a line of a thousand characters
+    /// runs off the pane; a text file keeps its lines as they are.
+    /// </summary>
+    public System.Windows.TextWrapping TextWrap {
+        get => _textWrap;
+        private set => SetField(ref _textWrap, value);
     }
 
     public ImageSource? Image {
@@ -1297,6 +1310,7 @@ public sealed class PreviewController : ObservableObject {
             long now = Stopwatch.GetTimestamp();
             _primaryBurst = _primaryChangedAt != 0 && Stopwatch.GetElapsedTime(_primaryChangedAt, now).TotalMilliseconds < BurstMs;
             _primaryChangedAt = now;
+            _shownMeasured = false;
             _previousPrimaryPath = _primary?.FullPath;
         }
         _primary = entry;
@@ -2165,9 +2179,19 @@ public sealed class PreviewController : ObservableObject {
 
         ShowPicture(path, picture, ct);
         // PLAN AK, step 1: from the selection moving to the picture being
-        // put up; a line in the log only for the slow ones (PerfLog).
-        PerfLog.Note("preview.shown", Stopwatch.GetElapsedTime(_primaryChangedAt).TotalMilliseconds);
-        _ = DecodeNeighborsAsync(ct);
+        // put up; a line in the log only for the slow ones (PerfLog). Once
+        // per move: the same file loaded again - a refit, the RAW switch,
+        // the pane shown again - is not a selection taking that long.
+        if (!_shownMeasured) {
+            _shownMeasured = true;
+            PerfLog.Note("preview.shown", Stopwatch.GetElapsedTime(_primaryChangedAt).TotalMilliseconds);
+        }
+        // Only for a picture shown from its own row: the rows around an
+        // archive entry's scratch copy are paths inside the archive, which
+        // nothing on disk answers to.
+        if (key is not null) {
+            _ = DecodeNeighborsAsync(ct);
+        }
     }
 
 
@@ -2187,8 +2211,13 @@ public sealed class PreviewController : ObservableObject {
         // Before the picture goes up: the helpers wait for the bigger one.
         _fullPending = decode || bigger || whole;
         _zoomImage = null;
-        ImageCapWidth = picture.NaturalWidth;
-        ImageCapHeight = picture.NaturalHeight;
+        // Capped at the frame the camera recorded only while a frame that
+        // big is on its way (PictureLoader.WholeFrame): the preview is drawn
+        // at that size at once and then sharpens. A preview that is all
+        // there is is not stretched past its own pixels.
+        bool framed = (decode || bigger) && picture.FrameWidth > 0;
+        ImageCapWidth = framed ? picture.FrameWidth : picture.NaturalWidth;
+        ImageCapHeight = framed ? picture.FrameHeight : picture.NaturalHeight;
         Image = picture.Fit;
         Kind = PreviewKind.Image;
         ScheduleHelpers();
@@ -2442,6 +2471,7 @@ public sealed class PreviewController : ObservableObject {
             return;
         }
 
+        TextWrap = System.Windows.TextWrapping.Wrap;
         Text = Strings.PreviewDocumentTextNote + "\n\n" + PreviewText.Clip(new PreviewTextFile(read.Text, false, read.Size));
         Kind = PreviewKind.Text;
     }
@@ -2554,6 +2584,7 @@ public sealed class PreviewController : ObservableObject {
         // A sensor decode of the file before is cancelled with its load.
         IsRawDecoding = false;
         Text = null;
+        TextWrap = System.Windows.TextWrapping.NoWrap;
         if (!keepImage) {
             _zoomImage = null;
             Image = null;
@@ -2572,6 +2603,7 @@ public sealed class PreviewController : ObservableObject {
         Audio = null;
         AudioCover = null;
         ExecutableIcon = null;
+        ExecutableTitle = "";
         ExecutableFacts = Array.Empty<PreviewFact>();
         ModelParts = Array.Empty<ModelPart>();
         ModelDetail = "";

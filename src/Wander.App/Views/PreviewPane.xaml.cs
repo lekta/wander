@@ -345,8 +345,13 @@ public partial class PreviewPane : UserControl {
         Justification = "A PropertyChanged handler is void by contract. It runs on the dispatcher, so an exception lands in App.HookCrashLogging (DispatcherUnhandledException): logged and offered as a report, not fatal.")]
     private async void OnPreviewPropertyChanged(object? sender, PropertyChangedEventArgs e) {
         switch (e.PropertyName) {
+            case nameof(PreviewController.Text):
+                ForgetMatches();
+                break;
+
             case nameof(PreviewController.CodeText):
             case nameof(PreviewController.CodeExtension):
+                ForgetMatches();
                 UpdateCodeEditor();
                 break;
 
@@ -365,6 +370,7 @@ public partial class PreviewPane : UserControl {
                 break;
 
             case nameof(PreviewController.DocumentPath):
+                ForgetMatches();
                 await LoadDocumentAsync(Controller.DocumentPath);
                 break;
 
@@ -478,8 +484,10 @@ public partial class PreviewPane : UserControl {
         }
 
         DocumentPreview.Document = document;
-        // A query handed over before the document was read (OnFindRequest).
-        if (_pendingFind is not null) {
+        // A query handed over before the document was read (OnFindRequest),
+        // or the field left open over the document before: the find that
+        // ran when the load ended may have come before this read did.
+        if (_pendingFind is not null || FindBar.Visibility == Visibility.Visible) {
             _pendingFind = null;
             _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => RunFind(0));
         }
@@ -903,7 +911,7 @@ public partial class PreviewPane : UserControl {
         UpdateBar();
     }
 
-    /// <summary>Full strength while the mouse is down by the bar or a new rating is being shown; a fifth otherwise.</summary>
+    /// <summary>Full strength while the mouse is down by the bar or a new rating is being shown; <see cref="BarDimmed"/> otherwise.</summary>
     private void UpdateBar() {
         bool up = _barReached || _barFlash?.IsEnabled == true;
         if (up == _barUp) {
@@ -1590,7 +1598,9 @@ public partial class PreviewPane : UserControl {
     /// then stands.
     /// </summary>
     public bool OpenFind() {
-        if (!IsKeyboardFocusWithin || !IsFindable) {
+        // The other half of a split sits inside this pane (SecondSlot): the
+        // keyboard in it is that pane's to answer for.
+        if (!IsKeyboardFocusWithin || SecondSlot.IsKeyboardFocusWithin || !IsFindable) {
             return false;
         }
 
@@ -1748,9 +1758,7 @@ public partial class PreviewPane : UserControl {
     /// <param name="keepKeyboard">Esc in the field: the keyboard goes back to the text, not to the list.</param>
     private void CloseFind(bool keepKeyboard) {
         FindBar.Visibility = Visibility.Collapsed;
-        _findOffsets = Array.Empty<int>();
-        _findRanges.Clear();
-        _findAt = -1;
+        ForgetMatches();
         _pendingFind = null;
         if (!keepKeyboard) {
             return;
@@ -1769,6 +1777,19 @@ public partial class PreviewPane : UserControl {
                 DocumentPreview.Focus();
                 break;
         }
+    }
+
+    /// <summary>
+    /// The text under the field went - a new file is loading, or the same
+    /// one again (a log the watcher re-read): its matches point into text
+    /// that is not there any more, and a step to one of them selected past
+    /// the end and threw. The field stays; the end of the load finds again
+    /// (AfterTextChanged, LoadDocumentAsync).
+    /// </summary>
+    private void ForgetMatches() {
+        _findOffsets = Array.Empty<int>();
+        _findRanges.Clear();
+        _findAt = -1;
     }
 
     /// <summary>Where a search from the caret starts: the caret of the text on show.</summary>

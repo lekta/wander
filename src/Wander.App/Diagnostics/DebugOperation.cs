@@ -36,7 +36,7 @@ public sealed record DebugOperationOutcome(int Ok, int Failed, int Total);
 /// </para>
 /// </summary>
 public static class DebugOperation {
-    /// <summary>Long enough to see "считаем" before the numbers arrive.</summary>
+    /// <summary>Long enough to see the counting line before the numbers arrive.</summary>
     private static readonly TimeSpan _weighFor = TimeSpan.FromMilliseconds(300);
 
     /// <summary>One byte report per tick, the rate a real copy reports at.</summary>

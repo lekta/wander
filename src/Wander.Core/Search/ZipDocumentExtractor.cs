@@ -41,6 +41,18 @@ public sealed class ZipDocumentExtractor : IContentExtractor {
         ".epub",
     };
 
+    /// <summary>
+    /// Local names a line ends after, the same across these formats - a
+    /// handful of names, not a parser per format: a paragraph (Word's w:p,
+    /// PowerPoint's a:p, OpenDocument's text:p, XHTML's p), a heading
+    /// (text:h, h1-h6), a list item, a table row (w:tr, XHTML tr,
+    /// table:table-row, Excel's row), one of Excel's shared strings, a line
+    /// break (w:br, br).
+    /// </summary>
+    private static readonly HashSet<string> _lineEnds = new(StringComparer.Ordinal) {
+        "p", "h", "h1", "h2", "h3", "h4", "h5", "h6", "li", "tr", "table-row", "row", "si", "br",
+    };
+
     private readonly IFileSystem _fs;
 
 
@@ -142,10 +154,14 @@ public sealed class ZipDocumentExtractor : IContentExtractor {
 
 
     /// <summary>
-    /// Every text node in one part, separated by spaces. Spaces rather
-    /// than nothing because a Word paragraph is split into runs at every
+    /// Every text node in one part, separated by spaces, and a line break
+    /// where a paragraph ends (<see cref="_lineEnds"/>). Spaces rather than
+    /// nothing because a Word paragraph is split into runs at every
     /// formatting change: without a separator, a sentence with one bold
-    /// word in it joins into a string no query would ever match.
+    /// word in it joins into a string no query would ever match. Line
+    /// breaks because the preview pane shows this text (PLAN B5), and a
+    /// document without them is a single line of a hundred thousand
+    /// characters; a search's snippet is the match's line, too.
     /// </summary>
     private static void ReadTextNodes(ZipArchiveEntry entry, StringBuilder text, CancellationToken token) {
         // Prohibit rather than ignore: these files come from wherever the
@@ -165,6 +181,14 @@ public sealed class ZipDocumentExtractor : IContentExtractor {
 
             while (reader.Read()) {
                 token.ThrowIfCancellationRequested();
+                if (reader.NodeType == XmlNodeType.EndElement
+                    || (reader.NodeType == XmlNodeType.Element && reader.IsEmptyElement)) {
+                    if (_lineEnds.Contains(reader.LocalName)) {
+                        EndLine(text);
+                    }
+
+                    continue;
+                }
                 if (reader.NodeType is not (XmlNodeType.Text or XmlNodeType.CDATA)) {
                     continue;
                 }
@@ -177,6 +201,16 @@ public sealed class ZipDocumentExtractor : IContentExtractor {
         } catch (Exception ex) when (ex is XmlException or InvalidDataException or IOException) {
             // A damaged part is not a damaged document: keep whatever the
             // other parts gave us.
+        }
+    }
+
+    /// <summary>A line ends: the space after its last word goes, and an empty line is not made.</summary>
+    private static void EndLine(StringBuilder text) {
+        if (text.Length > 0 && text[text.Length - 1] == ' ') {
+            text.Length--;
+        }
+        if (text.Length > 0 && text[text.Length - 1] != '\n') {
+            text.Append('\n');
         }
     }
 }

@@ -102,6 +102,28 @@ public class ContentExtractorTests {
     }
 
 
+    /// <summary>
+    /// The preview pane shows this text (PLAN B5): a paragraph is a line,
+    /// and a line break inside one is one too - not the whole document on
+    /// a single line.
+    /// </summary>
+    [Fact]
+    public void ZipDocument_ParagraphsComeAsLines() {
+        var fs = new FakeFileSystem();
+        fs.Files[@"C:\letter.docx"] = Zip(
+            ("word/document.xml",
+                "<w:document xmlns:w='x'><w:body>" +
+                "<w:p><w:r><w:t>Первый</w:t></w:r><w:r><w:t>абзац</w:t></w:r></w:p>" +
+                "<w:p/>" +
+                "<w:p><w:r><w:t>Второй</w:t></w:r><w:r><w:br/></w:r><w:r><w:t>строкой</w:t></w:r></w:p>" +
+                "</w:body></w:document>"));
+
+        string? text = new ZipDocumentExtractor(fs).Extract(@"C:\letter.docx", default);
+
+        Assert.Equal("Первый абзац\nВторой\nстрокой\n", text);
+    }
+
+
     [Fact]
     public void ZipDocument_ReadsExcelSharedStrings() {
         var fs = new FakeFileSystem();

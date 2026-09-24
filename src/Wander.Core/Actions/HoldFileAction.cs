@@ -4,7 +4,7 @@ namespace Wander.Core.Actions;
 /// Keeps the selected file open, exclusively, for a few seconds and lets go
 /// (PLAN AI2). A debug tool with no product use: it is how "the file is
 /// busy" is looked at without a second program - the clock on the icon, the
-/// "Идёт: ..." line, another operation refused with an explanation, and a
+/// "in progress" line, another operation refused with an explanation, and a
 /// real hold for <c>IFileBusyProbe</c> and the Restart Manager, which then
 /// name Wander itself as the holder.
 ///

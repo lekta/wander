@@ -22,14 +22,23 @@ public sealed class RunReport {
 
     public string? Metrics { get; set; }
 
-    /// <summary>Steps that ended "ok"; the batch journal reports it against the scenario's step count.</summary>
+    /// <summary>Steps that ended "ok"; the batch journal reports it against the steps that ran.</summary>
     public int Passed { get; private set; }
+
+    /// <summary>
+    /// Steps this machine cannot run (<c>ifOpensAsFolder</c>). Left out of
+    /// the journal's count: the line reads "102 of 102", not "102 of 115"
+    /// as if thirteen steps had failed.
+    /// </summary>
+    public int Skipped { get; private set; }
 
 
     public void Step(int index, string verb, string outcome, long ms, string? detail = null) {
         _steps.Add($"| {index} | `{verb}` | {outcome} | {ms} | {detail ?? ""} |");
         if (outcome == "ok") {
             Passed++;
+        } else if (outcome == "skipped") {
+            Skipped++;
         }
     }
 

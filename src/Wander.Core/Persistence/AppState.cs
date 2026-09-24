@@ -31,7 +31,11 @@ public sealed record AppState {
     public const int CurrentVersion = 1;
 
 
-    /// <summary>The shape this file was written in; see <see cref="CurrentVersion"/>. 0 in files written before it existed.</summary>
+    /// <summary>
+    /// The shape this file was written in; see <see cref="CurrentVersion"/>.
+    /// A file written before it existed has no such field and reads as the
+    /// current shape - the default - not as a shape to keep away from.
+    /// </summary>
     public int Version { get; init; } = CurrentVersion;
 
     /// <summary>Where the user left off — folder, expansions, panes, view mode.</summary>
