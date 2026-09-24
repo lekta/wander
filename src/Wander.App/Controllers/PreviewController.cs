@@ -1345,6 +1345,10 @@ public sealed class PreviewController : ObservableObject {
             // A pane nobody sees holds no frames: the split's second half
             // between pairs, the pane put away (PictureMemory).
             _pictures.Clear();
+        } else {
+            // The picture the pane comes back to was selected some time
+            // ago: that time is not what preview.shown measures.
+            _shownMeasured = true;
         }
         Raise(nameof(IsPlaceholderVisible));
         SchedulePreviewUpdate();
@@ -1371,7 +1375,9 @@ public sealed class PreviewController : ObservableObject {
             long now = Stopwatch.GetTimestamp();
             _primaryBurst = _primaryChangedAt != 0 && Stopwatch.GetElapsedTime(_primaryChangedAt, now).TotalMilliseconds < BurstMs;
             _primaryChangedAt = now;
-            _shownMeasured = false;
+            // Measured only when the pane can show it: a selection moved
+            // while the pane was put away is not a wait (PLAN AK).
+            _shownMeasured = !_isVisible;
             _previousPrimaryPath = _primary?.FullPath;
         }
         _primary = entry;

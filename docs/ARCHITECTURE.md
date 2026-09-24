@@ -60,7 +60,8 @@ src/
 │   │                   DesktopIni
 │   ├── Icons/          IIconProvider, IImageMetadataReader, IconSize, ImageMetadata,
 │   │                   ImageFormats, RawPreviewExtractor, ThumbnailCacheOptions
-│   ├── Imaging/        хелперы отсмотра (раздел ниже), PictureFit, TgaDecoder
+│   ├── Imaging/        хелперы отсмотра (раздел ниже), PictureFit, TgaDecoder,
+│   │                   PictureMemory, SizedCache + MemoryShare
 │   ├── Layout/         TileLayout, TileMetrics, GridNavigation,
 │   │                   WindowZones, WindowPlacement, DragHover, EdgeScroll
 │   ├── Listing/        FolderSession, ListingDiff, ArrivalIntent, ListingArrival
@@ -673,11 +674,17 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
   кого-то спросят, сторож drag & drop пропускает такой бросок через
   `PathSafety.IsAllowedDuplicate`, а вырезание в свою же папку
   `PasteAsync` снимает молча (`PathSafety.AllAlreadyIn`).
-- **Защита.** `SystemPathGuard` — чистая функция от пути и окружения, без
-  I/O и локатора, зовётся статически: корни дисков, спец-папки (Windows,
-  Program Files x86/x64, ProgramData, Users, корень профиля), всё дерево
-  `C:\Windows`; содержимое Program Files и чужих профилей намеренно не
-  блокируется (чистка остатков деинсталляции легальна). `PathSafety` —
+- **Защита.** `SystemPathGuard` — функция от пути и окружения, без I/O,
+  зовётся статически: корни дисков, спец-папки (Windows, Program Files
+  x86/x64, ProgramData, Users, корень профиля), папки профиля, которые
+  ведёт Windows (Рабочий стол, Документы, Загрузки, Изображения, Музыка,
+  Видео, AppData с Local / LocalLow / Roaming — 2026-09-24, сами папки, не
+  содержимое; где они — `IKnownFolders` из локатора, `Lazy` при первом
+  вызове, иначе `Environment`), всё дерево `C:\Windows`; содержимое
+  Program Files и чужих профилей намеренно не блокируется (чистка остатков
+  деинсталляции легальна). Причины — ключи ресурсов через `Text.Format`.
+  Запись внутрь — `MayWriteInto`: «нет» говорит только дерево Windows
+  (извлечение и выход действия — в корень диска и в профиль). `PathSafety` —
   self-drop с человеческим текстом через `ITextSource`. `IFileLockInspector`
   — «файл открыт в: Word (PID 1234)», по файлам.
 - **Осознанные отступления от «всё откатываемо»:** безвозвратное удаление
@@ -895,7 +902,8 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
   картинка, и не отвечает, когда провайдер отдаёт уже другой (путь переживает
   то, что на нём стояло). Три тира: провайдер хранит `byte[]` (память +
   диск), **`IconImageCache` — декодированные замороженные `BitmapImage`**
-  (256; декод был единственным на UI-потоке — 338 декодов и 141 мс за
+  (256 и не больше четверти бюджета картинок в байтах — `PictureMemory`,
+  2026-09-24; декод был единственным на UI-потоке — 338 декодов и 141 мс за
   секунду при прокрутке; декодирует тот, кто первым дошёл; кнопка очистки
   чистит и его). Четыре ступени: `Small` / `Normal` — значок по расширению
   (`SHGetFileInfo`, один на тип; кроме типов, чей значок в самом файле, —
@@ -1257,6 +1265,12 @@ false — набор в `SearchController`; true — `Query` очищается,
   `1|2|8|16` → полный текст); флаг идёт вместе, value-чанки отбрасываются.
   Список форматов именованный, не «что скажет реестр»: реестровый фильтр
   текста декодирует системной кодовой страницей, `EncodingProbe` лучше.
+  `LoadIFilter` отвечает `E_FAIL` расширению без фильтра и
+  `REGDB_E_CLASSNOTREG` — незарегистрированному; только эти два
+  запоминаются как «фильтра нет» на расширение (`_withoutFilter`);
+  остальные коды — `FILTER_E_UNKNOWNFORMAT` у `~$….doc` и пустого,
+  `STG_E_SHAREVIOLATION` у запертого, `STG_E_DOCFILECORRUPT` у обрезанного
+  — про один файл (стенд 2026-09-24, блок 8).
 - **`BinaryTextSearch`** — отдельный режим, не экстрактор: бинари по
   умолчанию вне (как `grep`, `ripgrep`, VS Code, Windows Search — шум из
   пятисот DLL); по галке побайтово, **только ASCII** (`Supports` говорит
@@ -2085,8 +2099,17 @@ a₁·a₂ > r². Форма — из заголовков (`PictureLoader.Shape
   рядом: `←` / `→` — какая сторона остаётся; «оставить правую» меняет роли
   панелей (`KeepSide`), а не грузит правый снимок в левую — иначе на кадр
   виден левый во весь экран. Панель прозрачна, пока её контроллер ничего
-  не показывает (`Kind` None и не `IsLoading`): первое декодирование не
-  показывает «выберите файл». Строки после оценки берутся заново
+  не показывает (`Kind` None и не `IsLoading`), а `IsPlaceholderVisible`
+  молчит, пока у файла идёт первая загрузка: первое декодирование не
+  показывает «выберите файл». Полоса снимка спрятана (`BarAtRest` = 0),
+  пока мышь не у нижнего края или не нажата клавиша оценки (`FlashBar`);
+  у пары полосы ходят вместе (`BarReached` ↔ `ReachBarWith`). `Ctrl` + `Z`
+  — `UndoCommand` окна из `OnPreviewKeyDown`; `Alt` + `Space` и `F10`
+  (`Key.System`) гасятся, как одиночный `Alt`; `Z` — `PreviewPane.ToggleZoom`
+  (`_zoomPinned`, `ZoomMove.Pinned` ведёт вторую половину). Предупреждение
+  и ошибка `MainViewModel.Say` приходят событием `StatusSaid` и стоят
+  плашкой 4 с — строка состояния под окном не видна. Строки после оценки
+  берутся заново
   (`RatingsController.FindInSource` — находит и скрытую фильтром) по
   `Entries.CollectionChanged` и `Ratings.CompanionsChanged`: строка, которая
   была скрыта фильтром и скрытой осталась, список не меняет. Окно
@@ -2103,15 +2126,24 @@ a₁·a₂ > r². Форма — из заголовков (`PictureLoader.Shape
   — целиком; масштаб в DCT), остальное целиком; выход — `DecodedPicture`
   (вписанный кадр, натуральный размер, кадр камеры, встроенный JPEG, признак
   «уменьшен»). Поле выросло мимо кадра — перерез через `BoxSettleMs` = 300
-  (`PictureFit.TooSmall`). `PictureCache` — три кадра, UI-поток, ключ путь +
-  время + размер + поле; соседи — `PreviewNeighbors.Of` (Core, тест: выше и
-  ниже, только картинки, первым — по направлению движения), по одному после
-  показа (`DecodeNeighborsAsync`, отмена вместе с загрузкой) и только для
-  кадра из своей строки: цель ярлыка и копия записи архива декодируются
+  (`PictureFit.TooSmall`). `PictureCache` — три кадра и байты
+  (`SizedCache` над `MemoryShare`, Core: доля кадров в бюджете
+  `PictureMemory`, общая на все панели; показанный и греющиеся соседи —
+  `Keep`; `Fits` решает, декодировать ли соседа — размер по заголовку,
+  `PictureLoader.DecodedBytes`), UI-поток, ключ путь + время + размер +
+  поле; спрятанная панель и `Detach` отдают кадры; соседи —
+  `PreviewNeighbors.Of` (Core, тест: выше и ниже, только картинки, первым —
+  по направлению движения), по одному после показа (`DecodeNeighborsAsync`,
+  отмена вместе с загрузкой, но законченный декод кладётся в кэш и при
+  отмене — выделение могло прийти на него же) и только для кадра из своей
+  строки: цель ярлыка и копия записи архива декодируются
   каждый раз, а соседи записи — пути внутри архива. Серия — смена чаще
-  `BurstMs` = 150: промах кэша ждёт `BurstDelayMs` = 90. `preview.shown` —
-  от смены выделения до показа, раз на смену (`_shownMeasured`): перерез,
-  RAW и показ панели — не смена. Бюджета в байтах у кэша нет — PLAN AK.
+  `BurstMs` = 150: промах кэша ждёт `BurstDelayMs` = 90 и переспрашивает
+  кэш. `preview.shown` — от смены выделения до показа, раз на смену
+  (`_shownMeasured`): перерез, RAW, показ панели и смена при спрятанной
+  панели — не смена. Первый размер панели ждётся до `BoxWaitMs` = 500
+  (`_boxKnown`, блок 8): вторая половина сплита и полный экран не
+  декодируют кадр целиком.
 - **DPI** (AM, 2026-09-22): `BitmapPixelSizeConverter` —
   `IMultiValueConverter`, пиксели картинки ÷ `PreviewPane.DpiScale`
   (обновляется на `Loaded` и `OnDpiChanged`) для `ImgFit`, `GifPreview`,
@@ -2128,7 +2160,13 @@ a₁·a₂ > r². Форма — из заголовков (`PictureLoader.Shape
   `CACHE_ONLY_URL_RETRIEVAL`; `TRUST_E_NOSIGNATURE` — «нет подписи», иной
   код — «не подтверждается»; каталожные подписи не смотрятся) →
   `ExecutableCard.Facts` (App, подписи из ресурсов, пустое не пишется).
-  `WinVerifyTrust` хэширует весь файл — PLAN, B7-хвост.
+  `WinVerifyTrust` хэширует весь файл, поэтому подпись — отдельный
+  `ReadSignature` (блок 8, 2026-09-24): карточка встаёт со строкой
+  «проверяется…», проверка — после `FullSizeDwellMs` на файле, через
+  `_signatureGate` по одной, без отмены (ответ про ушедший файл
+  отбрасывается по ссылке на `ExecutableInfo`); файл больше
+  `SignatureByItselfBytes` = 200 МБ — «не проверялась» и
+  `CheckSignatureCommand`.
 - **Документ текстом** (B5, 2026-09-22): `PreviewRoute.DocumentText` →
   `ContentSearchService.DocumentText` — только форматные («дорогие»)
   экстракторы: общий текстовый показал бы бинарник буквами; кэш общий с

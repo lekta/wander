@@ -50,7 +50,7 @@ public sealed class ReviewThumb : Image {
     public ReviewThumb() {
         Unloaded += (_, _) => {
             Listen(false);
-            Drop();
+            DropWork();
             _detached = true;
         };
         Loaded += (_, _) => {
@@ -101,7 +101,7 @@ public sealed class ReviewThumb : Image {
 
 
     private void Request() {
-        Drop();
+        DropWork();
         int generation = _generation;
         Source = null;
         if (_helpers is null || Entry is not FileSystemEntry entry
@@ -127,7 +127,7 @@ public sealed class ReviewThumb : Image {
     /// scrolled through quickly would otherwise keep measuring frames that
     /// left the screen long ago.
     /// </summary>
-    private void Drop() {
+    private void DropWork() {
         _generation++;
         _work?.Cancel();
         _work = null;
