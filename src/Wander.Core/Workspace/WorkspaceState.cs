@@ -98,6 +98,22 @@ public sealed record WorkspaceState {
         return new PanelHighlight(Panel(pane).Caret, Keyboard.Zone == ZoneOf(pane));
     }
 
+    /// <summary>
+    /// The row <paramref name="pane"/> goes back to when Ctrl+1 brings the
+    /// keyboard over from the other panel (P-22, both ways since
+    /// 2026-09-23): the row its cursor was left on, while the open folder is
+    /// not in it. Null for the keyboard coming from anywhere else - from the
+    /// list Ctrl+1 only shows where the open folder is - and for a panel that
+    /// holds the open folder or no row. Read before the keyboard's module
+    /// moves the zone: the zone is still the one the keyboard comes from.
+    /// </summary>
+    public string? HeldRow(Pane pane) {
+        var other = pane == Pane.Bookmarks ? Pane.Drives : Pane.Bookmarks;
+        var panel = Panel(pane);
+
+        return Keyboard.Zone == ZoneOf(other) && panel.Location is null ? panel.Caret : null;
+    }
+
 
     /// <summary>The zone a panel is.</summary>
     public static WindowZone ZoneOf(Pane pane) {

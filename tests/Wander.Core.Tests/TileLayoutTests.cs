@@ -225,6 +225,85 @@ public class TileLayoutTests {
     }
 
 
+    // --- Reflow ------------------------------------------------------------
+    // A thousand cells of 100 x 100 in a viewport 300 high: 600 wide is six
+    // columns, 700 is seven - the folder panel put away with Ctrl+B.
+
+    private static TileLayout Cells(double width, double cell = 100, double height = 300) {
+        return new TileLayout(width, height, cell, cell, itemCount: 1000);
+    }
+
+
+    [Fact]
+    public void Reflows_OnOtherColumnsOrCellHeight_NotOnTheViewportHeight() {
+        var six = Cells(600);
+
+        Assert.True(Cells(700).Reflows(six));
+        Assert.True(Cells(600, cell: 120).Reflows(six));
+        Assert.False(Cells(650).Reflows(six));
+        Assert.False(Cells(600, height: 500).Reflows(six));
+        Assert.False(new TileLayout(700, 300, 100, 100, itemCount: 999).Reflows(six));
+    }
+
+    /// <summary>Nothing of the user's on screen: the first cell that shows keeps its place - here row 50, at the top.</summary>
+    [Fact]
+    public void Hold_KeepsTheFirstVisibleCellWhereItWas() {
+        var anchor = Cells(600).AnchorAt(5000, keyboard: -1, selected: Array.Empty<int>())!.Value;
+        Assert.Equal(new TileAnchor(300, 0, KeepWhole: false), anchor);
+
+        var seven = Cells(700);
+        double offset = seven.Hold(anchor);
+
+        Assert.Equal(0, seven.CellAt(300).Y - offset);
+    }
+
+    [Fact]
+    public void AnchorAt_PrefersTheKeyboardsCell_ThenASelectedOneThatShows() {
+        var six = Cells(600);
+
+        // Rows 50-52 show at 5000: items 300-317.
+        Assert.Equal(310, six.AnchorAt(5000, keyboard: 310, selected: new[] { 315 })!.Value.Index);
+        Assert.Equal(315, six.AnchorAt(5000, keyboard: 5, selected: new[] { 5, 330, 315 })!.Value.Index);
+        Assert.Equal(300, six.AnchorAt(5000, keyboard: 5, selected: new[] { 5, 900 })!.Value.Index);
+    }
+
+    [Fact]
+    public void Hold_KeepsTheKeyboardsCellOnScreen_WhenTheCellsGrow() {
+        // Cell 314 sits on the bottom row of the view; twice the size, held
+        // at the same height, it would be cut off below.
+        var anchor = Cells(600).AnchorAt(5000, keyboard: 314, selected: Array.Empty<int>())!.Value;
+        Assert.True(anchor.KeepWhole);
+
+        var big = Cells(600, cell: 200);
+        double offset = big.Hold(anchor);
+
+        Assert.InRange(big.CellAt(314).Y, offset, offset + 300 - 200);
+    }
+
+    /// <summary>
+    /// A splitter dragged out and back: the anchor taken before the first
+    /// reflow brings the view back to the offset it left; one taken afresh
+    /// after it would come back a row off - why the panel keeps the first.
+    /// </summary>
+    [Fact]
+    public void Hold_ThereAndBack_ReturnsToTheSameOffset() {
+        var six = Cells(600);
+        var seven = Cells(700);
+        var anchor = six.AnchorAt(5030, keyboard: -1, selected: Array.Empty<int>())!.Value;
+
+        double there = seven.Hold(anchor);
+        var fresh = seven.AnchorAt(there, keyboard: -1, selected: Array.Empty<int>())!.Value;
+
+        Assert.Equal(5030, six.Hold(anchor));
+        Assert.NotEqual(5030, six.Hold(fresh));
+    }
+
+    [Fact]
+    public void AnchorAt_OnAnEmptyGrid_IsNothing() {
+        Assert.Null(new TileLayout(600, 300, 100, 100, itemCount: 0).AnchorAt(0, -1, Array.Empty<int>()));
+    }
+
+
     // --- Degenerate input ------------------------------------------------
 
     /// <summary>

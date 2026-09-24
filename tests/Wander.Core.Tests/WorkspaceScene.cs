@@ -120,6 +120,14 @@ internal sealed class WorkspaceScene {
         return this;
     }
 
+    /// <summary>
+    /// Answers one read asked for earlier and left waiting - the way the pool
+    /// answers in the application: after whatever was posted meanwhile.
+    /// </summary>
+    public WorkspaceScene Answer(ReadBranch read) {
+        return Post(new BranchRead(read.Pane, read.Path, Level(read.Path), read.Epoch)).Settle();
+    }
+
     /// <summary>The window comes up with the drives read.</summary>
     public WorkspaceScene Start(params NavigationStop[] expanded) {
         return Post(new WorkspaceStarted(expanded)).Settle();

@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows.Media.Imaging;
 using Wander.Core.Icons;
 using Wander.Core.Imaging;
+using Wander.Core.Preview;
 
 namespace Wander.App.Preview;
 
@@ -98,6 +99,29 @@ internal static class PictureLoader {
         var whole = picture.Embedded is { } jpeg ? ImageDecoder.Stream(jpeg) : ImageDecoder.File(path);
 
         return whole is null ? null : ImageDecoder.ApplyOrientation(whole, picture.Meta?.Orientation);
+    }
+
+
+    /// <summary>
+    /// The frame's shape as shown - turned upright by its EXIF tag - off its
+    /// headers, nothing decoded: which way a pair splits depends on it, and it
+    /// is wanted before either half is drawn (2026-09-23). Null when the
+    /// headers do not say. Off the UI thread: it reads the file.
+    /// </summary>
+    public static PictureShape? ShapeOf(string path, IImageMetadataReader? reader) {
+        var meta = reader?.Read(path);
+        (int Width, int Height)? stored = meta is { PixelWidth: > 0, PixelHeight: > 0 }
+            ? (meta.PixelWidth.Value, meta.PixelHeight.Value)
+            : ImageFormats.IsRaw(path)
+                ? ImageDecoder.RawPreviewBytes(path, fullSize: false) is { } jpeg ? ImageDecoder.StoredSize(jpeg) : null
+                : ImageDecoder.StoredSize(path);
+        if (stored is not { } s) {
+            return null;
+        }
+
+        bool turned = meta?.Orientation is >= 5 and <= 8;
+
+        return turned ? new PictureShape(s.Height, s.Width) : new PictureShape(s.Width, s.Height);
     }
 
 

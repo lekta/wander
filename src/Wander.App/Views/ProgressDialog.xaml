@@ -18,72 +18,131 @@
         There is no "Закрыть" and there will not be one - an operation the
         user cannot see is an operation they cannot stop. The two ways out
         are "Свернуть", which parks it in the status bar, and "Отмена", which
-        stops it; the window closes itself when the work is done. The X,
-        Alt+F4 and Escape all mean "Свернуть", because that is the harmless
-        one of the two.
+        stops it; the window closes itself when the work is done. Alt+F4 and
+        Escape mean "Свернуть" too, because that is the harmless one of the
+        two.
+
+        The title bar is our own (2026-09-23): the system's cannot show
+        "minimise" without the X, and an X that only hides the window
+        promised what it did not do. A tool window's strip - the title
+        quiet, one glyph that parks the window - and the caption still drags
+        it and still has the system menu.
     -->
-    <Border Padding="20,18">
-        <StackPanel>
-            <!--
-                The verb the caller passed ("Копирование", "Перемещение"),
-                then the file in flight. We deliberately don't show the
-                source paths - there can be thousands.
-            -->
-            <TextBlock Text="{Binding Headline}"
-                       FontSize="14" FontWeight="SemiBold"
-                       Margin="0,0,0,10"/>
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="30"
+                      ResizeBorderThickness="0"
+                      GlassFrameThickness="0,0,0,1"
+                      CornerRadius="0"
+                      UseAeroCaptionButtons="False"/>
+    </WindowChrome.WindowChrome>
 
-            <TextBlock Text="{Binding Operation.CurrentFile}"
-                       Foreground="{StaticResource TextCaption}" FontSize="11"
+    <Window.Resources>
+        <Style x:Key="CaptionButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource TextMuted}"/>
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource ControlHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource ControlPressed}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+        <Grid DockPanel.Dock="Top" Height="30">
+            <TextBlock Text="{Binding DialogTitle}"
+                       Foreground="{StaticResource TextCaption}" FontSize="12"
                        TextTrimming="CharacterEllipsis"
-                       Margin="0,0,0,8"/>
+                       VerticalAlignment="Center"
+                       Margin="12,0,52,0"/>
+            <Button Style="{StaticResource CaptionButton}"
+                    Content="&#xE921;"
+                    Width="44"
+                    HorizontalAlignment="Right"
+                    ToolTip="{x:Static res:Strings.ActionMinimize}"
+                    AutomationProperties.Name="{x:Static res:Strings.ActionMinimize}"
+                    Click="MinimizeButton_Click"/>
+        </Grid>
 
-            <ProgressBar Height="14"
-                         Minimum="0" Maximum="100"
-                         Value="{Binding Operation.Percent, Mode=OneWay}"/>
+        <Border Padding="20,6,20,18">
+            <StackPanel>
+                <!--
+                    The verb the caller passed ("Копирование", "Перемещение"),
+                    then the file in flight. We deliberately don't show the
+                    source paths - there can be thousands.
+                -->
+                <TextBlock Text="{Binding Headline}"
+                           FontSize="14" FontWeight="SemiBold"
+                           Margin="0,0,0,10"/>
 
-            <!--
-                Counts on the left, speed and what is left on the right. The
-                right-hand pair goes quiet rather than guess: a copy that has
-                only just started has no speed to report yet, and a delete
-                has no bytes at all.
-            -->
-            <Grid Margin="0,6,0,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding Operation.CurrentFile}"
+                           Foreground="{StaticResource TextCaption}" FontSize="11"
+                           TextTrimming="CharacterEllipsis"
+                           Margin="0,0,0,8"/>
 
-                <StackPanel Grid.Column="0">
-                    <TextBlock Text="{Binding Operation.ItemsText}"
-                               Foreground="{StaticResource TextDim}" FontSize="11"/>
-                    <TextBlock Text="{Binding Operation.BytesText}"
-                               Foreground="{StaticResource TextDim}" FontSize="11"
-                               Margin="0,2,0,0"/>
+                <ProgressBar Height="14"
+                             Minimum="0" Maximum="100"
+                             Value="{Binding Operation.Percent, Mode=OneWay}"/>
+
+                <!--
+                    Counts on the left, speed and what is left on the right. The
+                    right-hand pair goes quiet rather than guess: a copy that has
+                    only just started has no speed to report yet, and a delete
+                    has no bytes at all.
+                -->
+                <Grid Margin="0,6,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="{Binding Operation.ItemsText}"
+                                   Foreground="{StaticResource TextDim}" FontSize="11"/>
+                        <TextBlock Text="{Binding Operation.BytesText}"
+                                   Foreground="{StaticResource TextDim}" FontSize="11"
+                                   Margin="0,2,0,0"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" HorizontalAlignment="Right" Margin="12,0,0,0">
+                        <TextBlock Text="{Binding Operation.SpeedText}"
+                                   Foreground="{StaticResource TextDim}" FontSize="11"
+                                   HorizontalAlignment="Right"/>
+                        <TextBlock Text="{Binding Operation.RemainingText}"
+                                   Foreground="{StaticResource TextDim}" FontSize="11"
+                                   HorizontalAlignment="Right"
+                                   Margin="0,2,0,0"/>
+                    </StackPanel>
+                </Grid>
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+                    <Button x:Name="MinimizeButton"
+                            Content="{x:Static res:Strings.ActionMinimize}"
+                            Width="100" Padding="6,3" Margin="0,0,8,0"
+                            IsCancel="True"
+                            Click="MinimizeButton_Click"/>
+                    <Button x:Name="CancelButton"
+                            Content="{x:Static res:Strings.ActionCancel}"
+                            Width="100" Padding="6,3"
+                            Click="CancelButton_Click"/>
                 </StackPanel>
-
-                <StackPanel Grid.Column="1" HorizontalAlignment="Right" Margin="12,0,0,0">
-                    <TextBlock Text="{Binding Operation.SpeedText}"
-                               Foreground="{StaticResource TextDim}" FontSize="11"
-                               HorizontalAlignment="Right"/>
-                    <TextBlock Text="{Binding Operation.RemainingText}"
-                               Foreground="{StaticResource TextDim}" FontSize="11"
-                               HorizontalAlignment="Right"
-                               Margin="0,2,0,0"/>
-                </StackPanel>
-            </Grid>
-
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
-                <Button x:Name="MinimizeButton"
-                        Content="{x:Static res:Strings.ActionMinimize}"
-                        Width="100" Padding="6,3" Margin="0,0,8,0"
-                        IsCancel="True"
-                        Click="MinimizeButton_Click"/>
-                <Button x:Name="CancelButton"
-                        Content="{x:Static res:Strings.ActionCancel}"
-                        Width="100" Padding="6,3"
-                        Click="CancelButton_Click"/>
             </StackPanel>
-        </StackPanel>
-    </Border>
+        </Border>
+    </DockPanel>
 </Window>

@@ -813,6 +813,9 @@
   <data name="MenuCmdExtract" xml:space="preserve">
     <value>Извлечь…</value>
   </data>
+  <data name="MenuCmdExtractHere" xml:space="preserve">
+    <value>Извлечь рядом</value>
+  </data>
   <data name="MenuCmdProperties" xml:space="preserve">
     <value>Свойства</value>
   </data>

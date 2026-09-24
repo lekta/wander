@@ -195,6 +195,18 @@ public partial class PreviewPane : UserControl {
     }
 
     /// <summary>
+    /// The room the two halves of a split share - the pane above the footer,
+    /// whichever way it is split now: what decides which way it splits
+    /// (SplitOrientation).
+    /// </summary>
+    public Size PairArea() {
+        var grid = (Grid)ContentArea.Parent;
+        double footer = grid.RowDefinitions[2].ActualHeight;
+
+        return new Size(grid.ActualWidth, Math.Max(0, grid.ActualHeight - footer));
+    }
+
+    /// <summary>
     /// Shows the other half's zoom here: the same share of this picture,
     /// without taking the mouse. Null ends it. A picture that fits whole
     /// has nothing to zoom into and stays as it is.

@@ -24,6 +24,7 @@ using Wander.Core.Navigation;
 using Wander.Core.Operations;
 using Wander.Core.Panels;
 using Wander.Core.Persistence;
+using Wander.Core.Preview;
 using Wander.Core.Shell;
 using Wander.Core.Workspace;
 
@@ -387,6 +388,10 @@ public partial class MainWindow : Window {
                 ApplyPreviewSplit();
                 break;
 
+            case nameof(MainViewModel.PreviewPairShapes):
+                ApplyPreviewSplitOrientation();
+                break;
+
             case nameof(MainViewModel.IsFoldersVisible):
             case nameof(MainViewModel.FoldersWidth):
                 ApplyFoldersLayout();
@@ -451,6 +456,9 @@ public partial class MainWindow : Window {
 
     private Views.PreviewPane? _previewSecond;
 
+    /// <summary>How the split on screen is turned; null while there is none - see <see cref="ApplyPreviewSplitOrientation"/>.</summary>
+    private bool? _splitStacked;
+
     /// <summary>
     /// Two panes or one. The second control is made on the first pair and
     /// kept for the session; between pairs it is collapsed, and its
@@ -459,6 +467,7 @@ public partial class MainWindow : Window {
     private void ApplyPreviewSplit() {
         if (!Vm.IsPreviewSplit) {
             Preview.ShowSecond(null, stacked: true);
+            _splitStacked = null;
 
             return;
         }
@@ -483,17 +492,24 @@ public partial class MainWindow : Window {
     }
 
     /// <summary>
-    /// Stacked while the column is taller than it is wide - the usual shape
-    /// of a preview strip - and side by side once it has been dragged wider
-    /// than that. Two photographs across a 280-px strip are two thumbnails;
-    /// one above the other they are two photographs.
+    /// One above the other or side by side, whichever shows the two pictures
+    /// bigger in the room they share - the pane above the footer
+    /// (SplitOrientation, 2026-09-23). Two photographs across a 280-px strip
+    /// are two thumbnails; one above the other they are two photographs -
+    /// and two portraits in a pane dragged wide are bigger side by side.
+    /// Pictures of unknown shape count as square: the old rule, stacked
+    /// while the pane is taller than it is wide. A split on screen turns
+    /// over only when the other way is clearly bigger.
     /// </summary>
     private void ApplyPreviewSplitOrientation() {
         if (!Vm.IsPreviewSplit || _previewSecond is null) {
             return;
         }
 
-        bool stacked = PreviewSplit.ActualHeight >= PreviewSplit.ActualWidth;
+        var room = Preview.PairArea();
+        var (first, second) = Vm.PreviewPairShapes;
+        bool stacked = SplitOrientation.Stacked(room.Width, room.Height, first, second, _splitStacked);
+        _splitStacked = stacked;
         Preview.ShowSecond(_previewSecond, stacked);
     }
 
@@ -1371,6 +1387,7 @@ public partial class MainWindow : Window {
             [MenuCommandId.NewFolder] = new(vm.NewFolderCommand),
 
             [MenuCommandId.Extract] = new(vm.ExtractCommand),
+            [MenuCommandId.ExtractHere] = new(vm.ExtractHereCommand),
 
             [MenuCommandId.RestoreFromRecycleBin] = new(vm.RestoreFromRecycleBinCommand),
 

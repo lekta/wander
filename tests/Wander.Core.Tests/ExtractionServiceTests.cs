@@ -264,6 +264,21 @@ public class ExtractionServiceTests {
         Assert.False(Assert.Single(resolver.Conflicts).SourceReachable);
     }
 
+    /// <summary>"Извлечь рядом": nobody is asked, nothing is replaced - a file and a folder already there both stay, the newcomers get "(1)".</summary>
+    [Fact]
+    public async Task Extract_WithAFixedKeepBoth_AsksNobody_AndReplacesNothing() {
+        var (service, ns, fs, _, _) = Setup();
+        fs.Files[TargetReadme] = "already here"u8.ToArray();
+        fs.Directories.Add(TargetDocs);
+
+        var results = await service.ExtractAsync(
+            new[] { InnerReadme, InnerDocs }, Target, new FixedConflictResolver(ConflictResolution.Rename), CancellationToken.None);
+
+        Assert.All(results, r => Assert.Equal(BatchItemStatus.Renamed, r.Status));
+        Assert.Equal(new[] { "readme (1).txt", "docs (1)" }, ns.CopiedOut.Select(c => c.NewName));
+        Assert.Equal("already here"u8.ToArray(), fs.Files[TargetReadme]);
+    }
+
     [Fact]
     public async Task Extract_MergeOnAFolder_MeansANewName() {
         var (service, ns, fs, _, _) = Setup();

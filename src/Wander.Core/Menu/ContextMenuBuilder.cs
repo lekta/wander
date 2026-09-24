@@ -163,13 +163,15 @@ public static class ContextMenuBuilder {
         items.Add(Sub(MenuCommandId.FileSubmenu, fileGroup));
 
         // An archive sitting in an ordinary folder: everything above still
-        // applies to it as a file, and this is the one verb it has as a
-        // container. The shell's own "Извлечь все..." arrives among the
-        // third-party rows above and is left where it is - it is somebody
-        // else's verb and it behaves differently.
+        // applies to it as a file, and these are the verbs it has as a
+        // container - asking where, or right beside it. The shell's own
+        // "Извлечь все..." arrives among the third-party rows above and is
+        // left where it is - it is somebody else's verb and it behaves
+        // differently.
         if (t.SelectionIsArchive) {
             items.Add(MenuEntry.Divider);
             items.Add(Cmd(MenuCommandId.Extract));
+            items.Add(Cmd(MenuCommandId.ExtractHere));
         }
 
         items.Add(MenuEntry.Divider);
@@ -179,8 +181,8 @@ public static class ContextMenuBuilder {
     }
 
     /// <summary>
-    /// The menu on a row inside an archive. Four verbs, and nothing that
-    /// would write: the container is read-only by decision, so rename,
+    /// The menu on a row inside an archive. Five verbs, and nothing that
+    /// writes into it: the container is read-only by decision, so rename,
     /// delete, cut and paste are not greyed out here - they are simply not
     /// things this place offers. Third-party rows are absent for the same
     /// reason the Recycle Bin has none: the shell is never queried in a
@@ -194,6 +196,7 @@ public static class ContextMenuBuilder {
             MenuEntry.Divider,
             Cmd(MenuCommandId.Copy),
             Cmd(MenuCommandId.Extract),
+            Cmd(MenuCommandId.ExtractHere),
             Cmd(MenuCommandId.CopyPath),
         };
     }
@@ -260,6 +263,7 @@ public static class ContextMenuBuilder {
         // about a folder work on the folder on screen.
         if (any && (t.SelectionIsArchive || t.IsArchive)) {
             items.Add(Cmd(MenuCommandId.Extract));
+            items.Add(Cmd(MenuCommandId.ExtractHere));
         }
         if (fs && any && !t.IsPanelRow) {
             items.Add(Cmd(MenuCommandId.CreateShortcut));

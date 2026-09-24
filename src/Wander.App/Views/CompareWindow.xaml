@@ -15,10 +15,17 @@
         same place of both pictures, and two pictures can be laid on one
         place and flicked between (A/B). Not modal: it is for looking, and
         the window it came from waits for its own answer.
+
+        Two pictures go one above the other instead when that shows them
+        bigger (SplitOrientation, 2026-09-23): each pane then has its header
+        over it, in rows 0-1 and 2-3. Side by side the panes span all three
+        lower rows, and row 2 stays empty.
     -->
-    <Grid>
+    <Grid x:Name="Room" SizeChanged="Room_SizeChanged">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
+            <RowDefinition x:Name="HeaderRowA" Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition x:Name="HeaderRowB" Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
@@ -26,7 +33,7 @@
             <ColumnDefinition x:Name="ColumnB" Width="*"/>
         </Grid.ColumnDefinitions>
 
-        <!-- Which side is which: the folder over each column, as in the conflict window. -->
+        <!-- Which side is which: the folder over each pane, as in the conflict window. -->
         <TextBlock x:Name="HeaderA" Grid.Row="0" Grid.Column="0" Margin="12,8,6,6"
                    FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
         <DockPanel x:Name="HeaderBPanel" Grid.Row="0" Grid.Column="1" Margin="6,6,8,4">
@@ -44,7 +51,7 @@
                        VerticalAlignment="Center"/>
         </DockPanel>
 
-        <views:PreviewPane x:Name="PaneA" Grid.Row="1" Grid.Column="0" BorderThickness="0,1,0,0"/>
-        <views:PreviewPane x:Name="PaneB" Grid.Row="1" Grid.Column="1" BorderThickness="1,1,0,0"/>
+        <views:PreviewPane x:Name="PaneA" Grid.Row="1" Grid.RowSpan="3" Grid.Column="0" BorderThickness="0,1,0,0"/>
+        <views:PreviewPane x:Name="PaneB" Grid.Row="1" Grid.RowSpan="3" Grid.Column="1" BorderThickness="1,1,0,0"/>
     </Grid>
 </Window>

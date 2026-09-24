@@ -78,9 +78,10 @@ public static class PanelRules {
     /// <summary>
     /// The open folder moved: its place is in the panel it was opened from -
     /// the drives when it cannot be reached from the bookmarks (P-10) - and
-    /// that panel is opened down to it, the cursor on it. A folder opened
-    /// from the bookmarks leaves the drives' cursor where it was (P-20, P-22);
-    /// one opened from anywhere else takes the bookmarks' cursor away (P-21).
+    /// that panel is opened down to it, the cursor on it. The other panel
+    /// keeps its cursor where it was, lit as inactive, for Ctrl+1 to go back
+    /// to (P-20, P-22); until 2026-09-23 a folder opened from anywhere but
+    /// the bookmarks took the bookmarks' cursor away.
     /// </summary>
     private static WorkspaceState OnNavigated(WorkspaceState state, Navigated navigated, ICollection<WorkspaceEffect> effects) {
         string path = navigated.Path;
@@ -92,7 +93,7 @@ public static class PanelRules {
         state = Reveal(state, pane, path, effects);
 
         return pane == Pane.Drives
-            ? state with { Bookmarks = state.Bookmarks with { Location = null, Caret = null, Revealing = null } }
+            ? state with { Bookmarks = state.Bookmarks with { Location = null, Revealing = null } }
             : state with { Drives = state.Drives with { Location = null, Revealing = null } };
     }
 
@@ -111,9 +112,9 @@ public static class PanelRules {
 
     /// <summary>
     /// The keyboard came into a panel. Ctrl+Shift+E opens the panel down to
-    /// the open folder; Ctrl+1 does the same, except into the drives while
-    /// the open folder came from the bookmarks - the drives' cursor stays
-    /// where it was left (P-22). Tab lands on the panel's cursor, else on
+    /// the open folder; Ctrl+1 does the same, except from the other panel
+    /// into one that does not hold the open folder - its cursor stays where
+    /// it was left (P-22, both ways). Tab lands on the panel's cursor, else on
     /// the open folder's place, else on the first row, opening the branch
     /// it is hidden in (P-7, P-8, decision B5) and opening no folder. Coming
     /// back from a menu, a dialog or another window moves nothing; nor does
@@ -133,7 +134,7 @@ public static class PanelRules {
                 return RevealOpenFolder(state, pane, effects);
 
             case ZoneReason.PanelKey:
-                return pane == Pane.Drives && state.Folder.Source == NavigationSource.Bookmark && panel.Caret is { } held
+                return state.HeldRow(pane) is { } held
                     ? Show(state, pane, held, effects)
                     : RevealOpenFolder(state, pane, effects);
 
@@ -212,10 +213,11 @@ public static class PanelRules {
 
     /// <summary>
     /// A folder Wander moved or renamed: every row on it or under it, in
-    /// both panels, takes the new path in place - open if it was open, the
-    /// cursor still on it (P-12, P-17). The level it moved out of and the
-    /// one it moved into are read again by whoever moved it
-    /// (<see cref="FolderChanged"/>).
+    /// both panels, takes the new path - open if it was open, the cursor
+    /// still on it (P-12, P-17). Renamed, its row stays where it stands; moved
+    /// into another folder, it leaves the level it was in and shows in the
+    /// one it went to once that is read. Both levels are read again by
+    /// whoever moved it (<see cref="FolderChanged"/>).
     /// </summary>
     private static WorkspaceState OnRelocated(WorkspaceState state, Relocated relocated) {
         return state with {
@@ -561,11 +563,22 @@ public static class PanelRules {
         return levelKey.Length > 0 ? levelKey : null;
     }
 
-    /// <summary>One panel after a folder moved: levels, rows, what is open and every path it holds follow.</summary>
+    /// <summary>
+    /// One panel after a folder moved: levels, rows, what is open and every
+    /// path it holds follow. The moved folder's own row leaves a level that
+    /// is no longer its parent: kept there under the new path, it went
+    /// missing from that level's next read, and the cursor on it went to a
+    /// neighbour (2026-09-23). The top rows are no one's children - a
+    /// bookmark on the folder follows it in place.
+    /// </summary>
     private static PanelState Follow(PanelState panel, string from, string to) {
         var levels = ImmutableDictionary.CreateBuilder<string, PanelLevel>(StringComparer.OrdinalIgnoreCase);
         foreach (var (key, level) in panel.Levels) {
-            var rows = level.Rows.Select(r => FollowRow(r, from, to)).ToImmutableArray();
+            bool left = key.Length > 0 && !PanelPaths.Same(PanelPaths.Parent(to), key);
+            var rows = level.Rows
+                .Where(r => !(left && PanelPaths.Same(r.Path, from)))
+                .Select(r => FollowRow(r, from, to))
+                .ToImmutableArray();
             string moved = key.Length == 0 ? key : PanelPaths.Key(PanelPaths.Follow(key, from, to));
             levels[moved] = level with { Rows = rows };
         }

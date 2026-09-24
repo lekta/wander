@@ -1,5 +1,4 @@
 using Wander.Core.Layout;
-using Wander.Core.Navigation;
 using Wander.Core.Panels;
 
 namespace Wander.Core.Workspace;
@@ -7,8 +6,8 @@ namespace Wander.Core.Workspace;
 /// <summary>
 /// Module 1 of the reducer (REDESIGN 4.5): which events open a folder. A
 /// click on a row, Enter on the cursor, and - with "arrows open folders" -
-/// a cursor move, through <see cref="TreeNavThrottle"/>; Ctrl+1 back into
-/// the drives onto the row they hold, with the same setting. A folder that
+/// a cursor move, through <see cref="TreeNavThrottle"/>; Ctrl+1 from one
+/// panel into the other onto the row it holds, with the same setting. A folder that
 /// is already open is not opened again: the echo of a navigation used to
 /// plant an intent that the next listing consumed. Owns the open folder's
 /// facts and the throttle's clock.
@@ -31,13 +30,16 @@ public static class NavigationRules {
             case ThrottleElapsed elapsed:
                 return OnThrottle(state, elapsed, effects);
 
-            case ZoneEntered { Zone: WindowZone.Drives, Reason: ZoneReason.PanelKey }
-                when state.Options.ArrowsOpenFolders && state.Folder.Source == NavigationSource.Bookmark:
-                // Ctrl+1 from the bookmarks into the drives goes back to the
-                // row the drives hold, and with the arrows opening folders it
-                // opens that row, as an arrow landing there would (P-22).
-                return state.Drives.Caret is { } held
-                    ? Open(state, Pane.Drives, held, nowMs: null, effects)
+            case ZoneEntered { Zone: WindowZone.Bookmarks or WindowZone.Drives, Reason: ZoneReason.PanelKey } entered
+                when state.Options.ArrowsOpenFolders:
+                // Ctrl+1 from one panel into the other goes back to the row
+                // that panel holds, and with the arrows opening folders it
+                // opens that row, as an arrow landing there would (P-22, both
+                // ways since 2026-09-23).
+                var pane = entered.Zone == WindowZone.Bookmarks ? Pane.Bookmarks : Pane.Drives;
+
+                return state.HeldRow(pane) is { } held
+                    ? Open(state, pane, held, nowMs: null, effects)
                     : state;
 
             default:

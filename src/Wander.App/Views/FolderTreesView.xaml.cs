@@ -54,8 +54,10 @@ public partial class FolderTreesView : UserControl {
     private Point _dragOrigin;
 
     // A right-button press on a line arms a drag as well: moved past the
-    // threshold it drags the folder, released in place it opens the menu.
+    // threshold it drags the folder, released in place it opens the menu -
+    // on a line that has one (an archive's lines drag and have none).
     private TreeNodeViewModel? _menuLine;
+    private TreeNodeViewModel? _rightDragLine;
     private Point _rightDragOrigin;
     private bool _rightDragArmed;
 
@@ -164,7 +166,7 @@ public partial class FolderTreesView : UserControl {
     /// <summary>
     /// The tail of <c>Ctrl+1</c> and <c>Ctrl+Shift+E</c>: the keyboard into
     /// <paramref name="pane"/>. Where its cursor lands - the open folder,
-    /// opened down to, or the row the drives held (P-22) - is the model's
+    /// opened down to, or the row the panel held (P-22) - is the model's
     /// answer to the keyboard arriving for that reason, which the window
     /// gives; the panel then puts the keyboard on that line.
     /// </summary>
@@ -377,7 +379,7 @@ public partial class FolderTreesView : UserControl {
         // The panel is a drag source as in Explorer: it is where the folder
         // you want to move *to* is visible, so it is also where the folder
         // you want to move *from* often is.
-        _dragLine = IsGrip(line) ? line : null;
+        _dragLine = CanDrag(line) ? line : null;
         _dragOrigin = e.GetPosition(this);
         Post(new RowClicked(pane, line.FullPath, WorkspaceController.Now));
     }
@@ -390,8 +392,9 @@ public partial class FolderTreesView : UserControl {
         if (_rightDragArmed) {
             if (e.RightButton != MouseButtonState.Pressed) {
                 _rightDragArmed = false;
-            } else if (_menuLine is { } grabbed && MovedPastDragThreshold(e.GetPosition(this), _rightDragOrigin)) {
+            } else if (_rightDragLine is { } grabbed && MovedPastDragThreshold(e.GetPosition(this), _rightDragOrigin)) {
                 _rightDragArmed = false;
+                _rightDragLine = null;
                 // The drag swallows the release; a menu waiting for it would
                 // open on the next stray one instead.
                 _menuLine = null;
@@ -431,16 +434,17 @@ public partial class FolderTreesView : UserControl {
         }
 
         // The "..." button is a control, not a grip - same as for the left button.
-        _menuLine = ListVisuals.IsInsideControl(e.OriginalSource) || LineAt(e.OriginalSource) is not { } line || !IsGrip(line)
-            ? null
-            : line;
-        _rightDragArmed = _menuLine is not null;
+        var line = ListVisuals.IsInsideControl(e.OriginalSource) ? null : LineAt(e.OriginalSource);
+        _menuLine = line is not null && HasMenu(line) ? line : null;
+        _rightDragLine = line is not null && CanDrag(line) ? line : null;
+        _rightDragArmed = _rightDragLine is not null;
         _rightDragOrigin = e.GetPosition(this);
         e.Handled = _menuLine is not null;
     }
 
     private void List_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e) {
         _rightDragArmed = false;
+        _rightDragLine = null;
         var line = _menuLine;
         // Consumed by this release: a press elsewhere released over the
         // panel must not find this line still waiting for its menu.
@@ -573,7 +577,7 @@ public partial class FolderTreesView : UserControl {
         // release (List_PreviewKeyUp) - an unhandled release turns into
         // WM_CONTEXTMENU and would dismiss a menu opened on the press.
         if (e.Key == Key.Apps || (e.Key == Key.System && e.SystemKey == Key.F10 && modifiers == ModifierKeys.Shift)) {
-            if (e.Key != Key.Apps && caret is not null && IsGrip(caret)) {
+            if (e.Key != Key.Apps && caret is not null && HasMenu(caret)) {
                 OpenMenu(list, caret, PlacementMode.Bottom);
             }
             e.Handled = true;
@@ -593,7 +597,7 @@ public partial class FolderTreesView : UserControl {
         }
 
         e.Handled = true;
-        if (Vm.Trees.CaretLine(PaneOf(list)) is { } caret && IsGrip(caret)) {
+        if (Vm.Trees.CaretLine(PaneOf(list)) is { } caret && HasMenu(caret)) {
             OpenMenu(list, caret, PlacementMode.Bottom);
         }
     }
@@ -1111,15 +1115,24 @@ public partial class FolderTreesView : UserControl {
     }
 
     /// <summary>
-    /// A line with a real folder behind it: what can be dragged, dropped on
-    /// and given a folder's menu. An archive, a folder inside one and a
-    /// shell location answer no - the container is read-only by decision.
+    /// A line with a real folder behind it: what is given a folder's menu. An
+    /// archive, a folder inside one and a shell location answer no - the
+    /// container is read-only by decision.
     /// </summary>
-    private static bool IsGrip(TreeNodeViewModel line) {
+    private static bool HasMenu(TreeNodeViewModel line) {
+        return CanDrag(line) && !Archives.Contains(line.FullPath);
+    }
+
+    /// <summary>
+    /// A line that can be dragged away: a folder, an archive - a file like
+    /// any other - and a folder inside an archive, whose drop unpacks it the
+    /// way a row dragged out of the list does (2026-09-23). A shell location
+    /// is nothing a drop could take.
+    /// </summary>
+    private static bool CanDrag(TreeNodeViewModel line) {
         return !string.IsNullOrEmpty(line.FullPath)
             && line.Kind is not PanelRowKind.Shell
-            && !line.FullPath.StartsWith("shell:", StringComparison.OrdinalIgnoreCase)
-            && !Archives.Contains(line.FullPath);
+            && !line.FullPath.StartsWith("shell:", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool MovedPastDragThreshold(Point pos, Point origin) {

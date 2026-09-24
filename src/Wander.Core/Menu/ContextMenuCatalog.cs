@@ -54,6 +54,7 @@ public static class ContextMenuCatalog {
         [MenuCommandId.ConfigureActions] = "MenuCmdConfigureActions",
 
         [MenuCommandId.Extract] = "MenuCmdExtract",
+        [MenuCommandId.ExtractHere] = "MenuCmdExtractHere",
 
         [MenuCommandId.RestoreFromRecycleBin] = "MenuCmdRestore",
 
@@ -117,6 +118,7 @@ public static class ContextMenuCatalog {
         new MenuNode(MenuCommandId.CreateShortcut, 1),
         new MenuNode(MenuCommandId.Delete, 1),
         new MenuNode(MenuCommandId.Extract, 0),
+        new MenuNode(MenuCommandId.ExtractHere, 0),
         new MenuNode(MenuCommandId.NewSubmenu, 0),
         new MenuNode(MenuCommandId.NewFolder, 1),
         new MenuNode(MenuCommandId.Properties, 0),

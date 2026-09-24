@@ -195,9 +195,10 @@ public partial class ProgressDialog : Window, INotifyPropertyChanged, ITransient
     }
 
     /// <summary>
-    /// While the work runs there is no closing this window: the X, Alt+F4
-    /// and Escape all mean "Свернуть". Once the task has finished, the close
-    /// is ours and goes through.
+    /// While the work runs there is no closing this window: Alt+F4, the
+    /// system menu's Close and Escape all mean "Свернуть" - the title bar
+    /// has no X (see the XAML). Once the task has finished, the close is
+    /// ours and goes through.
     /// </summary>
     private void OnClosing(object? sender, CancelEventArgs e) {
         if (!_finished) {

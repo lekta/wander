@@ -49,6 +49,13 @@ public sealed class MainViewModel : ObservableObject {
     private const int SpinnerDelayMs = 150;
 
     /// <summary>
+    /// How long a pair's split waits for its pictures' shapes (ShowPair).
+    /// Headers read in milliseconds; a slow disk gets the split this late
+    /// at most, with a picture not read yet counted as square.
+    /// </summary>
+    private const int PairShapesWaitMs = 150;
+
+    /// <summary>
     /// How slow an arrival has to be before it is worth a line in the log.
     /// A third of a second is where "it opened" turns into "it took a
     /// moment" — below that there is nothing to investigate and a line per
@@ -76,9 +83,10 @@ public sealed class MainViewModel : ObservableObject {
     /// Most are over long before that - a delete of one file, an undo of a
     /// rename, a refusal that takes no time at all - and a window flashing
     /// up and taking the focus for them is worse than none. The status bar
-    /// shows the operation from its first moment either way.
+    /// shows the operation from its first moment either way; the clocks on
+    /// its rows come up with the window (2026-09-23).
     /// </summary>
-    private static readonly TimeSpan _operationWindowDelay = TimeSpan.FromMilliseconds(400);
+    private static readonly TimeSpan _operationWindowDelay = TimeSpan.FromMilliseconds(PathClaims.BadgeDelayMs);
 
     /// <summary>How often a window held back by a modal question looks again.</summary>
     private static readonly TimeSpan _operationWindowRecheck = TimeSpan.FromMilliseconds(200);
@@ -144,6 +152,12 @@ public sealed class MainViewModel : ObservableObject {
     // thread to show - see ShowPanelFolder.
     private string? _panelFolderPath;
     private CancellationTokenSource? _panelFolderCts;
+
+    // The pair the split is for, and whether its pictures' shapes are in -
+    // see ShowPair.
+    private (string First, string Second)? _pairShown;
+    private bool _pairShapesRead;
+    private CancellationTokenSource? _pairShapesCts;
 
     // What is on screen and why (ViewChoice). The choice itself is not
     // stored here: a pin lives in _folders, the default in the settings,
@@ -439,6 +453,7 @@ public sealed class MainViewModel : ObservableObject {
         // pasting a $Recycle.Bin backing path copies a mangled file.
         CopyCommand = new RelayCommand(Copy, CanCopy);
         ExtractCommand = new RelayCommand(p => _ = ExtractSelectionAsync(p), CanExtractSelection);
+        ExtractHereCommand = new RelayCommand(p => _ = ExtractHereAsync(p), CanExtractSelection);
         CutCommand = new RelayCommand(Cut, CanCut);
         PasteCommand = new RelayCommand(p => _ = PasteAsync(p), CanPaste);
         NewFolderCommand = new RelayCommand(_ => NewFolder(), _ => _nav.Current is not null && !IsCurrentShellNamespace);
@@ -689,6 +704,14 @@ public sealed class MainViewModel : ObservableObject {
             }
         }
     }
+
+    /// <summary>
+    /// The shapes of the split's two pictures as shown, read off their
+    /// headers (2026-09-23): which way the pane splits is decided from them
+    /// and from the pane (SplitOrientation). Null for a half that is not a
+    /// picture or has not been read.
+    /// </summary>
+    public (PictureShape? First, PictureShape? Second) PreviewPairShapes { get; private set; }
 
     /// <summary>
     /// User preferences. XAML binds to this (e.g. tile sizes) and the
@@ -1029,7 +1052,84 @@ public sealed class MainViewModel : ObservableObject {
             PreviewSecond.SetPrimary(null);
         }
         Preview.SetPrimary(subject.Primary);
-        IsPreviewSplit = subject.Pair is not null;
+        ShowPair(subject.Pair);
+    }
+
+    /// <summary>
+    /// The split for a pair, once its pictures' shapes are known: which way
+    /// it splits depends on them, and a split that turned over after its
+    /// pictures appeared would be one frame too many on screen (pillar 4).
+    /// The headers are read on the pool - milliseconds; the second half does
+    /// not load while it is hidden, so it comes up already the right way.
+    /// A new pair under a split already on screen keeps it meanwhile.
+    /// </summary>
+    private void ShowPair((FileSystemEntry First, FileSystemEntry Second)? pair) {
+        if (pair is not { } p) {
+            HidePair();
+
+            return;
+        }
+
+        var paths = (p.First.FullPath, p.Second.FullPath);
+        if (_pairShown is { } shown && PathsEqual(shown.First, paths.Item1) && PathsEqual(shown.Second, paths.Item2)) {
+            IsPreviewSplit |= _pairShapesRead;
+
+            return;
+        }
+
+        _pairShown = paths;
+        _pairShapesRead = false;
+        // Not raised: a split already on screen stays as it is until the
+        // new shapes are in; one coming up on the wait counts both as square.
+        PreviewPairShapes = (null, null);
+        _pairShapesCts?.Cancel();
+        _pairShapesCts = new CancellationTokenSource();
+        _ = ShowPairAsync(p.First.FullPath, p.Second.FullPath, _pairShapesCts.Token);
+    }
+
+    private async Task ShowPairAsync(string first, string second, CancellationToken ct) {
+        var reader = ServiceLocator.TryGet<IImageMetadataReader>();
+        var read = Task.Run(() => (ShapeOf(first), ShapeOf(second)), ct);
+        await Task.WhenAny(read, Task.Delay(PairShapesWaitMs, ct));
+        if (ct.IsCancellationRequested) {
+            return;
+        }
+
+        // Past the wait the split comes up with what is known; the shapes
+        // still count when they arrive, and the split turns only when that
+        // clearly shows the two bigger (SplitOrientation.TurnAbove).
+        if (!read.IsCompleted) {
+            IsPreviewSplit = true;
+        }
+        (PictureShape?, PictureShape?) shapes;
+        try {
+            shapes = await read;
+        } catch (OperationCanceledException) {
+            return;
+        } catch (Exception ex) {
+            _log.Warn($"Preview pair: shapes not read ({ex.Message})");
+            shapes = (null, null);
+        }
+        if (ct.IsCancellationRequested) {
+            return;
+        }
+
+        PreviewPairShapes = shapes;
+        _pairShapesRead = true;
+        Raise(nameof(PreviewPairShapes));
+        IsPreviewSplit = true;
+
+        PictureShape? ShapeOf(string path) {
+            return PreviewRouter.Route(path) is PreviewRoute.Image ? PictureLoader.ShapeOf(path, reader) : null;
+        }
+    }
+
+    /// <summary>No pair: the split goes, and a read of its shapes is let go of.</summary>
+    private void HidePair() {
+        _pairShapesCts?.Cancel();
+        _pairShown = null;
+        _pairShapesRead = false;
+        IsPreviewSplit = false;
     }
 
     /// <summary>
@@ -1084,7 +1184,7 @@ public sealed class MainViewModel : ObservableObject {
         Preview.SetPrimary(entry);
         PreviewSecond.SetSelection(Array.Empty<FileSystemEntry>());
         PreviewSecond.SetPrimary(null);
-        IsPreviewSplit = false;
+        HidePair();
     }
 
     /// <summary>
@@ -1377,6 +1477,9 @@ public sealed class MainViewModel : ObservableObject {
 
     /// <summary>Takes the selection out of an archive into a folder the user picks.</summary>
     public RelayCommand ExtractCommand { get; }
+
+    /// <summary>The same, into the folder the archive sits in, asking nothing.</summary>
+    public RelayCommand ExtractHereCommand { get; }
 
     public RelayCommand SetViewModeCommand { get; }
 
@@ -5112,15 +5215,8 @@ public sealed class MainViewModel : ObservableObject {
     /// own "Извлечь все…" does one row above.
     /// </summary>
     private async Task ExtractSelectionAsync(object? parameter) {
-        if (!CanExtractSelection(parameter) || TryGetShellNamespace() is not { } ns) {
-            return;
-        }
-
-        var sources = CurrentArchive is not null
-            ? _selectedEntries.Select(e => e.FullPath).ToList()
-            : _selectedEntries.SelectMany(e => TopLevelOf(ns, e.FullPath)).ToList();
-        if (sources.Count == 0) {
-            Warn(string.Format(Strings.StatusArchiveEmptyOrLocked, _selectedEntries[0].Name));
+        if (!CanExtractSelection(parameter) || TryGetShellNamespace() is not { } ns
+            || ExtractionSources(ns, _selectedEntries) is not { } sources) {
             return;
         }
 
@@ -5130,6 +5226,52 @@ public sealed class MainViewModel : ObservableObject {
         }
 
         await ExtractAsync(sources, target);
+    }
+
+    /// <summary>
+    /// "Извлечь рядом" (2026-09-23): what "Извлечь…" takes out, into the
+    /// folder the archive sits in, with no question at all - a name already
+    /// there is kept and the newcomer gets "(1)" (pillar 2: asking nothing,
+    /// it may not replace anything). Archives picked in search results can
+    /// sit in several folders; each comes out beside its own.
+    /// </summary>
+    private async Task ExtractHereAsync(object? parameter) {
+        if (!CanExtractSelection(parameter) || TryGetShellNamespace() is not { } ns) {
+            return;
+        }
+
+        var batches = CurrentArchive is { } archive
+            ? new[] { (Folder: Path.GetDirectoryName(archive.Archive), Rows: _selectedEntries) }
+            : _selectedEntries
+                .GroupBy(e => Path.GetDirectoryName(e.FullPath), StringComparer.OrdinalIgnoreCase)
+                .Select(g => (Folder: g.Key, Rows: (IReadOnlyList<FileSystemEntry>)g.ToList()))
+                .ToArray();
+        foreach (var (folder, rows) in batches) {
+            if (string.IsNullOrEmpty(folder) || ExtractionSources(ns, rows) is not { } sources) {
+                continue;
+            }
+
+            await ExtractAsync(sources, folder, new FixedConflictResolver(ConflictResolution.Rename));
+        }
+    }
+
+    /// <summary>
+    /// What an extraction takes out of <paramref name="rows"/>: inside an
+    /// archive the rows themselves; archives in an ordinary folder give
+    /// everything they hold, which is what the shell's own "Извлечь все…"
+    /// does one row above. Null, said in the status bar, when that is nothing.
+    /// </summary>
+    private IReadOnlyList<string>? ExtractionSources(IShellNamespace ns, IReadOnlyList<FileSystemEntry> rows) {
+        var sources = CurrentArchive is not null
+            ? rows.Select(e => e.FullPath).ToList()
+            : rows.SelectMany(e => TopLevelOf(ns, e.FullPath)).ToList();
+        if (sources.Count == 0) {
+            Warn(string.Format(Strings.StatusArchiveEmptyOrLocked, rows[0].Name));
+
+            return null;
+        }
+
+        return sources;
     }
 
     /// <summary>What an archive holds at its top level, listed off the disk it sits on.</summary>
@@ -5145,15 +5287,17 @@ public sealed class MainViewModel : ObservableObject {
 
     /// <summary>
     /// The one route bytes leave an archive by: the paste of archive
-    /// sources into a real folder and the "Извлечь…" row both end here.
+    /// sources into a real folder and both "Извлечь" rows end here. A name
+    /// already taken is asked about, unless <paramref name="resolver"/>
+    /// answers instead.
     /// </summary>
-    private async Task ExtractAsync(IReadOnlyList<string> sources, string target) {
+    private async Task ExtractAsync(IReadOnlyList<string> sources, string target, IConflictResolver? resolver = null) {
         if (TryGetShellNamespace() is not { } ns) {
             return;
         }
 
         var service = new ExtractionService(ns, _fs, ServiceLocator.Get<IRecycleBin>(), _undo, _tracker, _log, _claims);
-        var resolver = _dialogs.CreateConflictResolver(Settings.SkipIdenticalOnConflict);
+        resolver ??= _dialogs.CreateConflictResolver(Settings.SkipIdenticalOnConflict);
         _log.Info($"Extract: {sources.Count} item(s) into {target}");
 
         IReadOnlyList<BatchItemResult> results;

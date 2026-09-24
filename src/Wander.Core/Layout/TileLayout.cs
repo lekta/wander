@@ -9,6 +9,16 @@ public readonly record struct TileRect(double X, double Y, double Width, double 
 
 
 /// <summary>
+/// A cell held where it stands on screen while the grid reflows under it
+/// (<see cref="TileLayout.AnchorAt"/>).
+/// </summary>
+/// <param name="Index">The item.</param>
+/// <param name="Y">Its top, from the viewport's top - negative when cut off above.</param>
+/// <param name="KeepWhole">The user's cell, wholly on screen: it stays wholly on screen.</param>
+public readonly record struct TileAnchor(int Index, double Y, bool KeepWhole);
+
+
+/// <summary>
 /// The arithmetic of a wrap layout with uniform cells: how many columns fit,
 /// where each cell sits, how tall the whole thing is, and which slice of it
 /// a given scroll offset can see.
@@ -133,5 +143,81 @@ public readonly record struct TileLayout {
         }
 
         return verticalOffset;
+    }
+
+
+    /// <summary>
+    /// This grid, after <paramref name="before"/>, moves the rows under an
+    /// unmoved offset: the same items in other columns (a folder panel
+    /// shown or hidden, a splitter dragged) or at another cell height
+    /// (Ctrl+wheel). The viewport's height alone moves nothing - the top row
+    /// stays where it is.
+    /// </summary>
+    public bool Reflows(TileLayout before) {
+        return before.ItemCount > 0 && before.ItemCount == ItemCount && before.ViewportHeight > 0
+            && (before.Columns != Columns || Math.Abs(before.CellHeight - CellHeight) > 0.01);
+    }
+
+    /// <summary>
+    /// The cell to hold in place when the grid reflows (2026-09-23): the one
+    /// with the keyboard if any of it shows, else the first selected one that
+    /// shows, else the first that shows - what a browser anchors a page on.
+    /// Without it the offset stays in pixels, every row below the first
+    /// moves, and deep in a folder the whole screen changes. Selected cells
+    /// off screen are never pulled in: a reflow is not a reason to scroll.
+    /// </summary>
+    /// <param name="verticalOffset">Where the grid is scrolled to.</param>
+    /// <param name="keyboard">The item with the keyboard, or -1.</param>
+    /// <param name="selected">The selected items, in any order.</param>
+    public TileAnchor? AnchorAt(double verticalOffset, int keyboard, IEnumerable<int> selected) {
+        if (ItemCount == 0) {
+            return null;
+        }
+
+        double offset = Clamp(verticalOffset);
+        if (Shows(keyboard, offset)) {
+            return AnchorOf(keyboard, offset, users: true);
+        }
+
+        int first = -1;
+        foreach (int index in selected) {
+            if (Shows(index, offset) && (first < 0 || index < first)) {
+                first = index;
+            }
+        }
+
+        return first >= 0
+            ? AnchorOf(first, offset, users: true)
+            : AnchorOf(VisibleRange(offset).First, offset, users: false);
+    }
+
+    /// <summary>
+    /// The offset at which <paramref name="anchor"/> stands where it stood;
+    /// the user's cell that no longer fits there wholly is brought into view.
+    /// </summary>
+    public double Hold(TileAnchor anchor) {
+        int index = Math.Clamp(anchor.Index, 0, Math.Max(0, ItemCount - 1));
+        double offset = Clamp(CellAt(index).Y - anchor.Y);
+
+        return anchor.KeepWhole ? OffsetToReveal(index, offset) : offset;
+    }
+
+
+    /// <summary>Any of the cell is on screen at the offset.</summary>
+    private bool Shows(int index, double verticalOffset) {
+        if (index < 0 || index >= ItemCount) {
+            return false;
+        }
+
+        var cell = CellAt(index);
+
+        return cell.Bottom > verticalOffset && cell.Y < verticalOffset + ViewportHeight;
+    }
+
+    private TileAnchor AnchorOf(int index, double verticalOffset, bool users) {
+        var cell = CellAt(index);
+        bool whole = cell.Y >= verticalOffset && cell.Bottom <= verticalOffset + ViewportHeight;
+
+        return new TileAnchor(index, cell.Y - verticalOffset, users && whole);
     }
 }

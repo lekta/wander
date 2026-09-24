@@ -198,7 +198,11 @@ public class PanelRulesTests {
 
     // --- Where the open folder is ----------------------------------------------
 
-    /// <summary>P-10: a folder opened from the bookmarks has its place there, going deeper too; one they cannot reach goes to the drives.</summary>
+    /// <summary>
+    /// P-10: a folder opened from the bookmarks has its place there, going
+    /// deeper too; one they cannot reach goes to the drives, and the
+    /// bookmarks keep their cursor (P-21 since 2026-09-23).
+    /// </summary>
     [Fact]
     public void P10_ThePlaceIsInThePanelTheFolderCameFrom() {
         var s = Scene().Start().SetBookmarks(Bookmark(Photos));
@@ -212,7 +216,7 @@ public class PanelRulesTests {
         s.Navigate(E, NavigationSource.Bookmark);
         Assert.Equal(E, s.Drives.Location);
         Assert.Null(s.Bookmarks.Location);
-        Assert.Null(s.Bookmarks.Caret);
+        Assert.Equal(Year, s.Bookmarks.Caret);
     }
 
     /// <summary>P-11: back and forward put the place in the panel of the history record.</summary>
@@ -223,7 +227,8 @@ public class PanelRulesTests {
         s.Navigate(A, NavigationSource.Drives, NavigationKind.Back);
 
         Assert.Equal(A, s.Drives.Location);
-        Assert.Null(s.Bookmarks.Caret);
+        Assert.Null(s.Bookmarks.Location);
+        Assert.Equal(Photos, s.Bookmarks.Caret);
     }
 
     /// <summary>P-12: the open folder moved; its place follows in the same panel, and the drives do not open by themselves.</summary>
@@ -239,6 +244,29 @@ public class PanelRulesTests {
         Assert.Equal(@"D:\Photos\2027", s.Bookmarks.Location);
         Assert.Equal(@"D:\Photos\2027", s.Bookmarks.Caret);
         Assert.Equal(drivesOpen, s.Drives.Expanded);
+    }
+
+    /// <summary>
+    /// P-12 into another folder: the row leaves the level it was in, the place
+    /// and the cursor go with it, and it stays open - also when the level it
+    /// left is read again after the navigation, as the application answers.
+    /// </summary>
+    [Fact]
+    public void P12_TheOpenFolderMovedIntoAnotherFolder_TheCursorFollows() {
+        const string moved = @"C:\E\B";
+        var s = Scene().Start().Navigate(B).Chevron(Pane.Drives, B, open: true).Enter(WindowZone.Drives);
+        s.Delete(B).Add(@"C:\E\B\C");
+
+        s.Post(new Relocated(B, moved)).Post(new FolderChanged(E)).Post(new FolderChanged(A));
+        var late = Assert.Single(s.Effects.OfType<ReadBranch>());
+        s.Navigate(moved, NavigationSource.Drives, NavigationKind.Rewrite).Answer(late);
+
+        Assert.Equal(moved, s.Drives.Location);
+        Assert.Equal(moved, s.Drives.Caret);
+        Assert.True(s.Shows(Pane.Drives, moved));
+        Assert.False(s.Shows(Pane.Drives, B));
+        Assert.True(s.Drives.IsExpanded(moved));
+        Assert.True(s.Shows(Pane.Drives, @"C:\E\B\C"));
     }
 
     /// <summary>P-13: the open folder deleted from its panel: the parent opens, and it is the cursor and the target.</summary>
@@ -463,8 +491,8 @@ public class PanelRulesTests {
 
     /// <summary>
     /// P-21: at most one lit row a panel, at most one active in the window;
-    /// a folder opened from anywhere but the bookmarks takes the bookmarks'
-    /// row away, one opened from the bookmarks leaves the drives' row.
+    /// each panel keeps its row whichever panel the next folder is opened
+    /// from (both ways since 2026-09-23).
     /// </summary>
     [Fact]
     public void P21_OneActiveHighlight_AndEachPanelItsOwn() {
@@ -483,23 +511,70 @@ public class PanelRulesTests {
             Assert.True(active <= 1);
         }
 
-        Assert.Null(s.Bookmarks.Caret);
+        Assert.Equal(Year, s.Bookmarks.Caret);
         Assert.Equal(E, s.Drives.Caret);
     }
 
     /// <summary>
-    /// P-22: the open folder came from the bookmarks; Ctrl+1 into the drives
-    /// lands on the row they hold - and with the arrows opening folders,
-    /// opens it.
+    /// P-22: the open folder came from the bookmarks; Ctrl+1 from them into
+    /// the drives lands on the row the drives hold - and with the arrows
+    /// opening folders, opens it.
     /// </summary>
     [Fact]
     public void P22_Ctrl1IntoTheDrives_LandsOnTheRowTheyHold() {
         var s = Scene().Options(arrowsOpen: true).Start().SetBookmarks(Bookmark(Photos)).Navigate(A).Navigate(Photos, NavigationSource.Bookmark);
+        s.Enter(WindowZone.Bookmarks);
 
         s.Enter(WindowZone.Drives, ZoneReason.PanelKey);
 
         Assert.Equal(A, s.Drives.Caret);
         Assert.Equal(A, Assert.Single(s.Effects.OfType<Navigate>()).Path);
+    }
+
+    /// <summary>
+    /// P-22 the other way (2026-09-23): the open folder came from the drives;
+    /// Ctrl+1 from them into the bookmarks lands on the row the bookmarks
+    /// hold and, with the arrows opening folders, opens it - Ctrl+1 goes to
+    /// and fro between two folders.
+    /// </summary>
+    [Fact]
+    public void P22_Ctrl1IntoTheBookmarks_LandsOnTheRowTheyHold() {
+        var s = Scene().Options(arrowsOpen: true).Start().SetBookmarks(Bookmark(Photos), Bookmark(E))
+            .Navigate(Year, NavigationSource.Bookmark)
+            .Enter(WindowZone.Drives, ZoneReason.Click).Click(Pane.Drives, A).Navigate(A);
+        Assert.Equal(Year, s.Bookmarks.Caret);
+        Assert.False(s.State.Highlight(Pane.Bookmarks).Active);
+
+        s.Enter(WindowZone.Bookmarks, ZoneReason.PanelKey);
+        Assert.Equal(Year, s.Bookmarks.Caret);
+        Assert.Equal(Year, Assert.Single(s.Effects.OfType<Navigate>()).Path);
+
+        s.Navigate(Year, NavigationSource.Bookmark).Enter(WindowZone.Drives, ZoneReason.PanelKey);
+        Assert.Equal(A, Assert.Single(s.Effects.OfType<Navigate>()).Path);
+    }
+
+    /// <summary>Without the arrows opening folders, Ctrl+1 from the drives puts the cursor on the bookmarks' row and opens nothing.</summary>
+    [Fact]
+    public void Ctrl1IntoTheBookmarks_WithoutArrowsOpening_OnlyMovesTheCursor() {
+        var s = Scene().Start().SetBookmarks(Bookmark(Photos), Bookmark(E))
+            .Navigate(Year, NavigationSource.Bookmark).Navigate(A).Enter(WindowZone.Drives);
+
+        s.Enter(WindowZone.Bookmarks, ZoneReason.PanelKey);
+
+        Assert.Equal(Year, s.Bookmarks.Caret);
+        Assert.Empty(s.Effects.OfType<Navigate>());
+    }
+
+    /// <summary>From the list Ctrl+1 only shows where the open folder is: into the bookmarks that cannot reach it, onto their row, opening nothing.</summary>
+    [Fact]
+    public void Ctrl1FromTheList_OpensNothing() {
+        var s = Scene().Options(arrowsOpen: true).Start().SetBookmarks(Bookmark(Photos), Bookmark(E))
+            .Navigate(Year, NavigationSource.Bookmark).Navigate(A).Enter(WindowZone.FileList);
+
+        s.Enter(WindowZone.Bookmarks, ZoneReason.PanelKey);
+
+        Assert.Equal(Year, s.Bookmarks.Caret);
+        Assert.Empty(s.Effects.OfType<Navigate>());
     }
 
     /// <summary>P-22: the drives hold no row - Ctrl+1 opens them down to the open folder.</summary>
@@ -532,8 +607,19 @@ public class PanelRulesTests {
 
         s.Enter(WindowZone.Bookmarks, ZoneReason.PanelKey);
 
-        Assert.Equal(Photos, s.Bookmarks.Caret);
+        Assert.Equal(E, s.Bookmarks.Caret);
         Assert.Null(s.Bookmarks.Location);
+    }
+
+    /// <summary>Ctrl+1 into bookmarks that hold no row and cannot reach the folder: the first row, nothing opened (B5).</summary>
+    [Fact]
+    public void Ctrl1IntoBookmarks_ThatHoldNoRow_TakesTheFirst() {
+        var s = Scene().Options(arrowsOpen: true).Start().SetBookmarks(Bookmark(Photos), Bookmark(E)).Navigate(A).Enter(WindowZone.Drives);
+
+        s.Enter(WindowZone.Bookmarks, ZoneReason.PanelKey);
+
+        Assert.Equal(Photos, s.Bookmarks.Caret);
+        Assert.Empty(s.Effects.OfType<Navigate>());
     }
 
     /// <summary>Back from a menu, a dialog or another window, put there by the application - or for a reason nobody gave - the keyboard moves no cursor.</summary>

@@ -65,6 +65,8 @@ public enum MenuCommandId {
 
     // --- Archives -------------------------------------------------------
     Extract,
+    /// <summary>Into the folder the archive sits in, asking nothing (2026-09-23).</summary>
+    ExtractHere,
 
     // --- Recycle bin ----------------------------------------------------
     RestoreFromRecycleBin,

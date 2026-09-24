@@ -2,6 +2,7 @@ using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Media;
 using Wander.App.Diagnostics;
 using Wander.Core;
@@ -104,6 +105,21 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo {
     /// <summary>The ItemsControl whose visibility is being watched - see <see cref="WatchOwner"/>.</summary>
     private ItemsControl? _owner;
 
+    /// <summary>
+    /// The cell held where it stood while the grid reflows under it - the
+    /// columns or the cell size changing (2026-09-23, <see cref="TileLayout.AnchorAt"/>).
+    /// Kept through a run of such passes, so a splitter dragged out and back
+    /// puts the view back where it was; let go of by anything that moves the
+    /// view or its rows: a scroll, a new selection, the keyboard on another
+    /// cell, rows coming or going.
+    /// </summary>
+    private TileAnchor? _anchor;
+
+
+    public VirtualizingWrapPanel() {
+        AddHandler(Keyboard.GotKeyboardFocusEvent, new KeyboardFocusChangedEventHandler((_, _) => _anchor = null), handledEventsToo: true);
+    }
+
 
     /// <summary>Width of one cell, its margin included — see <see cref="TileMetrics.CellWidth"/>.</summary>
     public double CellWidth {
@@ -197,6 +213,7 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo {
     }
 
     public void SetVerticalOffset(double offset) {
+        _anchor = null;
         double clamped = _layout.Clamp(offset);
         if (AreClose(clamped, _offsetY)) {
             return;
@@ -261,11 +278,24 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo {
             double.IsInfinity(availableSize.Height) ? _viewport.Height : availableSize.Height));
 
         var cell = new Size(Math.Max(1, CellWidth), Math.Max(1, CellHeight));
+        var before = _layout;
         _layout = new TileLayout(ColumnWidth(count, cell), _viewport.Height, cell.Width, cell.Height, count);
-        _offsetY = _layout.Clamp(_offsetY);
-
         var owner = ItemsControl.GetItemsOwner(this);
         WatchOwner(owner);
+
+        // Other columns or another cell height under an unmoved offset move
+        // every row below the first; what was on screen stays on it. Chosen
+        // among the cells of the old range, which are still the children.
+        if (owner is { IsVisible: true } && _layout.Reflows(before)) {
+            if (_anchor is null) {
+                var (keyboard, selected) = UsersCells(generator);
+                _anchor = before.AnchorAt(_offsetY, keyboard, selected);
+            }
+            if (_anchor is { } anchor) {
+                _offsetY = _layout.Hold(anchor);
+            }
+        }
+        _offsetY = _layout.Clamp(_offsetY);
 
         var (first, last) = _layout.VisibleRange(_offsetY);
         if (owner is { IsVisible: false }) {
@@ -393,6 +423,7 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo {
         // Whatever was realised describes the old collection.
         _realisedFirst = 0;
         _realisedLast = -1;
+        _anchor = null;
 
         InvalidateMeasure();
         NotifyScrollOwner();
@@ -586,6 +617,33 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo {
     }
 
 
+    /// <summary>
+    /// The realised cells a reflow may hold on to: the one with the keyboard
+    /// (-1 for none) and the selected ones. A cell that is not realised is
+    /// not on screen, and an anchor is only ever chosen among those that are.
+    /// </summary>
+    private (int Keyboard, List<int> Selected) UsersCells(IItemContainerGenerator generator) {
+        int keyboard = -1;
+        var selected = new List<int>();
+        for (int i = 0; i < InternalChildren.Count; i++) {
+            int index = generator.IndexFromGeneratorPosition(new GeneratorPosition(i, 0));
+            if (index < 0) {
+                continue;
+            }
+
+            var child = InternalChildren[i];
+            if (child.IsKeyboardFocusWithin) {
+                keyboard = index;
+            }
+            if (child is ListBoxItem { IsSelected: true }) {
+                selected.Add(index);
+            }
+        }
+
+        return (keyboard, selected);
+    }
+
+
     // --- State ---------------------------------------------------------
 
     private int ItemCount => ItemsControl.GetItemsOwner(this)?.Items.Count ?? 0;
@@ -652,6 +710,7 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo {
 
 
     private void OnOwnerVisibleChanged(object sender, DependencyPropertyChangedEventArgs e) {
+        _anchor = null;
         if (e.NewValue is true) {
             InvalidateMeasure();
         }
@@ -674,6 +733,7 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo {
     /// </para>
     /// </summary>
     private void OnOwnerSelectionChanged(object sender, SelectionChangedEventArgs e) {
+        _anchor = null;
         InvalidateMeasure();
     }
 

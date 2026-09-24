@@ -170,7 +170,7 @@ public class ContextMenuBuilderTests {
     // --- Inside an archive ------------------------------------------------
 
     [Fact]
-    public void InsideArchive_OffersFourVerbsAndNothingThatWrites() {
+    public void InsideArchive_OffersFiveVerbsAndNothingThatWritesIntoIt() {
         var target = SelectionOf(File("readme.txt")) with { IsReadOnlyLocation = true, IsArchive = true };
 
         var menu = ContextMenuBuilder.Build(target, ContextMenuSettings.Default);
@@ -179,6 +179,7 @@ public class ContextMenuBuilderTests {
         Assert.True(menu[0].IsDefault);
         Assert.NotNull(Find(menu, MenuCommandId.Copy));
         Assert.NotNull(Find(menu, MenuCommandId.Extract));
+        Assert.NotNull(Find(menu, MenuCommandId.ExtractHere));
         Assert.NotNull(Find(menu, MenuCommandId.CopyPath));
         // Not greyed out - absent. There is no writing into an archive at
         // all, so a disabled row would be promising something for later.
@@ -205,6 +206,7 @@ public class ContextMenuBuilderTests {
         var menu = ContextMenuBuilder.Build(target, ContextMenuSettings.Default);
 
         Assert.NotNull(Find(menu, MenuCommandId.Extract));
+        Assert.NotNull(Find(menu, MenuCommandId.ExtractHere));
         // Still a file: everything a file can do is still on the menu.
         Assert.NotNull(Find(menu, MenuCommandId.FileSubmenu));
         Assert.Equal(MenuCommandId.Properties, menu[^1].Id);
@@ -215,6 +217,7 @@ public class ContextMenuBuilderTests {
         var menu = ContextMenuBuilder.Build(SelectionOf(File("a.txt")), ContextMenuSettings.Default);
 
         Assert.Null(Find(menu, MenuCommandId.Extract));
+        Assert.Null(Find(menu, MenuCommandId.ExtractHere));
     }
 
 
@@ -764,7 +767,7 @@ public class ContextMenuBuilderTests {
         }, Ids(many));
         Assert.Equal(new[] {
             MenuCommandId.BatchRename, MenuCommandId.ActionsSubmenu,
-            MenuCommandId.Extract, MenuCommandId.CreateShortcut, MenuCommandId.CopyPath,
+            MenuCommandId.Extract, MenuCommandId.ExtractHere, MenuCommandId.CreateShortcut, MenuCommandId.CopyPath,
         }, Ids(archive));
 
         static IEnumerable<MenuCommandId> Ids(IReadOnlyList<MenuEntry> menu) {
@@ -805,6 +808,8 @@ public class ContextMenuBuilderTests {
 
         Assert.True(Enabled(archives, MenuCommandId.Extract));
         Assert.True(Enabled(inside, MenuCommandId.Extract));
+        Assert.True(Enabled(archives, MenuCommandId.ExtractHere));
+        Assert.True(Enabled(inside, MenuCommandId.ExtractHere));
         // Nothing else writes inside an archive.
         Assert.Null(Find(inside, MenuCommandId.BatchRename));
         Assert.Null(Find(inside, MenuCommandId.CreateShortcut));

@@ -39,6 +39,9 @@ namespace Wander.App.Controls;
 /// than by an element in the template, because a mark most cells never
 /// show must not cost every cell a visual (ARCHITECTURE, "what a tile
 /// template may not do"). The row is a record and is never replaced for it.
+/// The clock comes up once the work has held the path for
+/// <see cref="PathClaims.BadgeDelayMs"/> (2026-09-23): an operation over
+/// before that shows none.
 /// </para>
 /// </summary>
 public sealed class AsyncIcon : Image {
@@ -85,11 +88,14 @@ public sealed class AsyncIcon : Image {
     /// </summary>
     private static event Action<string>? _invalidated;
 
-    /// <summary>The claims changed: raised on the UI thread, once per burst.</summary>
+    /// <summary>The claims changed, or one came of age: raised on the UI thread, once per burst.</summary>
     private static event Action? _workChanged;
 
     private static bool _workHooked;
     private static int _workPending;
+
+    /// <summary>Looks again when the next young claim is old enough for its clock - nothing else would say so.</summary>
+    private static DispatcherTimer? _workDue;
 
 
     private int _generation;
@@ -252,20 +258,35 @@ public sealed class AsyncIcon : Image {
         }
 
         _workHooked = true;
+        _workDue = new DispatcherTimer(DispatcherPriority.Background, dispatcher);
+        _workDue.Tick += (_, _) => WorkPass(claims);
         claims.Changed += (_, _) => {
             if (Interlocked.Exchange(ref _workPending, 1) == 0) {
                 dispatcher.BeginInvoke(DispatcherPriority.Background, () => {
                     Interlocked.Exchange(ref _workPending, 0);
-                    _workChanged?.Invoke();
+                    WorkPass(claims);
                 });
             }
         };
     }
 
+    /// <summary>
+    /// One pass over the icons in the tree, and the next one booked for when
+    /// the youngest claim still waiting comes of age.
+    /// </summary>
+    private static void WorkPass(PathClaims claims) {
+        _workChanged?.Invoke();
+        _workDue!.Stop();
+        if (claims.DueInMs(ClaimKind.UserOperation, PathClaims.BadgeDelayMs) is { } due) {
+            _workDue.Interval = TimeSpan.FromMilliseconds(Math.Max(1, due));
+            _workDue.Start();
+        }
+    }
+
     /// <summary>Wears the clock or takes it off; a redraw only when that changes.</summary>
     private void UpdateWork() {
         bool working = ShowsWork && _listening && IconPath is { Length: > 0 } path
-            && ServiceLocator.TryGet<PathClaims>()?.IsClaimed(path, ClaimKind.UserOperation) == true;
+            && ServiceLocator.TryGet<PathClaims>()?.IsClaimed(path, ClaimKind.UserOperation, PathClaims.BadgeDelayMs) == true;
         if (working == _working) {
             return;
         }

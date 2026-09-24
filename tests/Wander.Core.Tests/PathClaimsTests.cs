@@ -140,4 +140,65 @@ public class PathClaimsTests {
 
         Assert.Equal(2, fired);
     }
+
+
+    // --- The badge's wait ---------------------------------------------------
+
+    [Fact]
+    public void IsClaimed_WithAnAge_CountsAClaimOnlyOnceItIsThatOld() {
+        long now = 1000;
+        var claims = new PathClaims(() => now);
+        using var copy = claims.Claim(new[] { Album }, ClaimKind.UserOperation, OperationVerbs.Copy);
+
+        now += PathClaims.BadgeDelayMs - 1;
+        Assert.False(claims.IsClaimed(Shot, ClaimKind.UserOperation, PathClaims.BadgeDelayMs));
+        Assert.True(claims.IsClaimed(Shot, ClaimKind.UserOperation));
+
+        now += 1;
+        Assert.True(claims.IsClaimed(Shot, ClaimKind.UserOperation, PathClaims.BadgeDelayMs));
+    }
+
+    [Fact]
+    public void AClaimLetGoBeforeItsAge_IsNeverShown() {
+        long now = 1000;
+        var claims = new PathClaims(() => now);
+
+        var delete = claims.Claim(new[] { Shot }, ClaimKind.UserOperation, OperationVerbs.Recycle);
+        now += 300;
+        delete.Dispose();
+        now += 300;
+
+        Assert.False(claims.IsClaimed(Shot, ClaimKind.UserOperation, PathClaims.BadgeDelayMs));
+        Assert.Null(claims.DueInMs(ClaimKind.UserOperation, PathClaims.BadgeDelayMs));
+    }
+
+    [Fact]
+    public void AnOlderClaimOnTheSamePath_Counts() {
+        long now = 1000;
+        var claims = new PathClaims(() => now);
+        using var copy = claims.Claim(new[] { Shot }, ClaimKind.UserOperation, OperationVerbs.Copy);
+        now += 500;
+        using var action = claims.Claim(new[] { Shot }, ClaimKind.UserOperation, OperationVerbs.Copy);
+
+        Assert.True(claims.IsClaimed(Shot, ClaimKind.UserOperation, PathClaims.BadgeDelayMs));
+    }
+
+    [Fact]
+    public void DueInMs_IsWhenTheNextYoungClaimComesOfAge() {
+        long now = 1000;
+        var claims = new PathClaims(() => now);
+        using var reader = claims.Claim(new[] { Album }, ClaimKind.Background, ClaimOwners.Thumbnail);
+        using var first = claims.Claim(new[] { Shot }, ClaimKind.UserOperation, OperationVerbs.Copy);
+        now += 100;
+        using var second = claims.Claim(new[] { Album }, ClaimKind.UserOperation, OperationVerbs.Move);
+
+        now += 100;
+        Assert.Equal(200, claims.DueInMs(ClaimKind.UserOperation, PathClaims.BadgeDelayMs));
+
+        now += 250;
+        Assert.Equal(50, claims.DueInMs(ClaimKind.UserOperation, PathClaims.BadgeDelayMs));
+
+        now += 50;
+        Assert.Null(claims.DueInMs(ClaimKind.UserOperation, PathClaims.BadgeDelayMs));
+    }
 }

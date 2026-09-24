@@ -36,7 +36,7 @@ public static class ClaimOwners {
 /// work; a file operation about to touch a path asks first, and then
 /// background readers are told to let go (<see cref="Yield"/>) while an
 /// operation of the user's is named instead of being fought - and the list
-/// puts a badge on what is being worked on.
+/// puts a badge on what has been worked on for <see cref="BadgeDelayMs"/>.
 ///
 /// <para>
 /// Cheap by construction: a claim is a <b>source</b> of an operation - the
@@ -59,8 +59,23 @@ public static class ClaimOwners {
 /// </para>
 /// </summary>
 public sealed class PathClaims {
+    /// <summary>
+    /// How long a user operation has held a path before its row wears the
+    /// clock (2026-09-23) - the same wait as the operation's window: most
+    /// operations are over long before it, and a clock flashing on and off
+    /// for them tells nothing.
+    /// </summary>
+    public const int BadgeDelayMs = 400;
+
     private readonly Lock _gate = new();
     private readonly Dictionary<string, List<Entry>> _byPath = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Func<long> _clock;
+
+
+    /// <param name="clock">Milliseconds, for how long a claim has been held; the system's tick count when null.</param>
+    public PathClaims(Func<long>? clock = null) {
+        _clock = clock ?? (() => Environment.TickCount64);
+    }
 
 
     /// <summary>A user operation's claim appeared or went. Subscribers marshal to their own thread.</summary>
@@ -89,7 +104,7 @@ public sealed class PathClaims {
     /// once its handle is closed - that is what the operation waits for.
     /// </param>
     public IDisposable Claim(IEnumerable<string> paths, ClaimKind kind, string owner, CancellationTokenSource? yield = null) {
-        var token = new Token(this);
+        var token = new Token(this, _clock());
         var entries = paths.Select(p => new Entry(new PathClaim(Normalize(p), kind, owner), yield, token)).ToList();
         token.Entries = entries;
         lock (_gate) {
@@ -122,7 +137,8 @@ public sealed class PathClaims {
     /// <summary>True when the path itself or a folder above it is claimed - what a badge on a row asks.</summary>
     /// <param name="path">The row's path.</param>
     /// <param name="kind">Only claims of this kind count; null counts every claim.</param>
-    public bool IsClaimed(string path, ClaimKind? kind = null) {
+    /// <param name="olderThanMs">Only claims held at least this long count (<see cref="BadgeDelayMs"/> for a badge).</param>
+    public bool IsClaimed(string path, ClaimKind? kind = null, long olderThanMs = 0) {
         lock (_gate) {
             // Every cell of the list asks as it scrolls into view, and almost
             // always nothing is claimed at all.
@@ -130,13 +146,37 @@ public sealed class PathClaims {
                 return false;
             }
 
+            long now = _clock();
             for (string? at = Normalize(path); !string.IsNullOrEmpty(at); at = Path.GetDirectoryName(at)) {
-                if (_byPath.TryGetValue(at, out var list) && (kind is null || list.Any(e => e.Claim.Kind == kind))) {
+                if (_byPath.TryGetValue(at, out var list)
+                    && list.Any(e => (kind is null || e.Claim.Kind == kind) && now - e.Token.AtMs >= olderThanMs)) {
                     return true;
                 }
             }
 
             return false;
+        }
+    }
+
+    /// <summary>
+    /// In how many milliseconds the next claim of <paramref name="kind"/>
+    /// becomes <paramref name="ageMs"/> old - when a badge that asks with
+    /// that age should look again; null when no claim is still that young.
+    /// </summary>
+    public long? DueInMs(ClaimKind kind, long ageMs) {
+        lock (_gate) {
+            long now = _clock();
+            long? due = null;
+            foreach (var list in _byPath.Values) {
+                foreach (var entry in list) {
+                    long left = entry.Token.AtMs + ageMs - now;
+                    if (entry.Claim.Kind == kind && left > 0 && (due is null || left < due)) {
+                        due = left;
+                    }
+                }
+            }
+
+            return due;
         }
     }
 
@@ -220,12 +260,16 @@ public sealed class PathClaims {
         private int _released;
 
 
-        public Token(PathClaims owner) {
+        public Token(PathClaims owner, long atMs) {
             _owner = owner;
+            AtMs = atMs;
         }
 
 
         public IReadOnlyList<Entry> Entries { get; set; } = Array.Empty<Entry>();
+
+        /// <summary>When the claim was made, by the owner's clock.</summary>
+        public long AtMs { get; }
 
 
         public void Dispose() {
