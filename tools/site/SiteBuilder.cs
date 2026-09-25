@@ -72,7 +72,7 @@ internal sealed class SiteBuilder {
         for (int i = 0; i < guide.Pages.Count; i++) {
             GuidePage page = guide.Pages[i];
             _pages[$"guide/{page.Slug}/index.html"] = Fill(template, TemplateSource, new() {
-                ["title"] = Escape(page.Title) + " — Wander",
+                ["title"] = Escape(page.Title) + " | Wander",
                 ["css"] = css,
                 ["root"] = "../../",
                 ["guide"] = home,
@@ -81,7 +81,7 @@ internal sealed class SiteBuilder {
             });
         }
         _pages["versions/index.html"] = Fill(template, TemplateSource, new() {
-            ["title"] = "Версии — Wander",
+            ["title"] = "Версии | Wander",
             ["css"] = css,
             ["root"] = "../",
             ["guide"] = home,
@@ -147,27 +147,11 @@ internal sealed class SiteBuilder {
             }
         }
 
-        var main = new StringBuilder();
+        // Above the title: the group on the left, back / next on the right.
+        var main = new StringBuilder("<div class=\"head\">");
         if (page.Group is not null) {
-            main.Append("<p class=\"group\">").Append(Escape(page.Group.Title)).Append("</p>\n");
+            main.Append("<p class=\"group\">").Append(Escape(page.Group.Title)).Append("</p>");
         }
-        main.Append("<h1>").Append(Escape(page.Title)).Append("</h1>\n");
-        var toc = page.Sections.Where(s => s.Level == 4).ToList();
-        if (toc.Count > 0) {
-            main.Append("<p class=\"toc\">На странице: ")
-                .AppendJoin(" · ", toc.Select(s => $"<a href=\"#{s.Anchor}\">{Escape(s.Title)}</a>"))
-                .Append("</p>\n");
-        }
-
-        using var writer = new StringWriter();
-        var renderer = new HtmlRenderer(writer);
-        _pipeline.Setup(renderer);
-        foreach (Block block in page.Blocks) {
-            renderer.Render(block);
-        }
-        writer.Flush();
-        main.Append(writer.ToString());
-
         main.Append("<nav class=\"pager\">");
         if (index > 0) {
             GuidePage previous = guide.Pages[index - 1];
@@ -177,41 +161,72 @@ internal sealed class SiteBuilder {
             GuidePage next = guide.Pages[index + 1];
             main.Append($"<a rel=\"next\" href=\"../{next.Slug}/index.html\">{Escape(next.Title)} →</a>");
         }
+        main.Append("</nav></div>\n")
+            .Append("<h1>").Append(Escape(page.Title)).Append("</h1>\n");
+        var toc = page.Sections.Where(s => s.Level == 4).ToList();
+        if (toc.Count > 0) {
+            main.Append("<p class=\"toc\"><span>На странице:</span>")
+                .AppendJoin("", toc.Select(s => $"<a href=\"#{s.Anchor}\">{Escape(s.Title)}</a>"))
+                .Append("</p>\n");
+        }
 
-        return main.Append("</nav>").ToString();
+        using var writer = new StringWriter();
+        var renderer = new HtmlRenderer(writer);
+        _pipeline.Setup(renderer);
+        foreach (Block block in page.Blocks) {
+            // A paragraph that opens with a bold phrase starts a topic of its
+            // own; the stylesheet gives it air above.
+            if (block is ParagraphBlock { Inline.FirstChild: EmphasisInline { DelimiterCount: 2 } } topic) {
+                topic.GetAttributes().AddClass("topic");
+            }
+            renderer.Render(block);
+        }
+        writer.Flush();
+
+        return main.Append(writer.ToString()).ToString();
     }
 
     private static string RenderVersions(List<Release> releases) {
         var main = new StringBuilder()
             .Append("<h1>Версии</h1>\n")
-            .Append("<p>Руководство на сайте собирается из текущей разработки и может описывать то, ")
-            .Append("чего в последнем релизе ещё нет. Руководство выпущенной версии — ссылка рядом с ней; ")
-            .Append($"что в ней изменилось — <a href=\"{Repository}/blob/master/docs/CHANGELOG.md\">CHANGELOG</a>.</p>\n")
-            .Append("<ul class=\"versions\">\n");
+            .Append("<p>Руководство на сайте описывает текущую разработку и может опережать последний релиз. ")
+            .Append("Руководство выпущенной версии открывается из её строки, список изменений в ")
+            .Append($"<a href=\"{Repository}/blob/master/docs/CHANGELOG.md\">CHANGELOG</a>.</p>\n")
+            .Append("<table>\n<thead><tr><th>Версия</th><th>Дата</th><th>Релиз</th><th>Руководство</th></tr></thead>\n<tbody>\n");
         foreach (Release release in releases) {
-            main.Append($"<li><b>{release.Version}</b> · {release.Date} · ")
-                .Append($"<a href=\"{Repository}/releases/tag/{release.Tag}\">релиз</a>");
+            string date = DateOnly.ParseExact(release.Date, "yyyy-MM-dd", CultureInfo.InvariantCulture)
+                .ToString("dd.MM.yyyy", CultureInfo.InvariantCulture);
+            main.Append($"<tr><td><b>{release.Version}</b></td><td>{date}</td>")
+                .Append($"<td><a href=\"{Repository}/releases/tag/{release.Tag}\">скачать</a></td><td>");
             if (release.HasGuide) {
-                main.Append($" · <a href=\"{Repository}/blob/{release.Tag}/docs/GUIDE.md\">руководство</a>");
+                main.Append($"<a href=\"{Repository}/blob/{release.Tag}/docs/GUIDE.md\">открыть</a>");
             }
-            main.Append("</li>\n");
+            main.Append("</td></tr>\n");
         }
 
-        return main.Append("</ul>").ToString();
+        return main.Append("</tbody>\n</table>").ToString();
     }
 
-    /// <summary>Groups and pages in file order; <paramref name="prefix"/> leads from the page to guide/.</summary>
+    /// <summary>
+    /// Groups and pages in file order; <paramref name="prefix"/> leads from
+    /// the page to guide/. A group folds (details, no script); only the group
+    /// of the open page starts unfolded, since nothing carries what the reader
+    /// folded over to the next page.
+    /// </summary>
     private static string Nav(Guide guide, GuidePage? current, string prefix) {
         var nav = new StringBuilder("<ul>\n");
         GuideGroup? group = null;
         foreach (GuidePage page in guide.Pages) {
             if (!ReferenceEquals(page.Group, group)) {
                 if (group is not null) {
-                    nav.Append("</ul></li>\n");
+                    nav.Append("</ul></details></li>\n");
                 }
                 group = page.Group;
                 if (group is not null) {
-                    nav.Append("<li><span>").Append(Escape(group.Title)).Append("</span><ul>\n");
+                    bool open = ReferenceEquals(current?.Group, group);
+                    nav.Append(open ? "<li><details open><summary>" : "<li><details><summary>")
+                        .Append(Escape(group.Title))
+                        .Append("</summary><ul>\n");
                 }
             }
             nav.Append($"<li><a href=\"{prefix}{page.Slug}/index.html\"");
@@ -221,7 +236,7 @@ internal sealed class SiteBuilder {
             nav.Append('>').Append(Escape(page.Title)).Append("</a></li>\n");
         }
         if (group is not null) {
-            nav.Append("</ul></li>\n");
+            nav.Append("</ul></details></li>\n");
         }
 
         return nav.Append("</ul>").ToString();

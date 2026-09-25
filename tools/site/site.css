@@ -37,7 +37,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
-  font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
@@ -107,7 +107,7 @@ th {
 }
 
 li {
-  margin: .25em 0;
+  margin: .35em 0;
 }
 
 /* Header and footer, shared with the landing. */
@@ -129,11 +129,14 @@ li {
 }
 
 .bottom {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: .4rem 1.6rem;
   padding: 1.2rem 1rem 2rem;
   border-top: 1px solid var(--line);
   color: var(--muted);
   font-size: .88rem;
-  text-align: center;
 }
 
 /* Guide pages: navigation on the left, the text on the right. */
@@ -141,7 +144,7 @@ li {
 .page {
   display: grid;
   grid-template-columns: 15.5rem minmax(0, 1fr);
-  max-width: 76rem;
+  max-width: 80rem;
   margin: 0 auto;
 }
 
@@ -149,10 +152,32 @@ li {
   grid-column: 2;
   grid-row: 1;
   min-width: 0;
-  max-width: 49rem;
-  padding: 1.5rem 2rem 2.5rem;
+  max-width: 60rem;
+  padding: 1.5rem 2.5rem 3rem;
   border-left: 1px solid var(--line);
   overflow-wrap: break-word;
+}
+
+/* Text keeps a readable line; tables and pictures may take the whole column. */
+.page main p, .page main ul, .page main ol {
+  max-width: 44rem;
+  margin: 1.1em 0;
+}
+
+/* A paragraph opening with a bold phrase starts a topic: air above it. */
+.page main .topic {
+  margin-top: 2.1em;
+}
+
+.page main h1 + .topic, .page main h2 + .topic, .page main .toc + .topic {
+  margin-top: 1.1em;
+}
+
+/* #### sections: a line and air above each. */
+.page main h2 {
+  margin-top: 2.4em;
+  padding-top: .9em;
+  border-top: 1px solid var(--line);
 }
 
 .side {
@@ -174,17 +199,32 @@ li {
 }
 
 .side li {
-  margin: .2em 0;
+  margin: .45em 0;
+  line-height: 1.35;
 }
 
-.side span {
-  display: block;
-  margin: 1.1em 0 .25em;
+/* Groups fold; the pages of a group sit indented under its title. */
+.side details {
+  margin-top: .9em;
+}
+
+.side summary {
+  cursor: pointer;
   color: var(--muted);
   font-size: .78rem;
   font-weight: 600;
   letter-spacing: .04em;
   text-transform: uppercase;
+}
+
+.side summary:hover {
+  color: var(--fg);
+}
+
+.side details ul {
+  margin: .35em 0 .2em .3rem;
+  padding-left: .8rem;
+  border-left: 1px solid var(--line);
 }
 
 .side a {
@@ -203,36 +243,39 @@ li {
   display: none;
 }
 
-.group {
+.page main .group {
   margin: 0;
   color: var(--muted);
   font-size: .9rem;
 }
 
 .toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .2rem 1.1rem;
   padding: .5em .8em;
   border-left: 3px solid var(--line);
   background: var(--soft);
   font-size: .93rem;
 }
 
+.toc span {
+  color: var(--muted);
+}
+
+/* Above the title: the group on the left, back / next on the right. */
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: .2rem 1.5rem;
+}
+
 .pager {
   display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-top: 3rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--line);
-}
-
-.pager [rel=next] {
+  gap: 1.3rem;
   margin-left: auto;
-  text-align: right;
-}
-
-.versions {
-  padding: 0;
-  list-style: none;
+  font-size: .9rem;
 }
 
 /* Narrow screens: one column, the text first, the navigation after it. */
