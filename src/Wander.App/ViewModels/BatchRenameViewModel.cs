@@ -18,6 +18,8 @@ namespace Wander.App.ViewModels;
 /// in that order: there is no reordering in here, and the window says so.
 /// </para>
 /// </summary>
+[SuppressMessage("Design", "CA1001",
+    Justification = "Stop() cancels it when the window goes away; not disposed, since a read already running may still ask for the token, and a source with no timer holds nothing to release.")]
 public sealed class BatchRenameViewModel : ObservableObject {
     private readonly IReadOnlyList<RenameItem> _items;
     private readonly RenameContext _context;

@@ -2,6 +2,9 @@ using System.Runtime.InteropServices;
 
 namespace Wander.Platform.Windows.Shell;
 
+// Names as the Windows docs spell them, in the whole file.
+// ReSharper disable InconsistentNaming
+
 /// <summary>
 /// The <c>IShellItem</c> family, used by <see cref="ShellArchiveFolder"/> to
 /// browse and unpack archives. Separate from

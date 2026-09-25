@@ -45,7 +45,7 @@ public static class MergeScanner {
             return new Result(conflicts, free);
         }
 
-        foreach (var entry in fs.Enumerate(sourceFolder)) {
+        foreach (var entry in fs.Enumerate(sourceFolder, ct: ct)) {
             string dest = Path.Combine(targetFolder, entry.Name);
             var existing = fs.GetEntry(dest);
             if (existing is null) {
@@ -73,7 +73,7 @@ public static class MergeScanner {
         }
 
         int count = 0;
-        foreach (var entry in fs.Enumerate(folder)) {
+        foreach (var entry in fs.Enumerate(folder, ct: ct)) {
             count += entry.Kind == EntryKind.Directory ? CountFiles(fs, entry.FullPath, depth + 1, ct) : 1;
         }
 

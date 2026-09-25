@@ -28,6 +28,8 @@ namespace Wander.App.Conflict;
 /// the UI thread and pushes what they found back into the rows.
 /// </para>
 /// </summary>
+[SuppressMessage("Design", "CA1001",
+    Justification = "Stop() cancels it when the window goes away; not disposed, since a read already running may still ask for the token, and a source with no timer holds nothing to release.")]
 public sealed class ConflictWindowViewModel : ObservableObject {
     private readonly IFileSystem _fs;
     private readonly ILogger _log;

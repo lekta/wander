@@ -98,7 +98,7 @@ public partial class DragPreviewWindow : Window {
     private void OnSourceInitialized(object? sender, EventArgs e) {
         var hwnd = new WindowInteropHelper(this).Handle;
         int ex = NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE);
-        NativeMethods.SetWindowLong(
+        _ = NativeMethods.SetWindowLong(
             hwnd,
             NativeMethods.GWL_EXSTYLE,
             ex | NativeMethods.WS_EX_TRANSPARENT | NativeMethods.WS_EX_NOACTIVATE | NativeMethods.WS_EX_TOOLWINDOW);

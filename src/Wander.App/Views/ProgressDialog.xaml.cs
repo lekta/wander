@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Windows;
 using Wander.App.Dialogs;
 using Wander.App.Resources;
@@ -42,6 +43,8 @@ namespace Wander.App.Views;
 /// status-bar panel) or cancelled - see the XAML.
 /// </para>
 /// </summary>
+[SuppressMessage("Design", "CA1001",
+    Justification = "Its token goes to the operation (Token), which may run on after the dialog closes: cancelling is the dialog's part, disposing would pull the source from under the operation.")]
 public partial class ProgressDialog : Window, INotifyPropertyChanged, ITransientWindow {
     /// <summary>Every window from construction to close - what <see cref="CancelAll"/> reaches.</summary>
     private static readonly List<ProgressDialog> _live = new();

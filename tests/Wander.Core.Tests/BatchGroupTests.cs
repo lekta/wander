@@ -88,7 +88,7 @@ public class BatchGroupTests {
 
         Assert.Equal(new byte[] { 9 }, fs.Files[DstPng]);
         Assert.Equal(new byte[] { 2 }, fs.Files[DstMeta]);
-        Assert.Equal($"Recycle:{DstMeta}", Assert.Single(bin.CallLog, c => c.StartsWith("Recycle:")));
+        Assert.Equal($"Recycle:{DstMeta}", Assert.Single(bin.CallLog, c => c.StartsWith("Recycle:", StringComparison.Ordinal)));
     }
 
     [Fact]
@@ -137,7 +137,7 @@ public class BatchGroupTests {
 
         batch.CopyMany(SpriteGroup(), DstFolder, resolver);
 
-        Assert.Equal(2, bin.CallLog.Count(c => c.StartsWith("Recycle:")));
+        Assert.Equal(2, bin.CallLog.Count(c => c.StartsWith("Recycle:", StringComparison.Ordinal)));
         Assert.Equal(new byte[] { 1 }, fs.Files[DstPng]);
         Assert.Equal(new byte[] { 2 }, fs.Files[DstMeta]);
     }

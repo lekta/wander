@@ -92,8 +92,7 @@ public sealed record PanelState {
     /// </summary>
     public PanelRow? TopHolding(string path) {
         foreach (var row in Top) {
-            bool leaf = row.Kind == PanelRowKind.Shell || row.IsMissing;
-            if (leaf ? PanelPaths.Same(path, row.Path) : PanelPaths.IsUnderOrSelf(path, row.Path)) {
+            if (row.IsLeaf ? PanelPaths.Same(path, row.Path) : PanelPaths.IsUnderOrSelf(path, row.Path)) {
                 return row;
             }
         }

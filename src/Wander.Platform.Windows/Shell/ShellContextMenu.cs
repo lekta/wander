@@ -444,7 +444,7 @@ internal sealed class ShellContextMenuSession : IShellContextMenuSession {
         }
 
         var buffer = new StringBuilder(length + 1);
-        GetMenuString(hMenu, index, buffer, buffer.Capacity, MF_BYPOSITION);
+        _ = GetMenuString(hMenu, index, buffer, buffer.Capacity, MF_BYPOSITION);
 
         return buffer.ToString();
     }

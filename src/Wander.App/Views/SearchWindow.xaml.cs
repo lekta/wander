@@ -81,7 +81,7 @@ public partial class SearchWindow : Window {
         }
 
         int style = GetWindowLong(handle, GwlStyle);
-        SetWindowLong(handle, GwlStyle, style & ~WsMinimizeBox & ~WsMaximizeBox);
+        _ = SetWindowLong(handle, GwlStyle, style & ~WsMinimizeBox & ~WsMaximizeBox);
     }
 
 

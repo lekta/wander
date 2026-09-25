@@ -139,7 +139,7 @@ public sealed class ContentSearchService {
 
             IReadOnlyList<FileSystemEntry> entries;
             try {
-                entries = _fs.Enumerate(step.Folder, SortOptions.Default);
+                entries = _fs.Enumerate(step.Folder, SortOptions.Default, token);
             } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
                 // A folder we may not read is not an error the user asked
                 // about — it is one of dozens on any real disk.

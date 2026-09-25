@@ -60,7 +60,7 @@ public sealed class RestartManagerLockInspector : IFileLockInspector {
         } catch {
             return Array.Empty<FileLockInfo>();
         } finally {
-            RmEndSession(handle);
+            _ = RmEndSession(handle);
         }
     }
 
@@ -91,6 +91,9 @@ public sealed class RestartManagerLockInspector : IFileLockInspector {
 
 
     // --- Restart Manager P/Invoke -------------------------------------
+
+    // Names as the Windows docs spell them, to the end of the file.
+    // ReSharper disable InconsistentNaming
 
     private const int ERROR_MORE_DATA = 234;
     private const int CCH_RM_MAX_APP_NAME = 255;

@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using Wander.Core.Companions;
 using Wander.Core.FileSystem;
@@ -22,6 +23,8 @@ namespace Wander.Core.Listing;
 /// when this logic lived inline in the view-model.
 /// </para>
 /// </summary>
+[SuppressMessage("Design", "CA1001",
+    Justification = "Each filter pass's source is cancelled and disposed before the next; the controller lives as long as the main window's list.")]
 public sealed class SearchController : INotifyPropertyChanged {
     private string _query = "";
     private NameFilter _name = NameFilter.Empty;

@@ -39,6 +39,8 @@ using Wander.Core.Workspace;
 
 namespace Wander.App;
 
+[SuppressMessage("Design", "CA1001",
+    Justification = "Cancellation sources of list loads and panel reads, managed only; the view model lives as long as the application.")]
 public sealed class MainViewModel : ObservableObject {
     /// <summary>
     /// The debug menu's fourth operation row: not a scenario of its own,

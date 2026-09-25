@@ -208,7 +208,10 @@ public static class SandboxBuilder {
     /// assets that decide the same extension two different ways. The
     /// <c>.bat</c> is written in codepage 866 rather than UTF-8, because a
     /// batch file in DOS Cyrillic is the case <c>EncodingProbe</c> exists
-    /// for and the one nobody ever has a sample of.
+    /// for and the one nobody ever has a sample of. Beside them, what the
+    /// program card reads: a program and a library of Windows itself,
+    /// copied rather than generated - the card is about a version resource
+    /// and a signature, and nothing here makes either.
     /// </summary>
     private static void Code(SandboxContext c) {
         string dir = c.Dir("code");
@@ -256,13 +259,24 @@ public static class SandboxBuilder {
                 "NativeFormatImporter:\r\n  externalObjects: {}\r\n  userData:\r\n",
                 new UTF8Encoding(false));
         }
+
+        foreach (string program in new[] { "cmd.exe", "version.dll" }) {
+            string source = Path.Combine(Environment.SystemDirectory, program);
+            if (File.Exists(source)) {
+                File.Copy(source, Path.Combine(dir, program), overwrite: true);
+            } else {
+                c.Note($"code: no {program} in {Environment.SystemDirectory}");
+            }
+        }
+        c.Fixtures.CopyEach(c, dir, ".msi");
     }
 
     /// <summary>
-    /// Audio, video and pictures. A WAV and three views of one cube are
-    /// generated; everything that needs a real encoder comes from the
-    /// fixtures folder, and a format nobody has supplied is a note rather
-    /// than a failure - the scenario that needs it asserts for itself.
+    /// Audio, video and pictures. A WAV, three views of one cube, a TGA
+    /// texture and an SVG are generated; everything that needs a real
+    /// encoder comes from the fixtures folder, and a format nobody has
+    /// supplied is a note rather than a failure - the scenario that needs
+    /// it asserts for itself.
     /// </summary>
     private static void Media(SandboxContext c) {
         string dir = c.Dir("media");
@@ -367,7 +381,9 @@ public static class SandboxBuilder {
     /// <para>
     /// <c>plain.zip</c> next to them is not an archive to walk into but the
     /// control case: a real folder called <c>plain.zip</c>, which has to
-    /// open as the folder it is.
+    /// open as the folder it is. <c>photos.zip</c> holds pictures instead:
+    /// their thumbnails, turned by their EXIF tags, are drawn from inside
+    /// the archive.
     /// </para>
     /// </summary>
     private static void Archives(SandboxContext c) {
@@ -397,6 +413,17 @@ public static class SandboxBuilder {
 
         string folder = c.Dir("archives", "plain.zip");
         File.WriteAllText(Path.Combine(folder, "inside.txt"), "A folder, not an archive.\r\n", new UTF8Encoding(false));
+
+        string photos = Path.Combine(dir, "photos.zip");
+        File.Delete(photos);
+        using var archive = ZipFile.Open(photos, ZipArchiveMode.Create);
+        for (int i = 1; i <= 6; i++) {
+            string name = $"IMG_{i:0000}.jpg";
+            // Stored, not deflated: a JPEG does not shrink, and a folder of
+            // photos zipped for sending is usually made this way.
+            using var entry = archive.CreateEntry(name, CompressionLevel.NoCompression).Open();
+            entry.Write(PictureFactory.Jpeg(PhotoWidth / 2, PhotoHeight / 2, RawFiles.OrientationFor(i), name, seed: 4000 + i));
+        }
     }
 
 

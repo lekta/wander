@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -83,6 +84,8 @@ public sealed class RatingRequestedEventArgs : EventArgs {
 /// stay with the host, and the dependency points one way.
 /// </para>
 /// </summary>
+[SuppressMessage("Design", "CA1001",
+    Justification = "Cancellation sources and one-at-a-time gates, managed only - no timer, no wait handle, nothing to release; a load still running holds their tokens after its pane or viewer has closed.")]
 public sealed class PreviewController : ObservableObject {
     /// <summary>
     /// Width a cover is decoded at. Twice what the card draws, so it stays
@@ -1882,7 +1885,7 @@ public sealed class PreviewController : ObservableObject {
         // The veil only for a load worth announcing - see VeilDelayMs. The
         // picture kept on screen (above) is what the wait is spent looking at.
         async Task RaiseVeilWhenSlowAsync() {
-            await Task.Delay(VeilDelayMs);
+            await Task.Delay(VeilDelayMs, ct);
             if (!finished && !ct.IsCancellationRequested) {
                 IsLoading = true;
             }

@@ -145,3 +145,13 @@ dotnet_naming_symbols.interfaces.applicable_accessibilities = *
 
 dotnet_naming_style.i_prefix.required_prefix = I
 dotnet_naming_style.i_prefix.capitalization = pascal_case
+
+# --- .NET analyzers: correctness rules, picked one by one ----------------
+# The rest of latest-recommended is noise here (CA1305 on UI text, CA1707,
+# CA1861...). A rule with a code fix turns `dotnet format
+# --verify-no-changes` red too, so a new case fails check.bat, not review.
+dotnet_diagnostic.CA1001.severity = warning
+dotnet_diagnostic.CA1310.severity = warning
+dotnet_diagnostic.CA1806.severity = warning
+dotnet_diagnostic.CA2016.severity = warning
+dotnet_diagnostic.CA2101.severity = warning

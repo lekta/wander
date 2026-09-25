@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Windows.Threading;
 using Wander.App.ViewModels;
 using Wander.Core.FileSystem;
@@ -59,6 +60,8 @@ public enum SearchState {
 /// switch you can see the state of is one that cannot surprise you later.
 /// </para>
 /// </summary>
+[SuppressMessage("Design", "CA1001",
+    Justification = "Cancel() cancels and disposes each search's source before the next one; the controller lives as long as the main window.")]
 public sealed class ContentSearchController : ObservableObject {
     /// <summary>
     /// Quiet time after the last keystroke before a heavy search starts.

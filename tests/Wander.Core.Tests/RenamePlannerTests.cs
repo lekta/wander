@@ -110,7 +110,7 @@ public class RenamePlannerTests {
             new RenameItem(Path.Combine(Folder, "a.jpg"), false, modified),
             new RenameItem(Path.Combine(Folder, "b.jpg"), false, modified),
         };
-        var context = new RenameContext(_ => false, ShotDate: path => path.EndsWith("a.jpg") ? _shot : null);
+        var context = new RenameContext(_ => false, ShotDate: path => path.EndsWith("a.jpg", StringComparison.Ordinal) ? _shot : null);
 
         var preview = RenamePlanner.Preview(new RenameRules { Template = "[X]" }, items, context);
 
@@ -217,7 +217,7 @@ public class RenamePlannerTests {
 
     [Fact]
     public void NameTakenOutsideTheBatch_Collides() {
-        var context = new RenameContext(path => path.EndsWith("taken.txt"));
+        var context = new RenameContext(path => path.EndsWith("taken.txt", StringComparison.Ordinal));
 
         var preview = RenamePlanner.Preview(new RenameRules { Template = "taken" }, Items("a.txt"), context);
 
@@ -228,7 +228,7 @@ public class RenamePlannerTests {
     public void Swap_IsNotACollision() {
         // Both names exist on disk - they are the batch's own. The counter
         // runs in list order, so "2" becomes 1 and "1" becomes 2.
-        var context = new RenameContext(path => path.EndsWith("1.txt") || path.EndsWith("2.txt"));
+        var context = new RenameContext(path => path.EndsWith("1.txt", StringComparison.Ordinal) || path.EndsWith("2.txt", StringComparison.Ordinal));
 
         var preview = RenamePlanner.Preview(new RenameRules { Template = "[C]" }, Items("2.txt", "1.txt"), context);
 
@@ -260,7 +260,7 @@ public class RenamePlannerTests {
             new RenameItem(Path.Combine(Folder, "IMG_1.CR2"), false, DateTime.UnixEpoch,
                 new[] { Path.Combine(Folder, "IMG_1.CR2.pp3") }),
         };
-        var context = new RenameContext(path => path.EndsWith("shot_1.CR2.pp3"), CompanionResolver.Default);
+        var context = new RenameContext(path => path.EndsWith("shot_1.CR2.pp3", StringComparison.Ordinal), CompanionResolver.Default);
 
         var preview = RenamePlanner.Preview(new RenameRules { Find = "IMG", Replace = "shot" }, items, context);
 

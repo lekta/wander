@@ -72,7 +72,10 @@ public static class PanelView {
 
 
     private static void Add(PanelState panel, ImmutableArray<VisibleRow>.Builder lines, PanelRow row, string key, int depth, string? parent) {
-        bool open = row.HasChevron && panel.IsExpanded(row.Path);
+        // Open is the user's word, not the folder's: a row that lost its last
+        // subfolder stays open - there is no chevron to show it - and one
+        // coming back shows under it at once.
+        bool open = !row.IsLeaf && panel.IsExpanded(row.Path);
         lines.Add(new VisibleRow(key, row, depth, open, parent));
         if (!open) {
             return;

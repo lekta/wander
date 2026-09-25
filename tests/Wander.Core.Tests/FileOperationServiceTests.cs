@@ -224,9 +224,9 @@ public class FileOperationServiceTests {
         Assert.Equal(new byte[] { 1 }, fs.Files[BatchB]);
         Assert.Equal(new byte[] { 2 }, fs.Files[BatchA]);
         // a parked, b moved, a unparked - and nothing else left behind.
-        Assert.Equal(3, fs.CallLog.Count(line => line.StartsWith("Rename:")));
+        Assert.Equal(3, fs.CallLog.Count(line => line.StartsWith("Rename:", StringComparison.Ordinal)));
         Assert.Equal(2, fs.Files.Count);
-        Assert.DoesNotContain(fs.Files.Keys, path => path.EndsWith(TransientFiles.ReplaceSuffix));
+        Assert.DoesNotContain(fs.Files.Keys, path => path.EndsWith(TransientFiles.ReplaceSuffix, StringComparison.Ordinal));
         Assert.Equal("Rename 2 items", undo.NextDescription);
     }
 
@@ -261,7 +261,7 @@ public class FileOperationServiceTests {
         Assert.Equal(new byte[] { 3 }, fs.Files[@"C:\batch\d.txt"]);
         Assert.Equal(3, fs.Files.Count);
         // a and b parked and unparked (4 renames), c straight (1).
-        Assert.Equal(5, fs.CallLog.Count(line => line.StartsWith("Rename:")));
+        Assert.Equal(5, fs.CallLog.Count(line => line.StartsWith("Rename:", StringComparison.Ordinal)));
     }
 
     [Fact]
@@ -272,7 +272,7 @@ public class FileOperationServiceTests {
 
         ops.RenameMany(new[] { (BatchA, "x.txt"), (BatchB, "y.txt") });
 
-        Assert.Equal(2, fs.CallLog.Count(line => line.StartsWith("Rename:")));
+        Assert.Equal(2, fs.CallLog.Count(line => line.StartsWith("Rename:", StringComparison.Ordinal)));
     }
 
     [Fact]

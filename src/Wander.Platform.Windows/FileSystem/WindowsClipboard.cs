@@ -131,7 +131,7 @@ public sealed class WindowsClipboard : ISystemClipboard {
         // Win32. One initialization on first use, never undone: the thread
         // is the UI thread and it lives as long as the process.
         if (hr == CO_E_NOTINITIALIZED) {
-            OleInitialize(IntPtr.Zero);
+            _ = OleInitialize(IntPtr.Zero);
             hr = OleSetClipboard(data);
         }
 
@@ -541,6 +541,9 @@ public sealed class WindowsClipboard : ISystemClipboard {
     // ------------------------------------------------------------------
     // Interop
     // ------------------------------------------------------------------
+
+    // Names as the Windows docs spell them, to the end of the file.
+    // ReSharper disable InconsistentNaming
 
     private const uint CF_DIB = 8;
     private const uint CF_UNICODETEXT = 13;

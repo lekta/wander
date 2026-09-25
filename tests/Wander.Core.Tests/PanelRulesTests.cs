@@ -450,6 +450,23 @@ public class PanelRulesTests {
         Assert.True(s.Drives.Find(D)!.HasChevron);
     }
 
+    /// <summary>An open row that lost its last subfolder stays open, and one coming back shows under it at once.</summary>
+    [Fact]
+    public void AnOpenRowThatLostItsLastSubfolder_StaysOpen() {
+        var s = Scene(@"C:\A\D\X").Start().Navigate(A)
+            .Chevron(Pane.Drives, A, open: true).Chevron(Pane.Drives, D, open: true);
+        Assert.True(s.Shows(Pane.Drives, @"C:\A\D\X"));
+
+        s.Delete(@"C:\A\D\X").Post(new FolderChanged(D)).Settle();
+
+        Assert.False(s.Drives.Find(D)!.HasChevron);
+        Assert.True(PanelView.Rows(s.Drives).Single(l => l.Path == D).IsExpanded);
+
+        s.Add(@"C:\A\D\X").Post(new FolderChanged(D)).Settle();
+
+        Assert.True(s.Shows(Pane.Drives, @"C:\A\D\X"));
+    }
+
     /// <summary>Branches saved open come back open, their levels read.</summary>
     [Fact]
     public void Start_OpensTheBranchesSavedOpen() {

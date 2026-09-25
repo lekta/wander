@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Windows.Threading;
 using Wander.Core.Diagnostics;
 using Wander.Core.FileSystem;
@@ -27,6 +28,8 @@ namespace Wander.App.Controllers;
 /// them out.
 /// </para>
 /// </summary>
+[SuppressMessage("Design", "CA1001",
+    Justification = "A SemaphoreSlim whose wait handle nobody asks for holds nothing to release; the controller lives as long as the main window.")]
 public sealed class SharpnessController {
     /// <summary>How many files are measured at once. The disk is shared with the thumbnails.</summary>
     private const int Parallelism = 2;

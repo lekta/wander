@@ -97,7 +97,7 @@ public sealed class WindowsExecutableInfo : IExecutableInfoReader {
             var action = _genericVerifyV2;
             int result = WinVerifyTrust(IntPtr.Zero, ref action, ref data);
             data.dwStateAction = WtdStateActionClose;
-            WinVerifyTrust(IntPtr.Zero, ref action, ref data);
+            _ = WinVerifyTrust(IntPtr.Zero, ref action, ref data);
 
             return result switch {
                 0 => SignatureState.Valid,
@@ -112,6 +112,9 @@ public sealed class WindowsExecutableInfo : IExecutableInfoReader {
         }
     }
 
+
+    // Names as the Windows docs spell them, to the end of the file.
+    // ReSharper disable InconsistentNaming
 
     [DllImport("wintrust.dll", CharSet = CharSet.Unicode)]
     private static extern int WinVerifyTrust(IntPtr hwnd, ref Guid pgActionID, ref WinTrustData pWVTData);

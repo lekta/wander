@@ -71,8 +71,11 @@ public sealed record PanelRow(string Path, string Name, PanelRowKind Kind) {
     public bool StartsSection { get; init; }
 
 
+    /// <summary>Nothing is ever shown under it: a shell row, or a bookmark whose folder is gone.</summary>
+    public bool IsLeaf => IsMissing || Kind == PanelRowKind.Shell;
+
     /// <summary>A chevron is drawn: subfolders there, or not asked about yet.</summary>
-    public bool HasChevron => Children != ChildrenKnown.No && !IsMissing && Kind != PanelRowKind.Shell;
+    public bool HasChevron => Children != ChildrenKnown.No && !IsLeaf;
 
     /// <summary>
     /// Its subfolders can be asked of the disk off the UI thread to settle

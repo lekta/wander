@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using Wander.App.Resources;
 using Wander.App.ViewModels;
@@ -28,6 +29,8 @@ namespace Wander.App.Controllers;
 /// cursor — for a change the user made to one number on one file.
 /// </para>
 /// </summary>
+[SuppressMessage("Design", "CA1001",
+    Justification = "The pass source is cancelled by Cancel() and by the next pass; managed only, nothing to release; the controller lives as long as the main window.")]
 public sealed class RatingsController {
     private readonly IFileSystem _fs;
     private readonly CompanionResolver _companions;

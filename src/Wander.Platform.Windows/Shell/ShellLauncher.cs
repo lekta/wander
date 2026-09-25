@@ -96,6 +96,9 @@ public sealed class ShellLauncher : IShellLauncher {
 
     // --- Win32 -------------------------------------------------------
 
+    // Names as the Windows docs spell them, to the end of the file.
+    // ReSharper disable InconsistentNaming
+
     private const uint SEE_MASK_INVOKEIDLIST = 0x0000000C;
     private const int SW_SHOW = 5;
     private const int ERROR_CANCELLED = 1223;

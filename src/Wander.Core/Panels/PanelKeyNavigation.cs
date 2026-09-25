@@ -38,10 +38,11 @@ public readonly record struct PanelKeyResult(PanelKeyOutcome Outcome, string? Pa
 /// <summary>
 /// The keys of a panel drawn as a list (decision P3), the way the tree of
 /// Windows answers them: up and down to the neighbour line, Left closes an
-/// open row and otherwise goes to the row above it, Right opens a closed
-/// one and otherwise goes to its first child, Home and End, a page at a
-/// time. Arithmetic over the lines on screen, where the off-by-one lives -
-/// so it lives here, where a test reaches it (like <c>GridNavigation</c>).
+/// open row with a chevron and otherwise goes to the row above it, Right
+/// opens a closed one and otherwise goes to its first child, Home and End,
+/// a page at a time. Arithmetic over the lines on screen, where the
+/// off-by-one lives - so it lives here, where a test reaches it (like
+/// <c>GridNavigation</c>).
 /// </summary>
 public static class PanelKeyNavigation {
     /// <param name="lines">The panel's lines as drawn.</param>
@@ -91,7 +92,9 @@ public static class PanelKeyNavigation {
 
 
     private static PanelKeyResult Left(IReadOnlyList<VisibleRow> lines, int index, VisibleRow line) {
-        if (line.IsExpanded) {
+        // An open row with no subfolders has nothing to close: Left goes up
+        // at once, and the row stays open for a subfolder to come back to.
+        if (line.IsExpanded && line.Row.HasChevron) {
             return new PanelKeyResult(PanelKeyOutcome.Collapse, line.Path);
         }
 

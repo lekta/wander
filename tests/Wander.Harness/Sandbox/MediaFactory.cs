@@ -5,10 +5,11 @@ using System.Text;
 namespace Wander.Harness.Sandbox;
 
 /// <summary>
-/// The two halves of the <c>media</c> profile that need no encoder: a WAV,
-/// which is a header and some arithmetic, and one cube in three mesh
-/// formats. Everything else - mp3, flac, video, animated GIF - needs a
-/// real encoder and comes from <see cref="FixtureLibrary"/> instead.
+/// The parts of the <c>media</c> profile that need no encoder: a WAV,
+/// which is a header and some arithmetic, one cube in three mesh formats,
+/// a TGA texture and an SVG drawing. Everything else - mp3, flac, video,
+/// animated GIF - needs a real encoder and comes from
+/// <see cref="FixtureLibrary"/> instead.
 ///
 /// <para>
 /// The cube is deliberately the same cube three times. The preview pane
@@ -18,12 +19,27 @@ namespace Wander.Harness.Sandbox;
 /// </para>
 /// </summary>
 public static class MediaFactory {
+    /// <summary>The texture: the one picture format here Windows has no codec for.</summary>
+    public const string Texture = "texture.tga";
+
+    private const int TextureWidth = 480;
+    private const int TextureHeight = 320;
+    private const int TextureSeed = 7;
+
+
     /// <summary>Writes the generated part of the media profile into <paramref name="dir"/>.</summary>
     public static void WriteAll(string dir) {
         Wav(Path.Combine(dir, "tone.wav"), seconds: 2, hertz: 440);
         Stl(Path.Combine(dir, "cube.stl"));
         Obj(Path.Combine(dir, "cube.obj"));
         Gltf(Path.Combine(dir, "cube.gltf"));
+        File.WriteAllBytes(Path.Combine(dir, Texture), PictureFactory.Tga(TexturePixels(), TextureWidth, TextureHeight));
+        Svg(Path.Combine(dir, "shapes.svg"));
+    }
+
+    /// <summary>The texture's picture as top-down BGRA - what reading <see cref="Texture"/> has to give back.</summary>
+    public static byte[] TexturePixels() {
+        return PictureFactory.Bgra(TextureWidth, TextureHeight, Texture, TextureSeed);
     }
 
 
@@ -175,6 +191,21 @@ public static class MediaFactory {
             "  \"materials\": [ { \"pbrMetallicRoughness\": { \"baseColorFactor\": [ 0.35, 0.6, 0.85, 1.0 ] } } ]\n" +
             "}\n";
         File.WriteAllText(path, json, new UTF8Encoding(false));
+    }
+
+    /// <summary>
+    /// A drawing the pane shows as a picture, with its markup a switch
+    /// away: a filled circle, a rounded square half see-through over the
+    /// background, and a line of text naming the file.
+    /// </summary>
+    private static void Svg(string path) {
+        File.WriteAllText(path,
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"320\" height=\"200\" viewBox=\"0 0 320 200\">\r\n" +
+            "  <rect width=\"320\" height=\"200\" fill=\"#f4f1ea\"/>\r\n" +
+            "  <circle cx=\"95\" cy=\"95\" r=\"60\" fill=\"#d9534f\"/>\r\n" +
+            "  <rect x=\"165\" y=\"35\" width=\"120\" height=\"120\" rx=\"16\" fill=\"#337ab7\" fill-opacity=\"0.6\"/>\r\n" +
+            "  <text x=\"160\" y=\"188\" font-family=\"Segoe UI\" font-size=\"14\" text-anchor=\"middle\">shapes.svg</text>\r\n" +
+            "</svg>\r\n", new UTF8Encoding(false));
     }
 
 

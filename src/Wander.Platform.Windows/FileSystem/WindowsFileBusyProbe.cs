@@ -27,6 +27,9 @@ public sealed class WindowsFileBusyProbe : IFileBusyProbe {
 
     // --- P/Invoke ------------------------------------------------------
 
+    // Names as the Windows docs spell them, to the end of the file.
+    // ReSharper disable InconsistentNaming
+
     private const int ERROR_SHARING_VIOLATION = 0x20;
 
     private const uint DELETE = 0x00010000;

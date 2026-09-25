@@ -420,6 +420,9 @@ public sealed class SystemIOFileSystem : IFileSystem {
 
     // --- P/Invoke ------------------------------------------------------
 
+    // Names as the Windows docs spell them, to the end of the file.
+    // ReSharper disable InconsistentNaming
+
     private const int PROGRESS_CONTINUE = 0;
     private const int PROGRESS_CANCEL = 1;
     private const int COPY_FILE_FAIL_IF_EXISTS = 0x00000001;

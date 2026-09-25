@@ -18,12 +18,25 @@ public class PanelViewTests {
         Assert.Equal(@"C:\", lines[1].Parent);
     }
 
-    /// <summary>A row with no chevron is never drawn open, whatever was remembered of it.</summary>
+    /// <summary>A row open with no subfolders left stays open: the opening is the user's, not the folder's.</summary>
     [Fact]
-    public void ARowWithNoChevron_IsNotDrawnOpen() {
+    public void AnOpenRowWithNoSubfolders_StaysOpen() {
         var panel = Panel().WithExpanded(@"C:\", true).WithExpanded(@"C:\E", true);
 
-        Assert.False(PanelView.Rows(panel).Single(l => l.Path == @"C:\E").IsExpanded);
+        Assert.True(PanelView.Rows(panel).Single(l => l.Path == @"C:\E").IsExpanded);
+    }
+
+    /// <summary>A shell row and a bookmark whose folder is gone are never drawn open, whatever was remembered of them.</summary>
+    [Fact]
+    public void ALeaf_IsNeverDrawnOpen() {
+        var bin = new PanelRow("shell:RecycleBinFolder", "Bin", PanelRowKind.Shell) { Role = PanelRowRole.BuiltInBookmark };
+        var gone = new PanelRow(@"D:\Gone", "Gone", PanelRowKind.Folder) { IsMissing = true, Role = PanelRowRole.OwnBookmark };
+        var panel = PanelState.Empty
+            .WithLevel(PanelState.TopKey, new PanelLevel(LevelState.Loaded, ImmutableArray.Create(bin, gone), 1))
+            .WithExpanded(bin.Path, true)
+            .WithExpanded(gone.Path, true);
+
+        Assert.All(PanelView.Rows(panel), l => Assert.False(l.IsExpanded));
     }
 
     /// <summary>The same folder twice - a bookmark inside another - is two lines, told apart by their keys.</summary>

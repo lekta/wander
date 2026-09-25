@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -37,6 +38,8 @@ namespace Wander.Harness.Host;
 ///   <item>a failed step gets a screenshot before the run stops.</item>
 /// </list>
 /// </summary>
+[SuppressMessage("Design", "CA1001",
+    Justification = "_metrics is disposed at the end of Run - a runner runs its scenario once.")]
 public sealed class ScenarioRunner {
     private const int FirstScreenWaitMs = 5000;
 

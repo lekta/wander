@@ -3,6 +3,7 @@ using System.IO;
 using System.Windows.Media.Imaging;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
+using Wander.Core.Imaging;
 using Wander.Core.Logging;
 using Wander.Core.Preview;
 using Wander.Core.Search;
@@ -10,6 +11,7 @@ using Wander.Harness.Host;
 using Wander.Harness.Sandbox;
 using Wander.Platform.Windows.FileSystem;
 using Wander.Platform.Windows.Icons;
+using Wander.Platform.Windows.Preview;
 using Wander.Platform.Windows.Shell;
 
 namespace Wander.Harness;
@@ -40,7 +42,7 @@ public static class SelfCheck {
         string dir = Path.GetFullPath(options.Value("dir") ?? Path.Combine(Path.GetTempPath(), "wander-sandbox", "selfcheck"));
         SandboxBuilder.Remove(dir);
         var built = SandboxBuilder.Build(
-            dir, new[] { "photos", "raw", "docs", "media", "archives" },
+            dir, new[] { "photos", "raw", "docs", "code", "media", "archives" },
             new SandboxOptions(Photos: 8, Big: 0, RawCount: 4, RawMb: 3));
         Console.WriteLine($"selfcheck sandbox: {built.Root}");
         foreach (string line in built.Summary) {
@@ -61,6 +63,7 @@ public static class SelfCheck {
         }
 
         failures += CheckDocuments(Path.Combine(dir, "docs"));
+        failures += CheckPrograms(Path.Combine(dir, "code"));
         failures += CheckMedia(Path.Combine(dir, "media"));
         failures += CheckArchives(Path.Combine(dir, "archives"));
         failures += CheckFixtures(built.Fixtures);
@@ -119,8 +122,27 @@ public static class SelfCheck {
     }
 
     /// <summary>
-    /// The WAV has to come back with the tags that went in, and the three
-    /// views of one cube have to agree on how many triangles a cube has.
+    /// The program and the library copied in for the program card have to
+    /// carry a version resource the card's reader finds, or its shot in
+    /// <c>preview-formats</c> is an empty frame that looks plausible.
+    /// </summary>
+    private static int CheckPrograms(string dir) {
+        int failures = 0;
+        var reader = new WindowsExecutableInfo();
+        foreach (string name in new[] { "cmd.exe", "version.dll" }) {
+            var info = reader.Read(Path.Combine(dir, name));
+            failures += Report(name, info?.FileVersion is null
+                ? "FAIL: no version resource read"
+                : $"ok, {info.Company ?? "(no company)"}, {info.FileVersion}");
+        }
+
+        return failures;
+    }
+
+    /// <summary>
+    /// The WAV has to come back with the tags that went in, the three
+    /// views of one cube have to agree on how many triangles a cube has,
+    /// and the texture has to decode to the very pixels it was made from.
     /// </summary>
     private static int CheckMedia(string dir) {
         int failures = 0;
@@ -136,6 +158,13 @@ public static class SelfCheck {
                 ? $"ok, {mesh.VertexCount} vertices, {mesh.TriangleCount} triangles"
                 : $"FAIL: {mesh?.TriangleCount.ToString() ?? "unreadable"} triangles, expected 12");
         }
+
+        var texture = TgaDecoder.Decode(File.ReadAllBytes(Path.Combine(dir, MediaFactory.Texture)));
+        failures += Report(MediaFactory.Texture, texture is null
+            ? "FAIL: does not decode"
+            : texture.Pixels.AsSpan().SequenceEqual(MediaFactory.TexturePixels())
+                ? $"ok, {texture.Width}x{texture.Height}, every pixel as drawn"
+                : "FAIL: pixels differ from the picture it was made from");
 
         return failures;
     }

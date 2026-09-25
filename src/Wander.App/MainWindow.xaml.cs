@@ -31,6 +31,8 @@ using Wander.Core.Workspace;
 
 namespace Wander.App;
 
+[SuppressMessage("Design", "CA1001",
+    Justification = "_shellMenus is disposed in OnClosing: a window ends with Closing, not with Dispose.")]
 public partial class MainWindow : Window {
 
     private MainViewModel Vm => (MainViewModel)DataContext;

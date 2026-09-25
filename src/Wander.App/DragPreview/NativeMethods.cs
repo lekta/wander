@@ -2,6 +2,9 @@ using System.Runtime.InteropServices;
 
 namespace Wander.App.DragPreview;
 
+// Names as the Windows docs spell them, in the whole file.
+// ReSharper disable InconsistentNaming
+
 internal static class NativeMethods {
     public const int GWL_EXSTYLE = -20;
     public const int WS_EX_TRANSPARENT = 0x00000020;

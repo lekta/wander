@@ -36,6 +36,8 @@ namespace Wander.App.Views;
 /// layout question: whether the pane is shown and how wide it is.
 /// </para>
 /// </summary>
+[SuppressMessage("Design", "CA1001",
+    Justification = "The count source is cancelled when the query changes or the matches are forgotten; managed only, nothing to release; the pane lives as long as its window.")]
 public partial class PreviewPane : UserControl {
     private bool _webInitialized;
 

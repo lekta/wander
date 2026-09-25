@@ -5,8 +5,8 @@
   // route, load and draw every one of them without an error in the log,
   // and that part is checked here.
   //
-  // WebView2 is an HWND, so the pdf / html / markdown / fb2 shots come out
-  // with a hole where the document is. The point of taking them anyway is
+  // WebView2 is an HWND, so the pdf / html / markdown / fb2 / svg shots come
+  // out with a hole where the document is. The point of taking them anyway is
   // the rest of the window: the pane's frame, the footer, and whether the
   // list underneath survived the load.
   "name": "preview-formats",
@@ -60,6 +60,25 @@
     { "do": "select", "names": [ "letter.rtf" ] },
     { "do": "wait-idle" },
     { "do": "screenshot", "name": "document-rtf" },
+    // Word, Excel, PowerPoint, OpenDocument and EPUB as text: the zip they
+    // are is unpacked by our own extractor, and the text is drawn by WPF,
+    // so these shots are whole.
+    { "do": "select", "names": [ "report.docx" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "doctext-docx" },
+    { "do": "select", "names": [ "budget.xlsx" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "doctext-xlsx" },
+    { "do": "select", "names": [ "deck.pptx" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "doctext-pptx" },
+    { "do": "select", "names": [ "notes.odt" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "doctext-odt" },
+    { "do": "select", "names": [ "book.epub" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "doctext-epub" },
+    { "do": "note", "text": "the five documents show as text, and the word needle42 is somewhere in each" },
     // Word 97: the only document format here that no generator can make,
     // so it comes from the fixtures and the step is optional - see the
     // notes at the end of the report for what this machine did not have.
@@ -93,6 +112,18 @@
     { "do": "screenshot", "name": "maybetext-binary" },
     { "do": "note", "text": "the same extension twice: one is YAML and shows as code, the other is a blob and should refuse" },
 
+    // --- Programs -----------------------------------------------------
+    // Copies of the system's own cmd.exe and version.dll: a version
+    // resource and a PE header to show. The .msi is a fixture, optional.
+    { "do": "select", "names": [ "cmd.exe" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "program-exe" },
+    { "do": "select", "names": [ "version.dll" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "program-dll" },
+    { "do": "preview-format", "ext": ".msi", "name": "program-msi" },
+    { "do": "note", "text": "the program card: description, company, versions and the header of cmd.exe and version.dll; a system file is often signed in a catalog rather than in itself, so 'no signature' is a fair answer for these two" },
+
     // --- Media --------------------------------------------------------
     { "do": "navigate", "path": "{sandbox}\\media" },
     { "do": "select", "names": [ "tone.wav" ] },
@@ -108,6 +139,14 @@
     { "do": "wait-idle" },
     { "do": "screenshot", "name": "model-gltf" },
     { "do": "note", "text": "the three models are one cube - they have to look alike" },
+    { "do": "select", "names": [ "texture.tga" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "image-tga" },
+    { "do": "note", "text": "texture.tga is stored bottom-up and run-length encoded: the arrow has to point up and the caption read upright" },
+    { "do": "select", "names": [ "shapes.svg" ] },
+    { "do": "wait-idle" },
+    { "do": "screenshot", "name": "image-svg" },
+    { "do": "note", "text": "shapes.svg is drawn by WebView2, so the drawing is a hole in the shot; the pane's frame and the </> switch in the footer are what to look at" },
 
     // Everything below needs a real encoder, so it is here only when
     // somebody has put a file of that format in tests/Fixtures. A missing
@@ -119,6 +158,7 @@
     { "do": "preview-format", "ext": ".m4a", "name": "audio-m4a" },
     { "do": "preview-format", "ext": ".webp", "name": "image-webp" },
     { "do": "preview-format", "ext": ".gif", "name": "image-gif" },
+    { "do": "preview-format", "ext": ".heic", "name": "image-heic" },
     { "do": "preview-format", "ext": ".mp4", "name": "video-mp4" },
     { "do": "note", "text": "cover.jpg sits beside the tracks: a file with no cover of its own has to borrow it" },
 

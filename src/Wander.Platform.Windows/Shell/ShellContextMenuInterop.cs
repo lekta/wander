@@ -2,6 +2,9 @@ using System.Runtime.InteropServices;
 
 namespace Wander.Platform.Windows.Shell;
 
+// Names as the Windows docs spell them, in the whole file.
+// ReSharper disable InconsistentNaming
+
 /// <summary>
 /// Raw Win32 / COM surface used by <see cref="ShellContextMenu"/>. Kept in
 /// its own file so the interesting logic next door reads as logic and not

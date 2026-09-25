@@ -158,7 +158,7 @@ public class BatchExecutorTests {
 
         Assert.Single(results);
         Assert.Equal(BatchItemStatus.Cancelled, results[0].Status);
-        Assert.DoesNotContain(fs.CallLog, c => c.StartsWith("CopyFile"));
+        Assert.DoesNotContain(fs.CallLog, c => c.StartsWith("CopyFile", StringComparison.Ordinal));
         Assert.Equal(0, undo.Depth);
     }
 
@@ -184,7 +184,7 @@ public class BatchExecutorTests {
         // answered Replace is not replaced, the free one is not copied.
         Assert.Equal(3, results.Count);
         Assert.All(results, r => Assert.Equal(BatchItemStatus.Cancelled, r.Status));
-        Assert.DoesNotContain(fs.CallLog, c => c.StartsWith("CopyFile"));
+        Assert.DoesNotContain(fs.CallLog, c => c.StartsWith("CopyFile", StringComparison.Ordinal));
         Assert.Equal(new byte[] { 9 }, fs.Files[DstA]);
         Assert.Equal(0, undo.Depth);
     }
@@ -201,7 +201,7 @@ public class BatchExecutorTests {
         var results = batch.CopyMany(new[] { SrcA, SrcB }, DstFolder, resolver);
 
         Assert.All(results, r => Assert.Equal(BatchItemStatus.Cancelled, r.Status));
-        Assert.DoesNotContain(fs.CallLog, c => c.StartsWith("CopyFile"));
+        Assert.DoesNotContain(fs.CallLog, c => c.StartsWith("CopyFile", StringComparison.Ordinal));
         Assert.Equal(0, undo.Depth);
     }
 
@@ -444,7 +444,7 @@ public class BatchExecutorTests {
         Assert.Equal(new byte[] { 1 }, fs.Files[@"C:\dst\docs\same.txt"]);
         Assert.Equal(new byte[] { 2 }, fs.Files[@"C:\dst\docs\free.txt"]);
         Assert.Equal(new byte[] { 8 }, fs.Files[@"C:\dst\docs\theirs.txt"]);
-        Assert.Equal(@"Recycle:C:\dst\docs\same.txt", Assert.Single(bin.CallLog, c => c.StartsWith("Recycle:")));
+        Assert.Equal(@"Recycle:C:\dst\docs\same.txt", Assert.Single(bin.CallLog, c => c.StartsWith("Recycle:", StringComparison.Ordinal)));
     }
 
     [Fact]
@@ -595,7 +595,7 @@ public class BatchExecutorTests {
 
         Assert.Equal(BatchItemStatus.Failed, results[0].Status);
         Assert.IsType<IOException>(results[0].Error);
-        Assert.DoesNotContain(fs.CallLog, c => c.StartsWith("MoveEntry"));
+        Assert.DoesNotContain(fs.CallLog, c => c.StartsWith("MoveEntry", StringComparison.Ordinal));
     }
 
 

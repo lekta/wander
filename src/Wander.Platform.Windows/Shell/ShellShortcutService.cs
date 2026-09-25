@@ -58,6 +58,9 @@ public sealed class ShellShortcutService : IShortcutService {
 
     // --- COM definitions ----------------------------------------------
 
+    // Names as the Windows docs spell them, to the end of the file.
+    // ReSharper disable InconsistentNaming
+
     private const int SLGP_RAWPATH = 0x4;
 
     [ComImport]

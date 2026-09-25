@@ -953,8 +953,6 @@ public sealed class SystemIconProvider : IIconProvider {
     // FOLDERID_RecycleBinFolder — {B7534046-3ECB-4C18-BE4E-64FD61466250}
     private static readonly Guid _folderIdRecycleBin = new("B7534046-3ECB-4C18-BE4E-64FD61466250");
 
-    private const uint SHGFI_PIDL = 0x00000008;
-
 
     // ------------------------------------------------------------------
     // Small / Normal — straight SHGetFileInfo.
@@ -1587,7 +1585,7 @@ public sealed class SystemIconProvider : IIconProvider {
                     DIB_RGB_COLORS);
                 ok = rc != 0;
             } finally {
-                ReleaseDC(IntPtr.Zero, hdc);
+                _ = ReleaseDC(IntPtr.Zero, hdc);
             }
         } finally {
             bmp.UnlockBits(data);
@@ -1614,6 +1612,9 @@ public sealed class SystemIconProvider : IIconProvider {
     // P/Invoke — shell + GDI.
     // ------------------------------------------------------------------
 
+    // Names as the Windows docs spell them, to the end of the file.
+    // ReSharper disable InconsistentNaming
+
     private const uint SHGFI_ICON = 0x000000100;
     private const uint SHGFI_LARGEICON = 0x000000000;
     private const uint SHGFI_SMALLICON = 0x000000001;
@@ -1621,6 +1622,7 @@ public sealed class SystemIconProvider : IIconProvider {
     private const uint SHGFI_SYSICONINDEX = 0x000004000;
     private const uint SHGFI_LINKOVERLAY = 0x000008000;
     private const uint SHGFI_USEFILEATTRIBUTES = 0x000000010;
+    private const uint SHGFI_PIDL = 0x00000008;
     private const uint FILE_ATTRIBUTE_NORMAL = 0x00000080;
 
     /// <summary>
@@ -1709,7 +1711,7 @@ public sealed class SystemIconProvider : IIconProvider {
     }
 
 
-    [DllImport("shell32.dll", CharSet = CharSet.Auto)]
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr SHGetFileInfo(
         string pszPath,
         uint dwFileAttributes,

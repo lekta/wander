@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -25,6 +26,8 @@ namespace Wander.App.Controls;
 /// number on the row.
 /// </para>
 /// </summary>
+[SuppressMessage("Design", "CA1001",
+    Justification = "DropWork() cancels the work when the cell leaves or changes file; managed only, nothing to release - and WPF never disposes a control.")]
 public sealed class ReviewThumb : Image {
     public static readonly DependencyProperty EntryProperty =
         DependencyProperty.Register(

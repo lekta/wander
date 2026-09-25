@@ -14,7 +14,7 @@
   "steps": [
     { "do": "fs", "op": "delete", "path": "{sandbox}\\archives\\out" },
     { "do": "navigate", "path": "{sandbox}\\archives" },
-    { "do": "assert-entries", "contains": [ "nested.zip", "nested.7z", "nested.rar", "solid.rar", "locked.zip", "plain.zip" ] },
+    { "do": "assert-entries", "contains": [ "nested.zip", "nested.7z", "nested.rar", "solid.rar", "locked.zip", "plain.zip", "photos.zip" ] },
 
     // --- Into a zip by path -------------------------------------------
     { "do": "navigate", "path": "{sandbox}\\archives\\nested.zip" },
@@ -119,6 +119,17 @@
     { "do": "navigate", "path": "{sandbox}\\archives\\nested.zip\\docs" },
     { "do": "assert-path", "is": "{sandbox}\\archives\\nested.zip\\docs" },
     { "do": "note", "text": "look with your eyes on tree-archive.png: the tree highlights docs inside nested.zip, not the archives folder" },
+
+    // --- Pictures inside an archive -----------------------------------
+    // The view is left as the folder has it: what the list shows for a
+    // folder of photos inside an archive is part of what is looked at.
+    // Thumbnails arrive after the list is idle, hence the pause.
+    { "do": "navigate", "path": "{sandbox}\\archives\\photos.zip" },
+    { "do": "assert-entries", "count": 6, "contains": [ "IMG_0001.jpg", "IMG_0006.jpg" ] },
+    { "do": "wait-idle" },
+    { "do": "sleep", "ms": 1500 },
+    { "do": "screenshot", "name": "zip-photos" },
+    { "do": "note", "text": "look with your eyes on zip-photos.png: the six pictures inside photos.zip are thumbnails with the arrow pointing up, not file icons" },
 
     // --- The other formats --------------------------------------------
     // "ifOpensAsFolder": with WinRAR or 7-Zip owning .rar / .gz the shell

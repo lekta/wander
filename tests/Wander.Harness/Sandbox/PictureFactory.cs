@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Globalization;
 using System.IO;
 using System.Windows;
@@ -15,6 +16,56 @@ namespace Wander.Harness.Sandbox;
 /// </summary>
 public static class PictureFactory {
     public static byte[] Jpeg(int width, int height, int orientation, string label, int seed, int quality = 85) {
+        var bitmap = Render(width, height, orientation, label, seed);
+
+        var encoder = new JpegBitmapEncoder { QualityLevel = quality };
+        var metadata = new BitmapMetadata("jpg");
+        SetExif(metadata, orientation);
+        encoder.Frames.Add(BitmapFrame.Create(bitmap, null, metadata, null));
+
+        using var stream = new MemoryStream();
+        encoder.Save(stream);
+
+        return stream.ToArray();
+    }
+
+    public static void SaveJpeg(string path, int width, int height, int orientation, string label, int seed) {
+        File.WriteAllBytes(path, Jpeg(width, height, orientation, label, seed));
+    }
+
+    /// <summary>The same picture as top-down BGRA: what a reader of any file made from it has to give back.</summary>
+    public static byte[] Bgra(int width, int height, string label, int seed) {
+        var pixels = new byte[width * height * 4];
+        Render(width, height, 1, label, seed).CopyPixels(pixels, width * 4, 0);
+
+        return pixels;
+    }
+
+    /// <summary>
+    /// A TGA texture the way games and 3D tools write one: 32 bits,
+    /// run-length encoded, rows from the bottom up. The two are what a TGA
+    /// reader gets wrong - the picture comes out garbled or upside down -
+    /// and the arrow drawn upright shows which.
+    /// </summary>
+    public static byte[] Tga(byte[] bgra, int width, int height) {
+        using var stream = new MemoryStream();
+        var header = new byte[18];
+        header[2] = 10;  // true colour, run-length encoded
+        BinaryPrimitives.WriteUInt16LittleEndian(header.AsSpan(12), (ushort)width);
+        BinaryPrimitives.WriteUInt16LittleEndian(header.AsSpan(14), (ushort)height);
+        header[16] = 32;
+        header[17] = 8;  // eight bits of alpha; origin bottom left
+        stream.Write(header);
+        int stride = width * 4;
+        for (int y = height - 1; y >= 0; y--) {
+            WriteRunLengthRow(stream, bgra.AsSpan(y * stride, stride));
+        }
+
+        return stream.ToArray();
+    }
+
+
+    private static RenderTargetBitmap Render(int width, int height, int orientation, string label, int seed) {
         var visual = new DrawingVisual();
         using (var dc = visual.RenderOpen()) {
             var random = new Random(seed);
@@ -65,21 +116,44 @@ public static class PictureFactory {
         var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
         bitmap.Render(visual);
 
-        var encoder = new JpegBitmapEncoder { QualityLevel = quality };
-        var metadata = new BitmapMetadata("jpg");
-        SetExif(metadata, orientation);
-        encoder.Frames.Add(BitmapFrame.Create(bitmap, null, metadata, null));
-
-        using var stream = new MemoryStream();
-        encoder.Save(stream);
-
-        return stream.ToArray();
+        return bitmap;
     }
 
-    public static void SaveJpeg(string path, int width, int height, int orientation, string label, int seed) {
-        File.WriteAllBytes(path, Jpeg(width, height, orientation, label, seed));
+    /// <summary>
+    /// One row as packets that do not run into the next: a run of equal
+    /// pixels is one packet, anything else goes raw up to where the next
+    /// run starts. The gradient gives raw stretches, the white arrow and
+    /// caption give runs - both kinds of packet end up in the file.
+    /// </summary>
+    private static void WriteRunLengthRow(Stream stream, ReadOnlySpan<byte> row) {
+        int count = row.Length / 4;
+        int x = 0;
+        while (x < count) {
+            int run = 1;
+            while (x + run < count && run < 128 && SamePixel(row, x, x + run)) {
+                run++;
+            }
+            if (run > 1) {
+                stream.WriteByte((byte)(0x80 | (run - 1)));
+                stream.Write(row.Slice(x * 4, 4));
+                x += run;
+
+                continue;
+            }
+
+            int raw = 1;
+            while (x + raw < count && raw < 128 && !(x + raw + 1 < count && SamePixel(row, x + raw, x + raw + 1))) {
+                raw++;
+            }
+            stream.WriteByte((byte)(raw - 1));
+            stream.Write(row.Slice(x * 4, raw * 4));
+            x += raw;
+        }
     }
 
+    private static bool SamePixel(ReadOnlySpan<byte> row, int a, int b) {
+        return row.Slice(a * 4, 4).SequenceEqual(row.Slice(b * 4, 4));
+    }
 
     private static void SetExif(BitmapMetadata metadata, int orientation) {
         // WIC accepts the raw IFD query on a fresh JPEG container; the

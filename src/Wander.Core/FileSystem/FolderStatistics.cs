@@ -130,7 +130,7 @@ public static class FolderStatistics {
 
             IReadOnlyList<FileSystemEntry> children;
             try {
-                children = fs.Enumerate(current);
+                children = fs.Enumerate(current, ct: ct);
             } catch {
                 // Access denied / disappeared mid-walk: skip this subtree.
                 continue;

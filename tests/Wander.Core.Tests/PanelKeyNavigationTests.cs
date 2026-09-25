@@ -9,7 +9,7 @@ public class PanelKeyNavigationTests {
     //     A            1  open
     //       B          2  closed, has a chevron
     //       D          3  no chevron
-    //     E            4
+    //     E            4  open, no subfolders left
     //   D:\            5
     private static readonly IReadOnlyList<VisibleRow> _lines = Lines();
 
@@ -40,6 +40,13 @@ public class PanelKeyNavigationTests {
         Assert.Equal(new PanelKeyResult(PanelKeyOutcome.Expand, @"C:\A\B"), Press(@"C:\A\B", PanelKey.Right));
         Assert.Equal(Move(@"C:\A\B"), Press(@"C:\A", PanelKey.Right));
         Assert.Equal(PanelKeyResult.None, Press(@"C:\A\D", PanelKey.Right));
+    }
+
+    /// <summary>An open row with no subfolders has nothing to close: Left goes up at once, Right has nowhere to go.</summary>
+    [Fact]
+    public void AnOpenRowWithNoSubfolders_LeftGoesUp_RightDoesNothing() {
+        Assert.Equal(Move(@"C:\"), Press(@"C:\E", PanelKey.Left));
+        Assert.Equal(PanelKeyResult.None, Press(@"C:\E", PanelKey.Right));
     }
 
     [Fact]
@@ -98,7 +105,8 @@ public class PanelKeyNavigationTests {
             .WithLevel(@"C:\", new PanelLevel(LevelState.Loaded, ImmutableArray.Create(a, e), 2))
             .WithLevel(@"C:\A", new PanelLevel(LevelState.Loaded, ImmutableArray.Create(b, d), 3))
             .WithExpanded(@"C:\", true)
-            .WithExpanded(@"C:\A", true);
+            .WithExpanded(@"C:\A", true)
+            .WithExpanded(@"C:\E", true);
 
         return PanelView.Rows(panel);
     }

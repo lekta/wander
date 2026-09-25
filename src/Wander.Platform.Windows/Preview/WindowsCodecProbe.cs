@@ -66,6 +66,9 @@ public sealed class WindowsCodecProbe : ICodecProbe {
 
     // --- Interop -------------------------------------------------------
 
+    // Names as the Windows docs spell them, to the end of the file.
+    // ReSharper disable InconsistentNaming
+
     /// <summary>Synchronous, asynchronous, hardware, field-of-use, local and transcode-only decoders - the Store ones are synchronous.</summary>
     private const uint MFT_ENUM_FLAG_ALL = 0x3F;
 
