@@ -2,7 +2,7 @@
 rem ===========================================================
 rem  Wander - combined verification entry point.
 rem
-rem    tools\check.bat            build + format verify + strings + resources + tests
+rem    tools\check.bat            build + format verify + strings + resources + site + tests
 rem    tools\check.bat run        + smoke launch of the app
 rem    tools\check.bat format     apply dotnet format (writes files)
 rem    tools\check.bat qa         build + harness selfcheck + smoke-walk
@@ -80,6 +80,15 @@ echo === resources ===
 rem XAML resource keys: every one used is defined somewhere. Same blind
 rem spot as the strings - a mistyped key fails only when its view is built.
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0check-resources.ps1"
+if errorlevel 1 exit /b 1
+
+echo.
+echo === site ===
+rem The site generator over docs/GUIDE.md and the landing: page structure,
+rem slugs and every link, into artifacts\site - open index.html there to
+rem look. Nothing is deployed from here (.github/workflows/site.yml does it
+rem on a site-* tag; docs/ARCHITECTURE.md, the site section).
+%DOTNET% run --project "%~dp0site" --no-build -- --out "%~dp0..\artifacts\site"
 if errorlevel 1 exit /b 1
 
 echo.

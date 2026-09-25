@@ -8,4 +8,7 @@
     <Project Path="tests/Wander.Core.Tests/Wander.Core.Tests.csproj" />
     <Project Path="tests/Wander.Harness/Wander.Harness.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/site/Wander.Site.csproj" />
+  </Folder>
 </Solution>

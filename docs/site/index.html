@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wander — файловый проводник для Windows</title>
+<meta name="description" content="Портативный файловый проводник для Windows 10 и 11: дерево, которое не сворачивается само, галерея и отбор снимков, просмотр RAW, видео, кода и документов, поиск по содержимому, архивы как папки. Всё, кроме безвозвратного удаления, откатывается Ctrl+Z.">
+<style>{{css}}
+.hero {
+  max-width: 76rem;
+  margin: 0 auto;
+  padding: 2.5rem 1rem 0;
+  text-align: center;
+}
+.hero h1 {
+  display: inline-flex;
+  align-items: center;
+  gap: .9rem;
+  margin: 0;
+  font-size: 3rem;
+}
+.logo {
+  border: 0;
+  border-radius: 0;
+  image-rendering: pixelated;
+}
+.lead {
+  max-width: 38rem;
+  margin: .6rem auto 1.6rem;
+  color: var(--muted);
+  font-size: 1.2rem;
+}
+.download {
+  display: inline-flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .75rem 1.6rem .75rem 1.3rem;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+.download:hover {
+  text-decoration: none;
+  filter: brightness(1.1);
+}
+.note {
+  margin: .7rem auto 0;
+  max-width: 38rem;
+  color: var(--muted);
+  font-size: .9rem;
+}
+.shot {
+  display: block;
+  margin: 2rem auto 0;
+}
+.features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: 1.5rem 2.5rem;
+  max-width: 76rem;
+  margin: 0 auto;
+  padding: 2.5rem 1rem 1rem;
+}
+.features h2 {
+  margin: 0 0 .3rem;
+  font-size: 1.1rem;
+}
+.features p {
+  margin: 0;
+}
+.more {
+  max-width: 76rem;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 2.5rem;
+  text-align: center;
+}
+.more p {
+  margin: .8rem 0 0;
+  color: var(--muted);
+}
+</style>
+</head>
+<body>
+<header class="top">
+<a class="brand" href="index.html">Wander</a>
+<a href="{{guide}}">Руководство</a>
+<a href="versions/index.html">Версии</a>
+<a href="https://github.com/lekta/wander">GitHub</a>
+</header>
+<main class="hero">
+<h1><img class="logo" src="img/icon.webp" width="128" height="128" alt="">Wander</h1>
+<p class="lead">Файловый проводник для Windows 10 и 11: без лишнего, без багов Проводника, с удобствами для фото и кода.</p>
+<a class="download" href="{{download}}"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5v11.5m-5.5-5.5 5.5 5.5 5.5-5.5M4.5 20.5h15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Скачать Wander {{version}}</a>
+<p class="note">Бета · один exe, ~74 МБ, ставить ничего не нужно · Windows 10 (2004+) и 11, x64 · бесплатно для некоммерческого использования. При первом запуске SmartScreen предупредит о неподписанном файле: «Подробнее» → «Выполнить в любом случае». Контрольная сумма — на <a href="{{release}}">странице релиза</a>.</p>
+<img class="shot" src="img/main.webp" width="1691" height="611" alt="Главное окно: слева закладки и дерево дисков, в середине папка крупными значками, справа панель просмотра с видео">
+</main>
+<section class="features">
+<div>
+<h2><a href="guide/derevo-i-zakladki/index.html">Навигация</a></h2>
+<p>Дерево дисков и закладки. Дерево не сворачивается само: раскрытые ветки переживают переходы и перезапуск. Список обновляется сам, когда папку меняет другая программа.</p>
+</div>
+<div>
+<h2><a href="guide/formaty/index.html">Просмотр и форматы</a></h2>
+<p>Панель просмотра показывает картинки, RAW, HEIC и SVG, видео, музыку с обложкой, 3D, PDF, код с подсветкой, Office и EPUB текстом; в полном экране — снимок за снимком или пара рядом.</p>
+</div>
+<div>
+<h2><a href="guide/otbor-snimkov/index.html">Галерея и отбор снимков</a></h2>
+<p>Папка со снимками сама открывается галереей. Оценки и цветные метки в файле-спутнике (<code>.xmp</code>, <code>.pp3</code>), фокус-пикинг, резкость числом, клиппинг и гистограмма — прямо на миниатюрах.</p>
+</div>
+<div>
+<h2><a href="guide/poisk/index.html">Поиск</a></h2>
+<p>Фильтр по имени на каждую букву, маски вроде <code>*.cs;*.xaml</code>. Через двоеточие — текст внутри файлов, включая <code>.docx</code>, <code>.xlsx</code> и <code>.pdf</code>.</p>
+</div>
+<div>
+<h2><a href="guide/arkhivy-kak-papki/index.html">Архивы как папки</a></h2>
+<p><code>Enter</code> на <code>.zip</code>, <code>.7z</code>, <code>.rar</code> заходит внутрь: список, просмотр, миниатюры снимков. Извлечь — копированием или перетаскиванием.</p>
+</div>
+<div>
+<h2><a href="guide/faylovye-operatsii/index.html">Безопасность операций</a></h2>
+<p>Удаление в корзину, подтверждение с «Отменой» по умолчанию, <code>Ctrl</code> + <code>Z</code> на всё, кроме безвозвратного удаления. Системные папки защищены, буфер и перетаскивание — общие с Проводником.</p>
+</div>
+</section>
+<section class="more">
+<img src="img/preview.webp" width="1148" height="816" loading="lazy" alt="Галерея снимков с оценками на тёмном фоне и панель просмотра: RAW под лупой, данные съёмки, звёзды и цветные метки">
+<p><a href="{{guide}}">Руководство</a> — с чего начать и всё остальное · <a href="versions/index.html">Версии</a> · <a href="https://github.com/lekta/wander">Исходники на GitHub</a></p>
+</section>
+<footer class="bottom">
+<a href="https://github.com/lekta/wander/blob/master/LICENSE">PolyForm Noncommercial 1.0.0</a> · © Lekta, 2026 ·
+<a href="https://github.com/lekta/wander/issues">Сообщить о проблеме</a>
+</footer>
+</body>
+</html>

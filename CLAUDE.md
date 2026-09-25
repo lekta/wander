@@ -24,6 +24,7 @@
 | QA: уровни, песочница, харнесс, чек-листы, предрелизный прогон, метрики | [QA.md](docs/QA.md) |
 | Как выпустить версию | [RELEASING.md](docs/RELEASING.md) |
 | Возможности и хоткеи для пользователя | [GUIDE.md](docs/GUIDE.md) |
+| Сайт: структура GUIDE, генератор, деплой, скриншоты | [ARCHITECTURE.md](docs/ARCHITECTURE.md), «Сайт» |
 | История релизов | [CHANGELOG.md](docs/CHANGELOG.md) |
 | Контрибьют, безопасность | [CONTRIBUTING.md](docs/CONTRIBUTING.md), [SECURITY.md](docs/SECURITY.md) |
 | Кодстиль машинно | [.editorconfig](.editorconfig) |
@@ -113,7 +114,7 @@ Roadmap. Закрытое → DONE, а из PLAN при финализации *
 Из PowerShell, из корня репозитория:
 
 ```pwsh
-.\tools\check.bat          # build → dotnet format --verify-no-changes → сверка строк и ключей XAML → тесты
+.\tools\check.bat          # build → dotnet format --verify-no-changes → сверка строк и ключей XAML → сайт → тесты
 .\tools\check.bat run      # то же + smoke-запуск (окно за экраном, само закрывается)
 .\tools\check.bat format   # применить форматирование (пишет файлы)
 .\tools\check.bat qa       # сборка + харнесс: selfcheck и smoke-walk (минуты, отдельно)
@@ -123,7 +124,9 @@ Roadmap. Закрытое → DONE, а из PLAN при финализации *
 против `Strings.resx` в обе стороны (опечатка в ключе компилируется молча и
 всплывает в интерфейсе); шаг «ресурсы» — `tools\check-resources.ps1`:
 каждый `{StaticResource}` / `{DynamicResource}` определён каким-то `x:Key`
-(без областей видимости). Exit code 0 — зелено, иначе код первого упавшего
+(без областей видимости); шаг «сайт» — `tools/site` собирает сайт из GUIDE
+и лендинга в `artifacts\site`: структура страниц, слаги, все ссылки
+(ARCHITECTURE, «Сайт»). Exit code 0 — зелено, иначе код первого упавшего
 шага. Не запускать через `cmd /c` из bash — возвращает 0 и глотает вывод.
 Точечно можно `dotnet build` / `dotnet test`, перед коммитом — полный
 `check.bat`. Шаг «тесты» идёт через `tools\run-tests.ps1` и, как

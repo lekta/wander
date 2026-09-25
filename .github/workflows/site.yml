@@ -1,0 +1,51 @@
+name: Site
+
+# Builds the site from docs/GUIDE.md and docs/site/index.html (tools/site)
+# and publishes it to GitHub Pages, lekta.github.io/wander/, when a tag like
+# site-2026-10-01 is pushed. Not tied to a release: the site is built from
+# whatever the tag points at and may run ahead of the latest release.
+# One-time setup by hand: Settings -> Pages -> Source = GitHub Actions, and
+# the github-pages environment allows site-* tags to deploy.
+
+on:
+  push:
+    tags:
+      - 'site-*'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # All of history, for the tags: the versions page lists every v*
+          # tag and the download button offers the newest.
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build site
+        run: dotnet run --project tools/site -- --out _site
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
