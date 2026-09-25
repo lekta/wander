@@ -54,6 +54,12 @@ public static partial class Strings {
     /// <summary>В список файлов</summary>
     public static string HotkeyToList => Get(nameof(HotkeyToList));
 
+    /// <summary>В панель просмотра: текст, документ, плеер; ещё раз — во вторую половину пары</summary>
+    public static string HotkeyToPreview => Get(nameof(HotkeyToPreview));
+
+    /// <summary>Из панели просмотра обратно в список</summary>
+    public static string HotkeyPreviewEscape => Get(nameof(HotkeyPreviewEscape));
+
     /// <summary>В панель папок, на узел текущей папки. Повторное нажатие — в другую панель (закладки ↔ компьютер)</summary>
     public static string HotkeyToTree => Get(nameof(HotkeyToTree));
 
@@ -119,6 +125,9 @@ public static partial class Strings {
 
     /// <summary>Фокус в поле фильтра</summary>
     public static string HotkeyFilter => Get(nameof(HotkeyFilter));
+
+    /// <summary>Следующее / предыдущее совпадение в панели просмотра; после последнего — следующий найденный файл</summary>
+    public static string HotkeyFindNext => Get(nameof(HotkeyFindNext));
 
     /// <summary>Открыть окно поиска</summary>
     public static string HotkeySearchWindow => Get(nameof(HotkeySearchWindow));

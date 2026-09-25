@@ -164,17 +164,17 @@ Platform.Windows` — один файл, `App.xaml.cs` (точка композ�
 <!-- deps:generated:begin -->
 ```
 === Wander dependency graph (using sweep) ===
-date   : 2026-09-24
-commit : 3b52b5d
+date   : 2026-09-25
+commit : 8120f22
 
 -- projects --
 Wander.App -> Wander.Core   (71 files)
 Wander.App -> Wander.Platform.Windows   (1 files)
-Wander.Core.Tests -> Wander.Core   (148 files)
+Wander.Core.Tests -> Wander.Core   (154 files)
 Wander.Harness -> Wander.App   (4 files)
 Wander.Harness -> Wander.Core   (6 files)
 Wander.Harness -> Wander.Platform.Windows   (3 files)
-Wander.Platform.Windows -> Wander.Core   (35 files)
+Wander.Platform.Windows -> Wander.Core   (37 files)
 
 -- Wander.Core: folder -> folder --
   Actions        -> FileSystem     (5 files)
@@ -190,7 +190,7 @@ Wander.Platform.Windows -> Wander.Core   (35 files)
   Companions     -> Undo           (1 files)
   Diagnostics    -> Logging        (2 files)
   FileSystem     -> Diagnostics    (2 files)
-  FileSystem     -> Localization   (2 files)
+  FileSystem     -> Localization   (3 files)
   FileSystem     -> Logging        (3 files)
   FileSystem     -> Operations     (3 files)
   FileSystem     -> Undo           (3 files)
@@ -213,7 +213,7 @@ Wander.Platform.Windows -> Wander.Core   (35 files)
   Persistence    -> Folders        (2 files)
   Persistence    -> Navigation     (1 files)
   Persistence    -> Rename         (1 files)
-  Preview        -> FileSystem     (9 files)
+  Preview        -> FileSystem     (10 files)
   Preview        -> Icons          (1 files)
   Rename         -> Companions     (1 files)
   Rename         -> FileSystem     (2 files)
@@ -940,10 +940,12 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
   шелл разбирает сам; Wander режет его надвое чистой функцией
   `ArchivePath.Parse(path, extensions)` (Core): первый сегмент с архивным
   расширением — контейнер, хвост — путь внутри, пустой хвост = корень.
-  Набор расширений читает Platform из реестра лениво (ProgID расширения ∈
-  `CompressedFolder` / `ArchiveFolder` / `CABFolder`, `UserChoice` важнее
-  умолчания класса, fallback `.zip`): ассоциация, отданная 7-Zip, закрывает
-  просмотр папкой и у нас — как в Проводнике.
+  Набор расширений читает Platform из реестра лениво, по классу
+  папки-обработчика (`FolderHandlerOf`, 2026-09-25: `HKCR\<ProgID>\CLSID`,
+  ProgID с учётом `UserChoice`, иначе `SystemFileAssociations\<ext>\CLSID`;
+  ∈ CLSID `CompressedFolder` / `ArchiveFolder` / `CABFolder`; fallback
+  `.zip`): 7-Zip и WinRAR своей папки не регистрируют, так что отданная им
+  ассоциация меняет запуск, а не просмотр папкой (решение 2026-09-24).
 - **Один предикат на весь код** — `Archives.Of(path)` →
   `IShellNamespace.ParseArchive`. Никаких `EndsWith(".zip")`.
   `ParseArchive` заодно проверяет `File.Exists` контейнера: настоящая папка
@@ -970,11 +972,22 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
   shell-папка — apartment-threaded; созданная с потока пула, она попадает в
   общий host-STA процесса: вызовы маршалятся, а долгий вызов там держит
   overlay-запросы значков (`SHGetFileInfo`) — четыре слота `AsyncIcon` и
-  следующую папку с ними. Контрольные строки лога: `Recycle bin: opened …
-  first row after … rows in …` и `Recycle bin: listing abandoned at …`.
-- **Байты — только копирующим движком шелла.** `BHID_Stream` и
-  `IDataObject` для `ArchiveFolder` отвечают `E_NOINTERFACE`;
-  `IFileOperation::CopyItem` с `FOF_NO_UI` извлекает всё. Отсюда
+  следующую папку с ними. Холодный заход размазан по строкам, поэтому
+  листинг отдаётся порциями (AD2, 2026-09-25): `PortionClock` (Core) — с
+  300 мс, дальше раз в секунду, отсортированные копии через `IProgress` в
+  `Enumerate`; `MainViewModel.Land` — первая порция как приход папки (вуаль
+  снимается), следующие как перечитывание с сохранённым выделением, порция
+  после целого отбрасывается; архив порций не даёт. Контрольные строки
+  лога: `Recycle bin: opened … first row after … rows in …, N portion(s) on
+  the way` и `Recycle bin: listing abandoned at …`.
+- **Байты: zip — потоком, остальное — копирующим движком шелла.** Запись
+  `CompressedFolder` отдаёт `BHID_Stream` (`IShellNamespace.ReadEntry` →
+  `ShellArchiveFolder.ReadEntry`, в память; стенд 2026-09-25: 430 КБ за
+  18 мс); у `ArchiveFolder` `BHID_Stream` — `E_NOINTERFACE`, а `IDataObject`
+  несёт только `Shell IDList Array`, без `FileContents`;
+  `IFileOperation::CopyItem` с `FOF_NO_UI` извлекает всё. Поток берут
+  миниатюры (`ArchiveThumbnail`); панель просмотра и «Открыть» — через
+  копию, им нужен файл. Отсюда
   `IShellNamespace.CopyOut` и `Shell/ExtractionService` (Core) вокруг
   него: `SystemPathGuard` на цель, `IConflictResolver` (Replace → старое в
   корзину), лог, прогресс в `OperationTracker`, отмена через
@@ -987,9 +1000,11 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
 - **Внутри архива выключено решением**, а не «пока не сделано»: удаление,
   переименование, вырезать, вставка, создание, drop внутрь, сторож папки,
   оценки, спутники, поиск по содержимому и подпапкам, статистика папки в
-  футере, миниатюры (`IsThumbnailable` → false, значок по расширению;
-  папке внутри архива `SHGetFileInfo` надо прямо сказать
-  `FILE_ATTRIBUTE_DIRECTORY` — иначе рисуется пустой лист).
+  футере; миниатюры — только у картинок (`ArchiveThumbnail`, ниже;
+  `IsThumbnailable` → false: шелл отвечает записи значком типа, а
+  `IShellItemImageFactory` писал бы его в общий `thumbcache`; папке внутри
+  архива `SHGetFileInfo` надо прямо сказать `FILE_ATTRIBUTE_DIRECTORY` —
+  иначе рисуется пустой лист).
   Фильтр по имени работает — он в памяти. Меню внутри — пять строк
   (Открыть, Копировать, Извлечь…, Извлечь рядом, Копировать путь), не
   серые: писать в архив нельзя вообще, а серая строка обещает «потом».
@@ -1082,8 +1097,17 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
   `PreviewController`): движок шелла не останавливается внутри записи,
   отменённый запрос держит поток пула до конца, и стрелки по RAR сканов
   набрали 85 потоков и подвесили всё, что ходит через пул (сессия
-  2026-09-04); больше 32 МБ — карточка с отсылкой к «Открыть». Миниатюр и
-  поиска внутри по-прежнему нет.
+  2026-09-04); больше 32 МБ — карточка с отсылкой к «Открыть». Поиска
+  внутри по-прежнему нет.
+- **Миниатюры картинок внутри** (AL, 2026-09-25): `ArchiveThumbnail`
+  (Platform) — `SizeOf` (`PKEY_Size`, потолок 32 МБ, без размера — значок);
+  zip — `ReadEntry` в память и `RawThumbnail.RenderPicture(bytes)`
+  (ориентация — `MetadataExtractorImageReader.Read(Stream)`), остальные —
+  `CopyOut` в `TempFiles.FolderFor("thumbnail|" + path)` под гейтом
+  `SemaphoreSlim(1)` и удаление сразу; RAW и TGA всегда через копию. Готовая
+  копия панели (`TempExtraction.CopyPathFor`) читается, не трогается. Ключ
+  дискового кэша — путь записи + mtime и размер архива
+  (`ThumbnailDiskCache.TryBuildFileName`).
 
 ## Выделение, буфер, фильтр
 
@@ -1150,6 +1174,17 @@ Window.Activated → SyncFromSystem → ISystemClipboard.GetFiles → модел
 `SetClipboardData` — владелец `GetActiveWindow()` вызывающего потока.
 Асимметрия: вырезал у нас, вставил в Проводнике — перемещение не наше, в
 undo его нет.
+
+Текст и картинка (X, 2026-09-25): `GetFiles` только отмечает флаги
+(`CF_UNICODETEXT`, `CF_DIB` / `PNG`, `CountClipboardFormats`), байты читает
+`PasteAsync` в момент вставки — `GetText` (`CF_UNICODETEXT` до нуля),
+`GetImagePng` (зарегистрированный `PNG` как есть, иначе `CF_DIB` →
+`DibFile.ToBmp` (Core: 14-байтовый заголовок, смещение пикселей с учётом
+масок после 40-байтового заголовка и палитры) → PNG WinRT-кодером, на
+пуле), `GetFormatNames` для строки «не вставлено». `ClipboardPaste.Choose`
+(Core) — один вид: файлы → текст → картинка; файлы не с диска — ничего.
+`SyncFromSystem` перед вставкой — текст, скопированный внутри Wander,
+виден без переактивации.
 
 ### Слежение за папкой
 
@@ -1713,8 +1748,8 @@ RAW набирает ровно 50 %. Минимума нет. Расширен�
 
 ### Клавиатурные области
 
-`Tab` переключает **области**: тулбар → адрес → фильтр → закладки → дерево
-→ список. Порядок и обход — `Core/Layout/WindowZones` (`WindowZone`, `Order`,
+`Tab` переключает **области**: тулбар → адрес → закладки → дерево → поле
+поиска (на полосе над списком, G6) → список. Порядок и обход — `Core/Layout/WindowZones` (`WindowZone`, `Order`,
 `Ring`, `FolderPane`): кольцевая арифметика и лестница умолчаний — где
 прячется ошибка на единицу. Окну — `ZoneOf` по визуальному дереву,
 `CycleZone`, `FocusZone`. Не средствами WPF: родной `Tab` идёт по дереву
@@ -1722,7 +1757,11 @@ RAW набирает ровно 50 %. Минимума нет. Расширен�
 `TabNavigation` / `IsTabStop` по всей разметке. `Tab` **всегда** «следующая
 область», и из текстового поля. `FocusZone` возвращает `false` — обход идёт
 дальше (свёрнутые закладки, выключенные кнопки). Панель просмотра не в
-списке (BACKLOG).
+кольце — `Tab` в текстовое поле запер бы клавиатуру: `Ctrl+3` —
+`PreviewPane.TakeKeyboard` (контрол содержимого по `Kind`; панель, ещё
+грузящая файл, берёт клавиатуру по приходу контента), повтор — во вторую
+половину пары, `Esc` — `FileList.FocusList` (поле поиска панели отвечает на
+`Esc` само).
 
 - **`Alt`-сочетания не `KeyBinding`**: в тулбаре настоящий `Menu`, `Alt`
   переводит окно в режим меню раньше маршрутизации. `Alt+←/→/↑`,
@@ -2183,19 +2222,45 @@ a₁·a₂ > r². Форма — из заголовков (`PictureLoader.Shape
   текста); RTF, дочитанный после конца загрузки, ищется заново в
   `LoadDocumentAsync`. Подхват — `PreviewController.FindRequest` в конце
   загрузки, запрос даёт `FindTextFor` (`MainViewModel`: строка с
-  `MatchSnippet` и `ContentSearch.TextQuery`). `MainWindow`: `Ctrl+F` —
+  `MatchSnippet` и `ContentSearch.TextQuery`; у второй половины и
+  «Сравнить» — `MainViewModel.FoundText`). `MainWindow`: `Ctrl+F` —
   сначала `OpenFind` панелей (вторая половина сплита вложена в первую и
-  отвечает сама — `SecondSlot`), иначе поле фильтра.
+  отвечает сама — `SecondSlot`), иначе поле поиска над списком; `F3` /
+  `Shift+F3` — `PreviewPane.FindAgain` у половины с клавиатурой, иначе с
+  открытым полем: `PastLast` над выдачей по содержимому →
+  `MainViewModel.NextFoundRow` (`FindWalk`, Core) и `FileList.SelectRow`,
+  дальше некуда — статус и по кругу. За показанным началом (B6-хвост,
+  2026-09-25): `PreviewController.NoteRest` запоминает, что осталось —
+  путь и сколько знаков пропустить, если файл обрезан бюджетом чтения,
+  либо хвост строки в памяти; `CountPastShownAsync` считает на пуле
+  (`TextFind.Count` блоками по 64K знаков с переносом хвоста;
+  `EncodingProbe.Reader` — та же кодировка, BOM съеден, тест на
+  совпадение с `Decode`); `ShownTextLength` — где в показанном тексте
+  начинается заметка, чтобы её слова не искались.
 - **TGA** (B8, 2026-09-22): `TgaDecoder` (Core, тест) → `BgraImage`, до
   выделения буфера проверяет палитру, поле id и объём данных; панель —
   `ImageDecoder.Tga` (`BitmapSource.Create`, Bgra32), миниатюры —
   `TgaThumbnail` (Platform, WinRT-кодер PNG, файлы до 64 МБ); `.tga` в
   `ImageFormats.All`.
+- **HEIF** (B10, 2026-09-25): `ImageFormats.Heif` в `All`, декод под размер
+  панели (`PictureLoader._scaled`); контейнер поворачивает сам, EXIF-тег WIC
+  игнорирует — `UprightHeif` в `MetadataExtractorImageReader`; декод без
+  пикселей — `DecodeFailed` в `ImageDecoder.Decode` (WIC отдаёт 1×1 без
+  исключения). `ICodecProbe` (Core) / `WindowsCodecProbe` (Platform,
+  `MFTEnumEx`: `CLSID_WICHeifDecoder` входным типом — HEIF Image
+  Extensions, `MFVideoFormat_HEVC` — HEVC Video Extensions) спрашивается
+  только после провала декода; `PreviewController.ExplainMissingCodecAsync`
+  → плашка и `OpenStoreCommand` (`ms-windows-store://pdp/?ProductId=…`).
+- **SVG** (B8, 2026-09-25): `PreviewRoute.Svg` перед кодом; картинка —
+  `PreviewText.SvgPage` (`<img>` с `data:` base64 на фоне области, скрипт
+  не исполняется) в WebView2, `ShowSvgSource` — разметка как код, режим на
+  обе панели пары; больше 1 МБ — разметкой (строка WebView2 до 2 МБ).
 - **`PreviewRouter`** (Core) — «расширение → `PreviewRoute`», без диска;
   `Route` (каким загрузчиком) ≠ `Kind` (каким контролом): Markdown, FB2, PDF
   — три пути в один WebView2. Таблица — **порядок правил**: `.webp` —
-  картинка и многокадровый контейнер, `.mtl` — текст, `.svg` — исходник;
-  побеждает первое; `PreviewRouterTests`.
+  картинка и многокадровый контейнер, `.mtl` — текст, `.svg` — рисуется, а
+  для действий с текстом остаётся текстом; побеждает первое;
+  `PreviewRouterTests`.
 - **Разбор в Core (`Preview/`), отрисовка в App.** `AudioTags` (ID3v2.2 /
   2.3 / 2.4, ID3v1, Vorbis; длительность FLAC из `STREAMINFO`, MP3 по `Xing`
   / `Info` / `VBRI`; кодировка 0 угадывается **по всем полям сразу**);
@@ -2455,7 +2520,14 @@ Wander` — так задумано, отдельной папки для отл
 сеанса (`IAppStateStore.IsReadOnly`, в заголовке окна «— настройки не
 сохраняются», строка в логе). Читает состояние он как обычно. Имя с хэшем
 корня — харнесс в песочнице и установленная копия друг друга не видят.
-Кэш миниатюр и профиль WebView2 общие: один рантайм, одни опции.
+Кэш миниатюр и профиль WebView2 общие: один рантайм, одни опции. Профиль —
+`AppPaths.WebView2` (AD1, 2026-09-25): `<tmp>\WebView2` при
+`UseSystemTemp`, иначе `<DataRoot>\WebView2`, выбирается раз на запуск
+(браузер держит папку, с которой стартовал); неиспользуемая папка
+удаляется после первого кадра, если нет другого экземпляра
+(`App.SweepUnusedWebViewProfile`). Опции —
+`--disable-component-update --disable-background-networking`, tracking
+prevention выключен: компоненты браузер не качает.
 
 **`state.json`** (`JsonAppStateStore`, record `AppState`):
 - `Session` — `LastPath` (`NavigationStop?`), `ExpandedPaths` (только

@@ -187,4 +187,30 @@ public class EncodingProbeTests {
 
         Assert.DoesNotContain('�', decoded);
     }
+
+
+    /// <summary>
+    /// The reader the pane's find counts the rest of a file through gives
+    /// what the decode gives - the same characters at the same offsets, the
+    /// byte-order mark consumed.
+    /// </summary>
+    [Fact]
+    public void Reader_AgreesWithDecode_InEveryEncoding() {
+        var samples = new[] {
+            Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(Russian)).ToArray(),
+            Encoding.UTF8.GetBytes(Russian),
+            Encoding.Unicode.GetPreamble().Concat(Encoding.Unicode.GetBytes(Russian)).ToArray(),
+            Encoding.BigEndianUnicode.GetPreamble().Concat(Encoding.BigEndianUnicode.GetBytes(Russian)).ToArray(),
+            Encode(Russian, dos: false),
+            Encode(Russian, dos: true),
+            Encoding.Latin1.GetBytes("Grüße aus Köln"),
+        };
+
+        foreach (byte[] bytes in samples) {
+            var kind = EncodingProbe.Detect(bytes);
+            using var reader = EncodingProbe.Reader(new MemoryStream(bytes), kind);
+
+            Assert.Equal(EncodingProbe.Decode(bytes, kind), reader.ReadToEnd());
+        }
+    }
 }

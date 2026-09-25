@@ -83,6 +83,12 @@ public static partial class Strings {
     /// <summary>Новая папка</summary>
     public static string NewFolderName => Get(nameof(NewFolderName));
 
+    /// <summary>Текст.txt</summary>
+    public static string PasteTextFileName => Get(nameof(PasteTextFileName));
+
+    /// <summary>Изображение.png</summary>
+    public static string PasteImageFileName => Get(nameof(PasteImageFileName));
+
     /// <summary>файл</summary>
     public static string KindFile => Get(nameof(KindFile));
 

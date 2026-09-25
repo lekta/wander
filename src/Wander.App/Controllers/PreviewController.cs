@@ -104,6 +104,23 @@ public sealed class PreviewController : ObservableObject {
     /// </summary>
     private const long MaxArchivePreviewBytes = 32L * 1024 * 1024;
 
+    /// <summary>
+    /// The biggest SVG drawn as a picture (PLAN B8). The web view takes a
+    /// page as a string of at most 2 MB, and the picture goes into it in
+    /// base64 - a third more; a bigger one is shown as its markup.
+    /// </summary>
+    private const long MaxSvgPictureBytes = 1024 * 1024;
+
+    /// <summary>The Microsoft Store's product of HEIF Image Extensions - free (PLAN B10).</summary>
+    private const string HeifStoreProduct = "9PMMSR1CGPWG";
+
+    /// <summary>
+    /// The Microsoft Store's product of HEVC Video Extensions - paid; the free
+    /// "from Device Manufacturer" one is not listed by the Store's search, and
+    /// comes with the machines it is meant for.
+    /// </summary>
+    private const string HevcStoreProduct = "9NMZLZ57R3T7";
+
 
     /// <summary>
     /// How many pictures of a multi-selection are opened for the shared
@@ -230,11 +247,22 @@ public sealed class PreviewController : ObservableObject {
     private bool _isLoading;
     private bool _isCensusLoading;
     private string? _text;
+
+    // The text on show is the start of a longer one (PLAN B6): what the
+    // find counts through past it - the file itself, read again from its
+    // start less the characters shown, or the rest already in memory - and
+    // how much of the shown text comes before the note that says so.
+    private string? _restPath;
+    private string? _restText;
+    private long _restSkip;
+    private int? _shownTextLength;
     private System.Windows.TextWrapping _textWrap = System.Windows.TextWrapping.NoWrap;
     private ImageSource? _image;
     private ImageSource? _zoomImage;
     private bool _isRawImage;
     private bool _showRawDecode;
+    private bool _isSvg;
+    private bool _showSvgSource;
     private string? _codeText;
     private string? _codeExtension;
     private Uri? _webUri;
@@ -258,6 +286,9 @@ public sealed class PreviewController : ObservableObject {
     // Who holds the file shut when nothing could be shown: the names, ""
     // when nobody can be named, null when the file is not held.
     private string? _lockedBy;
+
+    // The Store extension a HEIF picture could not be shown without (PLAN B10).
+    private MissingCodec _missingCodec;
     private VolumeInfo? _volume;
     private string _workLine = "";
     private int _workLinePending;
@@ -374,6 +405,7 @@ public sealed class PreviewController : ObservableObject {
         CopyGuidCommand = new RelayCommand(_ => CopyGuid(), _ => HasUnityGuid);
         GoToLinkTargetCommand = new RelayCommand(_ => GoToLinkTarget(), _ => HasLinkTarget);
         CheckSignatureCommand = new RelayCommand(_ => CheckSignatureNow(), _ => CanCheckSignature);
+        OpenStoreCommand = new RelayCommand(_ => OpenStore(), _ => HasStoreHint);
     }
 
 
@@ -509,6 +541,25 @@ public sealed class PreviewController : ObservableObject {
         private set => SetField(ref _textWrap, value);
     }
 
+    /// <summary>
+    /// The text or code on show is only the start of the file's - the pane
+    /// draws the first megabyte, 200 000 characters at most. The find field
+    /// still counts the matches past it (<see cref="CountPastShownAsync"/>)
+    /// and says they are there to be seen by opening the file (PLAN B6,
+    /// decision of 2026-09-25).
+    /// </summary>
+    public bool TextGoesOn => _restPath is not null || _restText is not null;
+
+    /// <summary>
+    /// Where the note about the rest begins in <see cref="Text"/> or
+    /// <see cref="CodeText"/> - what the find looks through, so the note's
+    /// own words are not a match. Null when the whole text is on show.
+    /// </summary>
+    public int? ShownTextLength {
+        get => _shownTextLength;
+        private set => SetField(ref _shownTextLength, value);
+    }
+
     public ImageSource? Image {
         get => _image;
         private set {
@@ -594,6 +645,26 @@ public sealed class PreviewController : ObservableObject {
         get => _showRawDecode;
         set {
             if (SetField(ref _showRawDecode, value)) {
+                SchedulePreviewUpdate();
+            }
+        }
+    }
+
+    /// <summary>The file on screen is an SVG - drawn or read as markup (PLAN B8); it shows the switch between the two.</summary>
+    public bool IsSvg {
+        get => _isSvg;
+        private set => SetField(ref _isSvg, value);
+    }
+
+    /// <summary>
+    /// An SVG is shown as its markup rather than as the picture it draws
+    /// (PLAN B8). A mode, like <see cref="ShowRawDecode"/>: someone reading
+    /// the markup of a folder of icons wants it to stay that way.
+    /// </summary>
+    public bool ShowSvgSource {
+        get => _showSvgSource;
+        set {
+            if (SetField(ref _showSvgSource, value) && _isSvg) {
                 SchedulePreviewUpdate();
             }
         }
@@ -993,6 +1064,16 @@ public sealed class PreviewController : ObservableObject {
         _isVisible && (_kind == PreviewKind.Unsupported
             || (_kind == PreviewKind.None && _primary is not { Kind: EntryKind.File }));
 
+    /// <summary>
+    /// A HEIF picture needs an extension from the Microsoft Store (PLAN B10):
+    /// the placeholder says which, and a button under it opens its page -
+    /// the system's own way to get it (pillar 3).
+    /// </summary>
+    public bool HasStoreHint => _missingCodec != MissingCodec.None;
+
+    /// <summary>Opens the Store's page of the extension <see cref="HasStoreHint"/> names.</summary>
+    public RelayCommand OpenStoreCommand { get; }
+
     public string PlaceholderText =>
         _kind == PreviewKind.None ? Strings.PreviewSelectFile
         : _linkBroken ? Strings.PreviewLinkBroken
@@ -1000,6 +1081,8 @@ public sealed class PreviewController : ObservableObject {
         // archive is previewed off its scratch copy, and a format the pane
         // cannot read says so in the ordinary words.
         : _archiveEntryTooBig ? Strings.PreviewArchiveTooBig
+        : _missingCodec == MissingCodec.Heif ? Strings.PreviewNeedsHeif
+        : _missingCodec == MissingCodec.Hevc ? Strings.PreviewNeedsHevc
         : _lockedBy is { Length: > 0 } holders ? string.Format(Strings.PreviewFileLockedBy, holders)
         : _lockedBy is not null ? Strings.PreviewFileLocked
         : Strings.PreviewUnsupported;
@@ -1543,6 +1626,43 @@ public sealed class PreviewController : ObservableObject {
         _pictures.Clear();
     }
 
+    /// <summary>
+    /// How many times <paramref name="query"/> occurs past the part of the
+    /// text on show (<see cref="TextGoesOn"/>) - counted off the UI thread,
+    /// from the rest in memory or from the file read again; the matches on
+    /// show are the pane's own. 0 when the whole text is on show or the file
+    /// cannot be read any more.
+    /// </summary>
+    public Task<int> CountPastShownAsync(string query, CancellationToken ct) {
+        string? path = _restPath;
+        string? rest = _restText;
+        long skip = _restSkip;
+        if (query.Length == 0 || (path is null && rest is null)) {
+            return Task.FromResult(0);
+        }
+
+        return Task.Run(() => {
+            if (rest is not null) {
+                return TextFind.Count(new StringReader(rest), query, 0, ct);
+            }
+
+            try {
+                using var file = SharedRead.Open(path!, bufferSize: 64 * 1024);
+                // More than the sample, so the guess is the one the shown
+                // part was decoded with (EncodingProbe.Detect trims a
+                // character cut by the sample's end only when it is cut).
+                var head = new byte[Math.Min(file.Length, EncodingProbe.SampleSize * 2)];
+                file.ReadExactly(head);
+                file.Position = 0;
+                using var reader = EncodingProbe.Reader(file, EncodingProbe.Detect(head));
+
+                return TextFind.Count(reader, query, skip, ct);
+            } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+                return 0;
+            }
+        }, ct);
+    }
+
 
     // --- Preview content pipeline --------------------------------------
 
@@ -1602,6 +1722,11 @@ public sealed class PreviewController : ObservableObject {
         string? loadingFor = _primary?.FullPath;
         ClearPreviewContent(keepImage: pictureToPicture);
         _pictureFactsStale = pictureToPicture;
+        // Decided up front, not cleared with the content: from one SVG to the
+        // next the switch stays put, and the footer does not change height
+        // twice a file. A shortcut's target or an archive entry's copy is
+        // asked again when it is loaded (LoadSvgAsync).
+        IsSvg = _primary is { Kind: EntryKind.File } file && PreviewRouter.Route(file.FullPath) is PreviewRoute.Svg;
 
         if (!_isVisible) {
             Kind = PreviewKind.None;
@@ -1712,7 +1837,11 @@ public sealed class PreviewController : ObservableObject {
             }
 
             await LoadFileAsync(path, ct);
-            if (_kind == PreviewKind.Unsupported) {
+            // Nothing shown: a HEIF picture may need an extension Windows
+            // does not have (PLAN B10), anything may be a file another
+            // program holds shut.
+            if (_kind == PreviewKind.Unsupported
+                && (!ImageFormats.IsHeif(path) || !await ExplainMissingCodecAsync(ct))) {
                 await ExplainUnreadableAsync(path, ct);
             }
         } catch (OperationCanceledException) {
@@ -1735,6 +1864,11 @@ public sealed class PreviewController : ObservableObject {
                     _pictureFactsStale = false;
                     ImageMetadata = null;
                     IsRawImage = false;
+                }
+                // An SVG that is shown neither way - too big an entry, a file
+                // that would not read - has no switch to offer.
+                if (_kind is not (PreviewKind.Web or PreviewKind.Code)) {
+                    IsSvg = false;
                 }
                 _pictureOf = _kind == PreviewKind.Image ? loadingFor : null;
                 ScheduleSummaryUpdate();  // metadata might have arrived
@@ -1777,6 +1911,49 @@ public sealed class PreviewController : ObservableObject {
 
         _lockedBy = holders;
         Raise(nameof(PlaceholderText));
+    }
+
+    /// <summary>
+    /// A HEIF picture that did not decode: whether Windows lacks one of the
+    /// two extensions from the Microsoft Store it is read with (PLAN B10) -
+    /// then the pane says which and offers its page. False when both are
+    /// there: the file itself is at fault.
+    /// </summary>
+    private async Task<bool> ExplainMissingCodecAsync(CancellationToken ct) {
+        if (ServiceLocator.TryGet<ICodecProbe>() is not { } probe) {
+            return false;
+        }
+
+        var missing = await Task.Run(probe.MissingForHeif, ct);
+        if (ct.IsCancellationRequested || missing == MissingCodec.None) {
+            return false;
+        }
+
+        _missingCodec = missing;
+        Raise(nameof(PlaceholderText));
+        Raise(nameof(HasStoreHint));
+        OpenStoreCommand.RaiseCanExecuteChanged();
+        Log.Info($"Preview: a HEIF picture cannot be read - Windows lacks the {missing} extension from the Microsoft Store");
+
+        return true;
+    }
+
+    /// <summary>The Store's page of the missing extension, in the Store itself.</summary>
+    private void OpenStore() {
+        string? product = _missingCodec switch {
+            MissingCodec.Heif => HeifStoreProduct,
+            MissingCodec.Hevc => HevcStoreProduct,
+            _ => null,
+        };
+        if (product is null || ServiceLocator.TryGet<IShellLauncher>() is not { } shell) {
+            return;
+        }
+
+        try {
+            shell.Open("ms-windows-store://pdp/?ProductId=" + product);
+        } catch (Exception ex) {
+            Log.Warn($"Preview: the Microsoft Store did not open - {ex.Message}");
+        }
     }
 
     /// <summary>The file exists and cannot even be opened for reading: somebody holds it without sharing.</summary>
@@ -1876,6 +2053,10 @@ public sealed class PreviewController : ObservableObject {
 
             case PreviewRoute.DocumentText:
                 await LoadDocumentTextAsync(path, ct);
+                break;
+
+            case PreviewRoute.Svg:
+                await LoadSvgAsync(path, ext, ct);
                 break;
 
             // A shortcut is resolved before we get here; one pointing at
@@ -2509,8 +2690,26 @@ public sealed class PreviewController : ObservableObject {
             return;
         }
 
+        NoteRest(file, path, prefix: 0);
         Text = PreviewText.Clip(file);
         Kind = PreviewKind.Text;
+    }
+
+    /// <summary>
+    /// What of <paramref name="file"/> the pane leaves out, for the find to
+    /// count (<see cref="CountPastShownAsync"/>): past the read budget the
+    /// file is read again, past the pane's characters only the rest in
+    /// memory is. <paramref name="prefix"/> is the note put in front of the
+    /// text, which the find's offsets count too.
+    /// </summary>
+    private void NoteRest(PreviewTextFile file, string? path, int prefix) {
+        bool goesOn = PreviewText.GoesOn(file);
+        int shown = PreviewText.ShownChars(file);
+        _restPath = goesOn && file.Clipped ? path : null;
+        _restText = goesOn && !file.Clipped ? file.Text[shown..] : null;
+        _restSkip = shown;
+        ShownTextLength = goesOn ? prefix + shown : null;
+        Raise(nameof(TextGoesOn));
     }
 
 
@@ -2640,8 +2839,61 @@ public sealed class PreviewController : ObservableObject {
         }
 
         TextWrap = System.Windows.TextWrapping.Wrap;
-        Text = Strings.PreviewDocumentTextNote + "\n\n" + PreviewText.Clip(new PreviewTextFile(read.Text, false, read.Size));
+        string note = Strings.PreviewDocumentTextNote + "\n\n";
+        var document = new PreviewTextFile(read.Text, false, read.Size);
+        NoteRest(document, null, note.Length);
+        Text = note + PreviewText.Clip(document);
         Kind = PreviewKind.Text;
+    }
+
+
+    /// <summary>
+    /// An SVG (PLAN B8): the picture it draws, in the web view - or its
+    /// markup, with <see cref="ShowSvgSource"/>. The picture goes in as an
+    /// image with the file's bytes in a data URI: an image runs no script of
+    /// its own and fetches nothing, which a page opened straight from the
+    /// file would. Past <see cref="MaxSvgPictureBytes"/> the page would not
+    /// fit the string the web view takes, and the markup is shown.
+    /// </summary>
+    private async Task LoadSvgAsync(string path, string ext, CancellationToken ct) {
+        IsSvg = true;
+        if (!_showSvgSource) {
+            byte[]? svg = await Task.Run(() => ReadUpTo(path, MaxSvgPictureBytes), ct);
+            if (ct.IsCancellationRequested) {
+                return;
+            }
+            if (svg is not null) {
+                WebHtml = PreviewText.SvgPage(svg, CssColor(_contentPalette.Background));
+                Kind = PreviewKind.Web;
+
+                return;
+            }
+        }
+
+        await LoadCodeAsync(path, ext, ct);
+    }
+
+    /// <summary>The whole file, or null when it is bigger than <paramref name="limit"/> or cannot be read.</summary>
+    private static byte[]? ReadUpTo(string path, long limit) {
+        try {
+            using var file = SharedRead.Open(path);
+            if (file.Length > limit) {
+                return null;
+            }
+
+            var bytes = new byte[file.Length];
+            file.ReadExactly(bytes);
+
+            return bytes;
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+            return null;
+        }
+    }
+
+    private static string CssColor(Brush brush) {
+        var color = brush is SolidColorBrush solid ? solid.Color : Colors.White;
+
+        return $"#{color.R:X2}{color.G:X2}{color.B:X2}";
     }
 
 
@@ -2650,6 +2902,7 @@ public sealed class PreviewController : ObservableObject {
             return;
         }
 
+        NoteRest(file, path, prefix: 0);
         CodeText = PreviewText.Clip(file, "// ");
         CodeExtension = ext;
         Kind = PreviewKind.Code;
@@ -2751,6 +3004,10 @@ public sealed class PreviewController : ObservableObject {
     private void ClearPreviewContent(bool keepImage = false) {
         // A sensor decode of the file before is cancelled with its load.
         IsRawDecoding = false;
+        _restPath = null;
+        _restText = null;
+        ShownTextLength = null;
+        Raise(nameof(TextGoesOn));
         Text = null;
         TextWrap = System.Windows.TextWrapping.NoWrap;
         if (!keepImage) {
@@ -2784,6 +3041,11 @@ public sealed class PreviewController : ObservableObject {
         _linkBroken = false;
         _archiveEntryTooBig = false;
         _lockedBy = null;
+        if (_missingCodec != MissingCodec.None) {
+            _missingCodec = MissingCodec.None;
+            Raise(nameof(HasStoreHint));
+            OpenStoreCommand.RaiseCanExecuteChanged();
+        }
         // Two files in a row can land on Unsupported for different reasons
         // (a broken shortcut, an entry too big to unpack), and the Kind
         // setter then never fires. The placeholder is re-read here, when

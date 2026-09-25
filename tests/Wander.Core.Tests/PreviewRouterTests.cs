@@ -53,15 +53,16 @@ public class PreviewRouterTests {
 
 
     /// <summary>
-    /// An SVG is a picture to the listing and a source file to the pane:
-    /// there is no raster to decode, and the markup is what a reader wants
-    /// to see. It is in the code list, but the image rule is asked first,
-    /// so this is the one overlap the order settles the other way.
+    /// An SVG is drawn in the pane, its markup a switch away (PLAN B8,
+    /// decision of 2026-09-24; it used to be shown as code only). Not a
+    /// picture to the listing - no raster, no gallery - and still text to
+    /// the actions for text and code, which work on the markup.
     /// </summary>
     [Fact]
-    public void Svg_IsCode() {
+    public void Svg_IsDrawn_AndStaysText() {
+        Assert.Equal(PreviewRoute.Svg, PreviewRouter.ForExtension(".svg"));
         Assert.DoesNotContain(".svg", (IEnumerable<string>)Wander.Core.Icons.ImageFormats.All);
-        Assert.Equal(PreviewRoute.Code, PreviewRouter.ForExtension(".svg"));
+        Assert.Contains(".svg", (IEnumerable<string>)PreviewRouter.TextLike);
     }
 
 

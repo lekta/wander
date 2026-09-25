@@ -101,4 +101,11 @@ public interface IFileSystem {
     /// truncated file means somebody's lost work.
     /// </summary>
     void ReplaceAtomic(string path, byte[] content);
+
+    /// <summary>
+    /// A new file of <paramref name="content"/> - text or a picture pasted
+    /// from the clipboard (PLAN X). Never over another: a name taken by the
+    /// time the write comes throws <see cref="IOException"/>.
+    /// </summary>
+    void WriteNew(string path, byte[] content);
 }

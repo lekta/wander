@@ -39,6 +39,13 @@ public class WindowZonesTests {
         Assert.Equal(WindowZone.Search, WindowZones.Ring(WindowZone.Search, -1).Last());
     }
 
+    /// <summary>The filter field is on the strip over the list (PLAN G6): Shift+Tab from the list lands in it, Tab from the panels on the left too.</summary>
+    [Fact]
+    public void TheFilterField_StandsRightBeforeTheList() {
+        Assert.Equal(WindowZone.Search, WindowZones.Ring(WindowZone.FileList, -1).First());
+        Assert.Equal(WindowZone.Search, WindowZones.Ring(WindowZone.Drives, 1).First());
+    }
+
     [Fact]
     public void TheRing_WrapsPastTheLastZone() {
         Assert.Equal(WindowZone.Toolbar, WindowZones.Ring(WindowZone.FileList, 1).First());

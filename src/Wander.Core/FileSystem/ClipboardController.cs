@@ -53,6 +53,26 @@ public sealed class ClipboardController {
     /// <summary>Convenience flag for command <c>CanExecute</c> bindings.</summary>
     public bool HasContent => _paths.Count > 0;
 
+    /// <summary>The system clipboard held text when last read (<see cref="SyncFromSystem"/>) - a paste makes a file of it (PLAN X).</summary>
+    public bool HasText { get; private set; }
+
+    /// <summary>The system clipboard held a picture when last read - a paste makes a PNG of it (PLAN X).</summary>
+    public bool HasImage { get; private set; }
+
+    /// <summary>The system clipboard held anything at all when last read.</summary>
+    public bool HasAnything { get; private set; }
+
+    /// <summary>
+    /// Ctrl+V has something to take or to report on: files, text, a picture
+    /// - or anything else, which a paste names as what it could not take
+    /// (PLAN X). Which of them it takes is <see cref="ClipboardPaste.Choose"/>.
+    /// </summary>
+    public bool CanPaste => HasContent || HasText || HasImage || HasAnything;
+
+    /// <summary>What a paste takes of what the clipboard held when last read (PLAN X).</summary>
+    public PasteChoice Choice => ClipboardPaste.Choose(new ClipboardFiles(
+        _paths, IsCut, LastSystemIssue == SystemIssue.VirtualFiles, HasText, HasImage, HasAnything));
+
     /// <summary>
     /// Set when the last mirrored call could not reach the OS clipboard, or
     /// when what it holds is a kind of file Wander cannot paste. Null when
@@ -141,8 +161,21 @@ public sealed class ClipboardController {
 
         LastSystemIssue = files.Value.HasUnsupportedFiles ? SystemIssue.VirtualFiles : null;
 
+        // Text and a picture are not held here, only noted: what they are is
+        // read when they are pasted (PLAN X). Files are something too.
+        var read = files.Value;
+        bool anything = read.HasAnything || read.HasContent || read.HasUnsupportedFiles || read.HasText || read.HasImage;
+        bool othersChanged = read.HasText != HasText || read.HasImage != HasImage || anything != HasAnything;
+        HasText = read.HasText;
+        HasImage = read.HasImage;
+        HasAnything = anything;
+
         if (Same(files.Value.Paths, _paths) && files.Value.IsCut == IsCut) {
-            return false;
+            if (othersChanged) {
+                RaiseChanged();
+            }
+
+            return othersChanged;
         }
 
         _paths = files.Value.Paths.ToList();
@@ -150,6 +183,22 @@ public sealed class ClipboardController {
         RaiseChanged();
 
         return true;
+    }
+
+
+    /// <summary>The clipboard's text now (PLAN X), or null: there is none, or it cannot be read.</summary>
+    public string? ReadText() {
+        return _system?.GetText();
+    }
+
+    /// <summary>The clipboard's picture now, as PNG (PLAN X), or null. Off the UI thread - see <see cref="ISystemClipboard.GetImagePng"/>.</summary>
+    public byte[]? ReadImagePng() {
+        return _system?.GetImagePng();
+    }
+
+    /// <summary>The names of the formats on the clipboard now: what a paste that took nothing names.</summary>
+    public IReadOnlyList<string> FormatNames() {
+        return _system?.GetFormatNames() ?? Array.Empty<string>();
     }
 
 
@@ -190,6 +239,10 @@ public sealed class ClipboardController {
         IsCut = isCut;
         LastSystemIssue = null;
         _sharedShellObject = false;
+        // The files replace whatever was there.
+        HasText = false;
+        HasImage = false;
+        HasAnything = _paths.Count > 0;
 
         if (_system is not null && _paths.Count > 0) {
             bool shared = systemObject is null
@@ -208,11 +261,14 @@ public sealed class ClipboardController {
     }
 
     private void ClearLocal() {
-        if (_paths.Count == 0 && !IsCut) {
+        if (_paths.Count == 0 && !IsCut && !HasText && !HasImage && !HasAnything) {
             return;
         }
         _paths = new List<string>();
         IsCut = false;
+        HasText = false;
+        HasImage = false;
+        HasAnything = false;
         RaiseChanged();
     }
 

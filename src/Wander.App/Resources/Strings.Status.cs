@@ -51,6 +51,9 @@ public static partial class Strings {
     /// <summary>Скопирован текст из панели просмотра: {0} симв.</summary>
     public static string StatusTextCopied => Get(nameof(StatusTextCopied));
 
+    /// <summary>Дальше в найденном этого текста нет — поиск в файле пошёл с начала</summary>
+    public static string StatusFindNoMoreFiles => Get(nameof(StatusFindNoMoreFiles));
+
     /// <summary>Не удалось показать свойства: {0}</summary>
     public static string StatusPropertiesFailed => Get(nameof(StatusPropertiesFailed));
 
@@ -119,6 +122,27 @@ public static partial class Strings {
 
     /// <summary>Вставка не удалась: {0}</summary>
     public static string StatusPasteFailed => Get(nameof(StatusPasteFailed));
+
+    /// <summary>Текст из буфера вставлен файлом {0}</summary>
+    public static string StatusPastedText => Get(nameof(StatusPastedText));
+
+    /// <summary>Картинка из буфера вставлена файлом {0}</summary>
+    public static string StatusPastedImage => Get(nameof(StatusPastedImage));
+
+    /// <summary>Буфер обмена прочитать не удалось — вставка не сделана</summary>
+    public static string StatusPasteUnreadable => Get(nameof(StatusPasteUnreadable));
+
+    /// <summary>Не вставлено: в буфере нет файлов, текста или картинки (форматы: {0})</summary>
+    public static string StatusPasteNothing => Get(nameof(StatusPasteNothing));
+
+    /// <summary>Не вставлено: картинка — в буфере был и текст</summary>
+    public static string PasteLeftImageForText => Get(nameof(PasteLeftImageForText));
+
+    /// <summary>Не вставлено: текст — в буфере были и файлы</summary>
+    public static string PasteLeftTextForFiles => Get(nameof(PasteLeftTextForFiles));
+
+    /// <summary>Не вставлено: картинка — в буфере были и файлы</summary>
+    public static string PasteLeftImageForFiles => Get(nameof(PasteLeftImageForFiles));
 
     /// <summary>Не удалось создать: {0}</summary>
     public static string StatusCreateFailed => Get(nameof(StatusCreateFailed));

@@ -32,6 +32,30 @@ public class TextFindTests {
     }
 
     [Fact]
+    public void Count_AgreesWithAll_AcrossBlockBoundaries() {
+        // Longer than one block of the reader (64K characters), under the
+        // cap, and with a match cut in two by the block's edge: the 3856th
+        // repeat starts at 65 535.
+        string text = string.Concat(Enumerable.Repeat("бюджет и БЮДЖЕТ, ", 4_000));
+
+        Assert.Equal(8_000, TextFind.All(text, "бюджет").Count);
+        Assert.Equal(8_000, TextFind.Count(new StringReader(text), "бюджет"));
+        Assert.Equal(2, TextFind.Count(new StringReader("aaaa"), "aa"));
+    }
+
+    [Fact]
+    public void Count_OnlyPastTheSkippedStart() {
+        Assert.Equal(1, TextFind.Count(new StringReader("find me, find me"), "find", skip: 3));
+        Assert.Equal(0, TextFind.Count(new StringReader("find"), "find", skip: 10));
+    }
+
+    [Fact]
+    public void Count_EmptyQuery_Nothing_AndStopsAtTheCap() {
+        Assert.Equal(0, TextFind.Count(new StringReader("text"), ""));
+        Assert.Equal(TextFind.MaxMatches, TextFind.Count(new StringReader(new string('a', TextFind.MaxMatches + 50)), "a"));
+    }
+
+    [Fact]
     public void Step_WrapsBothWays() {
         Assert.Equal(1, TextFind.Step(0, 3, backwards: false));
         Assert.Equal(0, TextFind.Step(2, 3, backwards: false));

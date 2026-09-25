@@ -42,6 +42,10 @@ public partial class PreviewPane : UserControl {
     // A scroll made to follow the other text of a comparison - not the user's.
     private bool _followingScroll;
 
+    // Ctrl+3 came while the content was still on its way: it takes the
+    // keyboard when it comes (TakeKeyboard).
+    private bool _keyboardWanted;
+
     public PreviewPane() {
         InitializeComponent();
         // Wander's own .xshd definitions (batch, ShaderLab, YAML) have to be
@@ -277,6 +281,32 @@ public partial class PreviewPane : UserControl {
         return new Size(grid.ActualWidth, Math.Max(0, grid.ActualHeight - footer));
     }
 
+    /// <summary>
+    /// Ctrl+3 (PLAN B6): the keyboard into what the pane shows - the text or
+    /// the code, to read, select and find in; the document; the page; the
+    /// play button of a clip or a track. A pane still loading takes it when
+    /// its content comes. False when nothing here takes the keyboard - a
+    /// picture, a model, a folder's census: it stays where it was.
+    /// </summary>
+    public bool TakeKeyboard() {
+        if (!IsVisible) {
+            return false;
+        }
+        if (FocusContent()) {
+            return true;
+        }
+        // Shown a moment ago, the file still being read - not a pane with
+        // nothing selected, which would take the keyboard whenever a file
+        // came to it later.
+        if (Controller.Kind != PreviewKind.None || Controller.IsPlaceholderVisible) {
+            return false;
+        }
+
+        _keyboardWanted = true;
+
+        return true;
+    }
+
     /// <summary>Scrolls the text on show to the other text's offsets - see <see cref="TextScrolled"/>.</summary>
     public void FollowTextScroll(Point offset) {
         _followingScroll = true;
@@ -418,6 +448,10 @@ public partial class PreviewPane : UserControl {
                 if (!IsFindable) {
                     CloseFind(keepKeyboard: false);
                 }
+                if (_keyboardWanted) {
+                    _keyboardWanted = false;
+                    _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => FocusContent());
+                }
                 break;
 
             case nameof(PreviewController.ZoomSource):
@@ -534,10 +568,20 @@ public partial class PreviewPane : UserControl {
         try {
             // Explicit user-data folder: the default is "<exe dir>.WebView2",
             // which fails silently when Wander runs from a read-only location
-            // (portable exe in Program Files, network share).
+            // (portable exe in Program Files, network share). Under the
+            // system Temp when scratch copies go there (PLAN AD1).
             string dataFolder = AppPaths.WebView2;
+            // The browser fetches components for itself - safe-browsing
+            // lists, tracking protection, spell-check - into the profile:
+            // 42 MB over two months, for a pane that shows local files with
+            // the network cut off anyway (PLAN AD1). Every pane of the
+            // process asks with the same options: the folder takes one set.
+            var options = new CoreWebView2EnvironmentOptions {
+                AdditionalBrowserArguments = "--disable-component-update --disable-background-networking",
+                EnableTrackingPrevention = false,
+            };
             var env = await Microsoft.Web.WebView2.Core.CoreWebView2Environment.CreateAsync(
-                browserExecutableFolder: null, userDataFolder: dataFolder);
+                browserExecutableFolder: null, userDataFolder: dataFolder, options: options);
             await WebPreview.EnsureCoreWebView2Async(env);
 
             if (WebPreview.CoreWebView2 is { } core) {
@@ -596,6 +640,18 @@ public partial class PreviewPane : UserControl {
     private static bool IsRemoteUri(string uri) {
         return Uri.TryCreate(uri, UriKind.Absolute, out var parsed)
             && parsed.Scheme is "http" or "https" or "ws" or "wss" or "ftp" or "ftps";
+    }
+
+    /// <summary>The keyboard onto the control that shows the content - see <see cref="TakeKeyboard"/>.</summary>
+    private bool FocusContent() {
+        return Controller.Kind switch {
+            PreviewKind.Text => PlainText.Focus(),
+            PreviewKind.Code => CodeEditor.TextArea.Focus(),
+            PreviewKind.Document => DocumentPreview.Focus(),
+            PreviewKind.Web => WebPreview.Focus(),
+            PreviewKind.Video or PreviewKind.Audio => VideoPlayPauseButton.Focus(),
+            _ => false,
+        };
     }
 
 
@@ -1750,7 +1806,15 @@ public partial class PreviewPane : UserControl {
     // A query handed over before the rich-text document was read (LoadDocumentAsync).
     private string? _pendingFind;
 
+    // The matches past the part of the text on show (PLAN B6): how many,
+    // and the count still running for the query in the field.
+    private int _beyond;
+    private CancellationTokenSource? _beyondCts;
+
     private bool IsFindable => Controller.Kind is PreviewKind.Text or PreviewKind.Code or PreviewKind.Document;
+
+    /// <summary>The keyboard is in this pane's find field - Esc there closes the field, not the pane (MainWindow).</summary>
+    public bool IsFindFocused => FindBox.IsKeyboardFocusWithin;
 
     private int FindCountOf => Controller.Kind == PreviewKind.Document ? _findRanges.Count : _findOffsets.Count;
 
@@ -1777,6 +1841,28 @@ public partial class PreviewPane : UserControl {
         RunFind(CaretOffset());
 
         return true;
+    }
+
+    /// <summary>
+    /// F3 / Shift+F3 (PLAN B6): the next or the previous match of the find
+    /// field open over the text. Past the last match with
+    /// <paramref name="canLeave"/> nothing moves and the answer says so -
+    /// the window goes on to the next file a search inside files found;
+    /// otherwise round to the first, as Enter in the field does.
+    /// </summary>
+    public FindStep FindAgain(bool backwards, bool canLeave) {
+        if (!IsVisible || FindBar.Visibility != Visibility.Visible || !IsFindable || FindBox.Text.Length == 0) {
+            return FindStep.None;
+        }
+
+        int count = FindCountOf;
+        if (canLeave && !backwards && (count == 0 || _findAt == count - 1)) {
+            return FindStep.PastLast;
+        }
+
+        StepFind(backwards);
+
+        return FindStep.Stepped;
     }
 
 
@@ -1834,12 +1920,12 @@ public partial class PreviewPane : UserControl {
         _findOffsets = Array.Empty<int>();
         switch (Controller.Kind) {
             case PreviewKind.Text:
-                _findOffsets = TextFind.All(PlainText.Text, query);
+                _findOffsets = TextFind.All(ShownPart(PlainText.Text), query);
                 _findAt = TextFind.FirstFrom(_findOffsets, from);
                 break;
 
             case PreviewKind.Code:
-                _findOffsets = TextFind.All(CodeEditor.Text, query);
+                _findOffsets = TextFind.All(ShownPart(CodeEditor.Text), query);
                 _findAt = TextFind.FirstFrom(_findOffsets, from);
                 break;
 
@@ -1849,6 +1935,51 @@ public partial class PreviewPane : UserControl {
                 break;
         }
         ShowMatch();
+        CountBeyond(query);
+    }
+
+    /// <summary>The text on show without the note about the rest of the file - its words are no match.</summary>
+    private string ShownPart(string text) {
+        return Controller.ShownTextLength is { } length && length < text.Length ? text[..length] : text;
+    }
+
+    /// <summary>
+    /// Counts the matches past the part on show, when the text goes on past
+    /// it (PLAN B6, 2026-09-25): off the UI thread, dropped when the query
+    /// or the text changes first.
+    /// </summary>
+    private void CountBeyond(string query) {
+        _beyondCts?.Cancel();
+        _beyondCts = null;
+        _beyond = 0;
+        ShowBeyond();
+        if (query.Length == 0 || !Controller.TextGoesOn) {
+            return;
+        }
+
+        _beyondCts = new CancellationTokenSource();
+        _ = CountBeyondAsync(query, _beyondCts.Token);
+    }
+
+    private async Task CountBeyondAsync(string query, CancellationToken ct) {
+        int count;
+        try {
+            count = await Controller.CountPastShownAsync(query, ct);
+        } catch (OperationCanceledException) {
+            return;
+        }
+        if (ct.IsCancellationRequested) {
+            return;
+        }
+
+        _beyond = count;
+        ShowBeyond();
+    }
+
+    private void ShowBeyond() {
+        FindBeyond.Text = _beyond <= 0 ? ""
+            : string.Format(Strings.PreviewFindBeyond, _beyond >= TextFind.MaxMatches ? $"{_beyond}+" : _beyond.ToString());
+        FindBeyond.Visibility = _beyond > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>
@@ -1954,6 +2085,10 @@ public partial class PreviewPane : UserControl {
         _findOffsets = Array.Empty<int>();
         _findRanges.Clear();
         _findAt = -1;
+        _beyondCts?.Cancel();
+        _beyondCts = null;
+        _beyond = 0;
+        ShowBeyond();
     }
 
     /// <summary>Where a search from the caret starts: the caret of the text on show.</summary>
@@ -2021,4 +2156,17 @@ public partial class PreviewPane : UserControl {
     /// <param name="Alone">The right button is held as well: the other pane of a pair stays where it is.</param>
     /// <param name="Pinned">No button holds it - Z did (<see cref="ToggleZoom"/>): the other pane's follows pinned too.</param>
     private readonly record struct ZoomMove(Point? Share, bool Alone, bool Pinned);
+
+
+    /// <summary>What F3 did here - see <see cref="FindAgain"/>.</summary>
+    public enum FindStep {
+        /// <summary>No find field open over a text: the key is not this pane's.</summary>
+        None,
+
+        /// <summary>Moved to the next or the previous match.</summary>
+        Stepped,
+
+        /// <summary>The last match was on show already, or there is none in the text on show.</summary>
+        PastLast,
+    }
 }

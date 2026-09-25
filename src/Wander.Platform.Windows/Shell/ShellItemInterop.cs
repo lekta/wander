@@ -37,6 +37,17 @@ internal static class ShellItemInterop {
     /// </summary>
     internal static Guid BHID_DataObject = new("b8c0bd9f-ed24-455c-83e6-d5390c4fe8c4");
 
+    /// <summary>
+    /// Bind handler that hands back an <c>IStream</c> over a file's bytes.
+    /// A zip entry (<c>CompressedFolder</c>) gives one; an entry of an
+    /// <c>ArchiveFolder</c> (7z, rar, tar) answers <c>E_NOINTERFACE</c>
+    /// (stand 2026-09-25).
+    /// </summary>
+    internal static Guid BHID_Stream = new("1cebb3ab-7c10-499a-a417-92ca16c4cb83");
+
+    /// <summary>The COM <c>IStream</c> - ole2.</summary>
+    internal static Guid IID_IStream = new("0000000c-0000-0000-c000-000000000046");
+
     internal static Guid CLSID_FileOperation = new("3ad05575-8857-4850-9277-11b85bdb8e09");
     internal static Guid IID_IFileOperation = new("947aab5f-0a5c-4c13-b4d6-4bf7836fc9f8");
 
@@ -284,7 +295,8 @@ internal static class ShellItemInterop {
     /// <summary>
     /// The copy engine of the shell. The only thing that can read the bytes
     /// of an entry inside an <c>ArchiveFolder</c>: <c>BHID_Stream</c>
-    /// answers <c>E_NOINTERFACE</c> there, and so does <c>IDataObject</c>.
+    /// answers <c>E_NOINTERFACE</c> there, and its data object carries item
+    /// ids only, no <c>FileContents</c> (stand 2026-09-25).
     /// </summary>
     [ComImport]
     [Guid("947aab5f-0a5c-4c13-b4d6-4bf7836fc9f8")]

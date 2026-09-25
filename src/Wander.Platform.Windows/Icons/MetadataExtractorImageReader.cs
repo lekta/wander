@@ -1,6 +1,7 @@
 using MetadataExtractor;
 using MetadataExtractor.Formats.Exif;
 using MetadataExtractor.Formats.Exif.Makernotes;
+using MetadataExtractor.Formats.Heif;
 using MetadataExtractor.Formats.Jpeg;
 using MetadataExtractor.Formats.Png;
 using Wander.Core.Icons;
@@ -22,42 +23,57 @@ namespace Wander.Platform.Windows.Icons;
 public sealed class MetadataExtractorImageReader : IImageMetadataReader {
     public ImageMetadata? Read(string path) {
         try {
-            var dirs = ImageMetadataReader.ReadMetadata(path);
-
-            var ifd0 = dirs.OfType<ExifIfd0Directory>().FirstOrDefault();
-            var sub = dirs.OfType<ExifSubIfdDirectory>().FirstOrDefault();
-
-            string? make = ifd0?.GetDescription(ExifDirectoryBase.TagMake);
-            string? model = ifd0?.GetDescription(ExifDirectoryBase.TagModel);
-
-            string? iso = sub?.GetDescription(ExifDirectoryBase.TagIsoEquivalent);
-            string? aperture = sub?.GetDescription(ExifDirectoryBase.TagFNumber);
-            string? shutter = sub?.GetDescription(ExifDirectoryBase.TagExposureTime);
-            string? focal = sub?.GetDescription(ExifDirectoryBase.TagFocalLength);
-
-            DateTime? taken = null;
-            if (sub?.TryGetDateTime(ExifDirectoryBase.TagDateTimeOriginal, out var dto) == true) {
-                taken = dto;
-            }
-
-            int? width = null;
-            int? height = null;
-            ReadDimensions(dirs, ref width, ref height);
-
-            int? orientation = ifd0?.TryGetInt32(ExifDirectoryBase.TagOrientation, out int o) == true ? o : null;
-
-            return new ImageMetadata(make, model, iso, aperture, shutter, focal, taken, width, height, orientation,
-                Iso: Int(sub, ExifDirectoryBase.TagIsoEquivalent),
-                ExposureSeconds: Number(sub, ExifDirectoryBase.TagExposureTime),
-                FNumber: Number(sub, ExifDirectoryBase.TagFNumber),
-                FocalLengthMm: Number(sub, ExifDirectoryBase.TagFocalLength),
-                Position: Position(dirs.OfType<GpsDirectory>().FirstOrDefault()),
-                Copyright: ifd0?.GetString(ExifDirectoryBase.TagCopyright),
-                Rating: Int(ifd0, ExifDirectoryBase.TagRating),
-                AfPoints: AfPoints(dirs.OfType<CanonMakernoteDirectory>().FirstOrDefault(), orientation));
+            return Parse(ImageMetadataReader.ReadMetadata(path));
         } catch {
             return null;
         }
+    }
+
+    /// <summary>The same off a stream: the bytes of an archive entry held in memory (<c>ArchiveThumbnail</c>).</summary>
+    public ImageMetadata? Read(Stream stream) {
+        try {
+            return Parse(ImageMetadataReader.ReadMetadata(stream));
+        } catch {
+            return null;
+        }
+    }
+
+
+    private static ImageMetadata Parse(IReadOnlyList<MetadataExtractor.Directory> dirs) {
+        var ifd0 = dirs.OfType<ExifIfd0Directory>().FirstOrDefault();
+        var sub = dirs.OfType<ExifSubIfdDirectory>().FirstOrDefault();
+
+        string? make = ifd0?.GetDescription(ExifDirectoryBase.TagMake);
+        string? model = ifd0?.GetDescription(ExifDirectoryBase.TagModel);
+
+        string? iso = sub?.GetDescription(ExifDirectoryBase.TagIsoEquivalent);
+        string? aperture = sub?.GetDescription(ExifDirectoryBase.TagFNumber);
+        string? shutter = sub?.GetDescription(ExifDirectoryBase.TagExposureTime);
+        string? focal = sub?.GetDescription(ExifDirectoryBase.TagFocalLength);
+
+        DateTime? taken = null;
+        if (sub?.TryGetDateTime(ExifDirectoryBase.TagDateTimeOriginal, out var dto) == true) {
+            taken = dto;
+        }
+
+        int? width = null;
+        int? height = null;
+        ReadDimensions(dirs, ref width, ref height);
+
+        int? orientation = ifd0?.TryGetInt32(ExifDirectoryBase.TagOrientation, out int o) == true ? o : null;
+        if (dirs.OfType<HeicImagePropertiesDirectory>().FirstOrDefault() is { } heif) {
+            UprightHeif(heif, ref width, ref height, ref orientation);
+        }
+
+        return new ImageMetadata(make, model, iso, aperture, shutter, focal, taken, width, height, orientation,
+            Iso: Int(sub, ExifDirectoryBase.TagIsoEquivalent),
+            ExposureSeconds: Number(sub, ExifDirectoryBase.TagExposureTime),
+            FNumber: Number(sub, ExifDirectoryBase.TagFNumber),
+            FocalLengthMm: Number(sub, ExifDirectoryBase.TagFocalLength),
+            Position: Position(dirs.OfType<GpsDirectory>().FirstOrDefault()),
+            Copyright: ifd0?.GetString(ExifDirectoryBase.TagCopyright),
+            Rating: Int(ifd0, ExifDirectoryBase.TagRating),
+            AfPoints: AfPoints(dirs.OfType<CanonMakernoteDirectory>().FirstOrDefault(), orientation));
     }
 
 
@@ -77,6 +93,25 @@ public sealed class MetadataExtractorImageReader : IImageMetadataReader {
             return points.Count == 0 ? null : AfGeometry.Orient(points, orientation);
         } catch {
             return null;
+        }
+    }
+
+
+    /// <summary>
+    /// A HEIF picture (PLAN B10) comes out of the WIC decoder already turned
+    /// and mirrored by its container's own transforms, and the decoder
+    /// ignores the EXIF tag: an iPhone photograph carries both, and turned
+    /// by the tag again it lay on its side (stand 2026-09-25). So nothing is
+    /// left to turn - orientation 1 - and the size is the picture's as it
+    /// comes out: the stored one, sides swapped for a quarter turn.
+    /// </summary>
+    private static void UprightHeif(HeicImagePropertiesDirectory heif, ref int? width, ref int? height, ref int? orientation) {
+        orientation = null;
+        if (heif.TryGetInt32(HeicImagePropertiesDirectory.TagImageWidth, out int stored)
+            && heif.TryGetInt32(HeicImagePropertiesDirectory.TagImageHeight, out int storedHeight)) {
+            bool quarterTurn = heif.TryGetInt32(HeicImagePropertiesDirectory.TagRotation, out int degrees) && degrees is 90 or 270;
+            width = quarterTurn ? storedHeight : stored;
+            height = quarterTurn ? stored : storedHeight;
         }
     }
 

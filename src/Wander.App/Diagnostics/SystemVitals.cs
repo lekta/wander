@@ -46,6 +46,7 @@ public static class SystemVitals {
     private static long _lastAllocated;
     private static TimeSpan _lastCpu;
     private static long _lastCpuAtMs;
+    private static TimeSpan _lastPause;
 
 
     /// <summary>
@@ -59,6 +60,7 @@ public static class SystemVitals {
             _lastAllocated = GC.GetTotalAllocatedBytes();
             _lastCpu = _process.TotalProcessorTime;
             _lastCpuAtMs = Environment.TickCount64;
+            _lastPause = GC.GetTotalPauseDuration();
         }
     }
 
@@ -110,11 +112,21 @@ public static class SystemVitals {
         var gc = GC.GetGCMemoryInfo();
         long loh = gc.GenerationInfo.Length > 3 ? gc.GenerationInfo[3].SizeAfterBytes : 0;
 
+        // How long the collector stopped the process since the last line
+        // (PLAN AK, BACKLOG on performance, step 1): the counts say
+        // the collections are nearly all full ones, only this says whether
+        // they are what a stall on this line spent its time on. Last, so the
+        // readers of the fields before it keep working.
+        var pause = GC.GetTotalPauseDuration();
+        long pauseMs = (long)(pause - _lastPause).TotalMilliseconds;
+        _lastPause = pause;
+
         _log.Info(
             $"SYS ws={Mb(_process.WorkingSet64)} private={Mb(_process.PrivateMemorySize64)} " +
             $"gen={GC.CollectionCount(0)}/{GC.CollectionCount(1)}/{GC.CollectionCount(2)} " +
             $"alloc=+{Mb(allocatedSince)} loh={Mb(loh)} " +
-            $"handles={_process.HandleCount} threads={_process.Threads.Count} cpu={cpuPercent:F1}");
+            $"handles={_process.HandleCount} threads={_process.Threads.Count} cpu={cpuPercent:F1} " +
+            $"gcpause=+{pauseMs}");
     }
 
     private static long Mb(long bytes) {

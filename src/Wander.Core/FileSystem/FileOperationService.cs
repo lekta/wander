@@ -214,6 +214,32 @@ public sealed class FileOperationService {
         _undo.Push(new CreateAction(_bin, path));
     }
 
+    /// <summary>
+    /// A new file of <paramref name="content"/> in <paramref name="folder"/>
+    /// - text or a picture pasted from the clipboard (PLAN X). Named
+    /// <paramref name="name"/>, or its next free "(N)"
+    /// (<see cref="UniqueNames"/>); undone to the recycle bin, like a folder
+    /// created. Nothing is replaced, so nothing is asked.
+    /// </summary>
+    /// <returns>The path of the file made.</returns>
+    /// <exception cref="IOException">The folder is in the Windows tree (<see cref="SystemPathGuard.MayWriteInto"/>), or the write failed.</exception>
+    public string CreateFile(string folder, string name, byte[] content) {
+        if (!SystemPathGuard.MayWriteInto(folder, out string reason)) {
+            throw new IOException(reason);
+        }
+
+        using var _ = _undo.BeginOperation();
+        string path = UniqueNames.Resolve(
+            Path.Combine(folder, name),
+            p => _fs.FileExists(p) || _fs.DirectoryExists(p),
+            dir => _fs.Enumerate(dir).Select(e => e.Name));
+        _fs.WriteNew(path, content);
+        _log.Info($"CreateFile: {path} ({content.Length} bytes)");
+        _undo.Push(new CreateAction(_bin, path));
+
+        return path;
+    }
+
 
     private void RenameStep(BusyGate gate, string path, string newName, List<IUndoableAction> steps) {
         string oldName = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));

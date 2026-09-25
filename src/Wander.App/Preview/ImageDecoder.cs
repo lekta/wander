@@ -208,10 +208,19 @@ internal static class ImageDecoder {
     private static BitmapImage? Decode(Action<BitmapImage> setSource) {
         try {
             var bi = new BitmapImage();
+            // A decode that fails half-way may not throw: a HEIC with its
+            // pixels unreadable - cut short, or no HEVC decoder on the
+            // machine - comes back as a picture of 1 x 1 and says so only
+            // with this event (stand 2026-09-25, PLAN B10).
+            bool failed = false;
+            bi.DecodeFailed += (_, _) => failed = true;
             bi.BeginInit();
             bi.CacheOption = BitmapCacheOption.OnLoad;
             setSource(bi);
             bi.EndInit();
+            if (failed) {
+                return null;
+            }
             bi.Freeze();
 
             return bi;

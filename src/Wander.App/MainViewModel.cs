@@ -274,7 +274,6 @@ public sealed class MainViewModel : ObservableObject {
     // matches and then walks underneath it, so the walk re-finds what is
     // already there — hence the path set above — and the two halves have
     // to stay apart on screen: here first, below after.
-    private bool _isSearchWindowOpen;
 
 
 
@@ -363,9 +362,17 @@ public sealed class MainViewModel : ObservableObject {
         Preview.RatingRequested += (_, request) =>
             request.Rating = ApplyRatingFromPane(request, wholeSelection: !IsPreviewSplit);
         Preview.RevealRequested += (_, path) => RevealPath(path);
+        // The other half of a pair finds the search's text as the first one
+        // does (PLAN B6, 2026-09-25): both files are rows of the results.
         PreviewSecond = new PreviewController(
             ServiceLocator.TryGet<IImageMetadataReader>(),
-            companionMetadata) { ShowFooter = false, ShowPictureBar = true };
+            companionMetadata) {
+            ShowFooter = false,
+            ShowPictureBar = true,
+            FindTextFor = entry => entry.MatchSnippet is not null && ContentSearch!.TextQuery.Length > 0
+                ? ContentSearch.TextQuery
+                : null,
+        };
         PreviewSecond.RatingRequested += (_, request) =>
             request.Rating = ApplyRatingFromPane(request, wholeSelection: false);
         PreviewSecond.RevealRequested += (_, path) => RevealPath(path);
@@ -374,6 +381,9 @@ public sealed class MainViewModel : ObservableObject {
         Preview.PropertyChanged += (_, e) => {
             if (e.PropertyName == nameof(PreviewController.ShowRawDecode)) {
                 PreviewSecond.ShowRawDecode = Preview.ShowRawDecode;
+            } else if (e.PropertyName == nameof(PreviewController.ShowSvgSource)) {
+                // The same for the SVG switch (PLAN B8).
+                PreviewSecond.ShowSvgSource = Preview.ShowSvgSource;
             }
         };
         // One set of review helpers for the window: the strip edits it,
@@ -497,11 +507,19 @@ public sealed class MainViewModel : ObservableObject {
         PropertiesCommand = new RelayCommand(ShowProperties, p => TargetRules.PropertiesOf(ResolveTarget(p).Target, _nav.Current) is not null);
         OpenWithCommand = new RelayCommand(OpenWith, p => OpenWithTarget(p) is not null);
         OpenInTerminalCommand = new RelayCommand(OpenInTerminal, p => TerminalFolder(p) is not null);
+        // The text they put on the clipboard is noted at once: Wander stays
+        // in front, and Ctrl+V pastes it as a file (PLAN X).
         CopyPathCommand = new RelayCommand(
-            p => Shell.CopyPaths(TargetRules.CopyPaths(ResolveTarget(p).Target, _nav.Current)),
+            p => {
+                Shell.CopyPaths(TargetRules.CopyPaths(ResolveTarget(p).Target, _nav.Current));
+                SyncClipboardFromSystem();
+            },
             p => TargetRules.CopyPaths(ResolveTarget(p).Target, _nav.Current).Count > 0);
         CopyNameCommand = new RelayCommand(
-            p => Shell.CopyNames(TargetRules.Items(ResolveTarget(p).Target).Select(e => e.Name).ToArray()),
+            p => {
+                Shell.CopyNames(TargetRules.Items(ResolveTarget(p).Target).Select(e => e.Name).ToArray());
+                SyncClipboardFromSystem();
+            },
             p => TargetRules.Items(ResolveTarget(p).Target).Count > 0);
         CreateShortcutCommand = new RelayCommand(
             CreateShortcutsForSelection,
@@ -1294,16 +1312,6 @@ public sealed class MainViewModel : ObservableObject {
 
     /// <summary>True when the list is showing search results rather than a folder.</summary>
     public bool IsSearchResults => ContentSearch.IsShowingResults;
-
-    /// <summary>
-    /// Whether the search window is up. The toolbar box hides while it is:
-    /// the same criteria in two places is how one of them ends up stale,
-    /// and only the window can show all of them.
-    /// </summary>
-    public bool IsSearchWindowOpen {
-        get => _isSearchWindowOpen;
-        set => SetField(ref _isSearchWindowOpen, value);
-    }
 
     /// <summary>
     /// The view on screen. Written by the user (<see cref="SetViewModeCommand"/>,
@@ -2801,6 +2809,21 @@ public sealed class MainViewModel : ObservableObject {
         var sort = new SortOptions(Settings.SortKey, Settings.SortAscending, Settings.GroupFoldersFirst);
         var archive = CurrentArchive;
 
+        // The Recycle Bin gives what it has read so far while a slow listing
+        // goes on (PLAN AD2): the first portion lands as the whole listing
+        // would - arrival, view, first screen - and the next ones land on it
+        // as a re-listing of the same folder, the rows on screen kept in
+        // place. One that comes after the whole is dropped.
+        bool landed = false;
+        bool complete = false;
+        var portions = archive is null
+            ? new Progress<IReadOnlyList<FileSystemEntry>>(rows => {
+                if (!complete && !token.IsCancellationRequested) {
+                    Land(rows);
+                }
+            })
+            : null;
+
         try {
             IReadOnlyList<FileSystemEntry> items;
             try {
@@ -2809,7 +2832,7 @@ public sealed class MainViewModel : ObservableObject {
                 // the person is looking at.
                 items = await LongWait.WatchAsync(
                     Task.Run(() => {
-                        var listed = ns.Enumerate(shellPath, token);
+                        var listed = ns.Enumerate(shellPath, token, portions);
 
                         return archive is null ? listed : EntryComparers.Sort(listed, sort);
                     }, token),
@@ -2828,35 +2851,12 @@ public sealed class MainViewModel : ObservableObject {
             if (token.IsCancellationRequested) {
                 return;
             }
-            _session.NoteListed(shellPath);
-            SetMissingFolder(null);
-            if (arriving) {
-                // An archive and the Recycle Bin are folders to the person
-                // opening them, so they belong in the journal the same way.
-                Journal.Note(string.Format(Strings.JournalOpenedFolder, shellPath), DateTime.Now);
-            }
-            // No sidecars in a shell namespace. The view is chosen below as
-            // on disk - by the names in an archive; the Recycle Bin is a
-            // list of things to decide about, not a folder to look at, and
-            // ViewChoice keeps it out of the gallery.
-            Ratings.Cancel();
-            _sharpness.Cancel();
-            HasRatings = false;
+            complete = true;
             // Always, not only when slow as on disk: shell listings are few,
             // and their cost is the number the bin's slowness (AD2) is
             // decided on.
             _log.Info($"Folder listed in {started.ElapsedMilliseconds} ms: {items.Count} shown - {shellPath}");
-            if (arriving) {
-                ChooseView(items, shellPath, createdUtc: null, vacated: null, inRecycleBin: archive is null);
-            }
-            PublishRows(epoch, items.ToList());
-
-            // Timed like any other folder: an archive is one to the person
-            // opening it, and "how long until I can see it" is the same
-            // question there as on disk.
-            if (arriving && _session.IsCurrent(epoch)) {
-                FolderArrived?.Invoke(shellPath, started);
-            }
+            Land(items);
 
             // An archive that lists nothing is either empty or encrypted
             // whole - 7z with -mhe hides even the names, and the two are
@@ -2870,6 +2870,44 @@ public sealed class MainViewModel : ObservableObject {
             // A superseded load (token cancelled) leaves IsListLoading=true
             // so the next RefreshShellAsync inherits it without flicker.
             if (!token.IsCancellationRequested) {
+                IsListLoading = false;
+            }
+        }
+
+        // Rows on the list - a portion or the whole. The first landing is
+        // the arrival; after it the veil goes, since the rows under it are
+        // there to be looked at and more are only being added.
+        void Land(IReadOnlyList<FileSystemEntry> rows) {
+            bool first = !landed;
+            if (first) {
+                landed = true;
+                _session.NoteListed(shellPath);
+                SetMissingFolder(null);
+                if (arriving) {
+                    // An archive and the Recycle Bin are folders to the person
+                    // opening them, so they belong in the journal the same way.
+                    Journal.Note(string.Format(Strings.JournalOpenedFolder, shellPath), DateTime.Now);
+                }
+                // No sidecars in a shell namespace. The view is chosen below as
+                // on disk - by the names in an archive; the Recycle Bin is a
+                // list of things to decide about, not a folder to look at, and
+                // ViewChoice keeps it out of the gallery.
+                Ratings.Cancel();
+                _sharpness.Cancel();
+                HasRatings = false;
+                if (arriving) {
+                    ChooseView(rows, shellPath, createdUtc: null, vacated: null, inRecycleBin: archive is null);
+                }
+            }
+            PublishRows(epoch, rows.ToList());
+
+            // Timed like any other folder: an archive is one to the person
+            // opening it, and "how long until I can see it" is the same
+            // question there as on disk.
+            if (first && arriving && _session.IsCurrent(epoch)) {
+                FolderArrived?.Invoke(shellPath, started);
+            }
+            if (first && !complete) {
                 IsListLoading = false;
             }
         }
@@ -3341,6 +3379,26 @@ public sealed class MainViewModel : ObservableObject {
     // SearchController on every keystroke. The deep one — subfolders, file
     // contents, the system index — runs on Enter, replaces the listing with
     // its results, and is everything below.
+
+    /// <summary>
+    /// The text a search inside files is looking for while the list shows
+    /// its results, null otherwise - what a pane opened on files of it
+    /// finds at once: the comparison of two of them (PLAN B6, 2026-09-25).
+    /// </summary>
+    public string? FoundText => IsSearchResults && ContentSearch.TextQuery.Length > 0 ? ContentSearch.TextQuery : null;
+
+    /// <summary>
+    /// The row F3 goes on to past the last match in the preview (PLAN B6):
+    /// the next one a search inside files found after the file on show, in
+    /// the list's order; null when the list is not such a search's results,
+    /// or the file on show is the last of them.
+    /// </summary>
+    public FileSystemEntry? NextFoundRow() {
+        return FoundText is null
+            ? null
+            : FindWalk.Next(Entries, PreviewSubject.Of(_target, _caretPath, Entries).Primary?.FullPath);
+    }
+
 
     /// <summary>
     /// F5 while results are on screen. Re-running the search is what
@@ -5142,7 +5200,7 @@ public sealed class MainViewModel : ObservableObject {
     private bool CanPaste(object? parameter) {
         var (target, place) = ResolveTarget(parameter);
 
-        return _clipboard.HasContent && !place.IsReadOnly
+        return _clipboard.CanPaste && !place.IsReadOnly
             && TargetRules.PasteFolder(target, _nav.Current, fromMenu: parameter is MenuCall) is not null;
     }
 
@@ -5167,6 +5225,19 @@ public sealed class MainViewModel : ObservableObject {
             TargetKind.ListRows when !IsSamePath(target, _nav.Current) => "selected row",
             _ => "open folder",
         };
+
+        // What is on the clipboard now, not at the last activation: text
+        // copied inside Wander while it stayed in front is the paste's too
+        // (PLAN X). One kind per paste - files, else text, else a picture.
+        _clipboard.SyncFromSystem();
+        var choice = _clipboard.Choice;
+        if (choice.Kind != PasteKind.Files) {
+            await PasteContentAsync(choice, target, how);
+
+            return;
+        }
+        NoteLeftOnClipboard(choice);
+
         var sources = _clipboard.Paths.ToList();
 
         var reason = PathSafety.DetectSelfDrop(sources, target, out string? offender);
@@ -5247,6 +5318,82 @@ public sealed class MainViewModel : ObservableObject {
             Refresh();
         }
         ReportBatchResults(results, wasCut ? Strings.VerbMoved : Strings.VerbCopied, target);
+    }
+
+    /// <summary>
+    /// Ctrl+V with no files on the clipboard (PLAN X): its text as a new
+    /// .txt file - UTF-8, no byte-order mark - or its picture as a new
+    /// .png, named by the resources (PasteTextFileName, PasteImageFileName),
+    /// in the folder the paste is for; "(N)" when the name is taken, and
+    /// selected with its name editor open, as a new folder is. Nothing is
+    /// replaced, so nothing is asked; Ctrl+Z puts the file in the recycle
+    /// bin. Nothing Wander can take: the status bar, and so the journal,
+    /// names what was there.
+    /// </summary>
+    private async Task PasteContentAsync(PasteChoice choice, string target, string how) {
+        if (choice.Kind == PasteKind.None) {
+            if (_clipboard.LastSystemIssue == ClipboardController.SystemIssue.VirtualFiles) {
+                Fail(Strings.StatusClipboardVirtualFiles);
+
+                return;
+            }
+
+            string formats = string.Join(", ", _clipboard.FormatNames());
+            _log.Info($"Paste: nothing to take, the clipboard holds {formats}");
+            Warn(string.Format(Strings.StatusPasteNothing, formats));
+
+            return;
+        }
+
+        bool text = choice.Kind == PasteKind.Text;
+        byte[]? content = text
+            ? _clipboard.ReadText() is { } read ? new System.Text.UTF8Encoding(false).GetBytes(read) : null
+            : await Task.Run(_clipboard.ReadImagePng);
+        if (content is null) {
+            Fail(Strings.StatusPasteUnreadable);
+
+            return;
+        }
+
+        string made;
+        try {
+            made = _ops.CreateFile(target, text ? Strings.PasteTextFileName : Strings.PasteImageFileName, content);
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+            _log.Error($"Paste: cannot write into {target}", ex);
+            Fail(string.Format(Strings.StatusPasteFailed, ex.Message));
+
+            return;
+        }
+
+        _log.Info($"Paste: {(text ? "text" : "a picture")} as a file into {target} ({how})");
+        NoteLeftOnClipboard(choice);
+        Status = string.Format(text ? Strings.StatusPastedText : Strings.StatusPastedImage, Path.GetFileName(made));
+        // Only in the folder on screen (N8): pasted into a panel row, the
+        // file is not in this listing.
+        if (IsSamePath(target, _nav.Current)) {
+            _session.SetArrivalHere(ArrivalIntent.Rows(target, new[] { made }, takeFocus: true, renameTarget: made));
+            Refresh();
+        }
+    }
+
+    /// <summary>
+    /// What else was on the clipboard, left there by the paste - a line in
+    /// the journal and the log rather than the status bar, which says what
+    /// was pasted (PLAN X, decision of 2026-09-24).
+    /// </summary>
+    private void NoteLeftOnClipboard(PasteChoice choice) {
+        foreach (var left in choice.Left) {
+            string line = (choice.Kind, left) switch {
+                (PasteKind.Text, PasteKind.Image) => Strings.PasteLeftImageForText,
+                (PasteKind.Files, PasteKind.Text) => Strings.PasteLeftTextForFiles,
+                (PasteKind.Files, PasteKind.Image) => Strings.PasteLeftImageForFiles,
+                _ => "",
+            };
+            if (line.Length > 0) {
+                Journal.Note(line, DateTime.Now);
+                _log.Info($"Paste: {left} left on the clipboard, {choice.Kind} taken");
+            }
+        }
     }
 
     // --- Archives: extraction and the temporary copy --------------------

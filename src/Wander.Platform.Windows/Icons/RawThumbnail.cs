@@ -76,6 +76,37 @@ internal static class RawThumbnail {
 
 
     /// <summary>
+    /// The same thumbnail of an ordinary picture file WIC reads - a copy
+    /// of an archive entry (<see cref="ArchiveThumbnail"/>): the file's own
+    /// bytes decoded at the scaled size, turned by its own EXIF tag. Null
+    /// when it cannot be read or decoded.
+    /// </summary>
+    public static byte[]? RenderPicture(string path, int side) {
+        try {
+            byte[] bytes = SharedRead.ReadAllBytes(path);
+
+            return RenderAsync(bytes, Orientation(path), side).GetAwaiter().GetResult();
+        } catch {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The same of a picture held in memory - a zip entry read through the
+    /// shell's stream (<see cref="ArchiveThumbnail"/>), no copy on disk.
+    /// </summary>
+    public static byte[]? RenderPicture(byte[] bytes, int side) {
+        try {
+            int orientation = _metadata.Read(new MemoryStream(bytes))?.Orientation ?? 1;
+
+            return RenderAsync(bytes, orientation, side).GetAwaiter().GetResult();
+        } catch {
+            return null;
+        }
+    }
+
+
+    /// <summary>
     /// EXIF orientation of the RAW container, 1..8, defaulting to 1. Read
     /// off the container rather than the extracted JPEG because that is
     /// where cameras put it.

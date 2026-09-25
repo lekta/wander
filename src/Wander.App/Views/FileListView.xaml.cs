@@ -117,6 +117,9 @@ public partial class FileListView : UserControl {
     /// </summary>
     public event EventHandler<FullscreenPlan>? FullscreenRequested;
 
+    /// <summary>The filter field's "more" button: the window raises the search window, which it owns (PLAN G6).</summary>
+    public event EventHandler? SearchWindowRequested;
+
 
     private MainViewModel Vm => (MainViewModel)DataContext;
 
@@ -434,6 +437,28 @@ public partial class FileListView : UserControl {
                 grid.CurrentItem = rows[0];
             }
             ScrollRowIntoView(host, rows[0]);
+        }
+    }
+
+
+    /// <summary>
+    /// <paramref name="entry"/> becomes the selection, as an arrow key would
+    /// make it, and is brought into view - F3 past the last match in the
+    /// preview going on to the next found file (PLAN B6). The keyboard
+    /// stays where it is; in the list, it comes onto the row.
+    /// </summary>
+    public void SelectRow(FileSystemEntry entry) {
+        if (ActiveList() is not { } host) {
+            return;
+        }
+
+        PutSelection(host, new[] { entry }, report: true);
+        if (host is DataGrid grid) {
+            grid.CurrentItem = entry;
+        }
+        ScrollRowIntoView(host, entry);
+        if (host.IsKeyboardFocusWithin) {
+            FocusEntry(entry, scroll: true);
         }
     }
 
@@ -1454,6 +1479,44 @@ public partial class FileListView : UserControl {
             case DataGrid grid: grid.ScrollIntoView(entry); break;
             case ListBox list: list.ScrollIntoView(entry); break;
         }
+    }
+
+
+
+    // --- The filter field (PLAN G6) ----------------------------------------
+    // On the strip over the list since 2026-09-25; it used to be in the
+    // window's toolbar, and the window still reaches it (Ctrl+F, the Tab
+    // ring) through SearchBox.
+
+    private void SearchBox_PreviewKeyDown(object sender, KeyEventArgs e) {
+        // Esc: one press does the lot — stop whatever is running, drop the
+        // filter and the results, and put the keyboard back in the list. A
+        // ladder of three presses meant the user had to know which rung
+        // they were on, and the answer to "what is going on" is never
+        // "press it again".
+        if (e.Key == Key.Escape) {
+            if (Vm.ContentSearch.IsRunning) {
+                Vm.StopSearchCommand.Execute(null);
+            }
+            Vm.ClearSearchCommand.Execute(null);
+            FocusList();
+            e.Handled = true;
+
+            return;
+        }
+
+        // Enter: the box is the shallow half — the filter has already been
+        // applied letter by letter — so Enter only moves the keyboard to
+        // the results. A deep search is set up in the search window, and
+        // Enter belongs to it there.
+        if (e.Key == Key.Enter) {
+            FocusList();
+            e.Handled = true;
+        }
+    }
+
+    private void SearchOptions_Click(object sender, RoutedEventArgs e) {
+        SearchWindowRequested?.Invoke(this, EventArgs.Empty);
     }
 
 

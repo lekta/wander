@@ -37,6 +37,7 @@ public static class AppPaths {
 
     private static string? _root;
     private static string _source = "default";
+    private static string? _webView2;
 
 
     /// <summary>Root folder; subfolders below are all relative to it.</summary>
@@ -59,7 +60,21 @@ public static class AppPaths {
 
     public static string Crashes => Path.Combine(DataRoot, "crashes");
 
-    public static string WebView2 => Path.Combine(DataRoot, "WebView2");
+    /// <summary>
+    /// The web view's profile (PLAN AD1): the components its browser keeps
+    /// for itself - <see cref="SystemWebView2"/> with
+    /// <see cref="UseSystemTemp"/>, where it goes with the temporary files,
+    /// <see cref="DataWebView2"/> otherwise. Fixed the first time it is
+    /// asked, after the settings are read: a browser keeps the folder it was
+    /// started with, so a changed setting takes effect at the next start.
+    /// </summary>
+    public static string WebView2 => _webView2 ??= UseSystemTemp ? SystemWebView2 : DataWebView2;
+
+    /// <summary>The web view's profile in the data folder.</summary>
+    public static string DataWebView2 => Path.Combine(DataRoot, "WebView2");
+
+    /// <summary>The web view's profile under the system's Temp folder - a profile nobody minds losing.</summary>
+    public static string SystemWebView2 => Path.Combine(SystemTmp, "WebView2");
 
     /// <summary>
     /// Whether scratch copies go to the system's Temp folder instead of the
@@ -144,5 +159,6 @@ public static class AppPaths {
     private static void Set(string root, string source) {
         _root = root;
         _source = source;
+        _webView2 = null;
     }
 }

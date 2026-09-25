@@ -18,6 +18,15 @@ public static partial class Strings {
     /// <summary>Для этого файла просмотр недоступен</summary>
     public static string PreviewUnsupported => Get(nameof(PreviewUnsupported));
 
+    /// <summary>Чтобы открыть HEIC и HEIF, Windows нужно бесплатное дополнение «Расширения для изображений HEIF» из Microsoft Store</summary>
+    public static string PreviewNeedsHeif => Get(nameof(PreviewNeedsHeif));
+
+    /// <summary>Снимки HEIC сжаты кодеком HEVC: Windows нужно дополнение «Расширения для видео HEVC» из Microsoft Store — платное, на многих компьютерах оно уже стоит от производителя</summary>
+    public static string PreviewNeedsHevc => Get(nameof(PreviewNeedsHevc));
+
+    /// <summary>Открыть в Microsoft Store</summary>
+    public static string PreviewOpenStore => Get(nameof(PreviewOpenStore));
+
     /// <summary>Файл занят другой программой — прочитать его нельзя</summary>
     public static string PreviewFileLocked => Get(nameof(PreviewFileLocked));
 
@@ -72,6 +81,12 @@ public static partial class Strings {
     /// <summary>Показать полный кадр RAW вместо встроенного превью …</summary>
     public static string PreviewRawToggleHint => Get(nameof(PreviewRawToggleHint));
 
+    /// <summary>&lt;/&gt;</summary>
+    public static string PreviewSvgSourceToggle => Get(nameof(PreviewSvgSourceToggle));
+
+    /// <summary>Показать разметку SVG вместо картинки — и обратно</summary>
+    public static string PreviewSvgSourceHint => Get(nameof(PreviewSvgSourceHint));
+
     /// <summary>Оценка, пишется в {0}</summary>
     public static string PreviewRatingWrittenTo => Get(nameof(PreviewRatingWrittenTo));
 
@@ -99,10 +114,10 @@ public static partial class Strings {
     /// <summary>Устройство не готово</summary>
     public static string PreviewVolumeNotReady => Get(nameof(PreviewVolumeNotReady));
 
-    /// <summary>Фильтр: имя, либо имя:текст (Ctrl+F). Окно поиска — Ctrl+Shift+F. Esc — сбросить</summary>
+    /// <summary>Поиск по имени/содержимому: имя, либо имя:текст (Ctrl+F). Окно поиска — Ctrl+Shift+F. Esc — сбросить</summary>
     public static string SearchHint => Get(nameof(SearchHint));
 
-    /// <summary>Фильтр: имя или имя:текст</summary>
+    /// <summary>Поиск по имени/содержимому</summary>
     public static string SearchPlaceholder => Get(nameof(SearchPlaceholder));
 
     /// <summary>Воспроизведение недоступно</summary>
@@ -278,6 +293,9 @@ public static partial class Strings {
 
     /// <summary>Не найдено</summary>
     public static string PreviewFindNone => Get(nameof(PreviewFindNone));
+
+    /// <summary>Ещё {0} дальше в файле — откройте его, чтобы увидеть</summary>
+    public static string PreviewFindBeyond => Get(nameof(PreviewFindBeyond));
 
     /// <summary>Предыдущее (Shift+Enter)</summary>
     public static string PreviewFindPrevious => Get(nameof(PreviewFindPrevious));

@@ -39,11 +39,13 @@ public partial class CompareWindow : Window {
     private bool _showingB;
 
 
-    private CompareWindow(FileSystemEntry a, FileSystemEntry b, ReviewHelpers? helpers, PictureShape? shapeA, PictureShape? shapeB) {
+    /// <param name="found">The text a search inside files is looking for, when the list shows its results: both texts open on it (PLAN B6).</param>
+    private CompareWindow(
+        FileSystemEntry a, FileSystemEntry b, ReviewHelpers? helpers, string? found, PictureShape? shapeA, PictureShape? shapeB) {
         InitializeComponent();
 
-        _a = Controller(a, helpers);
-        _b = Controller(b, helpers);
+        _a = Controller(a, helpers, found);
+        _b = Controller(b, helpers, found);
         PaneA.DataContext = _a;
         PaneB.DataContext = _b;
         _headerA = Path.GetDirectoryName(a.FullPath) ?? a.FullPath;
@@ -99,8 +101,10 @@ public partial class CompareWindow : Window {
     }
 
 
-    private static PreviewController Controller(FileSystemEntry entry, ReviewHelpers? helpers) {
-        var controller = new PreviewController(ServiceLocator.TryGet<IImageMetadataReader>(), null);
+    private static PreviewController Controller(FileSystemEntry entry, ReviewHelpers? helpers, string? found) {
+        var controller = new PreviewController(ServiceLocator.TryGet<IImageMetadataReader>(), null) {
+            FindTextFor = _ => found,
+        };
         if (helpers is not null) {
             controller.SetHelpers(helpers);
         }
@@ -213,9 +217,11 @@ public partial class CompareWindow : Window {
             }
 
             // The window's helpers when there is a main window to take them
-            // from: the switches are one set for every pane (PLAN Q5).
-            var helpers = (Application.Current?.MainWindow?.DataContext as MainViewModel)?.Helpers;
-            var window = new CompareWindow(left, right, helpers, a, b) { Owner = owner };
+            // from: the switches are one set for every pane (PLAN Q5). And
+            // the text of a search inside files, when its results are what
+            // was copied (PLAN B6).
+            var main = Application.Current?.MainWindow?.DataContext as MainViewModel;
+            var window = new CompareWindow(left, right, main?.Helpers, main?.FoundText, a, b) { Owner = owner };
             window.Show();
         }
 

@@ -1468,14 +1468,21 @@
                                           Content="{Binding}" ContentTemplate="{StaticResource HistogramChart}"/>
                     </Border>
 
-                    <!-- Placeholder (None / Unsupported) -->
-                    <TextBlock Text="{Binding PlaceholderText}"
-                               Style="{StaticResource PaneDim}"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"
-                               TextWrapping="Wrap" TextAlignment="Center"
-                               Margin="16,0"
-                               Visibility="{Binding IsPlaceholderVisible, Converter={StaticResource BoolToVisibility}}"/>
+                    <!--
+                        Placeholder (None / Unsupported), and under it the way
+                        to the extension a HEIF picture needs (PLAN B10).
+                    -->
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="16,0"
+                                Visibility="{Binding IsPlaceholderVisible, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="{Binding PlaceholderText}"
+                                   Style="{StaticResource PaneDim}"
+                                   HorizontalAlignment="Center"
+                                   TextWrapping="Wrap" TextAlignment="Center"/>
+                        <Button Content="{x:Static res:Strings.PreviewOpenStore}"
+                                Command="{Binding OpenStoreCommand}"
+                                Visibility="{Binding HasStoreHint, Converter={StaticResource BoolToVisibility}}"
+                                HorizontalAlignment="Center" Margin="0,10,0,0" Padding="10,2"/>
+                    </StackPanel>
 
                     <!-- Loading spinner — overlays content while content loads -->
                     <Grid Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisibility}}"
@@ -1514,20 +1521,31 @@
                             Background="{StaticResource InputBackground}"
                             BorderBrush="{StaticResource Separator}" BorderThickness="1" CornerRadius="3"
                             Padding="4,1">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBox x:Name="FindBox" Width="160" BorderThickness="0"
-                                     VerticalContentAlignment="Center"
-                                     ToolTip="{x:Static res:Strings.PreviewFindBox}"
-                                     TextChanged="FindBox_TextChanged"
-                                     PreviewKeyDown="FindBox_PreviewKeyDown"/>
-                            <TextBlock x:Name="FindCount" Foreground="{StaticResource TextDim}" FontSize="11"
-                                       VerticalAlignment="Center" Margin="6,0,4,0"/>
-                            <Button Style="{StaticResource FindGlyphButton}" Content="&#xE70E;"
-                                    ToolTip="{x:Static res:Strings.PreviewFindPrevious}" Click="FindPrevious_Click"/>
-                            <Button Style="{StaticResource FindGlyphButton}" Content="&#xE70D;"
-                                    ToolTip="{x:Static res:Strings.PreviewFindNext}" Click="FindNext_Click"/>
-                            <Button Style="{StaticResource FindGlyphButton}" Content="&#xE711;"
-                                    ToolTip="{x:Static res:Strings.PreviewFindClose}" Click="FindClose_Click"/>
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBox x:Name="FindBox" Width="160" BorderThickness="0"
+                                         VerticalContentAlignment="Center"
+                                         ToolTip="{x:Static res:Strings.PreviewFindBox}"
+                                         TextChanged="FindBox_TextChanged"
+                                         PreviewKeyDown="FindBox_PreviewKeyDown"/>
+                                <TextBlock x:Name="FindCount" Foreground="{StaticResource TextDim}" FontSize="11"
+                                           VerticalAlignment="Center" Margin="6,0,4,0"/>
+                                <Button Style="{StaticResource FindGlyphButton}" Content="&#xE70E;"
+                                        ToolTip="{x:Static res:Strings.PreviewFindPrevious}" Click="FindPrevious_Click"/>
+                                <Button Style="{StaticResource FindGlyphButton}" Content="&#xE70D;"
+                                        ToolTip="{x:Static res:Strings.PreviewFindNext}" Click="FindNext_Click"/>
+                                <Button Style="{StaticResource FindGlyphButton}" Content="&#xE711;"
+                                        ToolTip="{x:Static res:Strings.PreviewFindClose}" Click="FindClose_Click"/>
+                            </StackPanel>
+                            <!--
+                                Matches past the part of the file on show
+                                (PLAN B6, 2026-09-25): counted, not shown -
+                                the pane draws the first megabyte - so the
+                                line says where they are to be seen.
+                            -->
+                            <TextBlock x:Name="FindBeyond" Visibility="Collapsed"
+                                       Foreground="{StaticResource TextDim}" FontSize="11"
+                                       Margin="2,0,4,2" TextWrapping="Wrap" MaxWidth="260"/>
                         </StackPanel>
                     </Border>
                 </Grid>
@@ -1545,12 +1563,13 @@
                         Padding="8,6" Background="{StaticResource ChromeBackground}"
                         Visibility="{Binding ShowFooter, Converter={StaticResource BoolToVisibility}}">
                     <!--
-                        The file's details on the left, the review helpers'
-                        switches and their chart on the right (RAWHELPERS).
-                        Two columns rather than a row inside the first line:
-                        the chart is taller than that line, and inside it it
-                        pushed the stars down the footer for nothing - beside
-                        them there is room to spare (2026-09-22).
+                        The file's details on the left, the chart of levels
+                        on the right (RAWHELPERS): taller than a line, inside
+                        the text it pushed the stars down the footer for
+                        nothing (2026-09-22). The helpers' switches are on
+                        the stars' line, not beside the text (B3, 2026-09-25):
+                        eight buttons there squeezed the name into a column
+                        of 70 px in a narrow pane, ten lines instead of four.
                     -->
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -1645,25 +1664,45 @@
                             stars to say "there is nowhere to write this
                             yet"); the block above was hiding the offer.
                         -->
-                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0" Style="{StaticResource FooterRating}">
-                            <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource RatingControls}"/>
+                        <!--
+                            The stars' line carries the helpers' switches and
+                            the RAW switch after them (B3): side by side while
+                            the pane is wide enough, the switches on a line
+                            of their own under the stars when it is not. The
+                            text above keeps the whole width either way.
+                        -->
+                        <WrapPanel Orientation="Horizontal">
+                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0" Style="{StaticResource FooterRating}">
+                                <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource RatingControls}"/>
 
-                            <TextBlock Text="{Binding CustomColorLabel}"
-                                       FontSize="11" Foreground="{StaticResource TextDim}"
-                                       VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                <TextBlock Text="{Binding CustomColorLabel}"
+                                           FontSize="11" Foreground="{StaticResource TextDim}"
+                                           VerticalAlignment="Center" Margin="8,0,0,0"/>
 
-                            <!--
-                                Several files selected: the stars and the
-                                swatches show the one on screen, but a click
-                                writes to all of them - and the click must
-                                not be the first the user hears of it.
-                            -->
-                            <TextBlock Text="{Binding RatingOthers}"
-                                       ToolTip="{Binding RatingOthersHint}"
-                                       FontSize="11" Foreground="{StaticResource TextDim}"
-                                       VerticalAlignment="Center" Margin="8,0,0,0"
-                                       Visibility="{Binding HasRatingOthers, Converter={StaticResource BoolToVisibility}}"/>
-                        </StackPanel>
+                                <!--
+                                    Several files selected: the stars and the
+                                    swatches show the one on screen, but a click
+                                    writes to all of them - and the click must
+                                    not be the first the user hears of it.
+                                -->
+                                <TextBlock Text="{Binding RatingOthers}"
+                                           ToolTip="{Binding RatingOthersHint}"
+                                           FontSize="11" Foreground="{StaticResource TextDim}"
+                                           VerticalAlignment="Center" Margin="8,0,0,0"
+                                           Visibility="{Binding HasRatingOthers, Converter={StaticResource BoolToVisibility}}"/>
+                            </StackPanel>
+                            <!-- Only over a picture, as the switches inside: collapsed, its margin adds no line to a text's footer. -->
+                            <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource HelperSwitches}"
+                                              Margin="0,6,0,0"
+                                              Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Image}"/>
+                            <!-- An SVG: the picture it draws, or its markup (PLAN B8); a mode, as RAW is. -->
+                            <ToggleButton Content="{x:Static res:Strings.PreviewSvgSourceToggle}"
+                                          ToolTip="{x:Static res:Strings.PreviewSvgSourceHint}"
+                                          IsChecked="{Binding ShowSvgSource, Mode=TwoWay}"
+                                          Visibility="{Binding IsSvg, Converter={StaticResource BoolToVisibility}}"
+                                          VerticalAlignment="Top" Margin="0,6,0,0" Padding="8,1" MinWidth="44"
+                                          FontSize="11" Focusable="False"/>
+                        </WrapPanel>
 
                         <!--
                             What just happened to the sidecar ("created
@@ -1675,14 +1714,11 @@
                         <TextBlock Text="{Binding CompanionStatus}"
                                    FontSize="11" Foreground="{StaticResource TextDim}" TextWrapping="Wrap"/>
                         </StackPanel>
-                        <!-- The helpers' switches and the chart (HelperSwitches, HistogramChart). -->
-                            <StackPanel Grid.Column="1" VerticalAlignment="Top">
-                                <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource HelperSwitches}"/>
-                                <Border Margin="8,4,0,0" HorizontalAlignment="Right" VerticalAlignment="Top"
-                                        Style="{StaticResource FooterHistogram}">
-                                    <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource HistogramChart}"/>
-                                </Border>
-                            </StackPanel>
+                        <!-- The chart of levels (HistogramChart). -->
+                            <Border Grid.Column="1" Margin="8,0,0,0" HorizontalAlignment="Right" VerticalAlignment="Top"
+                                    Style="{StaticResource FooterHistogram}">
+                                <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource HistogramChart}"/>
+                            </Border>
                     </Grid>
                 </Border>
             </Grid>

@@ -275,6 +275,11 @@ public sealed class SystemIOFileSystem : IFileSystem {
         }
     }
 
+    public void WriteNew(string path, byte[] content) {
+        using var file = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+        file.Write(content);
+    }
+
     /// <summary>
     /// Returns true if the given file is a <c>.lnk</c> shortcut that
     /// resolves to an existing directory. Used at enumeration time so we

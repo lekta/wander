@@ -53,6 +53,12 @@ public enum PreviewRoute {
     Executable,
 
     /// <summary>
+    /// A vector picture - SVG: drawn by the web view, or read as its markup
+    /// when the pane's switch says so (PLAN B8).
+    /// </summary>
+    Svg,
+
+    /// <summary>
     /// A document Wander does not lay out - Word, the Office and
     /// OpenDocument formats, EPUB: its text, as the content search reads it
     /// (PLAN B5).
@@ -69,9 +75,10 @@ public enum PreviewRoute {
 /// <para>
 /// Order is the whole content of this table, not an implementation
 /// detail — most of these lists overlap. A <c>.webp</c> is a picture and
-/// an animation, a <c>.svg</c> is a picture and a source file, a
-/// <c>.mtl</c> sits next to models and is text. The first matching rule
-/// wins, and moving one rule past another changes what the pane shows.
+/// an animation, a <c>.svg</c> is a picture and a source file (drawn, with
+/// the markup a switch away - PLAN B8), a <c>.mtl</c> sits next to models
+/// and is text. The first matching rule wins, and moving one rule past
+/// another changes what the pane shows.
 /// </para>
 /// </summary>
 public static class PreviewRouter {
@@ -207,6 +214,11 @@ public static class PreviewRouter {
         }
         if (ImageFormats.All.Contains(ext)) {
             return PreviewRoute.Image;
+        }
+        // Before the code list, which has it too: the markup is what the
+        // actions for text files work on, the picture is what the pane shows.
+        if (ext.Equals(".svg", StringComparison.OrdinalIgnoreCase)) {
+            return PreviewRoute.Svg;
         }
         if (_web.Contains(ext)) {
             return PreviewRoute.Web;

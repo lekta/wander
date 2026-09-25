@@ -1,10 +1,11 @@
 namespace Wander.Core.FileSystem;
 
 /// <summary>
-/// What the operating system's clipboard holds when it holds files: a list
-/// of paths plus a flag saying whether the owner meant "copy" or "cut".
-/// Nothing else about the payload is modelled — that is all Wander can
-/// either read or write with confidence.
+/// What the operating system's clipboard holds: a list of paths plus a flag
+/// saying whether the owner meant "copy" or "cut" - the payload Wander both
+/// reads and writes - and whether text or a picture is there, which a paste
+/// turns into a new file (PLAN X). Their bytes are not read here: they are
+/// read when pasted, and only then.
 /// </summary>
 /// <param name="Paths">The files and folders on the clipboard, in the order the owner put them.</param>
 /// <param name="IsCut">True when the owner meant a move (Windows' <c>DROPEFFECT_MOVE</c>).</param>
@@ -15,10 +16,19 @@ namespace Wander.Core.FileSystem;
 /// paths, and Wander cannot paste them. Worth telling the user about,
 /// because from their side of the screen they did copy something.
 /// </param>
+/// <param name="HasText">Text is there.</param>
+/// <param name="HasImage">A picture is there - a PNG an application put, or a device-independent bitmap.</param>
+/// <param name="HasAnything">
+/// Anything at all is there, of whatever format: a paste of what Wander
+/// cannot take says what it was (PLAN X).
+/// </param>
 public readonly record struct ClipboardFiles(
     IReadOnlyList<string> Paths,
     bool IsCut,
-    bool HasUnsupportedFiles = false) {
+    bool HasUnsupportedFiles = false,
+    bool HasText = false,
+    bool HasImage = false,
+    bool HasAnything = false) {
 
     public static readonly ClipboardFiles Empty = new(Array.Empty<string>(), false);
 
@@ -74,6 +84,20 @@ public interface ISystemClipboard {
     /// file list with something else.
     /// </summary>
     ClipboardFiles? GetFiles();
+
+    /// <summary>The text on the clipboard now, or null when there is none or it could not be read.</summary>
+    string? GetText();
+
+    /// <summary>
+    /// The picture on the clipboard now, as PNG: the one an application put
+    /// there as PNG, as it is, or a device-independent bitmap encoded as
+    /// one. Null when there is none or it could not be read. Off the UI
+    /// thread: a screenshot takes a moment to encode.
+    /// </summary>
+    byte[]? GetImagePng();
+
+    /// <summary>The names of the formats on the clipboard now - for the line that says what a paste could not take.</summary>
+    IReadOnlyList<string> GetFormatNames();
 
     /// <summary>
     /// Empties the clipboard — used after a cut-paste, so a second

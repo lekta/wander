@@ -152,6 +152,26 @@ public static class EncodingProbe {
     }
 
 
+    /// <summary>
+    /// A reader over a whole stream in an encoding already decided - for
+    /// text too long to decode in one piece: the find of the preview pane
+    /// counts through the part of a file it does not show (PLAN B6). A
+    /// byte-order mark is consumed, as <see cref="Decode(ReadOnlySpan{byte}, TextEncodingKind)"/>
+    /// consumes it, so the two agree character for character. Disposing the
+    /// reader closes the stream.
+    /// </summary>
+    public static TextReader Reader(Stream stream, TextEncodingKind kind) {
+        return kind switch {
+            TextEncodingKind.Utf8 => new StreamReader(stream, new UTF8Encoding(false), detectEncodingFromByteOrderMarks: true),
+            TextEncodingKind.Utf16LittleEndian => new StreamReader(stream, Encoding.Unicode, detectEncodingFromByteOrderMarks: true),
+            TextEncodingKind.Utf16BigEndian => new StreamReader(stream, Encoding.BigEndianUnicode, detectEncodingFromByteOrderMarks: true),
+            TextEncodingKind.Windows1251 => new SingleByteReader(stream, Cp1251),
+            TextEncodingKind.Dos866 => new SingleByteReader(stream, Cp866),
+            _ => new StreamReader(stream, Encoding.Latin1, detectEncodingFromByteOrderMarks: false),
+        };
+    }
+
+
     // --- Scoring -------------------------------------------------------
 
     /// <summary>
@@ -258,5 +278,52 @@ public static class EncodingProbe {
 
     private static bool StartsWith(ReadOnlySpan<byte> bytes, params byte[] prefix) {
         return bytes.Length >= prefix.Length && bytes[..prefix.Length].SequenceEqual(prefix);
+    }
+
+
+    /// <summary>A stream in one of the Cyrillic codepages, read through its table - see <see cref="Reader"/>.</summary>
+    private sealed class SingleByteReader : TextReader {
+        private readonly Stream _stream;
+        private readonly string _table;
+        private byte[] _bytes = Array.Empty<byte>();
+
+
+        public SingleByteReader(Stream stream, string table) {
+            _stream = stream;
+            _table = table;
+        }
+
+
+        public override int Read() {
+            int b = _stream.ReadByte();
+
+            return b < 0 ? -1 : Map((byte)b);
+        }
+
+        public override int Read(char[] buffer, int index, int count) {
+            if (_bytes.Length < count) {
+                _bytes = new byte[count];
+            }
+
+            int read = _stream.Read(_bytes, 0, count);
+            for (int i = 0; i < read; i++) {
+                buffer[index + i] = Map(_bytes[i]);
+            }
+
+            return read;
+        }
+
+
+        protected override void Dispose(bool disposing) {
+            if (disposing) {
+                _stream.Dispose();
+            }
+            base.Dispose(disposing);
+        }
+
+
+        private char Map(byte b) {
+            return b < 0x80 ? (char)b : _table[b - 0x80];
+        }
     }
 }

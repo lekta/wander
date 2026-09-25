@@ -4,6 +4,7 @@ using Wander.Core.FileSystem;
 using Wander.Core.Logging;
 using Wander.Core.Shell;
 using static Wander.Platform.Windows.Shell.ShellItemInterop;
+using ComTypes = System.Runtime.InteropServices.ComTypes;
 
 namespace Wander.Platform.Windows.Shell;
 
@@ -12,8 +13,10 @@ namespace Wander.Platform.Windows.Shell;
 /// uses: <c>CompressedFolder</c> for zip, <c>ArchiveFolder</c> (libarchive)
 /// for 7z / rar / tar.gz and a dozen more, <c>CABFolder</c> for cab. Wander
 /// writes no archive reader of its own - which formats open is whatever the
-/// machine says, and an association handed to 7-Zip or WinRAR closes the
-/// door here exactly as it does in Explorer.
+/// machine's shell opens. An association handed to 7-Zip or WinRAR does not
+/// close that: it changes what a double click starts, while the shell still
+/// takes the folder handler Windows registers for the type (decision of
+/// 2026-09-24, stand of 2026-09-25) - see <see cref="ReadExtensions"/>.
 ///
 /// <para>
 /// Everything goes through <c>IShellItem</c>, never <c>Shell.Application</c>:
@@ -23,11 +26,11 @@ namespace Wander.Platform.Windows.Shell;
 /// </para>
 ///
 /// <para>
-/// Reading the bytes is the shell copy engine's job and nobody else's:
-/// <c>BHID_Stream</c> and <c>IDataObject</c> both answer
-/// <c>E_NOINTERFACE</c> for <c>ArchiveFolder</c>, while
-/// <c>IFileOperation::CopyItem</c> unpacks everything - see
-/// <see cref="CopyOut"/>.
+/// Reading the bytes: a zip entry comes as a stream (<see cref="ReadEntry"/>,
+/// <c>BHID_Stream</c>); an <c>ArchiveFolder</c> entry answers
+/// <c>E_NOINTERFACE</c> to that, and its data object carries item ids only
+/// (stand 2026-09-25), so the shell copy engine is the one reader there:
+/// <c>IFileOperation::CopyItem</c> unpacks everything - see <see cref="CopyOut"/>.
 /// </para>
 /// </summary>
 public sealed class ShellArchiveFolder {
@@ -39,21 +42,21 @@ public sealed class ShellArchiveFolder {
 
 
     /// <summary>
-    /// The shell handlers that make an archive browsable. An extension
-    /// whose ProgID is one of these opens as a folder; anything else -
-    /// including a .7z whose association went to 7-Zip - does not.
+    /// The shell handlers that make an archive browsable, by class:
+    /// <c>CompressedFolder</c>, <c>ArchiveFolder</c>, <c>CABFolder</c>. An
+    /// extension whose folder handler is one of these opens as a folder.
     /// </summary>
-    private static readonly HashSet<string> _folderProgIds = new(StringComparer.OrdinalIgnoreCase) {
-        "CompressedFolder",
-        "ArchiveFolder",
-        "CABFolder",
+    private static readonly HashSet<string> _folderHandlers = new(StringComparer.OrdinalIgnoreCase) {
+        "{E88DCCE0-B7B3-11d1-A9F0-00AA0060FA31}",
+        "{0C1FD748-B888-443D-9EC3-AD7E22D48808}",
+        "{0CD7A5C0-9F37-11CE-AE65-08002B2E1262}",
     };
 
     /// <summary>
     /// Extensions worth asking the registry about: everything zipfldr.dll
-    /// claims on a stock Windows 11, plus cab. The answer for each is the
-    /// ProgID, so a machine where 7-Zip owns .7z simply drops it from the
-    /// set; an exotic type nobody registers is absent either way.
+    /// claims on a stock Windows 11, plus cab. The answer for each is its
+    /// folder handler (<see cref="FolderHandlerOf"/>); an exotic type nobody
+    /// registers is absent either way.
     /// </summary>
     private static readonly string[] _candidateExtensions = {
         ".zip", ".7z", ".rar", ".tar", ".gz", ".tgz", ".bz2", ".tbz2",
@@ -96,6 +99,66 @@ public sealed class ShellArchiveFolder {
         try {
             return item.GetAttributes(SFGAO_FOLDER, out uint attributes) >= 0
                 && (attributes & SFGAO_FOLDER) != 0;
+        } finally {
+            Release(item);
+        }
+    }
+
+    /// <summary>
+    /// The size of one entry as the archive states it (<c>PKEY_Size</c>);
+    /// null for a folder, an entry that states none - a lone <c>.gz</c>
+    /// answers 0, which is as unknown as nothing - or a path the shell
+    /// cannot find.
+    /// </summary>
+    public long? SizeOf(string path) {
+        var item = CreateItem(path);
+        if (item is null) {
+            return null;
+        }
+
+        try {
+            var sizeKey = PKEY_Size;
+
+            return item is IShellItem2 item2 && item2.GetUInt64(ref sizeKey, out ulong bytes) >= 0 && bytes > 0
+                ? (long)bytes
+                : null;
+        } finally {
+            Release(item);
+        }
+    }
+
+    /// <summary>
+    /// The bytes of one entry through the handler's own stream
+    /// (<c>BHID_Stream</c>, PLAN AL): a zip gives one, and the entry is read
+    /// into memory with no copy on disk. Null where the handler has none -
+    /// <c>ArchiveFolder</c> (7z, rar, tar) answers <c>E_NOINTERFACE</c> -
+    /// or the read fails: the copy engine (<see cref="CopyOut"/>) is the
+    /// way then. Nothing here caps the size: the caller asks
+    /// <see cref="SizeOf"/> first.
+    /// </summary>
+    public byte[]? ReadEntry(string path) {
+        var item = CreateItem(path);
+        if (item is null) {
+            return null;
+        }
+
+        try {
+            var bhid = BHID_Stream;
+            var iid = IID_IStream;
+            if (item.BindToHandler(IntPtr.Zero, ref bhid, ref iid, out object raw) < 0) {
+                return null;
+            }
+
+            var stream = (ComTypes.IStream)raw;
+            try {
+                return ReadAll(stream);
+            } finally {
+                Release(stream);
+            }
+        } catch (Exception ex) when (ex is COMException or IOException) {
+            _log.Info($"Archive entry: stream not read for {path} ({ex.Message})");
+
+            return null;
         } finally {
             Release(item);
         }
@@ -281,6 +344,27 @@ public sealed class ShellArchiveFolder {
 
     // --- COM plumbing ---------------------------------------------------
 
+    /// <summary>Everything the stream gives, as one array - see <see cref="ReadEntry"/>.</summary>
+    private static byte[] ReadAll(ComTypes.IStream stream) {
+        var buffer = new byte[64 * 1024];
+        var bytes = new MemoryStream();
+        IntPtr read = Marshal.AllocHGlobal(sizeof(int));
+        try {
+            while (true) {
+                stream.Read(buffer, buffer.Length, read);
+                int count = Marshal.ReadInt32(read);
+                if (count <= 0) {
+                    break;
+                }
+                bytes.Write(buffer, 0, count);
+            }
+        } finally {
+            Marshal.FreeHGlobal(read);
+        }
+
+        return bytes.ToArray();
+    }
+
     private static IShellItem? CreateItem(string path) {
         var iid = IID_IShellItem;
         int hr = SHCreateItemFromParsingName(path, IntPtr.Zero, ref iid, out object item);
@@ -336,18 +420,16 @@ public sealed class ShellArchiveFolder {
     // --- Which extensions open as folders --------------------------------
 
     /// <summary>
-    /// Asks the registry which of the candidates the shell still owns.
-    /// The user's own choice wins over the class default, the same way
-    /// Explorer resolves it - installing 7-Zip and letting it take .7z has
-    /// to close the folder view for .7z here too, or Wander would be
-    /// offering something the rest of the system does not.
+    /// Asks the registry which of the candidates open as folders: every
+    /// archive Windows itself can read, whoever the association went to
+    /// (decision of 2026-09-24).
     /// </summary>
     private HashSet<string> ReadExtensions() {
         var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (string extension in _candidateExtensions) {
             try {
-                if (_folderProgIds.Contains(ProgIdOf(extension) ?? "")) {
+                if (_folderHandlers.Contains(FolderHandlerOf(extension) ?? "")) {
                     found.Add(extension);
                 }
             } catch (Exception ex) {
@@ -367,6 +449,30 @@ public sealed class ShellArchiveFolder {
         return found;
     }
 
+    /// <summary>
+    /// The class of the shell folder an extension opens with, the way the
+    /// shell finds it (stand of 2026-09-25): the one its program registers
+    /// (<c>HKCR\&lt;ProgID&gt;\CLSID</c>, the user's choice before the class
+    /// default), else the one Windows registers for the type itself
+    /// (<c>HKCR\SystemFileAssociations\&lt;ext&gt;\CLSID</c>). WinRAR and
+    /// 7-Zip register none of their own, so a .rar handed to WinRAR is still
+    /// an <c>ArchiveFolder</c> to the shell - a double click starts WinRAR,
+    /// a path into it lists it. An archiver with a folder of its own takes
+    /// the type away from here, as it does from the shell.
+    /// </summary>
+    private static string? FolderHandlerOf(string extension) {
+        if (ProgIdOf(extension) is { } progId) {
+            using var program = Registry.ClassesRoot.OpenSubKey($@"{progId}\CLSID");
+            if (program?.GetValue(null) is string own && own.Length > 0) {
+                return own;
+            }
+        }
+
+        using var system = Registry.ClassesRoot.OpenSubKey($@"SystemFileAssociations\{extension}\CLSID");
+
+        return system?.GetValue(null) as string;
+    }
+
     private static string? ProgIdOf(string extension) {
         using var choice = Registry.CurrentUser.OpenSubKey(
             $@"Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\{extension}\UserChoice");
@@ -376,7 +482,7 @@ public sealed class ShellArchiveFolder {
 
         using var classes = Registry.ClassesRoot.OpenSubKey(extension);
 
-        return classes?.GetValue(null) as string;
+        return classes?.GetValue(null) as string is { Length: > 0 } byDefault ? byDefault : null;
     }
 
 

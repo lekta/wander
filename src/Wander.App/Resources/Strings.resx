@@ -72,6 +72,15 @@
   <data name="PreviewUnsupported" xml:space="preserve">
     <value>Для этого файла просмотр недоступен</value>
   </data>
+  <data name="PreviewNeedsHeif" xml:space="preserve">
+    <value>Чтобы открыть HEIC и HEIF, Windows нужно бесплатное дополнение «Расширения для изображений HEIF» из Microsoft Store</value>
+  </data>
+  <data name="PreviewNeedsHevc" xml:space="preserve">
+    <value>Снимки HEIC сжаты кодеком HEVC: Windows нужно дополнение «Расширения для видео HEVC» из Microsoft Store — платное, на многих компьютерах оно уже стоит от производителя</value>
+  </data>
+  <data name="PreviewOpenStore" xml:space="preserve">
+    <value>Открыть в Microsoft Store</value>
+  </data>
   <data name="PreviewFileLocked" xml:space="preserve">
     <value>Файл занят другой программой — прочитать его нельзя</value>
   </data>
@@ -125,6 +134,13 @@
   </data>
   <data name="PreviewRawToggleHint" xml:space="preserve">
     <value>Показать полный кадр RAW вместо встроенного превью — медленнее, но это настоящее изображение с матрицы</value>
+  </data>
+  <data name="PreviewSvgSourceToggle" xml:space="preserve">
+    <value>&lt;/&gt;</value>
+    <comment>Переключатель SVG: картинка или разметка; значок, слова — в подсказке</comment>
+  </data>
+  <data name="PreviewSvgSourceHint" xml:space="preserve">
+    <value>Показать разметку SVG вместо картинки — и обратно</value>
   </data>
   <data name="SummaryDeleted" xml:space="preserve">
     <value>Удалён</value>
@@ -232,10 +248,10 @@
     <value>Выход</value>
   </data>
   <data name="SearchHint" xml:space="preserve">
-    <value>Фильтр: имя, либо имя:текст (Ctrl+F). Окно поиска — Ctrl+Shift+F. Esc — сбросить</value>
+    <value>Поиск по имени/содержимому: имя, либо имя:текст (Ctrl+F). Окно поиска — Ctrl+Shift+F. Esc — сбросить</value>
   </data>
   <data name="SearchPlaceholder" xml:space="preserve">
-    <value>Фильтр: имя или имя:текст</value>
+    <value>Поиск по имени/содержимому</value>
   </data>
   <data name="RecentFoldersHint" xml:space="preserve">
     <value>Недавние папки (F4)</value>
@@ -291,6 +307,10 @@
   <data name="StatusTextCopied" xml:space="preserve">
     <value>Скопирован текст из панели просмотра: {0} симв.</value>
     <comment>{0} — сколько символов скопировано</comment>
+  </data>
+  <data name="StatusFindNoMoreFiles" xml:space="preserve">
+    <value>Дальше в найденном этого текста нет — поиск в файле пошёл с начала</value>
+    <comment>F3 после последнего совпадения в последнем найденном файле</comment>
   </data>
   <data name="JournalTooltip" xml:space="preserve">
     <value>Журнал действий за сеанс — открыть в текстовом просмотрщике</value>
@@ -370,6 +390,33 @@
   <data name="StatusPasteFailed" xml:space="preserve">
     <value>Вставка не удалась: {0}</value>
   </data>
+  <data name="StatusPastedText" xml:space="preserve">
+    <value>Текст из буфера вставлен файлом {0}</value>
+    <comment>{0} — имя нового файла</comment>
+  </data>
+  <data name="StatusPastedImage" xml:space="preserve">
+    <value>Картинка из буфера вставлена файлом {0}</value>
+    <comment>{0} — имя нового файла</comment>
+  </data>
+  <data name="StatusPasteUnreadable" xml:space="preserve">
+    <value>Буфер обмена прочитать не удалось — вставка не сделана</value>
+  </data>
+  <data name="StatusPasteNothing" xml:space="preserve">
+    <value>Не вставлено: в буфере нет файлов, текста или картинки (форматы: {0})</value>
+    <comment>{0} — имена форматов буфера через запятую</comment>
+  </data>
+  <data name="PasteLeftImageForText" xml:space="preserve">
+    <value>Не вставлено: картинка — в буфере был и текст</value>
+    <comment>Строка журнала: вставлен текст, картинка из буфера осталась</comment>
+  </data>
+  <data name="PasteLeftTextForFiles" xml:space="preserve">
+    <value>Не вставлено: текст — в буфере были и файлы</value>
+    <comment>Строка журнала: вставлены файлы, текст из буфера остался</comment>
+  </data>
+  <data name="PasteLeftImageForFiles" xml:space="preserve">
+    <value>Не вставлено: картинка — в буфере были и файлы</value>
+    <comment>Строка журнала: вставлены файлы, картинка из буфера осталась</comment>
+  </data>
   <data name="StatusCreateFailed" xml:space="preserve">
     <value>Не удалось создать: {0}</value>
   </data>
@@ -443,6 +490,14 @@
   </data>
   <data name="NewFolderName" xml:space="preserve">
     <value>Новая папка</value>
+  </data>
+  <data name="PasteTextFileName" xml:space="preserve">
+    <value>Текст.txt</value>
+    <comment>Имя файла, в который Ctrl+V кладёт текст из буфера; занятое получает «(1)»</comment>
+  </data>
+  <data name="PasteImageFileName" xml:space="preserve">
+    <value>Изображение.png</value>
+    <comment>Имя файла, в который Ctrl+V кладёт картинку из буфера; занятое получает «(1)»</comment>
   </data>
   <data name="KindFile" xml:space="preserve">
     <value>файл</value>
@@ -1506,6 +1561,10 @@
   <data name="PreviewFindNone" xml:space="preserve">
     <value>Не найдено</value>
   </data>
+  <data name="PreviewFindBeyond" xml:space="preserve">
+    <value>Ещё {0} дальше в файле — откройте его, чтобы увидеть</value>
+    <comment>{0} — сколько совпадений за показанной частью текста (панель показывает первый мегабайт); «10000+» при потолке</comment>
+  </data>
   <data name="PreviewFindPrevious" xml:space="preserve">
     <value>Предыдущее (Shift+Enter)</value>
   </data>
@@ -1585,6 +1644,12 @@
   <data name="HotkeyToList" xml:space="preserve">
     <value>В список файлов</value>
   </data>
+  <data name="HotkeyToPreview" xml:space="preserve">
+    <value>В панель просмотра: текст, документ, плеер; ещё раз — во вторую половину пары</value>
+  </data>
+  <data name="HotkeyPreviewEscape" xml:space="preserve">
+    <value>Из панели просмотра обратно в список</value>
+  </data>
   <data name="HotkeyToTree" xml:space="preserve">
     <value>В панель папок, на узел текущей папки. Повторное нажатие — в другую панель (закладки ↔ компьютер)</value>
   </data>
@@ -1644,6 +1709,9 @@
   </data>
   <data name="HotkeyFilter" xml:space="preserve">
     <value>Фокус в поле фильтра</value>
+  </data>
+  <data name="HotkeyFindNext" xml:space="preserve">
+    <value>Следующее / предыдущее совпадение в панели просмотра; после последнего — следующий найденный файл</value>
   </data>
   <data name="HotkeySearchWindow" xml:space="preserve">
     <value>Открыть окно поиска</value>

@@ -112,6 +112,10 @@ public partial class MainWindow : Window {
         using var self = System.Diagnostics.Process.GetCurrentProcess();
         double ms = (DateTime.Now - self.StartTime).TotalMilliseconds;
         Log.Info($"Startup: first frame {ms:F0} ms after process start");
+
+        // The settings are read by now, and nothing on the way to this frame
+        // waits for the answer (PLAN AD1).
+        App.SweepUnusedWebViewProfile();
     }
 
 
@@ -523,6 +527,64 @@ public partial class MainWindow : Window {
     private bool IsCodeEditorFocused =>
         Preview.IsCodeEditorFocused || _previewSecond?.IsCodeEditorFocused == true;
 
+    /// <summary>The keyboard is in a find field of the preview - either half's.</summary>
+    private bool IsPreviewFindFocused =>
+        Preview.IsFindFocused || _previewSecond?.IsFindFocused == true;
+
+    /// <summary>
+    /// Ctrl+3 (PLAN B6): the keyboard into the preview. Pressed again in the
+    /// upper half of a pair, into the other half - as Ctrl+1 goes from one
+    /// folder panel to the other. Put away, the pane comes back first.
+    /// </summary>
+    private void FocusPreview() {
+        if (!Vm.IsPreviewVisible) {
+            Vm.IsPreviewVisible = true;
+            UpdateLayout();
+        }
+
+        var second = Vm.IsPreviewSplit ? _previewSecond : null;
+        bool inFirst = Preview.IsKeyboardFocusWithin && second?.IsKeyboardFocusWithin != true;
+        if (inFirst && second?.TakeKeyboard() == true) {
+            return;
+        }
+
+        Preview.TakeKeyboard();
+    }
+
+    /// <summary>
+    /// F3 / Shift+F3 (PLAN B6) in the half with the keyboard, else in the
+    /// one with its find field open. Past the last match of a single pane
+    /// over a search inside files the next file it found is selected - the
+    /// pane shows it on its first match; past the last of those the status
+    /// line says so and the field goes round. False when no find field is
+    /// open: the key is nobody's.
+    /// </summary>
+    private bool FindAgain(bool backwards) {
+        var second = Vm.IsPreviewSplit ? _previewSecond : null;
+        var panes = second is null ? new[] { Preview }
+            : second.IsKeyboardFocusWithin ? new[] { second, Preview }
+            : new[] { Preview, second };
+        foreach (var pane in panes) {
+            bool canLeave = second is null && Vm.FoundText is not null;
+            switch (pane.FindAgain(backwards, canLeave)) {
+                case Views.PreviewPane.FindStep.Stepped:
+                    return true;
+
+                case Views.PreviewPane.FindStep.PastLast:
+                    if (Vm.NextFoundRow() is { } next) {
+                        FileList.SelectRow(next);
+                    } else {
+                        Vm.Status = Strings.StatusFindNoMoreFiles;
+                        pane.FindAgain(backwards, canLeave: false);
+                    }
+
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
 
     // --- Full screen (PLAN Q5) ----------------------------------------------
 
@@ -603,6 +665,8 @@ public partial class MainWindow : Window {
         if (e.Key == Key.C && Keyboard.Modifiers == ModifierKeys.Control
             && TryCopyPreviewText() is { } copied) {
             Vm.Status = string.Format(Strings.StatusTextCopied, copied);
+            // Ctrl+V in the list pastes it as a file (PLAN X).
+            Vm.SyncClipboardFromSystem();
             e.Handled = true;
 
             return;
@@ -685,6 +749,24 @@ public partial class MainWindow : Window {
             return;
         }
 
+        // Ctrl+3: into the preview (PLAN B6), in the row with the two above
+        // - the pane is to the right of the list. Esc brings the keyboard
+        // back; Tab does not stop there.
+        if (e.Key == Key.D3 && Keyboard.Modifiers == ModifierKeys.Control) {
+            FocusPreview();
+            e.Handled = true;
+            return;
+        }
+
+        // F3 / Shift+F3: the next / previous match of the preview's find
+        // field, and past the last one the next file a search inside files
+        // found (PLAN B6).
+        if (e.Key == Key.F3 && Keyboard.Modifiers is ModifierKeys.None or ModifierKeys.Shift
+            && FindAgain(backwards: Keyboard.Modifiers == ModifierKeys.Shift)) {
+            e.Handled = true;
+            return;
+        }
+
         // Ctrl+Shift+E: the same reveal without the toggle — always the
         // panel the current folder was opened from (Explorer parity).
         if (e.Key == Key.E && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift)) {
@@ -723,8 +805,8 @@ public partial class MainWindow : Window {
                 return;
             }
             if (!IsCodeEditorFocused) {
-                SearchBox.Focus();
-                SearchBox.SelectAll();
+                FileList.SearchBox.Focus();
+                FileList.SearchBox.SelectAll();
                 e.Handled = true;
 
                 return;
@@ -734,6 +816,16 @@ public partial class MainWindow : Window {
         if (e.Key == Key.F2 && CanStartRename(null)) {
             StartRename(null);
             e.Handled = true;
+            return;
+        }
+
+        // Esc in the preview: back to the list (PLAN B6). The find field
+        // there answers Esc itself - it closes, and the keyboard stays with
+        // the text.
+        if (e.Key == Key.Escape && Preview.IsKeyboardFocusWithin && !IsPreviewFindFocused) {
+            FileList.FocusList();
+            e.Handled = true;
+
             return;
         }
 
@@ -763,35 +855,8 @@ public partial class MainWindow : Window {
         }
     }
 
-    private void SearchBox_PreviewKeyDown(object sender, KeyEventArgs e) {
-        // Esc: one press does the lot — stop whatever is running, drop the
-        // filter and the results, and put the keyboard back in the list. A
-        // ladder of three presses meant the user had to know which rung
-        // they were on, and the answer to "what is going on" is never
-        // "press it again".
-        if (e.Key == Key.Escape) {
-            if (Vm.ContentSearch.IsRunning) {
-                Vm.StopSearchCommand.Execute(null);
-            }
-            Vm.ClearSearchCommand.Execute(null);
-            FileList.FocusList();
-            e.Handled = true;
-
-            return;
-        }
-
-        // Enter: the box is the shallow half — the filter has already been
-        // applied letter by letter — so Enter only moves the keyboard to
-        // the results. A deep search is set up in the search window, and
-        // Enter belongs to it there.
-        if (e.Key == Key.Enter) {
-            FileList.FocusList();
-            e.Handled = true;
-        }
-    }
-
-
-    private void SearchOptions_Click(object sender, RoutedEventArgs e) {
+    /// <summary>The filter field's "more" button, on the strip over the list (PLAN G6).</summary>
+    private void FileList_SearchWindowRequested(object? sender, EventArgs e) {
         OpenSearchWindow();
     }
 
@@ -816,7 +881,6 @@ public partial class MainWindow : Window {
                 }
                 args.Cancel = true;
                 _searchWindow!.Hide();
-                Vm.IsSearchWindowOpen = false;
             };
             // Whatever made the window go away, the keyboard has to land
             // somewhere the user can act. Without this, Esc left it on a
@@ -830,7 +894,6 @@ public partial class MainWindow : Window {
             };
         }
 
-        Vm.IsSearchWindowOpen = true;
         _searchWindow.ShowAndFocus();
     }
 
@@ -938,7 +1001,9 @@ public partial class MainWindow : Window {
             if (ReferenceEquals(hit, AddressBar)) {
                 return WindowZone.Address;
             }
-            if (ReferenceEquals(hit, SearchBox)) {
+            // Before the list's zone, which holds it on the strip over the
+            // rows (PLAN G6): the nearest of the two is the answer.
+            if (ReferenceEquals(hit, FileList.SearchBox)) {
                 return WindowZone.Search;
             }
             if (ReferenceEquals(hit, FileListZone)) {
@@ -989,7 +1054,7 @@ public partial class MainWindow : Window {
                 return true;
 
             case WindowZone.Search:
-                return SearchBox.Focus();
+                return FileList.SearchBox.Focus();
 
             case WindowZone.Bookmarks:
                 return FolderTrees.FocusBookmarks();

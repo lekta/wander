@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 using Wander.App.Diagnostics;
 using Wander.App.Dialogs;
@@ -182,6 +183,40 @@ public partial class App : Application {
         }
     }
 
+
+    /// <summary>
+    /// The web view's profile in the place the setting moved away from
+    /// (PLAN AD1) - removed on the pool once the settings are read, as the
+    /// scratch copies are swept. Not while another Wander runs: it may be
+    /// the one using it.
+    /// </summary>
+    internal static void SweepUnusedWebViewProfile() {
+        string unused = AppPaths.UseSystemTemp ? AppPaths.DataWebView2 : AppPaths.SystemWebView2;
+        _ = Task.Run(() => {
+            if (!Directory.Exists(unused) || OtherInstanceRunning()) {
+                return;
+            }
+
+            try {
+                Directory.Delete(unused, recursive: true);
+                Log.Info($"WebView2: the profile left in {unused} removed - the setting keeps it elsewhere now");
+            } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+                Log.Info($"WebView2: the profile left in {unused} not removed ({ex.Message})");
+            }
+        });
+    }
+
+    private static bool OtherInstanceRunning() {
+        using var self = System.Diagnostics.Process.GetCurrentProcess();
+        var others = System.Diagnostics.Process.GetProcessesByName(self.ProcessName);
+        try {
+            return others.Any(p => p.Id != self.Id);
+        } finally {
+            foreach (var process in others) {
+                process.Dispose();
+            }
+        }
+    }
 
     private static void SweepTempCopies() {
         // Both roots, whichever the setting picks today: the copies may

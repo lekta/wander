@@ -37,8 +37,16 @@ public interface IShellNamespace {
     /// is waiting for any more - the person has moved on - ends with
     /// <see cref="OperationCanceledException"/> instead of running out.
     /// </para>
+    ///
+    /// <para>
+    /// <paramref name="portions"/>, when given, hears the rows read so far,
+    /// in the order the whole listing will have, while a slow listing is
+    /// still being read (<c>PortionClock</c>, PLAN AD2) - the Recycle Bin
+    /// reports them; an archive lists at once and reports none.
+    /// </para>
     /// </summary>
-    IReadOnlyList<FileSystemEntry> Enumerate(string shellPath, CancellationToken ct = default);
+    IReadOnlyList<FileSystemEntry> Enumerate(
+        string shellPath, CancellationToken ct = default, IProgress<IReadOnlyList<FileSystemEntry>>? portions = null);
 
     /// <summary>
     /// Human-readable label for the namespace itself (e.g. "Корзина" for
@@ -65,6 +73,25 @@ public interface IShellNamespace {
     /// be opened to answer), so callers run it off the UI thread.
     /// </summary>
     bool CanNavigate(string path);
+
+    /// <summary>
+    /// The size of a file inside an archive as the archive states it; null
+    /// when it states none or the path is not such a file - what decides
+    /// whether an entry is worth unpacking to draw its thumbnail (PLAN AL).
+    /// Opens the archive, so off the UI thread.
+    /// </summary>
+    long? SizeOf(string path);
+
+    /// <summary>
+    /// The bytes of a file inside an archive through the handler's own
+    /// stream - what a zip gives, and the entry is read into memory with no
+    /// copy on disk (PLAN AL, decision of 2026-09-25). Null where the
+    /// handler has none - 7z, rar, tar - the path is not such a file, or
+    /// the read failed: <see cref="CopyOut"/> is the way then. The caller
+    /// checks <see cref="SizeOf"/> first: nothing here caps the size. Opens
+    /// the archive, so off the UI thread.
+    /// </summary>
+    byte[]? ReadEntry(string path);
 
     /// <summary>
     /// Copies items out of a namespace onto the real filesystem, using the

@@ -1,6 +1,10 @@
 using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.WindowsRuntime;
 using Wander.Core.FileSystem;
+using Wander.Core.Imaging;
 using Wander.Core.Logging;
+using Windows.Graphics.Imaging;
+using Windows.Storage.Streams;
 using ComTypes = System.Runtime.InteropServices.ComTypes;
 
 namespace Wander.Platform.Windows.FileSystem;
@@ -151,11 +155,18 @@ public sealed class WindowsClipboard : ISystemClipboard {
             bool virtualFiles =
                 IsClipboardFormatAvailable(RegisterClipboardFormat(FileGroupDescriptorW)) ||
                 IsClipboardFormatAvailable(RegisterClipboardFormat(FileGroupDescriptorA));
+            // Text and a picture are only noted here; their bytes are read
+            // when pasted (PLAN X). The system makes the plain and OEM text
+            // out of Unicode and the bitmap formats out of one another, so
+            // one of each answers for all of them.
+            bool text = IsClipboardFormatAvailable(CF_UNICODETEXT);
+            bool image = IsClipboardFormatAvailable(CF_DIB) || IsClipboardFormatAvailable(RegisterClipboardFormat(PngFormat));
+            bool anything = CountClipboardFormats() > 0;
 
             if (!IsClipboardFormatAvailable(CF_HDROP)) {
                 // Text, a bitmap, or an attachment that only exists inside
                 // the other application — either way, no paths to paste.
-                result = new ClipboardFiles(Array.Empty<string>(), false, virtualFiles);
+                result = new ClipboardFiles(Array.Empty<string>(), false, virtualFiles, text, image, anything);
                 return true;
             }
 
@@ -164,11 +175,73 @@ public sealed class WindowsClipboard : ISystemClipboard {
                 return false;
             }
 
-            result = new ClipboardFiles(paths, ReadIsCut(), virtualFiles && paths.Count == 0);
+            result = new ClipboardFiles(paths, ReadIsCut(), virtualFiles && paths.Count == 0, text, image, anything);
             return true;
         });
 
         return ok ? result : null;
+    }
+
+
+    public string? GetText() {
+        string? text = null;
+        WithClipboard(nameof(GetText), () => {
+            text = ReadGlobal(CF_UNICODETEXT) is { } bytes ? UnicodeUntilNull(bytes) : null;
+
+            return text is not null;
+        });
+
+        return text;
+    }
+
+
+    /// <summary>
+    /// The PNG an application put on the clipboard, as it is - browsers,
+    /// Office and the snipping tool do - or else the bitmap every picture
+    /// on it is offered as, encoded here. Called off the UI thread: the
+    /// clipboard is opened without a window then, which reading allows.
+    /// </summary>
+    public byte[]? GetImagePng() {
+        byte[]? png = null;
+        byte[]? dib = null;
+        WithClipboard(nameof(GetImagePng), () => {
+            png = ReadGlobal(RegisterClipboardFormat(PngFormat));
+            if (png is null || !IsPng(png)) {
+                png = null;
+                dib = ReadGlobal(CF_DIB);
+            }
+
+            return png is not null || dib is not null;
+        });
+        if (png is not null) {
+            return png;
+        }
+        if (dib is null || DibFile.ToBmp(dib) is not { } bmp) {
+            return null;
+        }
+
+        try {
+            return EncodePngAsync(bmp).GetAwaiter().GetResult();
+        } catch (Exception ex) {
+            _log.Warn($"[clipboard] the bitmap could not be made a PNG: {ex.Message}");
+
+            return null;
+        }
+    }
+
+
+    public IReadOnlyList<string> GetFormatNames() {
+        var names = new List<string>();
+        WithClipboard(nameof(GetFormatNames), () => {
+            uint format = 0;
+            while ((format = EnumClipboardFormats(format)) != 0) {
+                names.Add(FormatName(format));
+            }
+
+            return true;
+        });
+
+        return names;
     }
 
 
@@ -359,9 +432,118 @@ public sealed class WindowsClipboard : ISystemClipboard {
 
 
     // ------------------------------------------------------------------
+    // Text and pictures (PLAN X)
+    // ------------------------------------------------------------------
+
+    /// <summary>A copy of one format's memory block. Caller holds the clipboard. Null when the format is not there.</summary>
+    private static byte[]? ReadGlobal(uint format) {
+        if (format == 0 || !IsClipboardFormatAvailable(format)) {
+            return null;
+        }
+
+        IntPtr handle = GetClipboardData(format);
+        if (handle == IntPtr.Zero) {
+            return null;
+        }
+
+        long size = (long)GlobalSize(handle);
+        IntPtr block = GlobalLock(handle);
+        if (block == IntPtr.Zero || size <= 0 || size > int.MaxValue) {
+            if (block != IntPtr.Zero) {
+                GlobalUnlock(handle);
+            }
+
+            return null;
+        }
+
+        try {
+            var bytes = new byte[size];
+            Marshal.Copy(block, bytes, 0, bytes.Length);
+
+            return bytes;
+        } finally {
+            GlobalUnlock(handle);
+        }
+    }
+
+    /// <summary>The text of a <c>CF_UNICODETEXT</c> block: up to its terminator - the block is often bigger.</summary>
+    private static string UnicodeUntilNull(byte[] bytes) {
+        string all = System.Text.Encoding.Unicode.GetString(bytes, 0, bytes.Length & ~1);
+        int end = all.IndexOf('\0');
+
+        return end >= 0 ? all[..end] : all;
+    }
+
+    private static bool IsPng(byte[] bytes) {
+        return bytes.Length > 8 && bytes.AsSpan(0, 8).SequenceEqual(_pngSignature);
+    }
+
+    /// <summary>A <c>.bmp</c> file's bytes (<see cref="DibFile"/>) made a PNG, by WinRT's own coders - as <c>TgaThumbnail</c> does.</summary>
+    private static async Task<byte[]> EncodePngAsync(byte[] bmp) {
+        using var input = new InMemoryRandomAccessStream();
+        await input.WriteAsync(bmp.AsBuffer());
+        input.Seek(0);
+        var decoder = await BitmapDecoder.CreateAsync(BitmapDecoder.BmpDecoderId, input);
+        var pixels = await decoder.GetPixelDataAsync(
+            BitmapPixelFormat.Bgra8, BitmapAlphaMode.Straight, new BitmapTransform(),
+            ExifOrientationMode.IgnoreExifOrientation, ColorManagementMode.DoNotColorManage);
+
+        using var output = new InMemoryRandomAccessStream();
+        var encoder = await BitmapEncoder.CreateAsync(BitmapEncoder.PngEncoderId, output);
+        encoder.SetPixelData(
+            BitmapPixelFormat.Bgra8, BitmapAlphaMode.Straight,
+            decoder.PixelWidth, decoder.PixelHeight, decoder.DpiX, decoder.DpiY,
+            pixels.DetachPixelData());
+        await encoder.FlushAsync();
+
+        var png = new byte[output.Size];
+        output.Seek(0);
+        await output.ReadAsync(png.AsBuffer(), (uint)png.Length, InputStreamOptions.None);
+
+        return png;
+    }
+
+    /// <summary>
+    /// What a format is called, for the line naming what a paste could not
+    /// take: its registered name, or the constant's name for the ones
+    /// Windows predefines (those have none to ask for).
+    /// </summary>
+    private static string FormatName(uint format) {
+        var name = new char[256];
+        int length = GetClipboardFormatName(format, name, name.Length);
+        if (length > 0) {
+            return new string(name, 0, length);
+        }
+
+        return format switch {
+            1 => "CF_TEXT",
+            2 => "CF_BITMAP",
+            3 => "CF_METAFILEPICT",
+            4 => "CF_SYLK",
+            5 => "CF_DIF",
+            6 => "CF_TIFF",
+            7 => "CF_OEMTEXT",
+            8 => "CF_DIB",
+            9 => "CF_PALETTE",
+            10 => "CF_PENDATA",
+            11 => "CF_RIFF",
+            12 => "CF_WAVE",
+            13 => "CF_UNICODETEXT",
+            14 => "CF_ENHMETAFILE",
+            15 => "CF_HDROP",
+            16 => "CF_LOCALE",
+            17 => "CF_DIBV5",
+            _ => $"0x{format:X4}",
+        };
+    }
+
+
+    // ------------------------------------------------------------------
     // Interop
     // ------------------------------------------------------------------
 
+    private const uint CF_DIB = 8;
+    private const uint CF_UNICODETEXT = 13;
     private const uint CF_HDROP = 15;
     private const uint GMEM_MOVEABLE = 0x0002;
     private const int DROPEFFECT_COPY = 1;
@@ -376,6 +558,11 @@ public sealed class WindowsClipboard : ISystemClipboard {
     private const string PreferredDropEffect = "Preferred DropEffect";
     private const string FileGroupDescriptorW = "FileGroupDescriptorW";
     private const string FileGroupDescriptorA = "FileGroupDescriptor";
+
+    /// <summary>The registered format browsers, Office and the snipping tool put a picture's PNG under.</summary>
+    private const string PngFormat = "PNG";
+
+    private static readonly byte[] _pngSignature = { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
 
 
     [StructLayout(LayoutKind.Sequential)]
@@ -421,6 +608,15 @@ public sealed class WindowsClipboard : ISystemClipboard {
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern uint RegisterClipboardFormat(string lpszFormat);
 
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern int CountClipboardFormats();
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern uint EnumClipboardFormats(uint format);
+
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern int GetClipboardFormatName(uint format, [Out] char[] lpszFormatName, int cchMaxCount);
+
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     private static extern uint DragQueryFile(IntPtr hDrop, uint iFile, char[]? lpszFile, uint cch);
 
@@ -438,6 +634,9 @@ public sealed class WindowsClipboard : ISystemClipboard {
 
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern IntPtr GlobalLock(IntPtr hMem);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern UIntPtr GlobalSize(IntPtr hMem);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

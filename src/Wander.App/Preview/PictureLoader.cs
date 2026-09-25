@@ -46,17 +46,21 @@ internal static class PictureLoader {
     /// </summary>
     private const double SameShape = 0.02;
 
-    private static readonly HashSet<string> _jpeg = new(StringComparer.OrdinalIgnoreCase) {
-        ".jpg", ".jpeg", ".jpe", ".jfif",
-    };
+    /// <summary>
+    /// What WIC decodes at the size asked, not whole and then shrunk: JPEG
+    /// in the DCT, HEIF by its tiles - a 12-megapixel HEIC is 600-1000 ms
+    /// whole and about 250 fitted to a pane (stand 2026-09-25, PLAN B10).
+    /// </summary>
+    private static readonly HashSet<string> _scaled = new(
+        new[] { ".jpg", ".jpeg", ".jpe", ".jfif" }.Concat(ImageFormats.Heif), StringComparer.OrdinalIgnoreCase);
 
 
     /// <summary>
     /// The fitted copy of <paramref name="path"/> for a box of
     /// <paramref name="boxWidth"/> x <paramref name="boxHeight"/> device
-    /// pixels. JPEGs - files and the ones RAW containers carry - are
-    /// decoded at that size; everything else whole, as before. Null when
-    /// nothing could be decoded.
+    /// pixels. JPEGs - files and the ones RAW containers carry - and HEIF
+    /// are decoded at that size; everything else whole, as before. Null
+    /// when nothing could be decoded.
     /// </summary>
     public static DecodedPicture? Decode(
         string path, IImageMetadataReader? reader, double boxWidth, double boxHeight, CancellationToken ct) {
@@ -88,7 +92,7 @@ internal static class PictureLoader {
                 : null;
         }
 
-        if (_jpeg.Contains(Path.GetExtension(path))) {
+        if (_scaled.Contains(Path.GetExtension(path))) {
             return Fitted(ImageDecoder.StoredSize(path), orientation, boxWidth, boxHeight,
                 width => width is { } w ? ImageDecoder.File(path, w) : ImageDecoder.File(path)) is { } fitted
                 ? fitted with { Meta = meta }
@@ -152,7 +156,7 @@ internal static class PictureLoader {
     /// Off the UI thread: it may read the file.
     /// </summary>
     public static long DecodedBytes(string path, IImageMetadataReader? reader, double boxWidth, double boxHeight) {
-        bool fitted = ImageFormats.IsRaw(path) || _jpeg.Contains(Path.GetExtension(path));
+        bool fitted = ImageFormats.IsRaw(path) || _scaled.Contains(Path.GetExtension(path));
         if (fitted && boxWidth >= 1 && boxHeight >= 1) {
             return PictureMemory.BytesOf((int)boxWidth, (int)boxHeight);
         }

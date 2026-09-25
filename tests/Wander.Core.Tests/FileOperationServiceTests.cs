@@ -373,4 +373,50 @@ public class FileOperationServiceTests {
         Assert.Contains($"Recycle:{NewFolderPath}", bin.CallLog);
         Assert.DoesNotContain(NewFolderPath, fs.Directories);
     }
+
+
+    // --- A file made of the clipboard's text or picture (PLAN X) --------
+
+    [Fact]
+    public void CreateFile_WritesTheBytes_UnderTheNameAsked() {
+        var (ops, fs, _, _) = Setup();
+        fs.Directories.Add(BaseFolder);
+
+        string made = ops.CreateFile(BaseFolder, "Текст.txt", new byte[] { 1, 2 });
+
+        Assert.Equal(@"C:\base\Текст.txt", made);
+        Assert.Equal(new byte[] { 1, 2 }, fs.Files[made]);
+    }
+
+    [Fact]
+    public void CreateFile_NameTaken_TheNextNumber() {
+        var (ops, fs, _, _) = Setup();
+        fs.Directories.Add(BaseFolder);
+        fs.Files[@"C:\base\Текст.txt"] = new byte[1];
+        fs.Files[@"C:\base\Текст (1).txt"] = new byte[1];
+
+        Assert.Equal(@"C:\base\Текст (2).txt", ops.CreateFile(BaseFolder, "Текст.txt", new byte[1]));
+    }
+
+    [Fact]
+    public void CreateFile_PushesUndo_ThatRecyclesTheFile() {
+        var (ops, fs, bin, undo) = Setup();
+        fs.Directories.Add(BaseFolder);
+
+        string made = ops.CreateFile(BaseFolder, "Изображение.png", new byte[1]);
+        undo.Undo();
+
+        Assert.Contains($"Recycle:{made}", bin.CallLog);
+        Assert.False(fs.FileExists(made));
+    }
+
+    [Fact]
+    public void CreateFile_InTheWindowsTree_Refused() {
+        var (ops, fs, _, undo) = Setup();
+        string system = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32");
+
+        Assert.Throws<IOException>(() => ops.CreateFile(system, "Текст.txt", new byte[1]));
+        Assert.DoesNotContain(fs.CallLog, call => call.StartsWith("WriteNew:", StringComparison.Ordinal));
+        Assert.False(undo.CanUndo);
+    }
 }

@@ -28,16 +28,17 @@ public enum WindowZone {
 public static class WindowZones {
     /// <summary>
     /// Reading order: the top strip left to right, then the left pane top
-    /// to bottom, then the list. The preview pane is deliberately absent -
-    /// it has no keyboard behaviour yet, so a stop there would be a dead
-    /// end (see BACKLOG, "клавиатура в панели просмотра").
+    /// to bottom, then the filter field on the strip over the list (PLAN
+    /// G6, 2026-09-25) and the list. The preview pane is deliberately
+    /// absent: Ctrl+3 goes there and Esc comes back (PLAN B6), and a Tab
+    /// stop in it would trap the keyboard in a text box.
     /// </summary>
     private static readonly WindowZone[] _order = {
         WindowZone.Toolbar,
         WindowZone.Address,
-        WindowZone.Search,
         WindowZone.Bookmarks,
         WindowZone.Drives,
+        WindowZone.Search,
         WindowZone.FileList,
     };
 

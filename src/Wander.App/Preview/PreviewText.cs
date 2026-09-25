@@ -142,6 +142,17 @@ internal static class PreviewText {
     }
 
 
+    /// <summary>How many characters of the file's text <see cref="Clip"/> keeps, before its note.</summary>
+    public static int ShownChars(PreviewTextFile file) {
+        return Math.Min(file.Text.Length, MaxChars);
+    }
+
+    /// <summary>Whether <see cref="Clip"/> leaves anything out - the file goes past what was read, or past what the pane renders.</summary>
+    public static bool GoesOn(PreviewTextFile file) {
+        return file.Clipped || file.Text.Length > MaxChars;
+    }
+
+
     /// <summary>
     /// Markdown rendered to HTML. The note about a clipped file has to be
     /// Markdown too — a rule and an emphasised line, which is what "the
@@ -176,6 +187,20 @@ internal static class PreviewText {
             ul.contains-task-list {{ list-style: none; padding-left: 1.2em; }}
             {extraCss}
         </style></head><body>{body}</body></html>";
+    }
+
+
+    /// <summary>
+    /// The page an SVG is drawn on (PLAN B8): the picture as an image, fitted
+    /// to the pane either way - a vector has no size worth keeping - on the
+    /// surround's colour, as the pane draws a photograph. As an image it runs
+    /// no script and fetches nothing, whatever the file carries.
+    /// </summary>
+    public static string SvgPage(byte[] svg, string background) {
+        return "<!doctype html><html><head><meta charset='utf-8'><style>" +
+            $"html, body {{ margin: 0; height: 100%; background: {background}; }}" +
+            "img { display: block; width: 100%; height: 100%; object-fit: contain; box-sizing: border-box; padding: 4px; }" +
+            "</style></head><body><img src='data:image/svg+xml;base64," + Convert.ToBase64String(svg) + "'></body></html>";
     }
 
 

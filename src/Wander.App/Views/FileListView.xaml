@@ -35,6 +35,37 @@
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
 
         <!--
+            The glyphs that sit inside the filter field. Templated flat rather
+            than merely restyled: an ordinary WPF button dropped into a text
+            field reads as a second control with its own border, and the box
+            has to look like one field with affordances in it.
+        -->
+        <Style x:Key="BoxGlyphButton" TargetType="Button">
+            <Setter Property="Width" Value="22"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource TextMuted}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="2">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource ControlHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!--
             One star of the filter bar. Same shape as the preview footer's
             rating widget and deliberately so: the row that says "this photo
             has three stars" and the row that says "show me three stars"
@@ -538,58 +569,122 @@
 
     <DockPanel>
         <!--
-            Rating filter (PLAN J3). A strip rather than a menu item, and
-            visible only in folders where something is actually rated.
+            The strip over the list: what narrows it and how it is drawn -
+            one click from the rows it is about.
 
-            Both halves of that are deliberate. A filter is state that
-            removes rows, and state that removes rows has to be visible from
-            the screen it is removing them from — a filter left on inside a
-            menu is the "why is this folder empty" bug, and every photo
-            browser that hides one eventually grows a warning strip to
-            compensate. And a bar that appeared over every folder of source
-            code would be a permanent row of stars nobody can use, so it
-            follows MainViewModel.HasRatings, which the sidecar pass sets.
-
-            It filters in every view, not only the gallery: "three stars and
-            up" is as good a question in the table as it is in the grid.
+              * The filter field (PLAN G6, 2026-09-25): it was in the
+                window's toolbar, but it is about the list - the name
+                filter live, "name:text" through the files. It is what keeps
+                the strip on screen in every folder. One field; the search
+                window (Ctrl+Shift+F) stays as it was, and the field stays
+                while that window is open - the window only shows more of
+                the same criteria.
+              * The rating filter (PLAN J3), whenever the folder has
+                ratings: state that removes rows has to be visible from the
+                list it removes them from - a filter left on inside a menu
+                is the "why is this folder empty" bug. It filters in every
+                view, not only the gallery.
+              * The gallery's background, whenever the gallery is on: the
+                control you reach for while looking at the photographs.
         -->
         <Border x:Name="GalleryStrip"
                 DockPanel.Dock="Top"
                 Background="{StaticResource StripBackground}" BorderBrush="{StaticResource Separator}" BorderThickness="0,0,0,1"
                 Padding="6,3">
-            <!--
-                The strip carries two independent things, each with its own
-                reason to be here rather than in a menu, and each showing
-                only when it applies:
-
-                  * the rating filter, whenever the folder has ratings —
-                    state that removes rows has to be visible from the list
-                    it removes them from;
-                  * the gallery's background, whenever the gallery is on —
-                    it is the control you reach for while looking at the
-                    photographs, and three clicks into a menu is three
-                    clicks too many for a thing you flip to compare.
-
-                Neither of them applying means no strip at all, so an
-                ordinary folder in an ordinary view loses no height to it.
-            -->
-            <Border.Style>
-                <Style TargetType="Border">
-                    <Setter Property="Visibility" Value="Collapsed"/>
-                    <Style.Triggers>
-                        <DataTrigger Binding="{Binding HasRatings}" Value="True">
-                            <Setter Property="Visibility" Value="Visible"/>
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding ViewMode}" Value="Gallery">
-                            <Setter Property="Visibility" Value="Visible"/>
-                        </DataTrigger>
-                    </Style.Triggers>
-                </Style>
-            </Border.Style>
             <DockPanel>
-                <!-- Background switcher, right-aligned: it belongs to the
-                     view, not to the folder, so it stays out of the way of
-                     the filter that does. -->
+                <!--
+                    The filter field, at the right edge of the strip and 220
+                    wide whatever the window (decisions of 2026-09-25): the
+                    first child docked right, so it keeps its place when the
+                    gallery's swatches appear beside it. The two glyphs
+                    overlay the box rather than sitting in columns beside
+                    it: the field has to keep the whole width so it still
+                    looks like one control, and the TextBox's right padding
+                    is what keeps the caret out from under them.
+                -->
+                <Grid DockPanel.Dock="Right" Width="220" VerticalAlignment="Center" Margin="12,0,0,0">
+                    <TextBox x:Name="SearchBox"
+                             Padding="6,4,48,4"
+                             Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="{x:Static res:Strings.SearchHint}"
+                             PreviewKeyDown="SearchBox_PreviewKeyDown"/>
+                    <!-- Only the "more" glyph is up while the box is empty: the placeholder runs under where the other two would be. -->
+                    <TextBlock Text="{x:Static res:Strings.SearchPlaceholder}"
+                               Foreground="{StaticResource TextPlaceholder}"
+                               Margin="8,0,28,0"
+                               TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center"
+                               IsHitTestVisible="False">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasSearchQuery}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+
+                    <StackPanel Orientation="Horizontal"
+                                HorizontalAlignment="Right" VerticalAlignment="Center"
+                                Margin="0,0,3,0">
+                        <!--
+                            Stop replaces Clear while a pass is walking the disk:
+                            the same spot, because they answer the same impulse —
+                            "that is not what I meant, undo it".
+                        -->
+                        <Button Content="&#x25A0;" Style="{StaticResource BoxGlyphButton}"
+                                Command="{Binding StopSearchCommand}"
+                                ToolTip="{x:Static res:Strings.SearchStop}"
+                                Visibility="{Binding ContentSearch.IsRunning, Converter={StaticResource BoolToVisibility}}"/>
+                        <Button Content="&#x2715;"
+                                Command="{Binding ClearSearchCommand}"
+                                ToolTip="{x:Static res:Strings.SearchClear}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource BoxGlyphButton}">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding HasSearchQuery}" Value="True"/>
+                                                <Condition Binding="{Binding ContentSearch.IsRunning}" Value="False"/>
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </MultiDataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                        <!--
+                            Marked when the search window holds something other
+                            than the two text criteria — subfolders, the whole
+                            machine, binaries. Those do not fit in the box's own
+                            text, and a list narrowed by a switch set in a window
+                            that is now closed has to say so somewhere.
+                        -->
+                        <Button Content="&#x22EE;"
+                                FontSize="13"
+                                Click="SearchOptions_Click"
+                                ToolTip="{x:Static res:Strings.SearchOptions}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource BoxGlyphButton}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding ContentSearch.HasNonDefaultOptions}" Value="True">
+                                            <Setter Property="Foreground" Value="{StaticResource AccentText}"/>
+                                            <Setter Property="FontWeight" Value="Bold"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Background switcher, left of the filter field: it belongs
+                     to the view, not to the folder, so it stays out of the
+                     way of the filter that does. -->
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
                             VerticalAlignment="Center"
                             Visibility="{Binding ViewMode, Converter={StaticResource EnumToVisibility}, ConverterParameter=Gallery}">
@@ -610,7 +705,7 @@
                                  ToolTip="{x:Static res:Strings.GalleryBackgroundDark}"/>
                 </StackPanel>
 
-                <StackPanel Orientation="Horizontal"
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
                             Visibility="{Binding HasRatings, Converter={StaticResource BoolToVisibility}}">
                 <Button Style="{StaticResource FilterUnratedStar}" CommandParameter="0"/>
                 <Button Style="{StaticResource FilterStar}" CommandParameter="1"

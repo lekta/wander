@@ -20,6 +20,15 @@ internal sealed class FakeSystemClipboard : ISystemClipboard {
     /// <summary>The object handed to <see cref="SetShellObject"/>, if any.</summary>
     public object? SharedObject { get; private set; }
 
+    /// <summary>What <see cref="GetText"/> reads back - set together with <c>HasText</c> in <see cref="Content"/>.</summary>
+    public string? Text { get; set; }
+
+    /// <summary>What <see cref="GetImagePng"/> reads back.</summary>
+    public byte[]? ImagePng { get; set; }
+
+    /// <summary>What <see cref="GetFormatNames"/> reads back.</summary>
+    public IReadOnlyList<string> FormatNames { get; set; } = Array.Empty<string>();
+
 
     public string? LastError { get; private set; }
 
@@ -32,7 +41,7 @@ internal sealed class FakeSystemClipboard : ISystemClipboard {
         }
 
         LastError = null;
-        Content = new ClipboardFiles(paths.ToList(), isCut);
+        Content = new ClipboardFiles(paths.ToList(), isCut, HasAnything: paths.Count > 0);
 
         return true;
     }
@@ -51,7 +60,7 @@ internal sealed class FakeSystemClipboard : ISystemClipboard {
 
         LastError = null;
         SharedObject = dataObject;
-        Content = new ClipboardFiles(Array.Empty<string>(), false, HasUnsupportedFiles: true);
+        Content = new ClipboardFiles(Array.Empty<string>(), false, HasUnsupportedFiles: true, HasAnything: true);
 
         return true;
     }
@@ -66,6 +75,22 @@ internal sealed class FakeSystemClipboard : ISystemClipboard {
         LastError = null;
 
         return Content;
+    }
+
+    public string? GetText() {
+        CallLog.Add("GetText");
+
+        return Fails ? null : Text;
+    }
+
+    public byte[]? GetImagePng() {
+        CallLog.Add("GetImagePng");
+
+        return Fails ? null : ImagePng;
+    }
+
+    public IReadOnlyList<string> GetFormatNames() {
+        return FormatNames;
     }
 
     public void Clear() {

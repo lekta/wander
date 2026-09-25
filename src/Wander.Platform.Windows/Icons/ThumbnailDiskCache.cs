@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Wander.Core.Icons;
 using Wander.Core.Logging;
+using Wander.Core.Shell;
 
 namespace Wander.Platform.Windows.Icons;
 
@@ -287,6 +288,12 @@ public sealed class ThumbnailDiskCache {
     private string? TryBuildFileName(string sourcePath) {
         try {
             var info = new FileInfo(sourcePath);
+            // A picture inside an archive (PLAN AL): the archive's own
+            // stamp, beside the path of the entry - a rebuilt archive
+            // orphans every thumbnail of it.
+            if (!info.Exists && Archives.Of(sourcePath) is { IsRoot: false } archive) {
+                info = new FileInfo(archive.Archive);
+            }
             if (!info.Exists) {
                 return null;
             }

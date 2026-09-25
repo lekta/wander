@@ -48,6 +48,8 @@ public static class HotkeyCatalog {
             new HotkeyRow("Tab / Shift + Tab", Strings.HotkeyNextPane),
             new HotkeyRow("Ctrl + 1", Strings.HotkeyToTree),
             new HotkeyRow("Ctrl + 2", Strings.HotkeyToList),
+            new HotkeyRow("Ctrl + 3", Strings.HotkeyToPreview),
+            new HotkeyRow("Esc в панели просмотра", Strings.HotkeyPreviewEscape),
             new HotkeyRow("Ctrl + Shift + E", Strings.HotkeyRevealInTree),
             new HotkeyRow("Ctrl + Q", Strings.HotkeyTogglePreview),
             new HotkeyRow("Ctrl + B", Strings.HotkeyToggleFolders),
@@ -70,6 +72,7 @@ public static class HotkeyCatalog {
         new HotkeyGroup(Strings.HotkeyGroupSearch, new[] {
             new HotkeyRow("Ctrl + A", Strings.HotkeySelectAll),
             new HotkeyRow("Ctrl + F", Strings.HotkeyFilter),
+            new HotkeyRow("F3 / Shift + F3", Strings.HotkeyFindNext),
             new HotkeyRow("Ctrl + Shift + F", Strings.HotkeySearchWindow),
             new HotkeyRow("Enter в окне поиска", Strings.HotkeySearchNow),
             new HotkeyRow("Esc в окне поиска", Strings.HotkeySearchClose),

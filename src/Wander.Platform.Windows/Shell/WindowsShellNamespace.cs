@@ -54,6 +54,14 @@ public sealed class WindowsShellNamespace : IShellNamespace {
         return ParseArchive(path) is not null && _archives.CanNavigate(path);
     }
 
+    public long? SizeOf(string path) {
+        return ParseArchive(path) is { IsRoot: false } ? _archives.SizeOf(path) : null;
+    }
+
+    public byte[]? ReadEntry(string path) {
+        return ParseArchive(path) is { IsRoot: false } ? _archives.ReadEntry(path) : null;
+    }
+
     public Task CopyOut(
         IReadOnlyList<CopyOutItem> items, string targetFolder,
         IProgress<string>? progress, CancellationToken ct,
@@ -73,9 +81,10 @@ public sealed class WindowsShellNamespace : IShellNamespace {
         return IsRecycleBin(shellPath) ? Text.Get("SpecialFolderRecycleBin") : null;
     }
 
-    public IReadOnlyList<FileSystemEntry> Enumerate(string shellPath, CancellationToken ct = default) {
+    public IReadOnlyList<FileSystemEntry> Enumerate(
+        string shellPath, CancellationToken ct = default, IProgress<IReadOnlyList<FileSystemEntry>>? portions = null) {
         if (IsRecycleBin(shellPath)) {
-            return _bin.Enumerate(ct);
+            return _bin.Enumerate(ct, portions);
         }
         if (ParseArchive(shellPath) is not null) {
             return _archives.Enumerate(shellPath, ct);

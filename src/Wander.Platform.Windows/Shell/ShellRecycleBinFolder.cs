@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Wander.Core.FileSystem;
+using Wander.Core.Listing;
 using Wander.Core.Logging;
 using Wander.Core.Shell;
 using static Wander.Platform.Windows.Shell.ShellItemInterop;
@@ -42,13 +43,19 @@ internal sealed class ShellRecycleBinFolder {
     /// the icon provider and for the launcher. Recycled folders are not
     /// walked into.
     /// </summary>
+    /// <param name="portions">
+    /// Hears the rows read so far, sorted, while a slow listing is still
+    /// being read (<see cref="PortionClock"/>, PLAN AD2): on a cold disk the
+    /// seconds are spread over the rows - every item is a <c>$I</c> file
+    /// read - and the list fills in instead of waiting for the last one.
+    /// </param>
     /// <exception cref="OperationCanceledException">The person moved on before the listing ended.</exception>
-    public IReadOnlyList<FileSystemEntry> Enumerate(CancellationToken ct) {
-        return OwnApartment.Run("Wander recycle bin listing", () => ReadAll(ct));
+    public IReadOnlyList<FileSystemEntry> Enumerate(CancellationToken ct, IProgress<IReadOnlyList<FileSystemEntry>>? portions = null) {
+        return OwnApartment.Run("Wander recycle bin listing", () => ReadAll(ct, portions));
     }
 
 
-    private IReadOnlyList<FileSystemEntry> ReadAll(CancellationToken ct) {
+    private IReadOnlyList<FileSystemEntry> ReadAll(CancellationToken ct, IProgress<IReadOnlyList<FileSystemEntry>>? portions) {
         var watch = System.Diagnostics.Stopwatch.StartNew();
         var iid = IID_IShellItem;
         int hr = SHCreateItemFromParsingName(ShellPaths.RecycleBin, IntPtr.Zero, ref iid, out object rawFolder);
@@ -74,6 +81,8 @@ internal sealed class ShellRecycleBinFolder {
 
             long openedMs = watch.ElapsedMilliseconds;
             long firstRowMs = -1;
+            int portionsGiven = 0;
+            var clock = new PortionClock();
             var batch = new IShellItem[1];
 
             while (items.Next(1, batch, out uint fetched) == 0 && fetched == 1) {
@@ -90,6 +99,10 @@ internal sealed class ShellRecycleBinFolder {
                     if (BuildEntry(item) is { } entry) {
                         result.Add(entry);
                     }
+                    if (portions is not null && result.Count > 0 && clock.Due(watch.ElapsedMilliseconds)) {
+                        portions.Report(NewestFirst(result));
+                        portionsGiven++;
+                    }
                 } catch (Exception ex) when (ex is not OperationCanceledException) {
                     _log.Warn($"Recycle bin: skipped an item ({ex.Message})");
                 } finally {
@@ -99,18 +112,25 @@ internal sealed class ShellRecycleBinFolder {
 
             // The control line for the bin's slowness (PLAN AD2): where a
             // cold listing spends its seconds - before the first row, or
-            // spread over all of them.
+            // spread over all of them - and how many portions the list got
+            // while it waited.
             _log.Info(
                 $"Recycle bin: opened in {openedMs} ms, first row after {Math.Max(firstRowMs, 0)} ms, " +
-                $"{result.Count} rows in {watch.ElapsedMilliseconds - openedMs} ms");
+                $"{result.Count} rows in {watch.ElapsedMilliseconds - openedMs} ms, {portionsGiven} portion(s) on the way");
         } finally {
             Release(items);
             Release(folder);
         }
 
-        result.Sort((a, b) => b.ModifiedUtc.CompareTo(a.ModifiedUtc));
+        return NewestFirst(result);
+    }
 
-        return result;
+    /// <summary>The rows in the bin's order: newest deletion first - a copy, so a portion given away is not sorted under its reader.</summary>
+    private static List<FileSystemEntry> NewestFirst(List<FileSystemEntry> rows) {
+        var sorted = new List<FileSystemEntry>(rows);
+        sorted.Sort((a, b) => b.ModifiedUtc.CompareTo(a.ModifiedUtc));
+
+        return sorted;
     }
 
     private static FileSystemEntry? BuildEntry(IShellItem item) {

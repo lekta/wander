@@ -28,7 +28,6 @@
         <conv:BitmapPixelSizeConverter x:Key="BitmapPixelSize"/>
         <conv:RankStarConverter x:Key="RankStar"/>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
-        <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility"/>
 
         <Style x:Key="ToolbarButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
@@ -69,37 +68,6 @@
         <Style x:Key="CrumbButton" TargetType="Button" BasedOn="{StaticResource ToolbarButton}">
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Padding" Value="5,3"/>
-        </Style>
-
-        <!--
-            The glyphs that sit inside the search box. Templated flat rather
-            than merely restyled: an ordinary WPF button dropped into a text
-            field reads as a second control with its own border, and the box
-            has to look like one field with affordances in it.
-        -->
-        <Style x:Key="BoxGlyphButton" TargetType="Button">
-            <Setter Property="Width" Value="22"/>
-            <Setter Property="Focusable" Value="False"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="{StaticResource TextMuted}"/>
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="2">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource ControlHover}"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.4"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
         </Style>
 
     </Window.Resources>
@@ -394,107 +362,6 @@
                     </MenuItem>
                 </Menu>
             </StackPanel>
-
-            <!--
-                Search box. DockPanel.Dock="Right" placed AFTER the right-side
-                menus = sits to their LEFT, i.e. immediately to the right of the
-                address bar. Grid hosts a placeholder TextBlock overlaid on the
-                TextBox; the placeholder's visibility flips on HasSearchQuery.
-            -->
-            <!--
-                Hidden while the search window is open: the same criteria in
-                two places is how one of them ends up stale, and the window
-                is the one that can show all of them.
-            -->
-            <Grid DockPanel.Dock="Right"
-                  Width="250" VerticalAlignment="Center"
-                  Margin="0,4,4,4"
-                  Visibility="{Binding IsSearchWindowOpen, Converter={StaticResource InverseBoolToVisibility}}">
-                <!--
-                    The two glyphs overlay the box rather than sitting in
-                    columns beside it: the field has to keep the whole width
-                    so it still looks like one control, and the TextBox's
-                    right padding is what keeps the caret out from under
-                    them.
-                -->
-                <TextBox x:Name="SearchBox"
-                         Padding="6,4,48,4"
-                         Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
-                         ToolTip="{x:Static res:Strings.SearchHint}"
-                         PreviewKeyDown="SearchBox_PreviewKeyDown"/>
-                <TextBlock Text="{x:Static res:Strings.SearchPlaceholder}"
-                           Foreground="{StaticResource TextPlaceholder}"
-                           Margin="8,0,50,0"
-                           TextTrimming="CharacterEllipsis"
-                           VerticalAlignment="Center"
-                           IsHitTestVisible="False">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Visibility" Value="Visible"/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding HasSearchQuery}" Value="True">
-                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
-
-                <StackPanel Orientation="Horizontal"
-                            HorizontalAlignment="Right" VerticalAlignment="Center"
-                            Margin="0,0,3,0">
-                    <!--
-                        Stop replaces Clear while a pass is walking the disk:
-                        the same spot, because they answer the same impulse —
-                        "that is not what I meant, undo it".
-                    -->
-                    <Button Content="&#x25A0;" Style="{StaticResource BoxGlyphButton}"
-                            Command="{Binding StopSearchCommand}"
-                            ToolTip="{x:Static res:Strings.SearchStop}"
-                            Visibility="{Binding ContentSearch.IsRunning, Converter={StaticResource BoolToVisibility}}"/>
-                    <Button Content="&#x2715;"
-                            Command="{Binding ClearSearchCommand}"
-                            ToolTip="{x:Static res:Strings.SearchClear}">
-                        <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource BoxGlyphButton}">
-                                <Setter Property="Visibility" Value="Collapsed"/>
-                                <Style.Triggers>
-                                    <MultiDataTrigger>
-                                        <MultiDataTrigger.Conditions>
-                                            <Condition Binding="{Binding HasSearchQuery}" Value="True"/>
-                                            <Condition Binding="{Binding ContentSearch.IsRunning}" Value="False"/>
-                                        </MultiDataTrigger.Conditions>
-                                        <Setter Property="Visibility" Value="Visible"/>
-                                    </MultiDataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                    </Button>
-                    <!--
-                        Marked when the search window holds something other
-                        than the two text criteria — subfolders, the whole
-                        machine, binaries. Those do not fit in the box's own
-                        text, and a list narrowed by a switch set in a window
-                        that is now closed has to say so somewhere.
-                    -->
-                    <Button Content="&#x22EE;"
-                            FontSize="13"
-                            Click="SearchOptions_Click"
-                            ToolTip="{x:Static res:Strings.SearchOptions}">
-                        <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource BoxGlyphButton}">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding ContentSearch.HasNonDefaultOptions}" Value="True">
-                                        <Setter Property="Foreground" Value="{StaticResource AccentText}"/>
-                                        <Setter Property="FontWeight" Value="Bold"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                    </Button>
-                </StackPanel>
-
-            </Grid>
 
             <!--
                 Address bar — one strip with two faces:
@@ -833,7 +700,8 @@
                                     Drop="OnDrop"
                                     DragStartRequested="FileList_DragStartRequested"
                                     ContextMenuRequested="FileList_ContextMenuRequested"
-                                    FullscreenRequested="FileList_FullscreenRequested"/>
+                                    FullscreenRequested="FileList_FullscreenRequested"
+                                    SearchWindowRequested="FileList_SearchWindowRequested"/>
             </Border>
 
             <!-- Splitter between right pane and preview -->

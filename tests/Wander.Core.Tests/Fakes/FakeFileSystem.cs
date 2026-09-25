@@ -120,6 +120,14 @@ internal class FakeFileSystem : IFileSystem {
         Files[path] = content;
     }
 
+    public void WriteNew(string path, byte[] content) {
+        CallLog.Add($"WriteNew:{path}");
+        if (Files.ContainsKey(path) || Directories.Contains(path)) {
+            throw new IOException($"The file '{path}' already exists.");
+        }
+        Files[path] = content;
+    }
+
     public void ClearReadOnly(string path) {
         CallLog.Add($"ClearReadOnly:{path}");
     }

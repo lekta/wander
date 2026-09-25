@@ -70,11 +70,22 @@ internal sealed class FakeShellNamespace : IShellNamespace {
         return _folders.Contains(path);
     }
 
+    public long? SizeOf(string path) {
+        return _sizes.TryGetValue(path, out long declared) ? declared
+            : _files.TryGetValue(path, out string? content) ? content.Length
+            : null;
+    }
+
+    public byte[]? ReadEntry(string path) {
+        return _files.TryGetValue(path, out string? content) ? System.Text.Encoding.UTF8.GetBytes(content) : null;
+    }
+
     public string? GetDisplayName(string shellPath) {
         return null;
     }
 
-    public IReadOnlyList<FileSystemEntry> Enumerate(string shellPath, CancellationToken ct = default) {
+    public IReadOnlyList<FileSystemEntry> Enumerate(
+        string shellPath, CancellationToken ct = default, IProgress<IReadOnlyList<FileSystemEntry>>? portions = null) {
         var children = new List<FileSystemEntry>();
         foreach (string folder in _folders) {
             if (IsChildOf(folder, shellPath)) {
