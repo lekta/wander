@@ -32,6 +32,10 @@ public sealed class SearchController : INotifyPropertyChanged {
     private IReadOnlyList<FileSystemEntry> _source = Array.Empty<FileSystemEntry>();
     private CancellationTokenSource? _cts;
 
+    // The user rearranged the list - a filter changed, the rows came in
+    // another order - and no projection has been published since.
+    private bool _rearranged;
+
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -39,8 +43,11 @@ public sealed class SearchController : INotifyPropertyChanged {
     /// Fires after a filter pass completes with a new projection. The owner
     /// pushes <c>FilteredEntries</c> into the bound collection from this
     /// handler. Cancelled passes do NOT fire — only the latest survivor does.
+    /// The flag is true for the first projection since the user rearranged
+    /// the list - changed a filter, or handed the rows in another order
+    /// (<see cref="SetSource"/>): the row the eye was on is to be followed.
     /// </summary>
-    public event Action<IReadOnlyList<FileSystemEntry>>? FilteredChanged;
+    public event Action<IReadOnlyList<FileSystemEntry>, bool>? FilteredChanged;
 
     /// <summary>
     /// Fires when <see cref="Replace"/> changed rows that were on screen
@@ -74,6 +81,7 @@ public sealed class SearchController : INotifyPropertyChanged {
             // Parsed here rather than in the loop: the mask is re-read on
             // every keystroke and applied to every row of the folder.
             _name = NameFilter.Parse(value);
+            _rearranged = true;
             Raise();
             Raise(nameof(HasQuery));
             _ = ApplyAsync();
@@ -97,6 +105,7 @@ public sealed class SearchController : INotifyPropertyChanged {
                 return;
             }
             _rating = value;
+            _rearranged = true;
             Raise();
             Raise(nameof(HasRatingFilter));
             _ = ApplyAsync();
@@ -115,8 +124,11 @@ public sealed class SearchController : INotifyPropertyChanged {
     /// through <see cref="FilteredChanged"/> on the calling thread once the
     /// async filter completes.
     /// </summary>
-    public void SetSource(IReadOnlyList<FileSystemEntry> source) {
+    /// <param name="source">The folder's rows, before the filters.</param>
+    /// <param name="rearranged">The rows come in an order the user has just chosen.</param>
+    public void SetSource(IReadOnlyList<FileSystemEntry> source, bool rearranged = false) {
         _source = source ?? Array.Empty<FileSystemEntry>();
+        _rearranged |= rearranged;
         _ = ApplyAsync();
     }
 
@@ -127,6 +139,7 @@ public sealed class SearchController : INotifyPropertyChanged {
     /// </summary>
     public void Reset() {
         _cts?.Cancel();
+        _rearranged = false;
         if (_query.Length > 0) {
             _query = "";
             _name = NameFilter.Empty;
@@ -220,7 +233,7 @@ public sealed class SearchController : INotifyPropertyChanged {
         var source = _source;
 
         if (name.IsEmpty && !rating.IsActive) {
-            FilteredChanged?.Invoke(source);
+            Publish(source);
             return;
         }
 
@@ -251,7 +264,18 @@ public sealed class SearchController : INotifyPropertyChanged {
         if (token.IsCancellationRequested) {
             return;
         }
-        FilteredChanged?.Invoke(filtered);
+        Publish(filtered);
+    }
+
+    /// <summary>
+    /// A projection out, with whether it is the first since the user
+    /// rearranged the list. Only the latest pass publishes, and it was
+    /// started after the change, so it is the one that shows it.
+    /// </summary>
+    private void Publish(IReadOnlyList<FileSystemEntry> rows) {
+        bool rearranged = _rearranged;
+        _rearranged = false;
+        FilteredChanged?.Invoke(rows, rearranged);
     }
 
     private void Raise([CallerMemberName] string? name = null) {

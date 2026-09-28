@@ -1,7 +1,6 @@
 using System.IO;
 using System.Windows.Threading;
 using Wander.App.Resources;
-using Wander.App.ViewModels;
 using Wander.Core.FileSystem;
 using Wander.Core.Search;
 
@@ -40,7 +39,7 @@ public sealed class SearchResultsController {
 
     private readonly ContentSearchController _search;
     private readonly IFileSystem _fs;
-    private readonly SettingsViewModel _settings;
+    private readonly Func<SortOptions> _sort;
     private readonly Dispatcher _dispatcher;
 
     private readonly List<FileSystemEntry> _rows = new();
@@ -51,11 +50,12 @@ public sealed class SearchResultsController {
     private string? _root;
 
 
+    /// <param name="sort">The order results are shown in - the open folder's, asked at each repaint.</param>
     public SearchResultsController(
-        ContentSearchController search, IFileSystem fs, SettingsViewModel settings, Dispatcher dispatcher) {
+        ContentSearchController search, IFileSystem fs, Func<SortOptions> sort, Dispatcher dispatcher) {
         _search = search;
         _fs = fs;
-        _settings = settings;
+        _sort = sort;
         _dispatcher = dispatcher;
     }
 
@@ -249,8 +249,7 @@ public sealed class SearchResultsController {
         }
         _dirty = false;
 
-        var sort = new SortOptions(_settings.SortKey, _settings.SortAscending, _settings.GroupFoldersFirst);
-        var sorted = EntryComparers.Sort(_rows, sort);
+        var sorted = EntryComparers.Sort(_rows, _sort());
 
         RowsChanged?.Invoke(this, _hereFirst ? HereFirst(sorted) : sorted);
     }

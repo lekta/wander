@@ -1,5 +1,6 @@
 using Wander.Core.Actions;
 using Wander.Core.FileSystem;
+using Wander.Core.Folders;
 using Wander.Core.Rename;
 
 namespace Wander.Core.Menu;
@@ -63,6 +64,18 @@ public sealed record ContextMenuTarget {
     /// catalog's <see cref="CustomAction.DebugOnly"/> rows are offered too.
     /// </summary>
     public bool ShowDebug { get; init; }
+
+    /// <summary>The view of the folder on screen - its row under "Вид" is checked.</summary>
+    public ViewMode View { get; init; }
+
+    /// <summary>Why the folder on screen has that view: the caption of "Вид", the check on "Автоматически".</summary>
+    public ViewReason ViewReason { get; init; } = ViewReason.Default;
+
+    /// <summary>The order of the folder on screen - its rows under "Сортировка" are checked.</summary>
+    public SortOptions Sort { get; init; } = SortOptions.Default;
+
+    /// <summary>The order is the folder's own (<see cref="FolderRecord.Sort"/>) rather than the default one.</summary>
+    public bool SortPinned { get; init; }
 
 
     /// <summary>Exactly one item under the cursor — the precondition for Rename / Properties.</summary>

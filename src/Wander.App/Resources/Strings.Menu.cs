@@ -84,6 +84,21 @@ public static partial class Strings {
     /// <summary>Папки сверху</summary>
     public static string MenuSortFoldersFirst => Get(nameof(MenuSortFoldersFirst));
 
+    /// <summary>Закрепить этот порядок за открытой папкой</summary>
+    public static string MenuSortPinHint => Get(nameof(MenuSortPinHint));
+
+    /// <summary>По умолчанию</summary>
+    public static string MenuSortAuto => Get(nameof(MenuSortAuto));
+
+    /// <summary>Снять закрепление: порядок по умолчанию</summary>
+    public static string MenuSortAutoHint => Get(nameof(MenuSortAutoHint));
+
+    /// <summary>Сделать сортировкой по умолчанию</summary>
+    public static string MenuSortMakeDefault => Get(nameof(MenuSortMakeDefault));
+
+    /// <summary>Для папок без закрепления; с открытой папки закрепление снимается</summary>
+    public static string MenuSortMakeDefaultHint => Get(nameof(MenuSortMakeDefaultHint));
+
     /// <summary>Обновить</summary>
     public static string MenuRefresh => Get(nameof(MenuRefresh));
 

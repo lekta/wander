@@ -31,10 +31,15 @@ public class SearchControllerTests {
     /// out to keep a misbehaving controller from hanging the test runner.
     /// </summary>
     private static async Task<IReadOnlyList<FileSystemEntry>> WaitForNextFilteredAsync(SearchController sc, TimeSpan? timeout = null) {
-        var tcs = new TaskCompletionSource<IReadOnlyList<FileSystemEntry>>(TaskCreationOptions.RunContinuationsAsynchronously);
-        void Handler(IReadOnlyList<FileSystemEntry> result) {
+        return (await WaitForNextPassAsync(sc, timeout)).Rows;
+    }
+
+    /// <summary>The next emission with its flag: is it the first since the list was rearranged.</summary>
+    private static async Task<(IReadOnlyList<FileSystemEntry> Rows, bool Rearranged)> WaitForNextPassAsync(SearchController sc, TimeSpan? timeout = null) {
+        var tcs = new TaskCompletionSource<(IReadOnlyList<FileSystemEntry>, bool)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        void Handler(IReadOnlyList<FileSystemEntry> result, bool rearranged) {
             sc.FilteredChanged -= Handler;
-            tcs.TrySetResult(result);
+            tcs.TrySetResult((result, rearranged));
         }
         sc.FilteredChanged += Handler;
         var winner = await Task.WhenAny(tcs.Task, Task.Delay(timeout ?? TimeSpan.FromSeconds(2)));
@@ -164,7 +169,7 @@ public class SearchControllerTests {
         await settled;
 
         int filteredFires = 0;
-        sc.FilteredChanged += _ => filteredFires++;
+        sc.FilteredChanged += (_, _) => filteredFires++;
 
         sc.Reset();
 
@@ -214,7 +219,7 @@ public class SearchControllerTests {
         await initial;
 
         var lastResults = new List<IReadOnlyList<FileSystemEntry>>();
-        sc.FilteredChanged += r => lastResults.Add(r);
+        sc.FilteredChanged += (r, _) => lastResults.Add(r);
 
         sc.Query = "a";
         sc.Query = "ap";
@@ -331,6 +336,67 @@ public class SearchControllerTests {
 
         Assert.Contains(nameof(SearchController.RatingFilter), seen);
         Assert.Contains(nameof(SearchController.HasRatingFilter), seen);
+    }
+
+
+    // --- Rearranging: what the list is to follow ---------------------------
+
+    [Fact]
+    public async Task AFilterChange_IsReportedAsARearrangement_Once() {
+        var sc = new SearchController();
+        var initial = WaitForNextPassAsync(sc);
+        sc.SetSource(new[] { Photo("a.jpg", rank: 5), Photo("b.jpg") });
+        Assert.False((await initial).Rearranged);
+
+        var filtered = WaitForNextPassAsync(sc);
+        sc.RatingFilter = RatingFilter.None.PickRank(3);
+        Assert.True((await filtered).Rearranged);
+
+        // The watcher's next listing is not the user's doing.
+        var relisted = WaitForNextPassAsync(sc);
+        sc.SetSource(new[] { Photo("a.jpg", rank: 5), Photo("b.jpg"), Photo("c.jpg") });
+        Assert.False((await relisted).Rearranged);
+    }
+
+    [Fact]
+    public async Task ANameFilterTakenOff_IsARearrangement() {
+        var sc = new SearchController();
+        sc.SetSource(new[] { _apple, _banana });
+        var typed = WaitForNextPassAsync(sc);
+        sc.Query = "apple";
+        await typed;
+
+        var cleared = WaitForNextPassAsync(sc);
+        sc.Query = "";
+
+        var pass = await cleared;
+        Assert.Equal(2, pass.Rows.Count);
+        Assert.True(pass.Rearranged);
+    }
+
+    [Fact]
+    public async Task RowsInANewOrder_AreARearrangement_WhenTheCallerSaysSo() {
+        var sc = new SearchController();
+        sc.SetSource(new[] { _apple, _banana });
+
+        var next = WaitForNextPassAsync(sc);
+        sc.SetSource(new[] { _banana, _apple }, rearranged: true);
+
+        Assert.True((await next).Rearranged);
+    }
+
+    [Fact]
+    public async Task Reset_DropsARearrangementNotYetShown() {
+        // A filter changed and the folder was left before its pass landed:
+        // the next folder's rows are an arrival, not something to follow.
+        var sc = new SearchController();
+        sc.RatingFilter = RatingFilter.None.PickRank(3);
+        sc.Reset();
+
+        var next = WaitForNextPassAsync(sc);
+        sc.SetSource(new[] { _apple });
+
+        Assert.False((await next).Rearranged);
     }
 
 

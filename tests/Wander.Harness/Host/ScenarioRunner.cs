@@ -10,7 +10,9 @@ using System.Windows.Input;
 using System.Windows.Threading;
 using Wander.App;
 using Wander.App.Controllers;
+using Wander.App.Controls;
 using Wander.App.Dialogs;
+using Wander.App.Util;
 using Wander.App.ViewModels;
 using Wander.Core;
 using Wander.Core.FileSystem;
@@ -54,6 +56,9 @@ public sealed class ScenarioRunner {
     private int _shots;
     private string? _awaitedFolder;
     private volatile bool _firstScreenSeen;
+
+    /// <summary>Where the last <c>place</c> step left its row, from the top of the list - what <c>assert-place kept</c> compares with.</summary>
+    private double? _place;
 
 
     public ScenarioRunner(
@@ -238,6 +243,25 @@ public sealed class ScenarioRunner {
                 break;
             case "assert-folders":
                 AssertFolders(step);
+                break;
+            case "sort":
+                _vm.SetSortKeyCommand.Execute(step.Require("key"));
+                await WaitIdleAsync(step);
+                break;
+            case "stars":
+                if (step.Bool("clear") == true) {
+                    _vm.ClearRatingFilterCommand.Execute(null);
+                } else {
+                    _vm.ClickRankFilter(step.Int("rank", 1), toggle: false);
+                }
+                await WaitIdleAsync(step);
+                break;
+            case "place":
+                await PlaceAsync(step);
+                break;
+            case "assert-place":
+                await YieldAsync();
+                AssertPlace(step);
                 break;
             case "drop":
                 Drop(step);
@@ -542,11 +566,32 @@ public sealed class ScenarioRunner {
             throw new InvalidOperationException($"fs step outside the sandbox: {path}");
         }
 
+        // With "count", create and delete are about that many files: {n} in
+        // the name is their number, 001 and up.
+        var series = Enumerable.Range(1, step.Int("count", 1))
+            .Select(n => path.Replace("{n}", n.ToString("000"), StringComparison.Ordinal))
+            .ToList();
+
         switch (step.Require("op").ToLowerInvariant()) {
             case "create":
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-                File.WriteAllBytes(path, new byte[step.Int("bytes", 0)]);
+                foreach (string file in series) {
+                    File.WriteAllBytes(file, new byte[step.Int("bytes", 0)]);
+                }
                 break;
+            // A rename or a move made by another program.
+            case "move": {
+                    string to = _context.Expand(step.Require("to"));
+                    if (!IsInSandbox(to)) {
+                        throw new InvalidOperationException($"fs step outside the sandbox: {to}");
+                    }
+                    if (Directory.Exists(path)) {
+                        Directory.Move(path, to);
+                    } else {
+                        File.Move(path, to);
+                    }
+                    break;
+                }
             case "mkdir":
                 Directory.CreateDirectory(path);
                 break;
@@ -557,10 +602,12 @@ public sealed class ScenarioRunner {
             // with to clear what a previous run left when it died halfway,
             // and it has to work on a clean sandbox too.
             case "delete":
-                if (Directory.Exists(path)) {
-                    Directory.Delete(path, recursive: true);
-                } else if (File.Exists(path)) {
-                    File.Delete(path);
+                foreach (string gone in series) {
+                    if (Directory.Exists(gone)) {
+                        Directory.Delete(gone, recursive: true);
+                    } else if (File.Exists(gone)) {
+                        File.Delete(gone);
+                    }
                 }
                 break;
             // "The file is in use" needs somebody using it. Held here
@@ -781,10 +828,18 @@ public sealed class ScenarioRunner {
     /// </summary>
     private async Task SearchAsync(JsonElement step) {
         var search = _vm.ContentSearch;
-        search.NameQuery = step.Str("name") ?? "";
-        search.TextQuery = step.Str("text") ?? "";
-        search.SearchSubfolders = step.Bool("subfolders") ?? false;
-        search.SearchBinaries = step.Bool("binaries") ?? false;
+        if (step.Str("box") is { } typed) {
+            // Typed into the box over the list: the live filter, landed
+            // first as it is under the pause a person types with, and the
+            // walk under the folder that continues it (IsFilterPass).
+            search.FilterText = typed;
+            await WaitIdleAsync(step);
+        } else {
+            search.NameQuery = step.Str("name") ?? "";
+            search.TextQuery = step.Str("text") ?? "";
+            search.SearchSubfolders = step.Bool("subfolders") ?? false;
+            search.SearchBinaries = step.Bool("binaries") ?? false;
+        }
         search.RunNow();
 
         var clock = Stopwatch.StartNew();
@@ -1130,6 +1185,85 @@ public sealed class ScenarioRunner {
                 throw new InvalidOperationException($"'{folder}' is pinned to {record.View?.ToString() ?? "nothing"}, expected {view}");
             }
         }
+    }
+
+    // --- The place of a row on screen ------------------------------------
+    // Read off the row's container, not asked of the view: where a row is
+    // drawn is what a person sees, and the view's own arithmetic is what
+    // these steps check (RowFollowing, 2026-09-28).
+
+    /// <summary>
+    /// Scrolls the list on screen so that the row stands <c>"rows"</c> rows
+    /// below the top of the view, and remembers where that is.
+    /// </summary>
+    private async Task PlaceAsync(JsonElement step) {
+        var entry = Entry(step.Require("name"));
+        var list = ActiveList();
+        int index = list.Items.IndexOf(entry);
+        int rows = step.Int("rows", 3);
+        if (list is DataGrid) {
+            // The table scrolls by rows: its offset is the index of the first.
+            Viewer(list).ScrollToVerticalOffset(Math.Max(0, index - rows));
+        } else {
+            var panel = ListVisuals.FindDescendant<VirtualizingWrapPanel>(list)
+                ?? throw new InvalidOperationException("the list on screen has no tile panel");
+            panel.ShowFromTop(index);
+            panel.SetVerticalOffset(panel.VerticalOffset - (rows * panel.CellHeight));
+        }
+
+        await WaitIdleAsync(step);
+        _place = PlaceOf(Entry(entry.Name))
+            ?? throw new InvalidOperationException($"'{entry.Name}' is not on screen after the list was scrolled to it");
+        _report.Note($"'{entry.Name}' stands {_place:F0} px from the top of the list ({_vm.ViewMode})");
+    }
+
+    /// <summary>
+    /// The row is on screen - with <c>"kept": true</c>, where the last
+    /// <c>place</c> step left its row, under whatever name and among
+    /// whatever rows it is now; <c>"onScreen": false</c> - it is not.
+    /// </summary>
+    private void AssertPlace(JsonElement step) {
+        var entry = Entry(step.Require("name"));
+        double? place = PlaceOf(entry);
+        if (step.Bool("onScreen") == false) {
+            if (place is { } shown) {
+                throw new InvalidOperationException($"'{entry.Name}' is on screen, {shown:F0} px from the top of the list");
+            }
+
+            return;
+        }
+
+        if (place is not { } top) {
+            throw new InvalidOperationException(
+                $"'{entry.Name}' is not on screen (the first row on it is '{Path.GetFileName(_window.FileList.FirstRowOnScreen())}')");
+        }
+        if (step.Bool("kept") != true) {
+            return;
+        }
+
+        double was = _place ?? throw new InvalidDataException("'assert-place' with \"kept\" needs a 'place' step before it");
+        if (Math.Abs(top - was) > step.Int("tolerance", 2)) {
+            throw new InvalidOperationException($"'{entry.Name}' stands {top:F0} px from the top of the list, the row stood {was:F0}");
+        }
+    }
+
+    /// <summary>The top of the row's container in the list's viewport, or null when none of it shows.</summary>
+    private double? PlaceOf(FileSystemEntry entry) {
+        var list = ActiveList();
+        if (list.ItemContainerGenerator.ContainerFromItem(entry) is not FrameworkElement row
+            || ListVisuals.FindDescendant<ScrollContentPresenter>(list) is not { } viewport
+            || !row.IsDescendantOf(viewport)) {
+            return null;
+        }
+
+        double top = row.TransformToAncestor(viewport).Transform(new Point(0, 0)).Y;
+
+        return top + row.ActualHeight > 0.5 && top < viewport.ActualHeight - 0.5 ? top : null;
+    }
+
+    private static ScrollViewer Viewer(ItemsControl list) {
+        return ListVisuals.FindDescendant<ScrollViewer>(list)
+            ?? throw new InvalidOperationException("the list on screen has no scroll viewer");
     }
 
     private static WindowZone? ZoneNamed(string? name) {

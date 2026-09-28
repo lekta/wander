@@ -233,6 +233,12 @@ public sealed class MainViewModel : ObservableObject {
     // The folder whose rows landed last: rows of another one are an arrival.
     private string? _landedFolder;
 
+    // The user asked for another order and no listing has landed since: the
+    // next one to land is in it, whichever call started it - the listing
+    // started for the order can be overtaken by the watcher's or an
+    // operation's, and its rows are the rearrangement all the same.
+    private bool _reordering;
+
     // Rows renamed or moved since the last landing, old path to new - ours
     // and the ones the watcher saw - for the selection to follow (B7).
     private readonly List<(string From, string To)> _landingRenames = new();
@@ -342,7 +348,7 @@ public sealed class MainViewModel : ObservableObject {
         Ratings = new RatingsController(
             _fs, _companions, companionMetadata, _search, Settings, _log,
             isCurrent: _session.IsCurrent,
-            publish: PublishRows,
+            publish: (epoch, rows) => PublishRows(epoch, rows),
             ask: question => _dialogs.Ask(new DialogRequest(
                 DialogKind.CreateSidecar, Strings.ConfirmCreateSidecarTitle, question,
                 DialogButtons.YesNo, DialogIcon.Question)));
@@ -401,7 +407,7 @@ public sealed class MainViewModel : ObservableObject {
             ServiceLocator.TryGet<ISharpnessProbe>(), _log,
             isCurrent: _session.IsCurrent,
             rows: () => _search.Source,
-            publish: PublishRows);
+            publish: (epoch, rows) => PublishRows(epoch, rows));
         Helpers.PropertyChanged += (_, e) => {
             if (e.PropertyName == nameof(ReviewHelpers.Sharpness)) {
                 _sharpness.SetActive(Helpers.Sharpness);
@@ -480,7 +486,9 @@ public sealed class MainViewModel : ObservableObject {
             _ => RestoreFromRecycleBin(),
             p => ResolveTarget(p).Place.IsRecycleBin && ListRowsOf(p) is not null);
         RefreshCommand = new RelayCommand(_ => RefreshOrRerunSearch());
-        SetViewModeCommand = new RelayCommand(p => SetViewMode(p as string));
+        // The view and the order are the open folder's: from the menus, the
+        // keys and the table's headers alike (2026-09-28).
+        SetViewModeCommand = new RelayCommand(p => SetViewMode(ArgumentOf(p)));
         SetViewAutoCommand = new RelayCommand(_ => SetViewAuto());
         MakeDefaultViewCommand = new RelayCommand(_ => MakeDefaultView());
         SetGalleryBackgroundCommand = new RelayCommand(p => SetGalleryBackground(p as string));
@@ -489,9 +497,11 @@ public sealed class MainViewModel : ObservableObject {
         SetRankForSelectionCommand = new RelayCommand(p => SetRankForSelection(p as string));
         SetFilterColorCommand = new RelayCommand(SetFilterColor);
         ClearRatingFilterCommand = new RelayCommand(_ => ClearRatingFilter(), _ => HasRatingFilter);
-        SetSortKeyCommand = new RelayCommand(p => SetSortKey(p as string));
-        ToggleSortAscendingCommand = new RelayCommand(_ => Settings.SortAscending = !Settings.SortAscending);
-        ToggleGroupFoldersFirstCommand = new RelayCommand(_ => Settings.GroupFoldersFirst = !Settings.GroupFoldersFirst);
+        SetSortKeyCommand = new RelayCommand(p => SetSortKey(ArgumentOf(p)));
+        ToggleSortAscendingCommand = new RelayCommand(_ => PinSort(CurrentSort with { Ascending = !CurrentSort.Ascending }));
+        ToggleGroupFoldersFirstCommand = new RelayCommand(_ => PinSort(CurrentSort with { GroupFoldersFirst = !CurrentSort.GroupFoldersFirst }));
+        SetSortAutoCommand = new RelayCommand(_ => SetSortAuto());
+        MakeDefaultSortCommand = new RelayCommand(_ => MakeDefaultSort(), _ => IsSortPinned);
         // A close, not Shutdown: WPF ignores a cancelled close during
         // Shutdown, and the window asks before leaving operations behind.
         ExitCommand = new RelayCommand(_ => Application.Current?.MainWindow?.Close());
@@ -569,11 +579,8 @@ public sealed class MainViewModel : ObservableObject {
             () => Settings.Visibility,
             _log);
 
-        SearchResults = new SearchResultsController(ContentSearch, _fs, Settings, _dispatcher);
-        SearchResults.RowsChanged += (_, rows) => {
-            _entriesAreResults = true;
-            Entries.ReplaceAll(rows);
-        };
+        SearchResults = new SearchResultsController(ContentSearch, _fs, () => CurrentSort, _dispatcher);
+        SearchResults.RowsChanged += (_, rows) => LandResults(rows);
         SearchResults.StatusReported += (_, text) => Status = text;
 
         ContentSearch.Started += BeginSearchResults;
@@ -599,7 +606,7 @@ public sealed class MainViewModel : ObservableObject {
                 ClearRatingFilterCommand.RaiseCanExecuteChanged();
             }
         };
-        _search.FilteredChanged += filtered => {
+        _search.FilteredChanged += (filtered, rearranged) => {
             // A folder listing that lands while the list is showing search
             // results would replace them. The watcher, a finishing rating
             // pass and a stale refresh can all get here after the search
@@ -608,7 +615,7 @@ public sealed class MainViewModel : ObservableObject {
                 return;
             }
 
-            LandRows(filtered);
+            LandRows(filtered, rearranged);
         };
         _search.ItemsChanged += changed => {
             if (ContentSearch.IsShowingResults) {
@@ -668,6 +675,13 @@ public sealed class MainViewModel : ObservableObject {
     /// time the first screen from there (<c>FirstScreenWatch</c>).
     /// </summary>
     public event Action<string, System.Diagnostics.Stopwatch>? FolderArrived;
+
+    /// <summary>
+    /// A listing's rows are about to be laid down on the list - raised while
+    /// the old ones are still on screen: a row the model then follows into
+    /// view stays where it stood (FileListView).
+    /// </summary>
+    public event Action? RowsLanding;
 
     /// <summary>
     /// Every line the status bar is given, repeats included - the property
@@ -1362,6 +1376,20 @@ public sealed class MainViewModel : ObservableObject {
     /// <summary>The check mark on "Automatically": no pin on the open folder.</summary>
     public bool IsViewAuto => _viewReason != ViewReason.Pinned;
 
+    /// <summary>
+    /// The order of the open folder (2026-09-28): its pin in the folder book,
+    /// else the default from the settings. What a listing is made in and
+    /// what the menus and the table's arrow show; raised when a folder
+    /// arrives and when the order changes (<see cref="RaiseSort"/>).
+    /// </summary>
+    public SortOptions CurrentSort => SortFor(_nav.Current);
+
+    /// <summary>The open folder has an order of its own.</summary>
+    public bool IsSortPinned => _nav.Current is { Length: > 0 } here && _folders.Find(here)?.Sort is not null;
+
+    /// <summary>The check mark on "По умолчанию" under "Сортировка".</summary>
+    public bool IsSortAuto => !IsSortPinned;
+
     /// <summary>The preview panes draw on the same surround as the list; they are told when it changes.</summary>
     private void PushPalette() {
         Preview.SetPalette(ContentPalette);
@@ -1545,9 +1573,19 @@ public sealed class MainViewModel : ObservableObject {
     public RelayCommand MakeDefaultViewCommand { get; }
 
     public RelayCommand SetGalleryBackgroundCommand { get; }
+
+    /// <summary>A key pinned to the open folder with the rest of its order; the key in use again flips the direction.</summary>
     public RelayCommand SetSortKeyCommand { get; }
+
     public RelayCommand ToggleSortAscendingCommand { get; }
     public RelayCommand ToggleGroupFoldersFirstCommand { get; }
+
+    /// <summary>Takes the order's pin off the open folder; it gets the default one again.</summary>
+    public RelayCommand SetSortAutoCommand { get; }
+
+    /// <summary>The order on screen becomes the setting for folders without a pin.</summary>
+    public RelayCommand MakeDefaultSortCommand { get; }
+
     public RelayCommand ExitCommand { get; }
     public RelayCommand OptionsCommand { get; }
     public RelayCommand ReportIssueCommand { get; }
@@ -2583,7 +2621,9 @@ public sealed class MainViewModel : ObservableObject {
 
 
     // --- Listing --------------------------------------------------------
-    private void Refresh() {
+
+    /// <param name="rearranged">The user asked for another order: the rows land with the selection followed (<see cref="ListingReason.Rearranged"/>).</param>
+    private void Refresh(bool rearranged = false) {
         // Search results are not a folder listing, and re-listing would
         // replace them with the folder underneath. Leaving results is an
         // explicit act — clearing the box, or navigating — so a refresh
@@ -2604,6 +2644,7 @@ public sealed class MainViewModel : ObservableObject {
         // once the new listing lands - the model's rule (ListingArrival), no
         // intent needed for it.
         RenamingPath = null;
+        _reordering |= rearranged;
 
         // Any in-flight shell enumeration from a previous navigation is
         // stale now — cancel it so its delayed SetSource doesn't clobber
@@ -2639,8 +2680,7 @@ public sealed class MainViewModel : ObservableObject {
         // Settings are read here, on the UI thread, and carried into the
         // worker as values — the background pass must not race the settings
         // dialog.
-        var sort = new SortOptions(Settings.SortKey, Settings.SortAscending, Settings.GroupFoldersFirst);
-        _ = RefreshFolderAsync(_nav.Current, Settings.Visibility, sort, Settings.IntegrateCompanions);
+        _ = RefreshFolderAsync(_nav.Current, Settings.Visibility, CurrentSort, Settings.IntegrateCompanions);
     }
 
     /// <summary>
@@ -2659,6 +2699,9 @@ public sealed class MainViewModel : ObservableObject {
         // the view mode is chosen for a folder the user walks into, not
         // every time F5 or a rename re-reads the one they are standing in.
         int epoch = _session.BeginListing(path, out bool arriving);
+        // The rows on screen, for their ratings: a re-listing carries them
+        // over until the rating pass reads the sidecars again.
+        var shown = arriving ? null : _search.Source;
         string statusBeforeLoad = Status;
         var started = System.Diagnostics.Stopwatch.StartNew();
         var spinnerDelay = Task.Delay(SpinnerDelayMs);
@@ -2717,7 +2760,12 @@ public sealed class MainViewModel : ObservableObject {
             }
 
             using (PerfLog.Measure("bg.companions")) {
-                return (Items: _companions.Collapse(items), Hidden: hidden, Created: created, Vacated: vacated, Hint: picturesHint);
+                var collapsed = _companions.Collapse(items);
+                if (shown is not null) {
+                    collapsed = RatedListing.CarryRatings(collapsed, shown, sort);
+                }
+
+                return (Items: collapsed, Hidden: hidden, Created: created, Vacated: vacated, Hint: picturesHint);
             }
         }, token);
 
@@ -2794,7 +2842,7 @@ public sealed class MainViewModel : ObservableObject {
             // "N items" must not eat that message.
             string reported = Status;
             var reportedSeverity = StatusSeverity;
-            PublishRows(epoch, items);
+            PublishRows(epoch, items, TakeReordering(arriving));
             if (reported != statusBeforeLoad) {
                 Say(reported, reportedSeverity);
             }
@@ -2806,6 +2854,11 @@ public sealed class MainViewModel : ObservableObject {
             }
             Ratings.StartPass(items, path, sort, epoch, arriving);
             _sharpness.Listed(path, epoch);
+            // A record adopted on the way in - the folder was renamed
+            // outside - may bring an order of its own: listed again in it.
+            if (arriving && _session.IsCurrent(epoch) && CurrentSort != sort) {
+                Refresh();
+            }
         } catch (OperationCanceledException) {
             return;
         } catch (Exception ex) when (ex is DirectoryNotFoundException or DriveNotFoundException) {
@@ -2857,7 +2910,7 @@ public sealed class MainViewModel : ObservableObject {
         // the bin sorts itself (newest deletion first), an archive comes
         // back in whatever order the container holds it and is sorted here
         // by the same rules the user set for every other folder.
-        var sort = new SortOptions(Settings.SortKey, Settings.SortAscending, Settings.GroupFoldersFirst);
+        var sort = CurrentSort;
         var archive = CurrentArchive;
 
         // The Recycle Bin gives what it has read so far while a slow listing
@@ -2950,7 +3003,7 @@ public sealed class MainViewModel : ObservableObject {
                     ChooseView(rows, shellPath, createdUtc: null, vacated: null, inRecycleBin: archive is null);
                 }
             }
-            PublishRows(epoch, rows.ToList());
+            PublishRows(epoch, rows.ToList(), TakeReordering(arriving));
 
             // Timed like any other folder: an archive is one to the person
             // opening it, and "how long until I can see it" is the same
@@ -2983,7 +3036,8 @@ public sealed class MainViewModel : ObservableObject {
     /// the epoch they were computed for instead, and it is checked here.
     /// </para>
     /// </summary>
-    private void PublishRows(int epoch, IReadOnlyList<FileSystemEntry> items) {
+    /// <param name="rearranged">The rows are in an order the user has just chosen.</param>
+    private void PublishRows(int epoch, IReadOnlyList<FileSystemEntry> items, bool rearranged = false) {
         if (!_session.IsCurrent(epoch)) {
             return;
         }
@@ -2995,20 +3049,35 @@ public sealed class MainViewModel : ObservableObject {
         AsyncIcon.DropStale(items);
         // Rows listed or rated before the sharpness pass came round would
         // wash its answers out of the list; they are put back here.
-        _search.SetSource(_sharpness.Decorate(items));
+        _search.SetSource(_sharpness.Decorate(items), rearranged);
+    }
+
+    /// <summary>
+    /// Whether the listing about to land is the order the user asked for
+    /// (<see cref="Refresh"/>) - answered once, to the first that lands.
+    /// Another folder's rows are an arrival, whatever was asked of the one
+    /// left.
+    /// </summary>
+    private bool TakeReordering(bool arriving) {
+        bool reordering = _reordering && !arriving;
+        _reordering = false;
+
+        return reordering;
     }
 
 
-    private void SyncEntries(IReadOnlyList<FileSystemEntry> items) {
+    /// <param name="items">The rows to show.</param>
+    /// <param name="results">They are search results, not a folder's listing.</param>
+    private void SyncEntries(IReadOnlyList<FileSystemEntry> items, bool results) {
         // The moment a folder's listing lands on the UI thread — the one
         // hitch a person notices when opening a folder.
         using var applying = PerfLog.Measure("list.apply");
 
-        // Search results on the way out: another list, whatever rows the
-        // two share. Reconciled against them, a folder opened from the
-        // results kept their scroll.
-        if (_entriesAreResults) {
-            _entriesAreResults = false;
+        // Search results coming in or on the way out: another list,
+        // whatever rows the two share. Reconciled against them, a folder
+        // opened from the results kept their scroll.
+        if (_entriesAreResults != results) {
+            _entriesAreResults = results;
             Entries.ReplaceAll(items);
 
             return;
@@ -3057,15 +3126,46 @@ public sealed class MainViewModel : ObservableObject {
     /// (ListingArrival); the list's own reports while the rows are laid down
     /// are its doing, not the user's (<see cref="IsSyncingRows"/>).
     /// </summary>
-    private void LandRows(IReadOnlyList<FileSystemEntry> rows) {
-        var before = PathsOf(Entries);
+    /// <param name="rearranged">The user changed a filter or the order: the same folder's rows land <see cref="ListingReason.Rearranged"/>.</param>
+    private void LandRows(IReadOnlyList<FileSystemEntry> rows, bool rearranged) {
         var reason = _entriesAreResults ? ListingReason.ResultsLeft
-            : IsSamePath(_nav.Current, _landedFolder) ? ListingReason.Relist
-            : ListingReason.Arrival;
+            : !IsSamePath(_nav.Current, _landedFolder) ? ListingReason.Arrival
+            : rearranged ? ListingReason.Rearranged
+            : ListingReason.Relist;
+        var before = LayDown(rows, results: false);
+        _landedFolder = _nav.Current;
+        UpdateFilterStatus(rows.Count, _search.Source.Count);
+        using (PerfLog.Measure("ui.restore")) {
+            PostLanding(before, reason, _session.DecideArrival(_nav.Current, Entries));
+        }
+    }
+
+    /// <summary>
+    /// Search results land on the list - the first of them over the folder's
+    /// rows, more as the search goes on, the same in another order: through
+    /// the window's model, as a listing's rows do (<see cref="LandRows"/>).
+    /// A selected row that is among them stays selected, and where it stood
+    /// on screen (2026-09-28); laid down past the model, every batch took
+    /// the selection off.
+    /// </summary>
+    private void LandResults(IReadOnlyList<FileSystemEntry> rows) {
+        var before = LayDown(rows, results: true);
+        using (PerfLog.Measure("ui.restore")) {
+            PostLanding(before, ListingReason.Results, ArrivalDecision.None);
+        }
+    }
+
+    /// <summary>
+    /// The rows laid down against the ones on screen, the view told first
+    /// (<see cref="RowsLanding"/>); answers with the rows as they stood.
+    /// </summary>
+    private string[] LayDown(IReadOnlyList<FileSystemEntry> rows, bool results) {
+        string[] before = PathsOf(Entries);
+        RowsLanding?.Invoke();
         using (PerfLog.Measure("ui.rows")) {
             _syncingRows = true;
             try {
-                SyncEntries(rows);
+                SyncEntries(rows, results);
             } catch (Exception ex) when (ex is not OutOfMemoryException) {
                 // A list control threw in the middle of the notification: the
                 // plan is half applied and the other listeners never heard of
@@ -3077,11 +3177,8 @@ public sealed class MainViewModel : ObservableObject {
                 _syncingRows = false;
             }
         }
-        _landedFolder = _nav.Current;
-        UpdateFilterStatus(rows.Count, _search.Source.Count);
-        using (PerfLog.Measure("ui.restore")) {
-            PostLanding(before, reason, _session.DecideArrival(_nav.Current, Entries));
-        }
+
+        return before;
     }
 
     /// <summary>The rows on screen landed for <paramref name="reason"/>: the model is told, with the renames since the last landing.</summary>
@@ -3748,6 +3845,9 @@ public sealed class MainViewModel : ObservableObject {
             _folders.Find(path)?.View, Settings.AutoGallery, inRecycleBin,
             () => ImageFolderProbe.IsImageFolder(items, _companions, Settings.AutoGalleryPercent),
             Settings.DefaultViewMode, picturesHint));
+        // The folder's order was read when it was listed; what shows it -
+        // the menus, the table's arrow - is told as its rows arrive.
+        RaiseSort();
     }
 
     /// <summary>
@@ -3788,15 +3888,117 @@ public sealed class MainViewModel : ObservableObject {
             : string.Format(Strings.StatusViewSize, name, now, standard);
     }
 
+    /// <summary>
+    /// A key picked for the open folder - from a menu or the table's header.
+    /// The key in use again flips the direction, as in Explorer; the rest of
+    /// the order stays, and the whole of it is pinned to the folder.
+    /// </summary>
     private void SetSortKey(string? name) {
-        if (Enum.TryParse<SortKey>(name, out var key)) {
-            // Click-the-same-column toggles direction; Explorer parity.
-            if (Settings.SortKey == key) {
-                Settings.SortAscending = !Settings.SortAscending;
-            } else {
-                Settings.SortKey = key;
-            }
+        if (!Enum.TryParse<SortKey>(name, out var key)) {
+            return;
         }
+
+        var sort = CurrentSort;
+        PinSort(sort.Key == key ? sort with { Ascending = !sort.Ascending } : sort with { Key = key });
+    }
+
+    /// <summary>
+    /// <paramref name="sort"/> pinned to the open folder (2026-09-28), the
+    /// way picking a view pins it: the default for every other folder is a
+    /// setting (<see cref="MakeDefaultSort"/>).
+    /// </summary>
+    private void PinSort(SortOptions sort) {
+        if (_nav.Current is not { Length: > 0 } here) {
+            return;
+        }
+
+        var was = CurrentSort;
+        _foldersDirty |= _folders.SetSort(here, sort, _currentCreatedUtc, DateOnly.FromDateTime(DateTime.Now));
+        _log.Info($"Sort pinned: {Describe(sort)} - {here}");
+        ShowSort(was);
+        SaveState();
+    }
+
+    /// <summary>"По умолчанию": the order's pin comes off the open folder, and it takes the default order.</summary>
+    private void SetSortAuto() {
+        if (_nav.Current is not { Length: > 0 } here) {
+            return;
+        }
+
+        var was = CurrentSort;
+        if (_folders.SetSort(here, null, null, DateOnly.FromDateTime(DateTime.Now))) {
+            _foldersDirty = true;
+            _log.Info($"Sort unpinned - {here}");
+        }
+        ShowSort(was);
+        SaveState();
+    }
+
+    /// <summary>
+    /// The order on screen becomes the default for folders without a pin,
+    /// and the open folder's pin comes off with it, as for the view
+    /// (decision B13). Nothing on screen moves: it is the same order.
+    /// </summary>
+    private void MakeDefaultSort() {
+        var sort = CurrentSort;
+        // The setting first, while the pin still holds the folder: the
+        // default changing under a folder without one re-lists it.
+        Settings.SortKey = sort.Key;
+        Settings.SortAscending = sort.Ascending;
+        Settings.GroupFoldersFirst = sort.GroupFoldersFirst;
+        if (_nav.Current is { Length: > 0 } here && _folders.SetSort(here, null, null, DateOnly.FromDateTime(DateTime.Now))) {
+            _foldersDirty = true;
+        }
+        _log.Info($"Default sort: {Describe(sort)}");
+        RaiseSort();
+        SaveState();
+    }
+
+    /// <summary>
+    /// The open folder's order may have changed from <paramref name="was"/>:
+    /// what shows it is told, and the rows put in it when it did.
+    /// </summary>
+    private void ShowSort(SortOptions was) {
+        RaiseSort();
+        if (CurrentSort != was) {
+            Reorder();
+        }
+    }
+
+    /// <summary>The menus' check marks and the table's arrow read the order again.</summary>
+    private void RaiseSort() {
+        Raise(nameof(CurrentSort));
+        Raise(nameof(IsSortPinned));
+        Raise(nameof(IsSortAuto));
+    }
+
+    /// <summary>
+    /// The rows put in the order now in force, the selection followed on
+    /// screen. Results are sorted in place: their order comes from the pass
+    /// that found them, not from an enumerator that can be asked again.
+    /// </summary>
+    private void Reorder() {
+        if (ContentSearch.IsShowingResults) {
+            SearchResults.Resort();
+        } else {
+            Refresh(rearranged: true);
+        }
+    }
+
+    /// <summary>The order <paramref name="folder"/> is listed in: its pin, else the default one.</summary>
+    private SortOptions SortFor(string? folder) {
+        return folder is { Length: > 0 } && _folders.Find(folder)?.Sort is { } pinned
+            ? pinned
+            : new SortOptions(Settings.SortKey, Settings.SortAscending, Settings.GroupFoldersFirst);
+    }
+
+    private static string Describe(SortOptions sort) {
+        return $"{sort.Key} {(sort.Ascending ? "asc" : "desc")}{(sort.GroupFoldersFirst ? ", folders first" : "")}";
+    }
+
+    /// <summary>What a command of the view or the order is given: a menu row's argument (<see cref="MenuCall"/>), or its own parameter from a key or a button.</summary>
+    private static string? ArgumentOf(object? parameter) {
+        return parameter is MenuCall call ? call.Argument as string : parameter as string;
     }
 
     private void OnSettingsChanged(object? sender, PropertyChangedEventArgs e) {
@@ -3870,17 +4072,13 @@ public sealed class MainViewModel : ObservableObject {
         if (e.PropertyName == nameof(SettingsViewModel.SortKey) ||
             e.PropertyName == nameof(SettingsViewModel.SortAscending) ||
             e.PropertyName == nameof(SettingsViewModel.GroupFoldersFirst)) {
-            // Sort only affects the file list — tree always uses default
-            // (name asc, folders first). Sort knobs are FS-layer params, not
+            // The default order: it moves only a folder without one of its
+            // own. Sort only affects the file list - the tree always uses
+            // name asc, folders first. Sort knobs are FS-layer params, not
             // a re-filter, so the cheap path is enough.
-            //
-            // Results are the exception: their order comes from the pass
-            // that found them, not from an enumerator that can be asked
-            // again, so the rows already on screen are re-sorted in place.
-            if (ContentSearch.IsShowingResults) {
-                SearchResults.Resort();
-            } else {
-                Refresh();
+            RaiseSort();
+            if (!IsSortPinned) {
+                Reorder();
             }
         }
 

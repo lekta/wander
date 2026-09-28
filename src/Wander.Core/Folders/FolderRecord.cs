@@ -1,10 +1,12 @@
+using Wander.Core.FileSystem;
+
 namespace Wander.Core.Folders;
 
 /// <summary>
 /// What Wander remembers about one folder, in its own <c>folders.json</c>
 /// (decision Z1: nothing is written into the folder itself, so this works
-/// on read-only media and inside archives). Today that is the view the
-/// user pinned; the record is built to take more (a sort order, a gallery
+/// on read-only media and inside archives). Today that is the view and the
+/// order the user pinned; the record is built to take more (a gallery
 /// background) as further optional fields - JSON tolerates a field an
 /// older file does not have, so adding one does not change the file's
 /// version.
@@ -19,7 +21,8 @@ namespace Wander.Core.Folders;
 /// </param>
 /// <param name="LastVisit">The day the folder was last opened; the ageing order when the book is full.</param>
 /// <param name="View">The view pinned to this folder, or null for "chosen automatically".</param>
-public sealed record FolderRecord(string Path, DateTime? CreatedUtc, DateOnly LastVisit, ViewMode? View) {
+/// <param name="Sort">The order pinned to this folder (2026-09-28), or null for the default one.</param>
+public sealed record FolderRecord(string Path, DateTime? CreatedUtc, DateOnly LastVisit, ViewMode? View, SortOptions? Sort = null) {
     /// <summary>True when the record says nothing any more and can be dropped.</summary>
-    public bool IsEmpty => View is null;
+    public bool IsEmpty => View is null && Sort is null;
 }

@@ -59,15 +59,17 @@ public sealed record MenuEntry {
     public string? IconPath { get; init; }
 
     /// <summary>
-    /// Why the row is greyed, for a tooltip; null when there is nothing to
-    /// explain. Only the header menu uses it, for an action whose tool is
-    /// not installed: everything else that does not apply is left out.
+    /// A tooltip; null when there is nothing to explain. The header menu
+    /// says why an action is greyed (its tool is not installed), the view
+    /// and order rows that a choice is pinned to the folder, as the "Вид"
+    /// menu says it.
     /// </summary>
     public string? Tooltip { get; init; }
 
     /// <summary>
     /// What the command is given: the catalog id of a <see cref="MenuCommandId.RunAction"/>
-    /// row. Null for the rows whose command needs nothing.
+    /// row, the view or the sort key of a choice. Null for the rows whose
+    /// command needs nothing.
     /// </summary>
     public string? Argument { get; init; }
 

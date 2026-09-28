@@ -115,6 +115,12 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo {
     /// </summary>
     private TileAnchor? _anchor;
 
+    /// <summary>
+    /// A row to show once the next measure has laid out the rows it is among
+    /// - at a height, or anywhere in view (<see cref="ShowOnNextMeasure"/>).
+    /// </summary>
+    private (object Item, double? Top)? _pendingShow;
+
 
     public VirtualizingWrapPanel() {
         AddHandler(Keyboard.GotKeyboardFocusEvent, new KeyboardFocusChangedEventHandler((_, _) => _anchor = null), handledEventsToo: true);
@@ -273,6 +279,39 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo {
     }
 
 
+    /// <summary>
+    /// How far the cell of <paramref name="index"/> stands from the top of
+    /// the view - negative when cut off above - or null when none of it
+    /// shows: where a row followed through a change of rows is put back
+    /// (<see cref="ShowOnNextMeasure"/>).
+    /// </summary>
+    public double? TopOnScreen(int index) {
+        if (index < 0 || index >= _layout.ItemCount) {
+            return null;
+        }
+
+        var cell = _layout.CellAt(index);
+        double top = cell.Y - _offsetY;
+
+        return cell.Bottom > _offsetY && top < _viewport.Height ? top : null;
+    }
+
+
+    /// <summary>
+    /// Shows <paramref name="item"/> once the next measure has laid out the
+    /// rows it is among: at <paramref name="top"/> from the top of the view
+    /// (<see cref="TopOnScreen"/>) and wholly, or with none, brought into
+    /// view moving as little as possible. Asked right after the rows
+    /// changed, while the layout still describes the old ones - an offset
+    /// worked out now would be clamped to them - and done inside the
+    /// measure, so no frame is drawn at the place in between.
+    /// </summary>
+    public void ShowOnNextMeasure(object item, double? top) {
+        _pendingShow = (item, top);
+        InvalidateMeasure();
+    }
+
+
     // --- Layout --------------------------------------------------------
 
     protected override Size MeasureOverride(Size availableSize) {
@@ -308,6 +347,16 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo {
             }
             if (_anchor is { } anchor) {
                 _offsetY = _layout.Hold(anchor);
+            }
+        }
+        if (_pendingShow is { } show) {
+            _pendingShow = null;
+            int index = owner?.Items.IndexOf(show.Item) ?? -1;
+            if (index >= 0 && index < _layout.ItemCount) {
+                _anchor = null;
+                _offsetY = show.Top is { } top
+                    ? _layout.Hold(new TileAnchor(index, top, KeepWhole: true))
+                    : _layout.OffsetToReveal(index, _offsetY);
             }
         }
         _offsetY = _layout.Clamp(_offsetY);

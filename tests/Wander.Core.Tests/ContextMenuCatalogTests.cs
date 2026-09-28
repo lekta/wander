@@ -66,6 +66,7 @@ public class ContextMenuCatalogTests {
         var bound = new HashSet<string> {
             "Enter", "Ctrl+X", "Ctrl+C", "Ctrl+V", "Ctrl+Shift+C",
             "F2", "Del", "Ctrl+Shift+N", "F5", "Ctrl+Z", "Alt+Enter",
+            "Ctrl+Shift+1", "Ctrl+Shift+2", "Ctrl+Shift+6", "Ctrl+Shift+7",
         };
 
         foreach (var entry in AllBuiltInEntries()) {

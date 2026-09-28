@@ -144,7 +144,7 @@ exe), переменная `WANDER_DATA_DIR`, иначе `%LOCALAPPDATA%\Wander`
 
 | Трогал | Автоматически | Руками (раздел ниже) | В логе |
 |---|---|---|---|
-| Навигация, `FolderSession`, приземление | `FolderSessionTests`, `ListingDiffTests`, `ListRulesTests` (`ListingArrival`), `PathFollowingTests`; харнесс: серия навигаций, выделение после подъёма | Скорость; Фокус | `nav.*`, `list.apply`, `ui.stall`, `First screen painted`, `WS ListingLanded` (с `LogActions`) |
+| Навигация, `FolderSession`, приземление, место выделенной строки | `FolderSessionTests`, `ListingDiffTests`, `ListRulesTests` (`ListingArrival`), `RowFollowingTests`, `PathFollowingTests`; харнесс: серия навигаций, выделение после подъёма, `follow-row` (строка на месте: сторож, `F5`, порядок, фильтр, выдача поиска, смена вида) | Скорость; Фокус («Выделенный файл не уходит с экрана сам») | `nav.*`, `list.apply`, `ui.stall`, `First screen painted`, `WS ListingLanded` (с `LogActions`) |
 | Иконки, миниатюры, шлюз, приоритеты | харнесс: холодная `photos`, счётчики | Скорость (все пункты — трижды ломали друг друга); Дерево (иконки после запуска) | `bg.thumb-*`, `icon.decode-ui`, `layout.*`, `[icon-diag]`, `slow shell load` |
 | Шаблон плитки, `VirtualizingWrapPanel`, `TileLayout` | `TileLayoutTests` (в том числе якорь перелива), `TileMetricsTests`; харнесс: проходы раскладки в простое = 0, `visuals` на шаблон | Скорость (смена вида); Фокус (`F2` в четырёх видах); Просмотр (миниатюры не прыгают, перелив плиток держит видимое); Файловые операции (корзина в «Плитке») | `LAYOUT … visuals`, `COUNT layout.*`, `layout.realise` |
 | Выделение, фокус, области, rename; модель окна (`Core/Workspace`, `WorkspaceController`, исполнитель в `MainWindow`) | `GridNavigationTests`, `WindowZonesTests`, `KeyboardRulesTests`, `ListRulesTests`, `PanelRulesTests`, `TargetRulesTests`, `MenuContextTests`, `PreviewSubjectTests`; харнесс: клавиатурные сценарии, `post`, `assert-state`, `assert-focus` | Фокус, выделение и клавиатура — целиком; Дерево и закладки | `WS …`, `WS target:` (с `LogActions`) |
@@ -155,8 +155,8 @@ exe), переменная `WANDER_DATA_DIR`, иначе `%LOCALAPPDATA%\Wander`
 | Панель просмотра, форматы, сплит, «Сравнить», полный экран | `AudioTagsTests`, `MeshFileTests`, `Fb2DocumentTests`, `EncodingProbeTests`, `PreviewRouterTests`, `PreviewPairTests`, `SplitOrientationTests`, `ShotSummaryTests`, `FullscreenPlanTests`, `PictureWalkTests`, `ZoomLinkTests`, `PictureFitTests`, `PreviewNeighborsTests`, `TextFindTests`, `TgaDecoderTests`, `PeHeaderTests`, `ContentExtractorTests` (абзацы), `ThumbnailCacheOptionsTests`, `PictureMemoryTests`, `SizedCacheTests`; харнесс: скриншот каждой ветки (сплит, полный экран и сводку по нескольким не рисует) | Просмотр и галерея | `nav.preview`, `Preview pair: shapes not read`, ошибки биндингов (трассировка) |
 | Хелперы отсмотра (пикинг, резкость, клиппинг, гистограмма, кривые, точка AF) | `SharpnessTests`, `FocusPeakingTests`, `ToneCurveTests`, `CanonAfInfoTests`, `AfGeometryTests`, `LumaTests`, `HistogramTests`, `ClippingTests`, `SharpListingTests`; харнесс: шаг `helpers` в `preview-formats` (скриншоты) | Просмотр (совпадение наложения с картинкой при разной ширине панели, в лупе, в сплите, при 125 / 150 %); Скорость (прокрутка галереи с включённым пикингом) | `bg.helpers`, `bg.sharpness` |
 | Галерея, оценки, сайдкары | `RatingFilterTests`, `RatingToggleTests`, `ImageFolderProbeTests`, `DesktopIniTests`, `CompanionMetadataServiceTests`; харнесс: клик по звезде не пересобирает | Фокус (клик по звезде, `Shift`+цифры); Просмотр | `bg.ratings`, тик сторожа |
-| Контекстное меню, shell | `ContextMenuBuilderTests`, `ShellExtensionCatalogTests`; харнесс: меню строится без исключений | Обмен с системой (сторонние пункты запускаются) | время `QueryContextMenu`, owner-drawn в логе |
-| Настройки, `state.json`, `folders.json`, палитра | `AppPathsTests`, `PaneSizesTests`, `ViewChoiceTests`, `FolderSettingsBookTests`; `check-resources.ps1` (ключи XAML); харнесс: `state` из фикстур (`state-upgrade`: `assert-folders`) | После обновления; две копии на одних данных (`--yield`) — только вживую; Просмотр и галерея («Вид — у папки») | `WARN` при загрузке состояния, `State loaded` / `State written`, `Pane sizes:`, `Started with --yield` |
+| Контекстное меню, shell | `ContextMenuBuilderTests`, `ShellExtensionCatalogTests`; харнесс: меню строится без исключений | Обмен с системой (сторонние пункты запускаются); Просмотр и галерея («Сортировка — у папки, меню пустого места») | время `QueryContextMenu`, owner-drawn в логе |
+| Настройки, `state.json`, `folders.json`, палитра | `AppPathsTests`, `PaneSizesTests`, `ViewChoiceTests`, `FolderSettingsBookTests`; `check-resources.ps1` (ключи XAML); харнесс: `state` из фикстур (`state-upgrade`: `assert-folders`) | После обновления; две копии на одних данных (`--yield`) — только вживую; Просмотр и галерея («Вид — у папки», «Сортировка — у папки») | `WARN` при загрузке состояния, `State loaded` / `State written`, `Pane sizes:`, `Started with --yield`, `Sort pinned:` / `Default sort:` |
 | Дерево, закладки, сторож | `PanelRulesTests`, `PanelKeyNavigationTests`, `PanelViewTests`, `PanelPathsTests`, `TreeNavThrottleTests`, `FolderChangesTests`, `NavigationFallbackTests`, `BranchReconcileTests` (уровень панели: строки живут, вставки / перестановки / удаления вокруг), `PathFollowingTests`, `UndoableActionsTests` (пары `MovesOnUndo`), `NavigationServiceTests` (`RewritePaths`); харнесс: `tree-bookmarks` (таблица сценариев), внешнее создание файла в песочнице → строка появилась | Дерево и закладки | `nav.trees`, `nav.watch`, `WS …` (с `LogActions`) |
 | Архивы как папки, извлечение, панель просмотра | `ArchivePathTests`, `ExtractionServiceTests`, `PreviewRouterTests`, `ContextMenuBuilderTests` («Извлечь рядом»); харнесс: `selfcheck` (ассоциации машины) + сценарий `archives` | Архивы как папки (извлечь рядом, перетаскивание из дерева); Файловые операции; Обмен с системой (наружу — только глазами) | `Extract:`, `Extract (temporary copy)`, `Archive enumerate`, «Archives open as folders» в первых строках лога |
 | Действия, каталог, запуск; групповое переименование | `ActionApplicabilityTests`, `CommandLineTests`, `ExternalActionRunnerTests`, `ActionCatalogTests`, `ActionReportTests`, `BuiltinArgumentsTests`, `ContextMenuBuilderTests`, `RenamePlannerTests`, `HoldFileActionTests`; харнесс: `smoke-walk` (меню), `focus-keys` (`F2`) — окна действий и переименования он не поднимает | **Действия** — целиком; Ход операции (окно действия) | `Action '…'`, `image-convert:`, `Batch rename:`, `Rename:` |
@@ -230,6 +230,25 @@ exe), переменная `WANDER_DATA_DIR`, иначе `%LOCALAPPDATA%\Wander`
 - [ ] **Прокрутка переживает чужие правки** (2026-09-21): папка прокручена
       вниз, в первой её половине файл удалён или добавлен (здесь или
       снаружи) — список не отматывается в начало.
+- [ ] **Выделенный файл не уходит с экрана сам** (2026-09-28; харнесс —
+      `follow-row`, глазами — что нет мелькания): фильтр «5★», выделить
+      снимок в середине экрана, снять фильтр — снимок на том же месте
+      экрана, вокруг него остальные, начало папки не мелькает; то же —
+      поставить фильтр, набрать и стереть имя в поле фильтра, сменить
+      порядок (меню «Вид», меню пустого места, заголовок таблицы); во всех
+      четырёх видах. Снимок прокручен за экран до смены — после неё он
+      показан. Под фильтром «3★ и выше» `F5` и файл, добавленный снаружи,
+      не прячут снимки на миг и не снимают выделение; по оценке — порядок
+      сразу. Папка прокручена, файл выделен: файлы, добавленные и удалённые
+      выше него снаружи (и сотнями), `F5`, переименование в другой
+      программе — он на том же месте; отмотать от него и повторить —
+      список не двигается. Поиск из поля фильтра с подпапками: выделенный
+      остаётся выделен и на месте, пока выдача растёт и при смене порядка;
+      `Esc` — папка, он на месте. Папка с порядком по оценке, «Назад» в неё
+      — выделенный снимок остаётся на экране, когда приезжают оценки.
+      Смена вида с клавиатурой в панели папок — выделенный показан. Список
+      в самом начале, файл создан снаружи выше выделенного — новый файл
+      виден, список не уехал.
 - [ ] После **переименования** строка выделена, список не прокручен,
       клавиатура на строке.
 - [ ] **`F2` во всех четырёх видах**: редактор на месте подписи, имя без
@@ -818,6 +837,16 @@ exe), переменная `WANDER_DATA_DIR`, иначе `%LOCALAPPDATA%\Wander`
       логе `Folder record follows a rename made outside`); `Ctrl+Z`
       переименования — тоже; недавний путь адресной строки после переноса
       папки — новый.
+- [ ] **Сортировка — у папки, меню пустого места** (2026-09-28): в папке A
+      по дате (меню «Вид», меню пустого места или заголовок таблицы) — в B
+      порядок прежний, галочки меню и стрелка заголовка — у каждой свои; «По
+      умолчанию» в A — порядок B, «Сделать сортировкой по умолчанию» (без
+      закрепления серый) — порядок у всех незакреплённых; перезапуск — на
+      месте. Меню пустого места: «Создать», потом «Вид» (подпись «Эта папка
+      · …», хоткеи, галочка на виде на экране) и «Сортировка»; выбор в них
+      закрепляет за этой папкой, как меню «Вид»; в корзине только «Вид», в
+      архиве оба; «Настройки» → «Контекстное меню» → снять «Вид» и
+      «Сортировка» — их нет, разделители не двоятся.
 - [ ] Панель просмотра: картинка (и `.jfif`), RAW, текст, код, PDF, 3D,
       аудио, веб, папка, диск — по разу.
 - [ ] Занятый файл (PowerShell держит без общего доступа) в панели — «кто
@@ -1301,9 +1330,11 @@ undo, up, back, forward, clear-search; деструктивные — тольк
 модификаторов — `Keyboard.Modifiers` читает настоящую клавиатуру; для
 `Ctrl`-сочетаний есть `command`), `settings name value` (свойство
 `SettingsViewModel`), `dialogs {default | kind + accept | conflict | prompt
-| folder}`, `fs {op: create | mkdir | append | delete | lock | unlock,
-path}` (только в песочнице; `delete` не ругается на отсутствующий путь —
-это шаг сброса; `lock` держит хэндл до `unlock` или конца прогона),
+| folder}`, `fs {op: create | mkdir | append | delete | move | lock |
+unlock, path}` (только в песочнице; `delete` не ругается на отсутствующий
+путь — это шаг сброса; `create` и `delete` с `count` — серия файлов, `{n}`
+в имени — номер с 001; `move {to}` — переименование или перенос «другой
+программой»; `lock` держит хэндл до `unlock` или конца прогона),
 `preview on`, `preview-format {ext, name}` (файл с таким расширением, если
 он тут есть, — выделить и снять; нет — строка в отчёте, не падение),
 `helpers {on[]}` (хелперы отсмотра `ReviewHelpers` по именам свойств:
@@ -1330,8 +1361,17 @@ panel, exists: false | chevron | expanded | selected | name}` (строка
 `assert-focus {zone, row}` (куда исполнитель поставил клавиатуру: зона,
 `none` — никуда; `row` — имя в списке, путь в панели),
 `assert-folders {pinned: {путь: вид}}` (`folders.json` после записи),
+`sort {key}` (порядок открытой папки, как клик по заголовку: тот же ключ —
+другое направление), `stars {rank | clear}` (фильтр по звёздам: «столько и
+выше»), `place {name, rows}` (прокрутить список так, чтобы строка встала
+на `rows` строк ниже верха, и запомнить место), `assert-place {name, kept,
+tolerance, onScreen: false}` (строка на экране; `kept` — там, где её
+оставил последний `place`, под каким бы именем и среди каких бы строк она
+ни была; место читается с контейнера строки, не из арифметики вида),
 `bookmark {op: add|remove, path}`, `search {name, text, subfolders,
-binaries, searchTimeoutMs}`, `soak {minutes, maxWorkingSetGrowthMb,
+binaries, searchTimeoutMs | box}` (`box` — набрано в поле над списком:
+живой фильтр и обход подпапок, который его продолжает),
+`soak {minutes, maxWorkingSetGrowthMb,
 maxHandleGrowth, seed}`, `assert-log {contains | regex | absent | noErrors
 [+ allow[]], scope: step|all}`, `assert-entries {count | min | max |
 contains | absent | selected, scope: model|visible}`, `assert-path {is,
@@ -1410,6 +1450,7 @@ WPF-ввода: событие уходит в `WorkspaceController` тем же
 | `search` | docs, code, big | маска по имени, `needle42` по содержимому во всех форматах, четыре кодировки, подпапки, поиск по 5000 |
 | `preview-formats` | photos, raw, docs, code, media, links | по скриншоту на ветку панели (35 при нынешнем наборе фикстур; чего не хватило — в отчёте), с 2026-09-25 и ветки 0.5: документы текстом, карточка программы, TGA, SVG, HEIC и `.msi` из фикстур; хелперы отсмотра на CR3 — три скриншота |
 | `watcher` | photos | появилось / исчезло / изменилось снаружи — без единого `refresh`; выделенный удалён снаружи — выделен следующий, последний — предыдущий |
+| `follow-row` | big, photos | выделенная строка на своём месте экрана (`place` / `assert-place`), таблица и плитки: файлы снаружи выше неё (три и четыреста — пересборка), `F5`, переименование снаружи, порядок туда и обратно, фильтр по имени, выдача из поля фильтра с подпапками, её пересортировка и возврат в папку, фильтр по звёздам; каждый из четырёх видов показывает выделенную, в том числе с клавиатурой в панели; список в самом начале не уезжает от созданного выше |
 | `archives` | archives | zip / 7z / rar / tar.gz как папки: вход по пути и по Enter, подпапка, `up`, крошки; архив как узел дерева (`tree-expand` до папки внутри, zip и rar); `solid.rar` в панели просмотра — три выделения, копия не переделывается (лог глазами); панель просмотра на архиве и на записи (скриншоты, глазами); delete / cut / new-folder внутри не срабатывают; `copy` -> `paste` в обычную папку -> `undo`; `drop` записи из архива в папку с эффектом Move -> извлечение, запись осталась в архиве, `undo`; настоящая папка `plain.zip`; снимки внутри `photos.zip` — миниатюры (скриншот, глазами); защищённый паролем архив; шаги с rar и tar.gz — `ifOpensAsFolder` |
 | `soak` | photos, raw, big, names | случайная навигация, плато WS и handles, `SYS` в логе |
 | `state-upgrade` | photos, attrs | старт на `state.json` чужой сборки: настройки из файла применились (скрытые видны, а они по умолчанию выключены), закрепления видов переехали в `folders.json` (`assert-folders`), пропавшие закладки — строки, а не ошибки |
@@ -1523,14 +1564,14 @@ Claude никогда не ведёт настоящий рабочий стол
 | Тронуты генераторы песочницы или состав `tests/Fixtures/` | `selfcheck` (секунды) |
 | Правка в области, у которой есть сценарий (матрица «трогал → проверь») | этот сценарий, `--rebuild` если менялся состав песочницы — по слову «прогони автотесты <сценарий>» |
 | Не воспроизводится по коду: «прыгает фокус», «пропала миниатюра», «что там в панели» | сценарий-однодневка рядом с нужной папкой, находки — `note` в отчёт — по просьбе |
-| Финализация куска работ («финализируй») | `check.bat qa` + сценарии задетой фичи — само слово и есть просьба |
+| Финализация куска работ («финализируй») | `check.bat run`; `check.bat qa` и сценарии задетой фичи Claude называет и ждёт слова «прогони» (с 2026-09-16) |
 | **Подготовка к релизу версии** (`X.Y.0`, PRERELEASE.md) | lint Rider по `src` + весь набор + `soak` с `"minutes": 30` + замеры версии |
 | **Подготовка к патч-релизу** (`X.Y.Z`, PRERELEASE.md, «Ветка патча») | lint изменённых файлов, `check.bat run`, `check.bat qa`, сценарии задетого по матрице; `soak` — если тронуты память, кэши, миниатюры, сторож |
 
 **Сценарии харнесса запускаются по словам** (2026-09-04, WORKFLOW.md,
 «Автотесты»): «прогони / запусти автотесты <сценарий, по фиче, все>»,
-«финализируй» — по задетой фиче, «готовимся к релизу» — весь набор и
-соак. Без этих слов Claude называет задетые сценарии и ждёт (причина
+«готовимся к релизу» — весь набор и соак. Без этих слов, и по
+«финализируй» тоже (с 2026-09-16), Claude называет задетые сценарии и ждёт (причина
 осторожности — абзац «Окно не должно оказаться на экране»). Запустив,
 кладёт в отчёт путь к `report.md`,
 упавшие шаги, скриншоты, которые стоит посмотреть глазами, и строки `SYS` /

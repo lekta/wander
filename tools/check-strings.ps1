@@ -80,7 +80,7 @@ foreach ($file in $sources) {
     # arm or a const from enum/name to resource key. They live in Core,
     # which cannot reference the accessor at all, and are told apart from
     # other string literals by the key's prefix.
-    foreach ($m in [regex]::Matches($text, '=>? "((?:MenuCmd|MenuReason|MenuCaption|Scope|FileType|ActionPreset|RenameError|ActionsError|Progress|Holder)[A-Za-z]+)"')) {
+    foreach ($m in [regex]::Matches($text, '=>? "((?:MenuCmd|MenuReason|MenuCaption|MenuView|MenuSort|Scope|FileType|ActionPreset|RenameError|ActionsError|Progress|Holder)[A-Za-z]+)"')) {
         [void] $used.Add($m.Groups[1].Value)
     }
 }

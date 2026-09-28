@@ -270,7 +270,8 @@ public sealed class WorkspaceController {
         return effect switch {
             ReadBranch read => $"ReadBranch {read.Pane} {Level(read.Path)} (epoch {read.Epoch})",
             ProbeChevrons probe => $"ProbeChevrons {probe.Pane} ({probe.Paths.Count})",
-            ApplyListSelection apply => $"ApplyListSelection ({Selected(apply.List.Selection)}, caret {apply.List.Caret}{(apply.Scroll ? ", scroll" : "")})",
+            ApplyListSelection apply => $"ApplyListSelection ({Selected(apply.List.Selection)}, caret {apply.List.Caret}" +
+                $"{(apply.Scroll ? ", scroll" : "")}{(apply.Held is null ? "" : ", held")})",
             _ => effect.ToString(),
         };
     }

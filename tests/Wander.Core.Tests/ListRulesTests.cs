@@ -205,6 +205,46 @@ public class ListRulesTests {
         Assert.Empty(s.Effects.OfType<FocusRow>());
     }
 
+    /// <summary>
+    /// A filter taken off, another order (2026-09-28): the selection stays by
+    /// path, and its main row is followed into view - the eye is on it. The
+    /// keyboard stays where it is.
+    /// </summary>
+    [Fact]
+    public void ARearrangement_FollowsTheMainRow() {
+        var s = Listed().Enter(WindowZone.FileList).Select(B, D);
+
+        s.Land(new[] { B, D }, new[] { E, D, C, B, A }, ListingReason.Rearranged);
+
+        Assert.Equal(new[] { B, D }, s.State.List.Selection);
+        Assert.Equal(B, s.State.List.Primary);
+        Assert.True(Assert.Single(s.Effects.OfType<ApplyListSelection>()).Scroll);
+        Assert.Empty(s.Effects.OfType<FocusRow>());
+    }
+
+    /// <summary>A filter hid the selected row: the one that took its place is followed, the keyboard onto it as after any row gone.</summary>
+    [Fact]
+    public void ARearrangementHidingTheSelectedRow_FollowsTheOneInItsPlace() {
+        var s = Listed().Enter(WindowZone.FileList).Select(B);
+
+        s.Land(_rows, new[] { A, C, E }, ListingReason.Rearranged);
+
+        var apply = Assert.Single(s.Effects.OfType<ApplyListSelection>());
+        Assert.Equal(new[] { C }, apply.List.Selection);
+        Assert.True(apply.Scroll);
+        Assert.Equal(new FocusRow(WindowZone.FileList, C, Scroll: false), Assert.Single(s.Effects.OfType<FocusRow>()));
+    }
+
+    /// <summary>Nothing selected: a rearrangement has no row to follow, and nothing scrolls.</summary>
+    [Fact]
+    public void ARearrangementWithNothingSelected_ScrollsNothing() {
+        var s = Listed();
+
+        s.Land(_rows, new[] { A, C }, ListingReason.Rearranged);
+
+        Assert.False(Assert.Single(s.Effects.OfType<ApplyListSelection>()).Scroll);
+    }
+
     /// <summary>Search results left for the folder: a selected result not in it did not leave the folder, and nothing takes its place.</summary>
     [Fact]
     public void ResultsLeft_ASelectedResultNotInTheFolder_LeavesNothingSelected() {
@@ -214,6 +254,127 @@ public class ListRulesTests {
         s.Land(new[] { result, C }, _rows, ListingReason.ResultsLeft);
 
         Assert.Empty(s.State.List.Selection);
+    }
+
+    /// <summary>Search results left for the folder with a row of it selected: it stays selected and is brought into view - the list is another one.</summary>
+    [Fact]
+    public void ResultsLeft_ASelectedResultOfTheFolder_IsShown() {
+        var s = Listed().Select(C);
+
+        s.Land(new[] { @"D:\Elsewhere\x.jpg", C }, _rows, ListingReason.ResultsLeft);
+
+        var apply = Assert.Single(s.Effects.OfType<ApplyListSelection>());
+        Assert.Equal(new[] { C }, apply.List.Selection);
+        Assert.True(apply.Scroll);
+        Assert.Equal(C, apply.Held);
+    }
+
+    /// <summary>
+    /// Search results over the folder's rows, and more of them as the search
+    /// goes on: a selected row among them stays selected, keeps its place
+    /// and is not brought into view - the user may be looking at others.
+    /// </summary>
+    [Fact]
+    public void Results_KeepASelectedRowThatIsAmongThem() {
+        var s = Listed().Enter(WindowZone.FileList).Select(B);
+
+        s.Land(_rows, new[] { @"C:\A\sub\x.jpg", B, @"C:\A\sub\y.jpg" }, ListingReason.Results);
+
+        var apply = Assert.Single(s.Effects.OfType<ApplyListSelection>());
+        Assert.Equal(new[] { B }, apply.List.Selection);
+        Assert.False(apply.Scroll);
+        Assert.Equal(B, apply.Held);
+        Assert.Empty(s.Effects.OfType<FocusRow>());
+    }
+
+    /// <summary>A selected row the search did not find did not leave the folder: nothing takes its place.</summary>
+    [Fact]
+    public void Results_ASelectedRowNotAmongThem_LeavesNothingSelected() {
+        var s = Listed().Select(B);
+
+        s.Land(_rows, new[] { A, C }, ListingReason.Results);
+
+        Assert.Empty(s.State.List.Selection);
+        Assert.Null(Assert.Single(s.Effects.OfType<ApplyListSelection>()).Held);
+    }
+
+
+    // --- The main row's place on screen (2026-09-28) ---------------------------------
+
+    /// <summary>Read again - the watcher, F5, an operation: the main row keeps its place, and one out of view is left there.</summary>
+    [Fact]
+    public void ARelist_HoldsTheMainRow_AndShowsNothing() {
+        var s = Listed().Select(B, D);
+
+        s.Land(_rows, _rows.Prepend(F("0.jpg")).ToArray());
+
+        var apply = Assert.Single(s.Effects.OfType<ApplyListSelection>());
+        Assert.Equal(B, apply.Held);
+        Assert.False(apply.Scroll);
+    }
+
+    /// <summary>Renamed by another program: the row under its new name keeps the place it had under the old one.</summary>
+    [Fact]
+    public void RenamedElsewhere_TheNewNameKeepsThePlaceOfTheOld() {
+        string renamed = F("z-final.jpg");
+        var s = Listed().Select(B);
+
+        s.Land(_rows, new[] { A, C, D, E, renamed }, renames: (B, renamed));
+
+        var apply = Assert.Single(s.Effects.OfType<ApplyListSelection>());
+        Assert.Equal(new[] { renamed }, apply.List.Selection);
+        Assert.Equal(B, apply.Held);
+    }
+
+    /// <summary>The selected row went: the one that took its place takes its place on screen too.</summary>
+    [Fact]
+    public void TheSelectedRowGone_TheSuccessorStandsWhereItStood() {
+        var s = Listed().Select(B);
+
+        s.Land(_rows, Without(B));
+
+        var apply = Assert.Single(s.Effects.OfType<ApplyListSelection>());
+        Assert.Equal(new[] { C }, apply.List.Selection);
+        Assert.Equal(B, apply.Held);
+    }
+
+    /// <summary>The main row went and another selected one is the main row now: it stood elsewhere, and nothing is held.</summary>
+    [Fact]
+    public void TheMainRowGone_AnotherSelectedOneTakingOver_HoldsNothing() {
+        var s = Listed().Select(B, C, D);
+
+        s.Land(_rows, Without(B));
+
+        var apply = Assert.Single(s.Effects.OfType<ApplyListSelection>());
+        Assert.Equal(C, apply.List.Primary);
+        Assert.Null(apply.Held);
+    }
+
+    /// <summary>Rows that were asked for are shown; the main one of them keeps its place only when it is the row that stood there.</summary>
+    [Fact]
+    public void RowsAskedFor_HoldTheMainRow_OnlyWhenItIsTheSameRow() {
+        string pasted = F("pasted.jpg");
+        string renamed = F("b2.jpg");
+
+        var paste = Listed().Select(B);
+        paste.Land(_rows, _rows.Append(pasted).ToArray(), intent: Asked(pasted));
+        var rename = Listed().Select(B);
+        rename.Land(_rows, new[] { A, renamed, C, D, E }, intent: Asked(renamed), renames: (B, renamed));
+
+        Assert.Null(Assert.Single(paste.Effects.OfType<ApplyListSelection>()).Held);
+        Assert.Equal(B, Assert.Single(rename.Effects.OfType<ApplyListSelection>()).Held);
+    }
+
+    /// <summary>Another folder's rows, and rows swapped for copies: no place to keep.</summary>
+    [Fact]
+    public void AnArrivalAndRowsReplaced_HoldNothing() {
+        var arrival = Opened().Select(@"C:\E\x.txt");
+        arrival.Land(new[] { @"C:\E\x.txt" }, _rows, ListingReason.Arrival);
+        var replaced = Listed().Select(B);
+        replaced.Land(_rows, _rows, ListingReason.RowsReplaced);
+
+        Assert.Null(Assert.Single(arrival.Effects.OfType<ApplyListSelection>()).Held);
+        Assert.Null(Assert.Single(replaced.Effects.OfType<ApplyListSelection>()).Held);
     }
 
 

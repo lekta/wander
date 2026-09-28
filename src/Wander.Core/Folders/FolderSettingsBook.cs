@@ -4,7 +4,7 @@ namespace Wander.Core.Folders;
 
 /// <summary>
 /// The records Wander keeps about folders (<see cref="FolderRecord"/>),
-/// keyed by path: find, pin a view, follow a rename, age out. Pure
+/// keyed by path: find, pin a view or an order, follow a rename, age out. Pure
 /// bookkeeping - no disk, no clock; the caller hands in today's date and
 /// the creation time it read on the pool, and persists
 /// <see cref="Records"/> through <c>IFolderSettingsStore</c> when a call
@@ -105,34 +105,16 @@ public sealed class FolderSettingsBook {
     /// when anything changed.
     /// </summary>
     public bool SetView(string path, ViewMode? view, DateTime? createdUtc, DateOnly today) {
-        string key = Normalize(path);
-        _byKey.TryGetValue(key, out var record);
+        return Set(path, view is null, record => record with { View = view }, createdUtc, today);
+    }
 
-        if (view is null) {
-            if (record is null || record.View is null) {
-                return false;
-            }
-            var cleared = record with { View = null };
-            if (cleared.IsEmpty) {
-                _byKey.Remove(key);
-            } else {
-                _byKey[key] = cleared;
-            }
-
-            return true;
-        }
-
-        var pinned = record is null
-            ? new FolderRecord(key, createdUtc, today, view)
-            : record with { View = view, LastVisit = today, CreatedUtc = record.CreatedUtc ?? createdUtc };
-        if (pinned == record) {
-            return false;
-        }
-
-        _byKey[key] = pinned;
-        Trim();
-
-        return true;
+    /// <summary>
+    /// Pins the order <paramref name="sort"/> to the folder, or with null
+    /// gives it the default order again - the same bookkeeping as
+    /// <see cref="SetView"/>, and the view pin is left as it is.
+    /// </summary>
+    public bool SetSort(string path, SortOptions? sort, DateTime? createdUtc, DateOnly today) {
+        return Set(path, sort is null, record => record with { Sort = sort }, createdUtc, today);
     }
 
     /// <summary>
@@ -234,6 +216,46 @@ public sealed class FolderSettingsBook {
         return oldest.Count;
     }
 
+
+    /// <summary>
+    /// One field of the folder's record pinned by <paramref name="change"/>,
+    /// or taken off when <paramref name="clearing"/>. A pin moves the visit
+    /// to today and past the cap ages the oldest record out; a record left
+    /// with nothing in it is dropped. True when anything changed.
+    /// </summary>
+    private bool Set(string path, bool clearing, Func<FolderRecord, FolderRecord> change, DateTime? createdUtc, DateOnly today) {
+        string key = Normalize(path);
+        _byKey.TryGetValue(key, out var record);
+
+        if (clearing) {
+            if (record is null) {
+                return false;
+            }
+            var cleared = change(record);
+            if (cleared == record) {
+                return false;
+            }
+            if (cleared.IsEmpty) {
+                _byKey.Remove(key);
+            } else {
+                _byKey[key] = cleared;
+            }
+
+            return true;
+        }
+
+        var pinned = record is null
+            ? change(new FolderRecord(key, createdUtc, today, View: null))
+            : change(record) with { LastVisit = today, CreatedUtc = record.CreatedUtc ?? createdUtc };
+        if (pinned == record) {
+            return false;
+        }
+
+        _byKey[key] = pinned;
+        Trim();
+
+        return true;
+    }
 
     private static string Normalize(string path) {
         return Path.TrimEndingDirectorySeparator(path.Trim());

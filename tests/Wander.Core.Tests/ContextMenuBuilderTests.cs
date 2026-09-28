@@ -1,5 +1,6 @@
 using Wander.Core.Actions;
 using Wander.Core.FileSystem;
+using Wander.Core.Folders;
 using Wander.Core.Menu;
 using Wander.Core.Rename;
 using Wander.Core.Shell;
@@ -191,12 +192,14 @@ public class ContextMenuBuilderTests {
     }
 
     [Fact]
-    public void InsideArchive_BackgroundOffersThePathAndNothingElse() {
+    public void InsideArchive_BackgroundOffersHowItIsShownAndThePath() {
         var target = Background() with { IsReadOnlyLocation = true, IsArchive = true };
 
         var menu = ContextMenuBuilder.Build(target, ContextMenuSettings.Default);
 
-        Assert.Equal(MenuCommandId.CopyPath, Assert.Single(menu).Id);
+        Assert.Equal(
+            new[] { MenuCommandId.ViewSubmenu, MenuCommandId.SortSubmenu, MenuCommandId.CopyPath },
+            menu.Where(e => !e.IsSeparator).Select(e => e.Id).ToArray());
     }
 
     [Fact]
@@ -245,22 +248,96 @@ public class ContextMenuBuilderTests {
     }
 
     [Fact]
-    public void BackgroundMenu_IsFolderVerbsOnly() {
-        // View mode, sorting, refresh, undo and paste were all here once.
-        // They are window-wide state, they live in the toolbar's "Вид" menu
-        // and on hotkeys, and a right-click on a folder is not where anyone
-        // goes looking for them. What is left acts on the folder itself.
+    public void BackgroundMenu_IsFolderVerbsAndHowTheFolderIsShown() {
+        // Refresh, undo and paste were here once; they are window-wide and
+        // live in the toolbar's "Вид" menu and on hotkeys. The view and the
+        // order went with them and came back (2026-09-28): they are the
+        // folder's own, and its empty space is where Explorer has them.
         var menu = ContextMenuBuilder.Build(Background() with { CanPaste = true }, ContextMenuSettings.Default);
 
         Assert.Equal(
             new[] {
                 MenuCommandId.NewSubmenu,
+                MenuCommandId.ViewSubmenu,
+                MenuCommandId.SortSubmenu,
                 MenuCommandId.OpenInTerminal,
                 MenuCommandId.CopyPath,
                 MenuCommandId.Properties,
             },
             menu.Where(e => !e.IsSeparator).Select(e => e.Id).ToArray());
         Assert.DoesNotContain(Flatten(menu), e => e.Id == MenuCommandId.Paste);
+    }
+
+    [Fact]
+    public void BackgroundMenu_ViewSubmenu_ChecksTheViewOnScreen() {
+        var target = Background() with { View = ViewMode.Gallery, ViewReason = ViewReason.Pictures };
+
+        var view = Find(ContextMenuBuilder.Build(target, ContextMenuSettings.Default), MenuCommandId.ViewSubmenu)!.Children;
+
+        // A caption first, as in the "Вид" menu: why the folder looks so.
+        Assert.False(view[0].IsEnabled);
+        var choices = view.Where(e => e.Id == MenuCommandId.SetView).ToList();
+        Assert.Equal(new[] { "Details", "Tiles", "LargeIcons", "Gallery" }, choices.Select(e => e.Argument));
+        Assert.Equal(new[] { "Gallery" }, choices.Where(e => e.IsChecked).Select(e => e.Argument));
+        Assert.All(choices, e => Assert.True(e.IsCheckable));
+        // Chosen automatically: "Автоматически" is the one checked.
+        Assert.True(Find(view, MenuCommandId.ViewAuto)!.IsChecked);
+        Assert.NotNull(Find(view, MenuCommandId.MakeDefaultView));
+    }
+
+    [Fact]
+    public void BackgroundMenu_APinnedView_IsNotAutomatic() {
+        var target = Background() with { View = ViewMode.Tiles, ViewReason = ViewReason.Pinned };
+
+        var view = Find(ContextMenuBuilder.Build(target, ContextMenuSettings.Default), MenuCommandId.ViewSubmenu)!.Children;
+
+        Assert.False(Find(view, MenuCommandId.ViewAuto)!.IsChecked);
+    }
+
+    [Fact]
+    public void BackgroundMenu_SortSubmenu_ChecksTheFoldersOwnOrder() {
+        var byDate = new SortOptions(SortKey.ModifiedDate, Ascending: false, GroupFoldersFirst: false);
+        var target = Background() with { Sort = byDate, SortPinned = true };
+
+        var sort = Find(ContextMenuBuilder.Build(target, ContextMenuSettings.Default), MenuCommandId.SortSubmenu)!.Children;
+
+        var keys = sort.Where(e => e.Id == MenuCommandId.SetSortKey).ToList();
+        Assert.Equal(new[] { "Name", "ModifiedDate", "Size", "Type", "Rating" }, keys.Select(e => e.Argument));
+        Assert.Equal(new[] { "ModifiedDate" }, keys.Where(e => e.IsChecked).Select(e => e.Argument));
+        Assert.False(Find(sort, MenuCommandId.SortAscending)!.IsChecked);
+        Assert.False(Find(sort, MenuCommandId.SortFoldersFirst)!.IsChecked);
+        Assert.False(Find(sort, MenuCommandId.SortAuto)!.IsChecked);
+        Assert.True(Find(sort, MenuCommandId.MakeDefaultSort)!.IsEnabled);
+    }
+
+    [Fact]
+    public void BackgroundMenu_TheDefaultOrder_CannotBeMadeTheDefaultAgain() {
+        var sort = Find(ContextMenuBuilder.Build(Background(), ContextMenuSettings.Default), MenuCommandId.SortSubmenu)!.Children;
+
+        Assert.True(Find(sort, MenuCommandId.SortAuto)!.IsChecked);
+        Assert.False(Find(sort, MenuCommandId.MakeDefaultSort)!.IsEnabled);
+    }
+
+    [Fact]
+    public void RecycleBinBackground_HasAViewButNoOrderToOffer() {
+        // The bin lists newest deletion first whatever the order says.
+        var target = Background() with { IsReadOnlyLocation = true, IsRecycleBin = true };
+
+        var menu = ContextMenuBuilder.Build(target, ContextMenuSettings.Default);
+
+        Assert.NotNull(Find(menu, MenuCommandId.ViewSubmenu));
+        Assert.Null(Find(menu, MenuCommandId.SortSubmenu));
+    }
+
+    [Fact]
+    public void HidingTheViewAndTheOrder_LeavesTheBackgroundAsItWas() {
+        var menu = ContextMenuBuilder.Build(Background(), Hiding(MenuCommandId.ViewSubmenu, MenuCommandId.SortSubmenu));
+
+        Assert.Equal(
+            new[] { MenuCommandId.NewSubmenu, MenuCommandId.OpenInTerminal, MenuCommandId.CopyPath, MenuCommandId.Properties },
+            menu.Where(e => !e.IsSeparator).Select(e => e.Id).ToArray());
+        // The separator the two stood between does not stay doubled.
+        Assert.DoesNotContain(menu.Zip(menu.Skip(1)), pair => pair.First.IsSeparator && pair.Second.IsSeparator);
     }
 
     [Fact]

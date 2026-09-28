@@ -942,7 +942,7 @@ public partial class MainWindow : Window {
     private void OnViewEffectRequested(WorkspaceEffect effect) {
         switch (effect) {
             case ApplyListSelection apply:
-                FileList.ApplySelection(apply.List, apply.Scroll, apply.Top);
+                FileList.ApplySelection(apply.List, apply.Scroll, apply.Top, apply.Held);
                 break;
             case OpenEditor editor:
                 FileList.OpenEditor(editor.Path);
@@ -1364,7 +1364,11 @@ public partial class MainWindow : Window {
         menu.IsOpen = true;
     }
 
-    /// <summary>What a menu about <paramref name="context"/> is built from: the snapshot, plus the settings it does not hold.</summary>
+    /// <summary>
+    /// What a menu about <paramref name="context"/> is built from: the
+    /// snapshot, plus the settings it does not hold and how the open folder
+    /// is shown - its view and its order, for the empty space's menu.
+    /// </summary>
     private ContextMenuTarget MenuTarget(MenuContext context, MenuPlace place = MenuPlace.Context) {
         var vm = Vm;
 
@@ -1372,6 +1376,10 @@ public partial class MainWindow : Window {
             Actions = vm.Settings.Actions,
             MissingTools = vm.MissingTools,
             ShowDebug = vm.Settings.ShowDebugMenu,
+            View = vm.ViewMode,
+            ViewReason = vm.ViewReason,
+            Sort = vm.CurrentSort,
+            SortPinned = vm.IsSortPinned,
         };
     }
 
@@ -1468,6 +1476,17 @@ public partial class MainWindow : Window {
             [MenuCommandId.ExtractHere] = new(vm.ExtractHereCommand),
 
             [MenuCommandId.RestoreFromRecycleBin] = new(vm.RestoreFromRecycleBinCommand),
+
+            // The open folder's view and order, as the "Вид" menu sets them;
+            // a choice row carries the view or the key as its argument.
+            [MenuCommandId.SetView] = new(vm.SetViewModeCommand),
+            [MenuCommandId.ViewAuto] = new(vm.SetViewAutoCommand),
+            [MenuCommandId.MakeDefaultView] = new(vm.MakeDefaultViewCommand),
+            [MenuCommandId.SetSortKey] = new(vm.SetSortKeyCommand),
+            [MenuCommandId.SortAscending] = new(vm.ToggleSortAscendingCommand),
+            [MenuCommandId.SortFoldersFirst] = new(vm.ToggleGroupFoldersFirstCommand),
+            [MenuCommandId.SortAuto] = new(vm.SetSortAutoCommand),
+            [MenuCommandId.MakeDefaultSort] = new(vm.MakeDefaultSortCommand),
 
             [MenuCommandId.Properties] = new(vm.PropertiesCommand),
 

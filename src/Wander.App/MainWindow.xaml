@@ -240,43 +240,63 @@
                         -->
                         <Separator/>
                         <!--
-                            Sort by submenu. The four columns mirror the Details
-                            view. Clicking the active column toggles direction
-                            (Explorer parity, handled in MainViewModel.SetSortKey).
-                            Ascending/GroupFoldersFirst sit below as separate
-                            toggles so the user can flip them without changing
-                            the column.
+                            Sort by submenu - the open folder's order, pinned to
+                            it like the view (2026-09-28). The five keys mirror
+                            the Details columns. Clicking the active one toggles
+                            direction (Explorer parity, handled in
+                            MainViewModel.SetSortKey). Ascending/GroupFoldersFirst
+                            sit below as separate toggles so the user can flip
+                            them without changing the key; the last two take the
+                            pin off or make the order the default, as the view's
+                            pair above does. The empty space's menu has the same
+                            rows (ContextMenuBuilder.SortRows).
                         -->
                         <MenuItem Header="{x:Static res:Strings.MenuSortBy}">
                             <MenuItem Header="{x:Static res:Strings.MenuSortName}"
                                       IsCheckable="True"
-                                      IsChecked="{Binding Settings.SortKey, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=Name}"
+                                      ToolTip="{x:Static res:Strings.MenuSortPinHint}"
+                                      IsChecked="{Binding CurrentSort.Key, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=Name}"
                                       Command="{Binding SetSortKeyCommand}" CommandParameter="Name"/>
                             <MenuItem Header="{x:Static res:Strings.MenuSortDate}"
                                       IsCheckable="True"
-                                      IsChecked="{Binding Settings.SortKey, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=ModifiedDate}"
+                                      ToolTip="{x:Static res:Strings.MenuSortPinHint}"
+                                      IsChecked="{Binding CurrentSort.Key, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=ModifiedDate}"
                                       Command="{Binding SetSortKeyCommand}" CommandParameter="ModifiedDate"/>
                             <MenuItem Header="{x:Static res:Strings.MenuSortSize}"
                                       IsCheckable="True"
-                                      IsChecked="{Binding Settings.SortKey, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=Size}"
+                                      ToolTip="{x:Static res:Strings.MenuSortPinHint}"
+                                      IsChecked="{Binding CurrentSort.Key, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=Size}"
                                       Command="{Binding SetSortKeyCommand}" CommandParameter="Size"/>
                             <MenuItem Header="{x:Static res:Strings.MenuSortType}"
                                       IsCheckable="True"
-                                      IsChecked="{Binding Settings.SortKey, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=Type}"
+                                      ToolTip="{x:Static res:Strings.MenuSortPinHint}"
+                                      IsChecked="{Binding CurrentSort.Key, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=Type}"
                                       Command="{Binding SetSortKeyCommand}" CommandParameter="Type"/>
                             <MenuItem Header="{x:Static res:Strings.MenuSortRating}"
                                       IsCheckable="True"
-                                      IsChecked="{Binding Settings.SortKey, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=Rating}"
+                                      ToolTip="{x:Static res:Strings.MenuSortPinHint}"
+                                      IsChecked="{Binding CurrentSort.Key, Mode=OneWay, Converter={StaticResource EnumEquals}, ConverterParameter=Rating}"
                                       Command="{Binding SetSortKeyCommand}" CommandParameter="Rating"/>
                             <Separator/>
                             <MenuItem Header="{x:Static res:Strings.MenuSortAscending}"
                                       IsCheckable="True"
-                                      IsChecked="{Binding Settings.SortAscending, Mode=OneWay}"
+                                      ToolTip="{x:Static res:Strings.MenuSortPinHint}"
+                                      IsChecked="{Binding CurrentSort.Ascending, Mode=OneWay}"
                                       Command="{Binding ToggleSortAscendingCommand}"/>
                             <MenuItem Header="{x:Static res:Strings.MenuSortFoldersFirst}"
                                       IsCheckable="True"
-                                      IsChecked="{Binding Settings.GroupFoldersFirst, Mode=OneWay}"
+                                      ToolTip="{x:Static res:Strings.MenuSortPinHint}"
+                                      IsChecked="{Binding CurrentSort.GroupFoldersFirst, Mode=OneWay}"
                                       Command="{Binding ToggleGroupFoldersFirstCommand}"/>
+                            <Separator/>
+                            <MenuItem Header="{x:Static res:Strings.MenuSortAuto}"
+                                      IsCheckable="True"
+                                      ToolTip="{x:Static res:Strings.MenuSortAutoHint}"
+                                      IsChecked="{Binding IsSortAuto, Mode=OneWay}"
+                                      Command="{Binding SetSortAutoCommand}"/>
+                            <MenuItem Header="{x:Static res:Strings.MenuSortMakeDefault}"
+                                      ToolTip="{x:Static res:Strings.MenuSortMakeDefaultHint}"
+                                      Command="{Binding MakeDefaultSortCommand}"/>
                         </MenuItem>
                         <Separator/>
                         <!--

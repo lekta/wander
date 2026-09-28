@@ -1,3 +1,4 @@
+using Wander.Core.FileSystem;
 using Wander.Core.Folders;
 
 namespace Wander.Core.Tests;
@@ -59,6 +60,42 @@ public class FolderSettingsBookTests {
     }
 
     [Fact]
+    public void SetSort_PinsAnOrderBesideTheView() {
+        var byDate = new SortOptions(SortKey.ModifiedDate, Ascending: false, GroupFoldersFirst: true);
+        var book = new FolderSettingsBook(new[] { Pin(Photos, ViewMode.Gallery) });
+
+        Assert.True(book.SetSort(Photos, byDate, _created, _tuesday));
+        Assert.False(book.SetSort(Photos, byDate, _created, _tuesday));
+
+        var record = book.Find(Photos);
+        Assert.Equal(byDate, record?.Sort);
+        Assert.Equal(ViewMode.Gallery, record?.View);
+        Assert.Equal(_tuesday, record?.LastVisit);
+    }
+
+    [Fact]
+    public void SetSort_OnAFolderWithoutARecord_MakesOne() {
+        var book = new FolderSettingsBook();
+
+        Assert.True(book.SetSort(Docs, SortOptions.Default, _created, _monday));
+
+        Assert.Null(book.Find(Docs)?.View);
+        Assert.Equal(SortOptions.Default, book.Find(Docs)?.Sort);
+    }
+
+    [Fact]
+    public void ClearingOnePin_KeepsTheOther_AndBothGone_DropsTheRecord() {
+        var book = new FolderSettingsBook(new[] { Pin(Photos, ViewMode.Tiles) with { Sort = SortOptions.Default } });
+
+        Assert.True(book.SetView(Photos, null, null, _monday));
+        Assert.Equal(SortOptions.Default, book.Find(Photos)?.Sort);
+
+        Assert.True(book.SetSort(Photos, null, null, _monday));
+        Assert.Null(book.Find(Photos));
+        Assert.False(book.SetSort(Photos, null, null, _monday));
+    }
+
+    [Fact]
     public void Touch_MovesAKnownFolderToTodayAndLearnsItsCreationTime() {
         var book = new FolderSettingsBook(new[] { Pin(Photos, ViewMode.Tiles) });
 
@@ -88,6 +125,13 @@ public class FolderSettingsBookTests {
     }
 
     // --- Loading ---
+
+    [Fact]
+    public void Constructor_KeepsARecordWithOnlyAnOrder() {
+        var book = new FolderSettingsBook(new[] { new FolderRecord(Docs, null, _monday, null, SortOptions.Default) });
+
+        Assert.Equal(SortOptions.Default, book.Find(Docs)?.Sort);
+    }
 
     [Fact]
     public void Constructor_DropsEmptyRecordsAndKeepsTheLaterOfDuplicates() {
@@ -158,6 +202,17 @@ public class FolderSettingsBookTests {
         Assert.Null(book.Find(@"D:\shoot"));
         // A sibling that merely starts with the same letters stays.
         Assert.Equal(ViewMode.Details, book.Find(@"D:\shoot-old")?.View);
+    }
+
+    [Fact]
+    public void Follow_TakesThePinnedOrderAlong() {
+        var byName = SortOptions.Default with { Ascending = false };
+        var book = new FolderSettingsBook();
+        book.SetSort(@"D:\shoot", byName, null, _monday);
+
+        book.Follow(@"D:\shoot", @"D:\shoot-2026");
+
+        Assert.Equal(byName, book.Find(@"D:\shoot-2026")?.Sort);
     }
 
     [Fact]

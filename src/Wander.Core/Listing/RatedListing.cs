@@ -30,6 +30,12 @@ public static class RatedListing {
     /// listing has landed, not as part of it — the listing must not wait
     /// on it.
     /// </para>
+    ///
+    /// <para>
+    /// A row that came in with a rating carried over from the screen
+    /// (<see cref="CarryRatings"/>) gets what its sidecar says now, which
+    /// may be nothing.
+    /// </para>
     /// </summary>
     public static IReadOnlyList<FileSystemEntry> WithRatings(
         IReadOnlyList<FileSystemEntry> entries,
@@ -41,7 +47,7 @@ public static class RatedListing {
             ct.ThrowIfCancellationRequested();
 
             var rating = readRating(entries[i]);
-            if (rating is null) {
+            if (rating is null && entries[i].Rating is null) {
                 rated?.Add(entries[i]);
                 continue;
             }
@@ -51,5 +57,43 @@ public static class RatedListing {
         }
 
         return rated ?? entries;
+    }
+
+
+    /// <summary>
+    /// The folder's rows listed again, with the ratings the same rows have
+    /// on screen (<paramref name="shown"/>, by path) until the pass above
+    /// reads the sidecars again (2026-09-28). A listing knows no ratings of
+    /// its own: without this every re-listing - F5, the watcher, another
+    /// order - dropped the stars for a moment, a filter by stars hid every
+    /// photograph and the selection with them, and an order by rating came
+    /// by name first and jumped once the pass landed. Only rows that still
+    /// have a companion take one - a rating lives nowhere else. Returns the
+    /// list it was given when nothing on screen is rated.
+    /// </summary>
+    /// <param name="entries">The new listing, in the order <paramref name="sort"/> made without ratings.</param>
+    /// <param name="shown">The rows on screen before it, ratings and all.</param>
+    /// <param name="sort">The listing's order: by rating, it is made again with the carried ratings.</param>
+    public static IReadOnlyList<FileSystemEntry> CarryRatings(
+        IReadOnlyList<FileSystemEntry> entries, IReadOnlyList<FileSystemEntry> shown, SortOptions sort) {
+        Dictionary<string, SidecarRating>? known = null;
+        foreach (var row in shown) {
+            if (row.Rating is { } rating) {
+                known ??= new Dictionary<string, SidecarRating>(StringComparer.OrdinalIgnoreCase);
+                known[row.FullPath] = rating;
+            }
+        }
+        if (known is null) {
+            return entries;
+        }
+
+        var carried = new List<FileSystemEntry>(entries.Count);
+        foreach (var entry in entries) {
+            carried.Add(entry.Rating is null && entry.HasCompanions && known.TryGetValue(entry.FullPath, out var rating)
+                ? entry with { Rating = rating }
+                : entry);
+        }
+
+        return sort.Key == SortKey.Rating ? EntryComparers.Sort(carried, sort) : carried;
     }
 }

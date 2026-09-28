@@ -1,4 +1,6 @@
 using Wander.Core.Actions;
+using Wander.Core.FileSystem;
+using Wander.Core.Folders;
 using Wander.Core.Localization;
 using Wander.Core.Rename;
 using Wander.Core.Shell;
@@ -20,9 +22,9 @@ namespace Wander.Core.Menu;
 /// <list type="bullet">
 ///   <item>Selection — verbs that act on the clicked items.</item>
 ///   <item>Background — verbs that act on the folder being listed
-///   (create, terminal, path). View mode, sorting, refresh and undo are
-///   window state, not folder verbs: they live in the toolbar's «Вид»
-///   menu and on hotkeys.</item>
+///   (create, terminal, path) and how it is shown: its view and its order,
+///   the "Вид" menu's two blocks (2026-09-28). Refresh and undo are window
+///   state, not folder verbs: they live in "Вид" and on hotkeys.</item>
 /// </list>
 ///
 /// <para>
@@ -204,9 +206,14 @@ public static class ContextMenuBuilder {
 
     private static List<MenuEntry> BuildBackground(ContextMenuTarget t, ShellGroups shell) {
         if (t.IsArchive) {
-            // Nothing is created, opened in a terminal or pasted here; the
-            // path is the one thing a click on empty space can still give.
-            return new List<MenuEntry> { Cmd(MenuCommandId.CopyPath) };
+            // Nothing is created, opened in a terminal or pasted here; how
+            // the folder is shown and its path are what a click on empty
+            // space can still give.
+            var inside = ShowRows(t);
+            inside.Add(MenuEntry.Divider);
+            inside.Add(Cmd(MenuCommandId.CopyPath));
+
+            return inside;
         }
 
         bool fs = t.IsWritable;
@@ -220,11 +227,14 @@ public static class ContextMenuBuilder {
             Sub(MenuCommandId.NewSubmenu,
                 new[] { Cmd(MenuCommandId.NewFolder, fs) }.Concat(shell.New).ToArray()),
             MenuEntry.Divider,
-
+        };
+        items.AddRange(ShowRows(t));
+        items.AddRange(new[] {
+            MenuEntry.Divider,
             Cmd(MenuCommandId.OpenInTerminal, fs),
             Cmd(MenuCommandId.CopyPath),
             MenuEntry.Divider,
-        };
+        });
 
         // Actions for folders act on the folder being listed.
         if (fs) {
@@ -297,6 +307,70 @@ public static class ContextMenuBuilder {
             FileTypeGroup.Archives => "MenuCaptionArchives",
             FileTypeGroup.Folders => "MenuCaptionFolders",
             _ => CaptionSelectionKey,
+        };
+    }
+
+
+    // --- The folder's view and order ------------------------------------
+
+    /// <summary>
+    /// "Вид" and "Сортировка" for the folder the click was in - the "Вид"
+    /// menu's two blocks, row for row; what is picked there is pinned to
+    /// that folder. The Recycle Bin keeps an order of its own (newest
+    /// deletion first), so it has no "Сортировка" to offer.
+    /// </summary>
+    private static List<MenuEntry> ShowRows(ContextMenuTarget t) {
+        var rows = new List<MenuEntry> { Sub(MenuCommandId.ViewSubmenu, ViewRows(t)) };
+        if (!t.IsRecycleBin) {
+            rows.Add(Sub(MenuCommandId.SortSubmenu, SortRows(t)));
+        }
+
+        return rows;
+    }
+
+    /// <summary>Why the folder looks the way it does, the four views with their keys, and the pin taken off or made the default.</summary>
+    private static List<MenuEntry> ViewRows(ContextMenuTarget t) {
+        string reason = t.ViewReason switch {
+            ViewReason.Pinned => Text.Get("ViewReasonPinned"),
+            ViewReason.Pictures => Text.Get("ViewReasonPictures"),
+            _ => Text.Get("ViewReasonDefault"),
+        };
+        string pin = Text.Get("MenuViewPinHint");
+
+        return new List<MenuEntry> {
+            new() { Header = Text.Format("MenuViewThisFolder", reason), IsEnabled = false },
+            Choice(MenuCommandId.SetView, ViewMode.Details, Text.Get("MenuViewDetails"), t.View, pin) with { Gesture = "Ctrl+Shift+6" },
+            Choice(MenuCommandId.SetView, ViewMode.Tiles, Text.Get("MenuViewTiles"), t.View, pin) with { Gesture = "Ctrl+Shift+7" },
+            Choice(MenuCommandId.SetView, ViewMode.LargeIcons, Text.Get("MenuViewLargeIcons"), t.View, pin) with { Gesture = "Ctrl+Shift+2" },
+            Choice(MenuCommandId.SetView, ViewMode.Gallery, Text.Get("MenuViewGallery"), t.View, pin) with { Gesture = "Ctrl+Shift+1" },
+            MenuEntry.Divider,
+            Toggle(MenuCommandId.ViewAuto, t.ViewReason != ViewReason.Pinned, Text.Get("MenuViewAutoHint")),
+            Cmd(MenuCommandId.MakeDefaultView) with { Tooltip = Text.Get("MenuViewMakeDefaultHint") },
+        };
+    }
+
+    /// <summary>
+    /// The keys - the one in use flips the direction - direction and folders
+    /// first, and the pin taken off or made the default. Any of the first
+    /// seven pins the whole order to the folder.
+    /// </summary>
+    private static List<MenuEntry> SortRows(ContextMenuTarget t) {
+        string pin = Text.Get("MenuSortPinHint");
+        var key = t.Sort.Key;
+
+        return new List<MenuEntry> {
+            Choice(MenuCommandId.SetSortKey, SortKey.Name, Text.Get("MenuSortName"), key, pin),
+            Choice(MenuCommandId.SetSortKey, SortKey.ModifiedDate, Text.Get("MenuSortDate"), key, pin),
+            Choice(MenuCommandId.SetSortKey, SortKey.Size, Text.Get("MenuSortSize"), key, pin),
+            Choice(MenuCommandId.SetSortKey, SortKey.Type, Text.Get("MenuSortType"), key, pin),
+            Choice(MenuCommandId.SetSortKey, SortKey.Rating, Text.Get("MenuSortRating"), key, pin),
+            MenuEntry.Divider,
+            Toggle(MenuCommandId.SortAscending, t.Sort.Ascending, pin),
+            Toggle(MenuCommandId.SortFoldersFirst, t.Sort.GroupFoldersFirst, pin),
+            MenuEntry.Divider,
+            Toggle(MenuCommandId.SortAuto, !t.SortPinned, Text.Get("MenuSortAutoHint")),
+            // Without a pin the order on screen already is the default one.
+            Cmd(MenuCommandId.MakeDefaultSort, enabled: t.SortPinned) with { Tooltip = Text.Get("MenuSortMakeDefaultHint") },
         };
     }
 
@@ -581,6 +655,8 @@ public static class ContextMenuBuilder {
         MenuCommandId.ActionsSubmenu,
         MenuCommandId.ConvertSubmenu,
         MenuCommandId.ToFolderSubmenu,
+        MenuCommandId.ViewSubmenu,
+        MenuCommandId.SortSubmenu,
     };
 
 
@@ -652,5 +728,25 @@ public static class ContextMenuBuilder {
             Header = ContextMenuCatalog.Title(id),
             Children = children,
         };
+    }
+
+    /// <summary>
+    /// One of a set - a view, a sort key: checked when it is the one in use,
+    /// and carrying its name as the argument its command gets.
+    /// </summary>
+    private static MenuEntry Choice<T>(MenuCommandId id, T choice, string header, T current, string tooltip) where T : struct, Enum {
+        return new MenuEntry {
+            Id = id,
+            Header = header,
+            Argument = choice.ToString(),
+            IsCheckable = true,
+            IsChecked = EqualityComparer<T>.Default.Equals(choice, current),
+            Tooltip = tooltip,
+        };
+    }
+
+    /// <summary>A row whose check mark says whether it is on.</summary>
+    private static MenuEntry Toggle(MenuCommandId id, bool isChecked, string tooltip) {
+        return Cmd(id) with { IsCheckable = true, IsChecked = isChecked, Tooltip = tooltip };
     }
 }

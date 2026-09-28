@@ -1,0 +1,164 @@
+{
+  // The selected file does not leave the screen on its own (RowFollowing,
+  // 2026-09-28): whatever comes, goes or moves around it, a row that stood
+  // on screen stands there afterwards - at the same place. "place" scrolls
+  // the list to a row and remembers where it stands; "assert-place" reads
+  // the place off the row's container, not off the view's own arithmetic.
+  // Nothing here presses refresh where the watcher is what is checked.
+  "name": "follow-row",
+  "sandbox": "follow",
+  "profiles": [ "big", "photos" ],
+  "steps": [
+    // What an earlier run left behind, if it died halfway.
+    { "do": "fs", "op": "delete", "path": "{sandbox}\\big\\early-{n}.txt", "count": 3 },
+    { "do": "fs", "op": "delete", "path": "{sandbox}\\big\\burst-{n}.txt", "count": 400 },
+    { "do": "fs", "op": "delete", "path": "{sandbox}\\big\\dir-01\\file-04{n}-deep.txt", "count": 50 },
+    { "do": "fs", "op": "delete", "path": "{sandbox}\\big\\file-04500-moved.txt" },
+    { "do": "fs", "op": "create", "path": "{sandbox}\\big\\file-02500.txt", "bytes": 1024 },
+
+    // === The table ======================================================
+    { "do": "navigate", "path": "{sandbox}\\big" },
+    { "do": "view", "mode": "Details" },
+    { "do": "select", "names": [ "file-02500.txt" ] },
+    { "do": "place", "name": "file-02500.txt", "rows": 6 },
+
+    // --- Files from outside, above the row -----------------------------
+    { "do": "fs", "op": "create", "path": "{sandbox}\\big\\early-{n}.txt", "count": 3, "bytes": 8 },
+    { "do": "sleep", "ms": 1500 },
+    { "do": "assert-entries", "contains": [ "early-003.txt" ], "selected": [ "file-02500.txt" ] },
+    { "do": "assert-place", "name": "file-02500.txt", "kept": true },
+    { "do": "note", "text": "table: three files created above the selected row from outside - it stands where it stood" },
+
+    // More than the list reconciles row by row: it is laid down whole.
+    { "do": "fs", "op": "create", "path": "{sandbox}\\big\\burst-{n}.txt", "count": 400, "bytes": 8 },
+    { "do": "sleep", "ms": 2500 },
+    { "do": "wait-idle" },
+    { "do": "assert-entries", "contains": [ "burst-400.txt" ], "selected": [ "file-02500.txt" ] },
+    { "do": "assert-place", "name": "file-02500.txt", "kept": true },
+    { "do": "command", "name": "refresh" },
+    { "do": "assert-place", "name": "file-02500.txt", "kept": true },
+    { "do": "note", "text": "table: four hundred files from outside, then F5 - the selected row stands where it stood" },
+
+    // --- Renamed from outside: the row moves two thousand rows down ------
+    { "do": "fs", "op": "move", "path": "{sandbox}\\big\\file-02500.txt", "to": "{sandbox}\\big\\file-04500-moved.txt" },
+    { "do": "sleep", "ms": 1500 },
+    { "do": "wait-idle" },
+    { "do": "assert-state", "field": "list.primary", "value": "{sandbox}\\big\\file-04500-moved.txt" },
+    { "do": "assert-place", "name": "file-04500-moved.txt", "kept": true },
+    { "do": "note", "text": "table: renamed from outside, the row went to another part of the list and is on screen where it stood" },
+
+    // --- Another order, and back -----------------------------------------
+    { "do": "sort", "key": "Name" },
+    { "do": "assert-place", "name": "file-04500-moved.txt", "kept": true },
+    { "do": "sort", "key": "Name" },
+    { "do": "assert-place", "name": "file-04500-moved.txt", "kept": true },
+
+    // --- The filter by name, put on and taken off --------------------------
+    { "do": "search", "name": "file-04*" },
+    { "do": "assert-entries", "scope": "visible", "count": 1001 },
+    { "do": "assert-place", "name": "file-04500-moved.txt", "kept": true },
+    { "do": "command", "name": "clear-search" },
+    { "do": "assert-entries", "scope": "visible", "min": 5000, "selected": [ "file-04500-moved.txt" ] },
+    { "do": "assert-place", "name": "file-04500-moved.txt", "kept": true },
+
+    // --- Search results: the filter going on under the folder ------------
+    //
+    // The rows the filter found stay, the ones found below land under them:
+    // results now, laid down through the model - the selected row among
+    // them stays selected and in place, through another order of them too,
+    // and through the way back to the folder.
+    { "do": "fs", "op": "create", "path": "{sandbox}\\big\\dir-01\\file-04{n}-deep.txt", "count": 50, "bytes": 8 },
+    { "do": "search", "box": "file-04*" },
+    { "do": "assert-entries", "count": 1051, "selected": [ "file-04500-moved.txt" ] },
+    { "do": "assert-place", "name": "file-04500-moved.txt", "kept": true },
+    { "do": "sort", "key": "Name" },
+    { "do": "assert-entries", "count": 1051, "selected": [ "file-04500-moved.txt" ] },
+    { "do": "assert-place", "name": "file-04500-moved.txt", "kept": true },
+    { "do": "sort", "key": "Name" },
+    { "do": "command", "name": "clear-search" },
+    { "do": "assert-entries", "min": 5000, "selected": [ "file-04500-moved.txt" ] },
+    { "do": "assert-place", "name": "file-04500-moved.txt", "kept": true },
+    { "do": "note", "text": "table: order, filter, results of the filter's walk and the way back - the selected row stands where it stood" },
+    { "do": "screenshot", "name": "table-after" },
+
+    // === Another view =====================================================
+    //
+    // Each view scrolls on its own; the one coming on screen shows the
+    // selection - with the keyboard in a panel as well.
+    { "do": "view", "mode": "Tiles" },
+    { "do": "assert-place", "name": "file-04500-moved.txt" },
+    { "do": "post", "event": "ZoneEntered", "zone": "Drives", "reason": "Click" },
+    { "do": "view", "mode": "LargeIcons" },
+    { "do": "assert-place", "name": "file-04500-moved.txt" },
+    { "do": "view", "mode": "Gallery" },
+    { "do": "assert-place", "name": "file-04500-moved.txt" },
+    { "do": "view", "mode": "Details" },
+    { "do": "assert-place", "name": "file-04500-moved.txt" },
+    { "do": "note", "text": "every view coming on screen shows the selected row, the keyboard in the list or in a panel" },
+
+    // === The tiles ========================================================
+    { "do": "view", "mode": "Tiles" },
+    { "do": "select", "names": [ "file-04500-moved.txt" ] },
+    { "do": "place", "name": "file-04500-moved.txt", "rows": 3 },
+    { "do": "fs", "op": "delete", "path": "{sandbox}\\big\\early-{n}.txt", "count": 3 },
+    { "do": "sleep", "ms": 1500 },
+    { "do": "assert-entries", "absent": [ "early-001.txt" ], "selected": [ "file-04500-moved.txt" ] },
+    { "do": "assert-place", "name": "file-04500-moved.txt", "kept": true },
+    { "do": "fs", "op": "delete", "path": "{sandbox}\\big\\burst-{n}.txt", "count": 400 },
+    { "do": "sleep", "ms": 2500 },
+    { "do": "wait-idle" },
+    { "do": "assert-entries", "absent": [ "burst-400.txt" ], "selected": [ "file-04500-moved.txt" ] },
+    { "do": "assert-place", "name": "file-04500-moved.txt", "kept": true },
+    { "do": "sort", "key": "Name" },
+    { "do": "assert-place", "name": "file-04500-moved.txt", "kept": true },
+    { "do": "sort", "key": "Name" },
+    { "do": "assert-place", "name": "file-04500-moved.txt", "kept": true },
+    { "do": "search", "box": "file-04*" },
+    { "do": "assert-entries", "count": 1051, "selected": [ "file-04500-moved.txt" ] },
+    { "do": "assert-place", "name": "file-04500-moved.txt", "kept": true },
+    { "do": "command", "name": "clear-search" },
+    { "do": "assert-place", "name": "file-04500-moved.txt", "kept": true },
+    { "do": "note", "text": "tiles: files gone above the row, a rebuild, order, results and back - the selected tile stands where it stood" },
+    { "do": "screenshot", "name": "tiles-after" },
+
+    // --- At the very start of the list -----------------------------------
+    //
+    // The exception: a list at its start stays there while the row fits on
+    // screen - what arrives above it is what the user is looking at.
+    { "do": "view", "mode": "Details" },
+    { "do": "select", "names": [ "dir-04" ] },
+    { "do": "place", "name": "dir-04", "rows": 3 },
+    { "do": "fs", "op": "mkdir", "path": "{sandbox}\\big\\dir-00" },
+    { "do": "sleep", "ms": 1500 },
+    { "do": "assert-place", "name": "dir-00" },
+    { "do": "assert-place", "name": "dir-04" },
+    { "do": "note", "text": "at the start of the list a folder created above the selected row is on screen, and so is the row" },
+    { "do": "fs", "op": "delete", "path": "{sandbox}\\big\\dir-00" },
+    { "do": "sleep", "ms": 1500 },
+
+    // === Stars ============================================================
+    //
+    // IMG_0057 carries three stars. Under "three and up" the folder is a
+    // screenful and does not scroll; the filter taken off, the row stands
+    // where it stood under it. F5 under the filter hides nothing.
+    { "do": "navigate", "path": "{sandbox}\\photos" },
+    { "do": "view", "mode": "Details" },
+    { "do": "stars", "rank": 3 },
+    { "do": "assert-entries", "scope": "visible", "contains": [ "IMG_0057.jpg" ], "absent": [ "IMG_0060.jpg" ] },
+    { "do": "select", "names": [ "IMG_0057.jpg" ] },
+    { "do": "place", "name": "IMG_0057.jpg", "rows": 3 },
+    { "do": "command", "name": "refresh" },
+    { "do": "assert-entries", "scope": "visible", "contains": [ "IMG_0057.jpg" ], "absent": [ "IMG_0060.jpg" ], "selected": [ "IMG_0057.jpg" ] },
+    { "do": "assert-place", "name": "IMG_0057.jpg", "kept": true },
+    { "do": "stars", "clear": true },
+    { "do": "assert-entries", "scope": "visible", "contains": [ "IMG_0060.jpg" ], "selected": [ "IMG_0057.jpg" ] },
+    { "do": "assert-place", "name": "IMG_0057.jpg", "kept": true },
+    { "do": "note", "text": "stars: F5 under the filter kept the rows and the selection; the filter taken off, the row stands where it stood" },
+    { "do": "screenshot", "name": "stars-off" },
+
+    // Put back for the next run on the same sandbox.
+    { "do": "fs", "op": "delete", "path": "{sandbox}\\big\\dir-01\\file-04{n}-deep.txt", "count": 50 },
+
+    { "do": "assert-log", "scope": "all", "noErrors": true }
+  ]
+}

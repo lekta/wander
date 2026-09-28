@@ -58,6 +58,18 @@ public static class ContextMenuCatalog {
 
         [MenuCommandId.RestoreFromRecycleBin] = "MenuCmdRestore",
 
+        // The rows inside the two submenus are the "Вид" menu's own, under
+        // its keys: the two menus cannot drift apart. The choices themselves
+        // - a view, a sort key - are labelled by the builder.
+        [MenuCommandId.ViewSubmenu] = "MenuCmdViewSubmenu",
+        [MenuCommandId.SortSubmenu] = "MenuCmdSortSubmenu",
+        [MenuCommandId.ViewAuto] = "MenuViewAuto",
+        [MenuCommandId.MakeDefaultView] = "MenuViewMakeDefault",
+        [MenuCommandId.SortAscending] = "MenuSortAscending",
+        [MenuCommandId.SortFoldersFirst] = "MenuSortFoldersFirst",
+        [MenuCommandId.SortAuto] = "MenuSortAuto",
+        [MenuCommandId.MakeDefaultSort] = "MenuSortMakeDefault",
+
         [MenuCommandId.Properties] = "MenuCmdProperties",
 
         [MenuCommandId.DropCopyHere] = "MenuCmdDropCopyHere",
@@ -121,6 +133,10 @@ public static class ContextMenuCatalog {
         new MenuNode(MenuCommandId.Extract, 0),
         new MenuNode(MenuCommandId.NewSubmenu, 0),
         new MenuNode(MenuCommandId.NewFolder, 1),
+        // Whole submenus only: they repeat the "Вид" menu, and the one
+        // question is whether the empty space should too.
+        new MenuNode(MenuCommandId.ViewSubmenu, 0),
+        new MenuNode(MenuCommandId.SortSubmenu, 0),
         new MenuNode(MenuCommandId.Properties, 0),
     };
 

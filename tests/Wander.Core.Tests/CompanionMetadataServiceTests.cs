@@ -236,6 +236,52 @@ public class CompanionMetadataServiceTests {
         Assert.Null(rated[0].Rating);
     }
 
+    [Fact]
+    public void WithRatings_TakesOffACarriedRatingTheSidecarNoLongerHolds() {
+        var (service, _, _) = Build(pp3: null);
+        var rows = new[] { Row("Sprite.png", MetaPath) with { Rating = new SidecarRating(4, null) } };
+
+        var rated = RatedListing.WithRatings(rows, service.ReadRatingFor);
+
+        Assert.Null(rated[0].Rating);
+    }
+
+    [Fact]
+    public void CarryRatings_PutsTheShownRatingsBack_OnlyWhereACompanionIs() {
+        var shown = new[] {
+            Row("a.cr2", Pp3Path) with { Rating = new SidecarRating(5, null) },
+            Row("b.jpg") with { Rating = new SidecarRating(3, null) },
+        };
+        // The same files listed again - no ratings yet, and b.jpg's sidecar gone.
+        var listed = new[] { Row("a.cr2", Pp3Path), Row("b.jpg"), Row("c.cr2", Pp3Path) };
+
+        var carried = RatedListing.CarryRatings(listed, shown, SortOptions.Default);
+
+        Assert.Equal(5, carried[0].Rating?.Rank);
+        Assert.Null(carried[1].Rating);
+        Assert.Null(carried[2].Rating);
+    }
+
+    [Fact]
+    public void CarryRatings_SortedByRating_OrdersByWhatWasCarried() {
+        var shown = new[] {
+            Row("a.cr2", Pp3Path) with { Rating = new SidecarRating(1, null) },
+            Row("b.cr2", Pp3Path) with { Rating = new SidecarRating(5, null) },
+        };
+        var byRating = new SortOptions(SortKey.Rating, Ascending: false, GroupFoldersFirst: true);
+
+        var carried = RatedListing.CarryRatings(new[] { Row("a.cr2", Pp3Path), Row("b.cr2", Pp3Path) }, shown, byRating);
+
+        Assert.Equal(new[] { "b.cr2", "a.cr2" }, carried.Select(e => e.Name));
+    }
+
+    [Fact]
+    public void CarryRatings_NothingRatedOnScreen_ReturnsTheSameList() {
+        var listed = new[] { Row("a.cr2", Pp3Path) };
+
+        Assert.Same(listed, RatedListing.CarryRatings(listed, new[] { Row("a.cr2", Pp3Path) }, SortOptions.Default));
+    }
+
 
     // --- Creating a sidecar ---------------------------------------------
 

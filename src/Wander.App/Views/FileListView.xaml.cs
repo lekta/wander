@@ -77,6 +77,25 @@ public partial class FileListView : UserControl {
     /// </summary>
     private FileSystemEntry? _pendingFocus;
 
+    /// <summary>
+    /// The main row as it stood on screen when rows began to land
+    /// (<see cref="MainViewModel.RowsLanding"/>) - its path, how far from
+    /// the top of the view (rows in the table, pixels in the tiles), and
+    /// whether the list stood at its start. Null when it was not on screen.
+    /// What is done about it once they have landed is RowFollowing's to say
+    /// (<see cref="ApplySelection"/>, 2026-09-28).
+    /// </summary>
+    private RowStand? _stood;
+
+    /// <summary>
+    /// What the view was last asked about the main row and has not laid out
+    /// yet: the row, and the place it is being put at - none when it is only
+    /// being brought into view. Rows landing again before the layout find
+    /// the row there (<see cref="OnRowsLanding"/>): the offsets still
+    /// describe the rows before.
+    /// </summary>
+    private (string Path, double? Top)? _asked;
+
     /// <summary>The inline rename editor while a name is being edited, and the layer it sits in - see the rename section.</summary>
     private RenameAdorner? _renameAdorner;
     private AdornerLayer? _renameLayer;
@@ -129,12 +148,14 @@ public partial class FileListView : UserControl {
             old.PropertyChanged -= OnViewModelChanged;
             old.Settings.PropertyChanged -= OnSettingsChanged;
             old.FolderArrived -= OnFolderArrived;
+            old.RowsLanding -= OnRowsLanding;
             old.Entries.CollectionChanged -= OnEntriesChanged;
         }
         if (e.NewValue is MainViewModel vm) {
             vm.PropertyChanged += OnViewModelChanged;
             vm.Settings.PropertyChanged += OnSettingsChanged;
             vm.FolderArrived += OnFolderArrived;
+            vm.RowsLanding += OnRowsLanding;
             vm.Entries.CollectionChanged += OnEntriesChanged;
             ShowSortIndicator();
             ApplyDetailsIconSize();
@@ -177,6 +198,8 @@ public partial class FileListView : UserControl {
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e) {
         if (e.PropertyName == nameof(MainViewModel.HasRatings)) {
             ShowRatingColumn();
+        } else if (e.PropertyName == nameof(MainViewModel.CurrentSort)) {
+            ShowSortIndicator();
         } else if (e.PropertyName == nameof(MainViewModel.IsSearchResults)) {
             ShowSearchColumns();
         } else if (e.PropertyName == nameof(MainViewModel.ViewMode)) {
@@ -230,11 +253,6 @@ public partial class FileListView : UserControl {
 
     private void OnSettingsChanged(object? sender, PropertyChangedEventArgs e) {
         switch (e.PropertyName) {
-            case nameof(SettingsViewModel.SortKey):
-            case nameof(SettingsViewModel.SortAscending):
-                ShowSortIndicator();
-                break;
-
             case nameof(SettingsViewModel.DetailsIconSize):
                 ApplyDetailsIconSize();
                 break;
@@ -369,18 +387,19 @@ public partial class FileListView : UserControl {
     /// <summary>
     /// Puts the little arrow on the column that is actually sorted. The
     /// grid would normally do this as part of sorting, which is exactly what
-    /// we refused above — so the indicator is driven from the settings
-    /// instead, and the View menu moves it too.
+    /// we refused above - so the indicator is driven from the open folder's
+    /// order instead, and the menus move it too.
     /// </summary>
     private void ShowSortIndicator() {
         if (DataContext is not MainViewModel vm) {
             return;
         }
 
-        string active = vm.Settings.SortKey.ToString();
+        var sort = vm.CurrentSort;
+        string active = sort.Key.ToString();
         foreach (var column in DetailsView.Columns) {
             column.SortDirection = column.SortMemberPath == active
-                ? (vm.Settings.SortAscending ? ListSortDirection.Ascending : ListSortDirection.Descending)
+                ? (sort.Ascending ? ListSortDirection.Ascending : ListSortDirection.Descending)
                 : null;
         }
     }
@@ -425,22 +444,34 @@ public partial class FileListView : UserControl {
     /// <paramref name="scroll"/> brings the main row into view, the table's
     /// current row on it - after <paramref name="top"/>, when there is one,
     /// has been put first on screen (the last session's place, 2026-09-25).
+    /// A main row that stood on screen when these rows began to land, as
+    /// <paramref name="held"/>, stays where it stood (RowFollowing,
+    /// 2026-09-28).
     /// </summary>
-    public void ApplySelection(ListState list, bool scroll, string? top = null) {
+    public void ApplySelection(ListState list, bool scroll, string? top = null, string? held = null) {
+        var stood = _stood;
+        _stood = null;
         if (ActiveList() is not { } host) {
             return;
         }
 
         var rows = EntriesOf(list.Selection, list.Primary);
         PutSelection(host, rows, report: false);
-        var main = scroll && rows.Count > 0 ? rows[0] : null;
-        if (main is not null && host is DataGrid grid) {
+        var main = rows.Count > 0 ? rows[0] : null;
+        if (scroll && main is not null && host is DataGrid grid) {
             grid.CurrentItem = main;
         }
         if (EntryAt(top) is { } first) {
-            ShowFromTop(host, first, main);
+            ShowFromTop(host, first, scroll ? main : null);
         } else if (main is not null) {
-            ScrollRowIntoView(host, main);
+            switch (RowFollowing.Decide(stood, held, scroll)) {
+                case RowFollow.Hold:
+                    Follow(host, main, stood?.Top);
+                    break;
+                case RowFollow.Reveal:
+                    Follow(host, main, top: null);
+                    break;
+            }
         }
     }
 
@@ -507,6 +538,88 @@ public partial class FileListView : UserControl {
     public void OpenEditor(string path) {
         if (Vm.SelectedEntry is { } entry && IsSamePath(entry.FullPath, path)) {
             StartRename();
+        }
+    }
+
+
+    /// <summary>
+    /// Rows are about to land: where the main row stands, while the view
+    /// still shows the old ones. Landing again before the layout has carried
+    /// out what was asked about the row, it stands where it was asked to.
+    /// </summary>
+    private void OnRowsLanding() {
+        _stood = null;
+        if (Vm.SelectedEntry is not { } main || ActiveList() is not { } host) {
+            return;
+        }
+
+        if (_asked is { } asked && IsSamePath(asked.Path, main.FullPath)) {
+            if (asked.Top is { } place) {
+                _stood = new RowStand(main.FullPath, place, AtStart: false);
+            }
+
+            return;
+        }
+
+        if (TopOnScreen(host, main) is { } top) {
+            bool atStart = ListVisuals.FindDescendant<ScrollViewer>(host) is not { VerticalOffset: > 0.5 };
+            _stood = new RowStand(main.FullPath, top, atStart);
+        }
+    }
+
+
+    /// <summary>
+    /// How far <paramref name="entry"/> stands from the top of the view - in
+    /// rows for the table, which scrolls by rows, in pixels for the tiles -
+    /// or null when it is not on screen.
+    /// </summary>
+    private static double? TopOnScreen(ItemsControl host, FileSystemEntry entry) {
+        int index = host.Items.IndexOf(entry);
+        if (index < 0) {
+            return null;
+        }
+
+        if (host is DataGrid grid) {
+            if (ListVisuals.FindDescendant<ScrollViewer>(grid) is not { } viewer) {
+                return null;
+            }
+            double rows = index - viewer.VerticalOffset;
+
+            return rows >= 0 && rows < viewer.ViewportHeight ? rows : null;
+        }
+
+        return ListVisuals.FindDescendant<VirtualizingWrapPanel>(host)?.TopOnScreen(index);
+    }
+
+
+    /// <summary>
+    /// The main row followed: back at <paramref name="top"/> from the top
+    /// of the view (<see cref="TopOnScreen"/>), or with none brought into
+    /// view, moving as little as possible. Once the new rows are laid out
+    /// and before they are drawn - the tiles in their next measure, the
+    /// table through its scroll viewer, which takes an offset after its
+    /// layout. Until then the view remembers what it was asked
+    /// (<see cref="_asked"/>).
+    /// </summary>
+    private void Follow(ItemsControl host, FileSystemEntry entry, double? top) {
+        _asked = (entry.FullPath, top);
+        // Loaded comes after the layout pass that carries it out.
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => _asked = null);
+
+        if (host is DataGrid grid) {
+            if (top is { } rows && ListVisuals.FindDescendant<ScrollViewer>(grid) is { } viewer) {
+                viewer.ScrollToVerticalOffset(grid.Items.IndexOf(entry) - rows);
+            } else {
+                grid.ScrollIntoView(entry);
+            }
+
+            return;
+        }
+
+        if (ListVisuals.FindDescendant<VirtualizingWrapPanel>(host) is { } panel) {
+            panel.ShowOnNextMeasure(entry, top);
+        } else {
+            ScrollRowIntoView(host, entry);
         }
     }
 
@@ -1460,22 +1573,21 @@ public partial class FileListView : UserControl {
             }
         }
 
-        bool attached = false;
         foreach (var view in views) {
             if (!ShouldDetach(view, active) && _detachedViews.Remove(view)) {
                 view.SetBinding(ItemsControl.ItemsSourceProperty, new Binding(nameof(MainViewModel.Entries)));
-                attached = true;
             }
         }
 
         // Every control keeps its own SelectedItems, so the view coming on
         // screen is handed the model's selection whether or not it was just
         // bound: three rows picked in the table showed as one in the tiles
-        // while Ctrl+C still copied three. Unchanged is a no-op. A view that
-        // has just been bound is also scrolled to the top, so that one is
-        // brought back to the selection.
+        // while Ctrl+C still copied three. Unchanged is a no-op. Each view
+        // scrolls on its own - one just bound stands at its start, the
+        // others where they were left - so the one coming on screen is
+        // brought to the selection, wherever the keyboard is (2026-09-28).
         if (active is not null && Vm.SelectedEntries.Count > 0) {
-            ApplySelection(Vm.Workspace.State.List, scroll: attached);
+            ApplySelection(Vm.Workspace.State.List, scroll: true);
         }
     }
 

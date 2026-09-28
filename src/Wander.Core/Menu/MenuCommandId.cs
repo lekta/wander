@@ -15,11 +15,12 @@ namespace Wander.Core.Menu;
 /// header text.
 ///
 /// <para>
-/// View mode, sorting, refresh and undo are deliberately absent: they are
-/// window-wide state, they live in the toolbar's «Вид» menu and on hotkeys,
-/// and a right-click on a folder is not where you go looking for them.
-/// Names dropped from this enum are ignored on load rather than rejected —
-/// see <c>ContextMenuSettings.From</c>.
+/// Refresh and undo are deliberately absent: they are window-wide, they
+/// live in the toolbar's "Вид" menu and on hotkeys. The view and the order
+/// are the open folder's own and came back to its empty space (2026-09-28)
+/// - Explorer's place for them; a user who finds them doubled switches the
+/// two submenus off. Names dropped from this enum are ignored on load
+/// rather than rejected - see <c>ContextMenuSettings.From</c>.
 /// </para>
 /// </summary>
 public enum MenuCommandId {
@@ -70,6 +71,24 @@ public enum MenuCommandId {
 
     // --- Recycle bin ----------------------------------------------------
     RestoreFromRecycleBin,
+
+    // --- The open folder's view and order (background menu) -------------
+    ViewSubmenu,
+    SortSubmenu,
+    /// <summary>One of the views, pinned to the folder; <c>MenuEntry.Argument</c> carries the <c>ViewMode</c> name.</summary>
+    SetView,
+    /// <summary>The folder's view chosen for it again - its pin taken off.</summary>
+    ViewAuto,
+    /// <summary>The view on screen becomes the default one.</summary>
+    MakeDefaultView,
+    /// <summary>One of the keys, pinned to the folder with the rest of its order; <c>MenuEntry.Argument</c> carries the <c>SortKey</c> name.</summary>
+    SetSortKey,
+    SortAscending,
+    SortFoldersFirst,
+    /// <summary>The folder in the default order again - its pin taken off.</summary>
+    SortAuto,
+    /// <summary>The order on screen becomes the default one.</summary>
+    MakeDefaultSort,
 
     // --- Misc -----------------------------------------------------------
     Properties,

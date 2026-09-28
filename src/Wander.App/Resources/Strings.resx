@@ -2562,6 +2562,30 @@
   <data name="ViewReasonDefault" xml:space="preserve">
     <value>по умолчанию</value>
   </data>
+  <data name="MenuSortPinHint" xml:space="preserve">
+    <value>Закрепить этот порядок за открытой папкой</value>
+  </data>
+  <data name="MenuSortAuto" xml:space="preserve">
+    <value>По умолчанию</value>
+    <comment>Под «Сортировкой»: у открытой папки нет своего порядка</comment>
+  </data>
+  <data name="MenuSortAutoHint" xml:space="preserve">
+    <value>Снять закрепление: порядок по умолчанию</value>
+  </data>
+  <data name="MenuSortMakeDefault" xml:space="preserve">
+    <value>Сделать сортировкой по умолчанию</value>
+  </data>
+  <data name="MenuSortMakeDefaultHint" xml:space="preserve">
+    <value>Этот порядок получат папки без закрепления; с открытой папки закрепление снимается</value>
+  </data>
+  <data name="MenuCmdViewSubmenu" xml:space="preserve">
+    <value>Вид</value>
+    <comment>Подменю в меню пустого места папки — вид открытой папки, как в меню «Вид»</comment>
+  </data>
+  <data name="MenuCmdSortSubmenu" xml:space="preserve">
+    <value>Сортировка</value>
+    <comment>Подменю в меню пустого места папки — порядок открытой папки</comment>
+  </data>
   <data name="SettingsDefaultViewMode" xml:space="preserve">
     <value>Вид по умолчанию</value>
   </data>
