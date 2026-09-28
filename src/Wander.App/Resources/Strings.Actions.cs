@@ -17,9 +17,6 @@ public static partial class Strings {
     /// <summary>Действия</summary>
     public static string SettingsCategoryActions => Get(nameof(SettingsCategoryActions));
 
-    /// <summary>Вкл</summary>
-    public static string SettingsActionsColumnEnabled => Get(nameof(SettingsActionsColumnEnabled));
-
     /// <summary>Название</summary>
     public static string SettingsActionsColumnTitle => Get(nameof(SettingsActionsColumnTitle));
 
@@ -41,10 +38,10 @@ public static partial class Strings {
     /// <summary>В подменю</summary>
     public static string SettingsActionsColumnSubmenu => Get(nameof(SettingsActionsColumnSubmenu));
 
-    /// <summary>Скрыть консоль</summary>
-    public static string SettingsActionsColumnHideConsole => Get(nameof(SettingsActionsColumnHideConsole));
+    /// <summary>Показывать консоль</summary>
+    public static string SettingsActionsShowConsole => Get(nameof(SettingsActionsShowConsole));
 
-    /// <summary>Выход</summary>
+    /// <summary>Файл результата</summary>
     public static string SettingsActionsColumnOutput => Get(nameof(SettingsActionsColumnOutput));
 
     /// <summary>Маска вместо группы, например *.psd;*.ai. Непустая маска главнее группы и к папкам не подходит</summary>
@@ -53,11 +50,11 @@ public static partial class Strings {
     /// <summary>Подстановки: {path} — файл, {name} — его имя без расширения, …</summary>
     public static string SettingsActionsPlaceholders => Get(nameof(SettingsActionsPlaceholders));
 
+    /// <summary>Настройки через «;»: format=jpeg, png, bmp, tiff или gif — обязательно…</summary>
+    public static string SettingsActionsBuiltinSettings => Get(nameof(SettingsActionsBuiltinSettings));
+
     /// <summary>Имя результата рядом с исходным, например {name}.mp4. …</summary>
     public static string SettingsActionsOutputHint => Get(nameof(SettingsActionsOutputHint));
-
-    /// <summary>Встроенные действия не удаляются и не правятся — …</summary>
-    public static string SettingsActionsHint => Get(nameof(SettingsActionsHint));
 
     /// <summary>на каждый файл</summary>
     public static string ActionsModePerFile => Get(nameof(ActionsModePerFile));
@@ -80,8 +77,11 @@ public static partial class Strings {
     /// <summary>Добавить</summary>
     public static string ActionsAdd => Get(nameof(ActionsAdd));
 
-    /// <summary>Копировать</summary>
+    /// <summary>Дублировать</summary>
     public static string ActionsCopy => Get(nameof(ActionsCopy));
+
+    /// <summary>Выбрать файл программы</summary>
+    public static string ActionsPickProgram => Get(nameof(ActionsPickProgram));
 
     /// <summary>Удалить</summary>
     public static string ActionsRemove => Get(nameof(ActionsRemove));
@@ -119,9 +119,6 @@ public static partial class Strings {
     /// <summary>Программы</summary>
     public static string SettingsCategoryTools => Get(nameof(SettingsCategoryTools));
 
-    /// <summary>Программы, которые нужны встроенным действиям. …</summary>
-    public static string SettingsToolsHint => Get(nameof(SettingsToolsHint));
-
     /// <summary>видео и аудио, WebP</summary>
     public static string ToolsPurposeFfmpeg => Get(nameof(ToolsPurposeFfmpeg));
 
@@ -155,9 +152,24 @@ public static partial class Strings {
     /// <summary>Программы (*.exe)|*.exe</summary>
     public static string ToolsProgramFilter => Get(nameof(ToolsProgramFilter));
 
+    /// <summary>Программы (*.exe, *.cmd, *.bat)|*.exe;*.cmd;*.bat</summary>
+    public static string ActionsProgramFilter => Get(nameof(ActionsProgramFilter));
+
     /// <summary>Сбросить</summary>
     public static string ToolsReset => Get(nameof(ToolsReset));
 
     /// <summary>Забыть указанный файл и снова искать программу самому</summary>
     public static string ToolsResetHint => Get(nameof(ToolsResetHint));
+
+    /// <summary>Где показывать</summary>
+    public static string SettingsActionsPlacement => Get(nameof(SettingsActionsPlacement));
+
+    /// <summary>Встроенное действие не правится: его можно выключить галочкой в таблице…</summary>
+    public static string SettingsActionsPresetNote => Get(nameof(SettingsActionsPresetNote));
+
+    /// <summary>встроенное</summary>
+    public static string SettingsActionsPreset => Get(nameof(SettingsActionsPreset));
+
+    /// <summary>Выберите строку — здесь появится её команда.</summary>
+    public static string SettingsActionsNoSelection => Get(nameof(SettingsActionsNoSelection));
 }

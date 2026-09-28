@@ -57,6 +57,7 @@ public static class HotkeyCatalog {
             new HotkeyRow("Enter в дереве", Strings.HotkeyTreeEnter),
             new HotkeyRow("Esc в дереве", Strings.HotkeyTreeEscape),
             new HotkeyRow("F2 в дереве", Strings.HotkeyTreeRename),
+            new HotkeyRow("F1 в настройках", Strings.HotkeySettingsGuide),
         }),
         new HotkeyGroup(Strings.HotkeyGroupFileOps, new[] {
             new HotkeyRow("Ctrl + C", Strings.HotkeyCopy),
@@ -90,6 +91,19 @@ public static class HotkeyCatalog {
             new HotkeyRow("Ctrl + Shift + 2", Strings.HotkeyViewLargeIcons),
             new HotkeyRow("Ctrl + Shift + 6", Strings.HotkeyViewDetails),
             new HotkeyRow("Ctrl + Shift + 7", Strings.HotkeyViewTiles),
+        }),
+        new HotkeyGroup(Strings.HotkeyGroupFullscreen, new[] {
+            new HotkeyRow("→ ↓ Space PgDn", Strings.HotkeyFullscreenNext),
+            new HotkeyRow("← ↑ Backspace PgUp", Strings.HotkeyFullscreenPrevious),
+            new HotkeyRow("Home / End", Strings.HotkeyFullscreenEnds),
+            new HotkeyRow("Shift + стрелки", Strings.HotkeyFullscreenSide),
+            new HotkeyRow("← / → на двух", Strings.HotkeyFullscreenKeepSide),
+            new HotkeyRow("0…5, Shift + 0…5", Strings.HotkeyFullscreenRate),
+            new HotkeyRow("Delete / Shift + Delete", Strings.HotkeyFullscreenDelete),
+            new HotkeyRow("Alt (держать)", Strings.HotkeyFullscreenPeek),
+            new HotkeyRow("Ctrl + Z", Strings.HotkeyFullscreenUndo),
+            new HotkeyRow("Z", Strings.HotkeyFullscreenZoom),
+            new HotkeyRow("Esc / Enter", Strings.HotkeyFullscreenClose),
         }),
     };
 

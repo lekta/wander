@@ -423,21 +423,45 @@ public partial class FileListView : UserControl {
     /// What it mends is the list's own doing: a row rebuilt or replaced drops
     /// out of a WPF selection on the way (REDESIGN 4.8).
     /// <paramref name="scroll"/> brings the main row into view, the table's
-    /// current row on it.
+    /// current row on it - after <paramref name="top"/>, when there is one,
+    /// has been put first on screen (the last session's place, 2026-09-25).
     /// </summary>
-    public void ApplySelection(ListState list, bool scroll) {
+    public void ApplySelection(ListState list, bool scroll, string? top = null) {
         if (ActiveList() is not { } host) {
             return;
         }
 
         var rows = EntriesOf(list.Selection, list.Primary);
         PutSelection(host, rows, report: false);
-        if (scroll && rows.Count > 0) {
-            if (host is DataGrid grid) {
-                grid.CurrentItem = rows[0];
-            }
-            ScrollRowIntoView(host, rows[0]);
+        var main = scroll && rows.Count > 0 ? rows[0] : null;
+        if (main is not null && host is DataGrid grid) {
+            grid.CurrentItem = main;
         }
+        if (EntryAt(top) is { } first) {
+            ShowFromTop(host, first, main);
+        } else if (main is not null) {
+            ScrollRowIntoView(host, main);
+        }
+    }
+
+
+    /// <summary>
+    /// The row first on screen in the view on screen - of a row of cells, the
+    /// first of it; null with no rows. What the session keeps to put the
+    /// list back as it was (<see cref="ShowFromTop"/>).
+    /// </summary>
+    public string? FirstRowOnScreen() {
+        if (ActiveList() is not { } host || host.Items.Count == 0) {
+            return null;
+        }
+
+        int index = host switch {
+            // The table scrolls by rows: its offset is the index of the first.
+            DataGrid grid => ListVisuals.FindDescendant<ScrollViewer>(grid) is { } viewer ? (int)viewer.VerticalOffset : -1,
+            _ => ListVisuals.FindDescendant<VirtualizingWrapPanel>(host)?.FirstVisibleIndex ?? -1,
+        };
+
+        return index >= 0 && index < host.Items.Count ? (host.Items[index] as FileSystemEntry)?.FullPath : null;
     }
 
 
@@ -1479,6 +1503,33 @@ public partial class FileListView : UserControl {
             case DataGrid grid: grid.ScrollIntoView(entry); break;
             case ListBox list: list.ScrollIntoView(entry); break;
         }
+    }
+
+
+    /// <summary>
+    /// <paramref name="first"/> first on screen, then <paramref name="main"/>
+    /// brought into view - a window smaller than the one the list was left
+    /// in may not reach it from there. Once the rows are laid out: the
+    /// selection lands with the rows, before the view has measured them, and
+    /// an offset set now would be clamped to the empty list.
+    /// </summary>
+    private void ShowFromTop(ItemsControl host, FileSystemEntry first, FileSystemEntry? main) {
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => {
+            int index = host.Items.IndexOf(first);
+            if (index < 0 || !ReferenceEquals(ActiveList(), host)) {
+                return;
+            }
+
+            if (host is DataGrid grid) {
+                ListVisuals.FindDescendant<ScrollViewer>(grid)?.ScrollToVerticalOffset(index);
+            } else {
+                ListVisuals.FindDescendant<VirtualizingWrapPanel>(host)?.ShowFromTop(index);
+            }
+            if (main is not null) {
+                // The next pass: the table's offset is laid out only then.
+                _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => ScrollRowIntoView(host, main));
+            }
+        });
     }
 
 

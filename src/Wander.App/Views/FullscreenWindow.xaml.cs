@@ -21,15 +21,23 @@ namespace Wander.App.Views;
 /// Right keeps that side alone on the screen. Covers the monitor the main
 /// window is on; the keyboard is its own while it is open. Each picture
 /// carries its stars and the helpers' switches on its bar, and a digit
-/// rates it - of two, the one under the mouse; Ctrl+Z takes it back. Z
-/// zooms to 1:1 and stays there until Z again.
+/// rates it - of two, the one under the mouse; Ctrl+Z takes it back. Delete
+/// sends that picture to the bin (2026-09-25). Z zooms to 1:1 and stays
+/// there until Z again. The pointer goes while the mouse stands still.
 /// </summary>
 public partial class FullscreenWindow : Window {
     /// <summary>How long a warning or an error stays over the picture.</summary>
     private const int NoticeMs = 4000;
 
+    /// <summary>How long the mouse stands still before the pointer goes (2026-09-25).</summary>
+    private const int CursorIdleMs = 1500;
+
     private readonly MainViewModel _vm;
     private readonly FullscreenPlan _plan;
+
+    // What a walk of the selection goes through: the selected pictures, less
+    // the ones deleted from here.
+    private readonly List<FileSystemEntry> _selection;
 
     // The picture on the left, or alone: its pane and viewer, and where it
     // stood in the rows walked when last seen there (PictureWalk.Step).
@@ -57,12 +65,26 @@ public partial class FullscreenWindow : Window {
     // Takes the notice away again (OnStatusSaid).
     private DispatcherTimer? _noticeTimer;
 
+    // A delete from here is under way (DeleteShownAsync); Delete again waits for it.
+    private bool _deleting;
+
+    // Takes the pointer away once the mouse has stood still (OnPreviewMouseMove).
+    private readonly DispatcherTimer _cursorTimer;
+
+    // Where the mouse last moved to, in the window. WPF raises MouseMove for
+    // a mouse that stands still too - when the picture under it changes -
+    // and that must not bring the pointer back.
+    private Point? _cursorAt;
+
 
     private FullscreenWindow(MainViewModel vm, FullscreenPlan plan) {
         InitializeComponent();
 
         _vm = vm;
         _plan = plan;
+        _selection = plan.Pictures.ToList();
+        _cursorTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(CursorIdleMs) };
+        _cursorTimer.Tick += (_, _) => HideCursor();
         Background = vm.Preview.ContentPalette.Background;
         _mainPane = PaneA;
         _mainViewer = NewViewer(_mainPane);
@@ -93,6 +115,7 @@ public partial class FullscreenWindow : Window {
             vm.Ratings.CompanionsChanged -= OnRatingsWritten;
             vm.StatusSaid -= OnStatusSaid;
             _noticeTimer?.Stop();
+            _cursorTimer.Stop();
             StopPeeking();
             _mainViewer.Detach();
             _sideViewer?.Detach();
@@ -147,6 +170,17 @@ public partial class FullscreenWindow : Window {
         if (modifiers == ModifierKeys.Control && e.Key == Key.Z) {
             if (_vm.UndoCommand.CanExecute(null)) {
                 _vm.UndoCommand.Execute(null);
+            }
+            e.Handled = true;
+
+            return;
+        }
+        // Delete, and Shift+Delete for good, as in the list: the picture a
+        // digit would rate. Once per press - a held key does not go on
+        // through the folder.
+        if (e.Key == Key.Delete && modifiers is ModifierKeys.None or ModifierKeys.Shift) {
+            if (!e.IsRepeat) {
+                _ = DeleteShownAsync(permanent: modifiers == ModifierKeys.Shift);
             }
             e.Handled = true;
 
@@ -237,10 +271,39 @@ public partial class FullscreenWindow : Window {
     }
 
 
-    /// <summary>Alt+Tab with Alt held: the key-up lands in another window, so the marks would stay off.</summary>
+    /// <summary>
+    /// The mouse moved: the pointer comes back, and goes again once it has
+    /// stood still for <see cref="CursorIdleMs"/> - the picture is what is
+    /// looked at here, as in any viewer full screen.
+    /// </summary>
+    protected override void OnPreviewMouseMove(MouseEventArgs e) {
+        base.OnPreviewMouseMove(e);
+        var at = e.GetPosition(this);
+        if (_cursorAt is { } was && Math.Abs(at.X - was.X) < 1 && Math.Abs(at.Y - was.Y) < 1) {
+            return;
+        }
+
+        _cursorAt = at;
+        ShowCursor();
+        _cursorTimer.Start();
+    }
+
+
+    protected override void OnActivated(EventArgs e) {
+        base.OnActivated(e);
+        _cursorTimer.Start();
+    }
+
+
+    /// <summary>
+    /// Alt+Tab with Alt held: the key-up lands in another window, so the
+    /// marks would stay off. The pointer is back while another window has
+    /// the keyboard.
+    /// </summary>
     protected override void OnDeactivated(EventArgs e) {
         base.OnDeactivated(e);
         StopPeeking();
+        ShowCursor();
     }
 
 
@@ -265,7 +328,7 @@ public partial class FullscreenWindow : Window {
 
     /// <summary>What the arrow keys walk: the list, or only the pictures selected.</summary>
     private IReadOnlyList<FileSystemEntry> Walked() {
-        return _plan.Mode == FullscreenMode.Selection ? _plan.Pictures : _vm.Entries;
+        return _plan.Mode == FullscreenMode.Selection ? _selection : _vm.Entries;
     }
 
     /// <summary>The row as the list has it now: a walked selection keeps the rows it was opened with, and a star written since made new ones.</summary>
@@ -411,7 +474,7 @@ public partial class FullscreenWindow : Window {
             return false;
         }
 
-        if (Rated() is { } rated) {
+        if (KeyTarget() is { } rated) {
             _vm.RatePicture(rated.Picture, colour ? RatingField.ColorLabel : RatingField.Rank, digit);
             // The bar comes up with the key, whatever it changed: what was
             // set is seen - and so is a rating that already was the one
@@ -437,8 +500,8 @@ public partial class FullscreenWindow : Window {
         pane.ToggleZoom();
     }
 
-    /// <summary>What a digit rates, and on which pane: the picture on show; of two, the one the mouse is over, none when it is over neither.</summary>
-    private (FileSystemEntry Picture, PreviewPane Pane)? Rated() {
+    /// <summary>What a digit rates or Delete takes, and on which pane: the picture on show; of two, the one the mouse is over, none when it is over neither.</summary>
+    private (FileSystemEntry Picture, PreviewPane Pane)? KeyTarget() {
         if (_side is not { } side || _sidePane is not { } sidePane) {
             return (Current, _mainPane);
         }
@@ -446,6 +509,79 @@ public partial class FullscreenWindow : Window {
         return _mainPane.IsMouseOver ? (Current, _mainPane)
             : sidePane.IsMouseOver ? (side, sidePane)
             : null;
+    }
+
+    /// <summary>
+    /// Delete and Shift+Delete (2026-09-25): the picture a key is about goes,
+    /// the way the list's own Delete takes it (<see cref="MainViewModel.DeletePictureAsync"/>).
+    /// Of two, the other one stays alone on screen, as Left and Right leave
+    /// one. Alone, the walk goes on to the next picture - to the one before
+    /// when it was the last, the list's own rule (CurrentRowFallback) - and
+    /// the window closes when there is none. A picture walked away from
+    /// while the delete ran is not followed.
+    /// </summary>
+    private async Task DeleteShownAsync(bool permanent) {
+        if (_deleting || KeyTarget() is not { } aimed) {
+            return;
+        }
+
+        _deleting = true;
+        try {
+            var picture = aimed.Picture;
+            if (!await _vm.DeletePictureAsync(picture, permanent) || _closed) {
+                return;
+            }
+
+            _selection.RemoveAll(e => IsSamePath(e.FullPath, picture.FullPath));
+            if (_side is { } side) {
+                if (IsSamePath(Current.FullPath, picture.FullPath)) {
+                    KeepSide();
+                } else if (IsSamePath(side.FullPath, picture.FullPath)) {
+                    CloseSide();
+                }
+
+                return;
+            }
+            if (!IsSamePath(Current.FullPath, picture.FullPath)) {
+                return;
+            }
+
+            var rows = Walked();
+            int to = PictureWalk.Step(rows, picture.FullPath, _mainStood, +1);
+            if (to < 0) {
+                to = PictureWalk.Step(rows, picture.FullPath, _mainStood, -1);
+            }
+            if (to < 0) {
+                Close();
+
+                return;
+            }
+
+            _mainStood = to;
+            Current = Fresh(rows[to]);
+            ShowPicture(_mainViewer, Current);
+            UpdateTitle();
+        } finally {
+            _deleting = false;
+        }
+    }
+
+    /// <summary>The pointer as the picture under it has it - the magnifier over one that zooms.</summary>
+    private void ShowCursor() {
+        _cursorTimer.Stop();
+        ForceCursor = false;
+        ClearValue(CursorProperty);
+    }
+
+    /// <summary>The mouse has stood still: no pointer over the pictures, whatever they ask for, until it moves.</summary>
+    private void HideCursor() {
+        _cursorTimer.Stop();
+        Cursor = Cursors.None;
+        ForceCursor = true;
+    }
+
+    private static bool IsSamePath(string a, string b) {
+        return string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

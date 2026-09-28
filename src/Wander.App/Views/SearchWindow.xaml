@@ -1,6 +1,7 @@
 <Window x:Class="Wander.App.Views.SearchWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:Wander.App.Controls"
         xmlns:res="clr-namespace:Wander.App.Resources"
         Title="{x:Static res:Strings.SearchWindowTitle}"
         ShowInTaskbar="False"
@@ -51,16 +52,18 @@
 
         <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource FieldLabel}"
                    Text="{x:Static res:Strings.SearchFieldName}"/>
-        <TextBox x:Name="NameBox" Grid.Row="0" Grid.Column="1" Padding="4,3"
-                 ToolTip="{x:Static res:Strings.SearchFieldNameHint}"
-                 Text="{Binding ContentSearch.NameQuery, UpdateSourceTrigger=PropertyChanged, Delay=0}"/>
+        <!-- A cross in each field (2026-09-28); Esc stays the window's, see
+             Window_PreviewKeyDown. -->
+        <controls:FilterBox x:Name="NameBox" Grid.Row="0" Grid.Column="1"
+                            ToolTip="{x:Static res:Strings.SearchFieldNameHint}"
+                            Text="{Binding ContentSearch.NameQuery}"/>
 
         <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,8,8,0"
                    Style="{StaticResource FieldLabel}"
                    Text="{x:Static res:Strings.SearchFieldText}"/>
-        <TextBox x:Name="TextQueryBox" Grid.Row="1" Grid.Column="1" Padding="4,3" Margin="0,8,0,0"
-                 ToolTip="{x:Static res:Strings.SearchFieldTextHint}"
-                 Text="{Binding ContentSearch.TextQuery, UpdateSourceTrigger=PropertyChanged, Delay=0}"/>
+        <controls:FilterBox Grid.Row="1" Grid.Column="1" Margin="0,8,0,0"
+                            ToolTip="{x:Static res:Strings.SearchFieldTextHint}"
+                            Text="{Binding ContentSearch.TextQuery}"/>
 
         <!--
             Where the search starts from, read-only. It is the folder the

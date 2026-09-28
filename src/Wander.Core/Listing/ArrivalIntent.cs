@@ -37,24 +37,47 @@ public enum ArrivalAction {
 /// <param name="TakeFocus">
 /// Whether the list should take the keyboard back along with the selection.
 /// Set by operations that ran behind a modal dialog — by the time it closes,
-/// the row that had the keyboard has been rebuilt out of existence.
+/// the row that had the keyboard has been rebuilt out of existence - and by
+/// the last session's place (<see cref="Place"/>).
 /// </param>
 /// <param name="RenameTarget">
 /// A path whose inline editor should open once it is selected. Only ever the
 /// row that was asked for: a listing that landed for some other reason must
 /// not open an editor under the user's hands.
 /// </param>
+/// <param name="StoodAmong">
+/// The rows around the wanted one as they stood when it was noted, in
+/// order. None of the wanted rows listed, the one that took their place is
+/// selected instead (<see cref="CurrentRowFallback"/>); null - nothing is.
+/// </param>
+/// <param name="Top">The row to put first on screen along with the selection; null to only bring the selection into view.</param>
 public sealed record ArrivalIntent(
     ArrivalAction Action,
     IReadOnlyList<string> Paths,
     string? ForFolder,
     bool TakeFocus = false,
-    string? RenameTarget = null) {
+    string? RenameTarget = null,
+    IReadOnlyList<string>? StoodAmong = null,
+    string? Top = null) {
 
     /// <summary>Select these rows once <paramref name="folder"/> has listed.</summary>
     public static ArrivalIntent Rows(
         string folder, IReadOnlyList<string> paths, bool takeFocus = false, string? renameTarget = null) {
         return new ArrivalIntent(ArrivalAction.SelectRows, paths, folder, takeFocus, renameTarget);
+    }
+
+
+    /// <summary>
+    /// The list as the last session left it in <paramref name="folder"/>
+    /// (2026-09-25): <paramref name="row"/> selected - or the row that took
+    /// its place among <paramref name="stoodAmong"/> - and <paramref name="top"/>
+    /// first on screen. The keyboard goes onto it: the window comes up with
+    /// the keyboard on itself, where the arrows move nothing.
+    /// </summary>
+    public static ArrivalIntent Place(string folder, string? row, IReadOnlyList<string> stoodAmong, string? top) {
+        return new ArrivalIntent(
+            ArrivalAction.SelectRows, row is null ? Array.Empty<string>() : new[] { row }, folder,
+            TakeFocus: true, StoodAmong: stoodAmong, Top: top);
     }
 
 

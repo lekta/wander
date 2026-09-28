@@ -40,17 +40,31 @@ public static class CrashReporter {
     /// <summary>Stack excerpt cap for the issue URL — browsers/GitHub reject overlong URLs.</summary>
     private const int MaxStackChars = 1800;
 
+    /// <summary>The site the guide is published on - GitHub Pages, built by tools/site.</summary>
+    public const string SiteUrl = "https://lekta.github.io/wander/";
+
+    /// <summary>
+    /// The user guide on the site - what the "Help" menu row opens
+    /// (2026-09-28; before, GUIDE.md at the build's own tag). The site is
+    /// built from master on a site-* tag and may run ahead of the installed
+    /// version; its "Версии" page links each release's own GUIDE.
+    /// </summary>
+    public const string GuideUrl = SiteUrl + "guide/";
+
     private static bool _offeredThisSession;
 
 
     /// <summary>
-    /// The user guide - what the "Help" menu row opens. A release build
-    /// opens the guide at its own tag, so the text matches the binary; a
-    /// Debug build opens master, which describes the tree it was built from.
+    /// A page of the guide, and its section when the target names one:
+    /// "faylovye-operatsii#otmena-i-bezopasnost" is
+    /// <c>guide/faylovye-operatsii/#otmena-i-bezopasnost</c>. The settings
+    /// pages' targets are checked against the built site by check.bat.
     /// </summary>
-    public static string GuideUrl { get; } = BuildInfo.IsDebug
-        ? ProjectUrl + "/blob/master/docs/GUIDE.md"
-        : ProjectUrl + "/blob/v" + TagVersion(BuildInfo.Version) + "/docs/GUIDE.md";
+    public static string GuidePage(string target) {
+        int hash = target.IndexOf('#', StringComparison.Ordinal);
+
+        return hash < 0 ? GuideUrl + target + "/" : GuideUrl + target[..hash] + "/" + target[hash..];
+    }
 
 
     /// <summary>
@@ -312,15 +326,5 @@ public static class CrashReporter {
 
     private static string Truncate(string s, int max) {
         return s.Length <= max ? s : s[..max] + "…";
-    }
-
-    /// <summary>
-    /// The tag a version was released under: <c>0.3.1-beta</c> is tagged
-    /// <c>v0.3.1</c>, the suffix stays out (RELEASING.md).
-    /// </summary>
-    private static string TagVersion(string version) {
-        int dash = version.IndexOf('-');
-
-        return dash < 0 ? version : version[..dash];
     }
 }

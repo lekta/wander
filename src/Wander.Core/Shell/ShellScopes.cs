@@ -35,6 +35,9 @@ public static class ShellScopes {
     /// <summary>A drive root.</summary>
     public const string Drive = "Drive";
 
+    /// <summary>A shortcut file - never a type a menu is about, see <see cref="MenuScopeOf"/>.</summary>
+    public const string Shortcut = ".lnk";
+
 
     private static readonly Dictionary<string, string> _titleKeys =
         new(StringComparer.OrdinalIgnoreCase) {
@@ -64,6 +67,36 @@ public static class ShellScopes {
 
     public static bool IsBase(string scope) {
         return _titleKeys.ContainsKey(scope);
+    }
+
+    /// <summary>Whether <paramref name="path"/> - or a scope - is a shortcut file.</summary>
+    public static bool IsShortcut(string? path) {
+        return path?.EndsWith(Shortcut, StringComparison.OrdinalIgnoreCase) == true;
+    }
+
+    /// <summary>
+    /// The scope a context menu opened on an item is about: its extension,
+    /// or <see cref="Directory"/> for a folder. A shortcut stands for its
+    /// target (stand 2026-09-25): the shell builds a <c>.lnk</c>'s menu from
+    /// the target's handlers - "Изменить", Notepad++, 7-Zip's "add to
+    /// note.7z" for a link to <c>note.txt</c>, the folder's rows for a link
+    /// to a folder - and adds one row of its own, "Расположение файла".
+    /// Filed under <c>.lnk</c>, those rows claimed a type they have nothing
+    /// to do with. Null when there is no type to name: a file with no
+    /// extension, a shortcut whose target cannot be read.
+    /// </summary>
+    /// <param name="path">The item.</param>
+    /// <param name="isFolder">A folder, or a shortcut to one.</param>
+    /// <param name="resolveShortcut">Reads a shortcut's target; null when it cannot.</param>
+    public static string? MenuScopeOf(string path, bool isFolder, Func<string, string?> resolveShortcut) {
+        if (isFolder) {
+            return Directory;
+        }
+        if (!IsShortcut(path)) {
+            return ExtensionOf(path);
+        }
+
+        return resolveShortcut(path) is { } target && !IsShortcut(target) ? ExtensionOf(target) : null;
     }
 
     /// <summary>

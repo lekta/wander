@@ -1,3 +1,4 @@
+using Wander.Core.Localization;
 using Wander.Core.Persistence;
 
 namespace Wander.Core.Shell;
@@ -31,16 +32,15 @@ public sealed record ShellExtensionRow {
     public string AppName { get; init; } = string.Empty;
 
     /// <summary>
-    /// What the row does, in the handler's own words. Empty for the many
-    /// that publish nothing; the column then shows the scope instead of a
-    /// blank, because "все файлы" is at least something.
+    /// What the row does, in the handler's own words - the row's tooltip.
+    /// Empty for the many that publish nothing; the row then has no tooltip.
     /// </summary>
     public string Help { get; init; } = string.Empty;
 
     /// <summary>Registry scopes it is installed on, already display-ready.</summary>
     public IReadOnlyList<string> Scopes { get; init; } = Array.Empty<string>();
 
-    /// <summary>Checked in the table = the row is switched off in menus.</summary>
+    /// <summary>The row is switched off in menus; the table shows it the other way round, as an unticked box.</summary>
     public bool IsBlocked { get; init; }
 
     /// <summary>
@@ -78,34 +78,43 @@ public sealed record ShellExtensionRow {
 /// </para>
 ///
 /// <para>
-/// A row that only one source knows about is still listed, and says so
-/// through <see cref="ShellExtensionRow.IsSeen"/> — with one exception,
-/// applied to both sources: an entry with no name, no application and no
-/// description is dropped. A line reading
+/// <b>The table is what the user has met</b> (2026-09-28): a row the menu
+/// has drawn, a row switched off, and - the one exception - a row of a type
+/// or a program added by hand through "Добавить", which is asked for by
+/// name. An installed handler no menu has shown yet is not listed: a switch
+/// for something nobody has seen is a guess, and the table used to be
+/// mostly guesses, greyed out. An entry with no name, no application and
+/// no description is dropped from both sources: a line reading
 /// "{9F156763-7844-4DC4-B2B1-901F640F5155}" next to an empty checkbox is
 /// not a setting, it is a dare. Blocking one keeps it, so the switch
 /// that turns it back on never disappears.
 /// </para>
 /// </summary>
 public static class ShellExtensionCatalog {
+    /// <param name="handlers">What the registry scan found.</param>
+    /// <param name="seen">What menus have drawn.</param>
+    /// <param name="blockedKeys">What the user switched off.</param>
+    /// <param name="addedScopes">Types added by hand; their handlers are listed unmet.</param>
     public static IReadOnlyList<ShellExtensionRow> Build(
         IReadOnlyList<ShellHandler> handlers,
         IReadOnlyList<KnownShellEntry> seen,
         IReadOnlySet<string> blockedKeys,
-        bool includeSystem = false) {
+        IReadOnlyCollection<string>? addedScopes = null) {
 
         var rows = new Dictionary<string, ShellExtensionRow>(StringComparer.OrdinalIgnoreCase);
         var order = new List<string>();
+        var added = new HashSet<string>(addedScopes ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
 
         foreach (var handler in handlers) {
-            if (!Offerable(handler, seen, blockedKeys, includeSystem)) {
+            if (!Offerable(handler, seen, blockedKeys, added)) {
                 continue;
             }
 
             Merge(rows, order, new ShellExtensionRow {
                 Key = handler.Key,
                 Title = handler.Title.Length > 0 ? handler.Title : handler.Key,
-                AppName = handler.AppName,
+                // Windows itself is "ОС" - see ShellHandler.IsOsComponent.
+                AppName = handler.IsOsComponent ? Text.Get("ShellAppOs") : handler.AppName,
                 Scopes = handler.Scopes,
                 IsSystem = handler.IsSystem,
             });
@@ -113,7 +122,9 @@ public static class ShellExtensionCatalog {
 
         foreach (var entry in seen) {
             string key = entry.Key.Trim();
-            if (key.Length == 0) {
+            // A verb Wander has taken over since it was met: never drawn
+            // again, so its switch would do nothing.
+            if (key.Length == 0 || ShellVerbs.IsSuppressed(key)) {
                 continue;
             }
             // The same rule as for registry rows, and for the same reason:
@@ -133,9 +144,10 @@ public static class ShellExtensionCatalog {
             });
         }
 
-        // A blocked key neither source produced still deserves its row —
-        // otherwise the user could never switch it back on.
-        foreach (string key in blockedKeys) {
+        // A blocked key neither source produced still deserves its row -
+        // otherwise the user could never switch it back on. Not a verb Wander
+        // has taken over: that row is never drawn, on or off.
+        foreach (string key in blockedKeys.Where(k => !ShellVerbs.IsSuppressed(k))) {
             Merge(rows, order, new ShellExtensionRow { Key = key, Title = key });
         }
 
@@ -220,13 +232,14 @@ public static class ShellExtensionCatalog {
     /// <summary>
     /// Whether an installed handler is worth a line in the table at all.
     /// Blocked or already-met entries always are — hiding one of those would
-    /// take away the switch that turns it back on.
+    /// take away the switch that turns it back on. One not met yet is only
+    /// on a type the user added by hand.
     /// </summary>
     private static bool Offerable(
         ShellHandler handler,
         IReadOnlyList<KnownShellEntry> seen,
         IReadOnlySet<string> blockedKeys,
-        bool includeSystem) {
+        IReadOnlySet<string> addedScopes) {
 
         if (handler.Key.Length == 0) {
             return false;
@@ -254,7 +267,10 @@ public static class ShellExtensionCatalog {
             return false;
         }
 
-        return includeSystem || !handler.IsSystem;
+        // Not met in a menu: listed on a type the user asked for by name,
+        // and then only a program's own rows - Windows' plumbing on a type
+        // (print, edit, share) turns up in its menu soon enough.
+        return !handler.IsSystem && handler.Scopes.Any(addedScopes.Contains);
     }
 
     /// <summary>

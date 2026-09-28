@@ -16,6 +16,13 @@ namespace Wander.Core.Actions;
 /// </para>
 /// </summary>
 public static class ActionCatalog {
+    /// <summary>Resource key: a command with no program to start.</summary>
+    public const string NoProgramKey = "ActionsErrorNoProgram";
+
+    /// <summary>Resource key: the program the row names is not on this machine.</summary>
+    public const string ProgramNotFoundKey = "ActionsErrorProgramNotFound";
+
+
     /// <summary>
     /// Presets first, in code order, each with what the user changed on it
     /// laid over - only the switch and a program of their own, so the
@@ -190,6 +197,93 @@ public static class ActionCatalog {
     }
 
     /// <summary>
+    /// Why a row's program will not start (2026-09-28): none given, or none
+    /// where it says - the program field is marked and says which. Typed by
+    /// hand, a program used to be taken on trust, and a typo came out only
+    /// when the action ran. Null when it will start; for a built-in, which
+    /// has no program; and for a row that names its tool by the bare name -
+    /// that one is <see cref="NeedsTool"/>'s to say.
+    /// </summary>
+    /// <param name="locate">Where a program is (<see cref="IToolLocator.Locate"/>); null when it is not there.</param>
+    public static string? ProgramValidationKey(CustomAction action, Func<string, string?> locate) {
+        if (action.Kind != ActionKind.Command || (action.RequiredTool.Length > 0 && !HasOwnProgram(action))) {
+            return null;
+        }
+
+        string program = action.Program.Trim();
+        if (program.Length == 0) {
+            return NoProgramKey;
+        }
+
+        return locate(program) is null ? ProgramNotFoundKey : null;
+    }
+
+    /// <summary>
+    /// The program list of an action's form (2026-09-28): the tools the
+    /// catalog needs, in the "Программы" page's order, then every other
+    /// program a row runs - Wander's own handlers among them, by their
+    /// title: an internal operation is chosen by name like any program.
+    /// What is already in use, so nothing is typed on trust; a program new
+    /// to the catalog is chosen on the disk. A row that names a tool by its
+    /// file name is that tool's line, not one more; the debug rows, never
+    /// in the table, bring none.
+    /// </summary>
+    public static IReadOnlyList<ProgramChoice> ProgramChoices(IReadOnlyList<CustomAction> catalog) {
+        var choices = ToolNames(catalog)
+            .Select(tool => new ProgramChoice(tool, tool, ActionPresets.KnownTool(tool)?.Title ?? tool))
+            .ToList();
+
+        foreach (var row in catalog) {
+            string program = row.Program.Trim();
+            if (row.DebugOnly || program.Length == 0 || ChoiceOf(row.Kind, program, choices) is not null) {
+                continue;
+            }
+
+            choices.Add(row.Kind == ActionKind.Builtin
+                ? new ProgramChoice(program, string.Empty, ActionPresets.BuiltinTitle(program), ActionKind.Builtin)
+                : new ProgramChoice(program, string.Empty, program));
+        }
+
+        return choices;
+    }
+
+    /// <summary>The line of <paramref name="choices"/> the row's program is; null when the list has none.</summary>
+    public static ProgramChoice? ChoiceOf(CustomAction action, IReadOnlyList<ProgramChoice> choices) {
+        return ChoiceOf(action.Kind, action.Program.Trim(), choices);
+    }
+
+    /// <summary>
+    /// The row pointed at a program: a tool by its bare name, so the runner
+    /// finds it where the "Программы" page does and the menus grey the row
+    /// out while it is missing; a built-in handler as one; any other program
+    /// as it is, with no tool.
+    /// </summary>
+    public static CustomAction WithProgram(CustomAction action, ProgramChoice choice) {
+        return action with { Kind = choice.Kind, Program = choice.Program, RequiredTool = choice.Tool };
+    }
+
+    /// <summary>
+    /// What is wrong with a built-in row's settings - the picture encoder's
+    /// format and source - worded as the run would report it; null when they
+    /// are fine or the handler has nothing to check. A row pointed at the
+    /// encoder from the program list keeps its command line until it is
+    /// rewritten, and the form says so rather than the first run.
+    /// </summary>
+    public static string? BuiltinProblem(CustomAction action) {
+        if (action.Kind != ActionKind.Builtin || !SameTool(action.Program.Trim(), ActionPresets.ImageConvert)) {
+            return null;
+        }
+
+        try {
+            ImageConvertOptions.Parse(action.Arguments);
+
+            return null;
+        } catch (FormatException ex) {
+            return ex.Message;
+        }
+    }
+
+    /// <summary>
     /// The row as it is started: a program given only as the tool's name is
     /// replaced by where the tool is, since the folders an installer uses are
     /// not always on <c>PATH</c>. A program of the row's own stays.
@@ -216,6 +310,11 @@ public static class ActionCatalog {
 
     private static bool SameTool(string a, string b) {
         return string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static ProgramChoice? ChoiceOf(ActionKind kind, string program, IReadOnlyList<ProgramChoice> choices) {
+        return choices.FirstOrDefault(c => c.Kind == kind
+            && (SameTool(c.Program, program) || (c.Tool.Length > 0 && SameTool(c.Program + ".exe", program))));
     }
 
     private static string NewId() {

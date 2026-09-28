@@ -21,13 +21,14 @@ namespace Wander.Core.Persistence;
 /// </summary>
 public sealed record AppSettings {
     // --- General -------------------------------------------------------
-    /// <summary>Restore the last folder on launch instead of going to the first drive.</summary>
+    /// <summary>Restore the last folder on launch instead of going to the working folder (2026-09-28; the first drive before).</summary>
     public bool RestoreLastFolder { get; init; } = true;
 
     /// <summary>
-    /// The user's working folder: where a session starts when its last
-    /// folder was on a medium that is gone - a flash drive taken out, a
-    /// share that is not there. Empty means the system Documents folder.
+    /// The user's working folder: where a session starts when the last
+    /// folder is not to be restored, and when it was on a medium that is
+    /// gone - a flash drive taken out, a share that is not there. Empty
+    /// means the system Documents folder.
     /// </summary>
     public string WorkFolder { get; init; } = "";
 
@@ -379,14 +380,6 @@ public sealed record AppSettings {
     /// A convenience cache: deleting it costs nothing but re-discovery.
     /// </summary>
     public IReadOnlyList<KnownShellEntry> KnownShellEntries { get; init; } = Array.Empty<KnownShellEntry>();
-
-    /// <summary>
-    /// Show Windows' own context-menu plumbing in the settings table.
-    /// Off by default: roughly forty of the fifty handlers on a stock
-    /// machine are BitLocker verbs, Defender, Work Folders and the sharing
-    /// menu, and listing them buries the handful anyone came to switch off.
-    /// </summary>
-    public bool ShowSystemShellExtensions { get; init; } = false;
 
     /// <summary>
     /// Registry scopes the user added to the table by hand, beyond the base

@@ -341,6 +341,7 @@ public partial class MainWindow : Window {
         // Bubbling, so it sees focus landing anywhere in the window.
         GotKeyboardFocus += OnZoneFocusChanged;
         Vm.Workspace.ViewEffectRequested += OnViewEffectRequested;
+        Vm.ListTopRow = FileList.FirstRowOnScreen;
         if (App.IsSmokeRun) {
             StartSmokeCountdown();
         }
@@ -941,7 +942,7 @@ public partial class MainWindow : Window {
     private void OnViewEffectRequested(WorkspaceEffect effect) {
         switch (effect) {
             case ApplyListSelection apply:
-                FileList.ApplySelection(apply.List, apply.Scroll);
+                FileList.ApplySelection(apply.List, apply.Scroll, apply.Top);
                 break;
             case OpenEditor editor:
                 FileList.OpenEditor(editor.Path);
@@ -1316,7 +1317,12 @@ public partial class MainWindow : Window {
         var settings = vm.MenuSettings;
         var target = MenuTarget(context);
         bool isBackground = context.Subject.Kind == TargetKind.Background;
-        string? primary = context.Subject.Primary?.FullPath;
+        // The type the menu is about: a shortcut's is its target's.
+        string? scope = isBackground
+            ? ShellScopes.DirectoryBackground
+            : context.Subject.Primary is { } primary
+                ? ShellScopes.MenuScopeOf(primary.FullPath, primary.IsFolderLike, ResolveShortcut)
+                : null;
 
         // Remember the file type that was right-clicked. The "Добавить"
         // picker in settings leads with these — of the eight hundred
@@ -1324,8 +1330,8 @@ public partial class MainWindow : Window {
         // only ones with any claim to being first.
         // Only real file types: the picker's list is a list of extensions,
         // and "фон папки" is already one of the scopes the table always has.
-        if (!isBackground) {
-            vm.Settings.NoteMenuScope(ShellScopes.ExtensionOf(primary));
+        if (scope is not null && !ShellScopes.IsBase(scope)) {
+            vm.Settings.NoteMenuScope(scope);
         }
 
         var session = QueryShellMenu(target, settings);
@@ -1334,17 +1340,13 @@ public partial class MainWindow : Window {
             // handlers actually draw anything, so this is where the settings
             // table's "встречали" mark comes from. Keyed the same way the
             // blocklist is — verb first, label as the fallback.
-            string scope = isBackground
-                ? ShellScopes.DirectoryBackground
-                : ShellScopes.ExtensionOf(primary) ?? ShellScopes.Directory;
-
             vm.Settings.NoteShellExtensions(session.Items
                 .Where(item => !item.IsSeparator)
                 .Select(item => new KnownShellEntry {
                     Key = ShellEntryKey.For(item.Verb, item.Header),
                     Title = ShellEntryKey.Normalize(item.Header),
                     Help = item.Help,
-                    Scope = scope,
+                    Scope = scope ?? "",
                 }));
         }
 
@@ -1371,6 +1373,16 @@ public partial class MainWindow : Window {
             MissingTools = vm.MissingTools,
             ShowDebug = vm.Settings.ShowDebugMenu,
         };
+    }
+
+    /// <summary>A shortcut's target, for the type its menu is about; null when the link cannot be read.</summary>
+    private static string? ResolveShortcut(string path) {
+        try {
+            return ServiceLocator.TryGet<IShortcutService>()?.Resolve(path);
+        } catch (Exception) {
+            // A link that will not open names no type; its menu still opens.
+            return null;
+        }
     }
 
     private IShellContextMenuSession? QueryShellMenu(ContextMenuTarget target, ContextMenuSettings settings) {

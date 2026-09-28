@@ -117,11 +117,13 @@ if /i "%MODE%"=="run" (
     rem The existence check is not belt and braces: launching a path that is
     rem not there fails with cmd's own message and "see the logs", and the
     rem logs of a process that never started say nothing.
+    rem A folder of the repository to start in: with no state.json a session
+    rem starts in the working folder, and that is the user's Documents.
     if not exist "!EXE!" (
         echo   smoke launch FAILED - no such file: !EXE!
         set SMOKE_FAILED=1
     ) else (
-        "!EXE!" --smoke --data-dir "!SMOKEDATA!\data"
+        "!EXE!" --smoke --data-dir "!SMOKEDATA!\data" --folder "%~dp0..\tests\Fixtures"
         rem `if errorlevel 1` compares as signed and misses a .NET crash,
         rem which exits with 0xE0434352 — negative as an int32. `neq 0`
         rem catches both.

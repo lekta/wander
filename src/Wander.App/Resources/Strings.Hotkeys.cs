@@ -87,6 +87,9 @@ public static partial class Strings {
     /// <summary>Переименовать папку под курсором</summary>
     public static string HotkeyTreeRename => Get(nameof(HotkeyTreeRename));
 
+    /// <summary>Справка по открытой странице настроек</summary>
+    public static string HotkeySettingsGuide => Get(nameof(HotkeySettingsGuide));
+
     /// <summary>Файловые операции</summary>
     public static string HotkeyGroupFileOps => Get(nameof(HotkeyGroupFileOps));
 
@@ -165,7 +168,7 @@ public static partial class Strings {
     /// <summary>Оценка выделенным файлам, 0 — снять</summary>
     public static string HotkeyRateInGallery => Get(nameof(HotkeyRateInGallery));
 
-    /// <summary>Крупные значки</summary>
+    /// <summary>Значки</summary>
     public static string HotkeyViewLargeIcons => Get(nameof(HotkeyViewLargeIcons));
 
     /// <summary>Таблица</summary>
@@ -173,4 +176,40 @@ public static partial class Strings {
 
     /// <summary>Плитки</summary>
     public static string HotkeyViewTiles => Get(nameof(HotkeyViewTiles));
+
+    /// <summary>Полный экран</summary>
+    public static string HotkeyGroupFullscreen => Get(nameof(HotkeyGroupFullscreen));
+
+    /// <summary>Следующий снимок</summary>
+    public static string HotkeyFullscreenNext => Get(nameof(HotkeyFullscreenNext));
+
+    /// <summary>Предыдущий снимок</summary>
+    public static string HotkeyFullscreenPrevious => Get(nameof(HotkeyFullscreenPrevious));
+
+    /// <summary>Первый / последний снимок</summary>
+    public static string HotkeyFullscreenEnds => Get(nameof(HotkeyFullscreenEnds));
+
+    /// <summary>Соседний снимок справа — экран делится; дальше листают правый</summary>
+    public static string HotkeyFullscreenSide => Get(nameof(HotkeyFullscreenSide));
+
+    /// <summary>Оставить на экране левый / правый</summary>
+    public static string HotkeyFullscreenKeepSide => Get(nameof(HotkeyFullscreenKeepSide));
+
+    /// <summary>Оценка и метка снимку; из двух — тому, что под мышью</summary>
+    public static string HotkeyFullscreenRate => Get(nameof(HotkeyFullscreenRate));
+
+    /// <summary>Снимок в корзину / навсегда, дальше — следующий</summary>
+    public static string HotkeyFullscreenDelete => Get(nameof(HotkeyFullscreenDelete));
+
+    /// <summary>Кадр без подсветки хелперов</summary>
+    public static string HotkeyFullscreenPeek => Get(nameof(HotkeyFullscreenPeek));
+
+    /// <summary>Отменить оценку или удаление</summary>
+    public static string HotkeyFullscreenUndo => Get(nameof(HotkeyFullscreenUndo));
+
+    /// <summary>Лупа 1:1 без кнопки; ещё раз — снять</summary>
+    public static string HotkeyFullscreenZoom => Get(nameof(HotkeyFullscreenZoom));
+
+    /// <summary>Закрыть</summary>
+    public static string HotkeyFullscreenClose => Get(nameof(HotkeyFullscreenClose));
 }

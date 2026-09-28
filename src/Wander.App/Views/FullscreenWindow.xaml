@@ -15,7 +15,9 @@
         kept in column 1 (FullscreenWindow.Place). The pictures meet the
         screen's edges, with none of the pane's margin (PictureMargin), and
         the picture's bar is away until called for (BarAtRest). Z pins the
-        1:1 zoom (PreviewPane.ToggleZoom). Esc and Enter close.
+        1:1 zoom (PreviewPane.ToggleZoom). Delete takes the picture to the
+        bin and goes on to the next. The pointer goes while the mouse stands
+        still. Esc and Enter close.
     -->
     <Grid x:Name="Room">
         <Grid.ColumnDefinitions>

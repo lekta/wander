@@ -24,6 +24,10 @@ public class FolderSessionTests {
             Companions: companions.Length == 0 ? null : companions.Select(c => @"C:\folder\" + c).ToArray());
     }
 
+    private static string[] Paths(params string[] names) {
+        return names.Select(n => @"C:\folder\" + n).ToArray();
+    }
+
 
     // --- Epochs: who is answering about the folder on screen -------------
 
@@ -190,6 +194,62 @@ public class FolderSessionTests {
 
         Assert.Equal(ArrivalOutcome.SelectRows, first.Outcome);
         Assert.Equal(ArrivalOutcome.None, second.Outcome);
+    }
+
+    // --- The last session's place (2026-09-25) ----------------------------
+
+    [Fact]
+    public void LastPlace_SelectsItsFileAndPutsItsTopRowFirst() {
+        var session = new FolderSession();
+        session.SetArrival(ArrivalIntent.Place(
+            @"C:\folder", @"C:\folder\c.jpg", Paths("b.jpg", "c.jpg", "d.jpg"), top: @"C:\folder\b.jpg"));
+
+        var decision = session.DecideArrival(@"C:\folder", new[] { Row("a.jpg"), Row("b.jpg"), Row("c.jpg"), Row("d.jpg") });
+
+        Assert.Equal(ArrivalOutcome.SelectRows, decision.Outcome);
+        Assert.Equal(@"C:\folder\c.jpg", decision.Rows.Single().FullPath);
+        Assert.Equal(@"C:\folder\b.jpg", decision.Top);
+    }
+
+    [Fact]
+    public void LastPlace_FileGone_TheRowThatTookItsPlaceIsSelected() {
+        // Deleted between the sessions: the next one as the rows stood,
+        // the one before when it was the last - the list's own rule.
+        var gone = new FolderSession();
+        gone.SetArrival(ArrivalIntent.Place(
+            @"C:\folder", @"C:\folder\c.jpg", Paths("b.jpg", "c.jpg", "d.jpg", "e.jpg"), top: @"C:\folder\b.jpg"));
+        var last = new FolderSession();
+        last.SetArrival(ArrivalIntent.Place(@"C:\folder", @"C:\folder\e.jpg", Paths("d.jpg", "e.jpg"), top: null));
+
+        var next = gone.DecideArrival(@"C:\folder", new[] { Row("a.jpg"), Row("b.jpg"), Row("e.jpg") });
+        var before = last.DecideArrival(@"C:\folder", new[] { Row("a.jpg"), Row("d.jpg") });
+
+        Assert.Equal(@"C:\folder\e.jpg", next.Rows.Single().FullPath);
+        Assert.Equal(@"C:\folder\b.jpg", next.Top);
+        Assert.Equal(@"C:\folder\d.jpg", before.Rows.Single().FullPath);
+    }
+
+    [Fact]
+    public void LastPlace_NothingAroundItLeft_TheFolderFromItsTop() {
+        var session = new FolderSession();
+        session.SetArrival(ArrivalIntent.Place(
+            @"C:\folder", @"C:\folder\c.jpg", Paths("b.jpg", "c.jpg"), top: @"C:\folder\a.jpg"));
+
+        var decision = session.DecideArrival(@"C:\folder", new[] { Row("a.jpg"), Row("x.jpg") });
+
+        Assert.Equal(ArrivalOutcome.NothingFound, decision.Outcome);
+        Assert.Null(decision.Top);
+    }
+
+    [Fact]
+    public void LastPlace_NothingSelected_OnlyTheScrollComesBack() {
+        var session = new FolderSession();
+        session.SetArrival(ArrivalIntent.Place(@"C:\folder", row: null, Array.Empty<string>(), top: @"C:\folder\b.jpg"));
+
+        var decision = session.DecideArrival(@"C:\folder", new[] { Row("a.jpg"), Row("b.jpg") });
+
+        Assert.Equal(ArrivalOutcome.NothingFound, decision.Outcome);
+        Assert.Equal(@"C:\folder\b.jpg", decision.Top);
     }
 
     [Fact]

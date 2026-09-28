@@ -179,7 +179,7 @@
     <value>Плитка</value>
   </data>
   <data name="MenuViewLargeIcons" xml:space="preserve">
-    <value>Крупные значки</value>
+    <value>Значки</value>
   </data>
   <data name="MenuSortBy" xml:space="preserve">
     <value>Сортировка</value>
@@ -221,10 +221,10 @@
     <value>Отладка</value>
   </data>
   <data name="MenuLogs" xml:space="preserve">
-    <value>Журнал</value>
+    <value>Лог сеанса</value>
   </data>
   <data name="MenuLogsHint" xml:space="preserve">
-    <value>Открыть файл журнала текущего сеанса</value>
+    <value>Открыть технический лог текущего сеанса</value>
   </data>
   <data name="MenuDebugOperation" xml:space="preserve">
     <value>Операция</value>
@@ -293,13 +293,13 @@
     <value>Не удалось открыть браузер: {0}</value>
   </data>
   <data name="StatusNoLogging" xml:space="preserve">
-    <value>Журнал не настроен.</value>
+    <value>Лог не ведётся.</value>
   </data>
   <data name="StatusNoLogFile" xml:space="preserve">
-    <value>Файл журнала не найден.</value>
+    <value>Файл лога не найден.</value>
   </data>
   <data name="StatusOpenLogFailed" xml:space="preserve">
-    <value>Не удалось открыть журнал: {0}</value>
+    <value>Не удалось открыть лог: {0}</value>
   </data>
   <data name="StatusJournalFailed" xml:space="preserve">
     <value>Не удалось открыть журнал действий: {0}</value>
@@ -724,17 +724,17 @@
 
 {0}: {1}
 
-Подготовить отчёт (только детали ошибки, без журнала сеанса)?</value>
+Подготовить отчёт (только детали ошибки, без лога сеанса)?</value>
     <comment>{0} — тип исключения, {1} — сообщение</comment>
   </data>
   <data name="CrashExplain" xml:space="preserve">
     <value>Wander может собрать архив с отчётом (zip), показать его в проводнике и открыть в браузере заготовку задачи на GitHub. Ничего не уходит наружу, пока ты сам не отправишь задачу.</value>
   </data>
   <data name="CrashIncludeLog" xml:space="preserve">
-    <value>Приложить журнал этого сеанса — с ним разбираться гораздо проще, но в нём есть пути к файлам, с которыми ты работал</value>
+    <value>Приложить лог этого сеанса — с ним разбираться гораздо проще, но в нём есть пути к файлам, с которыми ты работал</value>
   </data>
   <data name="CrashIncludeLogMasked" xml:space="preserve">
-    <value>Приложить журнал этого сеанса — с ним разбираться гораздо проще; пути и имена файлов в нём заменены метками</value>
+    <value>Приложить лог этого сеанса — с ним разбираться гораздо проще; пути и имена файлов в нём заменены метками</value>
   </data>
   <data name="CrashPrepare" xml:space="preserve">
     <value>Подготовить отчёт</value>
@@ -916,35 +916,20 @@
   <data name="ActionApply" xml:space="preserve">
     <value>Применить</value>
   </data>
-  <data name="SettingsCategoryGeneral" xml:space="preserve">
-    <value>Основное</value>
-  </data>
-  <data name="SettingsCategoryLayout" xml:space="preserve">
-    <value>Размеры</value>
-  </data>
-  <data name="SettingsCategoryThumbnails" xml:space="preserve">
-    <value>Миниатюры</value>
-  </data>
-  <data name="SettingsCategoryBookmarks" xml:space="preserve">
-    <value>Закладки</value>
-  </data>
   <data name="SettingsCategoryContextMenu" xml:space="preserve">
     <value>Контекстное меню</value>
   </data>
   <data name="SettingsCategoryDebug" xml:space="preserve">
-    <value>Отладка</value>
+    <value>Отладка и сброс</value>
   </data>
   <data name="SettingsRestoreLastFolder" xml:space="preserve">
-    <value>Открывать последнюю папку при запуске</value>
+    <value>Последняя папка</value>
   </data>
   <data name="SettingsRestoreLastFolderHint" xml:space="preserve">
-    <value>Иначе — первый доступный диск.</value>
+    <value>Папки больше нет — открывается ближайшая уцелевшая над ней; была на отключённом диске (флешке, сетевом) — рабочая папка.</value>
   </data>
   <data name="SettingsWorkFolder" xml:space="preserve">
     <value>Рабочая папка</value>
-  </data>
-  <data name="SettingsWorkFolderHint" xml:space="preserve">
-    <value>Открывается при запуске, если последняя папка была на отключённом диске — флешке, сетевом.</value>
   </data>
   <data name="SettingsWorkFolderDefault" xml:space="preserve">
     <value>{0} (системные «Документы»)</value>
@@ -957,50 +942,47 @@
     <value>Вернуть системные «Документы»</value>
   </data>
   <data name="SettingsShowHidden" xml:space="preserve">
-    <value>Отображать скрытые файлы и папки</value>
+    <value>Скрытые файлы и папки</value>
   </data>
   <data name="SettingsShowSystem" xml:space="preserve">
-    <value>Отображать защищённые системные файлы</value>
+    <value>Защищённые системные файлы</value>
     <comment>Как в Проводнике: скрытый + системный атрибут вместе</comment>
   </data>
   <data name="SettingsHideSystemRootFoldersHint" xml:space="preserve">
-    <value>$RECYCLE.BIN, System Volume Information, Recovery и подобные. Внутрь них всё равно нет доступа.</value>
+    <value>$RECYCLE.BIN, System Volume Information, pagefile.sys и подобные: в папки всё равно нет доступа. Видны только вместе со скрытыми.</value>
   </data>
   <data name="SettingsConfirmRecycle" xml:space="preserve">
     <value>Спрашивать при удалении в корзину</value>
   </data>
   <data name="SettingsConfirmRecycleHint" xml:space="preserve">
-    <value>Ctrl+Z возвращает из корзины в любом случае. Shift+Delete спрашивает всегда.</value>
+    <value>Ctrl+Z вернёт из корзины в любом случае, а удаление навсегда (Shift+Delete) спрашивает всегда.</value>
   </data>
   <data name="SettingsIntegrateCompanions" xml:space="preserve">
-    <value>Объединять файл и его спутники в один элемент</value>
-  </data>
-  <data name="SettingsCompanionsHint" xml:space="preserve">
-    <value>Спутник — служебный файл рядом с основным: Unity-шный «.meta», настройки проявки RawTherapee «.pp3». Переименование, перемещение и удаление уносят спутников вместе с основным файлом, одной записью в Ctrl+Z.</value>
+    <value>Показывать файл и его спутники одним элементом</value>
   </data>
   <data name="SettingsLargeIconsGroup" xml:space="preserve">
-    <value>Режим «Крупные значки»</value>
+    <value>Значки</value>
   </data>
   <data name="SettingsCellWidth" xml:space="preserve">
-    <value>Ширина ячейки (px)</value>
+    <value>Ширина ячейки, px</value>
   </data>
   <data name="SettingsIconSize" xml:space="preserve">
-    <value>Размер иконки (px)</value>
+    <value>Размер значка, px</value>
   </data>
   <data name="SettingsCellMargin" xml:space="preserve">
-    <value>Отступ между ячейками (px)</value>
+    <value>Отступ вокруг ячейки, px</value>
   </data>
   <data name="SettingsLabelFontSize" xml:space="preserve">
-    <value>Размер шрифта подписи</value>
+    <value>Размер шрифта подписи, px</value>
   </data>
   <data name="SettingsThumbnailDiskCache" xml:space="preserve">
-    <value>Хранить миниатюры на диске между запусками</value>
+    <value>Хранить миниатюры между запусками</value>
   </data>
   <data name="SettingsThumbnailDiskMb" xml:space="preserve">
-    <value>Кэш на диске, не больше (МБ)</value>
+    <value>Не больше, МБ</value>
   </data>
   <data name="SettingsPictureMemory" xml:space="preserve">
-    <value>Память под картинки (МБ)</value>
+    <value>Под картинки, МБ</value>
   </data>
   <data name="SettingsPictureMemoryHint" xml:space="preserve">
     <value>Миниатюры и кадры панели просмотра вместе. 0 — шестнадцатая часть памяти компьютера, здесь {0} МБ.</value>
@@ -1009,18 +991,11 @@
   <data name="SettingsClearCache" xml:space="preserve">
     <value>Очистить кэш</value>
   </data>
-  <data name="SettingsThumbnailsHint" xml:space="preserve">
-    <value>Миниатюра строится один раз на файл и переиспользуется, пока файл не изменится: в ключ входят путь, размер и время правки, так что устаревшую картинку показать нельзя в принципе. Папку кэша можно удалить руками в любой момент — Wander соберёт её заново.</value>
-  </data>
-  <data name="SettingsThumbnailsLimitsHint" xml:space="preserve">
-    <value>Значения зажимаются в разумные пределы автоматически: 16…8192 МБ на диске, 128…65536 МБ под картинки в памяти. Стандартные: 256 МБ на диске, под картинки — 0, то есть по памяти компьютера.</value>
-  </data>
   <data name="SettingsCacheOff" xml:space="preserve">
     <value>Кэш на диске выключен.</value>
   </data>
   <data name="SettingsCacheUsage" xml:space="preserve">
-    <value>Сейчас занято: {0}
-{1}</value>
+    <value>Занято {0} в {1}</value>
     <comment>{0} — размер, {1} — путь к папке кэша</comment>
   </data>
   <data name="SettingsBookmarkDownloads" xml:space="preserve">
@@ -1036,57 +1011,47 @@
     <value>Корзина</value>
   </data>
   <data name="SettingsBookmarksHint" xml:space="preserve">
-    <value>Спец-папки берутся у системы: имя зависит от языка Windows, и папку можно перенести на другой диск. Ненайденная просто не показывается.</value>
+    <value>Стандартные папки берутся у системы: имя зависит от языка Windows, и папка может лежать на другом диске. Ненайденная не показывается.</value>
   </data>
   <data name="SettingsShellExtensions" xml:space="preserve">
-    <value>Показывать пункты сторонних приложений</value>
+    <value>Показывать в меню</value>
+    <comment>Под заголовком «Пункты других программ»</comment>
   </data>
   <data name="SettingsShellExtensionsGroup" xml:space="preserve">
-    <value>Пункты сторонних приложений</value>
-  </data>
-  <data name="SettingsShellExtensionsHint" xml:space="preserve">
-    <value>Наведите на строку — увидите, что делает пункт. «Добавить» вытаскивает пункты приложения или типа файлов.</value>
+    <value>Пункты других программ</value>
   </data>
   <data name="SettingsOwnItemsGroup" xml:space="preserve">
-    <value>Пункты Wander</value>
-  </data>
-  <data name="SettingsOwnItemsHint" xml:space="preserve">
-    <value>Скрытый пункт пропадает из меню, хоткей продолжает работать. Подменю скрывается вместе со всем, что внутри.</value>
+    <value>Основные пункты</value>
+    <comment>Пункты, которые рисует сам Wander: открыть, копировать, свойства, свои действия</comment>
   </data>
   <data name="SettingsShowDebugMenu" xml:space="preserve">
-    <value>Показывать меню «Отладка» в главном меню</value>
-  </data>
-  <data name="SettingsDebugHint" xml:space="preserve">
-    <value>Когда выключено, в основном меню больше не появится пункт «Отладка» (включая «Журнал»). Чтобы вернуть, открой этот раздел настроек снова — он остаётся доступен независимо от состояния флажка.</value>
+    <value>Показывать в главном меню</value>
   </data>
   <data name="SettingsLogGroup" xml:space="preserve">
-    <value>Журнал запуска</value>
+    <value>Лог сеанса</value>
   </data>
   <data name="SettingsLogActions" xml:space="preserve">
-    <value>Подробно: клавиши, клики, выделение</value>
+    <value>Записывать клавиши, клики и выделение</value>
   </data>
   <data name="SettingsLogActionsHint" xml:space="preserve">
-    <value>Каждое нажатие, клик и смена выделения в списке и в панелях папок — строкой в журнале, чтобы было видно, что делали перед ошибкой. Журнал растёт быстрее.</value>
+    <value>Каждое нажатие, клик и смена выделения в списке и в панелях папок — строкой в логе, чтобы было видно, что делали перед ошибкой. Лог растёт быстрее.</value>
   </data>
   <data name="SettingsLogPaths" xml:space="preserve">
-    <value>Писать пути к файлам</value>
+    <value>Писать настоящие пути к файлам</value>
   </data>
   <data name="SettingsLogPathsHint" xml:space="preserve">
-    <value>Выключено — пути и имена в журнале и в отчёте об ошибке заменены метками: диск, глубина и расширение видны, имена — нет; одна папка в пределах сеанса — одна метка. Включите, когда журнал нужен вам самим. Первые строки сеанса, до чтения настроек, обезличены всегда.</value>
+    <value>Одна папка в пределах сеанса — одна метка. Первые строки сеанса, до чтения настроек, обезличены всегда. Включите, когда лог нужен вам самим.</value>
   </data>
   <data name="SettingsResetGroup" xml:space="preserve">
     <value>Сброс настроек</value>
   </data>
   <data name="SettingsResetAll" xml:space="preserve">
-    <value>Сбросить всё</value>
-  </data>
-  <data name="SettingsResetHint" xml:space="preserve">
-    <value>Вернёт все настройки к стандартным значениям и спросит подтверждение перед этим. «Отмена» в диалоге откатит и сам сброс, пока он не подтверждён кнопкой «ОК» или «Применить».</value>
+    <value>Сбросить все настройки…</value>
   </data>
   <data name="SettingsResetConfirm" xml:space="preserve">
     <value>Сбросить все настройки к стандартным значениям?
 
-Вернутся выключенные пункты контекстного меню и скрытые расширения, размеры значков и закладки-спецпапки станут исходными.</value>
+Снова включатся все пункты контекстного меню, размеры значков и закладки-спецпапки станут исходными. «Отмена» в окне настроек ещё вернёт всё назад.</value>
   </data>
   <data name="BookmarksHeader" xml:space="preserve">
     <value>Закладки</value>
@@ -1125,7 +1090,7 @@
     <value>Удалить папку навсегда</value>
   </data>
   <data name="BookmarkSwitchedOff" xml:space="preserve">
-    <value>Закладка «{0}» убрана с панели. Вернуть — Параметры → Закладки</value>
+    <value>Закладка «{0}» убрана с панели. Вернуть — Параметры → Папки и закладки</value>
     <comment>{0} — подпись встроенной закладки</comment>
   </data>
   <data name="BookmarksMoveUp" xml:space="preserve">
@@ -1201,31 +1166,28 @@
     <comment>{0} — сколько папок в выделении</comment>
   </data>
   <data name="SettingsAutoRefresh" xml:space="preserve">
-    <value>Обновлять список автоматически</value>
+    <value>Показывать сразу</value>
   </data>
   <data name="SettingsAutoRefreshHint" xml:space="preserve">
-    <value>Список перерисовывается, когда файлы меняет кто-то другой. Выключено — только по F5.</value>
+    <value>Выключено — только по F5.</value>
   </data>
   <data name="SettingsVisibleFirstLoading" xml:space="preserve">
-    <value>Быстрое чтение первых файлов при открытии папки</value>
+    <value>Сначала то, что видно на экране</value>
   </data>
   <data name="SettingsVisibleFirstLoadingHint" xml:space="preserve">
-    <value>Значки и миниатюры того, что видно на экране, читаются раньше всего остального: строки таблицы за краем окна и папки дерева за пределами видимости ждут своей очереди. Сколько заняла прорисовка первого экрана — в журнале сеанса.</value>
+    <value>Значки и миниатюры того, что видно на экране, читаются раньше всего остального: строки таблицы за краем окна и папки дерева за пределами видимости ждут своей очереди. Сколько заняла прорисовка первого экрана — в логе сеанса.</value>
   </data>
   <data name="SettingsDetailsGroup" xml:space="preserve">
-    <value>Режим «Таблица»</value>
+    <value>Таблица</value>
   </data>
   <data name="SettingsTilesGroup" xml:space="preserve">
-    <value>Режим «Плитки»</value>
+    <value>Плитки</value>
   </data>
   <data name="SettingsRowHeight" xml:space="preserve">
-    <value>Высота строки (px)</value>
+    <value>Высота строки, px</value>
   </data>
   <data name="SettingsTileWidth" xml:space="preserve">
-    <value>Ширина плитки (px)</value>
-  </data>
-  <data name="SettingsZoomHint" xml:space="preserve">
-    <value>То же самое делает Ctrl + колесо мыши прямо в списке — каждый вид меняется отдельно, и то, что накрутили колесом, попадает в эти же поля.</value>
+    <value>Ширина плитки, px</value>
   </data>
   <data name="StatusViewSize" xml:space="preserve">
     <value>{0}: {1} px · Ctrl + нажать колёсико — вернуть {2} px</value>
@@ -1315,7 +1277,7 @@
 Отменить создание можно через Ctrl+Z.</value>
   </data>
   <data name="ConfirmCreateSidecarPp3Warning" xml:space="preserve">
-    <value>Внимание: RawTherapee применяет профиль по-умолчанию (Auto-Matched Curve) только к снимкам без .pp3. Как только .pp3 появится, снимок начнёт открываться в RawTherapee с нейтральных значений, а не с автоподбора. Формат меняется в настройках, раздел «Галерея».</value>
+    <value>Внимание: RawTherapee применяет профиль по-умолчанию (Auto-Matched Curve) только к снимкам без .pp3. Как только .pp3 появится, снимок начнёт открываться в RawTherapee с нейтральных значений, а не с автоподбора. Формат меняется в настройках, раздел «Оценки».</value>
   </data>
   <data name="PreviewRatingUnsaved" xml:space="preserve">
     <value>Оценки пока нет. Щелчок по звезде создаст файл рядом со снимком — с подтверждением.</value>
@@ -1324,22 +1286,22 @@
     <value>Галерея</value>
   </data>
   <data name="SettingsGalleryGroup" xml:space="preserve">
-    <value>Режим «Галерея»</value>
+    <value>Галерея</value>
   </data>
   <data name="SettingsGalleryBackground" xml:space="preserve">
     <value>Фон</value>
   </data>
   <data name="SettingsAutoGallery" xml:space="preserve">
-    <value>Включать галерею в папках со снимками</value>
+    <value>Включать галерею, если снимков в папке больше</value>
   </data>
-  <data name="SettingsAutoGalleryHint" xml:space="preserve">
-    <value>Если больше половины содержательных файлов в папке — изображения, вид переключается на галерею сам. Сайдкары (.pp3, .xmp, .meta) и резервные копии в счёт не идут. Стоит выбрать вид в папке вручную — и в ней автоматика больше не вмешивается.</value>
+  <data name="SettingsPhotoFoldersGroup" xml:space="preserve">
+    <value>Папки со снимками</value>
   </data>
-  <data name="SettingsRatingGroup" xml:space="preserve">
-    <value>Оценки</value>
+  <data name="SettingsAutoGalleryUnit" xml:space="preserve">
+    <value>%</value>
   </data>
   <data name="SettingsRawRatingFormat" xml:space="preserve">
-    <value>Формат оценки, если сайдкара нет</value>
+    <value>Файл оценки для снимка без сайдкара</value>
   </data>
   <data name="SettingsRawRatingFormatXmp" xml:space="preserve">
     <value>.xmp — Adobe, darktable, RawTherapee 5.11+</value>
@@ -1348,7 +1310,7 @@
     <value>.pp3 — RawTherapee</value>
   </data>
   <data name="SettingsRawRatingFormatHint" xml:space="preserve">
-    <value>Wander не создаёт файлы, о которых не просили: первая оценка снимка без сайдкара спрашивает подтверждение. Формат по-умолчанию — .xmp, потому что он ни на что, кроме оценки, не влияет. Появившийся .pp3 отменяет применение профиля по-умолчанию в RawTherapee.</value>
+    <value>.xmp ни на что, кроме оценки, не влияет. .pp3 — файл настроек RawTherapee: появившись, он отменяет для снимка профиль проявки по умолчанию.</value>
   </data>
   <data name="StatusSearching" xml:space="preserve">
     <value>Поиск: найдено {0:N0}, просмотрено {1:N0}</value>
@@ -1392,13 +1354,10 @@
 Отменить создание можно через Ctrl+Z, одним нажатием на всю пачку.</value>
   </data>
   <data name="SettingsGalleryGreyLevel" xml:space="preserve">
-    <value>Яркость серого фона (0–255)</value>
+    <value>Яркость серого, 0–255</value>
   </data>
   <data name="SettingsGalleryDarkLevel" xml:space="preserve">
-    <value>Яркость тёмного фона (0–255)</value>
-  </data>
-  <data name="SettingsAutoGalleryPercent" xml:space="preserve">
-    <value>Доля изображений для включения (%)</value>
+    <value>Яркость тёмного, 0–255</value>
   </data>
   <data name="StatusRatingApplied" xml:space="preserve">
     <value>Оценка {0} — файлов: {1}</value>
@@ -1750,7 +1709,7 @@
     <value>Оценка выделенным файлам, 0 — снять</value>
   </data>
   <data name="HotkeyViewLargeIcons" xml:space="preserve">
-    <value>Крупные значки</value>
+    <value>Значки</value>
   </data>
   <data name="HotkeyViewDetails" xml:space="preserve">
     <value>Таблица</value>
@@ -1760,9 +1719,6 @@
   </data>
   <data name="SettingsCategoryHotkeys" xml:space="preserve">
     <value>Клавиатура</value>
-  </data>
-  <data name="SettingsHotkeysHint" xml:space="preserve">
-    <value>Полный список сочетаний. Переназначение пока не поддерживается — сочетания заданы приложением.</value>
   </data>
   <data name="ScopeAllFiles" xml:space="preserve">
     <value>все файлы</value>
@@ -1782,23 +1738,25 @@
   <data name="ScopeDrive" xml:space="preserve">
     <value>диски</value>
   </data>
-  <data name="SettingsShellColumnHide" xml:space="preserve">
-    <value>Скрыть</value>
+  <data name="ShellAppOs" xml:space="preserve">
+    <value>ОС</value>
+    <comment>Программа в таблице контекстного меню, когда пункт — часть самой Windows («Операционная система Microsoft® Windows®»)</comment>
+  </data>
+  <data name="SettingsColumnOn" xml:space="preserve">
+    <value>Вкл</value>
+    <comment>Колонка галочек во всех таблицах настроек: отмечено — включено</comment>
   </data>
   <data name="SettingsShellColumnItem" xml:space="preserve">
     <value>Пункт</value>
   </data>
   <data name="SettingsShellColumnApp" xml:space="preserve">
-    <value>Приложение</value>
+    <value>Программа</value>
   </data>
   <data name="SettingsShellColumnScopes" xml:space="preserve">
-    <value>Где показывается</value>
+    <value>Для чего</value>
   </data>
   <data name="SettingsShellAdd" xml:space="preserve">
-    <value>Добавить...</value>
-  </data>
-  <data name="SettingsShellShowSystem" xml:space="preserve">
-    <value>Показывать системные</value>
+    <value>Добавить программу или тип файла…</value>
   </data>
   <data name="SettingsShellScopeUnknown" xml:space="preserve">
     <value>—</value>
@@ -1840,13 +1798,13 @@
     <value>Видео</value>
   </data>
   <data name="SettingsTreeKeyboardNavigates" xml:space="preserve">
-    <value>Стрелки в дереве открывают папку</value>
+    <value>Открывать папку, на которую перешли с клавиатуры</value>
   </data>
   <data name="SettingsTreeKeyboardNavigatesHint" xml:space="preserve">
-    <value>Поведение проводника. Выключено — стрелки двигают курсор, открывает Enter.</value>
+    <value>Стрелки, PgUp, PgDn, Home, End. Как в Проводнике, только зажатая клавиша открывает одну папку — ту, где остановился курсор. Выключено — клавиши двигают курсор, открывает Enter.</value>
   </data>
   <data name="SettingsTreeScrollsSideways" xml:space="preserve">
-    <value>Дерево само прокручивается вбок к длинному имени</value>
+    <value>Прокручивать вбок к длинному имени</value>
   </data>
   <data name="SettingsTreeScrollsSidewaysHint" xml:space="preserve">
     <value>Имя папки шире панели — панель уезжает вправо, чтобы показать его целиком, и шевроны уходят за левый край. Выключено — панель прокручивается только вверх и вниз; вбок — Shift + колесо.</value>
@@ -1858,10 +1816,10 @@
     <value>Показывать системные файлы</value>
   </data>
   <data name="PanelTreeKeyboardNavigates" xml:space="preserve">
-    <value>Стрелки в дереве открывают папку</value>
+    <value>Открывать папку, на которую перешли с клавиатуры</value>
   </data>
   <data name="PanelTreeKeyboardNavigatesHint" xml:space="preserve">
-    <value>Поведение проводника. Выключено — стрелки только двигают курсор, открывает Enter</value>
+    <value>Как в Проводнике. Выключено — клавиши только двигают курсор, открывает Enter</value>
   </data>
   <data name="PanelConfirmRecycle" xml:space="preserve">
     <value>Спрашивать при удалении в корзину</value>
@@ -1870,25 +1828,16 @@
     <value>Ctrl+Z возвращает из корзины в любом случае; Shift+Delete спрашивает всегда</value>
   </data>
   <data name="PanelAutoRefresh" xml:space="preserve">
-    <value>Обновлять список автоматически</value>
-  </data>
-  <data name="SettingsCategoryVisibility" xml:space="preserve">
-    <value>Отображение</value>
-  </data>
-  <data name="SettingsBookmarksAddHint" xml:space="preserve">
-    <value>Свои закладки добавляются перетаскиванием в панель.</value>
+    <value>Сразу показывать изменения от других программ</value>
   </data>
   <data name="SettingsOwnColumnGesture" xml:space="preserve">
-    <value>Хоткей</value>
-  </data>
-  <data name="SettingsShellExtensionsTableHint" xml:space="preserve">
-    <value>Приложение и «где показывается» приходят из реестра, названия — из самих меню. Чёрным — строки, которые Wander уже встречал; серым — установленные, но пока не показавшиеся. Прочерк в «Приложении» значит, что строку рисует COM-расширение: Windows отдаёт одно склеенное меню и не говорит, чья это строка.</value>
+    <value>Клавиши</value>
   </data>
   <data name="SettingsShowSystemRootFolders" xml:space="preserve">
-    <value>Отображать служебные папки в корне дисков</value>
+    <value>Служебные папки и файлы в корне дисков</value>
   </data>
   <data name="SettingsShowGroup" xml:space="preserve">
-    <value>Показывать</value>
+    <value>Показывать в списке</value>
   </data>
   <data name="SettingsPreviewName" xml:space="preserve">
     <value>Документ.txt</value>
@@ -1900,13 +1849,10 @@
     <value>14 КБ · Текстовый файл</value>
   </data>
   <data name="SettingsShellReset" xml:space="preserve">
-    <value>Сбросить</value>
-  </data>
-  <data name="SettingsShellResetHint" xml:space="preserve">
-    <value>Вернуть настройки контекстного меню к исходным</value>
+    <value>Сбросить настройки контекстного меню…</value>
   </data>
   <data name="SettingsShellResetConfirm" xml:space="preserve">
-    <value>Сбросить настройки контекстного меню?&#xA;&#xA;Снимутся все галочки «скрыть», забудутся добавленные типы и всё, что Wander встречал в меню. Пункты Wander снова станут видны. Отмена в окне настроек ещё вернёт всё назад.</value>
+    <value>Сбросить настройки контекстного меню?&#xA;&#xA;Все пункты — других программ и основные — снова включатся; добавленные программы и типы файлов и всё, что Wander встречал в меню, забудутся. «Отмена» в окне настроек ещё вернёт всё назад.</value>
   </data>
   <data name="SettingsHotkeysSearch" xml:space="preserve">
     <value>Поиск по сочетанию или по действию</value>
@@ -1921,16 +1867,16 @@
     <value>Перетаскивание с перемещением и вставка после Ctrl+X. Ctrl+Z возвращает файлы на место в любом случае, а перезапись существующего спрашивает всегда.</value>
   </data>
   <data name="SettingsSkipIdentical" xml:space="preserve">
-    <value>Не спрашивать про одинаковые файлы</value>
+    <value>Пропускать одинаковые файлы без вопроса</value>
   </data>
   <data name="SettingsSkipIdenticalHint" xml:space="preserve">
-    <value>В окне совпадений имён сразу отвечать «оставить» за пары, совпадающие побайтово: ничего не копируется и не переезжает.</value>
+    <value>Файл, совпадающий побайтово с тем, что уже лежит на месте, не копируется и не переносится; в окне совпадений у такой пары сразу стоит «оставить».</value>
   </data>
   <data name="SettingsUseSystemTemp" xml:space="preserve">
-    <value>Временные копии в системной папке Temp</value>
+    <value>Держать в системной папке Temp</value>
   </data>
   <data name="SettingsUseSystemTempHint" xml:space="preserve">
-    <value>Копии файлов из архивов для просмотра и «Открыть». Снято — в папке данных Wander (в портативном режиме — в папке data рядом с exe). Чистятся при запуске, старше суток. По умолчанию включено в портативном режиме.</value>
+    <value>Папка данных в портативном режиме — data рядом с exe. Копии старше суток удаляются при запуске. Включено по умолчанию в портативном режиме. Туда же после перезапуска переезжает служебная папка встроенного браузера панели просмотра.</value>
   </data>
   <data name="SettingsConfirmCreateSidecar" xml:space="preserve">
     <value>Спрашивать перед созданием файла оценки</value>
@@ -2161,6 +2107,12 @@
     <value>Режим «все одной командой» требует {paths} или {list}</value>
     <comment>Показывать через Get, не Format: фигурные скобки — часть текста</comment>
   </data>
+  <data name="ActionsErrorNoProgram" xml:space="preserve">
+    <value>Программа не выбрана</value>
+  </data>
+  <data name="ActionsErrorProgramNotFound" xml:space="preserve">
+    <value>Программа не найдена</value>
+  </data>
   <data name="MenuOperations" xml:space="preserve">
     <value>Действия</value>
     <comment>Меню в шапке, левее «Вид»: что можно сделать с выделенным</comment>
@@ -2272,9 +2224,6 @@
     <value>Действия</value>
     <comment>Страница Параметров: свои действия и встроенные конвертации</comment>
   </data>
-  <data name="SettingsActionsColumnEnabled" xml:space="preserve">
-    <value>Вкл</value>
-  </data>
   <data name="SettingsActionsColumnTitle" xml:space="preserve">
     <value>Название</value>
   </data>
@@ -2296,11 +2245,11 @@
   <data name="SettingsActionsColumnSubmenu" xml:space="preserve">
     <value>В подменю</value>
   </data>
-  <data name="SettingsActionsColumnHideConsole" xml:space="preserve">
-    <value>Скрыть консоль</value>
+  <data name="SettingsActionsShowConsole" xml:space="preserve">
+    <value>Показывать консоль</value>
   </data>
   <data name="SettingsActionsColumnOutput" xml:space="preserve">
-    <value>Выход</value>
+    <value>Файл результата</value>
   </data>
   <data name="SettingsActionsMaskHint" xml:space="preserve">
     <value>Маска вместо группы, например *.psd;*.ai. Непустая маска главнее группы и к папкам не подходит</value>
@@ -2309,12 +2258,12 @@
     <value>Подстановки: {path} — файл, {name} — его имя без расширения, {ext} — расширение, {dir} — папка файла, {paths} — все выделенные, {list} — временный файл со списком путей, {out} — выход. Кавычки подстановка ставит сама.</value>
     <comment>Показывать через Get, не Format: фигурные скобки — часть текста</comment>
   </data>
+  <data name="SettingsActionsBuiltinSettings" xml:space="preserve">
+    <value>Настройки через «;»: format=jpeg, png, bmp, tiff или gif — обязательно; quality=1–100 — качество JPEG, по умолчанию 90; maxside — длинная сторона, px; source=preview или preview-full — JPEG, который камера положила в RAW: маленький или самый крупный.</value>
+  </data>
   <data name="SettingsActionsOutputHint" xml:space="preserve">
     <value>Имя результата рядом с исходным, например {name}.mp4. Занятое имя получит «(1)»; Ctrl+Z отправит результат в корзину. Пусто — выход не объявлен, отменить нечего.</value>
     <comment>Показывать через Get, не Format: фигурные скобки — часть текста</comment>
-  </data>
-  <data name="SettingsActionsHint" xml:space="preserve">
-    <value>Встроенные действия не удаляются и не правятся — их выключают галочкой или делают копию. Свои действия — в подменю «Частные», копии встроенных — в «Конвертировать».</value>
   </data>
   <data name="ActionsModePerFile" xml:space="preserve">
     <value>на каждый файл</value>
@@ -2338,9 +2287,6 @@
   <data name="SettingsCategoryTools" xml:space="preserve">
     <value>Программы</value>
     <comment>Страница Параметров: внешние программы для встроенных действий</comment>
-  </data>
-  <data name="SettingsToolsHint" xml:space="preserve">
-    <value>Программы, которые нужны встроенным действиям. Wander ищет их в PATH и в обычных папках установки. «Указать…» — выбрать файл вручную, он главнее найденного; «Сбросить» — снова искать самому.</value>
   </data>
   <data name="ToolsPurposeFfmpeg" xml:space="preserve">
     <value>видео и аудио, WebP</value>
@@ -2378,6 +2324,9 @@
     <value>Программы (*.exe)|*.exe</value>
     <comment>Фильтр OpenFileDialog: подпись|маска</comment>
   </data>
+  <data name="ActionsProgramFilter" xml:space="preserve">
+    <value>Программы (*.exe, *.cmd, *.bat)|*.exe;*.cmd;*.bat</value>
+  </data>
   <data name="ToolsReset" xml:space="preserve">
     <value>Сбросить</value>
   </data>
@@ -2392,6 +2341,9 @@
   </data>
   <data name="ActionsErrorImageSource" xml:space="preserve">
     <value>Встроенный кодировщик не читает из «{0}»</value>
+  </data>
+  <data name="ActionsBuiltinImageConvert" xml:space="preserve">
+    <value>Встроенный кодировщик изображений</value>
   </data>
   <data name="ImageConvertNoPreview" xml:space="preserve">
     <value>Внутри файла нет превью, которое Wander умеет достать</value>
@@ -2409,7 +2361,10 @@
     <value>Добавить</value>
   </data>
   <data name="ActionsCopy" xml:space="preserve">
-    <value>Копировать</value>
+    <value>Дублировать</value>
+  </data>
+  <data name="ActionsPickProgram" xml:space="preserve">
+    <value>Выбрать файл программы</value>
   </data>
   <data name="ActionsRemove" xml:space="preserve">
     <value>Удалить</value>
@@ -2610,7 +2565,154 @@
   <data name="SettingsDefaultViewMode" xml:space="preserve">
     <value>Вид по умолчанию</value>
   </data>
-  <data name="SettingsDefaultViewModeHint" xml:space="preserve">
-    <value>Для папок без закрепления и не со снимками. Выбор вида в меню «Вид» закрепляет его только за открытой папкой.</value>
+  <data name="SettingsCategoryFolders" xml:space="preserve">
+    <value>Папки и закладки</value>
+  </data>
+  <data name="SettingsCategoryList" xml:space="preserve">
+    <value>Список файлов</value>
+  </data>
+  <data name="SettingsCategoryViews" xml:space="preserve">
+    <value>Вид</value>
+  </data>
+  <data name="SettingsCategorySizes" xml:space="preserve">
+    <value>Размеры</value>
+  </data>
+  <data name="SettingsCategoryOperations" xml:space="preserve">
+    <value>Файловые операции</value>
+  </data>
+  <data name="SettingsCategoryRatings" xml:space="preserve">
+    <value>Оценки</value>
+  </data>
+  <data name="SettingsCategoryCache" xml:space="preserve">
+    <value>Кэш и память</value>
+  </data>
+  <data name="SettingsStartupGroup" xml:space="preserve">
+    <value>При запуске</value>
+  </data>
+  <data name="SettingsTreeGroup" xml:space="preserve">
+    <value>Панель папок</value>
+  </data>
+  <data name="SettingsBookmarksGroup" xml:space="preserve">
+    <value>Стандартные закладки</value>
+  </data>
+  <data name="SettingsShowSystemHint" xml:space="preserve">
+    <value>Скрытые и системные разом, как pagefile.sys; один системный атрибут ничего не значит — его ставит себе любая папка с desktop.ini. Видны только вместе со скрытыми.</value>
+  </data>
+  <data name="SettingsCompanionsGroup" xml:space="preserve">
+    <value>Спутники</value>
+  </data>
+  <data name="SettingsCompanionsNote" xml:space="preserve">
+    <value>Переименование, перенос и удаление уносят спутники — .meta, .xmp, .pp3 рядом с файлом — вместе с ним; Ctrl+Z возвращает всё разом.</value>
+  </data>
+  <data name="SettingsRefreshGroup" xml:space="preserve">
+    <value>Изменения от других программ</value>
+  </data>
+  <data name="SettingsPictureSize" xml:space="preserve">
+    <value>Размер картинки, px</value>
+  </data>
+  <data name="SettingsConfirmGroup" xml:space="preserve">
+    <value>Подтверждения</value>
+  </data>
+  <data name="SettingsConflictsGroup" xml:space="preserve">
+    <value>Совпадения имён при копировании и перемещении</value>
+  </data>
+  <data name="SettingsShellExtensionsSwitchHint" xml:space="preserve">
+    <value>Выключено — меню не загружает расширения оболочки вовсе: быстрее, и чужой код в Wander не попадает.</value>
+  </data>
+  <data name="SettingsShellFilter" xml:space="preserve">
+    <value>Поиск по пункту, программе или расширению</value>
+  </data>
+  <data name="SettingsShellFilterHint" xml:space="preserve">
+    <value>Расширение с точкой (.mp4) находит и пункты для всех файлов: в меню .mp4 они тоже есть.</value>
+  </data>
+  <data name="SettingsGuide" xml:space="preserve">
+    <value>Справка по этой странице (F1)</value>
+    <comment>Подсказка кнопки «?» в окне настроек: открывает руководство на разделе открытой страницы</comment>
+  </data>
+  <data name="FieldClear" xml:space="preserve">
+    <value>Очистить</value>
+    <comment>Крестик в поле поиска или фильтра</comment>
+  </data>
+  <data name="PickerTypeFilter" xml:space="preserve">
+    <value>Поиск по расширению</value>
+  </data>
+  <data name="HotkeySettingsGuide" xml:space="preserve">
+    <value>Справка по открытой странице настроек</value>
+  </data>
+  <data name="SettingsActionsPlacement" xml:space="preserve">
+    <value>Где показывать</value>
+  </data>
+  <data name="SettingsActionsPresetNote" xml:space="preserve">
+    <value>Встроенное действие не правится: его можно выключить галочкой в таблице или продублировать и поправить копию.</value>
+  </data>
+  <data name="SettingsActionsPreset" xml:space="preserve">
+    <value>встроенное</value>
+    <comment>Метка в шапке карточки действия, у которого поля только для чтения</comment>
+  </data>
+  <data name="SettingsActionsNoSelection" xml:space="preserve">
+    <value>Выберите строку — здесь появится её команда.</value>
+  </data>
+  <data name="SettingsThumbnailCacheGroup" xml:space="preserve">
+    <value>Кэш миниатюр на диске</value>
+  </data>
+  <data name="SettingsThumbnailDiskMbHint" xml:space="preserve">
+    <value>16…8192 МБ, стандартно 256; сверх предела уходят давно не открывавшиеся.</value>
+  </data>
+  <data name="SettingsMemoryGroup" xml:space="preserve">
+    <value>Память</value>
+  </data>
+  <data name="SettingsPictureMemoryLimits" xml:space="preserve">
+    <value>128…65536 МБ или 0, стандартно 0.</value>
+  </data>
+  <data name="SettingsTempGroup" xml:space="preserve">
+    <value>Временные копии</value>
+  </data>
+  <data name="SettingsUseSystemTempNote" xml:space="preserve">
+    <value>Копии файлов из архивов — для просмотра и «Открыть». Снято — в папке данных Wander.</value>
+  </data>
+  <data name="SettingsLoadingGroup" xml:space="preserve">
+    <value>Загрузка значков</value>
+  </data>
+  <data name="SettingsLogPathsNote" xml:space="preserve">
+    <value>Выключено — вместо путей метки: диск, глубина и расширение видны, имена нет. Такой лог можно приложить к отчёту об ошибке.</value>
+  </data>
+  <data name="SettingsDebugMenuGroup" xml:space="preserve">
+    <value>Меню «Отладка»</value>
+  </data>
+  <data name="HotkeyGroupFullscreen" xml:space="preserve">
+    <value>Полный экран</value>
+  </data>
+  <data name="HotkeyFullscreenNext" xml:space="preserve">
+    <value>Следующий снимок</value>
+  </data>
+  <data name="HotkeyFullscreenPrevious" xml:space="preserve">
+    <value>Предыдущий снимок</value>
+  </data>
+  <data name="HotkeyFullscreenEnds" xml:space="preserve">
+    <value>Первый / последний снимок</value>
+  </data>
+  <data name="HotkeyFullscreenSide" xml:space="preserve">
+    <value>Соседний снимок справа — экран делится; дальше листают правый</value>
+  </data>
+  <data name="HotkeyFullscreenKeepSide" xml:space="preserve">
+    <value>Оставить на экране левый / правый</value>
+  </data>
+  <data name="HotkeyFullscreenRate" xml:space="preserve">
+    <value>Оценка и метка снимку; из двух — тому, что под мышью</value>
+  </data>
+  <data name="HotkeyFullscreenDelete" xml:space="preserve">
+    <value>Снимок в корзину / навсегда, дальше — следующий</value>
+  </data>
+  <data name="HotkeyFullscreenPeek" xml:space="preserve">
+    <value>Кадр без подсветки хелперов</value>
+  </data>
+  <data name="HotkeyFullscreenUndo" xml:space="preserve">
+    <value>Отменить оценку или удаление</value>
+  </data>
+  <data name="HotkeyFullscreenZoom" xml:space="preserve">
+    <value>Лупа 1:1 без кнопки; ещё раз — снять</value>
+  </data>
+  <data name="HotkeyFullscreenClose" xml:space="preserve">
+    <value>Закрыть</value>
   </data>
 </root>

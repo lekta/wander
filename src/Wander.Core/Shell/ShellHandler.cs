@@ -74,13 +74,24 @@ public sealed record ShellHandler {
     /// <para>
     /// Roughly forty of the fifty handlers on a stock machine are this:
     /// "Отправить", BitLocker's six verbs, Defender, Work Folders, the
-    /// sharing menu. Listing them by default would bury the six rows anyone
-    /// actually came to switch off, so the settings table hides them behind
-    /// a checkbox rather than dropping them — some of them (SendTo) really
+    /// sharing menu. Listing them all would bury the six rows anyone
+    /// actually came to switch off, so the settings table lists one only
+    /// once a menu has drawn it or the user has switched it off
+    /// (<see cref="ShellExtensionCatalog"/>) - some of them (SendTo) really
     /// are worth turning off.
     /// </para>
     /// </summary>
     public bool IsSystem { get; init; }
+
+    /// <summary>
+    /// The binary's product is Windows itself - "Операционная система
+    /// Microsoft Windows", or its English twin that some DLLs carry. The
+    /// table calls such a program "ОС" (2026-09-28): the full name is the
+    /// longest string in the column and says nothing a short one does not.
+    /// Narrower than <see cref="IsSystem"/>: Defender is Microsoft's, but
+    /// its name says which part of Windows it is.
+    /// </summary>
+    public bool IsOsComponent { get; init; }
 }
 
 

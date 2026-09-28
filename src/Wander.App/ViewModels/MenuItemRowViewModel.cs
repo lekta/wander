@@ -4,7 +4,8 @@ using Wander.Core.Menu;
 namespace Wander.App.ViewModels;
 
 /// <summary>
-/// One line of the "Пункты Wander" table in settings.
+/// One line of the "Основные пункты" table in settings: an entry Wander
+/// draws itself, standard or its own.
 ///
 /// <para>
 /// A table rather than a column of checkboxes, to match the third-party one
@@ -48,13 +49,19 @@ public sealed class MenuItemRowViewModel : ObservableObject {
     /// <summary>A submenu header — drawn in semibold so the grouping reads at a glance.</summary>
     public bool IsSubmenu { get; }
 
-    /// <summary>Ticked = the entry does not appear in the menu.</summary>
-    public bool IsHidden {
-        get => _isHidden;
+    /// <summary>
+    /// Ticked = the entry is in the menu - the table's "Вкл", the same way
+    /// round as every checkbox of the settings (2026-09-28). Stored the
+    /// other way round, as the hidden ones.
+    /// </summary>
+    public bool IsShown {
+        get => !_isHidden;
         set {
-            if (SetField(ref _isHidden, value)) {
+            if (SetField(ref _isHidden, !value)) {
                 _onChanged();
             }
         }
     }
+
+    public bool IsHidden => _isHidden;
 }

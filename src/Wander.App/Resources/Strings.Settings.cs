@@ -15,35 +15,20 @@ public static partial class Strings {
     /// <summary>Настройки Wander</summary>
     public static string SettingsTitle => Get(nameof(SettingsTitle));
 
-    /// <summary>Основное</summary>
-    public static string SettingsCategoryGeneral => Get(nameof(SettingsCategoryGeneral));
-
-    /// <summary>Размеры</summary>
-    public static string SettingsCategoryLayout => Get(nameof(SettingsCategoryLayout));
-
-    /// <summary>Миниатюры</summary>
-    public static string SettingsCategoryThumbnails => Get(nameof(SettingsCategoryThumbnails));
-
-    /// <summary>Закладки</summary>
-    public static string SettingsCategoryBookmarks => Get(nameof(SettingsCategoryBookmarks));
-
     /// <summary>Контекстное меню</summary>
     public static string SettingsCategoryContextMenu => Get(nameof(SettingsCategoryContextMenu));
 
-    /// <summary>Отладка</summary>
+    /// <summary>Отладка и сброс</summary>
     public static string SettingsCategoryDebug => Get(nameof(SettingsCategoryDebug));
 
-    /// <summary>Открывать последнюю папку при запуске</summary>
+    /// <summary>Последняя папка</summary>
     public static string SettingsRestoreLastFolder => Get(nameof(SettingsRestoreLastFolder));
 
-    /// <summary>Иначе — первый доступный диск.</summary>
+    /// <summary>Папки больше нет — открывается ближайшая уцелевшая над ней; была на…</summary>
     public static string SettingsRestoreLastFolderHint => Get(nameof(SettingsRestoreLastFolderHint));
 
     /// <summary>Рабочая папка</summary>
     public static string SettingsWorkFolder => Get(nameof(SettingsWorkFolder));
-
-    /// <summary>Открывается при запуске, если последняя папка была на отключённом диске — флешке, сетевом.</summary>
-    public static string SettingsWorkFolderHint => Get(nameof(SettingsWorkFolderHint));
 
     /// <summary>{0} (системные «Документы»)</summary>
     public static string SettingsWorkFolderDefault => Get(nameof(SettingsWorkFolderDefault));
@@ -60,13 +45,13 @@ public static partial class Strings {
     /// <summary>Защищённые системные файлы</summary>
     public static string SettingsShowSystem => Get(nameof(SettingsShowSystem));
 
-    /// <summary>$RECYCLE.BIN, System Volume Information, Recovery и подобные. Внутрь н</summary>
+    /// <summary>$RECYCLE.BIN, System Volume Information, pagefile.sys и подобные: в папки…</summary>
     public static string SettingsHideSystemRootFoldersHint => Get(nameof(SettingsHideSystemRootFoldersHint));
 
     /// <summary>Спрашивать при удалении в корзину</summary>
     public static string SettingsConfirmRecycle => Get(nameof(SettingsConfirmRecycle));
 
-    /// <summary>Ctrl+Z возвращает из корзины в любом случае. Shift+Delete спрашивает в</summary>
+    /// <summary>Ctrl+Z вернёт из корзины в любом случае, а удаление навсегда (Shift+Delete)…</summary>
     public static string SettingsConfirmRecycleHint => Get(nameof(SettingsConfirmRecycleHint));
 
     /// <summary>Спрашивать при перемещении</summary>
@@ -75,46 +60,43 @@ public static partial class Strings {
     /// <summary>Перетаскивание с перемещением и вставка после Ctrl+X. Ctrl+Z возвраща</summary>
     public static string SettingsConfirmMoveHint => Get(nameof(SettingsConfirmMoveHint));
 
-    /// <summary>Не спрашивать про одинаковые файлы</summary>
+    /// <summary>Пропускать одинаковые файлы без вопроса</summary>
     public static string SettingsSkipIdentical => Get(nameof(SettingsSkipIdentical));
 
-    /// <summary>В окне совпадений имён сразу отвечать «оставить» за пары, совпадающие побайтово</summary>
+    /// <summary>Файл, совпадающий побайтово с тем, что уже лежит на месте, не копируется и…</summary>
     public static string SettingsSkipIdenticalHint => Get(nameof(SettingsSkipIdenticalHint));
 
-    /// <summary>Временные копии в системной папке Temp</summary>
+    /// <summary>Держать в системной папке Temp</summary>
     public static string SettingsUseSystemTemp => Get(nameof(SettingsUseSystemTemp));
 
-    /// <summary>Копии файлов из архивов для просмотра и «Открыть». Снято — в папке данных Wander</summary>
+    /// <summary>Папка данных в портативном режиме — data рядом с exe. Копии старше суток…</summary>
     public static string SettingsUseSystemTempHint => Get(nameof(SettingsUseSystemTempHint));
 
-    /// <summary>Файл и его спутники — одним элементом</summary>
+    /// <summary>Показывать файл и его спутники одним элементом</summary>
     public static string SettingsIntegrateCompanions => Get(nameof(SettingsIntegrateCompanions));
 
-    /// <summary>Спутник — служебный файл рядом с основным: Unity-шный «.meta», настрой</summary>
-    public static string SettingsCompanionsHint => Get(nameof(SettingsCompanionsHint));
-
-    /// <summary>Режим «Крупные значки»</summary>
+    /// <summary>Значки</summary>
     public static string SettingsLargeIconsGroup => Get(nameof(SettingsLargeIconsGroup));
 
-    /// <summary>Ширина ячейки (px)</summary>
+    /// <summary>Ширина ячейки, px</summary>
     public static string SettingsCellWidth => Get(nameof(SettingsCellWidth));
 
-    /// <summary>Размер иконки (px)</summary>
+    /// <summary>Размер значка, px</summary>
     public static string SettingsIconSize => Get(nameof(SettingsIconSize));
 
-    /// <summary>Отступ между ячейками (px)</summary>
+    /// <summary>Отступ вокруг ячейки, px</summary>
     public static string SettingsCellMargin => Get(nameof(SettingsCellMargin));
 
-    /// <summary>Размер шрифта подписи</summary>
+    /// <summary>Размер шрифта подписи, px</summary>
     public static string SettingsLabelFontSize => Get(nameof(SettingsLabelFontSize));
 
-    /// <summary>Хранить миниатюры на диске между запусками</summary>
+    /// <summary>Хранить миниатюры между запусками</summary>
     public static string SettingsThumbnailDiskCache => Get(nameof(SettingsThumbnailDiskCache));
 
-    /// <summary>Кэш на диске, не больше (МБ)</summary>
+    /// <summary>Не больше, МБ</summary>
     public static string SettingsThumbnailDiskMb => Get(nameof(SettingsThumbnailDiskMb));
 
-    /// <summary>Память под картинки (МБ)</summary>
+    /// <summary>Под картинки, МБ</summary>
     public static string SettingsPictureMemory => Get(nameof(SettingsPictureMemory));
 
     /// <summary>Миниатюры и кадры панели просмотра вместе. 0 — шестнадцатая часть памяти компьютера, здесь {0} МБ.</summary>
@@ -123,16 +105,10 @@ public static partial class Strings {
     /// <summary>Очистить кэш</summary>
     public static string SettingsClearCache => Get(nameof(SettingsClearCache));
 
-    /// <summary>Миниатюра строится один раз на файл и переиспользуется, п…</summary>
-    public static string SettingsThumbnailsHint => Get(nameof(SettingsThumbnailsHint));
-
-    /// <summary>Значения зажимаются в разумные пределы автоматически: 16……</summary>
-    public static string SettingsThumbnailsLimitsHint => Get(nameof(SettingsThumbnailsLimitsHint));
-
     /// <summary>Кэш на диске выключен.</summary>
     public static string SettingsCacheOff => Get(nameof(SettingsCacheOff));
 
-    /// <summary>Сейчас занято: {0} {1}</summary>
+    /// <summary>Занято {0} в {1}</summary>
     public static string SettingsCacheUsage => Get(nameof(SettingsCacheUsage));
 
     /// <summary>Загрузки</summary>
@@ -147,101 +123,86 @@ public static partial class Strings {
     /// <summary>Корзина</summary>
     public static string SettingsBookmarkRecycleBin => Get(nameof(SettingsBookmarkRecycleBin));
 
-    /// <summary>Спец-папки берутся у системы: имя зависит от языка Windows, и папку мо</summary>
+    /// <summary>Стандартные папки берутся у системы: имя зависит от языка Windows, и папка…</summary>
     public static string SettingsBookmarksHint => Get(nameof(SettingsBookmarksHint));
 
-    /// <summary>Показывать пункты сторонних приложений</summary>
+    /// <summary>Показывать в меню</summary>
     public static string SettingsShellExtensions => Get(nameof(SettingsShellExtensions));
 
-    /// <summary>Пункты сторонних приложений</summary>
+    /// <summary>Пункты других программ</summary>
     public static string SettingsShellExtensionsGroup => Get(nameof(SettingsShellExtensionsGroup));
 
-    /// <summary>Наведите на строку — увидите, что делает пункт. «Добавить» вытаскивает</summary>
-    public static string SettingsShellExtensionsHint => Get(nameof(SettingsShellExtensionsHint));
-
-    /// <summary>Пункты Wander</summary>
+    /// <summary>Основные пункты</summary>
     public static string SettingsOwnItemsGroup => Get(nameof(SettingsOwnItemsGroup));
 
-    /// <summary>Скрытый пункт пропадает из меню, хоткей продолжает работать. Подменю с</summary>
-    public static string SettingsOwnItemsHint => Get(nameof(SettingsOwnItemsHint));
-
-    /// <summary>Показывать меню «Отладка» в главном меню</summary>
+    /// <summary>Показывать в главном меню</summary>
     public static string SettingsShowDebugMenu => Get(nameof(SettingsShowDebugMenu));
 
-    /// <summary>Когда выключено, в основном меню больше не появится пункт…</summary>
-    public static string SettingsDebugHint => Get(nameof(SettingsDebugHint));
-
-    /// <summary>Журнал запуска</summary>
+    /// <summary>Лог сеанса</summary>
     public static string SettingsLogGroup => Get(nameof(SettingsLogGroup));
 
-    /// <summary>Подробно: клавиши, клики, выделение</summary>
+    /// <summary>Записывать клавиши, клики и выделение</summary>
     public static string SettingsLogActions => Get(nameof(SettingsLogActions));
 
     /// <summary>Каждое нажатие, клик и смена выделения в списке и в панелях папок…</summary>
     public static string SettingsLogActionsHint => Get(nameof(SettingsLogActionsHint));
 
-    /// <summary>Писать пути к файлам</summary>
+    /// <summary>Писать настоящие пути к файлам</summary>
     public static string SettingsLogPaths => Get(nameof(SettingsLogPaths));
 
-    /// <summary>Выключено — пути и имена в журнале и в отчёте об ошибке заменены метка…</summary>
+    /// <summary>Одна папка в пределах сеанса — одна метка. Первые строки сеанса, до чтения…</summary>
     public static string SettingsLogPathsHint => Get(nameof(SettingsLogPathsHint));
 
     /// <summary>Сброс настроек</summary>
     public static string SettingsResetGroup => Get(nameof(SettingsResetGroup));
 
-    /// <summary>Сбросить всё</summary>
+    /// <summary>Сбросить все настройки…</summary>
     public static string SettingsResetAll => Get(nameof(SettingsResetAll));
 
-    /// <summary>Вернёт все настройки к стандартным значениям и спросит по…</summary>
-    public static string SettingsResetHint => Get(nameof(SettingsResetHint));
-
-    /// <summary>Сбросить все настройки к стандартным значениям?  Вернутся…</summary>
+    /// <summary>Сбросить все настройки к стандартным значениям?  Снова включатся…</summary>
     public static string SettingsResetConfirm => Get(nameof(SettingsResetConfirm));
 
-    /// <summary>Обновлять список автоматически</summary>
+    /// <summary>Показывать сразу</summary>
     public static string SettingsAutoRefresh => Get(nameof(SettingsAutoRefresh));
 
-    /// <summary>Список перерисовывается, когда файлы меняет кто-то другой. Выключено —</summary>
+    /// <summary>Выключено — только по F5.</summary>
     public static string SettingsAutoRefreshHint => Get(nameof(SettingsAutoRefreshHint));
 
-    /// <summary>Быстрое чтение первых файлов при открытии папки</summary>
+    /// <summary>Сначала то, что видно на экране</summary>
     public static string SettingsVisibleFirstLoading => Get(nameof(SettingsVisibleFirstLoading));
 
     /// <summary>Значки и миниатюры того, что видно на экране, читаются раньше всего остального…</summary>
     public static string SettingsVisibleFirstLoadingHint => Get(nameof(SettingsVisibleFirstLoadingHint));
 
-    /// <summary>Режим «Таблица»</summary>
+    /// <summary>Таблица</summary>
     public static string SettingsDetailsGroup => Get(nameof(SettingsDetailsGroup));
 
-    /// <summary>Режим «Плитки»</summary>
+    /// <summary>Плитки</summary>
     public static string SettingsTilesGroup => Get(nameof(SettingsTilesGroup));
 
-    /// <summary>Высота строки (px)</summary>
+    /// <summary>Высота строки, px</summary>
     public static string SettingsRowHeight => Get(nameof(SettingsRowHeight));
 
-    /// <summary>Ширина плитки (px)</summary>
+    /// <summary>Ширина плитки, px</summary>
     public static string SettingsTileWidth => Get(nameof(SettingsTileWidth));
-
-    /// <summary>То же самое делает Ctrl + колесо мыши прямо в списке — каждый вид меняется отдельно, и то, что накрутили колесом, попадает в эти же поля.</summary>
-    public static string SettingsZoomHint => Get(nameof(SettingsZoomHint));
 
     /// <summary>Галерея</summary>
     public static string SettingsCategoryGallery => Get(nameof(SettingsCategoryGallery));
 
-    /// <summary>Режим «Галерея»</summary>
+    /// <summary>Галерея</summary>
     public static string SettingsGalleryGroup => Get(nameof(SettingsGalleryGroup));
 
     /// <summary>Фон</summary>
     public static string SettingsGalleryBackground => Get(nameof(SettingsGalleryBackground));
 
-    /// <summary>Включать галерею в папках со снимками</summary>
+    /// <summary>Включать галерею, если снимков в папке больше</summary>
     public static string SettingsAutoGallery => Get(nameof(SettingsAutoGallery));
 
-    /// <summary>Если больше половины содержательных файлов в папке — изображения, вид переключается на галерею сам. Сайдкары (.pp3, .xmp, .meta) и резервные копии в счёт не идут. Стоит выбрать вид в папке вручную — и в ней автоматика больше не вмешивается.</summary>
-    public static string SettingsAutoGalleryHint => Get(nameof(SettingsAutoGalleryHint));
+    /// <summary>Папки со снимками</summary>
+    public static string SettingsPhotoFoldersGroup => Get(nameof(SettingsPhotoFoldersGroup));
 
-    /// <summary>Оценки</summary>
-    public static string SettingsRatingGroup => Get(nameof(SettingsRatingGroup));
+    /// <summary>%</summary>
+    public static string SettingsAutoGalleryUnit => Get(nameof(SettingsAutoGalleryUnit));
 
     /// <summary>Спрашивать перед созданием файла оценки</summary>
     public static string SettingsConfirmCreateSidecar => Get(nameof(SettingsConfirmCreateSidecar));
@@ -249,7 +210,7 @@ public static partial class Strings {
     /// <summary>Первая оценка снимка без сайдкара создаёт файл рядом с ним. Снятая г</summary>
     public static string SettingsConfirmCreateSidecarHint => Get(nameof(SettingsConfirmCreateSidecarHint));
 
-    /// <summary>Формат оценки, если сайдкара нет</summary>
+    /// <summary>Файл оценки для снимка без сайдкара</summary>
     public static string SettingsRawRatingFormat => Get(nameof(SettingsRawRatingFormat));
 
     /// <summary>.xmp — Adobe, darktable, RawTherapee 5.11+</summary>
@@ -258,29 +219,20 @@ public static partial class Strings {
     /// <summary>.pp3 — RawTherapee</summary>
     public static string SettingsRawRatingFormatPp3 => Get(nameof(SettingsRawRatingFormatPp3));
 
-    /// <summary>Wander не создаёт файлы, о которых не просили: первая оценка снимка без сайдкара спрашивает подтверждение. Формат по-умолчанию — .xmp, потому что он ни на что, кроме оценки, не влияет. Появившийся .pp3 отменяет применение профиля по-умолчанию в RawTherapee.</summary>
+    /// <summary>.xmp ни на что, кроме оценки, не влияет. .pp3 — файл настроек RawTherapee…</summary>
     public static string SettingsRawRatingFormatHint => Get(nameof(SettingsRawRatingFormatHint));
 
-    /// <summary>Яркость серого фона (0–255)</summary>
+    /// <summary>Яркость серого, 0–255</summary>
     public static string SettingsGalleryGreyLevel => Get(nameof(SettingsGalleryGreyLevel));
 
-    /// <summary>Яркость тёмного фона (0–255)</summary>
+    /// <summary>Яркость тёмного, 0–255</summary>
     public static string SettingsGalleryDarkLevel => Get(nameof(SettingsGalleryDarkLevel));
-
-    /// <summary>Доля изображений для включения (%)</summary>
-    public static string SettingsAutoGalleryPercent => Get(nameof(SettingsAutoGalleryPercent));
 
     /// <summary>Вид по умолчанию</summary>
     public static string SettingsDefaultViewMode => Get(nameof(SettingsDefaultViewMode));
 
-    /// <summary>Для папок без закрепления и не со снимками...</summary>
-    public static string SettingsDefaultViewModeHint => Get(nameof(SettingsDefaultViewModeHint));
-
     /// <summary>Клавиатура</summary>
     public static string SettingsCategoryHotkeys => Get(nameof(SettingsCategoryHotkeys));
-
-    /// <summary>Полный список сочетаний. Переназначение пока не поддерживается — сочетания заданы приложением.</summary>
-    public static string SettingsHotkeysHint => Get(nameof(SettingsHotkeysHint));
 
     /// <summary>Поиск по сочетанию или по действию</summary>
     public static string SettingsHotkeysSearch => Get(nameof(SettingsHotkeysSearch));
@@ -306,23 +258,23 @@ public static partial class Strings {
     /// <summary>диски</summary>
     public static string ScopeDrive => Get(nameof(ScopeDrive));
 
-    /// <summary>Скрыть</summary>
-    public static string SettingsShellColumnHide => Get(nameof(SettingsShellColumnHide));
+    /// <summary>ОС</summary>
+    public static string ShellAppOs => Get(nameof(ShellAppOs));
+
+    /// <summary>Вкл</summary>
+    public static string SettingsColumnOn => Get(nameof(SettingsColumnOn));
 
     /// <summary>Пункт</summary>
     public static string SettingsShellColumnItem => Get(nameof(SettingsShellColumnItem));
 
-    /// <summary>Приложение</summary>
+    /// <summary>Программа</summary>
     public static string SettingsShellColumnApp => Get(nameof(SettingsShellColumnApp));
 
-    /// <summary>Где показывается</summary>
+    /// <summary>Для чего</summary>
     public static string SettingsShellColumnScopes => Get(nameof(SettingsShellColumnScopes));
 
-    /// <summary>Добавить...</summary>
+    /// <summary>Добавить программу или тип файла…</summary>
     public static string SettingsShellAdd => Get(nameof(SettingsShellAdd));
-
-    /// <summary>Показывать системные</summary>
-    public static string SettingsShellShowSystem => Get(nameof(SettingsShellShowSystem));
 
     /// <summary>—</summary>
     public static string SettingsShellScopeUnknown => Get(nameof(SettingsShellScopeUnknown));
@@ -354,13 +306,13 @@ public static partial class Strings {
     /// <summary>Видео</summary>
     public static string SettingsBookmarkVideos => Get(nameof(SettingsBookmarkVideos));
 
-    /// <summary>Стрелки в дереве открывают папку</summary>
+    /// <summary>Открывать папку, на которую перешли с клавиатуры</summary>
     public static string SettingsTreeKeyboardNavigates => Get(nameof(SettingsTreeKeyboardNavigates));
 
-    /// <summary>Поведение проводника. Выключено — стрелки двигают курсор, открывает En</summary>
+    /// <summary>Стрелки, PgUp, PgDn, Home, End. Как в Проводнике, только зажатая клавиша…</summary>
     public static string SettingsTreeKeyboardNavigatesHint => Get(nameof(SettingsTreeKeyboardNavigatesHint));
 
-    /// <summary>Дерево само прокручивается вбок к длинному имени</summary>
+    /// <summary>Прокручивать вбок к длинному имени</summary>
     public static string SettingsTreeScrollsSideways => Get(nameof(SettingsTreeScrollsSideways));
 
     /// <summary>Имя папки шире панели — панель уезжает вправо, чтобы показать его цел</summary>
@@ -372,10 +324,10 @@ public static partial class Strings {
     /// <summary>Показывать системные файлы</summary>
     public static string PanelShowSystem => Get(nameof(PanelShowSystem));
 
-    /// <summary>Стрелки в дереве открывают папку</summary>
+    /// <summary>Открывать папку, на которую перешли с клавиатуры</summary>
     public static string PanelTreeKeyboardNavigates => Get(nameof(PanelTreeKeyboardNavigates));
 
-    /// <summary>Поведение проводника. Выключено — стрелки только двигают курсор, откры</summary>
+    /// <summary>Как в Проводнике. Выключено — клавиши только двигают курсор, открывает…</summary>
     public static string PanelTreeKeyboardNavigatesHint => Get(nameof(PanelTreeKeyboardNavigatesHint));
 
     /// <summary>Спрашивать при удалении в корзину</summary>
@@ -384,25 +336,16 @@ public static partial class Strings {
     /// <summary>Ctrl+Z возвращает из корзины в любом случае; Shift+Delete спрашивает в</summary>
     public static string PanelConfirmRecycleHint => Get(nameof(PanelConfirmRecycleHint));
 
-    /// <summary>Обновлять список автоматически</summary>
+    /// <summary>Сразу показывать изменения от других программ</summary>
     public static string PanelAutoRefresh => Get(nameof(PanelAutoRefresh));
 
-    /// <summary>Отображение</summary>
-    public static string SettingsCategoryVisibility => Get(nameof(SettingsCategoryVisibility));
-
-    /// <summary>Свои закладки добавляются перетаскиванием в панель.</summary>
-    public static string SettingsBookmarksAddHint => Get(nameof(SettingsBookmarksAddHint));
-
-    /// <summary>Хоткей</summary>
+    /// <summary>Клавиши</summary>
     public static string SettingsOwnColumnGesture => Get(nameof(SettingsOwnColumnGesture));
 
-    /// <summary>Приложение и «где показывается» приходят из реестра, названия — из сам</summary>
-    public static string SettingsShellExtensionsTableHint => Get(nameof(SettingsShellExtensionsTableHint));
-
-    /// <summary>Служебные папки в корне дисков</summary>
+    /// <summary>Служебные папки и файлы в корне дисков</summary>
     public static string SettingsShowSystemRootFolders => Get(nameof(SettingsShowSystemRootFolders));
 
-    /// <summary>Показывать</summary>
+    /// <summary>Показывать в списке</summary>
     public static string SettingsShowGroup => Get(nameof(SettingsShowGroup));
 
     /// <summary>Документ.txt</summary>
@@ -414,12 +357,105 @@ public static partial class Strings {
     /// <summary>14 КБ · Текстовый файл</summary>
     public static string SettingsPreviewMeta => Get(nameof(SettingsPreviewMeta));
 
-    /// <summary>Сбросить</summary>
+    /// <summary>Сбросить настройки контекстного меню…</summary>
     public static string SettingsShellReset => Get(nameof(SettingsShellReset));
 
-    /// <summary>Вернуть настройки контекстного меню к исходным</summary>
-    public static string SettingsShellResetHint => Get(nameof(SettingsShellResetHint));
-
-    /// <summary>Сбросить настройки контекстного меню?  Снимутся все галочки «скрыть», </summary>
+    /// <summary>Сбросить настройки контекстного меню?  Все пункты — других программ и основные…</summary>
     public static string SettingsShellResetConfirm => Get(nameof(SettingsShellResetConfirm));
+
+    /// <summary>Папки и закладки</summary>
+    public static string SettingsCategoryFolders => Get(nameof(SettingsCategoryFolders));
+
+    /// <summary>Список файлов</summary>
+    public static string SettingsCategoryList => Get(nameof(SettingsCategoryList));
+
+    /// <summary>Вид</summary>
+    public static string SettingsCategoryViews => Get(nameof(SettingsCategoryViews));
+
+    /// <summary>Размеры</summary>
+    public static string SettingsCategorySizes => Get(nameof(SettingsCategorySizes));
+
+    /// <summary>Файловые операции</summary>
+    public static string SettingsCategoryOperations => Get(nameof(SettingsCategoryOperations));
+
+    /// <summary>Оценки</summary>
+    public static string SettingsCategoryRatings => Get(nameof(SettingsCategoryRatings));
+
+    /// <summary>Кэш и память</summary>
+    public static string SettingsCategoryCache => Get(nameof(SettingsCategoryCache));
+
+    /// <summary>При запуске</summary>
+    public static string SettingsStartupGroup => Get(nameof(SettingsStartupGroup));
+
+    /// <summary>Панель папок</summary>
+    public static string SettingsTreeGroup => Get(nameof(SettingsTreeGroup));
+
+    /// <summary>Стандартные закладки</summary>
+    public static string SettingsBookmarksGroup => Get(nameof(SettingsBookmarksGroup));
+
+    /// <summary>Скрытые и системные разом, как pagefile.sys; один системный атрибут ничего…</summary>
+    public static string SettingsShowSystemHint => Get(nameof(SettingsShowSystemHint));
+
+    /// <summary>Спутники</summary>
+    public static string SettingsCompanionsGroup => Get(nameof(SettingsCompanionsGroup));
+
+    /// <summary>Переименование, перенос и удаление уносят спутники — .meta, .xmp, .pp3…</summary>
+    public static string SettingsCompanionsNote => Get(nameof(SettingsCompanionsNote));
+
+    /// <summary>Изменения от других программ</summary>
+    public static string SettingsRefreshGroup => Get(nameof(SettingsRefreshGroup));
+
+    /// <summary>Размер картинки, px</summary>
+    public static string SettingsPictureSize => Get(nameof(SettingsPictureSize));
+
+    /// <summary>Подтверждения</summary>
+    public static string SettingsConfirmGroup => Get(nameof(SettingsConfirmGroup));
+
+    /// <summary>Совпадения имён при копировании и перемещении</summary>
+    public static string SettingsConflictsGroup => Get(nameof(SettingsConflictsGroup));
+
+    /// <summary>Выключено — меню не загружает расширения оболочки вовсе: быстрее, и чужой…</summary>
+    public static string SettingsShellExtensionsSwitchHint => Get(nameof(SettingsShellExtensionsSwitchHint));
+
+    /// <summary>Поиск по пункту, программе или расширению</summary>
+    public static string SettingsShellFilter => Get(nameof(SettingsShellFilter));
+
+    /// <summary>Расширение с точкой (.mp4) находит и пункты для всех файлов: в меню .mp4 они тоже есть.</summary>
+    public static string SettingsShellFilterHint => Get(nameof(SettingsShellFilterHint));
+
+    /// <summary>Справка по этой странице (F1)</summary>
+    public static string SettingsGuide => Get(nameof(SettingsGuide));
+
+    /// <summary>Очистить</summary>
+    public static string FieldClear => Get(nameof(FieldClear));
+
+    /// <summary>Поиск по расширению</summary>
+    public static string PickerTypeFilter => Get(nameof(PickerTypeFilter));
+
+    /// <summary>Кэш миниатюр на диске</summary>
+    public static string SettingsThumbnailCacheGroup => Get(nameof(SettingsThumbnailCacheGroup));
+
+    /// <summary>16…8192 МБ, стандартно 256; сверх предела уходят давно не открывавшиеся.</summary>
+    public static string SettingsThumbnailDiskMbHint => Get(nameof(SettingsThumbnailDiskMbHint));
+
+    /// <summary>Память</summary>
+    public static string SettingsMemoryGroup => Get(nameof(SettingsMemoryGroup));
+
+    /// <summary>128…65536 МБ или 0, стандартно 0.</summary>
+    public static string SettingsPictureMemoryLimits => Get(nameof(SettingsPictureMemoryLimits));
+
+    /// <summary>Временные копии</summary>
+    public static string SettingsTempGroup => Get(nameof(SettingsTempGroup));
+
+    /// <summary>Копии файлов из архивов — для просмотра и «Открыть». Снято — в папке данных…</summary>
+    public static string SettingsUseSystemTempNote => Get(nameof(SettingsUseSystemTempNote));
+
+    /// <summary>Загрузка значков</summary>
+    public static string SettingsLoadingGroup => Get(nameof(SettingsLoadingGroup));
+
+    /// <summary>Выключено — вместо путей метки: диск, глубина и расширение видны, имена нет.…</summary>
+    public static string SettingsLogPathsNote => Get(nameof(SettingsLogPathsNote));
+
+    /// <summary>Меню «Отладка»</summary>
+    public static string SettingsDebugMenuGroup => Get(nameof(SettingsDebugMenuGroup));
 }

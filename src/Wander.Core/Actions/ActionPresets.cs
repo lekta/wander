@@ -1,4 +1,5 @@
 using Wander.Core.Icons;
+using Wander.Core.Localization;
 
 namespace Wander.Core.Actions;
 
@@ -156,6 +157,17 @@ public static class ActionPresets {
     /// <summary>The listed program of that name; null for one only a user's row names.</summary>
     public static ExternalTool? KnownTool(string name) {
         return Tools.FirstOrDefault(t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// What a built-in handler is called where a program's name goes - the
+    /// program list of an action's form (2026-09-28); its handler name when
+    /// it has no title of its own.
+    /// </summary>
+    public static string BuiltinTitle(string name) {
+        return string.Equals(name, ImageConvert, StringComparison.OrdinalIgnoreCase)
+            ? Text.Get("ActionsBuiltinImageConvert")
+            : name;
     }
 
 

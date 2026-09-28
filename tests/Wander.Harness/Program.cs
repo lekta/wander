@@ -1,5 +1,6 @@
 using System.IO;
 using Wander.App;
+using Wander.Core.Navigation;
 using Wander.Core.Persistence;
 using Wander.Harness.Host;
 using Wander.Harness.Sandbox;
@@ -89,6 +90,9 @@ public static class Program {
         string dataDir = Path.Combine(outDir, "data");
         Environment.SetEnvironmentVariable(AppPaths.EnvironmentVariable, dataDir);
         SeedState(scenario, dataDir);
+        // The session starts in the sandbox, not where the state or the
+        // working folder - the user's Documents - would take it.
+        StartFolder.Override(sandboxRoot);
         Wander.App.App.Headless = true;
 
         var context = new RunContext(scenario, sandboxRoot, outDir, dataDir);

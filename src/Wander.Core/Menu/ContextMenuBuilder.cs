@@ -164,14 +164,15 @@ public static class ContextMenuBuilder {
 
         // An archive sitting in an ordinary folder: everything above still
         // applies to it as a file, and these are the verbs it has as a
-        // container - asking where, or right beside it. The shell's own
-        // "Извлечь все..." arrives among the third-party rows above and is
-        // left where it is - it is somebody else's verb and it behaves
-        // differently.
+        // container - right beside it, or asking where. The one without a
+        // question first (2026-09-25), in every menu that has the pair. The
+        // shell's own "Извлечь все..." arrives among the third-party rows
+        // above and is left where it is - it is somebody else's verb and it
+        // behaves differently.
         if (t.SelectionIsArchive) {
             items.Add(MenuEntry.Divider);
-            items.Add(Cmd(MenuCommandId.Extract));
             items.Add(Cmd(MenuCommandId.ExtractHere));
+            items.Add(Cmd(MenuCommandId.Extract));
         }
 
         items.Add(MenuEntry.Divider);
@@ -195,8 +196,8 @@ public static class ContextMenuBuilder {
             Cmd(MenuCommandId.Open, t.IsSingle, isDefault: true),
             MenuEntry.Divider,
             Cmd(MenuCommandId.Copy),
-            Cmd(MenuCommandId.Extract),
             Cmd(MenuCommandId.ExtractHere),
+            Cmd(MenuCommandId.Extract),
             Cmd(MenuCommandId.CopyPath),
         };
     }
@@ -262,8 +263,8 @@ public static class ContextMenuBuilder {
         // they are what the menu is for. With nothing selected, the ones
         // about a folder work on the folder on screen.
         if (any && (t.SelectionIsArchive || t.IsArchive)) {
-            items.Add(Cmd(MenuCommandId.Extract));
             items.Add(Cmd(MenuCommandId.ExtractHere));
+            items.Add(Cmd(MenuCommandId.Extract));
         }
         if (fs && any && !t.IsPanelRow) {
             items.Add(Cmd(MenuCommandId.CreateShortcut));

@@ -9,6 +9,7 @@ using Wander.Core;
 using Wander.Core.Actions;
 using Wander.Core.Localization;
 using Wander.Core.Logging;
+using Wander.Core.Navigation;
 using Wander.Core.Operations;
 using Wander.Core.Persistence;
 using Wander.Platform.Windows;
@@ -70,6 +71,9 @@ public partial class App : Application {
         // logger opens its file, since the logger is the first thing the
         // bootstrapper builds.
         AppPaths.Resolve(e.Args);
+        // The folder to start in, when the command line names one - a test
+        // run does, to list a folder of its own.
+        StartFolder.Resolve(e.Args);
         // Before anything formats a number, and before the thread pool has
         // been handed any work that might: the culture set here is the one
         // background passes inherit.

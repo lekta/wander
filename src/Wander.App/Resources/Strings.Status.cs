@@ -36,13 +36,13 @@ public static partial class Strings {
     /// <summary>Не удалось открыть браузер: {0}</summary>
     public static string StatusBrowserFailed => Get(nameof(StatusBrowserFailed));
 
-    /// <summary>Журнал не настроен.</summary>
+    /// <summary>Лог не ведётся.</summary>
     public static string StatusNoLogging => Get(nameof(StatusNoLogging));
 
-    /// <summary>Файл журнала не найден.</summary>
+    /// <summary>Файл лога не найден.</summary>
     public static string StatusNoLogFile => Get(nameof(StatusNoLogFile));
 
-    /// <summary>Не удалось открыть журнал: {0}</summary>
+    /// <summary>Не удалось открыть лог: {0}</summary>
     public static string StatusOpenLogFailed => Get(nameof(StatusOpenLogFailed));
 
     /// <summary>Не удалось открыть журнал действий: {0}</summary>
@@ -261,10 +261,10 @@ public static partial class Strings {
     /// <summary>Wander может собрать архив с отчётом (zip), показать его …</summary>
     public static string CrashExplain => Get(nameof(CrashExplain));
 
-    /// <summary>Приложить журнал этого сеанса — с ним разбираться гораздо…</summary>
+    /// <summary>Приложить лог этого сеанса — с ним разбираться гораздо…</summary>
     public static string CrashIncludeLog => Get(nameof(CrashIncludeLog));
 
-    /// <summary>Приложить журнал этого сеанса — с ним разбираться гораздо…; пути заменены метками</summary>
+    /// <summary>Приложить лог этого сеанса — с ним разбираться гораздо…; пути заменены метками</summary>
     public static string CrashIncludeLogMasked => Get(nameof(CrashIncludeLogMasked));
 
     /// <summary>Подготовить отчёт</summary>
@@ -363,7 +363,7 @@ public static partial class Strings {
     /// <summary>У снимка «{1}» нет файла с оценкой. Рядом будет создан «{0}» — в нём и сохранится оценка.  Отменить создание можно через Ctrl+Z.</summary>
     public static string ConfirmCreateSidecar => Get(nameof(ConfirmCreateSidecar));
 
-    /// <summary>Внимание: RawTherapee применяет профиль по-умолчанию (Auto-Matched Curve) только к снимкам без .pp3. Как только .pp3 появится, снимок начнёт открываться в RawTherapee с нейтральных значений, а не с автоподбора. Формат меняется в настройках, раздел «Галерея».</summary>
+    /// <summary>Внимание: RawTherapee применяет профиль по-умолчанию (Auto-Matched Curve)…</summary>
     public static string ConfirmCreateSidecarPp3Warning => Get(nameof(ConfirmCreateSidecarPp3Warning));
 
     /// <summary>Поиск: найдено {0:N0}, просмотрено {1:N0}</summary>

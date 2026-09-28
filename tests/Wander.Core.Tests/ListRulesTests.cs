@@ -49,6 +49,26 @@ public class ListRulesTests {
         Assert.Empty(s.Effects.OfType<FocusRow>());
     }
 
+    /// <summary>
+    /// The window came up on the last session's place (2026-09-25): its file
+    /// selected, the keyboard - on the window itself, where WPF put it - onto
+    /// it. Clicked into a panel while the folder was listing, it stays there.
+    /// </summary>
+    [Theory]
+    [InlineData(null, ZoneReason.FocusFell, true)]
+    [InlineData(WindowZone.Drives, ZoneReason.Click, false)]
+    public void TheLastSessionsPlace_TakesTheKeyboardFromNowhere(WindowZone? zone, ZoneReason reason, bool keyboardFollows) {
+        var session = new FolderSession();
+        session.SetArrival(ArrivalIntent.Place(Folder, C, new[] { B, C, D }, top: B));
+        var decision = session.DecideArrival(Folder, _rows.Select(Entry).ToList());
+        var s = Opened().Enter(zone, reason);
+
+        s.Land(Array.Empty<string>(), _rows, ListingReason.Arrival, decision);
+
+        Assert.Equal(new[] { C }, s.State.List.Selection);
+        Assert.Equal(keyboardFollows, s.Effects.OfType<FocusRow>().Any(f => f.Path == C));
+    }
+
     /// <summary>A folder opened from a panel row: nothing of its own listing is selected.</summary>
     [Fact]
     public void AFolderOpenedFromAPanel_SelectsNothingInIt() {
@@ -331,9 +351,13 @@ public class ListRulesTests {
 
     /// <summary>An intent that found its rows.</summary>
     private static ArrivalDecision Asked(string row, bool takeFocus = false, string? rename = null) {
-        var entry = new FileSystemEntry(
-            Name: Path.GetFileName(row),
-            FullPath: row,
+        return new ArrivalDecision(ArrivalOutcome.SelectRows, new[] { Entry(row) }, takeFocus, rename);
+    }
+
+    private static FileSystemEntry Entry(string path) {
+        return new FileSystemEntry(
+            Name: Path.GetFileName(path),
+            FullPath: path,
             Kind: EntryKind.File,
             Size: 0,
             ModifiedUtc: DateTime.MinValue,
@@ -341,7 +365,5 @@ public class ListRulesTests {
             IsReadOnly: false,
             IsSystem: false,
             LinksToDirectory: false);
-
-        return new ArrivalDecision(ArrivalOutcome.SelectRows, new[] { entry }, takeFocus, rename);
     }
 }

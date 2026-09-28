@@ -61,6 +61,8 @@ public sealed class ShellHandlerRegistry : IShellHandlerRegistry {
 
     private static IReadOnlyList<string>? _searchPath;
 
+    private static IReadOnlySet<string>? _osProducts;
+
 
     public ShellHandlerRegistry(ILogger log) {
         _log = log;
@@ -165,11 +167,13 @@ public sealed class ShellHandlerRegistry : IShellHandlerRegistry {
             ?? verb;
 
         string executable = ExecutableFor(key);
+        var (app, isOs) = Product(executable);
 
         return new ShellHandler {
             Key = verb,
             Title = ShellEntryKey.Normalize(label),
-            AppName = VersionName(executable),
+            AppName = app,
+            IsOsComponent = isOs,
             Scopes = new[] { scope },
             Kind = ShellHandlerKind.Verb,
             // No command line of its own means DelegateExecute or
@@ -200,7 +204,7 @@ public sealed class ShellHandlerRegistry : IShellHandlerRegistry {
         }
 
         string server = clsid.Length > 0 ? ServerFor(root, clsid) : string.Empty;
-        string app = VersionName(server);
+        var (app, isOs) = Product(server);
 
         // The key name is the identity where there is one — it is what the
         // handler will most likely draw. Where the key *is* the CLSID there
@@ -213,6 +217,7 @@ public sealed class ShellHandlerRegistry : IShellHandlerRegistry {
             Key = entryKey,
             Title = title,
             AppName = app,
+            IsOsComponent = isOs,
             Scopes = new[] { scope },
             Kind = ShellHandlerKind.ContextMenuHandler,
             IsSystem = server.Length > 0 && IsSystemFile(server),
@@ -305,10 +310,14 @@ public sealed class ShellHandlerRegistry : IShellHandlerRegistry {
         return path;
     }
 
-    private static string VersionName(string path) {
+    /// <summary>
+    /// The program a binary belongs to, and whether that program is Windows
+    /// itself - see <see cref="ShellHandler.IsOsComponent"/>.
+    /// </summary>
+    private static (string Name, bool IsOs) Product(string path) {
         try {
             if (path.Length == 0 || !File.Exists(path)) {
-                return string.Empty;
+                return (string.Empty, false);
             }
 
             var info = FileVersionInfo.GetVersionInfo(path);
@@ -317,13 +326,41 @@ public sealed class ShellHandlerRegistry : IShellHandlerRegistry {
             // where FileDescription is often the component ("7-Zip Shell
             // Extension"). Falls through to the file name for stripped
             // binaries, which is still better than nothing.
-            return First(info.ProductName, info.FileDescription, info.CompanyName)
+            string name = First(info.ProductName, info.FileDescription, info.CompanyName)
                 ?? Path.GetFileNameWithoutExtension(path);
+            bool isOs = info.ProductName is { } product && OsProducts().Contains(product.Trim());
+
+            return (name, isOs);
         } catch (Exception) {
             // A path we cannot read is a row without an owner, never a
             // failed scan: one broken handler must not cost the table.
-            return string.Empty;
+            return (string.Empty, false);
         }
+    }
+
+    /// <summary>
+    /// The product name Windows' own binaries carry: the local one, read off
+    /// <c>shell32.dll</c> so any language of Windows is covered, and the
+    /// English one part of the DLLs keep whatever the language (BitLocker's).
+    /// Read once.
+    /// </summary>
+    private static IReadOnlySet<string> OsProducts() {
+        if (_osProducts is not null) {
+            return _osProducts;
+        }
+
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Microsoft® Windows® Operating System" };
+        try {
+            string shell32 = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "shell32.dll");
+            if (FileVersionInfo.GetVersionInfo(shell32).ProductName is { Length: > 0 } local) {
+                names.Add(local.Trim());
+            }
+        } catch (Exception) {
+            // The English name alone still covers most of them.
+        }
+        _osProducts = names;
+
+        return names;
     }
 
     /// <summary>

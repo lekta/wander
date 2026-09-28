@@ -653,12 +653,16 @@
                             a review helper shows in its place (a tone curve,
                             the sharpness map) - and the cap is the picture's:
                             the helper's copy may be smaller than the frame.
+
+                            In the middle both ways (2026-09-25), as every
+                            viewer puts it; the 1:1 zoom lines up with it on
+                            the axis it does not pan (UpdateZoomPosition).
                         -->
                         <Image x:Name="ImgFit"
                                Source="{Binding DisplayImage}"
                                Stretch="Uniform"
                                Margin="{Binding PictureMargin, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                               VerticalAlignment="Top" HorizontalAlignment="Center"
+                               VerticalAlignment="Center" HorizontalAlignment="Center"
                                RenderOptions.BitmapScalingMode="HighQuality"
                                SizeChanged="ImgFit_SizeChanged">
                             <Image.MaxWidth>
@@ -689,7 +693,7 @@
                                Width="{Binding ActualWidth, ElementName=ImgFit}"
                                Height="{Binding ActualHeight, ElementName=ImgFit}"
                                Margin="{Binding PictureMargin, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                               VerticalAlignment="Top" HorizontalAlignment="Center"
+                               VerticalAlignment="Center" HorizontalAlignment="Center"
                                RenderOptions.BitmapScalingMode="HighQuality"/>
                         <!--
                             The sensor decode of a RAW on its way (RAW switch
@@ -742,13 +746,13 @@
                         </Canvas>
                     </Grid>
 
-                    <!-- Animated GIF (also anchored middle-top with same margin). -->
+                    <!-- Animated GIF (also in the middle, with the same margin). -->
                     <controls:GifImage x:Name="GifPreview"
                                        GifUri="{Binding GifUri}"
                                        Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Gif}"
                                        Stretch="Uniform"
                                        Margin="{Binding PictureMargin, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                       VerticalAlignment="Top" HorizontalAlignment="Center"
+                                       VerticalAlignment="Center" HorizontalAlignment="Center"
                                        RenderOptions.BitmapScalingMode="HighQuality">
                         <controls:GifImage.MaxWidth>
                             <MultiBinding Converter="{StaticResource BitmapPixelSize}" ConverterParameter="W">

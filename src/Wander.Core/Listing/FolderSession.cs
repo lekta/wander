@@ -21,14 +21,16 @@ public enum ArrivalOutcome {
 /// <summary>
 /// The answer to "a listing just landed — what should be selected". Computed
 /// by <see cref="FolderSession.DecideArrival"/>; the view model only carries
-/// it out.
+/// it out. <see cref="Top"/> is the row to put first on screen, when the
+/// intent named one.
 /// </summary>
 public sealed record ArrivalDecision(
     ArrivalOutcome Outcome,
     IReadOnlyList<FileSystemEntry> Rows,
     bool TakeFocus = false,
     string? RenameTarget = null,
-    string? FolderPath = null) {
+    string? FolderPath = null,
+    string? Top = null) {
 
     public static readonly ArrivalDecision None =
         new(ArrivalOutcome.None, Array.Empty<FileSystemEntry>());
@@ -327,6 +329,15 @@ public sealed class FolderSession {
     /// listing, and consuming the intent there is what stopped "up one
     /// level" from highlighting the folder it came out of.
     /// </para>
+    ///
+    /// <para>
+    /// None of the wanted rows listed: an intent that knows the rows they
+    /// stood among (the last session's place, 2026-09-25) selects the one
+    /// that took their place, by the list's own rule; with none of those
+    /// either, nothing is selected and nothing is scrolled - the folder from
+    /// its top. Its row for the top of the screen goes with a selection, or
+    /// alone when no row was asked for.
+    /// </para>
     /// </summary>
     public ArrivalDecision DecideArrival(string? currentFolder, IReadOnlyList<FileSystemEntry> rows) {
         if (_arrival is not { } intent) {
@@ -351,8 +362,16 @@ public sealed class FolderSession {
         }
 
         _arrival = null;
+        if (intent.Paths.Count == 0) {
+            return new ArrivalDecision(ArrivalOutcome.NothingFound, Array.Empty<FileSystemEntry>(), Top: intent.Top);
+        }
+
         var wanted = new HashSet<string>(intent.Paths, StringComparer.OrdinalIgnoreCase);
         var found = rows.Where(e => wanted.Contains(e.FullPath)).ToList();
+        if (found.Count == 0 && intent.StoodAmong is { } stood
+            && CurrentRowFallback.After(stood, intent.Paths, rows.Select(r => r.FullPath).ToList()) is { } next) {
+            found = rows.Where(e => IsSamePath(e.FullPath, next)).Take(1).ToList();
+        }
         if (found.Count == 0) {
             return new ArrivalDecision(ArrivalOutcome.NothingFound, Array.Empty<FileSystemEntry>());
         }
@@ -363,7 +382,7 @@ public sealed class FolderSession {
             ? pending
             : null;
 
-        return new ArrivalDecision(ArrivalOutcome.SelectRows, found, intent.TakeFocus, rename);
+        return new ArrivalDecision(ArrivalOutcome.SelectRows, found, intent.TakeFocus, rename, Top: intent.Top);
     }
 
 

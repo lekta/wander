@@ -47,8 +47,7 @@ public partial class SearchWindow : Window {
         }
 
         Activate();
-        NameBox.Focus();
-        NameBox.SelectAll();
+        NameBox.FocusAndSelectAll();
     }
 
 

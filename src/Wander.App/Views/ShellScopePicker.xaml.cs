@@ -1,5 +1,4 @@
 using System.Windows;
-using System.Windows.Controls;
 using Wander.App.Resources;
 using Wander.Core.Shell;
 
@@ -79,7 +78,7 @@ public partial class ShellScopePicker : Window {
     }
 
 
-    private void TypeFilter_TextChanged(object sender, TextChangedEventArgs e) {
+    private void TypeFilter_TextChanged(object? sender, EventArgs e) {
         string query = TypeFilter.Text.Trim();
         TypeList.ItemsSource = query.Length == 0
             ? _allTypes

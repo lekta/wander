@@ -31,6 +31,9 @@ namespace Wander.App.ViewModels;
 ///    repetitive delegated properties.
 /// </summary>
 public sealed class SettingsViewModel : ObservableObject {
+    /// <summary>How much of the next picture the gallery preview shows - see <see cref="GalleryPreviewWidth"/>.</summary>
+    private const int GalleryPreviewEdge = 16;
+
 
     public SettingsViewModel() {
         // Initialise from the default AppSettings record so the field
@@ -38,20 +41,27 @@ public sealed class SettingsViewModel : ObservableObject {
         ApplyFrom(new AppSettings());
 
         Categories = new ObservableCollection<SettingsCategoryViewModel> {
-            // Nine pages, not eleven. "Безопасность" was never about
-            // security — it is what the listing shows — and two pages
-            // holding one checkbox each cost a click to reach and taught
-            // nobody anything. Their contents moved to the page whose
-            // question they actually answer.
-            new GeneralSettingsCategory(this),
-            new VisibilitySettingsCategory(this),
-            new LayoutSettingsCategory(this),
+            // Every page is a part of Wander as the user meets it, in three
+            // runs: what is on screen, what is done with files, the
+            // machinery (2026-09-25). No "Основное": a page named after
+            // nothing collected whatever had no better place, and the
+            // tree's arrows sat next to the delete question and the temp
+            // folder. A page about a part of another is under it, indented
+            // (2026-09-28): the view's sizes and the gallery under the view;
+            // the menu, the actions with their programs and the ratings -
+            // set in every view, written next to the photo - under file
+            // operations. Rules - ARCHITECTURE, "Настройки".
+            new FoldersSettingsCategory(this),
+            new ListSettingsCategory(this),
+            new ViewsSettingsCategory(this),
+            new SizesSettingsCategory(this),
             new GallerySettingsCategory(this),
-            new ThumbnailsSettingsCategory(this),
-            new BookmarksSettingsCategory(this),
+            new OperationsSettingsCategory(this),
             new ContextMenuSettingsCategory(this),
             new ActionsSettingsCategory(this),
             new ToolsSettingsCategory(this),
+            new RatingsSettingsCategory(this),
+            new CacheSettingsCategory(this),
             new HotkeysSettingsCategory(this),
             new DebugSettingsCategory(this),
         };
@@ -61,9 +71,20 @@ public sealed class SettingsViewModel : ObservableObject {
 
     // --- General -------------------------------------------------------
     private bool _restoreLastFolder;
+    /// <summary>A session starts in the last folder; otherwise in the working folder (2026-09-28; the first drive before).</summary>
     public bool RestoreLastFolder {
         get => _restoreLastFolder;
-        set => SetField(ref _restoreLastFolder, value);
+        set {
+            if (SetField(ref _restoreLastFolder, value)) {
+                Raise(nameof(StartsInWorkFolder));
+            }
+        }
+    }
+
+    /// <summary>The other of the page's two startup choices; stored as <see cref="RestoreLastFolder"/>.</summary>
+    public bool StartsInWorkFolder {
+        get => !_restoreLastFolder;
+        set => RestoreLastFolder = !value;
     }
 
     private string _workFolder = "";
@@ -343,6 +364,7 @@ public sealed class SettingsViewModel : ObservableObject {
         set {
             if (SetField(ref _galleryCellWidth, ClampInt(value, 80, 640))) {
                 Raise(nameof(GalleryMetrics));
+                Raise(nameof(GalleryPreviewWidth));
             }
         }
     }
@@ -353,6 +375,7 @@ public sealed class SettingsViewModel : ObservableObject {
         set {
             if (SetField(ref _galleryImageSize, ClampInt(value, 64, 600))) {
                 Raise(nameof(GalleryMetrics));
+                Raise(nameof(GalleryPreviewWidth));
             }
         }
     }
@@ -363,6 +386,7 @@ public sealed class SettingsViewModel : ObservableObject {
         set {
             if (SetField(ref _galleryMargin, ClampInt(value, 0, 32))) {
                 Raise(nameof(GalleryMetrics));
+                Raise(nameof(GalleryPreviewWidth));
             }
         }
     }
@@ -380,6 +404,15 @@ public sealed class SettingsViewModel : ObservableObject {
     /// <summary>Cell geometry of the gallery grid — same contract as <see cref="IconsMetrics"/>.</summary>
     public TileMetrics GalleryMetrics => TileMetrics.ForGallery(
         GalleryCellWidth, GalleryImageSize, GalleryMargin, GalleryLabelFontSize);
+
+    /// <summary>
+    /// How wide the page's gallery preview is drawn (2026-09-28): one cell
+    /// with the air round it, then the edge of the next picture - enough to
+    /// show the gap between two. Two whole cells were wider than the room
+    /// beside the fields and put the preview under them.
+    /// </summary>
+    public int GalleryPreviewWidth =>
+        (3 * GalleryMargin) + GalleryCellWidth + Math.Max(0, (GalleryCellWidth - GalleryImageSize) / 2) + GalleryPreviewEdge;
 
     private GalleryBackground _galleryBackground;
     public GalleryBackground GalleryBackground {
@@ -594,16 +627,6 @@ public sealed class SettingsViewModel : ObservableObject {
     /// </summary>
     public ObservableCollection<ShellExtensionRowViewModel> ShellExtensionRows { get; } = new();
 
-    private bool _showSystemShellExtensions;
-    public bool ShowSystemShellExtensions {
-        get => _showSystemShellExtensions;
-        set {
-            if (SetField(ref _showSystemShellExtensions, value)) {
-                RebuildShellRows();
-            }
-        }
-    }
-
     public IReadOnlyList<string> RecentScopes => _recentScopes;
 
     /// <summary>Every scope the table is built from: the fixed set plus the user's.</summary>
@@ -619,6 +642,9 @@ public sealed class SettingsViewModel : ObservableObject {
 
     /// <summary>Programs pointed at by hand on the "Программы" page.</summary>
     private IReadOnlyList<ToolPath> _toolPaths = Array.Empty<ToolPath>();
+
+    /// <summary>The program list of the actions' form, kept while its lines stay the same - see <see cref="RefreshProgramChoices"/>.</summary>
+    private IReadOnlyList<ProgramChoice> _programChoices = Array.Empty<ProgramChoice>();
 
     /// <summary>
     /// The catalog's debug-only rows (PLAN AI2). Kept out of the table -
@@ -728,14 +754,16 @@ public sealed class SettingsViewModel : ObservableObject {
         TreeKeyboardNavigates = s.TreeKeyboardNavigates;
         TreeScrollsSideways = s.TreeScrollsSideways;
         ShellExtensionsEnabled = s.ShellExtensionsEnabled;
-        _showSystemShellExtensions = s.ShowSystemShellExtensions;
-        Raise(nameof(ShowSystemShellExtensions));
         RebuildMenuToggles(s.HiddenContextMenuItems);
+        // ".lnk" as the type of a menu was the shortcut's target's rows
+        // filed under the link (ShellScopes.MenuScopeOf, 2026-09-25): such a
+        // row keeps no scope until it is met again, and the picker no longer
+        // leads with it.
         _seenShellEntries.Clear();
-        _seenShellEntries.AddRange(s.KnownShellEntries);
+        _seenShellEntries.AddRange(s.KnownShellEntries.Select(e => ShellScopes.IsShortcut(e.Scope) ? e with { Scope = "" } : e));
         _trackedScopes.Clear();
         _trackedScopes.AddRange(s.TrackedShellScopes);
-        _recentScopes = s.RecentShellScopes;
+        _recentScopes = s.RecentShellScopes.Where(scope => !ShellScopes.IsShortcut(scope)).ToArray();
         _blockedShellKeys = new HashSet<string>(s.BlockedShellExtensions, StringComparer.OrdinalIgnoreCase);
         RebuildShellRows();
         _toolPaths = s.ToolPaths;
@@ -754,7 +782,7 @@ public sealed class SettingsViewModel : ObservableObject {
     /// <para>
     /// Rows already known are left alone: meeting "7-Zip" again must not
     /// re-enable a 7-Zip the user switched off. An entry whose description
-    /// was empty last time is filled in if the handler published one now.
+    /// or type was empty last time is filled in if this menu has one.
     /// </para>
     /// </summary>
     public void NoteShellExtensions(IEnumerable<KnownShellEntry> entries) {
@@ -772,8 +800,12 @@ public sealed class SettingsViewModel : ObservableObject {
             }
 
             var known = _seenShellEntries[at];
-            if (known.Help.Length == 0 && entry.Help.Length > 0) {
-                _seenShellEntries[at] = known with { Help = entry.Help };
+            var filled = known with {
+                Help = known.Help.Length > 0 ? known.Help : entry.Help,
+                Scope = known.Scope.Length > 0 ? known.Scope : entry.Scope,
+            };
+            if (filled != known) {
+                _seenShellEntries[at] = filled;
                 changed = true;
             }
         }
@@ -802,10 +834,10 @@ public sealed class SettingsViewModel : ObservableObject {
     /// menus, and Wander's own entries all visible.
     ///
     /// <para>
-    /// The seen list goes too, on purpose. It is what makes rows appear that
-    /// no scan produced, so leaving it would reset the switches and keep the
-    /// clutter — and it costs nothing: the next right-click starts filling
-    /// it in again.
+    /// The seen list goes too, on purpose. It is what puts rows in the table
+    /// (ShellExtensionCatalog lists what menus have drawn), so leaving it
+    /// would reset the switches and keep the clutter - and it costs nothing:
+    /// the next right-click starts filling it in again.
     /// </para>
     /// </summary>
     public void ResetContextMenu() {
@@ -813,11 +845,10 @@ public sealed class SettingsViewModel : ObservableObject {
         _seenShellEntries.Clear();
         _trackedScopes.Clear();
         _recentScopes = Array.Empty<string>();
-        ShowSystemShellExtensions = false;
         ShellExtensionsEnabled = true;
 
         foreach (var row in MenuItemRows) {
-            row.IsHidden = false;
+            row.IsShown = true;
         }
 
         RebuildShellRows();
@@ -960,7 +991,6 @@ public sealed class SettingsViewModel : ObservableObject {
             HiddenContextMenuItems = MenuItemRows.Where(r => r.IsHidden).Select(r => r.Key).ToArray(),
             BlockedShellExtensions = _blockedShellKeys.ToArray(),
             KnownShellEntries = ContextMenuSettings.TrimKnownEntries(_seenShellEntries, _blockedShellKeys),
-            ShowSystemShellExtensions = ShowSystemShellExtensions,
             TrackedShellScopes = _trackedScopes.ToArray(),
             RecentShellScopes = _recentScopes,
             CustomActions = ActionCatalog.ToStored(ActionPresets.All, Actions),
@@ -1000,7 +1030,7 @@ public sealed class SettingsViewModel : ObservableObject {
     /// </summary>
     private void RebuildShellRows() {
         var rows = ShellExtensionCatalog.Build(
-            _handlers, _seenShellEntries, _blockedShellKeys, ShowSystemShellExtensions);
+            _handlers, _seenShellEntries, _blockedShellKeys, _trackedScopes);
 
         ShellExtensionRows.Clear();
         foreach (var row in rows) {
@@ -1046,7 +1076,7 @@ public sealed class SettingsViewModel : ObservableObject {
     }
 
     private ActionRowViewModel NewActionRow(CustomAction action) {
-        var row = new ActionRowViewModel(action, OnActionsChanged);
+        var row = new ActionRowViewModel(action, OnActionsChanged, LocateProgram, () => _programChoices);
         row.SetTools(_toolLocations);
 
         return row;
@@ -1054,7 +1084,25 @@ public sealed class SettingsViewModel : ObservableObject {
 
     /// <summary>The same nudge as <see cref="OnMenuToggleChanged"/>, for the actions table.</summary>
     private void OnActionsChanged() {
+        RefreshProgramChoices();
         Raise(nameof(ActionRows));
+    }
+
+    /// <summary>
+    /// The actions' program list anew, after a row's program changed or a
+    /// row came or went. A new list only when its lines differ: a box handed
+    /// a new list selects again, and every keystroke in the form would.
+    /// </summary>
+    private void RefreshProgramChoices() {
+        var next = ActionCatalog.ProgramChoices(Actions);
+        if (next.SequenceEqual(_programChoices)) {
+            return;
+        }
+
+        _programChoices = next;
+        foreach (var row in ActionRows) {
+            row.RaiseProgramChoices();
+        }
     }
 
     /// <summary>
@@ -1085,5 +1133,10 @@ public sealed class SettingsViewModel : ObservableObject {
 
     private static string? SystemDocuments() {
         return ServiceLocator.TryGet<IKnownFolders>()?.GetDocuments();
+    }
+
+    /// <summary>Where an action's program is; with no locator every program counts as there - nothing can say otherwise.</summary>
+    private static string? LocateProgram(string program) {
+        return ServiceLocator.TryGet<IToolLocator>() is { } locator ? locator.Locate(program) : program;
     }
 }

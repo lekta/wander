@@ -6,8 +6,8 @@
         xmlns:controls="clr-namespace:Wander.App.Controls"
         xmlns:res="clr-namespace:Wander.App.Resources"
         Title="{x:Static res:Strings.SettingsTitle}"
-        Width="780" Height="560"
-        MinWidth="620" MinHeight="400"
+        Width="880" Height="640"
+        MinWidth="660" MinHeight="460"
         WindowStartupLocation="CenterOwner"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
@@ -18,22 +18,53 @@
         Each SettingsCategoryViewModel subclass gets its own DataTemplate
         below; the right pane's ContentControl picks the right template
         by the type of `SelectedCategory`. Adding a new category means
-        adding a new VM + a new DataTemplate here — nothing else needs
+        adding a new VM + a new DataTemplate here - nothing else needs
         to change.
+
+        How a page is laid out (2026-09-25; the rules - ARCHITECTURE,
+        "Настройки"): the page title, then groups, each under a heading
+        that is the context its rows are read in - "При запуске",
+        "Показывать в списке" - so a row does not repeat it. A checkbox says
+        what is on when it is ticked, a table's checkbox column included
+        ("Вкл"). A line of grey under a row says only what changing it
+        costs, where the label cannot (companions, .pp3, cache, logs); a
+        tooltip only says what is not on screen; the rest of the story is in
+        the guide on the site, which F1 opens at the page (2026-09-28,
+        SettingsCategoryViewModel.GuidePage). A row that means something
+        only with another on is under it, indented, and off with it. One
+        column, and nothing wider than the dialog at its smallest: a table
+        keeps to a few narrow columns, a preview wraps under its fields.
     -->
+    <Window.CommandBindings>
+        <CommandBinding Command="ApplicationCommands.Help" Executed="Help_Executed"/>
+    </Window.CommandBindings>
+
     <Window.Resources>
 
         <conv:EnumRadioConverter x:Key="EnumRadio"/>
         <conv:PixelsToThicknessConverter x:Key="PixelsToThickness"/>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
 
-        <!-- Reusable spacing values so the four sections look uniform. -->
-        <Thickness x:Key="Row">0,4,0,4</Thickness>
-        <Thickness x:Key="GroupHeader">0,0,0,8</Thickness>
+        <!-- Spacing shared by every page, so they look the same. -->
+        <Thickness x:Key="Row">0,3,0,3</Thickness>
+        <!-- Under its parent: level with the parent checkbox's label. -->
+        <Thickness x:Key="Sub">20,0,0,0</Thickness>
 
         <Style x:Key="SectionTitle" TargetType="TextBlock">
             <Setter Property="FontSize" Value="16"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Margin" Value="0,0,0,10"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+
+        <Style x:Key="GroupTitle" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,14,0,4"/>
+        </Style>
+
+        <!-- The reset of a page or of everything: last, and set off from
+             what is worked with every day by more air than a group gets. -->
+        <Style x:Key="ResetGroupTitle" TargetType="TextBlock" BasedOn="{StaticResource GroupTitle}">
+            <Setter Property="Margin" Value="0,32,0,4"/>
         </Style>
 
         <Style x:Key="FieldLabel" TargetType="TextBlock">
@@ -41,11 +72,25 @@
             <Setter Property="Margin" Value="0,0,12,0"/>
         </Style>
 
+        <!-- The line of explanation under a row, or under a group. -->
+        <Style x:Key="Note" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource TextCaption}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,1,0,4"/>
+        </Style>
+
+        <!-- The same under a checkbox: starts where its label does. -->
+        <Style x:Key="CheckNote" TargetType="TextBlock" BasedOn="{StaticResource Note}">
+            <Setter Property="Margin" Value="20,0,0,4"/>
+        </Style>
+
         <!--
-            Every text box on this page holds a pixel count, so they all get
-            the number-field behaviour: the clamp stops overwriting what is
-            being typed, and the value can be pulled with the mouse or the
-            wheel. See NumericField for why the first half is needed at all.
+            Every text box on these pages holds a number unless it says
+            otherwise, so they all get the number-field behaviour: the clamp
+            stops overwriting what is being typed, and the value can be
+            pulled with the mouse or the wheel. See NumericField for why the
+            first half is needed at all. The fields that hold text - a path,
+            a command line, the search on the keyboard page - switch it off.
         -->
         <Style TargetType="TextBox">
             <Setter Property="Padding" Value="4,2"/>
@@ -56,35 +101,52 @@
         <Style TargetType="CheckBox">
             <Setter Property="Margin" Value="{StaticResource Row}"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <!-- A row that is off with its parent still says why on hover. -->
+            <Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
+        </Style>
+
+        <Style TargetType="RadioButton">
+            <Setter Property="Margin" Value="0,3,16,3"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+
+        <!-- A field: its label in the page's one column of labels, the box after it. -->
+        <Style x:Key="FieldRow" TargetType="Grid">
+            <Setter Property="Margin" Value="{StaticResource Row}"/>
         </Style>
 
 
-        <!--
-            General. The switches about how the window behaves and the
-            working folder, with the explanations on tooltips: a paragraph under every checkbox turns
-            a settings page into a document, and the reader stops seeing the
-            settings.
-        -->
-        <DataTemplate DataType="{x:Type vm:GeneralSettingsCategory}">
+        <!-- Папки и закладки: where a session starts, the folder panel, the standard bookmarks. -->
+        <DataTemplate DataType="{x:Type vm:FoldersSettingsCategory}">
             <StackPanel>
                 <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
-                <CheckBox Content="{x:Static res:Strings.SettingsRestoreLastFolder}"
-                          ToolTip="{x:Static res:Strings.SettingsRestoreLastFolderHint}"
-                          IsChecked="{Binding Owner.RestoreLastFolder}"/>
+
+                <TextBlock Text="{x:Static res:Strings.SettingsStartupGroup}" Style="{StaticResource GroupTitle}"/>
                 <!--
-                    The working folder: the path, a picker and a way back to
-                    the system Documents. Buttons as glyphs, the words on
-                    tooltips.
+                    One of two, said as two (2026-09-28): the last folder or
+                    the working folder. A checkbox over an indented folder row
+                    left "off" to be guessed - it was the first drive. The
+                    folder's row is on with either choice: with the last
+                    folder it is where a session starts when that folder was
+                    on a medium since taken out (the first choice's tooltip).
+                    Buttons as glyphs, the words on tooltips.
                 -->
-                <Grid Margin="{StaticResource Row}" ToolTip="{x:Static res:Strings.SettingsWorkFolderHint}">
+                <RadioButton GroupName="StartFolder"
+                             Content="{x:Static res:Strings.SettingsRestoreLastFolder}"
+                             ToolTip="{x:Static res:Strings.SettingsRestoreLastFolderHint}"
+                             IsChecked="{Binding Owner.RestoreLastFolder}"/>
+                <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="{x:Static res:Strings.SettingsWorkFolder}" Style="{StaticResource FieldLabel}"/>
+                    <RadioButton GroupName="StartFolder"
+                                 Content="{x:Static res:Strings.SettingsWorkFolder}"
+                                 IsChecked="{Binding Owner.StartsInWorkFolder}"/>
                     <TextBlock Grid.Column="1" Text="{Binding Owner.WorkFolderText}"
+                               controls:TrimmedToolTip.Enabled="True"
                                VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
@@ -98,72 +160,78 @@
                     </TextBlock>
                     <Button Grid.Column="2" Content="&#xED25;" FontFamily="Segoe MDL2 Assets"
                             ToolTip="{x:Static res:Strings.SettingsWorkFolderPick}"
-                            Padding="8,3" Margin="8,0,0,0" Click="PickWorkFolder_Click"/>
+                            Padding="8,3" Margin="8,0,0,0" VerticalAlignment="Center" Click="PickWorkFolder_Click"/>
                     <Button Grid.Column="3" Content="&#xE777;" FontFamily="Segoe MDL2 Assets"
                             ToolTip="{x:Static res:Strings.SettingsWorkFolderReset}"
                             IsEnabled="{Binding Owner.HasCustomWorkFolder}"
-                            Padding="8,3" Margin="4,0,0,0" Click="ResetWorkFolder_Click"/>
+                            Padding="8,3" Margin="4,0,0,0" VerticalAlignment="Center" Click="ResetWorkFolder_Click"/>
                 </Grid>
-                <CheckBox Content="{x:Static res:Strings.SettingsAutoRefresh}"
-                          ToolTip="{x:Static res:Strings.SettingsAutoRefreshHint}"
-                          IsChecked="{Binding Owner.AutoRefresh}"/>
-                <CheckBox Content="{x:Static res:Strings.SettingsVisibleFirstLoading}"
-                          ToolTip="{x:Static res:Strings.SettingsVisibleFirstLoadingHint}"
-                          IsChecked="{Binding Owner.VisibleFirstLoading}"/>
+
+                <TextBlock Text="{x:Static res:Strings.SettingsTreeGroup}" Style="{StaticResource GroupTitle}"/>
                 <CheckBox Content="{x:Static res:Strings.SettingsTreeKeyboardNavigates}"
                           ToolTip="{x:Static res:Strings.SettingsTreeKeyboardNavigatesHint}"
                           IsChecked="{Binding Owner.TreeKeyboardNavigates}"/>
                 <CheckBox Content="{x:Static res:Strings.SettingsTreeScrollsSideways}"
                           ToolTip="{x:Static res:Strings.SettingsTreeScrollsSidewaysHint}"
                           IsChecked="{Binding Owner.TreeScrollsSideways}"/>
-                <CheckBox Content="{x:Static res:Strings.SettingsConfirmRecycle}"
-                          ToolTip="{x:Static res:Strings.SettingsConfirmRecycleHint}"
-                          IsChecked="{Binding Owner.ConfirmRecycle}"/>
-                <CheckBox Content="{x:Static res:Strings.SettingsConfirmMove}"
-                          ToolTip="{x:Static res:Strings.SettingsConfirmMoveHint}"
-                          IsChecked="{Binding Owner.ConfirmMove}"/>
-                <CheckBox Content="{x:Static res:Strings.SettingsSkipIdentical}"
-                          ToolTip="{x:Static res:Strings.SettingsSkipIdenticalHint}"
-                          IsChecked="{Binding Owner.SkipIdenticalOnConflict}"/>
-                <CheckBox Content="{x:Static res:Strings.SettingsUseSystemTemp}"
-                          ToolTip="{x:Static res:Strings.SettingsUseSystemTempHint}"
-                          IsChecked="{Binding Owner.UseSystemTemp}"/>
+
+                <TextBlock Text="{x:Static res:Strings.SettingsBookmarksGroup}" Style="{StaticResource GroupTitle}"
+                           ToolTip="{x:Static res:Strings.SettingsBookmarksHint}"/>
+                <StackPanel ToolTip="{x:Static res:Strings.SettingsBookmarksHint}">
+                    <CheckBox Content="{x:Static res:Strings.SettingsBookmarkDownloads}"
+                              IsChecked="{Binding Owner.ShowBookmarkDownloads}"/>
+                    <CheckBox Content="{x:Static res:Strings.SettingsBookmarkDocuments}"
+                              IsChecked="{Binding Owner.ShowBookmarkDocuments}"/>
+                    <CheckBox Content="{x:Static res:Strings.SettingsBookmarkPictures}"
+                              IsChecked="{Binding Owner.ShowBookmarkPictures}"/>
+                    <CheckBox Content="{x:Static res:Strings.SettingsBookmarkDesktop}"
+                              IsChecked="{Binding Owner.ShowBookmarkDesktop}"/>
+                    <CheckBox Content="{x:Static res:Strings.SettingsBookmarkMusic}"
+                              IsChecked="{Binding Owner.ShowBookmarkMusic}"/>
+                    <CheckBox Content="{x:Static res:Strings.SettingsBookmarkVideos}"
+                              IsChecked="{Binding Owner.ShowBookmarkVideos}"/>
+                    <CheckBox Content="{x:Static res:Strings.SettingsBookmarkRecycleBin}"
+                              IsChecked="{Binding Owner.ShowBookmarkRecycleBin}"/>
+                </StackPanel>
             </StackPanel>
         </DataTemplate>
 
 
         <!--
-            What the listing shows. This page used to be called
-            "Безопасность", which it never was: nothing here protects
-            anything, it decides what appears in the list. Companions moved
-            in from their own page for the same reason — "показывать файл и
-            его спутники одной строкой" is that same question.
+            Список файлов: what the list shows and when it lists again. The
+            protected and the volume-root rows are hidden files too - they
+            show only with hidden files shown (EntryVisibility.Allows), so
+            they are under that row and off with it. The last of them is
+            stored inverted (HideSystemRootFolders) and shown the right way
+            up - see SettingsViewModel.ShowSystemRootFolders.
         -->
-        <DataTemplate DataType="{x:Type vm:VisibilitySettingsCategory}">
+        <DataTemplate DataType="{x:Type vm:ListSettingsCategory}">
             <StackPanel>
                 <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
 
-                <!--
-                    No group headings: three rows that all answer "show this?"
-                    do not need to be told apart, and a heading over each pair
-                    is more furniture than content. The third one is stored
-                    inverted (HideSystemRootFolders) and shown the right way up
-                    — see SettingsViewModel.ShowSystemRootFolders.
-                -->
+                <TextBlock Text="{x:Static res:Strings.SettingsShowGroup}" Style="{StaticResource GroupTitle}"/>
                 <CheckBox Content="{x:Static res:Strings.SettingsShowHidden}"
                           IsChecked="{Binding Owner.ShowHidden}"/>
-                <CheckBox Content="{x:Static res:Strings.SettingsShowSystem}"
-                          IsChecked="{Binding Owner.ShowSystem}"/>
-                <CheckBox Content="{x:Static res:Strings.SettingsShowSystemRootFolders}"
-                          ToolTip="{x:Static res:Strings.SettingsHideSystemRootFoldersHint}"
-                          IsChecked="{Binding Owner.ShowSystemRootFolders}"/>
+                <StackPanel Margin="{StaticResource Sub}" IsEnabled="{Binding Owner.ShowHidden}">
+                    <CheckBox Content="{x:Static res:Strings.SettingsShowSystem}"
+                              ToolTip="{x:Static res:Strings.SettingsShowSystemHint}"
+                              IsChecked="{Binding Owner.ShowSystem}"/>
+                    <CheckBox Content="{x:Static res:Strings.SettingsShowSystemRootFolders}"
+                              ToolTip="{x:Static res:Strings.SettingsHideSystemRootFoldersHint}"
+                              IsChecked="{Binding Owner.ShowSystemRootFolders}"/>
+                </StackPanel>
 
-                <!-- Half a line of air: this one is not about visibility but
-                     about how many items a file counts as. -->
+                <TextBlock Text="{x:Static res:Strings.SettingsCompanionsGroup}" Style="{StaticResource GroupTitle}"/>
+                <!-- The one line kept under a row on this page: what the
+                     switch does to deleting and moving is not in its label. -->
                 <CheckBox Content="{x:Static res:Strings.SettingsIntegrateCompanions}"
-                          ToolTip="{x:Static res:Strings.SettingsCompanionsHint}"
-                          IsChecked="{Binding Owner.IntegrateCompanions}"
-                          Margin="0,14,0,4"/>
+                          IsChecked="{Binding Owner.IntegrateCompanions}"/>
+                <TextBlock Text="{x:Static res:Strings.SettingsCompanionsNote}" Style="{StaticResource CheckNote}"/>
+
+                <TextBlock Text="{x:Static res:Strings.SettingsRefreshGroup}" Style="{StaticResource GroupTitle}"/>
+                <CheckBox Content="{x:Static res:Strings.SettingsAutoRefresh}"
+                          ToolTip="{x:Static res:Strings.SettingsAutoRefreshHint}"
+                          IsChecked="{Binding Owner.AutoRefresh}"/>
             </StackPanel>
         </DataTemplate>
 
@@ -177,25 +245,26 @@
 
             Nothing here is a real list row: no icon service, no file, no
             layout code. It is a rectangle where the icon goes and a line of
-            text at the label's size — which is exactly the part the numbers
+            text at the label's size - which is exactly the part the numbers
             control, and all anyone is checking.
+
+            Beside the fields when the dialog is wide enough, under them when
+            it is not (the WrapPanel of each group): a preview cut at the
+            dialog's edge read as a drawing bug. One wider than the whole
+            page - a 480 px tile in the smallest dialog - is still clipped
+            inside its frame rather than past it.
         -->
         <Style x:Key="PreviewFrame" TargetType="Border">
             <Setter Property="Background" Value="{StaticResource ContentBackground}"/>
             <Setter Property="BorderBrush" Value="{StaticResource Separator}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="10"/>
+            <Setter Property="Margin" Value="0,3,0,3"/>
             <Setter Property="VerticalAlignment" Value="Top"/>
-            <!--
-                Stretched and clipped, not sized to its content: a 260 px tile
-                is wider than the space left beside the fields, and a frame
-                that grows past it loses its own right edge and reads as a
-                drawing bug. Clipped inside a full-width frame it reads as
-                what it is — a window onto a cell that is wider than the box.
-            -->
-            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
             <Setter Property="ClipToBounds" Value="True"/>
             <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="MaxWidth" Value="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=WrapPanel}}"/>
         </Style>
 
         <Style x:Key="PreviewBox" TargetType="Rectangle">
@@ -206,42 +275,84 @@
             <Setter Property="RadiusY" Value="2"/>
         </Style>
 
+        <!-- The fields of one view, before its preview. -->
+        <Style x:Key="SizeFields" TargetType="Grid">
+            <Setter Property="Margin" Value="0,0,24,0"/>
+            <Setter Property="VerticalAlignment" Value="Top"/>
+        </Style>
 
-        <!-- Layout.
-             One group per view: each one owns its own sizes, because what
-             makes a comfortable table is not what makes a comfortable grid
-             of photographs. Ctrl + wheel over the list writes these same
-             fields, so the gesture and the dialog cannot drift apart. -->
-        <DataTemplate DataType="{x:Type vm:LayoutSettingsCategory}">
+
+        <!--
+            Вид: which view a folder gets - the default one, and the gallery
+            for a folder of photos, which wins over it: one rule (ViewChoice)
+            read top to bottom, a group each. An option a line (2026-09-28;
+            all four in one line read as squeezed); the gallery's share is
+            inside its checkbox's sentence.
+        -->
+        <DataTemplate DataType="{x:Type vm:ViewsSettingsCategory}">
             <StackPanel>
                 <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
 
-                <TextBlock Text="{x:Static res:Strings.SettingsDetailsGroup}" FontWeight="SemiBold" Margin="{StaticResource GroupHeader}"/>
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <Grid Grid.Column="0">
+                <TextBlock Text="{x:Static res:Strings.SettingsDefaultViewMode}" Style="{StaticResource GroupTitle}"/>
+                <RadioButton GroupName="DefaultViewMode"
+                             Content="{x:Static res:Strings.MenuViewDetails}"
+                             IsChecked="{Binding Owner.DefaultViewMode, Converter={StaticResource EnumRadio}, ConverterParameter=Details}"/>
+                <RadioButton GroupName="DefaultViewMode"
+                             Content="{x:Static res:Strings.MenuViewTiles}"
+                             IsChecked="{Binding Owner.DefaultViewMode, Converter={StaticResource EnumRadio}, ConverterParameter=Tiles}"/>
+                <RadioButton GroupName="DefaultViewMode"
+                             Content="{x:Static res:Strings.MenuViewLargeIcons}"
+                             IsChecked="{Binding Owner.DefaultViewMode, Converter={StaticResource EnumRadio}, ConverterParameter=LargeIcons}"/>
+                <RadioButton GroupName="DefaultViewMode"
+                             Content="{x:Static res:Strings.MenuViewGallery}"
+                             IsChecked="{Binding Owner.DefaultViewMode, Converter={StaticResource EnumRadio}, ConverterParameter=Gallery}"/>
+
+                <TextBlock Text="{x:Static res:Strings.SettingsPhotoFoldersGroup}" Style="{StaticResource GroupTitle}"/>
+                <StackPanel Orientation="Horizontal">
+                    <CheckBox Content="{x:Static res:Strings.SettingsAutoGallery}"
+                              IsChecked="{Binding Owner.AutoGallery}"/>
+                    <StackPanel Orientation="Horizontal" IsEnabled="{Binding Owner.AutoGallery}">
+                        <TextBox Width="44" MinWidth="0" Margin="6,0,4,0" VerticalAlignment="Center"
+                                 Text="{Binding Owner.AutoGalleryPercent, UpdateSourceTrigger=Explicit}"/>
+                        <TextBlock Text="{x:Static res:Strings.SettingsAutoGalleryUnit}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+        </DataTemplate>
+
+
+        <!--
+            Размеры: one group per view with its own sizes - what makes a
+            comfortable table is not what makes a comfortable grid of
+            photographs. Ctrl + wheel over the list writes these same fields,
+            so the gesture and the dialog cannot drift apart.
+        -->
+        <DataTemplate DataType="{x:Type vm:SizesSettingsCategory}">
+            <StackPanel Grid.IsSharedSizeScope="True">
+                <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
+
+                <TextBlock Text="{x:Static res:Strings.SettingsDetailsGroup}" Style="{StaticResource GroupTitle}"/>
+                <WrapPanel>
+                    <Grid Style="{StaticResource SizeFields}">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="180"/>
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="SizeLabel"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
-                        <TextBlock Grid.Row="0" Grid.Column="0" Margin="{StaticResource Row}"
+                        <TextBlock Grid.Row="0"
                                    Text="{x:Static res:Strings.SettingsRowHeight}" Style="{StaticResource FieldLabel}"/>
                         <TextBox Grid.Row="0" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
                                  Text="{Binding Owner.DetailsRowHeight, UpdateSourceTrigger=Explicit}"/>
-                        <TextBlock Grid.Row="1" Grid.Column="0" Margin="{StaticResource Row}"
+                        <TextBlock Grid.Row="1"
                                    Text="{x:Static res:Strings.SettingsIconSize}" Style="{StaticResource FieldLabel}"/>
                         <TextBox Grid.Row="1" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
                                  Text="{Binding Owner.DetailsIconSize, UpdateSourceTrigger=Explicit}"/>
                     </Grid>
 
-                    <Border Grid.Column="1" Style="{StaticResource PreviewFrame}" Margin="20,0,0,0">
+                    <Border Style="{StaticResource PreviewFrame}">
                         <StackPanel>
                             <Grid Height="{Binding Owner.DetailsRowHeight}">
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -263,17 +374,13 @@
                             </Grid>
                         </StackPanel>
                     </Border>
-                </Grid>
+                </WrapPanel>
 
-                <TextBlock Text="{x:Static res:Strings.SettingsTilesGroup}" FontWeight="SemiBold" Margin="0,18,0,8"/>
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <Grid Grid.Column="0">
+                <TextBlock Text="{x:Static res:Strings.SettingsTilesGroup}" Style="{StaticResource GroupTitle}"/>
+                <WrapPanel>
+                    <Grid Style="{StaticResource SizeFields}">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="180"/>
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="SizeLabel"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <Grid.RowDefinitions>
@@ -281,21 +388,21 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
-                        <TextBlock Grid.Row="0" Grid.Column="0" Margin="{StaticResource Row}"
+                        <TextBlock Grid.Row="0"
                                    Text="{x:Static res:Strings.SettingsTileWidth}" Style="{StaticResource FieldLabel}"/>
                         <TextBox Grid.Row="0" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
                                  Text="{Binding Owner.TileCellWidth, UpdateSourceTrigger=Explicit}"/>
-                        <TextBlock Grid.Row="1" Grid.Column="0" Margin="{StaticResource Row}"
+                        <TextBlock Grid.Row="1"
                                    Text="{x:Static res:Strings.SettingsIconSize}" Style="{StaticResource FieldLabel}"/>
                         <TextBox Grid.Row="1" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
                                  Text="{Binding Owner.TileIconSize, UpdateSourceTrigger=Explicit}"/>
-                        <TextBlock Grid.Row="2" Grid.Column="0" Margin="{StaticResource Row}"
+                        <TextBlock Grid.Row="2"
                                    Text="{x:Static res:Strings.SettingsLabelFontSize}" Style="{StaticResource FieldLabel}"/>
                         <TextBox Grid.Row="2" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
                                  Text="{Binding Owner.TileLabelFontSize, UpdateSourceTrigger=Explicit}"/>
                     </Grid>
 
-                    <Border Grid.Column="1" Style="{StaticResource PreviewFrame}" Margin="20,0,0,0">
+                    <Border Style="{StaticResource PreviewFrame}">
                         <StackPanel Orientation="Horizontal" Width="{Binding Owner.TileCellWidth}">
                             <Rectangle Style="{StaticResource PreviewBox}"
                                        Width="{Binding Owner.TileIconSize}"
@@ -309,17 +416,13 @@
                             </StackPanel>
                         </StackPanel>
                     </Border>
-                </Grid>
+                </WrapPanel>
 
-                <TextBlock Text="{x:Static res:Strings.SettingsLargeIconsGroup}" FontWeight="SemiBold" Margin="0,18,0,8"/>
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <Grid Grid.Column="0">
+                <TextBlock Text="{x:Static res:Strings.SettingsLargeIconsGroup}" Style="{StaticResource GroupTitle}"/>
+                <WrapPanel>
+                    <Grid Style="{StaticResource SizeFields}">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="180"/>
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="SizeLabel"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <Grid.RowDefinitions>
@@ -328,19 +431,19 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
-                        <TextBlock Grid.Row="0" Grid.Column="0" Margin="{StaticResource Row}"
+                        <TextBlock Grid.Row="0"
                                    Text="{x:Static res:Strings.SettingsCellWidth}" Style="{StaticResource FieldLabel}"/>
                         <TextBox Grid.Row="0" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
                                  Text="{Binding Owner.LargeIconCellWidth, UpdateSourceTrigger=Explicit}"/>
-                        <TextBlock Grid.Row="1" Grid.Column="0" Margin="{StaticResource Row}"
+                        <TextBlock Grid.Row="1"
                                    Text="{x:Static res:Strings.SettingsIconSize}" Style="{StaticResource FieldLabel}"/>
                         <TextBox Grid.Row="1" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
                                  Text="{Binding Owner.LargeIconImageSize, UpdateSourceTrigger=Explicit}"/>
-                        <TextBlock Grid.Row="2" Grid.Column="0" Margin="{StaticResource Row}"
+                        <TextBlock Grid.Row="2"
                                    Text="{x:Static res:Strings.SettingsCellMargin}" Style="{StaticResource FieldLabel}"/>
                         <TextBox Grid.Row="2" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
                                  Text="{Binding Owner.LargeIconMargin, UpdateSourceTrigger=Explicit}"/>
-                        <TextBlock Grid.Row="3" Grid.Column="0" Margin="{StaticResource Row}"
+                        <TextBlock Grid.Row="3"
                                    Text="{x:Static res:Strings.SettingsLabelFontSize}" Style="{StaticResource FieldLabel}"/>
                         <TextBox Grid.Row="3" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
                                  Text="{Binding Owner.LargeIconLabelFontSize, UpdateSourceTrigger=Explicit}"/>
@@ -348,7 +451,7 @@
 
                     <!-- Two cells, so the margin between them is visible: on
                          its own it would just look like padding. -->
-                    <Border Grid.Column="1" Style="{StaticResource PreviewFrame}" Margin="20,0,0,0">
+                    <Border Style="{StaticResource PreviewFrame}">
                         <StackPanel Orientation="Horizontal">
                             <StackPanel Width="{Binding Owner.LargeIconCellWidth}"
                                         Margin="{Binding Owner.LargeIconMargin, Converter={StaticResource PixelsToThickness}}">
@@ -372,103 +475,13 @@
                             </StackPanel>
                         </StackPanel>
                     </Border>
-                </Grid>
+                </WrapPanel>
 
-                <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,16,0,0"
-                           Text="{x:Static res:Strings.SettingsZoomHint}"/>
-            </StackPanel>
-        </DataTemplate>
-
-
-        <!-- Gallery.
-             Its own page rather than a fourth group under Layout: only half
-             of what is here is a size. The background is a viewing decision
-             and the sidecar format is a decision about other programs'
-             files, and neither belongs under a heading that says "layout". -->
-        <DataTemplate DataType="{x:Type vm:GallerySettingsCategory}">
-            <StackPanel>
-                <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
-
-                <!-- The view a folder gets when nothing else decides: no
-                     pin on it, not a folder of pictures. Here, above the
-                     gallery switch, because the two are the same rule
-                     (ViewChoice) read top to bottom. -->
-                <TextBlock Text="{x:Static res:Strings.SettingsDefaultViewMode}" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                <StackPanel Orientation="Horizontal">
-                    <RadioButton GroupName="DefaultViewMode" Margin="0,0,16,0"
-                                 Content="{x:Static res:Strings.MenuViewDetails}"
-                                 IsChecked="{Binding Owner.DefaultViewMode, Converter={StaticResource EnumRadio}, ConverterParameter=Details}"/>
-                    <RadioButton GroupName="DefaultViewMode" Margin="0,0,16,0"
-                                 Content="{x:Static res:Strings.MenuViewTiles}"
-                                 IsChecked="{Binding Owner.DefaultViewMode, Converter={StaticResource EnumRadio}, ConverterParameter=Tiles}"/>
-                    <RadioButton GroupName="DefaultViewMode" Margin="0,0,16,0"
-                                 Content="{x:Static res:Strings.MenuViewLargeIcons}"
-                                 IsChecked="{Binding Owner.DefaultViewMode, Converter={StaticResource EnumRadio}, ConverterParameter=LargeIcons}"/>
-                    <RadioButton GroupName="DefaultViewMode"
-                                 Content="{x:Static res:Strings.MenuViewGallery}"
-                                 IsChecked="{Binding Owner.DefaultViewMode, Converter={StaticResource EnumRadio}, ConverterParameter=Gallery}"/>
-                </StackPanel>
-                <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,6,0,18"
-                           Text="{x:Static res:Strings.SettingsDefaultViewModeHint}"/>
-
-                <CheckBox Content="{x:Static res:Strings.SettingsAutoGallery}"
-                          IsChecked="{Binding Owner.AutoGallery}"/>
-                <Grid Margin="0,6,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="240"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Margin="{StaticResource Row}"
-                               Text="{x:Static res:Strings.SettingsAutoGalleryPercent}" Style="{StaticResource FieldLabel}"/>
-                    <TextBox Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
-                             Text="{Binding Owner.AutoGalleryPercent, UpdateSourceTrigger=Explicit}"/>
-                </Grid>
-                <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,6,0,0"
-                           Text="{x:Static res:Strings.SettingsAutoGalleryHint}"/>
-
-                <TextBlock Text="{x:Static res:Strings.SettingsGalleryBackground}" FontWeight="SemiBold" Margin="0,18,0,8"/>
-                <StackPanel Orientation="Horizontal">
-                    <RadioButton GroupName="GalleryBackground" Margin="0,0,16,0"
-                                 Content="{x:Static res:Strings.GalleryBackgroundLight}"
-                                 IsChecked="{Binding Owner.GalleryBackground, Converter={StaticResource EnumRadio}, ConverterParameter=Light}"/>
-                    <RadioButton GroupName="GalleryBackground" Margin="0,0,16,0"
-                                 Content="{x:Static res:Strings.GalleryBackgroundGrey}"
-                                 IsChecked="{Binding Owner.GalleryBackground, Converter={StaticResource EnumRadio}, ConverterParameter=Grey}"/>
-                    <RadioButton GroupName="GalleryBackground"
-                                 Content="{x:Static res:Strings.GalleryBackgroundDark}"
-                                 IsChecked="{Binding Owner.GalleryBackground, Converter={StaticResource EnumRadio}, ConverterParameter=Dark}"/>
-                </StackPanel>
-                <!-- The two darkened options are numbers rather than fixed
-                     colours: the neutral that reads right depends on the
-                     monitor and the room as much as on the photographs. -->
-                <Grid Margin="0,8,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="240"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0" Grid.Column="0" Margin="{StaticResource Row}"
-                               Text="{x:Static res:Strings.SettingsGalleryGreyLevel}" Style="{StaticResource FieldLabel}"/>
-                    <TextBox Grid.Row="0" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
-                             Text="{Binding Owner.GalleryGreyLevel, UpdateSourceTrigger=Explicit}"/>
-                    <TextBlock Grid.Row="1" Grid.Column="0" Margin="{StaticResource Row}"
-                               Text="{x:Static res:Strings.SettingsGalleryDarkLevel}" Style="{StaticResource FieldLabel}"/>
-                    <TextBox Grid.Row="1" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
-                             Text="{Binding Owner.GalleryDarkLevel, UpdateSourceTrigger=Explicit}"/>
-                </Grid>
-
-                <TextBlock Text="{x:Static res:Strings.SettingsGalleryGroup}" FontWeight="SemiBold" Margin="0,18,0,8"/>
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <Grid Grid.Column="0">
+                <TextBlock Text="{x:Static res:Strings.SettingsGalleryGroup}" Style="{StaticResource GroupTitle}"/>
+                <WrapPanel>
+                    <Grid Style="{StaticResource SizeFields}">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="180"/>
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="SizeLabel"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <Grid.RowDefinitions>
@@ -477,154 +490,166 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
-                        <TextBlock Grid.Row="0" Grid.Column="0" Margin="{StaticResource Row}"
+                        <TextBlock Grid.Row="0"
                                    Text="{x:Static res:Strings.SettingsCellWidth}" Style="{StaticResource FieldLabel}"/>
                         <TextBox Grid.Row="0" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
                                  Text="{Binding Owner.GalleryCellWidth, UpdateSourceTrigger=Explicit}"/>
-                        <TextBlock Grid.Row="1" Grid.Column="0" Margin="{StaticResource Row}"
-                                   Text="{x:Static res:Strings.SettingsIconSize}" Style="{StaticResource FieldLabel}"/>
+                        <TextBlock Grid.Row="1"
+                                   Text="{x:Static res:Strings.SettingsPictureSize}" Style="{StaticResource FieldLabel}"/>
                         <TextBox Grid.Row="1" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
                                  Text="{Binding Owner.GalleryImageSize, UpdateSourceTrigger=Explicit}"/>
-                        <TextBlock Grid.Row="2" Grid.Column="0" Margin="{StaticResource Row}"
+                        <TextBlock Grid.Row="2"
                                    Text="{x:Static res:Strings.SettingsCellMargin}" Style="{StaticResource FieldLabel}"/>
                         <TextBox Grid.Row="2" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
                                  Text="{Binding Owner.GalleryMargin, UpdateSourceTrigger=Explicit}"/>
-                        <TextBlock Grid.Row="3" Grid.Column="0" Margin="{StaticResource Row}"
+                        <TextBlock Grid.Row="3"
                                    Text="{x:Static res:Strings.SettingsLabelFontSize}" Style="{StaticResource FieldLabel}"/>
                         <TextBox Grid.Row="3" Grid.Column="1" Margin="{StaticResource Row}" HorizontalAlignment="Left"
                                  Text="{Binding Owner.GalleryLabelFontSize, UpdateSourceTrigger=Explicit}"/>
                     </Grid>
 
                     <!--
-                        Same preview as on the size page, but on the gallery's
-                        own background: half the point of these numbers is how
-                        much air is left between the pictures, and air reads
-                        differently on grey than it does on white.
+                        On the gallery's own background: half the point of
+                        these numbers is how much air is left between the
+                        pictures, and air reads differently on grey than it
+                        does on white. One cell and the cut edge of the next
+                        (2026-09-28, GalleryPreviewWidth): the gap shows, and
+                        the preview fits beside the fields as the others do.
                     -->
-                    <Border Grid.Column="1" Style="{StaticResource PreviewFrame}" Margin="20,0,0,0"
+                    <Border Style="{StaticResource PreviewFrame}"
                             Background="{Binding Owner.GalleryPalette.Background}">
-                        <StackPanel Orientation="Horizontal">
-                            <StackPanel Width="{Binding Owner.GalleryCellWidth}"
-                                        Margin="{Binding Owner.GalleryMargin, Converter={StaticResource PixelsToThickness}}">
-                                <Rectangle Style="{StaticResource PreviewBox}"
-                                           Width="{Binding Owner.GalleryImageSize}"
-                                           Height="{Binding Owner.GalleryImageSize}"
-                                           HorizontalAlignment="Center"/>
-                                <TextBlock Text="{x:Static res:Strings.SettingsPreviewName2}" HorizontalAlignment="Center"
-                                           Margin="0,4,0,0" TextTrimming="CharacterEllipsis"
-                                           Foreground="{Binding Owner.GalleryPalette.Foreground}"
-                                           FontSize="{Binding Owner.GalleryLabelFontSize}"/>
+                        <Grid Width="{Binding Owner.GalleryPreviewWidth}" HorizontalAlignment="Left" ClipToBounds="True">
+                            <StackPanel Orientation="Horizontal">
+                                <StackPanel Width="{Binding Owner.GalleryCellWidth}"
+                                            Margin="{Binding Owner.GalleryMargin, Converter={StaticResource PixelsToThickness}}">
+                                    <Rectangle Style="{StaticResource PreviewBox}"
+                                               Width="{Binding Owner.GalleryImageSize}"
+                                               Height="{Binding Owner.GalleryImageSize}"
+                                               HorizontalAlignment="Center"/>
+                                    <TextBlock Text="{x:Static res:Strings.SettingsPreviewName2}" HorizontalAlignment="Center"
+                                               Margin="0,4,0,0" TextTrimming="CharacterEllipsis"
+                                               Foreground="{Binding Owner.GalleryPalette.Foreground}"
+                                               FontSize="{Binding Owner.GalleryLabelFontSize}"/>
+                                </StackPanel>
+                                <StackPanel Width="{Binding Owner.GalleryCellWidth}"
+                                            Margin="{Binding Owner.GalleryMargin, Converter={StaticResource PixelsToThickness}}">
+                                    <Rectangle Style="{StaticResource PreviewBox}"
+                                               Width="{Binding Owner.GalleryImageSize}"
+                                               Height="{Binding Owner.GalleryImageSize}"
+                                               HorizontalAlignment="Center"/>
+                                </StackPanel>
                             </StackPanel>
-                            <StackPanel Width="{Binding Owner.GalleryCellWidth}"
-                                        Margin="{Binding Owner.GalleryMargin, Converter={StaticResource PixelsToThickness}}">
-                                <Rectangle Style="{StaticResource PreviewBox}"
-                                           Width="{Binding Owner.GalleryImageSize}"
-                                           Height="{Binding Owner.GalleryImageSize}"
-                                           HorizontalAlignment="Center"/>
-                                <TextBlock Text="{x:Static res:Strings.SettingsPreviewName}" HorizontalAlignment="Center"
-                                           Margin="0,4,0,0" TextTrimming="CharacterEllipsis"
-                                           Foreground="{Binding Owner.GalleryPalette.Foreground}"
-                                           FontSize="{Binding Owner.GalleryLabelFontSize}"/>
-                            </StackPanel>
-                        </StackPanel>
+                        </Grid>
                     </Border>
-                </Grid>
-
-                <TextBlock Text="{x:Static res:Strings.SettingsRatingGroup}" FontWeight="SemiBold" Margin="0,18,0,8"/>
-                <CheckBox Content="{x:Static res:Strings.SettingsConfirmCreateSidecar}"
-                          ToolTip="{x:Static res:Strings.SettingsConfirmCreateSidecarHint}"
-                          IsChecked="{Binding Owner.ConfirmCreateSidecar}"
-                          Margin="0,0,0,10"/>
-                <TextBlock Text="{x:Static res:Strings.SettingsRawRatingFormat}" Margin="0,0,0,6"/>
-                <RadioButton GroupName="RawRatingFormat" Margin="0,0,0,4"
-                             Content="{x:Static res:Strings.SettingsRawRatingFormatXmp}"
-                             IsChecked="{Binding Owner.RawRatingFormat, Converter={StaticResource EnumRadio}, ConverterParameter=Xmp}"/>
-                <RadioButton GroupName="RawRatingFormat"
-                             Content="{x:Static res:Strings.SettingsRawRatingFormatPp3}"
-                             IsChecked="{Binding Owner.RawRatingFormat, Converter={StaticResource EnumRadio}, ConverterParameter=Pp3}"/>
-                <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,10,0,0"
-                           Text="{x:Static res:Strings.SettingsRawRatingFormatHint}"/>
-            </StackPanel>
-        </DataTemplate>
-
-
-        <!-- Thumbnails -->
-        <DataTemplate DataType="{x:Type vm:ThumbnailsSettingsCategory}">
-            <StackPanel>
-                <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
-
-                <CheckBox Content="{x:Static res:Strings.SettingsThumbnailDiskCache}"
-                          IsChecked="{Binding Owner.ThumbnailDiskCacheEnabled}"/>
-
-                <Grid Margin="{StaticResource Row}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="220"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="{x:Static res:Strings.SettingsThumbnailDiskMb}" Style="{StaticResource FieldLabel}" Grid.Column="0"/>
-                    <TextBox Text="{Binding Owner.ThumbnailDiskCacheMb, UpdateSourceTrigger=Explicit}"
-                             Grid.Column="1" HorizontalAlignment="Left"
-                             IsEnabled="{Binding Owner.ThumbnailDiskCacheEnabled}"/>
-                </Grid>
-
-                <Grid Margin="{StaticResource Row}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="220"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="{x:Static res:Strings.SettingsPictureMemory}" Style="{StaticResource FieldLabel}" Grid.Column="0"
-                               ToolTip="{Binding Owner.PictureMemoryHint}"/>
-                    <TextBox Text="{Binding Owner.PictureMemoryMb, UpdateSourceTrigger=Explicit}"
-                             ToolTip="{Binding Owner.PictureMemoryHint}"
-                             Grid.Column="1" HorizontalAlignment="Left"/>
-                </Grid>
-
-                <TextBlock Text="{Binding Owner.ThumbnailCacheStatus}"
-                           Foreground="{StaticResource TextCaption}" TextWrapping="Wrap" Margin="0,12,0,0"/>
-
-                <Button Content="{x:Static res:Strings.SettingsClearCache}" Padding="14,4" Width="140"
-                        HorizontalAlignment="Left" Margin="0,8,0,0"
-                        Click="ClearThumbnails_Click"/>
-
-                <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,12,0,0"
-                           Text="{x:Static res:Strings.SettingsThumbnailsHint}"/>
-                <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,10,0,0"
-                           Text="{x:Static res:Strings.SettingsThumbnailsLimitsHint}"/>
-            </StackPanel>
-        </DataTemplate>
-
-
-        <!-- Bookmarks -->
-        <DataTemplate DataType="{x:Type vm:BookmarksSettingsCategory}">
-            <StackPanel ToolTip="{x:Static res:Strings.SettingsBookmarksHint}">
-                <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
-                <TextBlock Text="{x:Static res:Strings.SettingsShowGroup}" FontWeight="SemiBold" Margin="{StaticResource GroupHeader}"/>
-                <CheckBox Content="{x:Static res:Strings.SettingsBookmarkDownloads}"
-                          IsChecked="{Binding Owner.ShowBookmarkDownloads}"/>
-                <CheckBox Content="{x:Static res:Strings.SettingsBookmarkDocuments}"
-                          IsChecked="{Binding Owner.ShowBookmarkDocuments}"/>
-                <CheckBox Content="{x:Static res:Strings.SettingsBookmarkPictures}"
-                          IsChecked="{Binding Owner.ShowBookmarkPictures}"/>
-                <CheckBox Content="{x:Static res:Strings.SettingsBookmarkDesktop}"
-                          IsChecked="{Binding Owner.ShowBookmarkDesktop}"/>
-                <CheckBox Content="{x:Static res:Strings.SettingsBookmarkMusic}"
-                          IsChecked="{Binding Owner.ShowBookmarkMusic}"/>
-                <CheckBox Content="{x:Static res:Strings.SettingsBookmarkVideos}"
-                          IsChecked="{Binding Owner.ShowBookmarkVideos}"/>
-                <CheckBox Content="{x:Static res:Strings.SettingsBookmarkRecycleBin}"
-                          IsChecked="{Binding Owner.ShowBookmarkRecycleBin}"/>
-                <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,14,0,0"
-                           Text="{x:Static res:Strings.SettingsBookmarksAddHint}"/>
+                </WrapPanel>
             </StackPanel>
         </DataTemplate>
 
 
         <!--
-            Context menu. Two tables over the same idea — a checkbox that
-            hides a row, plus the columns that make the row identifiable.
-            They look alike on purpose: the difference between "a pункт of
-            Wander" and "a пункт of 7-Zip" is whose it is, not how it is
-            switched off.
+            Галерея: its background, an option a line (2026-09-28) - each
+            colour drawn beside its name, the two darkened ones with their
+            brightness in a box after it, the boxes in one column: numbers
+            rather than fixed colours, since the neutral that reads right
+            depends on the monitor and the room as much as on the
+            photographs. The gallery's sizes are with the other views'
+            (Размеры).
+        -->
+        <DataTemplate DataType="{x:Type vm:GallerySettingsCategory}">
+            <StackPanel>
+                <StackPanel.Resources>
+                    <Style x:Key="BackgroundSwatch" TargetType="Border">
+                        <Setter Property="Width" Value="14"/>
+                        <Setter Property="Height" Value="14"/>
+                        <Setter Property="BorderBrush" Value="{StaticResource OptionRing}"/>
+                        <Setter Property="BorderThickness" Value="1"/>
+                        <Setter Property="Margin" Value="0,0,5,0"/>
+                        <Setter Property="VerticalAlignment" Value="Center"/>
+                    </Style>
+                    <Style x:Key="LevelBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                        <Setter Property="Width" Value="44"/>
+                        <Setter Property="MinWidth" Value="0"/>
+                        <Setter Property="Margin" Value="0,2,0,2"/>
+                        <Setter Property="HorizontalAlignment" Value="Left"/>
+                        <Setter Property="VerticalAlignment" Value="Center"/>
+                    </Style>
+                </StackPanel.Resources>
+
+                <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
+
+                <TextBlock Text="{x:Static res:Strings.SettingsGalleryBackground}" Style="{StaticResource GroupTitle}"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <RadioButton Grid.Row="0" GroupName="GalleryBackground"
+                                 IsChecked="{Binding Owner.GalleryBackground, Converter={StaticResource EnumRadio}, ConverterParameter=Light}">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Style="{StaticResource BackgroundSwatch}" Background="{Binding Owner.GalleryLightSwatch}"/>
+                            <TextBlock Text="{x:Static res:Strings.GalleryBackgroundLight}"/>
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton Grid.Row="1" GroupName="GalleryBackground"
+                                 IsChecked="{Binding Owner.GalleryBackground, Converter={StaticResource EnumRadio}, ConverterParameter=Grey}">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Style="{StaticResource BackgroundSwatch}" Background="{Binding Owner.GalleryGreySwatch}"/>
+                            <TextBlock Text="{x:Static res:Strings.GalleryBackgroundGrey}"/>
+                        </StackPanel>
+                    </RadioButton>
+                    <TextBox Grid.Row="1" Grid.Column="1" Style="{StaticResource LevelBox}"
+                             ToolTip="{x:Static res:Strings.SettingsGalleryGreyLevel}"
+                             Text="{Binding Owner.GalleryGreyLevel, UpdateSourceTrigger=Explicit}"/>
+                    <RadioButton Grid.Row="2" GroupName="GalleryBackground"
+                                 IsChecked="{Binding Owner.GalleryBackground, Converter={StaticResource EnumRadio}, ConverterParameter=Dark}">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Style="{StaticResource BackgroundSwatch}" Background="{Binding Owner.GalleryDarkSwatch}"/>
+                            <TextBlock Text="{x:Static res:Strings.GalleryBackgroundDark}"/>
+                        </StackPanel>
+                    </RadioButton>
+                    <TextBox Grid.Row="2" Grid.Column="1" Style="{StaticResource LevelBox}"
+                             ToolTip="{x:Static res:Strings.SettingsGalleryDarkLevel}"
+                             Text="{Binding Owner.GalleryDarkLevel, UpdateSourceTrigger=Explicit}"/>
+                </Grid>
+            </StackPanel>
+        </DataTemplate>
+
+
+        <!-- Файловые операции: what is asked before a delete or a move, and about files that turn out the same. -->
+        <DataTemplate DataType="{x:Type vm:OperationsSettingsCategory}">
+            <StackPanel>
+                <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
+
+                <TextBlock Text="{x:Static res:Strings.SettingsConfirmGroup}" Style="{StaticResource GroupTitle}"/>
+                <CheckBox Content="{x:Static res:Strings.SettingsConfirmRecycle}"
+                          ToolTip="{x:Static res:Strings.SettingsConfirmRecycleHint}"
+                          IsChecked="{Binding Owner.ConfirmRecycle}"/>
+                <CheckBox Content="{x:Static res:Strings.SettingsConfirmMove}"
+                          ToolTip="{x:Static res:Strings.SettingsConfirmMoveHint}"
+                          IsChecked="{Binding Owner.ConfirmMove}"/>
+
+                <TextBlock Text="{x:Static res:Strings.SettingsConflictsGroup}" Style="{StaticResource GroupTitle}"/>
+                <CheckBox Content="{x:Static res:Strings.SettingsSkipIdentical}"
+                          ToolTip="{x:Static res:Strings.SettingsSkipIdenticalHint}"
+                          IsChecked="{Binding Owner.SkipIdenticalOnConflict}"/>
+            </StackPanel>
+        </DataTemplate>
+
+
+        <!--
+            The tables. A checkbox that hides a row, and what makes the row
+            identifiable; the two tables of the context-menu page look alike
+            on purpose - the difference between "a пункт of Wander" and "a
+            пункт of 7-Zip" is whose it is, not how it is switched off. One
+            line a row, four columns at most sharing the width: the table
+            fits the dialog at its smallest by cutting a long cell with an
+            ellipsis, not by scrolling sideways, and what does not fit goes
+            on the tooltip or into the form under the table.
         -->
         <Style x:Key="SettingsGrid" TargetType="DataGrid">
             <Setter Property="AutoGenerateColumns" Value="False"/>
@@ -640,100 +665,140 @@
             <Setter Property="RowBackground" Value="{StaticResource ContentBackground}"/>
             <Setter Property="AlternatingRowBackground" Value="{StaticResource TableRowAlternate}"/>
             <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
-            <Setter Property="HorizontalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="HorizontalScrollBarVisibility" Value="Disabled"/>
+            <!--
+                Selected: Explorer's light blue under the row's own colour of
+                text (2026-09-25) - the system's dark blue left the grey and
+                the red captions unreadable. It stays while the keyboard is
+                in the form under the table: the selected row is what the
+                form shows. No frame round the current cell - a row is what
+                these tables select.
+            -->
+            <Setter Property="CellStyle">
+                <Setter.Value>
+                    <Style TargetType="DataGridCell">
+                        <Setter Property="BorderBrush" Value="Transparent"/>
+                        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                        <Style.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter Property="Background" Value="{StaticResource RowSelected}"/>
+                                <Setter Property="BorderBrush" Value="{StaticResource RowSelected}"/>
+                                <Setter Property="Foreground"
+                                        Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=DataGridRow}}"/>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- A text cell: one line, cut with an ellipsis rather than at the
+             column's edge, and whole on a tooltip only when it is cut. -->
+        <Style x:Key="CellText" TargetType="TextBlock" BasedOn="{x:Static DataGridTextColumn.DefaultElementStyle}">
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="controls:TrimmedToolTip.Enabled" Value="True"/>
         </Style>
 
         <DataTemplate DataType="{x:Type vm:ContextMenuSettingsCategory}">
             <StackPanel>
                 <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
 
-                <TextBlock Text="{x:Static res:Strings.SettingsShellExtensionsGroup}" FontWeight="SemiBold" Margin="{StaticResource GroupHeader}"/>
+                <!--
+                    The switch is about the menu: whether other programs' rows
+                    are loaded into it at all. The table and everything around
+                    it follow the switch (2026-09-28).
+                -->
+                <TextBlock Text="{x:Static res:Strings.SettingsShellExtensionsGroup}" Style="{StaticResource GroupTitle}"/>
                 <CheckBox Content="{x:Static res:Strings.SettingsShellExtensions}"
+                          ToolTip="{x:Static res:Strings.SettingsShellExtensionsSwitchHint}"
                           IsChecked="{Binding Owner.ShellExtensionsEnabled}"/>
 
-                <DataGrid Style="{StaticResource SettingsGrid}"
-                          ItemsSource="{Binding Owner.ShellExtensionRows}"
-                          IsEnabled="{Binding Owner.ShellExtensionsEnabled}"
-                          ToolTip="{x:Static res:Strings.SettingsShellExtensionsTableHint}"
-                          Height="230" Margin="0,8,0,0">
-                    <DataGrid.Columns>
-                        <!--
-                            A template column, not DataGridCheckBoxColumn: that
-                            one puts the box in a cell that has to be selected
-                            before it can be edited, so every tick costs two
-                            clicks. A plain CheckBox in a template is just a
-                            checkbox.
-                        -->
-                        <DataGridTemplateColumn Header="{x:Static res:Strings.SettingsShellColumnHide}" Width="62">
-                            <DataGridTemplateColumn.CellTemplate>
-                                <DataTemplate>
-                                    <CheckBox IsChecked="{Binding IsBlocked, UpdateSourceTrigger=PropertyChanged}"
-                                              HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0"/>
-                                </DataTemplate>
-                            </DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-                        <!-- The label takes the slack, but never below the width
-                             that shows a real name: squeezing "TortoiseGit" down
-                             to "Tor" makes the table unreadable long before it
-                             makes it narrow. Below that the grid scrolls. -->
-                        <DataGridTextColumn Header="{x:Static res:Strings.SettingsShellColumnItem}"
-                                            Binding="{Binding Title}" IsReadOnly="True"
-                                            Width="*" MinWidth="160"/>
-                        <DataGridTextColumn Header="{x:Static res:Strings.SettingsShellColumnApp}"
-                                            Binding="{Binding AppName}" IsReadOnly="True" Width="130"/>
-                        <DataGridTextColumn Header="{x:Static res:Strings.SettingsShellColumnScopes}"
-                                            Binding="{Binding ScopesText}" IsReadOnly="True" Width="150"/>
-                    </DataGrid.Columns>
-                    <DataGrid.RowStyle>
-                        <Style TargetType="DataGridRow">
-                            <!-- What the handler says the row does, when it says
-                                 anything: the only place that text exists is
-                                 IContextMenu, so it cannot be a column that is
-                                 always filled. -->
-                            <Setter Property="ToolTip" Value="{Binding Description}"/>
-                            <Style.Triggers>
-                                <!-- Installed but never yet seen in a menu. Dimmed
-                                     rather than hidden — still a switch, just a
-                                     speculative one. -->
-                                <DataTrigger Binding="{Binding IsSeen}" Value="False">
-                                    <Setter Property="Foreground" Value="{StaticResource TextSubtle}"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </DataGrid.RowStyle>
-                </DataGrid>
+                <StackPanel IsEnabled="{Binding Owner.ShellExtensionsEnabled}">
+                    <!-- Narrows the table, not the menu - ShellExtensionFilter. -->
+                    <controls:FilterBox Width="300" HorizontalAlignment="Left" Margin="0,6,0,0"
+                                        Text="{Binding Query}"
+                                        Prompt="{x:Static res:Strings.SettingsShellFilter}"
+                                        ToolTip="{x:Static res:Strings.SettingsShellFilterHint}"/>
 
-                <StackPanel Orientation="Horizontal" Margin="0,8,0,0"
-                            IsEnabled="{Binding Owner.ShellExtensionsEnabled}">
-                    <Button Content="{x:Static res:Strings.SettingsShellAdd}"
-                            Padding="14,5" Click="AddShellScope_Click"/>
-                    <Button Content="{x:Static res:Strings.SettingsShellReset}"
-                            ToolTip="{x:Static res:Strings.SettingsShellResetHint}"
-                            Padding="14,5" Margin="8,0,0,0" Click="ResetShellScopes_Click"/>
-                    <CheckBox Content="{x:Static res:Strings.SettingsShellShowSystem}"
-                              IsChecked="{Binding Owner.ShowSystemShellExtensions}"
-                              VerticalAlignment="Center" Margin="14,0,0,0"/>
+                    <!--
+                        What menus have drawn, what is switched off, and the
+                        rows of types added by hand (ShellExtensionCatalog,
+                        2026-09-28): a row nobody has met is not listed, so
+                        there is no dimmed "installed, never seen" any more.
+                        One line a row, whose it is and where it shows in
+                        columns of their own (2026-09-25): two lines a row
+                        halved what the table shows at once, and a click on a
+                        header sorts by it - by the program, by the file type,
+                        the switched off together. The selection is left out
+                        of the view's current item: a filter or a rebuild
+                        would otherwise move it to the top row.
+                    -->
+                    <DataGrid Style="{StaticResource SettingsGrid}"
+                              ItemsSource="{Binding ShellRows}"
+                              IsSynchronizedWithCurrentItem="False"
+                              Height="240" Margin="0,6,0,0">
+                        <DataGrid.Columns>
+                            <!--
+                                A template column, not DataGridCheckBoxColumn: that
+                                one puts the box in a cell that has to be selected
+                                before it can be edited, so every tick costs two
+                                clicks. A plain CheckBox in a template is just a
+                                checkbox.
+                            -->
+                            <DataGridTemplateColumn Header="{x:Static res:Strings.SettingsColumnOn}" Width="42"
+                                                    SortMemberPath="IsShown">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <CheckBox IsChecked="{Binding IsShown, UpdateSourceTrigger=PropertyChanged}"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="{x:Static res:Strings.SettingsShellColumnItem}"
+                                                Binding="{Binding Title}" IsReadOnly="True" Width="2*"
+                                                ElementStyle="{StaticResource CellText}"/>
+                            <DataGridTextColumn Header="{x:Static res:Strings.SettingsShellColumnApp}"
+                                                Binding="{Binding AppName}" IsReadOnly="True" Width="*"
+                                                ElementStyle="{StaticResource CellText}"/>
+                            <DataGridTextColumn Header="{x:Static res:Strings.SettingsShellColumnScopes}"
+                                                Binding="{Binding ScopesText}" IsReadOnly="True" Width="*"
+                                                ElementStyle="{StaticResource CellText}"/>
+                        </DataGrid.Columns>
+                        <DataGrid.RowStyle>
+                            <Style TargetType="DataGridRow">
+                                <!-- What the handler says the row does, when it says
+                                     anything: the only place that text exists is
+                                     IContextMenu, so it cannot be a column that is
+                                     always filled. No tip on a row it says nothing
+                                     about. -->
+                                <Setter Property="ToolTip" Value="{Binding Description}"/>
+                            </Style>
+                        </DataGrid.RowStyle>
+                    </DataGrid>
+
+                    <Button Content="{x:Static res:Strings.SettingsShellAdd}" HorizontalAlignment="Left"
+                            Padding="14,4" Margin="0,8,0,0" Click="AddShellScope_Click"/>
                 </StackPanel>
 
-                <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,10,0,0"
-                           Text="{x:Static res:Strings.SettingsShellExtensionsHint}"/>
-
-                <TextBlock Text="{x:Static res:Strings.SettingsOwnItemsGroup}" FontWeight="SemiBold" Margin="0,20,0,8"/>
+                <!--
+                    The entries Wander draws itself: the standard ones
+                    (open, copy, properties) and its own (the terminal, the
+                    actions). Not "Wander's" - they read as the menu's own,
+                    and one of them has a twin among other programs' rows.
+                    Not sorted: the order is the menu's shape, and a click on
+                    "Клавиши" left the indents under the wrong parents.
+                -->
+                <TextBlock Text="{x:Static res:Strings.SettingsOwnItemsGroup}" Style="{StaticResource GroupTitle}" Margin="0,18,0,6"/>
                 <DataGrid Style="{StaticResource SettingsGrid}"
                           ItemsSource="{Binding Owner.MenuItemRows}"
-                          Height="230">
+                          CanUserSortColumns="False"
+                          Height="240">
                     <DataGrid.Columns>
-                        <!--
-                            A template column, not DataGridCheckBoxColumn: that
-                            one puts the box in a cell that has to be selected
-                            before it can be edited, so every tick costs two
-                            clicks. A plain CheckBox in a template is just a
-                            checkbox.
-                        -->
-                        <DataGridTemplateColumn Header="{x:Static res:Strings.SettingsShellColumnHide}" Width="62">
+                        <DataGridTemplateColumn Header="{x:Static res:Strings.SettingsColumnOn}" Width="42">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
-                                    <CheckBox IsChecked="{Binding IsHidden, UpdateSourceTrigger=PropertyChanged}"
+                                    <CheckBox IsChecked="{Binding IsShown, UpdateSourceTrigger=PropertyChanged}"
                                               HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0"/>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
@@ -741,12 +806,12 @@
                         <!-- A template column, not a text one: the indent is what
                              shows that "Вставить" lives inside "Файл", and a
                              plain binding has nowhere to put it. -->
-                        <DataGridTemplateColumn Header="{x:Static res:Strings.SettingsShellColumnItem}"
-                                                Width="*" MinWidth="180">
+                        <DataGridTemplateColumn Header="{x:Static res:Strings.SettingsShellColumnItem}" Width="*">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <TextBlock Text="{Binding Title}" Margin="{Binding Indent}"
-                                               VerticalAlignment="Center">
+                                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                               controls:TrimmedToolTip.Enabled="True">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
                                                 <Style.Triggers>
@@ -765,8 +830,11 @@
                     </DataGrid.Columns>
                 </DataGrid>
 
-                <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,8,0,0"
-                           Text="{x:Static res:Strings.SettingsOwnItemsHint}"/>
+                <!-- The whole page back to how it ships: last and on its own,
+                     like the reset of all settings. -->
+                <TextBlock Text="{x:Static res:Strings.SettingsResetGroup}" Style="{StaticResource ResetGroupTitle}"/>
+                <Button Content="{x:Static res:Strings.SettingsShellReset}" HorizontalAlignment="Left"
+                        Padding="14,4" Margin="0,3,0,0" Click="ResetShellScopes_Click"/>
             </StackPanel>
         </DataTemplate>
 
@@ -774,43 +842,28 @@
         <!--
             Actions. One table for the shipped presets and the user's own
             rows - the same catalog the header menu and the context menu
-            read. A preset takes only its checkbox and "Указать…"; anything
-            more is done to a copy, so the shipped row stays what the code
-            says and is not written to state.json.
-
-            Cells are plain controls in template columns, like the tables on
-            the context-menu page: a DataGrid edit mode costs a click per
-            field. The implicit TextBox style below switches the page's
-            number-field behaviour off - a wheel over a command line must
-            not rewrite it.
+            read - and the selected row's command in a form under it
+            (2026-09-25): the ten columns of the command did not fit any
+            window, and a command line is read whole, not in a cell. A preset
+            takes only its checkbox; anything more is done to a copy, so the
+            shipped row stays what the code says and is not written to
+            state.json.
         -->
         <DataTemplate DataType="{x:Type vm:ActionsSettingsCategory}">
             <StackPanel>
                 <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
 
-                <DataGrid x:Name="ActionsGrid"
+                <DataGrid x:Name="ActionsGrid" Margin="0,6,0,0"
                           Style="{StaticResource SettingsGrid}"
                           ItemsSource="{Binding Owner.ActionRows}"
                           SelectedItem="{Binding SelectedRow}"
                           SelectionMode="Single"
                           GotKeyboardFocus="ActionsGrid_GotKeyboardFocus"
-                          Height="300">
-                    <DataGrid.Resources>
-                        <Style TargetType="TextBox">
-                            <Setter Property="controls:NumericField.Enabled" Value="False"/>
-                            <Setter Property="Padding" Value="2,1"/>
-                            <Setter Property="VerticalAlignment" Value="Center"/>
-                            <Setter Property="IsReadOnly" Value="{Binding IsPreset}"/>
-                        </Style>
-                        <Style TargetType="ComboBox">
-                            <Setter Property="VerticalAlignment" Value="Center"/>
-                            <Setter Property="DisplayMemberPath" Value="Title"/>
-                            <Setter Property="SelectedValuePath" Value="Value"/>
-                            <Setter Property="IsEnabled" Value="{Binding IsEditable}"/>
-                        </Style>
-                    </DataGrid.Resources>
+                          Loaded="ActionsGrid_ShowSelected"
+                          SelectionChanged="ActionsGrid_ShowSelected"
+                          Height="210">
                     <DataGrid.Columns>
-                        <DataGridTemplateColumn Header="{x:Static res:Strings.SettingsActionsColumnEnabled}" Width="42">
+                        <DataGridTemplateColumn Header="{x:Static res:Strings.SettingsColumnOn}" Width="42">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <CheckBox IsChecked="{Binding Enabled, UpdateSourceTrigger=PropertyChanged}"
@@ -818,124 +871,38 @@
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
-                        <DataGridTemplateColumn Header="{x:Static res:Strings.SettingsActionsColumnTitle}" Width="170">
+                        <!-- A row whose command will not work as it stands is
+                             in red; what is wrong is said in the form. -->
+                        <DataGridTemplateColumn Header="{x:Static res:Strings.SettingsActionsColumnTitle}" Width="*">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
-                                    <TextBox Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}"/>
-                                </DataTemplate>
-                            </DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-                        <!-- The mask wins over the group when it is not empty. -->
-                        <DataGridTemplateColumn Header="{x:Static res:Strings.SettingsActionsColumnTypes}" Width="200">
-                            <DataGridTemplateColumn.CellTemplate>
-                                <DataTemplate>
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-                                        <ComboBox Grid.Column="0"
-                                                  ItemsSource="{x:Static vm:ActionRowViewModel.GroupChoices}"
-                                                  SelectedValue="{Binding Group}"/>
-                                        <TextBox Grid.Column="1" Margin="4,0,0,0"
-                                                 ToolTip="{x:Static res:Strings.SettingsActionsMaskHint}"
-                                                 Text="{Binding Mask, UpdateSourceTrigger=PropertyChanged}"/>
-                                    </Grid>
-                                </DataTemplate>
-                            </DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-                        <!-- A program that is not on the machine is marked here;
-                             where it is is the "Программы" page's business. -->
-                        <DataGridTemplateColumn Header="{x:Static res:Strings.SettingsActionsColumnProgram}" Width="150">
-                            <DataGridTemplateColumn.CellTemplate>
-                                <DataTemplate>
-                                    <TextBox Text="{Binding Program, UpdateSourceTrigger=PropertyChanged}"
-                                             ToolTip="{Binding ProgramHint}">
-                                        <TextBox.Style>
-                                            <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                                    <TextBlock Text="{Binding Title}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                               controls:TrimmedToolTip.Enabled="True">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
                                                 <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding NeedsTool}" Value="True">
+                                                    <DataTrigger Binding="{Binding HasProblem}" Value="True">
                                                         <Setter Property="Foreground" Value="{StaticResource TextError}"/>
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
-                                        </TextBox.Style>
-                                    </TextBox>
+                                        </TextBlock.Style>
+                                    </TextBlock>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
-                        <!-- A mode the command line cannot work in is said in red
-                             under it; saving is not blocked. -->
-                        <DataGridTemplateColumn Header="{x:Static res:Strings.SettingsActionsColumnArguments}" Width="260">
-                            <DataGridTemplateColumn.CellTemplate>
-                                <DataTemplate>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBox Text="{Binding Arguments, UpdateSourceTrigger=PropertyChanged}"
-                                                 ToolTip="{x:Static res:Strings.SettingsActionsPlaceholders}"/>
-                                        <TextBlock Text="{Binding ValidationText}" Foreground="{StaticResource TextError}"
-                                                   TextWrapping="Wrap">
-                                            <TextBlock.Style>
-                                                <Style TargetType="TextBlock">
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding ValidationText}" Value="">
-                                                            <Setter Property="Visibility" Value="Collapsed"/>
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </TextBlock.Style>
-                                        </TextBlock>
-                                    </StackPanel>
-                                </DataTemplate>
-                            </DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-                        <DataGridTemplateColumn Header="{x:Static res:Strings.SettingsActionsColumnMode}" Width="150">
-                            <DataGridTemplateColumn.CellTemplate>
-                                <DataTemplate>
-                                    <ComboBox ItemsSource="{x:Static vm:ActionRowViewModel.ModeChoices}"
-                                              SelectedValue="{Binding RunPerFile}"/>
-                                </DataTemplate>
-                            </DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-                        <DataGridTemplateColumn Header="{x:Static res:Strings.SettingsActionsColumnPlacement}" Width="120">
-                            <DataGridTemplateColumn.CellTemplate>
-                                <DataTemplate>
-                                    <ComboBox ItemsSource="{x:Static vm:ActionRowViewModel.PlacementChoices}"
-                                              SelectedValue="{Binding Placement}"/>
-                                </DataTemplate>
-                            </DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-                        <DataGridTemplateColumn Header="{x:Static res:Strings.SettingsActionsColumnSubmenu}" Width="Auto">
-                            <DataGridTemplateColumn.CellTemplate>
-                                <DataTemplate>
-                                    <CheckBox IsChecked="{Binding InSubmenu, UpdateSourceTrigger=PropertyChanged}"
-                                              IsEnabled="{Binding IsEditable}"
-                                              HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0"/>
-                                </DataTemplate>
-                            </DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-                        <DataGridTemplateColumn Header="{x:Static res:Strings.SettingsActionsColumnHideConsole}" Width="Auto">
-                            <DataGridTemplateColumn.CellTemplate>
-                                <DataTemplate>
-                                    <CheckBox IsChecked="{Binding HideConsole, UpdateSourceTrigger=PropertyChanged}"
-                                              IsEnabled="{Binding IsEditable}"
-                                              HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0"/>
-                                </DataTemplate>
-                            </DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-                        <DataGridTemplateColumn Header="{x:Static res:Strings.SettingsActionsColumnOutput}" Width="130">
-                            <DataGridTemplateColumn.CellTemplate>
-                                <DataTemplate>
-                                    <TextBox Text="{Binding Output, UpdateSourceTrigger=PropertyChanged}"
-                                             ToolTip="{x:Static res:Strings.SettingsActionsOutputHint}"/>
-                                </DataTemplate>
-                            </DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
+                        <DataGridTextColumn Header="{x:Static res:Strings.SettingsActionsColumnTypes}"
+                                            Binding="{Binding TypesText}" IsReadOnly="True" Width="130"
+                                            ElementStyle="{StaticResource CellText}"/>
+                        <DataGridTextColumn Header="{x:Static res:Strings.SettingsActionsColumnPlacement}"
+                                            Binding="{Binding PlacementText}" IsReadOnly="True" Width="100"
+                                            ElementStyle="{StaticResource CellText}"/>
                     </DataGrid.Columns>
                     <DataGrid.RowStyle>
                         <Style TargetType="DataGridRow">
                             <Style.Triggers>
                                 <!-- Switched off: still a row to switch back on,
-                                     drawn the way the unseen shell rows are. -->
+                                     drawn quieter than the ones in the menus. -->
                                 <DataTrigger Binding="{Binding Enabled}" Value="False">
                                     <Setter Property="Foreground" Value="{StaticResource TextSubtle}"/>
                                 </DataTrigger>
@@ -944,23 +911,224 @@
                     </DataGrid.RowStyle>
                 </DataGrid>
 
-                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                    <Button Content="{x:Static res:Strings.ActionsAdd}"
-                            Padding="14,5" Click="AddAction_Click"/>
-                    <Button Content="{x:Static res:Strings.ActionsCopy}"
-                            IsEnabled="{Binding HasSelection}"
-                            Padding="14,5" Margin="8,0,0,0" Click="CopyAction_Click"/>
-                    <Button Content="{x:Static res:Strings.ActionsRemove}"
-                            IsEnabled="{Binding CanRemove}"
-                            ToolTip="{x:Static res:Strings.ActionsRemoveHint}"
-                            ToolTipService.ShowOnDisabled="True"
-                            Padding="14,5" Margin="8,0,0,0" Click="RemoveAction_Click"/>
-                </StackPanel>
+                <!-- Adds a row to the table; what acts on the selected row
+                     is on the card's head. -->
+                <Button Content="{x:Static res:Strings.ActionsAdd}" HorizontalAlignment="Left"
+                        Padding="14,4" Margin="0,8,0,0" Click="AddAction_Click"/>
 
-                <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,10,0,0"
-                           Text="{x:Static res:Strings.SettingsActionsPlaceholders}"/>
-                <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,8,0,0"
-                           Text="{x:Static res:Strings.SettingsActionsHint}"/>
+                <TextBlock Text="{x:Static res:Strings.SettingsActionsNoSelection}" Margin="0,14,0,0">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock" BasedOn="{StaticResource Note}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasSelection}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+
+                <!--
+                    The selected row's command, on a card whose head is the
+                    row itself (2026-09-25): the selected row's blue, its name
+                    - red like the row's when the command will not work - and
+                    the two buttons that act on it. Loose under the table, the
+                    fields read as settings of the page.
+                -->
+                <Border BorderBrush="{StaticResource RowSelectedBorder}" BorderThickness="1" Margin="0,12,0,0"
+                        Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel>
+                        <Border Background="{StaticResource RowSelected}" Padding="10,4,4,4">
+                            <DockPanel>
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                    <Button Content="{x:Static res:Strings.ActionsCopy}"
+                                            Padding="12,2" Click="CopyAction_Click"/>
+                                    <Button Content="{x:Static res:Strings.ActionsRemove}"
+                                            IsEnabled="{Binding CanRemove}"
+                                            ToolTip="{x:Static res:Strings.ActionsRemoveHint}"
+                                            ToolTipService.ShowOnDisabled="True"
+                                            Padding="12,2" Margin="6,0,0,0" Click="RemoveAction_Click"/>
+                                </StackPanel>
+                                <!-- Why a preset's fields are read only: one word
+                                     beside the buttons, what to do about it on its
+                                     tooltip. -->
+                                <TextBlock DockPanel.Dock="Right" Text="{x:Static res:Strings.SettingsActionsPreset}"
+                                           ToolTip="{x:Static res:Strings.SettingsActionsPresetNote}"
+                                           Foreground="{StaticResource TextCaption}"
+                                           VerticalAlignment="Center" Margin="0,0,10,0"
+                                           Visibility="{Binding SelectedRow.IsPreset, Converter={StaticResource BoolToVisibility}}"/>
+                                <TextBlock Text="{Binding SelectedRow.Title}" FontWeight="SemiBold"
+                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,10,0">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding SelectedRow.HasProblem}" Value="True">
+                                                    <Setter Property="Foreground" Value="{StaticResource TextError}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </DockPanel>
+                        </Border>
+
+                        <!--
+                            The fields, on the row itself. The text boxes hold text,
+                            so the page's number-field behaviour is off here - a wheel
+                            over a command line must not rewrite it. A preset's are
+                            read only.
+                        -->
+                        <Grid DataContext="{Binding SelectedRow}" Margin="10,8,10,8">
+                            <Grid.Resources>
+                                <Style TargetType="TextBox">
+                                    <Setter Property="controls:NumericField.Enabled" Value="False"/>
+                                    <Setter Property="Padding" Value="4,2"/>
+                                    <Setter Property="VerticalAlignment" Value="Center"/>
+                                    <Setter Property="IsReadOnly" Value="{Binding IsPreset}"/>
+                                </Style>
+                                <!-- The two paths are on each box, ahead of its SelectedValue:
+                                     set by this style they came after the value, and the
+                                     box stayed empty. -->
+                                <Style TargetType="ComboBox">
+                                    <Setter Property="VerticalAlignment" Value="Center"/>
+                                    <Setter Property="HorizontalAlignment" Value="Left"/>
+                                    <Setter Property="MinWidth" Value="180"/>
+                                    <Setter Property="IsEnabled" Value="{Binding IsEditable}"/>
+                                </Style>
+                            </Grid.Resources>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Text="{x:Static res:Strings.SettingsActionsColumnTitle}" Style="{StaticResource FieldLabel}"/>
+                            <TextBox Grid.Row="0" Grid.Column="1" Margin="{StaticResource Row}"
+                                     Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}"/>
+
+                            <!-- The mask wins over the group when it is not empty. -->
+                            <TextBlock Grid.Row="1" Text="{x:Static res:Strings.SettingsActionsColumnTypes}" Style="{StaticResource FieldLabel}"/>
+                            <Grid Grid.Row="1" Grid.Column="1" Margin="{StaticResource Row}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <ComboBox ItemsSource="{x:Static vm:ActionRowViewModel.GroupChoices}" DisplayMemberPath="Title" SelectedValuePath="Value"
+                                          SelectedValue="{Binding Group}"/>
+                                <TextBox Grid.Column="1" Margin="8,0,0,0"
+                                         ToolTip="{x:Static res:Strings.SettingsActionsMaskHint}"
+                                         Text="{Binding Mask, UpdateSourceTrigger=PropertyChanged}"/>
+                            </Grid>
+
+                            <!--
+                                The program (2026-09-28): picked from those the actions
+                                already use - the "Программы" page's tools and what the
+                                rows run - or chosen on the disk with the button; nothing
+                                typed on trust. A tool is found where that page finds it.
+                                What will not start is said in red under it. A preset's is
+                                read only, like the rest of its fields.
+                            -->
+                            <TextBlock Grid.Row="2" Text="{x:Static res:Strings.SettingsActionsColumnProgram}" Style="{StaticResource FieldLabel}"
+                                       VerticalAlignment="Top" Margin="0,5,12,0"/>
+                            <Grid Grid.Row="2" Grid.Column="1" Margin="{StaticResource Row}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <ComboBox ItemsSource="{Binding ProgramChoices}" DisplayMemberPath="Title"
+                                          SelectedItem="{Binding ProgramChoice}"
+                                          HorizontalAlignment="Stretch">
+                                    <ComboBox.Style>
+                                        <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding ProgramProblem}" Value="True">
+                                                    <Setter Property="Foreground" Value="{StaticResource TextError}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ComboBox.Style>
+                                </ComboBox>
+                                <Button Grid.Column="1" Content="&#xED25;" FontFamily="Segoe MDL2 Assets"
+                                        ToolTip="{x:Static res:Strings.ActionsPickProgram}"
+                                        IsEnabled="{Binding IsEditable}"
+                                        Padding="8,3" Margin="6,0,0,0" VerticalAlignment="Center" Click="PickActionProgram_Click"/>
+                                <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="{Binding ProgramText}" Foreground="{StaticResource TextError}"
+                                           TextWrapping="Wrap" Margin="0,2,0,0">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding ProgramText}" Value="">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Grid>
+
+                            <!-- A mode the command line cannot work in, or settings the
+                                 built-in encoder does not take, are said in red under
+                                 it; saving is not blocked. What the box takes - the
+                                 placeholders or the encoder's settings - is on its
+                                 tooltip, and in the guide. -->
+                            <TextBlock Grid.Row="3" Text="{x:Static res:Strings.SettingsActionsColumnArguments}" Style="{StaticResource FieldLabel}"
+                                       VerticalAlignment="Top" Margin="0,5,12,0"/>
+                            <StackPanel Grid.Row="3" Grid.Column="1" Margin="{StaticResource Row}">
+                                <TextBox Text="{Binding Arguments, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="{Binding ArgumentsHint}"/>
+                                <TextBlock Text="{Binding ValidationText}" Foreground="{StaticResource TextError}"
+                                           TextWrapping="Wrap" Margin="0,2,0,0">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding ValidationText}" Value="">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </StackPanel>
+
+                            <TextBlock Grid.Row="4" Text="{x:Static res:Strings.SettingsActionsColumnMode}" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox Grid.Row="4" Grid.Column="1" Margin="{StaticResource Row}"
+                                      ItemsSource="{x:Static vm:ActionRowViewModel.ModeChoices}" DisplayMemberPath="Title" SelectedValuePath="Value"
+                                      SelectedValue="{Binding RunPerFile}"/>
+
+                            <TextBlock Grid.Row="5" Text="{x:Static res:Strings.SettingsActionsPlacement}" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox Grid.Row="5" Grid.Column="1" Margin="{StaticResource Row}"
+                                      ItemsSource="{x:Static vm:ActionRowViewModel.PlacementChoices}" DisplayMemberPath="Title" SelectedValuePath="Value"
+                                      SelectedValue="{Binding Placement}"/>
+
+                            <WrapPanel Grid.Row="6" Grid.Column="1" Margin="{StaticResource Row}">
+                                <CheckBox Content="{x:Static res:Strings.SettingsActionsColumnSubmenu}"
+                                          IsChecked="{Binding InSubmenu, UpdateSourceTrigger=PropertyChanged}"
+                                          IsEnabled="{Binding IsEditable}" Margin="0,0,16,0"/>
+                                <CheckBox Content="{x:Static res:Strings.SettingsActionsShowConsole}"
+                                          IsChecked="{Binding ShowConsole, UpdateSourceTrigger=PropertyChanged}"
+                                          IsEnabled="{Binding IsEditable}" Margin="0"/>
+                            </WrapPanel>
+
+                            <TextBlock Grid.Row="7" Text="{x:Static res:Strings.SettingsActionsColumnOutput}" Style="{StaticResource FieldLabel}"/>
+                            <TextBox Grid.Row="7" Grid.Column="1" Margin="{StaticResource Row}"
+                                     Text="{Binding Output, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="{x:Static res:Strings.SettingsActionsOutputHint}"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
             </StackPanel>
         </DataTemplate>
 
@@ -973,8 +1141,6 @@
         <DataTemplate DataType="{x:Type vm:ToolsSettingsCategory}">
             <StackPanel>
                 <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
-                <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,0,0,6"
-                           Text="{x:Static res:Strings.SettingsToolsHint}"/>
 
                 <ItemsControl ItemsSource="{Binding Owner.ToolRows}">
                     <ItemsControl.ItemTemplate>
@@ -987,10 +1153,10 @@
                                     </Grid.ColumnDefinitions>
 
                                     <StackPanel Grid.Column="0" Margin="0,0,12,0">
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold"/>
-                                            <TextBlock Text="{Binding Purpose}" Foreground="{StaticResource TextDim}" Margin="10,0,0,0"/>
-                                        </StackPanel>
+                                        <WrapPanel>
+                                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Margin="0,0,10,0"/>
+                                            <TextBlock Text="{Binding Purpose}" Foreground="{StaticResource TextCaption}"/>
+                                        </WrapPanel>
                                         <TextBlock Text="{Binding StatusText}" Margin="0,4,0,0">
                                             <TextBlock.Style>
                                                 <Style TargetType="TextBlock">
@@ -1003,7 +1169,7 @@
                                                 </Style>
                                             </TextBlock.Style>
                                         </TextBlock>
-                                        <TextBlock Text="{Binding PathText}" ToolTip="{Binding PathText}"
+                                        <TextBlock Text="{Binding PathText}" controls:TrimmedToolTip.Enabled="True"
                                                    TextTrimming="CharacterEllipsis" Margin="0,2,0,0">
                                             <TextBlock.Style>
                                                 <Style TargetType="TextBlock">
@@ -1016,9 +1182,10 @@
                                             </TextBlock.Style>
                                         </TextBlock>
                                         <TextBox Text="{Binding InstallHint, Mode=OneWay}" IsReadOnly="True"
+                                                 TextWrapping="Wrap"
                                                  controls:NumericField.Enabled="False"
                                                  BorderThickness="0" Background="Transparent" Padding="0"
-                                                 Foreground="{StaticResource TextDim}" Margin="0,2,0,0">
+                                                 Foreground="{StaticResource TextCaption}" Margin="0,2,0,0">
                                             <TextBox.Style>
                                                 <Style TargetType="TextBox">
                                                     <Style.Triggers>
@@ -1051,16 +1218,99 @@
         </DataTemplate>
 
 
-        <!-- Debug -->
         <!--
-            The keyboard reference. A read-only list, and it says so: five
-            groups in the order the guide uses them, gesture on the left,
-            what it does on the right.
+            Оценки: the file a photo's stars and label go to when it has
+            none yet (2026-09-28: off the gallery's page - ratings are set in
+            every view, through the preview pane). A decision about other
+            programs' files: the line under the choice says what a .pp3
+            does to RawTherapee, which nothing in the option's name says.
+        -->
+        <DataTemplate DataType="{x:Type vm:RatingsSettingsCategory}">
+            <StackPanel>
+                <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
+
+                <TextBlock Text="{x:Static res:Strings.SettingsRawRatingFormat}" Style="{StaticResource GroupTitle}"/>
+                <RadioButton GroupName="RawRatingFormat"
+                             Content="{x:Static res:Strings.SettingsRawRatingFormatXmp}"
+                             IsChecked="{Binding Owner.RawRatingFormat, Converter={StaticResource EnumRadio}, ConverterParameter=Xmp}"/>
+                <RadioButton GroupName="RawRatingFormat"
+                             Content="{x:Static res:Strings.SettingsRawRatingFormatPp3}"
+                             IsChecked="{Binding Owner.RawRatingFormat, Converter={StaticResource EnumRadio}, ConverterParameter=Pp3}"/>
+                <TextBlock Text="{x:Static res:Strings.SettingsRawRatingFormatHint}" Style="{StaticResource CheckNote}"/>
+                <CheckBox Content="{x:Static res:Strings.SettingsConfirmCreateSidecar}"
+                          ToolTip="{x:Static res:Strings.SettingsConfirmCreateSidecarHint}"
+                          IsChecked="{Binding Owner.ConfirmCreateSidecar}" Margin="0,6,0,3"/>
+            </StackPanel>
+        </DataTemplate>
+
+
+        <!--
+            Кэш и память: what Wander keeps on disk and in memory, and in
+            what order the icons come. Every limit's range and default is on
+            its field's tooltip; what 0 means for the pictures is under the
+            field - it is the one number that does not say what it is. The
+            lines under rows here stay (2026-09-28): what a switch costs in
+            disk, memory and where copies land is not in its label.
+        -->
+        <DataTemplate DataType="{x:Type vm:CacheSettingsCategory}">
+            <StackPanel>
+                <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
+
+                <TextBlock Text="{x:Static res:Strings.SettingsThumbnailCacheGroup}" Style="{StaticResource GroupTitle}"/>
+                <CheckBox Content="{x:Static res:Strings.SettingsThumbnailDiskCache}"
+                          IsChecked="{Binding Owner.ThumbnailDiskCacheEnabled}"/>
+                <Grid Style="{StaticResource FieldRow}" Margin="20,3,0,3" IsEnabled="{Binding Owner.ThumbnailDiskCacheEnabled}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{x:Static res:Strings.SettingsThumbnailDiskMb}" Style="{StaticResource FieldLabel}"/>
+                    <TextBox Grid.Column="1" HorizontalAlignment="Left"
+                             ToolTip="{x:Static res:Strings.SettingsThumbnailDiskMbHint}"
+                             Text="{Binding Owner.ThumbnailDiskCacheMb, UpdateSourceTrigger=Explicit}"/>
+                </Grid>
+                <TextBlock Text="{Binding Owner.ThumbnailCacheStatus}" Style="{StaticResource Note}" Margin="0,6,0,0"/>
+                <Button Content="{x:Static res:Strings.SettingsClearCache}" Padding="14,4"
+                        HorizontalAlignment="Left" Margin="0,4,0,0"
+                        Click="ClearThumbnails_Click"/>
+
+                <TextBlock Text="{x:Static res:Strings.SettingsMemoryGroup}" Style="{StaticResource GroupTitle}"/>
+                <Grid Style="{StaticResource FieldRow}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{x:Static res:Strings.SettingsPictureMemory}" Style="{StaticResource FieldLabel}"/>
+                    <TextBox Grid.Column="1" HorizontalAlignment="Left"
+                             ToolTip="{x:Static res:Strings.SettingsPictureMemoryLimits}"
+                             Text="{Binding Owner.PictureMemoryMb, UpdateSourceTrigger=Explicit}"/>
+                </Grid>
+                <TextBlock Text="{Binding Owner.PictureMemoryHint}" Style="{StaticResource Note}"/>
+
+                <TextBlock Text="{x:Static res:Strings.SettingsTempGroup}" Style="{StaticResource GroupTitle}"/>
+                <CheckBox Content="{x:Static res:Strings.SettingsUseSystemTemp}"
+                          ToolTip="{x:Static res:Strings.SettingsUseSystemTempHint}"
+                          IsChecked="{Binding Owner.UseSystemTemp}"/>
+                <TextBlock Text="{x:Static res:Strings.SettingsUseSystemTempNote}" Style="{StaticResource CheckNote}"/>
+
+                <TextBlock Text="{x:Static res:Strings.SettingsLoadingGroup}" Style="{StaticResource GroupTitle}"/>
+                <CheckBox Content="{x:Static res:Strings.SettingsVisibleFirstLoading}"
+                          ToolTip="{x:Static res:Strings.SettingsVisibleFirstLoadingHint}"
+                          IsChecked="{Binding Owner.VisibleFirstLoading}"/>
+            </StackPanel>
+        </DataTemplate>
+
+
+        <!--
+            The keyboard reference. A read-only list: the groups in the
+            order the guide uses them, gesture on the left, what it does on
+            the right. That the keys cannot be changed yet is the guide's to
+            say, not a line over the list.
 
             Not a fixed-width column but a shared-size one, and the scope is
-            the whole page rather than each group: five groups each sizing
-            their own column made five different left edges down one page,
-            which reads as five tables instead of one list.
+            the whole page rather than each group: groups each sizing their
+            own column made different left edges down one page, which reads
+            as several tables instead of one list.
 
             The field above it filters on the gesture and on the description
             both - see HotkeyCatalog.Filter.
@@ -1068,38 +1318,10 @@
         <DataTemplate DataType="{x:Type vm:HotkeysSettingsCategory}">
             <StackPanel Grid.IsSharedSizeScope="True">
                 <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
-                <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,0,0,10"
-                           Text="{x:Static res:Strings.SettingsHotkeysHint}"/>
 
-                <!--
-                    Same overlaid-placeholder shape as the main window's
-                    search box. NumericField is switched off explicitly: the
-                    page's TextBox style turns it on for the pixel fields,
-                    and a search box that pulls its own text on a wheel
-                    scroll would empty itself when the page is scrolled.
-                -->
-                <Grid Margin="0,0,0,12" HorizontalAlignment="Left" Width="260">
-                    <TextBox Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}"
-                             controls:NumericField.Enabled="False"
-                             Padding="6,4"/>
-                    <TextBlock Text="{x:Static res:Strings.SettingsHotkeysSearch}"
-                               Foreground="{StaticResource TextPlaceholder}"
-                               Margin="8,0,8,0"
-                               TextTrimming="CharacterEllipsis"
-                               VerticalAlignment="Center"
-                               IsHitTestVisible="False">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Visibility" Value="Collapsed"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Query}" Value="">
-                                        <Setter Property="Visibility" Value="Visible"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-                </Grid>
+                <controls:FilterBox Width="260" HorizontalAlignment="Left" Margin="0,6,0,12"
+                                    Text="{Binding Query}"
+                                    Prompt="{x:Static res:Strings.SettingsHotkeysSearch}"/>
 
                 <ItemsControl ItemsSource="{Binding Groups}">
                     <ItemsControl.ItemTemplate>
@@ -1136,7 +1358,7 @@
 
                 <!-- An empty page under a search field is an unanswered
                      question, so it gets an answer. -->
-                <TextBlock Foreground="{StaticResource TextDim}"
+                <TextBlock Foreground="{StaticResource TextCaption}"
                            Text="{x:Static res:Strings.SettingsHotkeysNoMatch}">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
@@ -1152,33 +1374,37 @@
             </StackPanel>
         </DataTemplate>
 
+
+        <!--
+            Отладка и сброс: what the session log says, the debug menu, and
+            putting every setting back. By default the log carries events and
+            no paths - it is what goes out with a bug report; the action trace
+            and real paths are for chasing a bug. The reset lives here rather
+            than in the dialog's button row: it is needed once a year, and it
+            took as much room there as OK, Apply and Cancel.
+        -->
         <DataTemplate DataType="{x:Type vm:DebugSettingsCategory}">
             <StackPanel>
                 <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
-                <CheckBox Content="{x:Static res:Strings.SettingsShowDebugMenu}"
-                          IsChecked="{Binding Owner.ShowDebugMenu}"/>
-                <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,10,0,0"
-                           Text="{x:Static res:Strings.SettingsDebugHint}"/>
 
-                <!-- What the session log says. By default events and no
-                     paths - it is what goes out with a bug report; the
-                     action trace and real paths are for chasing a bug. -->
-                <TextBlock Text="{x:Static res:Strings.SettingsLogGroup}" FontWeight="SemiBold" Margin="0,24,0,4"/>
+                <TextBlock Text="{x:Static res:Strings.SettingsLogGroup}" Style="{StaticResource GroupTitle}"/>
                 <CheckBox Content="{x:Static res:Strings.SettingsLogActions}"
                           ToolTip="{x:Static res:Strings.SettingsLogActionsHint}"
                           IsChecked="{Binding Owner.LogActions}"/>
                 <CheckBox Content="{x:Static res:Strings.SettingsLogPaths}"
                           ToolTip="{x:Static res:Strings.SettingsLogPathsHint}"
                           IsChecked="{Binding Owner.LogPaths}"/>
+                <!-- Kept: what goes into a log that is sent out is the
+                     price of the switch above. -->
+                <TextBlock Text="{x:Static res:Strings.SettingsLogPathsNote}" Style="{StaticResource CheckNote}"/>
 
-                <!-- Сброс живёт здесь, а не в строке кнопок диалога: он нужен
-                     раз в год, а места рядом с ОК / Применить / Отмена
-                     занимал столько же, сколько они. -->
-                <TextBlock Text="{x:Static res:Strings.SettingsResetGroup}" FontWeight="SemiBold" Margin="0,24,0,4"/>
-                <Button Content="{x:Static res:Strings.SettingsResetAll}" Padding="14,4" Width="140"
-                        HorizontalAlignment="Left" Click="Reset_Click"/>
-                <TextBlock Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,8,0,0"
-                           Text="{x:Static res:Strings.SettingsResetHint}"/>
+                <TextBlock Text="{x:Static res:Strings.SettingsDebugMenuGroup}" Style="{StaticResource GroupTitle}"/>
+                <CheckBox Content="{x:Static res:Strings.SettingsShowDebugMenu}"
+                          IsChecked="{Binding Owner.ShowDebugMenu}"/>
+
+                <TextBlock Text="{x:Static res:Strings.SettingsResetGroup}" Style="{StaticResource ResetGroupTitle}"/>
+                <Button Content="{x:Static res:Strings.SettingsResetAll}" Padding="14,4"
+                        HorizontalAlignment="Left" Margin="0,3,0,0" Click="Reset_Click"/>
             </StackPanel>
         </DataTemplate>
 
@@ -1190,24 +1416,33 @@
              закоммитит без закрытия, Отмена откатит изменения и закроет.
              Baseline для отката снимается в Loaded в code-behind. -->
         <Border DockPanel.Dock="Bottom" BorderBrush="{StaticResource Separator}" BorderThickness="0,1,0,0" Padding="12,8">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button Content="{x:Static res:Strings.ActionOk}" Padding="14,4" Width="92" Margin="0,0,8,0"
-                        IsDefault="True" Click="Ok_Click"/>
-                <Button Content="{x:Static res:Strings.ActionApply}" Padding="14,4" Width="92" Margin="0,0,8,0"
-                        Click="Apply_Click"/>
-                <Button Content="{x:Static res:Strings.ActionCancel}" Padding="14,4" Width="92"
-                        IsCancel="True" Click="Cancel_Click"/>
-            </StackPanel>
+            <DockPanel LastChildFill="False">
+                <!-- The guide at the part about the page on show, the same
+                     as F1 (ApplicationCommands.Help carries the key). -->
+                <Button DockPanel.Dock="Left" Content="&#xE897;" FontFamily="Segoe MDL2 Assets"
+                        Command="ApplicationCommands.Help"
+                        ToolTip="{x:Static res:Strings.SettingsGuide}"
+                        Padding="8,3" VerticalAlignment="Center"/>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button Content="{x:Static res:Strings.ActionOk}" Padding="14,4" Width="92" Margin="0,0,8,0"
+                            IsDefault="True" Click="Ok_Click"/>
+                    <Button Content="{x:Static res:Strings.ActionApply}" Padding="14,4" Width="92" Margin="0,0,8,0"
+                            Click="Apply_Click"/>
+                    <Button Content="{x:Static res:Strings.ActionCancel}" Padding="14,4" Width="92"
+                            IsCancel="True" Click="Cancel_Click"/>
+                </StackPanel>
+            </DockPanel>
         </Border>
 
         <Grid>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="180"/>
+                <ColumnDefinition Width="190"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <!-- Left: category list. ListBox today; will swap to TreeView
-                 if/when a category gains nested subsections.
+            <!-- Left: category list, in three runs with a little air between
+                 them (SettingsCategoryViewModel.StartsCluster); a page about
+                 a part of the one above is indented under it (IsNested).
 
                  FocusVisualStyle is nulled the same way the file list nulls
                  it: WPF's dashed rectangle draws on top of the selection
@@ -1224,12 +1459,23 @@
                 <ListBox.ItemContainerStyle>
                     <Style TargetType="ListBoxItem">
                         <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                        <Setter Property="Padding" Value="10,4"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding StartsCluster}" Value="True">
+                                <Setter Property="Margin" Value="0,12,0,0"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsNested}" Value="True">
+                                <Setter Property="Padding" Value="26,4,10,4"/>
+                            </DataTrigger>
+                        </Style.Triggers>
                     </Style>
                 </ListBox.ItemContainerStyle>
             </ListBox>
 
-            <!-- Right: content area selected by SelectedCategory's type. -->
-            <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Padding="20">
+            <!-- Right: content area selected by SelectedCategory's type.
+                 Never scrolled sideways: a page fits the width it gets. -->
+            <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                          Padding="20,16,20,20">
                 <ContentControl Content="{Binding SelectedCategory}"/>
             </ScrollViewer>
         </Grid>

@@ -17,6 +17,11 @@ public class ActionCatalogTests {
 
     private static readonly CustomAction _own = new() { Id = "own", Title = "Notepad", Program = @"C:\np.exe" };
 
+    private static readonly CustomAction _encoder = new() {
+        Id = "preset:image", TitleKey = "ActionPresetImage", Kind = ActionKind.Builtin, Program = ActionPresets.ImageConvert,
+        Arguments = "format=jpeg;quality=90", Output = "{name}.jpg", IsPreset = true, Category = ActionCategory.Convert,
+    };
+
 
     [Fact]
     public void Merge_WithNothingStored_IsThePresets() {
@@ -176,6 +181,82 @@ public class ActionCatalogTests {
         Assert.True(ActionCatalog.NeedsTool(_presetA, Tools()));
         Assert.False(ActionCatalog.NeedsTool(_presetA, found));
         Assert.False(ActionCatalog.NeedsTool(_own, missing));
+    }
+
+    [Fact]
+    public void ProgramValidationKey_SaysWhenAnOwnRowsProgramWillNotStart() {
+        static string? Nowhere(string _) => null;
+        static string? Anywhere(string program) => program;
+
+        Assert.Null(ActionCatalog.ProgramValidationKey(_own, Anywhere));
+        Assert.Equal(ActionCatalog.ProgramNotFoundKey, ActionCatalog.ProgramValidationKey(_own, Nowhere));
+        Assert.Equal(ActionCatalog.NoProgramKey, ActionCatalog.ProgramValidationKey(_own with { Program = "  " }, Anywhere));
+    }
+
+    [Fact]
+    public void ProgramValidationKey_LeavesTheToolsBareNameToNeedsTool_AndABuiltinAlone() {
+        static string? Nowhere(string _) => null;
+        var builtin = _own with { Kind = ActionKind.Builtin, Program = "hold" };
+        var pointed = _presetA with { Program = @"D:\other\ffmpeg.exe" };
+
+        Assert.Null(ActionCatalog.ProgramValidationKey(_presetA, Nowhere));
+        Assert.Null(ActionCatalog.ProgramValidationKey(builtin, Nowhere));
+        // A path of the row's own is the row's to answer for.
+        Assert.Equal(ActionCatalog.ProgramNotFoundKey, ActionCatalog.ProgramValidationKey(pointed, Nowhere));
+    }
+
+    [Fact]
+    public void ProgramChoices_AreTheToolsThenWhatTheRowsRun_OnceEach() {
+        var catalog = new[] {
+            _presetA,
+            _encoder,
+            _own,
+            _own with { Id = "own2" },
+            // The tool by its file name is the tool's line.
+            _own with { Id = "own3", Program = "ffmpeg.exe" },
+            _encoder with { Id = "own4", IsPreset = false },
+            // Never in the table, so never in its list.
+            _encoder with { Id = "debug", Program = ActionPresets.HoldFile, DebugOnly = true },
+        };
+
+        var choices = ActionCatalog.ProgramChoices(catalog);
+
+        Assert.Equal(
+            ActionPresets.Tools.Select(t => t.Name).Append(ActionPresets.ImageConvert).Append(@"C:\np.exe"),
+            choices.Select(c => c.Program));
+        Assert.Equal(("ffmpeg", "FFmpeg", ActionKind.Command), choices.Where(c => c.Program == "ffmpeg").Select(c => (c.Tool, c.Title, c.Kind)).Single());
+        // An internal operation has a name like any program; the key comes
+        // back as itself here - no text source in the tests.
+        Assert.Equal((string.Empty, "ActionsBuiltinImageConvert", ActionKind.Builtin), (choices[^2].Tool, choices[^2].Title, choices[^2].Kind));
+        Assert.Equal((string.Empty, @"C:\np.exe", ActionKind.Command), (choices[^1].Tool, choices[^1].Title, choices[^1].Kind));
+    }
+
+    [Fact]
+    public void WithProgram_SetsTheToolAndTheKindWithTheProgram_AndChoiceOfFindsItsLine() {
+        var choices = ActionCatalog.ProgramChoices(new[] { _presetA, _encoder, _own });
+        var tool = choices.First(c => c.Program == "ffmpeg");
+        var encoder = choices.First(c => c.Kind == ActionKind.Builtin);
+        var own = choices.First(c => c.Program == @"C:\np.exe");
+
+        var toTool = ActionCatalog.WithProgram(_own, tool);
+        var toEncoder = ActionCatalog.WithProgram(toTool, encoder);
+        var toOwn = ActionCatalog.WithProgram(toEncoder, own);
+
+        Assert.Equal(("ffmpeg", "ffmpeg", ActionKind.Command), (toTool.Program, toTool.RequiredTool, toTool.Kind));
+        Assert.Equal((ActionPresets.ImageConvert, string.Empty, ActionKind.Builtin), (toEncoder.Program, toEncoder.RequiredTool, toEncoder.Kind));
+        Assert.Equal((@"C:\np.exe", string.Empty, ActionKind.Command), (toOwn.Program, toOwn.RequiredTool, toOwn.Kind));
+        Assert.Equal(tool, ActionCatalog.ChoiceOf(toTool, choices));
+        Assert.Equal(encoder, ActionCatalog.ChoiceOf(toEncoder, choices));
+        Assert.Equal(own, ActionCatalog.ChoiceOf(_own with { Program = @"c:\NP.exe" }, choices));
+        Assert.Null(ActionCatalog.ChoiceOf(_own with { Program = "" }, choices));
+    }
+
+    [Fact]
+    public void BuiltinProblem_IsWhatTheEncoderWouldReport() {
+        // A command line left over from the row's earlier program.
+        Assert.Equal("ActionsErrorImageNoFormat", ActionCatalog.BuiltinProblem(_encoder with { Arguments = "{path}" }));
+        Assert.Null(ActionCatalog.BuiltinProblem(_encoder));
+        Assert.Null(ActionCatalog.BuiltinProblem(_own with { Arguments = "{path}" }));
     }
 
     [Fact]

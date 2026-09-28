@@ -197,6 +197,10 @@ public sealed class MainViewModel : ObservableObject {
     private double _windowHeight;
     private string? _lastWrittenPanes;
 
+    // Where the list stood when the session was last written - a closing
+    // window writes again when it has moved since (FlushState).
+    private ListPlace? _writtenPlace;
+
     private readonly ClipboardController _clipboard;
 
     private bool _isBookmarksExpanded = true;
@@ -1316,6 +1320,12 @@ public sealed class MainViewModel : ObservableObject {
     public bool IsSearchResults => ContentSearch.IsShowingResults;
 
     /// <summary>
+    /// The row first on screen in the list, asked when the session is
+    /// written (<see cref="ListPlace"/>); the list's view answers it.
+    /// </summary>
+    public Func<string?>? ListTopRow { get; set; }
+
+    /// <summary>
     /// The view on screen. Written by the user (<see cref="SetViewModeCommand"/>,
     /// which also pins the choice to the open folder) and by
     /// <see cref="ChooseView"/> on arrival; the setter itself saves nothing
@@ -2042,7 +2052,9 @@ public sealed class MainViewModel : ObservableObject {
     /// where I left off" needs.
     /// </summary>
     public void FlushState() {
-        if (!_stateSaveTimer.IsEnabled) {
+        // A selection or a scroll arms no save of its own: it is written
+        // here when the list has moved since the last write.
+        if (!_stateSaveTimer.IsEnabled && (CurrentPlace()?.SameAs(_writtenPlace) ?? _writtenPlace is null)) {
             return;
         }
 
@@ -2194,8 +2206,9 @@ public sealed class MainViewModel : ObservableObject {
         _nav.LoadRecentPaths(session.RecentPaths);
 
         // Honour the RestoreLastFolder preference: when off, ignore
-        // LastPath and start at the first drive.
-        _ = OpenStartFolderAsync(Settings.RestoreLastFolder ? session.LastPath : null);
+        // LastPath and start in the working folder.
+        _writtenPlace = session.LastPlace;
+        _ = OpenStartFolderAsync(Settings.RestoreLastFolder ? session.LastPath : null, session.LastPlace);
 
         // Restore is the saved state coming back, not a change worth
         // saving: whatever armed the debounce on the way is disarmed here,
@@ -2205,41 +2218,60 @@ public sealed class MainViewModel : ObservableObject {
 
 
     /// <summary>
-    /// The first navigation of the session: the remembered folder when it
-    /// is still there, its nearest surviving ancestor when it has gone from
-    /// one of the machine's own drives, the working folder (a setting; the
+    /// The first navigation of the session: the folder the command line
+    /// names, when it is there (<see cref="StartFolder"/>, 2026-09-28 - what
+    /// a test run passes); otherwise the remembered folder when it is still
+    /// there, its nearest surviving ancestor when it has gone from one of
+    /// the machine's own drives, the working folder (a setting; the
     /// system Documents by default) when it was on a medium that has most
-    /// likely been taken out, and the first drive when nothing was
-    /// remembered or the working folder is not there either. Whether it is still there is asked on
-    /// the pool - that one <c>DirectoryExists</c> used to sit on the UI
-    /// thread before the first frame, and a session closed on a drive that
-    /// has since spun down or been unplugged made the next start wait for
-    /// it. A user who went somewhere themselves while the disk was thinking
-    /// is left where they went.
+    /// likely been taken out - or when the last folder is not to be opened,
+    /// or nothing was remembered (2026-09-28; the first drive before) - and
+    /// the first drive when the working folder is not there either. Whether
+    /// it is still there is asked on the pool - that one
+    /// <c>DirectoryExists</c> used to sit on the UI thread before the first
+    /// frame, and a session closed on a drive that has since spun down or
+    /// been unplugged made the next start wait for it. A user who went
+    /// somewhere themselves while the disk was thinking is left where they
+    /// went. The folder still there, the list comes up as it was left in it
+    /// (<paramref name="place"/>, 2026-09-25): its file selected - or the
+    /// row that took its place - and the same row on top.
     /// </summary>
-    private async Task OpenStartFolderAsync(NavigationStop? remembered) {
+    private async Task OpenStartFolderAsync(NavigationStop? remembered, ListPlace? place) {
         // Read here, on the UI thread, and carried into the pool.
         string? work = Settings.ResolveWorkFolder();
-        var (restored, home, first) = await Task.Run(() => {
-            string? back = remembered is null ? null : NavigationFallback.AfterRestore(remembered.Path, CanOpen, VolumeKindOf);
-            string? parked = remembered is not null && back is null && work is not null && _fs.DirectoryExists(work) ? work : null;
+        string? asked = StartFolder.Asked;
+        var (named, restored, home, first) = await Task.Run(() => {
+            string? given = asked is not null && _fs.DirectoryExists(asked) ? asked : null;
+            string? back = given is not null || remembered is null
+                ? null
+                : NavigationFallback.AfterRestore(remembered.Path, CanOpen, VolumeKindOf);
+            string? parked = given is null && back is null && work is not null && _fs.DirectoryExists(work) ? work : null;
             // The drives are listed on the pool as well: the panel reads
             // them there, and this is before the first frame.
-            string? drive = back is null && parked is null ? _fs.GetRoots().FirstOrDefault()?.FullPath : null;
+            string? drive = given is null && back is null && parked is null ? _fs.GetRoots().FirstOrDefault()?.FullPath : null;
 
-            return (back, parked, drive);
+            return (given, back, parked, drive);
         });
+        if (asked is not null && named is null) {
+            _log.Warn($"Start: {asked} ({StartFolder.Option}) is not there, starting as without it");
+        }
         if (_nav.Current is not null) {
             return;
         }
 
-        if (restored is not null) {
+        if (named is not null) {
+            _nav.NavigateTo(named, NavigationSource.External);
+        } else if (restored is not null) {
             if (!string.Equals(restored, remembered!.Path, StringComparison.OrdinalIgnoreCase)) {
                 _log.Info($"Start: {remembered.Path} is gone, opening {restored}");
+            } else if (place is not null) {
+                _session.SetArrival(ArrivalIntent.Place(restored, place.Row, place.StoodAmong, place.Top));
             }
             _nav.NavigateTo(restored, remembered.Source);
         } else if (home is not null) {
-            _log.Info($"Start: {remembered!.Path} is not on this machine's own drives any more, opening the working folder {home}");
+            if (remembered is not null) {
+                _log.Info($"Start: {remembered.Path} is not on this machine's own drives any more, opening the working folder {home}");
+            }
             _nav.NavigateTo(home, NavigationSource.External);
         } else if (first is not null) {
             _nav.NavigateTo(first, NavigationSource.External);
@@ -2295,11 +2327,13 @@ public sealed class MainViewModel : ObservableObject {
         // we replaced the whole record here we'd silently wipe those on
         // every navigation/preview toggle.
         var current = _stateStore.Load();
+        var place = CurrentPlace();
         _stateStore.Save(current with {
             Session = new SessionState {
                 LastPath = _nav.Current is not null
                     ? new NavigationStop(_nav.Current, _nav.CurrentSource ?? NavigationSource.External)
                     : null,
+                LastPlace = place,
                 ExpandedPaths = Trees.CollectExpanded(),
                 // The pair the user set, not the scaled sizes on screen -
                 // see RebasePaneSizes.
@@ -2317,6 +2351,7 @@ public sealed class MainViewModel : ObservableObject {
             Settings = Settings.ToRecord(),
             LastRunVersion = BuildInfo.Version,
         });
+        _writtenPlace = place;
 
         if (_foldersDirty) {
             _foldersDirty = false;
@@ -2330,6 +2365,20 @@ public sealed class MainViewModel : ObservableObject {
             _lastWrittenPanes = panes;
             _log.Info($"State written{(_stateStore.IsReadOnly ? " (not really: read-only)" : "")}: {panes}");
         }
+    }
+
+    /// <summary>
+    /// Where the list stands in the folder on screen, for the next session
+    /// (<see cref="ListPlace"/>): its main row and the row first on screen.
+    /// Null for search results and while the next folder is still listing -
+    /// the rows on screen are then not the folder's.
+    /// </summary>
+    private ListPlace? CurrentPlace() {
+        if (_nav.Current is not { } folder || IsSearchResults || !IsSamePath(_session.ListedPath, folder)) {
+            return null;
+        }
+
+        return ListPlace.Of(PathsOf(Entries), _selectedEntry?.FullPath, ListTopRow?.Invoke());
     }
 
     /// <summary>
@@ -4171,6 +4220,25 @@ public sealed class MainViewModel : ObservableObject {
 
 
     // --- Destructive / clipboard ops (always confirm, Cancel-default) --
+
+    /// <summary>
+    /// Delete and Shift+Delete on a picture shown full screen (2026-09-25):
+    /// that one file, the way the list's own Delete takes its rows - never in
+    /// the bin or inside an archive, asked first as the settings say, its
+    /// companions along, Ctrl+Z bringing it back from the bin. True when the
+    /// file is gone.
+    /// </summary>
+    public async Task<bool> DeletePictureAsync(FileSystemEntry picture, bool permanent) {
+        if (IsCurrentShellNamespace) {
+            return false;
+        }
+
+        // The row as the list has it now, companions and all: the one a
+        // viewer holds can be a star behind.
+        await DeleteAsync(new[] { Ratings.FindInSource(picture.FullPath) ?? picture }, permanent);
+
+        return !_fs.FileExists(picture.FullPath);
+    }
 
     /// <summary>Delete and Shift+Delete: the target's items, where the place allows it.</summary>
     private bool CanDelete(object? parameter) {

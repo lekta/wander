@@ -10,6 +10,13 @@ namespace Wander.Core.Tests;
 /// records stand in for whatever the platform layer found.
 /// </summary>
 public class ShellExtensionCatalogTests {
+    /// <summary>
+    /// A type the tests add by hand ("Добавить программу или тип файла"):
+    /// handlers on it are listed before any menu has shown them, which lets
+    /// the tests about merging and filtering start from the registry alone.
+    /// </summary>
+    private const string AddedType = ".txt";
+
 
     [Fact]
     public void HandlerAndSighting_MergeIntoOneRow() {
@@ -28,12 +35,14 @@ public class ShellExtensionCatalogTests {
     [Fact]
     public void OneHandlerOnManyScopes_IsOneRowWithAllOfThem() {
         // 7-Zip registers itself three times over; that is one switch, not
-        // three, and the "Типы" column is what the three become.
-        var rows = Build(handlers: new[] {
-            Handler("7-Zip", app: "7-Zip", scopes: new[] { ShellScopes.AllFiles }),
-            Handler("7-Zip", app: "", scopes: new[] { ShellScopes.Directory }),
-            Handler("7-Zip", app: "7-Zip", scopes: new[] { ShellScopes.Folder }),
-        });
+        // three, and the "Для чего" column is what the three become.
+        var rows = Build(
+            handlers: new[] {
+                Handler("7-Zip", app: "7-Zip", scopes: new[] { ShellScopes.AllFiles }),
+                Handler("7-Zip", app: "", scopes: new[] { ShellScopes.Directory }),
+                Handler("7-Zip", app: "7-Zip", scopes: new[] { ShellScopes.Folder }),
+            },
+            seen: new[] { "7-Zip" });
 
         var row = Assert.Single(rows);
         Assert.Equal(
@@ -69,16 +78,48 @@ public class ShellExtensionCatalogTests {
     }
 
     [Fact]
-    public void SystemHandlers_AreHiddenUnlessAskedFor() {
+    public void AnInstalledHandlerNoMenuHasShown_IsNotListed() {
+        // The table is what the user has met (2026-09-28): a switch for a
+        // row nobody has seen is a guess, and the table was mostly guesses.
+        var rows = Build(
+            handlers: new[] { Handler("git_shell", title: "Open Git Bash here", app: "Git", scopes: new[] { ShellScopes.DirectoryBackground }) },
+            added: Array.Empty<string>());
+
+        Assert.Empty(rows);
+    }
+
+    [Fact]
+    public void OnATypeAddedByHand_AProgramsRowsAreListedUnmet() {
+        // "Добавить программу или тип файла" asks for them by name.
+        var rows = Build(
+            handlers: new[] { Handler("PS.Open", title: "Открыть в Photoshop", app: "Adobe Photoshop", scopes: new[] { ".psd" }) },
+            added: new[] { ".psd" });
+
+        var row = Assert.Single(rows);
+        Assert.False(row.IsSeen);
+    }
+
+    [Fact]
+    public void WindowsOwnRows_WaitToBeMet_EvenOnATypeAddedByHand() {
+        // Print, edit, share turn up in the type's menu soon enough.
         var handlers = new[] {
             Handler("SendTo", app: "Windows", system: true),
             Handler("7-Zip", app: "7-Zip"),
         };
 
         Assert.Equal(new[] { "7-Zip" }, Build(handlers).Select(r => r.Title));
-        Assert.Equal(
-            new[] { "7-Zip", "SendTo" },
-            Build(handlers, includeSystem: true).Select(r => r.Title).OrderBy(t => t));
+    }
+
+    [Fact]
+    public void WindowsItself_IsCalledOs() {
+        // "Операционная система Microsoft Windows" is the longest string in
+        // the column and says nothing "ОС" does not. The key comes back as
+        // itself here: no text source in the tests.
+        var rows = Build(
+            handlers: new[] { new ShellHandler { Key = "SendTo", Title = "Отправить", AppName = "Операционная система Microsoft® Windows®", IsOsComponent = true, IsSystem = true } },
+            seen: new[] { "SendTo" });
+
+        Assert.Equal("ShellAppOs", Assert.Single(rows).AppName);
     }
 
     [Fact]
@@ -99,6 +140,23 @@ public class ShellExtensionCatalogTests {
             Handler("pintohome", app: "Windows"),
             Handler("7-Zip", app: "7-Zip"),
         });
+
+        Assert.Equal(new[] { "7-Zip" }, rows.Select(r => r.Title));
+    }
+
+    [Fact]
+    public void ARowWanderTookOverAfterItWasMet_IsNotListed() {
+        // Windows Terminal's "Открыть в Терминале" gave way to Wander's own
+        // row (2026-09-28). What an older session met or switched off is
+        // still in state.json; it must not come back as a dead switch.
+        const string terminal = "{9F156763-7844-4DC4-B2B1-901F640F5155}";
+        var rows = ShellExtensionCatalog.Build(
+            Array.Empty<ShellHandler>(),
+            new[] {
+                new KnownShellEntry { Key = terminal, Title = "Открыть в Терминале", Help = "Открыть в Терминале" },
+                new KnownShellEntry { Key = "7-Zip", Title = "7-Zip" },
+            },
+            new HashSet<string>(new[] { terminal }, StringComparer.OrdinalIgnoreCase));
 
         Assert.Equal(new[] { "7-Zip" }, rows.Select(r => r.Title));
     }
@@ -144,10 +202,10 @@ public class ShellExtensionCatalogTests {
 
     [Fact]
     public void NamelessClsidHandlers_AreNotOffered() {
-        // A row reading "{9F156763-…}" next to an empty checkbox is not a
+        // A row reading "{12345678-...}" next to an empty checkbox is not a
         // setting. If nothing can be said about it, it is not listed.
         var rows = Build(handlers: new[] {
-            Handler("{9F156763-7844-4DC4-B2B1-901F640F5155}", title: "{9F156763-7844-4DC4-B2B1-901F640F5155}"),
+            Handler("{12345678-9ABC-4DEF-8123-456789ABCDEF}", title: "{12345678-9ABC-4DEF-8123-456789ABCDEF}"),
             Handler("7-Zip", app: "7-Zip"),
         });
 
@@ -162,7 +220,7 @@ public class ShellExtensionCatalogTests {
         var rows = ShellExtensionCatalog.Build(
             Array.Empty<ShellHandler>(),
             new[] {
-                new KnownShellEntry { Key = "{9F156763-7844-4DC4-B2B1-901F640F5155}", Title = "{9F156763-7844-4DC4-B2B1-901F640F5155}" },
+                new KnownShellEntry { Key = "{12345678-9ABC-4DEF-8123-456789ABCDEF}", Title = "{12345678-9ABC-4DEF-8123-456789ABCDEF}" },
                 new KnownShellEntry { Key = "7-Zip", Title = "7-Zip" },
             },
             new HashSet<string>(StringComparer.OrdinalIgnoreCase));
@@ -178,8 +236,8 @@ public class ShellExtensionCatalogTests {
             Array.Empty<ShellHandler>(),
             new[] {
                 new KnownShellEntry {
-                    Key = "{9F156763-7844-4DC4-B2B1-901F640F5155}",
-                    Title = "{9F156763-7844-4DC4-B2B1-901F640F5155}",
+                    Key = "{12345678-9ABC-4DEF-8123-456789ABCDEF}",
+                    Title = "{12345678-9ABC-4DEF-8123-456789ABCDEF}",
                     Help = "Открывает панель управления",
                 },
             },
@@ -191,8 +249,8 @@ public class ShellExtensionCatalogTests {
     [Fact]
     public void NamelessClsid_StillAppearsOnceItIsBlocked() {
         var rows = Build(
-            handlers: new[] { Handler("{9F156763-7844-4DC4-B2B1-901F640F5155}", title: "{9F156763-7844-4DC4-B2B1-901F640F5155}") },
-            blocked: new[] { "{9F156763-7844-4DC4-B2B1-901F640F5155}" });
+            handlers: new[] { Handler("{12345678-9ABC-4DEF-8123-456789ABCDEF}", title: "{12345678-9ABC-4DEF-8123-456789ABCDEF}") },
+            blocked: new[] { "{12345678-9ABC-4DEF-8123-456789ABCDEF}" });
 
         Assert.True(Assert.Single(rows).IsBlocked);
     }
@@ -228,7 +286,7 @@ public class ShellExtensionCatalogTests {
         // nothing this checkbox blocks can ever match a drawn row.
         var rows = Build(handlers: new[] {
             Handler(
-                "{9F156763-7844-4DC4-B2B1-901F640F5155}",
+                "{12345678-9ABC-4DEF-8123-456789ABCDEF}",
                 title: "Операционная система Microsoft® Windows®",
                 app: "Операционная система Microsoft® Windows®"),
             Handler("7-Zip", app: "7-Zip"),
@@ -242,10 +300,12 @@ public class ShellExtensionCatalogTests {
         // BitLocker registers two verbs for "Включить BitLocker" on a
         // drive. On screen they are the same line twice; ticking one of
         // them and finding the item still in the menu is the bug.
-        var rows = Build(handlers: new[] {
-            Handler("encrypt-bde", title: "Включить BitLocker", app: "Windows", scopes: new[] { ShellScopes.Drive }),
-            Handler("encrypt-bde-elev", title: "Включить BitLocker", app: "Windows", scopes: new[] { ShellScopes.Drive }),
-        }, includeSystem: true);
+        var rows = Build(
+            handlers: new[] {
+                Handler("encrypt-bde", title: "Включить BitLocker", app: "Windows", scopes: new[] { ShellScopes.Drive }),
+                Handler("encrypt-bde-elev", title: "Включить BitLocker", app: "Windows", scopes: new[] { ShellScopes.Drive }),
+            },
+            seen: new[] { "encrypt-bde", "encrypt-bde-elev" });
 
         var row = Assert.Single(rows);
         Assert.Equal(new[] { "encrypt-bde", "encrypt-bde-elev" }, row.AllKeys);
@@ -258,8 +318,8 @@ public class ShellExtensionCatalogTests {
                 Handler("encrypt-bde", title: "Включить BitLocker", app: "Windows", scopes: new[] { ShellScopes.Drive }),
                 Handler("encrypt-bde-elev", title: "Включить BitLocker", app: "Windows", scopes: new[] { ShellScopes.Drive }),
             },
-            blocked: new[] { "encrypt-bde-elev" },
-            includeSystem: true);
+            seen: new[] { "encrypt-bde", "encrypt-bde-elev" },
+            blocked: new[] { "encrypt-bde-elev" });
 
         Assert.True(Assert.Single(rows).IsBlocked);
     }
@@ -267,21 +327,25 @@ public class ShellExtensionCatalogTests {
     [Fact]
     public void SameCaptionFromDifferentApplications_StaysTwoRows() {
         // The caption alone does not make two rows one: these are two
-        // switches, and the "Приложение" column is what tells them apart.
-        var rows = Build(handlers: new[] {
-            Handler("scan-a", title: "Проверить", app: "Antivirus A", scopes: new[] { ShellScopes.AllFiles }),
-            Handler("scan-b", title: "Проверить", app: "Antivirus B", scopes: new[] { ShellScopes.AllFiles }),
-        });
+        // switches, and the "Программа" column is what tells them apart.
+        var rows = Build(
+            handlers: new[] {
+                Handler("scan-a", title: "Проверить", app: "Antivirus A", scopes: new[] { ShellScopes.AllFiles }),
+                Handler("scan-b", title: "Проверить", app: "Antivirus B", scopes: new[] { ShellScopes.AllFiles }),
+            },
+            seen: new[] { "scan-a", "scan-b" });
 
         Assert.Equal(2, rows.Count);
     }
 
     [Fact]
     public void SameCaptionOnDifferentScopes_StaysTwoRows() {
-        var rows = Build(handlers: new[] {
-            Handler("a", title: "Проверить", app: "Antivirus", scopes: new[] { ShellScopes.AllFiles }),
-            Handler("b", title: "Проверить", app: "Antivirus", scopes: new[] { ShellScopes.Directory }),
-        });
+        var rows = Build(
+            handlers: new[] {
+                Handler("a", title: "Проверить", app: "Antivirus", scopes: new[] { ShellScopes.AllFiles }),
+                Handler("b", title: "Проверить", app: "Antivirus", scopes: new[] { ShellScopes.Directory }),
+            },
+            seen: new[] { "a", "b" });
 
         Assert.Equal(2, rows.Count);
     }
@@ -291,13 +355,13 @@ public class ShellExtensionCatalogTests {
         IReadOnlyList<ShellHandler> handlers,
         IReadOnlyList<string>? seen = null,
         IReadOnlyList<string>? blocked = null,
-        bool includeSystem = false) {
+        IReadOnlyList<string>? added = null) {
 
         return ShellExtensionCatalog.Build(
             handlers,
             (seen ?? Array.Empty<string>()).Select(k => new KnownShellEntry { Key = k, Title = k }).ToArray(),
             new HashSet<string>(blocked ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase),
-            includeSystem);
+            added ?? new[] { AddedType });
     }
 
     private static ShellHandler Handler(
@@ -312,7 +376,7 @@ public class ShellExtensionCatalogTests {
             Key = key,
             Title = title ?? key,
             AppName = app,
-            Scopes = scopes ?? Array.Empty<string>(),
+            Scopes = scopes ?? new[] { AddedType },
             IsSystem = system,
         };
     }

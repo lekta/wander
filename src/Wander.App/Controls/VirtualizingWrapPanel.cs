@@ -140,6 +140,9 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo {
     /// </summary>
     public int Columns => _layout.Columns;
 
+    /// <summary>The first item of the row at the top of the view, whole or cut; -1 with no items.</summary>
+    public int FirstVisibleIndex => _layout.ItemCount == 0 ? -1 : _layout.VisibleRange(_offsetY).First;
+
 
     // --- IScrollInfo: wiring ------------------------------------------
 
@@ -255,6 +258,18 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo {
         var cell = _layout.CellAt(index);
 
         return new Rect(cell.X, cell.Y - _offsetY, cell.Width, cell.Height);
+    }
+
+
+    /// <summary>
+    /// The row of <paramref name="index"/> at the top of the view - as far
+    /// as the content goes down. For a layout already measured with the
+    /// items: before that the offset is clamped to what was there.
+    /// </summary>
+    public void ShowFromTop(int index) {
+        if (index >= 0 && index < _layout.ItemCount) {
+            SetVerticalOffset(_layout.CellAt(index).Y);
+        }
     }
 
 

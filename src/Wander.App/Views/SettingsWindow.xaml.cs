@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Threading;
 using Wander.App.Dialogs;
 using Wander.App.Resources;
 using Wander.App.Util;
@@ -9,6 +10,7 @@ using Wander.App.ViewModels;
 using Wander.Core;
 using Wander.Core.Actions;
 using Wander.Core.Icons;
+using Wander.Core.Logging;
 using Wander.Core.Persistence;
 using Wander.Core.Shell;
 
@@ -108,7 +110,7 @@ public partial class SettingsWindow : Window {
         }
 
         bool accepted = ServiceLocator.Get<IDialogs>().Ask(new DialogRequest(
-            DialogKind.ShellMenuReset, Strings.SettingsShellReset, Strings.SettingsShellResetConfirm,
+            DialogKind.ShellMenuReset, Strings.SettingsResetGroup, Strings.SettingsShellResetConfirm,
             DialogButtons.OkCancel, DialogIcon.Warning));
         if (!accepted) {
             return;
@@ -138,6 +140,24 @@ public partial class SettingsWindow : Window {
         vm.SetShellHandlers(registry.Scan(vm.ScannedScopes));
     }
 
+
+    /// <summary>
+    /// F1 and the "?" beside the buttons: the guide on the site at the part
+    /// about the page on show (2026-09-28). What a setting does beyond its
+    /// label is written there rather than in hints on the page.
+    /// </summary>
+    private void Help_Executed(object sender, ExecutedRoutedEventArgs e) {
+        if (DataContext is not SettingsViewModel { SelectedCategory: { } page }
+            || ServiceLocator.TryGet<IShellLauncher>() is not { } shell) {
+            return;
+        }
+
+        try {
+            shell.Open(Diagnostics.CrashReporter.GuidePage(page.GuidePage));
+        } catch (Exception ex) {
+            Log.Warn($"Guide not opened at {page.GuidePage}: {ex.Message}");
+        }
+    }
 
     private void Ok_Click(object sender, RoutedEventArgs e) {
         CommitBaseline();
@@ -252,6 +272,18 @@ public partial class SettingsWindow : Window {
         }
     }
 
+    /// <summary>
+    /// The selected row stays in sight: the card under the table is headed
+    /// with it. A new row or a copy lands at the end of the table, past its
+    /// bottom edge; a page switched back to builds a new table on the row
+    /// chosen before. After layout - neither has its rows laid out yet.
+    /// </summary>
+    private void ActionsGrid_ShowSelected(object sender, RoutedEventArgs e) {
+        if (sender is DataGrid { SelectedItem: { } item } grid) {
+            grid.Dispatcher.InvokeAsync(() => grid.ScrollIntoView(item), DispatcherPriority.Loaded);
+        }
+    }
+
     private void AddAction_Click(object sender, RoutedEventArgs e) {
         ActionsPage(sender)?.Add();
     }
@@ -262,6 +294,31 @@ public partial class SettingsWindow : Window {
 
     private void RemoveAction_Click(object sender, RoutedEventArgs e) {
         ActionsPage(sender)?.RemoveSelected();
+    }
+
+    /// <summary>
+    /// The button beside a row's program list: a program the actions do not
+    /// use yet, chosen on the disk (2026-09-28) - a file picked is a program
+    /// that is there. Opens where the row's program is.
+    /// </summary>
+    private void PickActionProgram_Click(object sender, RoutedEventArgs e) {
+        if (sender is not FrameworkElement { DataContext: ActionRowViewModel row }) {
+            return;
+        }
+
+        var picker = new Microsoft.Win32.OpenFileDialog {
+            Title = Strings.ActionsPickProgram,
+            Filter = Strings.ActionsProgramFilter,
+            CheckFileExists = true,
+        };
+        string program = row.Program.Trim().Trim('"');
+        if (Path.IsPathRooted(program) && Path.GetDirectoryName(program) is { } folder && Directory.Exists(folder)) {
+            picker.InitialDirectory = folder;
+            picker.FileName = Path.GetFileName(program);
+        }
+        if (picker.ShowDialog(this) == true) {
+            row.ChooseProgramFile(picker.FileName);
+        }
     }
 
 

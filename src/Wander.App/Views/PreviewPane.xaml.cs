@@ -671,9 +671,8 @@ public partial class PreviewPane : UserControl {
     // matches FastStone / IrfanView "navigator" zoom.
 
     // On the axis that does not pan the zoom view is placed as the fitted
-    // picture is: PictureMargin.Top from the top. Left and right margins are
-    // equal, and the centring math (hw - srcW)/2 gives the same X with or
-    // without them.
+    // picture is: in the middle. The margins are equal on both sides, and the
+    // centring math (hw - srcW)/2 gives the same place with or without them.
     //
     // Full screen, Z pins the same zoom (ToggleZoom, 2026-09-24): no button
     // held, the mouse pans it all the same, and Z again lets it go.
@@ -923,8 +922,8 @@ public partial class PreviewPane : UserControl {
     /// cursor stays under the cursor. Pan is per-axis: only the dimension
     /// that doesn't fit the pane scrolls with the cursor. The other one
     /// is aligned to match how ImgFit (the fit-mode view) lays it out —
-    /// centred horizontally, top-anchored vertically — so toggling zoom
-    /// on doesn't visually jump the image to the middle.
+    /// centred both ways — so toggling zoom on doesn't visually jump the
+    /// image along it.
     ///
     /// Mouse coordinates are clamped to the pane rectangle. The mouse
     /// capture during zoom lets the cursor travel outside the host (e.g.
@@ -977,14 +976,11 @@ public partial class PreviewPane : UserControl {
             : (hw - srcW) / 2;
 
         // Y axis: pan only if image is taller than the pane.
-        // When it fits, anchor to the top with the same margin ImgFit
-        // uses - ImgFit is VerticalAlignment="Top" with PictureMargin, so
-        // the fit view places the image at y = PictureMargin.Top. Centring
-        // vertically here would visibly jump the image down when the user
-        // holds LMB.
+        // When it fits, centre vertically - matches ImgFit's
+        // VerticalAlignment="Center" with equal top and bottom margins.
         double y = srcH > hh
             ? my - (my / hh) * srcH
-            : PictureMargin.Top;
+            : (hh - srcH) / 2;
 
         // On whole device pixels: a fractional offset resamples the whole
         // picture by a share of a pixel, and 1:1 stops being 1:1.

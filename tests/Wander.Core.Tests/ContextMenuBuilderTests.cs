@@ -213,6 +213,19 @@ public class ContextMenuBuilderTests {
     }
 
     [Fact]
+    public void ExtractHere_ComesBeforeExtractWithAQuestion() {
+        // The one without a question first (2026-09-25), on the archive
+        // itself and inside it alike.
+        var onArchive = ContextMenuBuilder.Build(
+            SelectionOf(File("pack.zip")) with { SelectionIsArchive = true }, ContextMenuSettings.Default);
+        var inside = ContextMenuBuilder.Build(
+            SelectionOf(File("readme.txt")) with { IsReadOnlyLocation = true, IsArchive = true }, ContextMenuSettings.Default);
+
+        Assert.Equal(IndexOf(onArchive, MenuCommandId.ExtractHere) + 1, IndexOf(onArchive, MenuCommandId.Extract));
+        Assert.Equal(IndexOf(inside, MenuCommandId.ExtractHere) + 1, IndexOf(inside, MenuCommandId.Extract));
+    }
+
+    [Fact]
     public void OrdinaryFile_HasNoExtractRow() {
         var menu = ContextMenuBuilder.Build(SelectionOf(File("a.txt")), ContextMenuSettings.Default);
 
@@ -767,7 +780,7 @@ public class ContextMenuBuilderTests {
         }, Ids(many));
         Assert.Equal(new[] {
             MenuCommandId.BatchRename, MenuCommandId.ActionsSubmenu,
-            MenuCommandId.Extract, MenuCommandId.ExtractHere, MenuCommandId.CreateShortcut, MenuCommandId.CopyPath,
+            MenuCommandId.ExtractHere, MenuCommandId.Extract, MenuCommandId.CreateShortcut, MenuCommandId.CopyPath,
         }, Ids(archive));
 
         static IEnumerable<MenuCommandId> Ids(IReadOnlyList<MenuEntry> menu) {

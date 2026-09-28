@@ -36,7 +36,8 @@ public enum ListingReason {
 /// <param name="List">The selection, its main row and the caret.</param>
 /// <param name="Scroll">The main row is brought into view.</param>
 /// <param name="Editor">The row whose name editor opens - a folder just created (L-12).</param>
-public sealed record ListLanding(ListState List, bool Scroll, string? Editor);
+/// <param name="Top">The row put first on screen before that - the last session's place (2026-09-25).</param>
+public sealed record ListLanding(ListState List, bool Scroll, string? Editor, string? Top = null);
 
 
 /// <summary>
@@ -66,7 +67,7 @@ public static class ListingArrival {
             case ArrivalOutcome.SelectRows:
                 var rows = intent.Rows.Select(r => r.FullPath).ToImmutableArray();
 
-                return new ListLanding(new ListState(rows, rows[0], rows[0]), Scroll: true, intent.RenameTarget);
+                return new ListLanding(new ListState(rows, rows[0], rows[0]), Scroll: true, intent.RenameTarget, intent.Top);
 
             case ArrivalOutcome.SelectFolder:
                 // A folder opened from a panel row is not a row of its own
@@ -80,7 +81,7 @@ public static class ListingArrival {
             _ => Settle(list, before, after, successor: true),
         };
 
-        return new ListLanding(settled, Scroll: false, Editor: null);
+        return new ListLanding(settled, Scroll: false, Editor: null, intent.Top);
     }
 
 

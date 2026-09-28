@@ -33,7 +33,7 @@ public static partial class Strings {
     /// <summary>Плитка</summary>
     public static string MenuViewTiles => Get(nameof(MenuViewTiles));
 
-    /// <summary>Крупные значки</summary>
+    /// <summary>Значки</summary>
     public static string MenuViewLargeIcons => Get(nameof(MenuViewLargeIcons));
 
     /// <summary>Эта папка · {0} - {0} почему такой вид</summary>
@@ -108,10 +108,10 @@ public static partial class Strings {
     /// <summary>Отладка</summary>
     public static string MenuDebug => Get(nameof(MenuDebug));
 
-    /// <summary>Журнал</summary>
+    /// <summary>Лог сеанса</summary>
     public static string MenuLogs => Get(nameof(MenuLogs));
 
-    /// <summary>Открыть файл журнала текущего сеанса</summary>
+    /// <summary>Открыть технический лог текущего сеанса</summary>
     public static string MenuLogsHint => Get(nameof(MenuLogsHint));
 
     /// <summary>Операция</summary>
@@ -249,7 +249,7 @@ public static partial class Strings {
     /// <summary>Удалить папку навсегда</summary>
     public static string BookmarkDeleteFolderForever => Get(nameof(BookmarkDeleteFolderForever));
 
-    /// <summary>Закладка «{0}» убрана с панели. Вернуть — Параметры → Закладки</summary>
+    /// <summary>Закладка «{0}» убрана с панели. Вернуть — Параметры → Папки и закладки</summary>
     public static string BookmarkSwitchedOff => Get(nameof(BookmarkSwitchedOff));
 
     /// <summary>Переместить вверх</summary>

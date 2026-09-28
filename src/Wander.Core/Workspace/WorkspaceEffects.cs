@@ -43,9 +43,10 @@ public sealed record FocusRow(WindowZone Surface, string Path, bool Scroll = tru
 /// <summary>
 /// Put <paramref name="List"/> on the list as the selection it shows - in
 /// one call, not told back as the user's; <paramref name="Scroll"/> brings
-/// its main row into view.
+/// its main row into view, after <paramref name="Top"/> - when there is one
+/// - has been put first on screen.
 /// </summary>
-public sealed record ApplyListSelection(ListState List, bool Scroll) : WorkspaceEffect;
+public sealed record ApplyListSelection(ListState List, bool Scroll, string? Top = null) : WorkspaceEffect;
 
 /// <summary>Open the name editor on the list's row on <paramref name="Path"/>.</summary>
 public sealed record OpenEditor(string Path) : WorkspaceEffect;

@@ -1,6 +1,7 @@
 <Window x:Class="Wander.App.Views.ShellScopePicker"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:Wander.App.Controls"
         xmlns:res="clr-namespace:Wander.App.Resources"
         Title="{x:Static res:Strings.PickerTitle}"
         Width="520" Height="560"
@@ -45,9 +46,9 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
-                    <TextBox x:Name="TypeFilter" Grid.Row="0" Padding="6,4" Margin="0,0,0,8"
-                             BorderBrush="{StaticResource Separator}"
-                             TextChanged="TypeFilter_TextChanged"/>
+                    <controls:FilterBox x:Name="TypeFilter" Grid.Row="0" Margin="0,0,0,8"
+                                        Prompt="{x:Static res:Strings.PickerTypeFilter}"
+                                        TextChanged="TypeFilter_TextChanged"/>
                     <ListBox x:Name="TypeList" Grid.Row="1" SelectionMode="Extended"
                              BorderBrush="{StaticResource Separator}" Background="{StaticResource InputBackground}">
                         <ListBox.ItemTemplate>

@@ -63,6 +63,29 @@ public class RecentScopesTests {
         Assert.Equal(expected, ShellScopes.ExtensionOf(path));
     }
 
+    [Theory]
+    [InlineData(@"C:\work\note.TXT", false, ".txt")]
+    [InlineData(@"C:\work\README", false, null)]
+    [InlineData(@"C:\work\sub", true, ShellScopes.Directory)]
+    // A dot in a folder's name is not a type.
+    [InlineData(@"C:\work\v1.2", true, ShellScopes.Directory)]
+    public void MenuScopeOf_IsTheItemsOwnType(string path, bool isFolder, string? expected) {
+        Assert.Equal(expected, ShellScopes.MenuScopeOf(path, isFolder, _ => throw new InvalidOperationException("not a shortcut")));
+    }
+
+    [Fact]
+    public void MenuScopeOf_AShortcutStandsForItsTarget() {
+        // The shell builds a link's menu from its target's handlers (stand
+        // 2026-09-25): the rows belong to the target's type, not to .lnk.
+        Assert.Equal(".psd", ShellScopes.MenuScopeOf(@"C:\work\art.lnk", false, _ => @"D:\art\cover.PSD"));
+        Assert.Equal(ShellScopes.Directory, ShellScopes.MenuScopeOf(@"C:\work\art.lnk", true, _ => @"D:\art"));
+        // Nothing to name: an unreadable link, one to a file with no
+        // extension, one to another link.
+        Assert.Null(ShellScopes.MenuScopeOf(@"C:\work\broken.lnk", false, _ => null));
+        Assert.Null(ShellScopes.MenuScopeOf(@"C:\work\readme.lnk", false, _ => @"D:\README"));
+        Assert.Null(ShellScopes.MenuScopeOf(@"C:\work\chain.lnk", false, _ => @"D:\other.lnk"));
+    }
+
 
     private static IReadOnlyList<string> Empty => Array.Empty<string>();
 

@@ -27,6 +27,13 @@ public static class ShellVerbs {
             "copyaspath", "windows.copyaspath", "windows.modernshare", "windows.share",
             // Windows 11 "Add to Favorites" — Wander has its own bookmarks panel.
             "pintohome", "pintohomefile",
+            // Windows Terminal's "Open in Terminal" - release, Preview, Canary
+            // (2026-09-28). Its verb is its CLSID (OpenTerminalHere.h in
+            // microsoft/terminal). Wander's own row does the same and more:
+            // it is in the header menu too and falls back to PowerShell.
+            "{9F156763-7844-4DC4-B2B1-901F640F5155}",
+            "{02DB545A-3E20-46DE-83A5-1329B1E88B6B}",
+            "{6119575F-6918-4392-AF16-C2C627AF9416}",
         };
 
 

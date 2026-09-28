@@ -128,6 +128,13 @@ public sealed record SessionState {
     public NavigationStop? LastPath { get; init; }
 
     /// <summary>
+    /// Where the list stood in <see cref="LastPath"/>: the file it was on and
+    /// the row first on screen (2026-09-25). Null on a file written before
+    /// this field existed, and when there was nothing to remember.
+    /// </summary>
+    public ListPlace? LastPlace { get; init; }
+
+    /// <summary>
     /// Legacy (up to 0.4.x): folders where the user picked a view by hand.
     /// Read once, on the first start after the update, and moved into
     /// <c>folders.json</c> (<c>IFolderSettingsStore</c>); never written
@@ -197,6 +204,71 @@ public sealed record SessionState {
 
     /// <summary>Window height when the sizes above were written; see <see cref="LayoutWindowWidth"/>.</summary>
     public double LayoutWindowHeight { get; init; }
+}
+
+
+/// <summary>
+/// Where the list stood in a folder, for coming back to it the next session
+/// (2026-09-25): the file it was on - its main selected row - and the row
+/// first on screen. The folder is gone: its nearest survivor opens as it
+/// always did, and this is not used. The file is gone: the row that took its
+/// place is selected, found among the rows that stood around it
+/// (<c>CurrentRowFallback</c>); none of those left either -
+/// the folder from its top, nothing selected.
+/// </summary>
+public sealed record ListPlace {
+    /// <summary>How many rows on each side of the file are kept to find the one that took its place.</summary>
+    public const int Neighbors = 8;
+
+
+    /// <summary>The file the list was on; null when nothing was selected.</summary>
+    public string? Row { get; init; }
+
+    /// <summary>The rows around <see cref="Row"/> as they stood, in order, <see cref="Row"/> among them.</summary>
+    public IReadOnlyList<string> StoodAmong { get; init; } = Array.Empty<string>();
+
+    /// <summary>The row first on screen; null when it is not known.</summary>
+    public string? Top { get; init; }
+
+
+    /// <summary>The place in <paramref name="rows"/>, or null when there is nothing to remember.</summary>
+    /// <param name="rows">The list's rows, in order.</param>
+    /// <param name="row">The file it is on.</param>
+    /// <param name="top">The row first on screen.</param>
+    public static ListPlace? Of(IReadOnlyList<string> rows, string? row, string? top) {
+        int at = row is null ? -1 : IndexOf(rows, row);
+        string? first = top is null || IndexOf(rows, top) < 0 ? null : top;
+        if (at < 0 && first is null) {
+            return null;
+        }
+
+        int from = Math.Max(0, at - Neighbors);
+        int to = at < 0 ? -1 : Math.Min(rows.Count - 1, at + Neighbors);
+
+        return new ListPlace {
+            Row = at < 0 ? null : rows[at],
+            StoodAmong = at < 0 ? Array.Empty<string>() : rows.Skip(from).Take(to - from + 1).ToArray(),
+            Top = first,
+        };
+    }
+
+    /// <summary>The same place as <paramref name="other"/>: the same file, the same row on top.</summary>
+    public bool SameAs(ListPlace? other) {
+        return other is not null
+            && string.Equals(Row, other.Row, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(Top, other.Top, StringComparison.OrdinalIgnoreCase);
+    }
+
+
+    private static int IndexOf(IReadOnlyList<string> rows, string path) {
+        for (int i = 0; i < rows.Count; i++) {
+            if (string.Equals(rows[i], path, StringComparison.OrdinalIgnoreCase)) {
+                return i;
+            }
+        }
+
+        return -1;
+    }
 }
 
 

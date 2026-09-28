@@ -28,6 +28,10 @@ internal sealed class SiteBuilder {
     private const string LandingSource = "docs/site/index.html";
     private const string TemplateSource = "tools/site/page.html";
 
+    /// <summary>Where the settings pages name the guide section F1 opens.</summary>
+    private const string SettingsPagesSource = "src/Wander.App/ViewModels/SettingsCategoryViewModel.cs";
+
+    private static readonly Regex _guideArgument = new(@"\bguide: ""([^""]*)""");
     private static readonly Regex _scheme = new("^[a-z][a-z0-9+.-]*:", RegexOptions.IgnoreCase);
     private static readonly Regex _placeholder = new(@"\{\{([a-z]+)\}\}");
     private static readonly Regex _link = new(@"\s(?:href|src)=""([^""]*)""");
@@ -80,6 +84,14 @@ internal sealed class SiteBuilder {
                 ["main"] = RenderPage(guide, i),
             });
         }
+        // What the app's "Помощь" opens (CrashReporter.GuideUrl): the guide
+        // has no page of its own at guide/, so this one sends the reader on
+        // to the first - a refresh and a link, no script.
+        string first = $"{guide.Pages[0].Slug}/index.html";
+        _pages["guide/index.html"] =
+            "<!doctype html>\n<html lang=\"ru\">\n<head>\n<meta charset=\"utf-8\">\n" +
+            $"<meta http-equiv=\"refresh\" content=\"0; url={first}\">\n<title>Руководство | Wander</title>\n</head>\n" +
+            $"<body><a href=\"{first}\">Руководство</a></body>\n</html>\n";
         _pages["versions/index.html"] = Fill(template, TemplateSource, new() {
             ["title"] = "Версии | Wander",
             ["css"] = css,
@@ -100,6 +112,7 @@ internal sealed class SiteBuilder {
         // reported with its line, and would come back here once per page.
         if (Errors.Count == 0) {
             CheckLinks();
+            CheckSettingsPages();
         }
     }
 
@@ -130,7 +143,10 @@ internal sealed class SiteBuilder {
 
     /// <summary>Sizes against the budget: a guide page 10-30 KB, the landing with its pictures under 300 KB.</summary>
     public IEnumerable<string> Summary() {
-        var guidePages = _pages.Where(p => p.Key.StartsWith("guide/", StringComparison.Ordinal)).ToList();
+        // guide/index.html only forwards to the first page.
+        var guidePages = _pages
+            .Where(p => p.Key.StartsWith("guide/", StringComparison.Ordinal) && p.Key != "guide/index.html")
+            .ToList();
         var largest = guidePages.MaxBy(p => _utf8.GetByteCount(p.Value));
         long pictures = _files.Values.Sum(file => new FileInfo(file).Length);
 
@@ -344,6 +360,37 @@ internal sealed class SiteBuilder {
                     Errors.Add($"{path}: no #{fragment} in {target}");
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// F1 on a settings page opens the site's guide at the page the settings
+    /// page names (<c>guide: "slug"</c> or <c>"slug#section"</c>). A heading
+    /// renamed in GUIDE.md renames the page, and F1 would land on a 404, so
+    /// every such target has to be a built page, and its section an id on
+    /// it - and there have to be some: a rename of the argument must not
+    /// pass as "nothing to check".
+    /// </summary>
+    private void CheckSettingsPages() {
+        string[] lines = Read(SettingsPagesSource).Split('\n');
+        int found = 0;
+        for (int i = 0; i < lines.Length; i++) {
+            foreach (Match match in _guideArgument.Matches(lines[i])) {
+                found++;
+                string target = match.Groups[1].Value;
+                int hash = target.IndexOf('#', StringComparison.Ordinal);
+                string page = $"guide/{(hash < 0 ? target : target[..hash])}/index.html";
+                string section = hash < 0 ? "" : target[(hash + 1)..];
+                string where = $"{SettingsPagesSource}:{i + 1}: F1 opens {target}";
+                if (!_pages.TryGetValue(page, out string? html)) {
+                    Errors.Add($"{where}, no {page} in the site");
+                } else if (section.Length > 0 && !_id.Matches(html).Any(id => id.Groups[1].Value == section)) {
+                    Errors.Add($"{where}, no #{section} in {page}");
+                }
+            }
+        }
+        if (found == 0) {
+            Errors.Add($"{SettingsPagesSource}: no guide: \"...\" targets found - the settings pages' F1 is not checked");
         }
     }
 

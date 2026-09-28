@@ -22,7 +22,7 @@ public static class ListRules {
 
             case ListingLanded landed:
                 var landing = ListingArrival.Land(state.List, landed.Before, landed.After, landed.Reason, landed.Intent, landed.Renames);
-                effects.Add(new ApplyListSelection(landing.List, landing.Scroll));
+                effects.Add(new ApplyListSelection(landing.List, landing.Scroll, landing.Top));
                 if (landing.Editor is { } editor) {
                     effects.Add(new OpenEditor(editor));
                 }

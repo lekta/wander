@@ -101,7 +101,8 @@ public static class KeyboardRules {
     /// The list's rows landed. Rows an operation or an undo brought, a folder
     /// walked into with a row to come back to: the keyboard goes onto the
     /// main one, brought into view - from the list; from nowhere too when the
-    /// operation ran behind a dialog (K-3, K-6, L-6, L-7). The keyboard's row
+    /// operation ran behind a dialog, or the window came up on the last
+    /// session's place (K-3, K-6, L-6, L-7). The keyboard's row
     /// went - deleted, hidden by the filter, renamed: onto the row that took
     /// its place, nothing scrolling (K-1, K-11). Otherwise it stays (K-7,
     /// K-12); a keyboard in a panel always does.
