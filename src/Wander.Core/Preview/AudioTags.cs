@@ -71,6 +71,15 @@ public static class AudioTags {
     /// </summary>
     private static readonly string[] _coverNames = { "cover", "folder", "front", "album", "albumart", "artwork" };
 
+    /// <summary>
+    /// What a ripper or a download leaves beside the tracks of an album:
+    /// a folder of music and these is still an album, and its lone picture
+    /// is still its cover.
+    /// </summary>
+    private static readonly HashSet<string> _ripCompanions = new(StringComparer.OrdinalIgnoreCase) {
+        ".cue", ".log", ".m3u", ".m3u8", ".nfo", ".txt", ".sfv", ".md5", ".accurip", ".ini", ".db",
+    };
+
 
     public static bool IsAudio(string path) {
         return Extensions.Contains(Path.GetExtension(path));
@@ -141,7 +150,10 @@ public static class AudioTags {
     /// folder — that one. The last rule is deliberately narrow: with two
     /// unnamed pictures there is no way to tell the front cover from the
     /// back, and showing the back of the sleeve as the cover is worse than
-    /// showing nothing.
+    /// showing nothing. Narrower still since 2026-09-29: the folder must
+    /// look like an album - music and what a rip leaves beside it
+    /// (<see cref="_ripCompanions"/>). In a folder of odds and ends the lone
+    /// picture is a screenshot, and every track there wore it.
     /// </para>
     /// </summary>
     public static string? CoverBeside(string path) {
@@ -152,9 +164,13 @@ public static class AudioTags {
             }
 
             var pictures = new List<string>();
+            bool onlyMusicBeside = true;
             foreach (string file in Directory.EnumerateFiles(directory)) {
-                if (_coverExtensions.Contains(Path.GetExtension(file), StringComparer.OrdinalIgnoreCase)) {
+                string extension = Path.GetExtension(file);
+                if (_coverExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase)) {
                     pictures.Add(file);
+                } else if (!Extensions.Contains(extension) && !_ripCompanions.Contains(extension)) {
+                    onlyMusicBeside = false;
                 }
             }
             if (pictures.Count == 0) {
@@ -178,7 +194,7 @@ public static class AudioTags {
                 }
             }
 
-            return pictures.Count == 1 ? pictures[0] : null;
+            return pictures.Count == 1 && onlyMusicBeside ? pictures[0] : null;
         } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException) {
             return null;
         }

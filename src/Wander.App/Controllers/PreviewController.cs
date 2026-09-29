@@ -1067,6 +1067,9 @@ public sealed class PreviewController : ObservableObject {
         _isVisible && (_kind == PreviewKind.Unsupported
             || (_kind == PreviewKind.None && _primary is not { Kind: EntryKind.File }));
 
+    /// <summary>The file the pane is showing, while it is shown - what the gallery's helpers work out first.</summary>
+    public string? ShownPath => _isVisible ? _primary?.FullPath : null;
+
     /// <summary>
     /// A HEIF picture needs an extension from the Microsoft Store (PLAN B10):
     /// the placeholder says which, and a button under it opens its page -
@@ -1540,6 +1543,11 @@ public sealed class PreviewController : ObservableObject {
     /// </summary>
     public void ReloadCompanions() {
         ScheduleCompanionUpdate();
+    }
+
+    /// <summary>Says the footer again - after a debug switch changed how it is worded.</summary>
+    public void RefreshSummary() {
+        ScheduleSummaryUpdate();
     }
 
     public void SetSelection(IReadOnlyList<FileSystemEntry> selection) {

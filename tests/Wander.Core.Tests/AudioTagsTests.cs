@@ -458,6 +458,24 @@ public class AudioTagsTests {
     }
 
     [Fact]
+    public void CoverBeside_LonePictureBesideARip_IsStillTheCover() {
+        string dir = Folder("01 - Track.flac", "02 - Track.flac", "album.cue", "rip.log", "desktop.ini", "scan001.jpg");
+
+        Assert.Equal("scan001.jpg", Path.GetFileName(AudioTags.CoverBeside(Path.Combine(dir, "01 - Track.flac"))));
+    }
+
+    /// <summary>
+    /// A folder of odds and ends: the one picture in it is a screenshot,
+    /// not the track's cover (2026-09-29, a track wore it).
+    /// </summary>
+    [Fact]
+    public void CoverBeside_LonePictureAmongOtherFiles_IsNotACover() {
+        string dir = Folder("осень.aac", "song.mp3", "book.epub", "stuff.zip", "Снимок экрана.png");
+
+        Assert.Null(AudioTags.CoverBeside(Path.Combine(dir, "осень.aac")));
+    }
+
+    [Fact]
     public void CoverBeside_TwoUnnamedPictures_PicksNeither() {
         // Front and back of the sleeve, neither named: showing the back as
         // the cover is worse than showing nothing.

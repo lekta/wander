@@ -34,6 +34,13 @@ internal static class SummaryText {
 
 
     /// <summary>
+    /// Debug menu: every camera is named by one stand-in word, so a
+    /// screenshot does not advertise the body it was shot with. Session only.
+    /// </summary>
+    internal static bool MaskCamera { get; set; }
+
+
+    /// <summary>
     /// One file: its name, then what it is - pixels when it is a picture,
     /// size, when it was changed - then what the camera recorded. The first
     /// line is the name alone: the footer draws the mention of the file's
@@ -196,7 +203,7 @@ internal static class SummaryText {
     private static string ForShots(ShotSummary shots, int read) {
         var parts = new List<string>();
         if (shots.Cameras.Count > 0) {
-            parts.Add(string.Join(", ", shots.Cameras));
+            parts.Add(MaskCamera ? Strings.SummaryCameraMask : string.Join(", ", shots.Cameras));
         }
         if (shots.Iso.Count > 0) {
             parts.Add("ISO " + string.Join(", ", shots.Iso));
@@ -232,7 +239,7 @@ internal static class SummaryText {
     private static string FormatExif(ImageMetadata m, string shownDate) {
         var parts = new List<string>();
         if (ShotSummary.CameraName(m) is { } camera) {
-            parts.Add(camera);
+            parts.Add(MaskCamera ? Strings.SummaryCameraMask : camera);
         }
         var shot = new List<string>();
         if (!string.IsNullOrEmpty(m.IsoSpeed)) {

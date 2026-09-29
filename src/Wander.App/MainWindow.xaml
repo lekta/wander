@@ -376,6 +376,10 @@
                                           Command="{Binding DebugOperationCommand}"
                                           CommandParameter="ThreeAtOnce"/>
                             </MenuItem>
+                            <MenuItem Header="{x:Static res:Strings.MenuDebugMaskCamera}"
+                                      ToolTip="{x:Static res:Strings.MenuDebugMaskCameraHint}"
+                                      IsCheckable="True"
+                                      IsChecked="{Binding MaskCamera}"/>
                         </MenuItem>
                         <Separator/>
                         <MenuItem Header="{x:Static res:Strings.MenuExit}" Command="{Binding ExitCommand}"/>

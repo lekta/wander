@@ -244,6 +244,12 @@
   <data name="MenuDebugOperationThree" xml:space="preserve">
     <value>Три сразу</value>
   </data>
+  <data name="MenuDebugMaskCamera" xml:space="preserve">
+    <value>Маскировать камеру</value>
+  </data>
+  <data name="MenuDebugMaskCameraHint" xml:space="preserve">
+    <value>Вместо модели камеры в подписи просмотра — «Сапог»; для скриншотов, до конца сеанса</value>
+  </data>
   <data name="MenuExit" xml:space="preserve">
     <value>Выход</value>
   </data>
@@ -653,15 +659,6 @@
   </data>
   <data name="KindFolderNoun" xml:space="preserve">
     <value>Папка</value>
-  </data>
-  <data name="ColumnTypeFile" xml:space="preserve">
-    <value>Файл</value>
-  </data>
-  <data name="ColumnTypeFolder" xml:space="preserve">
-    <value>Папка</value>
-  </data>
-  <data name="ColumnTypeDrive" xml:space="preserve">
-    <value>Диск</value>
   </data>
   <data name="PreviewRatingWrittenTo" xml:space="preserve">
     <value>Оценка, пишется в {0}</value>
@@ -2004,6 +2001,10 @@
   <data name="SummaryShots" xml:space="preserve">
     <value>📷 {0}</value>
     <comment>Снимков в выделении; пишется, только когда выделены не одни снимки</comment>
+  </data>
+  <data name="SummaryCameraMask" xml:space="preserve">
+    <value>Сапог</value>
+    <comment>Вместо камеры в подписи просмотра, когда в меню «Отладка» включена маскировка</comment>
   </data>
   <data name="SummaryShotsSample" xml:space="preserve">
     <value>EXIF по первым {0}</value>

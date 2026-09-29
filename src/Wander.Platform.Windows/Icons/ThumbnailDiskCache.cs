@@ -53,8 +53,14 @@ public sealed class ThumbnailDiskCache {
     /// <c>.mpeg</c>, <c>.asf</c>, <c>.3gp</c>, <c>.3g2</c> - their jumbo
     /// slot was cached as the type's icon and would have stayed one.
     /// </para>
+    ///
+    /// <para>
+    /// v4 (2026-09-29): a lone picture is a track's cover only in a folder
+    /// of music (<c>AudioTags.CoverBeside</c>) - tracks in a mixed folder
+    /// were cached wearing its screenshot.
+    /// </para>
     /// </summary>
-    private const int Generation = 3;
+    private const int Generation = 4;
 
     private readonly string _directory;
     private readonly ILogger _log;

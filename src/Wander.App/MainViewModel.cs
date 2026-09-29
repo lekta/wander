@@ -406,7 +406,8 @@ public sealed class MainViewModel : ObservableObject {
             ServiceLocator.TryGet<ISharpnessProbe>(), _log,
             isCurrent: _session.IsCurrent,
             rows: () => _search.Source,
-            publish: (epoch, rows) => PublishRows(epoch, rows));
+            publish: (epoch, rows) => PublishRows(epoch, rows),
+            rank: HelperRank);
         Helpers.PropertyChanged += (_, e) => {
             if (e.PropertyName == nameof(ReviewHelpers.Sharpness)) {
                 _sharpness.SetActive(Helpers.Sharpness);
@@ -416,6 +417,7 @@ public sealed class MainViewModel : ObservableObject {
         // score of the frame they are on as they come on screen.
         ReviewThumb.Follow(Helpers);
         ReviewThumb.ScoreWanted += entry => _sharpness.Want(entry);
+        ReviewThumbs.Prioritize(HelperRank);
         Ratings.CompanionsChanged += (_, _) => {
             Preview.ReloadCompanions();
             PreviewSecond.ReloadCompanions();
@@ -1076,6 +1078,21 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     /// <summary>
+    /// The order the gallery's helpers are worked out in, among the cells on
+    /// screen: the files in the preview, then the rest of the selection,
+    /// then everything else. Asked when a slot frees, so a file selected
+    /// while it waits moves up.
+    /// </summary>
+    private int HelperRank(string path) {
+        if (string.Equals(path, Preview.ShownPath, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(path, PreviewSecond.ShownPath, StringComparison.OrdinalIgnoreCase)) {
+            return 0;
+        }
+
+        return _selectedEntries.Any(e => string.Equals(e.FullPath, path, StringComparison.OrdinalIgnoreCase)) ? 1 : 2;
+    }
+
+    /// <summary>
     /// The place of <paramref name="target"/>. A panel row is its own place -
     /// an ordinary folder, unless it is in an archive or is the bin; rows of
     /// the list and the empty space are in the open folder.
@@ -1600,6 +1617,20 @@ public sealed class MainViewModel : ObservableObject {
 
     /// <summary>The debug menu's fake operation; the parameter names the scenario (PLAN AI1).</summary>
     public RelayCommand DebugOperationCommand { get; }
+
+    /// <summary>The debug menu's camera mask (<see cref="SummaryText.MaskCamera"/>); the footers say it again at once.</summary>
+    public bool MaskCamera {
+        get => SummaryText.MaskCamera;
+        set {
+            if (SummaryText.MaskCamera == value) {
+                return;
+            }
+            SummaryText.MaskCamera = value;
+            Preview.RefreshSummary();
+            PreviewSecond.RefreshSummary();
+            Raise();
+        }
+    }
     public RelayCommand ToggleBookmarksCommand { get; }
     public RelayCommand ToggleFoldersCommand { get; }
     public RelayCommand AddBookmarkCommand { get; }

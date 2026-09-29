@@ -1,8 +1,8 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Windows.Threading;
 using Wander.Core.Diagnostics;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
+using Wander.Core.Imaging;
 using Wander.Core.Listing;
 using Wander.Core.Logging;
 
@@ -17,7 +17,8 @@ namespace Wander.App.Controllers;
 /// Scored on demand, a cell at a time: the cells ask as they come on screen
 /// (<c>ReviewThumb</c>), so a folder of three hundred RAW files costs the
 /// screenful being looked at rather than all of it. The probe remembers what
-/// it measured, so scrolling back costs a lookup.
+/// it measured, so scrolling back costs a lookup. Of the cells waiting, the
+/// host's rank decides who goes first.
 /// </para>
 ///
 /// <para>
@@ -28,8 +29,6 @@ namespace Wander.App.Controllers;
 /// them out.
 /// </para>
 /// </summary>
-[SuppressMessage("Design", "CA1001",
-    Justification = "A SemaphoreSlim whose wait handle nobody asks for holds nothing to release; the controller lives as long as the main window.")]
 public sealed class SharpnessController {
     /// <summary>How many files are measured at once. The disk is shared with the thumbnails.</summary>
     private const int Parallelism = 2;
@@ -40,7 +39,7 @@ public sealed class SharpnessController {
     private readonly Func<IReadOnlyList<FileSystemEntry>> _rows;
     private readonly Action<int, IReadOnlyList<FileSystemEntry>> _publish;
     private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
-    private readonly SemaphoreSlim _gate = new(Parallelism);
+    private readonly RankedGate _gate;
 
     // What the rows on screen are to say, and what has already been asked
     // about, both for the folder listed now. UI thread only.
@@ -56,12 +55,15 @@ public sealed class SharpnessController {
     /// <param name="isCurrent">Whether an epoch is still the listing on screen.</param>
     /// <param name="rows">The rows on screen now - what the answers are put into.</param>
     /// <param name="publish">Hands a set of rows to the list, epoch and all.</param>
+    /// <param name="rank">Which files are measured first, lowest rank first.</param>
     public SharpnessController(
         ISharpnessProbe? probe,
         ILogger log,
         Func<int, bool> isCurrent,
         Func<IReadOnlyList<FileSystemEntry>> rows,
-        Action<int, IReadOnlyList<FileSystemEntry>> publish) {
+        Action<int, IReadOnlyList<FileSystemEntry>> publish,
+        Func<string, int> rank) {
+        _gate = new RankedGate(Parallelism, rank);
         _probe = probe;
         _log = log;
         _isCurrent = isCurrent;
@@ -144,7 +146,7 @@ public sealed class SharpnessController {
     private async Task ScoreAsync(FileSystemEntry entry, int epoch, CancellationToken ct) {
         double? score;
         try {
-            await _gate.WaitAsync(ct);
+            await _gate.EnterAsync(entry.FullPath, ct);
             try {
                 score = await Task.Run(() => Measure(entry), ct);
             } finally {

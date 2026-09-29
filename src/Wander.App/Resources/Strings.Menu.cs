@@ -147,6 +147,12 @@ public static partial class Strings {
     /// <summary>Три сразу</summary>
     public static string MenuDebugOperationThree => Get(nameof(MenuDebugOperationThree));
 
+    /// <summary>Маскировать камеру</summary>
+    public static string MenuDebugMaskCamera => Get(nameof(MenuDebugMaskCamera));
+
+    /// <summary>Вместо модели камеры в подписи просмотра — «Сапог»; для скриншотов, до конца сеанса</summary>
+    public static string MenuDebugMaskCameraHint => Get(nameof(MenuDebugMaskCameraHint));
+
     /// <summary>Журнал действий за сеанс — открыть в текстовом просмотрщике</summary>
     public static string JournalTooltip => Get(nameof(JournalTooltip));
 

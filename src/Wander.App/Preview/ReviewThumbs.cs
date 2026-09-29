@@ -24,7 +24,8 @@ namespace Wander.App.Preview;
 /// Metered at two files at a time and kept by path, stamp and switches:
 /// scrolling back to a cell costs a lookup. Only the cells on screen ever
 /// ask (see <c>ReviewThumb</c>), so a folder of three hundred RAW files is
-/// never measured whole.
+/// never measured whole. Of those, the host's rank decides who goes first
+/// (<see cref="Prioritize"/>).
 /// </para>
 /// </summary>
 internal static class ReviewThumbs {
@@ -38,9 +39,16 @@ internal static class ReviewThumbs {
     /// </summary>
     private const double CellDensity = 0.06;
 
-    private static readonly SemaphoreSlim _gate = new(2);
+    private static Func<string, int> _rank = _ => 0;
+    private static readonly RankedGate _gate = new(2, path => _rank(path));
     private static readonly Lock _lock = new();
     private static readonly Dictionary<string, ImageSource?> _cache = new(StringComparer.Ordinal);
+
+
+    /// <summary>Which files are rendered first, lowest rank first. Set once, by the host.</summary>
+    public static void Prioritize(Func<string, int> rank) {
+        _rank = rank;
+    }
 
 
     /// <summary>
@@ -55,7 +63,7 @@ internal static class ReviewThumbs {
             }
         }
 
-        await _gate.WaitAsync(ct);
+        await _gate.EnterAsync(path, ct);
         ImageSource? made;
         try {
             made = await Task.Run(() => Render(path, ask, side, ct), ct);

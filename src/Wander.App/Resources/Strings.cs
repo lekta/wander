@@ -71,6 +71,9 @@ public static partial class Strings {
     /// <summary>EXIF по первым {0}</summary>
     public static string SummaryShotsSample => Get(nameof(SummaryShotsSample));
 
+    /// <summary>Сапог</summary>
+    public static string SummaryCameraMask => Get(nameof(SummaryCameraMask));
+
     /// <summary>Недавние папки (F4)</summary>
     public static string RecentFoldersHint => Get(nameof(RecentFoldersHint));
 
@@ -175,15 +178,6 @@ public static partial class Strings {
 
     /// <summary>Папка</summary>
     public static string KindFolderNoun => Get(nameof(KindFolderNoun));
-
-    /// <summary>Файл — колонка «Тип»</summary>
-    public static string ColumnTypeFile => Get(nameof(ColumnTypeFile));
-
-    /// <summary>Папка — колонка «Тип»</summary>
-    public static string ColumnTypeFolder => Get(nameof(ColumnTypeFolder));
-
-    /// <summary>Диск — колонка «Тип»</summary>
-    public static string ColumnTypeDrive => Get(nameof(ColumnTypeDrive));
 
     /// <summary>Переименовать</summary>
     public static string RenameTitle => Get(nameof(RenameTitle));

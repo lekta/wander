@@ -39,6 +39,9 @@ internal static class SystemRootFolders {
         "$GetCurrent",
         // Delivery Optimization / Windows Update download cache on data drives.
         "$Windows.~LS",
+        // Junction to C:\Users kept for programs from the XP days; listing
+        // it is denied, so it is a dead end with a shortcut arrow.
+        "Documents and Settings",
         // Files: virtual memory, hibernation, the store apps' swap, and the
         // crash-dump scratch file. Always in use, never the user's.
         "pagefile.sys",
