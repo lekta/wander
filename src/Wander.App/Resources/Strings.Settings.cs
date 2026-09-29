@@ -177,7 +177,7 @@ public static partial class Strings {
     /// <summary>Таблица</summary>
     public static string SettingsDetailsGroup => Get(nameof(SettingsDetailsGroup));
 
-    /// <summary>Плитки</summary>
+    /// <summary>Плитка</summary>
     public static string SettingsTilesGroup => Get(nameof(SettingsTilesGroup));
 
     /// <summary>Высота строки, px</summary>
@@ -207,10 +207,10 @@ public static partial class Strings {
     /// <summary>Спрашивать перед созданием файла оценки</summary>
     public static string SettingsConfirmCreateSidecar => Get(nameof(SettingsConfirmCreateSidecar));
 
-    /// <summary>Первая оценка снимка без сайдкара создаёт файл рядом с ним. Снятая г</summary>
+    /// <summary>Первая оценка снимка без спутника создаёт файл рядом с ним. Снятая г</summary>
     public static string SettingsConfirmCreateSidecarHint => Get(nameof(SettingsConfirmCreateSidecarHint));
 
-    /// <summary>Файл оценки для снимка без сайдкара</summary>
+    /// <summary>Файл оценки для снимка без спутника</summary>
     public static string SettingsRawRatingFormat => Get(nameof(SettingsRawRatingFormat));
 
     /// <summary>.xmp — Adobe, darktable, RawTherapee 5.11+</summary>

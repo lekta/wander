@@ -46,6 +46,14 @@ internal sealed class SiteBuilder {
     /// </summary>
     private static readonly Regex _screenshot = new(@"^<!--\s*скрин:\s*(.*?)\s*-->\s*$", RegexOptions.Singleline);
 
+    /// <summary>
+    /// A picture GUIDE.md sizes or floats itself: a line of its own holding
+    /// <c>&lt;img src alt [width] [align="right"]&gt;</c>, which GitHub
+    /// renders as it is.
+    /// </summary>
+    private static readonly Regex _imageTag = new(@"^<img\s+([^>]*?)\s*/?>\s*$", RegexOptions.Singleline);
+
+    private static readonly Regex _attribute = new(@"([a-z]+)=""([^""]*)""");
     private static readonly Regex _scheme = new("^[a-z][a-z0-9+.-]*:", RegexOptions.IgnoreCase);
     private static readonly Regex _placeholder = new(@"\{\{([a-z]+)\}\}");
     private static readonly Regex _link = new(@"\s(?:href|src)=""([^""]*)""");
@@ -90,6 +98,9 @@ internal sealed class SiteBuilder {
         _latest = releases[0];
         foreach (string picture in Directory.GetFiles(Path.Combine(_root, "docs", "screenshots"), "*.webp")) {
             _files["img/" + Path.GetFileName(picture)] = picture;
+        }
+        foreach (string icon in Directory.GetFiles(Path.Combine(_root, "docs", "icons"), "*.svg")) {
+            _files["img/icons/" + Path.GetFileName(icon)] = icon;
         }
 
         string home = $"guide/{guide.Pages[0].Slug}/index.html";
@@ -181,7 +192,9 @@ internal sealed class SiteBuilder {
     private string RenderPage(Guide guide, int index) {
         GuidePage page = guide.Pages[index];
         foreach (Block block in page.Blocks) {
-            foreach (LinkInline link in Links(block)) {
+            // A list, not the live walk: a screenshot gets wrapped in a link
+            // on the way, which changes the tree being walked.
+            foreach (LinkInline link in Links(block).ToList()) {
                 link.Url = Rewrite(link, page, guide);
             }
         }
@@ -221,6 +234,11 @@ internal sealed class SiteBuilder {
                 if (_debug) {
                     renderer.WriteLine($"<p class=\"shot-todo\">Скриншот: {Escape(shot.Groups[1].Value)}</p>");
                 }
+
+                continue;
+            }
+            if (block is HtmlBlock sized && _imageTag.Match(sized.Lines.ToString()) is { Success: true } tag) {
+                renderer.WriteLine(SizedPicture(tag.Groups[1].Value, $"{GuideSource}:{sized.Line + 1}"));
 
                 continue;
             }
@@ -359,21 +377,105 @@ internal sealed class SiteBuilder {
         return $"../{target.Page.Slug}/index.html" + (target.Anchor is null ? "" : "#" + target.Anchor);
     }
 
-    /// <summary>A picture keeps its file name under img/ and gets its size, so the page does not jump when it arrives.</summary>
+    /// <summary>
+    /// A picture keeps its file name under img/ and gets its size, so the
+    /// page does not jump when it arrives. A screenshot is also a link to its
+    /// own file: the column shows it shrunk, a click opens it full size - no
+    /// script, Back returns. An icon of the interface (docs/icons, redrawn
+    /// from the app's XAML) sits in the line of text and opens nothing.
+    /// </summary>
     private string Picture(LinkInline link, string full, string relative, string where) {
-        var size = File.Exists(full) ? Webp.Size(full) : null;
-        if (size is null || !relative.StartsWith("docs/screenshots/", StringComparison.Ordinal)) {
-            Errors.Add($"{where}: pictures are docs/screenshots/*.webp, not {relative}");
+        var attributes = link.GetAttributes();
+        if (relative.StartsWith("docs/icons/", StringComparison.Ordinal) && relative.EndsWith(".svg", StringComparison.Ordinal)) {
+            if (Svg.Size(full) is not { } icon) {
+                Errors.Add($"{where}: {relative} has no width and height on its <svg>");
 
+                return link.Url ?? "";
+            }
+
+            attributes.AddClass("icon");
+            attributes.AddProperty("width", icon.Width.ToString(CultureInfo.InvariantCulture));
+            attributes.AddProperty("height", icon.Height.ToString(CultureInfo.InvariantCulture));
+
+            return "../../img/icons/" + Path.GetFileName(full);
+        }
+        if (Screenshot(full, relative, where) is not { } size) {
             return link.Url ?? "";
         }
 
-        var attributes = link.GetAttributes();
-        attributes.AddProperty("width", size.Value.Width.ToString(CultureInfo.InvariantCulture));
-        attributes.AddProperty("height", size.Value.Height.ToString(CultureInfo.InvariantCulture));
+        string url = "../../img/" + Path.GetFileName(full);
+        attributes.AddProperty("width", size.Width.ToString(CultureInfo.InvariantCulture));
+        attributes.AddProperty("height", size.Height.ToString(CultureInfo.InvariantCulture));
         attributes.AddProperty("loading", "lazy");
+        if (link.Parent is not LinkInline) {
+            var zoom = new LinkInline(url, "");
+            zoom.GetAttributes().AddClass("zoom");
+            link.ReplaceBy(zoom, copyChildren: false);
+            zoom.AppendChild(link);
+        }
 
-        return "../../img/" + Path.GetFileName(full);
+        return url;
+    }
+
+    /// <summary>
+    /// The HTML of a picture GUIDE.md sizes or floats itself
+    /// (<see cref="_imageTag"/>): src and alt as a markdown picture has them,
+    /// width in pixels - the height follows the picture - and align="right"
+    /// to float it beside the text. Anything else in the tag is an error: the
+    /// same line has to mean the same on GitHub.
+    /// </summary>
+    private string SizedPicture(string tag, string where) {
+        var attributes = _attribute.Matches(tag)
+            .ToDictionary(m => m.Groups[1].Value, m => WebUtility.HtmlDecode(m.Groups[2].Value), StringComparer.Ordinal);
+        bool known = attributes.Keys.All(key => key is "src" or "alt" or "width" or "align");
+        if (!known || _attribute.Replace(tag, "").Trim().Length > 0
+            || !attributes.TryGetValue("src", out string? src) || !attributes.TryGetValue("alt", out string? alt) || alt.Length == 0) {
+            Errors.Add($"{where}: <img> takes src, alt, width and align=\"right\", nothing else");
+
+            return "";
+        }
+
+        string full = Path.GetFullPath(Path.Combine(_root, "docs", Uri.UnescapeDataString(src)));
+        string relative = Path.GetRelativePath(_root, full).Replace('\\', '/');
+        if (Screenshot(full, relative, where) is not { } size) {
+            return "";
+        }
+
+        int width = size.Width;
+        if (attributes.TryGetValue("width", out string? asked)
+            && !(int.TryParse(asked, NumberStyles.None, CultureInfo.InvariantCulture, out width) && width > 0)) {
+            Errors.Add($"{where}: <img width=\"{asked}\"> - pixels, a whole number");
+
+            return "";
+        }
+        bool right = attributes.TryGetValue("align", out string? align);
+        if (right && align != "right") {
+            Errors.Add($"{where}: <img align=\"{align}\"> - only \"right\" floats");
+
+            return "";
+        }
+
+        string url = "../../img/" + Path.GetFileName(full);
+        int height = (int)Math.Round((double)width * size.Height / size.Width);
+        string picture = $"<img src=\"{url}\" alt=\"{Escape(alt)}\" width=\"{width}\" height=\"{height}\" loading=\"lazy\">";
+
+        // Floated, the picture is a box beside the text; otherwise it opens a
+        // paragraph of its own, as a markdown picture does.
+        return right
+            ? $"<a class=\"zoom right\" href=\"{url}\">{picture}</a>"
+            : $"<p><a class=\"zoom\" href=\"{url}\">{picture}</a></p>";
+    }
+
+    /// <summary>The size of a screenshot; anything but docs/screenshots/*.webp is an error, and null.</summary>
+    private (int Width, int Height)? Screenshot(string full, string relative, string where) {
+        var size = File.Exists(full) ? Webp.Size(full) : null;
+        if (size is null || !relative.StartsWith("docs/screenshots/", StringComparison.Ordinal)) {
+            Errors.Add($"{where}: pictures are docs/screenshots/*.webp and docs/icons/*.svg, not {relative}");
+
+            return null;
+        }
+
+        return size;
     }
 
     /// <summary>

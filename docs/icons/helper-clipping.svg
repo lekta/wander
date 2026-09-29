@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- IconHelperClip in src/Wander.App/Views/PreviewPane.xaml: black to white, both ends clipped. -->
+  <defs>
+    <linearGradient id="range">
+      <stop offset="0" stop-color="#3D5AFE"/>
+      <stop offset="0.16" stop-color="#3D5AFE"/>
+      <stop offset="0.2" stop-color="#000000"/>
+      <stop offset="0.8" stop-color="#FFFFFF"/>
+      <stop offset="0.84" stop-color="#FF3B30"/>
+      <stop offset="1" stop-color="#FF3B30"/>
+    </linearGradient>
+  </defs>
+  <circle cx="8" cy="8" r="7" fill="url(#range)" stroke="#9A9A9A"/>
+  <path d="M8,1.2 L8,14.8" fill="none" stroke="#9A9A9A"/>
+</svg>

@@ -150,7 +150,7 @@ public sealed class ContextMenuSettingsCategory : SettingsCategoryViewModel {
 /// </summary>
 public sealed class ActionsSettingsCategory : SettingsCategoryViewModel {
     public ActionsSettingsCategory(SettingsViewModel owner)
-        : base(Strings.SettingsCategoryActions, owner, guide: "svoi-komandy", nested: true) {
+        : base(Strings.SettingsCategoryActions, owner, guide: "svoi-deystviya", nested: true) {
         // The owner builds its rows anew on a reset of all settings, with
         // this page off screen and no table to drop the selection: a row
         // no longer in the table would stay on the card, and what is typed

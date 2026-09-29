@@ -399,10 +399,10 @@ public static partial class Strings {
     /// <summary>Метка снята — файлов: {0}</summary>
     public static string StatusColorCleared => Get(nameof(StatusColorCleared));
 
-    /// <summary>Не записано в сайдкар: {0}{1}</summary>
+    /// <summary>Не записано в спутник: {0}{1}</summary>
     public static string StatusRatingNotWritten => Get(nameof(StatusRatingNotWritten));
 
-    /// <summary>Не записано в сайдкары — файлов: {0}{1}</summary>
+    /// <summary>Не записано в спутники — файлов: {0}{1}</summary>
     public static string StatusRatingNotWrittenMany => Get(nameof(StatusRatingNotWrittenMany));
 
     /// <summary>нет прав на запись</summary>

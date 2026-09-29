@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- IconHelperAf in src/Wander.App/Views/PreviewPane.xaml: the camera's focus frame. -->
+  <circle cx="8" cy="8" r="7" fill="none" stroke="#9A9A9A"/>
+  <rect x="4.5" y="4.5" width="7" height="7" fill="none" stroke="#FF2BD6" stroke-width="1.6"/>
+</svg>

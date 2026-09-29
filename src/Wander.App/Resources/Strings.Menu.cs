@@ -111,7 +111,7 @@ public static partial class Strings {
     /// <summary>Показать или скрыть панель папок (Ctrl+B)</summary>
     public static string NavToggleFolders => Get(nameof(NavToggleFolders));
 
-    /// <summary>Параметры</summary>
+    /// <summary>Настройки</summary>
     public static string MenuOptions => Get(nameof(MenuOptions));
 
     /// <summary>Обратная связь</summary>
@@ -270,7 +270,7 @@ public static partial class Strings {
     /// <summary>Удалить папку навсегда</summary>
     public static string BookmarkDeleteFolderForever => Get(nameof(BookmarkDeleteFolderForever));
 
-    /// <summary>Закладка «{0}» убрана с панели. Вернуть — Параметры → Папки и закладки</summary>
+    /// <summary>Закладка «{0}» убрана с панели. Вернуть — Настройки → Папки и закладки</summary>
     public static string BookmarkSwitchedOff => Get(nameof(BookmarkSwitchedOff));
 
     /// <summary>Переместить вверх</summary>

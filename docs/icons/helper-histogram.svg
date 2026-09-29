@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- IconHelperHistogram in src/Wander.App/Views/PreviewPane.xaml: the chart in miniature. -->
+  <circle cx="8" cy="8" r="7" fill="none" stroke="#9A9A9A"/>
+  <path fill="#C838E8" d="M4,11 L5.2,11 L5.2,8.5 L4,8.5 Z
+                          M5.7,11 L6.9,11 L6.9,6 L5.7,6 Z
+                          M7.4,11 L8.6,11 L8.6,4.5 L7.4,4.5 Z
+                          M9.1,11 L10.3,11 L10.3,7 L9.1,7 Z
+                          M10.8,11 L12,11 L12,9.5 L10.8,9.5 Z"/>
+</svg>

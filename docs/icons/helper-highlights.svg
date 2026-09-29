@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- IconHelperHighlights in src/Wander.App/Views/PreviewPane.xaml: the range with its bright end lowered. -->
+  <defs>
+    <linearGradient id="range">
+      <stop offset="0" stop-color="#000000"/>
+      <stop offset="0.55" stop-color="#5E5E5E"/>
+      <stop offset="1" stop-color="#9A9A9A"/>
+    </linearGradient>
+  </defs>
+  <circle cx="8" cy="8" r="7" fill="url(#range)" stroke="#9A9A9A"/>
+</svg>

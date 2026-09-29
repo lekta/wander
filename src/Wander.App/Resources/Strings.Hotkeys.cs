@@ -27,7 +27,7 @@ public static partial class Strings {
     /// <summary>На уровень вверх</summary>
     public static string HotkeyUpBackspace => Get(nameof(HotkeyUpBackspace));
 
-    /// <summary>Открыть выбранное: папку — войти, файл — системной ассоциацией</summary>
+    /// <summary>Открыть выбранное: папку — войти, файл — программой по умолчанию</summary>
     public static string HotkeyOpen => Get(nameof(HotkeyOpen));
 
     /// <summary>Правка пути в адресной строке, текст выделяется целиком</summary>
@@ -39,7 +39,7 @@ public static partial class Strings {
     /// <summary>Перейти по введённому пути</summary>
     public static string HotkeyAddressGo => Get(nameof(HotkeyAddressGo));
 
-    /// <summary>Отменить правку, вернуть крошки и фокус в список</summary>
+    /// <summary>Отменить правку и вернуть клавиатуру к файлам</summary>
     public static string HotkeyAddressCancel => Get(nameof(HotkeyAddressCancel));
 
     /// <summary>Обновить содержимое папки</summary>
@@ -51,22 +51,22 @@ public static partial class Strings {
     /// <summary>Следующая / предыдущая область окна</summary>
     public static string HotkeyNextPane => Get(nameof(HotkeyNextPane));
 
-    /// <summary>В список файлов</summary>
+    /// <summary>К файлам</summary>
     public static string HotkeyToList => Get(nameof(HotkeyToList));
 
     /// <summary>В панель просмотра: текст, документ, плеер; ещё раз — во вторую половину пары</summary>
     public static string HotkeyToPreview => Get(nameof(HotkeyToPreview));
 
-    /// <summary>Из панели просмотра обратно в список</summary>
+    /// <summary>Вернуть клавиатуру к файлам</summary>
     public static string HotkeyPreviewEscape => Get(nameof(HotkeyPreviewEscape));
 
-    /// <summary>В панель папок, на узел текущей папки. Повторное нажатие — в другую панель (закладки ↔ компьютер)</summary>
+    /// <summary>В текущую панель папок, на открытую папку. Повторное нажатие — в другую панель (закладки ↔ компьютер)</summary>
     public static string HotkeyToTree => Get(nameof(HotkeyToTree));
 
     /// <summary>Показать текущую папку в дереве и встать на неё</summary>
     public static string HotkeyRevealInTree => Get(nameof(HotkeyRevealInTree));
 
-    /// <summary>Показать или убрать панель быстрого просмотра</summary>
+    /// <summary>Показать или убрать панель просмотра</summary>
     public static string HotkeyTogglePreview => Get(nameof(HotkeyTogglePreview));
 
     /// <summary>Показать или убрать панель папок (закладки и компьютер)</summary>
@@ -81,7 +81,7 @@ public static partial class Strings {
     /// <summary>Перейти в папку под курсором</summary>
     public static string HotkeyTreeEnter => Get(nameof(HotkeyTreeEnter));
 
-    /// <summary>Вернуть фокус в список</summary>
+    /// <summary>Вернуть клавиатуру к файлам</summary>
     public static string HotkeyTreeEscape => Get(nameof(HotkeyTreeEscape));
 
     /// <summary>Переименовать папку под курсором</summary>
@@ -111,7 +111,7 @@ public static partial class Strings {
     /// <summary>Удалить безвозвратно: всегда спрашивает, не откатывается</summary>
     public static string HotkeyDeleteForever => Get(nameof(HotkeyDeleteForever));
 
-    /// <summary>Переименовать прямо в строке списка (Enter — применить, Esc — отменить); два и более — группой, в своём окне</summary>
+    /// <summary>Переименовать на месте (Enter — применить, Esc — отменить); два и более — группой, в своём окне</summary>
     public static string HotkeyRename => Get(nameof(HotkeyRename));
 
     /// <summary>Создать папку</summary>
@@ -126,7 +126,7 @@ public static partial class Strings {
     /// <summary>Выделить всё</summary>
     public static string HotkeySelectAll => Get(nameof(HotkeySelectAll));
 
-    /// <summary>Фокус в поле фильтра</summary>
+    /// <summary>Поле поиска над файлами</summary>
     public static string HotkeyFilter => Get(nameof(HotkeyFilter));
 
     /// <summary>Следующее / предыдущее совпадение в панели просмотра; после последнего — следующий найденный файл</summary>
@@ -138,10 +138,10 @@ public static partial class Strings {
     /// <summary>Искать сразу, не дожидаясь паузы и не считая символы</summary>
     public static string HotkeySearchNow => Get(nameof(HotkeySearchNow));
 
-    /// <summary>Закрыть окно, клавиатура возвращается в список файлов</summary>
+    /// <summary>Закрыть окно и вернуть клавиатуру к файлам</summary>
     public static string HotkeySearchClose => Get(nameof(HotkeySearchClose));
 
-    /// <summary>Одним нажатием: остановить поиск, сбросить фильтр, вернуть клавиатуру в список</summary>
+    /// <summary>Одним нажатием: остановить и сбросить поиск, вернуть клавиатуру к файлам</summary>
     public static string HotkeyFilterEscape => Get(nameof(HotkeyFilterEscape));
 
     /// <summary>Повторить поиск</summary>
@@ -174,7 +174,7 @@ public static partial class Strings {
     /// <summary>Таблица</summary>
     public static string HotkeyViewDetails => Get(nameof(HotkeyViewDetails));
 
-    /// <summary>Плитки</summary>
+    /// <summary>Плитка</summary>
     public static string HotkeyViewTiles => Get(nameof(HotkeyViewTiles));
 
     /// <summary>Полный экран</summary>

@@ -209,7 +209,7 @@
     <value>Область просмотра</value>
   </data>
   <data name="MenuOptions" xml:space="preserve">
-    <value>Параметры</value>
+    <value>Настройки</value>
   </data>
   <data name="MenuReportIssue" xml:space="preserve">
     <value>Обратная связь</value>
@@ -1087,7 +1087,7 @@
     <value>Удалить папку навсегда</value>
   </data>
   <data name="BookmarkSwitchedOff" xml:space="preserve">
-    <value>Закладка «{0}» убрана с панели. Вернуть — Параметры → Папки и закладки</value>
+    <value>Закладка «{0}» убрана с панели. Вернуть — Настройки → Папки и закладки</value>
     <comment>{0} — подпись встроенной закладки</comment>
   </data>
   <data name="BookmarksMoveUp" xml:space="preserve">
@@ -1178,7 +1178,7 @@
     <value>Таблица</value>
   </data>
   <data name="SettingsTilesGroup" xml:space="preserve">
-    <value>Плитки</value>
+    <value>Плитка</value>
   </data>
   <data name="SettingsRowHeight" xml:space="preserve">
     <value>Высота строки, px</value>
@@ -1298,7 +1298,7 @@
     <value>%</value>
   </data>
   <data name="SettingsRawRatingFormat" xml:space="preserve">
-    <value>Файл оценки для снимка без сайдкара</value>
+    <value>Файл оценки для снимка без спутника</value>
   </data>
   <data name="SettingsRawRatingFormatXmp" xml:space="preserve">
     <value>.xmp — Adobe, darktable, RawTherapee 5.11+</value>
@@ -1363,11 +1363,11 @@
     <value>Оценка снята — файлов: {0}</value>
   </data>
   <data name="StatusRatingNotWritten" xml:space="preserve">
-    <value>Не записано в сайдкар: {0}{1}</value>
+    <value>Не записано в спутник: {0}{1}</value>
     <comment>Оценка или метка не записалась; {0} — имя снимка, {1} — причина в скобках или пусто</comment>
   </data>
   <data name="StatusRatingNotWrittenMany" xml:space="preserve">
-    <value>Не записано в сайдкары — файлов: {0}{1}</value>
+    <value>Не записано в спутники — файлов: {0}{1}</value>
     <comment>{0} — сколько, {1} — причина первого в скобках или пусто</comment>
   </data>
   <data name="ErrorNoWriteAccess" xml:space="preserve">
@@ -1574,7 +1574,7 @@
     <value>На уровень вверх</value>
   </data>
   <data name="HotkeyOpen" xml:space="preserve">
-    <value>Открыть выбранное: папку — войти, файл — системной ассоциацией</value>
+    <value>Открыть выбранное: папку — войти, файл — программой по умолчанию</value>
   </data>
   <data name="HotkeyAddressBar" xml:space="preserve">
     <value>Правка пути в адресной строке, текст выделяется целиком</value>
@@ -1586,7 +1586,7 @@
     <value>Перейти по введённому пути</value>
   </data>
   <data name="HotkeyAddressCancel" xml:space="preserve">
-    <value>Отменить правку, вернуть крошки и фокус в список</value>
+    <value>Отменить правку и вернуть клавиатуру к файлам</value>
   </data>
   <data name="HotkeyRefresh" xml:space="preserve">
     <value>Обновить содержимое папки</value>
@@ -1598,22 +1598,22 @@
     <value>Следующая / предыдущая область окна</value>
   </data>
   <data name="HotkeyToList" xml:space="preserve">
-    <value>В список файлов</value>
+    <value>К файлам</value>
   </data>
   <data name="HotkeyToPreview" xml:space="preserve">
     <value>В панель просмотра: текст, документ, плеер; ещё раз — во вторую половину пары</value>
   </data>
   <data name="HotkeyPreviewEscape" xml:space="preserve">
-    <value>Из панели просмотра обратно в список</value>
+    <value>Вернуть клавиатуру к файлам</value>
   </data>
   <data name="HotkeyToTree" xml:space="preserve">
-    <value>В панель папок, на узел текущей папки. Повторное нажатие — в другую панель (закладки ↔ компьютер)</value>
+    <value>В текущую панель папок, на открытую папку. Повторное нажатие — в другую панель (закладки ↔ компьютер)</value>
   </data>
   <data name="HotkeyRevealInTree" xml:space="preserve">
     <value>Показать текущую папку в дереве и встать на неё</value>
   </data>
   <data name="HotkeyTogglePreview" xml:space="preserve">
-    <value>Показать или убрать панель быстрого просмотра</value>
+    <value>Показать или убрать панель просмотра</value>
   </data>
   <data name="HotkeyTreeExpand" xml:space="preserve">
     <value>Свернуть или раскрыть ветку</value>
@@ -1622,7 +1622,7 @@
     <value>Перейти в папку под курсором</value>
   </data>
   <data name="HotkeyTreeEscape" xml:space="preserve">
-    <value>Вернуть фокус в список</value>
+    <value>Вернуть клавиатуру к файлам</value>
   </data>
   <data name="HotkeyTreeRename" xml:space="preserve">
     <value>Переименовать папку под курсором</value>
@@ -1649,7 +1649,7 @@
     <value>Удалить безвозвратно: всегда спрашивает, не откатывается</value>
   </data>
   <data name="HotkeyRename" xml:space="preserve">
-    <value>Переименовать прямо в строке списка (Enter — применить, Esc — отменить); два и более — группой, в своём окне</value>
+    <value>Переименовать на месте (Enter — применить, Esc — отменить); два и более — группой, в своём окне</value>
   </data>
   <data name="HotkeyNewFolder" xml:space="preserve">
     <value>Создать папку</value>
@@ -1664,7 +1664,7 @@
     <value>Выделить всё</value>
   </data>
   <data name="HotkeyFilter" xml:space="preserve">
-    <value>Фокус в поле фильтра</value>
+    <value>Поле поиска над файлами</value>
   </data>
   <data name="HotkeyFindNext" xml:space="preserve">
     <value>Следующее / предыдущее совпадение в панели просмотра; после последнего — следующий найденный файл</value>
@@ -1676,10 +1676,10 @@
     <value>Искать сразу, не дожидаясь паузы и не считая символы</value>
   </data>
   <data name="HotkeySearchClose" xml:space="preserve">
-    <value>Закрыть окно, клавиатура возвращается в список файлов</value>
+    <value>Закрыть окно и вернуть клавиатуру к файлам</value>
   </data>
   <data name="HotkeyFilterEscape" xml:space="preserve">
-    <value>Одним нажатием: остановить поиск, сбросить фильтр, вернуть клавиатуру в список</value>
+    <value>Одним нажатием: остановить и сбросить поиск, вернуть клавиатуру к файлам</value>
   </data>
   <data name="HotkeySearchRepeat" xml:space="preserve">
     <value>Повторить поиск</value>
@@ -1712,7 +1712,7 @@
     <value>Таблица</value>
   </data>
   <data name="HotkeyViewTiles" xml:space="preserve">
-    <value>Плитки</value>
+    <value>Плитка</value>
   </data>
   <data name="SettingsCategoryHotkeys" xml:space="preserve">
     <value>Клавиатура</value>
@@ -1879,7 +1879,7 @@
     <value>Спрашивать перед созданием файла оценки</value>
   </data>
   <data name="SettingsConfirmCreateSidecarHint" xml:space="preserve">
-    <value>Первая оценка снимка без сайдкара создаёт файл рядом с ним. Снятая галочка — для прогона по папке RAW, где ответ каждый раз один и тот же. Ctrl+Z отменяет создание в любом случае.</value>
+    <value>Первая оценка снимка без спутника создаёт файл рядом с ним. Снятая галочка — для прогона по папке RAW, где ответ каждый раз один и тот же. Ctrl+Z отменяет создание в любом случае.</value>
   </data>
   <data name="StatusArchiveUnreadable" xml:space="preserve">
     <value>Архив «{0}» не читается: повреждён или недоступен</value>
@@ -2035,7 +2035,7 @@
     <value>Настроить действия…</value>
   </data>
   <data name="MenuReasonToolMissing" xml:space="preserve">
-    <value>Нужен {0} (Параметры → Действия)</value>
+    <value>Нужен {0} (Настройки → Программы)</value>
     <comment>Тултип серой строки в меню «Действия» шапки; {0} — имя внешней программы: ffmpeg, soffice, pandoc</comment>
   </data>
   <data name="MenuCaptionFolder" xml:space="preserve">
