@@ -108,9 +108,8 @@ public sealed class MainViewModel : ObservableObject {
     /// <summary>Smallest the folders pane on the left may be; the list's reserve is the same as above.</summary>
     private const double FoldersMinWidth = 120;
 
-    /// <summary>The same pair for the bookmarks panel and the drives tree under it.</summary>
+    /// <summary>Smallest the bookmarks panel may be; the drives under it keep their header (FolderTreesView).</summary>
     private const double BookmarksMinHeight = 44;
-    private const double TreeMinHeight = 200;
 
     private readonly IFileSystem _fs;
     private readonly IShellLauncher _shell;
@@ -1475,12 +1474,15 @@ public sealed class MainViewModel : ObservableObject {
     /// Height of the bookmarks region, in pixels — where the user left the
     /// divider in the left pane. Same arrangement as
     /// <see cref="PreviewWidth"/>: the window applies it to the grid, the
-    /// view model persists it.
+    /// view model persists it. No ceiling from the window here: the height
+    /// comes from a divider the grid already stops short of the drives, and
+    /// the window less a guessed reserve came out lower in a small window -
+    /// the divider jumped up when let go (2026-09-29).
     /// </summary>
     public double BookmarksHeight {
         get => _bookmarksHeight;
         set {
-            double clamped = Math.Max(BookmarksMinHeight, Math.Min(PaneCeiling(_windowHeight, TreeMinHeight), value));
+            double clamped = Math.Max(BookmarksMinHeight, value);
             if (SetField(ref _bookmarksHeight, clamped)) {
                 RebasePaneSizes();
                 SaveState();
@@ -2137,9 +2139,11 @@ public sealed class MainViewModel : ObservableObject {
             SetField(ref _previewWidth, PaneSizes.Restore(
                 _savedPreviewWidth, _savedWindowWidth, windowWidth, PreviewMinWidth, ListMinWidth), nameof(PreviewWidth));
         }
+        // No reserve for the drives: the room they keep is the view's to
+        // know (FolderTreesView caps the row), down to their header.
         if (_savedBookmarksHeight > 0) {
             SetField(ref _bookmarksHeight, PaneSizes.Restore(
-                _savedBookmarksHeight, _savedWindowHeight, windowHeight, BookmarksMinHeight, TreeMinHeight), nameof(BookmarksHeight));
+                _savedBookmarksHeight, _savedWindowHeight, windowHeight, BookmarksMinHeight, 0), nameof(BookmarksHeight));
         }
     }
 

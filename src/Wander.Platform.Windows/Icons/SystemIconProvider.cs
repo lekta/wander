@@ -1137,6 +1137,7 @@ public sealed class SystemIconProvider : IIconProvider {
         ".cr2", ".cr3", ".nef", ".arw", ".dng", ".raf", ".orf", ".rw2",
         // Video
         ".mp4", ".m4v", ".mov", ".wmv", ".avi", ".mkv", ".webm", ".mts", ".m2ts",
+        ".ogv", ".mpg", ".mpeg", ".asf", ".3gp", ".3g2",
         // Documents with shell thumbnail providers
         ".pdf", ".docx", ".xlsx", ".pptx", ".doc", ".xls", ".ppt",
     };

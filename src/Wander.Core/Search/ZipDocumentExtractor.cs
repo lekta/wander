@@ -35,6 +35,8 @@ public sealed class ZipDocumentExtractor : IContentExtractor {
     /// </summary>
     private const int MaxChars = 8 * 1024 * 1024;
 
+    private const string XhtmlNamespace = "http://www.w3.org/1999/xhtml";
+
     private static readonly HashSet<string> _extensions = new(StringComparer.OrdinalIgnoreCase) {
         ".docx", ".xlsx", ".pptx",
         ".odt", ".ods", ".odp",
@@ -164,11 +166,13 @@ public sealed class ZipDocumentExtractor : IContentExtractor {
     /// characters; a search's snippet is the match's line, too.
     /// </summary>
     private static void ReadTextNodes(ZipArchiveEntry entry, StringBuilder text, CancellationToken token) {
-        // Prohibit rather than ignore: these files come from wherever the
-        // user got them, and an external entity in one of them is somebody
-        // else's file read out over the network.
+        // Ignore rather than prohibit: an EPUB chapter is XHTML, and nearly
+        // every one opens with <!DOCTYPE html>, which Prohibit rejects -
+        // the whole book came out empty. Ignore skips the DTD without
+        // reading it, and with no resolver an external entity is still
+        // never fetched: these files come from wherever the user got them.
         var settings = new XmlReaderSettings {
-            DtdProcessing = DtdProcessing.Prohibit,
+            DtdProcessing = DtdProcessing.Ignore,
             XmlResolver = null,
             IgnoreComments = true,
             IgnoreProcessingInstructions = true,
@@ -179,8 +183,22 @@ public sealed class ZipDocumentExtractor : IContentExtractor {
             using var stream = entry.Open();
             using var reader = XmlReader.Create(stream, settings);
 
+            // Depth of the plumbing element being skipped, -1 when none.
+            int skipping = -1;
             while (reader.Read()) {
                 token.ThrowIfCancellationRequested();
+                if (skipping >= 0) {
+                    if (reader.NodeType == XmlNodeType.EndElement && reader.Depth == skipping) {
+                        skipping = -1;
+                    }
+
+                    continue;
+                }
+                if (reader.NodeType == XmlNodeType.Element && !reader.IsEmptyElement && IsXhtmlPlumbing(reader)) {
+                    skipping = reader.Depth;
+
+                    continue;
+                }
                 if (reader.NodeType == XmlNodeType.EndElement
                     || (reader.NodeType == XmlNodeType.Element && reader.IsEmptyElement)) {
                     if (_lineEnds.Contains(reader.LocalName)) {
@@ -202,6 +220,17 @@ public sealed class ZipDocumentExtractor : IContentExtractor {
             // A damaged part is not a damaged document: keep whatever the
             // other parts gave us.
         }
+    }
+
+    /// <summary>
+    /// An XHTML element whose text is not prose: the head (a title that
+    /// repeats the first heading), a style sheet, a script. A chapter
+    /// exported from a wiki carries kilobytes of CSS in its head, and read
+    /// as text it is the first thing the pane shows.
+    /// </summary>
+    private static bool IsXhtmlPlumbing(XmlReader reader) {
+        return reader.NamespaceURI == XhtmlNamespace
+            && reader.LocalName is "head" or "style" or "script";
     }
 
     /// <summary>A line ends: the space after its last word goes, and an empty line is not made.</summary>

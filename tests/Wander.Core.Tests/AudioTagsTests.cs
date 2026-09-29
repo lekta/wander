@@ -412,7 +412,10 @@ public class AudioTagsTests {
 
     [Fact]
     public void PlayableFormats_AreTheOnesTheCardIsOfferedFor() {
-        foreach (string name in new[] { "a.mp3", "a.flac", "a.m4a", "a.m4b", "a.aac", "a.wav", "a.wma", "a.ogg", "a.opus" }) {
+        foreach (string name in new[] {
+                     "a.mp3", "a.flac", "a.m4a", "a.m4b", "a.aac", "a.wav", "a.wma", "a.ogg", "a.opus",
+                     "a.aif", "a.aiff", "a.aifc", "a.au", "a.mka", "a.mp2", "a.mpa",
+                 }) {
             Assert.True(AudioTags.IsAudio(name), name);
         }
         foreach (string name in new[] { "a.mid", "a.txt", "a.mp4" }) {

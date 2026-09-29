@@ -45,16 +45,18 @@ public static class AudioTags {
     /// <para>
     /// This is the <em>playable</em> set, not the set we can read tags
     /// from — the two are different and it is the first that decides
-    /// whether a file gets the card and the transport. Media Foundation
-    /// plays all of these on Windows 10 and later; measured, one file each,
-    /// rather than assumed. Ogg and Opus depend on the Web Media
-    /// Extensions, which ship with the system but can be removed — the same
-    /// caveat the video list carries for MKV and WEBM, and the same
-    /// outcome: the pane says the file cannot be played.
+    /// whether a file gets the card and the transport. The pane's player
+    /// (WPF, the Windows Media Player engine) plays all of these but Ogg
+    /// and Opus; measured, one file each, rather than assumed (stand,
+    /// 2026-09-29). Ogg and Opus it does not play even with the Web Media
+    /// Extensions installed - that engine does not see the Store codecs -
+    /// and the pane says the file cannot be played; they stay for the
+    /// card and the actions for audio (ffmpeg).
     /// </para>
     /// </summary>
     public static readonly IReadOnlySet<string> Extensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
         ".mp3", ".flac", ".m4a", ".m4b", ".aac", ".wav", ".wma", ".ogg", ".opus",
+        ".aif", ".aiff", ".aifc", ".au", ".mka", ".mp2", ".mpa",
     };
 
     /// <summary>

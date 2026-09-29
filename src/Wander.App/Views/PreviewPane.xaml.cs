@@ -1467,8 +1467,9 @@ public partial class PreviewPane : UserControl {
     }
 
     private void VideoPreview_MediaFailed(object sender, ExceptionRoutedEventArgs e) {
-        // Codec not installed (e.g. .webm without the Web Media Extensions)
-        // or corrupt file. Surface a minimal hint in the slider area.
+        // Codec this engine cannot use (.webm, .ogv: the Store codecs are
+        // invisible to it) or corrupt file. Surface a minimal hint in the
+        // slider area.
         ReleaseHeldFrame();
         VideoTimeText.Text = Strings.PreviewVideoUnavailable;
     }

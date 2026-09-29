@@ -153,6 +153,27 @@ public class ContentExtractorTests {
     }
 
 
+    /// <summary>
+    /// A chapter as a wiki exports it: a doctype, which the reader used to
+    /// refuse (the whole book came out empty), and a head full of CSS,
+    /// which is not prose.
+    /// </summary>
+    [Fact]
+    public void ZipDocument_EpubChapterWithDoctypeAndStyles_GivesOnlyTheProse() {
+        var fs = new FakeFileSystem();
+        fs.Files[@"C:\book.epub"] = Zip(
+            ("OPS/c1.xhtml",
+                "<?xml version='1.0' encoding='UTF-8'?>\n<!DOCTYPE html>\n" +
+                "<html xmlns='http://www.w3.org/1999/xhtml'><head><title>Book I</title>" +
+                "<style><![CDATA[.mw-parser-output{margin:0}]]></style></head>" +
+                "<body><style>.inline{color:red}</style><p>Sing, Muse</p><script>alert(1)</script><p>the man</p></body></html>"));
+
+        string? text = new ZipDocumentExtractor(fs).Extract(@"C:\book.epub", default);
+
+        Assert.Equal("Sing, Muse\nthe man\n", text);
+    }
+
+
     [Fact]
     public void ZipDocument_DamagedFile_ReturnsNull() {
         var fs = new FakeFileSystem();

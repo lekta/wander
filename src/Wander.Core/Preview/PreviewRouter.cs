@@ -94,12 +94,17 @@ public static class PreviewRouter {
     };
 
     /// <summary>
-    /// What Windows Media Foundation plays out of the box on Win10/11.
-    /// MKV / WEBM are listed but fall back to "unsupported" when the user
-    /// has no extension packs installed.
+    /// Video files: what the pane's player (WPF, the Windows Media Player
+    /// engine) plays, plus WEBM and OGV. Those two it does not play even
+    /// with the Web Media Extensions installed - that engine does not see
+    /// the Store codecs (stand, 2026-09-29) - but the shell gives them a
+    /// frame and the actions for video (ffmpeg) take them; the pane says
+    /// the file cannot be played. <c>.ts</c> is not here: it is TypeScript
+    /// far more often, and the code list has it.
     /// </summary>
     private static readonly HashSet<string> _video = new(StringComparer.OrdinalIgnoreCase) {
-        ".mp4", ".m4v", ".mov", ".wmv", ".avi", ".mkv", ".webm",
+        ".mp4", ".m4v", ".mov", ".wmv", ".avi", ".mkv", ".webm", ".ogv",
+        ".mpg", ".mpeg", ".asf", ".3gp", ".3g2",
     };
 
     private static readonly HashSet<string> _text = new(StringComparer.OrdinalIgnoreCase) {

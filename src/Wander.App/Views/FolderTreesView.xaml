@@ -207,7 +207,7 @@
         </ContextMenu>
     </UserControl.Resources>
 
-    <Grid Background="{StaticResource PaneBackground}">
+    <Grid Background="{StaticResource PaneBackground}" SizeChanged="Panes_SizeChanged">
         <Grid.RowDefinitions>
             <!--
                 Header, list and the "+" strip share one row, so the
@@ -219,7 +219,7 @@
             -->
             <RowDefinition x:Name="BookmarksRow" Height="200" MinHeight="56"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*" MinHeight="80"/>
+            <RowDefinition x:Name="DrivesRow" Height="*"/>
         </Grid.RowDefinitions>
 
         <!--
@@ -428,7 +428,8 @@
                     Padding="6,4"
                     Background="{StaticResource HeaderBackground}"
                     BorderBrush="{StaticResource Separator}"
-                    BorderThickness="0,0,0,1">
+                    BorderThickness="0,0,0,1"
+                    SizeChanged="DrivesHeader_SizeChanged">
                 <TextBlock Text="{x:Static res:Strings.ComputerHeader}" FontWeight="SemiBold"/>
             </Border>
             <!--

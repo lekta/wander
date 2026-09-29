@@ -47,8 +47,14 @@ public sealed class ThumbnailDiskCache {
     /// applications without a 256-px icon resource no longer come back as a
     /// small picture in the corner of an empty square.
     /// </para>
+    ///
+    /// <para>
+    /// v3 (2026-09-29): video joined by <c>.ogv</c>, <c>.mpg</c>,
+    /// <c>.mpeg</c>, <c>.asf</c>, <c>.3gp</c>, <c>.3g2</c> - their jumbo
+    /// slot was cached as the type's icon and would have stayed one.
+    /// </para>
     /// </summary>
-    private const int Generation = 2;
+    private const int Generation = 3;
 
     private readonly string _directory;
     private readonly ILogger _log;

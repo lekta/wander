@@ -327,6 +327,27 @@ public partial class FolderTreesView : UserControl {
         }
     }
 
+    /// <summary>
+    /// A fixed-height row does not give way to the star row under it: the
+    /// bookmarks kept a height set in a taller window, and the drives panel
+    /// went out past the bottom of the window. Capped here by the room the
+    /// pane really has - the window's size does not say it, the toolbar and
+    /// the status bar take their share.
+    /// </summary>
+    private void Panes_SizeChanged(object sender, SizeChangedEventArgs e) {
+        CapBookmarksRow();
+    }
+
+    /// <summary>The drives fold down to their header by the divider, no further.</summary>
+    private void DrivesHeader_SizeChanged(object sender, SizeChangedEventArgs e) {
+        DrivesRow.MinHeight = e.NewSize.Height;
+        CapBookmarksRow();
+    }
+
+    private void CapBookmarksRow() {
+        BookmarksRow.MaxHeight = Math.Max(0, ActualHeight - BookmarksSplitter.Height - DrivesRow.MinHeight);
+    }
+
     private void BookmarksSplitter_DragCompleted(object sender, DragCompletedEventArgs e) {
         Vm.BookmarksHeight = BookmarksRow.ActualHeight;
     }
