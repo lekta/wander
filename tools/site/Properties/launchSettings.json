@@ -1,0 +1,11 @@
+{
+  "profiles": {
+    "Site": {
+      "commandName": "Project"
+    },
+    "Site (debug, opens the browser)": {
+      "commandName": "Project",
+      "commandLineArgs": "--debug --open"
+    }
+  }
+}

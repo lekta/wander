@@ -56,8 +56,8 @@ public static class CrashReporter {
 
     /// <summary>
     /// A page of the guide, and its section when the target names one:
-    /// "faylovye-operatsii#otmena-i-bezopasnost" is
-    /// <c>guide/faylovye-operatsii/#otmena-i-bezopasnost</c>. The settings
+    /// "konvertatsiya#programmy" is
+    /// <c>guide/konvertatsiya/#programmy</c>. The settings
     /// pages' targets are checked against the built site by check.bat.
     /// </summary>
     public static string GuidePage(string target) {

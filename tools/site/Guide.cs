@@ -8,10 +8,11 @@ namespace Wander.Site;
 /// <summary>
 /// docs/GUIDE.md cut into pages. The structure of the file is the structure
 /// of the site: <c>#</c> is the guide's title (its text is for GitHub and is
-/// not published); a <c>##</c> without <c>###</c> is a page of its own; a
-/// <c>##</c> with <c>###</c> is a group - a title in the navigation, no page,
-/// no text of its own; <c>###</c> is a page; <c>####</c> are the page's
-/// sections, listed at its top. Order is file order.
+/// not published); every <c>##</c> is a page, and one with <c>###</c> under
+/// it is also a group - its own text is the group's opening page, its title
+/// in the navigation leads there and folds the group's pages; <c>###</c> is
+/// a page of the group; <c>####</c> are a page's sections, listed at its
+/// top. Every page has text. Order is file order.
 ///
 /// <para>
 /// Links in the file are GitHub's (<c>#heading-anchor</c>, because that is
@@ -35,11 +36,9 @@ internal sealed class Guide {
         var guide = new Guide();
         var seen = new Dictionary<string, int>(StringComparer.Ordinal);
         string? titleAnchor = null;
-        GuideGroup? group = null;
         GuidePage? page = null;
-        // A ## is a page until a ### under it proves it a group.
-        GuidePage? pending = null;
-        string? pendingAnchor = null;
+        // The last ##: the first ### under it makes it a group's own page.
+        GuidePage? top = null;
 
         foreach (Block block in document) {
             if (block is not HeadingBlock heading) {
@@ -69,29 +68,19 @@ internal sealed class Guide {
             }
 
             if (heading.Level == 2) {
-                group = null;
-                page = pending = new GuidePage(title, heading, null);
-                pendingAnchor = anchor;
+                page = top = new GuidePage(title, heading, null);
                 guide.Pages.Add(page);
                 guide.Anchors[anchor] = new LinkTarget(page, null);
             } else if (heading.Level == 3) {
-                if (pending is not null) {
-                    if (pending.Blocks.Count > 0) {
-                        errors.Add($"{source}:{pending.Heading.Line + 1}: text under a group heading - a ## with ### inside has no page of its own");
-                    }
-                    guide.Pages.Remove(pending);
-                    group = new GuideGroup(pending.Title);
-                } else if (group is null) {
+                if (top is null) {
                     errors.Add($"{where}: ### outside a ## group");
+                } else {
+                    top.Group ??= new GuideGroup(top);
                 }
 
-                page = new GuidePage(title, heading, group);
+                page = new GuidePage(title, heading, top?.Group);
                 guide.Pages.Add(page);
                 guide.Anchors[anchor] = new LinkTarget(page, null);
-                if (pending is not null) {
-                    guide.Anchors[pendingAnchor!] = new LinkTarget(page, null);
-                    pending = null;
-                }
             } else if (page is null) {
                 errors.Add($"{where}: a section outside a page");
             } else {
@@ -114,6 +103,11 @@ internal sealed class Guide {
         }
         foreach (var empty in guide.Pages.Where(p => p.Slug.Length == 0)) {
             errors.Add($"{source}:{empty.Heading.Line + 1}: a page title with nothing to make a slug of");
+        }
+        // A group's page is the text under its ##: an empty one would be a
+        // link in the navigation that leads to a bare title.
+        foreach (var bare in guide.Pages.Where(p => p.Blocks.All(b => b is HeadingBlock))) {
+            errors.Add($"{source}:{bare.Heading.Line + 1}: a page with no text");
         }
 
         return guide;
@@ -177,7 +171,14 @@ internal sealed class GuidePage {
 
     public HeadingBlock Heading { get; }
 
-    public GuideGroup? Group { get; }
+    /// <summary>
+    /// The group the page belongs to - a group's own page included, which
+    /// learns it is one only when the first ### under it turns up.
+    /// </summary>
+    public GuideGroup? Group { get; set; }
+
+    /// <summary>The text under a ## that has ### pages after it: the group's opening page.</summary>
+    public bool IsGroupPage => Group is not null && ReferenceEquals(Group.Page, this);
 
     /// <summary>What is under the title, section headings included.</summary>
     public List<Block> Blocks { get; } = new();
@@ -186,7 +187,10 @@ internal sealed class GuidePage {
 }
 
 
-internal sealed record GuideGroup(string Title);
+/// <summary>A ## with ### pages under it; <see cref="Page"/> is the ## itself, and its title is the group's.</summary>
+internal sealed record GuideGroup(GuidePage Page) {
+    public string Title => Page.Title;
+}
 
 
 internal sealed record GuideSection(string Title, string Anchor, int Level);

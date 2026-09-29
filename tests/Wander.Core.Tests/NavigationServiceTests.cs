@@ -162,6 +162,57 @@ public class NavigationServiceTests {
         Assert.Equal(NavigationSource.Bookmark, nav.CurrentSource);
     }
 
+    /// <summary>
+    /// A step off the panels - into a folder of the list, a drag held over
+    /// one, the address bar and its crumbs, "open file location" - keeps
+    /// the bookmarks' context; the panels fall back to the drives once the
+    /// path leaves every bookmark (2026-09-29: a drag held over a subfolder
+    /// of a bookmark opened the drives tree down to it).
+    /// </summary>
+    [Theory]
+    [InlineData(NavigationSource.RightPane)]
+    [InlineData(NavigationSource.Address)]
+    [InlineData(NavigationSource.External)]
+    public void AStepOffThePanels_KeepsTheBookmarksContext(NavigationSource step) {
+        var nav = new NavigationService();
+        nav.NavigateTo(Foo, NavigationSource.Bookmark);
+
+        nav.NavigateTo(FooBar, step);
+
+        Assert.Equal(NavigationSource.Bookmark, nav.CurrentSource);
+    }
+
+    /// <summary>The logged case: a drag held over a subfolder, then Up and Enter - all of it stays in the bookmarks.</summary>
+    [Fact]
+    public void DragIntoASubfolder_ThenUpAndBackIn_StaysInTheBookmarks() {
+        var nav = new NavigationService();
+        nav.NavigateTo(Foo, NavigationSource.Bookmark);
+
+        nav.NavigateTo(FooBar, NavigationSource.RightPane);
+        nav.GoUp();
+        nav.NavigateTo(FooBar, NavigationSource.RightPane);
+
+        Assert.Equal(FooBar, nav.Current);
+        Assert.Equal(NavigationSource.Bookmark, nav.CurrentSource);
+    }
+
+    /// <summary>A panel's own click says where it was made; nothing is inherited over it, and nothing but the bookmarks is inherited.</summary>
+    [Fact]
+    public void APanelClick_IsKept_AndTheDrivesContextIsNotInherited() {
+        var nav = new NavigationService();
+        nav.NavigateTo(Foo, NavigationSource.Bookmark);
+
+        nav.NavigateTo(Bar, NavigationSource.Drives);
+        Assert.Equal(NavigationSource.Drives, nav.CurrentSource);
+
+        nav.NavigateTo(Baz, NavigationSource.RightPane);
+        Assert.Equal(NavigationSource.RightPane, nav.CurrentSource);
+
+        nav.NavigateTo(Foo, NavigationSource.Bookmark);
+        nav.NavigateTo(FooBar, NavigationSource.Restore);
+        Assert.Equal(NavigationSource.Restore, nav.CurrentSource);
+    }
+
     [Fact]
     public void DefaultSource_IsExternal() {
         var nav = new NavigationService();
@@ -189,7 +240,7 @@ public class NavigationServiceTests {
     public void RewritePaths_FollowsAMovedFolder_InTheCurrentEntryAndBehindIt() {
         var nav = new NavigationService();
         nav.NavigateTo(Foo, NavigationSource.Bookmark);
-        nav.NavigateTo(FooBar);
+        nav.NavigateTo(FooBar, NavigationSource.Drives);
         int raised = 0;
         nav.CurrentChanged += (_, _) => raised++;
 
@@ -198,7 +249,7 @@ public class NavigationServiceTests {
         Assert.True(followed);
         Assert.Equal(1, raised);
         Assert.Equal(@"C:\baz\bar", nav.Current);
-        Assert.Equal(NavigationSource.External, nav.CurrentSource);
+        Assert.Equal(NavigationSource.Drives, nav.CurrentSource);
         nav.GoBack();
         Assert.Equal(Baz, nav.Current);
         Assert.Equal(NavigationSource.Bookmark, nav.CurrentSource);

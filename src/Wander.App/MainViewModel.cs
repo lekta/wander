@@ -1744,7 +1744,7 @@ public sealed class MainViewModel : ObservableObject {
             // unpacked to a temporary copy below.
             if (Archives.Of(entry.FullPath) is { } archive) {
                 if (archive.IsRoot) {
-                    NavigateTo(entry.FullPath, DescendSource());
+                    NavigateTo(entry.FullPath, NavigationSource.RightPane);
                 } else {
                     // No path on disk to hand the shell, so make one.
                     _ = OpenArchiveEntryAsync(entry.FullPath);
@@ -1760,21 +1760,8 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
-        NavigateTo(entry.FullPath, DescendSource());
-    }
-
-
-    /// <summary>
-    /// Walking into a subfolder from the list keeps the panel the current
-    /// folder was opened from — the same inheritance <c>NavigationService.GoUp</c>
-    /// does going the other way. Without it, opening a bookmark and then
-    /// stepping one folder deeper jumped the highlight to the drives tree,
-    /// which is not where the user was reading.
-    /// </summary>
-    private NavigationSource DescendSource() {
-        return _nav.CurrentSource == NavigationSource.Bookmark
-            ? NavigationSource.Bookmark
-            : NavigationSource.RightPane;
+        // The bookmarks' context carries over in NavigationService.Inherit.
+        NavigateTo(entry.FullPath, NavigationSource.RightPane);
     }
 
     private bool TryFollowFolderShortcut(string path) {
@@ -1794,7 +1781,7 @@ public sealed class MainViewModel : ObservableObject {
         }
 
         _log.Info($"Follow folder shortcut: {path} -> {target}");
-        NavigateTo(target, DescendSource());
+        NavigateTo(target, NavigationSource.RightPane);
         return true;
     }
 
@@ -2115,24 +2102,10 @@ public sealed class MainViewModel : ObservableObject {
     /// had already noted, and skipped the call that mattered.
     /// </summary>
     public void RestorePaneSizes(double windowWidth, double windowHeight) {
-        NoteWindowSize(windowWidth, windowHeight);
-
-        // Nothing usable saved (a fresh install, a hand-edited file): the
-        // defaults stand, exactly as before.
-        if (_savedPreviewWidth > 0) {
-            _previewWidth = PaneSizes.Restore(
-                _savedPreviewWidth, _savedWindowWidth, windowWidth, PreviewMinWidth, ListMinWidth);
-            Raise(nameof(PreviewWidth));
-        }
+        FitPaneSizes(windowWidth, windowHeight);
         if (_savedFoldersWidth > 0) {
-            _foldersWidth = PaneSizes.Restore(
-                _savedFoldersWidth, _savedWindowWidth, windowWidth, FoldersMinWidth, ListMinWidth);
-            Raise(nameof(FoldersWidth));
-        }
-        if (_savedBookmarksHeight > 0) {
-            _bookmarksHeight = PaneSizes.Restore(
-                _savedBookmarksHeight, _savedWindowHeight, windowHeight, BookmarksMinHeight, TreeMinHeight);
-            Raise(nameof(BookmarksHeight));
+            SetField(ref _foldersWidth, PaneSizes.Restore(
+                _savedFoldersWidth, _savedWindowWidth, windowWidth, FoldersMinWidth, ListMinWidth), nameof(FoldersWidth));
         }
 
         // One line per call, so a report of "the pane came back wrong"
@@ -2142,6 +2115,32 @@ public sealed class MainViewModel : ObservableObject {
             $"Pane sizes: window {windowWidth:F0}x{windowHeight:F0}, set at {_savedWindowWidth:F0}x{_savedWindowHeight:F0}; " +
             $"folders {_foldersWidth:F0} (saved {_savedFoldersWidth:F0}), preview {_previewWidth:F0} (saved {_savedPreviewWidth:F0}), " +
             $"bookmarks {_bookmarksHeight:F0} (saved {_savedBookmarksHeight:F0})");
+    }
+
+    /// <summary>
+    /// <see cref="RestorePaneSizes"/> without the log line, for every size
+    /// the window passes through. Only noting the new size left the panes at
+    /// the pixels they had: bookmarks dragged tall in a maximized window
+    /// stayed that tall after un-maximizing, and pushed the drives panel out
+    /// of the window (2026-09-29). Scaled from the saved pair, so a window
+    /// back at the size the divider was dragged in gets it to the pixel. The
+    /// folders pane is left out: it holds names, not a share of the window,
+    /// and is scaled only when the window comes up.
+    /// </summary>
+    public void FitPaneSizes(double windowWidth, double windowHeight) {
+        NoteWindowSize(windowWidth, windowHeight);
+
+        // Nothing usable saved (a fresh install, a hand-edited file): the
+        // defaults stand, exactly as before. Raised only on a change: this
+        // runs for every step of a window being dragged to size.
+        if (_savedPreviewWidth > 0) {
+            SetField(ref _previewWidth, PaneSizes.Restore(
+                _savedPreviewWidth, _savedWindowWidth, windowWidth, PreviewMinWidth, ListMinWidth), nameof(PreviewWidth));
+        }
+        if (_savedBookmarksHeight > 0) {
+            SetField(ref _bookmarksHeight, PaneSizes.Restore(
+                _savedBookmarksHeight, _savedWindowHeight, windowHeight, BookmarksMinHeight, TreeMinHeight), nameof(BookmarksHeight));
+        }
     }
 
     /// <summary>

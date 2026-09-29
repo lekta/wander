@@ -20,6 +20,13 @@ namespace Wander.Site;
 /// from disk. The stylesheet is inlined into each page and there is no
 /// script: a page is one request, pictures aside.
 /// </para>
+///
+/// <para>
+/// The debug build (<c>--debug</c>) is the same site for a look before a
+/// push: the places GUIDE.md marks for a screenshot show as a dashed frame
+/// instead of vanishing, and Program writes it even when problems were
+/// found.
+/// </para>
 /// </summary>
 internal sealed class SiteBuilder {
     public const string Repository = "https://github.com/lekta/wander";
@@ -32,6 +39,13 @@ internal sealed class SiteBuilder {
     private const string SettingsPagesSource = "src/Wander.App/ViewModels/SettingsCategoryViewModel.cs";
 
     private static readonly Regex _guideArgument = new(@"\bguide: ""([^""]*)""");
+
+    /// <summary>
+    /// A place in GUIDE.md that wants a screenshot: an HTML comment of its
+    /// own, invisible on GitHub, dropped from the published site.
+    /// </summary>
+    private static readonly Regex _screenshot = new(@"^<!--\s*скрин:\s*(.*?)\s*-->\s*$", RegexOptions.Singleline);
+
     private static readonly Regex _scheme = new("^[a-z][a-z0-9+.-]*:", RegexOptions.IgnoreCase);
     private static readonly Regex _placeholder = new(@"\{\{([a-z]+)\}\}");
     private static readonly Regex _link = new(@"\s(?:href|src)=""([^""]*)""");
@@ -39,6 +53,7 @@ internal sealed class SiteBuilder {
     private static readonly UTF8Encoding _utf8 = new(encoderShouldEmitUTF8Identifier: false);
 
     private readonly string _root;
+    private readonly bool _debug;
     private readonly MarkdownPipeline _pipeline = new MarkdownPipelineBuilder().UsePipeTables().Build();
 
     /// <summary>Site path (relative, forward slashes) -> the page.</summary>
@@ -48,14 +63,19 @@ internal sealed class SiteBuilder {
     private readonly Dictionary<string, string> _files = new(StringComparer.Ordinal);
 
     private Release? _latest;
+    private int _screenshots;
 
 
-    public SiteBuilder(string root) {
+    public SiteBuilder(string root, bool debug) {
         _root = root;
+        _debug = debug;
     }
 
 
     public List<string> Errors { get; } = new();
+
+    /// <summary>There is a site to write, problems or not: no guide pages or no release leave nothing.</summary>
+    public bool IsBuilt => _pages.ContainsKey("index.html");
 
 
     public void Build() {
@@ -152,6 +172,9 @@ internal sealed class SiteBuilder {
 
         yield return $"{guidePages.Count} guide pages, largest {Kb(_utf8.GetByteCount(largest.Value))} ({largest.Key})";
         yield return $"landing {Kb(_utf8.GetByteCount(_pages["index.html"]))}, pictures {Kb(pictures)}; download {_latest!.Tag}";
+        if (_screenshots > 0) {
+            yield return $"{_screenshots} place(s) marked for a screenshot" + (_debug ? ", shown" : ", shown with --debug");
+        }
     }
 
 
@@ -163,10 +186,13 @@ internal sealed class SiteBuilder {
             }
         }
 
-        // Above the title: the group on the left, back / next on the right.
+        // Above the title: the group on the left, leading to its opening
+        // page, back / next on the right. The opening page is the group.
         var main = new StringBuilder("<div class=\"head\">");
-        if (page.Group is not null) {
-            main.Append("<p class=\"group\">").Append(Escape(page.Group.Title)).Append("</p>");
+        if (page.Group is not null && !page.IsGroupPage) {
+            main.Append($"<p class=\"group\"><a href=\"../{page.Group.Page.Slug}/index.html\">")
+                .Append(Escape(page.Group.Title))
+                .Append("</a></p>");
         }
         main.Append("<nav class=\"pager\">");
         if (index > 0) {
@@ -190,6 +216,14 @@ internal sealed class SiteBuilder {
         var renderer = new HtmlRenderer(writer);
         _pipeline.Setup(renderer);
         foreach (Block block in page.Blocks) {
+            if (block is HtmlBlock html && _screenshot.Match(html.Lines.ToString()) is { Success: true } shot) {
+                _screenshots++;
+                if (_debug) {
+                    renderer.WriteLine($"<p class=\"shot-todo\">Скриншот: {Escape(shot.Groups[1].Value)}</p>");
+                }
+
+                continue;
+            }
             // A paragraph that opens with a bold phrase starts a topic of its
             // own; the stylesheet gives it air above.
             if (block is ParagraphBlock { Inline.FirstChild: EmphasisInline { DelimiterCount: 2 } } topic) {
@@ -225,9 +259,11 @@ internal sealed class SiteBuilder {
 
     /// <summary>
     /// Groups and pages in file order; <paramref name="prefix"/> leads from
-    /// the page to guide/. A group folds (details, no script); only the group
-    /// of the open page starts unfolded, since nothing carries what the reader
-    /// folded over to the next page.
+    /// the page to guide/. A group folds (details, no script) under its title,
+    /// which is a link to the group's opening page - a click on the link
+    /// follows it, one beside it folds. Only the group of the open page
+    /// starts unfolded, since nothing carries what the reader folded over to
+    /// the next page.
     /// </summary>
     private static string Nav(Guide guide, GuidePage? current, string prefix) {
         var nav = new StringBuilder("<ul>\n");
@@ -238,24 +274,30 @@ internal sealed class SiteBuilder {
                     nav.Append("</ul></details></li>\n");
                 }
                 group = page.Group;
-                if (group is not null) {
+                // A group starts with its opening page, the ## above its
+                // pages: that page is the group's title, not a row under it.
+                if (page.IsGroupPage) {
                     bool open = ReferenceEquals(current?.Group, group);
                     nav.Append(open ? "<li><details open><summary>" : "<li><details><summary>")
-                        .Append(Escape(group.Title))
+                        .Append(NavLink(page, current, prefix))
                         .Append("</summary><ul>\n");
+
+                    continue;
                 }
             }
-            nav.Append($"<li><a href=\"{prefix}{page.Slug}/index.html\"");
-            if (page == current) {
-                nav.Append(" aria-current=\"page\"");
-            }
-            nav.Append('>').Append(Escape(page.Title)).Append("</a></li>\n");
+            nav.Append("<li>").Append(NavLink(page, current, prefix)).Append("</li>\n");
         }
         if (group is not null) {
             nav.Append("</ul></details></li>\n");
         }
 
         return nav.Append("</ul>").ToString();
+    }
+
+    private static string NavLink(GuidePage page, GuidePage? current, string prefix) {
+        string here = page == current ? " aria-current=\"page\"" : "";
+
+        return $"<a href=\"{prefix}{page.Slug}/index.html\"{here}>{Escape(page.Title)}</a>";
     }
 
     /// <summary>

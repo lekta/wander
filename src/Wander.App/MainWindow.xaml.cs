@@ -349,7 +349,7 @@ public partial class MainWindow : Window {
         // size is a share of the window it was saved from, and this is the
         // first moment there is a window with a size to compare against.
         Vm.RestorePaneSizes(ActualWidth, ActualHeight);
-        SizeChanged += (_, _) => Vm.NoteWindowSize(ActualWidth, ActualHeight);
+        SizeChanged += (_, _) => Vm.FitPaneSizes(ActualWidth, ActualHeight);
         // And once more after the first paint, against the size the window
         // has settled at: at Loaded a window restored maximized is still at
         // its normal bounds (1762x700 there, 2062x1118 here, by the two

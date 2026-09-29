@@ -44,7 +44,7 @@ public sealed class NavigationService {
             _history.RemoveRange(_cursor + 1, _history.Count - _cursor - 1);
         }
 
-        _history.Add(new NavigationEntry(path, source));
+        _history.Add(new NavigationEntry(path, Inherit(source)));
         _cursor = _history.Count - 1;
         RaiseChanged();
     }
@@ -115,6 +115,22 @@ public sealed class NavigationService {
         return currentChanged;
     }
 
+
+    /// <summary>
+    /// A step taken off the panels - into a folder of the list, a drag held
+    /// over one, the address bar and its crumbs, "open file location" -
+    /// stays in the bookmarks when the current folder was opened from them.
+    /// The panels put the place where the source says (PanelRules, P-10) and
+    /// fall back to the drives by themselves once the path leaves every
+    /// bookmark. Until 2026-09-29 only the list's Enter kept it, in the view
+    /// model: a drag held over a subfolder of a bookmark opened the drives
+    /// tree down to it, and Up and Enter from there inherited the drives.
+    /// </summary>
+    private NavigationSource Inherit(NavigationSource source) {
+        bool offThePanels = source is NavigationSource.RightPane or NavigationSource.Address or NavigationSource.External;
+
+        return offThePanels && CurrentSource == NavigationSource.Bookmark ? NavigationSource.Bookmark : source;
+    }
 
     private void RaiseChanged() {
         CurrentChanged?.Invoke(this, Current);

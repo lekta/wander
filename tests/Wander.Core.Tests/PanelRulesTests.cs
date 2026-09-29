@@ -219,6 +219,27 @@ public class PanelRulesTests {
         Assert.Equal(Year, s.Bookmarks.Caret);
     }
 
+    /// <summary>
+    /// P-10, 2026-09-29: walking about under a bookmark - deeper, up, back
+    /// in - never opens the drives; leaving every bookmark does, with no
+    /// place left in the bookmarks.
+    /// </summary>
+    [Fact]
+    public void P10_WalkingUnderABookmark_LeavesTheDrivesClosed() {
+        var s = Scene().Start().SetBookmarks(Bookmark(Photos));
+        var drivesOpen = s.Drives.Expanded;
+
+        s.Navigate(Photos, NavigationSource.Bookmark).Navigate(Year, NavigationSource.Bookmark).Navigate(Photos, NavigationSource.Bookmark);
+
+        Assert.Equal(drivesOpen, s.Drives.Expanded);
+        Assert.Null(s.Drives.Location);
+        Assert.Equal(Photos, s.Bookmarks.Location);
+
+        s.Navigate(@"D:\", NavigationSource.Bookmark);
+        Assert.Equal(@"D:\", s.Drives.Location);
+        Assert.Null(s.Bookmarks.Location);
+    }
+
     /// <summary>P-11: back and forward put the place in the panel of the history record.</summary>
     [Fact]
     public void P11_BackPutsThePlaceInTheRecordsPanel() {

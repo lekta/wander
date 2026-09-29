@@ -77,6 +77,19 @@ code {
   font: .875em/1.4 ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
 }
 
+/* A command line or a shortcut's target scrolls inside its box, as a wide table does. */
+pre {
+  overflow-x: auto;
+  padding: .7em .9em;
+  border-radius: 6px;
+  background: var(--soft);
+}
+
+pre code {
+  padding: 0;
+  background: none;
+}
+
 img {
   max-width: 100%;
   height: auto;
@@ -221,6 +234,11 @@ li {
   color: var(--fg);
 }
 
+/* A group's title is a link to its opening page, dressed as the title. */
+.side summary a {
+  color: inherit;
+}
+
 .side details ul {
   margin: .35em 0 .2em .3rem;
   padding-left: .8rem;
@@ -247,6 +265,19 @@ li {
   margin: 0;
   color: var(--muted);
   font-size: .9rem;
+}
+
+.page main .group a {
+  color: inherit;
+}
+
+/* Debug build only (--debug): where GUIDE.md asks for a screenshot. */
+.page main .shot-todo {
+  padding: 2.2em 1em;
+  border: 2px dashed var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  text-align: center;
 }
 
 .toc {
