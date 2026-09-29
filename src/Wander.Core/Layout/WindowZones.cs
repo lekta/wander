@@ -28,9 +28,9 @@ public enum WindowZone {
 public static class WindowZones {
     /// <summary>
     /// Reading order: the top strip left to right, then the left pane top
-    /// to bottom, then the filter field on the strip over the list (PLAN
-    /// G6, 2026-09-25) and the list. The preview pane is deliberately
-    /// absent: Ctrl+3 goes there and Esc comes back (PLAN B6), and a Tab
+    /// to bottom, then the filter field on the strip over the list
+    /// and the list. The preview pane is deliberately
+    /// absent: Ctrl+3 goes there and Esc comes back, and a Tab
     /// stop in it would trap the keyboard in a text box.
     /// </summary>
     private static readonly WindowZone[] _order = {

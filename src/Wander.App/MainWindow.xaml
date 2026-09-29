@@ -356,7 +356,7 @@
                                       Command="{Binding OpenLogFileCommand}"
                                       ToolTip="{x:Static res:Strings.MenuLogsHint}"/>
                             <!--
-                                Операция, которая ничего не трогает (PLAN AI1):
+                                Операция, которая ничего не трогает:
                                 окно прогресса, строка состояния, отмена и
                                 несколько операций разом — на заказ.
                                 CommandParameter — имя DebugOperationScenario.
@@ -645,7 +645,7 @@
             <StatusBarItem>
                 <DockPanel>
                     <!--
-                        How much the line matters (PLAN block 0, step 8): no
+                        How much the line matters: no
                         mark for news, one for a warning and one for an
                         error. The words stay as they are; the mark says how
                         to read them.

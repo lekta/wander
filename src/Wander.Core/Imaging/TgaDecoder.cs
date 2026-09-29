@@ -4,7 +4,7 @@ namespace Wander.Core.Imaging;
 
 /// <summary>
 /// Truevision TGA - the texture format of games and 3D tools, which Windows
-/// has no codec for (PLAN B8). Uncompressed and run-length encoded;
+/// has no codec for. Uncompressed and run-length encoded;
 /// colour-mapped, true-colour and grey; 8, 15, 16, 24 and 32 bits; the
 /// origin corner from the descriptor. Out comes top-down BGRA, straight
 /// (not premultiplied) alpha.

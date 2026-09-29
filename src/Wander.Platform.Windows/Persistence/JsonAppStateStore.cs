@@ -48,8 +48,8 @@ public sealed class JsonAppStateStore : IAppStateStore {
     /// <summary>
     /// Writes, unless this build has no business writing this file: it is
     /// yielding to the instance that owns it, or the file is of a newer
-    /// shape than this build knows (<see cref="AppState.CurrentVersion"/>,
-    /// PLAN AD11). Every caller does read-modify-write, so the record
+    /// shape than this build knows (<see cref="AppState.CurrentVersion"/>).
+    /// Every caller does read-modify-write, so the record
     /// handed here carries the shape of the file it came from.
     /// </summary>
     public void Save(AppState state) {

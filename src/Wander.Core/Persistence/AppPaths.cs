@@ -61,7 +61,7 @@ public static class AppPaths {
     public static string Crashes => Path.Combine(DataRoot, "crashes");
 
     /// <summary>
-    /// The web view's profile (PLAN AD1): the components its browser keeps
+    /// The web view's profile: the components its browser keeps
     /// for itself - <see cref="SystemWebView2"/> with
     /// <see cref="UseSystemTemp"/>, where it goes with the temporary files,
     /// <see cref="DataWebView2"/> otherwise. Fixed the first time it is

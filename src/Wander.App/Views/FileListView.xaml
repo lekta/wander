@@ -279,7 +279,7 @@
         <!--
             No frame on a cell: the default one is 1 px of the selection
             colour on every side, drawn over the same colour, and it made
-            the row 2 px taller than the height in the settings (PLAN AM).
+            the row 2 px taller than the height in the settings.
         -->
         <Style TargetType="DataGridCell">
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
@@ -300,7 +300,7 @@
             element. It used to be a sibling Border with seven DataTriggers,
             each a RelativeSource binding up to the ListBoxItem, in every
             tile - the second most expensive thing in the template after
-            the rename TextBox (PLAN R, 2026-09-02). Colours follow Explorer
+            the rename TextBox. Colours follow Explorer
             (#E5F3FB hover, #CCE8FF selected, #E8E8E8 for a selection in a
             pane that lost focus - the same three the tree uses); the gallery
             takes its own from GalleryPalette below.
@@ -409,7 +409,7 @@
             The gallery's rating badge, kept out of the cell template on
             purpose: a Border, a StackPanel, an Ellipse and a TextBlock with
             four bindings used to be built in every cell, and only rated
-            photographs ever show them (PLAN R3). The cell holds an empty
+            photographs ever show them. The cell holds an empty
             ContentControl instead, and a trigger hands it this template on
             the cells that have a rating.
         -->
@@ -573,14 +573,14 @@
             The strip over the list: what narrows it and how it is drawn -
             one click from the rows it is about.
 
-              * The filter field (PLAN G6, 2026-09-25): it was in the
+              * The filter field: it was in the
                 window's toolbar, but it is about the list - the name
                 filter live, "name:text" through the files. It is what keeps
                 the strip on screen in every folder. One field; the search
                 window (Ctrl+Shift+F) stays as it was, and the field stays
                 while that window is open - the window only shows more of
                 the same criteria.
-              * The rating filter (PLAN J3), whenever the folder has
+              * The rating filter, whenever the folder has
                 ratings: state that removes rows has to be visible from the
                 list it removes them from - a filter left on inside a menu
                 is the "why is this folder empty" bug. It filters in every
@@ -779,8 +779,8 @@
                   RowHeight="{Binding Settings.DetailsRowHeight}">
             <DataGrid.Columns>
                 <!--
-                    Row height and icon size are this view's own settings
-                    (PLAN A1) — Ctrl + wheel writes the same two fields, so
+                    Row height and icon size are this view's own settings;
+                    Ctrl + wheel writes the same two fields, so
                     the gesture and the dialog cannot disagree. The column's
                     width is derived from the icon rather than settable: a
                     column narrower than its icon would just clip it.
@@ -792,8 +792,7 @@
                     could be bound, and was — twice, through RelativeSource up
                     to this UserControl, in every realised row. Both numbers
                     now come from ApplyDetailsIconSize, the size as a
-                    DynamicResource, for the reason the tile sizes do
-                    (PLAN R3).
+                    DynamicResource, for the reason the tile sizes do.
                 -->
                 <DataGridTemplateColumn x:Name="IconColumn" Header="" IsReadOnly="True" CanUserSort="False">
                     <DataGridTemplateColumn.CellTemplate>
@@ -906,8 +905,8 @@
             <!--
                 The row templates below are kept deliberately thin: this is
                 what every visible tile pays on every folder, and a walk
-                through folders of photographs is nothing but this cost
-                (PLAN R). Sizes are not bound per element: the tile is the
+                through folders of photographs is nothing but this cost.
+                Sizes are not bound per element: the tile is the
                 container (TilesItem above) stretched to the cell the panel
                 gave it, the name's font size is inherited from the ListBox,
                 and the few numbers a template still needs come in as
@@ -1074,7 +1073,7 @@
         </controls:FileListBox>
 
         <!--
-            Gallery (PLAN J). Structurally the LargeIcons grid with bigger
+            Gallery. Structurally the LargeIcons grid with bigger
             cells, its own background and a rating badge - deliberately so:
             the arithmetic, the virtualising panel and the whole gesture set
             are the ones that were already debugged, and a second

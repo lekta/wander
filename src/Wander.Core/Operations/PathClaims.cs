@@ -31,8 +31,8 @@ public static class ClaimOwners {
 
 
 /// <summary>
-/// The answer to "is Wander itself doing something with this file" (PLAN AF,
-/// 2026-09-21). Whoever works on a user's path says so for the time of the
+/// The answer to "is Wander itself doing something with this file".
+/// Whoever works on a user's path says so for the time of the
 /// work; a file operation about to touch a path asks first, and then
 /// background readers are told to let go (<see cref="Yield"/>) while an
 /// operation of the user's is named instead of being fought - and the list

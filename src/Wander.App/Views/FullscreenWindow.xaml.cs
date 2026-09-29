@@ -15,7 +15,7 @@ using Wander.Core.Preview;
 namespace Wander.App.Views;
 
 /// <summary>
-/// Pictures on their own, full screen (PLAN Q5): one, walked with the arrow
+/// Pictures on their own, full screen: one, walked with the arrow
 /// keys, or two side by side (2026-09-24) - the one on the left stays while
 /// Shift and the arrows walk the one on the right, and a plain Left or
 /// Right keeps that side alone on the screen. Covers the monitor the main

@@ -1,7 +1,7 @@
 namespace Wander.Core.Imaging;
 
 /// <summary>
-/// How big a picture is decoded for the pane (PLAN AK, step 3). A JPEG asked
+/// How big a picture is decoded for the pane. A JPEG asked
 /// for fewer pixels scales in the DCT - 1/2 to 1/8 of the work and none of
 /// the hundred megabytes a 24-megapixel bitmap takes - so the pane gets the
 /// frame at the size it is drawn at, and the full one is decoded later and

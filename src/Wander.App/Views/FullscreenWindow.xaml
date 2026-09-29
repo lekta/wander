@@ -6,7 +6,7 @@
         ShowInTaskbar="False"
         UseLayoutRounding="True">
     <!--
-        Pictures on their own over the whole screen (PLAN Q5): Enter or Space
+        Pictures on their own over the whole screen: Enter or Space
         on pictures in the gallery. A pane is the preview pane, with its own
         controller and without its footer - the hold-to-zoom, the helpers
         and the decode ahead come with it, and the stars and switches ride

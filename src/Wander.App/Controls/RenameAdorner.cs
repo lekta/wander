@@ -15,7 +15,7 @@ namespace Wander.App.Controls;
 /// own ScrollViewer, caret, undo stack, input bindings - and every tile
 /// and every table row used to instantiate one for the single row per
 /// session that actually gets edited. Measured at 21 visuals per tile with
-/// it and 5 without (PLAN R, session log of 2026-09-02).
+/// it and 5 without (session log of 2026-09-02).
 /// </para>
 ///
 /// <para>

@@ -34,7 +34,7 @@ public sealed record ThumbnailCacheOptions(
     /// <summary>
     /// The side of a large thumbnail for a display scale (1.0 = 96 dpi). A
     /// gallery cell is up to 200 layout units; at 150 % that is 300 device
-    /// pixels, and a 256-px thumbnail drawn there is soft (PLAN AM). Steps
+    /// pixels, and a 256-px thumbnail drawn there is soft. Steps
     /// rather than the exact size, so the disk cache - keyed by the side -
     /// is not split by every scale setting.
     /// </summary>

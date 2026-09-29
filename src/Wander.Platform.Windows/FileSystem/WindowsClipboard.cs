@@ -156,7 +156,7 @@ public sealed class WindowsClipboard : ISystemClipboard {
                 IsClipboardFormatAvailable(RegisterClipboardFormat(FileGroupDescriptorW)) ||
                 IsClipboardFormatAvailable(RegisterClipboardFormat(FileGroupDescriptorA));
             // Text and a picture are only noted here; their bytes are read
-            // when pasted (PLAN X). The system makes the plain and OEM text
+            // when pasted. The system makes the plain and OEM text
             // out of Unicode and the bitmap formats out of one another, so
             // one of each answers for all of them.
             bool text = IsClipboardFormatAvailable(CF_UNICODETEXT);
@@ -432,7 +432,7 @@ public sealed class WindowsClipboard : ISystemClipboard {
 
 
     // ------------------------------------------------------------------
-    // Text and pictures (PLAN X)
+    // Text and pictures
     // ------------------------------------------------------------------
 
     /// <summary>A copy of one format's memory block. Caller holds the clipboard. Null when the format is not there.</summary>

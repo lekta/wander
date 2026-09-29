@@ -113,7 +113,7 @@ public static class SystemVitals {
         long loh = gc.GenerationInfo.Length > 3 ? gc.GenerationInfo[3].SizeAfterBytes : 0;
 
         // How long the collector stopped the process since the last line
-        // (PLAN AK, BACKLOG on performance, step 1): the counts say
+        // (BACKLOG on performance, step 1): the counts say
         // the collections are nearly all full ones, only this says whether
         // they are what a stall on this line spent its time on. Last, so the
         // readers of the fields before it keep working.

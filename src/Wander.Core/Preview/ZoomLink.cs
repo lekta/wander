@@ -1,7 +1,7 @@
 namespace Wander.Core.Preview;
 
 /// <summary>
-/// Two pictures under one held-button zoom (PLAN Q5): the one the mouse is
+/// Two pictures under one held-button zoom: the one the mouse is
 /// on leads, the other shows the same place of its own picture. With the
 /// right button held as well the other stands still and only the leader
 /// moves - two frames shot a moment apart are rarely framed alike, and this

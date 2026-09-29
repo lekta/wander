@@ -87,7 +87,7 @@ echo === site ===
 rem The site generator over docs/GUIDE.md and the landing: page structure,
 rem slugs and every link, into artifacts\site - open index.html there to
 rem look. Nothing is deployed from here (.github/workflows/site.yml does it
-rem on a site-* tag; docs/ARCHITECTURE.md, the site section).
+rem on a site-* tag; docs/SITE.md).
 %DOTNET% run --project "%~dp0site" --no-build -- --out "%~dp0..\artifacts\site"
 if errorlevel 1 exit /b 1
 

@@ -8,7 +8,7 @@ public sealed record PreviewFact(string Label, string Value);
 
 
 /// <summary>
-/// The lines of a program's card (PLAN B7), in words: what the version
+/// The lines of a program's card, in words: what the version
 /// resource, the header and the signature said. A fact the file does not
 /// carry is not a line - an empty "Copyright:" says nothing.
 /// </summary>

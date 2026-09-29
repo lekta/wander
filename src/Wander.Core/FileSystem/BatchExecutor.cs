@@ -120,7 +120,7 @@ internal sealed class BatchExecutor {
 
         // The sources and where they go, claimed for as long as the batch
         // runs: an operation that reaches for them meanwhile names this one
-        // instead of fighting it (PLAN AF, block 0, step 5).
+        // instead of fighting it.
         var claimed = groups
             .SelectMany(g => g.All)
             .SelectMany(source => new[] { source, Path.Combine(targetFolder, NameOf(source)) });
@@ -734,7 +734,7 @@ internal sealed class BatchExecutor {
             // place - ApplyEntry recycles it first - so plain no-overwrite
             // semantics are enough for both branches.
             //
-            // A held source is waited for (PLAN AF, block 0, step 4): a file
+            // A held source is waited for: a file
             // is asked before the move, a folder has nothing to ask and the
             // move itself is tried again while it answers "in use".
             //

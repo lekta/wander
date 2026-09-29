@@ -108,13 +108,13 @@ public sealed class PreviewController : ObservableObject {
     private const long MaxArchivePreviewBytes = 32L * 1024 * 1024;
 
     /// <summary>
-    /// The biggest SVG drawn as a picture (PLAN B8). The web view takes a
+    /// The biggest SVG drawn as a picture. The web view takes a
     /// page as a string of at most 2 MB, and the picture goes into it in
     /// base64 - a third more; a bigger one is shown as its markup.
     /// </summary>
     private const long MaxSvgPictureBytes = 1024 * 1024;
 
-    /// <summary>The Microsoft Store's product of HEIF Image Extensions - free (PLAN B10).</summary>
+    /// <summary>The Microsoft Store's product of HEIF Image Extensions - free.</summary>
     private const string HeifStoreProduct = "9PMMSR1CGPWG";
 
     /// <summary>
@@ -157,8 +157,8 @@ public sealed class PreviewController : ObservableObject {
     private const long SignatureByItselfBytes = 200L * 1024 * 1024;
 
     /// <summary>
-    /// Selection changes closer together than this are a held arrow key
-    /// (PLAN AK, step 5): a picture not decoded yet waits
+    /// Selection changes closer together than this are a held arrow key:
+    /// a picture not decoded yet waits
     /// <see cref="BurstDelayMs"/> before its decode starts - one that cannot
     /// be stopped half-way - in case the key moves on first. A picture
     /// already decoded is shown at once either way.
@@ -251,7 +251,7 @@ public sealed class PreviewController : ObservableObject {
     private bool _isCensusLoading;
     private string? _text;
 
-    // The text on show is the start of a longer one (PLAN B6): what the
+    // The text on show is the start of a longer one: what the
     // find counts through past it - the file itself, read again from its
     // start less the characters shown, or the rest already in memory - and
     // how much of the shown text comes before the note that says so.
@@ -290,7 +290,7 @@ public sealed class PreviewController : ObservableObject {
     // when nobody can be named, null when the file is not held.
     private string? _lockedBy;
 
-    // The Store extension a HEIF picture could not be shown without (PLAN B10).
+    // The Store extension a HEIF picture could not be shown without.
     private MissingCodec _missingCodec;
     private VolumeInfo? _volume;
     private string _workLine = "";
@@ -350,7 +350,7 @@ public sealed class PreviewController : ObservableObject {
     private readonly SemaphoreSlim _rawDecodeGate = new(1, 1);
 
     // One signature check at a time, for the same reason: each reads its
-    // whole file (PLAN B7). And the program on the card while its
+    // whole file. And the program on the card while its
     // signature is still to come - what the check is for.
     private readonly SemaphoreSlim _signatureGate = new(1, 1);
     private string? _executablePath;
@@ -434,7 +434,7 @@ public sealed class PreviewController : ObservableObject {
     /// <summary>
     /// The rating of the file on show changed while it was on show - a
     /// star, a digit, an undo; not a walk to another file. The picture's
-    /// bar comes up for a moment to show it (PLAN Q5).
+    /// bar comes up for a moment to show it.
     /// </summary>
     public event EventHandler? RatingChanged;
 
@@ -462,7 +462,7 @@ public sealed class PreviewController : ObservableObject {
 
     /// <summary>
     /// The picture carries its own stars and readouts - the score, the
-    /// levels - on a bar over its lower edge (PLAN Q5, 2026-09-24): full
+    /// levels - on a bar over its lower edge: full
     /// screen, and each half of a split, where one footer cannot speak for
     /// two pictures. The footer then leaves them out.
     /// </summary>
@@ -484,7 +484,7 @@ public sealed class PreviewController : ObservableObject {
 
     /// <summary>
     /// The text a row was found by, when it came from a search inside
-    /// files - what the pane's find field opens with (PLAN B6). Null for
+    /// files - what the pane's find field opens with. Null for
     /// every other row.
     /// </summary>
     public Func<FileSystemEntry, string?>? FindTextFor { get; init; }
@@ -535,7 +535,7 @@ public sealed class PreviewController : ObservableObject {
     }
 
     /// <summary>
-    /// How <see cref="Text"/> wraps. A document read as its text (PLAN B5)
+    /// How <see cref="Text"/> wraps. A document read as its text
     /// is prose, a paragraph to a line, and a line of a thousand characters
     /// runs off the pane; a text file keeps its lines as they are.
     /// </summary>
@@ -548,8 +548,8 @@ public sealed class PreviewController : ObservableObject {
     /// The text or code on show is only the start of the file's - the pane
     /// draws the first megabyte, 200 000 characters at most. The find field
     /// still counts the matches past it (<see cref="CountPastShownAsync"/>)
-    /// and says they are there to be seen by opening the file (PLAN B6,
-    /// decision of 2026-09-25).
+    /// and says they are there to be seen by opening the file
+    /// (decision of 2026-09-25).
     /// </summary>
     public bool TextGoesOn => _restPath is not null || _restText is not null;
 
@@ -602,7 +602,7 @@ public sealed class PreviewController : ObservableObject {
     /// <summary>
     /// Device pixels of the whole frame on show, across - the most the
     /// fitted picture is drawn at. Not <see cref="Image"/>'s own size: that
-    /// is decoded to the pane (PLAN AK, step 3) and would hold a picture
+    /// is decoded to the pane and would hold a picture
     /// smaller than the pane below what it could show.
     /// </summary>
     public double ImageCapWidth {
@@ -653,15 +653,15 @@ public sealed class PreviewController : ObservableObject {
         }
     }
 
-    /// <summary>The file on screen is an SVG - drawn or read as markup (PLAN B8); it shows the switch between the two.</summary>
+    /// <summary>The file on screen is an SVG - drawn or read as markup; it shows the switch between the two.</summary>
     public bool IsSvg {
         get => _isSvg;
         private set => SetField(ref _isSvg, value);
     }
 
     /// <summary>
-    /// An SVG is shown as its markup rather than as the picture it draws
-    /// (PLAN B8). A mode, like <see cref="ShowRawDecode"/>: someone reading
+    /// An SVG is shown as its markup rather than as the picture it draws.
+    /// A mode, like <see cref="ShowRawDecode"/>: someone reading
     /// the markup of a folder of icons wants it to stay that way.
     /// </summary>
     public bool ShowSvgSource {
@@ -739,7 +739,7 @@ public sealed class PreviewController : ObservableObject {
 
     public bool HasAudioCover => _audioCover is not null;
 
-    /// <summary>A program's or a library's own icon, big - the card's picture (PLAN B7).</summary>
+    /// <summary>A program's or a library's own icon, big - the card's picture.</summary>
     public ImageSource? ExecutableIcon {
         get => _executableIcon;
         private set => SetField(ref _executableIcon, value);
@@ -901,7 +901,7 @@ public sealed class PreviewController : ObservableObject {
     /// <summary>
     /// "Running: copy" while an operation of the user's is on the file
     /// shown, "Queued: ..." while it has it claimed and is busy elsewhere;
-    /// empty otherwise (PLAN AF, block 0, step 6).
+    /// empty otherwise.
     /// </summary>
     public string WorkLine {
         get => _workLine;
@@ -1071,7 +1071,7 @@ public sealed class PreviewController : ObservableObject {
     public string? ShownPath => _isVisible ? _primary?.FullPath : null;
 
     /// <summary>
-    /// A HEIF picture needs an extension from the Microsoft Store (PLAN B10):
+    /// A HEIF picture needs an extension from the Microsoft Store:
     /// the placeholder says which, and a button under it opens its page -
     /// the system's own way to get it (pillar 3).
     /// </summary>
@@ -1465,7 +1465,7 @@ public sealed class PreviewController : ObservableObject {
             _primaryBurst = _primaryChangedAt != 0 && Stopwatch.GetElapsedTime(_primaryChangedAt, now).TotalMilliseconds < BurstMs;
             _primaryChangedAt = now;
             // Measured only when the pane can show it: a selection moved
-            // while the pane was put away is not a wait (PLAN AK).
+            // while the pane was put away is not a wait.
             _shownMeasured = !_isVisible;
             _previousPrimaryPath = _primary?.FullPath;
         }
@@ -1486,7 +1486,7 @@ public sealed class PreviewController : ObservableObject {
 
     /// <summary>
     /// The room the pane has for a picture, in device pixels - what a
-    /// picture is decoded to (PLAN AK, step 3). Grown past the picture on
+    /// picture is decoded to. Grown past the picture on
     /// show, the picture is decoded again at the new size once the pane has
     /// settled.
     /// </summary>
@@ -1578,8 +1578,8 @@ public sealed class PreviewController : ObservableObject {
 
     /// <summary>
     /// Lets go of the file on show when it is one of <paramref name="paths"/>
-    /// or inside one - before a delete, a move or a rename takes them away
-    /// (PLAN AF, block 0, step 5). Nothing else makes the pane let go but a
+    /// or inside one - before a delete, a move or a rename takes them away.
+    /// Nothing else makes the pane let go but a
     /// new selection, and a video playing or a PDF on screen holds its file
     /// for as long as it is shown. Playback stops without a word. UI thread,
     /// before the operation starts.
@@ -1849,7 +1849,7 @@ public sealed class PreviewController : ObservableObject {
 
             await LoadFileAsync(path, ct);
             // Nothing shown: a HEIF picture may need an extension Windows
-            // does not have (PLAN B10), anything may be a file another
+            // does not have, anything may be a file another
             // program holds shut.
             if (_kind == PreviewKind.Unsupported
                 && (!ImageFormats.IsHeif(path) || !await ExplainMissingCodecAsync(ct))) {
@@ -1926,7 +1926,7 @@ public sealed class PreviewController : ObservableObject {
 
     /// <summary>
     /// A HEIF picture that did not decode: whether Windows lacks one of the
-    /// two extensions from the Microsoft Store it is read with (PLAN B10) -
+    /// two extensions from the Microsoft Store it is read with -
     /// then the pane says which and offers its page. False when both are
     /// there: the file itself is at fault.
     /// </summary>
@@ -2159,7 +2159,7 @@ public sealed class PreviewController : ObservableObject {
     /// The first level of an archive: what is in it, without opening it as
     /// a folder. Names and sizes only - no thumbnails and no walk into the
     /// subfolders, both of which mean unpacking, and the pane is for
-    /// looking rather than for work (PLAN, decision 4 of section P).
+    /// looking rather than for work.
     /// </summary>
     private async Task LoadArchiveAsync(string path, CancellationToken ct) {
         FolderTitle = Path.GetFileName(path);
@@ -2463,7 +2463,7 @@ public sealed class PreviewController : ObservableObject {
         }
 
         ShowPicture(path, picture, ct);
-        // PLAN AK, step 1: from the selection moving to the picture being
+        // Measured from the selection moving to the picture being
         // put up; a line in the log only for the slow ones (PerfLog). Once
         // per move: the same file loaded again - a refit, the RAW switch,
         // the pane shown again - is not a selection taking that long.
@@ -2516,7 +2516,7 @@ public sealed class PreviewController : ObservableObject {
 
     /// <summary>
     /// The pictures around the one on show, decoded into the cache while
-    /// the user looks (PLAN AK, step 4) - the next arrow key finds its
+    /// the user looks - the next arrow key finds its
     /// picture ready. One at a time, the likelier first, and stopped with
     /// the load that started it: the selection moved, and the neighbours
     /// are someone else's now - but one finished by then is kept, the
@@ -2574,8 +2574,8 @@ public sealed class PreviewController : ObservableObject {
 
     /// <summary>
     /// The second half of a picture: the whole frame, for the 1:1 zoom
-    /// (<see cref="ZoomSource"/>) - the fitted one is decoded to the pane
-    /// (PLAN AK, step 3), and a CR3's quick preview is 1620 px of a 6000-px
+    /// (<see cref="ZoomSource"/>) - the fitted one is decoded to the pane,
+    /// and a CR3's quick preview is 1620 px of a 6000-px
     /// frame. The fitted picture stays on screen: put in its place, the same
     /// picture resampled from four times the pixels was a visible twitch a
     /// quarter of a second after every arrow key. The exception is a CR3 in
@@ -2725,8 +2725,8 @@ public sealed class PreviewController : ObservableObject {
 
 
     /// <summary>
-    /// A program or a library: a card of what it says about itself (PLAN
-    /// B7) instead of "no preview". Nothing is run - the header is a few
+    /// A program or a library: a card of what it says about itself
+    /// instead of "no preview". Nothing is run - the header is a few
     /// hundred bytes, the version resource and the signature are read by
     /// Windows without loading the file as code. The version, the header
     /// and the icon come at once, the signature after them: its check reads
@@ -2810,7 +2810,7 @@ public sealed class PreviewController : ObservableObject {
 
 
     /// <summary>
-    /// A Word, Office, OpenDocument or EPUB file, as its text (PLAN B5) -
+    /// A Word, Office, OpenDocument or EPUB file, as its text -
     /// read the way the content search reads it, and cached with it: a
     /// document searched a minute ago shows at once. The note on top says
     /// what is missing, so a table read as a column of words is not taken
@@ -2859,7 +2859,7 @@ public sealed class PreviewController : ObservableObject {
 
 
     /// <summary>
-    /// An SVG (PLAN B8): the picture it draws, in the web view - or its
+    /// An SVG: the picture it draws, in the web view - or its
     /// markup, with <see cref="ShowSvgSource"/>. The picture goes in as an
     /// image with the file's bytes in a data URI: an image runs no script of
     /// its own and fetches nothing, which a page opened straight from the

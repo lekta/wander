@@ -44,7 +44,7 @@ namespace Wander.App;
 public sealed class MainViewModel : ObservableObject {
     /// <summary>
     /// The debug menu's fourth operation row: not a scenario of its own,
-    /// three plain ones at the same time (PLAN AI1).
+    /// three plain ones at the same time.
     /// </summary>
     private const string ThreeAtOnce = "ThreeAtOnce";
 
@@ -361,7 +361,7 @@ public sealed class MainViewModel : ObservableObject {
             _tracker) {
             // Both are assigned further down this constructor; the pane asks
             // only once something is on show. A row of a search inside files
-            // carries its snippet, and the query is the search's (PLAN B6).
+            // carries its snippet, and the query is the search's.
             Listing = () => Entries!,
             FindTextFor = entry => entry.MatchSnippet is not null && ContentSearch!.TextQuery.Length > 0
                 ? ContentSearch.TextQuery
@@ -374,7 +374,7 @@ public sealed class MainViewModel : ObservableObject {
             request.Rating = ApplyRatingFromPane(request, wholeSelection: !IsPreviewSplit);
         Preview.RevealRequested += (_, path) => RevealPath(path);
         // The other half of a pair finds the search's text as the first one
-        // does (PLAN B6, 2026-09-25): both files are rows of the results.
+        // does: both files are rows of the results.
         PreviewSecond = new PreviewController(
             ServiceLocator.TryGet<IImageMetadataReader>(),
             companionMetadata) {
@@ -393,7 +393,7 @@ public sealed class MainViewModel : ObservableObject {
             if (e.PropertyName == nameof(PreviewController.ShowRawDecode)) {
                 PreviewSecond.ShowRawDecode = Preview.ShowRawDecode;
             } else if (e.PropertyName == nameof(PreviewController.ShowSvgSource)) {
-                // The same for the SVG switch (PLAN B8).
+                // The same for the SVG switch.
                 PreviewSecond.ShowSvgSource = Preview.ShowSvgSource;
             }
         };
@@ -525,7 +525,7 @@ public sealed class MainViewModel : ObservableObject {
         OpenWithCommand = new RelayCommand(OpenWith, p => OpenWithTarget(p) is not null);
         OpenInTerminalCommand = new RelayCommand(OpenInTerminal, p => TerminalFolder(p) is not null);
         // The text they put on the clipboard is noted at once: Wander stays
-        // in front, and Ctrl+V pastes it as a file (PLAN X).
+        // in front, and Ctrl+V pastes it as a file.
         CopyPathCommand = new RelayCommand(
             p => {
                 Shell.CopyPaths(TargetRules.CopyPaths(ResolveTarget(p).Target, _nav.Current));
@@ -687,7 +687,7 @@ public sealed class MainViewModel : ObservableObject {
     /// <summary>
     /// Every line the status bar is given, repeats included - the property
     /// does not change for the same words twice. The full screen covers the
-    /// status bar and says a warning or an error itself (PLAN Q5).
+    /// status bar and says a warning or an error itself.
     /// </summary>
     public event EventHandler<StatusLine>? StatusSaid;
 
@@ -766,8 +766,8 @@ public sealed class MainViewModel : ObservableObject {
     public (PictureShape? First, PictureShape? Second) PreviewPairShapes { get; private set; }
 
     /// <summary>
-    /// A preview for pictures shown on their own - the full screen (PLAN
-    /// Q5): the window's helpers, surround and RAW switch; stars on its bar
+    /// A preview for pictures shown on their own - the full screen:
+    /// the window's helpers, surround and RAW switch; stars on its bar
     /// that write to the picture it shows, not to the selection. The window
     /// feeds it and lets it go (<see cref="PreviewController.Detach"/>).
     /// </summary>
@@ -855,7 +855,7 @@ public sealed class MainViewModel : ObservableObject {
 
     /// <summary>
     /// How much the status line matters: the status bar puts a mark in front
-    /// of a warning and an error (PLAN block 0, step 8).
+    /// of a warning and an error.
     /// </summary>
     public StatusSeverity StatusSeverity {
         get => _statusSeverity;
@@ -1615,7 +1615,7 @@ public sealed class MainViewModel : ObservableObject {
     public RelayCommand PermanentDeleteCommand { get; }
     public RelayCommand OpenLogFileCommand { get; }
 
-    /// <summary>The debug menu's fake operation; the parameter names the scenario (PLAN AI1).</summary>
+    /// <summary>The debug menu's fake operation; the parameter names the scenario.</summary>
     public RelayCommand DebugOperationCommand { get; }
 
     /// <summary>The debug menu's camera mask (<see cref="SummaryText.MaskCamera"/>); the footers say it again at once.</summary>
@@ -2948,7 +2948,7 @@ public sealed class MainViewModel : ObservableObject {
         var archive = CurrentArchive;
 
         // The Recycle Bin gives what it has read so far while a slow listing
-        // goes on (PLAN AD2): the first portion lands as the whole listing
+        // goes on: the first portion lands as the whole listing
         // would - arrival, view, first screen - and the next ones land on it
         // as a re-listing of the same folder, the rows on screen kept in
         // place. One that comes after the whole is dropped.
@@ -3286,7 +3286,7 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     /// <summary>
-    /// A digit on a picture shown on its own - full screen (PLAN Q5): the
+    /// A digit on a picture shown on its own - full screen: the
     /// gallery's keys, for that one file rather than for the selection.
     /// </summary>
     public void RatePicture(FileSystemEntry picture, RatingField field, int digit) {
@@ -3565,12 +3565,12 @@ public sealed class MainViewModel : ObservableObject {
     /// <summary>
     /// The text a search inside files is looking for while the list shows
     /// its results, null otherwise - what a pane opened on files of it
-    /// finds at once: the comparison of two of them (PLAN B6, 2026-09-25).
+    /// finds at once: the comparison of two of them.
     /// </summary>
     public string? FoundText => IsSearchResults && ContentSearch.TextQuery.Length > 0 ? ContentSearch.TextQuery : null;
 
     /// <summary>
-    /// The row F3 goes on to past the last match in the preview (PLAN B6):
+    /// The row F3 goes on to past the last match in the preview:
     /// the next one a search inside files found after the file on show, in
     /// the list's order; null when the list is not such a search's results,
     /// or the file on show is the last of them.
@@ -4823,7 +4823,7 @@ public sealed class MainViewModel : ObservableObject {
                 _log.Error($"Undo failed: {failure.Step.Description}", failure.Error);
             }
             // The journal is the user's: the lines name files, and the reason
-            // is said in their words (PLAN block 0, step 7).
+            // is said in their words.
             var (failedNames, failedReason) = outcome.Failures.Count > 0
                 ? await DescribeUndoFailuresAsync(outcome.Failures)
                 : ("", "");
@@ -4920,7 +4920,7 @@ public sealed class MainViewModel : ObservableObject {
         return action.PathsAfterUndo is [var first, ..] ? Named(first, action.PathsAfterUndo.Count) : action.Description;
     }
 
-    /// <summary>The first file by name, the rest as a count - how a journal line names files (PLAN block 0, step 7).</summary>
+    /// <summary>The first file by name, the rest as a count - how a journal line names files.</summary>
     private static string Named(string first, int count) {
         string name = Path.GetFileName(first.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
 
@@ -5529,8 +5529,8 @@ public sealed class MainViewModel : ObservableObject {
         };
 
         // What is on the clipboard now, not at the last activation: text
-        // copied inside Wander while it stayed in front is the paste's too
-        // (PLAN X). One kind per paste - files, else text, else a picture.
+        // copied inside Wander while it stayed in front is the paste's too.
+        // One kind per paste - files, else text, else a picture.
         _clipboard.SyncFromSystem();
         var choice = _clipboard.Choice;
         if (choice.Kind != PasteKind.Files) {
@@ -5623,7 +5623,7 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     /// <summary>
-    /// Ctrl+V with no files on the clipboard (PLAN X): its text as a new
+    /// Ctrl+V with no files on the clipboard: its text as a new
     /// .txt file - UTF-8, no byte-order mark - or its picture as a new
     /// .png, named by the resources (PasteTextFileName, PasteImageFileName),
     /// in the folder the paste is for; "(N)" when the name is taken, and
@@ -5681,7 +5681,7 @@ public sealed class MainViewModel : ObservableObject {
     /// <summary>
     /// What else was on the clipboard, left there by the paste - a line in
     /// the journal and the log rather than the status bar, which says what
-    /// was pasted (PLAN X, decision of 2026-09-24).
+    /// was pasted (decision of 2026-09-24).
     /// </summary>
     private void NoteLeftOnClipboard(PasteChoice choice) {
         foreach (var left in choice.Left) {
@@ -5905,7 +5905,7 @@ public sealed class MainViewModel : ObservableObject {
 
     /// <summary>
     /// "; 'a.txt' was held (Word (PID 812)) - let go after 0.4 s" for what
-    /// an operation waited out (PLAN AF), or empty when it waited for
+    /// an operation waited out, or empty when it waited for
     /// nothing. The first by name, the rest as a count. A hold the wait did
     /// not outlast is a failure, and is told as one.
     /// </summary>
@@ -6089,7 +6089,7 @@ public sealed class MainViewModel : ObservableObject {
     /// callers can show a uniform message.
     ///
     /// <para>
-    /// Not modal (PLAN, block 2): the list stays live while a long copy
+    /// Not modal: the list stays live while a long copy
     /// runs, the way it does in Explorer. What used to be ShowDialog
     /// blocking this continuation is now the plain await below - the window
     /// is a display, not a gate.
@@ -6131,7 +6131,7 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     /// <summary>
-    /// The debug menu's "Операция" (PLAN AI1). The parameter is a
+    /// The debug menu's "Операция". The parameter is a
     /// <see cref="Diagnostics.DebugOperationScenario"/> by name, or
     /// <see cref="ThreeAtOnce"/> - three plain runs side by side, which is
     /// about the status bar rather than about any one of them.

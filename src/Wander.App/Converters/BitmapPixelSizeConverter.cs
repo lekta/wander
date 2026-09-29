@@ -18,8 +18,8 @@ namespace Wander.App.Converters;
 /// <para>
 /// Two values: the pixels (a bitmap, or a number of pixels across or down)
 /// and the display's scale (<c>PreviewPane.DpiScale</c>). Pixels taken as
-/// layout units drew the picture half as big again at 150 % and softened it
-/// (PLAN AM, 2026-09-21); the scale comes as a binding so a move to another
+/// layout units drew the picture half as big again at 150 % and softened it;
+/// the scale comes as a binding so a move to another
 /// monitor redoes the cap.
 /// </para>
 ///

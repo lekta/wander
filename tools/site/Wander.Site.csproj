@@ -14,7 +14,7 @@
     pages out. No reference to App or Core, and a plain net10.0 target,
     because the same command runs on the Linux runner that deploys to
     GitHub Pages. Markdig is the version the app already uses. See
-    docs/ARCHITECTURE.md, the site section.
+    docs/SITE.md.
   -->
   <ItemGroup>
     <PackageReference Include="Markdig" Version="1.2.0" />

@@ -16,8 +16,8 @@ public enum FullscreenMode {
 
 
 /// <summary>
-/// What Enter or Space shows full screen from the gallery (PLAN Q5,
-/// 2026-09-24). Pictures only: a selection with anything else in it opens
+/// What Enter or Space shows full screen from the gallery.
+/// Pictures only: a selection with anything else in it opens
 /// in its programs, as Enter always did. One picture is shown and the arrow
 /// keys walk the list; two are shown together; more are walked one by one,
 /// from the one the keyboard is on - the selection is the set to look

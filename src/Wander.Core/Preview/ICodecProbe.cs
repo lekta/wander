@@ -1,6 +1,6 @@
 namespace Wander.Core.Preview;
 
-/// <summary>A Store extension Windows lacks to open a picture format (PLAN B10).</summary>
+/// <summary>A Store extension Windows lacks to open a picture format.</summary>
 public enum MissingCodec {
     /// <summary>Nothing is missing: the file itself is at fault.</summary>
     None,
@@ -15,7 +15,7 @@ public enum MissingCodec {
 
 /// <summary>
 /// Which extension from the Microsoft Store Windows lacks for a format it
-/// reads through one (PLAN B10). Asked only after a picture failed to
+/// reads through one. Asked only after a picture failed to
 /// decode: the answer is the system's registry of decoders, not a decode,
 /// and costs tens of milliseconds - off the UI thread. Not kept between
 /// asks: an extension installed meanwhile is found the next time.

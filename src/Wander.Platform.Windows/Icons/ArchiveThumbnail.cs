@@ -7,7 +7,7 @@ using Wander.Core.Shell;
 namespace Wander.Platform.Windows.Icons;
 
 /// <summary>
-/// A thumbnail for a picture inside an archive (PLAN AL). The shell has
+/// A thumbnail for a picture inside an archive. The shell has
 /// none to give: both archive handlers answer an entry with its type's icon
 /// and never with its picture (stand 2026-09-25, zip and 7z, every flag of
 /// <c>IShellItemImageFactory</c>). So the entry's bytes are read and drawn

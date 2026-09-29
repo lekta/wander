@@ -4,7 +4,7 @@ namespace Wander.Core.FileSystem;
 /// What the operating system's clipboard holds: a list of paths plus a flag
 /// saying whether the owner meant "copy" or "cut" - the payload Wander both
 /// reads and writes - and whether text or a picture is there, which a paste
-/// turns into a new file (PLAN X). Their bytes are not read here: they are
+/// turns into a new file. Their bytes are not read here: they are
 /// read when pasted, and only then.
 /// </summary>
 /// <param name="Paths">The files and folders on the clipboard, in the order the owner put them.</param>
@@ -20,7 +20,7 @@ namespace Wander.Core.FileSystem;
 /// <param name="HasImage">A picture is there - a PNG an application put, or a device-independent bitmap.</param>
 /// <param name="HasAnything">
 /// Anything at all is there, of whatever format: a paste of what Wander
-/// cannot take says what it was (PLAN X).
+/// cannot take says what it was.
 /// </param>
 public readonly record struct ClipboardFiles(
     IReadOnlyList<string> Paths,

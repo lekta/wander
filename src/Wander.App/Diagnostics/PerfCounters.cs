@@ -4,7 +4,7 @@ namespace Wander.App.Diagnostics;
 
 /// <summary>
 /// Counts next to <c>PerfLog</c>'s timings: how many containers a layout
-/// pass built, reused or threw away (PLAN R1). Same one-second window, same
+/// pass built, reused or threw away. Same one-second window, same
 /// log, a different unit - and a different rule for writing: every window
 /// that counted anything is written out, because a count of thirty says
 /// something a total of thirty milliseconds does not. Numbers, not times,

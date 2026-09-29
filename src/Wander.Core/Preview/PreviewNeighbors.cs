@@ -3,7 +3,7 @@ using Wander.Core.FileSystem;
 namespace Wander.Core.Preview;
 
 /// <summary>
-/// Which pictures the pane decodes ahead of time (PLAN AK, step 4): the rows
+/// Which pictures the pane decodes ahead of time: the rows
 /// right above and right below the one on show, when they are pictures - an
 /// arrow key lands on one of them next. The one in the direction the
 /// selection has been moving comes first: a walk down a folder asks for the

@@ -98,7 +98,7 @@ public sealed class MetadataExtractorImageReader : IImageMetadataReader {
 
 
     /// <summary>
-    /// A HEIF picture (PLAN B10) comes out of the WIC decoder already turned
+    /// A HEIF picture comes out of the WIC decoder already turned
     /// and mirrored by its container's own transforms, and the decoder
     /// ignores the EXIF tag: an iPhone photograph carries both, and turned
     /// by the tag again it lay on its side (stand 2026-09-25). So nothing is

@@ -216,7 +216,7 @@ public sealed class FileOperationService {
 
     /// <summary>
     /// A new file of <paramref name="content"/> in <paramref name="folder"/>
-    /// - text or a picture pasted from the clipboard (PLAN X). Named
+    /// - text or a picture pasted from the clipboard. Named
     /// <paramref name="name"/>, or its next free "(N)"
     /// (<see cref="UniqueNames"/>); undone to the recycle bin, like a folder
     /// created. Nothing is replaced, so nothing is asked.
@@ -250,7 +250,7 @@ public sealed class FileOperationService {
     }
 
     /// <summary>
-    /// The rename itself, past whatever holds the path (PLAN AF, block 0):
+    /// The rename itself, past whatever holds the path:
     /// an operation of the user's on it refuses the rename by name, a held
     /// file is waited for, a held folder is tried again while it answers
     /// "in use". Synchronous, like the rename: at most the budget.

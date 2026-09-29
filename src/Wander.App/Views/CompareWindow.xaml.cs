@@ -15,7 +15,7 @@ using Wander.Core.Preview;
 namespace Wander.App.Views;
 
 /// <summary>
-/// Two files side by side (PLAN Q5) - opened from a pair of the conflict
+/// Two files side by side - opened from a pair of the conflict
 /// window. Each half is a <see cref="PreviewPane"/> with a controller of
 /// its own; this window only ties them together.
 /// </summary>
@@ -39,7 +39,7 @@ public partial class CompareWindow : Window {
     private bool _showingB;
 
 
-    /// <param name="found">The text a search inside files is looking for, when the list shows its results: both texts open on it (PLAN B6).</param>
+    /// <param name="found">The text a search inside files is looking for, when the list shows its results: both texts open on it.</param>
     private CompareWindow(
         FileSystemEntry a, FileSystemEntry b, ReviewHelpers? helpers, string? found, PictureShape? shapeA, PictureShape? shapeB) {
         InitializeComponent();
@@ -217,9 +217,9 @@ public partial class CompareWindow : Window {
             }
 
             // The window's helpers when there is a main window to take them
-            // from: the switches are one set for every pane (PLAN Q5). And
+            // from: the switches are one set for every pane. And
             // the text of a search inside files, when its results are what
-            // was copied (PLAN B6).
+            // was copied.
             var main = Application.Current?.MainWindow?.DataContext as MainViewModel;
             var window = new CompareWindow(left, right, main?.Helpers, main?.FoundText, a, b) { Owner = owner };
             window.Show();

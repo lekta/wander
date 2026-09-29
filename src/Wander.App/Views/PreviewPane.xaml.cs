@@ -90,7 +90,7 @@ public partial class PreviewPane : UserControl {
 
     /// <summary>
     /// Device pixels per layout unit on the monitor the pane is on - what
-    /// the pictures' caps divide their pixels by (PLAN AM). A property to
+    /// the pictures' caps divide their pixels by. A property to
     /// bind to, so a move to another monitor redoes them.
     /// </summary>
     public double DpiScale {
@@ -163,7 +163,7 @@ public partial class PreviewPane : UserControl {
 
 
     /// <summary>
-    /// Ties the held-button zoom of two panes (PLAN Q5): the one under the
+    /// Ties the held-button zoom of two panes: the one under the
     /// mouse leads, the other shows the same place of its own picture - or
     /// stands still while the right button is held as well, which is how
     /// two frames framed apart are lined up (<see cref="ZoomLink"/>). The
@@ -284,7 +284,7 @@ public partial class PreviewPane : UserControl {
     }
 
     /// <summary>
-    /// Ctrl+3 (PLAN B6): the keyboard into what the pane shows - the text or
+    /// Ctrl+3: the keyboard into what the pane shows - the text or
     /// the code, to read, select and find in; the document; the page; the
     /// play button of a clip or a track. A pane still loading takes it when
     /// its content comes. False when nothing here takes the keyboard - a
@@ -365,7 +365,7 @@ public partial class PreviewPane : UserControl {
     /// <summary>
     /// Tells the controller how many device pixels a picture has here - the
     /// content area less the picture's margin (<see cref="PictureMargin"/>) -
-    /// so it decodes one to that size (PLAN AK, step 3).
+    /// so it decodes one to that size.
     /// </summary>
     private void ReportViewport() {
         if (DataContext is not PreviewController controller || ContentArea.ActualWidth <= 0) {
@@ -395,7 +395,7 @@ public partial class PreviewPane : UserControl {
     }
 
     /// <summary>
-    /// The controller let go of its file for an operation (PLAN AF): the
+    /// The controller let go of its file for an operation: the
     /// browser leaves the page it had open - a PDF on screen holds its file.
     /// The player is closed already: its source went with the content.
     /// </summary>
@@ -571,12 +571,12 @@ public partial class PreviewPane : UserControl {
             // Explicit user-data folder: the default is "<exe dir>.WebView2",
             // which fails silently when Wander runs from a read-only location
             // (portable exe in Program Files, network share). Under the
-            // system Temp when scratch copies go there (PLAN AD1).
+            // system Temp when scratch copies go there.
             string dataFolder = AppPaths.WebView2;
             // The browser fetches components for itself - safe-browsing
             // lists, tracking protection, spell-check - into the profile:
             // 42 MB over two months, for a pane that shows local files with
-            // the network cut off anyway (PLAN AD1). Every pane of the
+            // the network cut off anyway. Every pane of the
             // process asks with the same options: the folder takes one set.
             var options = new CoreWebView2EnvironmentOptions {
                 AdditionalBrowserArguments = "--disable-component-update --disable-background-networking",
@@ -1014,7 +1014,7 @@ public partial class PreviewPane : UserControl {
     }
 
 
-    // --- The picture's bar (PLAN Q5) -------------------------------------
+    // --- The picture's bar -----------------------------------------------
     //
     // Full screen and in each half of a split a picture carries its own
     // stars and sharpness score (and, full screen, the helpers' switches)
@@ -1789,7 +1789,7 @@ public partial class PreviewPane : UserControl {
     }
 
 
-    // --- Find in the text (PLAN B6) ---------------------------------------
+    // --- Find in the text -------------------------------------------------
 
     // Where the query occurs: offsets into the plain text or the code, or
     // ranges of the rich-text document - its text is spread over runs, and
@@ -1805,7 +1805,7 @@ public partial class PreviewPane : UserControl {
     // A query handed over before the rich-text document was read (LoadDocumentAsync).
     private string? _pendingFind;
 
-    // The matches past the part of the text on show (PLAN B6): how many,
+    // The matches past the part of the text on show: how many,
     // and the count still running for the query in the field.
     private int _beyond;
     private CancellationTokenSource? _beyondCts;
@@ -1843,7 +1843,7 @@ public partial class PreviewPane : UserControl {
     }
 
     /// <summary>
-    /// F3 / Shift+F3 (PLAN B6): the next or the previous match of the find
+    /// F3 / Shift+F3: the next or the previous match of the find
     /// field open over the text. Past the last match with
     /// <paramref name="canLeave"/> nothing moves and the answer says so -
     /// the window goes on to the next file a search inside files found;
@@ -1944,7 +1944,7 @@ public partial class PreviewPane : UserControl {
 
     /// <summary>
     /// Counts the matches past the part on show, when the text goes on past
-    /// it (PLAN B6, 2026-09-25): off the UI thread, dropped when the query
+    /// it: off the UI thread, dropped when the query
     /// or the text changes first.
     /// </summary>
     private void CountBeyond(string query) {

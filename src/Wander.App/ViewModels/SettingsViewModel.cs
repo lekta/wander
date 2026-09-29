@@ -647,7 +647,7 @@ public sealed class SettingsViewModel : ObservableObject {
     private IReadOnlyList<ProgramChoice> _programChoices = Array.Empty<ProgramChoice>();
 
     /// <summary>
-    /// The catalog's debug-only rows (PLAN AI2). Kept out of the table -
+    /// The catalog's debug-only rows. Kept out of the table -
     /// there is nothing to edit on them and the page is about what the user
     /// set up - and handed to the menus with the rest, which show them only
     /// while the debug menu is on. Never stored: with no row of their own

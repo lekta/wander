@@ -129,7 +129,7 @@ public sealed class ShellArchiveFolder {
 
     /// <summary>
     /// The bytes of one entry through the handler's own stream
-    /// (<c>BHID_Stream</c>, PLAN AL): a zip gives one, and the entry is read
+    /// (<c>BHID_Stream</c>): a zip gives one, and the entry is read
     /// into memory with no copy on disk. Null where the handler has none -
     /// <c>ArchiveFolder</c> (7z, rar, tar) answers <c>E_NOINTERFACE</c> -
     /// or the read fails: the copy engine (<see cref="CopyOut"/>) is the

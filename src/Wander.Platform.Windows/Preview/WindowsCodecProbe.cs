@@ -5,7 +5,7 @@ namespace Wander.Platform.Windows.Preview;
 
 /// <summary>
 /// Asks Media Foundation's registry of decoders which Store extension is
-/// missing (PLAN B10). Both halves of a HEIC are there as decoders once
+/// missing. Both halves of a HEIC are there as decoders once
 /// installed (stand 2026-09-25): WIC's HEIF decoder is a stub in
 /// <c>windowscodecs.dll</c> that looks the Store codec up by its own class
 /// as an input type, and the HEVC one is an ordinary video decoder. WIC's

@@ -161,7 +161,7 @@ public sealed class ZipDocumentExtractor : IContentExtractor {
     /// nothing because a Word paragraph is split into runs at every
     /// formatting change: without a separator, a sentence with one bold
     /// word in it joins into a string no query would ever match. Line
-    /// breaks because the preview pane shows this text (PLAN B5), and a
+    /// breaks because the preview pane shows this text, and a
     /// document without them is a single line of a hundred thousand
     /// characters; a search's snippet is the match's line, too.
     /// </summary>

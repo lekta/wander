@@ -41,7 +41,7 @@ public interface IShellNamespace {
     /// <para>
     /// <paramref name="portions"/>, when given, hears the rows read so far,
     /// in the order the whole listing will have, while a slow listing is
-    /// still being read (<c>PortionClock</c>, PLAN AD2) - the Recycle Bin
+    /// still being read (<c>PortionClock</c>) - the Recycle Bin
     /// reports them; an archive lists at once and reports none.
     /// </para>
     /// </summary>
@@ -77,7 +77,7 @@ public interface IShellNamespace {
     /// <summary>
     /// The size of a file inside an archive as the archive states it; null
     /// when it states none or the path is not such a file - what decides
-    /// whether an entry is worth unpacking to draw its thumbnail (PLAN AL).
+    /// whether an entry is worth unpacking to draw its thumbnail.
     /// Opens the archive, so off the UI thread.
     /// </summary>
     long? SizeOf(string path);
@@ -85,7 +85,7 @@ public interface IShellNamespace {
     /// <summary>
     /// The bytes of a file inside an archive through the handler's own
     /// stream - what a zip gives, and the entry is read into memory with no
-    /// copy on disk (PLAN AL, decision of 2026-09-25). Null where the
+    /// copy on disk (decision of 2026-09-25). Null where the
     /// handler has none - 7z, rar, tar - the path is not such a file, or
     /// the read failed: <see cref="CopyOut"/> is the way then. The caller
     /// checks <see cref="SizeOf"/> first: nothing here caps the size. Opens

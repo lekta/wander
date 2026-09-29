@@ -142,7 +142,7 @@ public sealed class ConflictWindowViewModel : ObservableObject {
 
     /// <summary>
     /// One answer for the whole list, decided rows included - the buttons in
-    /// the header (PLAN, Q8). Unlike <see cref="BulkAction"/>, which is
+    /// the header. Unlike <see cref="BulkAction"/>, which is
     /// "apply to the rest", this one overrules what has been answered
     /// already: that is what the user is saying when they reach for it.
     /// Nothing is scanned afterwards, because the window is about to close.

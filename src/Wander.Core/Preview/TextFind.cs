@@ -1,7 +1,7 @@
 namespace Wander.Core.Preview;
 
 /// <summary>
-/// Finding text in what the preview pane shows (PLAN B6): where the query
+/// Finding text in what the preview pane shows: where the query
 /// occurs, and which occurrence Enter and Shift+Enter go to. Case is
 /// ignored, as in the content search that may have brought the file here.
 /// </summary>
@@ -75,7 +75,7 @@ public static class TextFind {
     /// <paramref name="reader"/> gives after its first <paramref name="skip"/>
     /// characters - counted as <see cref="All"/> counts, case ignored and no
     /// overlap - without holding the text: the part of a file past what the
-    /// pane shows, which can be hundreds of megabytes (PLAN B6). Stops at
+    /// pane shows, which can be hundreds of megabytes. Stops at
     /// <see cref="MaxMatches"/>.
     /// </summary>
     public static int Count(TextReader reader, string query, long skip = 0, CancellationToken ct = default) {

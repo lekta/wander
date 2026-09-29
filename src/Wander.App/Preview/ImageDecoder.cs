@@ -71,7 +71,7 @@ internal static class ImageDecoder {
 
 
     /// <summary>
-    /// A TGA texture, which WIC has no codec for (PLAN B8): decoded by
+    /// A TGA texture, which WIC has no codec for: decoded by
     /// Core's <see cref="TgaDecoder"/>, straight alpha as it comes. Null
     /// when it cannot be read or is not a TGA this reads.
     /// </summary>
@@ -211,7 +211,7 @@ internal static class ImageDecoder {
             // A decode that fails half-way may not throw: a HEIC with its
             // pixels unreadable - cut short, or no HEVC decoder on the
             // machine - comes back as a picture of 1 x 1 and says so only
-            // with this event (stand 2026-09-25, PLAN B10).
+            // with this event (stand 2026-09-25).
             bool failed = false;
             bi.DecodeFailed += (_, _) => failed = true;
             bi.BeginInit();

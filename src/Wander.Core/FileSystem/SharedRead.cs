@@ -3,7 +3,7 @@ namespace Wander.Core.FileSystem;
 /// <summary>
 /// How Wander reads a user's file for itself - a preview, a cover, a
 /// thumbnail, a mesh - so that the read never stands in the way of what
-/// the user does with the file (PLAN AF, decision of 2026-09-21).
+/// the user does with the file (decision of 2026-09-21).
 ///
 /// <para>
 /// Opened with <see cref="FileShare.Delete"/>: a file open here can still be
@@ -15,7 +15,7 @@ namespace Wander.Core.FileSystem;
 ///
 /// <para>
 /// Not for an operation the user asked for (a conversion reads its input as
-/// the user's work, see PLAN block 0, step 5) and not for Wander's own files.
+/// the user's work) and not for Wander's own files.
 /// </para>
 /// </summary>
 public static class SharedRead {

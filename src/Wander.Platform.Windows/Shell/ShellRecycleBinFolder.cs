@@ -45,7 +45,7 @@ internal sealed class ShellRecycleBinFolder {
     /// </summary>
     /// <param name="portions">
     /// Hears the rows read so far, sorted, while a slow listing is still
-    /// being read (<see cref="PortionClock"/>, PLAN AD2): on a cold disk the
+    /// being read (<see cref="PortionClock"/>): on a cold disk the
     /// seconds are spread over the rows - every item is a <c>$I</c> file
     /// read - and the list fills in instead of waiting for the last one.
     /// </param>
@@ -110,7 +110,7 @@ internal sealed class ShellRecycleBinFolder {
                 }
             }
 
-            // The control line for the bin's slowness (PLAN AD2): where a
+            // The control line for the bin's slowness: where a
             // cold listing spends its seconds - before the first row, or
             // spread over all of them - and how many portions the list got
             // while it waited.

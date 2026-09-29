@@ -9,7 +9,7 @@
         UseLayoutRounding="True"
         Background="{StaticResource ChromeBackground}">
     <!--
-        Two files side by side (PLAN Q5): two preview panes, each with its
+        Two files side by side: two preview panes, each with its
         own controller, so each draws what the main pane would - a picture,
         a text, a document. Texts scroll together, a held zoom looks at the
         same place of both pictures, and two pictures can be laid on one

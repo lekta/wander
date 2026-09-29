@@ -7,7 +7,7 @@ using Windows.Storage.Streams;
 namespace Wander.Platform.Windows.Icons;
 
 /// <summary>
-/// A thumbnail for a TGA texture (PLAN B8). Windows has no codec and no
+/// A thumbnail for a TGA texture. Windows has no codec and no
 /// thumbnail provider for the format, so the shell draws the generic icon;
 /// this decodes it with Core's <see cref="TgaDecoder"/> and scales it the
 /// way <see cref="RawThumbnail"/> does. A null return puts the caller back

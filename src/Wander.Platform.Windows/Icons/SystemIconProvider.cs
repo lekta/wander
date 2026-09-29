@@ -475,7 +475,7 @@ public sealed class SystemIconProvider : IIconProvider {
 
         // Medium is a thumbnail only for the files that have one; the rest
         // fall back to the shared per-extension icon, exactly as Normal does.
-        // A picture inside an archive has one of its own (PLAN AL).
+        // A picture inside an archive has one of its own.
         if (size == IconSize.Medium && (IsThumbnailable(path) || ArchiveThumbnail.Supports(path))) {
             return ($"thumb96|{path}", true);
         }
@@ -597,7 +597,7 @@ public sealed class SystemIconProvider : IIconProvider {
     /// </para>
     /// </summary>
     private static byte[]? LoadMediumImage(string path) {
-        // A picture inside an archive: unpacked and drawn (PLAN AL); the
+        // A picture inside an archive: unpacked and drawn; the
         // icon below when it cannot be.
         if (ArchiveThumbnail.Supports(path)) {
             return ArchiveThumbnail.Render(path, MediumSize) ?? LoadShellIcon(path, IconSize.Normal);
@@ -1026,7 +1026,7 @@ public sealed class SystemIconProvider : IIconProvider {
         // of the same file look blurrier than before Wander ran. Splitting
         // the paths keeps icon-only writes out of the shared cache.
         //
-        // A picture inside an archive is unpacked and drawn (PLAN AL); when
+        // A picture inside an archive is unpacked and drawn; when
         // it cannot be, the icon path below takes it as any other entry.
         if (ArchiveThumbnail.Supports(path) && ArchiveThumbnail.Render(path, side) is { } entry) {
             return entry;
@@ -1057,7 +1057,7 @@ public sealed class SystemIconProvider : IIconProvider {
         if (thumbTarget is null && RawThumbnail.Render(path, side) is { } rawThumb) {
             return rawThumb;
         }
-        // No codec and no provider for TGA on Windows: decoded here (PLAN B8).
+        // No codec and no provider for TGA on Windows: decoded here.
         if (thumbTarget is null && TgaThumbnail.Render(path, side) is { } tgaThumb) {
             return tgaThumb;
         }
@@ -1147,7 +1147,7 @@ public sealed class SystemIconProvider : IIconProvider {
     /// contents. Never for anything inside an archive: the archive handlers
     /// have no thumbnail for an entry and answer with its type's icon
     /// (stand 2026-09-25). A picture in there is drawn by
-    /// <see cref="ArchiveThumbnail"/> instead (PLAN AL); every other entry
+    /// <see cref="ArchiveThumbnail"/> instead; every other entry
     /// gets the icon its extension registers - which
     /// <c>SHGFI_USEFILEATTRIBUTES</c> hands out for a path that is not on
     /// disk.
@@ -1329,8 +1329,8 @@ public sealed class SystemIconProvider : IIconProvider {
     /// </summary>
     private static Bitmap? LoadShellBitmap(string path, int side) {
         // The shell's thumbnail handler cannot be stopped half-way, but a
-        // delete that runs into it waits knowing it is ours, and says so
-        // (PLAN AF, block 0, step 5). Per call, like the other static
+        // delete that runs into it waits knowing it is ours, and says so.
+        // Per call, like the other static
         // helpers here: one dictionary lookup beside a shell round-trip.
         using var claim = ServiceLocator.TryGet<PathClaims>()?.Claim(new[] { path }, ClaimKind.Background, ClaimOwners.Thumbnail);
         IShellItem? item = null;

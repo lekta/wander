@@ -29,7 +29,7 @@ public static class BuildInfo {
     /// <summary>
     /// This machine's build counter - the fourth number of
     /// <c>AssemblyFileVersion</c>, stamped by the csproj from
-    /// <c>build-number.txt</c> (PLAN AH). 0 for a release build and for CI,
+    /// <c>build-number.txt</c>. 0 for a release build and for CI,
     /// where the counter does not exist: three numbers name the build there.
     /// </summary>
     public static int BuildNumber { get; } = ReadBuildNumber();

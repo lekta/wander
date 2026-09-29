@@ -12,7 +12,7 @@ public enum SignatureState {
 
 
 /// <summary>
-/// What the preview card says about a program or a library (PLAN B7): the
+/// What the preview card says about a program or a library: the
 /// version resource and the PE header - the file's first kilobytes. Any of
 /// it may be missing; the card shows what there is. The signature is read
 /// apart (<see cref="SignatureInfo"/>).

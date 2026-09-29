@@ -14,8 +14,8 @@ namespace Wander.Core.Persistence;
 public sealed record AppState {
     /// <summary>
     /// The shape of this file, as a number that goes up whenever a change
-    /// here would be lost or misread by an older Wander (PLAN AD11,
-    /// decision of 2026-09-22). Older builds still run and still write:
+    /// here would be lost or misread by an older Wander
+    /// (decision of 2026-09-22). Older builds still run and still write:
     /// what they must not do is write over a file of a newer shape, and
     /// this is what they compare against.
     ///
@@ -25,7 +25,7 @@ public sealed record AppState {
     /// simply ignores and carries through costs nothing and stays at the
     /// same number. The full rule - which copy is allowed to write when
     /// several versions of Wander live on one machine - is still open
-    /// (PLAN AD11).
+    /// (BACKLOG, AD11).
     /// </para>
     /// </summary>
     public const int CurrentVersion = 1;
@@ -90,7 +90,7 @@ public sealed record AppState {
     /// <summary>
     /// Version of the build that last wrote this file - the three numbers
     /// and the suffix (<c>0.5.0-beta</c>), without the commit and without
-    /// the build number of PLAN AH: a rebuild of the same version is the
+    /// the build number: a rebuild of the same version is the
     /// same version here.
     ///
     /// <para>

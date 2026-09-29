@@ -11,8 +11,10 @@
 #
 #     .\tools\deps.ps1                отчёт на экран
 #     .\tools\deps.ps1 -Out deps.txt  отчёт ещё и в файл
-#     .\tools\deps.ps1 -UpdateDoc     перезаписать блок в docs/ARCHITECTURE.md
-#                                     (между маркерами deps:generated)
+#     .\tools\deps.ps1 -UpdateDoc     отчёт целиком - в docs/deps.txt, уровни,
+#                                     циклы и расхождения - в блок
+#                                     docs/ARCHITECTURE.md (между маркерами
+#                                     deps:generated)
 #
 # Что считается:
 #   * рёбра проект -> проект;
@@ -154,14 +156,20 @@ foreach ($f in $csFiles) {
 # --- Отчёт -----------------------------------------------------------
 
 $report = New-Object System.Collections.Generic.List[string]
-function Add-Line([string]$text) {
+# Краткая часть отчёта - то, что -UpdateDoc кладёт в ARCHITECTURE.md:
+# уровни, циклы, расхождения. Рёбра туда не идут.
+$brief = New-Object System.Collections.Generic.List[string]
+function Add-Line([string]$text, [switch]$Brief) {
     $script:report.Add($text)
+    if ($Brief) {
+        $script:brief.Add($text)
+    }
 }
 
-Add-Line "=== Wander dependency graph (using sweep) ==="
-Add-Line ("date   : " + (Get-Date -Format 'yyyy-MM-dd'))
-Add-Line ("commit : " + (git rev-parse --short HEAD))
-Add-Line ""
+Add-Line "=== Wander dependency graph (using sweep) ===" -Brief
+Add-Line ("date   : " + (Get-Date -Format 'yyyy-MM-dd')) -Brief
+Add-Line ("commit : " + (git rev-parse --short HEAD)) -Brief
+Add-Line "" -Brief
 
 # Проект -> проект.
 Add-Line "-- projects --"
@@ -308,32 +316,32 @@ foreach ($project in @('Wander.Core', 'Wander.Platform.Windows', 'Wander.App')) 
     }
 
     Add-Line ""
-    Add-Line ("-- {0}: levels --" -f $project)
+    Add-Line ("-- {0}: levels --" -f $project) -Brief
     foreach ($lv in ($level.Values | Sort-Object -Unique)) {
         $names = @($level.Keys | Where-Object { $level[$_] -eq $lv } | Sort-Object)
-        Add-Line ("  {0}: {1}" -f $lv, ($names -join ', '))
+        Add-Line ("  {0}: {1}" -f $lv, ($names -join ', ')) -Brief
     }
     if ($cyclic.Count -gt 0) {
-        Add-Line "  cycle edges:"
+        Add-Line "  cycle edges:" -Brief
         foreach ($from in ($cyclic | Sort-Object)) {
             if ($inner.ContainsKey($from)) {
                 foreach ($to in ($inner[$from] | Sort-Object)) {
                     if ($cyclic.Contains($to) -and $group[$from] -eq $group[$to]) {
-                        Add-Line ("    {0} -> {1}" -f $from, $to)
+                        Add-Line ("    {0} -> {1}" -f $from, $to) -Brief
                     }
                 }
             }
         }
     }
-    Add-Line ""
+    Add-Line "" -Brief
 }
 
-Add-Line "-- namespace <> folder mismatches --"
+Add-Line "-- namespace <> folder mismatches --" -Brief
 if ($mismatches.Count -eq 0) {
-    Add-Line "  (none)"
+    Add-Line "  (none)" -Brief
 } else {
     foreach ($m in ($mismatches | Sort-Object)) {
-        Add-Line ("  " + $m)
+        Add-Line ("  " + $m) -Brief
     }
 }
 
@@ -360,9 +368,13 @@ if ($UpdateDoc) {
     if ($content -notmatch "`r`n") {
         $nl = "`n"
     }
-    $block = $begin + $nl + '```' + $nl + $text + $nl + '```' + $nl
+    $utf8 = New-Object System.Text.UTF8Encoding($false)
+    $block = $begin + $nl + '```' + $nl + ($brief -join $nl) + $nl + '```' + $nl
     $updated = $content.Substring(0, $iBegin) + $block + $content.Substring($iEnd)
-    [System.IO.File]::WriteAllText((Join-Path $repoRoot $doc), $updated, (New-Object System.Text.UTF8Encoding($false)))
+    [System.IO.File]::WriteAllText((Join-Path $repoRoot $doc), $updated, $utf8)
+
+    $full = 'docs/deps.txt'
+    [System.IO.File]::WriteAllText((Join-Path $repoRoot $full), (($report -join $nl) + $nl), $utf8)
     Write-Output ""
-    Write-Output ("updated " + $doc)
+    Write-Output ("updated " + $doc + " and " + $full)
 }

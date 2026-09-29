@@ -46,7 +46,7 @@ public static class PlatformBootstrapper {
             $"elevated: {IsElevated()}");
 
         ServiceLocator.Register<IFileSystem>(new SystemIOFileSystem());
-        // Who in Wander is working on which path (PLAN AF): the file
+        // Who in Wander is working on which path: the file
         // operations below claim what they touch, the thumbnail and search
         // readers claim what they read. Before either of them.
         ServiceLocator.Register<PathClaims>(new PathClaims());
@@ -117,7 +117,7 @@ public static class PlatformBootstrapper {
         ServiceLocator.Register<IToolLocator>(new WindowsToolLocator());
         var builtins = new IBuiltinAction[] {
             new ImageConvertAction(ServiceLocator.Get<IImageMetadataReader>(), logger),
-            // Debug only (PLAN AI2): makes a file genuinely busy on demand.
+            // Debug only: makes a file genuinely busy on demand.
             new HoldFileAction(),
         };
         ServiceLocator.Register<ExternalActionRunner>(new ExternalActionRunner(

@@ -53,10 +53,10 @@ public sealed class ClipboardController {
     /// <summary>Convenience flag for command <c>CanExecute</c> bindings.</summary>
     public bool HasContent => _paths.Count > 0;
 
-    /// <summary>The system clipboard held text when last read (<see cref="SyncFromSystem"/>) - a paste makes a file of it (PLAN X).</summary>
+    /// <summary>The system clipboard held text when last read (<see cref="SyncFromSystem"/>) - a paste makes a file of it.</summary>
     public bool HasText { get; private set; }
 
-    /// <summary>The system clipboard held a picture when last read - a paste makes a PNG of it (PLAN X).</summary>
+    /// <summary>The system clipboard held a picture when last read - a paste makes a PNG of it.</summary>
     public bool HasImage { get; private set; }
 
     /// <summary>The system clipboard held anything at all when last read.</summary>
@@ -64,12 +64,12 @@ public sealed class ClipboardController {
 
     /// <summary>
     /// Ctrl+V has something to take or to report on: files, text, a picture
-    /// - or anything else, which a paste names as what it could not take
-    /// (PLAN X). Which of them it takes is <see cref="ClipboardPaste.Choose"/>.
+    /// - or anything else, which a paste names as what it could not take.
+    /// Which of them it takes is <see cref="ClipboardPaste.Choose"/>.
     /// </summary>
     public bool CanPaste => HasContent || HasText || HasImage || HasAnything;
 
-    /// <summary>What a paste takes of what the clipboard held when last read (PLAN X).</summary>
+    /// <summary>What a paste takes of what the clipboard held when last read.</summary>
     public PasteChoice Choice => ClipboardPaste.Choose(new ClipboardFiles(
         _paths, IsCut, LastSystemIssue == SystemIssue.VirtualFiles, HasText, HasImage, HasAnything));
 
@@ -162,7 +162,7 @@ public sealed class ClipboardController {
         LastSystemIssue = files.Value.HasUnsupportedFiles ? SystemIssue.VirtualFiles : null;
 
         // Text and a picture are not held here, only noted: what they are is
-        // read when they are pasted (PLAN X). Files are something too.
+        // read when they are pasted. Files are something too.
         var read = files.Value;
         bool anything = read.HasAnything || read.HasContent || read.HasUnsupportedFiles || read.HasText || read.HasImage;
         bool othersChanged = read.HasText != HasText || read.HasImage != HasImage || anything != HasAnything;
@@ -186,12 +186,12 @@ public sealed class ClipboardController {
     }
 
 
-    /// <summary>The clipboard's text now (PLAN X), or null: there is none, or it cannot be read.</summary>
+    /// <summary>The clipboard's text now, or null: there is none, or it cannot be read.</summary>
     public string? ReadText() {
         return _system?.GetText();
     }
 
-    /// <summary>The clipboard's picture now, as PNG (PLAN X), or null. Off the UI thread - see <see cref="ISystemClipboard.GetImagePng"/>.</summary>
+    /// <summary>The clipboard's picture now, as PNG, or null. Off the UI thread - see <see cref="ISystemClipboard.GetImagePng"/>.</summary>
     public byte[]? ReadImagePng() {
         return _system?.GetImagePng();
     }

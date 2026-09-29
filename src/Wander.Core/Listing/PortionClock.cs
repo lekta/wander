@@ -2,7 +2,7 @@ namespace Wander.Core.Listing;
 
 /// <summary>
 /// When a listing that is still being read gives the list what it has so
-/// far (PLAN AD2): the Recycle Bin on a cold disk spends its seconds spread
+/// far: the Recycle Bin on a cold disk spends its seconds spread
 /// over the rows - 6.4 s for 1469 rows, the first after 12 ms (session log
 /// of 2026-09-21) - and a list that fills in beats one that stays empty to
 /// the end. A listing quicker than <see cref="FirstMs"/> gives nothing

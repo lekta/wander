@@ -1,6 +1,6 @@
 namespace Wander.Core.FileSystem;
 
-/// <summary>What one Ctrl+V takes off the clipboard (PLAN X).</summary>
+/// <summary>What one Ctrl+V takes off the clipboard.</summary>
 public enum PasteKind {
     /// <summary>Nothing it can take: files that are nowhere on disk, or formats Wander does not read.</summary>
     None,
@@ -21,7 +21,7 @@ public sealed record PasteChoice(PasteKind Kind, IReadOnlyList<PasteKind> Left);
 
 
 /// <summary>
-/// Which of the clipboard's contents a paste takes (PLAN X). One kind per
+/// Which of the clipboard's contents a paste takes. One kind per
 /// paste, in this order: files, then text, then a picture (decision of
 /// 2026-09-24) - Excel puts the text of the cells and a picture of them
 /// there together, and the text is what the cells hold.

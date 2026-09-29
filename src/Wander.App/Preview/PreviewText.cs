@@ -191,7 +191,7 @@ internal static class PreviewText {
 
 
     /// <summary>
-    /// The page an SVG is drawn on (PLAN B8): the picture as an image, fitted
+    /// The page an SVG is drawn on: the picture as an image, fitted
     /// to the pane either way - a vector has no size worth keeping - on the
     /// surround's colour, as the pane draws a photograph. As an image it runs
     /// no script and fetches nothing, whatever the file carries.

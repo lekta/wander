@@ -158,7 +158,7 @@ public sealed class ConflictRowViewModel : ObservableObject {
 
     /// <summary>
     /// Two files the preview can draw: the row offers to open them side by
-    /// side (PLAN Q5). Not for folders, and not for a file meeting a folder.
+    /// side. Not for folders, and not for a file meeting a folder.
     /// </summary>
     public bool CanCompare => !Pair.IsFolderPair && Verdict.SameKind
         && Conflict.Source.Kind == EntryKind.File

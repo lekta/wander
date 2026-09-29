@@ -3,7 +3,7 @@ namespace Wander.Core.FileSystem;
 /// <summary>
 /// One quick answer for the pairs nobody has decided yet - the window's
 /// "apply to the rest", offered after the user has looked at the list
-/// rather than before it (PLAN, Q3). The verdict-dependent one touches
+/// rather than before it. The verdict-dependent one touches
 /// only the pairs it fits and leaves the rest open.
 /// </summary>
 public enum ConflictBulkAction {
@@ -46,7 +46,7 @@ public sealed class ConflictBatch {
 
     /// <param name="skipIdentical">
     /// The user's "don't ask about files that are already there
-    /// byte-for-byte" setting (PLAN, Q4). It cannot fire at construction -
+    /// byte-for-byte" setting. It cannot fire at construction -
     /// nobody has read any bytes yet - only as comparisons land.
     /// </param>
     public ConflictBatch(ConflictRequest request, bool skipIdentical = false) {
@@ -187,7 +187,7 @@ public sealed class ConflictBatch {
     /// <para>
     /// <paramref name="includeDecided"/> is the one exception, and it is a
     /// different question: "заменить все" is an answer for the whole list,
-    /// not for what is left of it (PLAN, Q8). It is why the button that
+    /// not for what is left of it. It is why the button that
     /// asks it sits far away from OK.
     /// </para>
     /// </summary>

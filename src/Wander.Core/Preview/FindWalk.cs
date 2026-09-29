@@ -3,7 +3,7 @@ using Wander.Core.FileSystem;
 namespace Wander.Core.Preview;
 
 /// <summary>
-/// Where F3 goes past the last match in the pane (PLAN B6): on to the next
+/// Where F3 goes past the last match in the pane: on to the next
 /// file a search inside files found, in the order the list shows them - the
 /// row an arrow key would come to, less the rows found by their name alone,
 /// which have no match in their text to show.

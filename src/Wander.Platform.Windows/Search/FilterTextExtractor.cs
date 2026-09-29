@@ -13,7 +13,7 @@ namespace Wander.Platform.Windows.Search;
 /// installed, the Office formats where Office is.
 ///
 /// <para>
-/// This is the answer to "what do we parse <c>.doc</c> with" (PLAN B5)
+/// This is the answer to "what do we parse <c>.doc</c> with"
 /// that costs nothing: the binary Word format has a piece table, fast
 /// saves and eight-bit compressed runs, and a hand-written reader for it
 /// is a long tail of wrong answers. Windows ships a correct one in

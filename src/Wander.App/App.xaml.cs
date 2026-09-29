@@ -87,7 +87,7 @@ public partial class App : Application {
         // Every modal question goes through this seam; the harness swaps
         // in a scripted answerer before it builds the view model.
         ServiceLocator.Register<IDialogs>(new WpfDialogs());
-        // The compare window, for the conflict window's pairs (PLAN Q5).
+        // The compare window, for the conflict window's pairs.
         ServiceLocator.Register<Conflict.IPairViewer>(new Views.CompareWindow.Viewer());
         HookCrashLogging();
         // WPF answers an unrefused session end with Shutdown.
@@ -190,7 +190,7 @@ public partial class App : Application {
 
     /// <summary>
     /// The web view's profile in the place the setting moved away from
-    /// (PLAN AD1) - removed on the pool once the settings are read, as the
+    /// is removed on the pool once the settings are read, as the
     /// scratch copies are swept. Not while another Wander runs: it may be
     /// the one using it.
     /// </summary>

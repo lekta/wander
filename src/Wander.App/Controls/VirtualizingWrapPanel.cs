@@ -474,8 +474,8 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo {
                 // Counted off the range markers rather than off
                 // InternalChildren: Panel clears its children on a Reset
                 // before this runs, so the count here was always zero and
-                // "layout.discard" never once appeared in a session log
-                // (PLAN R2, 2026-09-02). The markers still describe the
+                // "layout.discard" never once appeared in a session log.
+                // The markers still describe the
                 // folder being left, which is exactly what is being torn
                 // down - what was built for it is what goes.
                 PerfCounters.Add("layout.discard", Math.Max(0, _realisedLast - _realisedFirst + 1));

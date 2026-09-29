@@ -82,7 +82,7 @@ public partial class ConflictWindow : Window {
     }
 
     /// <summary>
-    /// A pair's two files side by side, in a window of their own (PLAN Q5).
+    /// A pair's two files side by side, in a window of their own.
     /// Not modal: this window's question stays open while the user looks.
     /// </summary>
     private void OnCompare(object sender, RoutedEventArgs e) {

@@ -69,7 +69,7 @@ public sealed class ContentSearchService {
 
 
     /// <summary>
-    /// A document's text for the preview pane (PLAN B5): the same
+    /// A document's text for the preview pane: the same
     /// extractors and cache the search reads it with, the format-specific
     /// ones only - the catch-all would show a binary as text. Null when
     /// none claims the file or the one that did could not read it.

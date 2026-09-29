@@ -21,7 +21,7 @@ public sealed record DebugOperationOutcome(int Ok, int Failed, int Total);
 
 
 /// <summary>
-/// A file operation that moves no files (PLAN AI1): eight made-up names,
+/// A file operation that moves no files: eight made-up names,
 /// made-up sizes, and <see cref="Task.Delay(TimeSpan, CancellationToken)"/>
 /// where the disk would be. It exists so the parts around an operation -
 /// the progress window, the status-bar panel, the aggregate bar, cancelling,

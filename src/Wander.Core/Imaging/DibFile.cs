@@ -4,7 +4,7 @@ namespace Wander.Core.Imaging;
 
 /// <summary>
 /// A device-independent bitmap off the clipboard (<c>CF_DIB</c>) made into
-/// a <c>.bmp</c> file a decoder can read (PLAN X): the clipboard holds the
+/// a <c>.bmp</c> file a decoder can read: the clipboard holds the
 /// header and the pixels, and a file puts a 14-byte header in front whose
 /// one fact worth working out is where the pixels begin - past the info
 /// header, the colour masks a 40-byte header keeps after itself, and the

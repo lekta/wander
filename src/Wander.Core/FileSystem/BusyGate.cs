@@ -8,7 +8,7 @@ using Wander.Core.Operations;
 namespace Wander.Core.FileSystem;
 
 /// <summary>
-/// A path an operation found held and waited for (PLAN AF, block 0): who
+/// A path an operation found held and waited for: who
 /// held it, how long the operation waited, whether it was let go.
 /// </summary>
 /// <param name="Path">What was held.</param>
@@ -20,7 +20,7 @@ public sealed record BusyReport(string Path, string? Holder, TimeSpan Waited, bo
 
 /// <summary>
 /// The item was left alone: an operation the user started earlier is still
-/// working on it (PLAN AF: Wander never fights itself, it names the
+/// working on it (Wander never fights itself, it names the
 /// operation in the way).
 /// </summary>
 public sealed class ClaimedByOperationException : IOException {
@@ -77,7 +77,7 @@ public sealed class HeldPaths {
 
 
 /// <summary>
-/// One operation's dealings with held paths (PLAN AF, block 0, steps 4-5),
+/// One operation's dealings with held paths,
 /// asked before each item it touches.
 ///
 /// <list type="bullet">
@@ -102,7 +102,7 @@ public sealed class HeldPaths {
 /// </para>
 /// </summary>
 public sealed class BusyGate : IDisposable {
-    /// <summary>A claims lookup slower than this is worth a warning (PLAN block 0, step 5).</summary>
+    /// <summary>A claims lookup slower than this is worth a warning.</summary>
     private const double SlowLookupMs = 5;
 
     /// <summary>

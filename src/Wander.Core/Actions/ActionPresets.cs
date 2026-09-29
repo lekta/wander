@@ -143,7 +143,7 @@ public static class ActionPresets {
         },
 
         // --- Debug ---
-        // Behind the debug menu (PLAN AI2) and out of the actions table:
+        // Behind the debug menu and out of the actions table:
         // they produce nothing and are there to make a file busy on demand.
         Hold("preset:debug-hold-short", 5) with {
             TitleKey = "ActionPresetDebugHoldShort",

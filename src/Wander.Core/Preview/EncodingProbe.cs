@@ -155,7 +155,7 @@ public static class EncodingProbe {
     /// <summary>
     /// A reader over a whole stream in an encoding already decided - for
     /// text too long to decode in one piece: the find of the preview pane
-    /// counts through the part of a file it does not show (PLAN B6). A
+    /// counts through the part of a file it does not show. A
     /// byte-order mark is consumed, as <see cref="Decode(ReadOnlySpan{byte}, TextEncodingKind)"/>
     /// consumes it, so the two agree character for character. Disposing the
     /// reader closes the stream.

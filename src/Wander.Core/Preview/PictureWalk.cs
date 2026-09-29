@@ -3,7 +3,7 @@ using Wander.Core.FileSystem;
 namespace Wander.Core.Preview;
 
 /// <summary>
-/// Walking the pictures of a list full screen (PLAN Q5): an arrow key goes
+/// Walking the pictures of a list full screen: an arrow key goes
 /// to the next picture the given way, past whatever is not one.
 /// </summary>
 public static class PictureWalk {

@@ -132,11 +132,11 @@ public partial class FileListView : UserControl {
 
     /// <summary>
     /// Enter or Space on pictures in the gallery: the window shows them full
-    /// screen (PLAN Q5) - one, a pair, or the selection one by one.
+    /// screen - one, a pair, or the selection one by one.
     /// </summary>
     public event EventHandler<FullscreenPlan>? FullscreenRequested;
 
-    /// <summary>The filter field's "more" button: the window raises the search window, which it owns (PLAN G6).</summary>
+    /// <summary>The filter field's "more" button: the window raises the search window, which it owns.</summary>
     public event EventHandler? SearchWindowRequested;
 
 
@@ -499,7 +499,7 @@ public partial class FileListView : UserControl {
     /// <summary>
     /// <paramref name="entry"/> becomes the selection, as an arrow key would
     /// make it, and is brought into view - F3 past the last match in the
-    /// preview going on to the next found file (PLAN B6). The keyboard
+    /// preview going on to the next found file. The keyboard
     /// stays where it is; in the list, it comes onto the row.
     /// </summary>
     public void SelectRow(FileSystemEntry entry) {
@@ -1207,7 +1207,7 @@ public partial class FileListView : UserControl {
         }
 
         // Enter or Space on pictures in the gallery: full screen, as in a
-        // viewer (PLAN Q5) - one, two together, or more one by one. A
+        // viewer - one, two together, or more one by one. A
         // selection with anything but pictures keeps Enter = open.
         if (Vm.ViewMode == ViewMode.Gallery && e.Key is Key.Enter or Key.Space
             && Keyboard.Modifiers == ModifierKeys.None && Vm.RenamingPath is null
@@ -1601,7 +1601,7 @@ public partial class FileListView : UserControl {
     /// cannot be told to build nothing while the control around it is
     /// collapsed - and a Reset on the shared rows reaches it all the same,
     /// so every navigation had it realise and tear down a screenful of rows
-    /// behind a collapsed table (PLAN R2, T2). The three tile views already
+    /// behind a collapsed table. The three tile views already
     /// build nothing when hidden and stay bound.
     /// </para>
     /// </summary>
@@ -1646,7 +1646,7 @@ public partial class FileListView : UserControl {
 
 
 
-    // --- The filter field (PLAN G6) ----------------------------------------
+    // --- The filter field --------------------------------------------------
     // On the strip over the list since 2026-09-25; it used to be in the
     // window's toolbar, and the window still reaches it (Ctrl+F, the Tab
     // ring) through SearchBox.
@@ -1689,7 +1689,7 @@ public partial class FileListView : UserControl {
     // control, laid over the row's name label by a RenameAdorner while
     // MainViewModel.RenamingPath says which row. The row templates carry
     // no editor of their own - a TextBox in every row was the single most
-    // expensive thing in them (PLAN R, 2026-09-02). PromptDialog stays as
+    // expensive thing in them. PromptDialog stays as
     // the fallback for the case the inline editor cannot be reached - a row
     // that virtualisation has not realised.
 

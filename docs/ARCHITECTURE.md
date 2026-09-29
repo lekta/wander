@@ -11,18 +11,16 @@
 | `Wander.App` | `net10.0-windows10.0.19041.0` | WPF: окно, ViewModel'и, диалоги, конвертеры. |
 | `Wander.Core.Tests` | `net10.0` | xUnit, **только** Core через фейки. |
 
-TFM `10.0.19041.0` у windows-проектов — ради WinRT-проекций (`Windows.Data.Pdf`
-для обложки PDF); пакетов не прибавилось. Windows 10 остаётся целью: 19041 =
-Win10 2004, сам `Windows.Data.Pdf` есть с 8.1; вызов обёрнут глухим `catch`.
+TFM `10.0.19041.0` — ради WinRT-проекций (`Windows.Data.Pdf` для обложки
+PDF), без новых пакетов. Цель — Windows 10 (19041 = Win10 2004;
+`Windows.Data.Pdf` есть с 8.1), вызов обёрнут глухим `catch`.
 
 **Жёсткое правило:** в Core нет `using System.Windows.*`, COM, PInvoke.
 Нужно — интерфейс в Core, реализация в Platform.
 
-**Platform без WPF** (2026-09-16, после того как кодировщик картинок
-оказался в App). Platform.Windows не ссылается на `PresentationCore` /
-`PresentationFramework` и не будет: WPF — отвинчиваемый слой, а
-платформенная возможность, реализованная на нём, отвинтилась бы вместе с
-ним. Куда что кладётся:
+**Platform без WPF.** Platform.Windows не ссылается на `PresentationCore` /
+`PresentationFramework`: возможность, реализованная на WPF, отвинтилась бы
+вместе с ним.
 
 | Что делает код | Где живёт | На чём |
 |---|---|---|
@@ -30,122 +28,69 @@ Win10 2004, сам `Windows.Data.Pdf` есть с 8.1; вызов обёрнут
 | Картинка для экрана (`BitmapSource`), окно, диалог, буфер как объект WPF | App | WPF |
 | Реализация интерфейса Core в App | только когда реализация про экран: `WpfDialogs`, `AppTextSource` | — |
 
-Проверка при ревью: если реализация интерфейса Core в App не рисует и
-не спрашивает пользователя — ей место в Platform, и отсутствие API там
-значит искать не-WPF API, а не переезжать в App. Прецеденты: `RawThumbnail`
-и `PdfPageImage` (WinRT вместо WPF-декодера), `ImageConvertAction`
-(перенесён из App на `Windows.Graphics.Imaging`; тот же WIC, что у WPF, без
-`PresentationCore`). `Preview/ImageDecoder` остаётся в App правомерно: его
+Проверка при ревью: реализация интерфейса Core в App, которая не рисует и
+не спрашивает пользователя, живёт в Platform — на не-WPF API, а не
+переездом в App. Прецеденты: `RawThumbnail` и `PdfPageImage` (WinRT вместо
+WPF-декодера), `ImageConvertAction` (`Windows.Graphics.Imaging` — тот же
+WIC без `PresentationCore`). `Preview/ImageDecoder` в App правомерно: его
 выход — `BitmapImage` для контрола.
 
 ```
 src/
 ├── Wander.Core/
-│   ├── Companions/     CompanionRule, CompanionResolver, CompanionMetadataService,
-│   │                   SidecarText, RatingFilter, SidecarFormat,
-│   │                   Pp3Sidecar, XmpSidecar, UnityMetaSidecar
-│   ├── Diagnostics/    IFileLockInspector, FileLockInfo, PerfLog, BuildInfo
-│   ├── FileSystem/     IFileSystem, FileOperationService, BatchExecutor,
-│   │                   ClipboardController, ISystemClipboard,
-│   │                   TypeAheadController, IDirectoryWatcher, SystemPathGuard,
-│   │                   SystemRootFolders, EntryVisibility, FolderChanges,
-│   │                   PathSafety, IConflictResolver, IRecycleBin, IKnownFolders,
-│   │                   BusyGate (HeldPaths), IFileBusyProbe, FileInUse, SharedRead,
-│   │                   FileSystemEntry, EntryKind, EntryComparers, SortKey,
-│   │                   SidecarRating + ColorLabels, UndoableActions,
-│   │                   FolderStatistics, IVolumeInfoProvider, TransientFiles,
-│   │                   BatchGroup, ConflictVerdict, ConflictBatch, ConflictPair,
-│   │                   MergeScanner, FileContentComparer
-│   ├── Folders/        ViewChoice, FolderSettingsBook, FolderRecord, ViewMode,
-│   │                   DesktopIni
-│   ├── Icons/          IIconProvider, IImageMetadataReader, IconSize, ImageMetadata,
-│   │                   ImageFormats, RawPreviewExtractor, ThumbnailCacheOptions
-│   ├── Imaging/        хелперы отсмотра (раздел ниже), PictureFit, TgaDecoder,
-│   │                   PictureMemory, SizedCache + MemoryShare
-│   ├── Layout/         TileLayout, TileMetrics, GridNavigation,
-│   │                   WindowZones, WindowPlacement, DragHover, EdgeScroll
-│   ├── Listing/        FolderSession, ListingDiff, ArrivalIntent, ListingArrival
-│   │                   (+ ListState), CurrentRowFallback, RatedListing,
-│   │                   SearchController, ImageFolderProbe
+│   ├── Actions/        свои действия: каталог и пресеты, применимость, командная строка, запуск
+│   ├── Companions/     спутники: правила, группы, сайдкары оценок
+│   ├── Diagnostics/    PerfLog, LongWait, BuildInfo, кто держит файл
+│   ├── FileSystem/     IFileSystem, операции и батчи, конфликты, буфер, сторож, гарды,
+│   │                   занятые файлы, запись листинга и сортировка
+│   ├── Folders/        вид и порядок папки, книга папок, desktop.ini
+│   ├── Icons/          контракты значков и метаданных, форматы картинок, превью из RAW
+│   ├── Imaging/        хелперы отсмотра, TGA, DIB, бюджет памяти картинок
+│   ├── Layout/         геометрия: плитки, сетка, области окна, размеры панелей, drag у края
+│   ├── Listing/        сессия папки: приход, сверка строк, преемник, место строки, фильтр
 │   ├── Localization/   ITextSource
-│   ├── Logging/        ILogger, ILogFile, NullLogger
-│   ├── Menu/           ContextMenuBuilder, ContextMenuTarget, ContextMenuSettings,
-│   │                   ContextMenuCatalog, MenuEntry, MenuCommandId
-│   ├── Navigation/     NavigationService, NavigationSource, RecentPaths,
-│   │                   PathCrumbs, PathFollowing
-│   ├── Operations/     OperationTracker, OperationVerbs, TransferRate,
-│   │                   PathClaims, BusyWait
-│   ├── Panels/         PanelState, PanelRow, PanelLevel, PanelView, PanelPaths,
-│   │                   PanelKeyNavigation, TreeNavThrottle, BranchReconcile, Pane
-│   ├── Persistence/    IAppStateStore, AppState, AppSettings, GalleryBackground
-│   ├── Preview/        PreviewRouter, TextProbe, EncodingProbe, AudioTags,
-│   │                   BookCover, Fb2Document, MeshFile + Obj/Stl/GltfReader,
-│   │                   PreviewNeighbors, TextFind, PeHeader + ExecutableInfo,
-│   │                   SplitOrientation, FullscreenPlan, PictureWalk, ZoomLink
-│   ├── Search/         ContentSearchService, IContentExtractor, ContentMatcher,
-│   │                   NameFilter, SearchExpression, SearchRequest, SearchHit,
-│   │                   SearchScope, BinaryTextSearch, ExtractedTextCache
-│   ├── Shell/          IShellLauncher, IShellNamespace, IShortcutService,
-│   │                   IShellContextMenu, IShellHandlerRegistry,
-│   │                   ShellHandler, ShellExtensionCatalog, ShellExtensionFilter,
-│   │                   ShellEntryKey, ShellScopes, ShellVerbs, RecentScopes
-│   ├── Undo/           UndoService, IUndoableAction, UndoOutcome
-│   ├── Workspace/      WorkspaceState, события, эффекты, WorkspaceReducer,
-│   │                   NavigationRules, PanelRules, ListRules, KeyboardRules,
-│   │                   TargetRules + Target, MenuContext, PreviewSubject
+│   ├── Logging/        ILogger, Log, маскирование путей, журнал действий, ротация
+│   ├── Menu/           контекстное меню: правила, каталог, настройки, меню броска
+│   ├── Navigation/     история, адрес, MRU, стартовая папка, следование за путём
+│   ├── Operations/     OperationTracker, заявки на пути, скорость, ожидание занятых
+│   ├── Panels/         панели папок: состояние, строки, клавиши, сверка уровней
+│   ├── Persistence/    AppState, AppSettings, AppPaths, временные файлы
+│   ├── Preview/        маршруты панели просмотра и разбор форматов
+│   ├── Rename/         групповое переименование
+│   ├── Search/         маска, выражение, обход, экстракторы, кэш текста
+│   ├── Shell/          контракты оболочки: namespace, меню, ярлыки; архивы, извлечение
+│   ├── Undo/           UndoService, IUndoableAction
+│   ├── Workspace/      модель окна: состояние, события, правила, цель, эффекты
 │   └── ServiceLocator.cs
 │
 ├── Wander.Platform.Windows/
-│   ├── Diagnostics/    RestartManagerLockInspector
-│   ├── FileSystem/     SystemIOFileSystem, ShellRecycleBin, WindowsKnownFolders,
-│   │                   WindowsClipboard, WindowsDirectoryWatcher,
-│   │                   WindowsFileBusyProbe
-│   ├── Icons/          SystemIconProvider, MetadataExtractorImageReader, TgaThumbnail
-│   ├── Logging/        FileLogger
-│   ├── Persistence/    JsonAppStateStore
-│   ├── Preview/        WindowsExecutableInfo
-│   ├── Search/         FilterTextExtractor, NativeFilter
-│   ├── Shell/          ShellLauncher, ShellShortcutService, WindowsShellNamespace,
-│   │                   ShellContextMenu, ShellContextMenuInterop, ShellMenuIcons
+│   ├── Diagnostics/    Restart Manager
+│   ├── FileSystem/     System.IO, корзина, буфер, сторож, тома, известные папки
+│   ├── Icons/          значки и миниатюры, дисковый кэш, EXIF, проба резкости
+│   ├── Imaging/        кодировщик картинок (WinRT)
+│   ├── Logging/        FileLogger, чистка логов
+│   ├── Persistence/    state.json, folders.json, InstanceLock
+│   ├── Preview/        карточка программы, проба кодеков
+│   ├── Search/         IFilter
+│   ├── Shell/          запуск, ярлыки, namespace (корзина, архивы), меню оболочки,
+│   │                   процессы, поиск инструментов
 │   └── PlatformBootstrapper.cs
 │
 └── Wander.App/
-    ├── Conflict/       ConflictWindow (+ ConflictWindowViewModel,
-    │                   ConflictRowViewModel), DispatcherConflictResolver,
-    │                   InteractiveConflictResolver, IPairViewer
-    ├── Controllers/    WorkspaceController, NavigationController, PreviewController,
-    │                   RatingsController, BookmarksController, FolderTreesController,
-    │                   ContentSearchController, SearchResultsController,
-    │                   ShellCommandsController
-    ├── Controls/       AsyncIcon + IconLoadGate + FirstScreenWatch, GifImage,
-    │                   IconImageCache, MagnifierCursor, NumericField,
-    │                   RubberBandAdorner + RubberBandController,
-    │                   RenameAdorner, VirtualizingWrapPanel, FolderPanelList,
-    │                   FileListBox, FileDataGrid, FilterBox, TrimmedToolTip
-    ├── Converters/     Icon, EnumEquals, EnumRadio, EnumToVisibility,
-    │                   BitmapPixelSize, RankStar + RatingConverters, CutRow,
-    │                   TreeIndent, TileSecondLine, PixelsToThickness
-    ├── Diagnostics/    CrashReporter, PerfCounters, UiStallWatch, DebugOperation
-    ├── DragPreview/    DragPreviewWindow, OutgoingDrag, DropTargetController,
-    │                   DropTargetAdorner, DragAction, NativeMethods
-    ├── Highlighting/   HighlightingCatalog + *.xshd
+    ├── Conflict/       окно совпадений имён
+    ├── Controllers/    контроллеры при MainViewModel и исполнитель модели окна
+    ├── Controls/       свои контролы: значок, списки, плиточная панель, редактор имени, рамка
+    ├── Converters/
+    ├── Diagnostics/    CrashReporter, счётчики, UiStallWatch, SystemVitals, стенд операции
+    ├── Dialogs/        IDialogs, WpfDialogs
+    ├── DragPreview/    перетаскивание: приём, отдача, плашка
+    ├── Highlighting/   *.xshd
     ├── Menu/           ContextMenuFactory, ShellMenuCache
-    ├── Preview/        ImageDecoder, ModelBuilder + ModelScene, PreviewText,
-    │                   SummaryText, PictureLoader, PictureCache, ExecutableCard
-    │                   — раскодирование для панели просмотра
-    ├── Resources/      Strings*.resx, AppTextSource, MenuStyles, Palette
-    ├── Util/           SelectionController, ListVisuals, SizeFormatter,
-    │                   NumberFormat, TimeFormat, DurationFormat,
-    │                   DispatcherExtensions
-    ├── ViewModels/     SettingsViewModel, TreeNodeViewModel,
-    │                   OperationViewModel, ColorLabelViewModel, HotkeyCatalog,
-    │                   MenuItemRowViewModel, ShellExtensionRowViewModel,
-    │                   SettingsCategoryViewModel, BulkObservableCollection,
-    │                   GalleryPalette, ObservableObject,
-    │                   ViewMode, PreviewKind, DropEffect
-    ├── Views/          FileListView, FolderTreesView, PreviewPane, SearchWindow,
-    │                   SettingsWindow, ShellScopePicker, ProgressDialog,
-    │                   FullscreenWindow, CompareWindow
+    ├── Preview/        раскодирование и отрисовка для панели просмотра
+    ├── Resources/      Strings*.resx и аксессоры, Palette, MenuStyles
+    ├── Util/           форматы чисел и времени, ListVisuals, SelectionController
+    ├── ViewModels/     вьюмодели настроек и строк, базовые типы
+    ├── Views/          виды и окна
     ├── MainViewModel.cs — при окне, не в ViewModels/ (см. «Окно и его контролы»)
     ├── MainWindow.xaml(.cs)
     └── App.xaml(.cs)
@@ -153,88 +98,20 @@ src/
 
 ### Граф зависимостей между папками
 
-Снимается `tools\deps.ps1` (`-UpdateDoc` перезаписывает блок ниже — руками
-не править). Свод `using Wander.*` по папкам, уровни, циклы. **Правило (O7,
-2026-09-01): между папками внутри проекта нет циклов, у каждой папки есть
-уровень** (0 — ни от кого не зависит; N — самый длинный путь вниз). Новое
-ребро, замыкающее цикл, — повод переложить файл или развернуть связь
-(событие вместо коллбэка вверх), а не исключение. Ребро `App ->
-Platform.Windows` — один файл, `App.xaml.cs` (точка композиции), ему можно.
+Снимает `tools\deps.ps1`: свод `using Wander.*` по папкам — рёбра, уровни,
+циклы. `-UpdateDoc` пишет рёбра в `docs/deps.txt` и уровни в блок ниже
+(руками не править). **Правило (O7, 2026-09-01): между папками внутри
+проекта нет циклов, у каждой папки есть уровень** (0 — ни от кого не
+зависит; N — самый длинный путь вниз). Ребро, замыкающее цикл, — повод
+переложить файл или развернуть связь (событие вместо коллбэка вверх), не
+исключение. Ребро `App -> Platform.Windows` — один файл, `App.xaml.cs`
+(точка композиции).
 
 <!-- deps:generated:begin -->
 ```
 === Wander dependency graph (using sweep) ===
-date   : 2026-09-28
-commit : 41b9d67
-
--- projects --
-Wander.App -> Wander.Core   (71 files)
-Wander.App -> Wander.Platform.Windows   (1 files)
-Wander.Core.Tests -> Wander.Core   (158 files)
-Wander.Harness -> Wander.App   (4 files)
-Wander.Harness -> Wander.Core   (6 files)
-Wander.Harness -> Wander.Platform.Windows   (3 files)
-Wander.Platform.Windows -> Wander.Core   (37 files)
-
--- Wander.Core: folder -> folder --
-  Actions        -> FileSystem     (5 files)
-  Actions        -> Icons          (2 files)
-  Actions        -> Localization   (4 files)
-  Actions        -> Logging        (1 files)
-  Actions        -> Operations     (1 files)
-  Actions        -> Preview        (1 files)
-  Actions        -> Undo           (1 files)
-  Companions     -> FileSystem     (5 files)
-  Companions     -> Icons          (1 files)
-  Companions     -> Logging        (1 files)
-  Companions     -> Undo           (1 files)
-  Diagnostics    -> Logging        (2 files)
-  FileSystem     -> Diagnostics    (2 files)
-  FileSystem     -> Localization   (3 files)
-  FileSystem     -> Logging        (3 files)
-  FileSystem     -> Operations     (3 files)
-  FileSystem     -> Undo           (3 files)
-  Folders        -> FileSystem     (2 files)
-  Icons          -> Imaging        (1 files)
-  Listing        -> Companions     (2 files)
-  Listing        -> FileSystem     (8 files)
-  Listing        -> Icons          (1 files)
-  Listing        -> Search         (1 files)
-  Menu           -> Actions        (3 files)
-  Menu           -> FileSystem     (3 files)
-  Menu           -> Folders        (2 files)
-  Menu           -> Localization   (3 files)
-  Menu           -> Persistence    (1 files)
-  Menu           -> Rename         (2 files)
-  Menu           -> Shell          (2 files)
-  Navigation     -> FileSystem     (2 files)
-  Persistence    -> Actions        (1 files)
-  Persistence    -> Companions     (1 files)
-  Persistence    -> FileSystem     (1 files)
-  Persistence    -> Folders        (2 files)
-  Persistence    -> Navigation     (1 files)
-  Persistence    -> Rename         (1 files)
-  Preview        -> FileSystem     (10 files)
-  Preview        -> Icons          (1 files)
-  Rename         -> Companions     (1 files)
-  Rename         -> FileSystem     (2 files)
-  Search         -> FileSystem     (5 files)
-  Search         -> Logging        (1 files)
-  Search         -> Preview        (1 files)
-  Shell          -> FileSystem     (3 files)
-  Shell          -> Localization   (2 files)
-  Shell          -> Logging        (2 files)
-  Shell          -> Operations     (1 files)
-  Shell          -> Persistence    (2 files)
-  Shell          -> Undo           (1 files)
-  Undo           -> Operations     (1 files)
-  Workspace      -> FileSystem     (3 files)
-  Workspace      -> Layout         (7 files)
-  Workspace      -> Listing        (5 files)
-  Workspace      -> Menu           (1 files)
-  Workspace      -> Navigation     (4 files)
-  Workspace      -> Panels         (8 files)
-  Workspace      -> Preview        (1 files)
+date   : 2026-09-29
+commit : ac9f347
 
 -- Wander.Core: levels --
   0: (root), Imaging, Layout, Localization, Logging, Operations, Panels
@@ -247,75 +124,10 @@ Wander.Platform.Windows -> Wander.Core   (37 files)
   7: Menu
   8: Workspace
 
--- Wander.Platform.Windows: folder -> folder --
-  (root)         -> Diagnostics    (1 files)
-  (root)         -> FileSystem     (1 files)
-  (root)         -> Icons          (1 files)
-  (root)         -> Imaging        (1 files)
-  (root)         -> Logging        (1 files)
-  (root)         -> Persistence    (1 files)
-  (root)         -> Preview        (1 files)
-  (root)         -> Search         (1 files)
-  (root)         -> Shell          (1 files)
-  FileSystem     -> Shell          (1 files)
-
 -- Wander.Platform.Windows: levels --
   0: Diagnostics, Icons, Imaging, Logging, Persistence, Preview, Search, Shell
   1: FileSystem
   2: (root)
-
--- Wander.App: folder -> folder --
-  (root)         -> Controllers    (2 files)
-  (root)         -> Controls       (1 files)
-  (root)         -> Diagnostics    (1 files)
-  (root)         -> Dialogs        (3 files)
-  (root)         -> DragPreview    (1 files)
-  (root)         -> Menu           (2 files)
-  (root)         -> Preview        (1 files)
-  (root)         -> Resources      (4 files)
-  (root)         -> Util           (3 files)
-  (root)         -> ViewModels     (2 files)
-  (root)         -> Views          (2 files)
-  Conflict       -> Resources      (2 files)
-  Conflict       -> Util           (2 files)
-  Conflict       -> ViewModels     (2 files)
-  Controllers    -> Converters     (1 files)
-  Controllers    -> Preview        (1 files)
-  Controllers    -> Resources      (6 files)
-  Controllers    -> Util           (1 files)
-  Controllers    -> ViewModels     (6 files)
-  Controls       -> Converters     (1 files)
-  Controls       -> Diagnostics    (1 files)
-  Controls       -> Preview        (1 files)
-  Controls       -> Resources      (3 files)
-  Controls       -> Util           (1 files)
-  Controls       -> ViewModels     (2 files)
-  Converters     -> Resources      (1 files)
-  Converters     -> Util           (1 files)
-  Converters     -> ViewModels     (1 files)
-  Diagnostics    -> Resources      (1 files)
-  Dialogs        -> Conflict       (1 files)
-  Dialogs        -> Resources      (1 files)
-  DragPreview    -> Converters     (1 files)
-  DragPreview    -> Resources      (3 files)
-  DragPreview    -> Util           (1 files)
-  DragPreview    -> ViewModels     (1 files)
-  Preview        -> Resources      (3 files)
-  Preview        -> Util           (2 files)
-  Util           -> Resources      (1 files)
-  ViewModels     -> Resources      (9 files)
-  ViewModels     -> Util           (1 files)
-  Views          -> Conflict       (1 files)
-  Views          -> Controllers    (4 files)
-  Views          -> Controls       (3 files)
-  Views          -> Converters     (1 files)
-  Views          -> Dialogs        (3 files)
-  Views          -> DragPreview    (1 files)
-  Views          -> Highlighting   (1 files)
-  Views          -> Preview        (1 files)
-  Views          -> Resources      (8 files)
-  Views          -> Util           (3 files)
-  Views          -> ViewModels     (8 files)
 
 -- Wander.App: levels --
   0: Highlighting, Menu, Resources
@@ -333,43 +145,43 @@ Wander.Platform.Windows -> Wander.Core   (37 files)
 
 ### Когда `IFileSystem`, а когда `System.IO`
 
-(O7, сверено с кодом.) **Через `IFileSystem`** — всё, что пользователь может
-отменить, что обязан подменить тест, и всё, что перечисляет папки:
-операции, листинг, сайдкары, перепись. **Напрямую `System.IO`** — байты
-одного уже выбранного файла ради раскодирования, когда результат — картинка
-или текст на экране, а не решение логики: сегодня так читает **только
-`Wander.Core/Preview/`** (обложки, теги, меши, пробы текста), тесты туда не
-ходят. Новый `File.` / `Directory.` в Core вне `Preview/` — кандидат в
-`IFileSystem` либо осознанное расширение списка с записью здесь.
+**Через `IFileSystem`** — всё, что пользователь может отменить, что
+обязан подменить тест, и всё, что перечисляет папки: операции, листинг,
+сайдкары, перепись. **Напрямую `System.IO`** — байты одного выбранного
+файла ради раскодирования, когда результат — картинка или текст на экране,
+а не решение логики: так читает **только `Wander.Core/Preview/`** (обложки,
+теги, меши, пробы текста), тесты туда не ходят. Новый `File.` /
+`Directory.` в Core вне `Preview/` — кандидат в `IFileSystem` либо
+расширение списка с записью здесь.
 
 ## Композиция: ServiceLocator
 
 Статический `Dictionary<Type, object>`: `Register<T>`, `Get<T>`,
 `TryGet<T>`, `IsRegistered<T>`, `Reset()` (тесты); все под `lock`.
-Единственная регистрация — `App.OnStartup` → `PlatformBootstrapper.RegisterDefaults()`,
-порядок значим: (1) `ILogger` / `ILogFile` (`FileLogger`) первым — всё
-ниже логирует при конструировании; пишет заголовок сессии (версия, ОС,
-рантайм, культура, elevated); (2) платформенные абстракции (`IFileSystem`,
-`IKnownFolders`, `IShellLauncher`, `IIconProvider`, `IAppStateStore`,
-`IFileLockInspector`, `IShortcutService`, `IShellNamespace`,
-`IShellContextMenu`, `IImageMetadataReader`); (3) общие синглтоны
-`UndoService`, `OperationTracker`, `IRecycleBin`, `FileOperationService`
-(один на приложение — иначе undo-стек и прогресс расползутся);
-(4) `CompanionResolver`, `CompanionMetadataService` (зависит от
-`IFileSystem` и `UndoService`). Тесты в локатор не ходят — фейки
-конструкторами.
+Единственная регистрация — `App.OnStartup` →
+`PlatformBootstrapper.RegisterDefaults()`, порядок значим:
+(1) `ILogger` / `ILogFile` (`FileLogger`) — всё ниже логирует при
+конструировании; пишет заголовок сессии (версия, ОС, рантайм, культура,
+elevated); (2) платформенные абстракции (`IFileSystem`, `IKnownFolders`,
+`IShellLauncher`, `IIconProvider`, `IAppStateStore`, `IFileLockInspector`,
+`IShortcutService`, `IShellNamespace`, `IShellContextMenu`,
+`IImageMetadataReader`); (3) общие синглтоны `UndoService`,
+`OperationTracker`, `IRecycleBin`, `FileOperationService` — по одному на
+приложение, иначе undo-стек и прогресс расползутся; (4)
+`CompanionResolver`, `CompanionMetadataService` (зависит от `IFileSystem`
+и `UndoService`). Тесты в локатор не ходят — фейки конструкторами.
 
 ### Обязательные и необязательные сервисы
 
-Регистрация одна и безусловная, поэтому ветка «не зарегистрирован» либо
-описывает реальный режим, либо недостижима. **Сервис, который где-то
-читается `Get<T>()`, обязателен везде**: `IFileSystem`, `IShellLauncher`,
+Регистрация одна и безусловная: ветка «не зарегистрирован» либо описывает
+реальный режим, либо недостижима. **Сервис, который где-то читается
+`Get<T>()`, обязателен везде**: `IFileSystem`, `IShellLauncher`,
 `IAppStateStore`, `IRecycleBin`, `IShortcutService`, `IIconProvider`,
 `CompanionResolver`, `UndoService`, `OperationTracker`,
-`FileOperationService`, `IDialogs` (App-уровень, регистрируется в
-`App.OnStartup` рядом с `ITextSource`) — отсутствие = сломанный
-бутстраппер, падение на старте честнее работы вполсилы; хост без
-Windows-слоя регистрирует свои реализации сам. **Необязательные** читаются `TryGet<T>()`, у каждого
+`FileOperationService`, `IDialogs` (App, регистрируется в `App.OnStartup`
+рядом с `ITextSource`). Отсутствие — сломанный бутстраппер: падение на
+старте честнее работы вполсилы; хост без Windows-слоя регистрирует свои
+реализации сам. **Необязательные** читаются `TryGet<T>()`, у каждого
 внятный ответ «нет»:
 
 | Сервис | Чего не будет |
@@ -389,27 +201,26 @@ Windows-слоя регистрирует свои реализации сам. 
 | `ILogger` | лога (`Core/Logging/Log` отдаёт `NullLogger`; так живут тесты Core) |
 | `ITextSource` | Core отдаёт ключ вместо надписи |
 
-Только последняя деградация под тестом (`TextFallbackTests`); `ITextSource`
+Под тестом только последняя деградация (`TextFallbackTests`): `ITextSource`
 в тестах не регистрируется специально.
 
 ### Конструирование в две фазы
 
-Конструктор `MainViewModel` (O6.4): (1) **зависимость строится раньше того,
-кто её берёт** — nullable-ворнингов в сборке ноль, и это часть проверки:
-новый CS8602 / CS8604 в конструкторе = сломан порядок (так `RatingsController`
-однажды получил null вместо `Settings`); (2) **построить, потом включить** —
-подписки с побочными эффектами (`Settings.PropertyChanged` → перечитывания,
-`Trees.ExpansionChanged` → запись состояния) ставятся в конце, **после**
-`RestoreState()`; флага «идёт восстановление» нет, один
-`_stateSaveTimer.Stop()` в конце `RestoreState` гасит запись от начальной
-навигации.
+Конструктор `MainViewModel`: (1) **зависимость строится раньше того, кто её
+берёт** — nullable-ворнингов в сборке ноль, и это часть проверки: новый
+CS8602 / CS8604 в конструкторе — сломан порядок; (2) **построить, потом
+включить** — подписки с побочными эффектами (`Settings.PropertyChanged` →
+перечитывания, `Workspace.StateChanged` со сменой раскрытого → запись
+состояния) ставятся в конце, **после** `RestoreState()`; флага «идёт
+восстановление» нет, запись от начальной навигации гасит
+`_stateSaveTimer.Stop()` в конце `RestoreState`.
 
 ### Изменяемая статика
 
-Проход O6, категория 6. Правка одна — `lock` в локаторе (xUnit гонит
-классы параллельно, `ServiceLocatorTests` пишет, пока соседи читают через
-`ITextSource.Text` → `TryGet`; чтение `Dictionary` под запись —
-неопределённое поведение). Остальное оставлено сознательно:
+Под `lock` — только локатор: xUnit гонит классы параллельно,
+`ServiceLocatorTests` пишет, пока соседи читают через `ITextSource.Text` →
+`TryGet`, а чтение `Dictionary` под запись — неопределённое поведение.
+Остальное оставлено сознательно:
 
 | Место | Почему |
 |---|---|
@@ -424,21 +235,19 @@ Windows-слоя регистрирует свои реализации сам. 
 | `StartFolder.Asked` | пишется один раз до окна (`App.OnStartup`, харнесс — `Override` до него), читает `MainViewModel` на старте; тесты трогают её в одном классе и возвращают |
 
 `SystemIconProvider`: `_cache` / `_missing` / `_thumbnailOrder` — поля
-**экземпляра** под `_lock`; статика там — lock-объекты (set-once `_log`
-заменён на `Log`, 2026-09-22).
+**экземпляра** под `_lock`; статика там — только lock-объекты.
 
 ### Как потребляются сервисы
 
-Регистрация до первого потребителя, словарь после этого заморожен, горячей
-подмены и плагинов нет (появятся — пересмотреть). Правила: **экземпляры
-разрешают сервисы один раз в конструкторе в readonly-поля** (список
-зависимостей виден в одном месте — это будущие параметры конструктора);
-**статические хелперы** (`Text`, `Log`, `IconConverter.Load`,
-`SystemIconProvider.ResolveShortcut`) ходят в локатор на каждый вызов
-(один поиск по словарю не виден на фоне шелла / декодера / диска);
-**новых ленивых статических кэшей сервисов** (`_x ??= Get<X>()`) не
-заводить без строки в таблице выше (ещё одна статика плюс риск обращения до
-бутстраппера).
+Регистрация до первого потребителя, дальше словарь заморожен; горячей
+подмены и плагинов нет (появятся — пересмотреть). **Экземпляры разрешают
+сервисы один раз в конструкторе в readonly-поля** — список зависимостей в
+одном месте, будущие параметры конструктора. **Статические хелперы**
+(`Text`, `Log`, `IconConverter.Load`, `SystemIconProvider.ResolveShortcut`)
+ходят в локатор на каждый вызов: поиск по словарю не виден на фоне шелла,
+декодера, диска. **Новых ленивых статических кэшей сервисов**
+(`_x ??= Get<X>()`) без строки в таблице выше не заводить: ещё одна
+статика и риск обращения до бутстраппера.
 
 ## Файловые операции
 
@@ -453,258 +262,215 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
 ```
 
 Чтения остаются на `IFileSystem` и конвейер минуют. `BatchExecutor` —
-цикл конфликтов, composite-undo, recycle-vs-permanent; синхронные
-`CopyMany` / `MoveMany` для тестов, продакшн — async на пуле с прогрессом
-и `CancellationToken`. Прогресс и отмена — по байтам внутри файла (ниже);
-отмена посреди элемента даёт `BatchItemStatus.Cancelled`, а не `Failed`, и
-кладёт частично скопированное в undo. Типы результатов (`BatchItemResult`,
-`DeleteResult`) — на уровне namespace.
+цикл конфликтов, composite-undo, recycle-vs-permanent; группы
+`BatchGroup` (файл + спутники: один вопрос, один шаг прогресса,
+`Sprite (1).png` + `.meta`). Синхронные `CopyMany` / `MoveMany` — для
+тестов, продакшн — async на пуле с прогрессом и `CancellationToken`.
+Отмена посреди элемента — `BatchItemStatus.Cancelled`, не `Failed`,
+частично скопированное — в undo. Результаты (`BatchItemResult`,
+`DeleteResult`) — на уровне namespace. Папка между томами —
+`CopyDirectory` + `DeleteDirectory`; read-only цели — список, второй
+вопрос, снятие атрибута.
 
-- **Undo.** Один LIFO-стек. Move ↔ Move обратно, Rename ↔ Rename, Delete →
-  Restore из корзины, Create → Delete в корзину. Безвозвратное удаление не
-  откатывается и затирает стек. `BeginOperation()` — busy-счётчик,
-  `CanUndo == false` в полёте (`Ctrl+Z` игнорируется, как в Explorer).
-  Стек под одним локом; `Changed` поднимается вне лока и может прийти с
-  фонового потока — подписчик маршалит сам. Не переживает рестарт.
-- **Откат — операция** (2026-09-21). `UndoService.UndoAsync`: с пула, в
-  `OperationTracker` (`OperationVerbs.Undo`), под тем же busy-счётчиком.
-  Связка разматывается по `IUndoableAction.Steps`, последний шаг первым.
-  Отмена — несделанные шаги возвращаются в стек под тем же описанием
-  (`WithSteps`), следующий `Ctrl+Z` продолжает. Сбой шага — в
-  `UndoOutcome.Failures`, остальные шаги всё равно откатываются, сбойный в
-  стек не возвращается: иначе элемент, которого уже нет в корзине, запирает
-  всё под собой. `UndoOutcome.Undone` — то, что вернулось на деле, по нему
-  `UndoLast` ведёт выделение и `FollowRelocated`.
-- **Окно операции — через 400 мс работы, без фокуса** (2026-09-21,
-  `RunWithProgressDialogAsync`, у всех операций). Короткое удаление, откат
-  переименования, мгновенный отказ окна не показывают вовсе — раньше оно
-  мелькало и забирало фокус; строка состояния показывает операцию с первого
-  мгновения. Появляется без активации (`ShowActivated = false`): человек к
-  этому времени занят другим. Модальный вопрос (окно совпадений задаётся
-  изнутри операции) пережидается — `ComponentDispatcher.IsThreadModal`.
+- **Undo.** Один LIFO-стек: Move ↔ Move, Rename ↔ Rename, Delete →
+  Restore из корзины, Create → Delete в корзину. `PermanentDelete`
+  (`Shift+Delete`) не откатывается и затирает стек. `BeginOperation()` —
+  busy-счётчик, `CanUndo == false` в полёте. Стек под одним локом;
+  `Changed` — вне лока, может прийти с фона. Рестарт не переживает.
+- **Откат — операция.** `UndoService.UndoAsync`: с пула, в
+  `OperationTracker` (`OperationVerbs.Undo`), под тем же busy-счётчиком;
+  связка разматывается по `IUndoableAction.Steps` с конца. Отмена
+  возвращает несделанное в стек под тем же описанием (`WithSteps`). Сбой
+  шага — в `UndoOutcome.Failures`, остальные откатываются, сбойный в стек
+  не возвращается (иначе запер бы всё под собой). По
+  `UndoOutcome.Undone` `UndoLast` ведёт выделение и `FollowRelocated`.
+- **Окно операции — через 400 мс, без фокуса** (`RunWithProgressDialogAsync`,
+  `ShowActivated = false`): короткая операция его не показывает, строка
+  состояния показывает сразу. Модальный вопрос изнутри операции
+  пережидается (`ComponentDispatcher.IsThreadModal`).
 - **Корзина — на `IFileOperation`, в обе стороны** (`ShellRecycleBin`,
-  стенд 2026-09-21). Причины, все измерены:
-  - `SHFileOperation` с `FOF_ALLOWUNDO` файл на пути длиннее `MAX_PATH`
-    удалял **безвозвратно и молча** (rc 0, в корзине пусто). Движок же
-    говорит заранее: в `PreDeleteItem` нет `TSF_DELETE_RECYCLE_IF_POSSIBLE` —
-    значит, уничтожит; приёмник отвечает `E_FAIL`, файл остаётся,
-    наверх — `RecycleUnavailableException`. Короткая папка с длинным путём
-    внутри проверку движка проходит, и оболочка задаёт свой вопрос поверх
-    `FOF_NO_UI` («Да» по умолчанию) — поэтому до движка стоит свой обход
-    (`TooLongForBin`, порог 259; граница не измерена, документная).
-  - `PostDeleteItem` отдаёт созданный элемент корзины; его id-list
-    (base64) — в `RecycleHandle.BinItemId`. `Restore` — один `MoveItem`,
-    10–20 мс, без обхода корзины (было 0,35 с на элемент при 1433), без
-    глагола по локализованному имени, без разбора даты. Строка панели
-    корзины несёт `BinFilePath` (`$R…`) — поиск обходом до совпадения,
-    ~80 мс. Путь, удалённый дважды, возвращается правильной версией.
-  - Занятое имя при возврате: движок под `FOF_NO_UI` ответил бы «заменить»
-    сам, поэтому имя решается до него — `UniqueNames`;
-    `FOF_RENAMEONCOLLISION` — сетка на гонку. Пропавшая папка создаётся.
-  - `MoveItem` из корзины оставляет `$I…` без пары; корзина его не
-    показывает, убираем сами (`RemoveIndexFile`).
-  - Каждый прогон — на своём STA-потоке (`OwnApartment`, без очереди
-    сообщений — движку она не нужна), все RCW освобождаются до выхода.
-  - **Удаление — пачкой, один прогон движка** (`IRecycleBin.SendMany`,
-    `BatchExecutor.Recycle`; у интерфейса реализация по умолчанию — цикл
-    `Send`, ею живут фейки): 3 мс на файл против 11 (1000 файлов — 3,1 с;
-    300 через боевой класс — 0,94 с). Результат, `BinItemId` и колбэк
-    прогресса — на элемент, колбэки идут в порядке очереди. Без
-    `FOFX_EARLYFAILURE`: занятый файл (`0x80270027`) и папка с занятым
-    внутри (`0x80270028`, остаётся **целой**) пропускаются за миллисекунды,
-    остальные проходят; с флагом движок думал над тем же 1021 мс и
-    останавливался. Ошибка из `PreDeleteItem` останавливает прогон для
-    всех следующих элементов, нетронутых: это отмена (`E_ABORT` по токену)
-    и цена отказа (не берёт корзина — `E_FAIL`), после отказа остаток
-    просто прогоняется заново. Занятый элемент возвращается отказом
-    `FileInUse` без ожидания — ждёт операция, в Core (ниже). Возврат —
-    прогон на элемент, ~15 мс (TECHDEBT).
+  стенд):
+  - `SHFileOperation` с `FOF_ALLOWUNDO` удалял файл на пути длиннее
+    `MAX_PATH` **безвозвратно и молча**. Движок говорит заранее: нет
+    `TSF_DELETE_RECYCLE_IF_POSSIBLE` в `PreDeleteItem` — уничтожит;
+    приёмник отвечает `E_FAIL`, наверх — `RecycleUnavailableException`.
+    Короткая папка с длинным путём внутри эту проверку проходит, и
+    оболочка спрашивает поверх `FOF_NO_UI` с «Да» по умолчанию — поэтому
+    до движка свой обход (`TooLongForBin`, порог 259, документный). Итог —
+    один вопрос после операции (`ChoiceRequest`: `CancelLabel` «Прервать»
+    по умолчанию, `ArmDelay` 0,5 с до включения «Удалить безвозвратно»).
+  - `PostDeleteItem` отдаёт элемент корзины, его id-list (base64) — в
+    `RecycleHandle.BinItemId`; `Restore` — один `MoveItem`, 10–20 мс, без
+    обхода корзины, локализованного глагола и разбора даты. Строка панели
+    корзины несёт `BinFilePath` (`$R…`, обход до совпадения ~80 мс). Путь,
+    удалённый дважды, возвращается правильной версией.
+  - Занятое имя при возврате решается до движка (`UniqueNames`; под
+    `FOF_NO_UI` он заменил бы сам), `FOF_RENAMEONCOLLISION` — сетка на
+    гонку; пропавшая папка создаётся. `$I…` без пары убирает
+    `RemoveIndexFile`.
+  - Прогон — на своём STA-потоке (`OwnApartment`, без очереди
+    сообщений), RCW освобождаются до выхода.
+  - **Удаление пачкой, один прогон** (`IRecycleBin.SendMany`,
+    `BatchExecutor.Recycle`; реализация по умолчанию — цикл `Send`, ею
+    живут фейки): 3 мс на файл против 11. Результат, `BinItemId` и колбэк
+    прогресса — на элемент, по порядку. Без `FOFX_EARLYFAILURE`: занятый
+    файл (`0x80270027`) и папка с занятым внутри (`0x80270028`, остаётся
+    **целой**) пропускаются за миллисекунды (с флагом — 1021 мс и стоп).
+    Ошибка из `PreDeleteItem` останавливает прогон для остальных — это
+    отмена (`E_ABORT`) и отказ корзины (`E_FAIL`), остаток прогоняется
+    заново. Занятый элемент — отказ `FileInUse` без ожидания: ждёт
+    операция (ниже). Возврат — прогон на элемент, ~15 мс (TECHDEBT).
   - Файл, открытый с `FileShare.Delete`, уходит в корзину и возвращается
-    прямо под читателем — основание решения AF (а). Дешёвая проба
-    занятости — `WindowsFileBusyProbe` (`CreateFile(DELETE)`, пара мс).
-- **Занятые пути** (AF, 2026-09-21). Три слоя, снизу вверх:
+    прямо под читателем — основание решения AF (а).
+- **Занятые пути** (AF), три слоя снизу вверх:
   - `PathClaims` (Operations) — кто в Wander над чем работает. Заявка —
-    **источник** операции, не каждый файл под ним; вид `UserOperation`
-    (владелец — ключ `OperationVerbs`) или `Background` (`ClaimOwners`:
-    shell-миниатюра, системный фильтр поиска — то, что прервать нельзя).
-    `Covering(path, except)` — заявки на сам путь, на папку выше и на всё
-    внутри; `IsClaimed(path, kind)` — вопрос значка, 0,5 мкс; `Changed`
-    поднимается только для операций пользователя (фоновые заявки идут
-    сотнями при прокрутке, на экране их не видно). Замер: 1,5 мкс на запрос
-    при 50 заявках, 28 при 5000, 130 при 50 000 (скан «что внутри»
-    линеен); контрольная строка на операцию — `Claims: N lookups, slowest
-    X ms, table Y paths`, `WARN` от 5 мс.
-  - `BusyWait` (Operations) — чистая политика ожидания: взгляд каждые
-    0,2 с, бюджет 2 с **на операцию**; сто файлов, которые не отпустят,
-    стоят две секунды, не двести.
-  - `HeldPaths` / `BusyGate` (FileSystem; один `BusyGate` на операцию).
-    `Check(path)` перед элементом: заявка чужой операции пользователя —
-    `ClaimedByOperationException`, элемент не трогается; фоновым —
-    `Yield`. `WaitForFile` — файл, через `IFileBusyProbe`
+    **источник** операции; вид `UserOperation` (владелец — ключ
+    `OperationVerbs`) или `Background` (`ClaimOwners`: shell-миниатюра,
+    системный фильтр поиска — прервать нельзя). `Covering(path, except)` —
+    сам путь, папка выше и всё внутри; `IsClaimed(path, kind)` — 0,5 мкс;
+    `Changed` — только для операций пользователя. Запрос — 1,5 мкс при 50
+    заявках, 130 при 50 000; контрольная строка —
+    `Claims: N lookups, slowest X ms, table Y paths`, `WARN` от 5 мс.
+  - `BusyWait` (Operations) — политика: взгляд каждые 0,2 с, бюджет 2 с
+    **на операцию**, не на файл.
+  - `HeldPaths` / `BusyGate` (FileSystem; один на операцию). `Check(path)`:
+    заявка чужой операции пользователя — `ClaimedByOperationException`,
+    фоновой — `Yield`. `WaitForFile` — через `IFileBusyProbe`
     (`WindowsFileBusyProbe`, `CreateFile(DELETE)`, пара мс); `Retry` —
-    папка, у которой пробы нет: сама операция повторяется, пока отвечает
-    `FileInUse` — только в пределах тома: между томами перенос папки — это
-    копия и удаление, и удаление, упёршееся в занятый, уже снесло
-    остальное; `RetryMany` — пачка корзины: занятые возвращаются
-    отказом и отправляются снова все вместе каждый шаг ожидания. Держателя
-    называет один раз, на первом взгляде (`IFileLockInspector` либо своя
-    заявка — «Wander: миниатюра»), в пачке — первых трёх: каждое имя —
-    сессия Restart Manager; итог — `BusyReport` в `DeleteResult` /
-    `BatchItemResult`, из него строка статуса. Ждут перенос,
-    переименование и корзина; безвозвратное удаление — только заявки
-    (TECHDEBT).
-  - Чтобы ждать приходилось редко: свои читатели открывают файл через
-    `SharedRead` (`FileShare.ReadWrite | Delete` — файл уходит в корзину
-    прямо под читателем, стенд). Кроме чтения под запись обратно — оценка в
-    сайдкар (`IFileSystem.ReadAllBytesForUpdate`, без общего доступа на
-    запись): `.pp3`, который RawTherapee как раз сохраняет, иначе читался
-    недописанным и так же записывался. Панель просмотра отпускает файл явно,
-    до операции (`PreviewController.Release` → `ContentReleased` → WebView2 на
-    `about:blank`; `Restore` в `finally` показывает снова, если файл остался,
-    выделение то же и его не держит другая идущая операция). Откат панель не
-    отпускает (TECHDEBT).
-  - Значок «в работе» рисует сам `AsyncIcon` (`ShowsWork`, `OnRender`):
-    отметка, которой у большинства ячеек нет, не должна стоить каждой
-    ячейке визуала; один статический обработчик `PathClaims.Changed`,
-    пачка изменений — один проход по живым иконкам, `Entries` не трогается.
-    Часы — только у заявки не моложе `PathClaims.BadgeDelayMs` (400 мс, та
-    же, что у окна операции, 2026-09-23): заявка помнит время по часам
-    `PathClaims` (подставляются, тест), `IsClaimed(путь, вид, olderThanMs)`
-    отвечает с возрастом, `DueInMs` — когда созреет следующая, и один
-    статический `DispatcherTimer` запускает тот же проход. Анимацией в
-    шаблоне не сделать: у часов нет своего элемента.
-- **Прогресс — в двух счётчиках сразу** (2026-09-04, блок 2). Элементы —
-  то, что выделил человек; байты — то, что двигает диск, и без них копия
-  одного файла на 5 ГБ держит бар на нуле.
+    папка, пробы нет: операция повторяется, пока `FileInUse`, только в
+    пределах тома (между томами удаление уже снесло бы остальное);
+    `RetryMany` — пачка корзины, занятые уходят снова вместе. Держатель
+    называется один раз (`IFileLockInspector` — Restart Manager, у папки
+    по первым 500 файлам; своя заявка — «Wander: миниатюра»), в пачке —
+    первые три. Итог — `BusyReport` в `DeleteResult` / `BatchItemResult`.
+    Ждут перенос, переименование, корзина; безвозвратное удаление —
+    только заявки (TECHDEBT). Не дождалось удаление — «Файл занят» с
+    «Повторить» (`DialogKind.DeleteInUse`), повтор — по оставшимся.
+  - Чтобы ждать редко: свои читатели — `SharedRead`
+    (`FileShare.ReadWrite | Delete`; PDF-обложка — из своего потока);
+    исключение — оценка в сайдкар (`IFileSystem.ReadAllBytesForUpdate`):
+    `.pp3`, который RawTherapee как раз сохраняет, читался бы
+    недописанным. Панель просмотра отпускает файл до операции
+    (`PreviewController.Release` → `ContentReleased` → WebView2 на
+    `about:blank`; `Restore` в `finally`); откат — не отпускает
+    (TECHDEBT). Переименование — с пула.
+  - Часы «в работе» рисует `AsyncIcon` (`ShowsWork`, `OnRender`) — не
+    элемент в шаблоне каждой ячейки; один статический обработчик
+    `PathClaims.Changed` — проход по живым иконкам, `Entries` не
+    трогается. Часы — у заявки старше `PathClaims.BadgeDelayMs` (400 мс):
+    `IsClaimed(путь, вид, olderThanMs)`, `DueInMs` и один статический
+    `DispatcherTimer`; часы `PathClaims` подставляются в тесте.
+- **Прогресс — в двух счётчиках**: элементы (что выделил человек) и
+  байты (что двигает диск; без них копия 5 ГБ держит бар на нуле).
   `OperationTracker.Begin(verb, total, totalBytes, bytesAreWork)` →
-  `IOperationHandle` (диспозить всегда) с `Advance` / `AdvanceBytes`
-  (можно отрицательной дельтой) / `SetCurrentPath` / `SetTotalBytes`;
-  `Snapshot()` — иммутабельный срез с `Id`, `Percent` (по байтам, иначе по
-  элементам) и `StartedAtUtc`. `verb` — **ключ ресурса**
-  (`OperationVerbs`), не слово: Core своей таблицы строк не имеет.
-  `Changed` приходит с фона и троттлится до 10 раз в секунду, последнее
-  состояние довозит одноразовый таймер; появление и завершение операции
-  идут без троттла — на них открываются и закрываются окна.
-  - Откуда байты: `BatchExecutor` взвешивает источники до старта
-    (`FolderStatistics.Collect`, глубина 64) и держит вес по пути, чтобы не
-    обходить папку дважды; сам перенос идёт через
-    `IFileSystem.CopyFile/CopyDirectory/MoveEntry` с `IProgress<long>` и
-    токеном, в `SystemIOFileSystem` это `CopyFileEx` с
-    `LPPROGRESS_ROUTINE` (та же семантика, что `File.Copy`, плюс отмена
-    внутри файла — недописанный файл система убирает сама). Разницу между
-    оценкой и тем, что отчитала копия, `ApplyOne` сводит по каждому
-    элементу, поэтому счётчик приходит ровно туда, куда обещал план.
+  `IOperationHandle` (диспозить всегда): `Advance` / `AdvanceBytes`
+  (можно отрицательной дельтой) / `SetCurrentPath` / `SetTotalBytes` /
+  `SetWeighing` («Подсчёт…»); `Snapshot()` — иммутабельный срез с `Id`,
+  `Percent` (по байтам, иначе по элементам), `StartedAtUtc`. `verb` —
+  **ключ ресурса** (`OperationVerbs`). `Changed` с фона — не чаще 10 раз в
+  секунду, хвост довозит таймер; появление и завершение — без троттла.
+  - Байты: `BatchExecutor` взвешивает источники до старта
+    (`FolderStatistics.Collect`, глубина 64, вес по пути — один обход) —
+    **после** вопроса о совпадениях, чтобы Cancel в нём ничего не стоил.
+    Перенос — `IFileSystem.CopyFile/CopyDirectory/MoveEntry` с
+    `IProgress<long>` и токеном; в `SystemIOFileSystem` — `CopyFileEx` с
+    `LPPROGRESS_ROUTINE` (отмена внутри файла, недописанное убирает
+    система). `ApplyOne` сводит оценку с отчитанным по элементу.
   - Извлечение байтов не знает: `IShellNamespace.CopyOut` отдаёт
     `IProgress<CopyOutWork>` от `IFileOperationProgressSink.UpdateProgress`
-    — это «работа» движка, не мегабайты, поэтому операция помечена
-    `BytesAreWork` и показывается только процентом.
-- **Окно операции и статус-бар.** `MainViewModel.RunWithProgressDialogAsync`
-  открывает **немодальный** `ProgressDialog` и ждёт задачу, а не окно:
-  список остаётся живым. Окно узнаёт свою операцию по токену: хендл
-  рождается несколькими слоями ниже, `OperationTracker.Begin` получает
-  токен операции и кладёт его в снимок, окно сравнивает со своим. Водяной
-  знак по `Id` («первая операция новее моей отметки») был первым вариантом
-  и не пережил ревью: извлечение регистрирует операцию только после
-  диалога о совпадениях, и вторая операция, запущенная в этот промежуток,
-  доставалась чужому окну. Закрыть окно нельзя, пока
-  операция идёт (`Closing` отменяется): `Alt+F4`, «Закрыть» системного меню
-  и `Esc` = «Свернуть», дальше окно живёт в статус-баре и возвращается
-  кнопкой «Показать». Заголовок свой (`WindowChrome`, 2026-09-23): системный
-  не показывает «свернуть» без крестика, а крестик, который только прячет,
-  обещал не то; в полосе — тихое название и одна кнопка-глиф `E921`.
-  Первое окно со своим заголовком, у остальных рамка стандартная. По
-  завершении окно закрывает сам `RunWithProgressDialogAsync`
-  (`ProgressDialog.Finish` в `finally`), **до** возврата к вызывающему.
-  Раньше окно закрывало себя продолжением задачи — отдельной операцией
-  диспетчера после продолжения вызывающего, и вопрос об итоге («файл
-  занят, повторить?») заставал окно открытым и активным, брал его
-  владельцем и уничтожался вместе с ним, а приложение оставалось
-  выключенным во вложенном цикле невидимого модального окна
-  (2026-09-17). Второй замок на то же: `WpfDialogs.ActiveWindow` никогда
-  не отдаёт `ProgressDialog` владельцем вопроса — операций может быть
-  несколько, и чужое окно закрывается по своему расписанию. Строку и
-  всплывающую панель в статус-баре кормит `OperationViewModel` — обновляется на месте, а не
-  пересоздаётся (у него внутри `TransferRate`, скользящее среднее за 3 с,
-  и кнопки, которые нельзя ронять под курсором).
-- **Выход при идущих операциях** (2026-09-17). `MainWindow.OnClosing`
-  первым делом: операции есть — вопрос (`DialogKind.ExitWithOperations`,
-  Cancel по умолчанию); «да» — `e.Cancel`, `Vm.CancelAllOperations`
-  (`RequestCancel` каждому окну), `await OperationTracker.WhenIdleAsync(10 с)`
-  (Core, тест: true — список операций пуст, false — таймаут; продолжение
-  не на контексте вызывающего, так что фатальный обработчик может
-  блокироваться на нём), потом `Close()` снова по флагу «второй проход».
-  Таймаут — `IProcessRunner.KillAll`: `WindowsProcessRunner` ведёт
-  статический список живых процессов и убивает деревом. `Shutdown`
-  (`SessionEnding`, smoke, харнесс) отменить нельзя — `App.IsShuttingDown`
-  и `ShutdownWithoutAsking`: отмена на месте без вопроса. Вылет
-  (`AppDomain.UnhandledException`, headless-ветка диспетчера) —
-  `App.StopOperationsBeforeDying`: `ProgressDialog.CancelAll` (статический
-  список окон, только `_cts.Cancel`, без контролов — диспетчер может быть
-  мёртв), `KillAll`, `WhenIdleAsync(3 с).Result`. Пункт «Выход» в меню —
-  `MainWindow.Close`, не `Shutdown`, иначе вопрос игнорируется. После
-  `Hide()` окно отпускает сторож (`IDirectoryWatcher.Watch(null)`) и
-  WebView2 обеих панелей (`PreviewPane.ReleaseWebView`).
+    — операция `BytesAreWork`, только процент.
+- **Окно операции и статус-бар.** `RunWithProgressDialogAsync` открывает
+  **немодальный** `ProgressDialog` и ждёт задачу, а не окно. Окно узнаёт
+  свою операцию по токену в снимке (`OperationTracker.Begin`), не по `Id`:
+  извлечение регистрирует операцию после диалога о совпадениях, и
+  запущенная в этот промежуток досталась бы чужому окну. Пока операция
+  идёт, `Closing` отменяется: `Alt+F4`, «Закрыть» и `Esc` = «Свернуть» в
+  статус-бар, назад — «Показать». Заголовок свой (`WindowChrome`: у
+  системного нет «свернуть» без крестика), одна кнопка-глиф `E921`.
+  - Закрывает окно сам `RunWithProgressDialogAsync`
+    (`ProgressDialog.Finish` в `finally`) **до** возврата к вызывающему:
+    иначе вопрос об итоге брал открытое окно владельцем, умирал с ним, и
+    приложение оставалось во вложенном цикле невидимого модального окна.
+    Второй замок: `WpfDialogs.ActiveWindow` не отдаёт владельцем
+    `ITransientWindow`.
+  - Строку и панель статус-бара кормит `OperationViewModel` — на месте, не
+    пересоздаётся (`TransferRate` — скользящее за 3 с; кнопки под
+    курсором). Панель, а не тултип: тултип исчезает, стоит потянуться к
+    кнопке. Важность — `StatusSeverity` (`Warn` / `Fail`; та же пометка в
+    журнале действий).
+- **Выход при идущих операциях.** `MainWindow.OnClosing`: вопрос
+  (`DialogKind.ExitWithOperations`, Cancel по умолчанию); «да» —
+  `e.Cancel`, `Vm.CancelAllOperations` (`RequestCancel` каждому окну),
+  `await OperationTracker.WhenIdleAsync(10 с)` (Core, тест; продолжение не
+  на контексте вызывающего — фатальный обработчик может на нём
+  блокироваться), затем `Close()` вторым проходом. Таймаут —
+  `IProcessRunner.KillAll` (`WindowsProcessRunner` помнит живые и убивает
+  деревом). `Shutdown` (`SessionEnding`, smoke, харнесс) —
+  `App.IsShuttingDown`, `ShutdownWithoutAsking`: отмена без вопроса. Вылет —
+  `App.StopOperationsBeforeDying`: `ProgressDialog.CancelAll` (только
+  `_cts.Cancel` — диспетчер может быть мёртв), `KillAll`,
+  `WhenIdleAsync(3 с).Result`. «Выход» в меню — `MainWindow.Close`, не
+  `Shutdown`. После `Hide()` — `IDirectoryWatcher.Watch(null)` и
+  `PreviewPane.ReleaseWebView` обеих панелей.
 - **Конфликты.** `IConflictResolver.ResolveAll(ConflictRequest)` — push:
-  все коллизии, найденные до первого касания диска, одним вызовом (плюс
-  размер батча для заголовка); ответ — `ConflictAnswer` на каждую
-  показанную пару, вложенные (внутри сливаемых папок) включительно,
-  привязка по пути источника; null / `Cancel` — отмена всего батча, ничего
-  не применено; коллизия, возникшая по ходу или не спрошенная (имя внутри
-  сливаемой папки, которую резолвер не обошёл), — второй вызов из одного
-  элемента. Каждый файл группы — своя коллизия; связывает их только имя:
-  `BatchExecutor.ApplyGroup` уводит спутников за переименованным основным
-  файлом. `FileConflictInfo` — две записи + `IsMove` + `SourceReachable`
-  (false у записи архива); `ConflictVerdict.Of` — чистый вердикт (вид,
-  размер, кто новее, «идентичны»); `FileContentComparer` — побайтово через
-  `IFileSystem.OpenRead`, `AutoCompareLimit` делит очередь на два прохода.
-  `ConflictResolution.Merge` — слияние папок: `BatchExecutor.MergeFolder`
-  обходит исходную папку, ответы берёт по пути, вложенные папки сливает
-  рекурсивно, опустевшую при перемещении папку отправляет в корзину;
-  `MergeScanner` (Core) даёт окну то же дерево совпадений заранее, предел
-  глубины 64. `ConflictBatch` — состояние окна в Core: дерево
-  `ConflictPair` (вердикт, ответ, дети сливаемой папки, `IsEffective`),
-  очередь сравнения `NextToCompare`, разовый ответ за нерешённые
-  (`ConflictBulkAction`) и стоячая политика `SetSkipIdentical` (помнит,
-  какие ответы её, и забирает ровно их). UI — `Conflict/ConflictWindow`
-  (+ две вьюмодели) поверх него, выбор — две галки на пару (исходник /
-  целевой → Replace / Skip / Rename-или-Merge / не решено), слово-подпись
-  после имени; `DispatcherConflictResolver` маршалит на UI. При Replace
-  цель уходит **в корзину**, `DeleteAction` в composite перед основным
-  шагом — `Ctrl+Z` возвращает обе стороны (Explorer замещает
-  безвозвратно). Элемент, копируемый в свою же папку, конфликтом не
-  считается: `BatchExecutor` отвечает Rename (move — Skip) до того, как
-  кого-то спросят, сторож drag & drop пропускает такой бросок через
-  `PathSafety.IsAllowedDuplicate`, а вырезание в свою же папку
-  `PasteAsync` снимает молча (`PathSafety.AllAlreadyIn`).
+  все коллизии до первого касания диска одним вызовом (плюс размер батча);
+  ответ — `ConflictAnswer` на каждую показанную пару, вложенные
+  включительно, по пути источника; null / `Cancel` — отмена батча;
+  возникшая по ходу или не спрошенная — второй вызов из одного элемента.
+  Каждый файл группы — своя коллизия; `BatchExecutor.ApplyGroup` уводит
+  спутников за переименованным основным, кроме пропущенных.
+  - `FileConflictInfo` — две записи + `IsMove` + `SourceReachable` (false
+    у записи архива). `ConflictVerdict.Of` — вид, размер, кто новее (допуск
+    2 с, FAT), «идентичны» (false без чтения при разных размерах, null —
+    не сравнили). `FileContentComparer.AreIdentical` — блоками по 64 КБ
+    через `IFileSystem.OpenRead` до первого отличия; `AutoCompareLimit`
+    (64 МБ) делит очередь на два прохода.
+  - `ConflictResolution.Merge`: `BatchExecutor.MergeFolder` обходит
+    исходную папку, ответы по пути, вложенные — рекурсивно, опустевшую при
+    перемещении — в корзину; `MergeScanner` (Core) даёт окну то же дерево
+    заранее, с файлами без пары, глубина 64.
+  - `ConflictBatch` — состояние окна в Core: дерево `ConflictPair`
+    (вердикт, ответ, дети, `IsEffective`; `ConflictBatch.Effective` —
+    ответы исполнителю), очередь сравнения `NextToCompare`, разовый ответ
+    за нерешённые (`ConflictBulkAction`) и стоячая политика
+    `SetSkipIdentical` (забирает ровно свои ответы; начальная —
+    `AppSettings.SkipIdenticalOnConflict`). UI — `Conflict/ConflictWindow`
+    (+ две вьюмодели), миниатюры `IconSize.Medium`, геометрия
+    `AppState.ConflictWindow`; `DispatcherConflictResolver` маршалит на UI.
+  - Почему окно такое: кнопка на строке читается как сделанное действие;
+    отличия — весом, не фразой; «применить к нерешённым» не выбран —
+    нетронутый список и так решается по каждому; «Заменить все» /
+    «Пропустить все» — далеко от ОК, страховка — расстояние и `Ctrl+Z`.
+  - Replace — цель **в корзину**, `DeleteAction` в composite перед
+    основным шагом: `Ctrl+Z` возвращает обе стороны. Копия в свою же папку
+    — не конфликт: `BatchExecutor` отвечает Rename (move — Skip) сам;
+    сторож DnD пропускает (`PathSafety.IsAllowedDuplicate`), вырезание в
+    ту же папку `PasteAsync` снимает (`PathSafety.AllAlreadyIn`).
 - **Защита.** `SystemPathGuard` — функция от пути и окружения, без I/O,
-  зовётся статически: корни дисков, спец-папки (Windows, Program Files
-  x86/x64, ProgramData, Users, корень профиля), папки профиля, которые
-  ведёт Windows (Рабочий стол, Документы, Загрузки, Изображения, Музыка,
-  Видео, AppData с Local / LocalLow / Roaming — 2026-09-24, сами папки, не
-  содержимое; где они — `IKnownFolders` из локатора, `Lazy` при первом
-  вызове, иначе `Environment`), всё дерево `C:\Windows`; содержимое
-  Program Files и чужих профилей намеренно не блокируется (чистка остатков
-  деинсталляции легальна). Причины — ключи ресурсов через `Text.Format`.
-  Запись внутрь — `MayWriteInto`: «нет» говорит только дерево Windows
-  (извлечение и выход действия — в корень диска и в профиль). `PathSafety` —
-  self-drop с человеческим текстом через `ITextSource`. `IFileLockInspector`
-  — «файл открыт в: Word (PID 1234)», по файлам.
-- **Осознанные отступления от «всё откатываемо»:** безвозвратное удаление
-  (подтверждение всегда, независимо от настройки); восстановление из
-  корзины — в `UndoService` не кладётся, как в Explorer (откат = удалить
-  только что возвращённое, `Ctrl+Z` стал бы деструктивным); операция не
-  деструктивна, логируется, `SystemPathGuard` не нужен — место решает шелл.
+  статически: корни дисков и шар (`\\server\share`), спец-папки (Windows,
+  Program Files x86/x64, ProgramData, Users, корень профиля), папки
+  профиля, которые ведёт Windows (Рабочий стол, Документы, Загрузки,
+  Изображения, Музыка, Видео, AppData с Local / LocalLow / Roaming — сами,
+  не содержимое; `IKnownFolders`, `Lazy` при первом вызове, иначе
+  `Environment`), дерево `C:\Windows`. Содержимое Program Files и чужих
+  профилей не блокируется — чистка остатков легальна. Причины — ключи
+  `Guard*` через `Text.Format`. Запись внутрь — `MayWriteInto`: «нет»
+  только у дерева Windows. `PathSafety` — self-drop с текстом через
+  `ITextSource`. `IFileLockInspector` — «файл открыт в: Word (PID 1234)».
+- **Отступления от «всё откатываемо»:** безвозвратное удаление
+  (подтверждение всегда); восстановление из корзины в `UndoService` не
+  кладётся, как в Explorer (откат был бы удалением), не деструктивно,
+  логируется, `SystemPathGuard` не нужен — место решает шелл.
 
 ## Модель окна — `Core/Workspace/`, `Core/Panels/`
 
-С блока 2 (2026-09-23) панели, выделение списка, цель операций и
-клавиатура — одно состояние и правила в Core под тестами; вью переводят
-ввод в события и рисуют состояние. Спека блока — `docs/REDESIGN.md` в
-коммитах 4845b8f и 622a674 (диагноз, таблица поведения, решения человека
-В1–В28), удалена при финализации; ссылки `REDESIGN 4.x` в комментариях
-кода и тестов — на её разделы: 4.2 состояние, 4.3 цель, 4.4 события, 4.5
-правила, 4.6 эффекты, 4.7 вью, 4.8 причуды WPF, 4.10 таблица, 4.12
-следование за путём, 4.13 перетаскивание.
+Панели, выделение списка, цель операций и клавиатура — одно состояние и
+правила в Core под тестами; вью переводят ввод в события и рисуют
+состояние. Спека блока 2 — `docs/REDESIGN.md` в коммитах 4845b8f и
+622a674 (решения человека В1–В28); ссылки `REDESIGN 4.x` в коде и тестах
+— на её разделы: 4.2 состояние, 4.3 цель, 4.4 события, 4.5 правила, 4.6
+эффекты, 4.7 вью, 4.8 причуды WPF, 4.10 таблица, 4.12 следование за
+путём, 4.13 перетаскивание.
 
 ```
 вью / VM / пул ─событие─▶ WorkspaceController.Post ─▶ WorkspaceReducer.Apply(состояние, событие)
@@ -716,18 +482,18 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
 ```
 
 - **Состояние** — `WorkspaceState`, неизменяемые record'ы: `Folder` (путь,
-  панель-источник), `List` (`Listing/ListState`: выделение путями, главная,
-  каретка), `Bookmarks` / `Drives` (`PanelState`: уровни по пути с эпохой,
-  раскрытое, `Location` — место открытой папки, `Caret`, `Editing`,
-  `Revealing` — раскрытие вглубь в пути), `Keyboard` (зона, последняя
-  зона, окно активно, зона до диалога), `Menu` (снимок открытого меню),
-  настройки для правил, часы троттла. Производное не хранится: цель
-  (`TargetRules`), подсветка панели (`Highlight`), видимые строки
-  (`PanelView.Rows`), предмет панели просмотра (`PreviewSubject`).
+  панель-источник), `List` (`Listing/ListState`: выделение путями,
+  главная, каретка), `Bookmarks` / `Drives` (`PanelState`: уровни по пути
+  с эпохой, раскрытое, `Location` — место открытой папки, `Caret`,
+  `Editing`, `Revealing` — раскрытие вглубь), `Keyboard` (зона, последняя,
+  окно активно, зона до диалога), `Menu` (снимок меню), настройки, часы
+  троттла. Производное не хранится: цель (`TargetRules`), подсветка
+  (`Highlight`), видимые строки (`PanelView.Rows`), предмет панели
+  просмотра (`PreviewSubject`).
 - **События** несут причину: ввод панели (`RowClicked`, `RowActivated`,
-  `ChevronToggled` с `Alt`, `CaretMoveRequested` — клавиши, `CaretMoved` —
-  поиск по буквам), ввод списка (`ListSelectionChanged`, `ListCaretMoved`),
-  окно (`ZoneEntered(зона, причина)`, `MenuOpened` / `Closed`,
+  `ChevronToggled` с `Alt`, `CaretMoveRequested`, `CaretMoved` — поиск по
+  буквам), ввод списка (`ListSelectionChanged`, `ListCaretMoved`), окно
+  (`ZoneEntered(зона, причина)`, `MenuOpened` / `Closed`,
   `WindowActivated` / `Deactivated`, `PaneHidden`, `DialogOpened` /
   `Closed`, `OptionsChanged`), факты (`Navigated`, `BranchRead` с эпохой,
   `ChevronsProbed`, `BookmarksChanged`, `Relocated`, `Removed`,
@@ -735,82 +501,83 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
   Неизвестная причина ничего не выделяет и не раскрывает.
 - **Правила — модули в фиксированном порядке** (`WorkspaceReducer`):
   каждый владеет своим срезом, читает итог предыдущих, друг друга не
-  зовёт, клавиатуру, мышь, часы и диск не читает.
+  зовёт; клавиатуру, мышь, часы и диск не читает.
   1. `NavigationRules` — что открывает папку: клик, `Enter`, «стрелки
      открывают» через `TreeNavThrottle` (сейчас / в момент T / никогда,
-     срабатывание — событие `ThrottleElapsed`), `Ctrl+1` из соседней
-     панели на её курсор; уже открытая не открывается снова.
-  2. `PanelRules` — строки, раскрытое, место, курсор. Уровень читается
-     эффектом `ReadBranch` на пуле, ответ с устаревшей эпохой
-     отбрасывается; раскрытие до пути — асинхронный спуск (`Revealing`);
-     пересборка закладок и перечитывание держат раскрытое, курсор и место
-     по пути; ушедшая строка отдаёт курсор соседу; `WindowActivated`
-     перечитывает раскрытые уровни, не чаще раза в 5 с. Сама панель не
-     сворачивается никогда.
-  3. `ListRules` + `Listing/ListingArrival` — выделение после приземления
-     строк: намерение (`FolderSession.DecideArrival`), иначе по путям;
-     переименованная строка — под новым именем (пара «было → стало» от
-     своей операции и от сторожа); ушедшая выделенная — преемник
-     (`CurrentRowFallback`, любая причина, кроме ухода из результатов
-     поиска); в видимость приводится то, что попросили, главная строка при
-     `ListingReason.Rearranged` (фильтр или порядок сменил сам пользователь)
-     и при возврате из выдачи поиска; стоявшая на экране главная строка
-     держит своё место при любой посадке того же списка (`ListLanding.Held`,
-     `RowFollowing`, 2026-09-28). В список выделение возвращает эффект
+     срабатывание — `ThrottleElapsed`), `Ctrl+1` из соседней панели;
+     открытая не открывается снова.
+  2. `PanelRules` — строки, раскрытое, место, курсор. Уровень — эффект
+     `ReadBranch` на пуле, устаревшая эпоха отбрасывается; раскрытие до
+     пути — асинхронный спуск (`Revealing`); пересборка и перечитывание
+     держат раскрытое, курсор и место по пути; ушедшая строка отдаёт
+     курсор соседу; `WindowActivated` перечитывает раскрытое не чаще раза
+     в 5 с. Листья без шеврона (проба фоном, перепроба на `FolderChanged`),
+     раскрытое — в `AppState`. Сама панель не сворачивается никогда:
+     строка без подпапок остаётся раскрытой (`PanelView` открывает любую
+     строку из `Expanded`, кроме `IsLeaf`), `←` на ней — к родителю.
+  3. `ListRules` + `Listing/ListingArrival` — выделение после приземления:
+     намерение (`FolderSession.DecideArrival`), иначе по путям;
+     переименованная — под новым именем (пара «было → стало» от своей
+     операции и от сторожа); ушедшая выделенная — преемник
+     (`CurrentRowFallback`, кроме ухода из выдачи поиска); в видимость —
+     что попросили, главная при `ListingReason.Rearranged` и при возврате
+     из выдачи; стоявшая на экране главная держит место
+     (`ListLanding.Held`, `RowFollowing`). В список — эффект
      `ApplyListSelection`.
-  4. `KeyboardRules` — зона, меню, активность окна и куда клавиатуре идти,
-     сравнивая состояние до и после события: упала из панели — на её
-     курсор, из строки списка — на каретку без прокрутки; панель убрана — в
-     список; диалог закрыт — в панель, где была, иначе в список; строки
+  4. `KeyboardRules` — куда клавиатуре идти, по состоянию до и после:
+     упала из панели — на её курсор, из строки списка — на каретку без
+     прокрутки; панель убрана — в список; диалог закрыт — где была; строки
      операции — на главную, если клавиатура в списке или (после диалога)
-     нигде; ушла строка с кареткой — на преемника без прокрутки; смена
-     вида — на каретку в новом виде; в панели — на строке курсора.
+     нигде; ушла строка с кареткой — на преемника; смена вида — на
+     каретку; в панели — на строке курсора.
 - **Исполнитель** — `Controllers/WorkspaceController` (App): очередь
-  событий (вложенного `Apply` нет, порядок трассы — порядок модели),
-  `StateChanged` до эффектов (строка, куда шлют клавиатуру, уже
-  нарисована), чтение уровней и проба шевронов на пуле, таймер троттла.
-  Трасса — `WS <событие>; effects: …` строкой на событие и `WS target: …` на
-  смену производной цели, под `LogActions`.
-- **Адаптеры** — тонкий код-бихайнд. `FolderTreesView`: ввод панелей в
-  события, `FocusRow` (строка не нарисована — когда проекция её нарисует).
+  (вложенного `Apply` нет, порядок трассы — порядок модели),
+  `StateChanged` до эффектов (строка уже нарисована), чтение уровней и
+  проба шевронов на пуле, таймер троттла. Трасса под `LogActions`:
+  `WS <событие>; effects: …`, `WS target: …`.
+- **Адаптеры** — тонкий код-бихайнд. `FolderTreesView`: ввод в события,
+  `FocusRow` (строка не нарисована — когда нарисует проекция).
   `FileListView`: выделение пользователя — `ListSelectionChanged` (не во
-  время `IsSyncingRows`), исполнение `ApplySelection` одним вызовом
+  время `IsSyncingRows`), `ApplySelection` одним вызовом
   (`FileListBox.ReplaceSelection` = `SetSelectedItems`, у `FileDataGrid` —
   `BeginUpdateSelectedItems`), `FocusRow` по
   `ItemContainerGenerator.StatusChanged` без `UpdateLayout`, `OpenEditor`.
-  `MainWindow`: причина прихода фокуса (`ReasonFor`: записанная окном до
-  вызова; прежний элемент отсоединён или новый — окно → падение; кнопка
-  мыши → клик; старый фокус в меню → меню; `Activated` → активация) и
-  исполнение `FocusZone` / `FocusRow`. Неактивное окно: перенос ждёт
-  `Activated` (активировали кликом — решает клик); харнессу
-  (`App.Headless`) — сразу, его окно не бывает активным.
-- **Цель и меню** — `TargetRules` (чем команда оперирует: строки списка,
-  строка панели, фон папки) и `MenuContext` (снимок предмета и фактов его
-  места при открытии меню; команда из меню получает его параметром
-  `MenuCall`, с хоткея — цель сейчас). Рамка «о чём меню» — флаг строки
-  панели.
-- **Панель — плоский список**: `Controls/FolderPanelList` — `ListBox` с
-  выключенным выделением WPF, строки — `PanelView.Rows` с отступом по
-  глубине, `TreeNodeViewModel` — проекция строки с четырьмя OneWay-флагами
-  (курсор, активна, место — жирное имя, предмет меню);
+  `MainWindow`: причина прихода фокуса (`ReasonFor`: записанная окном;
+  прежний элемент отсоединён — падение; кнопка мыши — клик; фокус был в
+  меню — меню; `Activated` — активация) и `FocusZone` / `FocusRow`.
+  Неактивное окно: перенос ждёт `Activated`; харнессу (`App.Headless`) —
+  сразу.
+- **Цель и меню** — `TargetRules` (строки списка, строка панели, фон
+  папки; `TargetRules.Rename` — редактор в панели, в списке или групповое)
+  и `MenuContext` (снимок предмета при открытии меню; команда из меню
+  получает его параметром `MenuCall`, с хоткея — цель сейчас). Рамка «о
+  чём меню» — флаг строки панели. Лог вставки — `Paste: … (how)`.
+- **Панель — плоский список**: `Controls/FolderPanelList` — `ListBox` без
+  выделения WPF, строки — `PanelView.Rows`, отступ —
+  `TreeIndentConverter`; `TreeNodeViewModel` — проекция с четырьмя
+  OneWay-флагами (курсор, активна, место — жирное имя, предмет меню);
+  черта перед своими закладками — флаг `StartsUserSection`.
   `FolderTreesController` сверяет строки по ключам (`BranchReconcile`),
-  больше 256 правок — одной заменой. Клавиши — `PanelKeyNavigation`: `↑` /
-  `↓`, `←` свернуть / к родителю, `→` раскрыть / к первому ребёнку,
-  `Home`, `End`, `PgUp`, `PgDn`; буквы — `TypeAheadController`. UIA видит
-  список, не дерево.
+  больше 256 правок — одной заменой. Клавиши — `PanelKeyNavigation` (`↑`
+  / `↓`, `←` / `→`, `Home`, `End`, `PgUp`, `PgDn`), буквы —
+  `TypeAheadController`. UIA видит список, не дерево.
 - **Следование за путём** — `Navigation/PathFollowing`: перенос или
-  переименование Wander'ом → держатели по порядку: панели (и перечитать
-  затронутые уровни), закладки, книга видов, MRU адреса, память выделения
-  (`FolderSession.RewriteMemory`: и открытая папка, и намерение), буфер
-  (`ClipboardController.Rewrite` — только пока системный буфер держит наш
-  список), история последней: её навигация читает уже переписанное.
+  переименование Wander'ом (`FollowMoved` / `FollowRelocated`) →
+  держатели по порядку: панели (и перечитать уровни), закладки, книга
+  видов, MRU адреса, память выделения (`FolderSession.RewriteMemory`),
+  буфер (`ClipboardController.Rewrite`, пока системный буфер наш),
+  история последней. «Где теперь путь» — `PathRewrite.Under`; копия так
+  же обновляет цель в панелях; `Ctrl+Z` — по
+  `IUndoableAction.MovesOnUndo` (пары у `MoveAction`, `RenameAction`,
+  `CompositeAction`). Листинг, перенаправленный без навигации, —
+  `Listing follows: …`.
 
 | WPF делает | Ответ |
 |---|---|
 | выкидывает заменённый объект из `SelectedItems` (`Replace`, `Reset`) | отчёты списка во время `IsSyncingRows` не шлются; выделение возвращает `ApplyListSelection` |
 | присвоение `SelectedItem` схлопывает многовыделение | `SelectedItem` не привязан ни в одном виде |
-| `SelectedItems.Add` линейный — массовое выделение квадратичное | `ReplaceSelection` одним вызовом |
-| удалённый элемент с фокусом отдаёт его ближайшему фокусируемому предку (сам список) или окну | `ZoneEntered(…, FocusFell)` → `FocusRow` по правилу |
+| `SelectedItems.Add` линейный — массовое выделение квадратичное (5000 строк — 10,8 с, стенд `SelectionProbe`) | `ReplaceSelection` одним вызовом (0,36 с; `ui.selection-apply`) |
+| удалённый элемент с фокусом отдаёт его предку (сам список) или окну | `ZoneEntered(…, FocusFell)` → `FocusRow` по правилу |
 | исполняет пункт меню после закрытия и возврата фокуса | пункт получает снимок `MenuContext` |
 | после модального диалога фокус — первому фокусируемому | `DialogOpened` / `DialogClosed` → `FocusZone` по правилу |
 | свёрнутый элемент фокус не держит | `PaneHidden` до сворачивания → `FocusZone(список)` |
@@ -827,348 +594,277 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
 
 ## Навигация и дерево
 
-- **`NavigationFallback`** (Core, тест, 2026-09-17) — куда идти, когда
-  папки нет. `AfterDelete(удалённые, текущая)` — ближайший не задетый
-  предок или null («не трогать»), вложенность как у `PathRewrite.Under`;
-  `AfterRestore(путь, exists, kindOf)` — путь, пока он есть, иначе
-  `PathCrumbs.NearestExisting`, но только на `VolumeKind.Fixed`, на всём
-  остальном null (буква флешки могла достаться другому носителю) — тогда
-  `MainViewModel.OpenStartFolderAsync` берёт `AppSettings.WorkFolder`; он
-  же — старт, когда последняя папка не восстанавливается или её нет
-  (2026-09-28). Историю оба не трогают.
-- **`StartFolder`** (Core, тест, 2026-09-28) — папка, в которой сеанс
-  просят начаться: `--folder <путь>` или `--folder=<путь>`
-  (`FromArguments`, полный путь), у харнесса — `Override`.
-  `OpenStartFolderAsync` берёт её первой, раньше последней и рабочей;
-  папки нет — `WARN` и старт как без ключа. Тестовые запуски передают
-  свою: `check.bat run` — `tests\Fixtures`, харнесс — корень песочницы;
-  иначе сеанс без `state.json` начинается в «Документах» человека.
-- **`NavigationService`** — back / forward; каждая запись несёт
-  `NavigationSource`, чтобы дерево и панель просмотра реагировали по-разному.
-- **Быстрый фильтр не кончается на текущей папке.** `SearchController`
-  мгновенно сужает листинг в памяти; `ContentSearchController` через 400 мс
-  и от 2 символов (`MinAutoRunLength` — сторожит только этот незаметный
-  путь; в окне порога нет) запускает `ContentSearchService` со
-  `SearchScope.Subfolders` (`IsFilterPass`), **засеянный** найденным
-  фильтром (не мигает), повторы отсеиваются по `_resultPaths`, `HereFirst`
-  держит найденное здесь выше. Окно поиска этим путём не ходит
-  (`_fromFilterBox`) — у него своя галочка подпапок.
-- **Панель наследуется в обе стороны.** `GoUp` берёт источник текущей
-  записи, `DescendSource` — на спуске: шаг вглубь из закладок остаётся
-  `Bookmark`. Меняет панель только явный выбор в другой или недостижимый
-  путь (место — в «Дисках», `PanelRules`).
-- **Пропавшая папка — состояние.** `MissingFolderPath` взводится в фоне по
-  `DirectoryNotFoundException` / `DriveNotFoundException`, не проверкой
-  перед навигацией (синхронный поход на шару = зависание). Поверх пустого
-  списка — «папка удалена или недоступна»; у закладки (`IsMissingBookmark`)
-  — «Указать расположение…» / «Убрать».
-- **`NavigationController`** (App) — маршрутизация путей и shell-сентинелов
-  (`shell:RecycleBinFolder` через `IShellNamespace`, лейбл «Корзина»);
-  состояние адресной строки (`Breadcrumbs`, `RecentPaths`,
-  `IsEditingAddress`), XAML биндится `Vm.Nav.X`.
-- **Адресная строка** — крошки (`PathCrumbs.Split`, плоские кнопки,
-  shell-сентинел одной крошкой, `ScrollViewer` проматывается в хвост) и
-  текстовое поле (`Ctrl+L` / клик по пустому месту; выход `Esc`, потеря
-  фокуса, удавшаяся навигация). `RecentPaths` (Core) — MRU 20 папок без
-  дублей, `AppState.Session.RecentPaths`, кнопка-треугольник / `F4`.
-- **Память выделения и намерение прибытия** — `FolderSession` (ниже):
-  64 папки LRU; подъём вверх выделяет покинутую папку; удаление —
-  следующий уцелевший (`NextAfterRemoval`), вставка — вставленное, оба с
-  клавиатурой (шли за модальным диалогом). Намерение операции — только для
-  открытой папки (`SetArrivalHere`): вставленное в подпапку не ждёт захода
-  туда, чтобы забрать выделение.
-- **Панели** — модель окна (выше): уровни читаются фоном, листья без
-  шеврона (проба фоном, перепроба на `FolderChanged`), раскрытые пути в
-  `AppState`, раскрытие до открытой папки, **никогда не сворачиваются
-  сами**: строка, потерявшая последнюю подпапку, остаётся раскрытой
-  (`PanelView` — открыта любая строка из `Expanded`, кроме листа
-  `IsLeaf`), `←` на ней сразу к родителю, вернувшаяся подпапка видна под
-  ней (2026-09-25).
-- **Подсветка — у каждой панели своя**: курсор панели — в модели, активная
-  подсветка — только у панели с клавиатурой, у прочих — неактивная. Переход
-  из одной панели курсор другой не трогает — в обе стороны с 2026-09-23
-  (до того переход не из закладок гасил их курсор). `Ctrl+1` из соседней
-  панели в ту, что не держит открытую папку, — на её курсор (со «стрелки
-  открывают» — и переход): `WorkspaceState.HeldRow` читает зону до события
-  — модуль клавиатуры идёт последним. Курсора нет или клавиша нажата не
-  в соседней панели — раскрытие открытой папки, недостижима — курсор или
-  первая строка без перехода.
-- **Панель не уезжает вбок к длинному имени.** WPF прокручивает к строке,
-  получившей фокус, по обеим осям (`OnGotFocus` → `BringIntoView`);
-  `FolderTreesView.Line_RequestBringIntoView` гасит запрос и выпускает его
-  заново с горизонталью, равной видимой части `ScrollContentPresenter`, —
-  вверх-вниз как было. Выключается `AppSettings.TreeScrollsSideways`.
-- **Переименование папки — тот же путь, что перенос**: `FollowRelocated`
-  по правилу `PathFollowing` (модель окна); строки панелей переписываются
-  на месте событием `Relocated`, ветка не сворачивается, уровни родителей
-  перечитываются (`FolderChanged`). Перенесённая в другую папку строка
-  уходит из прежнего уровня (`PanelRules.Follow`, 2026-09-23): оставленная
-  там под новым путём, она пропадала из его перечитывания, пришедшего после
-  перехода, и `SettleGone` уводил курсор к соседу и сворачивал её ветку.
-- **Листинг вне UI-потока** — `RefreshFolderAsync` (и `RefreshShellAsync`)
-  в `Task.Run` с отменой: следующая навигация отменяет предыдущую, побеждает
-  последняя; спиннер только после 150 мс.
-- **Иконки и миниатюры в фоне** — `Controls/AsyncIcon` (наследник `Image`):
-  кэшированную отдаёт синхронно (`TryGetCachedIcon`), остальное через
+- **`NavigationFallback`** (Core, тест) — куда идти, когда папки нет.
+  `AfterDelete(удалённые, текущая)` — ближайший не задетый предок или
+  null, вложенность как у `PathRewrite.Under`; строки удалённого уходят из
+  обеих панелей (`Removed`), родители перечитываются
+  (`RefreshTreesAbove`). `AfterRestore(путь, exists, kindOf)` — путь, пока
+  есть, иначе `PathCrumbs.NearestExisting`, но только на
+  `VolumeKind.Fixed` (букву флешки мог получить другой носитель); иначе
+  `MainViewModel.OpenStartFolderAsync` берёт `AppSettings.WorkFolder` — он
+  же старт, когда последней папки нет. Историю оба не трогают.
+- **`StartFolder`** (Core, тест) — `--folder <путь>` / `--folder=<путь>`
+  (`FromArguments`), у харнесса — `Override`; `OpenStartFolderAsync` берёт
+  её первой; папки нет — `WARN` и старт как без ключа. Тестовые запуски
+  передают свою (`check.bat run` — `tests\Fixtures`, харнесс — корень
+  песочницы), иначе сеанс без `state.json` начнётся в «Документах».
+- **`NavigationService`** — back / forward; запись несёт
+  `NavigationSource`, чтобы дерево и панель просмотра реагировали
+  по-разному. Панель наследуется в обе стороны: `GoUp` — источник
+  текущей записи; шаг мимо панелей (папка списка, адрес, удержанный drag)
+  остаётся в закладках, если папка открыта из них (`Inherit`); меняет
+  панель только явный выбор или недостижимый путь (`PanelRules`). Клик по
+  папке — `NavigateAndSelectFolder` (в её листинге ничего не выделено).
+- **Пропавшая папка — состояние**: `MissingFolderPath` взводится в фоне
+  по `DirectoryNotFoundException` / `DriveNotFoundException`, не
+  проверкой перед навигацией (синхронный поход на шару = зависание).
+  Закладке (`IsMissingBookmark`) — «Указать расположение…» (диалог — на
+  `PathCrumbs.NearestExisting`) / «Убрать».
+- **`NavigationController`** (App) — маршрутизация путей и
+  shell-сентинелов (`shell:RecycleBinFolder` через `IShellNamespace`);
+  адресная строка (`Breadcrumbs`, `RecentPaths`, `IsEditingAddress`), XAML
+  — `Vm.Nav.X`. Крошки — `PathCrumbs.Split`, shell-сентинел одной
+  крошкой, `ScrollViewer` в хвост; поле — `Ctrl+L` / клик по пустому,
+  выход — `Esc`, потеря фокуса, удавшаяся навигация. `RecentPaths` (Core)
+  — MRU 20 без дублей, `AppState.Session.RecentPaths`, `F4`.
+- **Подсветка у каждой панели своя**: курсор — в модели, активная — у
+  панели с клавиатурой; переход из одной панели курсор другой не трогает.
+- **Панель не уезжает вбок**: `FolderTreesView.Line_RequestBringIntoView`
+  гасит запрос WPF и выпускает заново с горизонталью видимой части
+  `ScrollContentPresenter`. Выключается `AppSettings.TreeScrollsSideways`.
+- **Переименование папки — путём переноса**: `F2` в панели —
+  `MainViewModel.RenameFolderAsync` → `RenameMany`, затем
+  `FollowRelocated`; строки переписываются на месте (`Relocated`), уровни
+  родителей перечитываются. Перенесённая строка уходит из прежнего уровня
+  (`PanelRules.Follow`): иначе пропала бы из его перечитывания, и
+  `SettleGone` увёл бы курсор и свернул ветку.
+- **Листинг вне UI-потока** — `RefreshFolderAsync` / `RefreshShellAsync`
+  в `Task.Run` с отменой: побеждает последняя навигация; спиннер после
+  150 мс.
+- **Иконки и миниатюры** — `Controls/AsyncIcon` (наследник `Image`):
+  кэшированную отдаёт синхронно (`TryGetCachedIcon`), остальное —
   `Task.Run` под шлюзом (4 слота), результат отбрасывается, если контейнер
-  переехал на другой файл. Синхронный ответ диск не трогает, поэтому «папка
-  или файл» говорит строка (`AsyncIcon.RowIsFolder` из `DataContext`): общий
-  ключ типа (`file|noext`, `ext|.txt`) иначе отвечал и за ещё не нарисованную
-  папку — новая `fast` вставала в дерево со значком файла; без подсказки —
-  только ключи этого пути. Декодированный тир помнит, из какого `byte[]`
-  картинка, и не отвечает, когда провайдер отдаёт уже другой (путь переживает
-  то, что на нём стояло). Три тира: провайдер хранит `byte[]` (память +
-  диск), **`IconImageCache` — декодированные замороженные `BitmapImage`**
-  (256 и не больше четверти бюджета картинок в байтах — `PictureMemory`,
-  2026-09-24; декод был единственным на UI-потоке — 338 декодов и 141 мс за
-  секунду при прокрутке; декодирует тот, кто первым дошёл; кнопка очистки
-  чистит и его). Четыре ступени: `Small` / `Normal` — значок по расширению
-  (`SHGetFileInfo`, один на тип; кроме типов, чей значок в самом файле, —
-  `.exe`, `.ico`, `.url` и соседи, `_ownIconExtensions`: у них ключ по пути,
-  как у `.lnk`), `Medium` (96) / `Large` (256) — миниатюра
-  через `IShellItemImageFactory` только для `IsThumbnailable` (иначе шелл
-  пишет значок в общий `thumbcache` и платит обращением за каждый файл).
-  Остальные на `Large` идут через `SHIL_JUMBO`, и слот там всегда 256, но
-  не масштабируется: приложение с 48-пиксельным ресурсом рисуется в углу
-  пустого квадрата. `TrimJumboSlot` режет слот до ближайшей стандартной
-  ступени над нарисованным — только после этого натуральный размер
-  значка честный. Шелл не увеличивает (`SIIGBF_RESIZETOFIT` только
-  ужимает), поэтому растягивал вид: у плиток, значков и галереи
-  `StretchDirection=DownOnly`, размер ячейки — потолок, а не цель.
-  Ключ кэша: по пути, где картинка своя, по расширению, где общая; бюджет
-  считает только первые; на диск — только 256 (дисковый ключ размера не
-  несёт, 96 дёшево пересобрать), с поколением: правка того, как рисуется
-  миниатюра, инвалидирует диск (`ThumbnailDiskCache.Generation`).
+  переехал на другой файл; после очереди актуальность перепроверяется.
+  - Синхронный ответ диск не трогает: «папка или файл» говорит строка
+    (`AsyncIcon.RowIsFolder`), иначе общий ключ типа (`file|noext`,
+    `ext|.txt`) рисовал бы новую папку значком файла. Декодированный тир
+    помнит, из какого `byte[]` картинка.
+  - Тиры: `SystemIconProvider` — `byte[]` (память FIFO 512 + диск);
+    **`IconImageCache`** — декодированные замороженные `BitmapImage` (до
+    256 и не больше четверти `PictureMemory`; иначе декод оставался на
+    UI-потоке — 338 декодов и 141 мс за секунду прокрутки).
+  - Ступени: `Small` / `Normal` — значок по расширению (`SHGetFileInfo`;
+    типы со значком в файле — `.exe`, `.ico`, `.url`…, `_ownIconExtensions`
+    — по пути, как `.lnk`); `Medium` (96) / `Large` (256; 384 / 512 на
+    крупном масштабе системы — `ThumbnailCacheOptions.SideFor`) —
+    `IShellItemImageFactory` только для `IsThumbnailable` (иначе шелл
+    пишет значок в общий `thumbcache`). Прочее на `Large` — `SHIL_JUMBO`:
+    слот 256, значок не масштабируется; `TrimJumboSlot` режет слот до
+    ступени над нарисованным. Шелл не увеличивает (`SIIGBF_RESIZETOFIT`
+    только ужимает) — `StretchDirection=DownOnly`, ячейка — потолок.
+  - Мимо шелла: RAW — `RawThumbnail` (`RawPreviewExtractor` + WinRT
+    `Windows.Graphics.Imaging` с масштабом на разжатии; не
+    `System.Drawing` — GDI+ сериализуется; 75 → 3 мс; оверлей ярлыка на
+    RAW потерян осознанно). `Medium` / `Large` сначала спрашивают
+    `BookCover` (`.fb2`, `.epub`; обложка «страницей»; 16 / 32 не
+    получают). PDF — `PdfPageImage` (`Windows.Data.Pdf`, 14 + 13 мс),
+    **всегда** (читалки вроде SumatraPDF provider не регистрируют);
+    синхронно `.AsTask().GetAwaiter().GetResult()` — вызывающие на фоне.
+    Аудио — `AudioCover` (тег, иначе картинка рядом; кэш на папку по
+    mtime). `.lnk` — `ExistingLinkTarget` подменяет на цель, стрелку
+    накладывает `DrawLinkOverlay` (шелл запекает её в значок, не в
+    миниатюру); ключ по `.lnk` (TECHDEBT).
+  - Ключ кэша: по пути, где картинка своя, по расширению, где общая;
+    бюджет считает первые. На диск — только крупная; размер в ключе,
+    когда не 256; поколение (`ThumbnailDiskCache.Generation`) — правка
+    того, как рисуется миниатюра, инвалидирует диск.
 - **Закладки** — drag-add, сворачиваемые, `AppState.Favorites` /
   `IsBookmarksExpanded`; спец-папки через `IKnownFolders` →
-  `SHGetKnownFolderPath` плюс Корзина, каждая чекбоксом.
+  `SHGetKnownFolderPath` плюс Корзина. `Delete` на своей — `ChoiceDialog`
+  «закладку или папку» (`MainViewModel.DeleteFromBookmark`), на встроенной
+  — выключение (`BookmarksController.HideSpecial`).
 
 ## Shell-namespace: корзина и архивы
 
 Две вещи, которые выглядят папками, а папками не являются: корзина
-(`shell:RecycleBinFolder`) и архив, открытый как папка. Обе за одним
-контрактом `IShellNamespace` (Core), реализация — `WindowsShellNamespace`,
-которая только диспетчеризует: корзина — `ShellRecycleBinFolder`, архив —
-`ShellArchiveFolder`, обе на `IShellItem`. Листинг обеих (и обычной папки
-в `IFileSystem.Enumerate`) принимает `CancellationToken` и смотрит на него
-между элементами: ушёл из папки — чтение обрывается, а не дочитывается.
+(`shell:RecycleBinFolder`) и архив, открытый как папка. Обе за контрактом
+`IShellNamespace` (Core); `WindowsShellNamespace` диспетчеризует:
+корзина — `ShellRecycleBinFolder`, архив — `ShellArchiveFolder`, обе на
+`IShellItem`. Листинг — ветка `RefreshShellAsync` (эпоха, спиннер,
+отмена, `PublishRows`), адрес и крошки обычные (`GetDisplayName` →
+null); `Enumerate` принимает `CancellationToken` и смотрит на него между
+элементами.
 
-- **Путь внутри архива — обычный parsing name.** `D:\pack.7z\sub\b.txt`
-  шелл разбирает сам; Wander режет его надвое чистой функцией
-  `ArchivePath.Parse(path, extensions)` (Core): первый сегмент с архивным
-  расширением — контейнер, хвост — путь внутри, пустой хвост = корень.
-  Набор расширений читает Platform из реестра лениво, по классу
-  папки-обработчика (`FolderHandlerOf`, 2026-09-25: `HKCR\<ProgID>\CLSID`,
-  ProgID с учётом `UserChoice`, иначе `SystemFileAssociations\<ext>\CLSID`;
-  ∈ CLSID `CompressedFolder` / `ArchiveFolder` / `CABFolder`; fallback
-  `.zip`): 7-Zip и WinRAR своей папки не регистрируют, так что отданная им
-  ассоциация меняет запуск, а не просмотр папкой (решение 2026-09-24).
-- **Один предикат на весь код** — `Archives.Of(path)` →
-  `IShellNamespace.ParseArchive`. Никаких `EndsWith(".zip")`.
-  `ParseArchive` заодно проверяет `File.Exists` контейнера: настоящая папка
-  с именем `backup.zip` открывается папкой. `MainViewModel` кэширует ответ
-  на смену пути (`NoteCurrentLocation`) — `CanExecute` опрашивается десятки
-  раз в секунду, а ответ упирается в диск.
-- **`IShellItem`, не `Shell.Application`.** У последнего `FolderItem.Size`
-  и `ModifyDate` для `ArchiveFolder` врут (0 и 1899). Перечисление —
-  `BHID_EnumItems`; папка/файл — `SFGAO_FOLDER`; размер и дата —
-  `IShellItem2` (`PKEY_Size`, `PKEY_DateModified`), у папок внутри размера
-  нет.
-- **Корзина — тот же `IShellItem2`** (с 2026-09-21; раньше
-  `Shell.Application`, у него `Items()` — один непрерываемый вызов, ~5 с
-  на холодной корзине). Имя — `System.FileName`: как на диске, с
-  расширением (display name прячет `.lnk` всегда, остальные — по
-  настройке Проводника, а `RecycleHandle` несёт настоящий путь; запасное
-  имя — последняя часть `SIGDN_NORMALDISPLAY`, у элемента корзины это
-  исходный путь). `FullPath` — `SIGDN_FILESYSPATH`
-  (`$R…`), время удаления — `PKEY_Recycle_DateDeleted` точным FILETIME (в
-  `ModifiedUtc`: по нему сортировка и сопоставление в `Restore`), «откуда»
-  — `PKEY_Recycle_DeletedFrom`, у удалённой папки настоящий размер.
-  `Restore` находит строку панели по её `$R`-файлу (`RecycleHandle.BinFilePath`).
-- **Корзина перечисляется на своём STA-потоке** (`OwnApartment.Run`). Её
-  shell-папка — apartment-threaded; созданная с потока пула, она попадает в
-  общий host-STA процесса: вызовы маршалятся, а долгий вызов там держит
-  overlay-запросы значков (`SHGetFileInfo`) — четыре слота `AsyncIcon` и
-  следующую папку с ними. Холодный заход размазан по строкам, поэтому
-  листинг отдаётся порциями (AD2, 2026-09-25): `PortionClock` (Core) — с
-  300 мс, дальше раз в секунду, отсортированные копии через `IProgress` в
-  `Enumerate`; `MainViewModel.Land` — первая порция как приход папки (вуаль
-  снимается), следующие как перечитывание с сохранённым выделением, порция
-  после целого отбрасывается; архив порций не даёт. Контрольные строки
-  лога: `Recycle bin: opened … first row after … rows in …, N portion(s) on
-  the way` и `Recycle bin: listing abandoned at …`.
-- **Байты: zip — потоком, остальное — копирующим движком шелла.** Запись
-  `CompressedFolder` отдаёт `BHID_Stream` (`IShellNamespace.ReadEntry` →
-  `ShellArchiveFolder.ReadEntry`, в память; стенд 2026-09-25: 430 КБ за
-  18 мс); у `ArchiveFolder` `BHID_Stream` — `E_NOINTERFACE`, а `IDataObject`
-  несёт только `Shell IDList Array`, без `FileContents`;
+- **Путь внутри архива — обычный parsing name** (`D:\pack.7z\sub\b.txt`).
+  Надвое режет `ArchivePath.Parse(path, extensions)` (Core): первый
+  сегмент с архивным расширением — контейнер, хвост — путь внутри.
+  Расширения Platform читает из реестра лениво, по классу
+  папки-обработчика (`FolderHandlerOf`: `HKCR\<ProgID>\CLSID` с учётом
+  `UserChoice`, иначе `SystemFileAssociations\<ext>\CLSID`; ∈
+  `CompressedFolder` / `ArchiveFolder` / `CABFolder`; fallback `.zip`).
+  Решение 2026-09-24: 7-Zip и WinRAR своей папки не регистрируют —
+  отданная им ассоциация меняет запуск, а не просмотр папкой.
+- **Один предикат** — `Archives.Of(path)` → `IShellNamespace.ParseArchive`,
+  никаких `EndsWith(".zip")`; `File.Exists` контейнера — настоящая папка
+  `backup.zip` открывается папкой. `MainViewModel` кэширует ответ на смену
+  пути (`NoteCurrentLocation`): `CanExecute` спрашивает десятки раз в
+  секунду.
+- **`IShellItem`, не `Shell.Application`**: у того `FolderItem.Size` и
+  `ModifyDate` для `ArchiveFolder` врут (0 и 1899), а `Items()` корзины —
+  один непрерываемый вызов (~5 с холодной). Перечисление —
+  `BHID_EnumItems`; папка — `SFGAO_FOLDER`; размер и дата — `IShellItem2`
+  (`PKEY_Size`, `PKEY_DateModified`), у папок в архиве размера нет.
+- **Корзина.** Имя — `System.FileName` (как на диске, с расширением:
+  display name прячет `.lnk` всегда, остальное — по настройке
+  Проводника; запасное — хвост `SIGDN_NORMALDISPLAY`). `FullPath` —
+  `SIGDN_FILESYSPATH` (`$R…`); время удаления —
+  `PKEY_Recycle_DateDeleted`, точный FILETIME в `ModifiedUtc` (сортировка и
+  сопоставление в `Restore`); «откуда» — `PKEY_Recycle_DeletedFrom`; у
+  папки настоящий размер. «Восстановить» ищет по `$R`-файлу
+  (`RecycleHandle.BinFilePath`), `Ctrl+Z` — по `BinItemId`. ~0,4 с на 1400.
+- **Корзина — на своём STA-потоке** (`OwnApartment.Run`): её
+  apartment-threaded папка с потока пула попала бы в общий host-STA, и
+  долгий вызов держал бы overlay-запросы значков (`SHGetFileInfo`) —
+  четыре слота `AsyncIcon` и следующую папку. Холодный заход размазан по
+  строкам (6,4 с на 1469, первая через 12 мс) — листинг порциями (AD2):
+  `PortionClock` (Core, тест) — первая на 300 мс, дальше раз в секунду,
+  копии через `IProgress` в `Enumerate`; `MainViewModel.Land` кладёт первую
+  как приход (вуаль снимается), следующие — как перечитывание с
+  выделением, порция после целого отбрасывается; архив порций не даёт.
+  Лог: `Recycle bin: opened … first row after … rows in …, N portion(s) on the way`,
+  `Recycle bin: listing abandoned at …`.
+- **Байты: zip — потоком, остальное — движком шелла.** `CompressedFolder`
+  отдаёт `BHID_Stream` (`IShellNamespace.ReadEntry` →
+  `ShellArchiveFolder.ReadEntry`, в память; 430 КБ за 18 мс); у
+  `ArchiveFolder` — `E_NOINTERFACE`, а `IDataObject` без `FileContents`;
   `IFileOperation::CopyItem` с `FOF_NO_UI` извлекает всё. Поток берут
-  миниатюры (`ArchiveThumbnail`); панель просмотра и «Открыть» — через
-  копию, им нужен файл. Отсюда
-  `IShellNamespace.CopyOut` и `Shell/ExtractionService` (Core) вокруг
-  него: `SystemPathGuard` на цель, `IConflictResolver` (Replace → старое в
-  корзину), лог, прогресс в `OperationTracker`, отмена через
-  `IFileOperationProgressSink.PreCopyItem`, undo — `ExtractAction`
-  (извлечённое в корзину) в композите. Не через `BatchExecutor`: тот
-  копирует `IFileSystem` → `IFileSystem` и полагается на то, что оба конца
-  можно `stat`. Точки входа: `Ctrl+C` внутри архива кладёт пути внутрь как
-  есть, `PasteAsync` в обычной папке узнаёт их по `ParseArchive` и зовёт
-  сервис; «Извлечь…» (`MenuCommandId.Extract`) — то же плюс `PickFolder`.
-- **Внутри архива выключено решением**, а не «пока не сделано»: удаление,
-  переименование, вырезать, вставка, создание, drop внутрь, сторож папки,
-  оценки, спутники, поиск по содержимому и подпапкам, статистика папки в
-  футере; миниатюры — только у картинок (`ArchiveThumbnail`, ниже;
-  `IsThumbnailable` → false: шелл отвечает записи значком типа, а
-  `IShellItemImageFactory` писал бы его в общий `thumbcache`; папке внутри
-  архива `SHGetFileInfo` надо прямо сказать `FILE_ATTRIBUTE_DIRECTORY` —
-  иначе рисуется пустой лист).
-  Фильтр по имени работает — он в памяти. Меню внутри — пять строк
-  (Открыть, Копировать, Извлечь…, Извлечь рядом, Копировать путь), не
-  серые: писать в архив нельзя вообще, а серая строка обещает «потом».
-  «Извлечь рядом» (2026-09-23) — в папку архива без вопросов:
-  `FixedConflictResolver(Rename)` — раз никого не спросили, ничего и не
-  заменяется (столп 2).
-- **Пусто или защищено.** zip с паролем перечисляется, извлечение молча не
-  даёт байт; 7z с `-mhe` отдаёт ноль записей — неотличимо от пустого. Оба
-  случая — текст в статусной строке, не пустой список без объяснений;
+  миниатюры, панель и «Открыть» — копию. `Shell/ExtractionService` (Core)
+  вокруг `IShellNamespace.CopyOut`: один вызов движка на батч, гард на
+  цель, `IConflictResolver` (Replace → старое в корзину), лог,
+  `OperationTracker`, отмена через `PreCopyItem`, undo — `ExtractAction`
+  в композите. Не `BatchExecutor`: тот требует `stat` обоих концов. Входы:
+  `Ctrl+C` внутри кладёт пути внутрь, `PasteAsync` узнаёт их по
+  `ParseArchive`; «Извлечь…» (`MenuCommandId.Extract`) — плюс
+  `PickFolder`. Причина отказа движка — `ShellArchiveFolder.Failure`
+  (первый отказ элемента, иначе код прогона); стоп без причины (zip с
+  паролем без окна) — `ArchiveLockedException`.
+- **Внутри архива выключено решением**: удаление, переименование,
+  вырезать, вставка, создание, drop внутрь, сторож, оценки, спутники,
+  поиск по содержимому и подпапкам, статистика папки. Фильтр по имени
+  работает. Меню внутри — пять строк, не серые: серая строка обещает
+  «потом». «Извлечь рядом» — `FixedConflictResolver(Rename)`: никого не
+  спросили — ничего не заменяется. Миниатюры — только картинки (ниже):
+  `IsThumbnailable` → false (шелл отвечает значком типа и писал бы его в
+  общий `thumbcache`); папке внутри `SHGetFileInfo` нужен
+  `FILE_ATTRIBUTE_DIRECTORY`, иначе пустой лист.
+- **Пусто или защищено**: zip с паролем перечисляется, но байт не даёт;
+  7z с `-mhe` — ноль записей, как пустой. Оба — текст в статусе;
   нечитаемый контейнер — «архив повреждён или недоступен».
-- **Отступление от «всё откатываемо»:** временная копия записи —
-  `Core/Shell/TempExtraction.CopyOutAsync` мимо всех правил: без гарда, без
-  диалогов, без `IUndoableAction`. Временная копия чужого файла не
-  пользовательские данные. Папка — `AppPaths.Tmp` по хешу пути записи
-  (`TempFiles.FolderFor`): либо `DataTmp` (`<DataRoot>\tmp`), либо
-  `SystemTmp` (`%TEMP%\Wander`) — настройка `AppSettings.UseSystemTemp`
-  (`bool?`: пока человек не сказал, следует режиму — системная Temp в
-  портативном, где папка данных лежит на флешке; `AppPaths.UseSystemTemp`
-  ставит вьюмодель при загрузке и при смене). Чистка — `TempFiles.Sweep`
-  на старте по **обеим** папкам, старше суток: настройку могли
-  переключить после того, как копии сделаны. Три потребителя делят одну
-  копию: «открыть» (запуск ассоциацией, статусная строка говорит, что
-  правки в архив не попадут), панель просмотра и окно конфликтов.
-- **Конфликты: «извлёк — сравнил»** (2026-09-03). Запись архива через
-  `IFileSystem` не открыть, поэтому `ExtractionService` перед `ResolveAll`
-  распаковывает те пары, где байты что-то решают: файл против файла равного
-  размера, от мелких к крупным в пределах
-  `FileContentComparer.AutoCompareLimit`. Куда читать байты —
-  `FileConflictInfo.ReadablePath` (`SourceReadPath`); ключ ответов остаётся
-  `Source.FullPath`. Папка внутри архива не распаковывается никогда
-  (`SourceReachable` = false): слияние — это обход, обойти может только
-  шелл; её ответы — заменить / оставить / под новым именем.
-- **Дерево и закладки.** Архив — строка в обеих панелях (как в панели
-  навигации Проводника): чтение уровня (`WorkspaceController.ReadLevel`,
-  на пуле) добавляет к папкам файлы, для которых `Archives.Of(path) is {
-  IsRoot: true }`, вставляя их среди папок по имени; уровень под
-  `Archives.Contains(path)` читается через `IShellNamespace.Enumerate`
-  (только папки), не через `IFileSystem`. Шеврон архива не пробуется
-  (`PanelRow.IsProbed`) — иначе каждая папка с архивами открывала бы их все
-  через шелл в фоне; пустой архив теряет шеврон при раскрытии. Раскрытие до
-  пути внутри архива — как до любого другого. Панель и `DropTargetController`
-  считают архивные строки, как `shell:`: ни меню, ни цели drop
-  (`FolderTreesView.HasMenu`). Источник перетаскивания — да (`CanDrag`,
-  2026-09-23): папка архива уходит объектом данных оболочки
-  (`OutgoingDrag.ShellPayload`) и при броске извлекается, сам архив — файл,
-  с переносом и копией. Закладка на
-  архив — раскрываемая строка; на путь внутри — лист, не «пропавшая», как у
-  корзины.
-- **Наружу — шелловским объектом данных** (2026-09-03). `CF_HDROP` с путём
-  внутри архива принимающая программа читает как несуществующий файл,
-  поэтому `IShellNamespace.CreateDataObject(paths)` собирает тот же объект,
-  что отдаёт Проводник: `SHCreateItemFromParsingName` на каждый путь →
+- **Отступление от «всё откатываемо»** — временная копия записи
+  (`Core/Shell/TempExtraction.CopyOutAsync`) без гарда, диалогов и undo:
+  копия чужого файла — не данные пользователя. Папка — `AppPaths.Tmp` по
+  хешу пути записи (`TempFiles.FolderFor`): `DataTmp` (`<DataRoot>\tmp`)
+  либо `SystemTmp` (`%TEMP%\Wander`) по `AppSettings.UseSystemTemp`
+  (`bool?`: до выбора — системная Temp в портативном;
+  `AppPaths.UseSystemTemp` ставит вьюмодель). `TempFiles.Sweep` на старте
+  чистит **обе** папки старше суток. Одну копию делят «Открыть», панель и
+  окно конфликтов.
+- **Конфликты: «извлёк — сравнил».** `ExtractionService` перед
+  `ResolveAll` распаковывает пары «файл против файла равного размера» от
+  мелких к крупным в пределах `AutoCompareLimit`; байты читаются по
+  `FileConflictInfo.ReadablePath` (`SourceReadPath`), ключ ответов —
+  `Source.FullPath`. Папка внутри не распаковывается
+  (`SourceReachable` = false): обойти может только шелл; её ответы —
+  заменить / оставить / под новым именем.
+- **Дерево и закладки.** Архив — строка в обеих панелях:
+  `WorkspaceController.ReadLevel` добавляет к папкам файлы с
+  `Archives.Of(path) is { IsRoot: true }`; уровень под
+  `Archives.Contains(path)` — через `IShellNamespace.Enumerate`. Шеврон
+  архива не пробуется (`PanelRow.IsProbed`) — иначе каждая папка открывала
+  бы все свои архивы; пустой теряет шеврон при раскрытии. Меню и цели drop
+  нет (`FolderTreesView.HasMenu`); источник drag — да (`CanDrag`): папка
+  архива уходит объектом оболочки (`OutgoingDrag.ShellPayload`). Закладка
+  на путь внутри — лист, не «пропавшая».
+- **Наружу — шелловским объектом данных**: `CF_HDROP` с путём внутри
+  архива читается как несуществующий файл. `IShellNamespace.CreateDataObject`
+  собирает то же, что Проводник: `SHCreateItemFromParsingName` →
   `SHGetIDListFromObject` → `SHCreateShellItemArrayFromIDLists` →
-  `BindToHandler(BHID_DataObject)` (Platform, `ShellDataObject`). Не
-  `…FromShellItems`: SDK её объявляет, но shell32 по имени не экспортирует,
-  и `DllImport` падал на первом вызове (ревью 2026-09-04, стенд в
-  scratchpad). Внутри — `CFSTR_SHELLIDLIST`, у zip ещё
-  `FileGroupDescriptor`; байты принимающая сторона берёт у шелла. Две
-  точки: `OutgoingDrag.Run` оборачивает его в `DataObject(comObject)` и
-  предлагает **только** `Copy` (Move попросил бы источник удалить запись);
-  `Ctrl+C` идёт через `ISystemClipboard.SetShellObject` (`OleSetClipboard`,
-  OLE поднимается по первому `CO_E_NOTINITIALIZED`). Свои же приёмники
-  (`DropTargetController`) списка файлов в таком объекте не находят и
-  берут пути у самого перетаскивания — `OutgoingDrag.InFlightPaths`, живёт
-  на время `DoDragDrop` (он качает сообщения на том же потоке, так что
-  читающий его приёмник заведомо внутри того же жеста); дописать формат в
-  обёрнутый OLE-объект WPF не даёт. Для источников из архива приёмник
-  отвечает только `Copy` (источник больше и не предлагает: `Move` удалял бы
-  из архива), drop в папку — `MainViewModel.ExtractAsync`, тем же путём,
-  что вставка; папка внутри архива и листинг архива как цель — отказ, для
-  листинга нейтральный (стрелка и плашка «что в руках»). Какой объект отдать,
-  решает `MainViewModel` и передаёт вторым аргументом
-  `ClipboardController.Copy`: контроллер живёт в `Core/FileSystem`, а
-  `IShellNamespace` — в `Core/Shell` этажом выше, и зависимость обратно
-  дала бы цикл. Свой список путей остаётся как был — вставка внутри Wander
-  работает по нему; чтобы `SyncFromSystem` его не стёр (чужой взгляд на
-  шелловский объект — «файлы не на диске»), контроллер помнит флаг
-  `_sharedShellObject`.
-- **Панель просмотра** (2026-09-03). Выделен архив в обычной папке —
-  `PreviewRoute.Archive`, первый уровень через `Enumerate` на пуле, папки
-  сверху, потолок 200 строк и «и ещё N», заголовок — числа и размер файла
-  архива. Решает не расширение: `PreviewRouter.Route(path, isArchive)`
-  берёт ответ фактом от вызывающего (`Archives.Of` плюс `CanNavigate` на
-  пуле) — таблица расширений такого знать не может. Тот же список — для
-  текущей папки архива, когда внутри него ничего не выделено или выделена
-  папка (клик в пустое место; заголовок без размера архива). Файл
-  **внутри** архива до 32 МБ — временная копия и обычный конвейер по ней;
-  копия на диске с размером записи переиспользуется, не распаковывается
-  заново; распаковка идёт **одна за раз** (`SemaphoreSlim` в
-  `PreviewController`): движок шелла не останавливается внутри записи,
-  отменённый запрос держит поток пула до конца, и стрелки по RAR сканов
-  набрали 85 потоков и подвесили всё, что ходит через пул (сессия
-  2026-09-04); больше 32 МБ — карточка с отсылкой к «Открыть». Поиска
-  внутри по-прежнему нет.
-- **Миниатюры картинок внутри** (AL, 2026-09-25): `ArchiveThumbnail`
-  (Platform) — `SizeOf` (`PKEY_Size`, потолок 32 МБ, без размера — значок);
-  zip — `ReadEntry` в память и `RawThumbnail.RenderPicture(bytes)`
-  (ориентация — `MetadataExtractorImageReader.Read(Stream)`), остальные —
-  `CopyOut` в `TempFiles.FolderFor("thumbnail|" + path)` под гейтом
-  `SemaphoreSlim(1)` и удаление сразу; RAW и TGA всегда через копию. Готовая
-  копия панели (`TempExtraction.CopyPathFor`) читается, не трогается. Ключ
-  дискового кэша — путь записи + mtime и размер архива
-  (`ThumbnailDiskCache.TryBuildFileName`).
+  `BindToHandler(BHID_DataObject)` (`ShellDataObject`); не `…FromShellItems`
+  — shell32 её по имени не экспортирует. Внутри `CFSTR_SHELLIDLIST`, у zip
+  ещё `FileGroupDescriptor`.
+  - `OutgoingDrag.Run` — `DataObject(comObject)`, **только** `Copy`;
+    `Ctrl+C` — `ISystemClipboard.SetShellObject` (`OleSetClipboard`, OLE
+    поднимается по `CO_E_NOTINITIALIZED`).
+  - Свои приёмники берут пути у самого жеста —
+    `OutgoingDrag.InFlightPaths` на время `DoDragDrop` (дописать формат в
+    обёрнутый объект WPF не даёт); drop в папку —
+    `MainViewModel.ExtractAsync`; папка внутри архива и листинг архива —
+    отказ, у листинга нейтральный.
+  - Объект выбирает `MainViewModel` и передаёт в
+    `ClipboardController.Copy` — обратная зависимость `Core/FileSystem` →
+    `Core/Shell` дала бы цикл. Свой список путей остаётся для вставки
+    внутри Wander; `SyncFromSystem` его не стирает (флаг
+    `_sharedShellObject`).
+- **Панель просмотра.** Архив в папке — `PreviewRoute.Archive`: первый
+  уровень на пуле, папки сверху, до 200 строк и «и ещё N»; решает не
+  расширение — `PreviewRouter.Route(path, isArchive)` берёт факт от
+  вызывающего (`Archives.Of` + `CanNavigate`). Тот же список — для папки
+  архива без выделения. Файл внутри до 32 МБ — временная копия (с размером
+  записи или без него, как у RAR, — переиспользуется); распаковка **одна
+  за раз** (`SemaphoreSlim` в `PreviewController`): движок не
+  останавливается внутри записи, и стрелки по RAR набирали 85 потоков
+  пула.
+- **Миниатюры картинок внутри** (AL; шелл их не даёт — стенд по всем
+  флагам `IShellItemImageFactory`): `ArchiveThumbnail` — `SizeOf`
+  (`PKEY_Size`, до 32 МБ); zip — `ReadEntry` в память и
+  `RawThumbnail.RenderPicture(bytes)` (ориентация —
+  `MetadataExtractorImageReader.Read(Stream)`), остальное — `CopyOut` в
+  `TempFiles.FolderFor("thumbnail|" + path)` под `SemaphoreSlim(1)` (у
+  solid-архива запись стоит распаковки блока) и удаление сразу; RAW и TGA
+  — всегда копией. Готовая копия панели (`TempExtraction.CopyPathFor`)
+  читается. Ключ дискового кэша — путь записи + mtime и размер архива
+  (`ThumbnailDiskCache.TryBuildFileName`). Хвосты — TECHDEBT.
 
 ## Выделение, буфер, фильтр
 
-- **`SelectionController`** (App) — deferred selection при click-and-drag
-  (drag не сбрасывает мультивыбор), «снять выделение в активном списке».
-  Отложены оба смысла нажатия на строку: схлопывание мультивыбора и
-  `Ctrl`-переключение. Оба применяются на отпускании, начавшееся
-  перетаскивание их отменяет; единственное исключение — `Ctrl` по
-  невыделенной строке при старте перетаскивания: она добавляется, иначе
-  поедет не то, за что взялись.
+- **`SelectionController`** (App) — отложенный клик: оба смысла нажатия
+  на строку (схлопывание мультивыбора и `Ctrl`-переключение) применяются
+  на отпускании, начавшееся перетаскивание их отменяет — drag везёт всё
+  выделение. Исключение — `Ctrl` по невыделенной строке при старте
+  перетаскивания: она добавляется.
 - **`RubberBandController`** (App) — адорнер, захват мыши, пересечение с
-  контейнерами; только с пустого места (`ListVisuals.IsChrome` — полоса
+  контейнерами; только с пустого места (`ListVisuals.IsChrome` — полосы
   прокрутки, заголовки, разделители). Нажатие взводит (`Arm`),
-  прямоугольник появляется на системном пороге перетаскивания (`Begin`):
-  без порога клик в зазор между плитками ловил обоих соседей. У верхнего и
-  нижнего края (и за ним) список прокручивается по `EdgeScroll`, угол
-  нажатия привязан к содержимому, а не к экрану; строка, ушедшая за экран
-  внутри прямоугольника, остаётся выделенной, пока не вернётся на экран
-  вне его (у невидимой нет контейнера для проверки).
-- **Каретка** — `ListState.Caret` модели (`MainViewModel.CaretPath` — её
-  проекция), строка, от которой пойдёт следующая стрелка, и рамка в
-  шаблоне контейнера (`CaretRowConverter`, триггер последним). Путь, а не
+  прямоугольник — на системном пороге перетаскивания (`Begin`), иначе клик
+  в зазор между плитками ловил обоих соседей. У края прокрутка по
+  `EdgeScroll`, угол привязан к содержимому; строка, ушедшая за экран
+  внутри рамки, остаётся выделенной, пока не вернётся вне её.
+- **Каретка** — `ListState.Caret` модели (`MainViewModel.CaretPath` —
+  проекция): от неё пойдёт следующая стрелка; рамка —
+  `CaretRowConverter`, кисть `RowCaretBorder`, триггер последним. Путь, не
   строка: строки заменяются на каждом перечитывании. Сообщает список:
-  нажатие на строку и клавиатура, положенная на строку жестом
-  (`ListCaretMoved`), отчёт о выделении (строка с фокусом, иначе последняя
-  выделенная; снятое выделение каретку не трогает). Читают `TryEnterList`
-  и `CaretIndex`.
+  нажатие, клавиатура, положенная жестом (`ListCaretMoved`), отчёт о
+  выделении (строка с фокусом, иначе последняя выделенная). Читают
+  `TryEnterList` и `CaretIndex`.
+- **Вырезанные строки** гаснут по `MainViewModel.CutPaths` +
+  `CutRowConverter` — без флага на записи, иначе `Ctrl+X` пересобирал бы
+  строки.
 - **`EntryVisibility`** (Core) — `ShowHidden` / `ShowSystem` /
-  `HideSystemRootFolders` одним значением; список и дерево фильтруют им
-  обоим; в фон передаётся снимком. Третий флаг — `SystemRootFolders`
-  (`$RECYCLE.BIN`, `System Volume Information`), отдельно от
-  `SystemPathGuard`: тот запрещает менять, этот решает показывать.
-- **`ClipboardController`** (Core) — пути + флаг copy / move; хранит пути,
-  не содержимое (операция в момент Paste против тогдашнего состояния).
-- **`ListVisuals.Ancestors`** (App) — единственный способ вверх от
-  `e.OriginalSource`: клик может прийтись на `Run`, у которого
-  `VisualTreeHelper.GetParent` **бросает**; текстовые элементы шагают по
-  логическому дереву до `TextBlock`. Все «на что кликнули» — через него.
-- **`TypeAheadController`** (Core) — префикс, таймаут, «та же буква
+  `HideSystemRootFolders` одним значением для списка и дерева, в фон —
+  снимком. `SystemRootFolders` (`$RECYCLE.BIN`,
+  `System Volume Information`) — отдельно от `SystemPathGuard`: тот запрещает менять,
+  этот решает показывать.
+- **`ClipboardController`** (Core) — пути + copy / move; хранит пути, не
+  содержимое.
+- **`ListVisuals.Ancestors`** (App) — единственный путь вверх от
+  `e.OriginalSource`: у `Run` `VisualTreeHelper.GetParent` **бросает**;
+  текстовые элементы шагают по логическому дереву.
+- **`TypeAheadController`** (Core) — префикс, таймаут 1 с, «та же буква
   перебирает»; часы подставляются.
-- **`SearchController`** (Core) — живой фильтр: `SetSource` снапшот после
-  hidden/system, проекция на фоне с отменой на keystroke, `FilteredChanged`;
-  дерево не трогает. Все в Core — гонки «печатаю + Refresh» были источником
-  багов, пока жили в VM.
+- **`SearchController`** (Core) — живой фильтр: `SetSource` — снимок после
+  hidden / system, проекция на фоне с отменой на каждое нажатие,
+  `FilteredChanged`; в Core — гонки «печатаю + Refresh» в VM были
+  источником багов.
 
 ### Системный буфер обмена
 
@@ -1178,150 +874,174 @@ Ctrl+C/X → ClipboardController ─┬→ модель в памяти (Paste �
 Window.Activated → SyncFromSystem → ISystemClipboard.GetFiles → модель ← Explorer
 ```
 
-Модель в памяти — потому что буфер эксклюзивен и межпроцессен, а
-`RelayCommand` через `CommandManager.RequerySuggested` дёргает `CanExecute`
-десятки раз в секунду. Чтение по `Activated`, а не `WM_CLIPBOARDUPDATE`:
-чтобы вставить, окно всё равно активируют; ноль P/Invoke; дырка «буфер
-поменялся, пока активны» самоисправляется; `AddClipboardFormatListener` —
-отдельным классом при нужде. Свой Win32 (`WindowsClipboard`), не
-`System.Windows.Clipboard` — Platform не тянет WPF. Неприятности API:
-память `SetClipboardData` принадлежит системе; «вырезано» — **бит**
-`DROPEFFECT_MOVE` (пишут `COPY|LINK`); ретрай на каждом вызове;
-`OpenClipboard(NULL)` + `EmptyClipboard` обнуляет владельца и ломает
-`SetClipboardData` — владелец `GetActiveWindow()` вызывающего потока.
-Асимметрия: вырезал у нас, вставил в Проводнике — перемещение не наше, в
-undo его нет.
+Модель в памяти: буфер эксклюзивен и межпроцессен, а
+`CommandManager.RequerySuggested` дёргает `CanExecute` десятки раз в
+секунду. Чтение по `Activated`, не `WM_CLIPBOARDUPDATE`: чтобы вставить,
+окно всё равно активируют; «поменялся, пока активны» самоисправляется;
+`AddClipboardFormatListener` — отдельным классом, если понадобится.
+Прочитанное побеждает; запись при занятом буфере остаётся внутри.
+`WindowsClipboard` — свой Win32, не `System.Windows.Clipboard` (Platform
+не тянет WPF); формат —
+`CF_HDROP` + `Preferred DropEffect` (DWORD копировать / вырезать).
+Неприятности API: память `SetClipboardData` принадлежит системе;
+«вырезано» — **бит** `DROPEFFECT_MOVE` (пишут `COPY|LINK`); ретрай на
+каждом вызове; `OpenClipboard(NULL)` + `EmptyClipboard` обнуляет
+владельца и ломает `SetClipboardData` — владелец `GetActiveWindow()`.
+Вырезал у нас, вставил в Проводнике — перемещение не наше, в undo нет.
 
-Текст и картинка (X, 2026-09-25): `GetFiles` только отмечает флаги
-(`CF_UNICODETEXT`, `CF_DIB` / `PNG`, `CountClipboardFormats`), байты читает
-`PasteAsync` в момент вставки — `GetText` (`CF_UNICODETEXT` до нуля),
-`GetImagePng` (зарегистрированный `PNG` как есть, иначе `CF_DIB` →
-`DibFile.ToBmp` (Core: 14-байтовый заголовок, смещение пикселей с учётом
-масок после 40-байтового заголовка и палитры) → PNG WinRT-кодером, на
-пуле), `GetFormatNames` для строки «не вставлено». `ClipboardPaste.Choose`
-(Core) — один вид: файлы → текст → картинка; файлы не с диска — ничего.
-`SyncFromSystem` перед вставкой — текст, скопированный внутри Wander,
-виден без переактивации.
+Текст и картинка (X): `GetFiles` только отмечает флаги (`ClipboardFiles`:
+`HasText` / `HasImage` / `HasAnything`), байты — в момент вставки:
+`GetText` (`CF_UNICODETEXT`), `GetImagePng` (`PNG` как есть, иначе
+`CF_DIB` → `DibFile.ToBmp` (Core, тест: заголовок 14 байт, смещение
+пикселей с масками и палитрой) → PNG WinRT-кодером на пуле),
+`GetFormatNames` для «не вставлено». `ClipboardPaste.Choose` (Core) —
+один вид: файлы → текст → картинка; файлы не с диска — ничего. Пишет
+`FileOperationService.CreateFile`: гард, лог, undo в корзину, ничего не
+заменяет (`IFileSystem.WriteNew`, `CreateNew`, имя — `UniqueNames`).
+`SyncFromSystem` перед вставкой — текст из самого Wander виден без
+переактивации.
+
+### Drag & drop
+
+Приём — `DropTargetController` (список и панели), отдача —
+`DragPreview/OutgoingDrag` (список и дерево; `FileDrop`). Плашка: иконка
++ `+N`, действие, цель, DPI; при `Effects=None` без причины скрыта,
+причина — только когда целились в папку
+(`DropTargetController.TargetIsFallback`). Садится справа-снизу от курсора
+и переворачивается у края (`WindowPlacement.BesideCursor`). Вне своих окон
+(`WindowFromPoint` → наш ли процесс) — только «что в руках»: разрешает
+цель своим курсором. Подсветка цели — adorner, у строки панели — строка.
+
+- **Вглубь, не отпуская** (U1 / U2) — `Core/Layout/DragHover`,
+  `EdgeScroll` (тесты, часы подставлены), таймер удерживаемого drag
+  (40 мс) — в `DropTargetController`. У края — прокрутка (зона 24 px, до
+  1500 px/с, квадратично); над папкой после задержки (панель —
+  2 × `MouseHoverTime`, список — 3 ×) — `HoverOpened`: раскрыть строку
+  панели (`ChevronToggled`) или войти в папку списка; не для архива,
+  корзины и перетаскиваемой папки с потомками; отката нет. Сброс — уход
+  за окно, бросок, полоса закладок.
+- **Правая кнопка**: драг тем же порогом из `FileListView` и
+  `FolderTreesView`; `OutgoingDrag` несёт `InFlightRightButton`,
+  `DropTargetController` запоминает его и
+  `DragDropKeyStates.RightMouseButton` из `DragOver` (к `Drop` кнопка
+  отпущена); `Execute` отдаёт план в `offerMenu`. Меню —
+  `Core/Menu/DropMenuBuilder` (тест): действия, применимые ко всем
+  брошенным (`ActionApplicability`), выход — в папку броска
+  (`MainViewModel.RunActionOnDropped` →
+  `ExternalActionRunner.RunAsync(..., outputFolder)`), скрытые подменю
+  скрыты (`Normalize`). Действия — над первичными файлами
+  (`DescribeDropAsync` → `GroupPathsWithCompanions`, `Primary`): иначе
+  один `.xmp` среди брошенного выключал бы действия над картинками. Меню —
+  после возврата `DoDragDrop` (`ShowDropMenu`).
 
 ### Слежение за папкой
 
-`IDirectoryWatcher` / `WindowsDirectoryWatcher` (`FileSystemWatcher`).
-События пачками с фона → троттл на `DispatcherTimer` 500 мс, повторяющемся
-(перезапускаемый при непрерывном потоке не сработал бы), спрашивает
-`FolderSession.DecideWatchTick`, гасит себя на холостом тике. Пока правится
-имя, своё переименование ещё не приземлилось или идёт своя операция —
-`Hold`, изменения ждут следующего тика. Ошибка вотчера (переполнение
-буфера) = изменение, вотчер переподнимается. Переименование сторож отдаёт
-парой (`DirectoryChange.OldPath`, из `OnRenamed`): `FolderChanges.Renames`
-→ решение тика → приземление листинга, и выделение идёт за новым именем.
+`IDirectoryWatcher` / `WindowsDirectoryWatcher` (`FileSystemWatcher`) за
+открытой папкой; shell-namespace — нет. Пачки с фона → повторяющийся
+`DispatcherTimer` 500 мс (перезапускаемый при непрерывном потоке не
+сработал бы) → `FolderSession.DecideWatchTick`; холостой тик гасит
+таймер. Правится имя, своё переименование не приземлилось или идёт своя
+операция — `Hold`. Ошибка вотчера (переполнение) = изменение, вотчер
+переподнимается. Переименование — парой (`DirectoryChange.OldPath` из
+`OnRenamed`) → `FolderChanges.Renames`, выделение идёт за новым именем.
 
-Решение тика несёт ещё и `Stale` — все пути, которые сторож назвал в этой
-пачке, **включая** структурные. Это не про строки, а про кэши: миниатюры
-ключуются путём, а путь не меняется, когда файл под ним заменили другим с
-тем же именем. `MainViewModel` чистит по этим путям оба уровня
-(`IIconProvider.Forget` + `IconImageCache`) и поднимает `AsyncIcon`
-перерисоваться; дисковая запись удаляется на пуле, потому что тик живёт на
-UI-потоке. Второй заход на ту же проблему — сверка при публикации листинга:
-`ForgetIfChanged(path, FileStamp)` сравнивает mtime и размер строки с тем,
-что было у закэшированной картинки. Он и закрывает случай, которого сторож
-не видел: папку посмотрели, ушли, файл изменили снаружи, вернулись.
-`FileStamp` живёт в `Core/Icons` — значение, которое одинаково читают
-листинг (`FileSystemEntry.ModifiedUtc` + `Size`) и провайдер (`FileInfo`).
+**Миниатюра не переживает свой файл** (кэш ключуется путём, а файл под
+путём могли заменить):
+- решение тика несёт `Stale` (`WatchTickDecision.Stale` ←
+  `FolderChanges.ChangedPaths`) — все названные пути, **включая**
+  структурные; `MainViewModel` чистит `IIconProvider.Forget` +
+  `IconImageCache`, `AsyncIcon` перерисовывается (статическое событие,
+  подписка `Loaded`–`Unloaded`), дисковая запись — на пуле;
+- публикация листинга сверяет `ForgetIfChanged(path, FileStamp)` — mtime
+  и размер против закэшированной картинки, словарём, без диска: ловит
+  правку, пока папка не была открыта. `FileStamp` (`Core/Icons`) одинаково
+  читают листинг и провайдер.
+
+Дисковый ключ и так несёт mtime и размер; точечное удаление закрывает
+перезапись с сохранением обоих.
 
 ## Сессия папки — `Wander.Core/Listing/`
 
-Состояние «папки, на которую смотрят», вынесено из VM в Core (O11): машина
-**решений** без ввода-вывода — факты на входе («навигация в X», «листинг
-эпохи N долетел», «сторож заметил»), решения на выходе («опубликовать»,
-«выделить», «перечитать»); диск, потоки, `Dispatcher`, таймеры и коллекции
-остаются в `MainViewModel`.
+Машина **решений** без ввода-вывода (O11): факты на входе («навигация в
+X», «листинг эпохи N долетел», «сторож заметил»), решения на выходе
+(«опубликовать», «выделить», «перечитать»); диск, потоки, `Dispatcher`,
+таймеры и коллекции — в `MainViewModel`. Перечисление —
+`DirectoryInfo.EnumerateFileSystemInfos()`; новая папка заезжает одним
+уведомлением (`BulkObservableCollection.ReplaceAll`: 4 вместо 7681 на
+5000 файлов); старые строки убираются ниже ввода (`Background`), и не
+убираются, если листинг уже пришёл.
 
-- **`FolderSession`** — `BeginListing` выдаёт эпоху и признак «прибытие /
+- **`FolderSession`** — `BeginListing` выдаёт эпоху и «прибытие /
   перечитывание»; `IsCurrent(epoch)` — единственный вопрос «мой ли ответ»
-  (листинг, проход по оценкам через `RatingsController.isCurrent`, точка
-  публикации). `OnNavigating` запоминает выделение покидаемой папки, гасит
-  обогнанное намерение, планирует умолчание (подъём — покинутая папка,
-  иначе память LRU 64). `DecideArrival` — единственное потребление
-  намерения (чужой листинг и пустой список оставляют ждать).
-  `SetArrivalHere` — намерение операции только для папки на экране.
-  `RewriteMemory` — папка перенесена Wander'ом: открытая папка, память и
-  намерение идут за ней. `DecideWatchTick` поверх `FolderChanges`: стоп /
-  подождать / перечитать (с парами переименований) / перечитать строки;
-  идемпотентен.
+  (листинг, проход оценок через `RatingsController.isCurrent`,
+  публикация). `OnNavigating` запоминает выделение покидаемой папки, гасит
+  обогнанное намерение, планирует умолчание (подъём — покинутая, иначе
+  память LRU 64). `DecideArrival` — единственное потребление намерения.
+  `SetArrivalHere` — намерение операции (вставка — вставленное, с
+  клавиатурой) только для папки на экране.
+  `RewriteMemory` — папка перенесена Wander'ом. `DecideWatchTick` поверх
+  `FolderChanges`: стоп / подождать / перечитать (с парами
+  переименований) / перечитать строки; идемпотентен.
 - **`ListingDiff`** — «текущие строки + свежий листинг → план»
-  (`RemoveAt` / `Insert` / `Move` / `Replace` / пересобрать). Неизменённая
-  строка не порождает правки и не теряет контейнер. Двигаются только строки
-  вне наибольшей возрастающей подпоследовательности новых мест (n log n):
-  один снимок, уехавший по дате в другой конец, — один `Move`; мешающая
-  переезжающая строка отходит в конец и возвращается на своё место.
-  Пересборка (`Reset`, список уходит в начало прокрутки) — только когда
-  общего нет, общих строк в своём порядке меньше половины (сортировка) или
-  правок любого вида больше 256.
-- **`CurrentRowFallback`** — выделенный файл ушёл из списка (`Del`, удалён
-  в программе, где был открыт, перенесён, спрятан фильтром или настройкой):
-  текущим становится следующий уцелевший, иначе ближайший перед ним —
-  **выделен**, каретка и клавиатура на нём, без прокрутки [решения
-  2026-09-21 и 2026-09-22: одно правило на все причины; в Проводнике —
-  рамка без выделения, и панель просмотра осталась бы пустой]. Спрашивает
-  `ListingArrival` (модель окна) после приземления строк; `Del` задаёт его
-  заранее (`NextAfterRemoval`) намерением с клавиатурой.
+  (`RemoveAt` / `Insert` / `Move` / `Replace` / пересобрать).
+  Неизменённая строка не теряет контейнер. Двигаются только строки вне
+  наибольшей возрастающей подпоследовательности (n log n): уехавший по
+  дате снимок — один `Move`. Пересборка (`Reset`, прокрутка в начало) —
+  когда общего нет, в своём порядке меньше половины общих или правок
+  больше 256.
+- **`CurrentRowFallback`** — выделенный файл ушёл (`Del`, удалён снаружи,
+  перенесён, спрятан): текущим становится следующий уцелевший, иначе
+  предыдущий — **выделен**, каретка и клавиатура на нём, без прокрутки
+  [решения 2026-09-21 и 2026-09-22: одно правило на все причины; рамка
+  без выделения, как в Проводнике, оставила бы панель просмотра пустой].
+  Спрашивает `ListingArrival`; `Del` задаёт его заранее
+  (`NextAfterRemoval`).
 - **`ArrivalIntent`** — одно отложенное намерение «что выделить, когда
   долетит»: установка заменяет, применение одно.
 - **Выделенный файл не уходит с экрана сам** (решение человека
-  2026-09-28, `Listing/RowFollowing`, тест) — главная строка, стоявшая на
-  экране, когда строки начали садиться, после посадки стоит **на том же
-  месте**, что бы ни пришло, ушло или переехало вокруг: сторож, `F5`,
-  операция, фильтр, порядок, переименование снаружи, проход оценок, выдача
-  поиска и возврат из неё. Строку, от которой пользователь отмотал, посадка
-  не возвращает — кроме посадок, которые свою строку показывают
-  (`ListLanding.Scroll`: намерение, `Rearranged`, `ResultsLeft`). Исключение
-  — список в самом начале: он там и остаётся, пока строка помещается на
-  экране (файлы, приходящие сверху, — то, на что человек смотрит); перед
-  сменой, которую сделал сам пользователь, оно отступает. Три звена:
-  - `ListingArrival` отдаёт `ListLanding.Held` — чьё место держит главная
-    строка, путём **до** посадки: своё (после переименования — под прежним
-    именем) или ушедшей строки, чьим преемником она стала; другая строка по
-    намерению, другой папки, передача главной строки уцелевшей соседке —
-    `null`;
-  - `FileListView` перед посадкой (`MainViewModel.RowsLanding`) снимает
-    `RowStand`: путь, расстояние от верха (строки таблицы, пиксели плиток),
-    стоит ли список в начале; после — `RowFollowing.Decide` → `Hold` /
-    `Reveal` / ничего. Посадка, пришедшая до раскладки прошлой, берёт место
-    из `_asked`, а не из смещений: они ещё описывают прежние строки;
+  2026-09-28, `Listing/RowFollowing`, тест): главная строка, стоявшая на
+  экране, после посадки — **на том же месте**, что бы ни пришло вокруг:
+  сторож, `F5`, операция, фильтр, порядок, переименование снаружи,
+  проход оценок, выдача поиска и возврат из неё. Строку, от которой
+  отмотали, посадка не возвращает — кроме тех, что свою строку показывают
+  (`ListLanding.Scroll`: намерение, `Rearranged`, `ResultsLeft`). Список в
+  самом начале там и остаётся, пока строка на экране; перед сменой,
+  сделанной пользователем, это отступает. Три звена:
+  - `ListingArrival` отдаёт `ListLanding.Held` — чьё место держит главная,
+    путём **до** посадки (своё, прежнее имя при переименовании, или
+    ушедшей строки, чьим преемником стала); другая по намерению, другой
+    папки, передача соседке — `null`;
+  - `FileListView` до посадки (`MainViewModel.RowsLanding`) снимает
+    `RowStand` (путь, расстояние от верха, в начале ли), после —
+    `RowFollowing.Decide` → `Hold` / `Reveal` / ничего; посадка до
+    раскладки прошлой берёт место из `_asked`;
   - без промежуточного кадра: плитки — в следующем измерении
-    (`VirtualizingWrapPanel.ShowOnNextMeasure`, `TileLayout.Hold`), таблица
-    — `ScrollToVerticalOffset` (`ScrollViewer` применяет его после
-    раскладки).
+    (`VirtualizingWrapPanel.ShowOnNextMeasure`, `TileLayout.Hold`),
+    таблица — `ScrollToVerticalOffset`.
 
-  «Перестроил сам пользователь» (`Rearranged`) — фильтр по имени, звёздам,
-  меткам (сеттеры `SearchController`) или порядок (`SetSource(…,
-  rearranged)` из `Refresh(rearranged)`; просьба живёт до первой посадки —
-  `MainViewModel._reordering`, — так что листинг сторожа или операции,
-  обогнавший начатый ради порядка, сажается ею же); первая проекция после
-  этого приходит с флагом в `FilteredChanged`. Выдача поиска садится через
-  модель же (`LandResults`, `ListingReason.Results`: выделенная строка,
-  попавшая в выдачу, остаётся выделенной, не попавшая — не оставляет
-  преемника; подгрузки и пересортировка сверяются `ListingDiff`, смена
+  `Rearranged` — фильтр по имени, звёздам, меткам (сеттеры
+  `SearchController`) или порядок (`SetSource(…, rearranged)` из
+  `Refresh(rearranged)`; просьба живёт до первой посадки —
+  `MainViewModel._reordering`); первая проекция приходит с флагом в
+  `FilteredChanged`. Выдача поиска садится через модель (`LandResults`,
+  `ListingReason.Results`: выделенная, попавшая в выдачу, остаётся, не
+  попавшая — без преемника; подгрузки и пересортировка — `ListingDiff`,
   «папка ↔ выдача» — целиком). Вид, выходящий на экран, приводится к
-  выделению, где бы ни была клавиатура (`ApplyViewAttachment`): каждый
-  прокручивается сам по себе.
-- **Место прошлого сеанса** (2026-09-25) — `ArrivalIntent.Place`: файл,
-  строки вокруг него, как стояли (`StoodAmong`), и строка для верха экрана
-  (`Top`). Ставится в `OpenStartFolderAsync`, только если открылась та же
-  папка. `DecideArrival`: файл есть — он; нет — `CurrentRowFallback` по
-  `StoodAmong` (следующий, иначе предыдущий); нет и соседей — ничего, и `Top`
-  не применяется (папка с начала). `Top` доходит до вида по цепочке
-  `ArrivalDecision` → `ListLanding` → `ApplyListSelection`; вид ставит строку
-  первой на приоритете `Loaded` (после раскладки: смещение, заданное до неё,
-  прижалось бы к пустому списку) — у таблицы смещение и есть индекс строки,
-  у плиток `VirtualizingWrapPanel.ShowFromTop`, — затем выделенную в видимость.
-  Клавиатуру место берёт с собой (`TakeFocus`): окно поднимается с ней на
-  себе, стрелки там никуда не ведут; ушла в панель, пока папка листалась, —
-  остаётся там. Пишется в `WriteStateNow` (`CurrentPlace`: не для выдачи поиска и не пока
-  листинг другой папки); строку сверху вид отдаёт по запросу
-  (`MainViewModel.ListTopRow` ← `FileListView.FirstRowOnScreen`). Выделение и
-  прокрутка своей записи не заказывают: `FlushState` при закрытии пишет, если
-  место сдвинулось с прошлой записи (`ListPlace.SameAs`).
+  выделению (`ApplyViewAttachment`).
+- **Место прошлого сеанса** — `ArrivalIntent.Place`: файл, строки вокруг
+  (`StoodAmong`) и строка для верха (`Top`); ставится в
+  `OpenStartFolderAsync`, если открылась та же папка. `DecideArrival`:
+  файл есть — он; нет — `CurrentRowFallback` по `StoodAmong`; нет и
+  соседей — ничего, `Top` не применяется. `Top` идёт `ArrivalDecision` →
+  `ListLanding` → `ApplyListSelection`; вид ставит строку первой на
+  приоритете `Loaded` (до раскладки смещение прижалось бы к пустому
+  списку) — таблице индекс, плиткам `VirtualizingWrapPanel.ShowFromTop`, —
+  затем выделенную в видимость. Клавиатуру место берёт с собой
+  (`TakeFocus`). Пишется в `WriteStateNow` (`CurrentPlace`: не для выдачи
+  и не пока листинг другой папки); верх отдаёт
+  `MainViewModel.ListTopRow` ← `FileListView.FirstRowOnScreen`;
+  `FlushState` при закрытии пишет, если место сдвинулось
+  (`ListPlace.SameAs`).
 
 Инварианты — `FolderSessionTests` / `ListingDiffTests` / `ListRulesTests`.
 У VM осознанно: правило спиннера (тайминг вокруг `Task.WhenAny`),
@@ -1336,82 +1056,74 @@ UI-потоке. Второй заход на ту же проблему — с�
 ```
 
 Граница — `ContentSearchController.IsDeep`: есть текст или включены
-подпапки. **Навигация сбрасывает поиск целиком** (`Reset`): галка подпапок
-переживала навигацию и закрытие окна, `IsDeep` оставался, каждая буква
-уходила в обход диска — «фильтр перестал фильтровать» без объяснения. По
-той же причине область и галка бинарей не в `state.json`. Пока `IsDeep`
-false — набор в `SearchController`; true — `Query` очищается, поле
-становится запросом.
+подпапки; тогда `Query` очищается и поле становится запросом.
+**Навигация сбрасывает поиск целиком** (`Reset`): забытая галка подпапок
+превращала каждую букву в обход диска. Поэтому же область и галка бинарей
+не в `state.json`.
 
-- **Два критерия через «И».** Первая версия с «или» дала три бага на одном
-  скриншоте (слово в документах возвращало картинки с той же буквой в
-  имени; `.t` вытаскивал `.pdf`; галка «в содержимом» жила в попапе). «И»
-  делает маску воротами — отвергнутый файл не открывается и не считается.
-  Галки «искать в содержимом» нет — её роль играет наличие текста.
-- **`NameFilter`** — подстрока по умолчанию; `*` / `?` → шаблон на всё
-  имя; части через `;`. Как в Everything: `doc` и `*.cs` по одному
-  нажатию. Сопоставление руками без регулярок (перечитывается на каждую
-  букву; `*a*a*a*a*b` — катастрофический бэктрекинг; тут одна точка
-  возврата). Разбирается один раз на запрос.
-- **`IContentExtractor`** — три несовместимых ответа на «текст внутри»:
-  байты для декода, zip с XML, COM-фильтр Windows; первые два в Core,
-  третий там жить не может. Композиция в `PlatformBootstrapper`, порядок —
-  часть контракта: `ZipDocumentExtractor` (`.docx .xlsx .pptx .epub .odt
-  .ods .odp`), `FilterTextExtractor` (Platform, `.doc .rtf .pdf .chm .msg
-  .mht …`), `PlainTextExtractor` последним (`CanExtract` всегда true,
-  решает `TextProbe` по байтам — расширения врут: `.asset` бывает YAML и
-  бинарём). **Провал специфичного экстрактора заканчивает файл** (иначе
-  `.pdf` без обработчика проваливался в текст и находил слово в `%PDF-1.4
-  ReportLab`). Экстракторы не бросают — `null`. `IsExpensive` — что
-  кэшировать и что считать непрочитанным (`.dll` по дороге не считается).
-- **Почему `IFilter`.** `.doc` — OLE с piece table и сжатыми кусками, свой
-  читатель — хвост неправильных ответов; `OffFilt.dll` в Windows с 7, Office
-  не нужен, тот же механизм для `.rtf`, `.mht`, `.pdf` с читалкой.
-  Неочевидность: `IFilter::Init` без `APPLY_INDEX_ATTRIBUTES` возвращает
-  **пустой документ** при любом флаге канонизации (`1|2` → 0 символов,
-  `1|2|8|16` → полный текст); флаг идёт вместе, value-чанки отбрасываются.
-  Список форматов именованный, не «что скажет реестр»: реестровый фильтр
-  текста декодирует системной кодовой страницей, `EncodingProbe` лучше.
-  `LoadIFilter` отвечает `E_FAIL` расширению без фильтра и
-  `REGDB_E_CLASSNOTREG` — незарегистрированному; только эти два
-  запоминаются как «фильтра нет» на расширение (`_withoutFilter`);
-  остальные коды — `FILTER_E_UNKNOWNFORMAT` у `~$….doc` и пустого,
-  `STG_E_SHAREVIOLATION` у запертого, `STG_E_DOCFILECORRUPT` у обрезанного
-  — про один файл (стенд 2026-09-24, блок 8).
-- **`BinaryTextSearch`** — отдельный режим, не экстрактор: бинари по
-  умолчанию вне (как `grep`, `ripgrep`, VS Code, Windows Search — шум из
-  пятисот DLL); по галке побайтово, **только ASCII** (`Supports` говорит
-  заранее); экстрактор отвечает «что написано», этот — «да/нет».
-- **`ExtractedTextCache`** — LRU «путь + размер + mtime», потолок 32 МБ в
-  символах, только дорогие форматы. Индекс на диске — REJECTED.
+- **Быстрый фильтр не кончается на текущей папке**: `SearchController`
+  сужает листинг в памяти; `ContentSearchController` через 400 мс и от
+  2 символов (`MinAutoRunLength` — только здесь) запускает
+  `ContentSearchService` со `SearchScope.Subfolders` (`IsFilterPass`),
+  **засеянный** найденным (не мигает), повторы — по
+  `SearchResultsController._seen`, `HereFirst` держит найденное здесь
+  выше. Окно поиска этим путём не ходит (`_fromFilterBox`).
+- **Два критерия через «И»**: маска — ворота, отвергнутый файл не
+  открывается (17 файлов / 43 мс против 5074 / 217). Галки «в содержимом»
+  нет — её роль играет наличие текста.
+- **`NameFilter`** — подстрока; `*` / `?` → шаблон на всё имя; части через
+  `;` (как в Everything). Сопоставление руками, без регулярок (на каждую
+  букву; `*a*a*a*a*b` — бэктрекинг; тут одна точка возврата), разбор один
+  раз на запрос.
+- **`IContentExtractor`** — три несовместимых ответа: байты для декода,
+  zip с XML, COM-фильтр Windows (в Core жить не может). Порядок в
+  `PlatformBootstrapper` — часть контракта: `ZipDocumentExtractor`
+  (`.docx .xlsx .pptx .epub .odt .ods .odp`, zip + `XmlReader`),
+  `FilterTextExtractor` (Platform, `.doc .rtf .pdf .chm .msg .mht …`),
+  `PlainTextExtractor` последним (`TextProbe` по 8 КБ + `EncodingProbe` —
+  расширения врут: `.asset` бывает YAML и бинарём). **Провал специфичного
+  заканчивает файл** («не удалось прочитать»; иначе `.pdf` без обработчика
+  находил слово в `%PDF-1.4`). Экстракторы не бросают — `null`;
+  `IsExpensive` — что кэшировать и считать непрочитанным.
+- **Почему `IFilter`**: `.doc` — OLE с piece table, свой читатель — хвост
+  ошибок; `OffFilt.dll` есть в Windows с 7. `IFilter::Init` без
+  `APPLY_INDEX_ATTRIBUTES` отдаёт **пустой документ** (`1|2` → 0 символов,
+  `1|2|8|16` → текст); value-чанки отбрасываются. Список форматов
+  именованный: реестровый фильтр текста декодирует системной кодовой
+  страницей. «Фильтра нет» на расширение (`_withoutFilter`) — только по
+  ответам `LoadIFilter` `E_FAIL` и `REGDB_E_CLASSNOTREG`; `FILTER_E_UNKNOWNFORMAT` (`~$….doc`),
+  `STG_E_SHAREVIOLATION`, `STG_E_DOCFILECORRUPT` — про один файл (стенд).
+- **`BinaryTextSearch`** — отдельный режим: бинари по умолчанию вне (как
+  `grep`, `ripgrep`, VS Code); по галке побайтово, **только ASCII**
+  (`Supports`); ответ «да / нет».
+- **`ExtractedTextCache`** — LRU «путь + размер + mtime», 32 МБ в
+  символах, только дорогие форматы (25 мс против 129). Индекс — REJECTED.
+  Пределы: 32 МБ на файл, глубина 64 + посещённые, 5000 результатов.
 - **Запуск сам.** `ContentSearchController` получает корень и видимость
-  колбэками (меняются под ним). Символ — пауза 400 мс, порога по длине
-  **здесь** нет (три символа для тяжёлых областей давали необъяснимую
-  тишину на `:no`; обход ограничен 5000 и отменяется буквой);
-  переключатель — сразу; `Enter` перебивает паузу. `SearchState` (не
-  запускался / ждёт / идёт / готово / остановлен) гасит «Остановить»,
-  крутит индикатор, пишет статус. Отмена **забирает владение**: `Cancel`
-  поднимает поколение, отменённый проход молчит (иначе объявлял
-  «Остановлено» поверх нового состояния). «Остановить» = `Stop()`.
-- **Окно, а не панель** — критериев четыре, с диапазонами будет больше;
-  попап закрывался от клика мимо (и прятал галку). `SearchWindow` с
-  `Owner`, не `Topmost`; скрывается, не уничтожается; строка в тулбаре на
-  это время спрятана; рамка стандартная, «свернуть / развернуть» сняты
-  `SetWindowLong` в `SourceInitialized` (`ToolWindow` уродует крестик,
-  `NoResize` мешает растягивать). `Dismissed` возвращает клавиатуру в список.
-- **`SearchExpression`** — `маска:текст`; двоеточие запрещено в именах, не
-  экранируется; первое делит, остальные тексту. Нужно для **вывода**
-  (настроенный в окне поиск оставлял поле пустым). Флаги в строку не
-  попали — `HasNonDefaultOptions` подсвечивает `⋮` (BACKLOG).
-- **Результаты** — `_searchResults` → `Entries` пачками не чаще 200 мс
-  (обновление = Reset и пересчёт раскладки). `FileSystemEntry.MatchSnippet`
-  и `ParentFolder` — как `OriginalLocation`: одна строка на экране, без
-  параллельной таблицы. Пока результаты на экране, `Refresh()` не
-  пересобирает — только `PruneMissingResults`; повторить — `F5`.
+  колбэками. Пауза 400 мс, порога длины **здесь** нет (три символа давали
+  необъяснимую тишину на `:no`); переключатель и `Enter` — сразу.
+  `SearchState` (не запускался / ждёт / идёт / готово / остановлен) ведёт
+  «Остановить», индикатор, статус. Отмена **забирает владение**: `Cancel`
+  поднимает поколение, отменённый проход молчит. «Остановить» = `Stop()`.
+- **Окно, а не панель**: критериев четыре, попап закрывался от клика
+  мимо. `SearchWindow` с `Owner`, не `Topmost`; скрывается, не
+  уничтожается; «свернуть / развернуть» сняты `SetWindowLong` в
+  `SourceInitialized` (`ToolWindow` уродует крестик, `NoResize` мешает
+  растягивать). `Dismissed` возвращает клавиатуру в список.
+- **`SearchExpression`** — `маска:текст` (двоеточие запрещено в именах;
+  первое делит) — для **вывода**: поиск из окна виден в поле. Флаги в
+  строку не попали — `HasNonDefaultOptions` подсвечивает `⋮` (BACKLOG).
+- **Результаты** — `SearchResultsController._rows` → `Entries` пачками не
+  чаще 200 мс.
+  `FileSystemEntry.MatchSnippet` и `ParentFolder` — как
+  `OriginalLocation`: одна строка, без параллельной таблицы. Пока
+  результаты на экране, `Refresh()` не пересобирает — только
+  `PruneMissingAsync` на пуле; повторить — `F5`.
 
 ## Контекстное меню
 
-Что показать — Core, чем нарисовать — App, откуда чужие пункты — Platform.
+Что показать — Core, чем нарисовать — App, откуда чужие пункты —
+Platform. Строится на каждый правый клик, разметки в XAML нет.
 
 ```
 правый клик
@@ -1424,225 +1136,182 @@ false — набор в `SearchController`; true — `Query` очищается,
   └→ ContextMenuFactory.Build(model, session)                 App → WPF ContextMenu
 ```
 
-- **`ContextMenuBuilder`** — правила («Rename на одном», «в корзине ничего
-  деструктивного», «у папки нет Open with»), чистая функция от
-  `ContextMenuTarget` и `ContextMenuSettings`, под тестами; схлопывает
-  разделители (`Normalize`). Два меню: **по выделению** — `Открыть`, «Открыть
-  с помощью», расширения, подменю «Файл», `Свойства`; **по фону** —
-  `Создать`, «Вид» и «Сортировка», `Открыть в терминале`, `Копировать путь`,
-  расширения, `Свойства` (обновление и отмена — состояние окна, живут в
-  «Вид»). «Вид» и «Сортировка» (2026-09-28, решение человека: нужны, дубль
-  выключается в настройках) — блоки меню «Вид» строка в строку: подпись
-  «Эта папка · …», четыре вида с хоткеями, «Автоматически», «Сделать видом
-  по умолчанию»; ключи, «По возрастанию», «Папки сверху», «По умолчанию»,
-  «Сделать сортировкой по умолчанию» (без закрепления серый — это и есть
-  умолчание). Выбор — строка с `Argument` (`SetView` / `SetSortKey`, имя
-  вида или ключа) и галочкой; что отмечено, строитель берёт из
-  `ContextMenuTarget` (`View`, `ViewReason`, `Sort`, `SortPinned`). В
-  настройках — два выключателя, подменю целиком; внутри архива — тоже, в
-  корзине только «Вид» (она держит свой порядок).
-- Системное «Создать» **вливается** в наше (опознаётся по глаголу
-  `NewFolder` дочерней строки, не по подписи); своя «Папка» первой (откат и
-  rename на месте), `Ярлык` и шаблоны следом от шелла. «Открыть с помощью»
-  тоже вливается (живой список приложений не собрать самим), своя «Выбрать
-  приложение…» — запасная при выключенных расширениях.
-- **Порядок по частоте**: сверху то, ради чего открыли («Редактировать в…»,
-  «Git Commit»); свои операции внизу в «Файл» (Вырезать / Копировать /
-  Вставить, путь / имя, Переименовать / ярлык, Удалить) — у половины хоткеи.
-- **`SplitShell`** — по каноническому глаголу, никогда по подписи
-  (локализована, меняется с именем файла): подменю с ребёнком `openas` →
-  в «Открыть с помощью»; глагол в списке (`PreviousVersions`) **или**
-  динамическое системное подменю → в конец «Файл»; остальное — верх.
-  «Динамическое» = «Отправить» / «Передать на устройство»: шелл собирает их
-  при показе, ни один пункт не несёт глагола; сторонние глаголы
-  регистрируют всегда. Эвристика (TECHDEBT).
-- **`ShellEntryKey.For(verb, header)`** — глагол, если есть; нормализованная
-  подпись, если нет. TortoiseGit пишет в подпись имя ветки («Git Commit →
-  "master"…») — по подписи выключение отваливалось на `git switch`; 7-Zip
-  верхнему пункту глагол не публикует — там подпись стабильна (имя
-  приложения). `IsBlocked` проверяет обе формы — старые настройки без
-  миграции.
+- **`ContextMenuBuilder`** — правила («Rename на одном», «в корзине
+  ничего деструктивного», «у папки нет Open with») чистой функцией от
+  `ContextMenuTarget` и `ContextMenuSettings`, под тестами; разделители
+  схлопывает `Normalize`. **По выделению** — `Открыть`, «Открыть с
+  помощью», расширения, подменю «Файл», `Свойства`; **по фону** —
+  `Создать`, «Вид» и «Сортировка», `Открыть в терминале`,
+  `Копировать путь`, расширения, `Свойства`. «Вид» и «Сортировка» (решение
+  человека 2026-09-28: нужны, дубль выключается в настройках) — блоки меню
+  «Вид» строка в строку: подпись «Эта папка · …», виды с хоткеями,
+  «Автоматически», «Сделать видом по умолчанию»; ключи, «По
+  возрастанию», «Папки сверху», «По умолчанию», «Сделать сортировкой по
+  умолчанию» (без закрепления серый). Выбор — строка с `Argument`
+  (`SetView` / `SetSortKey`) и галочкой из `ContextMenuTarget` (`View`,
+  `ViewReason`, `Sort`, `SortPinned`). В корзине — только «Вид».
+- Системное «Создать» **вливается** в наше (по глаголу `NewFolder`
+  дочерней строки, не по подписи): своя «Папка» первой (откат и rename на
+  месте), `Ярлык` и шаблоны от шелла. «Открыть с помощью» тоже вливается;
+  своя «Выбрать приложение…» — при выключенных расширениях.
+- **Порядок по частоте**: сверху то, ради чего открыли; свои операции — в
+  «Файл» (у половины хоткеи).
+- **`SplitShell`** — по каноническому глаголу, не по подписи: подменю с
+  ребёнком `openas` → в «Открыть с помощью»; глагол из списка
+  (`PreviousVersions`) **или** динамическое подменю («Отправить»,
+  «Передать на устройство» — ни один пункт не несёт глагола) → в конец
+  «Файл»; остальное — верх. Эвристика (TECHDEBT).
+- **`ShellEntryKey.For(verb, header)`** — глагол, иначе нормализованная
+  подпись: TortoiseGit пишет в подпись ветку (выключение по подписи
+  отваливалось на `git switch`), 7-Zip верхнему пункту глагол не
+  публикует, но подпись там стабильна. `IsBlocked` проверяет обе формы.
 - **«Программа» и «Для чего»** — из реестра (`IShellHandlerRegistry`):
   `<scope>\shellex\ContextMenuHandlers\<имя>` → CLSID → `InprocServer32` →
-  версия DLL = приложение; `<scope>\shell\<verb>` — подпись и команда там,
-  имя ключа = глагол (точное сопоставление); то же под
-  `SystemFileAssociations\<scope>`. `HKLM\SOFTWARE\Classes` и `HKCU\…` по
-  отдельности, не `HKCR` (склеенное — минуты против сотни мс). Только
-  чтение. Замеры: базовые области 40–50 мс холодно, ~10 прогрето; все 848
-  областей ~150 мс; имена расширений 20 мс. `ShellExtensionCatalog` (Core)
-  сливает реестр и встреченное по `ShellEntryKey`; строка от одного
-  источника тоже попадает. **Таблица — встреченное** (2026-09-28): строка
-  реестра без встречи в меню попадает, только если она не Windows и её тип
-  добавлен руками («Добавить…», `TrackedShellScopes`); выключенная — всегда.
-  Переключатель того, чего никто не видел, — догадка, поэтому ни строк
-  «установлен, не встречался», ни фильтра пунктов Windows (они приходят
-  встреченными). Программа Windows — «ОС» (`ShellHandler.IsOsComponent`: Platform
-  сравнивает `ProductName` с тем, что у `shell32.dll`, и с английским
-  «Microsoft® Windows® Operating System» части DLL; Core подставляет
-  `ShellAppOs`). Поле над таблицей — `ShellExtensionFilter`
-  (Core, тест): подпись, программа, названия типов — то, что на экране;
-  расширение с точкой находит и строки «все файлы» / «файлы и папки» —
-  вопрос «что в меню `.mp4`». Фильтр и сортировка живут в
-  `ListCollectionView` страницы (`ContextMenuSettingsCategory.ShellRows`):
-  владелец пересобирает строки на месте, вид держит оба.
-- **Тип меню у ярлыка — тип цели** (`ShellScopes.MenuScopeOf`, стенд
-  2026-09-25). Шелл строит меню `.lnk` из обработчиков цели: у ярлыка на
-  `note.txt` — «Изменить», Notepad++, 7-Zip «Добавить к "note.7z"», у ярлыка
-  на папку — её строки; своя у ярлыка одна — «Расположение файла». Поэтому
-  встреченная строка и «последние типы» пикера пишутся типом цели (папка —
-  `Directory`), битый ярлык и файл без расширения типа не дают. Записанное
-  раньше `.lnk` при чтении настроек стирается (`SettingsViewModel.ApplyFrom`),
-  пустой тип знакомой строки дописывается при следующей встрече.
+  версия DLL; `<scope>\shell\<verb>` — имя ключа = глагол; то же под
+  `SystemFileAssociations\<scope>`. `HKLM\SOFTWARE\Classes` и `HKCU\…`
+  по отдельности, не `HKCR` (склеенное — минуты против сотни мс). Базовые
+  области 40–50 мс холодно, все 848 — ~150 мс.
+  - `ShellExtensionCatalog` (Core) сливает реестр и встреченное по
+    `ShellEntryKey`. **Таблица — встреченное**: строка реестра без встречи
+    — только не Windows и тип добавлен руками (`TrackedShellScopes`);
+    выключенная — всегда; строки с ключом-CLSID без имени, приложения и
+    описания — нет; одинаковые складываются (`Fold` → `Aliases`, BitLocker)
+    при равных подписи, приложении и областях; строка с именем приложения
+    — весь его раздел.
+  - Программа Windows — «ОС» (`ShellHandler.IsOsComponent`: `ProductName`
+    как у `shell32.dll` или «Microsoft® Windows® Operating System»; Core —
+    `ShellAppOs`).
+  - Поле над таблицей — `ShellExtensionFilter` (Core, тест): подпись,
+    программа, типы; расширение с точкой находит и «все файлы». Фильтр и
+    сортировка — `ListCollectionView` страницы
+    (`ContextMenuSettingsCategory.ShellRows`).
+- **Тип меню у ярлыка — тип цели** (`ShellScopes.MenuScopeOf`, стенд):
+  шелл строит меню `.lnk` из обработчиков цели, своя у ярлыка одна —
+  «Расположение файла». Встреченное и «последние типы» пикера пишутся
+  типом цели (папка — `Directory`); `.lnk`, записанный раньше, стирается
+  при чтении (`SettingsViewModel.ApplyFrom`).
 - **Не в меню намеренно:** «Удалить безвозвратно» (только `Shift+Del`),
-  закладки (панель слева), «Показать в Проводнике», `pintohomefile`.
-  «Открыть в терминале» — только папка и фон.
-- **`ShellContextMenu`** читает **классическое** меню (то, что Win11 прячет
-  под «дополнительные параметры»; 7-Zip, TortoiseGit, антивирусы там же;
-  оттуда же «Создать» с `ShellNew`). `HMENU` не отдаётся в `TrackPopupMenu`,
-  а обходится и перерисовывается WPF-строками (иначе чужое меню рядом, не
-  внутри). Цена: ленивые подменю будить `IContextMenu2::HandleMenuMsg` с
-  `WM_INITMENUPOPUP`; owner-drawn (`dwItemData` в приватном формате)
-  пропускаются с логом; иконки из `hbmpItem` → PNG (`ShellMenuIcons`).
-  Дубли по глаголу (`GetCommandString`, `GCS_VERBW`): `cut` / `copy` /
-  `paste` / `delete` / `rename` / `properties` / `link` / `openas` /
-  `copyaspath` рисуем сами. «Открыть в Терминале» самого Windows Terminal
-  (глагол — его CLSID; релиз, Preview, Canary) заменён своим «Открыть в
-  терминале» безвозвратно (2026-09-28): тот же терминал в папке, плюс меню
-  «Действия» и PowerShell без Windows Terminal. Список — `ShellVerbs`;
-  встреченное раньше таблица настроек не показывает (`ShellExtensionCatalog`).
-- **`ShellMenuCache`** — последняя сессия жива: повтор по тому же выделению
-  не ходит в шелл (0,4–1,1 с первый раз, 80–260 мс дальше: TortoiseGit
-  читает статус, у картинки 25 обработчиков против 12). Время жизни: правый
-  клик, открывающий меню, уже закрыл предыдущее — `Acquire` про *другую*
-  цель освобождает прошлую сессию; «открыто ли меню» не считается
-  (`ContextMenu.Closed` уходит в `BeginInvoke(Background)` — **после**
-  следующего клика); `Invalidate` только отвязывает от ключа.
+  закладки, «Показать в Проводнике», `pintohomefile`. «Открыть в
+  терминале» — только папка и фон; значок из встроенных — у него одного
+  (глиф `Segoe MDL2 Assets`), он стоит среди сторонних.
+- **`ShellContextMenu`** читает **классическое** меню (Win11 прячет его
+  под «дополнительные параметры»; оттуда же «Создать» с `ShellNew`).
+  `HMENU` не отдаётся в `TrackPopupMenu`, а обходится и перерисовывается
+  WPF-строками. Цена: ленивые подменю будит `IContextMenu2::HandleMenuMsg`
+  с `WM_INITMENUPOPUP`; owner-drawn (`dwItemData`) пропускаются с логом;
+  иконки `hbmpItem` → PNG (`ShellMenuIcons`). Дубли по глаголу
+  (`GetCommandString`, `GCS_VERBW`: `cut` / `copy` / `paste` / `delete` /
+  `rename` / `properties` / `link` / `openas` / `copyaspath`) рисуем сами.
+  «Открыть в Терминале» самого Windows Terminal (глагол — CLSID; релиз,
+  Preview, Canary) заменён своим безвозвратно — список `ShellVerbs`.
+- **`ShellMenuCache`** — последняя сессия жива: повтор по тому же
+  выделению в шелл не ходит (0,4–1,1 с первый раз, 80–260 мс дальше).
+  `Acquire` про *другую* цель освобождает прошлую; «открыто ли меню» не
+  считается (`ContextMenu.Closed` приходит **после** следующего клика);
+  `Invalidate` только отвязывает от ключа.
 - **Расширения в нашем процессе** (как в Explorer): `try/catch` с логом;
-  `ShellExtensionsEnabled = false` — чужие DLL не грузятся; команда
-  вызывается **после** закрытия меню (обработчики открывают модальные
-  диалоги).
+  `ShellExtensionsEnabled = false` — чужие DLL не грузятся; команда — **после**
+  закрытия меню (обработчики открывают модальные диалоги).
 - **Кастомизация** (`ContextMenuSettings`): мастер-выключатель, чёрный
-  список, скрытые свои пункты — как «что выключено» по строковым именам
-  `MenuCommandId` (новый пункт появится сам, переименование enum не
-  воскресит спрятанное). `KnownShellExtensions` накапливается по мере
-  открытия меню и подрезается при сохранении (`TrimKnownExtensions`).
-- **Меню «Действия» в шапке — третья форма тех же правил** (2026-09-16,
-  PLAN AC; в коде `MenuOperations` / `OperationsMenu`). `ContextMenuTarget.
-  Place = MenuPlace.Header` → `ContextMenuBuilder.BuildHeader`: постоянный
-  порядок (подпись выделения · Переименовать группой · Частные ▸ ·
-  Конвертировать ▸ · Извлечь рядом · Извлечь… · Ярлык · Копировать путь ·
-  Терминал; пара извлечений — в этом порядке во всех трёх меню, 2026-09-25), но
-  **неприменимое не показывается**, как и в контекстном. Серое с
-  тултипом — только действие, которому не хватает программы (подсказка
-  поставить её); `ActionApplicability` проверяет инструмент последним,
-  чтобы подсказка не шла к действию, неприменимому по типу. Подпись —
-  «4 изображения» через `Text.Plural` (формы в ресурсе через `|`). Один
-  каталог: `HideableTree` и галочки Параметров действуют на оба места.
-  Шелл в шапке не опрашивается; перестройка — на `SubmenuOpened` самого
-  меню (пункт без детей WPF считает кнопкой — в XAML строка-заглушка).
-  Пустое подменю билдер не создаёт (`AddSubmenu`): `Normalize`
-  выбрасывает только подменю, опустевшее от скрытия, а `Sub` без детей —
-  это лист с именем подменю.
+  список, скрытые свои — как «что выключено» по строковым именам
+  `MenuCommandId` (новый пункт появится сам). `KnownShellEntries`
+  копится и подрезается при сохранении (`TrimKnownEntries`).
+- **Меню «Действия» в шапке — третья форма тех же правил**
+  (`MenuOperations` / `OperationsMenu`):
+  `ContextMenuTarget.Place = MenuPlace.Header` →
+  `ContextMenuBuilder.BuildHeader`, постоянный порядок
+  (подпись · Переименовать группой · Частные ▸ · Конвертировать ▸ ·
+  Извлечь рядом · Извлечь… · Ярлык · Копировать путь · Терминал), но
+  **неприменимое не показывается**. Серое с тултипом — только действие без
+  программы; `ActionApplicability` проверяет инструмент последним.
+  Подпись — «4 изображения» через `Text.Plural` (формы через `|`). Один
+  каталог: `HideableTree` и галочки действуют на оба места. Шелл в шапке не
+  опрашивается; перестройка — на `SubmenuOpened` (пункт без детей WPF
+  считает кнопкой — в XAML заглушка). Пустое подменю билдер не создаёт
+  (`AddSubmenu`): `Sub` без детей — лист.
 
 ## Свои действия и групповое переименование
 
 Один каталог `CustomAction` (`Core/Actions/`) — строка «название · для
 каких файлов · программа или встроенный обработчик · шаблон аргументов ·
 режим · где показывать · объявленный выход»; хранится в
-`AppSettings.CustomActions`, пресеты приходят из кода и сливаются по `Id`.
-Что решает Core, а UI только исполняет:
+`AppSettings.CustomActions`, пресеты — из кода, сливаются по `Id`. Решает
+Core, UI исполняет:
 
 - **Применимость** — `ActionApplicability.For`: все выделенные подходят
-  под `FileTypeSelector` (группа из `FileTypeGroups` — те же списки, что
-  у панели просмотра, — или маска `*.psd;*.ai`), иначе действие не
-  предлагается; пустое выделение — только действия для папок, на текущую
-  папку; `RequiredTool` без инструмента — `ToolMissing`. Частичное
-  совпадение не считается (BACKLOG).
-- **Командная строка** — `CommandLine.Expand`: `{path} {name} {ext} {dir}
-  {paths} {list} {out}`, кавычки ставит подстановка всегда, хвостовой `\`
-  корня удваивается; `ValidationKey` ловит режим «на каждый файл» с
-  `{paths}` и наоборот. **Выход** — `OutputNames.Resolve`: рядом с
-  источником или в папке, которую человек выбрал («В другую папку…»,
-  `RunAsync(..., outputFolder)`), источник считается занятым; занятое имя
+  под `FileTypeSelector` (группа `FileTypeGroups` — списки панели
+  просмотра — или маска `*.psd;*.ai`); пустое выделение — действия для
+  папок, на текущую; `RequiredTool` без инструмента — `ToolMissing`.
+  Частичное совпадение не считается (BACKLOG).
+- **Командная строка** — `CommandLine.Expand`:
+  `{path} {name} {ext} {dir} {paths} {list} {out}`, кавычки ставит
+  подстановка, хвостовой `\` корня удваивается; `ValidationKey` ловит
+  режим «на каждый файл» с `{paths}` и наоборот. **Выход** —
+  `OutputNames.Resolve`: рядом с источником или в выбранной папке
+  (`RunAsync(..., outputFolder)`), источник считается занятым; занятое имя
   — `FileSystem/UniqueNames`, **номер после наибольшего** («clip (3)»,
-  «clip (4)» → «clip (5)»): одно правило на копии при «оставить обе»,
-  извлечение и выходы действий (решение 2026-09-16). Проводник, Finder и
-  браузеры заполняют первый пропуск; выбрано иначе, чтобы новое было
-  последним в списке и номер не переезжал на другой файл.
-- **Хранение пресетов** — `ActionCatalog.ToStored` / `Merge`: у пресета
-  в `state.json` только `Id`, `Enabled` и свой `Program`
-  (`ActionCatalog.Override`), остальное берётся из кода при слиянии —
-  улучшенная команда доезжает и до того, кто пресет выключал. Свои строки
-  хранятся целиком. Старый полный снимок пресета читается тем же путём.
-- **Программа строки** (2026-09-28) — выбирается, не набирается:
-  `ActionCatalog.ProgramChoices` — инструменты каталога в порядке страницы
-  «Программы», затем программы, которые запускают строки (строка с именем
-  файла инструмента — его же строка списка), встроенные обработчики — под
-  своим названием (`ActionPresets.BuiltinTitle`: «Встроенный кодировщик
-  изображений»), отладочные строки — нет; новая — файлом с диска.
-  `WithProgram` ставит программу вместе с инструментом и видом строки:
-  инструмент — по голому имени и в `RequiredTool`, так его находит
-  `WithLocatedProgram` и гасит `ActionApplicability`, пока его нет;
-  встроенный — `ActionKind.Builtin`; своя программа — команда без
-  инструмента. У встроенного аргументы — его настройки: `BuiltinProblem`
-  проверяет их тем же `ImageConvertOptions.Parse`, что и запуск, подсказка
-  поля — его ключи (`ArgumentsHint`). Список у `SettingsViewModel` один на все строки и
-  заменяется, только когда меняются его строки (новый список заставляет
-  `ComboBox` выбирать заново); `null`, который бокс сообщает при замене, —
-  не выбор. Проверка — `ProgramValidationKey`: не выбрана или не найдена —
-  ключ текста, инструмент по голому имени — дело `NeedsTool`, встроенный
-  обработчик не проверяется; причина — красным под списком, строка таблицы
-  красная. Поиск своей — `IToolLocator.Locate`, тот же, что у
-  `CreateProcess` при запуске: путь — сам файл, имя — `System32`, `Windows`
-  и `PATH` процесса, без расширения — `.exe`; не `Find` с его папками
-  установщиков и свежим `PATH` из реестра.
-- **Кодировщик картинок** — `Platform/Imaging/ImageConvertAction`
-  (WinRT, см. «Platform без WPF»): метаданные из `ImageMetadata`
-  (MetadataExtractor, с RAW тоже) пишутся номерами тегов
-  (`Imaging/ExifTags`, GPS включительно), слова — из свойств декодера;
-  JPEG без изменения пикселей идёт transcoding'ом без пережатия.
-- **Исполнение** — `ExternalActionRunner`: по одному, не параллельно;
-  `OperationTracker` (`OperationVerbs.RunAction`, по элементам); гард
-  `SystemPathGuard` на папку выхода; `{list}` — временный файл в
-  `AppPaths.Tmp` через `IFileSystem`; код возврата ≠ 0 — `Failed` с
-  хвостом stderr; отмена убивает процесс (`IProcessRunner.WasKilled`),
-  недописанный выход — в корзину, остальные `Cancelled`. **Undo — только
-  объявленный выход** (`CreateAction` → корзина); сам процесс не
-  откатывается, это осознанное отступление. `IProcessRunner` в Core,
-  `WindowsProcessRunner` в Platform: `UseShellExecute = false`, оба потока
-  сливаются на ходу (иначе полный пайп вешает программу), stderr читается
-  только при скрытой консоли, `Kill(entireProcessTree)`. Встроенные
-  обработчики — `IBuiltinAction` по имени в `Program`; выход у них
-  необязателен (`output` = null) — действие может не производить файла.
-- **Отладочные действия** (AI2, 2026-09-22) — `CustomAction.DebugOnly`:
-  строка каталога, которую меню показывают только при включённом меню
-  отладки (`ContextMenuTarget.ShowDebug` из `Settings.ShowDebugMenu`), а
-  таблица настроек не показывает вовсе (`SettingsViewModel`, `_debugActions`;
-  в `state.json` такие строки не попадают). Сейчас их две — `HoldFileAction`
-  (Core): держит выделенный файл `FileShare.None` 5 или 30 секунд; маска `*`
-  — только файлы, папку поток не откроет. Занятость
-  получается настоящая, вместе со всем, что раннер и так делает: заявка
-  путей (`PathClaims`), прогресс, часы на значке, отказ другой операции,
-  `IFileBusyProbe` и Restart Manager с Wander в держателях.
+  «clip (4)» → «clip (5)»): одно правило на «оставить обе», извлечение и
+  выходы действий (решение 2026-09-16) — новое последним в списке, номер
+  не переезжает на другой файл.
+- **Хранение пресетов** — `ActionCatalog.ToStored` / `Merge`: у пресета в
+  `state.json` только `Id`, `Enabled` и свой `Program`
+  (`ActionCatalog.Override`), остальное из кода — улучшенная команда
+  доезжает и до выключившего. Свои строки — целиком.
+- **Программа строки** выбирается: `ActionCatalog.ProgramChoices` —
+  инструменты каталога (порядок «Программ»), программы строк, встроенные
+  обработчики по названию (`ActionPresets.BuiltinTitle`); новая — файлом.
+  `WithProgram` ставит программу с инструментом и видом строки: инструмент
+  — по голому имени и в `RequiredTool` (его находит `WithLocatedProgram`,
+  а `ActionApplicability` гасит, пока нет); встроенный —
+  `ActionKind.Builtin`, аргументы — его настройки (`BuiltinProblem` через
+  `ImageConvertOptions.Parse`, подсказка — `ArgumentsHint`). Список один на
+  все строки и заменяется, только когда меняются его строки (иначе
+  `ComboBox` выбирает заново; `null` при замене — не выбор). Проверка —
+  `ProgramValidationKey`: не выбрана / не найдена — ключ текста, голое имя
+  инструмента — дело `NeedsTool`. Поиск своей — `IToolLocator.Locate`, как
+  у `CreateProcess`: путь — сам файл, имя — `System32`, `Windows` и `PATH`
+  процесса, без расширения — `.exe`; не `Find` с папками установщиков.
+- **Кодировщик картинок** — `Platform/Imaging/ImageConvertAction` (WinRT,
+  «Platform без WPF»): метаданные `ImageMetadata` (MetadataExtractor, и с
+  RAW) пишутся номерами тегов (`Imaging/ExifTags`, GPS), слова — из свойств
+  декодера; JPEG без изменения пикселей — transcoding без пережатия.
+- **Исполнение** — `ExternalActionRunner`: по одному;
+  `OperationTracker` (`OperationVerbs.RunAction`); гард на папку выхода;
+  `{list}` — временный файл в `AppPaths.Tmp`; код ≠ 0 — `Failed` с хвостом
+  stderr; отмена убивает процесс (`IProcessRunner.WasKilled`), недописанный
+  выход — в корзину, остальные `Cancelled`. **Undo — только объявленный
+  выход** (`CreateAction`); процесс не откатывается — осознанно.
+  `IProcessRunner` в Core, `WindowsProcessRunner` в Platform:
+  `UseShellExecute = false`, оба потока читаются на ходу (иначе полный пайп
+  вешает программу), stderr — только при скрытой консоли,
+  `Kill(entireProcessTree)`. Встроенные — `IBuiltinAction` по имени в
+  `Program`, выход необязателен.
+- **Отладочные действия** (AI2) — `CustomAction.DebugOnly`: меню
+  показывают их при меню отладки (`ContextMenuTarget.ShowDebug` из
+  `Settings.ShowDebugMenu`), таблица настроек — никогда (`_debugActions`,
+  в `state.json` не попадают). `HoldFileAction` (Core) держит выделенный
+  файл `FileShare.None` 5 или 30 с (маска `*` — только файлы): занятость
+  настоящая — `PathClaims`, часы, отказ другой операции, `IFileBusyProbe`,
+  Restart Manager с Wander в держателях.
 - **Групповое переименование** — `Core/Rename/`: `RenameRules` (найти /
-  заменить, шаблон, регистр — фиксированный порядок применения;
-  расширение меняется только регистром) → `RenamePlanner.Preview` — чистая
-  функция от правил, элементов и `RenameContext` (`exists`, спутники,
-  дата съёмки): «было → станет» со статусом, дубликаты внутри пачки,
-  совпадения снаружи; имя, которое пачка сама освобождает, совпадением не
-  считается. `BatchRenameGate` пускает в окно два и более **одного вида**
-  (файлы или папки), смешанное — отказ. Применение —
-  `FileOperationService.RenameMany`, **двухфазный**: член, чьё имя ещё
-  занято поздним членом, паркуется на `…<8 hex>.wander-tmp` (сторож такие
-  не видит) и переезжает после; один composite, откат в обратном порядке.
-  Память окна — `AppState.RenameRules` и пять последних применённых
-  шаблонов `AppState.RenameTemplates` (`RenameTemplateHistory`, `[N]` не
-  запоминается); пишутся по ОК из `MainViewModel`.
+  заменить, шаблон, регистр — фиксированный порядок; расширение — только
+  регистр; счётчик до `RenameRules.MaxCounterWidth` цифр) →
+  `RenamePlanner.Preview` — чистая функция от правил, элементов и
+  `RenameContext` (`exists`, спутники, дата съёмки — `[X]` читает EXIF на
+  пуле): «было → станет», дубликаты в пачке, совпадения снаружи; имя,
+  которое пачка сама освобождает, — не совпадение. `BatchRenameGate` —
+  два и более **одного вида**. Применение —
+  `FileOperationService.RenameMany`, **двухфазный**: член, чьё имя занято
+  поздним членом, паркуется на `…<8 hex>.wander-tmp` (сторож не видит);
+  один composite, откат в обратном порядке. Память окна —
+  `AppState.RenameRules` и пять шаблонов `AppState.RenameTemplates`
+  (`RenameTemplateHistory`, `[N]` не запоминается).
 
 ## Companion-файлы
 
-Служебный файл рядом с основным (`.meta`, `.pp3`, `.xmp`) — довесок, одной
-строкой, едет вместе. `AppSettings.IntegrateCompanions`, по умолчанию вкл.
+Служебный файл рядом с основным (`.meta`, `.pp3`, `.xmp`) — довесок,
+одной строкой, едет вместе. `AppSettings.IntegrateCompanions`, по
+умолчанию вкл.
 
 ```
 CompanionRule            суффикс + шаблон имени; формат — данные, не код
@@ -1661,110 +1330,97 @@ Listing/RatedListing     WithRatings() листинг → тот же с Rating 
 | `Appended` — к полному имени | `Sprite.png.meta`, `IMG.CR2.pp3` | Unity, RawTherapee, Takeout |
 | `Replaced` — заменяет расширение | `IMG_1234.xmp` | Adobe / darktable, `.AAE` |
 
-`Appended` по точному имени, `Replaced` по stem'у; два претендента на stem
-— сайдкар отдаётся RAW, если RAW среди них ровно один (`IMG.CR2` +
-`IMG.jpg` при `IMG.xmp`: пара RAW+JPEG с камеры или JPEG, сделанный из
-RAW, — XMP в обоих случаях у RAW; 2026-09-16, после «Превью из RAW»
-сайдкар и оценка оставались сиротами); иначе (два JPEG, два RAW) — ни к
-кому. То же в `Group` и в `FindCompanions`: JPEG рядом с RAW того же
-имени свой `.xmp` при переносе не забирает (`CompanionResolver.Owner`).
+`Appended` — по точному имени, `Replaced` — по stem'у. Два претендента на
+stem: сайдкар — RAW, если RAW среди них ровно один (`IMG.CR2` +
+`IMG.jpg` при `IMG.xmp` — XMP у RAW, иначе после «Превью из RAW» сайдкар и
+оценка осиротеют); иначе — ни к кому. То же в `Group` и `FindCompanions`
+(`CompanionResolver.Owner`).
 
-- Свёртка — в воркере `RefreshFolderAsync` **после** Hidden/System:
-  спутник у отфильтрованного файла и сирота остаются видимыми.
-- `FileSystemEntry.Companions` — пути, пусто у обычного файла и при
-  выключенном флаге; блок «Вместе с файлом:» в футере. Значок в списке —
-  REJECTED.
-- Меню про спутников не знает: их нет в выделении.
-- Групповые операции — `BatchGroup` (основной + спутники): один шаг
-  прогресса и один результат на группу, composite-undo; коллизия — у
-  каждого файла своя (см. «Конфликты»), переименованный основной файл
-  уводит спутников за собой. Группы из выделения бесплатно
-  (`Companions` уже в записи; Copy / Cut / Delete / drag на UI-потоке); из
-  плоского списка (буфер, drop из Explorer) — `CompanionResolver.Group()` с
-  диском, в `Task.Run`.
-- Авто-переименование тянет спутников (`Sprite (1).png.meta`) подстановкой
-  общей части — знание форматов в `BatchExecutor` не протекает.
-- Переименование мимо батча: `RenamePlan` + `RenameMany`, откат середины.
-- **Оценки** — `SidecarRating` (`Rank` / `ColorLabel`), формат за
+- Свёртка — в воркере `RefreshFolderAsync` **после** Hidden / System:
+  спутник отфильтрованного файла и сирота видны.
+- `FileSystemEntry.Companions` — пути (пусто у обычного файла и при
+  выключенном флаге); в футере — серым «(+.xmp)» после имени
+  (`CompanionLabel`). Значок в списке — REJECTED. Меню про спутников не
+  знает.
+- Групповые операции — `BatchGroup`: один шаг прогресса и результат на
+  группу, composite-undo; коллизия — у каждого файла своя, переименованный
+  основной уводит спутников. Из выделения — бесплатно (`Companions` уже в
+  записи); из плоского списка (буфер, drop из Explorer) —
+  `CompanionResolver.Group()` с диском, в `Task.Run`.
+- Авто-переименование тянет спутников (`Sprite (1).png.meta`)
+  подстановкой общей части. Мимо батча — `RenamePlan` + `RenameMany`.
+- **Оценки** — `SidecarRating` (`Rank` / `ColorLabel`), формат — за
   `CompanionMetadataService` по расширению; `ColorLabels` нумерованы
   одинаково (XMP хранит имя `Red`, pp3 — номер); `SidecarText` — BOM,
   переводы строк.
-- **Запись в чужой формат — узкий путь**: только поля оценки; в
-  существующем — правка одной строки, остальные байты как есть (в `.pp3`
-  вся проявка); XMP — строковая хирургия, не `XDocument` (round-trip
-  переписал бы атрибуты, префиксы, `<?xpacket?>` с padding'ом); нет свойства
-  — добавляется атрибутом в `rdf:Description` **только** при объявленном
-  `xmp:`, иначе `NotSupportedException`; только `ReplaceAtomic` (temp →
-  `File.Replace`); BOM и `\r\n` / `\n` сохраняются; прежнее значение в
-  `SidecarRatingAction`.
-- **`CreateRatingSidecar`** — единственное создание файла, которого не
-  называли: подтверждение (спрашивает `MainViewModel`), лог,
-  `SystemPathGuard`, `SidecarCreatedAction` — undo **удаляет** файл;
-  существующий — `InvalidOperationException`; снятие оценки не создаёт.
-- **`.xmp` по умолчанию** — выбор побочного эффекта: RawTherapee применяет
-  профиль по умолчанию только без сайдкара, `.pp3` с `Rank=3` меняет
-  проявку; `.xmp` не влияет, читается с 5.7, синхронизируется с 5.11.
-  `AppSettings.RawRatingFormat`, при `.pp3` предупреждение в диалоге.
+- **Запись в чужой формат — узкий путь**: только поля оценки, в
+  существующем — одна строка, остальные байты как есть (в `.pp3` вся
+  проявка); XMP — строковая хирургия, не `XDocument` (round-trip переписал
+  бы атрибуты, префиксы, `<?xpacket?>`); нет свойства — атрибутом в
+  `rdf:Description` **только** при объявленном `xmp:`, иначе
+  `NotSupportedException`; только `ReplaceAtomic` (temp → `File.Replace`);
+  BOM и `\r\n` / `\n` сохраняются; прежнее — в `SidecarRatingAction`.
+- **`CreateRatingSidecar`** — единственное создание неназванного файла:
+  подтверждение (спрашивает `MainViewModel`), лог, `SystemPathGuard`,
+  `SidecarCreatedAction` — undo **удаляет**; существующий —
+  `InvalidOperationException`; снятие оценки не создаёт. Созданный `.xmp`
+  несёт `xmp:Rating` и пустой `xmp:Label` — дальше правка на месте.
+- **`.xmp` по умолчанию**: RawTherapee применяет профиль по умолчанию
+  только без сайдкара, `.pp3` с `Rank=3` меняет проявку; `.xmp` не влияет,
+  читается с 5.7, синхронизируется с 5.11. `AppSettings.RawRatingFormat`,
+  при `.pp3` — предупреждение.
 - **`.meta` только читается** — Unity владеет им, перезапись отвяжет ассет.
 
 ## Галерея и оценки
 
 ### Запись оценки не пересобирает папку
 
-Правило (CLAUDE.md). Раньше клик по звезде → `Refresh()`: строки
-пересоздавались, выделение и сортировка уезжали.
+Правило (CLAUDE.md): клик по звезде не зовёт `Refresh()`.
 
 ```
-MainViewModel.ApplyRating(строки, поле, значение)
+RatingsController.Apply(строки, поле, значение)
    ├ делит на «сайдкар есть / нет», спрашивает про вторую группу один раз
    ├ CompanionMetadataService.ApplyRatingToMany → один CompositeAction
-   └ ApplyRatingResults
+   └ ApplyResults
        ├ SearchController.Replace: состав видимого тот же → ItemsChanged (эти строки);
        │                            строка выпала из фильтра → полный проход
-       └ ReplaceRows: Entries[i] = новая, выделение назад
+       └ MainViewModel.ReplaceRows: Entries[i] = новая, выделение назад
 ```
 
-- **Выделение.** `record` не правится на месте — замена, список выкидывает
-  объект из `SelectedItems`. Любая пересборка `Entries` (точечная и
-  `SyncEntries`) идёт под `IsSyncingRows` — отчёты списка на это время не
-  шлются (иначе три замены проводили панель просмотра по трём чужим фото),
-  затем приземление (`ListingLanded`, причина `RowsReplaced` у точечной):
-  модель возвращает выделение по путям одним вызовом, без прокрутки и
+- **Выделение.** `record` заменяется, и список выкидывает объект из
+  `SelectedItems`. Любая пересборка `Entries` (точечная и `SyncEntries`)
+  идёт под `IsSyncingRows` — отчёты списка не шлются (иначе замены водили
+  панель просмотра по чужим фото), затем приземление (`ListingLanded`,
+  `RowsReplaced`): выделение по путям одним вызовом, без прокрутки и
   фокуса.
-- **Оценка видна во всех видах** (J4): «Таблица» — столбец; «Галерея» и
-  «Значки» — бейдж: пустой `ContentControl`, шаблон подкладывает
-  триггер на `Rating` (у значков — светлая плашка `IconsRatingBadge`,
-  +2 визуала на ячейку без оценки: 6 → 8); «Плитка» — звёзды второй
-  строкой вместо типа (`TileSecondLineConverter`), без нового визуала.
+- **Оценка во всех видах** (J4): «Таблица» — столбец; «Галерея» и
+  «Значки» — бейдж: пустой `ContentControl`, шаблон подкладывает триггер
+  на `Rating` (у значков — плашка `IconsRatingBadge`, +2 визуала без
+  оценки); «Плитка» — звёзды второй строкой вместо типа
+  (`TileSecondLineConverter`).
 - **Сторож** — `DirectoryChange` + `FolderChanges`: изменился состав →
-  `Refresh()`; изменилось содержимое известных строк → перечитать их;
-  неизвестный файл → `Refresh()`. Прежнее глушение по времени **теряло**
-  настоящие изменения.
+  `Refresh()`; содержимое известных строк → перечитать их; неизвестный
+  файл → `Refresh()`. Глушение по времени теряет настоящие изменения.
 - **Панель просмотра** — `SetPrimary` сравнивает путь + размер + mtime:
-  та же строка = перечитать спутников, не декодировать RAW.
-- **Клик по звезде или свотчу** (2026-09-15) уходит хозяину неразрешённым:
-  `RatingRequestedEventArgs` несёт `Clicked` и `Current`, а «поставить или
-  снять» решает `RatingToggle.Resolve` (Core, тест) против **всех** целей —
-  всё выделение, если показанный файл в нём (в футере «и ещё N»), иначе
-  один файл; вторая половина сплита всегда про свой файл. `Shift`+цифры в
-  галерее — `SetColorForSelection` тем же правилом; цифры без `Shift` —
-  как были: ставят, `0` снимает.
+  та же строка — перечитать спутников, не декодировать RAW.
+- **Клик по звезде или свотчу** уходит хозяину неразрешённым
+  (`RatingRequestedEventArgs`: `Clicked`, `Current`); «поставить или
+  снять» решает `RatingToggle.Resolve` (Core, тест) против **всех** целей
+  — выделение, если показанный файл в нём, иначе один файл; половина
+  сплита — про свой. `Shift`+цифры в галерее — `SetColorForSelection` тем
+  же правилом. Неудавшаяся запись — `RatingsController.StatusReported`
+  (`StatusLine` с уровнем), даже если не записалось ничего.
 - **Служебные файлы.** `ReplaceAtomic` пишет `<файл>.wander-tmp`,
-  `File.Replace` создаёт **свой** бэкап `<файл>~RF<hex>.TMP` (не описан у
-  API; найден логом сторожа) — оба в `TransientFiles`. Переименование
-  **из** нашего служебного — запись содержимого, не состав
-  (`WindowsDirectoryWatcher.OnRenamed`).
-- Порядок не меняется даже при сортировке по оценке — новый приезжает со
-  следующим листингом.
+  `File.Replace` — **свой** бэкап `<файл>~RF<hex>.TMP` (не описан у API;
+  найден логом сторожа) — оба в `TransientFiles`. Переименование **из**
+  нашего служебного — запись содержимого (`WindowsDirectoryWatcher.OnRenamed`).
+- Порядок при сортировке по оценке не меняется до следующего листинга.
 - **`Ctrl+Z`** — `IUndoableAction.MetadataTargets`: непустой = состав не
-  изменился, `UndoLast` → `RefreshMetadataRowsAsync`; `CompositeAction`
-  отдаёт объединение только если **все** члены — метаданные.
-- **`Ctrl+Z` переноса** — `IUndoableAction.MovesOnUndo`: пары «где
-  сейчас → куда вернётся» (`MoveAction`; `CompositeAction` — в порядке
-  отката), `UndoLast` ведёт по ним всех держателей пути через
-  `FollowRelocated` — тот же шаг, что после броска или `Ctrl+V`
-  (`PathFollowing`, модель окна); открытая папка, вернувшаяся на место, не
-  оставляет список на опустевшем пути.
+  изменился, `UndoLast` → `RatingsController.RefreshRowsAsync`;
+  `CompositeAction` отдаёт объединение, только если **все** члены —
+  метаданные. Отмена переноса — `MovesOnUndo` через `FollowRelocated`
+  («Модель окна»): открытая папка, вернувшаяся на место, не оставляет
+  список на пустом пути.
 
 ### Проход по оценкам — второй
 
@@ -1772,93 +1428,79 @@ MainViewModel.ApplyRating(строки, поле, значение)
 RefreshFolderAsync (листинг + свёртка, пул)
    ├→ ChooseView() — только при входе, не на F5
    ├→ _search.SetSource() — строки на экране
-   └→ StartRatingPass() → RatedListing.WithRatings() (пул, отмена) → SetSource() с Rating
+   └→ RatingsController.StartPass() → RatedListing.WithRatings() (пул, отмена) → SetSource() с Rating
 ```
 
-Папка из пятисот RAW — пятьсот чтений, папка должна появиться раньше.
-Трогает только строки с `Companions`; без сайдкаров возвращает **тот же
-список по ссылке** — UI-проход пропускается. Живёт в `Listing/`: пройти
-строки и решить, какие заменить, — вопрос про листинг; как читать —
-делегат `ReadRatingFor`. Отмена по эпохе. `SyncEntries` сравнивает `SameRow`
-с `Rating`. **Сортировка по оценке** — `SortKey.Rating` в
-`EntryComparers`, первый проход по ней при пустых оценках (= по имени),
-второй пересортировывает через ту же `EntryComparers.Sort`, что и
+Пятьсот RAW — пятьсот чтений, папка должна появиться раньше. Трогает
+только строки с `Companions`; без сайдкаров возвращает **тот же список по
+ссылке** — UI-проход пропускается. Как читать — делегат `ReadRatingFor`;
+отмена по эпохе; `ListingDiff` сверяет строки
+`FileSystemEntry.SaysTheSameAs` (с оценкой). **Сортировка по оценке** —
+`SortKey.Rating` в `EntryComparers`: первый проход при пустых оценках (=
+по имени), второй пересортировывает той же `EntryComparers.Sort`, что
 `SystemIOFileSystem.Enumerate` (компаратор имён ординальный — TECHDEBT).
-Неоценённое = 0, не ниже нуля — папка не переставляется, пока null'ы
-становятся нулями. **Перечитывание той же папки** (`F5`, сторож, другой
-порядок; 2026-09-28) несёт оценки строк с экрана (`RatedListing.CarryRatings`,
-по пути, только строкам со спутником) до нового прохода, при сортировке по
-оценке — сразу в её порядке. Без этого фильтр по звёздам на миг прятал все
-снимки и выделение с ними, а порядок по оценке приезжал сначала по имени.
-Проход ставит то, что сайдкар говорит сейчас, в том числе «ничего».
+Неоценённое = 0 — папка не переставляется, пока null'ы становятся нулями.
+**Перечитывание той же папки** (`F5`, сторож, порядок) несёт оценки с
+экрана (`RatedListing.CarryRatings`, по пути, строкам со спутником) до
+нового прохода, при сортировке по оценке — сразу в её порядке: иначе
+фильтр по звёздам на миг прятал все снимки.
 
 ### Фильтр — внутри `SearchController`
 
 `RatingFilter` там же, где фильтр по имени: проекция одна, два фильтра —
 гонка. `Reset()` снимает оба. **Набор, а не порог** — два битовых набора
-(оценки, метки): клик — элемент и выше, `Ctrl` + клик — один. Ранг 0 —
-«без оценки», единственный, который клик берёт в одиночку; перечёркнутая
-звезда. Горит выбранное (`RatingFilter.HasRank`, `FilterStarConverter`).
-`Alt` ничего. Клик разложен (`ReadFilterGesture` / `ClickRankFilter`,
-`ClickColorFilter`): харнесс не имеет права трогать клавиатуру. Папки не
-отбрасываются. Первая проекция после смены любого фильтра — «перестройка»
-(флаг в `FilteredChanged`): выделенный файл остаётся на своём месте экрана
-(«Выделенный файл не уходит с экрана сам», выше).
+(оценки, метки): клик — элемент и выше, `Ctrl` + клик — один; ранг 0 —
+«без оценки», клик берёт его в одиночку. Горит выбранное
+(`RatingFilter.HasRank`, `FilterStarConverter`). Клик разложен
+(`ReadFilterGesture` / `ClickRankFilter`, `ClickColorFilter`): харнесс
+клавиатуру не трогает. Папки не отбрасываются. Первая проекция после
+смены фильтра — «перестройка» (флаг в `FilteredChanged`).
 
 ### Папка со снимками и автовыбор вида
 
 `ImageFolderProbe.IsImageFolder` — чистая функция от листинга и правил
-спутников: знаменатель — содержательные файлы (не спутники — правила у
-`CompanionResolver`, не бэкапы, не подпапки), иначе папка с `.pp3` у каждого
-RAW набирает ровно 50 %. Минимума нет. Расширения — `Icons/ImageFormats`,
-один список (раньше два в `PreviewController` расходились).
+спутников: знаменатель — содержательные файлы (не спутники, не бэкапы, не
+подпапки), иначе папка с `.pp3` у каждого RAW набирает ровно 50 %;
+минимума нет. Расширения — `Icons/ImageFormats`, один список с панелью
+просмотра.
 
-**Вид — у папки** (2026-09-23, блок 2: AG + Z1). `Folders/ViewChoice.Decide`
-(Core, тест) — одно правило на приходе в любую папку, включая корзину и
-архив: закрепление папки → оно; автогалерея включена, не корзина и папка со
-снимками (`ImageFolderProbe`, считается лениво) → «Галерея»; иначе —
-`AppSettings.DefaultViewMode` (из коробки «Значки», в коде
-`ViewMode.LargeIcons`). Ответ — вид и
-причина (`ViewReason`: закреплён / авто: снимки / по умолчанию), причина —
-подпись «Эта папка · …» в меню «Вид». `F5` и перечитывание вид не трогают
+**Вид — у папки** (AG + Z1). `Folders/ViewChoice.Decide` (Core, тест) —
+одно правило на приходе в любую папку: закрепление → оно; автогалерея
+включена, не корзина и папка со снимками (`ImageFolderProbe`, лениво) →
+«Галерея»; иначе `AppSettings.DefaultViewMode` (из коробки «Значки»,
+`ViewMode.LargeIcons`). Ответ — вид и `ViewReason` (закреплён / авто:
+снимки / по умолчанию) для подписи «Эта папка · …». `F5` вид не трогает
 (`arriving`). Выбор в меню и `Ctrl+Shift+1/2/6/7` — **закрепление за
-открытой папкой**, «Автоматически» снимает его, «Сделать видом по умолчанию»
-пишет настройку и снимает закрепление с этой папки (иначе она не пошла бы за
-следующим умолчанием). `ViewMode` (enum) живёт в `Core/Folders`. Хранение
-закреплений — `FolderSettingsBook`, ниже («База параметров папок»).
+папкой**; «Автоматически» снимает; «Сделать видом по умолчанию» пишет
+настройку и снимает закрепление с этой папки. `ViewMode` — в
+`Core/Folders`; хранение — `FolderSettingsBook` («`folders.json`»).
 
-**Сортировка — тоже у папки** (2026-09-28, решение человека: выбор в меню
-фона «влияет на текущую папку»). Любой выбор порядка — меню «Вид», меню
-фона, клик по заголовку таблицы — закрепляет **весь** `SortOptions` за
-открытой папкой (`FolderRecord.Sort`, `FolderSettingsBook.SetSort`);
-остальные — по умолчанию из `AppSettings.SortKey` / `SortAscending` /
+**Сортировка — тоже у папки** (решение человека 2026-09-28): любой выбор
+порядка (меню «Вид», меню фона, заголовок таблицы) закрепляет **весь**
+`SortOptions` за папкой (`FolderRecord.Sort`, `FolderSettingsBook.SetSort`);
+остальные — по `AppSettings.SortKey` / `SortAscending` /
 `GroupFoldersFirst`. `MainViewModel.CurrentSort` — закрепление, иначе
-умолчание: по нему идут листинг, пересортировка выдачи поиска
-(`SearchResultsController`), галочки меню и стрелка в заголовке таблицы
-(`RaiseSort` — на приходе папки и при смене). «По умолчанию» снимает
-закрепление, «Сделать сортировкой по умолчанию» пишет настройку и снимает
-его (настройка — пока закрепление держит папку, чтобы не перечитывать).
-Смена умолчания перечитывает только папку без своего порядка. Запись,
-усыновлённая на приходе (папку переименовали снаружи), со своим порядком
-перечитывает папку ещё раз. Дерево сортируется как прежде — по имени,
-папки сверху.
-Подсказка чужого `desktop.ini` (H1, 2026-09-23): перечисление видело файл
-(флаг до фильтра видимости — он скрытый и системный) — на приходе, на пуле
-с листингом, читается `[ViewState] FolderType=` (`Folders/DesktopIni`,
-тест); `Pictures` / `Photos` — ещё один факт `ViewChoice.Decide`:
-«Галерея» с причиной «авто: снимки» и без снимков в листинге. Не пишется
-(Z1).
+умолчание: по нему листинг, пересортировка выдачи
+(`SearchResultsController`), галочки меню, стрелка заголовка (`RaiseSort`).
+«По умолчанию» снимает, «Сделать сортировкой по умолчанию» пишет
+настройку и снимает; смена умолчания перечитывает только папку без
+своего порядка; запись, усыновлённая на приходе, со своим порядком
+перечитывает папку ещё раз. Дерево — по имени, папки сверху.
+
+Чужой `desktop.ini` (H1): перечисление видит его до фильтра видимости;
+на приходе, на пуле, читается `[ViewState] FolderType=`
+(`Folders/DesktopIni`, тест): `Pictures` / `Photos` — ещё один факт
+`ViewChoice.Decide` («Галерея», «авто: снимки»). Не пишется.
 
 ### Фон галереи — палитра
 
-`GalleryBackground` (Light / Grey / Dark) в Core, яркость двух тёмных —
-`GalleryGreyLevel` / `GalleryDarkLevel`. `GalleryPalette` (App) из трёх чисел
-собирает **весь** набор: фон, подпись, приглушённый, ховер, выделение
-активное / неактивное, рамки. Один тип — роли двигаются вместе: тёмный фон
-со светлой подписью нечитаем, с проводниковым голубым — лайтбоксы ярче
-фото; на тёмном подсветка — `Lift` фона, на светлом — проводниковые
-`#CCE8FF` / `#E8E8E8` как есть. `Light` = `SystemColors.WindowColor`, по
-умолчанию (тёмный при первом открытии читается как чужая тема). Панель
+`GalleryBackground` (Light / Grey / Dark) в Core, яркость тёмных —
+`GalleryGreyLevel` / `GalleryDarkLevel`. `GalleryPalette` (App) из трёх
+чисел собирает **весь** набор: фон, подпись, приглушённый, ховер,
+выделение активное / неактивное, рамки — роли двигаются вместе (тёмный
+фон со светлой подписью нечитаем, с голубым Проводника — лайтбоксы ярче
+фото); на тёмном подсветка — `Lift` фона, на светлом — `#CCE8FF` /
+`#E8E8E8`. `Light` = `SystemColors.WindowColor`, по умолчанию. Панель
 просмотра берёт фон только под картинкой (`Image`, `Gif`, лупа).
 
 ## Окно и его контролы
@@ -1873,245 +1515,223 @@ RAW набирает ровно 50 %. Минимума нет. Расширен�
 | `DragPreview/DropTargetController` | приём drop: папка под курсором, разрешён ли, что сделает, подсветка; удержание над папкой и прокрутка у края |
 | `DragPreview/OutgoingDrag` | перетаскивание наружу: плашка, курсор, формулировка |
 
-**`MainViewModel` живёт при окне** (корень `Wander.App`, namespace
-`Wander.App`), не в `ViewModels/`: она хостит контроллеры, контроллеры берут
-базовые типы из `ViewModels/` — был цикл (O9).
+**`MainViewModel` живёт при окне** (корень и namespace `Wander.App`), не
+в `ViewModels/`: она хостит контроллеры, а те берут базовые типы из
+`ViewModels/` — иначе цикл.
 
 **`DropTargetController` решает, но не действует**: отвечает `DropPlan`,
-выполняет VM (тем же путём с логом, guard, undo). `Execute` держит обвязку
-(отказ, `Handled`, снятие подсветки в `finally`). Один на все поверхности.
-Проверки повторяются на самом drop'е, не с последнего `DragOver`
-(модификаторы меняются между движением и отпусканием). Удерживаемый drag —
-на его таймере (40 мс): у края поверхности прокрутка (`Layout/EdgeScroll`:
-зона 24 px, до 1500 px/с, рост квадратичный), над папкой после задержки
-(`Layout/DragHover`: панель — 2 × `MouseHoverTime`, список — 3 ×) —
-`HoverOpened`: окно раскрывает строку панели (`ChevronToggled`) или входит
-в папку списка; архив, корзина, перетаскиваемая папка и всё под ней — нет;
-отката нет. Сброс — уход за окно (`DragLeave` вне границ), бросок, полоса
-закладок.
+выполняет VM (с логом, гардом, undo); `Execute` держит обвязку (отказ,
+`Handled`, снятие подсветки в `finally`). Один на все поверхности.
+Проверки повторяются на самом drop'е — модификаторы меняются между
+движением и отпусканием. Удержание над папкой и прокрутка у края —
+«Drag & drop».
 
-Граница окно ↔ список: `DragStartRequested` (жест у того, за что
-схватились; drag ведёт `OutgoingDrag`; загорание полосы закладок сообщает
-окно), `ContextMenuRequested` (модель — Core, шелл добавляет окно); вниз
-`FocusList()`, `ClearSelection()`, `StartRename()` и эффекты модели
+Граница окно ↔ список: `DragStartRequested`, `ContextMenuRequested`;
+вниз `FocusList()`, `ClearSelection()`, `StartRename()` и эффекты модели
 `ApplySelection()`, `FocusRow()`, `OpenEditor()`. Окно ↔ панели:
 `ContextMenuRequested`, `FocusListRequested` (`Esc`); вниз
 `FocusBookmarks()` / `FocusDrives()` / `HasBookmarks` / `PaneOf()` /
 `ShowFocusOutline()` / `RevealAndFocus()` / `FocusRow()`;
 `Connect(drops, drag)` — общие `DropTargetController` и `OutgoingDrag`.
 
+### Диалоги — один шов
+
+Каждый модальный вопрос — через `Wander.App/Dialogs/IDialogs`:
+`Ask(DialogRequest)` (`DialogKind`, заголовок, текст, кнопки, значок;
+кнопка по умолчанию всегда отменяющая, поэтому не поле),
+`Choose(ChoiceRequest)` (ответы на кнопках, «Отмена» по умолчанию; индекс
+или -1), `Prompt`, `PickFolder`, `CreateConflictResolver(skipIdentical)`.
+Продакшн — `WpfDialogs` (`MessageBox` поверх активного окна, но не окна операции,
+`ITransientWindow`; `ChoiceDialog`, `PromptDialog`, `OpenFolderDialog`,
+`DispatcherConflictResolver(InteractiveConflictResolver)`); харнесс
+подставляет `ScriptedDialogs` до постройки вьюмодели. Голый
+`MessageBox.Show` — только аварийный в `CrashReporter`.
+
 ### Клавиатурные области
 
 `Tab` переключает **области**: тулбар → адрес → закладки → дерево → поле
-поиска (на полосе над списком, G6) → список. Порядок и обход — `Core/Layout/WindowZones` (`WindowZone`, `Order`,
-`Ring`, `FolderPane`): кольцевая арифметика и лестница умолчаний — где
-прячется ошибка на единицу. Окну — `ZoneOf` по визуальному дереву,
-`CycleZone`, `FocusZone`. Не средствами WPF: родной `Tab` идёт по дереву
-объявления и внутрь каждого контрола — пришлось бы расставлять
-`TabNavigation` / `IsTabStop` по всей разметке. `Tab` **всегда** «следующая
-область», и из текстового поля. `FocusZone` возвращает `false` — обход идёт
-дальше (свёрнутые закладки, выключенные кнопки). Панель просмотра не в
-кольце — `Tab` в текстовое поле запер бы клавиатуру: `Ctrl+3` —
-`PreviewPane.TakeKeyboard` (контрол содержимого по `Kind`; панель, ещё
-грузящая файл, берёт клавиатуру по приходу контента), повтор — во вторую
-половину пары, `Esc` — `FileList.FocusList` (поле поиска панели отвечает на
-`Esc` само).
+поиска (G6) → список. Порядок и обход — `Core/Layout/WindowZones`
+(`WindowZone`, `Order`, `Ring`, `FolderPane`): кольцевая арифметика и
+лестница умолчаний. Окну — `ZoneOf` по визуальному дереву, `CycleZone`,
+`FocusZone` (`false` — обход дальше: свёрнутые закладки, выключенные
+кнопки). Не средствами WPF: родной `Tab` идёт внутрь каждого контрола.
+`Tab` **всегда** «следующая область», и из текстового поля. Панель
+просмотра не в кольце (`Tab` в текстовое поле запер бы клавиатуру):
+`Ctrl+3` — `PreviewPane.TakeKeyboard` (контрол по `Kind`; грузящаяся
+панель берёт клавиатуру по приходу контента), повтор — во вторую
+половину, `Esc` — `FileList.FocusList`.
 
-- **`Alt`-сочетания не `KeyBinding`**: в тулбаре настоящий `Menu`, `Alt`
-  переводит окно в режим меню раньше маршрутизации. `Alt+←/→/↑`,
-  `Alt+Enter`, `Alt+D` — в `MainWindow.OnPreviewKeyDown` (туннель впереди
-  режима меню и `InputBindings`); там же `Esc` для адресной области (с
-  кнопки-крошки тоже).
-- **Фокус на самом списке — тупик, лечится**: `TryEnterList` — первая
-  стрелка входит сверху (`↓` / `→`) или снизу, при выделении каретка на
-  него; `FocusVisualStyle` у `ListGestures` снят; `TakeKeyboardOnClick` —
-  ветки, помечающие нажатие обработанным (лассо, удержание мультивыделения),
-  забирают клавиатуру сами.
-- **Рамка области** — `BorderBrush` самих контролов (`BorderThickness` 1,
-  меняется цвет), `OnZoneFocusChanged` на `GotKeyboardFocus` **окна**.
-  `GridSplitter` из обхода убран (WPF делает его фокусируемым) — размер
-  панелей только мышью.
-- **`Ctrl+1`** — `WindowZones.FolderPane`: раскрыть панель, из которой
-  открыли, до открытой папки (правило модели на `ZoneEntered` с причиной
+- **`Alt`-сочетания не `KeyBinding`**: `Alt` переводит окно в режим меню
+  раньше маршрутизации. `Alt+←/→/↑`, `Alt+Enter`, `Alt+D`, `Esc` адресной
+  области — в `MainWindow.OnPreviewKeyDown` (туннель впереди режима меню и
+  `InputBindings`); при открытом редакторе имени хоткеи окна молчат —
+  иначе `Esc` снимал бы выделение раньше отмены правки.
+- **Стрелки на границах сетки** — `Core/Layout/GridNavigation`: сетка =
+  один список, свёрнутый в строки; `→` в конце строки — следующая, `↑` в
+  верхней — первый, `↓` в короткую последнюю — её последний; `Shift`
+  тянет через границу, якорь — конец выделения без каретки.
+  Перехватываются только нажатия, на которые WPF отвечает «некуда».
+- **Фокус на самом списке — тупик**: `TryEnterList` — первая стрелка
+  входит сверху или снизу, при выделении — на каретку; `FocusVisualStyle`
+  у `ListGestures` снят; `TakeKeyboardOnClick` — ветки, помечающие нажатие
+  обработанным (лассо, мультивыделение), забирают клавиатуру сами.
+- **Рамка области** — `BorderBrush` контролов (толщина 1, меняется цвет),
+  `OnZoneFocusChanged` на `GotKeyboardFocus` **окна**. `GridSplitter` из
+  обхода убран — размер панелей только мышью.
+- **`Ctrl+1`** — `WindowZones.FolderPane`: раскрыть до открытой папки ту
+  панель, из которой открыли (правило модели на `ZoneEntered` с причиной
   «хоткей»), повтор переключает; не из панели — `_lastFolderPane`. Из
-  соседней панели в ту, что не держит открытую папку, — на её курсор
-  (`HeldRow`, в обе стороны), раскрытие — только если курсора нет.
-  `Ctrl+Shift+E` — то же без переключения; `Ctrl+2` —
-  список. `Tab` в панель без места — на прошлый курсор панели, иначе на
-  первую строку, без навигации.
-- **В панели стрелки двигают курсор, не открывают**: клавиши панели —
-  события модели (`CaretMoveRequested`), открывает клик (`RowClicked`, в
-  том числе по строке курсора), `Enter` (`RowActivated`) и — с настройкой
-  «стрелки открывают» — сама стрелка через троттл. Ключи ловит
-  `List_PreviewKeyDown` панели раньше `KeyBinding` окна. Выделение списка
-  от прихода клавиатуры в панель не снимается — рисуется неактивным;
-  цель — по зоне клавиатуры.
-- **Зачем контролы**: пока три `ItemsControl` жили в окне, каждый режим —
-  правка в четырёх местах. Режим = контейнер и триггер видимости в
+  соседней панели в ту, что не держит открытую папку, — на её курсор (со
+  «стрелки открывают» — и переход), курсора нет — раскрытие открытой
+  папки: `WorkspaceState.HeldRow` читает зону до события — модуль
+  клавиатуры последний. `Ctrl+Shift+E` — без переключения; `Ctrl+2` —
+  список.
+- **В панели стрелки двигают курсор** (`CaretMoveRequested`); открывают
+  клик (`RowClicked`), `Enter` (`RowActivated`) и, с «стрелки
+  открывают», стрелка через троттл. Клавиши ловит `List_PreviewKeyDown`
+  раньше `KeyBinding` окна.
+- **Зачем контролы**: режим = контейнер и триггер видимости в
   `FileListView`, жесты — стиль `ListGestures`; галерея добавилась
   контейнером, окно узнало двумя строками. Полоса фильтра оценок — там же,
   `Dock="Top"`.
+
+### Редактор имени
+
+Один `TextBox` на контрол в adorner-слое `ScrollContentPresenter`
+(`RenameAdorner`); подпись — `x:Name="NameLabel"` (контракт шаблонов); в
+`DataGrid` синхронизируется текущая ячейка. Текст переносится, редактор
+растёт вниз. Клик по пустому месту той же папки применяет правку
+(`CommitRenameOnClickAway`): список помечает такое нажатие обработанным
+ради лассо, и без этого редактор висел бы над снятым выделением. Строка
+вне виртуализации — запасной `PromptDialog`.
 
 ### Цвета — один словарь
 
 `Resources/Palette.xaml` — кисти по тому, **что красят** (поверхности,
 линии, текст, строки, контролы, акцент, метки, меню); влит в `App.xaml`
-первым; `MenuStyles.xaml` вливает сам (грузится отдельно). Code-behind —
-`Resources/Palette.cs`, все поля `static readonly` на одном классе: опечатка
-падает громко на первой отрисовке. Тёмная тема — второй набор тех же
-значений, работает только если больше ничего нет (`Foreground="#888"` в
-вьюхе — светлый угол). Не в словаре намеренно (шапка файла):
-`GalleryPalette` (вычисляется), `*.xshd`, `DefaultBackgroundColor` WebView2
-(бумага документа), обложка книги в `SystemIconProvider` (битмап в
-Platform). Свет 3D-сцены — раздел «Not chrome». Семь градаций серого текста
-унаследованы (TECHDEBT).
+первым; `MenuStyles.xaml` вливает сам. Code-behind — `Resources/Palette.cs`,
+`static readonly` на одном классе: опечатка падает на первой отрисовке.
+Тёмная тема — второй набор тех же значений, если больше ничего нет
+(`Foreground="#888"` во вьюхе — светлый угол). Не в словаре намеренно
+(шапка файла): `GalleryPalette` (вычисляется), `*.xshd`,
+`DefaultBackgroundColor` WebView2, обложка книги в `SystemIconProvider`;
+свет 3D-сцены — раздел «Not chrome». Семь градаций серого текста — TECHDEBT.
 
 ### Подсветка плитки и что шаблону нельзя
 
 Подсветку рисует **контейнер** (`ListBoxItem`) своим `ControlTemplate` по
-property-триггерам: `TileChrome` форма, `TileItem` цвета плиток,
-`GalleryItem` из палитры (в сеттерах триггеров, лениво). Отступ ячейки —
-`Margin` контейнера (из `TileMetrics` ресурсом от `ApplyTileMetrics`):
-контейнер = плитка, а не ячейка, выделенные не сливаются; `Padding` 0.
-Раньше `TileHighlight` — `Border` с семью `DataTrigger` через
-`RelativeSource` в каждой плитке — вторая по цене вещь (R, 2026-09-02).
+property-триггерам: `TileChrome` — форма, `TileItem` — цвета плиток
+(`#E5F3FB` ховер, `#CCE8FF` выделение, `#E8E8E8` без фокуса),
+`GalleryItem` — из палитры (лениво, в сеттерах). Рамка `TileChrome` в 1 px
+входит в высоту ячейки (`ChromeBorder`, и в «Плитке») — иначе подпись
+теряет нижние выносные; у строки «Таблицы» рамки ячейки нет. Отступ —
+`Margin` контейнера (`TileMetrics` ресурсом от `ApplyTileMetrics`):
+контейнер = плитка, выделенные не сливаются; `Padding` 0.
 
-Шаблон оплачивается на каждой навигации × видимые плитки. Запреты (измерены,
-PLAN R2/R3):
-- **Никакого `TextBox`** — редактор один на контрол (`RenameAdorner`),
-  подпись `TextBlock x:Name="NameLabel"` — контракт.
+Шаблон оплачивается на каждой навигации × видимые плитки. Запреты
+(измерены):
+- **Никакого `TextBox`** — редактор один (`RenameAdorner`), подпись
+  `TextBlock x:Name="NameLabel"`.
 - **Никаких `Style.Triggers`** — состояние строки у контейнера, данные —
   конвертер (`TileSecondLineConverter`).
-- **Никаких `RelativeSource`** — размеры `DynamicResource` (переписывает
-  `ApplyTileMetrics`) или наследование (`FontSize` на `ListBox`).
-- **Ничего, что видно у меньшинства, — безусловно**: бейдж оценки — пустой
-  `ContentControl`, `DataTemplate.Trigger` подкладывает `Content` (11 → 9 /
-  13 визуалов).
+- **Никаких `RelativeSource`** — размеры `DynamicResource` или
+  наследование (`FontSize` на `ListBox`).
+- **Видное у меньшинства — не безусловно**: бейдж оценки — пустой
+  `ContentControl`, `DataTemplate.Trigger` подкладывает `Content`.
 
-Нижняя планка — картинка + подпись, 5 визуалов; продуктовые 8–9 против
-18–23. `LAYOUT <вид> container: N visuals` в логе — регресс виден.
+Нижняя планка — картинка + подпись, 5 визуалов; продуктовые 8–9.
+`LAYOUT <вид> container: N visuals` в логе — регресс виден.
 
 ### TileLayout + VirtualizingWrapPanel
 
-WPF не даёт виртуализирующий wrap; `WrapPanel` строит все контейнеры.
-Разделено: **`Core/Layout/TileLayout`** — вся арифметика (колонки, позиция
-N, высота, диапазон реализации, куда доскроллить), неизменяемое значение с
-нуля на проход, `TileLayoutTests`; **`TileMetrics`** — размер ячейки и
-содержимого из настроек, `ForTiles` / `ForLargeIcons`, производные
-(второй кегль) там же, `TileMetricsTests`; **`App/Controls/VirtualizingWrapPanel`**
-— спросить генератор, померить, расставить.
+WPF не даёт виртуализирующий wrap. Разделено: **`Core/Layout/TileLayout`**
+— вся арифметика (колонки, позиция N, высота, диапазон реализации, куда
+доскроллить), неизменяемое значение с нуля на проход, `TileLayoutTests`;
+**`TileMetrics`** — размер ячейки и содержимого из настроек (`ForTiles` /
+`ForLargeIcons`, производные — второй кегль, колонка значка),
+`TileMetricsTests`; **`App/Controls/VirtualizingWrapPanel`** — спросить
+генератор, померить, расставить.
 
-Пять багов, все в арифметике, ни один не ловился в отладчике: (1) колонки
-от размера ячейки с прошлого прохода, расстановка по новому — три колонки с
-шагом на шесть; (2) `ArrangeOverride` при расхождении вьюпорта просил
-measure — цикл; (3) `BringIndexIntoView` дёргал `UpdateLayout()` изнутри
-раскладки; (4) **дребезг размера ячейки** — высота 56,59 / 56,00 по
-положению прокрутки → экстент ±980 px → предел → сдвиг → высота
-(`MaxVerticalOffset` 92207,6 ↔ 93187,0); лечилось подтверждением + полосой
-нечувствительности; (5) **размер ячейки — вход, а не выход** (2026-08-26):
-панель узнавала размер, меряя реализованный контейнер — кольцо «контент →
-геометрия → контейнеры»; ячейки 70×40 (контейнер до значка) и 2:3
-(пропорция фото); `CellSizeProbe` залипал на мусоре. Теперь `TileMetrics` из
-настроек, VM отдаёт одним значением (`Settings.IconsMetrics` /
-`TilesMetrics`), дети меряются **ровно ячейкой**; кругов нет.
+Ловушки арифметики (отладчиком не ловятся): колонки и расстановка — от
+одного прохода; `ArrangeOverride` не просит measure; `BringIndexIntoView`
+не зовёт `UpdateLayout()` изнутри раскладки; размер ячейки не зависит от
+прокрутки; **размер ячейки — вход, а не выход**: `TileMetrics` из настроек
+одним значением (`Settings.IconsMetrics` / `TilesMetrics`), дети меряются
+**ровно ячейкой** — мерить контейнер значит замкнуть кольцо «контент →
+геометрия → контейнеры».
 
-**Якорь при переливе** (2026-09-23). Смещение хранится в пикселях, и при
-другом числе колонок или другой высоте ячейки каждый ряд ниже первого
-уезжает: в глубине папки после `Ctrl+B` на экране не оставалось ни одной
-прежней ячейки. `TileLayout.Reflows(прежняя)` — та же длина, другие
-колонки или высота ячейки (одна высота вьюпорта — не перелив, левый
-верхний угол на месте); `AnchorAt(смещение, клавиатура, выделенные)` —
-ячейка с клавиатурой, если видна хоть частично, иначе первая видимая
-выделенная, иначе первая видимая (как якорь прокрутки браузера);
-`Hold(якорь)` — смещение, при котором она на прежней высоте, своя целиком
-на экране. Исполнитель — `MeasureOverride` между старым и новым
-`TileLayout`, пока дети ещё старого диапазона (не `SizeChanged`: он
-приходит, когда чужие строки уже разложены, и не видит `Ctrl` + колесо).
-Якорь `_anchor` держится весь перелив подряд — туда-обратно даёт то же
-смещение, свежий якорь после первого прохода вернул бы на ряд мимо
-(тест) — и отпускается `SetVerticalOffset`, `OnItemsChanged`, сменой
-выделения, видимости и фокусом на ячейке. С «перечитывание не
-прокручивает» (K-7, L-2) не спорит: срабатывает только на геометрию и
-не тянет в поле невидимое.
+**Якорь при переливе.** Смещение в пикселях, и при другом числе колонок
+или высоте ячейки ряды ниже первого уезжают. `TileLayout.Reflows(прежняя)`
+— та же длина, другие колонки или высота (одна высота вьюпорта — не
+перелив); `AnchorAt(смещение, клавиатура, выделенные)` — ячейка с
+клавиатурой, если видна, иначе первая видимая выделенная, иначе первая
+видимая; `Hold(якорь)` — смещение, при котором она на прежней высоте.
+Исполнитель — `MeasureOverride` между старым и новым `TileLayout`, пока
+дети старого диапазона (не `SizeChanged`: поздно и не видит `Ctrl` +
+колесо). `_anchor` держится весь перелив подряд (туда-обратно — то же
+смещение, тест) и отпускается `SetVerticalOffset`, `OnItemsChanged`,
+сменой выделения, видимости и фокусом на ячейке. Срабатывает только на
+геометрию.
 
-Одно исключение из «дети меряются ровно ячейкой» (2026-09-03):
-**единственная выделенная** ячейка меряется с бесконечной высотой и
-расставляется на ту, которая получилась (`MeasureChild` / `IsExpanding`), —
-её подпись снимает потолок и показывает имя целиком. Должна расти вниз
-поверх соседей (`ZIndex` из `ArrangeOverride`), а не раздвигать их:
-раскладка по-прежнему считается от размера ячейки, поэтому сетка не
-переливается. При двух и больше выделенных не растёт никто: выросшие соседи
-по вертикали закрывали бы друг другу подписи. **Незакрытое:** на стенде
-`ZIndex` кладёт выросшую ячейку поверх (проверено растеризатором и
-`PrintWindow`), в живом окне сосед всё равно сверху — стенд разницу не
-воспроизводит, чинить в живом окне (BACKLOG, «Интерфейс»).
+Исключение из «ровно ячейкой»: **единственная выделенная** меряется с
+бесконечной высотой (`MeasureChild` / `IsExpanding`) — подпись показывает
+имя целиком, ячейка растёт вниз поверх соседей (`ZIndex` из
+`ArrangeOverride`), сетка не переливается; при двух и больше не растёт
+никто. **Незакрытое:** на стенде `ZIndex` кладёт ячейку поверх
+(растеризатор и `PrintWindow`), в живом окне сосед сверху (BACKLOG,
+«Интерфейс»). Две неочевидности: потолок подписи вешает **триггер «не
+выделен»** — `DynamicResource` в шаблоне ложится значением на элемент и
+обходит триггер по приоритету; панель **сама подписана на
+`SelectionChanged` владельца** и инвалидирует себя — контейнер с тем же
+constraint отдаёт прежний `DesiredSize`, и WPF не помечает панель
+грязной (стенд, QA.md «что можно проверить без окна»: 159 px до, 173,84
+после).
 
-Двух вещей это стоило, и обе неочевидны:
-
-- потолок подписи вешает **триггер «не выделен»**, а не атрибут в шаблоне:
-  `DynamicResource` в шаблоне ложится значением на сам элемент и обходит
-  триггер шаблона по приоритету, так что снять его триггером невозможно
-  (первая версия так и не работала — многоточие уходило, высота
-  оставалась);
-- панель **сама подписывается на `SelectionChanged` владельца** и
-  инвалидирует себя. Иначе её никто не разбудит: контейнер, чей constraint
-  не изменился, возвращает прежний `DesiredSize` (обрезанный ячейкой), WPF
-  не видит, что распространять, и панель не помечается грязной — подпись
-  снимала потолок, её собственный `DesiredSize` рос, а контейнер оставался
-  ростом в ячейку. Замерено на стенде (QA.md, «что можно проверить без
-  окна»): 159 px до инвалидации, 173,84 после.
-
-Инвариант тестом: `ExtentWidth` не превышает вьюпорт при колонках > 1.
-Панель не хранит производного состояния. Харнесс: настоящие `FileListView` и
-`MainViewModel`, окно за экраном, подменённый `IAppStateStore`, сторожевой
-поток считает проходы (5000 файлов: прыжок в конец 1396 проходов и
-продолжал → 5; 300 файлов: 0 в простое, 8–14 на щелчок колеса против 40 и
-384).
+Инвариант тестом: `ExtentWidth` не шире вьюпорта при колонках > 1.
+Производного состояния панель не хранит. Харнесс: настоящие
+`FileListView` и `MainViewModel` за экраном, сторожевой поток считает
+проходы (300 файлов: 0 в простое, 8–14 на щелчок колеса).
 
 **Скроллер свой у каждого вида**: плиточные — горизонтальная `Disabled`,
 вертикальная `Auto`; `Details` — `Auto` / `Auto`. Автополоса — ловушка
-(`ColumnWidth`): `ScrollViewer` меряет во всю ширину, потом на ширину минус
-полоса, wrap законно хочет полосу при одной и не хочет при другой →
-бесконечная гонка; колонки считаются по ширине с вычтенной полосой, если
-содержимое её потребует (54 ячейки — 0 проходов, полосы нет; 60 — полоса,
-восемь колонок, 0 проходов).
+(`ColumnWidth`): `ScrollViewer` меряет с полосой и без, wrap хочет её при
+одной ширине и не хочет при другой — вечная гонка; колонки считаются по
+ширине с вычтенной полосой, если содержимое её потребует.
 
 **Recycling** (`VirtualizationMode.Recycling` + `generator.Recycle`):
-`layout.realise` 260–400 мс/с и подвисания 300–450 → 5–10 мс на пачку.
-Рамка выделения видит только реализованные (автоскролла нет).
+`layout.realise` 260–400 мс/с → 5–10 мс на пачку. Рамка выделения видит
+только реализованные.
 
 ### Вид, которого не видно, не строит ничего
 
-Четыре вида на одной `Entries`; `Reset` пачкает измерение всех панелей,
-`Collapsed` предка менеджеру раскладки не указ — каждая навигация
-реализовывала папку трижды (`COUNT layout.new: 96 in 3 passes`). Свои
-панели: при `owner.IsVisible == false` `MeasureOverride` только перемеряет
-существующих детей (грязный ребёнок, которого не мерят, держит очередь
-грязной вечно) и сбрасывает маркеры; `IsVisibleChanged` инвалидирует.
-`DataGrid`: `FileListView.ApplyViewAttachment` отвязывает `ItemsSource`,
-пока не на экране; порядок — сначала отвязать, потом привязать (уходящий
-вид сообщает пустое выделение); `SelectedItem` гасится **до** строк двумя
-шагами (таблица — `ClearBinding`, плиточные — локальный `null` поверх стиля
-`TilePanel`); многовыделение снимается до и ставится обратно. Цена — одна
-заминка на смену вида; прокрутка таблицы не переживает.
+Четыре вида на одной `Entries`; `Reset` пачкает измерение всех панелей, а
+`Collapsed` предка менеджеру раскладки не указ — навигация реализовывала
+папку трижды (`COUNT layout.new: 96 in 3 passes`). Свои панели: при
+`owner.IsVisible == false` `MeasureOverride` только перемеряет детей
+(немеренный грязный ребёнок держит очередь вечно) и сбрасывает маркеры;
+`IsVisibleChanged` инвалидирует. `DataGrid`:
+`FileListView.ApplyViewAttachment` отвязывает `ItemsSource`, пока не на
+экране; сначала отвязать, потом привязать (уходящий вид сообщает пустое
+выделение); `SelectedItem` гасится **до** строк (таблица —
+`ClearBinding`, плиточные — локальный `null` поверх стиля `TilePanel`);
+многовыделение снимается и ставится обратно. Цена — одна заминка на
+смену вида; прокрутка таблицы не переживает.
 
 ### Что на экране — читается первым
 
-Шлюз `AsyncIcon._gate` на четыре загрузки. Семафор отдаёт в порядке
-обращения = создания контейнеров, не видимости (таблица держит страницу
-над и под, дерево — каждый узел). С `AppSettings.VisibleFirstLoading`
-(зеркало `AsyncIcon.VisibleFirst`) — `IconLoadGate` с двумя очередями:
-значок в окне своего `ScrollViewer` обгоняет; где значок — известно после
-раскладки, запрос откладывается до `DispatcherPriority.Loaded`. Без
-настройки всё срочное. `FirstScreenWatch`: часы с `RefreshFolderAsync`, вью
-после раскладки отдаёт значки реализованных строк в окне, ждёт
-`AsyncIcon.Painted`; `abandoned` при уходе; уехавший из дерева выбывает.
+Шлюз `AsyncIcon._gate` на четыре загрузки отдаёт в порядке создания
+контейнеров, не видимости. С `AppSettings.VisibleFirstLoading` (зеркало
+`AsyncIcon.VisibleFirst`) — `IconLoadGate` с двумя очередями: значок в
+окне своего `ScrollViewer` обгоняет; место известно после раскладки —
+запрос ждёт `DispatcherPriority.Loaded`. `FirstScreenWatch`: часы с
+`RefreshFolderAsync`, вью отдаёт значки реализованных строк в окне, ждёт
+`AsyncIcon.Painted`; `abandoned` при уходе.
 
 ## Замеры производительности
 
-`PerfLog.Measure("имя")` суммирует в секундные окна, в лог только > 100 мс
-суммарно или > 33 мс за вызов; цена — два таймстампа и словарь под локом.
-`PERF layout.realise: 202 ms in 9 calls, worst 38,4 ms`.
+`PerfLog.Measure("имя")` суммирует в секундные окна, в лог — > 100 мс
+суммарно или > 33 мс за вызов; цена — два таймстампа и словарь под
+локом: `PERF layout.realise: 202 ms in 9 calls, worst 38,4 ms`.
 
 | Имя | Что |
 |---|---|
@@ -2120,130 +1740,123 @@ measure — цикл; (3) `BringIndexIntoView` дёргал `UpdateLayout()` и�
 | `layout.arrange` | `ArrangeOverride` |
 | `icon.decode-ui` | декод миниатюры, только если нет в `IconImageCache` |
 | `list.apply` | листинг заезжает в `Entries` |
+| `ui.selection-apply` | выделение модели ложится в список |
 | `ui.stall` | UI не отвечал (снаружи) |
 | `bg.*` | фон: `bg.icon-load`, внутри `bg.thumb-disk` / `-shell` / `-disk-write` |
 
-`bg.` — не UI-поток, законно > 1 с/с; показывает, как долго едут миниатюры.
-`Startup: first frame N ms` — `MainWindow.OnFirstFrame` на
-`ContentRendered` от старта процесса (`Loaded` на ~900 мс раньше).
-`UiStallWatch` — фоновый поток раз в 200 мс просит диспетчер
+`bg.` — не UI-поток, законно > 1 с/с. Всегда включены `PerfCounters`
+(`COUNT layout.new / reused / kept / discard`,
+`LAYOUT <вид> container: N visuals`), `FirstScreenWatch`
+(`First screen painted in N ms: K icons, M awaited` / `abandoned`),
+`Folder listed in N ms` от 300 мс. `Startup: first frame N ms` —
+`MainWindow.OnFirstFrame` на `ContentRendered` (`Loaded` на ~900 мс
+раньше). `UiStallWatch` — поток раз в 200 мс просит диспетчер
 (`DispatcherPriority.Input`), ждёт > 150 мс → `ui.stall`; тот же heartbeat
 закрывает окно `PerfLog`, флашит `PerfCounters` и дёргает `SystemVitals`.
+Точки замеров — PERFORMANCE.md.
 
-`SystemVitals` (`App/Diagnostics/`) — раз в 5 с и на каждый `ui.stall` одна
-строка о процессе:
+`SystemVitals` (`App/Diagnostics/`) — раз в 5 с и на каждый `ui.stall`:
 
 ```
 SYS ws=431 private=360 gen=167/155/134 alloc=+45 loh=6 handles=1060 threads=40 cpu=8,0
 ```
 
-МБ, счётчики `GC.CollectionCount` нарастающим итогом, `alloc` — прирост с
-прошлой строки (`GC.GetTotalAllocatedBytes`), `loh` —
-`GetGCMemoryInfo().GenerationInfo[3]`, `cpu` — доля одного ядра в %
-(`TotalProcessorTime` / стена / `ProcessorCount`). `Process` берётся один
-раз (`GetCurrentProcess` открывает хэндл на каждый вызов), `Refresh()`
-перед чтением. Одна строка сама по себе не значит ничего; смысл — форма за
-сессию: растущий `ws`, невозвращающиеся `handles`, `gen2` на каждую папку.
-Это то, ради чего существует сценарий `soak`.
+МБ; `GC.CollectionCount` нарастающим итогом; `alloc` — прирост
+(`GC.GetTotalAllocatedBytes`); `loh` — `GetGCMemoryInfo().GenerationInfo[3]`;
+`cpu` — доля ядра (`TotalProcessorTime` / стена / `ProcessorCount`);
+`gcpause` — мс остановки сборщиком с прошлой строки (сборки почти все
+полные — подвисание видно только по паузе). `Process` берётся один раз,
+`Refresh()` перед чтением. Смысл — форма за сессию (растущий `ws`,
+невозвращающиеся `handles`, `gen2` на каждую папку): ради неё сценарий
+`soak`; в отчёте харнесса — секция `SYS` (последние пять).
 
 ## Отзывчивость: приоритеты
 
-«Всё асинхронно» ≠ «не мешает»: континуации `await` и `BeginInvoke` на
-`Normal`, ввод на `Input` — **ниже**; поток результатов заслоняет клики.
+«Всё асинхронно» ≠ «не мешает»: континуации `await` и `BeginInvoke` — на
+`Normal`, ввод — на `Input`, **ниже**; поток результатов заслоняет клики.
 
-- **Результат фона приземляется ниже ввода, в два яруса**: листинг
-  (`RefreshFolderAsync` делает `Dispatcher.Yield(Background)` перед
-  очисткой и `PublishRows`) на `Background`, миниатюры (Medium / Large) на
-  `ContextIdle`. Один ярус — FIFO: старые строки стояли, пока не долетят
-  сотни их миниатюр. Устаревшее отбрасывают токен и эпоха.
-- **Лёгкие иконки** (Small / Normal: дерево, закладки, таблица) — на
-  `Normal`, кешированные синхронно (`AsyncIcon.IsLightweight`).
-- **Синхронный путь навигации не трогает диск**: `NavigateTo` не проверяет
-  путь; `NavigationSource.Address` проверяется в фоне с гардом «уже ушёл»;
-  ретаргет вотчера на пуле по поколению; `state.json` по дебаунсу
-  (`_stateSaveTimer` 500 мс) с флашем из `OnClosing`.
-- **Очистка при входе — ниже ввода и не всегда**: строки покидаемой папки
-  убираются (контекст переключается сразу), но не внутри клика — демонтаж
-  на `Background` после отрисовки перехода; листинг уже пришёл — очистка
-  пропускается, один своп; медленная — очистка сразу и спиннер. Порядок
-  держится очередью `Background`.
-- **Остальной диск на пуле**: уровни панелей и корни дисков
-  (`ReadBranch` модели окна; ответ с эпохой, сверка — правилом),
+- **Результат фона — ниже ввода, в два яруса**: листинг
+  (`RefreshFolderAsync`: `Dispatcher.Yield(Background)` перед очисткой и
+  `PublishRows`) на `Background`, миниатюры (Medium / Large) на
+  `ContextIdle` — в одном ярусе старые строки стояли, пока долетят сотни
+  миниатюр. Устаревшее отбрасывают токен и эпоха. Лёгкие иконки (Small /
+  Normal) — на `Normal`, кешированные синхронно
+  (`AsyncIcon.IsLightweight`).
+- **Синхронный путь навигации не трогает диск**: `NavigateTo` путь не
+  проверяет, `NavigationSource.Address` проверяется в фоне с гардом «уже
+  ушёл»; ретаргет вотчера — на пуле по поколению; `state.json` — дебаунс
+  `_stateSaveTimer` 500 мс с флашем из `OnClosing`.
+- **Очистка при входе — не внутри клика**: демонтаж на `Background` после
+  отрисовки перехода; листинг уже пришёл — один своп; медленная папка —
+  очистка сразу и спиннер.
+- **Остальной диск на пуле** (O10): уровни панелей (`ReadBranch`),
   `PruneMissingAsync`, `OpenStartFolderAsync`, открытие файла для панели,
-  размер кэша.
-- **Клавиатура панели коалесируется** (`TreeNavThrottle`: одиночное
-  нажатие — сразу, серия на хвосте перехода — один переход после покоя,
-  таймер — исполнителя); навигация в уже открытую папку гасится правилом.
-- **Шевроны оптимистичные**: строка с шевроном, пока проба фоном
-  (`ProbeChevrons`) не скажет, что подпапок нет.
+  размер кэша. Чтение папки обрывается по токену между элементами
+  (`IFileSystem.Enumerate`, `IShellNamespace.Enumerate`; корзина — 2 мс
+  после отмены); дерево и панель просмотра токен не передают.
+- **Клавиатура панели коалесируется** (`TreeNavThrottle`: одиночное —
+  сразу, серия — один переход после покоя); навигация в открытую папку
+  гасится правилом. **Шевроны оптимистичные** до пробы `ProbeChevrons`.
 - **Иконки**: `SHGetFileInfo` сериализован (`_shellIconLock` — под
-  конкуренцией возвращал пусто для handler-иконок, жертва менялась);
-  негативный кэш `_missing` только для миниатюр (у Small / Normal null —
-  сбой); `Unloaded` поднимает поколение — загрузка снесённого контейнера
-  отступает у шлюза и декодера, вернувшийся (recycling) переспрашивает по
-  `Loaded`; ретрай через секунду (панели строят строки раз за сессию);
-  провал — `[icon-diag]`, > 1 с — `slow shell load`.
+  конкуренцией отдавал пусто для handler-иконок); негативный кэш
+  `_missing` — только у миниатюр; `Unloaded` поднимает поколение —
+  загрузка снесённого контейнера отступает, вернувшийся (recycling)
+  переспрашивает по `Loaded`; ретрай через секунду; провал —
+  `[icon-diag]`, > 1 с — `slow shell load`.
+- **Закрытие**: `Hide()` до освобождения COM — ~1,4 с доумирает невидимо.
 
 ### Таймеры: троттл решения, а не место решения
 
-(O6, категория 5.) Таймер — только разредить события. Обязательно:
-**решение отделимо** (метод зовётся напрямую: `RunNow()`, `FlushState()`,
-`Finish` флашит); **тик идемпотентен** (`Flush` при чистом `_dirty` выходит,
-`DecideWatchTick` без изменений — `Idle`) — потому таймер повторяющийся;
-**останавливает себя и не теряет накопленное под занятостью** (`Idle` /
-`Hold`; дебаунсы гасят себя первой строкой). Инвентарь 2026-09-01: сторож
+Таймер только прореживает события. Обязательно: **решение отделимо**
+(зовётся напрямую: `RunNow()`, `FlushState()`, `Finish` флашит); **тик
+идемпотентен** (`Flush` при чистом `_dirty` выходит, `DecideWatchTick`
+без изменений — `Idle`), поэтому таймер повторяющийся; **гасит себя и не
+теряет накопленное под занятостью** (`Idle` / `Hold`). Инвентарь: сторож
 500 мс, флаш результатов 200, автозапуск поиска 400, `state.json` 500,
-клавиатура дерева 90. Часы воспроизведения (`GifImage`, `_videoTimer`)
-тикают, пока показ, гасятся на `Unloaded` / `ResetVideoTransport`.
-«Дебаунса панели просмотра» нет — защита поколением через отмену.
-Абстракции часов нет и не заводится: таймеры в App, тесты не достают.
+клавиатура дерева 90; часы воспроизведения (`GifImage`, `_videoTimer`) —
+пока показ, гасятся на `Unloaded` / `ResetVideoTransport`. Дебаунса
+панели просмотра нет — поколение через отмену. Абстракции часов нет:
+таймеры в App, тесты не достают.
 
 ## Preview pane
 
 `PreviewController` (App) — конвейер с отменой и спиннером. `PreviewPane`
-берёт контроллер **своим `DataContext`** (2026-09-15; раньше — окно, и
-биндинги шли через `Preview.*`): всё, что панели нужно от хозяина, —
-свойства контроллера (`ContentPalette` кладёт `MainViewModel.PushPalette`),
-события наружу — `RatingRequested`, `RevealRequested`. Поэтому панель
-живёт вторым экземпляром: `MainViewModel.PreviewSecond` (`ShowFooter =
-false`, `ShowPictureBar = true`; `ShowRawDecode` зеркалится с первой) +
-второй `PreviewPane`, созданный при первой паре
-(`MainWindow.ApplyPreviewSplit`) и вложенный в первый
-(`PreviewPane.ShowSecond`, 2026-09-17); футер первой — под обеими и про
-выделение: сводка, хелперы, RAW. Звёзды, балл резкости и гистограмма в
-сплите — у каждой половины на её полосе снимка (2026-09-24):
-`IsPreviewSplit` включает `ShowPictureBar` и первой, футер свои тогда
-прячет (стили `FooterRating`, `FooterHistogram`, `FooterSharpness`), клик
-по звезде половины — про её файл (`ApplyRatingFromPane(wholeSelection:
-false)`).
-Стопкой или рядом — `SplitOrientation.Stacked` (Core, тест, 2026-09-23):
-сумма площадей двух вписанных кадров в обоих раскладах по месту над
-футером (`PreviewPane.PairArea`) и формам кадров; стопкой ⇔ примерно
-a₁·a₂ > r². Форма — из заголовков (`PictureLoader.ShapeOf`: EXIF-размеры
-или WIC, встроенный JPEG у RAW, поворот 5–8), читается на пуле до показа
-сплита (`MainViewModel.ShowPair`, ждёт до 150 мс; вторая половина скрытой
-не грузится, так что встаёт сразу нужным боком); неизвестная форма —
-квадрат, то есть прежнее правило «стопкой, пока место выше, чем шире».
-Сплит на экране переворачивается, только когда другой расклад крупнее в
-`TurnAbove` = 1,1 раза — сплиттер и новая пара его не дёргают. То же
-правило — в `CompareWindow` для двух картинок (две строки заголовков,
-`Arrange`), формы — до открытия окна; тексты там всегда рядом. Зум
-удержанием синхронный: `PreviewPane.Link(a, b)` связывает две панели через
-`ZoomLink` (Core, тест) — ведущая отдаёт точку долями области, вторая
-повторяет её (`FollowZoom`, без захвата мыши); с зажатой правой кнопкой
-вторая стоит, а сдвиг между ними запоминается — так совмещают кадры со
-сдвигом (2026-09-24); конец зума уходит всегда; `Reset` — новая пара (в
-сплите панели — `PreviewPairShapes`, на полном экране — новый правый
-снимок). Пара — чистое правило
-`PreviewPair.Of(выделение, листинг)` (Core, тест): ровно два файла, оба с
-маршрутом, порядок — по списку. Какой файл панель показывает при
-множественном выделении — `ActiveEntry`: каретка (`CaretPath`, её ставит
-список на клик и фокус), если она внутри выделения, — то есть файл,
-добавленный `Ctrl`+кликом последним; `SelectedItem` WPF остаётся на
-первом выделенном и показывал бы не то. `RefreshPreviewPrimary` зовётся
-из трёх сеттеров (`SelectedEntry`, `SelectedEntries`, `CaretPath`) —
-список сообщает их в произвольном порядке; в паре главный — верхний
-(`PrimaryForPane`). `PreviewKind`:
+берёт контроллер **своим `DataContext`**: всё, что панели нужно от
+хозяина, — свойства контроллера (`ContentPalette` кладёт
+`MainViewModel.PushPalette`), наружу — события `RatingRequested`,
+`RevealRequested`. Поэтому панель живёт и вторым экземпляром: половина
+сплита, «Сравнить», полный экран.
+
+- **Сплит.** `MainViewModel.PreviewSecond` (`ShowFooter = false`,
+  `ShowPictureBar = true`; `ShowRawDecode` зеркалится) + второй
+  `PreviewPane`, созданный при первой паре (`MainWindow.ApplyPreviewSplit`)
+  и вложенный в первый (`PreviewPane.ShowSecond`). Футер первой — под
+  обеими и про выделение; звёзды, балл и гистограмма — на полосе снимка
+  каждой половины: `IsPreviewSplit` включает `ShowPictureBar` и первой, её
+  футер свои прячет (`FooterRating`, `FooterHistogram`, `FooterSharpness`),
+  звезда половины — про её файл
+  (`ApplyRatingFromPane(wholeSelection: false)`).
+- **Стопкой или рядом** — `SplitOrientation.Stacked` (Core, тест): сумма
+  площадей двух вписанных кадров в обоих раскладах по месту над футером
+  (`PreviewPane.PairArea`); стопкой ⇔ примерно a₁·a₂ > r². Формы — из
+  заголовков (`PictureLoader.ShapeOf`: EXIF или WIC, встроенный JPEG у RAW,
+  поворот 5–8), на пуле до показа (`MainViewModel.ShowPair`, до 150 мс);
+  неизвестная — квадрат. Переворот — только когда другой расклад крупнее в
+  `TurnAbove` = 1,1 раза. То же правило у `CompareWindow` (`Arrange`).
+- **Зум синхронный**: `PreviewPane.Link(a, b)` через `ZoomLink` (Core,
+  тест) — ведущая отдаёт точку долями области, вторая повторяет
+  (`FollowZoom`, без захвата мыши); с зажатой правой вторая стоит, сдвиг
+  запоминается; `Reset` — новая пара (`PreviewPairShapes` в сплите, новый
+  правый снимок на полном экране).
+- **Что показывать.** Пара — `PreviewPair.Of(выделение, листинг)` (Core,
+  тест): ровно два файла с маршрутом, порядок по списку. Один из
+  нескольких — `PreviewSubject.Of(цель, каретка, листинг)` (Core, тест):
+  `Primary` — каретка, если она в выделении (`SelectedItem` WPF стоит на
+  первом выделенном), в паре — верхний. `RefreshPreviewPrimary` зовётся
+  на каждую смену строк, главной и каретки — список сообщает их в любом
+  порядке. Сводка по нескольким — `ShotSummary` (Core): одно
+  значение, два-три через запятую, больше — поле не пишется; EXIF у первых
+  ста; `ShotSummary.CameraName` убирает двойную марку.
 
 | Kind | Чем |
 |---|---|
@@ -2254,758 +1867,627 @@ a₁·a₂ > r². Форма — из заголовков (`PictureLoader.Shape
 | `Text` | `TextBox`; документ текстом — с переносом (`TextWrap`) |
 | `Code` | AvalonEdit |
 | `Document` | `RichTextBox` (RTF) |
-| `Web` | WebView2 — PDF / HTML / MHTML / Markdown / FB2 |
+| `Web` | WebView2 — PDF / HTML / MHTML / Markdown / FB2 / SVG |
 | `Model` | `Viewport3D` — STL / OBJ / glTF / GLB |
 | `Folder` | перепись + блок тома на корне |
 | `Executable` | карточка программы: значок, строки `ExecutableCard` |
 
-- `Audio` и `Video` делят `MediaUri` и транспорт (второй — копия автомата).
-  Проигрыватель разный обязательно: `MediaElement` работает, пока его
-  рисуют; без площади открывает файл и стоит на нуле (200×120 играет, 1×1
-  молчит). Выбор по `Kind` — контроллер ставит `Kind` **до** `MediaUri`.
-- Фон — `MainViewModel.ContentPalette`, не `Settings.GalleryPalette`
-  (затемнение — свойство галереи; таблица светлая — панель тоже). Подписи
-  `Foreground` / `Dim` **считаются от фона по контрасту** (фиксированная
-  пара на среднем сером давала 2.2:1). Ловушка: путь `DataContext.ContentPalette.…`
-  — `RelativeSource` возвращает элемент, без `DataContext.` биндинг молча
-  не находит и подпись остаётся чёрной; ловится
-  `PresentationTraceSources.DataBindingSource`. Текст, код, документы —
-  светлые (страницы).
-- Строка оценки **вне** блока спутников: `OfferRating` предлагает и файлу
-  без сайдкара.
-- **Полоса снимка** (`PreviewController.ShowPictureBar`, 2026-09-24) — в
-  `ContentArea` панели, левый нижний угол; звёзды, свотчи, хелперы и
-  гистограмма — те же шаблоны, что в футере (`RatingControls`,
-  `HelperSwitches`, `HistogramChart`), балл резкости внутри полосы,
-  гистограмма рядом. Приглушение — код панели (`ReachBar` / `UpdateBar`):
-  30 %, пока мышь не в нижних `BarReach` = 96 px и не пришёл
-  `PreviewController.RatingChanged` (тот же файл, другая оценка —
-  `NoteRatingShown`; держит 1,5 с); переход 60 мс; на время зума полоса
-  прозрачна.
-- **Полный экран** (`Views/FullscreenWindow`): что показать —
+- **`PreviewRouter`** (Core, `PreviewRouterTests`) — «расширение →
+  `PreviewRoute`», без диска; `Route` (каким загрузчиком) ≠ `Kind` (каким
+  контролом). Таблица — **порядок правил**, побеждает первое: `.webp` —
+  картинка и многокадровый контейнер, `.mtl` — текст, `.svg` рисуется, а
+  для действий остаётся текстом (`TextLike`).
+- **Медиа.** `Audio` и `Video` делят `MediaUri` и транспорт; проигрыватель
+  разный обязательно: `MediaElement` без площади открывает файл и стоит на
+  нуле (200×120 играет, 1×1 молчит). Контроллер ставит `Kind` **до**
+  `MediaUri`. `RestartMedia` (повтор и второе нажатие кнопки): файл
+  объявил длительность — `Position = 0; Play()`, нет — только `Close()` +
+  `Open()` (стенд `MediaPlayer`); пустой кадр переоткрытия закрывает снимок
+  последнего кадра (`HoldLastFrame`, `VideoHold`, элемент держит размер
+  через `MinWidth` / `MinHeight`) до первого тика со сдвигом. «Доиграл» —
+  флаг, не позиция: движок сам отматывает на ноль. `PlaybackClock`: повтор
+  по умолчанию для роликов короче 3 с и без длительности
+  (`LoopsByDefault`, не для звука), «позиция стоит секунду» = доиграли;
+  `Timecode` — длительность вверх, без объявленной — самая дальняя позиция.
+- **Фон** — `MainViewModel.ContentPalette` (палитра области файлов), не
+  `Settings.GalleryPalette`. `Foreground` / `Dim` **считаются от фона по
+  контрасту** (фиксированная пара на сером давала 2.2:1). Ловушка: путь
+  `DataContext.ContentPalette.…` — без `DataContext.` биндинг через
+  `RelativeSource` молча не находит (ловится
+  `PresentationTraceSources.DataBindingSource`). Текст, код, документы —
+  светлые.
+- **Оценка**: строка вне блока спутников — `OfferRating` предлагает и
+  файлу без сайдкара; полоса — у всего, у чего `HasRating`.
+- **Полоса снимка** (`PreviewController.ShowPictureBar`) — в
+  `ContentArea`, левый нижний угол; шаблоны футера (`RatingControls`,
+  `HelperSwitches`, `HistogramChart`). Приглушение — `ReachBar` /
+  `UpdateBar`: 30 %, пока мышь не в нижних `BarReach` = 96 px и не пришёл
+  `RatingChanged` (`NoteRatingShown`, 1,5 с); переход 60 мс; на зуме
+  прозрачна. Кнопки хелперов, **RAW** и `</>` — на строке звёзд в
+  `WrapPanel`.
+- **Полный экран** (`Views/FullscreenWindow`): план —
   `FullscreenPlan.Of(выделение, листинг, каретка)`, шаг —
   `PictureWalk.Step` (оба Core, тест; `stood` — место снимка, скрытого
-  фильтром, `skip` — левый снимок для правого). Каждая панель — свой
-  контроллер из `MainViewModel.NewPictureViewer` (звёзды — в свой файл;
-  хелперы, фон и RAW общие); при закрытии `Detach` отписывает его от
-  `ReviewHelpers` — иначе контроллер жил бы с кэшем кадров. Пара всегда
-  рядом: `←` / `→` — какая сторона остаётся; «оставить правую» меняет роли
-  панелей (`KeepSide`), а не грузит правый снимок в левую — иначе на кадр
-  виден левый во весь экран. Панель прозрачна, пока её контроллер ничего
-  не показывает (`Kind` None и не `IsLoading`), а `IsPlaceholderVisible`
-  молчит, пока у файла идёт первая загрузка: первое декодирование не
-  показывает «выберите файл». Полоса снимка спрятана (`BarAtRest` = 0),
-  пока мышь не у нижнего края или не нажата клавиша оценки (`FlashBar`);
-  у пары полосы ходят вместе (`BarReached` ↔ `ReachBarWith`). `Delete` /
-  `Shift` + `Delete` (2026-09-25) — `MainViewModel.DeletePictureAsync`, тот
-  же `DeleteAsync`, что у списка (вопрос по настройке, спутники, корзина,
-  `Ctrl` + `Z`; в корзине и архиве — ничего), про снимок, который оценила бы
-  цифра (`KeyTarget`); автоповтор не удаляет подряд. Один на экране — шаг
-  на следующий, с последнего — на предыдущий, не осталось — окно
-  закрывается; из пары — второй остаётся один, как `←` / `→`. Картинки
-  декодируются целиком в память (`OnLoad`), файл не держат — отпускать
-  контроллеры перед удалением не нужно. Курсор прячется через
-  `CursorIdleMs` = 1,5 с неподвижной мыши (`ForceCursor` + `Cursors.None`,
-  перекрывает лупу панели), возвращается движением; синтетический
-  `MouseMove` без сдвига (картинка сменилась под стоящей мышью) не будит.
-  `Ctrl` + `Z` — `UndoCommand` окна из `OnPreviewKeyDown`; `Alt` + `Space` и `F10`
-  (`Key.System`) гасятся, как одиночный `Alt`; `Z` — `PreviewPane.ToggleZoom`
-  (`_zoomPinned`, `ZoomMove.Pinned` ведёт вторую половину). Предупреждение
-  и ошибка `MainViewModel.Say` приходят событием `StatusSaid` и стоят
-  плашкой 4 с — строка состояния под окном не видна. Строки после оценки
-  берутся заново
-  (`RatingsController.FindInSource` — находит и скрытую фильтром) по
-  `Entries.CollectionChanged` и `Ratings.CompanionsChanged`: строка, которая
-  была скрыта фильтром и скрытой осталась, список не меняет. Окно
-  закрывается на KeyDown, и автоповтор держащей клавиши уходит в главное:
-  `Enter` / `Space` в галерее и `Esc` в списке с `IsRepeat` ничего не
-  делают — иначе окно открывалось бы снова, а выделение пары снималось.
-- **Отступ картинки** — `PreviewPane.PictureMargin` (DP, 4 px, на полном
-  экране 0): на него смотрят `ImgFit`, `ImgOverlay`, `GifPreview`, размер
-  декода (`ReportViewport`) и зум (`UpdateZoomPosition`, ось без прокрутки).
-  Картинка стоит посередине по обеим осям (2026-09-25; до того — у верхнего
-  края): лупа на оси, которую не прокручивает, ставит кадр так же, `(hh -
-  srcH) / 2`, иначе нажатие сдвигало бы его.
-- **Декод под поле и соседи** (AK, 2026-09-22). Поле — `SetViewport`:
-  место под картинку минус отступ, в пикселях устройства, с шагом
-  `BoxStep` = 64. `PictureLoader.Decode` (App, на пуле): JPEG и встроенный
-  JPEG у RAW — под поле (`PictureFit.DecodeWidth`, Core, тест: от 95 % поля
-  — целиком; масштаб в DCT), остальное целиком; выход — `DecodedPicture`
-  (вписанный кадр, натуральный размер, кадр камеры, встроенный JPEG, признак
-  «уменьшен»). Поле выросло мимо кадра — перерез через `BoxSettleMs` = 300
-  (`PictureFit.TooSmall`). `PictureCache` — три кадра и байты
-  (`SizedCache` над `MemoryShare`, Core: доля кадров в бюджете
-  `PictureMemory`, общая на все панели; показанный и греющиеся соседи —
-  `Keep`; `Fits` решает, декодировать ли соседа — размер по заголовку,
-  `PictureLoader.DecodedBytes`), UI-поток, ключ путь + время + размер +
-  поле; спрятанная панель и `Detach` отдают кадры; соседи —
-  `PreviewNeighbors.Of` (Core, тест: выше и ниже, только картинки, первым —
-  по направлению движения), по одному после показа (`DecodeNeighborsAsync`,
-  отмена вместе с загрузкой, но законченный декод кладётся в кэш и при
-  отмене — выделение могло прийти на него же) и только для кадра из своей
-  строки: цель ярлыка и копия записи архива декодируются
-  каждый раз, а соседи записи — пути внутри архива. Серия — смена чаще
-  `BurstMs` = 150: промах кэша ждёт `BurstDelayMs` = 90 и переспрашивает
-  кэш. `preview.shown` — от смены выделения до показа, раз на смену
-  (`_shownMeasured`): перерез, RAW, показ панели и смена при спрятанной
-  панели — не смена. Первый размер панели ждётся до `BoxWaitMs` = 500
-  (`_boxKnown`, блок 8): вторая половина сплита и полный экран не
-  декодируют кадр целиком.
-- **DPI** (AM, 2026-09-22): `BitmapPixelSizeConverter` —
-  `IMultiValueConverter`, пиксели картинки ÷ `PreviewPane.DpiScale`
-  (обновляется на `Loaded` и `OnDpiChanged`) для `ImgFit`, `GifPreview`,
-  обложки аудио; `MagnifierCursor` — `scaleWithDpi`. Крупная миниатюра —
-  `ThumbnailCacheOptions.SideFor` по системному масштабу
-  (`MainViewModel.ApplyThumbnailCacheSettings`, `GetDpi` от
-  `DrawingVisual`), не по монитору окна; ключ диска — `v2s{side}`, когда
-  сторона не 256.
-- **Карточка программы** (B7, 2026-09-22): `PreviewRoute.Executable` →
-  `LoadExecutableAsync` (пул) → `IExecutableInfoReader` (Core) ←
-  `WindowsExecutableInfo` (Platform): `FileVersionInfo`, `PeHeader.Parse`
-  (Core, тест: первые 4 КБ — машина, подсистема, DLL, CLR-каталог),
+  фильтром, `skip` — левый для правого). У каждой панели свой контроллер
+  (`MainViewModel.NewPictureViewer`; хелперы, фон и RAW общие); `Detach`
+  при закрытии отписывает от `ReviewHelpers` — иначе жил бы с кэшем
+  кадров.
+  - `←` / `→` в паре меняют роли панелей (`KeepSide`), а не грузят правый
+    снимок в левую — иначе на кадр виден левый во весь экран.
+  - Панель прозрачна, пока ничего не показывает (`Kind` None, не
+    `IsLoading`); `IsPlaceholderVisible` молчит на первой загрузке. Полоса
+    — `BarAtRest` = 0, будит мышь у края или `FlashBar`; у пары ходят
+    вместе (`BarReached` ↔ `ReachBarWith`).
+  - `Delete` — `MainViewModel.DeletePictureAsync` → тот же `DeleteAsync`,
+    про снимок `KeyTarget`; автоповтор не удаляет подряд. Картинки
+    декодируются в память (`OnLoad`), файл не держат.
+  - Курсор: `CursorIdleMs` = 1,5 с → `ForceCursor` + `Cursors.None`;
+    синтетический `MouseMove` без сдвига не будит.
+  - `Ctrl` + `Z` — `UndoCommand` из `OnPreviewKeyDown`; `Alt` + `Space` и
+    `F10` (`Key.System`) гасятся — системное меню ломало окно без рамки;
+    `Z` — `PreviewPane.ToggleZoom` (`_zoomPinned`, `ZoomMove.Pinned`).
+  - `MainViewModel.Say` → `StatusSaid` → плашка 4 с. Строки после оценки
+    — заново (`RatingsController.FindInSource`, и скрытые фильтром) по
+    `Entries.CollectionChanged` и `Ratings.CompanionsChanged`.
+  - Окно закрывается на KeyDown, и автоповтор уходит в главное: `Enter` /
+    `Space` в галерее и `Esc` в списке с `IsRepeat` ничего не делают.
+- **Отступ** — `PreviewPane.PictureMargin` (4 px, на полном экране 0): на
+  него смотрят `ImgFit`, `ImgOverlay`, `GifPreview`, размер декода
+  (`ReportViewport`) и зум (`UpdateZoomPosition`). Картинка посередине по
+  обеим осям; лупа на непрокручиваемой оси ставит кадр так же,
+  `(hh - srcH) / 2`.
+- **Декод под поле и соседи** (AK). Поле — `SetViewport`: место под
+  картинку в пикселях устройства с шагом `BoxStep` = 64.
+  `PictureLoader.Decode` (пул): JPEG и встроенный JPEG — под поле
+  (`PictureFit.DecodeWidth`, Core, тест: от 95 % поля — целиком; масштаб в
+  DCT), остальное целиком → `DecodedPicture`. Поле выросло — перерез через
+  `BoxSettleMs` = 300 (`PictureFit.TooSmall`). Первый размер панели
+  ждётся до `BoxWaitMs` = 500 (`_boxKnown`).
+  - `PictureCache` (UI-поток) — три кадра и байты, `SizedCache` над
+    `MemoryShare`; ключ путь + время + размер + поле; спрятанная панель и
+    `Detach` отдают кадры. Соседи — `PreviewNeighbors.Of` (Core, тест: выше
+    и ниже, только картинки, первым — по направлению движения), по одному
+    после показа (`DecodeNeighborsAsync`; законченный декод кладётся в кэш
+    и при отмене), только для кадра своей строки (цель ярлыка и запись
+    архива — каждый раз).
+  - **Память под картинки** — `PictureMemory` (Core, тест): МБ из
+    настройки либо 1/16 `GC.GetGCMemoryInfo().TotalAvailableMemoryBytes`;
+    четверть — `IconImageCache` (байты `W × H × bpp`), остальное — кадрам
+    всех панелей; показанный и греющиеся — `Keep`; `Fits` решает соседа по
+    `PictureLoader.DecodedBytes`. Предел ставит
+    `MainViewModel.ApplyThumbnailCacheSettings`, сразу.
+  - Серия — смена чаще `BurstMs` = 150: промах кэша ждёт `BurstDelayMs` =
+    90 и переспрашивает. `preview.shown` — раз на смену выделения
+    (`_shownMeasured`).
+  - **Между картинками панель не гаснет**: прежняя стоит до готовности
+    следующей (`ClearPreviewContent(keepImage)`), вуаль — после
+    `VeilDelayMs` = 250. Футер ждёт картинку (`FooterWaitsForPicture`,
+    спутники очищаются и заполняются в один такт) — иначе он дважды менял
+    высоту и вертикальный снимок дёргался; высоту держит содержание:
+    спутники — `CompanionLabel` → `SummaryNote` (`SummaryHead` /
+    `SummaryRest`), факты через `SummaryText.Gap`.
+- **DPI** (AM): `BitmapPixelSizeConverter` — пиксели ÷
+  `PreviewPane.DpiScale` (`Loaded`, `OnDpiChanged`) для `ImgFit`,
+  `GifPreview`, обложки аудио; вписанный вид — `HighQuality` по
+  пиксельному размеру; `MagnifierCursor` — `scaleWithDpi`; 1:1 — на целых
+  пикселях. Крупная миниатюра по масштабу — «Навигация и дерево».
+- **RAW не декодируется**: WIC на `.CR3` — ~1150 мс на 33 МБ
+  (`DecodePixelWidth` и `Thumbnail` не помогают).
+  `RawPreviewExtractor` (Core) достаёт JPEG из контейнера за 8–13 мс:
+  ISO-BMFF (`uuid` Canon с `PRVW`) и TIFF (IFD → JPEG: CR2, NEF, ARW, DNG);
+  кандидаты от большего к меньшему с проверкой маркера (в DNG / NEF самый
+  большой поток — raw-данные, SOF3). У CR3 `PRVW` — 1620×1080,
+  полноразмерный — первая дорожка `moov` (`Extract(fullSize: true)`,
+  60–110 мс против ~10).
+  - Панель берёт оба (`LoadImageAsync` → `LoadFullSizeAsync`): быстрый —
+    сразу и вписанным (`Image`), большой — после 150 мс на файле и
+    **только в зум** (`ZoomSource`; по нему меряют `ImgZoom`,
+    `IsImageDownscaled`, `UpdateZoomPosition`), иначе пересэмплировал бы
+    картинку после каждой стрелки. Одинаковые байты не декодируются
+    дважды; `PreviewPane.RefreshImageZoom` — зум под сменой картинки.
+  - Предел вписанного (`ImageCapWidth` / `Height`) у RAW — кадр из EXIF
+    (`DecodedPicture.FrameWidth`, `PictureLoader.WholeFrame`: больше превью
+    и той же формы в пределах 2 %), пока такой кадр придёт — `ShowPicture`
+    (`bigger` у CR3, `decode` с матрицы): превью сразу растянуто и только
+    дорезчивается. RAW с одним маленьким превью — предел по превью.
+    `RefitWhenSettledAsync` переспрашивает `TooSmall` при срабатывании.
+    Миниатюрам — только быстрый.
+  - JPEG лежит **неповёрнутым**: ориентация IFD0 контейнера —
+    `ImageMetadata.Orientation` → `ApplyOrientation`
+    (`TransformedBitmap`). Тег применяется к **каждой** картинке:
+    `BitmapImage` не поворачивает и JPEG с камеры.
+- **`IgnoreImageCache` — только для файлов**: у картинки из `MemoryStream`
+  URI нет, и `FinalizeCreation` на .NET 10 падает на `null` — быстрый путь
+  RAW молча уходил в полный декод.
+- **Карточка программы** (B7): `PreviewRoute.Executable` →
+  `LoadExecutableAsync` → `IExecutableInfoReader` (Core) ←
+  `WindowsExecutableInfo`: `FileVersionInfo`, `PeHeader.Parse` (Core, тест:
+  первые 4 КБ — машина, подсистема, DLL, CLR), `CreateFromSignedFile`,
   `WinVerifyTrust` без UI и сети (`WTD_REVOKE_NONE`,
-  `CACHE_ONLY_URL_RETRIEVAL`; `TRUST_E_NOSIGNATURE` — «нет подписи», иной
-  код — «не подтверждается»; каталожные подписи не смотрятся) →
-  `ExecutableCard.Facts` (App, подписи из ресурсов, пустое не пишется).
-  `WinVerifyTrust` хэширует весь файл, поэтому подпись — отдельный
-  `ReadSignature` (блок 8, 2026-09-24): карточка встаёт со строкой
-  «проверяется…», проверка — после `FullSizeDwellMs` на файле, через
-  `_signatureGate` по одной, без отмены (ответ про ушедший файл
-  отбрасывается по ссылке на `ExecutableInfo`); файл больше
-  `SignatureByItselfBytes` = 200 МБ — «не проверялась» и
+  `CACHE_ONLY_URL_RETRIEVAL`; `TRUST_E_NOSIGNATURE` — «нет подписи»,
+  иное — «не подтверждается»; каталожные не смотрятся) →
+  `ExecutableCard.Facts`. Подпись хэширует весь файл — отдельный
+  `ReadSignature` после `FullSizeDwellMs`, по одной через
+  `_signatureGate`, без отмены (ответ про ушедший файл отбрасывается по
+  ссылке); больше `SignatureByItselfBytes` = 200 МБ — «не проверялась» и
   `CheckSignatureCommand`.
-- **Документ текстом** (B5, 2026-09-22): `PreviewRoute.DocumentText` →
-  `ContentSearchService.DocumentText` — только форматные («дорогие»)
-  экстракторы: общий текстовый показал бы бинарник буквами; кэш общий с
-  поиском → `Kind = Text`, `TextWrap = Wrap`, пометка первой строкой.
-  `ZipDocumentExtractor` ставит `\n` после элементов с локальными именами
-  `_lineEnds` (p, h, h1–h6, li, tr, table-row, row, si, br — по одному
-  списку на все форматы, не разбор каждого; 2026-09-24): и в панели абзац
-  — строка, и сниппет поиска — строка абзаца.
-- **Поиск в тексте** (B6, 2026-09-22): `TextFind` (Core, тест) — смещения,
-  первое от каретки, шаг по кругу. `PreviewPane`: `FindBar`, совпадения —
-  смещения в тексте и коде, диапазоны в RTF (по run'ам: через смену
-  формата не находится); `ForgetMatches` на смене `Text`, `CodeText`,
-  `DocumentPath` (2026-09-24: старые смещения выделяли за концом нового
-  текста); RTF, дочитанный после конца загрузки, ищется заново в
-  `LoadDocumentAsync`. Подхват — `PreviewController.FindRequest` в конце
-  загрузки, запрос даёт `FindTextFor` (`MainViewModel`: строка с
-  `MatchSnippet` и `ContentSearch.TextQuery`; у второй половины и
-  «Сравнить» — `MainViewModel.FoundText`). `MainWindow`: `Ctrl+F` —
-  сначала `OpenFind` панелей (вторая половина сплита вложена в первую и
-  отвечает сама — `SecondSlot`), иначе поле поиска над списком; `F3` /
-  `Shift+F3` — `PreviewPane.FindAgain` у половины с клавиатурой, иначе с
-  открытым полем: `PastLast` над выдачей по содержимому →
-  `MainViewModel.NextFoundRow` (`FindWalk`, Core) и `FileList.SelectRow`,
-  дальше некуда — статус и по кругу. За показанным началом (B6-хвост,
-  2026-09-25): `PreviewController.NoteRest` запоминает, что осталось —
-  путь и сколько знаков пропустить, если файл обрезан бюджетом чтения,
-  либо хвост строки в памяти; `CountPastShownAsync` считает на пуле
-  (`TextFind.Count` блоками по 64K знаков с переносом хвоста;
-  `EncodingProbe.Reader` — та же кодировка, BOM съеден, тест на
-  совпадение с `Decode`); `ShownTextLength` — где в показанном тексте
-  начинается заметка, чтобы её слова не искались.
-- **TGA** (B8, 2026-09-22): `TgaDecoder` (Core, тест) → `BgraImage`, до
-  выделения буфера проверяет палитру, поле id и объём данных; панель —
+- **Документ текстом** (B5): `PreviewRoute.DocumentText` →
+  `ContentSearchService.DocumentText` — только форматные экстракторы (общий
+  показал бы бинарник буквами), кэш общий с поиском; `Kind = Text`,
+  `TextWrap = Wrap`, пометка первой строкой; до 64 МБ и 200 000 знаков.
+  `ZipDocumentExtractor` ставит `\n` после `_lineEnds` (p, h, h1–h6, li,
+  tr, table-row, row, si, br — один список на все форматы): абзац —
+  строка и в панели, и в сниппете.
+- **Поиск в тексте** (B6): `TextFind` (Core, тест) — смещения, первое от
+  каретки, по кругу, без регистра, от 10 000 — «N+». `FindBar`: смещения в
+  тексте и коде, диапазоны в RTF (по run'ам — через смену формата не
+  находится); `ForgetMatches` на смене `Text` / `CodeText` /
+  `DocumentPath`; дочитанный RTF ищется заново в `LoadDocumentAsync`.
+  - Подхват — `PreviewController.FindRequest` в конце загрузки, запрос —
+    `FindTextFor` (`MatchSnippet` и `ContentSearch.TextQuery`; у второй
+    половины и «Сравнить» — `MainViewModel.FoundText`).
+  - `Ctrl+F` — сначала `OpenFind` панелей (вторая половина отвечает сама,
+    `SecondSlot`), иначе поле над списком. `F3` / `Shift+F3` —
+    `PreviewPane.FindAgain`; `PastLast` над выдачей по содержимому →
+    `MainViewModel.NextFoundRow` (`FindWalk`, Core: по порядку списка,
+    мимо найденных только по имени) и `FileList.SelectRow`.
+  - За показанным началом: `PreviewController.NoteRest` помнит остаток
+    (путь и пропуск либо хвост строки), `CountPastShownAsync` считает на
+    пуле (`TextFind.Count` блоками по 64K с переносом хвоста;
+    `EncodingProbe.Reader` — та же кодировка, тест на совпадение с
+    `Decode`; остаток в памяти — `StringReader`); `ShownTextLength` —
+    слова заметки не ищутся.
+- **`Ctrl+C` в панели** — выделенный текст, не файл; решает окно
+  (`PreviewPane.TryCopySelectedText`), не каждое поле.
+- **TGA** (B8): `TgaDecoder` (Core, тест) → `BgraImage`: несжатый и RLE,
+  палитра (индекс 8 / 16, записи 15–32 бит), цвет 15–32 бит, серый 8,
+  угол из дескриптора, нулевая во всём кадре альфа — непрозрачно; до
+  16384²; палитра, поле id и объём данных проверяются до буфера. Панель —
   `ImageDecoder.Tga` (`BitmapSource.Create`, Bgra32), миниатюры —
-  `TgaThumbnail` (Platform, WinRT-кодер PNG, файлы до 64 МБ); `.tga` в
-  `ImageFormats.All`.
-- **HEIF** (B10, 2026-09-25): `ImageFormats.Heif` в `All`, декод под размер
-  панели (`PictureLoader._scaled`); контейнер поворачивает сам, EXIF-тег WIC
-  игнорирует — `UprightHeif` в `MetadataExtractorImageReader`; декод без
-  пикселей — `DecodeFailed` в `ImageDecoder.Decode` (WIC отдаёт 1×1 без
-  исключения). `ICodecProbe` (Core) / `WindowsCodecProbe` (Platform,
-  `MFTEnumEx`: `CLSID_WICHeifDecoder` входным типом — HEIF Image
-  Extensions, `MFVideoFormat_HEVC` — HEVC Video Extensions) спрашивается
-  только после провала декода; `PreviewController.ExplainMissingCodecAsync`
-  → плашка и `OpenStoreCommand` (`ms-windows-store://pdp/?ProductId=…`).
-- **SVG** (B8, 2026-09-25): `PreviewRoute.Svg` перед кодом; картинка —
-  `PreviewText.SvgPage` (`<img>` с `data:` base64 на фоне области, скрипт
-  не исполняется) в WebView2, `ShowSvgSource` — разметка как код, режим на
-  обе панели пары; больше 1 МБ — разметкой (строка WebView2 до 2 МБ).
-- **`PreviewRouter`** (Core) — «расширение → `PreviewRoute`», без диска;
-  `Route` (каким загрузчиком) ≠ `Kind` (каким контролом): Markdown, FB2, PDF
-  — три пути в один WebView2. Таблица — **порядок правил**: `.webp` —
-  картинка и многокадровый контейнер, `.mtl` — текст, `.svg` — рисуется, а
-  для действий с текстом остаётся текстом; побеждает первое;
-  `PreviewRouterTests`.
-- **Разбор в Core (`Preview/`), отрисовка в App.** `AudioTags` (ID3v2.2 /
-  2.3 / 2.4, ID3v1, Vorbis; длительность FLAC из `STREAMINFO`, MP3 по `Xing`
-  / `Info` / `VBRI`; кодировка 0 угадывается **по всем полям сразу**);
-  `MeshFile` + `Stl` / `Obj` / `GltfReader` (плоские массивы + `MeshPart` с
-  индексами и цветом, координаты общие; только `Kd` / `baseColorFactor`;
-  нормали не читаются); `Fb2Document` (HTML-фрагмент, потоковый
-  `ReadCover`; namespace по локальному имени — конвертеры ошибаются в URI;
-  бюджет 400 000 по ходу обхода — книга бывает одной `<section>`; при
-  обрыве закрываются теги); `BookCover` (`.fb2`, `.epub`: `container.xml` →
-  OPF → манифест, EPUB 3 `cover-image` / EPUB 2 `<meta name="cover">` /
-  по имени; `Supports` false для DjVu, CHM, `.doc`); Markdown — свой
-  `MarkdownPipeline` (CommonMark без таблиц; `UseAdvancedExtensions` тянет
-  iframe и `{#id}`); `EncodingProbe` (BOM → строгий UTF-8 → счёт 1251 / 866
-  по регистру: строчные ×3; порог 8 кириллических букв — `ä ö ü` это
-  кириллица в 1251; таблицы кодировок в Core, .NET знает только Unicode /
-  ASCII / Latin-1); `TextProbe` (8 КБ: BOM, нулевой байт — приговор, доля
-  управляющих пропорцией; для Unity-ассетов).
-- **`App/Preview/`**: `ImageDecoder` (кэш URI, обложка в размер, встроенное
-  превью RAW, поворот по EXIF), `ModelBuilder` + `ModelScene` (Core →
-  `MeshGeometry3D`, центр и радиус), `PreviewText` (бюджет, кодировка,
-  обрезка, Markdown, HTML-обёртка), `SummaryText` (подпись), `PictureLoader`
-  (декод под поле), `PictureCache`, `ExecutableCard` (строки карточки).
-  Контроллеру — конвейер.
-- **Ярлык прозрачен**: `.lnk` резолвится `IShortcutService`, рисуется цель;
-  `LinkTarget` в футере и «Перейти к оригиналу» → `MainViewModel.RevealPath`
-  (`_revealPathAfterListing`, `ApplyPendingReveal`; в той же папке — сразу).
-- **`IVolumeInfoProvider`** / `WindowsVolumeInfo` поверх `DriveInfo`: только
-  на корне тома; каждое свойство бросает на неготовом — чтение обёрнуто,
-  «не готово» = описанный том с нулевой ёмкостью.
-- **Подсветка кода**: AvalonEdit по расширению включая `.diff` / `.patch`;
-  свои `Highlighting/*.xshd` (`Batch`, `ShaderLab`, `YAML` — ассеты Unity)
-  через `HighlightingCatalog.EnsureRegistered()`; битый `.xshd` пропускается.
-- **Строка панели в панели просмотра** — предмет `PreviewSubject` (цель —
-  строка панели): запись папки читается на пуле (`ShowPanelFolder`) и
-  показывается, если цель ещё она.
-- Футер: пусто → папка (рекурсивно, async); файл → имя / размер / дата +
-  EXIF (`MetadataExtractor`, RAW включая CR2 / CR3 / NEF / ARW / DNG); папка
-  → count + size; мульти → агрегат. Под ним — спутники: список, GUID из
-  `.meta` с копированием, звёзды.
-- **WebView2 изолирован**: `NavigationStarting` — только `file:` / `about:`
-  / `data:`, попапы режутся; `WebResourceRequested` режет `http` / `https` /
-  `ws` / `wss` / `ftp` (deny-list: рендерер раздаёт обвязку по внутренним
-  схемам); побочный эффект — внешние картинки в Markdown не грузятся.
-  Скрипты локального `.html` исполняются (TECHDEBT).
-- **RAW не декодируется**: `.CR3` в WIC — ~1150 мс на 33 МБ (`DecodePixelWidth`
-  и `Thumbnail` не помогают). `RawPreviewExtractor` (Core) достаёт JPEG из
-  контейнера — 8–13 мс: ISO-BMFF (`uuid` Canon с `PRVW`) и TIFF (IFD → JPEG:
-  CR2, NEF, ARW, DNG); `null` = обычный путь; кандидаты от большего к
-  меньшему с проверкой маркера — в DNG / NEF самый большой поток это
-  raw-данные (SOF3). У CR3 быстрый `PRVW` — 1620×1080, полноразмерный JPEG —
-  первая дорожка `moov` (`Extract(fullSize: true)`, 60–110 мс декода против
-  ~10). Панель берёт оба (`PreviewController.LoadImageAsync` →
-  `LoadFullSizeAsync`): быстрый — сразу и остаётся вписанным (`Image`),
-  большой — после 150 мс стояния на файле (удержанная стрелка 24 Мп не
-  декодирует) и идёт **только в зум** (`ZoomSource` = большой, иначе
-  `Image`; `ImgZoom`, `IsImageDownscaled`, `UpdateZoomPosition` меряют по
-  нему): поставленный на место `Image`, он пересэмплировал ту же картинку
-  через четверть секунды после каждой стрелки — заметнее всего на
-  вертикальных кадрах, их панель рисует крупнее. Одинаковые байты (форматы
-  с одним JPEG) второй раз не декодируются; зум под сменой картинки —
-  `PreviewPane.RefreshImageZoom`. Предел вписанного (`ImageCapWidth` /
-  `Height`) у RAW — размер всего кадра из EXIF (`DecodedPicture.FrameWidth`,
-  `PictureLoader.WholeFrame`, 2026-09-24: больше превью и той же формы в
-  пределах 2 %), но только пока кадр такого размера придёт — решает
-  `ShowPicture`: большой JPEG CR3 (`bigger`) или декод с матрицы
-  (`decode`). Иначе на полном экране CR3 вырастал с 1620 px, когда приходил
-  большой JPEG, а так превью сразу растянуто и только дорезчивается; у RAW
-  с одним маленьким превью (ARW, RAF, часть DNG) предел — само превью: ему
-  нечем дорезчиться, растянутое осталось бы мыльным. Отложенный рефит под новый размер области
-  (`SetViewport` → `RefitWhenSettledAsync`) переспрашивает `TooSmall` в
-  момент срабатывания: большой JPEG мог уже лечь. Миниатюрам —
-  только быстрый. Размеры в футере из EXIF. **Панель между картинками не
-  гаснет**: прежняя стоит до готовности следующей
-  (`ClearPreviewContent(keepImage)`), вуаль с крутилкой — только если
-  загрузка дольше 250 мс (`VeilDelayMs`). Футер держится вместе с картинкой
-  (`FooterWaitsForPicture`, EXIF не гасится; блок спутников очищается в тот
-  же такт, что заполняется): иначе футер дважды менял высоту на каждый
-  файл, и вертикальный снимок — он вписан по высоте — дёргался. Высоту
-  футера держит его содержание, не подпорки: спутники — серое «(+.xmp)»
-  после имени (`CompanionLabel` → `SummaryNote`; `Summary` делится на
-  `SummaryHead` / `SummaryRest` ради этого `Run`), своих строк у них нет,
-  кроме Unity `.meta`; факты — без подписей, через `SummaryText.Gap`. JPEG лежит **неповёрнутым**, поворот в IFD0 контейнера
-  (6 / 8) — `ImageMetadata.Orientation`, `ApplyOrientation` через
-  `TransformedBitmap`. С 2026-09-16 тег применяется к **каждой** картинке,
-  не только к RAW: `BitmapImage` JPEG с камеры тоже не поворачивает, а
-  Проводник и любой просмотрщик поворачивают — «оставить как есть» было
-  ошибкой, всплывшей на превью, взятом из RAW как есть вместе с тегом.
-- **`IgnoreImageCache` — только для файлов**: кэш WPF по URI не замечает
-  подмены байтов; у картинки из `MemoryStream` URI нет, и
-  `FinalizeCreation` на .NET 10 падает на `null` — `Decode` гасил
-  исключение, вызывающий читал «превью нет» и шёл на полный декод: быстрый
-  путь RAW был мёртв и выглядел как «думает секунду».
-- **Иконки**: `SystemIconProvider` — системные + `.lnk` overlay (включая
-  jumbo-композит), миниатюры через `IShellItemImageFactory`; мелкие по
-  расширению, миниатюры по пути с FIFO 512. `Medium` / `Large` сначала
-  спрашивают `BookCover` (обложка «страницей»: подложка, рамка, тень; ключ
-  по пути; 16 / 32 не получают). PDF — первая страница `PdfPageImage`
-  (`Windows.Data.Pdf`), **всегда** (половина читалок не регистрирует
-  provider); вызов синхронный `.AsTask().GetAwaiter().GetResult()` — все
-  вызывающие на фоне, контекст не захватывается. `LinkThumbnailTarget`
-  подменяет `.lnk` на цель, стрелку накладывает `DrawLinkOverlay` (шелл
-  запекает её в значок, не в миниатюру); ключ по `.lnk` (TECHDEBT).
-  `AsyncIcon` перепроверяет актуальность после очереди. **RAW мимо шелла**:
-  `RawThumbnail` — тот же `RawPreviewExtractor` + WinRT
-  `Windows.Graphics.Imaging` с масштабированием на разжатии, 3 мс против 75;
-  ориентация из контейнера; не `System.Drawing` (GDI+ сериализуется);
-  шлюз 2 → 4.
-
-### Диалоги — один шов
-
-Каждый модальный вопрос идёт через `Wander.App/Dialogs/IDialogs`:
-`Ask(DialogRequest)` (вид `DialogKind`, заголовок, текст, кнопки, значок;
-кнопка по умолчанию всегда отменяющая — поэтому не поле),
-`Choose(ChoiceRequest)` (ответы названы на кнопках, «Отмена» — по
-умолчанию; индекс или -1), `Prompt`, `PickFolder`,
-`CreateConflictResolver(skipIdentical)`. Продакшн — `WpfDialogs`
-(`MessageBox` поверх активного окна — но никогда поверх окна операции,
-`ITransientWindow`; `ChoiceDialog`, `PromptDialog`,
-`OpenFolderDialog`, `DispatcherConflictResolver(InteractiveConflictResolver)`); харнесс
-подставляет `ScriptedDialogs` до постройки вью-модели. Голых
-`MessageBox.Show` в коде не осталось, кроме аварийного в `CrashReporter`.
-
-### Smoke-запуск и headless
-
-`App.Headless` — окно за экраном (`Left = -32000`), `ShowActivated = false`,
-не в панели задач, геометрия не читается и не пишется в `state.json`,
-крах — лог и `Shutdown(1)` вместо диалога. Ставится смоком и харнессом
-(`internal set`, `InternalsVisibleTo("Wander.Harness")`). В `App.OnStartup`
-флаг только **включается** (`Headless |= IsSmokeRun`): харнесс выставляет
-его до конструирования `App` и командной строки не имеет, а присваивание
-затирало это — окно выходило на настоящий рабочий стол и забирало фокус
-(2026-09-02). `HarnessApp` перепроверяет флаг и отказывается работать при
-выключенном; позиция окна пишется в лог строкой `HARNESS window at`.
-`Wander.exe
---smoke` = `Headless` + `StartSmokeCountdown` (две секунды на первый
-листинг, значки, наблюдателей, `Shutdown(0)`). Координаты — **в
-конструкторе** `MainWindow` (`ShowActivated` учитывается до показа).
-`check.bat run` зовёт exe напрямую (не `start`), с `--folder` на
-`tests\Fixtures` (`StartFolder`), и читает код; ловушки cmd:
-`if errorlevel 1` не видит .NET-падения (0xE0434352 отрицательное) — `neq
-0`; `exit /b` внутри скобок не доносит код — выход за пределами блока.
-
-### QA-харнесс
-
-`tests/Wander.Harness` — `HarnessApp : App`: свой `OnStartup` после
-базового подменяет `ILogger` на `CapturingLogger` и `IDialogs` на
-`ScriptedDialogs`, показывает `MainWindow` сам (`InitializeComponent` не
-зовётся — BAML ищется в сборке наследника; словари ресурсов вливаются
-руками) и стартует `ScenarioRunner` на `ApplicationIdle`. Данные — через
-`WANDER_DATA_DIR` в папку прогона. Шаги, профили песочницы, генераторы
-CR3 / DNG — QA.md.
-
-**Лог берётся у источника, а не у обёртки.** `CapturingLogger` подписан на
-событие `FileLogger.Written`, а не запоминает то, что прошло через него
-самого. Причина конкретная: сервисы, которые строит
-`PlatformBootstrapper`, получают логгер в конструкторе и больше никогда его
-не ищут — `FileOperationService`, шелл, сторож папки. Логгер,
-зарегистрированный поверх после `base.OnStartup`, их строк не видит, и
-`assert-log noErrors` был утверждением про половину приложения: `ERROR
-Delete failed` лежал в файле, а прогон отчитывался «ошибок нет»
-(2026-09-02). Событие поднимается под замком записи — подписчик обязан не
-логировать и не блокировать.
-
-`state.json` прошлой версии кладётся в data-dir **до** старта `App` (поле
-сценария `"state"`, `Program.SeedState`): это не профиль песочницы, потому
-что читается раньше, чем любой профиль мог бы отработать. Файла нет —
-прогон падает сразу, а не проходит молча.
+  `TgaThumbnail` (WinRT-кодер PNG, до 64 МБ); `.tga` в `ImageFormats.All`.
+- **HEIF** (B10): `ImageFormats.Heif`, декод под панель
+  (`PictureLoader._scaled`: 12 Мп — ~250 мс вместо 600–1000); поворот
+  контейнера — `UprightHeif` в `MetadataExtractorImageReader` (WIC
+  EXIF-тег игнорирует); 1×1 без пикселей — `DecodeFailed` в
+  `ImageDecoder.Decode`. После провала — `ICodecProbe` /
+  `WindowsCodecProbe` (`MFTEnumEx`: `CLSID_WICHeifDecoder` — HEIF Image
+  Extensions, `MFVideoFormat_HEVC` — HEVC Video Extensions; список WIC не
+  годится — заглушка в `windowscodecs.dll` есть всегда) →
+  `PreviewController.ExplainMissingCodecAsync`, плашка и
+  `OpenStoreCommand` (`ms-windows-store://pdp/?ProductId=…`).
+- **SVG** (B8): `PreviewRoute.Svg` перед кодом; `PreviewText.SvgPage` —
+  `<img>` с `data:` base64 (скрипт не исполняется) в WebView2;
+  `ShowSvgSource` — разметка, на обе половины; больше 1 МБ — разметкой
+  (строка WebView2 до 2 МБ). Снимок из панели в кэш — TECHDEBT.
+- **Не открылось и занято** — `ExplainUnreadableAsync`: держатель через
+  Restart Manager на пуле.
+- **Разбор в Core (`Preview/`), отрисовка в App.**
+  - `AudioTags`: ID3v2.2–2.4 (синх-безопасные размеры), ID3v1, Vorbis,
+    MP4-атомы, RIFF-INFO; WMA / Ogg — нет; AAC — только ID3 (кадр ADTS
+    проходит проверки MP3 и врёт). Длительность FLAC из `STREAMINFO`, MP3
+    по первому кадру, VBR — `Xing` / `Info` / `VBRI`; кодировка 0 — по
+    всем однобайтовым полям сразу. Обложка: `APIC` / `PICTURE`, иначе
+    `Cover.jpg`, `folder.jpg`, `front.*`, одноимённая, единственная
+    картинка в папке. Тесты на байтах из билдеров, не на фикстурах.
+  - `MeshFile` + `Stl` / `Obj` / `GltfReader` → `MeshData` (позиции +
+    `MeshPart` с индексами и цветом `Kd` / `baseColorFactor`; без текстур
+    и нормалей — WPF считает пофасеточные, обратная сторона
+    притемнена). STL двоичный — по `84 + 50 × n`; OBJ — отрицательные
+    индексы от конца, четырёхугольники веером; glTF — обход узлов с
+    матрицами и памятью посещённых, буфер `BIN` / `data:` / `.bin` рядом
+    по простому имени. Камера — из радиуса описанной сферы.
+  - `Fb2Document` (HTML-фрагмент, потоковый `ReadCover`, namespace по
+    локальному имени, бюджет 400 000 по ходу обхода с закрытием тегов,
+    картинки `data:` до 6 МБ); `BookCover` (`.fb2`, `.epub`:
+    `container.xml` → OPF → манифест, EPUB 3 `cover-image` / EPUB 2
+    `<meta name="cover">` / по имени; DjVu, CHM, `.doc` — нет).
+  - Markdown — свой `MarkdownPipeline` (`UsePipeTables`, `UseGridTables`,
+    `UseEmphasisExtras`, `UseTaskLists`, `UseAutoLinks`, `UseFootnotes`; не
+    `UseAdvancedExtensions` — тянет iframe и `{#id .class}`).
+  - `EncodingProbe`: BOM → строгий UTF-8 → счёт 1251 / 866 по регистру
+    (строчные ×3; порог 8 кириллических букв — `ä ö ü` это кириллица в
+    1251; таблицы в Core). `TextProbe`: 8 КБ, BOM, нулевой байт —
+    приговор, доля управляющих. Текст — первый мегабайт, оборванный
+    `U+FFFD` срезается.
+- **`App/Preview/`**: `ImageDecoder`, `ModelBuilder` + `ModelScene` (Core →
+  `MeshGeometry3D`), `PreviewText` (бюджет, кодировка, Markdown,
+  HTML-обёртка), `SummaryText`, `PictureLoader`, `PictureCache`,
+  `ExecutableCard`. Контроллеру — конвейер.
+- **Ярлык прозрачен**: `.lnk` резолвит `IShortcutService`
+  (`ShellShortcutService`, `IShellLinkW`), рисуется цель; `LinkTarget` в
+  футере и «Перейти к оригиналу» → `MainViewModel.RevealPath`
+  (намерение `ArrivalIntent.Rows`; папка уже открыта — посадка заново).
+- **Футер**: пусто — папка (рекурсивно, async); файл — имя, размер, дата
+  и EXIF (`MetadataExtractor`, RAW включая CR2 / CR3 / NEF / ARW / DNG);
+  несколько — агрегат; под ним спутники (GUID из `.meta` с копированием).
+- **Том** — `IVolumeInfoProvider` / `WindowsVolumeInfo` над `DriveInfo`,
+  только на корне; неготовое свойство бросает — «не готово» = том с
+  нулевой ёмкостью.
+- **Перепись папки** — `FolderStatistics` (Core, итеративно; глубина 64 —
+  защита от junction'ов, «числа неполные»); `IsCensusLoading` отдельно от
+  `IsLoading`; числа раз в 150 мс через `IProgress<FolderProgress>`, типы
+  — в конце.
+- **Подсветка кода**: AvalonEdit по расширению (и `.diff` / `.patch`);
+  свои `Highlighting/*.xshd` (`Batch`, `ShaderLab`, `YAML`) через
+  `HighlightingCatalog.EnsureRegistered()`; битый пропускается.
+- **Строка панели** в панели просмотра — `PreviewSubject`: запись папки
+  читается на пуле (`ShowPanelFolder`), показывается, если цель ещё она.
+- **WebView2 изолирован**: `NavigationStarting` — только `file:` /
+  `about:` / `data:`, попапы режутся; `WebResourceRequested` режет
+  `http` / `https` / `ws` / `wss` / `ftp` (deny-list: рендерер раздаёт
+  обвязку по внутренним схемам) — внешние картинки в Markdown не
+  грузятся. Скрипты локального `.html` исполняются (TECHDEBT).
 
 ## Хелперы отсмотра — `Wander.Core/Imaging/`
 
-Папка уровня 0, ссылок наружу нет: чистые функции над `BgraImage`
-(`byte[] Pixels, Width, Height, Stride`) — факты на входе, числа и маски на
-выходе, тесты на синтетике. WPF и путей к файлам тут нет; App подаёт
-пиксели и забирает маски (`Preview/ReviewOverlay`), Platform меряет файл
-(`Icons/SharpnessProbe`).
+Папка уровня 0: чистые функции над `BgraImage`
+(`byte[] Pixels, Width, Height, Stride`) — факты на входе, числа и маски
+на выходе, тесты на синтетике. App подаёт пиксели и забирает маски
+(`Preview/ReviewOverlay`), Platform меряет файл (`ISharpnessProbe` /
+`Icons/SharpnessProbe`: WinRT, декодируется только нужная область).
+Набор включённых — `ReviewHelpers` (App), один на окно: обе половины
+сплита, полный экран, галерея; между запусками не хранится.
 
-**Мера одна на всё — крутизна края** (`Sharpness.Measure` → `CrispMap`):
-градиент Собеля, делённый на местный контраст (окно 7×7). У ступеньки
-между соседними пикселями около 4, у края шириной w — около 4/w; от
-контраста сцены и света не зависит, чем и отличается от голого градиента.
-Первая версия пикинга отмечала верхние 3 % градиентов — кадр и он же
-размытый давали 3,04 % и 3,17 % отметок, причём у размытого на контрастном
-переднем плане; по крутизне та же пара даёт 1,11 % и 0,06 % (стенд
-2026-09-22). Мерить можно только в родном разрешении: уменьшение сужает
-края, и превью 1620 px промахнувшегося кадра читается как попавший.
+**Мера одна — крутизна края** (`Sharpness.Measure` → `CrispMap`):
+градиент Собеля, делённый на местный контраст (окно 7×7): у ступеньки
+около 4, у края шириной w — около 4/w, от контраста сцены не зависит.
+«Верхние 3 % градиентов» дают резкому кадру и его размытой паре 3,04 % и
+3,17 % отметок, крутизна — 1,11 % и 0,06 % (стенд). Порог пикинга — 2,0.
+Мерить — только в родном разрешении: на уменьшенном промах фокуса
+читается как попадание.
 
-**Что считается на чём.** Пикинг и балл — полный кадр (у RAW это вшитый
-JPEG, у CR3 большой). Клиппинг, гистограмма и кривые — рабочая копия
-≤ 2560 px: им разрешение не нужно. Миниатюрам галереи маска считается с
-шагом 2 (`Measure(step)`): соседей мера читает настоящих, ответов просит
-вчетверо меньше, а ячейка в 200 px разницы не видит.
+**Что на чём.** Пикинг и балл — полный кадр (у RAW — вшитый JPEG, у CR3
+большой); в панели маска ужимается максимумом, в лупе — 1:1. Клиппинг,
+гистограмма и кривые — рабочая копия ≤ 2560 px. Миниатюрам маска — с
+шагом 2 (`Measure(step)`). Кривые теней и светов двигают середину не
+больше чем на 10 уровней из 255.
 
-**Точки против линий** (`FocusPeaking.Continuous`). Связное пятно меньше
-шести точек выбрасывается; вытянутое (длиннее своей ширины в 2,5 раза) или
-крупное (от 200 точек — текстура) считается гранью в полный вес; мелкое
-круглое — снег, блик, пылинка, зерно — весит вчетверо меньше. Балл
-(`Sharpness.Score`) берёт 98-й перцентиль крутизны по области и умножает на
-долю таких «настоящих» граней среди всех краёв области (полный вес с 3 %).
+**Точки против линий** (`FocusPeaking.Continuous`): пятно меньше шести
+точек выбрасывается; вытянутое (в 2,5 раза длиннее ширины) или крупное
+(от 200 точек) — грань в полный вес; мелкое круглое (снег, блик, зерно) —
+вчетверо меньше. Балл (`Sharpness.Score`) — 98-й перцентиль крутизны по
+области × доля «настоящих» граней среди всех краёв (полный вес с 3 %).
 
-**Балл меряется по середине кадра, а не по точке AF.** Camera Canon
-записывает зону автофокуса в makernote, и обычно она на объекте, но два
-кадра одной сцены (2026-09-22, R8, RF50/1.8, дистанция фокусировки 2,8 м)
-несут зону в левом верхнем углу, над потолком, — разбор проверен по
-структуре записи, это данные камеры. По такой зоне промахнувшийся кадр
-получал 100, а попавший 95; по середине кадра — 27 и 91. Рамка при этом
-рисуется: глазами видно, когда камера пишет ерунду.
+**Балл — по середине кадра, не по точке AF**: Canon пишет зону AF в
+makernote (`CanonAfInfo`, поворот — `AfGeometry`), но бывает в углу над
+потолком — данные камеры; по такой зоне промах получал 100, попадание
+95, по середине — 27 и 91. Рамка рисуется — видно, когда камера пишет
+ерунду.
 
-**Режим RAW.** Декод сенсора (WIC) не шарпится и не давится по шуму:
-настоящие грани в нём мягче порога, а зерно — чёткое, и подсветка
-рассыпалась пылью по кадру (4,6 % отметок против 0,85 % у JPEG той же
-сцены). Перед замером идёт `Luma.Denoise` — медиана 3×3: одиночные точки
-уходят, ступенька остаётся. Балл в этом режиме всё равно меряется по
-вшитому JPEG, поэтому число в панели и число на миниатюре не расходятся.
+**Режим RAW**: декод сенсора не шарпится, зерно в нём чётче граней
+(4,6 % отметок против 0,85 % у JPEG) — перед замером `Luma.Denoise`,
+медиана 3×3. Балл и в этом режиме — по вшитому JPEG.
 
-**Что живёт между кадрами.** Балл — в `SharpnessProbe` по пути и штампу
-файла (до 4000 записей). Маски пикинга — в `ReviewOverlay`, упакованные по
-биту на пиксель (24 Мп = 3 МБ), бюджет 32 МБ: ходить по паре кадров
-туда-сюда — обычный жест отбора, и второй раз он бесплатный. Рендеры ячеек
-галереи — в `ReviewThumbs`, 120 штук.
+**Что живёт между кадрами**: балл — `SharpnessProbe` по пути и штампу (до
+4000); маски пикинга — `ReviewOverlay`, бит на пиксель (24 Мп = 3 МБ),
+бюджет 32 МБ; рендеры ячеек — `ReviewThumbs`, 120.
 
-**Наложения.** Метки клиппинга и пикинга — одна палитровая картинка
-`Indexed4` (4 бита на пиксель; на 24 Мп 12 МБ вместо 96 у Pbgra32), рамки
-AF — геометрия поверх неё, всё вместе `DrawingImage` с клипом по кадру
-(без клипа перо рамки у края раздувало картинку на полтора пикселя, и
-наложение в лупе уезжало). Панель рисует наложение поверх вписанной
-картинки (`ImgOverlay` размером с `ImgFit`), лупа — своё, в разрешении
-кадра, размер и место ему ставит `UpdateZoomPosition` вместе с картинкой.
+**Наложения**: метки клиппинга и пикинга — одна `Indexed4` (на 24 Мп
+12 МБ вместо 96), рамки AF — геометрия поверх, всё — `DrawingImage` с
+клипом по кадру (без клипа перо у края раздувало картинку, и лупа
+уезжала). Панель — `ImgOverlay` размером с `ImgFit`; лупа — своё, в
+разрешении кадра, место ставит `UpdateZoomPosition`.
 
-**Кто когда считает.** В панели — `PreviewController.ScheduleHelpers`:
-токен привязан к загрузке картинки, результат публикуется, только если обе
-картинки те же (`ReferenceEquals`); пока у CR3 не приехал большой JPEG,
-пикинг и балл ждут (`Request.FullReady`) — что померено на быстром превью,
-пришлось бы отзывать. В галерее считает не проход по папке, а сами ячейки:
-`ReviewThumb` заказывает своё при появлении на экране и отменяет при уходе,
-`SharpnessController` отвечает на заказы балла и складывает ответы в строки
-пачками (строка, заменённая по одной, — это перестроенная строка). Очередь
-у обоих — `RankedGate` (Core, по два потока): ранг спрашивается, когда
-освобождается место, — файлы в панели просмотра (`ShownPath`), потом
-остальное выделенное, потом прочее на экране (`MainViewModel.HelperRank`);
-выделенное, пока ждало, поднимается в очереди. Сама панель считает сразу,
-мимо очереди.
+**Кто когда считает.** Панель — `PreviewController.ScheduleHelpers`:
+токен привязан к загрузке, публикация — только если картинки те же
+(`ReferenceEquals`); пока у CR3 не приехал большой JPEG, пикинг и балл
+ждут (`Request.FullReady`). В галерее считают ячейки: `ReviewThumb`
+заказывает при появлении и отменяет при уходе, `SharpnessController`
+складывает баллы в строки пачками. Очередь — `RankedGate` (Core, два
+потока): ранг спрашивается, когда освобождается место, — файлы в панели
+(`ShownPath`), остальное выделенное, прочее на экране
+(`MainViewModel.HelperRank`). Сама панель — мимо очереди.
 
 ## Состояние и логи
 
 Корень — `AppPaths.DataRoot` (Core, `Persistence/`): `--data-dir <путь>` →
 `--portable` (`data` рядом с exe, `Environment.ProcessPath`) →
 `WANDER_DATA_DIR` → `%LOCALAPPDATA%\Wander`; `AppPaths.Resolve(args)` в
-`App.OnStartup` до логгера, `Override` для харнесса и тестов. `LOCALAPPDATA`
-из среды не читается — рантайм берёт папку у оболочки. Пять потребителей:
-`FileLogger`, `JsonAppStateStore`, `ThumbnailDiskCache` (бутстраппер),
-`CrashReporter`, `PreviewPane` (WebView2). Источник корня — в заголовке
-сессии (`Data root: … (arg|portable|env|override|default)`).
+`App.OnStartup` до логгера, `Override` — харнессу и тестам.
+`LOCALAPPDATA` из среды не читается — папку даёт оболочка. Потребители:
+`FileLogger`, `JsonAppStateStore`, `ThumbnailDiskCache`, `CrashReporter`,
+`PreviewPane` (WebView2). Источник корня — в заголовке сессии
+(`Data root: … (arg|portable|env|override|default)`).
 
-**Две копии на одних данных** (2026-09-15): установленная (`C:\Programs\
-Wander`, `publish.ps1 -Install`) и Debug из Rider делят `%LOCALAPPDATA%\
-Wander` — так задумано, отдельной папки для отладки нет: отлаживаться
-удобно на своих закладках и раскладке. Кто пишет `state.json`, решает
-`InstanceLock` (Platform): экземпляр без ключа держит именованный мьютекс
-`Local\Wander.state.<хэш корня>` (не захватывает — только существует, пока
-жив процесс); экземпляр с `--yield` (`AppPaths.Yields`, ставит профиль
-`launchSettings.json` для Rider) ничего не держит, а перед каждой записью
-смотрит, есть ли владелец, и, увидев его раз, больше не пишет до конца
-сеанса (`IAppStateStore.IsReadOnly`, в заголовке окна «— настройки не
-сохраняются», строка в логе). Читает состояние он как обычно. Имя с хэшем
-корня — харнесс в песочнице и установленная копия друг друга не видят.
-Кэш миниатюр и профиль WebView2 общие: один рантайм, одни опции. Профиль —
-`AppPaths.WebView2` (AD1, 2026-09-25): `<tmp>\WebView2` при
-`UseSystemTemp`, иначе `<DataRoot>\WebView2`, выбирается раз на запуск
-(браузер держит папку, с которой стартовал); неиспользуемая папка
-удаляется после первого кадра, если нет другого экземпляра
-(`App.SweepUnusedWebViewProfile`). Опции —
+**Две копии на одних данных**: установленная (`C:\Programs\Wander`,
+`publish.ps1 -Install`) и Debug из Rider делят `%LOCALAPPDATA%\Wander` —
+так задумано. Кто пишет `state.json`, решает `InstanceLock` (Platform):
+экземпляр без ключа держит именованный мьютекс
+`Local\Wander.state.<хэш корня>` (только существует, пока жив процесс);
+экземпляр с `--yield` (`AppPaths.Yields`, профиль `launchSettings.json`)
+перед каждой записью смотрит, есть ли владелец, и, увидев его раз, до
+конца сеанса не пишет (`IAppStateStore.IsReadOnly`, «— настройки не
+сохраняются» в заголовке, строка в логе). Хэш корня — харнесс и
+установленная копия друг друга не видят. Кэш миниатюр и профиль WebView2
+общие. Профиль — `AppPaths.WebView2` (AD1): `<tmp>\WebView2` при
+`UseSystemTemp`, иначе `<DataRoot>\WebView2`, выбор раз на запуск;
+неиспользуемый удаляется после первого кадра, если нет другого
+экземпляра (`App.SweepUnusedWebViewProfile`); опции
 `--disable-component-update --disable-background-networking`, tracking
-prevention выключен: компоненты браузер не качает.
+prevention выключен — браузер ничего не качает.
 
 **`state.json`** (`JsonAppStateStore`, record `AppState`):
-- `Session` — `LastPath` (`NavigationStop?`), `LastPlace` (`ListPlace?`,
-  2026-09-25: главная выделенная строка, по `ListPlace.Neighbors` = 8 строк
-  с каждой стороны, как стояли, и первая строка на экране), `ExpandedPaths` (только
-  **видимо** раскрытые: `CollectExpandedRecursive` останавливается на
-  свёрнутом; флаги внутри ветки не гасятся при сворачивании, иначе
-  восстановление раскроет свёрнутого родителя), `ViewMode`,
-  `IsPreviewVisible`, `PreviewWidth`, `IsFoldersVisible` (панель папок
-  убрана — колонка и её сплиттер в 0, `FoldersWidth` ждёт), `IsBookmarksExpanded`,
-  `RecentPaths`, `ManualViewModes` (легаси, читается один раз для миграции в
-  `folders.json`), `BookmarksHeight`, `FoldersWidth`,
+- `Session` — `LastPath` (`NavigationStop?`), `LastPlace` (`ListPlace?`:
+  главная строка, по `ListPlace.Neighbors` = 8 строк с каждой стороны и
+  первая на экране), `ExpandedPaths` (только **видимо** раскрытые —
+  `FolderTreesController.CollectExpanded` по `PanelView.Rows`: раскрытое
+  под свёрнутой строкой живёт в сеансе, но не пишется, иначе
+  восстановление раскроет свёрнутого родителя),
+  `ViewMode`, `IsPreviewVisible`, `PreviewWidth`, `IsFoldersVisible`
+  (убрана — колонка и сплиттер в 0, `FoldersWidth` ждёт),
+  `IsBookmarksExpanded`, `RecentPaths`, `ManualViewModes` (легаси, для
+  миграции в `folders.json`), `BookmarksHeight`, `FoldersWidth`,
   `LayoutWindowWidth` / `LayoutWindowHeight` — окно, долей которого были
-  три размера панелей: `PaneSizes.Restore` (Core/Layout, тест) возвращает
-  пиксели как были, если окно того же размера, и ту же долю нового окна,
-  если нет. Считается при `Loaded` и ещё раз при `ContentRendered`: в
-  `Loaded` окно ещё не того размера, каким откроется, — восстановленное
-  развёрнутым стоит там в обычных границах (1762×700 против 2062×1118), и
-  панели, смасштабированные под них, оставались короткими каждый старт
-  (2026-09-17; вызов — чистая функция пары и окна, сторожа «то же окно»
-  нет). Потолок при перетаскивании — окно минус резерв соседа
-  (`MainViewModel.PaneCeiling`), чтобы drag и восстановление не спорили.
-  В файл уходит **пара, выставленная пользователем** (`_saved*`), а не
-  масштабированные размеры с экрана: перебазирование (`RebasePaneSizes`)
-  — только при перетаскивании разделителя; легаси-файл без размера окна
-  возвращает панель как была, но не шире «окно минус резерв»
-  (`PaneSizes.Restore`), до первого перетаскивания; иначе круг монитор →
-  ноутбук → монитор возвращал панели на пиксели не туда (округление и
-  минимумы в обе стороны, 2026-09-16). Контроль в логе: `State loaded`
-  (что прочитано), `Pane sizes: window WxH, set at WxH; …` (оба вызова),
-  `State written` (что ушло на диск; только когда пара изменилась).
+  три размера панелей.
+  - `PaneSizes.Restore` (Core/Layout, тест): окно того же размера — те же
+    пиксели, другого — та же доля, списку не меньше 240 px; зовётся при
+    `Loaded` и ещё раз при `ContentRendered` (в `Loaded` развёрнутое окно
+    ещё в обычных границах). Потолок перетаскивания — окно минус резерв
+    соседа (`MainViewModel.PaneCeiling`).
+  - В файл уходит **пара, выставленная пользователем** (`_saved*`), не
+    размеры с экрана; перебазирование (`RebasePaneSizes`) — только
+    перетаскиванием разделителя, иначе круг монитор → ноутбук → монитор
+    возвращал панели не туда. Легаси без размера окна — как было, но не
+    шире «окно минус резерв». Контроль: `State loaded`,
+    `Pane sizes: window WxH, set at WxH; …`, `State written` (только
+    когда пара изменилась).
 - `Favorites` — закладки в порядке пользователя (`MoveBookmark`);
-  стандартные не здесь; пропавший путь не выбрасывается (`IsMissing`).
+  стандартные не здесь; пропавший путь остаётся (`IsMissing`).
 - `Window` — `WindowGeometry`; обратно через `WindowPlacement`
-  (`Core/Layout/`): размер < 320×240 отбрасывается, позиция прижимается к
+  (`Core/Layout/`): меньше 320×240 — отбрасывается, позиция прижимается к
   виртуальному экрану с полосой заголовка.
-- `Settings` — `AppSettings`: `RestoreLastFolder`, `ShowHidden`, `ShowSystem`,
-  `ConfirmRecycle`, сортировка, метрики видов, чекбоксы закладок,
-  `TreeKeyboardNavigates`, `TreeScrollsSideways`, `DefaultViewMode`, `ShowDebugMenu`,
-  `LogActions`, `LogPaths`, `VisibleFirstLoading`, галерея, контекстное меню
+- `Settings` — `AppSettings`: `RestoreLastFolder`, `ShowHidden`,
+  `ShowSystem`, `ConfirmRecycle`, сортировка, метрики видов, чекбоксы
+  закладок, `TreeKeyboardNavigates`, `TreeScrollsSideways`,
+  `DefaultViewMode`, `ShowDebugMenu`, `LogActions`, `LogPaths`,
+  `VisibleFirstLoading`, галерея, контекстное меню
   (`ShellExtensionsEnabled`, `BlockedShellExtensions`,
-  `KnownShellExtensions` — подрезается при сохранении,
-  `HiddenContextMenuItems`).
+  `KnownShellEntries`, `HiddenContextMenuItems`).
 
-`AppState.Version` — форма файла (`AppState.CurrentVersion`, сейчас 1,
-2026-09-22): поднимается, когда изменение потерялось бы или было бы
-прочитано неверно старой сборкой. Файл более новой формы старая сборка
-**не перезаписывает** (`JsonAppStateStore.Save`), читает как обычно; файл
-без поля читается текущей формой. Полное правило «кто пишет, когда на
-машине несколько версий» не решено — BACKLOG, «Сборка и поставка» (AD11).
+`AppState.Version` (`AppState.CurrentVersion`, сейчас 1) поднимается,
+когда изменение потерялось бы или прочиталось бы неверно старой сборкой.
+Файл новее сборки **не перезаписывается** (`JsonAppStateStore.Save`),
+читается как обычно; без поля — текущая форма. Правило «кто пишет, когда
+версий несколько» — BACKLOG, «Сборка и поставка» (AD11). Миграционного
+слоя **нет**: `Load` ловит исключение → `new AppState()` (до 1.0).
 
-Миграционного слоя **нет**: `Load` ловит исключение → `new AppState()`
-(до 1.0 схема ломается).
+**`folders.json`** — база параметров папок (Z1):
+`Folders/FolderSettingsBook` (Core, тест), записи `FolderRecord` (путь,
+дата создания UTC, день последнего захода, закреплённые вид и `Sort`;
+поля необязательные, новое — без смены версии), ключ — путь без регистра
+и хвостового разделителя. Хранятся только папки, которым есть что помнить;
+`DefaultCapacity` = 3000, вытеснение по дню захода.
+`IFolderSettingsStore` → `JsonFolderSettingsStore` (Platform, тот же
+`InstanceLock`): своя `Version` = 1, файл новее сборки не перезаписывается,
+запись через `.tmp` + `Move`, `--yield` не пишет. Читается синхронно в
+`RestoreState` (тысячи строк — миллисекунды), пишется из `WriteStateNow`
+по `_foldersDirty` тем же дебаунсом. На приходе дата создания читается на
+пуле с листингом (`IFileSystem.GetCreationTimeUtc`), `Touch` двигает день
+захода; папка **без** записи проверяет `AdoptCandidates` (та же дата и
+том, другой путь) через `DirectoryExists`, и ровно один пропавший
+усыновляется (`Adopt`) — закрепление находит папку, переименованную
+снаружи; две копии с одной датой (robocopy `/DCOPY:T`) — ничего. Свои
+переносы — `Follow` по `PathFollowing`. Миграция:
+`SessionState.ManualViewModes` (до 128 закреплений 0.4.x) читаются один
+раз в книгу; глобальный `SessionState.ViewMode` не переносится —
+умолчание стало настройкой (решение 2026-09-23).
 
-**`folders.json`** — база параметров папок (Z1, 2026-09-23):
-`Folders/FolderSettingsBook` (Core, тест) держит записи `FolderRecord`
-(путь, дата создания UTC, день последнего захода, закреплённые вид и
-порядок — `Sort` с 2026-09-28; поля необязательные, новое добавляется без
-смены версии), ключ — путь без регистра и хвостового разделителя. Хранятся
-только папки, которым есть что помнить (снял оба закрепления — запись
-ушла); потолок
-`DefaultCapacity` = 3000, вытеснение по дню захода. `IFolderSettingsStore`
-(Core) → `JsonFolderSettingsStore` (Platform, рядом с `JsonAppStateStore`,
-тот же `InstanceLock`): своя `Version` = 1, файл новее сборки не
-перезаписывается, запись через `.tmp` + `Move`, `--yield` не пишет.
-Читается синхронно в `RestoreState` вместе с `state.json` (тысячи строк —
-миллисекунды); пишется из `WriteStateNow` по флагу `_foldersDirty` — тем же
-дебаунсом 500 мс. На приходе: дата создания читается на пуле вместе с
-листингом (`IFileSystem.GetCreationTimeUtc`), `Touch` двигает день захода;
-у папки **без** записи `AdoptCandidates` (те же дата и том, другой путь)
-проверяются `DirectoryExists` там же на пуле, и ровно один пропавший
-кандидат усыновляется (`Adopt`) — так закрепление находит папку,
-переименованную снаружи; две копии с одной датой (robocopy `/DCOPY:T`) —
-ничего. Переименование и перенос Wander'ом — `Follow` по правилу
-`PathFollowing` (модель окна; там же MRU адресной строки, память выделения
-и буфер, AD3-хвост). Миграция: `SessionState.ManualViewModes`
-(до 128 закреплений 0.4.x) читаются один раз в книгу, если у папки ещё нет
-записи, и больше не пишутся; глобальный `SessionState.ViewMode` не
-переносится — умолчание стало настройкой (решение 2026-09-23).
+**Номер сборки** (AH) — четвёртое число `FileVersion`,
+`BuildInfo.BuildNumber`; строка версии —
+`v0.4.1-beta.137 D, 96e5e, 22.09.26`. Счётчик —
+`src/Wander.App/build-number.txt`, вне гита, на машину; цель
+`StampBuildNumber` в `Wander.App.csproj` крутит его на обычной сборке
+(кроме `-p:WanderRelease=true`, дизайн-сборок IDE и `*_wpftmp`),
+`version.ps1` сбрасывает в 0. У релиза (`release.yml`, `publish.ps1` без
+`-Install`) и CI номера нет — `BuildInfo.Line` в три числа.
+`LastRunVersion` = `BuildInfo.Version`: кэш миниатюр сбрасывает смена
+версии, не пересборка.
 
-**Номер сборки** (AH, 2026-09-22) — четвёртое число `FileVersion`,
-`BuildInfo.BuildNumber`. Счётчик — `src/Wander.App/build-number.txt`, вне
-гита, свой на машину; цель `StampBuildNumber` в `Wander.App.csproj` крутит
-его на любой обычной сборке (кроме `-p:WanderRelease=true`, дизайн-сборок
-IDE и временного `*_wpftmp`-проекта), `version.ps1` сбрасывает в 0. У
-релиза и у CI номера нет — `BuildInfo.Line` тогда без четвёртого числа.
-`LastRunVersion` в `state.json` хранит `BuildInfo.Version` (три числа и
-суффикс): кэш миниатюр сбрасывает смена версии, не пересборка.
+**`logs\session-*.log`** — `FileLogger`; в тестах `NullLogger`. Ротация —
+`LogFolders.Sweep` при старте на пуле: 200 последних `session-*` /
+`journal-*`, 20 `crashes\crash-*.zip`, правило — `Core/Logging/LogRetention`
+(тест); текущий лог и чужие файлы не трогаются. Повторы `WARN` / `ERROR`
+схлопывает `Core/Logging/RepeatCollapser` (подпись — уровень, сообщение,
+тип и первый кадр исключения): первое пишется, та же подпись в течение
+5 с считается, итог «`ERROR repeated N times over M s: сообщение`» — при
+смене строки, раз в минуту и при закрытии. `INFO` не схлопывается —
+хронология. `Written` поднимается на каждый вызов. Smoke `check.bat run`
+пишет в `artifacts\smoke\data`. Долгие фоновые ожидания называет
+`Core/Diagnostics/LongWait.WatchAsync` (тест):
+`SLOW wait: что - still running after 5 s` и `SLOW done: что - took N s`
+— на листинге архива (`RefreshShellAsync`), на уровне панели папок
+(`WorkspaceController.ReadAsync`), в панели просмотра и на распаковке
+записи.
 
-**`logs\session-*.log`** — `FileLogger`: открытие папки, операции, конфликты,
-ошибки; в тестах `NullLogger`. Ротация — `LogFolders.Sweep` при старте на
-пуле: 200 последних `session-*` / `journal-*` и 20 `crashes\crash-*.zip`,
-правило отбора — `Core/Logging/LogRetention` (тест). Повторы `WARN` /
-`ERROR` схлопывает `Core/Logging/RepeatCollapser` (подпись — уровень,
-сообщение, тип и первый кадр исключения): первое появление пишется всегда,
-та же подпись в течение 5 с считается, итог «`ERROR repeated N times over
-M s: сообщение`» — при смене строки, раз в минуту, пока повторы идут, и при
-закрытии лога. `INFO` через коллапсер не проходит: это хронология, и две
-одинаковые строки подряд — два события. Событие `Written` поднимается на
-каждый вызов, схлопнутые включая. Smoke-прогон `check.bat run` пишет в
-`artifacts\smoke\data`, не сюда. Долгие фоновые ожидания — спиннер, за
-которым в логе ничего, — называет `Core/Diagnostics/LongWait.WatchAsync`
-(тест): `SLOW wait: что - still running after 5 s` один раз и `SLOW done:
-что - took N s` по концу; висит на листинге архива в списке
-(`RefreshShellAsync`), в дереве (`TreeNodeViewModel.LoadChildrenAsync`) и в
-панели просмотра, и на распаковке записи для панели (очередь и распаковка
-одним ожиданием).
+**Журнал действий** — `Core/Logging/ActionJournal`: что видел
+пользователь, словами статус-бара, с датой и временем; кнопка (`F0E3`) в
+статус-баре открывает `journal-<pid>.txt` системным просмотрщиком.
+Открытые папки (только приход) и операции; описание самого списка
+(«элементов: 27» на каждую букву фильтра) — через `SetStatusQuietly`, в
+журнал не идёт. Без повторов и пустых, до 500 строк.
 
-**Что лог говорит о файлах** (2026-09-22). Без своего логгера пишут через
-`Core/Logging/Log` (`Log.Info` / `Warn` / `Error`, `Log.Current` — тем, кто
-берёт `ILogger`); конструктор с логгером пишет в свой. Строка `$"..."`
-через `ILogger` или `Log` идёт обработчиком `LogMessage`: каждое текстовое
-значение маскируется отдельно (`LogMask.Scrub`) — граница пути точная,
-слова строки на месте; `FileLogger` маскирует строку целиком ещё раз и
-текст исключения (готовые строки, `IOException` с путём). Метка —
-`<C:\~3fa91c\~0b2e4d.jpg>`: диск, глубина, расширение и «та же папка — та
-же метка» в пределах сеанса (хэш строк процесса, случайный на запуск);
-корень диска, `shell:` и путь исходника в кадре стека — как есть;
-написанное в кавычках (`'…'`, `"…"`, «…») считается именем. Голое имя
-маской не узнать — его оборачивают `Log.Path` (переименование, создание
-папки, строки панелей, восстановление из корзины); в строках лога не
-ставить кавычки вокруг того, что не имя (версия в `Version changed`).
-Отключает `AppSettings.LogPaths` (`Log.RevealPaths`). Отчёт о падении
-маскирует `crash.txt` и заготовку issue тем же правилом, галочка «приложить
-лог» говорит, есть ли в нём пути. Строки до `RestoreState` маскированы
-всегда. Харнесс включает `LogPaths` сразу после окна: `assert-log` ищет
+**Что лог говорит о файлах.** Без своего логгера пишут через
+`Core/Logging/Log` (`Info` / `Warn` / `Error`, `Log.Current`). Строка
+`$"..."` через `ILogger` или `Log` идёт обработчиком `LogMessage`: каждое
+значение маскируется отдельно (`LogMask.Scrub`) — граница пути точная;
+`FileLogger` маскирует строку целиком ещё раз и текст исключения. Метка —
+`<C:\~3fa91c\~0b2e4d.jpg>`: диск, глубина, расширение, «та же папка — та
+же метка» в пределах сеанса (хэш со случайной солью на запуск); корень
+диска, `shell:` и путь исходника в стеке — как есть; в кавычках (`'…'`,
+`"…"`, «…») — имя. Голое имя оборачивают `Log.Path`; кавычек вокруг не
+имени не ставить (версия в `Version changed`). Отключает
+`AppSettings.LogPaths` (`Log.RevealPaths`). Отчёт о падении маскирует
+`crash.txt` и заготовку issue тем же правилом. До `RestoreState` —
+маскировано всегда. Харнесс включает `LogPaths` сразу: `assert-log` ищет
 пути.
 
 **Трасса действий** — `AppSettings.LogActions` (`Log.Details`;
-`Log.Detail` с обработчиком `DetailMessage` не собирает строку, пока
-выключено): `Key:` (аккорд и зона; набранное в поле или буква поиска по
-имени — `(typed)`, пока пути маскируются), `Click:` (кнопка мыши, зона,
-строка / папка / кнопка), `Menu:` (класс-обработчик `MenuItem.Click`:
-меню — своё окно), `Focus:` (зона → зона), `Selection:`
-(проекция выделения модели) и трасса модели окна: `WS <событие>;
-effects: …` строкой на событие (`WorkspaceController`) и `WS target: …` на
-смену производной цели. Контрольные строки 0.4.1 (`Target:`, `tree:
-highlight`, `Delete: no target`) сняты с блоком 2 — их заменила трасса.
+`Log.Detail` через `DetailMessage` не собирает строку, пока выключено):
+`Key:` (аккорд и зона; набранное — `(typed)`, пока пути маскируются),
+`Click:`, `Menu:` (класс-обработчик `MenuItem.Click`), `Focus:`,
+`Selection:` и трасса модели окна — `WS <событие>; effects: …`
+(`WorkspaceController`) и `WS target: …`.
 
-**`thumbs\*.png`** — `ThumbnailDiskCache` (Platform): имя SHA-256 от «путь +
-mtime + размер» (изменившийся файл — другое имя, инвалидации не нужно);
-запись во временный + `File.Move(overwrite)` (два окна не оставят половину
-PNG); ошибки диска глотаются; подрезка по времени обращения раз в 64 записи
-и при уменьшении лимита, до 80 % бюджета, всегда в фоне; лимиты через
-`IIconProvider.ConfigureCache(ThumbnailCacheOptions)`.
+**`thumbs\*.png`** — `ThumbnailDiskCache` (Platform): имя SHA-256 от
+«путь + mtime + размер» (изменился — другое имя); запись во временный +
+`File.Move(overwrite)`; ошибки диска глотаются; подрезка по времени
+обращения раз в 64 записи и при уменьшении лимита, до 80 % бюджета, в
+фоне; лимиты — `IIconProvider.ConfigureCache(ThumbnailCacheOptions)`.
 
 **`crashes\*.zip`** — `CrashReporter`; `App.HookCrashLogging`:
 `DispatcherUnhandledException` (лог + репорт, `Handled = true`),
-`AppDomain.UnhandledException` (флаш), `TaskScheduler.UnobservedTaskException`.
-Репорт — пре-заполненный GitHub issue + локальный zip; **ничего не уходит
-без действия пользователя**.
+`AppDomain.UnhandledException` (флаш),
+`TaskScheduler.UnobservedTaskException`. Репорт — заготовка GitHub issue +
+локальный zip; **ничего не уходит без действия пользователя**; на ту же
+ошибку — не чаще раза в минуту (`App.ShouldOffer`); под `--smoke` выключен.
+
+**Стенды в меню «Отладка»**: «Операция» (AI1, `Diagnostics/DebugOperation`)
+— поддельная операция на восемь файлов по 20–80 МБ, 2–5 с каждый, без
+диска, через настоящие `OperationTracker` и окно прогресса: «Ровно»,
+«Ошибка на 4-м», «Отмена посреди», «Три сразу». Занять файл — отладочные
+действия (AI2, «Свои действия и групповое переименование»).
 
 ## Настройки — окно и правила
 
 `Views/SettingsWindow` — тонкий вид над `SettingsViewModel`: страница —
 подкласс `SettingsCategoryViewModel` и `DataTemplate` по его типу;
-изменения применяются сразу, «Отмена» откатывает к снимку, снятому при
-открытии. Правила раскладки и подписей (2026-09-25, по гайдлайнам
-настроек Microsoft, GNOME HIG и Win UX Guide «Check boxes»):
+изменения применяются сразу, «Отмена» откатывает к снимку при открытии;
+окно по умолчанию 880×640. Правила раскладки и подписей (2026-09-25, по
+гайдлайнам Microsoft, GNOME HIG и Win UX Guide «Check boxes»):
 
-1. **Страница — часть Wander, как её встречает человек**, а не механизм и не
-   «разное»: «Основное» и «Дополнительно» не заводятся — такая страница
-   собирает то, чему не нашлось места. Три группы в списке слева, отбивкой
-   (`StartsCluster`): что на экране (Папки и закладки, Список файлов, Вид —
-   под ним Размеры и Галерея), что делается с файлами (Файловые операции —
-   под ними Контекстное меню, Действия, Программы, Оценки), служебное (Кэш
-   и память, Клавиатура, Отладка и сброс). Страница о части другой — под
-   ней с отступом (`IsNested`, 2026-09-28). Новый пункт — на страницу той части, о
-   которой он, а не того вида, где его заметили: оценки ставятся в любом
-   виде, поэтому они не на странице галереи. Не нашлось — повод обсудить, а
-   не страница «Прочее».
-2. **Группа — заголовок-контекст** («При запуске», «Показывать в списке»,
-   «Подтверждения», «Совпадения имён при копировании и перемещении»): пункт
-   читается вместе с ним и его не повторяет; заголовок говорит, когда
-   пункт действует, а не как устроено внутри («Изменения от других
-   программ», не «Обновление»). У страницы из одной группы заголовок группы
-   — название страницы. Выбор одного из нескольких — переключатели
-   (радиокнопки), а не флажок с «выключено», которое надо угадать («При
-   запуске»: последняя или рабочая папка), по строке на вариант под
-   заголовком группы (в одну строку с подписью — пробовали 2026-09-28 —
-   читалось сжато); что относится к варианту — в его строке (яркость фона
-   галереи). Поле, уточняющее флажок, — внутри его фразы: «Включать
+1. **Страница — часть Wander, как её встречает человек**, не механизм и
+   не «разное»: «Основного» и «Дополнительно» нет. Три группы слева
+   отбивкой (`StartsCluster`): что на экране (Папки и закладки, Список
+   файлов, Вид — под ним Размеры и Галерея), что делается с файлами
+   (Файловые операции — под ними Контекстное меню, Действия, Программы,
+   Оценки), служебное (Кэш и память, Клавиатура, Отладка и сброс).
+   Страница о части другой — под ней с отступом (`IsNested`). Пункт — на
+   страницу той части, о которой он (оценки ставятся в любом виде — не на
+   странице галереи). Не нашлось места — повод обсудить, не «Прочее».
+2. **Группа — заголовок-контекст** («При запуске», «Подтверждения»,
+   «Совпадения имён при копировании и перемещении»): пункт его не
+   повторяет; заголовок говорит, когда пункт действует («Изменения от
+   других программ», не «Обновление»); у страницы из одной группы —
+   название страницы. Один из нескольких — переключатели по строке на
+   вариант, не флажок с угадываемым «выключено»; что относится к варианту
+   — в его строке. Поле, уточняющее флажок, — внутри фразы: «Включать
    галерею, если снимков в папке больше [50] %».
-3. **Флажок** — фраза про включённое состояние, без отрицания
-   («Спрашивать…», «Показывать…», «Пропускать… без вопроса»); в группе —
-   один оборот. Отмечено — включено везде, в таблицах тоже: колонка
-   галочек — «Вкл» (2026-09-28; «Скрыть» и «Скрыть консоль» были
-   исключениями); хранится как угодно (`IsShown` над `IsHidden`,
-   `ShowConsole` над `HideConsole`).
-4. **Поле** — существительное, единица через запятую: «Высота строки, px»,
-   «Не больше, МБ»; диапазон и стандартное значение — в подсказке поля.
+3. **Флажок** — фраза про включённое состояние, без отрицания; в группе
+   — один оборот. Отмечено — включено везде, в таблицах колонка «Вкл»;
+   хранится как угодно (`IsShown` над `IsHidden`, `ShowConsole` над
+   `HideConsole`).
+4. **Поле** — существительное, единица через запятую («Высота строки,
+   px»); диапазон и стандартное — в подсказке.
 5. **Страница понятна без подсказок** (2026-09-28): что пункт делает,
-   говорят подпись и группа. Строка серым под пунктом (`Note`, под флажком
-   — `CheckNote`) — только цена изменения, которой нет в подписи и которую
-   надо увидеть до действия: удаление уносит спутники, `.pp3` меняет
-   проявку в RawTherapee, кэш, память и Temp, пути в логе. Подсказка —
-   только то, чего на экране нет: не повтор ячейки или соседнего поля
-   (обрезанный текст целиком — `TrimmedToolTip`), не справка о том, откуда
-   данные. Остальное — в GUIDE: F1 и «?» у кнопок окна открывают его на
-   сайте, на странице и разделе страницы настроек (`GuidePage`, проверяет
-   шаг «сайт»). Абзацев «про всю страницу» нет.
-6. **Зависимый пункт** — под родителем с отступом (`Sub`), выключен вместе
-   с ним; подсказка видна и у выключенного.
-7. **Порядок**: частое выше; редкое и необратимое (сброс, очистка) —
-   последним: сброс страницы — своей группой внизу (`ResetGroupTitle`,
-   отбивка шире группы), не рядом с кнопками таблицы; справка и отладка — в
-   конце списка.
-8. **Ширина**: страница умещается в окно минимального размера (660 px) без
-   прокрутки вбок — правая область её не прокручивает. Таблица — строка в
-   одну линию, до четырёх колонок делят ширину, длинная ячейка обрезается
-   многоточием (`CellText`), целиком — в подсказке; клик по заголовку
-   сортирует, кроме таблицы, чей порядок — форма меню («Основные пункты»);
-   остальное о строке — в форме под таблицей; превью — рядом с
-   полями или под ними (`WrapPanel`), шире страницы — обрезается внутри
-   своей рамки. Две строки в ячейке (пробовали 2026-09-25) вдвое урезали
-   видимое в таблице и убрали сортировку по программе и типам.
-9. **Таблица и форма** (`SettingsGrid`): выделенная строка — голубым
-   `RowSelected`, как в Проводнике, при своём цвете текста, и не гаснет,
-   когда клавиатура в форме; форма выбранной строки — карточка, шапка
-   которой — сама строка: тот же голубой, её название (красным, как строка),
-   кнопки, что действуют на неё; выделенная строка прокручивается в вид
-   (`ActionsGrid_ShowSelected`). Поля без рамки под таблицей читались как
-   настройки страницы. Что меняет состав таблицы (поиск) — строкой над ней;
-   что добавляет строки — кнопкой под ней. Программа — не поле для ввода, а
-   список уже используемых и кнопка выбора файла для новой; чего нет,
-   говорит красная строка под списком, сохранение не запрещается.
-10. **Поле поиска и фильтра** — `Controls/FilterBox` (2026-09-28), и в
-    окнах вне настроек («Добавить…» контекстного меню, окно поиска):
-    подсказка в пустом, крестик в непустом, `Esc` очищает непустое и до
-    окна не доходит — в диалоге `Esc` это «Отмена», и набранный фильтр не
-    должен уносить с собой правки окна (так в настройках Rider); пустое
-    отдаёт `Esc` окну. Окно, которое берёт `Esc` раньше детей (окно поиска
-    закрывается им), так и делает.
+   говорят подпись и группа. Строка серым под пунктом (`Note`, `CheckNote`)
+   — только цена изменения, которую надо увидеть до действия (спутники,
+   `.pp3`, кэш, память и Temp, пути в логе). Подсказка — только то, чего
+   на экране нет (обрезанный текст — `TrimmedToolTip`). Остальное — GUIDE:
+   F1 и «?» открывают раздел страницы на сайте (`GuidePage`, шаг «сайт»).
+6. **Зависимый пункт** — под родителем с отступом (`Sub`), выключен с
+   ним; подсказка видна и у выключенного.
+7. **Порядок**: частое выше; сброс страницы — своей группой внизу
+   (`ResetGroupTitle`, отбивка шире), не у кнопок таблицы; справка и
+   отладка — в конце списка.
+8. **Ширина**: страница умещается в 660 px без прокрутки вбок. Таблица —
+   строка в одну линию, до четырёх колонок, длинная ячейка — многоточие
+   (`CellText`), целиком — в подсказке; заголовок сортирует, кроме
+   таблицы с порядком меню; остальное о строке — в форме под таблицей;
+   превью — рядом с полями или под ними (`WrapPanel`). Две строки в ячейке
+   вдвое урезают видимое и убирают сортировку.
+9. **Таблица и форма** (`SettingsGrid`): выделенная строка — `RowSelected`
+   при своём цвете текста, не гаснет с клавиатурой в форме; форма —
+   карточка, шапка которой — сама строка (тот же голубой, название,
+   кнопки строки), строка прокручивается в вид
+   (`ActionsGrid_ShowSelected`). Поиск — над таблицей, добавление — кнопкой
+   под ней. Программа — список используемых и выбор файла; чего нет —
+   красная строка, сохранение не запрещается.
+10. **Поиск и фильтр** — `Controls/FilterBox` (и вне настроек): подсказка
+    в пустом, крестик в непустом, `Esc` очищает непустое и до окна не
+    доходит (в диалоге `Esc` — «Отмена», фильтр не должен уносить правки;
+    так в Rider); пустое отдаёт `Esc` окну. Окно, которое берёт `Esc`
+    раньше детей (окно поиска), так и делает.
 
-У `ComboBox` пути (`DisplayMemberPath`, `SelectedValuePath`) — атрибутами на
-нём самом, раньше `SelectedValue`: заданные стилем, они приходили позже
-значения, выбор не находился, и список стоял пустым. Вёрстку страниц без
-экрана проверяет стенд: окно создаётся ради ресурсов и не показывается,
-страница кладётся в `HwndSource` без `WS_VISIBLE` за экраном (без
-источника `DataGrid` не получает `Loaded` и не раскладывает колонки;
-ширина источника — в физических пикселях, с запасом на масштаб) и
-отрисовывается в PNG.
+У `ComboBox` `DisplayMemberPath` / `SelectedValuePath` — атрибутами на нём,
+раньше `SelectedValue`: заданные стилем, приходят позже значения, и список
+стоит пустым. Вёрстку страниц без экрана проверяет стенд: страница в
+`HwndSource` без `WS_VISIBLE` за экраном (без источника `DataGrid` не
+раскладывает колонки; ширина — в физических пикселях) → PNG.
+
+- **«Клавиатура»** — таблицы GUIDE (`HotkeyCatalog`, `SharedSizeGroup` —
+  одна колонка жестов на все группы), только чтение; жесты литералами,
+  описания из ресурсов. `HotkeyCatalog.Filter` ищет по жесту и описанию,
+  пробелы в жесте снимаются («ctrl+q» → «Ctrl + Q»).
+- **«Память под картинки»** — `AppSettings.PictureMemoryMb` (0 — 1/16
+  памяти машины; 128…65536); лимиты кэша — сразу (`OnSettingsChanged` →
+  `ApplyThumbnailCacheSettings`); диск миниатюр — 256 МБ по умолчанию.
+- Служебные файлы корня тома (`pagefile.sys`, `hiberfil.sys`,
+  `swapfile.sys`, `DumpStack.log.tmp`) — той же настройкой, что служебные
+  папки (`SystemRootFolders`).
+- «Помощь» — `CrashReporter.GuideUrl` (`lekta.github.io/wander/guide/`).
 
 ### Новая настройка — по шагам
 
-Порядок один для пункта на готовой странице и для новой страницы
-(2026-09-28); правила — список выше, здесь — что за чем.
+Порядок один для пункта и для новой страницы; правила — выше.
 
-1. **Нужна ли.** Сначала поведение, которое не надо настраивать;
-   настройка — когда привычек две и обе настоящие
-   (`TreeKeyboardNavigates`) или у выбора есть цена, которую платит
-   человек (кэш, `.pp3`).
-2. **Страница и группа** — правила 1, 2, 7. Не нашлось места — вопрос
-   человеку.
+1. **Нужна ли.** Сначала поведение без настройки; настройка — когда
+   привычек две и обе настоящие (`TreeKeyboardNavigates`) или у выбора
+   есть цена для человека (кэш, `.pp3`).
+2. **Страница и группа** — правила 1, 2, 7; не нашлось — вопрос человеку.
 3. **Контрол и подпись** — правила 2–6. Хранится как удобнее коду,
    показывается включённым: `HideSystemRootFolders` в `AppSettings`,
    `ShowSystemRootFolders` во вьюмодели.
 4. **Код, по цепочке**:
-   - `AppSettings` — свойство с умолчанием «из коробки», в комментарии —
-     почему оно такое;
-   - `SettingsViewModel` — поле и свойство (число — через `ClampInt`),
-     строка в `ApplyFrom` и в `ToRecord`; производное свойство — `Raise`
-     из сеттера;
-   - потребитель — ветка в `MainViewModel.OnSettingsChanged`: действует
-     сразу и в обе стороны — «Отмена» и сброс приходят тем же `ApplyFrom`;
-     производное свойство — в ранний выход, иначе второе сохранение;
-   - правило, которое настройка включает, — чистая функция Core с тестом,
-     значение — параметром: Core настроек не читает (`Log.Details`,
-     `AppPaths.UseSystemTemp`, `ThumbnailCacheOptions`);
-   - разметка — строка в шаблоне страницы `SettingsWindow.xaml` готовыми
-     стилями (`Row`, `Sub`, `GroupTitle`, `Note` / `CheckNote`,
-     `FieldRow`); числовое поле — `UpdateSourceTrigger=Explicit`
-     (`NumericField`), текстовое — `NumericField.Enabled="False"`, поиск —
-     `FilterBox`, текст, который может не поместиться, — `TrimmedToolTip`;
+   - `AppSettings` — свойство с умолчанием, в комментарии — почему такое;
+   - `SettingsViewModel` — поле и свойство (число — `ClampInt`), строка в
+     `ApplyFrom` и `ToRecord`; производное — `Raise` из сеттера;
+   - потребитель — ветка в `MainViewModel.OnSettingsChanged`: сразу и в
+     обе стороны («Отмена» и сброс — тем же `ApplyFrom`); производное — в
+     ранний выход, иначе второе сохранение;
+   - правило — чистая функция Core с тестом, значение параметром: Core
+     настроек не читает (`Log.Details`, `AppPaths.UseSystemTemp`,
+     `ThumbnailCacheOptions`);
+   - разметка — строка в шаблоне страницы `SettingsWindow.xaml` стилями
+     `Row`, `Sub`, `GroupTitle`, `Note` / `CheckNote`, `FieldRow`; число —
+     `UpdateSourceTrigger=Explicit` (`NumericField`), текст —
+     `NumericField.Enabled="False"`, поиск — `FilterBox`, длинный текст —
+     `TrimmedToolTip`;
    - текст — `Strings.resx` и `Strings.Settings.cs`.
 5. **Новая страница** — подкласс `SettingsCategoryViewModel` с `guide:`,
-   `DataTemplate` по его типу, место в `SettingsViewModel.Categories`
-   (`startsCluster`, `nested`). Выбранная строка таблицы и текст поиска —
-   свойства страницы, не владельца: каждое изменение владельца
-   сохраняется. Страница, которая держит строку владельца, следит за его
-   коллекцией (`ActionsSettingsCategory`): сброс пересобирает строки, пока
-   страница не на экране.
-6. **Доки**: GUIDE — пункт с подписью из окна в разделе своей страницы в
-   «Справочник» → «Настройки», ссылка туда из текста о поведении и
-   раздел, куда ведёт `F1`; CHANGELOG; DONE, «Настройки и справка»; строка
-   чек-листа в QA, «Настройки»; сюда — только новое правило или механизм.
-7. **Проверка**: `check.bat run` — строки, ключи XAML, цели `F1` (шаг
-   «сайт»), smoke; страница в окне 660 px — стендом (абзац выше) или
-   глазами; «Отмена» и «Сбросить все настройки» возвращают значение. Имя
-   свойства вьюмодели — контракт шага `settings` харнесса.
+   `DataTemplate`, место в `SettingsViewModel.Categories`
+   (`startsCluster`, `nested`). Выбранная строка и текст поиска — свойства
+   страницы, не владельца (каждое изменение владельца сохраняется);
+   страница со строкой владельца следит за его коллекцией
+   (`ActionsSettingsCategory`).
+6. **Доки**: GUIDE — пункт с подписью из окна в «Справочник» →
+   «Настройки», ссылка из текста о поведении, раздел для `F1`; CHANGELOG;
+   DONE, «Настройки и справка»; чек-лист QA, «Настройки»; сюда — только
+   новое правило или механизм.
+7. **Проверка**: `check.bat run` — строки, ключи XAML, цели `F1`, smoke;
+   страница в 660 px — стендом или глазами; «Отмена» и «Сбросить все
+   настройки» возвращают значение. Имя свойства вьюмодели — контракт шага
+   `settings` харнесса.
 
 ## Строки интерфейса
 
-`Resources/Strings.resx` (встроенный ресурс), `Resources/Strings.cs` — одна
-строка на ключ поверх `ResourceManager`, XAML — `{x:Static res:Strings.Key}`;
-ненайденный ключ возвращает себя. Класс руками, не `MSBuild:Compile`:
-markup-компилятор WPF собирает XAML во временном проекте (`*_wpftmp.csproj`),
-куда designer-файл из `obj/` не попадает. Второй язык —
-`Strings.<culture>.resx` (BACKLOG). **Граница слоёв**: Core отдаёт
-пользователю подписи меню (`ContextMenuCatalog`) и причину отказа drop'а
-(`PathSafety.FormatReason`) через `ITextSource` (`AppTextSource` в App);
-Core хранит ключи. Без источника `Text.Get` возвращает ключ — режим тестов
-(`ContextMenuCatalogTests`); `FormatReason` принимает `ITextSource?`
-параметром.
+`Resources/Strings.resx` (встроенный ресурс), `Resources/Strings.cs` —
+одна строка на ключ поверх `ResourceManager`, аксессор разложен по
+областям partial-классами (`Strings.Settings.cs` …); XAML —
+`{x:Static res:Strings.Key}`; ненайденный ключ возвращает себя. Класс
+руками, не `MSBuild:Compile`: markup-компилятор WPF собирает XAML во
+временном проекте (`*_wpftmp.csproj`), куда designer-файл из `obj/` не
+попадает. Второй язык — `Strings.<culture>.resx` (BACKLOG). **Граница
+слоёв**: Core отдаёт пользователю подписи меню (`ContextMenuCatalog`) и
+причину отказа drop'а (`PathSafety.FormatReason`) через `ITextSource`
+(`AppTextSource` в App); Core хранит ключи. Без источника `Text.Get`
+возвращает ключ — режим тестов (`ContextMenuCatalogTests`);
+`FormatReason` принимает `ITextSource?` параметром.
+
+Проверки — шаги `check.bat`: `check-strings.ps1` — ключи в коде и XAML
+против `Strings.resx` в обе стороны (и константы `OperationVerbs`);
+`check-resources.ps1` — каждый `{StaticResource}` / `{DynamicResource}` и
+`FindResource` в App определён каким-то `x:Key` (без областей
+видимости; неиспользуемые печатаются, не роняют).
 
 **Лог и журнал — разные вещи** (2026-09-25), в строках и в GUIDE не
 путаются: **лог** («лог сеанса», «логи») — технический файл
@@ -3028,208 +2510,11 @@ xUnit, `tests/Wander.Core.Tests`, **только Core**; UI и Platform — smok
 
 Правила: **локатор — не канал доставки фейков** (конструктором; xUnit
 параллелен, локатор один на процесс; регистрирует и `Reset()` только
-`ServiceLocatorTests`, и только `IFileSystem`; исключение — `ITextSource`
-не регистрирует никто, `TextFallbackTests`); пути case-insensitive; никакого
+`ServiceLocatorTests`, и только `IFileSystem`; `ITextSource` не
+регистрирует никто — `TextFallbackTests`); пути case-insensitive; никакого
 реального I/O и времени (`NullLogger`); никаких гонок как утверждения
 (детерминированная синхронизация; тест, проходящий под нагрузкой, —
 сломан); новая абстракция в Core → фейк рядом.
-
-## Сайт — `tools/site`
-
-`lekta.github.io/wander/`, GitHub Pages, по-русски. Ни строки JS, без веб-
-и иконочных шрифтов и анимаций, CSS инлайном в каждой странице, тёмная тема
-— `prefers-color-scheme`. Генератор — консоль на C# (`net10.0`, Markdig той
-же версии, что у App; без ссылок на App и Core) в решении: `check.bat`
-его собирает и форматирует. Вход: лендинг `docs/site/index.html` (руками;
-плейсхолдеры `{{css}}`, `{{guide}}`, `{{version}}`, `{{download}}`,
-`{{release}}`), `docs/GUIDE.md` — единственный источник текста руководства,
-`docs/screenshots/*.webp`, значки интерфейса `docs/icons/*.svg`; шаблон
-страницы и CSS — `tools/site/page.html`, `site.css`. Выход (`--out`, по
-умолчанию `artifacts\site`): `index.html`, `guide/<слаг>/index.html`,
-`guide/index.html` (без своей страницы: `meta refresh` и ссылка на
-первую), `versions/index.html`, `img/` (значки — `img/icons/`); перед
-записью чистятся только эти папки. Приложение ведёт сюда (2026-09-28): «Помощь» —
-на `guide/`, `F1` в настройках — на `guide/<слаг>/#<раздел>`
-(`CrashReporter.GuidePage`); сайт собирается из master и может опережать
-установленную версию — решение человека, руководство релиза остаётся
-снимком GUIDE на теге.
-
-**Структура GUIDE = структура сайта.** `#` — заголовок руководства, текст
-под ним — только для GitHub. Каждый `##` — страница; `##` с `###` под ним —
-ещё и раздел (решение 2026-09-28): текст под `##` — вводная страница
-раздела, его название в боковом содержании — ссылка на неё; `###` —
-страницы раздела; `####` — разделы страницы: оглавление сверху, на
-странице они `h2` с линией над каждым. Страница без текста — ошибка. Над
-заголовком страницы раздела — название раздела ссылкой на вводную и
-«назад / дальше». Абзац, который открывается жирной фразой, — начало темы:
-класс `topic`, отбивка сверху. В боковом содержании разделы сворачиваются
-(`<details>`, без скрипта; клик по названию ведёт на вводную, по
-треугольнику — сворачивает): раскрыт раздел открытой страницы, остальные
-свёрнуты — без скрипта свёрнутое читателем на следующую страницу не
-переносится. Названия разделов и страниц — в одну строку содержания, около
-20 знаков (решение 2026-09-25). Порядок — порядок в файле. Слаг страницы
-— транслит заголовка, уникален среди страниц; якорь `####` — транслит,
-уникален на странице («Полный экран» — и страница, и раздел «Горячих
-клавиш»). Полный список расширений — только на странице «Форматы» (её
-сверяет с кодом `check-formats.ps1`).
-
-**Ссылки.** В GUIDE — как для GitHub: `#якорь` (github-slugger: строчные,
-пунктуация выброшена, пробел — дефис, повтор — `-1`, `-2`) генератор
-переводит в страницу и раздел сайта; якорь раздела ведёт на его вводную
-страницу. Другие файлы репозитория — на `blob/master/…`; картинки — в
-`img/`, с `width` / `height` из заголовка WebP и `loading="lazy"`. Все
-ссылки относительные, с явным `index.html`: одно и то же работает в
-подпапке Pages, в корне и из файла. Широкие таблицы и блоки кода
-прокручиваются внутри колонки (`display: block; width: max-content`,
-`overflow-x`).
-
-**Картинки** (2026-09-29). Скриншот — ссылка на собственный файл: колонка
-показывает его ужатым, клик открывает целиком (без скрипта, «Назад»
-возвращает; курсор-лупа, класс `zoom`). Размер и место скриншот задаёт
-строкой `<img src="screenshots/x.webp" alt="…" width="480">` отдельным
-абзацем — GitHub рендерит её так же; `align="right"` ставит картинку
-справа, текст обтекает (высокие снимки: дерево, пара в панели
-просмотра), на узком экране — снова в колонку. Высота считается из
-ширины и пропорций файла; другие атрибуты — ошибка. Линия раздела `h2`
-— свой контекст форматирования (`display: flow-root`) и кончается перед
-картинкой справа, а не идёт под ней. Значок интерфейса — `![](icons/x.svg)`:
-в строку текста, 1,25 em, без рамки и ссылки; размер — из
-`width` / `height` корня SVG.
-
-**Проверки** — ненулевой выход, ничего не пишется: нарушение структуры,
-страница без текста, дубль слага или якоря, ссылка в никуда (якорь, файл,
-картинка не из `docs/screenshots/*.webp` и не из `docs/icons/*.svg`),
-`<img>` с чужим атрибутом или без `alt`, незнакомый плейсхолдер; когда
-источники чисты
-— цель F1 страницы настроек (`guide: "слаг"` или `"слаг#раздел"` в
-`SettingsCategoryViewModel.cs`), которой нет среди готовых страниц и их
-`id`, или ни одной такой цели, и проход по готовым страницам: каждый относительный `href` / `src` и `#id`
-лендинга, шаблона и руководства ведёт в сайт. Шаг «site» в `check.bat`; в
-конце — размеры против бюджета: страница руководства 10–30 КБ, лендинг с
-картинками — до 300 КБ, и сколько в GUIDE мест под скриншоты.
-
-**Отладочная сборка** (2026-09-28) — посмотреть сайт до пуша и тега:
-`dotnet run --project tools\site -- --debug --open`, в Rider —
-конфигурация «Site Debug» (`.run/`, профиль в
-`tools/site/Properties/launchSettings.json`; первый профиль, «Site», —
-обычная сборка без ключей, его берёт голый `dotnet run`). `--debug`:
-проблемы печатаются, но сайт пишется (выход 1, если они были), места под
-скриншоты видны пунктирной рамкой с подписью. Место — HTML-комментарий
-отдельным абзацем, `<!-- скрин: что на снимке -->`: на GitHub не видно,
-обычная сборка его выбрасывает. `--open` открывает `index.html` браузером
-по умолчанию — ключ человека: Claude собирает без него и смотрит страницы
-headless Edge'ем. Выход тот же — `artifacts\site` или `--out`; `check.bat`
-перезаписывает его обычной сборкой, без рамок.
-
-**Версия и «Скачать»** (решение 2026-09-25) — из git, сеть не
-спрашивается. Последний тег `v*` (`for-each-ref --sort=-v:refname`) — версия
-на кнопке и прямая ссылка `releases/download/vX.Y.Z/Wander.exe` (у
-пререлиза тоже работает; `releases/latest` пререлизы пропускает); размер
-пишется в лендинге руками. «Версии» — все теги `v*`: дата, релиз, GUIDE
-тега (`blob/vX.Y.Z/docs/GUIDE.md`; тегам до появления GUIDE — без ссылки).
-Сайт собирается из master и может опережать релиз — «Версии» так и
-говорят.
-
-**Деплой** — `.github/workflows/site.yml`, пуш тега `site-*`
-(`site-2026-10-01`): `ubuntu-latest`, .NET 10, `dotnet run --project
-tools/site -- --out _site`, `upload-pages-artifact` + `deploy-pages`,
-`concurrency: pages`, `fetch-depth: 0` ради тегов. После релиза — новый тег
-`site-*`, иначе кнопка предлагает прошлую версию (RELEASING.md). Разово
-руками: Settings → Pages → Source = GitHub Actions; Settings → Environments
-→ `github-pages` — разрешить теги `site-*` (по умолчанию окружение пускает
-только ветку по умолчанию, деплой с тега отклоняется). Закроется
-репозиторий — та же `_site` уезжает на Cloudflare одним шагом workflow.
-
-**Скриншоты** (правило 2026-09-25). В репозитории только WebP,
-`docs/screenshots/*.webp`; на них ссылаются README, GUIDE и лендинг
-(GitHub WebP рендерит). PNG рендерит харнесс в `artifacts\`, в репозиторий
-не попадает; на сайт снимки харнесса не годятся — в дереве имя
-пользователя и домашние папки. Конвертирует человек при обновлении снимка,
-ffmpeg (`winget install Gyan.FFmpeg`):
-
-```pwsh
-ffmpeg -i main.png -c:v libwebp -quality 90 -preset text -compression_level 6 main.webp
-```
-
-Если текст мылит — `-lossless 1`. Там же значок `icon.webp` — из
-`docs/app_ico.png`, 64×64 без потерь: значок вкладки у всех страниц, перед
-«Wander» в шапке (32 px, вдвое мельче, со сглаживанием), а на лендинге —
-у заголовка, вдвое крупнее, с `image-rendering: pixelated`. Значки
-кнопок (хелперы отсмотра) — SVG в `docs/icons/`, перерисованные из
-`DrawingImage` в XAML один к одному: те же координаты 16×16 и цвета
-палитры; в SVG пишется, из какого ресурса он взят. Поменялся значок в
-приложении — перерисовать и здесь. Генератор картинки не трогает: у сборки
-сайта нет зависимостей, кроме Markdig.
-
-**Тексты** (решение 2026-09-25). Лендинг продаёт, а не оправдывается и не
-усложняет: без SmartScreen и технических подробностей, шесть блоков — самые
-сильные стороны. В текстах лендинга и обвязки страниц (заголовки вкладок,
-оглавление, «Версии», подвал) нет «·» и «—»; текст руководства — как в
-GUIDE.
-
-**Как пишется руководство** (решение человека 2026-09-28). GUIDE читает
-тот, кто Wander уже скачал; правила сжатия прочих доков к нему не
-применяются.
-
-- **Страница самодостаточна**: минимально достаточна в своих пределах и
-  читается без соседних — на неё приходят по `F1`, из поиска, по ссылке.
-  Механика, раскрытая на другой странице, — ссылкой `[«Название»](#якорь)`,
-  не текстом; частичный повтор допустим (сценарий пересказывает механики
-  своими словами).
-- **Порядок — от общего к частному, от простого к сложному, от частого к
-  редкому** — и страниц в файле, и тем на странице: первым — что это и
-  зачем, дальше обычное использование, в конце настройки и редкие случаи.
-- **Отбор**: остаётся то, что помогает сделать дело, предупреждает
-  сюрприз (потеря данных, неотменяемое) или показывает силу продукта.
-  Ожидаемое поведение («папка обновляется сама», «клик выделяет»),
-  устройство и внутренние слова («список», «сторож», «посадка») — нет;
-  технические подробности (папка данных, кэш, логи, ключи запуска) — в
-  «Справочник».
-- **Раздел начинается вводной**: что в нём и зачем, ссылки на страницы и
-  то, что общее для всех них (у «Работы с файлами» — отмена,
-  подтверждения, защита системных папок).
-- **«Начало работы»** — вводная и продающая: окно, главные приёмы со
-  ссылками вглубь, самые нужные клавиши; без установки, папки данных и
-  командной строки.
-- **Скриншот** — там, где снимок объяснит быстрее текста; пока снимка
-  нет — метка `<!-- скрин: … -->` (выше, «Отладочная сборка»). Высокий
-  снимок — справа от текста, мелкий — своей шириной («Картинки»).
-
-Язык (решение человека 2026-09-29):
-
-- **Wander — файл-менеджер** с упором на медиа, не «проводник». Проводник
-  упоминается раз-два на весь текст (стартовая, дерево); дальше ни «как в
-  Проводнике», ни сравнений.
-- **Человеческие фразы**: глагол, а не тире-связка («`Delete` отправляет в
-  корзину», не «`Delete` — в корзину»); тире — там, где его требует
-  грамматика. Перечисление действий или вариантов — списком, не абзацем.
-- **Хоткеи плотно**, как в меню приложения: `Ctrl+Z`, `Ctrl+Shift+N` одним
-  кодом; клавиша с мышью — `Ctrl`+клик.
-- **Всё настраиваемое — со ссылкой на каталог**: «Справочник» →
-  «Настройки» — раздел `####` на каждую страницу настроек (вложенная —
-  «Файловые операции → Оценки»), в нём подписи пунктов, как в окне, и
-  «Подробнее» на страницы руководства. В тексте путь —
-  `[«Настройки» → «Вид» → «Размеры»](#вид--размеры)`.
-- **Кнопка со значком — значком** (`docs/icons`), не описанием картинки.
-- **Слова одни на всё** (2026-09-29), в руководстве и в строках
-  приложения: «настройки» (не «параметры»), «действия» и «свои действия»
-  (не «команды»), «спутник» (не «сайдкар»), «горячие клавиши»; панели
-  папок называются «Закладки» и «Компьютер». Подпись из окна цитируется
-  буква в букву, с её регистром.
-- **Длительность не называется** — зависит от компьютера: где скорость
-  важна, пишется «быстро» или «мгновенно», иначе без уточнения.
-- **Название страницы в ссылке не склоняется**: «на странице
-  `[«Конвертация»](#конвертация)`», не «в «Конвертации»». Диапазон цифр —
-  через короткое тире: `1`–`5`.
-
-Опоры — разборы 2026-09-28: Every Page is Page One (М. Бейкер) —
-страница-самоцель; перевёрнутая пирамида и прогрессивное раскрытие —
-главное первым, подробности по запросу; минимализм Дж. Кэрролла —
-действие вместо описания, помощь в ошибке; Diátaxis и типы тем DITA —
-справочник (клавиши, настройки, форматы, ключи) отдельно от объяснений и
-сценариев. Отсюда гибрид: вводная → области окна в порядке пути
-пользователя (папки → файлы → просмотр → операции) → сценарии (отбор
-снимков, действия) → справочник.
 
 ## Осознанные границы
 

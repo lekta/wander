@@ -390,7 +390,7 @@
         </Style>
 
         <!--
-            What the footer and the picture's bar (PLAN Q5) both carry, drawn
+            What the footer and the picture's bar both carry, drawn
             once: the stars and the swatches, the helpers' switches, the
             chart of levels. Each is shown through a ContentPresenter whose
             content is the controller itself.
@@ -1344,7 +1344,7 @@
                             </ItemsControl>
                             <!--
                                 A big program's signature is checked only
-                                when asked (PLAN B7): under the lines, level
+                                when asked: under the lines, level
                                 with their values.
                             -->
                             <Button Content="{x:Static res:Strings.PreviewExeCheckSignature}"
@@ -1356,7 +1356,7 @@
                     </ScrollViewer>
 
                     <!--
-                        The picture's own bar (PLAN Q5, 2026-09-24): full
+                        The picture's own bar: full
                         screen, and each half of a split, where one footer
                         cannot speak for two pictures. In the lower left
                         corner, on a thin dark plate; the stars, the score
@@ -1474,7 +1474,7 @@
 
                     <!--
                         Placeholder (None / Unsupported), and under it the way
-                        to the extension a HEIF picture needs (PLAN B10).
+                        to the extension a HEIF picture needs.
                     -->
                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="16,0"
                                 Visibility="{Binding IsPlaceholderVisible, Converter={StaticResource BoolToVisibility}}">
@@ -1542,8 +1542,8 @@
                                         ToolTip="{x:Static res:Strings.PreviewFindClose}" Click="FindClose_Click"/>
                             </StackPanel>
                             <!--
-                                Matches past the part of the file on show
-                                (PLAN B6, 2026-09-25): counted, not shown -
+                                Matches past the part of the file on show:
+                                counted, not shown -
                                 the pane draws the first megabyte - so the
                                 line says where they are to be seen.
                             -->
@@ -1594,8 +1594,8 @@
 
                         <!--
                             An operation of the user's has this file: running
-                            on it now, or holding it for its turn (PLAN AF,
-                            block 0, step 6). The same news as the mark on
+                            on it now, or holding it for its turn.
+                            The same news as the mark on
                             the row's icon, in words.
                         -->
                         <TextBlock Text="{Binding WorkLine}"
@@ -1699,7 +1699,7 @@
                             <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource HelperSwitches}"
                                               Margin="0,6,0,0"
                                               Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Image}"/>
-                            <!-- An SVG: the picture it draws, or its markup (PLAN B8); a mode, as RAW is. -->
+                            <!-- An SVG: the picture it draws, or its markup; a mode, as RAW is. -->
                             <ToggleButton Content="{x:Static res:Strings.PreviewSvgSourceToggle}"
                                           ToolTip="{x:Static res:Strings.PreviewSvgSourceHint}"
                                           IsChecked="{Binding ShowSvgSource, Mode=TwoWay}"

@@ -49,19 +49,18 @@ public enum PreviewRoute {
     /// <summary>Plain text, no highlighting.</summary>
     Text,
 
-    /// <summary>A program or a library: a card of what its header, version and signature say (PLAN B7).</summary>
+    /// <summary>A program or a library: a card of what its header, version and signature say.</summary>
     Executable,
 
     /// <summary>
     /// A vector picture - SVG: drawn by the web view, or read as its markup
-    /// when the pane's switch says so (PLAN B8).
+    /// when the pane's switch says so.
     /// </summary>
     Svg,
 
     /// <summary>
     /// A document Wander does not lay out - Word, the Office and
-    /// OpenDocument formats, EPUB: its text, as the content search reads it
-    /// (PLAN B5).
+    /// OpenDocument formats, EPUB: its text, as the content search reads it.
     /// </summary>
     DocumentText,
 }
@@ -76,7 +75,7 @@ public enum PreviewRoute {
 /// Order is the whole content of this table, not an implementation
 /// detail — most of these lists overlap. A <c>.webp</c> is a picture and
 /// an animation, a <c>.svg</c> is a picture and a source file (drawn, with
-/// the markup a switch away - PLAN B8), a <c>.mtl</c> sits next to models
+/// the markup a switch away), a <c>.mtl</c> sits next to models
 /// and is text. The first matching rule wins, and moving one rule past
 /// another changes what the pane shows.
 /// </para>

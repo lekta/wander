@@ -15,7 +15,7 @@ namespace Wander.Core.Search;
 ///
 /// <para>
 /// This is also the abstraction the preview pane's <c>.doc</c> support
-/// (PLAN B5) was waiting on: whatever can be searched can be shown.
+/// was waiting on: whatever can be searched can be shown.
 /// </para>
 /// </summary>
 public interface IContentExtractor {

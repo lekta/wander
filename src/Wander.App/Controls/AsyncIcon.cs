@@ -35,7 +35,7 @@ namespace Wander.App.Controls;
 /// <para>
 /// With <see cref="ShowsWork"/> on - the four views of the list - it also
 /// wears a small clock while an operation the user started is working on
-/// its path (PLAN AF, block 0, step 6): drawn over the picture here rather
+/// its path: drawn over the picture here rather
 /// than by an element in the template, because a mark most cells never
 /// show must not cost every cell a visual (ARCHITECTURE, "what a tile
 /// template may not do"). The row is a record and is never replaced for it.

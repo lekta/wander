@@ -7,8 +7,8 @@ public readonly record struct BusyWaitResult(bool Free, bool WasBusy, TimeSpan W
 
 
 /// <summary>
-/// How long a file operation waits for a path somebody holds (PLAN AF,
-/// decision of 2026-09-21): a look every <see cref="DefaultStep"/>, for up
+/// How long a file operation waits for a path somebody holds
+/// (decision of 2026-09-21): a look every <see cref="DefaultStep"/>, for up
 /// to <see cref="DefaultBudget"/> - long enough for a reader of ours to let
 /// go, short enough that the question comes before the user starts to
 /// wonder. Let go sooner, it goes ahead sooner.

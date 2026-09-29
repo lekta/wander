@@ -22,7 +22,7 @@ public enum PeSubsystem {
 }
 
 
-/// <summary>What the header of a Windows program says about it (PLAN B7).</summary>
+/// <summary>What the header of a Windows program says about it.</summary>
 /// <param name="Machine">The processor.</param>
 /// <param name="Subsystem">Window, console, driver.</param>
 /// <param name="IsLibrary">A DLL rather than a program to start.</param>

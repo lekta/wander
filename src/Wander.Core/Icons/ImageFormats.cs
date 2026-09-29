@@ -31,7 +31,7 @@ public static class ImageFormats {
         // No codec in Windows: decoded by Wander (Imaging/TgaDecoder).
         ".tga",
         // Decoded by the system's codec from the Microsoft Store, when the
-        // extensions for it are installed (PLAN B10).
+        // extensions for it are installed.
         ".heic", ".heif",
         ".cr2", ".cr3", ".nef", ".arw", ".dng", ".raf", ".orf", ".rw2",
     };
@@ -39,7 +39,7 @@ public static class ImageFormats {
     /// <summary>
     /// HEIF: what the WIC decoder turns and mirrors by the container's own
     /// transforms, ignoring the EXIF tag (stand 2026-09-25), and what needs
-    /// extensions from the Microsoft Store to be read at all (PLAN B10).
+    /// extensions from the Microsoft Store to be read at all.
     /// </summary>
     public static readonly IReadOnlySet<string> Heif = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
         ".heic", ".heif",

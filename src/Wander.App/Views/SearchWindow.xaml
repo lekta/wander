@@ -15,7 +15,7 @@
     <!--
         A window rather than a panel inside the main one: the criteria no
         longer fit in a strip without eating the list, and the range filters
-        for dates and sizes are still to come (PLAN G3-хвост, J3). A popup
+        for dates and sizes are still to come. A popup
         was worse still — it closed on the first click elsewhere, which is
         how a search ended up running with a switch nobody could see.
 

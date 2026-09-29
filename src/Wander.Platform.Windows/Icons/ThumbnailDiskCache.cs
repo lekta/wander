@@ -294,13 +294,13 @@ public sealed class ThumbnailDiskCache {
     /// Cache file for a source path, or null when the file cannot be
     /// stamped (gone, or a shell-namespace pseudo-path that has no
     /// on-disk identity to key on). The side is in the key when it is not
-    /// the base one (PLAN AM: bigger thumbnails at 150 % and up), so the
+    /// the base one (bigger thumbnails at 150 % and up), so the
     /// cache made at 256 px stays valid.
     /// </summary>
     private string? TryBuildFileName(string sourcePath) {
         try {
             var info = new FileInfo(sourcePath);
-            // A picture inside an archive (PLAN AL): the archive's own
+            // A picture inside an archive: the archive's own
             // stamp, beside the path of the entry - a rebuilt archive
             // orphans every thumbnail of it.
             if (!info.Exists && Archives.Of(sourcePath) is { IsRoot: false } archive) {

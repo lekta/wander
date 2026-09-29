@@ -10,7 +10,7 @@ namespace Wander.App.Preview;
 /// A picture decoded for the pane: the copy fitted into it and what is
 /// known about the whole frame.
 /// </summary>
-/// <param name="Fit">What the pane draws, turned upright; at most the pane's size (PLAN AK, step 3).</param>
+/// <param name="Fit">What the pane draws, turned upright; at most the pane's size.</param>
 /// <param name="Meta">EXIF, when the file carries any.</param>
 /// <param name="IsRaw">A RAW container; the fit came from its embedded JPEG or its sensor decode.</param>
 /// <param name="Embedded">The embedded JPEG the fit was decoded from (RAW only), for the zoom's whole decode.</param>
@@ -35,7 +35,7 @@ internal sealed record DecodedPicture(
 
 
 /// <summary>
-/// Decoding a picture for the pane, off the UI thread (PLAN AK, step 3);
+/// Decoding a picture for the pane, off the UI thread;
 /// the decoded ones are kept by <see cref="PictureCache"/>.
 /// </summary>
 internal static class PictureLoader {
@@ -49,7 +49,7 @@ internal static class PictureLoader {
     /// <summary>
     /// What WIC decodes at the size asked, not whole and then shrunk: JPEG
     /// in the DCT, HEIF by its tiles - a 12-megapixel HEIC is 600-1000 ms
-    /// whole and about 250 fitted to a pane (stand 2026-09-25, PLAN B10).
+    /// whole and about 250 fitted to a pane (stand 2026-09-25).
     /// </summary>
     private static readonly HashSet<string> _scaled = new(
         new[] { ".jpg", ".jpeg", ".jpe", ".jfif" }.Concat(ImageFormats.Heif), StringComparer.OrdinalIgnoreCase);

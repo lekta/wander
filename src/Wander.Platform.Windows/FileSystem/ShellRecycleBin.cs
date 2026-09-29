@@ -28,13 +28,13 @@ namespace Wander.Platform.Windows.FileSystem;
 /// <para>
 /// A batch goes in one engine run (<see cref="SendMany"/>); Restore is
 /// still a run an item - an undo step is one item, and 10 ms of it is not
-/// what an undo of thousands waits for yet (PLAN, block 0).
+/// what an undo of thousands waits for yet.
 /// </para>
 ///
 /// <para>
 /// Thin on purpose: a held item is reported "in use" (<see cref="FileInUse"/>)
 /// and not waited for here. The wait is the operation's, in Core
-/// (<c>BusyGate</c>), one budget for the whole batch (PLAN, block 0, step 4).
+/// (<c>BusyGate</c>), one budget for the whole batch.
 /// </para>
 /// </summary>
 public sealed class ShellRecycleBin : IRecycleBin {
