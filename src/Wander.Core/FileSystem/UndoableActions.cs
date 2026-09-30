@@ -8,6 +8,8 @@ namespace Wander.Core.FileSystem;
 internal sealed record RenameAction(IFileSystem Fs, string NewPath, string OldName) : IUndoableAction {
     public string Description => $"Rename to '{Path.GetFileName(NewPath)}'";
 
+    public IReadOnlyList<string> PathsBeforeUndo => new[] { NewPath };
+
     public IReadOnlyList<string> PathsAfterUndo => new[] { OldPath };
 
     /// <summary>
@@ -27,6 +29,7 @@ internal sealed record RenameAction(IFileSystem Fs, string NewPath, string OldNa
 /// </summary>
 internal sealed record MoveAction(IFileSystem Fs, string OldPath, string NewPath) : IUndoableAction {
     public string Description => $"Move '{Path.GetFileName(OldPath)}'";
+    public IReadOnlyList<string> PathsBeforeUndo => new[] { NewPath };
     public IReadOnlyList<string> PathsAfterUndo => new[] { OldPath };
     public IReadOnlyList<(string From, string To)> MovesOnUndo => new[] { (NewPath, OldPath) };
 
@@ -41,6 +44,8 @@ internal sealed record MoveAction(IFileSystem Fs, string OldPath, string NewPath
 /// </summary>
 public sealed record CreateAction(IRecycleBin Bin, string CreatedPath) : IUndoableAction {
     public string Description => $"Create '{Path.GetFileName(CreatedPath)}'";
+
+    public IReadOnlyList<string> PathsBeforeUndo => new[] { CreatedPath };
 
     /// <summary>Nothing to select: undoing a create takes the item away.</summary>
     public IReadOnlyList<string> PathsAfterUndo => Array.Empty<string>();
@@ -67,6 +72,8 @@ internal sealed record DeleteAction(IRecycleBin Bin, RecycleHandle Handle) : IUn
 /// </summary>
 internal sealed record ExtractAction(IRecycleBin Bin, string ExtractedPath) : IUndoableAction {
     public string Description => $"Extract '{Path.GetFileName(ExtractedPath)}'";
+
+    public IReadOnlyList<string> PathsBeforeUndo => new[] { ExtractedPath };
 
     /// <summary>Nothing to select: undoing an extraction takes the copy away.</summary>
     public IReadOnlyList<string> PathsAfterUndo => Array.Empty<string>();

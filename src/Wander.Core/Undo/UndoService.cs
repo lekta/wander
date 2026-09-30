@@ -153,15 +153,59 @@ public sealed class UndoService {
     }
 
 
-    /// <summary>Drops the entire history — used after permanent delete.</summary>
-    public void Clear() {
+    /// <summary>
+    /// Drops what can no longer be undone now that <paramref name="gone"/>
+    /// left the disk for good: every step whose undo would not find its
+    /// item where it left it (<see cref="IUndoableAction.PathsBeforeUndo"/>),
+    /// and every older step that depended on one of those. The rest stays -
+    /// an unrelated rename is as undoable after a permanent delete as before.
+    ///
+    /// <para>
+    /// Walks the history from the newest step back, carrying the paths whose
+    /// content is gone as they were at each point in time. A step that drops
+    /// adds what its undo would have brought back. A step that stays takes
+    /// the gone paths back through its move, and clears the places its undo
+    /// fills - whatever went from there arrived after it. A bundle keeps the
+    /// steps that survive (<see cref="IUndoableAction.WithSteps"/>).
+    /// </para>
+    /// </summary>
+    public void Forget(IReadOnlyCollection<string> gone) {
+        bool changed = false;
         lock (_gate) {
-            if (_stack.Count == 0) {
-                return;
+            var dead = gone.ToList();
+            var kept = new List<IUndoableAction>(_stack.Count);
+            // A stack enumerates newest first.
+            foreach (var action in _stack) {
+                var steps = action.Steps;
+                var survivors = new List<IUndoableAction>(steps.Count);
+                for (int i = steps.Count - 1; i >= 0; i--) {
+                    if (Survives(steps[i], dead)) {
+                        survivors.Add(steps[i]);
+                    }
+                }
+
+                if (survivors.Count == steps.Count) {
+                    kept.Add(action);
+                    continue;
+                }
+
+                changed = true;
+                if (survivors.Count > 0) {
+                    survivors.Reverse();
+                    kept.Add(action.WithSteps(survivors));
+                }
             }
-            _stack.Clear();
+
+            if (changed) {
+                _stack.Clear();
+                for (int i = kept.Count - 1; i >= 0; i--) {
+                    _stack.Push(kept[i]);
+                }
+            }
         }
-        RaiseChanged();
+        if (changed) {
+            RaiseChanged();
+        }
     }
 
 
@@ -223,6 +267,52 @@ public sealed class UndoService {
             Remaining: next < 0 ? null : action.WithSteps(steps.Take(next + 1).ToList()),
             Failures: failures,
             Cancelled: next >= 0);
+    }
+
+    /// <summary>
+    /// Whether <paramref name="step"/> can still be undone; on the way,
+    /// <paramref name="dead"/> is taken back to the moment before the step
+    /// was done.
+    /// </summary>
+    private static bool Survives(IUndoableAction step, List<string> dead) {
+        var back = step.MovesOnUndo.Select(m => m.To).Concat(step.PathsAfterUndo).ToList();
+        if (step.PathsBeforeUndo.Any(p => dead.Any(d => Rebase(p, d, d) is not null))) {
+            // What it would have brought back is lost with it.
+            dead.AddRange(back);
+
+            return false;
+        }
+
+        dead.RemoveAll(d => back.Any(b => Rebase(d, b, b) is not null));
+        foreach (var (from, to) in step.MovesOnUndo) {
+            for (int i = 0; i < dead.Count; i++) {
+                if (Rebase(dead[i], from, to) is { } before) {
+                    dead[i] = before;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// <paramref name="path"/> with <paramref name="root"/> replaced by
+    /// <paramref name="newRoot"/>; null when it is neither the root nor
+    /// inside it. Without case and trailing separators - the rule of
+    /// <c>FileSystem.PathRewrite</c>, which this folder does not see.
+    /// </summary>
+    private static string? Rebase(string path, string root, string newRoot) {
+        string p = Path.TrimEndingDirectorySeparator(path);
+        string r = Path.TrimEndingDirectorySeparator(root);
+        if (string.Equals(p, r, StringComparison.OrdinalIgnoreCase)) {
+            return Path.TrimEndingDirectorySeparator(newRoot);
+        }
+
+        string prefix = Path.EndsInDirectorySeparator(r) ? r : r + Path.DirectorySeparatorChar;
+
+        return p.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+            ? Path.Combine(newRoot, p[prefix.Length..])
+            : null;
     }
 
     private void RaiseChanged() {

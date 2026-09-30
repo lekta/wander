@@ -585,9 +585,9 @@ internal sealed class BatchExecutor {
             : Recycle(paths, progress, undoSteps, gate, ct);
 
         if (permanent) {
-            // Permanent delete is not undoable - drop any history so users can't
-            // Ctrl+Z past it and think it worked.
-            _undo.Clear();
+            // Not undoable, and neither is anything whose undo needs what is
+            // gone; the rest of the history stays.
+            _undo.Forget(results.Where(r => r.Status == DeleteStatus.Ok).Select(r => r.Path).ToList());
         } else {
             PushComposite(undoSteps, isMove: false, undoSteps.Count, verbOverride: "delete");
         }

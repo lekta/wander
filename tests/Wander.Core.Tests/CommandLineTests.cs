@@ -51,11 +51,25 @@ public class CommandLineTests {
 
     [Fact]
     public void Validation_CatchesTheModeMismatch() {
-        Assert.Null(CommandLine.ValidationKey("-i {path}", runPerFile: true));
-        Assert.Null(CommandLine.ValidationKey("{paths}", runPerFile: false));
-        Assert.Null(CommandLine.ValidationKey("@{list}", runPerFile: false));
-        Assert.Equal(CommandLine.PerFileWithListKey, CommandLine.ValidationKey("{paths}", runPerFile: true));
-        Assert.Equal(CommandLine.GroupWithoutListKey, CommandLine.ValidationKey("-i {path}", runPerFile: false));
+        Assert.Null(CommandLine.ValidationKey("-i {path}", runPerFile: true, declaresOutput: false));
+        Assert.Null(CommandLine.ValidationKey("{paths}", runPerFile: false, declaresOutput: false));
+        Assert.Null(CommandLine.ValidationKey("@{list}", runPerFile: false, declaresOutput: false));
+        Assert.Equal(CommandLine.PerFileWithListKey, CommandLine.ValidationKey("{paths}", runPerFile: true, declaresOutput: false));
+        Assert.Equal(CommandLine.GroupWithoutListKey, CommandLine.ValidationKey("-i {path}", runPerFile: false, declaresOutput: false));
+    }
+
+    [Fact]
+    public void Validation_Outdir_NeedsAFilePerCommandAndADeclaredOutput() {
+        Assert.Null(CommandLine.ValidationKey("--outdir {outdir} {path}", runPerFile: true, declaresOutput: true));
+        Assert.Equal(CommandLine.OutdirKey, CommandLine.ValidationKey("--outdir {outdir} {path}", runPerFile: true, declaresOutput: false));
+        Assert.Equal(CommandLine.OutdirKey, CommandLine.ValidationKey("--outdir {outdir} {paths}", runPerFile: false, declaresOutput: true));
+    }
+
+    [Fact]
+    public void Outdir_ExpandsOnlyWhenGiven_AndIsNotOut() {
+        Assert.Equal(@"""C:\tmp\out-1"" -o ",
+            CommandLine.Expand("{outdir} -o {out}", new[] { Clip }, outDir: @"C:\tmp\out-1"));
+        Assert.Equal("--outdir ", CommandLine.Expand("--outdir {outdir}", new[] { Clip }));
     }
 
 

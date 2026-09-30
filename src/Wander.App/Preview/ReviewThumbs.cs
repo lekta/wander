@@ -17,7 +17,8 @@ namespace Wander.App.Preview;
 /// frame. Only every second pixel is asked about
 /// (<see cref="Sharpness.Measure"/>'s step), which is three times less work
 /// for an answer a two-hundred-pixel cell cannot tell apart. The tone
-/// curves need none of that: they are a table over the thumbnail itself.
+/// curves and the clipping need none of that: they are taken off the
+/// thumbnail itself.
 /// </para>
 ///
 /// <para>
@@ -56,7 +57,7 @@ internal static class ReviewThumbs {
     /// nothing to draw. Frozen, off the UI thread.
     /// </summary>
     public static async Task<ImageSource?> RenderAsync(FileStamp stamp, string path, Ask ask, int side, CancellationToken ct) {
-        string key = $"{path}|{stamp.Ticks}|{stamp.Size}|{side}|{(ask.Peaking ? "p" : "")}{ask.CurveTag}";
+        string key = $"{path}|{stamp.Ticks}|{stamp.Size}|{side}|{(ask.Peaking ? "p" : "")}{(ask.Clipping ? "c" : "")}{ask.CurveTag}";
         lock (_lock) {
             if (_cache.TryGetValue(key, out var kept)) {
                 return kept;
@@ -100,23 +101,24 @@ internal static class ReviewThumbs {
         }
 
         ct.ThrowIfCancellationRequested();
+        var cell = ReviewOverlay.Working(thumb);
         ImageSource? toned = null;
         if (ask.Curve is { } curve) {
-            toned = ReviewOverlay.Toned(ToneCurve.Apply(ReviewOverlay.Working(thumb), curve));
+            toned = ReviewOverlay.Toned(ToneCurve.Apply(cell, curve));
         }
 
-        ImageSource? marks = null;
+        byte[]? small = null;
         if (ask.Peaking && Picture(path, int.MaxValue, orientation) is { } full) {
             ct.ThrowIfCancellationRequested();
             var work = ReviewOverlay.Working(full, int.MaxValue);
             var map = Sharpness.Measure(Luma.Of(work), work.Width, work.Height, step: 2);
             ct.ThrowIfCancellationRequested();
             var marked = FocusPeaking.Continuous(FocusPeaking.Mask(map), map.Width, map.Height);
-            var small = FocusPeaking.Shrink(
-                marked, map.Width, map.Height, thumb.PixelWidth, thumb.PixelHeight, CellDensity);
-            marks = ReviewOverlay.Marks(thumb.PixelWidth, thumb.PixelHeight, null, small, ask.Peak, ask.Peak);
+            small = FocusPeaking.Shrink(marked, map.Width, map.Height, cell.Width, cell.Height, CellDensity);
         }
 
+        var clipped = ask.Clipping ? Clipping.Mask(cell) : null;
+        var marks = ReviewOverlay.Marks(cell.Width, cell.Height, clipped, small, ask.Peak, ask.Under);
         if (marks is null) {
             return toned;
         }
@@ -156,7 +158,8 @@ internal static class ReviewThumbs {
     }
 
 
-    /// <summary>What to make of a thumbnail: the marks, the curve, and the colour to mark in.</summary>
+    /// <summary>What to make of a thumbnail: the marks, the curve, and the colours to mark in.</summary>
     /// <param name="CurveTag">Which curve it is, for the key that remembers the answer.</param>
-    public sealed record Ask(bool Peaking, byte[]? Curve, string CurveTag, Color Peak);
+    /// <param name="Under">Crushed shadows; clipped highlights paint in their own channels.</param>
+    public sealed record Ask(bool Peaking, bool Clipping, byte[]? Curve, string CurveTag, Color Peak, Color Under);
 }

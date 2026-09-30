@@ -834,9 +834,6 @@
   <data name="RecycleUnavailableIrreversible" xml:space="preserve">
     <value>Удалить безвозвратно? Удалённое так не вернуть: ни Ctrl+Z, ни корзина.</value>
   </data>
-  <data name="RecycleUnavailableClearsUndo" xml:space="preserve">
-    <value>История Ctrl+Z тоже очистится: прежние действия отменить будет нельзя.</value>
-  </data>
   <data name="MenuCmdOpenSubmenu" xml:space="preserve">
     <value>Открыть с помощью</value>
   </data>
@@ -2108,6 +2105,14 @@
     <value>Режим «все одной командой» требует {paths} или {list}</value>
     <comment>Показывать через Get, не Format: фигурные скобки — часть текста</comment>
   </data>
+  <data name="ActionsErrorOutdir" xml:space="preserve">
+    <value>{outdir} работает в режиме «на каждый файл» и с именем результата: оттуда забирается файл с этим именем</value>
+    <comment>Показывать через Get, не Format: фигурные скобки — часть текста</comment>
+  </data>
+  <data name="ActionsOutdirMissing" xml:space="preserve">
+    <value>программа не сохранила {0}; проверьте имя результата</value>
+    <comment>Причина в отчёте о действии, после имени исходного файла; {0} — ожидаемое имя результата</comment>
+  </data>
   <data name="ActionsErrorNoProgram" xml:space="preserve">
     <value>Программа не выбрана</value>
   </data>
@@ -2256,7 +2261,7 @@
     <value>Маска вместо группы, например *.psd;*.ai. Непустая маска главнее группы и к папкам не подходит</value>
   </data>
   <data name="SettingsActionsPlaceholders" xml:space="preserve">
-    <value>Подстановки: {path} — файл, {name} — его имя без расширения, {ext} — расширение, {dir} — папка файла, {paths} — все выделенные, {list} — временный файл со списком путей, {out} — выход. Кавычки подстановка ставит сама.</value>
+    <value>Подстановки: {path} — файл, {name} — его имя без расширения, {ext} — расширение, {dir} — папка файла, {paths} — все выделенные, {list} — временный файл со списком путей, {out} — выход, {outdir} — пустая папка для программы, которая называет выход сама: файл с именем результата Wander заберёт оттуда. Кавычки подстановка ставит сама.</value>
     <comment>Показывать через Get, не Format: фигурные скобки — часть текста</comment>
   </data>
   <data name="SettingsActionsBuiltinSettings" xml:space="preserve">

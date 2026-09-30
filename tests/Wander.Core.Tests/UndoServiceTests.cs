@@ -1,3 +1,5 @@
+using Wander.Core.FileSystem;
+using Wander.Core.Tests.Fakes;
 using Wander.Core.Undo;
 
 namespace Wander.Core.Tests;
@@ -18,6 +20,33 @@ public class UndoServiceTests {
             Log.Add(Description);
             OnUndo?.Invoke();
         }
+    }
+
+
+    /// <summary>A service with the real actions in reach; nothing is undone, so the fakes stay empty.</summary>
+    private static (UndoService Svc, FakeFileSystem Fs, FakeRecycleBin Bin) Paths() {
+        var fs = new FakeFileSystem();
+
+        return (new UndoService(), fs, new FakeRecycleBin(fs));
+    }
+
+    /// <summary>
+    /// The history from the newest step down, by description. Taken off by
+    /// undoing: the fakes hold none of the files, and an undo that throws
+    /// has been popped all the same.
+    /// </summary>
+    private static string[] Descriptions(UndoService svc) {
+        var found = new List<string>();
+        while (svc.NextDescription is { } next) {
+            found.Add(next);
+            try {
+                svc.Undo();
+            } catch (IOException) {
+                // Nothing to restore or recycle in the fakes.
+            }
+        }
+
+        return found.ToArray();
     }
 
 
@@ -92,29 +121,94 @@ public class UndoServiceTests {
         Assert.Equal(new[] { "third", "second", "first" }, log);
     }
 
+    // --- Forget: after a permanent delete ------------------------------
+
     [Fact]
-    public void Clear_EmptiesStack_AndFiresChanged() {
-        var svc = new UndoService();
-        svc.Push(new TrackingAction("a"));
-        svc.Push(new TrackingAction("b"));
+    public void Forget_DropsTheChainThatLedToTheItem_KeepsTheRest() {
+        var (svc, fs, bin) = Paths();
+        svc.Push(new RenameAction(fs, @"C:\u\y.txt", "x.txt"));
+        svc.Push(new RenameAction(fs, @"C:\a\b.txt", "a.txt"));
+        svc.Push(new MoveAction(fs, @"C:\a\b.txt", @"C:\d\b.txt"));
+        svc.Push(new CreateAction(bin, @"C:\d\new"));
         int fired = 0;
         svc.Changed += (_, _) => fired++;
 
-        svc.Clear();
+        svc.Forget(new[] { @"C:\d\b.txt" });
 
-        Assert.Equal(0, svc.Depth);
-        Assert.False(svc.CanUndo);
         Assert.Equal(1, fired);
+        Assert.Equal(new[] { "Create 'new'", "Rename to 'y.txt'" }, Descriptions(svc));
     }
 
     [Fact]
-    public void Clear_OnEmptyStack_DoesNotFireChanged() {
-        var svc = new UndoService();
+    public void Forget_Bundle_KeepsTheStepsNotTouched() {
+        var (svc, fs, _) = Paths();
+        var one = new MoveAction(fs, @"C:\a\1", @"C:\d\1");
+        var two = new MoveAction(fs, @"C:\a\2", @"C:\d\2");
+        var three = new MoveAction(fs, @"C:\a\3", @"C:\d\3");
+        svc.Push(new CompositeAction("move of 3 items", new IUndoableAction[] { one, two, three }));
+
+        svc.Forget(new[] { @"C:\d\2" });
+
+        Assert.Equal("move of 3 items", svc.NextDescription);
+        Assert.Equal(new IUndoableAction[] { one, three }, svc.Undo()!.Steps);
+    }
+
+    [Fact]
+    public void Forget_Folder_TakesWhatWasInside() {
+        var (svc, fs, _) = Paths();
+        svc.Push(new MoveAction(fs, @"C:\a\x.txt", @"C:\d\sub\x.txt"));
+
+        svc.Forget(new[] { @"C:\d\" });
+
+        Assert.Equal(0, svc.Depth);
+    }
+
+    [Fact]
+    public void Forget_NameUsedAgain_OlderStepStays() {
+        // "New folder" made, renamed to Photos, another "New folder" made
+        // and deleted for good: Photos is still the first one's to undo.
+        var (svc, fs, bin) = Paths();
+        svc.Push(new CreateAction(bin, @"C:\p\New folder"));
+        svc.Push(new RenameAction(fs, @"C:\p\Photos", "New folder"));
+        svc.Push(new CreateAction(bin, @"C:\p\New folder"));
+
+        svc.Forget(new[] { @"C:\p\New folder" });
+
+        Assert.Equal(new[] { "Rename to 'Photos'", "Create 'New folder'" }, Descriptions(svc));
+    }
+
+    [Fact]
+    public void Forget_FollowsARenamedFolderBackInTime() {
+        // sub made inside D, D renamed to E, E\sub deleted for good.
+        var (svc, fs, bin) = Paths();
+        svc.Push(new CreateAction(bin, @"C:\p\D\sub"));
+        svc.Push(new RenameAction(fs, @"C:\p\E", "D"));
+
+        svc.Forget(new[] { @"C:\p\E\sub" });
+
+        Assert.Equal(new[] { "Rename to 'E'" }, Descriptions(svc));
+    }
+
+    [Fact]
+    public void Forget_RestoreFromBin_Stays() {
+        var (svc, _, bin) = Paths();
+        svc.Push(new DeleteAction(bin, new RecycleHandle(@"C:\p\old.txt", DateTime.UtcNow)));
+
+        svc.Forget(new[] { @"C:\p\old.txt" });
+
+        Assert.Equal(1, svc.Depth);
+    }
+
+    [Fact]
+    public void Forget_NothingTouched_DoesNotFireChanged() {
+        var (svc, fs, _) = Paths();
+        svc.Push(new RenameAction(fs, @"C:\a\b.txt", "a.txt"));
         int fired = 0;
         svc.Changed += (_, _) => fired++;
 
-        svc.Clear();
+        svc.Forget(new[] { @"C:\elsewhere" });
 
+        Assert.Equal(1, svc.Depth);
         Assert.Equal(0, fired);
     }
 

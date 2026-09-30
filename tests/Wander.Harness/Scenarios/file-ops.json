@@ -50,11 +50,10 @@
     { "do": "note", "text": "a cut file left the folder it was cut from" },
 
     // --- Undo back through the pastes ---------------------------------
-    // Before anything permanent: a permanent delete - the locked file below
-    // - drops the whole history, and until 2026-09-21 this chain stood
-    // after it and every undo in it was "not available here". Back through
-    // the cut, the Replace and the Rename paste: the three first copies
-    // are what is left.
+    // Before anything permanent: a permanent delete drops the steps that
+    // needed what it removed (UndoService.Forget). Back through the cut,
+    // the Replace and the Rename paste: the three first copies are what
+    // is left.
     { "do": "command", "name": "undo" },
     { "do": "assert-entries", "contains": [ "IMG_0003.jpg" ] },
     { "do": "command", "name": "undo" },
@@ -96,11 +95,16 @@
     { "do": "assert-entries", "contains": [ "readonly.txt" ] },
 
     // Tidy up: permanent, because the recycle bin is the one part of the
-    // machine a sandbox run does touch.
+    // machine a sandbox run does touch. The rename before it has nothing
+    // to do with what is deleted, so the undo after it still takes it back.
     { "do": "navigate", "path": "{sandbox}\\photos" },
+    { "do": "rename", "name": "notes.txt", "to": "kept.txt" },
     { "do": "select", "names": [ "target" ] },
     { "do": "command", "name": "permanent-delete" },
     { "do": "assert-entries", "absent": [ "target" ] },
+    { "do": "command", "name": "undo" },
+    { "do": "assert-entries", "contains": [ "notes.txt" ], "absent": [ "kept.txt" ] },
+    { "do": "note", "text": "a permanent delete left the unrelated rename in the undo history" },
 
     {
       // Three failures are the point of this scenario, so they are named

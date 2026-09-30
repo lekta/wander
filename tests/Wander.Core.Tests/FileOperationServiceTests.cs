@@ -107,7 +107,7 @@ public class FileOperationServiceTests {
     }
 
     [Fact]
-    public void PermanentDelete_ClearsUndoStack() {
+    public void PermanentDelete_KeepsUnrelatedHistory() {
         var (ops, fs, _, undo) = Setup();
         fs.Files[FileA] = new byte[0];
         fs.Files[FileB] = new byte[0];
@@ -116,8 +116,29 @@ public class FileOperationServiceTests {
         Assert.Equal(1, undo.Depth);
 
         ops.PermanentDelete(FileB);
-        Assert.Equal(0, undo.Depth);
-        Assert.False(undo.CanUndo);
+        Assert.Equal(1, undo.Depth);
+        Assert.True(undo.CanUndo);
+    }
+
+    [Fact]
+    public void PermanentDelete_ForgetsTheChainThatLedToIt() {
+        // Renamed, then moved, then deleted for good: neither step has
+        // anything left to undo. The rename before and after stay.
+        var (ops, fs, _, undo) = Setup();
+        fs.Files[FileA] = new byte[0];
+        fs.Files[FileB] = new byte[0];
+        fs.Directories.Add(DirDst);
+        ops.Rename(FileB, "first.txt");
+        ops.Rename(FileA, "renamed.txt");
+        ops.Move(@"C:\renamed.txt", @"C:\dst\renamed.txt");
+        ops.CreateFolder(BaseFolder, NewFolderName);
+
+        ops.PermanentDelete(@"C:\dst\renamed.txt");
+
+        Assert.Equal(2, undo.Depth);
+        Assert.Equal($"Create '{NewFolderName}'", undo.NextDescription);
+        undo.Undo();
+        Assert.Equal("Rename to 'first.txt'", undo.NextDescription);
     }
 
     [Fact]

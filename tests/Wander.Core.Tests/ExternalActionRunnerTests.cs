@@ -18,6 +18,11 @@ public class ExternalActionRunnerTests {
         Arguments = "-i {path} {out}", Output = "{name}.mp4", RunPerFile = true,
     };
 
+    private static readonly CustomAction _toPdf = new() {
+        Id = "pdf", Title = "To PDF", Program = "soffice",
+        Arguments = "--convert-to pdf --outdir {outdir} {path}", Output = "{name}.pdf", RunPerFile = true,
+    };
+
 
     private static (ExternalActionRunner Runner, FakeFileSystem Fs, FakeRecycleBin Bin, UndoService Undo, FakeProcessRunner Processes, List<IBuiltinAction> Builtins) Setup() {
         var fs = new FakeFileSystem();
@@ -271,6 +276,61 @@ public class ExternalActionRunnerTests {
         Assert.Equal(0, undo.Depth);
     }
 
+
+    // --- {outdir}: a program that names its output itself ------------------
+
+    [Fact]
+    public async Task Outdir_TheOutputIsTakenOut_UnderANameOfItsOwn_NeverOverAFile() {
+        var (runner, fs, _, undo, processes, _) = Setup();
+        fs.Files[@"C:\videos\a.pdf"] = new byte[] { 7 };
+        string? outDir = null;
+        processes.OnRun = (request, _) => {
+            outDir = OutDirOf(request);
+            fs.Files[Path.Combine(outDir, "a.pdf")] = new byte[] { 9 };
+        };
+
+        var results = await runner.RunAsync(_toPdf, new[] { A }, CancellationToken.None);
+
+        Assert.Equal(BatchItemStatus.Ok, results[0].Status);
+        Assert.StartsWith(Temp + @"\", outDir);
+        Assert.Equal(@"C:\videos\a (1).pdf", results[0].Output);
+        Assert.Equal(new byte[] { 7 }, fs.Files[@"C:\videos\a.pdf"]);
+        Assert.Equal(new byte[] { 9 }, fs.Files[@"C:\videos\a (1).pdf"]);
+        Assert.Contains($"DeleteDirectory:{outDir}:True", fs.CallLog);
+        Assert.Equal("Create 'a (1).pdf'", undo.NextDescription);
+    }
+
+    [Fact]
+    public async Task Outdir_NothingUnderTheDeclaredName_IsAFailure() {
+        var (runner, fs, _, undo, processes, _) = Setup();
+        processes.OnRun = (request, _) => fs.Files[Path.Combine(OutDirOf(request), "other.pdf")] = new byte[] { 9 };
+
+        var results = await runner.RunAsync(_toPdf, new[] { A }, CancellationToken.None);
+
+        Assert.Equal(BatchItemStatus.Failed, results[0].Status);
+        Assert.IsType<FileNotFoundException>(results[0].Error);
+        Assert.False(fs.FileExists(@"C:\videos\a.pdf"));
+        Assert.Equal(0, undo.Depth);
+    }
+
+    [Fact]
+    public async Task Outdir_WithoutADeclaredOutput_IsRefusedBeforeTheProgram() {
+        var (runner, _, _, _, processes, _) = Setup();
+
+        var results = await runner.RunAsync(_toPdf with { Output = "" }, new[] { A }, CancellationToken.None);
+
+        Assert.Equal(BatchItemStatus.Failed, results[0].Status);
+        Assert.Empty(processes.Requests);
+    }
+
+
+    /// <summary>The folder a <see cref="_toPdf"/> request was told to write into.</summary>
+    private static string OutDirOf(ProcessRequest request) {
+        const string flag = "--outdir \"";
+        int start = request.Arguments.IndexOf(flag, StringComparison.Ordinal) + flag.Length;
+
+        return request.Arguments[start..request.Arguments.IndexOf('"', start)];
+    }
 
     /// <summary>The quoted last argument of an encode request - where the fake "writes" the output.</summary>
     private static string OutputOf(ProcessRequest request) {

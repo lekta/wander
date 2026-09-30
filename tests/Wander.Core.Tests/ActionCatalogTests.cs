@@ -117,7 +117,7 @@ public class ActionCatalogTests {
         var row = ActionCatalog.NewAction("New");
 
         Assert.NotEqual(string.Empty, row.Id);
-        Assert.Null(CommandLine.ValidationKey(row.Arguments, row.RunPerFile));
+        Assert.Null(CommandLine.ValidationKey(row.Arguments, row.RunPerFile, row.Output.Length > 0));
     }
 
     // --- Programs ---------------------------------------------------------
@@ -312,20 +312,23 @@ public class ActionCatalogTests {
                 continue;
             }
 
-            Assert.Null(CommandLine.ValidationKey(preset.Arguments, preset.RunPerFile));
+            Assert.Null(CommandLine.ValidationKey(preset.Arguments, preset.RunPerFile, preset.Output.Length > 0));
             Assert.Equal(preset.RequiredTool, preset.Program);
             Assert.NotNull(ActionPresets.KnownTool(preset.RequiredTool));
-            // A declared output is one the command writes to.
-            Assert.Equal(preset.Output.Length > 0, CommandLine.Uses(preset.Arguments, "{out}"));
+            // Every output is declared, and the command writes it - by name,
+            // or into the folder it is taken out of.
+            Assert.NotEqual(string.Empty, preset.Output);
+            Assert.True(CommandLine.Uses(preset.Arguments, "{out}") || CommandLine.Uses(preset.Arguments, "{outdir}"));
         }
     }
 
     [Fact]
-    public void Presets_OnlyLibreOffice_LeavesItsOutputUndeclared() {
-        var undeclared = ActionPresets.All.Where(p => !p.DebugOnly && p.Output.Length == 0).ToArray();
+    public void Presets_LibreOffice_WritesIntoAFolderOfItsOwn() {
+        var named = ActionPresets.All.Where(p => CommandLine.Uses(p.Arguments, "{outdir}")).ToArray();
 
-        Assert.Single(undeclared);
-        Assert.Equal(ActionPresets.LibreOffice, undeclared[0].RequiredTool);
+        Assert.Single(named);
+        Assert.Equal(ActionPresets.LibreOffice, named[0].RequiredTool);
+        Assert.Equal("{name}.pdf", named[0].Output);
     }
 
     [Fact]

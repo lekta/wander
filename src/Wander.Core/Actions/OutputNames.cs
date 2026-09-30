@@ -21,10 +21,15 @@ public static class OutputNames {
         string? folder = null) {
 
         string dir = folder ?? Path.GetDirectoryName(sourcePath) ?? string.Empty;
-        string name = template
+
+        return UniqueNames.Resolve(Path.Combine(dir, Name(template, sourcePath)), exists, namesIn);
+    }
+
+
+    /// <summary>The name the template gives, before any number: what a program that names its output itself writes.</summary>
+    public static string Name(string template, string sourcePath) {
+        return template
             .Replace("{name}", Path.GetFileNameWithoutExtension(sourcePath), StringComparison.OrdinalIgnoreCase)
             .Replace("{ext}", Path.GetExtension(sourcePath).TrimStart('.'), StringComparison.OrdinalIgnoreCase);
-
-        return UniqueNames.Resolve(Path.Combine(dir, name), exists, namesIn);
     }
 }

@@ -1,5 +1,6 @@
 using System.Text;
 using Wander.Core.FileSystem;
+using Wander.Core.Localization;
 using Wander.Core.Logging;
 using Wander.Core.Operations;
 using Wander.Core.Undo;
@@ -43,7 +44,7 @@ public sealed class ExternalActionRunner {
     private readonly PathClaims _claims;
 
 
-    /// <param name="tempFolder">Where the <c>{list}</c> file is written; asked for per run, the setting may change.</param>
+    /// <param name="tempFolder">Where the <c>{list}</c> file is written and the <c>{outdir}</c> folder made; asked for per run, the setting may change.</param>
     /// <param name="claims">Where a run claims its inputs and outputs; null keeps them to itself.</param>
     public ExternalActionRunner(
         IFileSystem fs, IRecycleBin bin, UndoService undo, OperationTracker tracker,
@@ -164,6 +165,14 @@ public sealed class ExternalActionRunner {
             }
             output = OutputNames.Resolve(action.Output, primary, Exists, NamesIn, outputFolder);
         }
+        if (action.Kind == ActionKind.Command && CommandLine.Uses(action.Arguments, "{outdir}")
+            && (output is null || !action.RunPerFile)) {
+            // Nothing - or only the first file's - would be taken out of the
+            // folder, and what the program wrote there would go with it.
+            _log.Warn($"Action '{title}' refused for {primary}: {{outdir}} without a declared output or in one-command mode");
+
+            return Failed(primary, null, new InvalidOperationException(Text.Get(CommandLine.OutdirKey)));
+        }
 
         using var outputClaim = _claims.Claim(
             output is null ? Array.Empty<string>() : new[] { output }, ClaimKind.UserOperation, OperationVerbs.RunAction);
@@ -219,13 +228,22 @@ public sealed class ExternalActionRunner {
         if (CommandLine.Uses(action.Arguments, "{list}")) {
             listFile = WriteList(paths);
         }
+        string? outDir = null;
+        if (CommandLine.Uses(action.Arguments, "{outdir}")) {
+            outDir = Path.Combine(_tempFolder(), $"out-{Guid.NewGuid():N}");
+            _fs.CreateDirectory(outDir);
+        }
 
         try {
-            string arguments = CommandLine.Expand(action.Arguments, paths, listFile, output);
-
-            return await _processes
+            string arguments = CommandLine.Expand(action.Arguments, paths, listFile, output, outDir);
+            var result = await _processes
                 .RunAsync(new ProcessRequest(action.Program, arguments, workingDir, action.HideConsole), ct)
                 .ConfigureAwait(false);
+            if (outDir is not null && output is not null && !result.WasKilled && result.ExitCode == 0) {
+                TakeOutput(action.Output, paths[0], outDir, output);
+            }
+
+            return result;
         } finally {
             if (listFile is not null) {
                 try {
@@ -234,7 +252,29 @@ public sealed class ExternalActionRunner {
                     _log.Warn($"Could not remove list file {listFile}: {ex.Message}");
                 }
             }
+            if (outDir is not null) {
+                try {
+                    _fs.DeleteDirectory(outDir, recursive: true);
+                } catch (Exception ex) {
+                    _log.Warn($"Could not remove output folder {outDir}: {ex.Message}");
+                }
+            }
         }
+    }
+
+    /// <summary>
+    /// The declared output out of <c>{outdir}</c>: the program named it
+    /// itself - into an empty folder, where there was nothing to write over
+    /// - and it goes under the name Wander chose, numbered like every other
+    /// when taken. Anything else the program left there goes with the folder.
+    /// </summary>
+    private void TakeOutput(string template, string source, string outDir, string output) {
+        string written = Path.Combine(outDir, OutputNames.Name(template, source));
+        if (!Exists(written)) {
+            throw new FileNotFoundException(Text.Format("ActionsOutdirMissing", Path.GetFileName(written)), written);
+        }
+
+        _fs.MoveEntry(written, output);
     }
 
     /// <summary>One path per line, UTF-8, in scratch space; the caller deletes it.</summary>

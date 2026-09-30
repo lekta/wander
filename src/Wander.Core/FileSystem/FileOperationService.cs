@@ -106,9 +106,9 @@ public sealed class FileOperationService {
     }
 
     /// <summary>
-    /// Skips the recycle bin and removes the item from disk. Not undoable —
-    /// clears the existing undo stack so the user can't accidentally Ctrl+Z
-    /// past a permanent action and think it worked.
+    /// Skips the recycle bin and removes the item from disk. Not undoable -
+    /// and neither is any step whose undo needs the item
+    /// (<see cref="UndoService.Forget"/>); the rest of the history stays.
     /// </summary>
     internal void PermanentDelete(string path) {
         GuardDestructive(path);
@@ -121,7 +121,7 @@ public sealed class FileOperationService {
             throw new FileNotFoundException("Path not found", path);
         }
         _log.Warn($"Permanent delete: {path}");
-        _undo.Clear();
+        _undo.Forget(new[] { path });
     }
 
     internal void Rename(string path, string newName) {

@@ -10,6 +10,16 @@ public interface IUndoableAction {
     string Description { get; }
 
     /// <summary>
+    /// What the undo has to find where the action left it: the item under
+    /// its new name or in its new place for a rename or a move, the created
+    /// item for a create, the sidecar for a rating. Empty when the undo
+    /// needs nothing on disk - a restore from the recycle bin. A bundle
+    /// answers through its <see cref="Steps"/>. <see cref="UndoService.Forget"/>
+    /// reads it to drop what a permanent delete made impossible to undo.
+    /// </summary>
+    IReadOnlyList<string> PathsBeforeUndo => Array.Empty<string>();
+
+    /// <summary>
     /// Where the undone items end up. The UI re-selects these after the
     /// listing refreshes, so Ctrl+Z leaves the user pointing at what just
     /// came back instead of at nothing. Empty when undoing removes the item

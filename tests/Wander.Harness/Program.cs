@@ -11,7 +11,7 @@ namespace Wander.Harness;
 /// Entry point. Three commands:
 /// <list type="bullet">
 ///   <item><c>sandbox &lt;dir&gt; [--profiles a,b] [--photos N] [--big N] [--raw-mb N]</c> - generate test data.</item>
-///   <item><c>run &lt;scenario.json&gt; [--sandbox dir] [--out dir]</c> - drive the app through a scenario.</item>
+///   <item><c>run &lt;scenario.json&gt; [--sandbox dir] [--out dir] [--in-place]</c> - drive the app through a scenario, on a desktop of its own (<see cref="HarnessDesktop"/>).</item>
 ///   <item><c>selfcheck [--dir dir]</c> - generate a tiny sandbox and verify the generators against Core's readers.</item>
 /// </list>
 /// Exit codes: 0 ok, 2 scenario failed, 64 usage, 70 crashed.
@@ -60,6 +60,12 @@ public static class Program {
         string? scenarioPath = options.Positional(1);
         if (scenarioPath is null) {
             return Usage();
+        }
+
+        // On a desktop of its own, where its windows cannot take the
+        // foreground from whoever is working on this one.
+        if (!options.Has(HarnessDesktop.InPlaceFlag)) {
+            return HarnessDesktop.Relaunch(args);
         }
 
         var scenario = Scenario.Load(Path.GetFullPath(scenarioPath));
@@ -129,7 +135,7 @@ public static class Program {
         Console.Error.WriteLine(
             "usage:\n" +
             "  Wander.Harness sandbox <dir> [--profiles photos,raw,big,deep,names] [--photos N] [--big N] [--raw-mb N] [--raw N]\n" +
-            "  Wander.Harness run <scenario.json> [--sandbox <dir>] [--out <dir>] [--rebuild]\n" +
+            "  Wander.Harness run <scenario.json> [--sandbox <dir>] [--out <dir>] [--rebuild] [--in-place]\n" +
             "  Wander.Harness selfcheck [--dir <dir>]");
 
         return 64;

@@ -361,6 +361,8 @@ internal sealed record SidecarCreatedAction(
 
     public string Description => $"Sidecar '{System.IO.Path.GetFileName(Path)}'";
 
+    public IReadOnlyList<string> PathsBeforeUndo => new[] { Path };
+
     /// <summary>
     /// The photograph, not the file being deleted. Undoing this removes a
     /// sidecar that was folded into the photo's row, so that row — and only
@@ -387,6 +389,8 @@ internal sealed record SidecarRatingAction(
         Field == RatingField.Rank
             ? $"Rating {NewValue} on '{System.IO.Path.GetFileName(Path)}'"
             : $"Colour {ColorLabels.Name(NewValue)} on '{System.IO.Path.GetFileName(Path)}'";
+
+    public IReadOnlyList<string> PathsBeforeUndo => new[] { Path };
 
     /// <summary>The photograph the sidecar belongs to — see <see cref="IUndoableAction.MetadataTargets"/>.</summary>
     public IReadOnlyList<string> MetadataTargets => new[] { MainPath };

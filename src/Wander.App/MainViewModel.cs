@@ -4775,9 +4775,6 @@ public sealed class MainViewModel : ObservableObject {
 
         lines.Add("");
         lines.Add(Strings.RecycleUnavailableIrreversible);
-        if (_undo.Depth > 0) {
-            lines.Add(Strings.RecycleUnavailableClearsUndo);
-        }
 
         bool accepted = _dialogs.Choose(new ChoiceRequest(
             DialogKind.RecycleUnavailable, Strings.RecycleUnavailableTitle, string.Join("\n", lines),

@@ -18,10 +18,10 @@ public sealed record ExternalTool(string Name, string Title, string WingetId);
 ///
 /// <para>
 /// Every output is declared: it is what makes Ctrl+Z work and what keeps
-/// a program from writing over an existing file. The one exception is
-/// LibreOffice, which names its output itself and overwrites whatever is
-/// there - declaring a name it will not use would be a lie the undo step
-/// then acts on.
+/// a program from writing over an existing file. LibreOffice names its
+/// output itself and overwrites whatever is there, so it writes into an
+/// empty folder of its own (<c>{outdir}</c>), and the declared output is
+/// taken from there under a name of Wander's (<see cref="ExternalActionRunner"/>).
 /// </para>
 /// </summary>
 public static class ActionPresets {
@@ -128,7 +128,7 @@ public static class ActionPresets {
 
         // --- Documents ---
         Tool("preset:document-pdf", LibreOffice, FileTypeGroup.Documents,
-            "--headless --convert-to pdf --outdir {dir} {path}", output: string.Empty) with {
+            "--headless --convert-to pdf --outdir {outdir} {path}", "{name}.pdf") with {
             TitleKey = "ActionPresetDocumentPdf",
         },
         Tool("preset:markdown-docx", Pandoc, FileTypeGroup.All,

@@ -327,9 +327,6 @@ public static partial class Strings {
     /// <summary>Удалить безвозвратно? Удалённое так не вернуть: ни Ctrl+Z, ни корзина.</summary>
     public static string RecycleUnavailableIrreversible => Get(nameof(RecycleUnavailableIrreversible));
 
-    /// <summary>История Ctrl+Z тоже очистится: прежние действия отменить будет нельзя.</summary>
-    public static string RecycleUnavailableClearsUndo => Get(nameof(RecycleUnavailableClearsUndo));
-
     /// <summary>«{0}» был занят{1} — отпущен через {2:0.0} с</summary>
     public static string StatusWasBusyOne => Get(nameof(StatusWasBusyOne));
 

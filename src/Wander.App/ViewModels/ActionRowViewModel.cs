@@ -147,7 +147,9 @@ public sealed class ActionRowViewModel : ObservableObject {
     /// blocked.
     /// </summary>
     public string ValidationText => _action.Kind == ActionKind.Command
-        ? CommandLine.ValidationKey(_action.Arguments, _action.RunPerFile) is { } key ? Strings.Get(key) : string.Empty
+        ? CommandLine.ValidationKey(_action.Arguments, _action.RunPerFile, _action.Output.Length > 0) is { } key
+            ? Strings.Get(key)
+            : string.Empty
         : ActionCatalog.BuiltinProblem(_action) ?? string.Empty;
 
     /// <summary>What the arguments box takes, on its tooltip: a command line's placeholders, or the built-in encoder's settings.</summary>

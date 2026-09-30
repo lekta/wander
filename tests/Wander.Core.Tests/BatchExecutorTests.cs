@@ -631,14 +631,15 @@ public class BatchExecutorTests {
     // --- DeleteManyAsync: permanent path -------------------------------
 
     [Fact]
-    public async Task DeleteManyAsync_Permanent_BypassesBin_AndClearsUndoStack() {
+    public async Task DeleteManyAsync_Permanent_BypassesBin_AndForgetsWhatItTouched() {
         var (batch, fs, bin, undo, _) = Setup();
         fs.Files[RootA] = new byte[] { 1 };
         fs.Files[RootB] = new byte[] { 2 };
         fs.Directories.Add(RootDir);
-        // Pre-existing undo entry — should be wiped.
+        // Unrelated - stays; the rename of what is deleted goes.
         undo.Push(new RenameAction(fs, @"C:\x", "y"));
-        Assert.Equal(1, undo.Depth);
+        undo.Push(new RenameAction(fs, RootA, "old.txt"));
+        Assert.Equal(2, undo.Depth);
 
         var results = await batch.DeleteManyAsync(new[] { RootA, RootB, RootDir }, permanent: true, default);
 
@@ -647,7 +648,8 @@ public class BatchExecutorTests {
         Assert.Contains($"DeleteFile:{RootA}", fs.CallLog);
         Assert.Contains($"DeleteFile:{RootB}", fs.CallLog);
         Assert.Contains($"DeleteDirectory:{RootDir}:True", fs.CallLog);
-        Assert.Equal(0, undo.Depth);                        // wiped
+        Assert.Equal(1, undo.Depth);
+        Assert.Equal("Rename to 'x'", undo.NextDescription);
     }
 
 
