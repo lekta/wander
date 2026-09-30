@@ -65,7 +65,7 @@ public abstract class SettingsCategoryViewModel : ObservableObject {
 /// <summary>Where a session starts, the folder panel and the standard bookmarks.</summary>
 public sealed class FoldersSettingsCategory : SettingsCategoryViewModel {
     public FoldersSettingsCategory(SettingsViewModel owner)
-        : base(Strings.SettingsCategoryFolders, owner, guide: "derevo-i-zakladki") { }
+        : base(Strings.SettingsCategoryFolders, owner, guide: "paneli-papok") { }
 }
 
 
@@ -254,5 +254,5 @@ public sealed class HotkeysSettingsCategory : SettingsCategoryViewModel {
 /// <summary>The session log, the debug menu and putting every setting back.</summary>
 public sealed class DebugSettingsCategory : SettingsCategoryViewModel {
     public DebugSettingsCategory(SettingsViewModel owner)
-        : base(Strings.SettingsCategoryDebug, owner, guide: "esli-chto-to-poshlo-ne-tak") { }
+        : base(Strings.SettingsCategoryDebug, owner, guide: "problemy-i-otchety") { }
 }

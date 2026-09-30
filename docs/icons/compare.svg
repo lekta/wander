@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- The compare button by a pair's name in src/Wander.App/Conflict/ConflictWindow.xaml: glyph E8F9 of Segoe MDL2 Assets, its outline at 16 px, in the system button's text colour; lighter on the site's dark theme. -->
+  <style>@media (prefers-color-scheme: dark) { path { fill: #D0D0D0; } }</style>
+  <path d="M0,4 H16 V12 H0 Z M15,11 V5 H1 V11 Z M14,6 V10 H10 V6 Z M13,9 V7 H11 V9 Z M9,7 V9 H6 V7 Z M5,7 V9 H2 V7 Z" fill="#000000"/>
+</svg>

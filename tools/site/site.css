@@ -161,6 +161,11 @@ li {
   font-size: .88rem;
 }
 
+/* Links the header gives up on a narrow screen come back in the footer. */
+.bottom .narrow {
+  display: none;
+}
+
 /* Guide pages: navigation on the left, the text on the right. */
 
 .page {
@@ -204,19 +209,84 @@ li {
   border-top: 1px solid var(--line);
 }
 
-/* A screenshot is a link to its own file: a click opens it full size. */
+/* A screenshot is a button: a click opens it full size over the page. */
 .page main .zoom {
+  display: inline-block;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
   cursor: zoom-in;
+}
+
+.page main .zoom img {
+  display: block;
+}
+
+/* The full size, a popover: centred over a dimmed page, a click or Esc
+   closes it. Hidden by this rule too, not only by the browser's: where
+   popovers are unknown, the next rule is dropped and it stays hidden. */
+.page main .full {
+  display: none;
+  overflow: visible;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.page main .full:popover-open {
+  display: block;
+}
+
+.page main .full::backdrop {
+  background: rgb(0 0 0 / .8);
+}
+
+.page main .full button {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-out;
+}
+
+.page main .full img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 96vw;
+  max-height: 94vh;
+}
+
+/* Footnotes under the page's text; the one a reference led to stands out. */
+.page main .notes {
+  margin-top: 2.5em;
+  padding-top: .8em;
+  border-top: 1px solid var(--line);
+  font-size: .9rem;
+}
+
+.page main .notes p {
+  margin: 0;
+}
+
+.page main .notes li:target {
+  background: var(--soft);
+}
+
+.footnote-ref sup {
+  line-height: 0;
+}
+
+.footnote-back-ref {
+  margin-left: .3em;
 }
 
 /* A picture GUIDE.md floats (align="right"): beside the text, at its own width. */
 .page main .right {
   float: right;
   margin: .3em 0 1em 1.8em;
-}
-
-.page main .right img {
-  display: block;
 }
 
 /* An icon of the interface, in the line of text. */
@@ -251,8 +321,9 @@ li {
   line-height: 1.35;
 }
 
-/* Groups fold; the pages of a group sit indented under its title. */
-.side details {
+/* Groups fold; the pages of a group sit indented under its title. A page
+   of its own at the top level keeps the same air as a group. */
+.side details, .side > ul > li + li {
   margin-top: .9em;
 }
 
@@ -315,18 +386,38 @@ li {
   text-align: center;
 }
 
+/* The page's sections under its title: a table of contents, in columns. */
 .toc {
-  display: flex;
-  flex-wrap: wrap;
-  gap: .2rem 1.1rem;
-  padding: .5em .8em;
+  max-width: 44rem;
+  margin: 1.1em 0;
+  padding: .6em 1em .7em;
   border-left: 3px solid var(--line);
   background: var(--soft);
   font-size: .93rem;
 }
 
-.toc span {
+.toc-title {
   color: var(--muted);
+  font-size: .78rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.page main .toc ul {
+  columns: 13rem;
+  column-gap: 1.5rem;
+  margin: .3em 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Padding, not margin: a margin is dropped at the top of a column and
+   the columns would start at different heights. */
+.page main .toc li {
+  margin: 0;
+  padding: .15em 0;
+  break-inside: avoid;
 }
 
 /* Above the title: the group on the left, back / next on the right. */
@@ -344,8 +435,38 @@ li {
   font-size: .9rem;
 }
 
-/* Narrow screens: one column, the text first, the navigation after it. */
+/* The same back / next under the text: for the narrow screen only. */
+.pager.end {
+  display: none;
+}
+
+/* Narrow screens: one column, the text first, the navigation after it; the
+   header keeps the name and the way to the navigation, back / next move
+   under the text. */
 @media (max-width: 50rem) {
+  .top .wide, .head .pager {
+    display: none;
+  }
+
+  .bottom .narrow {
+    display: inline;
+  }
+
+  .pager.end {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: .6rem 1.3rem;
+    margin: 2.5rem 0 0;
+    padding-top: 1rem;
+    border-top: 1px solid var(--line);
+  }
+
+  .pager.end [rel=next] {
+    margin-left: auto;
+    text-align: right;
+  }
+
   .page {
     display: block;
   }

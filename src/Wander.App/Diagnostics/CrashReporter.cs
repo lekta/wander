@@ -46,8 +46,9 @@ public static class CrashReporter {
     /// <summary>
     /// The user guide on the site - what the "Help" menu row opens
     /// (2026-09-28; before, GUIDE.md at the build's own tag). The site is
-    /// built from master on a site-* tag and may run ahead of the installed
-    /// version; its "Версии" page links each release's own GUIDE.
+    /// built from master on a site-* tag, and GUIDE.md on master describes
+    /// the latest release (docs/SITE.md); its "Версии" page links each
+    /// release's own GUIDE.
     /// </summary>
     public const string GuideUrl = SiteUrl + "guide/";
 

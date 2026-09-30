@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- Arrow in src/Wander.App/Views/FolderTreesView.xaml, a folded folder: TreeChevron; lighter on the site's dark theme. -->
+  <style>@media (prefers-color-scheme: dark) { path { fill: #B0B0B0; } }</style>
+  <path d="M5.5,3.5 L10.5,8 L5.5,12.5 Z" fill="#606060"/>
+</svg>

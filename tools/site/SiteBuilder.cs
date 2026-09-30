@@ -3,6 +3,8 @@ using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 using Markdig;
+using Markdig.Extensions.EmphasisExtras;
+using Markdig.Extensions.Footnotes;
 using Markdig.Renderers;
 using Markdig.Renderers.Html;
 using Markdig.Syntax;
@@ -38,6 +40,9 @@ internal sealed class SiteBuilder {
     /// <summary>Where the settings pages name the guide section F1 opens.</summary>
     private const string SettingsPagesSource = "src/Wander.App/ViewModels/SettingsCategoryViewModel.cs";
 
+    /// <summary>The text column of a guide page in pixels (44rem in site.css): a wider picture is shown shrunk to it.</summary>
+    private const int ColumnWidth = 704;
+
     private static readonly Regex _guideArgument = new(@"\bguide: ""([^""]*)""");
 
     /// <summary>
@@ -62,7 +67,12 @@ internal sealed class SiteBuilder {
 
     private readonly string _root;
     private readonly bool _debug;
-    private readonly MarkdownPipeline _pipeline = new MarkdownPipelineBuilder().UsePipeTables().Build();
+    /// <summary>What GitHub renders in GUIDE.md and the site must too: tables, ~~strikethrough~~ and [^footnotes].</summary>
+    private readonly MarkdownPipeline _pipeline = new MarkdownPipelineBuilder()
+        .UsePipeTables()
+        .UseEmphasisExtras(EmphasisExtraOptions.Strikethrough)
+        .UseFootnotes()
+        .Build();
 
     /// <summary>Site path (relative, forward slashes) -> the page.</summary>
     private readonly Dictionary<string, string> _pages = new(StringComparer.Ordinal);
@@ -72,6 +82,9 @@ internal sealed class SiteBuilder {
 
     private Release? _latest;
     private int _screenshots;
+
+    /// <summary>Screenshots on the page being rendered: each one's popover needs an id of its own.</summary>
+    private int _shotsOnPage;
 
 
     public SiteBuilder(string root, bool debug) {
@@ -106,11 +119,13 @@ internal sealed class SiteBuilder {
         string home = $"guide/{guide.Pages[0].Slug}/index.html";
         for (int i = 0; i < guide.Pages.Count; i++) {
             GuidePage page = guide.Pages[i];
+            // Inside the guide its own link in the header leads nowhere new:
+            // the navigation beside the text is the guide.
             _pages[$"guide/{page.Slug}/index.html"] = Fill(template, TemplateSource, new() {
                 ["title"] = Escape(page.Title) + " | Wander",
                 ["css"] = css,
                 ["root"] = "../../",
-                ["guide"] = home,
+                ["guidelink"] = "",
                 ["nav"] = Nav(guide, page, "../"),
                 ["main"] = RenderPage(guide, i),
             });
@@ -127,7 +142,7 @@ internal sealed class SiteBuilder {
             ["title"] = "Версии | Wander",
             ["css"] = css,
             ["root"] = "../",
-            ["guide"] = home,
+            ["guidelink"] = $"<a class=\"wide\" href=\"../{home}\">Руководство</a>\n",
             ["nav"] = Nav(guide, null, "../guide/"),
             ["main"] = RenderVersions(releases),
         });
@@ -178,11 +193,23 @@ internal sealed class SiteBuilder {
         var guidePages = _pages
             .Where(p => p.Key.StartsWith("guide/", StringComparison.Ordinal) && p.Key != "guide/index.html")
             .ToList();
-        var largest = guidePages.MaxBy(p => _utf8.GetByteCount(p.Value));
+        var sizes = guidePages.ToDictionary(p => p.Key, p => (long)_utf8.GetByteCount(p.Value));
+        var largest = sizes.MaxBy(p => p.Value);
+        long smallest = sizes.Values.Min();
+        // The landing's budget counts the pictures it shows, not the guide's.
+        string landing = _pages["index.html"];
+        long page = _utf8.GetByteCount(landing);
+        long shown = _link.Matches(landing)
+            .Select(m => m.Groups[1].Value)
+            .Distinct()
+            .Where(_files.ContainsKey)
+            .Sum(path => new FileInfo(_files[path]).Length);
         long pictures = _files.Values.Sum(file => new FileInfo(file).Length);
 
-        yield return $"{guidePages.Count} guide pages, largest {Kb(_utf8.GetByteCount(largest.Value))} ({largest.Key})";
-        yield return $"landing {Kb(_utf8.GetByteCount(_pages["index.html"]))}, pictures {Kb(pictures)}; download {_latest!.Tag}";
+        yield return $"{guidePages.Count} guide pages, {Kb(smallest)} to {Kb(largest.Value)} of 10-30 KB (largest {largest.Key})"
+            + Over(smallest < 10 * 1024 || largest.Value > 30 * 1024);
+        yield return $"landing with its pictures {Kb(page + shown)} of 300 KB (the page {Kb(page)})" + Over(page + shown > 300 * 1024);
+        yield return $"all pictures {Kb(pictures)}; download {_latest!.Tag}";
         if (_screenshots > 0) {
             yield return $"{_screenshots} place(s) marked for a screenshot" + (_debug ? ", shown" : ", shown with --debug");
         }
@@ -191,10 +218,21 @@ internal sealed class SiteBuilder {
 
     private string RenderPage(Guide guide, int index) {
         GuidePage page = guide.Pages[index];
-        foreach (Block block in page.Blocks) {
-            // A list, not the live walk: a screenshot gets wrapped in a link
-            // on the way, which changes the tree being walked.
-            foreach (LinkInline link in Links(block).ToList()) {
+        _shotsOnPage = 0;
+        // The footnotes the page refers to, in the order of their numbers:
+        // the parser keeps them all at the end of the document, the site
+        // shows each under the text of its own page.
+        var notes = page.Blocks
+            .SelectMany(Inlines<FootnoteLink>)
+            .Where(link => !link.IsBackLink)
+            .Select(link => link.Footnote)
+            .Distinct()
+            .OrderBy(note => note.Order)
+            .ToList();
+        foreach (Block block in page.Blocks.Concat(notes)) {
+            // A list, not the live walk: a screenshot is replaced by its
+            // button on the way, which changes the tree being walked.
+            foreach (LinkInline link in Inlines<LinkInline>(block).ToList()) {
                 link.Url = Rewrite(link, page, guide);
             }
         }
@@ -207,22 +245,14 @@ internal sealed class SiteBuilder {
                 .Append(Escape(page.Group.Title))
                 .Append("</a></p>");
         }
-        main.Append("<nav class=\"pager\">");
-        if (index > 0) {
-            GuidePage previous = guide.Pages[index - 1];
-            main.Append($"<a rel=\"prev\" href=\"../{previous.Slug}/index.html\">← {Escape(previous.Title)}</a>");
-        }
-        if (index + 1 < guide.Pages.Count) {
-            GuidePage next = guide.Pages[index + 1];
-            main.Append($"<a rel=\"next\" href=\"../{next.Slug}/index.html\">{Escape(next.Title)} →</a>");
-        }
-        main.Append("</nav></div>\n")
+        main.Append(Pager(guide, index, "pager")).Append("</div>\n")
             .Append("<h1>").Append(Escape(page.Title)).Append("</h1>\n");
+        // The page's own sections, as a table of contents under the title.
         var toc = page.Sections.Where(s => s.Level == 4).ToList();
         if (toc.Count > 0) {
-            main.Append("<p class=\"toc\"><span>На странице:</span>")
-                .AppendJoin("", toc.Select(s => $"<a href=\"#{s.Anchor}\">{Escape(s.Title)}</a>"))
-                .Append("</p>\n");
+            main.Append("<nav class=\"toc\" aria-label=\"Содержание страницы\"><div class=\"toc-title\">Содержание</div><ul>")
+                .AppendJoin("", toc.Select(s => $"<li><a href=\"#{s.Anchor}\">{Escape(s.Title)}</a></li>"))
+                .Append("</ul></nav>\n");
         }
 
         using var writer = new StringWriter();
@@ -249,16 +279,44 @@ internal sealed class SiteBuilder {
             }
             renderer.Render(block);
         }
+        if (notes.Count > 0) {
+            // The ids are the ones the references and the ways back carry
+            // (fn:N, fnref:N); the numbers run through the whole guide, as
+            // they do on GitHub.
+            renderer.WriteLine("<ol class=\"notes\">");
+            foreach (Footnote note in notes) {
+                renderer.Write($"<li id=\"fn:{note.Order}\" value=\"{note.Order}\">");
+                renderer.WriteChildren(note);
+                renderer.WriteLine("</li>");
+            }
+            renderer.WriteLine("</ol>");
+        }
         writer.Flush();
 
-        return main.Append(writer.ToString()).ToString();
+        // Back / next once more under the text: a narrow screen has no room
+        // for them beside the group, and the stylesheet shows only this one.
+        return main.Append(writer.ToString()).Append(Pager(guide, index, "pager end")).ToString();
+    }
+
+    private static string Pager(Guide guide, int index, string classes) {
+        var pager = new StringBuilder($"<nav class=\"{classes}\">");
+        if (index > 0) {
+            GuidePage previous = guide.Pages[index - 1];
+            pager.Append($"<a rel=\"prev\" href=\"../{previous.Slug}/index.html\">← {Escape(previous.Title)}</a>");
+        }
+        if (index + 1 < guide.Pages.Count) {
+            GuidePage next = guide.Pages[index + 1];
+            pager.Append($"<a rel=\"next\" href=\"../{next.Slug}/index.html\">{Escape(next.Title)} →</a>");
+        }
+
+        return pager.Append("</nav>").ToString();
     }
 
     private static string RenderVersions(List<Release> releases) {
         var main = new StringBuilder()
             .Append("<h1>Версии</h1>\n")
-            .Append("<p>Руководство на сайте описывает текущую разработку и может опережать последний релиз. ")
-            .Append("Руководство выпущенной версии открывается из её строки, список изменений в ")
+            .Append("<p>Руководство на сайте описывает последний релиз. ")
+            .Append("Руководство прошлой версии открывается из её строки, список изменений в ")
             .Append($"<a href=\"{Repository}/blob/master/docs/CHANGELOG.md\">CHANGELOG</a>.</p>\n")
             .Append("<table>\n<thead><tr><th>Версия</th><th>Дата</th><th>Релиз</th><th>Руководство</th></tr></thead>\n<tbody>\n");
         foreach (Release release in releases) {
@@ -322,11 +380,11 @@ internal sealed class SiteBuilder {
     /// Markdig's Descendants of a leaf block (a paragraph) finds nothing: the
     /// inlines hang off the block's Inline, not off the block.
     /// </summary>
-    private static IEnumerable<LinkInline> Links(Block block) {
+    private static IEnumerable<T> Inlines<T>(Block block) where T : Inline {
         return block switch {
-            LeafBlock { Inline: not null } leaf => leaf.Inline.Descendants<LinkInline>(),
-            ContainerBlock container => container.Descendants<LinkInline>(),
-            _ => Enumerable.Empty<LinkInline>(),
+            LeafBlock { Inline: not null } leaf => leaf.Inline.Descendants<T>(),
+            ContainerBlock container => container.Descendants<T>(),
+            _ => Enumerable.Empty<T>(),
         };
     }
 
@@ -379,10 +437,11 @@ internal sealed class SiteBuilder {
 
     /// <summary>
     /// A picture keeps its file name under img/ and gets its size, so the
-    /// page does not jump when it arrives. A screenshot is also a link to its
-    /// own file: the column shows it shrunk, a click opens it full size - no
-    /// script, Back returns. An icon of the interface (docs/icons, redrawn
-    /// from the app's XAML) sits in the line of text and opens nothing.
+    /// page does not jump when it arrives. A screenshot is shown shrunk in
+    /// the column and opens full size over the page (<see cref="Zoomable"/>) -
+    /// unless the column shows it whole already (<see cref="Zooms"/>). An
+    /// icon of the interface (docs/icons, redrawn from the app's XAML) sits
+    /// in the line of text and opens nothing.
     /// </summary>
     private string Picture(LinkInline link, string full, string relative, string where) {
         var attributes = link.GetAttributes();
@@ -404,17 +463,51 @@ internal sealed class SiteBuilder {
         }
 
         string url = "../../img/" + Path.GetFileName(full);
-        attributes.AddProperty("width", size.Width.ToString(CultureInfo.InvariantCulture));
-        attributes.AddProperty("height", size.Height.ToString(CultureInfo.InvariantCulture));
-        attributes.AddProperty("loading", "lazy");
-        if (link.Parent is not LinkInline) {
-            var zoom = new LinkInline(url, "");
-            zoom.GetAttributes().AddClass("zoom");
-            link.ReplaceBy(zoom, copyChildren: false);
-            zoom.AppendChild(link);
+        if (link.Parent is LinkInline || !Zooms(size.Width, size.Width)) {
+            // Inside a link of its own, that link is what a click does; a
+            // small picture has nothing more to open.
+            attributes.AddProperty("width", size.Width.ToString(CultureInfo.InvariantCulture));
+            attributes.AddProperty("height", size.Height.ToString(CultureInfo.InvariantCulture));
+            attributes.AddProperty("loading", "lazy");
+
+            return url;
         }
 
+        // The alt is in the HTML already: the text inside the brackets must
+        // not follow the picture into the paragraph.
+        link.ReplaceBy(new HtmlInline(Zoomable(url, AltText(link), size, size)), copyChildren: false);
+
         return url;
+    }
+
+    /// <summary>
+    /// A screenshot as a button that opens it full size over the page: a
+    /// popover, so no script - a click beside the picture or on it, or Esc,
+    /// closes it, and the page stays where it was. A browser without
+    /// popovers shows the picture in the column and nothing more.
+    /// </summary>
+    private string Zoomable(string url, string alt, (int Width, int Height) shown, (int Width, int Height) full) {
+        string id = $"shot-{++_shotsOnPage}";
+
+        return $"<button type=\"button\" class=\"zoom\" popovertarget=\"{id}\">"
+            + $"<img src=\"{url}\" alt=\"{Escape(alt)}\" width=\"{shown.Width}\" height=\"{shown.Height}\" loading=\"lazy\"></button>"
+            + $"<span class=\"full\" id=\"{id}\" popover>"
+            + $"<button type=\"button\" popovertarget=\"{id}\" popovertargetaction=\"hide\" aria-label=\"Закрыть\">"
+            + $"<img src=\"{url}\" alt=\"\" width=\"{full.Width}\" height=\"{full.Height}\" loading=\"lazy\"></button></span>";
+    }
+
+    /// <summary>
+    /// Whether the full size is worth opening: at least a tenth wider than
+    /// the picture as the column shows it. A click that opens the same
+    /// picture again looks broken.
+    /// </summary>
+    private static bool Zooms(int shown, int full) {
+        return full * 10 > Math.Min(shown, ColumnWidth) * 11;
+    }
+
+    /// <summary>A markdown picture's alt: the text inside its brackets.</summary>
+    private static string AltText(LinkInline link) {
+        return string.Concat(link.Descendants<LiteralInline>().Select(literal => literal.Content.ToString()));
     }
 
     /// <summary>
@@ -457,13 +550,15 @@ internal sealed class SiteBuilder {
 
         string url = "../../img/" + Path.GetFileName(full);
         int height = (int)Math.Round((double)width * size.Height / size.Width);
-        string picture = $"<img src=\"{url}\" alt=\"{Escape(alt)}\" width=\"{width}\" height=\"{height}\" loading=\"lazy\">";
+        string picture = Zooms(width, size.Width)
+            ? Zoomable(url, alt, (width, height), size)
+            : $"<img src=\"{url}\" alt=\"{Escape(alt)}\" width=\"{width}\" height=\"{height}\" loading=\"lazy\">";
 
         // Floated, the picture is a box beside the text; otherwise it opens a
         // paragraph of its own, as a markdown picture does.
         return right
-            ? $"<a class=\"zoom right\" href=\"{url}\">{picture}</a>"
-            : $"<p><a class=\"zoom\" href=\"{url}\">{picture}</a></p>";
+            ? $"<div class=\"right\">{picture}</div>"
+            : $"<p>{picture}</p>";
     }
 
     /// <summary>The size of a screenshot; anything but docs/screenshots/*.webp is an error, and null.</summary>
@@ -595,5 +690,9 @@ internal sealed class SiteBuilder {
 
     private static string Kb(long bytes) {
         return $"{(bytes + 512) / 1024} KB";
+    }
+
+    private static string Over(bool outside) {
+        return outside ? " - OUT OF BUDGET" : "";
     }
 }

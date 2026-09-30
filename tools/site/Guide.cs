@@ -1,4 +1,5 @@
 using System.Text;
+using Markdig.Extensions.Footnotes;
 using Markdig.Renderers.Html;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
@@ -41,6 +42,11 @@ internal sealed class Guide {
         GuidePage? top = null;
 
         foreach (Block block in document) {
+            // Every footnote of the file, gathered at its end by the parser:
+            // a page shows the ones it refers to itself (SiteBuilder).
+            if (block is FootnoteGroup) {
+                continue;
+            }
             if (block is not HeadingBlock heading) {
                 if (page is not null) {
                     page.Blocks.Add(block);

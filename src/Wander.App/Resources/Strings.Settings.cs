@@ -198,7 +198,7 @@ public static partial class Strings {
     /// <summary>Включать галерею, если снимков в папке больше</summary>
     public static string SettingsAutoGallery => Get(nameof(SettingsAutoGallery));
 
-    /// <summary>Папки со снимками</summary>
+    /// <summary>Папки с изображениями</summary>
     public static string SettingsPhotoFoldersGroup => Get(nameof(SettingsPhotoFoldersGroup));
 
     /// <summary>%</summary>
@@ -402,7 +402,7 @@ public static partial class Strings {
     /// <summary>Переименование, перенос и удаление уносят спутники — .meta, .xmp, .pp3…</summary>
     public static string SettingsCompanionsNote => Get(nameof(SettingsCompanionsNote));
 
-    /// <summary>Изменения от других программ</summary>
+    /// <summary>Отслеживание изменений от других программ</summary>
     public static string SettingsRefreshGroup => Get(nameof(SettingsRefreshGroup));
 
     /// <summary>Размер картинки, px</summary>

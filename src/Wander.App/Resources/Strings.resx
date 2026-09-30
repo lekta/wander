@@ -1289,7 +1289,7 @@
     <value>Включать галерею, если снимков в папке больше</value>
   </data>
   <data name="SettingsPhotoFoldersGroup" xml:space="preserve">
-    <value>Папки со снимками</value>
+    <value>Папки с изображениями</value>
   </data>
   <data name="SettingsAutoGalleryUnit" xml:space="preserve">
     <value>%</value>
@@ -1801,7 +1801,7 @@
     <value>Прокручивать вбок к длинному имени</value>
   </data>
   <data name="SettingsTreeScrollsSidewaysHint" xml:space="preserve">
-    <value>Имя папки шире панели — панель уезжает вправо, чтобы показать его целиком, и шевроны уходят за левый край. Выключено — панель прокручивается только вверх и вниз; вбок — Shift + колесо.</value>
+    <value>Имя папки шире панели — панель уезжает вправо, чтобы показать его целиком, и треугольники уходят за левый край. Выключено — панель прокручивается только вверх и вниз; вбок — Shift + колесо.</value>
   </data>
   <data name="PanelShowHidden" xml:space="preserve">
     <value>Показывать скрытые файлы</value>
@@ -2635,7 +2635,7 @@
     <value>Переименование, перенос и удаление уносят спутники — .meta, .xmp, .pp3 рядом с файлом — вместе с ним; Ctrl+Z возвращает всё разом.</value>
   </data>
   <data name="SettingsRefreshGroup" xml:space="preserve">
-    <value>Изменения от других программ</value>
+    <value>Отслеживание изменений от других программ</value>
   </data>
   <data name="SettingsPictureSize" xml:space="preserve">
     <value>Размер картинки, px</value>

@@ -10,6 +10,42 @@
 4. Архитектурные правила — [ARCHITECTURE.md](ARCHITECTURE.md): `Wander.Core`
    не зависит от Windows и UI, платформенное — в `Wander.Platform.Windows`.
 
+## Сборка из исходников
+
+Нужен [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
+(`winget install Microsoft.DotNet.SDK.10`).
+
+```pwsh
+# Восстановить зависимости и собрать всё решение
+dotnet build Wander.slnx
+
+# Прогнать юнит-тесты Core
+dotnet test Wander.slnx
+
+# Запустить приложение
+dotnet run --project src\Wander.App
+```
+
+**Релизный портативный exe** — ровно то, что делает CI: один
+самодостаточный файл `Wander.exe`, которому не нужен установленный .NET.
+
+```pwsh
+dotnet publish src\Wander.App `
+  -c Release `
+  -r win-x64 `
+  --self-contained true `
+  -p:PublishSingleFile=true `
+  -p:IncludeNativeLibrariesForSelfExtract=true `
+  -p:EnableCompressionInSingleFile=true `
+  -o publish
+```
+
+Готовый файл — `publish\Wander.exe` (~74 МБ, весь .NET внутри). Трим
+(`PublishTrimmed`) для WPF не поддерживается — не включать. Нужен файл
+поменьше — можно собрать framework-dependent (без `--self-contained`), но
+тогда пользователю понадобится установленный
+[.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0).
+
 ## Права на вклад (Contributor License Agreement)
 
 **Открывая Pull Request, ты соглашаешься со следующими условиями. Без этого
