@@ -1121,26 +1121,21 @@ public sealed class SystemIconProvider : IIconProvider {
     /// Extensions we believe have a real thumbnail provider — i.e. the
     /// shell can produce a content-based preview. For these, going through
     /// <c>IShellItemImageFactory</c> is the right thing. Folders also
-    /// qualify (Win11 content peek).
+    /// qualify (Win11 content peek). Pictures are every one Wander knows
+    /// (<see cref="ImageFormats.All"/>), TGA and RAW drawn by Wander itself.
     ///
     /// Everything outside this list is icon-only and goes through the
     /// older <c>SHIL_JUMBO</c> path so we don't pollute the system
     /// thumbnail cache (see <see cref="LoadJumboImage"/> comment).
     /// </summary>
-    private static readonly HashSet<string> _thumbnailableExtensions = new(StringComparer.OrdinalIgnoreCase) {
-        // Images
-        ".png", ".jpg", ".jpeg", ".jpe", ".jfif", ".gif", ".bmp", ".webp", ".tif", ".tiff",
-        ".ico", ".heic", ".heif", ".svg",
-        // Decoded by Wander itself - TgaThumbnail
-        ".tga",
-        // RAW
-        ".cr2", ".cr3", ".nef", ".arw", ".dng", ".raf", ".orf", ".rw2",
+    private static readonly HashSet<string> _thumbnailableExtensions = new(ImageFormats.All.Concat(new[] {
+        ".svg",
         // Video
         ".mp4", ".m4v", ".mov", ".wmv", ".avi", ".mkv", ".webm", ".mts", ".m2ts",
         ".ogv", ".mpg", ".mpeg", ".asf", ".3gp", ".3g2",
         // Documents with shell thumbnail providers
         ".pdf", ".docx", ".xlsx", ".pptx", ".doc", ".xls", ".ppt",
-    };
+    }), StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Whether the shell can be asked for a picture of this file's

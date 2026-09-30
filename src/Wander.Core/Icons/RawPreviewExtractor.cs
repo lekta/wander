@@ -19,14 +19,19 @@ namespace Wander.Core.Icons;
 /// </para>
 ///
 /// <para>
-/// Two container shapes cover the formats Wander lists:
+/// Four container shapes cover the formats Wander lists:
 /// </para>
 /// <list type="bullet">
 ///   <item><b>ISO-BMFF</b> (Canon CR3) — an MP4-style box tree with the
 ///   preview in a Canon-specific <c>uuid</c> box and a full-size JPEG as
 ///   the first track.</item>
 ///   <item><b>TIFF</b> (CR2, NEF, ARW, DNG, most others) — IFDs, one of
-///   which points at a JPEG.</item>
+///   which points at a JPEG. Panasonic's RW2 names it by a tag of its own,
+///   Olympus' ORF keeps it in the maker note.</item>
+///   <item><b>RAF</b> (Fujifilm) - a header of its own that says where
+///   the JPEG is.</item>
+///   <item><b>CIFF</b> (Canon CRW) - heaps of tagged records, the JPEG
+///   one of them.</item>
 /// </list>
 ///
 /// <para>
@@ -69,23 +74,29 @@ public static class RawPreviewExtractor {
                 return null;
             }
 
-            var head = new byte[8];
+            var head = new byte[16];
             stream.Position = 0;
-            if (stream.Read(head, 0, 8) < 8) {
+            if (stream.ReadAtLeast(head, head.Length, throwOnEndOfStream: false) < head.Length) {
                 return null;
             }
 
             if (Ascii(head, 4) == "ftyp") {
                 return FromBmff(stream, fullSize);
             }
-            if (head[0] == 'I' && head[1] == 'I') {
-                return FromTiff(stream, littleEndian: true);
-            }
-            if (head[0] == 'M' && head[1] == 'M') {
-                return FromTiff(stream, littleEndian: false);
+            if (Ascii(head, 0, 15) == "FUJIFILMCCD-RAW") {
+                return FromRaf(stream);
             }
 
-            return null;
+            bool little = head[0] == 'I' && head[1] == 'I';
+            if (!little && !(head[0] == 'M' && head[1] == 'M')) {
+                return null;
+            }
+            // A CRW opens with a byte order too, then its header's length.
+            if (Ascii(head, 6, 8) == "HEAPCCDR") {
+                return FromCiff(stream, little);
+            }
+
+            return FromTiff(stream, little);
         } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException) {
             return null;
         }
@@ -264,7 +275,9 @@ public static class RawPreviewExtractor {
     }
 
 
-    // --- TIFF (CR2 / NEF / ARW / DNG) ----------------------------------
+    // --- TIFF (CR2 / NEF / ARW / DNG / RW2 / ORF) ----------------------
+
+    private const ushort TypeShort = 3;
 
     private const ushort TagCompression = 0x0103;
     private const ushort TagStripOffsets = 0x0111;
@@ -272,6 +285,15 @@ public static class RawPreviewExtractor {
     private const ushort TagSubIfds = 0x014A;
     private const ushort TagJpegOffset = 0x0201;
     private const ushort TagJpegLength = 0x0202;
+    private const ushort TagExifIfd = 0x8769;
+    private const ushort TagMakerNote = 0x927C;
+
+    /// <summary>Panasonic's JpgFromRaw (RW2, RWL): the JPEG's offset as the value, its length as the count.</summary>
+    private const ushort TagPanasonicJpeg = 0x002E;
+
+    private const ushort TagOlympusCameraSettings = 0x2020;
+    private const ushort TagOlympusPreviewStart = 0x0101;
+    private const ushort TagOlympusPreviewLength = 0x0102;
 
     /// <summary>Cap on the IFD walk — a corrupt file must not make us chase pointers all day.</summary>
     private const int MaxIfds = 32;
@@ -306,11 +328,13 @@ public static class RawPreviewExtractor {
             foreach (long sub in SubIfds(s, entries, littleEndian)) {
                 pending.Enqueue(sub);
             }
-
-            var found = JpegPointer(entries);
-            if (found.Length > 0 && found.Offset > 0 && found.Offset + found.Length <= s.Length) {
-                candidates.Add(found);
+            // For the maker note, where an ORF keeps its preview.
+            if (Find(entries, TagExifIfd) is { } exif) {
+                pending.Enqueue(exif.Value);
             }
+
+            Consider(JpegPointer(entries));
+            Consider(OlympusPreview(s, entries));
         }
 
         foreach (var (offset, length) in candidates.OrderByDescending(c => c.Length)) {
@@ -320,6 +344,12 @@ public static class RawPreviewExtractor {
         }
 
         return null;
+
+        void Consider((long Offset, long Length) found) {
+            if (found.Length > 0 && found.Offset > 0 && found.Offset + found.Length <= s.Length) {
+                candidates.Add(found);
+            }
+        }
     }
 
     private static List<IfdEntry> ReadIfd(Stream s, long offset, bool little, out long next) {
@@ -346,7 +376,12 @@ public static class RawPreviewExtractor {
 
         for (int i = 0; i < count; i++) {
             var e = buf.AsSpan(i * 12, 12);
-            result.Add(new IfdEntry(U16(e, little), U32(e[4..], little), U32(e[8..], little)));
+            uint values = U32(e[4..], little);
+            // A single SHORT sits in the first two bytes of the value slot,
+            // which a four-byte read of a big-endian file turns into the
+            // high half: compression 7 of an iPhone's DNG read as 0x70000.
+            uint value = U16(e[2..], little) == TypeShort && values == 1 ? U16(e[8..], little) : U32(e[8..], little);
+            result.Add(new IfdEntry(U16(e, little), values, value));
         }
         next = U32(buf.AsSpan(12 * count), little);
 
@@ -387,6 +422,9 @@ public static class RawPreviewExtractor {
         if (offset is { } o && length is { Value: > 0 } l) {
             return (o.Value, l.Value);
         }
+        if (Find(entries, TagPanasonicJpeg) is { Count: > 0 } panasonic) {
+            return (panasonic.Value, panasonic.Count);
+        }
 
         // Compression 6 (old-style JPEG) / 7 (JPEG) with the whole image in
         // one strip is how CR2 stores its full-size preview. Multiple strips
@@ -405,10 +443,121 @@ public static class RawPreviewExtractor {
         return (strips.Value.Value, counts.Value.Value);
     }
 
+    /// <summary>
+    /// Where an ORF keeps its big preview: in the maker note, not in an IFD
+    /// of the file. The note starts "OLYMPUS\0" - its IFD 12 bytes in - or,
+    /// since the OM-1, "OM SYSTEM\0\0\0" - 16 in -, each with a byte order
+    /// of its own before the IFD, and counts every offset from its own
+    /// first byte. Tag 0x2020 of that IFD points at the camera settings,
+    /// whose 0x0101 / 0x0102 are the preview's start and length. The older
+    /// "OLYMP\0" note of the first E-series counts from the TIFF header
+    /// instead and is left to the caller's fallback.
+    /// </summary>
+    private static (long Offset, long Length) OlympusPreview(Stream s, List<IfdEntry> entries) {
+        if (Find(entries, TagMakerNote) is not { } note) {
+            return (0, 0);
+        }
+
+        var head = new byte[16];
+        s.Position = note.Value;
+        if (note.Value + head.Length > s.Length || s.ReadAtLeast(head, head.Length, throwOnEndOfStream: false) < head.Length) {
+            return (0, 0);
+        }
+
+        int ifdAt = Ascii(head, 0, 8) == "OLYMPUS\0" ? 12
+            : Ascii(head, 0, 12) == "OM SYSTEM\0\0\0" ? 16
+            : 0;
+        if (ifdAt == 0) {
+            return (0, 0);
+        }
+
+        bool little = head[ifdAt - 4] == 'I';
+        if (Find(ReadIfd(s, note.Value + ifdAt, little, out _), TagOlympusCameraSettings) is not { } settings) {
+            return (0, 0);
+        }
+
+        var preview = ReadIfd(s, note.Value + settings.Value, little, out _);
+
+        return Find(preview, TagOlympusPreviewStart) is { } start && Find(preview, TagOlympusPreviewLength) is { } length
+            ? (note.Value + start.Value, length.Value)
+            : (0, 0);
+    }
+
     private static IfdEntry? Find(List<IfdEntry> entries, ushort tag) {
         int i = entries.FindIndex(x => x.Tag == tag);
 
         return i < 0 ? null : entries[i];
+    }
+
+
+    // --- RAF (Fujifilm) -------------------------------------------------
+
+    /// <summary>Where the header says where the JPEG is: its offset, then its length, big-endian.</summary>
+    private const int RafJpegPointer = 84;
+
+    /// <summary>A RAF carries one JPEG, the biggest there is - 4416 px across in an X-T4.</summary>
+    private static byte[]? FromRaf(Stream s) {
+        var buf = new byte[8];
+        s.Position = RafJpegPointer;
+        if (s.ReadAtLeast(buf, buf.Length, throwOnEndOfStream: false) < buf.Length) {
+            return null;
+        }
+
+        return ReadJpeg(s, BinaryPrimitives.ReadUInt32BigEndian(buf), BinaryPrimitives.ReadUInt32BigEndian(buf.AsSpan(4)));
+    }
+
+
+    // --- CIFF (Canon CRW) -----------------------------------------------
+
+    /// <summary>JpgFromRaw: the preview, a record of the root heap.</summary>
+    private const ushort CiffJpeg = 0x2007;
+
+    /// <summary>Tag, size and offset from the heap's start.</summary>
+    private const int CiffEntrySize = 10;
+
+    /// <summary>
+    /// After the byte order, the header's length; the root heap runs from
+    /// there to the end of the file. A heap's last four bytes point at its
+    /// table, from the heap's start: a count, then the records.
+    /// </summary>
+    private static byte[]? FromCiff(Stream s, bool little) {
+        var buf = new byte[4];
+        s.Position = 2;
+        if (s.ReadAtLeast(buf, 4, throwOnEndOfStream: false) < 4) {
+            return null;
+        }
+        long heap = U32(buf, little);
+
+        s.Position = s.Length - 4;
+        if (s.ReadAtLeast(buf, 4, throwOnEndOfStream: false) < 4) {
+            return null;
+        }
+        long table = heap + U32(buf, little);
+        if (table + 2 > s.Length - 4) {
+            return null;
+        }
+
+        s.Position = table;
+        if (s.ReadAtLeast(buf.AsSpan(0, 2), 2, throwOnEndOfStream: false) < 2) {
+            return null;
+        }
+        int count = U16(buf, little);
+        if (table + 2 + (long)CiffEntrySize * count > s.Length - 4) {
+            return null;
+        }
+
+        var records = new byte[CiffEntrySize * count];
+        if (s.ReadAtLeast(records, records.Length, throwOnEndOfStream: false) < records.Length) {
+            return null;
+        }
+        for (int i = 0; i < count; i++) {
+            var record = records.AsSpan(i * CiffEntrySize, CiffEntrySize);
+            if (U16(record, little) == CiffJpeg) {
+                return ReadJpeg(s, heap + U32(record[6..], little), U32(record[2..], little));
+            }
+        }
+
+        return null;
     }
 
 
@@ -483,8 +632,8 @@ public static class RawPreviewExtractor {
         return i >= data.Length;
     }
 
-    private static string Ascii(byte[] buf, int offset) {
-        return Encoding.ASCII.GetString(buf, offset, 4);
+    private static string Ascii(byte[] buf, int offset, int length = 4) {
+        return Encoding.ASCII.GetString(buf, offset, length);
     }
 
     private static ushort U16(ReadOnlySpan<byte> s, bool little) {

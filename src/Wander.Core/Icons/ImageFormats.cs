@@ -15,9 +15,22 @@ namespace Wander.Core.Icons;
 /// </para>
 /// </summary>
 public static class ImageFormats {
-    /// <summary>RAW containers, by extension.</summary>
+    /// <summary>
+    /// RAW containers, by extension, maker by maker. Formats no camera
+    /// writes any more - SRW, MRW, DCR, KDC, ERF, MEF, MOS - are left out
+    /// (2026-09-30), all but the three asked for: CRW, SRF, SR2.
+    /// </summary>
     public static readonly IReadOnlySet<string> Raw = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
-        ".cr2", ".cr3", ".nef", ".arw", ".dng", ".raf", ".orf", ".rw2",
+        ".cr2", ".cr3", ".crw",
+        ".nef", ".nrw",
+        ".arw", ".srf", ".sr2",
+        ".raf",
+        ".orf", ".ori",
+        ".rw2", ".rwl",
+        ".pef",
+        ".3fr", ".fff",
+        ".iiq",
+        ".dng",
     };
 
     /// <summary>
@@ -26,23 +39,24 @@ public static class ImageFormats {
     /// folder listing even though the preview pane plays them through a
     /// different control.
     /// </summary>
-    public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
+    public static readonly IReadOnlySet<string> All = new HashSet<string>(new[] {
         ".png", ".jpg", ".jpeg", ".jpe", ".jfif", ".bmp", ".ico", ".tif", ".tiff", ".gif", ".webp",
+        ".jxr", ".wdp",
         // No codec in Windows: decoded by Wander (Imaging/TgaDecoder).
         ".tga",
         // Decoded by the system's codec from the Microsoft Store, when the
         // extensions for it are installed.
-        ".heic", ".heif",
-        ".cr2", ".cr3", ".nef", ".arw", ".dng", ".raf", ".orf", ".rw2",
-    };
+        ".heic", ".heif", ".hif", ".avif", ".jxl",
+    }.Concat(Raw), StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// HEIF: what the WIC decoder turns and mirrors by the container's own
     /// transforms, ignoring the EXIF tag (stand 2026-09-25), and what needs
-    /// extensions from the Microsoft Store to be read at all.
+    /// extensions from the Microsoft Store to be read at all. <c>.hif</c> is
+    /// the same container from a camera.
     /// </summary>
     public static readonly IReadOnlySet<string> Heif = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
-        ".heic", ".heif",
+        ".heic", ".heif", ".hif",
     };
 
 

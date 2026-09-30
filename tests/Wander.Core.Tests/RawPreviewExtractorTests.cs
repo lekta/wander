@@ -156,6 +156,123 @@ public class RawPreviewExtractorTests {
         return file.ToArray();
     }
 
+    /// <summary>
+    /// DNG-shaped IFD0 whose picture is one JPEG strip, its compression a
+    /// SHORT in the first two bytes of the value slot - how an iPhone lays
+    /// out its ProRAW preview.
+    /// </summary>
+    private static byte[] StripTiff(bool little, byte[] jpeg) {
+        const int Ifd0 = 8;
+        const int Payload = Ifd0 + 2 + (3 * 12) + 4;
+
+        var file = new List<byte>();
+        file.AddRange(Encoding.ASCII.GetBytes(little ? "II" : "MM"));
+        file.AddRange(U16(little, 42));
+        file.AddRange(U32(little, Ifd0));
+        file.AddRange(U16(little, 3));
+        file.AddRange(U16(little, 0x0103));
+        file.AddRange(U16(little, 3));
+        file.AddRange(U32(little, 1));
+        file.AddRange(U16(little, 7));
+        file.AddRange(U16(little, 0));
+        file.AddRange(Entry(little, 0x0111, 4, 1, Payload));
+        file.AddRange(Entry(little, 0x0117, 4, 1, (uint)jpeg.Length));
+        file.AddRange(U32(little, 0));
+        file.AddRange(jpeg);
+
+        return file.ToArray();
+    }
+
+    /// <summary>RW2-shaped: its own TIFF magic, and the JPEG as the one tag of IFD0 - offset as the value, length as the count.</summary>
+    private static byte[] Rw2(byte[] jpeg) {
+        const int Ifd0 = 8;
+        const int Payload = Ifd0 + 2 + 12 + 4;
+
+        var file = new List<byte>();
+        file.AddRange(Encoding.ASCII.GetBytes("II"));
+        file.AddRange(U16(little: true, 0x55));
+        file.AddRange(U32(little: true, Ifd0));
+        file.AddRange(U16(little: true, 1));
+        file.AddRange(Entry(little: true, 0x002E, 7, (uint)jpeg.Length, Payload));
+        file.AddRange(U32(little: true, 0));
+        file.AddRange(jpeg);
+
+        return file.ToArray();
+    }
+
+    /// <summary>
+    /// ORF-shaped: IFD0, the Exif IFD, the maker note; the note's own IFD
+    /// points at the camera settings, whose two tags point at the JPEG -
+    /// every offset in the note counted from its first byte.
+    /// </summary>
+    private static byte[] Orf(byte[] jpeg, string noteHeader) {
+        const int IfdSize = 2 + 12 + 4;
+        const int Ifd0 = 8;
+        const int Exif = Ifd0 + IfdSize;
+        const int Note = Exif + IfdSize;
+        byte[] header = Encoding.Latin1.GetBytes(noteHeader);
+        int settings = header.Length + IfdSize;
+        int jpegAt = settings + 2 + 24 + 4;
+
+        var file = new List<byte>();
+        file.AddRange(Encoding.ASCII.GetBytes("IIRO"));
+        file.AddRange(U32(little: true, Ifd0));
+        file.AddRange(U16(little: true, 1));
+        file.AddRange(Entry(little: true, 0x8769, 4, 1, Exif));
+        file.AddRange(U32(little: true, 0));
+        file.AddRange(U16(little: true, 1));
+        file.AddRange(Entry(little: true, 0x927C, 7, (uint)(jpegAt + jpeg.Length), Note));
+        file.AddRange(U32(little: true, 0));
+        file.AddRange(header);
+        file.AddRange(U16(little: true, 1));
+        file.AddRange(Entry(little: true, 0x2020, 13, 1, (uint)settings));
+        file.AddRange(U32(little: true, 0));
+        file.AddRange(U16(little: true, 2));
+        file.AddRange(Entry(little: true, 0x0101, 4, 1, (uint)jpegAt));
+        file.AddRange(Entry(little: true, 0x0102, 4, 1, (uint)jpeg.Length));
+        file.AddRange(U32(little: true, 0));
+        file.AddRange(jpeg);
+
+        return file.ToArray();
+    }
+
+    /// <summary>RAF-shaped: the header, the JPEG's offset and length at 84, big-endian, then the JPEG.</summary>
+    private static byte[] Raf(byte[] jpeg, int? offset = null) {
+        const int JpegAt = 148;
+
+        var file = new List<byte>();
+        file.AddRange(Encoding.ASCII.GetBytes("FUJIFILMCCD-RAW 0201FF159505"));
+        file.AddRange(new byte[84 - file.Count]);
+        file.AddRange(Be32(offset ?? JpegAt));
+        file.AddRange(Be32(jpeg.Length));
+        file.AddRange(new byte[JpegAt - file.Count]);
+        file.AddRange(jpeg);
+
+        return file.ToArray();
+    }
+
+    /// <summary>
+    /// CRW-shaped: the header, then the root heap - the JPEG, a table of one
+    /// record pointing at it, and the table's offset in the last four bytes.
+    /// </summary>
+    private static byte[] Crw(byte[] jpeg, uint? tableAt = null) {
+        const int HeaderSize = 26;
+
+        var file = new List<byte>();
+        file.AddRange(Encoding.ASCII.GetBytes("II"));
+        file.AddRange(U32(little: true, HeaderSize));
+        file.AddRange(Encoding.ASCII.GetBytes("HEAPCCDR"));
+        file.AddRange(new byte[HeaderSize - file.Count]);
+        file.AddRange(jpeg);
+        file.AddRange(U16(little: true, 1));
+        file.AddRange(U16(little: true, 0x2007));
+        file.AddRange(U32(little: true, (uint)jpeg.Length));
+        file.AddRange(U32(little: true, 0));
+        file.AddRange(U32(little: true, tableAt ?? (uint)jpeg.Length));
+
+        return file.ToArray();
+    }
+
     private static byte[] Entry(bool little, ushort tag, ushort type, uint count, uint value) {
         var e = new List<byte>();
         e.AddRange(U16(little, tag));
@@ -292,6 +409,68 @@ public class RawPreviewExtractorTests {
         byte[] rawPayload = LosslessJpeg(padding: 5000);
 
         Assert.Equal(preview, Extract(Tiff(little: true, preview, rawPayload)));
+    }
+
+    /// <summary>An iPhone's DNG is big-endian (2026-09-30): its compression, a SHORT, read as 0x70000 lost the preview.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Extract_ReadsAShortValue_InEitherByteOrder(bool little) {
+        byte[] jpeg = BaselineJpeg(padding: 300);
+
+        Assert.Equal(jpeg, Extract(StripTiff(little, jpeg)));
+    }
+
+    [Fact]
+    public void Extract_FindsThePreview_InAnRw2() {
+        byte[] jpeg = BaselineJpeg(padding: 300);
+
+        Assert.Equal(jpeg, Extract(Rw2(jpeg)));
+    }
+
+    [Theory]
+    [InlineData("OLYMPUS\0II\u0003\0")]
+    [InlineData("OM SYSTEM\0\0\0II\u0004\0")]
+    public void Extract_FindsThePreview_InAnOrfMakerNote(string noteHeader) {
+        byte[] jpeg = BaselineJpeg(padding: 300);
+
+        Assert.Equal(jpeg, Extract(Orf(jpeg, noteHeader)));
+    }
+
+    [Fact]
+    public void Extract_LeavesAlone_AMakerNoteOfAnotherMaker() {
+        Assert.Null(Extract(Orf(BaselineJpeg(padding: 300), "Nikon\0\u0002\u0010\0\0II*\0")));
+    }
+
+
+    // --- RAF ------------------------------------------------------------
+
+    [Fact]
+    public void Extract_FindsThePreview_InARaf() {
+        byte[] jpeg = BaselineJpeg(padding: 300);
+
+        Assert.Equal(jpeg, Extract(Raf(jpeg)));
+        Assert.Equal(jpeg, Extract(Raf(jpeg), fullSize: true));
+    }
+
+    [Fact]
+    public void Extract_ReturnsNull_WhenARafPointsPastItsEnd() {
+        Assert.Null(Extract(Raf(BaselineJpeg(padding: 300), offset: 0xFFFF00)));
+    }
+
+
+    // --- CRW ------------------------------------------------------------
+
+    [Fact]
+    public void Extract_FindsThePreview_InACrw() {
+        byte[] jpeg = BaselineJpeg(padding: 300);
+
+        Assert.Equal(jpeg, Extract(Crw(jpeg)));
+    }
+
+    [Fact]
+    public void Extract_ReturnsNull_WhenACrwTablePointsPastItsEnd() {
+        Assert.Null(Extract(Crw(BaselineJpeg(padding: 300), tableAt: 0xFFFF00)));
     }
 
 

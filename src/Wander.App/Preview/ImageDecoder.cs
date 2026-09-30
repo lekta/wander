@@ -150,6 +150,54 @@ internal static class ImageDecoder {
 
 
     /// <summary>
+    /// The size of the preview the system's RAW codec finds in the file,
+    /// nothing of it decoded - see <see cref="CodecPreview"/>. Null when the
+    /// codec has none.
+    /// </summary>
+    public static (int Width, int Height)? CodecPreviewSize(string path) {
+        try {
+            using var file = SharedRead.Open(path);
+            var preview = CodecPreviewOf(file);
+
+            return preview is null ? null : (preview.PixelWidth, preview.PixelHeight);
+        } catch {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The preview the system's RAW codec finds in a container
+    /// <see cref="RawPreviewBytes"/> does not read - the same embedded
+    /// picture, found by the codec (<c>IWICBitmapDecoder::GetPreview</c>):
+    /// 3-100 ms against 0.7-2 s for the sensor decode (stand 2026-09-30,
+    /// Raw Image Extension). Null when the codec has none - the DNG one, a
+    /// RAW WIC reads as a plain TIFF - or there is no codec.
+    /// </summary>
+    /// <param name="width">Scaled down to this many pixels across; null for the whole preview.</param>
+    public static BitmapSource? CodecPreview(string path, int? width = null) {
+        try {
+            using var file = SharedRead.Open(path);
+            if (CodecPreviewOf(file) is not { } preview) {
+                return null;
+            }
+
+            BitmapSource source = preview;
+            if (width is { } w && w < preview.PixelWidth) {
+                double scale = w / (double)preview.PixelWidth;
+                source = new TransformedBitmap(preview, new ScaleTransform(scale, scale));
+            }
+            // Copied while the file is open: the preview reads from it.
+            var copy = new WriteableBitmap(source);
+            copy.Freeze();
+
+            return copy;
+        } catch {
+            return null;
+        }
+    }
+
+
+    /// <summary>
     /// Turns an EXIF orientation value (1..8) into the rotation and mirror
     /// it stands for. Values Wander cannot act on — and the identity value
     /// 1 — return the bitmap untouched.
@@ -183,6 +231,18 @@ internal static class ImageDecoder {
         group.Children.Add(new RotateTransform(degrees));
 
         return group;
+    }
+
+
+    /// <summary>
+    /// Delayed and uncached: the decoder's frame - the sensor data - is
+    /// never touched, only its preview.
+    /// </summary>
+    private static BitmapSource? CodecPreviewOf(System.IO.Stream stream) {
+        var decoder = BitmapDecoder.Create(
+            stream, BitmapCreateOptions.DelayCreation | BitmapCreateOptions.IgnoreColorProfile, BitmapCacheOption.None);
+
+        return decoder.Preview;
     }
 
 

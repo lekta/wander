@@ -282,6 +282,10 @@
   `.tga` в `_thumbnailableExtensions`, и при провале `TgaThumbnail` —
   `LoadShellBitmap`, то есть запись значка в `thumbcache_*.db`, от которой
   `LoadJumboImage` бережёт. Провал TGA — сразу значок по расширению.
+- **AVIF и JPEG XL без кодека — тоже в шелл**: они в
+  `_thumbnailableExtensions` через `ImageFormats.All`; без расширений из
+  Store шелл отвечает значком и пишет его в `thumbcache_*.db`, как TGA
+  выше. Лечится проверкой кодека (`ICodecProbe`) до шелла.
 - **`Ctrl+Shift+F` не работает в просмотре кода** (`MainWindow`,
   `IsCodeEditorFocused`): защита ради «своей панели поиска AvalonEdit»,
   которую никто не ставит (`SearchPanel.Install` нет).

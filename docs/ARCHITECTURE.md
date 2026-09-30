@@ -1487,7 +1487,7 @@ RefreshFolderAsync (листинг + свёртка, пул)
 спутников: знаменатель — содержательные файлы (не спутники, не бэкапы, не
 подпапки), иначе папка с `.pp3` у каждого RAW набирает ровно 50 %;
 минимума нет. Расширения — `Icons/ImageFormats`, один список с панелью
-просмотра.
+просмотра и миниатюрами (`_thumbnailableExtensions` берёт `All`).
 
 **Вид — у папки** (AG + Z1). `Folders/ViewChoice.Decide` (Core, тест) —
 одно правило на приходе в любую папку: закрепление → оно; автогалерея
@@ -1999,11 +1999,22 @@ SYS ws=431 private=360 gen=167/155/134 alloc=+45 loh=6 handles=1060 threads=40 c
 - **RAW не декодируется**: WIC на `.CR3` — ~1150 мс на 33 МБ
   (`DecodePixelWidth` и `Thumbnail` не помогают).
   `RawPreviewExtractor` (Core) достаёт JPEG из контейнера за 8–13 мс:
-  ISO-BMFF (`uuid` Canon с `PRVW`) и TIFF (IFD → JPEG: CR2, NEF, ARW, DNG);
-  кандидаты от большего к меньшему с проверкой маркера (в DNG / NEF самый
-  большой поток — raw-данные, SOF3). У CR3 `PRVW` — 1620×1080,
-  полноразмерный — первая дорожка `moov` (`Extract(fullSize: true)`,
-  60–110 мс против ~10).
+  ISO-BMFF (`uuid` Canon с `PRVW`); TIFF (IFD → JPEG: CR2, NEF, ARW, DNG,
+  PEF, 3FR; RW2 / RWL — тег `0x002E`, длина — счётчик; ORF — Exif IFD →
+  MakerNote `OLYMPUS` / `OM SYSTEM` → `0x2020` → `0x0101` / `0x0102`,
+  смещения от начала заметки; старый `OLYMP` — нет); RAF — указатель в
+  заголовке (байт 84, big-endian); CIFF (CRW) — запись `0x2007` корневой
+  кучи. SHORT в слоте значения — первые два байта (`MM`-файл иначе даёт
+  старшую половину: iPhone DNG терял превью). Кандидаты от большего к
+  меньшему с проверкой маркера (в DNG / NEF самый большой поток —
+  raw-данные, SOF3). У CR3 `PRVW` — 1620×1080, полноразмерный — первая
+  дорожка `moov` (`Extract(fullSize: true)`, 60–110 мс против ~10).
+  - Не прочитан (FFF — превью несжатое) — **превью кодека**:
+    `ImageDecoder.CodecPreview` (`BitmapDecoder.Preview`, без
+    `Frames`; Raw Image Extension — 3–100 мс против 0,7–2 с матрицы),
+    вписанное; `DecodedPicture.CodecPreview` — для кнопки RAW и зума 1:1
+    как встроенное. Нет и его (DNG-декодер, IIQ от WIC как TIFF) — декод
+    файла целиком.
   - Панель берёт оба (`LoadImageAsync` → `LoadFullSizeAsync`): быстрый —
     сразу и вписанным (`Image`), большой — после 150 мс на файле и
     **только в зум** (`ZoomSource`; по нему меряют `ImgZoom`,
@@ -2070,8 +2081,9 @@ SYS ws=431 private=360 gen=167/155/134 alloc=+45 loh=6 handles=1060 threads=40 c
   16384²; палитра, поле id и объём данных проверяются до буфера. Панель —
   `ImageDecoder.Tga` (`BitmapSource.Create`, Bgra32), миниатюры —
   `TgaThumbnail` (WinRT-кодер PNG, до 64 МБ); `.tga` в `ImageFormats.All`.
-- **HEIF** (B10): `ImageFormats.Heif`, декод под панель
-  (`PictureLoader._scaled`: 12 Мп — ~250 мс вместо 600–1000); поворот
+- **HEIF** (B10): `ImageFormats.Heif` (`.hif` с камер — тот же
+  контейнер), декод под панель (`PictureLoader._scaled`: 12 Мп — ~250 мс
+  вместо 600–1000); поворот
   контейнера — `UprightHeif` в `MetadataExtractorImageReader` (WIC
   EXIF-тег игнорирует); 1×1 без пикселей — `DecodeFailed` в
   `ImageDecoder.Decode`. После провала — `ICodecProbe` /

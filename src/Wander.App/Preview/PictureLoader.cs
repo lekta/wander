@@ -12,7 +12,7 @@ namespace Wander.App.Preview;
 /// </summary>
 /// <param name="Fit">What the pane draws, turned upright; at most the pane's size.</param>
 /// <param name="Meta">EXIF, when the file carries any.</param>
-/// <param name="IsRaw">A RAW container; the fit came from its embedded JPEG or its sensor decode.</param>
+/// <param name="IsRaw">A RAW container; the fit came from its embedded JPEG, its codec's preview or its sensor decode.</param>
 /// <param name="Embedded">The embedded JPEG the fit was decoded from (RAW only), for the zoom's whole decode.</param>
 /// <param name="Downscaled">The fit is a smaller copy - the 1:1 zoom needs the whole frame decoded.</param>
 /// <param name="NaturalWidth">Pixels of the whole frame as shown - what the pane caps the picture at.</param>
@@ -31,6 +31,14 @@ internal sealed record DecodedPicture(
 
     /// <summary>Same as <see cref="FrameWidth"/>.</summary>
     public int FrameHeight { get; init; }
+
+    /// <summary>
+    /// The fit came from the preview the system's RAW codec found in a
+    /// container Wander does not read itself
+    /// (<c>ImageDecoder.CodecPreview</c>). Like <see cref="Embedded"/>, it
+    /// leaves the sensor decode still to come.
+    /// </summary>
+    public bool CodecPreview { get; init; }
 }
 
 
@@ -87,6 +95,16 @@ internal static class PictureLoader {
 
             ct.ThrowIfCancellationRequested();
 
+            // A container Wander does not read: the codec's own preview, the
+            // same picture in tens of milliseconds.
+            if (ImageDecoder.CodecPreviewSize(path) is { } previewSize
+                && Fitted(previewSize, orientation, boxWidth, boxHeight,
+                    width => ImageDecoder.CodecPreview(path, width)) is { } codec) {
+                return WholeFrame(codec, meta) with { Meta = meta, IsRaw = true, CodecPreview = true };
+            }
+
+            ct.ThrowIfCancellationRequested();
+
             return Whole(ImageDecoder.File(path), orientation) is { } sensor
                 ? sensor with { Meta = meta, IsRaw = true }
                 : null;
@@ -119,7 +137,9 @@ internal static class PictureLoader {
             return null;
         }
 
-        var whole = picture.Embedded is { } jpeg ? ImageDecoder.Stream(jpeg) : ImageDecoder.File(path);
+        BitmapSource? whole = picture.Embedded is { } jpeg ? ImageDecoder.Stream(jpeg)
+            : picture.CodecPreview ? ImageDecoder.CodecPreview(path)
+            : ImageDecoder.File(path);
 
         return whole is null ? null : ImageDecoder.ApplyOrientation(whole, picture.Meta?.Orientation);
     }
@@ -181,7 +201,7 @@ internal static class PictureLoader {
 
     private static DecodedPicture? Fitted(
         (int Width, int Height)? stored, int? orientation, double boxWidth, double boxHeight,
-        Func<int?, BitmapImage?> decode) {
+        Func<int?, BitmapSource?> decode) {
         int? width = stored is { } s ? PictureFit.DecodeWidth(s.Width, s.Height, orientation, boxWidth, boxHeight) : null;
         if (decode(width) is not { } bitmap) {
             return null;
@@ -229,7 +249,7 @@ internal static class PictureLoader {
         return preview with { FrameWidth = width, FrameHeight = height };
     }
 
-    private static DecodedPicture? Whole(BitmapImage? bitmap, int? orientation) {
+    private static DecodedPicture? Whole(BitmapSource? bitmap, int? orientation) {
         if (bitmap is null) {
             return null;
         }

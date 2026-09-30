@@ -2486,7 +2486,7 @@ public sealed class PreviewController : ObservableObject {
         ImageMetadata = picture.Meta;
         IsRawImage = picture.IsRaw;
 
-        bool decode = _showRawDecode && picture.Embedded is not null;
+        bool decode = _showRawDecode && (picture.Embedded is not null || picture.CodecPreview);
         // Only a CR3 carries a bigger JPEG than its quick one: a TIFF-shaped
         // RAW already gave its biggest, and asking again read those
         // megabytes a second time to find the same length.
