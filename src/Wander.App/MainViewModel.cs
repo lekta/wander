@@ -179,10 +179,10 @@ public sealed class MainViewModel : ObservableObject {
     // the second half of its key in the book (FolderRecord.CreatedUtc).
     private DateTime? _currentCreatedUtc;
 
-    private bool _isPreviewVisible;
+    private bool _isPreviewVisible = true;
     private double _previewWidth = 280;
     private double _foldersWidth = 280;
-    private double _bookmarksHeight = 200;
+    private double _bookmarksHeight = 440;
 
     // Pane sizes as they were persisted, plus the window they were a share
     // of, held from RestoreState until the window is loaded and can say how
@@ -2344,7 +2344,12 @@ public sealed class MainViewModel : ObservableObject {
             if (remembered is not null) {
                 _log.Info($"Start: {remembered.Path} is not on this machine's own drives any more, opening the working folder {home}");
             }
-            _nav.NavigateTo(home, NavigationSource.External);
+            // As from the bookmarks: the working folder is Documents unless
+            // set otherwise, and Documents is a bookmark, so the first run
+            // lights it there and leaves the drives folded (2026-09-30).
+            // A working folder the bookmarks do not hold falls back to the
+            // drives (PanelRules.OnNavigated).
+            _nav.NavigateTo(home, NavigationSource.Bookmark);
         } else if (first is not null) {
             _nav.NavigateTo(first, NavigationSource.External);
         }
@@ -2821,7 +2826,16 @@ public sealed class MainViewModel : ObservableObject {
             }
             if (!work.IsCompleted) {
                 _hiddenCount = 0;
+                string beforeClear = Status;
                 _search.SetSource(Array.Empty<FileSystemEntry>());
+                // The clear counts its empty list into the status line. That
+                // count is this load's own, not an outcome to carry over the
+                // landing below: carried, it said "0 items" under a full
+                // folder - and in the journal - whenever the listing took
+                // longer than this yield.
+                if (beforeClear == statusBeforeLoad) {
+                    statusBeforeLoad = Status;
+                }
             }
         }
 

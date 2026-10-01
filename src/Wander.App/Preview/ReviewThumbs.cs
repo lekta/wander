@@ -57,7 +57,7 @@ internal static class ReviewThumbs {
     /// nothing to draw. Frozen, off the UI thread.
     /// </summary>
     public static async Task<ImageSource?> RenderAsync(FileStamp stamp, string path, Ask ask, int side, CancellationToken ct) {
-        string key = $"{path}|{stamp.Ticks}|{stamp.Size}|{side}|{(ask.Peaking ? "p" : "")}{(ask.Clipping ? "c" : "")}{ask.CurveTag}";
+        string key = $"{path}|{stamp.Ticks}|{stamp.Size}|{side}|{(ask.Peaking ? "p" : "")}{(ask.Clipping ? "c" : "")}{(ask.Af ? "a" : "")}{ask.CurveTag}";
         lock (_lock) {
             if (_cache.TryGetValue(key, out var kept)) {
                 return kept;
@@ -94,7 +94,19 @@ internal static class ReviewThumbs {
 
 
     private static ImageSource? Render(string path, Ask ask, int side, CancellationToken ct) {
-        int? orientation = ServiceLocator.TryGet<IImageMetadataReader>()?.Read(path)?.Orientation;
+        var metadata = ServiceLocator.TryGet<IImageMetadataReader>()?.Read(path);
+        int? orientation = metadata?.Orientation;
+        // Only the frames the camera called in focus: a cell has no room
+        // for the grey rest of them.
+        var af = ask.Af ? metadata?.AfPoints?.Where(p => p.InFocus).ToList() : null;
+        if (af is { Count: 0 }) {
+            af = null;
+        }
+        if (af is null && !ask.Peaking && !ask.Clipping && ask.Curve is null) {
+            // The frames were all that was asked for, and this file has none.
+            return null;
+        }
+
         var thumb = Picture(path, side, orientation);
         if (thumb is null) {
             return null;
@@ -119,14 +131,28 @@ internal static class ReviewThumbs {
 
         var clipped = ask.Clipping ? Clipping.Mask(cell) : null;
         var marks = ReviewOverlay.Marks(cell.Width, cell.Height, clipped, small, ask.Peak, ask.Under);
-        if (marks is null) {
+        if (marks is null && af is null) {
             return toned;
         }
 
-        var group = new DrawingGroup();
+        // Clipped to the picture: a frame's pen hanging over the edge would
+        // grow the drawing, and the cell would show it that much off the
+        // thumbnail under it (as in ReviewOverlay.Compose).
         var box = new Rect(0, 0, thumb.PixelWidth, thumb.PixelHeight);
+        var group = new DrawingGroup { ClipGeometry = new RectangleGeometry(box) };
         group.Children.Add(new ImageDrawing(toned ?? thumb, box));
-        group.Children.Add(new ImageDrawing(marks, box));
+        if (marks is not null) {
+            group.Children.Add(new ImageDrawing(marks, box));
+        }
+        if (af is not null) {
+            var pen = new Pen(new SolidColorBrush(ask.AfMark), Math.Max(1.0, Math.Max(box.Width, box.Height) / 140.0));
+            foreach (var point in af) {
+                var frame = new Rect(
+                    (point.X - point.W / 2) * box.Width, (point.Y - point.H / 2) * box.Height,
+                    point.W * box.Width, point.H * box.Height);
+                group.Children.Add(new GeometryDrawing(null, pen, new RectangleGeometry(frame)));
+            }
+        }
         var image = new DrawingImage(group);
         image.Freeze();
 
@@ -158,8 +184,10 @@ internal static class ReviewThumbs {
     }
 
 
-    /// <summary>What to make of a thumbnail: the marks, the curve, and the colours to mark in.</summary>
+    /// <summary>What to make of a thumbnail: the marks, the autofocus frames, the curve, and the colours to mark in.</summary>
     /// <param name="CurveTag">Which curve it is, for the key that remembers the answer.</param>
     /// <param name="Under">Crushed shadows; clipped highlights paint in their own channels.</param>
-    public sealed record Ask(bool Peaking, bool Clipping, byte[]? Curve, string CurveTag, Color Peak, Color Under);
+    /// <param name="AfMark">The frames the camera focused by - quieter than in the pane, a cell is small.</param>
+    public sealed record Ask(
+        bool Peaking, bool Clipping, bool Af, byte[]? Curve, string CurveTag, Color Peak, Color Under, Color AfMark);
 }

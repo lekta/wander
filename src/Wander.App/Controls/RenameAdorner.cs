@@ -27,7 +27,7 @@ namespace Wander.App.Controls;
 /// </para>
 ///
 /// <para>
-/// <paramref name="minWidth"/> is for a label that is exactly as wide as
+/// <c>minWidth</c> is for a label that is exactly as wide as
 /// the name it shows - a tree row - where the editor would otherwise
 /// wrap a longer name after a few characters. It grows to the right,
 /// over the empty part of the row.

@@ -160,7 +160,8 @@ public sealed record SessionState {
     /// </summary>
     public IReadOnlyList<string> RecentPaths { get; init; } = Array.Empty<string>();
 
-    public bool IsPreviewVisible { get; init; }
+    /// <summary>The preview pane is open from the first run (2026-09-30): it is what the program is about, and it should be seen.</summary>
+    public bool IsPreviewVisible { get; init; } = true;
     public double PreviewWidth { get; init; } = 280;
 
     /// <summary>
@@ -189,8 +190,10 @@ public sealed record SessionState {
     /// <summary>
     /// Height of the bookmarks region in the left pane, in pixels — where
     /// the user last dragged the divider between bookmarks and drives.
+    /// Most of the pane by default (2026-09-30; 200 before): the bookmarks
+    /// are the way to work, the drives below them fold to their three rows.
     /// </summary>
-    public double BookmarksHeight { get; init; } = 200;
+    public double BookmarksHeight { get; init; } = 440;
 
     /// <summary>
     /// Size of the window when the two sizes above were written. What the

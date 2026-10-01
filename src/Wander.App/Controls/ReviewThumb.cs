@@ -13,7 +13,8 @@ namespace Wander.App.Controls;
 
 /// <summary>
 /// The review helpers over one gallery cell: the picture through a tone
-/// curve with the clipping and peaking marks on it, drawn over the cell's thumbnail
+/// curve with the clipping and peaking marks and the focused autofocus
+/// frames on it, drawn over the cell's thumbnail
 /// (RAWHELPERS). Nothing at all while no helper that shows on a cell is on,
 /// and nothing for a file that is not a photograph.
 ///
@@ -140,17 +141,19 @@ public sealed class ReviewThumb : Image {
     /// <summary>What the switches ask of a cell; null when they ask nothing that shows on one.</summary>
     private ReviewThumbs.Ask? Ask() {
         if (_helpers is not { } helpers || helpers.Peek
-            || (!helpers.Peaking && !helpers.Clipping && !helpers.Shadows && !helpers.Highlights)) {
+            || (!helpers.Peaking && !helpers.Clipping && !helpers.AfPoints && !helpers.Shadows && !helpers.Highlights)) {
             return null;
         }
 
         return new ReviewThumbs.Ask(
             helpers.Peaking,
             helpers.Clipping,
+            helpers.AfPoints,
             helpers.Shadows ? ToneCurve.Shadows() : helpers.Highlights ? ToneCurve.Highlights() : null,
             helpers.Shadows ? "s" : helpers.Highlights ? "h" : "",
             Palette.ReviewPeaking is SolidColorBrush pink ? pink.Color : Colors.Magenta,
-            Palette.ReviewUnder is SolidColorBrush under ? under.Color : Colors.Blue);
+            Palette.ReviewUnder is SolidColorBrush under ? under.Color : Colors.Blue,
+            Palette.ReviewAfThumb is SolidColorBrush frame ? frame.Color : Colors.Magenta);
     }
 
 

@@ -222,7 +222,7 @@ public static partial class Strings {
     /// <summary>Пересвет {0:0.0} %, недосвет {1:0.0} %</summary>
     public static string HelperHistNote => Get(nameof(HelperHistNote));
 
-    /// <summary>Точка фокуса камеры: зелёная - в фокусе (Canon)</summary>
+    /// <summary>Точка фокуса камеры: розовая - в фокусе (Canon)</summary>
     public static string HelperAfTip => Get(nameof(HelperAfTip));
 
     /// <summary>Резкость {0} из 100 - по самым чётким краям в середине кадра; отдельные точки считаются за долю грани</summary>

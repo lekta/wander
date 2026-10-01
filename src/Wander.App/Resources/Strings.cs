@@ -179,6 +179,9 @@ public static partial class Strings {
     /// <summary>Папка</summary>
     public static string KindFolderNoun => Get(nameof(KindFolderNoun));
 
+    /// <summary>{0} · {1}</summary>
+    public static string TileFileLine => Get(nameof(TileFileLine));
+
     /// <summary>Переименовать</summary>
     public static string RenameTitle => Get(nameof(RenameTitle));
 

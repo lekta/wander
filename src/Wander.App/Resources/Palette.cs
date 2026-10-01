@@ -88,6 +88,8 @@ internal static class Palette {
 
     public static readonly Brush ReviewAfOther = Find("ReviewAfOther");
 
+    public static readonly Brush ReviewAfThumb = Find("ReviewAfThumb");
+
 
     /// <summary>
     /// A frozen pen from a palette brush - what the adorners draw their

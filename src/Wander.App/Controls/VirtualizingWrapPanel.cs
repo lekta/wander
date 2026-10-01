@@ -5,7 +5,6 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using Wander.App.Diagnostics;
-using Wander.Core;
 using Wander.Core.Diagnostics;
 using Wander.Core.Layout;
 using Wander.Core.Logging;

@@ -5,7 +5,7 @@ namespace Wander.Core.Imaging;
 /// viewfinder marks what is in focus.
 ///
 /// <para>
-/// By crispness (<see cref="Sharpness.Crispness"/>), not by the strength
+/// By crispness (<see cref="Sharpness.Measure"/>), not by the strength
 /// of the gradient. The first version marked the strongest three percent
 /// of gradients, and a frame and the same frame blurred came out with the
 /// same three percent marked (3.04 % against 3.17 %, stand 2026-09-22) -

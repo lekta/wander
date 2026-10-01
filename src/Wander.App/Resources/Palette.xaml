@@ -290,6 +290,9 @@
     <SolidColorBrush x:Key="ReviewUnder" Color="#3D5AFE"/>
     <SolidColorBrush x:Key="ReviewAfFocused" Color="#FF2BD6"/>
     <SolidColorBrush x:Key="ReviewAfOther" Color="#B0B0B0"/>
+    <!-- The focused frames on a gallery thumbnail: the same pink let
+         through, so a wall of cells does not shout. -->
+    <SolidColorBrush x:Key="ReviewAfThumb" Color="#A6FF2BD6"/>
     <SolidColorBrush x:Key="ReviewChartPlate" Color="#CC202020"/>
     <SolidColorBrush x:Key="ReviewChartRed" Color="#99FF4040"/>
     <SolidColorBrush x:Key="ReviewChartGreen" Color="#9940E040"/>

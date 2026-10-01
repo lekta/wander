@@ -14,10 +14,10 @@ namespace Wander.Core.Persistence;
 /// settings record grows.
 ///
 /// Default values represent the out-of-the-box behaviour: paranoid about
-/// deletes, hides Windows hidden/system files (Explorer-parity), shows
-/// the developer Debug menu (we're pre-1.0). LargeIcons defaults match
-/// the values that lived inline in MainWindow.xaml before this record
-/// existed.
+/// deletes, hides Windows hidden/system files (Explorer-parity), no
+/// developer Debug menu (since 0.5.0: the build goes to ordinary users).
+/// LargeIcons defaults match the values that lived inline in
+/// MainWindow.xaml before this record existed.
 /// </summary>
 public sealed record AppSettings {
     // --- General -------------------------------------------------------
@@ -47,11 +47,12 @@ public sealed record AppSettings {
     /// <summary>
     /// Icons and thumbnails for what is on screen are loaded ahead of those
     /// for what is not - table rows beyond the window's edge, tree nodes
-    /// out of view. Off by default until the session log says it is worth
-    /// it (the "First screen painted" line): with it on, a load is held
-    /// one layout pass to learn where its icon is.
+    /// out of view. On by default since 2026-09-30 (the author's own
+    /// setting through 0.5): with it on, a load is held one layout pass to
+    /// learn where its icon is, and the "First screen painted" line has not
+    /// got worse for it.
     /// </summary>
-    public bool VisibleFirstLoading { get; init; }
+    public bool VisibleFirstLoading { get; init; } = true;
 
 
     // --- Safety --------------------------------------------------------
@@ -125,16 +126,15 @@ public sealed record AppSettings {
     /// folder it lands on.
     ///
     /// <para>
-    /// Off by default, which is deliberately not Explorer's behaviour:
-    /// Explorer navigates on every selection change, so arrowing past ten
-    /// folders on the way to the eleventh lists all ten — ten directory
-    /// reads, ten thumbnail passes, and the list position lost each time.
-    /// Wander moves for free and opens on <c>Enter</c> or a click. The
-    /// switch is here because the other habit is a real habit, and someone
-    /// who has it should not have to unlearn it.
+    /// On by default since 2026-09-30, as in Explorer. It was off because
+    /// Explorer navigates on every selection change - arrowing past ten
+    /// folders on the way to the eleventh lists all ten - but Wander's
+    /// throttle (<c>TreeNavThrottle</c>) lists only the folder the cursor
+    /// stops on. Off is for whoever prefers to move for free and open on
+    /// <c>Enter</c>.
     /// </para>
     /// </summary>
-    public bool TreeKeyboardNavigates { get; init; } = false;
+    public bool TreeKeyboardNavigates { get; init; } = true;
 
     /// <summary>
     /// Whether a folder panel scrolls sideways by itself to show the whole
@@ -218,15 +218,16 @@ public sealed record AppSettings {
 
     // --- Layout (Gallery view) -----------------------------------------
     /// <summary>
-    /// Width of one gallery cell, in pixels. The 16 px it leaves around a
-    /// 200 px picture is deliberately tighter than the LargeIcons grid: a
-    /// wall of photographs reads as a wall when the gaps are thin, and as a
-    /// list of framed items when they are not.
+    /// Width of one gallery cell, in pixels. The 4 px it leaves around a
+    /// 216 px picture (the author's setting, default since 2026-09-30; 16
+    /// around 200 before) is deliberately tighter than the LargeIcons
+    /// grid: a wall of photographs reads as a wall when the gaps are thin,
+    /// and as a list of framed items when they are not.
     /// </summary>
-    public int GalleryCellWidth { get; init; } = 216;
+    public int GalleryCellWidth { get; init; } = 220;
 
     /// <summary>Side of the square a gallery picture is drawn in, in pixels.</summary>
-    public int GalleryImageSize { get; init; } = 200;
+    public int GalleryImageSize { get; init; } = 216;
 
     /// <summary>Margin around each gallery cell (all four sides), in pixels.</summary>
     public int GalleryMargin { get; init; } = 4;
@@ -235,13 +236,13 @@ public sealed record AppSettings {
     public int GalleryLabelFontSize { get; init; } = 11;
 
     /// <summary>
-    /// What the gallery draws behind the pictures. The window's own
-    /// background by default: a view that opens dark the first time reads
-    /// as a theme somebody turned on, not as a tool the user is about to
-    /// choose. The grey most photographers want is one click away and
-    /// persists once chosen.
+    /// What the gallery draws behind the pictures. Grey by default (decision
+    /// 2026-09-30; the window's own background before): the grey most
+    /// photographers want, and the change of colour is what tells a folder
+    /// of pictures from a folder of files. Light and dark are one click
+    /// away and persist once chosen.
     /// </summary>
-    public GalleryBackground GalleryBackground { get; init; } = GalleryBackground.Light;
+    public GalleryBackground GalleryBackground { get; init; } = GalleryBackground.Grey;
 
     /// <summary>
     /// Lightness of the "grey" gallery background, 0…255. Settable because
@@ -270,9 +271,11 @@ public sealed record AppSettings {
     /// How much of a folder has to be pictures before the gallery switches
     /// itself on, in per cent of the <em>content</em> files (see
     /// <see cref="Wander.Core.Listing.ImageFolderProbe"/> for what does
-    /// not count). Strictly more than this share.
+    /// not count). Strictly more than this share. 80 since 2026-09-30 (the
+    /// author's setting; 50 before): a folder that is half pictures is a
+    /// folder of things, not a shoot.
     /// </summary>
-    public int AutoGalleryPercent { get; init; } = 50;
+    public int AutoGalleryPercent { get; init; } = 80;
 
     /// <summary>
     /// The view for a folder that has no pin of its own and is not a
@@ -423,8 +426,8 @@ public sealed record AppSettings {
 
 
     // --- Debug ---------------------------------------------------------
-    /// <summary>Whether the "Debug" submenu is visible in the main menu.</summary>
-    public bool ShowDebugMenu { get; init; } = true;
+    /// <summary>Whether the "Debug" submenu is visible in the main menu. Off since 0.5.0: the build goes to ordinary users.</summary>
+    public bool ShowDebugMenu { get; init; }
 
     /// <summary>
     /// The session log also traces what the user does: every key pressed in

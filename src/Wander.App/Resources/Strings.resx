@@ -660,6 +660,10 @@
   <data name="KindFolderNoun" xml:space="preserve">
     <value>Папка</value>
   </data>
+  <data name="TileFileLine" xml:space="preserve">
+    <value>{0} · {1}</value>
+    <comment>Вторая строка плитки у файла: {0} — расширение строчными, {1} — размер</comment>
+  </data>
   <data name="PreviewRatingWrittenTo" xml:space="preserve">
     <value>Оценка, пишется в {0}</value>
   </data>
@@ -2534,7 +2538,7 @@
     <comment>Подсказка гистограммы; {0} — доля пикселей с каналом на 255, {1} — доля чёрных, в процентах</comment>
   </data>
   <data name="HelperAfTip" xml:space="preserve">
-    <value>Точка фокуса камеры: зелёная — в фокусе (Canon)</value>
+    <value>Точка фокуса камеры: розовая — в фокусе (Canon)</value>
   </data>
   <data name="HelperSharpScoreTip" xml:space="preserve">
     <value>Резкость {0} из 100 — по самым чётким краям в середине кадра; отдельные точки (шум, снег, блики) считаются за долю грани. 70 и выше — резко, 45–70 — мягко, ниже — мимо</value>
