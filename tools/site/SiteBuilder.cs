@@ -37,6 +37,13 @@ internal sealed class SiteBuilder {
     private const string LandingSource = "docs/site/index.html";
     private const string TemplateSource = "tools/site/page.html";
 
+    /// <summary>
+    /// The picture a messenger shows for a link to the site: og:image in the
+    /// landing, by its full address. JPEG, the one picture that is not WebP:
+    /// not every messenger reads WebP.
+    /// </summary>
+    private const string LinkPreviewSource = "docs/screenshots/og.jpg";
+
     /// <summary>Where the settings pages name the guide section F1 opens.</summary>
     private const string SettingsPagesSource = "src/Wander.App/ViewModels/SettingsCategoryViewModel.cs";
 
@@ -114,6 +121,12 @@ internal sealed class SiteBuilder {
         }
         foreach (string icon in Directory.GetFiles(Path.Combine(_root, "docs", "icons"), "*.svg")) {
             _files["img/icons/" + Path.GetFileName(icon)] = icon;
+        }
+        string preview = Path.Combine(_root, LinkPreviewSource);
+        if (File.Exists(preview)) {
+            _files["img/og.jpg"] = preview;
+        } else {
+            Errors.Add($"{LinkPreviewSource}: missing - the landing's og:image names it");
         }
 
         string home = $"guide/{guide.Pages[0].Slug}/index.html";
