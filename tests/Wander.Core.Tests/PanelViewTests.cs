@@ -56,6 +56,32 @@ public class PanelViewTests {
         Assert.Equal(lines.Length, lines.Select(l => l.Key).Distinct().Count());
     }
 
+    /// <summary>An open row whose level is out for its first read says so; closed, it says nothing.</summary>
+    [Fact]
+    public void AFirstRead_IsShownOnTheOpenRowOnly() {
+        var panel = Panel().WithLevel(@"C:\A", new PanelLevel(LevelState.Reading, ImmutableArray<PanelRow>.Empty, 3));
+
+        Assert.False(PanelView.Rows(panel.WithExpanded(@"C:\", true)).Single(l => l.Path == @"C:\A").IsReading);
+
+        var line = PanelView.Rows(panel.WithExpanded(@"C:\", true).WithExpanded(@"C:\A", true)).Single(l => l.Path == @"C:\A");
+        Assert.True(line.IsExpanded);
+        Assert.True(line.IsReading);
+    }
+
+    /// <summary>A re-read keeps its rows on screen, and a folder known empty has no chevron: neither shows a read.</summary>
+    [Fact]
+    public void AReReadOrAnEmptyFolder_ShowsNoRead() {
+        var b = new PanelRow(@"C:\A\B", "B", PanelRowKind.Folder);
+        var panel = Panel()
+            .WithLevel(@"C:\A", new PanelLevel(LevelState.Reading, ImmutableArray.Create(b), 3))
+            .WithLevel(@"C:\E", new PanelLevel(LevelState.Reading, ImmutableArray<PanelRow>.Empty, 4))
+            .WithExpanded(@"C:\", true)
+            .WithExpanded(@"C:\A", true)
+            .WithExpanded(@"C:\E", true);
+
+        Assert.All(PanelView.Rows(panel), l => Assert.False(l.IsReading));
+    }
+
     [Fact]
     public void NearestIndexOf_StandsInForAHiddenRow() {
         var lines = PanelView.Rows(Panel().WithExpanded(@"C:\", true));

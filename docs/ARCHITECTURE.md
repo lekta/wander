@@ -570,8 +570,10 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
   чём меню» — флаг строки панели. Лог вставки — `Paste: … (how)`.
 - **Панель — плоский список**: `Controls/FolderPanelList` — `ListBox` без
   выделения WPF, строки — `PanelView.Rows`, отступ —
-  `TreeIndentConverter`; `TreeNodeViewModel` — проекция с четырьмя
-  OneWay-флагами (курсор, активна, место — жирное имя, предмет меню);
+  `TreeIndentConverter`; `TreeNodeViewModel` — проекция с пятью
+  OneWay-флагами (курсор, активна, место — жирное имя, предмет меню,
+  первое чтение уровня — `VisibleRow.IsReading`: крутилка на месте
+  шеврона, раскадровкой через 300 мс, чтобы быстрые папки не мигали);
   черта перед своими закладками — флаг `StartsUserSection`.
   `FolderTreesController` сверяет строки по ключам (`BranchReconcile`),
   больше 256 правок — одной заменой. Клавиши — `PanelKeyNavigation` (`↑`

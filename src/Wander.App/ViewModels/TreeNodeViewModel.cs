@@ -15,6 +15,7 @@ public sealed class TreeNodeViewModel : ObservableObject {
     private PanelRow _row;
     private int _depth;
     private bool _isExpanded;
+    private bool _isReading;
     private bool _isCaret;
     private bool _isActive;
     private bool _isLocation;
@@ -70,6 +71,12 @@ public sealed class TreeNodeViewModel : ObservableObject {
         private set => SetField(ref _isExpanded, value);
     }
 
+    /// <summary>Open with its level out for a first read (<see cref="VisibleRow.IsReading"/>): a spinner stands in for the chevron.</summary>
+    public bool IsReading {
+        get => _isReading;
+        private set => SetField(ref _isReading, value);
+    }
+
     /// <summary>Under the panel's cursor: the lit row.</summary>
     public bool IsCaret {
         get => _isCaret;
@@ -108,6 +115,7 @@ public sealed class TreeNodeViewModel : ObservableObject {
 
         Depth = line.Depth;
         IsExpanded = line.IsExpanded;
+        IsReading = line.IsReading;
         IsCaret = PanelPaths.Same(highlight.Row, line.Path);
         IsActive = IsCaret && highlight.Active;
         IsLocation = PanelPaths.Same(location, line.Path);

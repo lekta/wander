@@ -27,8 +27,11 @@
 
 - SmartScreen может предупредить, что файл не подписан сертификатом:
   «Подробнее» → «Выполнить в любом случае».
-- Целостность файла: рядом в релизе лежит `Wander.exe.sha256`, сравнить с
-  `(Get-FileHash Wander.exe -Algorithm SHA256).Hash`.
+- Целостность файла: хэш скачанного - `(Get-FileHash Wander.exe -Algorithm
+  SHA256).Hash` в PowerShell. Сравнивать с `sha256:…` в строке
+  **`Wander.exe`** на странице релиза или с содержимым файла
+  `Wander.exe.sha256`; регистр букв не важен. Хэш в строке
+  `Wander.exe.sha256` - это хэш самого текстового файла, не программы.
 - Превью HTML, Markdown и PDF использует **WebView2 Runtime** - он уже есть
   в Windows 11 и актуальной Windows 10; если нет -
   [Evergreen Runtime от Microsoft](https://developer.microsoft.com/microsoft-edge/webview2/).

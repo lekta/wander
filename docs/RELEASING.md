@@ -125,6 +125,31 @@ X.Y.Z` собирает окружение, вес и SHA256, старт и `PER
     новую версию. После публикации релиза — или одним пушем с тегом `v*`,
     но тогда кнопка ведёт в 404, пока `release.yml` не выложит exe
     (минуты): сайт собирается быстрее. **Только человек**, как и шаг 9.
+12. SmartScreen: exe — в Microsoft на проверку (решение человека
+    2026-10-01). Снимает предупреждение только с этого файла, по хэшу, —
+    на каждый релиз заново; ответ ждать не нужно. **Только человек** —
+    учётка Microsoft. Скачать `Wander.exe` со страницы релиза, хэш
+    скачанного (`Get-FileHash`) сверить с `sha256:…` в строке `Wander.exe`
+    — в строке `.sha256` хэш текстового файла. Форма
+    <https://www.microsoft.com/en-us/wdsi/filesubmission>: Software
+    developer → Microsoft Defender SmartScreen → exe как есть (после входа
+    предел 500 МБ) → «Incorrectly detected as malware/malicious»;
+    Detection name — `Microsoft Defender SmartScreen prevented an
+    unrecognized app from starting`; Definition version — пусто;
+    Additional information — шаблон ниже. Статус — «Submission history».
+
+    ```text
+    Wander is a portable file manager for Windows 10/11 focused on photos and media (WPF, .NET 10), free for non-commercial use. Single self-contained exe, no installer.
+
+    Version: <X.Y.Z> (pre-release), published <YYYY-MM-DD>
+    Release page: https://github.com/lekta/wander/releases/tag/v<X.Y.Z>
+    Direct download: https://github.com/lekta/wander/releases/download/v<X.Y.Z>/Wander.exe
+    SHA256: <HASH>
+
+    The exe is built by GitHub Actions from the public source code in this repository (.github/workflows/release.yml); the hash is published next to the file. The file is not code-signed yet.
+
+    On download and first run, Microsoft Defender SmartScreen shows "Windows protected your PC" / "unrecognized app, unknown publisher". Please review the file and clear the SmartScreen warning.
+    ```
 
 ## Что делает CI
 

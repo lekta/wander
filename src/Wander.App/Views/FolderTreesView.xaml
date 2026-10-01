@@ -69,10 +69,31 @@
                                                 Width="16" Height="16"
                                                 Background="Transparent"
                                                 Visibility="Hidden">
-                                            <Path x:Name="Arrow"
-                                                  Data="M 0,0 L 5,4.5 L 0,9 Z"
-                                                  Fill="{StaticResource TreeChevron}"
-                                                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            <Grid>
+                                                <Path x:Name="Arrow"
+                                                      Data="M 0,0 L 5,4.5 L 0,9 Z"
+                                                      Fill="{StaticResource TreeChevron}"
+                                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                <!--
+                                                    The branch is open and its first read is
+                                                    still out (IsReading): the list's spinner,
+                                                    small, in the chevron's place - inside the
+                                                    chevron, so a click on it still closes the
+                                                    branch. Shown after 300 ms, so a folder
+                                                    that answers at once does not blink.
+                                                -->
+                                                <Ellipse x:Name="Spinner"
+                                                         Width="10" Height="10" StrokeThickness="1.5"
+                                                         Stroke="{StaticResource AccentStroke}" Fill="Transparent"
+                                                         StrokeDashArray="2,1.5"
+                                                         HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                         RenderTransformOrigin="0.5,0.5"
+                                                         Visibility="Collapsed">
+                                                    <Ellipse.RenderTransform>
+                                                        <RotateTransform Angle="0"/>
+                                                    </Ellipse.RenderTransform>
+                                                </Ellipse>
+                                            </Grid>
                                         </Border>
                                         <!--
                                             Alignment comes from the item style,
@@ -108,6 +129,27 @@
                             <DataTrigger Binding="{Binding IsExpanded}" Value="True">
                                 <Setter TargetName="Arrow" Property="Data" Value="M 0,0 L 9,0 L 4.5,5 Z"/>
                                 <Setter TargetName="Arrow" Property="Fill" Value="{StaticResource TreeChevronExpanded}"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsReading}" Value="True">
+                                <DataTrigger.EnterActions>
+                                    <BeginStoryboard x:Name="ReadingSpin">
+                                        <Storyboard>
+                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Arrow" Storyboard.TargetProperty="Visibility">
+                                                <DiscreteObjectKeyFrame KeyTime="0:0:0.3" Value="{x:Static Visibility.Collapsed}"/>
+                                            </ObjectAnimationUsingKeyFrames>
+                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Spinner" Storyboard.TargetProperty="Visibility">
+                                                <DiscreteObjectKeyFrame KeyTime="0:0:0.3" Value="{x:Static Visibility.Visible}"/>
+                                            </ObjectAnimationUsingKeyFrames>
+                                            <DoubleAnimation Storyboard.TargetName="Spinner"
+                                                             Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                             BeginTime="0:0:0.3" From="0" To="360" Duration="0:0:1"
+                                                             RepeatBehavior="Forever"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </DataTrigger.EnterActions>
+                                <DataTrigger.ExitActions>
+                                    <RemoveStoryboard BeginStoryboardName="ReadingSpin"/>
+                                </DataTrigger.ExitActions>
                             </DataTrigger>
                             <Trigger Property="IsMouseOver" SourceName="Chevron" Value="True">
                                 <Setter TargetName="Arrow" Property="Fill" Value="{StaticResource TreeChevronHover}"/>

@@ -17,7 +17,12 @@ namespace Wander.Core.Panels;
 /// <param name="Depth">0 for a top row.</param>
 /// <param name="IsExpanded">Open: its level is drawn under it.</param>
 /// <param name="Parent">The row it is under, or null for a top row.</param>
-public sealed record VisibleRow(string Key, PanelRow Row, int Depth, bool IsExpanded, string? Parent) {
+/// <param name="IsReading">
+/// Open, its level being read for the first time: nothing is under it yet,
+/// and only this says it is coming - a large archive or a sleeping share
+/// takes seconds. A re-read keeps the rows it had on screen and is not this.
+/// </param>
+public sealed record VisibleRow(string Key, PanelRow Row, int Depth, bool IsExpanded, string? Parent, bool IsReading = false) {
     public string Path => Row.Path;
 }
 
@@ -76,12 +81,16 @@ public static class PanelView {
         // subfolder stays open - there is no chevron to show it - and one
         // coming back shows under it at once.
         bool open = !row.IsLeaf && panel.IsExpanded(row.Path);
-        lines.Add(new VisibleRow(key, row, depth, open, parent));
+        var level = panel.LevelOf(row.Path);
+        // A row known to be empty has no chevron to stand in for, and its
+        // re-read is not news.
+        bool reading = open && row.HasChevron && level.State == LevelState.Reading && level.Rows.IsEmpty;
+        lines.Add(new VisibleRow(key, row, depth, open, parent, reading));
         if (!open) {
             return;
         }
 
-        foreach (var child in panel.LevelOf(row.Path).Rows) {
+        foreach (var child in level.Rows) {
             Add(panel, lines, child, key + ">" + PanelPaths.Key(child.Path), depth + 1, row.Path);
         }
     }
