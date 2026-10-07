@@ -180,7 +180,7 @@ public static partial class Strings {
     /// <summary>В корзину отправлено: {0}, с ошибкой: {1}{2}</summary>
     public static string StatusRecycledPartly => Get(nameof(StatusRecycledPartly));
 
-    /// <summary>{0} {1} элем. в {2}</summary>
+    /// <summary>{0} {1} в {2}</summary>
     public static string StatusBatchDone => Get(nameof(StatusBatchDone));
 
     /// <summary>пропущено {0}</summary>
@@ -210,10 +210,10 @@ public static partial class Strings {
     /// <summary>Отправить в корзину {0} «{1}»?  {2}</summary>
     public static string ConfirmRecycleOne => Get(nameof(ConfirmRecycleOne));
 
-    /// <summary>Удалить безвозвратно {0} элем.?  {1}</summary>
+    /// <summary>Удалить безвозвратно {0}?  {1}</summary>
     public static string ConfirmDeleteMany => Get(nameof(ConfirmDeleteMany));
 
-    /// <summary>Отправить в корзину {0} элем.?  {1}</summary>
+    /// <summary>Отправить в корзину {0}?  {1}</summary>
     public static string ConfirmRecycleMany => Get(nameof(ConfirmRecycleMany));
 
     /// <summary>Вместе с ними уедут файлы-спутники: {0}.</summary>
@@ -237,7 +237,7 @@ public static partial class Strings {
     /// <summary>Переместить элемент?  Откуда: {0} Куда:   {1}</summary>
     public static string ConfirmMoveOne => Get(nameof(ConfirmMoveOne));
 
-    /// <summary>Переместить {0} элем. в: {1}?</summary>
+    /// <summary>Переместить {0} в: {1}?</summary>
     public static string ConfirmMoveMany => Get(nameof(ConfirmMoveMany));
 
     /// <summary>Выйти из Wander?</summary>
@@ -303,7 +303,7 @@ public static partial class Strings {
     /// <summary>Не удалось удалить «{0}»: {1}.  Закройте его там и нажмите «Повторить».</summary>
     public static string DeleteInUseOne => Get(nameof(DeleteInUseOne));
 
-    /// <summary>Не удалось удалить {0} элем. — они заняты. Например, «{1}»: {2}.  Закройте их там и нажмите «Повторить».</summary>
+    /// <summary>Не удалось удалить {0} — они заняты. Например, «{1}»: {2}.  Закройте их там и нажмите «Повторить».</summary>
     public static string DeleteInUseMany => Get(nameof(DeleteInUseMany));
 
     /// <summary>Не помещается в корзину</summary>

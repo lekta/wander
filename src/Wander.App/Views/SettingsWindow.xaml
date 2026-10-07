@@ -620,7 +620,7 @@
         </DataTemplate>
 
 
-        <!-- Файловые операции: what is asked before a delete or a move, and about files that turn out the same. -->
+        <!-- Файловые операции: what is asked before a delete or a move, about files that turn out the same, and what a held drag does. -->
         <DataTemplate DataType="{x:Type vm:OperationsSettingsCategory}">
             <StackPanel>
                 <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
@@ -637,6 +637,11 @@
                 <CheckBox Content="{x:Static res:Strings.SettingsSkipIdentical}"
                           ToolTip="{x:Static res:Strings.SettingsSkipIdenticalHint}"
                           IsChecked="{Binding Owner.SkipIdenticalOnConflict}"/>
+
+                <TextBlock Text="{x:Static res:Strings.SettingsDragGroup}" Style="{StaticResource GroupTitle}"/>
+                <CheckBox Content="{x:Static res:Strings.SettingsDragHoverEntersFolders}"
+                          ToolTip="{x:Static res:Strings.SettingsDragHoverEntersFoldersHint}"
+                          IsChecked="{Binding Owner.DragHoverEntersFolders}"/>
             </StackPanel>
         </DataTemplate>
 

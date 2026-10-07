@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using Wander.App.Resources;
 using Wander.App.ViewModels;
+using Wander.Core.Actions;
 using Wander.Core.FileSystem;
 using Wander.Core.Logging;
 
@@ -65,7 +66,8 @@ public sealed class ConflictWindowViewModel : ObservableObject {
     /// instead, where each one sits over the side it belongs to.
     /// </summary>
     public string Title =>
-        string.Format(Batch.IsMove ? Strings.ConflictTitleMove : Strings.ConflictTitleCopy, Batch.ItemCount, Batch.Count);
+        string.Format(Batch.IsMove ? Strings.ConflictTitleMove : Strings.ConflictTitleCopy,
+            CountCaption.Items(Batch.ItemCount), Batch.Count);
 
     /// <summary>
     /// Where the left column comes from. One folder in the usual case; a

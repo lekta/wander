@@ -3,9 +3,11 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Threading;
 using Wander.App.Controllers;
 using Wander.App.Resources;
+using Wander.App.Util;
 using Wander.App.ViewModels;
 using Wander.Core.Companions;
 using Wander.Core.FileSystem;
@@ -296,6 +298,22 @@ public partial class FullscreenWindow : Window {
 
 
     /// <summary>
+    /// Opened from the keyboard, over a mouse that stands still (2026-10-07):
+    /// the pointer goes at once, a tooltip the gallery had up under it goes
+    /// too - it is a window over every other - and the mouse is looked up
+    /// again, or WPF would go on taking it for over the main window and leave
+    /// the pointer as it was until it moved.
+    /// </summary>
+    protected override void OnContentRendered(EventArgs e) {
+        base.OnContentRendered(e);
+        CloseToolTips();
+        _cursorAt = Mouse.GetPosition(this);
+        HideCursor();
+        Mouse.Synchronize();
+    }
+
+
+    /// <summary>
     /// Alt+Tab with Alt held: the key-up lands in another window, so the
     /// marks would stay off. The pointer is back while another window has
     /// the keyboard.
@@ -374,7 +392,7 @@ public partial class FullscreenWindow : Window {
     /// <summary>Splits the screen: <paramref name="entry"/> on the right, the picture on show stays on the left.</summary>
     private void OpenSide(FileSystemEntry entry, int stood) {
         if (_sidePane is null || _sideViewer is null) {
-            _sidePane = new PreviewPane { PictureMargin = new Thickness(0), BarAtRest = 0 };
+            _sidePane = new PreviewPane { PictureMargin = new Thickness(0), BarPinned = true };
             _sideViewer = NewViewer(_sidePane);
             Room.Children.Add(_sidePane);
             // A held zoom looks at the same place of both, while there are two.
@@ -578,6 +596,18 @@ public partial class FullscreenWindow : Window {
         _cursorTimer.Stop();
         Cursor = Cursors.None;
         ForceCursor = true;
+    }
+
+    /// <summary>
+    /// Every tooltip on screen closed. A tooltip is a popup of its own, and
+    /// only those are looked through - a window's tree is not.
+    /// </summary>
+    private static void CloseToolTips() {
+        foreach (var source in PresentationSource.CurrentSources.OfType<HwndSource>()) {
+            if (source.RootVisual is { } root and not Window && ListVisuals.FindDescendant<ToolTip>(root) is { IsOpen: true } tip) {
+                tip.IsOpen = false;
+            }
+        }
     }
 
     private static bool IsSamePath(string a, string b) {

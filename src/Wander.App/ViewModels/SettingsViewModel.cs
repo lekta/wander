@@ -199,6 +199,13 @@ public sealed class SettingsViewModel : ObservableObject {
         set => SetField(ref _skipIdenticalOnConflict, value);
     }
 
+    private bool _dragHoverEntersFolders;
+    /// <inheritdoc cref="AppSettings.DragHoverEntersFolders"/>
+    public bool DragHoverEntersFolders {
+        get => _dragHoverEntersFolders;
+        set => SetField(ref _dragHoverEntersFolders, value);
+    }
+
     private bool _useSystemTemp;
     /// <summary>
     /// <inheritdoc cref="AppSettings.UseSystemTemp"/> The checkbox shows
@@ -715,6 +722,7 @@ public sealed class SettingsViewModel : ObservableObject {
         ConfirmRecycle = s.ConfirmRecycle;
         ConfirmMove = s.ConfirmMove;
         SkipIdenticalOnConflict = s.SkipIdenticalOnConflict;
+        DragHoverEntersFolders = s.DragHoverEntersFolders;
         UseSystemTemp = s.UseSystemTemp ?? AppPaths.IsPortable;
         IntegrateCompanions = s.IntegrateCompanions;
         SortKey = s.SortKey;
@@ -946,6 +954,7 @@ public sealed class SettingsViewModel : ObservableObject {
             ConfirmRecycle = ConfirmRecycle,
             ConfirmMove = ConfirmMove,
             SkipIdenticalOnConflict = SkipIdenticalOnConflict,
+            DragHoverEntersFolders = DragHoverEntersFolders,
             UseSystemTemp = UseSystemTemp,
             IntegrateCompanions = IntegrateCompanions,
             SortKey = SortKey,

@@ -28,6 +28,16 @@ public class DragHoverTests {
         Assert.Equal(new DragHoverDecision(DragHoverOutcome.Enter, Path: _folder.Path), decision);
     }
 
+    /// <summary>The setting off (the default since 2026-10-07): the list stays, a panel line still opens.</summary>
+    [Fact]
+    public void NotEnteringFolders_LeavesTheList_ButOpensPanelLines() {
+        var folder = DragHover.Track(DragHoverState.None, _folder, 0);
+        var line = DragHover.Track(DragHoverState.None, _line, 0);
+
+        Assert.Equal(DragHoverDecision.Nothing, DragHover.Decide(folder, Delay * 3, Delay, Array.Empty<string>(), entersFolders: false));
+        Assert.Equal(DragHoverOutcome.Expand, DragHover.Decide(line, Delay, Delay, Array.Empty<string>(), entersFolders: false).Outcome);
+    }
+
     [Fact]
     public void HeldOverAClosedPanelLine_OpensIt() {
         var state = DragHover.Track(DragHoverState.None, _line, 0);

@@ -51,8 +51,13 @@ public static class TrimmedToolTip {
         }
     }
 
-    private static bool IsCut(TextBlock text) {
-        if (string.IsNullOrEmpty(text.Text)) {
+    /// <summary>
+    /// Whether <paramref name="text"/> shows less than all of itself: one
+    /// line, cut with an ellipsis. Wrapped text is taken as whole - the
+    /// gallery's selected cell grows to its name.
+    /// </summary>
+    public static bool IsCut(TextBlock text) {
+        if (string.IsNullOrEmpty(text.Text) || text.TextWrapping != TextWrapping.NoWrap) {
             return false;
         }
 

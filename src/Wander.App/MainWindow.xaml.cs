@@ -308,7 +308,7 @@ public partial class MainWindow : Window {
         // Built here rather than in the constructor: the folder it falls
         // back to is the one the view model is listing, and there is no view
         // model yet when the window is constructed.
-        _drops = new DropTargetController(() => Vm.CurrentPath);
+        _drops = new DropTargetController(() => Vm.CurrentPath, () => Vm.Settings.DragHoverEntersFolders);
         _drops.HoverOpened += OnDragHoverOpened;
         _outgoing = new OutgoingDrag(_drops, () => FolderTrees.ClearBookmarkTarget());
         FolderTrees.Connect(_drops, _outgoing);
@@ -591,6 +591,11 @@ public partial class MainWindow : Window {
 
     // --- Full screen --------------------------------------------------------
 
+    // The full screen while it is open: the keyboard is its own, and it gives
+    // it back to the list itself when it closes (OnViewEffectRequested).
+    private Views.FullscreenWindow? _fullscreen;
+
+
     /// <summary>
     /// Enter or Space on pictures in the gallery (<see cref="FullscreenPlan"/>).
     /// The window walks on its own; closed, it leaves the keyboard back in
@@ -599,7 +604,9 @@ public partial class MainWindow : Window {
     /// </summary>
     private void FileList_FullscreenRequested(object? sender, FullscreenPlan plan) {
         var window = Views.FullscreenWindow.Open(plan, Vm, this);
+        _fullscreen = window;
         window.Closed += (_, _) => {
+            _fullscreen = null;
             if (plan.Mode == FullscreenMode.Single
                 && !string.Equals(window.Current.FullPath, plan.Start.FullPath, StringComparison.OrdinalIgnoreCase)) {
                 Vm.RevealPath(window.Current.FullPath);
@@ -946,6 +953,13 @@ public partial class MainWindow : Window {
                 break;
             case OpenEditor editor:
                 FileList.OpenEditor(editor.Path);
+                break;
+            // Behind the full screen the keyboard is not the list's: a move
+            // asked meanwhile - onto the row after a picture deleted there,
+            // onto a stale caret as the window comes back - would be carried
+            // out after the full screen put the list on the picture it ended
+            // on, and take the selection back (log 2026-10-07).
+            case Core.Workspace.FocusZone or FocusRow when _fullscreen is not null:
                 break;
             // Not headless: the harness's window is never the active one, and
             // the keyboard moving inside it is what its steps look at.
@@ -1538,7 +1552,7 @@ public partial class MainWindow : Window {
     // the file list or a tree row. Running it does not: see OutgoingDrag.
 
     private void FileList_DragStartRequested(object? sender, FileListDragRequest e) {
-        _outgoing.Run(e.Source, e.Paths, e.Payload, e.RightButton);
+        _outgoing.Run(e.Source, e.Paths, e.Payload, e.RightButton, e.Counted);
     }
 
 

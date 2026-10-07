@@ -1361,9 +1361,10 @@
                         cannot speak for two pictures. In the lower left
                         corner, on a thin dark plate; the stars, the score
                         and the switches stand at BarAtRest of their
-                        strength - a trace in the pane, nothing full
-                        screen - until the mouse comes down to them or the
-                        rating changes (PreviewPane, "The picture's bar").
+                        strength in the pane until the mouse comes down to
+                        them or the rating changes; full screen they are
+                        pinned, with the name (PreviewPane, "The picture's
+                        bar").
                         The chart of levels is in the other corner
                         (PictureChart). Over a picture, and over anything
                         else that takes a rating - a video with its
@@ -1428,6 +1429,15 @@
                                 </Style>
                             </Border.Style>
                             <StackPanel Orientation="Horizontal">
+                                <!--
+                                    Full screen, the picture's name first
+                                    (BarPinned shows it): a long one is cut,
+                                    the whole of it in a tooltip.
+                                -->
+                                <TextBlock x:Name="PictureNameText" Visibility="Collapsed"
+                                           Text="{Binding PictureName}" Foreground="{Binding ContentPalette.Foreground}"
+                                           MaxWidth="320" Margin="0,0,10,0" VerticalAlignment="Center" FontSize="12"
+                                           TextTrimming="CharacterEllipsis" controls:TrimmedToolTip.Enabled="True"/>
                                 <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource RatingControls}"
                                                   VerticalAlignment="Center"
                                                   Visibility="{Binding HasRating, Converter={StaticResource BoolToVisibility}}"/>
@@ -1447,11 +1457,10 @@
                         The chart of levels for the picture's bar, in the
                         lower right corner (2026-09-24): beside the stars it
                         stood out along the edge, alone once they were
-                        away. It comes and goes with the bar full screen;
-                        in the pane, where the bar stays as a trace, it
-                        stays whole - it was switched on to be read. The
-                        zoom hides it with the bar. The visibility is on
-                        the Border, not on the presenter (FooterHistogram).
+                        away. It stays whole - it was switched on to be
+                        read; the zoom hides it with the bar, but for a
+                        pinned one full screen. The visibility is on the
+                        Border, not on the presenter (FooterHistogram).
                     -->
                     <Border x:Name="PictureChart" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="8,0,8,8">
                         <Border.Style>

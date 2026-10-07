@@ -52,7 +52,10 @@ namespace Wander.Core.Menu;
 /// </summary>
 public static class ContextMenuBuilder {
     public const string CaptionFolderKey = "MenuCaptionFolder";
-    public const string CaptionSelectionKey = "MenuCaptionSelection";
+    public const string CaptionSelectionKey = CountCaption.ItemsKey;
+
+    /// <summary>One item: its name in quotes, as the drop menu and the drag plaque name it.</summary>
+    public const string CaptionOneKey = "DragOneItem";
 
     /// <summary>
     /// Verbs whose entries act on the file rather than open it, *despite*
@@ -287,27 +290,15 @@ public static class ContextMenuBuilder {
         return items;
     }
 
-    /// <summary>"4 изображения", "3 элемента", or the folder when nothing is selected.</summary>
+    /// <summary>"3 CR3", "4 изображения" (<see cref="CountCaption"/>), the one item's name, or the folder when nothing is selected.</summary>
     private static MenuEntry Caption(ContextMenuTarget t) {
-        string header = t.Selection.Count == 0
-            ? Text.Format(CaptionFolderKey, t.FolderPath ?? string.Empty)
-            : Text.Plural(CaptionKey(FileTypeGroups.Classify(t.Selection)), t.Selection.Count);
+        string header = t.Selection.Count switch {
+            0 => Text.Format(CaptionFolderKey, t.FolderPath ?? string.Empty),
+            1 => Text.Format(CaptionOneKey, t.Selection[0].Name),
+            _ => CountCaption.Of(t.Selection),
+        };
 
         return new MenuEntry { Header = header, IsEnabled = false };
-    }
-
-    /// <summary>Resource key of the counted caption: the group's noun in its three forms.</summary>
-    private static string CaptionKey(FileTypeGroup? group) {
-        return group switch {
-            FileTypeGroup.Images => "MenuCaptionImages",
-            FileTypeGroup.Video => "MenuCaptionVideo",
-            FileTypeGroup.Audio => "MenuCaptionAudio",
-            FileTypeGroup.TextAndCode => "MenuCaptionTextAndCode",
-            FileTypeGroup.Documents => "MenuCaptionDocuments",
-            FileTypeGroup.Archives => "MenuCaptionArchives",
-            FileTypeGroup.Folders => "MenuCaptionFolders",
-            _ => CaptionSelectionKey,
-        };
     }
 
 

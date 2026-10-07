@@ -66,6 +66,12 @@ public static partial class Strings {
     /// <summary>Файл, совпадающий побайтово с тем, что уже лежит на месте, не копируется и…</summary>
     public static string SettingsSkipIdenticalHint => Get(nameof(SettingsSkipIdenticalHint));
 
+    /// <summary>Входить в папку, если задержать над ней перетаскиваемый файл</summary>
+    public static string SettingsDragHoverEntersFolders => Get(nameof(SettingsDragHoverEntersFolders));
+
+    /// <summary>Папка в списке открывается через секунду с небольшим, и файл можно бросить…</summary>
+    public static string SettingsDragHoverEntersFoldersHint => Get(nameof(SettingsDragHoverEntersFoldersHint));
+
     /// <summary>Держать в системной папке Temp</summary>
     public static string SettingsUseSystemTemp => Get(nameof(SettingsUseSystemTemp));
 
@@ -413,6 +419,9 @@ public static partial class Strings {
 
     /// <summary>Совпадения имён при копировании и перемещении</summary>
     public static string SettingsConflictsGroup => Get(nameof(SettingsConflictsGroup));
+
+    /// <summary>Перетаскивание</summary>
+    public static string SettingsDragGroup => Get(nameof(SettingsDragGroup));
 
     /// <summary>Выключено — меню не загружает расширения оболочки вовсе: быстрее, и чужой…</summary>
     public static string SettingsShellExtensionsSwitchHint => Get(nameof(SettingsShellExtensionsSwitchHint));

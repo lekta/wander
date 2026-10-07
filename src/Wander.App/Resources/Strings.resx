@@ -468,8 +468,8 @@
     <comment>{0} — имя первого, {1} — сколько ещё, {2} — « (кем держал первый)» или пусто, {3} — секунды самого долгого ожидания</comment>
   </data>
   <data name="StatusBatchDone" xml:space="preserve">
-    <value>{0} {1} элем. в {2}</value>
-    <comment>{0} — глагол операции, {1} — сколько, {2} — куда</comment>
+    <value>{0} {1} в {2}</value>
+    <comment>{0} — глагол операции, {1} — сколько: «3 элемента» (MenuCaptionSelection), {2} — куда</comment>
   </data>
   <data name="StatusBatchSkipped" xml:space="preserve">
     <value>пропущено {0}</value>
@@ -531,12 +531,12 @@
 {2}</value>
   </data>
   <data name="ConfirmDeleteMany" xml:space="preserve">
-    <value>Удалить безвозвратно {0} элем.?
+    <value>Удалить безвозвратно {0}?
 
 {1}</value>
   </data>
   <data name="ConfirmRecycleMany" xml:space="preserve">
-    <value>Отправить в корзину {0} элем.?
+    <value>Отправить в корзину {0}?
 
 {1}</value>
   </data>
@@ -576,7 +576,7 @@
 Куда:   {1}</value>
   </data>
   <data name="ConfirmMoveMany" xml:space="preserve">
-    <value>Переместить {0} элем. в:
+    <value>Переместить {0} в:
 {1}?</value>
   </data>
   <data name="ExitWithOperationsTitle" xml:space="preserve">
@@ -595,10 +595,10 @@
     <value>Разные типы: файл и папка</value>
   </data>
   <data name="ConflictTitleCopy" xml:space="preserve">
-    <value>Копирование: {0} элем., совпадений имён: {1}</value>
+    <value>Копирование: {0}, совпадений имён: {1}</value>
   </data>
   <data name="ConflictTitleMove" xml:space="preserve">
-    <value>Перемещение: {0} элем., совпадений имён: {1}</value>
+    <value>Перемещение: {0}, совпадений имён: {1}</value>
   </data>
   <data name="ConflictFrom" xml:space="preserve">
     <value>Из: {0}</value>
@@ -701,15 +701,12 @@
   <data name="DragLink" xml:space="preserve">
     <value>Создать ярлык на</value>
   </data>
-  <data name="DragItems" xml:space="preserve">
-    <value>{0} элем.</value>
-  </data>
   <data name="DragTarget" xml:space="preserve">
     <value>в {0}</value>
   </data>
   <data name="DragAddToBookmarks" xml:space="preserve">
     <value>Добавить {0} в закладки</value>
-    <comment>{0} — «имя» одного элемента или «N элем.»</comment>
+    <comment>{0} — «имя» одного элемента или подсчёт: «3 папки» (MenuCaptionFolders и соседи)</comment>
   </data>
   <data name="CrashTitle" xml:space="preserve">
     <value>Wander — отчёт об ошибке</value>
@@ -810,10 +807,10 @@
     <comment>{0} — имя, {1} — причина (ErrorFileInUse / ErrorInUse)</comment>
   </data>
   <data name="DeleteInUseMany" xml:space="preserve">
-    <value>Не удалось удалить {0} элем. — они заняты. Например, «{1}»: {2}.
+    <value>Не удалось удалить {0} — они заняты. Например, «{1}»: {2}.
 
 Закройте их там и нажмите «Повторить».</value>
-    <comment>{0} — сколько, {1} — имя первого, {2} — причина</comment>
+    <comment>{0} — сколько: «3 элемента» (MenuCaptionSelection), {1} — имя первого, {2} — причина</comment>
   </data>
   <data name="RecycleUnavailableTitle" xml:space="preserve">
     <value>Не помещается в корзину</value>
@@ -1870,6 +1867,12 @@
   <data name="SettingsSkipIdenticalHint" xml:space="preserve">
     <value>Файл, совпадающий побайтово с тем, что уже лежит на месте, не копируется и не переносится; в окне совпадений у такой пары сразу стоит «оставить».</value>
   </data>
+  <data name="SettingsDragHoverEntersFolders" xml:space="preserve">
+    <value>Входить в папку, если задержать над ней перетаскиваемый файл</value>
+  </data>
+  <data name="SettingsDragHoverEntersFoldersHint" xml:space="preserve">
+    <value>Папка в списке открывается через секунду с небольшим, и файл можно бросить внутрь. Свёрнутые папки дерева и закладок раскрываются так всегда.</value>
+  </data>
   <data name="SettingsUseSystemTemp" xml:space="preserve">
     <value>Держать в системной папке Temp</value>
   </data>
@@ -2045,7 +2048,7 @@
   </data>
   <data name="MenuCaptionSelection" xml:space="preserve">
     <value>{0} элемент|{0} элемента|{0} элементов</value>
-    <comment>Подпись меню «Действия» при выделении разного типа. Формы через «|»: 1 / 2–4 / 5 и 11–14</comment>
+    <comment>Подсчёт папок вместе с файлами — в меню «Действия», меню броска правой кнопкой, на плашке перетаскивания, в вопросах перед удалением и переносом; соседние MenuCaption* — уже. Формы через «|»: 1 / 2–4 / 5 и 11–14</comment>
   </data>
   <data name="MenuCaptionImages" xml:space="preserve">
     <value>{0} изображение|{0} изображения|{0} изображений</value>
@@ -2069,6 +2072,18 @@
   </data>
   <data name="MenuCaptionFolders" xml:space="preserve">
     <value>{0} папка|{0} папки|{0} папок</value>
+  </data>
+  <data name="MenuCaptionFiles" xml:space="preserve">
+    <value>{0} файл|{0} файла|{0} файлов</value>
+    <comment>Подсчёт файлов разного типа без папок</comment>
+  </data>
+  <data name="MenuCaptionRaw" xml:space="preserve">
+    <value>{0} RAW</value>
+    <comment>Подсчёт RAW разных камер; одна форма на все числа</comment>
+  </data>
+  <data name="MenuCaptionExtension" xml:space="preserve">
+    <value>{0} {1}</value>
+    <comment>Подсчёт файлов одного расширения: {0} — сколько, {1} — расширение заглавными без точки: «3 CR3»</comment>
   </data>
   <data name="FileTypeAll" xml:space="preserve">
     <value>всё</value>
@@ -2649,6 +2664,9 @@
   </data>
   <data name="SettingsConflictsGroup" xml:space="preserve">
     <value>Совпадения имён при копировании и перемещении</value>
+  </data>
+  <data name="SettingsDragGroup" xml:space="preserve">
+    <value>Перетаскивание</value>
   </data>
   <data name="SettingsShellExtensionsSwitchHint" xml:space="preserve">
     <value>Выключено — меню не загружает расширения оболочки вовсе: быстрее, и чужой код в Wander не попадает.</value>

@@ -86,8 +86,14 @@ public static class DragHover {
     /// <param name="nowMs">The time now.</param>
     /// <param name="delayMs">How long a place has to be held.</param>
     /// <param name="dragged">What is being dragged: never gone into, and nothing under it.</param>
-    public static DragHoverDecision Decide(DragHoverState state, long nowMs, int delayMs, IReadOnlyCollection<string> dragged) {
-        if (state.Done || state.Target is not { CanOpen: true } target || IsDragged(target.Path, dragged)) {
+    /// <param name="entersFolders">
+    /// A folder of the list is gone into (AppSettings.DragHoverEntersFolders,
+    /// off by default); without it a held drag only opens panel lines.
+    /// </param>
+    public static DragHoverDecision Decide(
+        DragHoverState state, long nowMs, int delayMs, IReadOnlyCollection<string> dragged, bool entersFolders = true) {
+        if (state.Done || state.Target is not { CanOpen: true } target || IsDragged(target.Path, dragged)
+            || (target.Surface == HoverSurface.List && !entersFolders)) {
             return DragHoverDecision.Nothing;
         }
 

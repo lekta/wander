@@ -16,6 +16,7 @@ using Wander.App.Resources;
 using Wander.App.Util;
 using Wander.App.ViewModels;
 using Wander.Core;
+using Wander.Core.Actions;
 using Wander.Core.Diagnostics;
 using Wander.Core.FileSystem;
 using Wander.Core.Folders;
@@ -1105,7 +1106,8 @@ public partial class FileListView : UserControl {
             (DependencyObject)sender,
             paths,
             Vm.WithCompanions(Vm.SelectedEntries).ToArray(),
-            rightButton));
+            rightButton,
+            CountCaption.Of(Vm.SelectedEntries)));
     }
 
 
@@ -1135,6 +1137,17 @@ public partial class FileListView : UserControl {
         }
 
         if (ListVisuals.TryShiftScrollHorizontally((DependencyObject)sender, e)) {
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>
+    /// A gallery cell names its picture only while the caption under it cuts
+    /// the name (2026-10-07): a tip that repeats the caption is noise.
+    /// </summary>
+    private void GalleryCell_ToolTipOpening(object sender, ToolTipEventArgs e) {
+        if (sender is DependencyObject cell && ListVisuals.FindDescendant<TextBlock>(cell, "NameLabel") is { } label
+            && !TrimmedToolTip.IsCut(label)) {
             e.Handled = true;
         }
     }
@@ -1929,7 +1942,7 @@ public partial class FileListView : UserControl {
 /// <param name="Paths">What the user selected — drives the drag preview.</param>
 /// <param name="Payload">What actually travels, companions included.</param>
 /// <param name="RightButton">The drag is held by the right mouse button: the drop opens a menu instead of acting.</param>
-public sealed record FileListDragRequest(DependencyObject Source, string[] Paths, string[] Payload, bool RightButton = false);
+public sealed record FileListDragRequest(DependencyObject Source, string[] Paths, string[] Payload, bool RightButton = false, string? Counted = null);
 
 /// <summary>Where and in what mode the list wants its context menu.</summary>
 public sealed record FileListMenuRequest(FrameworkElement Host, PlacementMode Placement, bool IsBackground);

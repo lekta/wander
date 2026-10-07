@@ -4562,7 +4562,7 @@ public sealed class MainViewModel : ObservableObject {
             } else {
                 message = string.Format(
                     permanent ? Strings.ConfirmDeleteMany : Strings.ConfirmRecycleMany,
-                    snapshot.Count,
+                    CountCaption.Of(snapshot),
                     string.Join("\n", snapshot.Take(5).Select(e => "• " + e.Name))
                         + (snapshot.Count > 5 ? "\n" + string.Format(Strings.AndMore, snapshot.Count - 5) : ""));
             }
@@ -4731,7 +4731,7 @@ public sealed class MainViewModel : ObservableObject {
         string name = Path.GetFileName(busy[0].TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
         string message = busy.Count == 1
             ? string.Format(Strings.DeleteInUseOne, name, reason)
-            : string.Format(Strings.DeleteInUseMany, busy.Count, name, reason);
+            : string.Format(Strings.DeleteInUseMany, CountCaption.Items(busy.Count), name, reason);
 
         return _dialogs.Choose(new ChoiceRequest(
             DialogKind.DeleteInUse, Strings.DeleteInUseTitle, message, new[] { Strings.ActionRetry })) == 0;
@@ -5897,7 +5897,7 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
-        var parts = new List<string> { string.Format(Strings.StatusBatchDone, verb, ok, target) };
+        var parts = new List<string> { string.Format(Strings.StatusBatchDone, verb, CountCaption.Items(ok), target) };
         if (skipped > 0) {
             parts.Add(string.Format(Strings.StatusBatchSkipped, skipped));
         }
@@ -6199,7 +6199,7 @@ public sealed class MainViewModel : ObservableObject {
                 sources[0],
                 Path.Combine(target, Path.GetFileName(sources[0].TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))));
         } else {
-            message = string.Format(Strings.ConfirmMoveMany, sources.Count, target);
+            message = string.Format(Strings.ConfirmMoveMany, CountCaption.Items(sources.Count), target);
         }
 
         return _dialogs.Ask(new DialogRequest(

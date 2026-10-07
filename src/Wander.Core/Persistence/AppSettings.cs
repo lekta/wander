@@ -109,6 +109,15 @@ public sealed record AppSettings {
     public bool SkipIdenticalOnConflict { get; init; } = true;
 
     /// <summary>
+    /// A drag held over a folder in the list goes into it (DragHover).
+    /// Off by default (2026-10-07): useful now and then, but more often the
+    /// list walks away from under a drag that only paused. A closed folder
+    /// of a panel opens under a held drag either way - that leaves the list
+    /// where it is.
+    /// </summary>
+    public bool DragHoverEntersFolders { get; init; }
+
+    /// <summary>
     /// Where scratch copies go - entries unpacked out of an archive for
     /// the preview pane and for "Open": the system's Temp folder, or the
     /// data folder (<c>AppPaths.DataTmp</c>). Null until the user has said:

@@ -1016,9 +1016,11 @@ public class ContextMenuBuilderTests {
         // caption is the key with the arguments unformatted in it - which
         // is enough to see which shape was chosen.
         Assert.Equal(ContextMenuBuilder.CaptionFolderKey, Header()[0].Header);
+        Assert.Equal(ContextMenuBuilder.CaptionOneKey, Header(Dir("a"))[0].Header);
         Assert.Equal("MenuCaptionImages", Header(File("a.jpg"), File("b.png"))[0].Header);
-        Assert.Equal("MenuCaptionFolders", Header(Dir("a"))[0].Header);
-        Assert.Equal(ContextMenuBuilder.CaptionSelectionKey, Header(File("a.jpg"), File("b.mp4"))[0].Header);
+        Assert.Equal(CountCaption.FoldersKey, Header(Dir("a"), Dir("b"))[0].Header);
+        Assert.Equal(CountCaption.FilesKey, Header(File("a.jpg"), File("b.mp4"))[0].Header);
+        Assert.Equal(ContextMenuBuilder.CaptionSelectionKey, Header(File("a.jpg"), Dir("b"))[0].Header);
     }
 
 

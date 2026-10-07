@@ -475,6 +475,13 @@ public sealed class PreviewController : ObservableObject {
     public bool PictureBarSwitches { get; init; }
 
     /// <summary>
+    /// The name of the file whose picture is on screen, empty while none is:
+    /// the full screen's bar says it (PreviewPane.BarPinned, 2026-10-07).
+    /// It changes with the picture, not ahead of it.
+    /// </summary>
+    public string PictureName => _pictureOf is { } shown ? Path.GetFileName(shown) : "";
+
+    /// <summary>
     /// The rows of the list in their order - where the pane finds the
     /// pictures around the one on show, to decode them ahead
     /// (<see cref="PreviewNeighbors"/>). Null decodes nothing ahead: the
@@ -1882,6 +1889,7 @@ public sealed class PreviewController : ObservableObject {
                     IsSvg = false;
                 }
                 _pictureOf = _kind == PreviewKind.Image ? loadingFor : null;
+                Raise(nameof(PictureName));
                 ScheduleSummaryUpdate();  // metadata might have arrived
                 // Raised every time, the same text too: it is about this file.
                 FindRequest = _kind is PreviewKind.Text or PreviewKind.Code or PreviewKind.Document
@@ -3029,6 +3037,7 @@ public sealed class PreviewController : ObservableObject {
             ImageMetadata = null;
             IsRawImage = false;
             _pictureOf = null;
+            Raise(nameof(PictureName));
         }
         CodeText = null;
         CodeExtension = null;

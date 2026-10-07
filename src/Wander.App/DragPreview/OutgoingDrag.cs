@@ -4,6 +4,7 @@ using System.Windows.Input;
 using Wander.App.Converters;
 using Wander.App.Resources;
 using Wander.Core;
+using Wander.Core.Actions;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
 using Wander.Core.Shell;
@@ -37,6 +38,7 @@ public sealed class OutgoingDrag {
     private DragPreviewWindow? _preview;
     private int _pathCount;
     private string? _firstName;
+    private string? _counted;
     private bool _rightButton;
 
 
@@ -60,9 +62,14 @@ public sealed class OutgoingDrag {
     /// The drag is held by the right mouse button: the drop opens a menu
     /// instead of acting, so the plaque names no verb.
     /// </param>
-    public void Run(DependencyObject src, string[] paths, string[] payload, bool rightButton = false) {
+    /// <param name="counted">
+    /// Several items, named as narrowly as they allow - "3 CR3"
+    /// (<see cref="CountCaption"/>); without it they are only counted.
+    /// </param>
+    public void Run(DependencyObject src, string[] paths, string[] payload, bool rightButton = false, string? counted = null) {
         _pathCount = paths.Length;
         _firstName = Path.GetFileName(paths[0].TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        _counted = counted ?? CountCaption.Items(paths.Length);
         _rightButton = rightButton;
         _drops.Clear();
 
@@ -333,11 +340,11 @@ public sealed class OutgoingDrag {
     }
 
 
-    /// <summary>What is in hand: the file's name, or how many of them.</summary>
+    /// <summary>What is in hand: the file's name, or how many of them and of what.</summary>
     private string DescribeDragged(int count) {
         return count == 1
             ? string.Format(Strings.DragOneItem, _firstName)
-            : string.Format(Strings.DragItems, count);
+            : _counted ?? string.Empty;
     }
 
 

@@ -1116,7 +1116,8 @@
             </ListBox.ItemsPanel>
             <ListBox.ItemTemplate>
                 <DataTemplate>
-                    <StackPanel ToolTip="{Binding Name}">
+                    <!-- The name as a tooltip only while the caption cuts it (GalleryCell_ToolTipOpening). -->
+                    <StackPanel ToolTip="{Binding Name}" ToolTipOpening="GalleryCell_ToolTipOpening">
                         <!--
                             Sized explicitly rather than left to the
                             picture: an Image left to measure itself reports

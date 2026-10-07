@@ -113,10 +113,10 @@ public static partial class Strings {
     /// <summary>Разные типы: файл и папка</summary>
     public static string ConflictVerdictDifferentKind => Get(nameof(ConflictVerdictDifferentKind));
 
-    /// <summary>Копирование, совпадений имён: {0}</summary>
+    /// <summary>Копирование: {0}, совпадений имён: {1}</summary>
     public static string ConflictTitleCopy => Get(nameof(ConflictTitleCopy));
 
-    /// <summary>Перемещение, совпадений имён: {0}</summary>
+    /// <summary>Перемещение: {0}, совпадений имён: {1}</summary>
     public static string ConflictTitleMove => Get(nameof(ConflictTitleMove));
 
     /// <summary>Из: {0}</summary>
@@ -199,9 +199,6 @@ public static partial class Strings {
 
     /// <summary>Создать ярлык на</summary>
     public static string DragLink => Get(nameof(DragLink));
-
-    /// <summary>{0} элем.</summary>
-    public static string DragItems => Get(nameof(DragItems));
 
     /// <summary>в {0}</summary>
     public static string DragTarget => Get(nameof(DragTarget));

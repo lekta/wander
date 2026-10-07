@@ -50,6 +50,7 @@ public sealed class DropTargetController {
     private const int TickMs = 40;
 
     private readonly Func<string?> _currentFolder;
+    private readonly Func<bool> _entersFolders;
     private readonly DispatcherTimer _tick;
 
     private DropTargetAdorner? _adorner;
@@ -69,8 +70,13 @@ public sealed class DropTargetController {
     /// The folder being listed — the fallback target when the cursor is over
     /// the list's empty space rather than over a row.
     /// </param>
-    public DropTargetController(Func<string?> currentFolder) {
+    /// <param name="entersFolders">
+    /// Whether a drag held over a folder of the list goes into it - read on
+    /// every tick, so the setting applies to the next drag at once.
+    /// </param>
+    public DropTargetController(Func<string?> currentFolder, Func<bool> entersFolders) {
         _currentFolder = currentFolder;
+        _entersFolders = entersFolders;
         _tick = new DispatcherTimer(DispatcherPriority.Input) { Interval = TimeSpan.FromMilliseconds(TickMs) };
         _tick.Tick += OnTick;
     }
@@ -503,7 +509,7 @@ public sealed class DropTargetController {
         _lastTickMs = now;
         ScrollAtEdge(elapsed);
 
-        var decision = DragHover.Decide(_hover, now, DelayOf(_hover.Target), _dragged);
+        var decision = DragHover.Decide(_hover, now, DelayOf(_hover.Target), _dragged, _entersFolders());
         if (decision.Outcome is DragHoverOutcome.Expand or DragHoverOutcome.Enter && _hoverElement is { } element) {
             _hover = _hover with { Done = true };
             HoverOpened?.Invoke(decision, element);

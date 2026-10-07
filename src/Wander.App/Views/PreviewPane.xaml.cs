@@ -53,7 +53,7 @@ public partial class PreviewPane : UserControl {
         // Wander's own .xshd definitions (batch, ShaderLab, YAML) have to be
         // in the manager before the first file asks for one.
         HighlightingCatalog.EnsureRegistered();
-        PictureControls.Opacity = BarAtRest;
+        PictureControls.Opacity = BarRest;
         PictureChartFace.Opacity = ChartAtRest;
         // A pane put away with the mouse by its bar - a pair full screen
         // down to one picture - is by it no longer, and says so to the other.
@@ -120,13 +120,27 @@ public partial class PreviewPane : UserControl {
 
     /// <summary>
     /// How much of the picture's bar shows while the mouse is away from it
-    /// and no rating is being shown: a trace in the pane, 30%; none full
-    /// screen (2026-09-24), where it comes up only when called for, as in
-    /// FastStone - the mouse at the bottom edge, a rating key.
+    /// and no rating is being shown: a trace in the pane, 30%. Full screen
+    /// it is pinned instead (<see cref="BarPinned"/>).
     /// </summary>
     public double BarAtRest {
         get => (double)GetValue(BarAtRestProperty);
         set => SetValue(BarAtRestProperty, value);
+    }
+
+    public static readonly DependencyProperty BarPinnedProperty = DependencyProperty.Register(
+        nameof(BarPinned), typeof(bool), typeof(PreviewPane),
+        new PropertyMetadata(false, (d, _) => ((PreviewPane)d).PinBar()));
+
+    /// <summary>
+    /// Full screen (2026-10-07): the picture's bar is always there at full
+    /// strength, over a zoom too, and names the picture - the stars are read
+    /// without the mouse going for them, and each half of a pair says which
+    /// file it is. Until then it came up only when called for.
+    /// </summary>
+    public bool BarPinned {
+        get => (bool)GetValue(BarPinnedProperty);
+        set => SetValue(BarPinnedProperty, value);
     }
 
 
@@ -1017,13 +1031,14 @@ public partial class PreviewPane : UserControl {
     // --- The picture's bar -----------------------------------------------
     //
     // Full screen and in each half of a split a picture carries its own
-    // stars and sharpness score (and, full screen, the helpers' switches)
-    // in its lower left corner. They are there for a moment and the picture
-    // for the rest, so they stand at BarAtRest of their strength - 30% in
-    // the pane, nothing full screen - until the mouse comes down to them or
-    // the rating changes - a digit pressed, a star clicked, an undo - and
-    // then for a moment more. The chart of levels in the other corner
-    // (PictureChart) comes and goes with them where they go away whole.
+    // stars and sharpness score (and, full screen, its name and the helpers'
+    // switches) in its lower left corner. In the pane they are there for a
+    // moment and the picture for the rest, so they stand at BarAtRest of
+    // their strength, 30%, until the mouse comes down to them or the rating
+    // changes - a digit pressed, a star clicked, an undo - and then for a
+    // moment more. Full screen the bar is pinned (BarPinned, 2026-10-07):
+    // whole, always, over a zoom too. The chart of levels in the other
+    // corner (PictureChart) keeps them company.
 
     /// <summary>How near the bottom edge the mouse brings the bar up, in layout units.</summary>
     private const double BarReach = 96;
@@ -1043,12 +1058,15 @@ public partial class PreviewPane : UserControl {
     private DispatcherTimer? _barFlash;
 
 
+    /// <summary>The bar's strength at rest: <see cref="BarAtRest"/>, whole while <see cref="BarPinned"/>.</summary>
+    private double BarRest => BarPinned ? 1 : BarAtRest;
+
     /// <summary>
     /// The chart's strength at rest: whole where the bar stays as a trace -
     /// the chart was switched on to be read - and none where the bar goes
-    /// away entirely: full screen nothing is over the picture until called for.
+    /// away entirely.
     /// </summary>
-    private double ChartAtRest => BarAtRest > 0 ? 1 : 0;
+    private double ChartAtRest => BarRest > 0 ? 1 : 0;
 
 
     /// <summary>
@@ -1107,13 +1125,13 @@ public partial class PreviewPane : UserControl {
 
     /// <summary>
     /// Full strength while the mouse is down by the bar or a new rating is
-    /// being shown; <see cref="BarAtRest"/> and <see cref="ChartAtRest"/>
+    /// being shown; <see cref="BarRest"/> and <see cref="ChartAtRest"/>
     /// otherwise. Neither over a zoom - but for a rating key's moment, which
-    /// is there to show what the key set.
+    /// is there to show what the key set, and a pinned bar.
     /// </summary>
     private void UpdateBar() {
         bool flashing = _barFlash?.IsEnabled == true;
-        double over = _imageZoomActive && !flashing ? 0 : 1;
+        double over = _imageZoomActive && !flashing && !BarPinned ? 0 : 1;
         PictureBar.Opacity = over;
         PictureChart.Opacity = over;
 
@@ -1124,7 +1142,7 @@ public partial class PreviewPane : UserControl {
 
         _barUp = up;
         var fade = TimeSpan.FromMilliseconds(BarFadeMs);
-        PictureControls.BeginAnimation(OpacityProperty, new DoubleAnimation(up ? 1 : BarAtRest, fade));
+        PictureControls.BeginAnimation(OpacityProperty, new DoubleAnimation(up ? 1 : BarRest, fade));
         PictureChartFace.BeginAnimation(OpacityProperty, new DoubleAnimation(up ? 1 : ChartAtRest, fade));
     }
 
@@ -1135,9 +1153,16 @@ public partial class PreviewPane : UserControl {
         }
 
         PictureControls.BeginAnimation(OpacityProperty, null);
-        PictureControls.Opacity = BarAtRest;
+        PictureControls.Opacity = BarRest;
         PictureChartFace.BeginAnimation(OpacityProperty, null);
         PictureChartFace.Opacity = ChartAtRest;
+    }
+
+    /// <summary>Pinned or let go: the name shows with the pin, the bar takes its strength, and a zoom no longer hides it.</summary>
+    private void PinBar() {
+        PictureNameText.Visibility = BarPinned ? Visibility.Visible : Visibility.Collapsed;
+        RestBar();
+        UpdateBar();
     }
 
 

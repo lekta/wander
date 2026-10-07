@@ -68,11 +68,15 @@ public static class DropMenuBuilder {
     }
 
 
-    /// <summary>"«photo.jpg» в Photos", "12 элем. в Photos" - the plaque's own words.</summary>
+    /// <summary>
+    /// "«photo.jpg» в Photos", "12 JPG в Photos" - the plaque's own words
+    /// (<see cref="CountCaption"/>); items that could not all be read are
+    /// only counted.
+    /// </summary>
     private static string Caption(DropMenuTarget t) {
-        string what = t.Paths.Count == 1
-            ? Text.Format("DragOneItem", NameOf(t.Paths[0]))
-            : Text.Format("DragItems", t.Paths.Count);
+        string what = t.Paths.Count == 1 ? Text.Format(ContextMenuBuilder.CaptionOneKey, NameOf(t.Paths[0]))
+            : t.Entries.Count == t.Paths.Count ? CountCaption.Of(t.Entries)
+            : CountCaption.Items(t.Paths.Count);
 
         return what + " " + Text.Format("DragTarget", NameOf(t.TargetFolder));
     }
