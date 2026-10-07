@@ -49,6 +49,17 @@ internal sealed class SiteBuilder {
     /// </summary>
     public const string IndexNowKey = "c9a50c3e765621030e3adcaa5b3da083";
 
+    /// <summary>
+    /// Cloudflare Web Analytics: the one script on the site, and only in
+    /// the deployed build (--analytics). A module script, so it loads after
+    /// the page is shown and never holds it up: about 10 KB over the wire,
+    /// cached for a day, and one beacon. The token is per hostname and
+    /// public - the digest at lekta.github.io/gamedev_digest/ shares it,
+    /// the dashboard tells the sites apart by path. No cookies, nothing
+    /// personal.
+    /// </summary>
+    private const string WebAnalyticsToken = "d74d8d284334461699e827bfc667146e";
+
     private const string GuideSource = "docs/GUIDE.md";
     private const string LandingSource = "docs/site/index.html";
     private const string TemplateSource = "tools/site/page.html";
@@ -93,6 +104,7 @@ internal sealed class SiteBuilder {
 
     private readonly string _root;
     private readonly bool _debug;
+    private readonly bool _analytics;
     /// <summary>What GitHub renders in GUIDE.md and the site must too: tables, ~~strikethrough~~ and [^footnotes].</summary>
     private readonly MarkdownPipeline _pipeline = new MarkdownPipelineBuilder()
         .UsePipeTables()
@@ -113,9 +125,10 @@ internal sealed class SiteBuilder {
     private int _shotsOnPage;
 
 
-    public SiteBuilder(string root, bool debug) {
+    public SiteBuilder(string root, bool debug, bool analytics) {
         _root = root;
         _debug = debug;
+        _analytics = analytics;
     }
 
 
@@ -141,6 +154,9 @@ internal sealed class SiteBuilder {
         string built = DateTime.UtcNow.ToString("dd.MM.yyyy HH:mm", CultureInfo.InvariantCulture) + " UTC";
         string head = Releases.Head(_root, Errors) ?? "";
         string build = $"<a href=\"{Repository}/commit/{head}\" title=\"Когда и из какого коммита собран сайт\">{built}, {head}</a>";
+        string analytics = _analytics
+            ? "<script type=\"module\" src=\"https://static.cloudflareinsights.com/beacon.min.js\" data-cf-beacon='{\"token\": \"" + WebAnalyticsToken + "\"}'></script>\n"
+            : "";
         foreach (string picture in Directory.GetFiles(Path.Combine(_root, "docs", "screenshots"), "*.webp")) {
             _files["img/" + Path.GetFileName(picture)] = picture;
         }
@@ -166,6 +182,7 @@ internal sealed class SiteBuilder {
                 ["site"] = SiteUrl,
                 ["url"] = SiteUrl + folder,
                 ["build"] = build,
+                ["analytics"] = analytics,
                 ["css"] = css,
                 ["root"] = "../../",
                 ["guidelink"] = "",
@@ -187,6 +204,7 @@ internal sealed class SiteBuilder {
             ["site"] = SiteUrl,
             ["url"] = SiteUrl + "versions/",
             ["build"] = build,
+            ["analytics"] = analytics,
             ["css"] = css,
             ["root"] = "../",
             ["guidelink"] = $"<a class=\"wide\" href=\"../{home}\">Руководство</a>\n",
@@ -197,6 +215,7 @@ internal sealed class SiteBuilder {
             ["css"] = css,
             ["site"] = SiteUrl,
             ["build"] = build,
+            ["analytics"] = analytics,
             ["guide"] = home,
             ["version"] = _latest.Version,
             ["download"] = $"{Repository}/releases/download/{_latest.Tag}/Wander.exe",

@@ -2,8 +2,9 @@
 
 `lekta.github.io/wander/` (`SiteBuilder.SiteUrl`), GitHub Pages,
 по-русски. Страница открывается мгновенно — отсюда правило: ни строки JS
-(JSON-LD на лендинге — данные, браузер не исполняет; решение человека
-2026-10-07), без веб- и иконочных шрифтов и анимаций, CSS инлайном,
+(JSON-LD на лендинге — данные, браузер не исполняет; скрипт счётчика —
+только в выложенной сборке и после показа страницы, «Статистика»; решения
+человека 2026-10-07), без веб- и иконочных шрифтов и анимаций, CSS инлайном,
 тёмная тема — `prefers-color-scheme`. В подвале каждой страницы — метка
 сборки: время UTC и короткий хэш коммита ссылкой на него (`{{build}}`),
 чтобы отличить свежую страницу от кеша. Генератор — `tools/site`: консоль
@@ -108,8 +109,8 @@ headless Edge'ем. `check.bat` перезаписывает выход обыч
 ## Деплой
 
 `.github/workflows/site.yml`, пуш тега `site-*` (`site-2026-10-01`):
-`ubuntu-latest`, .NET 10, `dotnet run --project tools/site -- --out _site`,
-`upload-pages-artifact` + `deploy-pages`, `concurrency: pages`,
+`ubuntu-latest`, .NET 10, `dotnet run --project tools/site -- --out _site
+--analytics`, `upload-pages-artifact` + `deploy-pages`, `concurrency: pages`,
 `fetch-depth: 0` ради тегов. После релиза — новый тег `site-*`, иначе кнопка
 предлагает прошлую версию (RELEASING.md). Разово руками: Settings → Pages →
 Source = GitHub Actions; Environments → `github-pages` — разрешить теги
@@ -138,6 +139,22 @@ Google, браузер не исполняет): название, ОС, вер�
 `api.indexnow.org` — Яндекс и Bing; Google в протоколе нет, ему —
 Search Console. Строка подтверждения Google — в `docs/site/index.html`
 после `description`; Яндексу нужен корень хоста — PROMOTION, «Индексация».
+
+## Статистика
+
+Решение человека 2026-10-07. Cloudflare Web Analytics
+(dash.cloudflare.com → Web Analytics): `<script type="module">` с токеном
+перед `</body>` каждой страницы — плейсхолдер `{{analytics}}`, заполняется
+только с ключом `--analytics`, который передаёт `site.yml`; локальные и
+отладочные сборки без него, чтобы просмотры с диска не считались. Цена:
+страница рисуется до загрузки скрипта (модуль — отложенный), затем
+около 10 КБ по сети (кеш сутки) с `static.cloudflareinsights.com` и один
+POST-маячок; сама страница — 5–6 КБ. Без cookie и личных данных, баннер
+согласия не нужен; блокировщики рекламы его режут — цифры занижены на
+часть технической аудитории. Токен `SiteBuilder.WebAnalyticsToken` —
+один на хост `lekta.github.io`, общий с дайджестом: в панели сайты
+различаются путём (`/wander/…`). Переезд на свой домен за Cloudflare —
+статистика серверная, скрипт не нужен.
 
 ## Скриншоты
 

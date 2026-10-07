@@ -14,7 +14,8 @@ namespace Wander.Site;
 /// are listed and do not stop it, and the places GUIDE.md marks for a
 /// screenshot show on the pages. <c>--open</c>: the landing opens in the
 /// default browser once written - for a person at the desk, never for a
-/// check or a script.
+/// check or a script. <c>--analytics</c>: the deployed build only - the
+/// visit counter's script goes on every page (SiteBuilder).
 /// </para>
 ///
 /// Exit codes: 0 built, 1 problems found (listed on stderr; the debug build
@@ -32,6 +33,7 @@ public static class Program {
         string? output = null;
         bool debug = false;
         bool open = false;
+        bool analytics = false;
         for (int i = 0; i < args.Length; i++) {
             if (args[i] == "--out" && i + 1 < args.Length) {
                 output = Path.GetFullPath(args[++i]);
@@ -39,8 +41,10 @@ public static class Program {
                 debug = true;
             } else if (args[i] == "--open") {
                 open = true;
+            } else if (args[i] == "--analytics") {
+                analytics = true;
             } else {
-                Console.Error.WriteLine("usage: Wander.Site [--out <dir>] [--debug] [--open]");
+                Console.Error.WriteLine("usage: Wander.Site [--out <dir>] [--debug] [--open] [--analytics]");
 
                 return 2;
             }
@@ -50,7 +54,7 @@ public static class Program {
         // Caught rather than left to the runtime: a crashed .NET process exits
         // with a negative code, which `if errorlevel 1` in check.bat misses.
         try {
-            var site = new SiteBuilder(root, debug);
+            var site = new SiteBuilder(root, debug, analytics);
             site.Build();
             // One template serves every page, so its mistake would repeat per page.
             var errors = site.Errors.Distinct().ToList();
