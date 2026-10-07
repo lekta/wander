@@ -1,4 +1,5 @@
 using Wander.Core.FileSystem;
+using Wander.Core.Icons;
 using Wander.Core.Logging;
 using Wander.Core.Undo;
 
@@ -8,6 +9,19 @@ namespace Wander.Core.Companions;
 public enum RatingField {
     Rank,
     ColorLabel,
+}
+
+
+/// <summary>What setting a rating field on a photo comes down to - see <see cref="CompanionMetadataService.PlanWrite"/>.</summary>
+public enum RatingWrite {
+    /// <summary>Nothing to write: not a picture, or clearing what nothing holds.</summary>
+    None,
+
+    /// <summary>Into the sidecars the photo has.</summary>
+    Edit,
+
+    /// <summary>A sidecar has to be created first - the caller asks.</summary>
+    Create,
 }
 
 
@@ -36,6 +50,7 @@ public sealed class CompanionMetadataService {
     private readonly UndoService _undo;
     private readonly ILogger _log;
     private readonly CompanionResolver _companions;
+    private readonly EmbeddedRatingCache _photoRatings = new();
 
 
     /// <summary>
@@ -69,16 +84,21 @@ public sealed class CompanionMetadataService {
     /// their ratings count (decision 2026-10-01): the editor's own, named
     /// after the whole file - darktable IMG.CR2.xmp, RawTherapee
     /// IMG.CR2.pp3 - before the neutral IMG.xmp, which anybody may have
-    /// written. Two of the same kind keep the order given.
+    /// written. Two of the same kind keep the order given. darktable's
+    /// duplicates (IMG_01.CR2.xmp) travel with the photo but are not among
+    /// them: the stars are the original's.
     /// </summary>
-    public static IReadOnlyList<string> RatingSidecars(string mainName, IReadOnlyList<string>? companions) {
+    public IReadOnlyList<string> RatingSidecars(string mainName, IReadOnlyList<string>? companions) {
         if (companions is not { Count: > 0 }) {
             return Array.Empty<string>();
         }
 
         return companions
             .Where(IsRatingSidecar)
-            .OrderBy(path => Path.GetFileName(path).StartsWith(mainName + ".", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .Select(path => (Path: path, Rule: _companions.RuleFor(path, mainName)))
+            .Where(c => c.Rule is not null)
+            .OrderBy(c => c.Rule!.Naming == CompanionNaming.Appended ? 0 : 1)
+            .Select(c => c.Path)
             .ToArray();
     }
 
@@ -94,15 +114,90 @@ public sealed class CompanionMetadataService {
 
 
     /// <summary>
-    /// The rating carried by one of <paramref name="entry"/>'s companions,
-    /// or null when it has none that holds ratings. The first of
-    /// <see cref="RatingSidecars"/> wins - the same one the preview pane
-    /// shows and a star writes into.
+    /// The rating a row shows: the first of <see cref="RatingSidecars"/> -
+    /// the same one the preview pane shows - over what the photo itself
+    /// says (<see cref="EmbeddedRating.Merge"/>). Null when neither says
+    /// anything.
     /// </summary>
     public SidecarRating? ReadRatingFor(FileSystemEntry entry) {
         var sidecars = RatingSidecars(entry.Name, entry.Companions);
 
-        return sidecars.Count > 0 ? ReadRating(sidecars[0]) : null;
+        return EmbeddedRating.Merge(sidecars.Count > 0 ? ReadRating(sidecars[0]) : null, PhotoRating(entry));
+    }
+
+
+    /// <summary>
+    /// The rating written into the photo itself (<see cref="EmbeddedRating"/>),
+    /// from the cache when the file has not changed since; null for a file
+    /// that cannot carry one, says nothing, or cannot be read right now.
+    /// </summary>
+    public SidecarRating? PhotoRating(FileSystemEntry photo) {
+        if (photo.IsFolderLike || !EmbeddedRating.Reads(photo.Name)) {
+            return null;
+        }
+        if (_photoRatings.TryGet(photo, out var known)) {
+            return known;
+        }
+
+        SidecarRating? rating;
+        try {
+            using var stream = _fs.OpenRead(photo.FullPath);
+            rating = EmbeddedRating.Read(stream);
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException) {
+            // Being copied in, or not a plain file (an archive entry, the
+            // bin): not cached, the next pass asks again.
+            return null;
+        } catch (Exception ex) {
+            // A header it cannot make out says nothing, and must not take
+            // the folder's rating pass down with it.
+            _log.Warn($"Photo rating unreadable: {photo.FullPath} ({ex.Message})");
+            rating = null;
+        }
+        _photoRatings.Put(photo, rating);
+
+        return rating;
+    }
+
+
+    /// <summary>The watcher saw this file change: what was read out of it is stale.</summary>
+    public void ForgetPhotoRating(string path) {
+        _photoRatings.Forget(path);
+    }
+
+
+    /// <summary>F5: the folder is read again from the disk, the photos' own ratings with it.</summary>
+    public void ForgetPhotoRatings(string folder) {
+        _photoRatings.ForgetFolder(folder);
+    }
+
+
+    /// <summary>
+    /// What setting <paramref name="field"/> to <paramref name="value"/> on
+    /// this photo would do. A photo with a rating sidecar is edited. One
+    /// without gets a sidecar created - when it is a picture, and when there
+    /// is something to say: a value, or a 0 over the photo's own (decision
+    /// 2026-10-01: Wander does not write into the RAW, a sidecar with 0 is
+    /// how the camera's stars come off). A sidecar created to record "no
+    /// stars" over nothing is the file nobody wanted.
+    /// </summary>
+    public RatingWrite PlanWrite(FileSystemEntry photo, RatingField field, int value) {
+        if (photo.IsFolderLike) {
+            return RatingWrite.None;
+        }
+        if (RatingSidecars(photo.Name, photo.Companions).Count > 0) {
+            return RatingWrite.Edit;
+        }
+        if (!ImageFormats.IsImage(photo.Name)) {
+            return RatingWrite.None;
+        }
+        if (value > 0) {
+            return RatingWrite.Create;
+        }
+
+        var own = PhotoRating(photo);
+        int? held = field == RatingField.Rank ? own?.Rank : own?.ColorLabel;
+
+        return held > 0 ? RatingWrite.Create : RatingWrite.None;
     }
 
 
@@ -140,7 +235,9 @@ public sealed class CompanionMetadataService {
     /// </para>
     /// </summary>
     public string CreateRatingSidecar(string mainPath, SidecarFormat format, RatingField field, int value) {
-        return CreateRatingSidecar(mainPath, format, field, value, pushUndo: true);
+        return CreateRatingSidecar(
+            mainPath, format, field == RatingField.Rank ? value : 0, field == RatingField.ColorLabel ? value : 0,
+            $"{field} = {value}", pushUndo: true);
     }
 
 
@@ -158,10 +255,20 @@ public sealed class CompanionMetadataService {
     /// </para>
     ///
     /// <para>
+    /// A photo with two rating sidecars - the neutral IMG.xmp and the one
+    /// RawTherapee or darktable added - has the field written into every
+    /// one that holds it (decision 2026-10-01), so the two editors keep
+    /// agreeing; none holding it, the first of <see cref="RatingSidecars"/>.
+    /// A created sidecar takes the photo's own other field along: a label
+    /// put on a frame the camera gave five stars must not take the stars
+    /// off with the new file's 0.
+    /// </para>
+    ///
+    /// <para>
     /// Whether the ones needing a new file may have one is <em>not</em>
-    /// decided here — the caller asks first and simply leaves out the
-    /// targets it was told no about. See <see cref="SidecarFormat.Pp3"/>
-    /// for why that question is a real one.
+    /// decided here — the caller asks first (<see cref="PlanWrite"/> says
+    /// which) and simply leaves out the photos it was told no about. See
+    /// <see cref="SidecarFormat.Pp3"/> for why that question is a real one.
     /// </para>
     ///
     /// <para>
@@ -175,30 +282,44 @@ public sealed class CompanionMetadataService {
     /// says so to the user; the result list only has the ones that went.
     /// </param>
     public IReadOnlyList<RatingResult> ApplyRatingToMany(
-        IReadOnlyList<RatingTarget> targets, RatingField field, int value, SidecarFormat createFormat,
+        IReadOnlyList<FileSystemEntry> photos, RatingField field, int value, SidecarFormat createFormat,
         Action<string, Exception>? failed = null) {
         var steps = new List<IUndoableAction>();
         var results = new List<RatingResult>();
+        var touched = new List<string>();
 
-        foreach (var target in targets) {
+        foreach (var photo in photos) {
+            var plan = PlanWrite(photo, field, value);
+            if (plan == RatingWrite.None) {
+                continue;
+            }
+
             try {
-                string path;
-                if (target.SidecarPath is { Length: > 0 } existing) {
-                    int previous = ApplyRating(existing, field, value);
-                    steps.Add(new SidecarRatingAction(this, existing, field, previous, value, target.MainPath));
-                    path = existing;
+                var sidecars = RatingSidecars(photo.Name, photo.Companions);
+                if (plan == RatingWrite.Edit) {
+                    foreach (string path in Holding(sidecars, field)) {
+                        int previous = ApplyRating(path, field, value);
+                        steps.Add(new SidecarRatingAction(this, path, field, previous, value, photo.FullPath));
+                    }
                 } else {
-                    path = CreateRatingSidecar(target.MainPath, createFormat, field, value, pushUndo: false);
-                    steps.Add(new SidecarCreatedAction(this, path, target.MainPath));
+                    var own = PhotoRating(photo);
+                    string created = CreateRatingSidecar(
+                        photo.FullPath, createFormat,
+                        field == RatingField.Rank ? value : own?.Rank ?? 0,
+                        field == RatingField.ColorLabel ? value : own?.ColorLabel ?? 0,
+                        $"{field} = {value}", pushUndo: false);
+                    steps.Add(new SidecarCreatedAction(this, created, photo.FullPath));
+                    sidecars = new[] { created };
                 }
+                touched.Add(photo.Name);
 
-                var rating = ReadRating(path);
+                var rating = EmbeddedRating.Merge(ReadRating(sidecars[0]), PhotoRating(photo));
                 if (rating is not null) {
-                    results.Add(new RatingResult(target.MainPath, path, rating));
+                    results.Add(new RatingResult(photo.FullPath, sidecars[0], rating));
                 }
             } catch (Exception ex) {
-                _log.Warn($"Rating {field}={value} failed for {target.MainPath}: {ex.Message}");
-                failed?.Invoke(target.MainPath, ex);
+                _log.Warn($"Rating {field}={value} failed for {photo.FullPath}: {ex.Message}");
+                failed?.Invoke(photo.FullPath, ex);
             }
         }
 
@@ -206,7 +327,8 @@ public sealed class CompanionMetadataService {
             _undo.Push(steps[0]);
         } else if (steps.Count > 1) {
             string what = field == RatingField.Rank ? $"Rating {value}" : $"Colour {ColorLabels.Name(value)}";
-            _undo.Push(new CompositeAction($"{what} on {steps.Count} items", steps));
+            string on = touched.Count == 1 ? $"'{touched[0]}'" : $"{touched.Count} items";
+            _undo.Push(new CompositeAction($"{what} on {on}", steps));
         }
 
         return results;
@@ -292,13 +414,14 @@ public sealed class CompanionMetadataService {
     }
 
 
+    /// <param name="what">The edit asked for, for the log - the other field may have come from the photo.</param>
     /// <param name="pushUndo">
     /// False when the caller is assembling a composite of its own — see
     /// <see cref="ApplyRatingToMany"/>. The step still exists, it is just
     /// pushed by somebody else.
     /// </param>
     private string CreateRatingSidecar(
-        string mainPath, SidecarFormat format, RatingField field, int value, bool pushUndo) {
+        string mainPath, SidecarFormat format, int rank, int color, string what, bool pushUndo) {
         string path = SidecarPathFor(mainPath, format);
         if (_fs.FileExists(path)) {
             throw new InvalidOperationException($"Sidecar already exists: {path}");
@@ -313,15 +436,12 @@ public sealed class CompanionMetadataService {
             throw new InvalidOperationException(reason);
         }
 
-        int rank = field == RatingField.Rank ? value : 0;
-        int color = field == RatingField.ColorLabel ? value : 0;
-
         byte[] content = format == SidecarFormat.Pp3
             ? Pp3Sidecar.Create(rank, color)
             : XmpSidecar.Create(rank, color);
 
         _fs.ReplaceAtomic(path, content);
-        _log.Info($"Sidecar created: {path} ({field} = {value})");
+        _log.Info($"Sidecar created: {path} ({what})");
         if (pushUndo) {
             _undo.Push(new SidecarCreatedAction(this, path, mainPath));
         }
@@ -329,6 +449,15 @@ public sealed class CompanionMetadataService {
         return path;
     }
 
+
+    /// <summary>The sidecars that hold <paramref name="field"/>; none does - the first, as before there were two.</summary>
+    private IReadOnlyList<string> Holding(IReadOnlyList<string> sidecars, RatingField field) {
+        var holding = sidecars
+            .Where(path => ReadRating(path) is { } rating && (field == RatingField.Rank ? rating.Rank : rating.ColorLabel) is not null)
+            .ToArray();
+
+        return holding.Length > 0 ? holding : new[] { sidecars[0] };
+    }
 
     private static bool IsPp3(string path) {
         return Path.GetExtension(path).Equals(".pp3", StringComparison.OrdinalIgnoreCase);
@@ -346,16 +475,8 @@ public sealed class CompanionMetadataService {
 
 
     /// <summary>
-    /// One photo an edit is about: where it lives, and which sidecar
-    /// already holds its rating (null when it has none yet and one has to
-    /// be created).
-    /// </summary>
-    public readonly record struct RatingTarget(string MainPath, string? SidecarPath);
-
-
-    /// <summary>
-    /// The result for one photo: which file its rating now lives in, and
-    /// what that file now says.
+    /// The result for one photo: the first sidecar its rating now lives in,
+    /// and what the row shows now - that sidecar over the photo's own.
     /// </summary>
     public readonly record struct RatingResult(string MainPath, string SidecarPath, SidecarRating Rating);
 }

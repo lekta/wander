@@ -60,6 +60,18 @@ internal class FakeFileSystem : IFileSystem {
         return null;
     }
 
+    public IReadOnlyList<string> FileNamesLike(string directory, string pattern) {
+        var like = new System.Text.RegularExpressions.Regex(
+            "^" + System.Text.RegularExpressions.Regex.Escape(pattern).Replace(@"\*", ".*").Replace(@"\?", ".") + "$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        return Files.Keys
+            .Where(p => string.Equals(System.IO.Path.GetDirectoryName(p), directory, StringComparison.OrdinalIgnoreCase))
+            .Select(p => System.IO.Path.GetFileName(p))
+            .Where(name => like.IsMatch(name))
+            .ToArray();
+    }
+
     /// <summary>Creation times by path; a path without one answers "unknown", like a volume that keeps none.</summary>
     public Dictionary<string, DateTime> CreationTimes { get; } = new(StringComparer.OrdinalIgnoreCase);
 

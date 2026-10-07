@@ -117,6 +117,14 @@ public sealed class SystemIOFileSystem : IFileSystem {
         return null;
     }
 
+    public IReadOnlyList<string> FileNamesLike(string directory, string pattern) {
+        try {
+            return Directory.EnumerateFiles(directory, pattern).Select(Path.GetFileName).ToArray()!;
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+            return Array.Empty<string>();
+        }
+    }
+
     public DateTime? GetCreationTimeUtc(string path) {
         try {
             if (Directory.Exists(path)) {

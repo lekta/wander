@@ -558,6 +558,14 @@ Hyper-V со снапшотами (обслуживать ВМ), CI `windows-lat
   1280 px, 30 кадров/с; сборка — ffmpeg с палитрой (`palettegen` /
   `paletteuse`), 15 кадров/с, до 5 МБ; для README — GIF, для лендинга —
   WebP-анимация или короткий MP4 (втрое легче).
+- **Публикация** — по PROMOTION, порядок по отдаче: winget (манифест, PR в
+  `winget-pkgs`), AlternativeTo, comss.ru и softportal, темы репозитория и
+  Social preview на GitHub, PR в Awesome-Windows; Хабр — аккаунт через
+  Песочницу статьёй о Wander. Сделано 2026-10-07: сайт в Search Console и
+  Яндекс Вебмастере, sitemap, IndexNow, счётчик Cloudflare, корень
+  `lekta.github.io`. Проверить индексацию 14.10 (напоминание стоит), дальше
+  раз в месяц: `site:lekta.github.io`, «Страницы в поиске», панель
+  Cloudflare с фильтром `/wander/`.
 
 ## Обсуждения
 

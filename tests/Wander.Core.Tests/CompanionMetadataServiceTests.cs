@@ -259,11 +259,12 @@ public class CompanionMetadataServiceTests {
 
     [Fact]
     public void RatingSidecars_PutTheEditorsOwnFirst_AndKeepTheRestInOrder() {
+        var (service, _, _) = Build(pp3: null);
         var companions = new[] { @"C:\p\IMG.xmp", @"C:\p\IMG.CR2.pp3", @"C:\p\IMG.CR2.meta", @"C:\p\IMG.CR2.xmp" };
 
         Assert.Equal(
             new[] { @"C:\p\IMG.CR2.pp3", @"C:\p\IMG.CR2.xmp", @"C:\p\IMG.xmp" },
-            CompanionMetadataService.RatingSidecars("IMG.CR2", companions));
+            service.RatingSidecars("IMG.CR2", companions));
     }
 
     [Fact]
@@ -280,6 +281,145 @@ public class CompanionMetadataServiceTests {
         Assert.Equal(5, carried[0].Rating?.Rank);
         Assert.Null(carried[1].Rating);
         Assert.Null(carried[2].Rating);
+    }
+
+    [Fact]
+    public void CarryRatings_KeepsThePhotosOwnRating_WithoutACompanion() {
+        var shown = new[] { Row("IMG_8923.CR3") with { Rating = new SidecarRating(5, null, InPhoto: true) } };
+
+        var carried = RatedListing.CarryRatings(new[] { Row("IMG_8923.CR3") }, shown, SortOptions.Default);
+
+        Assert.Equal(5, carried[0].Rating?.Rank);
+    }
+
+    [Fact]
+    public void RatingSidecars_LeaveDarktableDuplicatesOut() {
+        // The stars are the original's; IMG_01.CR2.xmp is another version.
+        var (service, _, _) = Build(pp3: null);
+
+        Assert.Equal(
+            new[] { @"C:\p\IMG.CR2.xmp" },
+            service.RatingSidecars("IMG.CR2", new[] { @"C:\p\IMG_01.CR2.xmp", @"C:\p\IMG.CR2.xmp" }));
+    }
+
+
+    // --- The photo's own rating (the camera's) ----------------------------
+
+    private const string CameraRaw = @"C:\photos\IMG_8923.CR3";
+
+    private static (CompanionMetadataService Service, FakeFileSystem Fs, UndoService Undo) BuildCamera(int stars) {
+        var built = Build(pp3: null);
+        built.Fs.Files[CameraRaw] = EmbeddedRatingTests.Cr3(EmbeddedRatingTests.Packet(stars));
+
+        return built;
+    }
+
+    [Fact]
+    public void ReadRatingFor_ShowsTheCamerasStars_WithoutASidecar() {
+        var (service, _, _) = BuildCamera(5);
+
+        var rating = service.ReadRatingFor(Row("IMG_8923.CR3"));
+
+        Assert.Equal(5, rating?.Rank);
+        Assert.True(rating!.InPhoto);
+    }
+
+    [Fact]
+    public void ReadRatingFor_ASidecarWithTheField_OverridesTheCamera() {
+        var (service, fs, _) = BuildCamera(5);
+        fs.Files[@"C:\photos\IMG_8923.CR3.pp3"] = Utf8("[General]\nRank=2\n");
+
+        Assert.Equal(2, service.ReadRatingFor(Row("IMG_8923.CR3", @"C:\photos\IMG_8923.CR3.pp3"))?.Rank);
+    }
+
+    [Fact]
+    public void PhotoRating_IsReadOnce_UntilTheFileChangesOrIsForgotten() {
+        var (service, fs, _) = BuildCamera(5);
+        var row = Row("IMG_8923.CR3");
+        Assert.Equal(5, service.PhotoRating(row)?.Rank);
+
+        // Rewritten with its size and time kept (exiftool -P): the cache
+        // still answers - until the watcher or F5 says otherwise.
+        fs.Files[CameraRaw] = EmbeddedRatingTests.Cr3(EmbeddedRatingTests.Packet(3));
+        Assert.Equal(5, service.PhotoRating(row)?.Rank);
+        service.ForgetPhotoRating(CameraRaw);
+        Assert.Equal(3, service.PhotoRating(row)?.Rank);
+
+        fs.Files[CameraRaw] = EmbeddedRatingTests.Cr3(EmbeddedRatingTests.Packet(1));
+        service.ForgetPhotoRatings(@"C:\photos\");
+        Assert.Equal(1, service.PhotoRating(row)?.Rank);
+
+        // Another size or time is another file: read again on its own.
+        fs.Files[CameraRaw] = EmbeddedRatingTests.Cr3(EmbeddedRatingTests.Packet(4));
+        Assert.Equal(4, service.PhotoRating(row with { Size = 1 })?.Rank);
+    }
+
+    [Fact]
+    public void PlanWrite_ClearingCreatesASidecar_OnlyOverThePhotosOwnStars() {
+        var (service, _, _) = BuildCamera(5);
+
+        Assert.Equal(RatingWrite.Create, service.PlanWrite(Row("IMG_8923.CR3"), RatingField.Rank, 0));
+        Assert.Equal(RatingWrite.None, service.PlanWrite(Row("IMG_8923.CR3"), RatingField.ColorLabel, 0));
+        Assert.Equal(RatingWrite.None, service.PlanWrite(Row("IMG_0001.CR3"), RatingField.Rank, 0));
+        Assert.Equal(RatingWrite.Create, service.PlanWrite(Row("IMG_0001.CR3"), RatingField.Rank, 2));
+        Assert.Equal(RatingWrite.Edit, service.PlanWrite(Row("IMG_1234.CR2", Pp3Path), RatingField.Rank, 0));
+        Assert.Equal(RatingWrite.None, service.PlanWrite(Row("notes.txt"), RatingField.Rank, 2));
+    }
+
+    [Fact]
+    public void ApplyRatingToMany_ClearingTheCamerasStars_CreatesASidecarWithZero() {
+        var (service, fs, undo) = BuildCamera(5);
+
+        var result = Assert.Single(service.ApplyRatingToMany(new[] { Row("IMG_8923.CR3") }, RatingField.Rank, 0, SidecarFormat.Xmp));
+
+        Assert.Equal(@"C:\photos\IMG_8923.xmp", result.SidecarPath);
+        Assert.Equal(0, service.ReadRating(result.SidecarPath)?.Rank);
+        Assert.Equal(0, result.Rating.Rank);
+        undo.Undo();
+        Assert.False(fs.FileExists(@"C:\photos\IMG_8923.xmp"));
+    }
+
+    [Fact]
+    public void ApplyRatingToMany_ALabelOnACameraRatedPhoto_KeepsItsStars() {
+        var (service, _, _) = BuildCamera(5);
+
+        var result = Assert.Single(service.ApplyRatingToMany(new[] { Row("IMG_8923.CR3") }, RatingField.ColorLabel, 3, SidecarFormat.Xmp));
+
+        var written = service.ReadRating(result.SidecarPath);
+        Assert.Equal(5, written?.Rank);
+        Assert.Equal(3, written?.ColorLabel);
+        Assert.Equal(5, result.Rating.Rank);
+    }
+
+
+    // --- Two sidecars of one photo --------------------------------------
+
+    [Fact]
+    public void ApplyRatingToMany_WritesEverySidecarThatHoldsTheField_InOneStep() {
+        // Decision 2026-10-01: the neutral IMG.xmp and RawTherapee's .pp3
+        // keep agreeing - both written, one Ctrl+Z.
+        var (service, _, undo) = Build(xmp: Xmp);
+        var row = Row("IMG_1234.CR2", Pp3Path, XmpPath);
+
+        service.ApplyRatingToMany(new[] { row }, RatingField.Rank, 4, SidecarFormat.Xmp);
+
+        Assert.Equal(4, service.ReadRating(Pp3Path)?.Rank);
+        Assert.Equal(4, service.ReadRating(XmpPath)?.Rank);
+        Assert.Equal(1, undo.Depth);
+        undo.Undo();
+        Assert.Equal(2, service.ReadRating(Pp3Path)?.Rank);
+        Assert.Equal(2, service.ReadRating(XmpPath)?.Rank);
+    }
+
+    [Fact]
+    public void ApplyRatingToMany_ASidecarWithoutTheField_IsLeftAlone() {
+        string noRating = Xmp.Replace("   xmp:Rating=\"2\"\n", "");
+        var (service, fs, _) = Build(xmp: noRating);
+
+        service.ApplyRatingToMany(new[] { Row("IMG_1234.CR2", Pp3Path, XmpPath) }, RatingField.Rank, 4, SidecarFormat.Xmp);
+
+        Assert.Equal(4, service.ReadRating(Pp3Path)?.Rank);
+        Assert.Equal(noRating, Text(fs.Files[XmpPath]));
     }
 
     [Fact]
@@ -369,8 +509,8 @@ public class CompanionMetadataServiceTests {
     public void ApplyRatingToMany_EditsExistingAndCreatesMissing() {
         var (service, fs, _) = Build();
         var targets = new[] {
-            new CompanionMetadataService.RatingTarget(@"C:\photos\IMG_1234.CR2", Pp3Path),
-            new CompanionMetadataService.RatingTarget(@"C:\photos\IMG_9999.CR2", null),
+            Row("IMG_1234.CR2", Pp3Path),
+            Row("IMG_9999.CR2"),
         };
 
         var results = service.ApplyRatingToMany(targets, RatingField.Rank, 4, SidecarFormat.Xmp);
@@ -387,8 +527,8 @@ public class CompanionMetadataServiceTests {
         // press, not one per file.
         var (service, fs, undo) = Build();
         var targets = new[] {
-            new CompanionMetadataService.RatingTarget(@"C:\photos\IMG_1234.CR2", Pp3Path),
-            new CompanionMetadataService.RatingTarget(@"C:\photos\IMG_9999.CR2", null),
+            Row("IMG_1234.CR2", Pp3Path),
+            Row("IMG_9999.CR2"),
         };
 
         service.ApplyRatingToMany(targets, RatingField.Rank, 5, SidecarFormat.Xmp);
@@ -404,7 +544,7 @@ public class CompanionMetadataServiceTests {
     public void ApplyRatingToMany_WithOneTarget_PushesThePlainStep() {
         var (service, _, undo) = Build();
         var targets = new[] {
-            new CompanionMetadataService.RatingTarget(@"C:\photos\IMG_1234.CR2", Pp3Path),
+            Row("IMG_1234.CR2", Pp3Path),
         };
 
         service.ApplyRatingToMany(targets, RatingField.ColorLabel, 3, SidecarFormat.Xmp);
@@ -419,8 +559,8 @@ public class CompanionMetadataServiceTests {
         // One unwritable photo must not take the rest of the batch down.
         var (service, fs, _) = Build();
         var targets = new[] {
-            new CompanionMetadataService.RatingTarget(@"C:\photos\ghost.CR2", @"C:\photos\ghost.CR2.pp3"),
-            new CompanionMetadataService.RatingTarget(@"C:\photos\IMG_1234.CR2", Pp3Path),
+            Row("ghost.CR2", @"C:\photos\ghost.CR2.pp3"),
+            Row("IMG_1234.CR2", Pp3Path),
         };
 
         var results = service.ApplyRatingToMany(targets, RatingField.Rank, 1, SidecarFormat.Xmp);
@@ -435,8 +575,8 @@ public class CompanionMetadataServiceTests {
     public void ApplyRatingToMany_TellsWhichItCouldNotWrite() {
         var (service, _, _) = Build();
         var targets = new[] {
-            new CompanionMetadataService.RatingTarget(@"C:\photos\ghost.CR2", @"C:\photos\ghost.CR2.pp3"),
-            new CompanionMetadataService.RatingTarget(@"C:\photos\IMG_1234.CR2", Pp3Path),
+            Row("ghost.CR2", @"C:\photos\ghost.CR2.pp3"),
+            Row("IMG_1234.CR2", Pp3Path),
         };
         var failed = new List<(string Path, Exception Error)>();
 
@@ -452,7 +592,7 @@ public class CompanionMetadataServiceTests {
         var (service, _, undo) = Build();
 
         var results = service.ApplyRatingToMany(
-            Array.Empty<CompanionMetadataService.RatingTarget>(), RatingField.Rank, 3, SidecarFormat.Xmp);
+            Array.Empty<FileSystemEntry>(), RatingField.Rank, 3, SidecarFormat.Xmp);
 
         Assert.Empty(results);
         Assert.Equal(0, undo.Depth);
@@ -477,8 +617,8 @@ public class CompanionMetadataServiceTests {
     public void BatchUndo_NamesEveryPhotoItTouched() {
         var (service, _, undo) = Build();
         var targets = new[] {
-            new CompanionMetadataService.RatingTarget(@"C:\photos\IMG_1234.CR2", Pp3Path),
-            new CompanionMetadataService.RatingTarget(@"C:\photos\IMG_9999.CR2", null),
+            Row("IMG_1234.CR2", Pp3Path),
+            Row("IMG_9999.CR2"),
         };
 
         service.ApplyRatingToMany(targets, RatingField.Rank, 2, SidecarFormat.Xmp);

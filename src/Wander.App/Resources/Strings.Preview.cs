@@ -132,6 +132,9 @@ public static partial class Strings {
     /// <summary>Оценки пока нет. Щелчок по звезде создаст файл рядом со снимком — с подтверждением.</summary>
     public static string PreviewRatingUnsaved => Get(nameof(PreviewRatingUnsaved));
 
+    /// <summary>Оценка из самого снимка — её поставила камера. Щелчок по звезде создаст рядом файл с новой оценкой — с подтверждением; снимок не меняется.</summary>
+    public static string PreviewRatingInPhoto => Get(nameof(PreviewRatingInPhoto));
+
     /// <summary>Окно поиска (Ctrl+Shift+F)</summary>
     public static string SearchOptions => Get(nameof(SearchOptions));
 

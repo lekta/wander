@@ -2613,6 +2613,7 @@ public sealed class MainViewModel : ObservableObject {
             foreach (string path in stale) {
                 AsyncIcon.Invalidate(path);
                 ReviewThumbs.Invalidate(path);
+                _companionMetadata?.ForgetPhotoRating(path);
             }
         }
 
@@ -3614,6 +3615,12 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
+        // The stars a camera wrote are cached by size and time, and a tool
+        // that rewrites the file keeping its time (exiftool -P) leaves both
+        // as they were: F5 reads them again.
+        if (_nav.Current is { Length: > 0 } here) {
+            _companionMetadata?.ForgetPhotoRatings(here);
+        }
         Refresh();
     }
 

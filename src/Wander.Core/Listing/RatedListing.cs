@@ -1,3 +1,4 @@
+using Wander.Core.Companions;
 using Wander.Core.FileSystem;
 
 namespace Wander.Core.Listing;
@@ -24,11 +25,12 @@ public static class RatedListing {
     ///
     /// <para>
     /// Cheap by construction: <paramref name="readRating"/> only touches
-    /// rows that already carry a companion, so a folder with no sidecars
-    /// costs no I/O at all, and a folder of RAW files costs one small text
-    /// read per photo. This is meant to run on a worker thread after the
-    /// listing has landed, not as part of it — the listing must not wait
-    /// on it.
+    /// rows that carry a companion or are photos that may carry a rating of
+    /// their own (<see cref="EmbeddedRating"/>, read once and cached), so a
+    /// folder of documents costs no I/O at all, and a folder of RAW files
+    /// a few small reads per photo. This is meant to run on a worker thread
+    /// after the listing has landed, not as part of it — the listing must
+    /// not wait on it.
     /// </para>
     ///
     /// <para>
@@ -68,8 +70,9 @@ public static class RatedListing {
     /// order - dropped the stars for a moment, a filter by stars hid every
     /// photograph and the selection with them, and an order by rating came
     /// by name first and jumped once the pass landed. Only rows that still
-    /// have a companion take one - a rating lives nowhere else. Returns the
-    /// list it was given when nothing on screen is rated.
+    /// have a companion take one, or a rating that came out of the photo
+    /// itself - a rating lives nowhere else. Returns the list it was given
+    /// when nothing on screen is rated.
     /// </summary>
     /// <param name="entries">The new listing, in the order <paramref name="sort"/> made without ratings.</param>
     /// <param name="shown">The rows on screen before it, ratings and all.</param>
@@ -89,7 +92,8 @@ public static class RatedListing {
 
         var carried = new List<FileSystemEntry>(entries.Count);
         foreach (var entry in entries) {
-            carried.Add(entry.Rating is null && entry.HasCompanions && known.TryGetValue(entry.FullPath, out var rating)
+            carried.Add(entry.Rating is null && known.TryGetValue(entry.FullPath, out var rating)
+                && (entry.HasCompanions || (rating.InPhoto && EmbeddedRating.Reads(entry.Name)))
                 ? entry with { Rating = rating }
                 : entry);
         }

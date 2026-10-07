@@ -35,6 +35,7 @@ public static class SandboxBuilder {
     private static readonly Dictionary<string, Action<SandboxContext>> _profiles = new(StringComparer.OrdinalIgnoreCase) {
         ["photos"] = Photos,
         ["raw"] = Raw,
+        ["ratings"] = Ratings,
         ["big"] = Big,
         ["deep"] = Deep,
         ["names"] = Names,
@@ -131,6 +132,29 @@ public static class SandboxBuilder {
         }
         File.WriteAllText(Path.Combine(dir, "IMG_0001.CR3.pp3"), Pp3(4, 2), Encoding.UTF8);
         File.WriteAllText(Path.Combine(dir, "DSC_0001.xmp"), Xmp(5, "Green"), Encoding.UTF8);
+    }
+
+    /// <summary>
+    /// Where a photo's rating lives, one CR3 per case (patch 0.5.1): the
+    /// camera's own stars and the 0 it writes into every other frame; a
+    /// .pp3 over the camera; darktable's IMG.CR3.xmp with a duplicate
+    /// IMG_01.CR3.xmp; a .pp3 and the neutral IMG.xmp side by side. Small
+    /// files - the cost here is not the size.
+    /// </summary>
+    private static void Ratings(SandboxContext c) {
+        string dir = c.Dir("ratings");
+        var cases = new (string Name, int Camera)[] { ("CAM_5", 5), ("CAM_0", 0), ("OVER", 5), ("DT", 0), ("PAIR", 0) };
+        for (int i = 0; i < cases.Length; i++) {
+            var (name, camera) = cases[i];
+            var preview = PictureFactory.Jpeg(PhotoWidth, PhotoHeight, 1, name + " CR3", seed: 4000 + i);
+            RawFiles.WriteCr3(Path.Combine(dir, name + ".CR3"), 1, 1024 * 1024, preview, PhotoWidth, PhotoHeight, seed: 400 + i, cameraRating: camera);
+        }
+        File.WriteAllText(Path.Combine(dir, "OVER.CR3.pp3"), Pp3(1, 0), Encoding.UTF8);
+        File.WriteAllText(Path.Combine(dir, "DT.CR3.xmp"), Xmp(3, ""), Encoding.UTF8);
+        File.WriteAllText(Path.Combine(dir, "DT_01.CR3.xmp"), Xmp(1, ""), Encoding.UTF8);
+        File.WriteAllText(Path.Combine(dir, "PAIR.CR3.pp3"), Pp3(2, 0), Encoding.UTF8);
+        File.WriteAllText(Path.Combine(dir, "PAIR.xmp"), Xmp(2, ""), Encoding.UTF8);
+        c.Dir("ratings", "target");
     }
 
     private static void Big(SandboxContext c) {

@@ -25,8 +25,8 @@ public sealed class CompanionResolver {
         // darktable appends: IMG_1234.CR2 -> IMG_1234.CR2.xmp. Ahead of the
         // replaced rule on purpose - by stem, IMG.CR2.xmp would go to
         // IMG.CR2.pp3 (stem "IMG.CR2") and stay on screen as a sidecar of
-        // a sidecar.
-        new CompanionRule(".xmp", CompanionNaming.Appended, "darktable .xmp"),
+        // a sidecar. Its duplicates (IMG_1234_01.CR2.xmp) come with it.
+        new CompanionRule(".xmp", CompanionNaming.Appended, "darktable .xmp", Versions: true),
         // XMP replaces the extension: IMG_1234.CR2 -> IMG_1234.xmp. Adobe
         // and exiftool write it, which makes it the widest reaching
         // sidecar of them all.
@@ -174,6 +174,21 @@ public sealed class CompanionResolver {
             }
         }
 
+        // Versions are an editor's of a picture; one folder query per picture
+        // dropped or pasted, none for everything else.
+        foreach (var rule in _rules.Where(r => r.Versions && ImageFormats.IsImage(name))) {
+            string pattern = Path.GetFileNameWithoutExtension(name) + "_*" + Path.GetExtension(name) + rule.Suffix;
+            foreach (string version in fs.FileNamesLike(dir, pattern)) {
+                // IMG_01.CR2.xmp beside a file IMG_01.CR2 is that file's own.
+                if (rule.TryVersion(version, out string of, out _)
+                    && string.Equals(of, name, StringComparison.OrdinalIgnoreCase)
+                    && rule.TryMatch(version, out string exact) && !fs.FileExists(Path.Combine(dir, exact))) {
+                    found ??= new List<string>();
+                    found.Add(Path.Combine(dir, version));
+                }
+            }
+        }
+
         return (IReadOnlyList<string>?)found ?? Array.Empty<string>();
     }
 
@@ -265,6 +280,8 @@ public sealed class CompanionResolver {
         foreach (string companion in companions ?? Array.Empty<string>()) {
             if (RuleFor(companion, mainName) is { } rule) {
                 plan.Add((companion, rule.CompanionNameFor(newMainName)));
+            } else if (VersionOf(Path.GetFileName(companion), mainName) is { } version) {
+                plan.Add((companion, version.Rule.VersionNameFor(newMainName, version.Number)));
             }
         }
 
@@ -286,6 +303,9 @@ public sealed class CompanionResolver {
 
             if (rule.Naming == CompanionNaming.Appended) {
                 if (siblings.TryGetValue(key, out string? main)) {
+                    return main;
+                }
+                if (rule.TryVersion(name, out string of, out _) && siblings.TryGetValue(of, out main)) {
                     return main;
                 }
                 continue;
@@ -329,6 +349,17 @@ public sealed class CompanionResolver {
         return raw.Count == 1 ? raw[0] : null;
     }
 
+    /// <summary>The numbered-version rule and number that make <paramref name="name"/> a companion of <paramref name="mainName"/>, or null.</summary>
+    private (CompanionRule Rule, string Number)? VersionOf(string name, string mainName) {
+        foreach (var rule in _rules) {
+            if (rule.TryVersion(name, out string of, out string number) && string.Equals(of, mainName, StringComparison.OrdinalIgnoreCase)) {
+                return (rule, number);
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>A RAW file with the same stem as <paramref name="name"/> exists in <paramref name="dir"/>.</summary>
     private static bool RawSiblingExists(string dir, string name, IFileSystem fs) {
         string stem = Path.GetFileNameWithoutExtension(name);
@@ -354,6 +385,11 @@ public sealed class CompanionResolver {
 
             if (rule.Naming == CompanionNaming.Appended) {
                 if (byName.TryGetValue(key, out var main) && !ReferenceEquals(main, candidate)) {
+                    return main;
+                }
+                // darktable's duplicate, IMG_01.CR2.xmp: no IMG_01.CR2 to own it.
+                if (rule.TryVersion(candidate.Name, out string of, out _)
+                    && byName.TryGetValue(of, out main) && main.Kind == EntryKind.File) {
                     return main;
                 }
                 continue;

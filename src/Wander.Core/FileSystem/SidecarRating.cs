@@ -14,7 +14,12 @@ namespace Wander.Core.FileSystem;
 /// the label isn't empty — a "Client approved" label is information, and
 /// showing nothing would be a lie.
 /// </param>
-public sealed record SidecarRating(int? Rank, int? ColorLabel, string? ColorLabelName = null);
+/// <param name="InPhoto">
+/// Part of it was read out of the photo itself (the camera's stars, see
+/// <c>EmbeddedRating</c>) rather than out of a sidecar - the stars look the
+/// same, the tooltip says where they come from.
+/// </param>
+public sealed record SidecarRating(int? Rank, int? ColorLabel, string? ColorLabelName = null, bool InPhoto = false);
 
 
 /// <summary>

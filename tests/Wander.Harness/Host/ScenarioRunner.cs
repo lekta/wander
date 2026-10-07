@@ -248,6 +248,20 @@ public sealed class ScenarioRunner {
                 _vm.SetSortKeyCommand.Execute(step.Require("key"));
                 await WaitIdleAsync(step);
                 break;
+            // Stars or a colour on the selection - the gallery's digits and
+            // Shift + digits; the creation question goes to the dialog policy.
+            case "rate":
+                EnsureInSandbox("rate");
+                if (step.TryGetProperty("rank", out var rank)) {
+                    _vm.SetRankForSelection(rank.GetInt32().ToString(System.Globalization.CultureInfo.InvariantCulture));
+                } else {
+                    _vm.SetColorForSelection(step.Int("color", 0));
+                }
+                await WaitIdleAsync(step);
+                break;
+            case "assert-files":
+                AssertFiles(step);
+                break;
             case "stars":
                 if (step.Bool("clear") == true) {
                     _vm.ClearRatingFilterCommand.Execute(null);
@@ -598,6 +612,23 @@ public sealed class ScenarioRunner {
             case "append":
                 File.AppendAllText(path, step.Str("text") ?? "x");
                 break;
+            // A sidecar saved by another program: the whole file anew.
+            case "write":
+                File.WriteAllText(path, step.Require("text"));
+                break;
+            // The rating inside a synthetic CR3 rewritten in place, the way
+            // exiftool does it; "keepTime" as with its -P.
+            case "camera-rating": {
+                    var modified = File.GetLastWriteTimeUtc(path);
+                    byte[] bytes = File.ReadAllBytes(path);
+                    string latin = System.Text.Encoding.Latin1.GetString(bytes);
+                    string rewritten = Regex.Replace(latin, @"<xmp:Rating>\d</xmp:Rating>", $"<xmp:Rating>{step.Int("rating", 0)}</xmp:Rating>");
+                    File.WriteAllBytes(path, System.Text.Encoding.Latin1.GetBytes(rewritten));
+                    if (step.Bool("keepTime") == true) {
+                        File.SetLastWriteTimeUtc(path, modified);
+                    }
+                    break;
+                }
             // Missing is not an error: this is the step a scenario opens
             // with to clear what a previous run left when it died halfway,
             // and it has to work on a clean sandbox too.
@@ -1027,6 +1058,55 @@ public sealed class ScenarioRunner {
                 }
             }
         }
+        // The stars a row shows (0 for none) and how many sidecars it carries.
+        foreach (var (name, expected) in Numbers(step, "ranks")) {
+            int shown = Entry(name).Rating?.Rank ?? 0;
+            if (shown != expected) {
+                throw new InvalidOperationException($"'{name}' shows {shown} stars, expected {expected}");
+            }
+        }
+        foreach (var (name, expected) in Numbers(step, "companions")) {
+            int carried = Entry(name).Companions?.Count ?? 0;
+            if (carried != expected) {
+                throw new InvalidOperationException($"'{name}' carries {carried} companions, expected {expected}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Files on disk, by path with <c>{sandbox}</c>: there, gone, and the stars
+    /// a sidecar holds - <c>xmp:Rating</c> in either XMP form, <c>Rank</c> in
+    /// a <c>.pp3</c>. What the listing shows is <c>assert-entries</c>; this is
+    /// what was written.
+    /// </summary>
+    private void AssertFiles(JsonElement step) {
+        foreach (string path in step.Strings("exist").Select(_context.Expand)) {
+            if (!File.Exists(path)) {
+                throw new InvalidOperationException($"file missing: {path}");
+            }
+        }
+        foreach (string path in step.Strings("absent").Select(_context.Expand)) {
+            if (File.Exists(path)) {
+                throw new InvalidOperationException($"file still there: {path}");
+            }
+        }
+        foreach (var (raw, expected) in Numbers(step, "ranks")) {
+            string path = _context.Expand(raw);
+            var match = Regex.Match(File.ReadAllText(path), @"xmp:Rating(?:=""|>)(\d)|^Rank=(\d)", RegexOptions.Multiline);
+            int held = match.Success ? int.Parse(match.Groups[1].Success ? match.Groups[1].Value : match.Groups[2].Value) : -1;
+            if (held != expected) {
+                throw new InvalidOperationException($"{Path.GetFileName(path)} holds {held}, expected {expected}");
+            }
+        }
+    }
+
+    /// <summary>An object of name → number in a step, empty when the step has none.</summary>
+    private static IEnumerable<(string Name, int Value)> Numbers(JsonElement step, string key) {
+        if (!step.TryGetProperty(key, out var map) || map.ValueKind != JsonValueKind.Object) {
+            return Array.Empty<(string, int)>();
+        }
+
+        return map.EnumerateObject().Select(p => (p.Name, p.Value.GetInt32())).ToArray();
     }
 
 

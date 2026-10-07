@@ -264,7 +264,7 @@
         -->
         <Style x:Key="RatingStarButton" TargetType="Button" BasedOn="{StaticResource StarButton}">
             <Setter Property="Command" Value="{Binding SetRankCommand}"/>
-            <Setter Property="ToolTip" Value="{Binding RatingSource, StringFormat={x:Static res:Strings.PreviewRatingWrittenTo}}"/>
+            <Setter Property="ToolTip" Value="{Binding RatingTip}"/>
             <Style.Triggers>
                 <!--
                     A photo with no sidecar yet. The stars are live - the
@@ -276,7 +276,6 @@
                 -->
                 <DataTrigger Binding="{Binding IsRatingUnsaved}" Value="True">
                     <Setter Property="Opacity" Value="0.55"/>
-                    <Setter Property="ToolTip" Value="{x:Static res:Strings.PreviewRatingUnsaved}"/>
                 </DataTrigger>
             </Style.Triggers>
         </Style>

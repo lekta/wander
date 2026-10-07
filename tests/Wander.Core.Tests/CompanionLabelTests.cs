@@ -38,6 +38,13 @@ public class CompanionLabelTests {
     }
 
     [Fact]
+    public void DarktableDuplicates_AreEachNamed() {
+        Assert.Equal(
+            "(+.xmp, _01.CR2.xmp, _02.CR2.xmp)",
+            CompanionLabel.For("IMG.CR2", new[] { "IMG.CR2.xmp", "IMG_01.CR2.xmp", "IMG_02.CR2.xmp" }));
+    }
+
+    [Fact]
     public void NamedOtherwise_FallsBackToTheExtension_OrTheName() {
         Assert.Equal("(+.json)", CompanionLabel.For("a.png", new[] { "b.json" }));
         Assert.Equal("(+notes)", CompanionLabel.For("a.png", new[] { "notes" }));

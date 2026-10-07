@@ -5,7 +5,6 @@ using Wander.App.ViewModels;
 using Wander.Core.Companions;
 using Wander.Core.Diagnostics;
 using Wander.Core.FileSystem;
-using Wander.Core.Icons;
 using Wander.Core.Listing;
 using Wander.Core.Logging;
 
@@ -105,7 +104,7 @@ public sealed class RatingsController {
         IReadOnlyList<FileSystemEntry> items, string path, SortOptions sort, int epoch, bool arriving) {
         Cancel();
 
-        bool willRun = _metadata is not null && items.Any(e => e.HasCompanions);
+        bool willRun = _metadata is not null && items.Any(e => e.HasCompanions || EmbeddedRating.Reads(e.Name));
         if (arriving || !willRun) {
             HasRatingsChanged?.Invoke(this, false);
         }
@@ -156,31 +155,27 @@ public sealed class RatingsController {
             return empty;
         }
 
-        var targets = new List<CompanionMetadataService.RatingTarget>();
+        var targets = new List<FileSystemEntry>();
         var wouldNeedSidecar = new List<FileSystemEntry>();
 
+        // Which photos get a new file is Core's call (PlanWrite): clearing
+        // creates one only over the camera's own stars. The question itself
+        // is switchable (Settings.ConfirmCreateSidecar) - a rating pass over
+        // a folder of RAW answers it yes every time.
         foreach (var entry in entries) {
-            if (entry.IsFolderLike) {
-                continue;
-            }
-            if (RatingSidecarOf(entry) is { } sidecar) {
-                targets.Add(new CompanionMetadataService.RatingTarget(entry.FullPath, sidecar));
-                continue;
-            }
-            if (ImageFormats.IsImage(entry.Name)) {
-                wouldNeedSidecar.Add(entry);
+            switch (_metadata.PlanWrite(entry, field, value)) {
+                case RatingWrite.Edit:
+                    targets.Add(entry);
+                    break;
+                case RatingWrite.Create:
+                    wouldNeedSidecar.Add(entry);
+                    break;
             }
         }
 
-        // Clearing a rating never brings a file into existence: a sidecar
-        // created to record "no stars" is exactly the file nobody wanted.
-        // The question itself is switchable (Settings.ConfirmCreateSidecar)
-        // - a rating pass over a folder of RAW answers it yes every time.
-        if (value > 0 && wouldNeedSidecar.Count > 0
+        if (wouldNeedSidecar.Count > 0
             && (!_settings.ConfirmCreateSidecar || _ask(SidecarQuestion(wouldNeedSidecar)))) {
-            foreach (var entry in wouldNeedSidecar) {
-                targets.Add(new CompanionMetadataService.RatingTarget(entry.FullPath, null));
-            }
+            targets.AddRange(wouldNeedSidecar);
         }
 
         if (targets.Count == 0) {
@@ -415,12 +410,6 @@ public sealed class RatingsController {
         return FileInUse.Is(error) ? Strings.ErrorInUse
             : error is UnauthorizedAccessException ? Strings.ErrorNoWriteAccess
             : "";
-    }
-
-
-    /// <summary>Path of the companion that holds this row's rating, or null when it has none.</summary>
-    private static string? RatingSidecarOf(FileSystemEntry entry) {
-        return CompanionMetadataService.RatingSidecars(entry.Name, entry.Companions).FirstOrDefault();
     }
 
 

@@ -1277,6 +1277,9 @@
   <data name="PreviewRatingUnsaved" xml:space="preserve">
     <value>Оценки пока нет. Щелчок по звезде создаст файл рядом со снимком — с подтверждением.</value>
   </data>
+  <data name="PreviewRatingInPhoto" xml:space="preserve">
+    <value>Оценка из самого снимка — её поставила камера. Щелчок по звезде создаст рядом файл с новой оценкой — с подтверждением; снимок не меняется.</value>
+  </data>
   <data name="SettingsCategoryGallery" xml:space="preserve">
     <value>Галерея</value>
   </data>

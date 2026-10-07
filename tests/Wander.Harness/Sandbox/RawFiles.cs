@@ -25,6 +25,11 @@ public static class RawFiles {
         0xb9, 0xfb, 0xb7, 0xdc, 0x40, 0x6e, 0x4d, 0x16,
     };
 
+    private static readonly byte[] _xmpUuid = {
+        0xbe, 0x7a, 0xcf, 0xcb, 0x97, 0xa9, 0x42, 0xe8,
+        0x9c, 0x71, 0x99, 0x94, 0x91, 0xe3, 0xaf, 0xac,
+    };
+
     private const ushort TagNewSubfileType = 0x00FE;
     private const ushort TagImageWidth = 0x0100;
     private const ushort TagImageLength = 0x0101;
@@ -71,19 +76,31 @@ public static class RawFiles {
         };
     }
 
+    /// <summary>The XMP packet a Canon R8 writes into a CR3, element form, as found in a real one (2026-10-07).</summary>
+    public static string CameraPacket(int rating) {
+        return "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">"
+            + "<rdf:Description rdf:about=\"\" xmlns:xmp=\"http://ns.adobe.com/xap/1.0/\">"
+            + $"<xmp:Rating>{rating}</xmp:Rating></rdf:Description></rdf:RDF></x:xmpmeta>";
+    }
+
     /// <summary>
     /// Canon CR3: ISO-BMFF. <c>ftyp</c>, a <c>moov</c> holding Canon's metadata
     /// uuid (CMT1 = IFD0 TIFF with the orientation, CMT2 = Exif TIFF), the
-    /// top-level preview uuid with the <c>PRVW</c> JPEG, and an <c>mdat</c> of
-    /// noise that brings the file to <paramref name="totalBytes"/>.
+    /// XMP uuid with the camera's <c>xmp:Rating</c> (0 for a frame nobody
+    /// rated, as a Canon R body writes it), the top-level preview uuid with
+    /// the <c>PRVW</c> JPEG, and an <c>mdat</c> of noise that brings the file
+    /// to <paramref name="totalBytes"/>.
     /// </summary>
-    public static void WriteCr3(string path, int orientation, long totalBytes, byte[] previewJpeg, int previewWidth, int previewHeight, int seed) {
+    public static void WriteCr3(
+        string path, int orientation, long totalBytes, byte[] previewJpeg, int previewWidth, int previewHeight, int seed,
+        int cameraRating = 0) {
         var ftyp = Box("ftyp", Concat(Ascii("crx "), U32(1), Ascii("isom"), Ascii("crx ")));
         var meta = UuidBox(_canonMetaUuid, Concat(
             Box("CNCV", Ascii("CanonCR3_001/01.09.00/00.00.00")),
             Box("CMT1", Ifd0Tiff(orientation, "Canon", "Canon EOS R5 (synthetic)")),
             Box("CMT2", ExifTiff(previewWidth, previewHeight))));
         var moov = Box("moov", meta);
+        var xmp = UuidBox(_xmpUuid, Concat(Encoding.UTF8.GetBytes(CameraPacket(cameraRating)), new byte[512]));
 
         var prvw = Concat(
             U32(24 + previewJpeg.Length), Ascii("PRVW"), U32(0),
@@ -91,12 +108,13 @@ public static class RawFiles {
             U32(previewJpeg.Length), previewJpeg);
         var preview = UuidBox(_canonPreviewUuid, Concat(new byte[8], prvw));
 
-        long fixedBytes = ftyp.Length + moov.Length + preview.Length + 8;
+        long fixedBytes = ftyp.Length + moov.Length + xmp.Length + preview.Length + 8;
         long padding = Math.Max(1024, totalBytes - fixedBytes);
 
         using var file = File.Create(path);
         file.Write(ftyp);
         file.Write(moov);
+        file.Write(xmp);
         file.Write(preview);
         file.Write(U32(checked((int)(8 + padding))));
         file.Write(Ascii("mdat"));

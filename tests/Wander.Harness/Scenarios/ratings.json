@@ -1,0 +1,122 @@
+{
+  // Patch 0.5.1, where a photo's rating lives: the camera's own stars and a
+  // sidecar over them, the 0 the camera writes into every other frame,
+  // clearing the camera's stars by a sidecar with 0, a rating written into
+  // both sidecars a photo has and taken back with one undo, another
+  // program's edit of a sidecar and of the photo itself while the folder
+  // is open, and darktable's IMG.CR3.xmp with its duplicate going wherever
+  // the RAW goes - rename, copy, move, delete, and undo of each.
+  //
+  // The sleeps after a change made from outside are the watch interval
+  // (500 ms) plus room for the rows it re-reads, as in watcher.json.
+  "name": "ratings",
+  "sandbox": "ratings",
+  "profiles": [ "ratings" ],
+  "steps": [
+    // A run that died halfway leaves files behind; the counts below would
+    // then be counting them.
+    { "do": "fs", "op": "delete", "path": "{sandbox}\\ratings\\target" },
+    { "do": "fs", "op": "mkdir", "path": "{sandbox}\\ratings\\target" },
+    { "do": "fs", "op": "delete", "path": "{sandbox}\\ratings\\CAM_5.xmp" },
+    { "do": "navigate", "path": "{sandbox}\\ratings" },
+    { "do": "sleep", "ms": 800 },
+
+    // --- What the photo says, and a sidecar over it -------------------
+    {
+      "do": "assert-entries", "count": 6,
+      "absent": [ "DT.CR3.xmp", "DT_01.CR3.xmp", "PAIR.xmp", "PAIR.CR3.pp3", "OVER.CR3.pp3" ],
+      "ranks": { "CAM_5.CR3": 5, "CAM_0.CR3": 0, "OVER.CR3": 1, "DT.CR3": 3, "PAIR.CR3": 2 },
+      "companions": { "CAM_5.CR3": 0, "OVER.CR3": 1, "DT.CR3": 2, "PAIR.CR3": 2 }
+    },
+    { "do": "note", "text": "the camera's stars show without a sidecar, its 0 shows none, a .pp3 overrides the camera; darktable's .CR3.xmp and its duplicate fold into the RAW, the stars are the original's" },
+    { "do": "screenshot", "name": "ratings-arrived" },
+
+    // --- Clearing the camera's stars ----------------------------------
+    // Wander does not write into the RAW: a sidecar with 0 goes over it,
+    // after the same question as any new sidecar.
+    { "do": "dialogs", "kind": "CreateSidecar", "accept": true },
+    { "do": "select", "names": [ "CAM_5.CR3" ] },
+    { "do": "rate", "rank": 0 },
+    { "do": "assert-files", "exist": [ "{sandbox}\\ratings\\CAM_5.xmp" ], "ranks": { "{sandbox}\\ratings\\CAM_5.xmp": 0 } },
+    { "do": "sleep", "ms": 800 },
+    { "do": "assert-entries", "ranks": { "CAM_5.CR3": 0 }, "companions": { "CAM_5.CR3": 1 } },
+    { "do": "command", "name": "undo" },
+    { "do": "sleep", "ms": 800 },
+    { "do": "assert-files", "absent": [ "{sandbox}\\ratings\\CAM_5.xmp" ] },
+    { "do": "assert-entries", "ranks": { "CAM_5.CR3": 5 } },
+    { "do": "note", "text": "clearing the camera's stars made CAM_5.xmp with 0; undo took the file away and the stars came back" },
+
+    // --- Two sidecars, one undo ---------------------------------------
+    { "do": "select", "names": [ "PAIR.CR3" ] },
+    { "do": "rate", "rank": 4 },
+    { "do": "assert-files", "ranks": { "{sandbox}\\ratings\\PAIR.CR3.pp3": 4, "{sandbox}\\ratings\\PAIR.xmp": 4 } },
+    { "do": "assert-entries", "ranks": { "PAIR.CR3": 4 } },
+    { "do": "command", "name": "undo" },
+    { "do": "assert-files", "ranks": { "{sandbox}\\ratings\\PAIR.CR3.pp3": 2, "{sandbox}\\ratings\\PAIR.xmp": 2 } },
+    { "do": "note", "text": "four stars went into both the .pp3 and IMG.xmp, one undo took both back" },
+
+    // --- Another program, the folder open -----------------------------
+    {
+      "do": "fs", "op": "write", "path": "{sandbox}\\ratings\\DT.CR3.xmp",
+      "text": "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"><rdf:Description rdf:about=\"\" xmlns:xmp=\"http://ns.adobe.com/xap/1.0/\" xmp:Rating=\"5\"/></rdf:RDF></x:xmpmeta>"
+    },
+    { "do": "sleep", "ms": 1500 },
+    { "do": "assert-entries", "ranks": { "DT.CR3": 5 } },
+    { "do": "note", "text": "darktable's sidecar saved from outside: the row shows the new stars without a refresh" },
+
+    // The rating inside the RAW rewritten, its time kept (exiftool -P):
+    // the watcher sees the write, F5 reads the photo again too.
+    { "do": "fs", "op": "camera-rating", "path": "{sandbox}\\ratings\\CAM_0.CR3", "rating": 4, "keepTime": true },
+    { "do": "sleep", "ms": 1500 },
+    { "do": "assert-entries", "ranks": { "CAM_0.CR3": 4 } },
+    { "do": "command", "name": "refresh" },
+    { "do": "sleep", "ms": 800 },
+    { "do": "assert-entries", "ranks": { "CAM_0.CR3": 4 } },
+    { "do": "fs", "op": "camera-rating", "path": "{sandbox}\\ratings\\CAM_0.CR3", "rating": 0, "keepTime": true },
+    { "do": "sleep", "ms": 1500 },
+    { "do": "assert-entries", "ranks": { "CAM_0.CR3": 0 } },
+    { "do": "note", "text": "the camera's rating rewritten inside the RAW with its time kept reached the row, through the watcher and through F5" },
+
+    // --- darktable's sidecar and its duplicate go with the RAW ---------
+    { "do": "rename", "name": "DT.CR3", "to": "DTR.CR3" },
+    {
+      "do": "assert-files",
+      "exist": [ "{sandbox}\\ratings\\DTR.CR3.xmp", "{sandbox}\\ratings\\DTR_01.CR3.xmp" ],
+      "absent": [ "{sandbox}\\ratings\\DT.CR3.xmp", "{sandbox}\\ratings\\DT_01.CR3.xmp" ]
+    },
+    { "do": "command", "name": "undo" },
+    { "do": "assert-files", "exist": [ "{sandbox}\\ratings\\DT.CR3.xmp", "{sandbox}\\ratings\\DT_01.CR3.xmp" ] },
+
+    { "do": "select", "names": [ "DT.CR3" ] },
+    { "do": "command", "name": "copy" },
+    { "do": "navigate", "path": "{sandbox}\\ratings\\target" },
+    { "do": "command", "name": "paste" },
+    { "do": "assert-entries", "count": 1, "companions": { "DT.CR3": 2 } },
+    { "do": "assert-files", "exist": [ "{sandbox}\\ratings\\target\\DT.CR3.xmp", "{sandbox}\\ratings\\target\\DT_01.CR3.xmp" ] },
+    { "do": "select", "names": [ "DT.CR3" ] },
+    { "do": "command", "name": "permanent-delete" },
+    { "do": "assert-files", "absent": [ "{sandbox}\\ratings\\target\\DT.CR3", "{sandbox}\\ratings\\target\\DT.CR3.xmp", "{sandbox}\\ratings\\target\\DT_01.CR3.xmp" ] },
+
+    { "do": "navigate", "path": "{sandbox}\\ratings" },
+    { "do": "select", "names": [ "DT.CR3" ] },
+    { "do": "command", "name": "cut" },
+    { "do": "navigate", "path": "{sandbox}\\ratings\\target" },
+    { "do": "command", "name": "paste" },
+    { "do": "assert-files", "exist": [ "{sandbox}\\ratings\\target\\DT.CR3.xmp", "{sandbox}\\ratings\\target\\DT_01.CR3.xmp" ], "absent": [ "{sandbox}\\ratings\\DT_01.CR3.xmp" ] },
+    { "do": "command", "name": "undo" },
+    { "do": "assert-files", "exist": [ "{sandbox}\\ratings\\DT.CR3.xmp", "{sandbox}\\ratings\\DT_01.CR3.xmp" ], "absent": [ "{sandbox}\\ratings\\target\\DT_01.CR3.xmp" ] },
+
+    { "do": "navigate", "path": "{sandbox}\\ratings" },
+    { "do": "select", "names": [ "DT.CR3" ] },
+    { "do": "command", "name": "delete" },
+    { "do": "assert-files", "absent": [ "{sandbox}\\ratings\\DT.CR3", "{sandbox}\\ratings\\DT.CR3.xmp", "{sandbox}\\ratings\\DT_01.CR3.xmp" ] },
+    { "do": "command", "name": "undo" },
+    { "do": "assert-files", "exist": [ "{sandbox}\\ratings\\DT.CR3", "{sandbox}\\ratings\\DT.CR3.xmp", "{sandbox}\\ratings\\DT_01.CR3.xmp" ] },
+    { "do": "note", "text": "DT.CR3.xmp and DT_01.CR3.xmp went with the RAW through rename, copy, move and delete, and came back with each undo" },
+
+    // As the sandbox was built: the next run starts from three stars.
+    { "do": "fs", "op": "write", "path": "{sandbox}\\ratings\\DT.CR3.xmp", "text": "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"><rdf:Description rdf:about=\"\" xmlns:xmp=\"http://ns.adobe.com/xap/1.0/\" xmp:Rating=\"3\"/></rdf:RDF></x:xmpmeta>" },
+
+    { "do": "assert-log", "scope": "all", "noErrors": true, "allow": [ "Permanent delete" ] }
+  ]
+}

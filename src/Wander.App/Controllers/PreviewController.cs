@@ -306,7 +306,13 @@ public sealed class PreviewController : ObservableObject {
     private string _companionStatus = "";
     private string? _unityGuid;
     private string? _unityDetail;
-    private string? _ratingPath;
+
+    // The sidecars a star writes into, the one the rating is read from
+    // first; empty when the photo has none.
+    private IReadOnlyList<string> _ratingSidecars = Array.Empty<string>();
+
+    // The stars on show came out of the photo itself - the camera's.
+    private bool _ratingInPhoto;
 
     // The photo a star would have to create a sidecar for. Set only when
     // there is no sidecar yet; the two are never both meaningful.
@@ -997,18 +1003,26 @@ public sealed class PreviewController : ObservableObject {
     /// sidecar whose rating can be shown and edited (a RawTherapee
     /// <c>.pp3</c> or an XMP), or it is a picture that could have one.
     /// </summary>
-    public bool HasRating => _ratingPath is not null || _ratingTarget is not null;
+    public bool HasRating => _ratingSidecars.Count > 0 || _ratingTarget is not null;
 
     /// <summary>
     /// True for a picture with no rating sidecar yet: the stars are there
     /// to be clicked, and the first click creates the file. Shown differently
     /// from a real rating — five hollow stars that mean "not rated" and five
-    /// that mean "no file to rate into" are not the same statement.
+    /// that mean "no file to rate into" are not the same statement. Stars
+    /// the camera wrote into the photo are a real rating, shown as one.
     /// </summary>
-    public bool IsRatingUnsaved => _ratingPath is null && _ratingTarget is not null;
+    public bool IsRatingUnsaved => _ratingSidecars.Count == 0 && _ratingTarget is not null && !_ratingInPhoto;
 
-    /// <summary>Name of the file the rating is read from and written to, for the tooltip.</summary>
-    public string RatingSource => _ratingPath is not null ? Path.GetFileName(_ratingPath) : "";
+    /// <summary>
+    /// The stars' tooltip: the files a star writes into; or that the stars
+    /// are the photo's own and a click makes a sidecar over them (decision
+    /// 2026-10-01: the camera's stars look like any, the tooltip tells); or
+    /// that a click makes the first sidecar.
+    /// </summary>
+    public string RatingTip => _ratingSidecars.Count > 0
+        ? string.Format(Strings.PreviewRatingWrittenTo, string.Join(", ", _ratingSidecars.Select(Path.GetFileName)))
+        : _ratingInPhoto ? Strings.PreviewRatingInPhoto : Strings.PreviewRatingUnsaved;
 
     /// <summary>Stars currently written in the sidecar, 0…5.</summary>
     public int Rank {
@@ -3105,8 +3119,8 @@ public sealed class PreviewController : ObservableObject {
             return;
         }
 
-        var companions = _primary.Companions;
-        if (companions is null || companions.Count == 0) {
+        var companions = _primary.Companions ?? Array.Empty<string>();
+        if (companions.Count == 0 && !EmbeddedRating.Reads(_primary.Name)) {
             ClearCompanionInfo();
             // Nothing beside the file — but if it is a photograph, the stars
             // still appear, because "rate this raw" should not mean "go and
@@ -3120,9 +3134,10 @@ public sealed class PreviewController : ObservableObject {
 
         // Sidecars are tiny, but they still live on the same disk that can
         // be a sleeping spindle or a network share — off the UI thread like
-        // every other read here.
-        string name = _primary.Name;
-        var loaded = await Task.Run(() => Load(name, companions), ct);
+        // every other read here. So is the photo's own rating, a header read
+        // the folder's rating pass has usually cached already.
+        var primary = _primary;
+        var loaded = await Task.Run(() => Load(primary, companions), ct);
         if (ct.IsCancellationRequested) {
             return;
         }
@@ -3135,37 +3150,36 @@ public sealed class PreviewController : ObservableObject {
         ClearCompanionInfo();
         UnityGuid = loaded.Meta?.Guid;
         UnityDetail = DescribeMeta(loaded.Meta);
-        ShowRating(loaded.RatingPath, loaded.Rating);
+        ShowRating(loaded.RatingSidecars, loaded.Rating);
 
         // A photo can have companions and still no place for a rating — a
         // Unity .meta next to a PNG is the everyday case.
-        if (loaded.RatingPath is null) {
+        if (loaded.RatingSidecars.Count == 0) {
             OfferRating(_primary);
         }
         _companionsOf = _primary.FullPath;
         NoteRatingShown(_primary.FullPath);
     }
 
-    private (UnityMetaInfo? Meta, string? RatingPath, SidecarRating? Rating) Load(
-        string mainName, IReadOnlyList<string> companions) {
+    private (UnityMetaInfo? Meta, IReadOnlyList<string> RatingSidecars, SidecarRating? Rating) Load(
+        FileSystemEntry primary, IReadOnlyList<string> companions) {
         UnityMetaInfo? meta = null;
-        string? ratingPath = null;
-        SidecarRating? rating = null;
-
         foreach (string path in companions) {
             if (meta is null && Path.GetExtension(path).Equals(".meta", StringComparison.OrdinalIgnoreCase)) {
                 meta = _companionMetadata!.ReadUnityMeta(path);
             }
         }
-        foreach (string path in CompanionMetadataService.RatingSidecars(mainName, companions)) {
-            rating = _companionMetadata!.ReadRating(path);
-            if (rating is not null) {
-                ratingPath = path;
+
+        var sidecars = _companionMetadata!.RatingSidecars(primary.Name, companions);
+        SidecarRating? fromSidecar = null;
+        foreach (string path in sidecars) {
+            fromSidecar = _companionMetadata.ReadRating(path);
+            if (fromSidecar is not null) {
                 break;
             }
         }
 
-        return (meta, ratingPath, rating);
+        return (meta, sidecars, EmbeddedRating.Merge(fromSidecar, _companionMetadata.PhotoRating(primary)));
     }
 
     /// <summary>
@@ -3190,9 +3204,10 @@ public sealed class PreviewController : ObservableObject {
         SetColorLabelCommand.RaiseCanExecuteChanged();
     }
 
-    /// <summary>Points the rating row at a sidecar (or at nothing) and refreshes what it shows.</summary>
-    private void ShowRating(string? path, SidecarRating? rating) {
-        _ratingPath = path;
+    /// <summary>Points the rating row at its sidecars (or at none) and refreshes what it shows.</summary>
+    private void ShowRating(IReadOnlyList<string> sidecars, SidecarRating? rating) {
+        _ratingSidecars = sidecars;
+        _ratingInPhoto = rating?.InPhoto == true;
         _colorLabel = rating?.ColorLabel ?? 0;
         Rank = rating?.Rank ?? 0;
 
@@ -3208,7 +3223,7 @@ public sealed class PreviewController : ObservableObject {
 
         Raise(nameof(HasRating));
         Raise(nameof(IsRatingUnsaved));
-        Raise(nameof(RatingSource));
+        Raise(nameof(RatingTip));
         SetRankCommand.RaiseCanExecuteChanged();
         SetColorLabelCommand.RaiseCanExecuteChanged();
         CopyGuidCommand.RaiseCanExecuteChanged();
@@ -3268,7 +3283,7 @@ public sealed class PreviewController : ObservableObject {
         // sidecar. Showing the value we were handed keeps the stars from
         // lagging a frame behind the click in the meantime.
         _ratingTarget = null;
-        ShowRating(_ratingPath ?? "", request.Rating);
+        ShowRating(_ratingSidecars.Count > 0 ? _ratingSidecars : new[] { "" }, request.Rating);
         NoteRatingShown(request.Entry.FullPath);
     }
 
@@ -3329,7 +3344,7 @@ public sealed class PreviewController : ObservableObject {
         UnityDetail = null;
         CompanionStatus = "";
         _ratingTarget = null;
-        ShowRating(null, null);
+        ShowRating(Array.Empty<string>(), null);
     }
 
 

@@ -217,6 +217,68 @@ public class CompanionResolverTests {
     }
 
 
+    // --- darktable's duplicates: IMG_01.CR3.xmp --------------------------
+
+    [Fact]
+    public void Collapse_FoldsDuplicates_IntoTheRaw() {
+        var result = CompanionResolver.Default.Collapse(new[] {
+            File("IMG.CR3"), File("IMG.CR3.xmp"), File("IMG_01.CR3.xmp"), File("IMG_02.CR3.xmp"),
+        });
+
+        var only = Assert.Single(result);
+        Assert.Equal(3, only.Companions!.Count);
+    }
+
+    [Fact]
+    public void Collapse_ADuplicateNamedAfterAnotherFile_IsThatFilesOwn() {
+        var result = CompanionResolver.Default.Collapse(new[] {
+            File("IMG.CR3"), File("IMG_01.CR3"), File("IMG_01.CR3.xmp"),
+        });
+
+        Assert.False(Assert.Single(result, e => e.Name == "IMG.CR3").HasCompanions);
+        Assert.Equal(@"C:\assets\IMG_01.CR3.xmp", Assert.Single(Assert.Single(result, e => e.Name == "IMG_01.CR3").Companions!));
+    }
+
+    [Fact]
+    public void Collapse_OneDigitIsNotADuplicate() {
+        // darktable numbers its versions with two digits or more.
+        var result = CompanionResolver.Default.Collapse(new[] { File("IMG.CR3"), File("IMG_1.CR3.xmp") });
+
+        Assert.Equal(2, result.Count);
+    }
+
+    [Fact]
+    public void Group_FoldsDuplicates_IntoTheRaw() {
+        var groups = CompanionResolver.Default.Group(new[] { @"C:\p\IMG.CR3", @"C:\p\IMG_01.CR3.xmp" });
+
+        Assert.Equal(@"C:\p\IMG_01.CR3.xmp", Assert.Single(Assert.Single(groups).Companions));
+    }
+
+    [Fact]
+    public void FindCompanions_FindsDuplicates_ButNotAnotherFilesOwn() {
+        var fs = new FakeFileSystem();
+        foreach (string name in new[] { "IMG.CR3", "IMG_01.CR3.xmp", "IMG_02.CR3.xmp", "IMG_03.CR3", "IMG_03.CR3.xmp", "OTHER_01.CR3.xmp" }) {
+            fs.Files[@"C:\p\" + name] = Array.Empty<byte>();
+        }
+
+        Assert.Equal(
+            new[] { @"C:\p\IMG_01.CR3.xmp", @"C:\p\IMG_02.CR3.xmp" },
+            CompanionResolver.Default.FindCompanions(@"C:\p\IMG.CR3", fs).Order(StringComparer.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void RenamePlan_TakesTheDuplicatesAlong() {
+        var plan = CompanionResolver.Default.RenamePlan(
+            @"C:\p\IMG.CR3", "NEW.CR3", new[] { @"C:\p\IMG.CR3.xmp", @"C:\p\IMG_01.CR3.xmp" });
+
+        Assert.Equal(new[] {
+            (@"C:\p\IMG.CR3", "NEW.CR3"),
+            (@"C:\p\IMG.CR3.xmp", "NEW.CR3.xmp"),
+            (@"C:\p\IMG_01.CR3.xmp", "NEW_01.CR3.xmp"),
+        }, plan);
+    }
+
+
     // --- FindCompanions / RenamePlan (the operation side) -------------
 
     [Fact]

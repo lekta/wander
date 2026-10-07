@@ -24,6 +24,14 @@ public interface IFileSystem {
     FileSystemEntry? GetEntry(string path);
 
     /// <summary>
+    /// Names of the files in <paramref name="directory"/> matching a
+    /// wildcard <paramref name="pattern"/> (<c>IMG_*.CR2.xmp</c>); empty when
+    /// the folder cannot be read. darktable's numbered duplicates of one
+    /// photo, without listing the whole folder for each photo dropped.
+    /// </summary>
+    IReadOnlyList<string> FileNamesLike(string directory, string pattern);
+
+    /// <summary>
     /// When the file or folder was created, or null when the path does not
     /// exist or the volume will not say. The second half of a folder's key
     /// in <c>folders.json</c>: a folder renamed outside Wander keeps it.
