@@ -26,11 +26,9 @@
         other half of a split pane.
     -->
     <UserControl.Resources>
-        <conv:EnumToVisibilityConverter x:Key="EnumToVisibility"/>
+        <!-- Its own converters; the general ones (bool, enum) are in Resources/Converters.xaml. -->
         <conv:BitmapPixelSizeConverter x:Key="BitmapPixelSize"/>
         <conv:RankStarConverter x:Key="RankStar"/>
-        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
-        <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility"/>
 
         <!--
             The helpers' buttons (RAWHELPERS). Two letters said nothing to
@@ -293,31 +291,14 @@
         </Style>
 
         <!--
-            One star of the .pp3 rating widget. Five copies of this in the
-            footer, each with its own CommandParameter; clicking the star
-            that already marks the rating clears it.
+            One star of the rating widget (the StarButton of Controls.xaml).
+            Five copies of this in the footer, each with its own
+            CommandParameter; clicking the star that already marks the
+            rating clears it.
         -->
-        <Style x:Key="RatingStar" TargetType="Button">
+        <Style x:Key="RatingStarButton" TargetType="Button" BasedOn="{StaticResource StarButton}">
             <Setter Property="Command" Value="{Binding SetRankCommand}"/>
-            <!-- A click leaves the keyboard where it was: a star with it
-                 took the next Space for a second click. -->
-            <Setter Property="Focusable" Value="False"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground" Value="{StaticResource RatingStar}"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Padding" Value="1,0"/>
-            <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="ToolTip" Value="{Binding RatingSource, StringFormat={x:Static res:Strings.PreviewRatingWrittenTo}}"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter/>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
             <Style.Triggers>
                 <!--
                     A photo with no sidecar yet. The stars are live - the
@@ -334,59 +315,15 @@
             </Style.Triggers>
         </Style>
 
-        <!--
-            One colour-label swatch. The chosen one gets a ring rather than a
-            different fill — the fill *is* the information, so it must not
-            change to indicate selection.
-        -->
-        <Style x:Key="ColorLabelSwatch" TargetType="Button">
+        <!-- One colour-label swatch: the SwatchButton of Controls.xaml with the footer's command. -->
+        <Style x:Key="ColorLabelSwatch" TargetType="Button" BasedOn="{StaticResource SwatchButton}">
             <Setter Property="Command" Value="{Binding DataContext.SetColorLabelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
-            <Setter Property="Focusable" Value="False"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Margin" Value="1,0"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="Ring" Width="16" Height="16" CornerRadius="8"
-                                Background="Transparent"
-                                BorderBrush="Transparent" BorderThickness="2">
-                            <Ellipse Width="8" Height="8" Fill="{Binding Brush}"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                <Setter TargetName="Ring" Property="BorderBrush" Value="{StaticResource SwatchRing}"/>
-                            </DataTrigger>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Ring" Property="Background" Value="{StaticResource ControlHover}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
         </Style>
 
-        <!-- The find field's arrows and cross (B6): flat, as the glyphs in the toolbar's search box. -->
-        <Style x:Key="FindGlyphButton" TargetType="Button">
-            <Setter Property="Width" Value="22"/>
-            <Setter Property="Focusable" Value="False"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="{StaticResource TextMuted}"/>
+        <!-- The find field's arrows and cross (B6): the glyph button, in the icon font. -->
+        <Style x:Key="FindGlyphButton" TargetType="Button" BasedOn="{StaticResource GlyphButton}">
             <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
             <Setter Property="FontSize" Value="10"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="2">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource ControlHover}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
         </Style>
 
         <!--
@@ -397,19 +334,19 @@
         -->
         <DataTemplate x:Key="RatingControls">
             <StackPanel Orientation="Horizontal">
-                <Button Style="{StaticResource RatingStar}" CommandParameter="1"
+                <Button Style="{StaticResource RatingStarButton}" CommandParameter="1"
                         Content="{Binding Rank, Converter={StaticResource RankStar}, ConverterParameter=1}"/>
-                <Button Style="{StaticResource RatingStar}" CommandParameter="2"
+                <Button Style="{StaticResource RatingStarButton}" CommandParameter="2"
                         Content="{Binding Rank, Converter={StaticResource RankStar}, ConverterParameter=2}"/>
-                <Button Style="{StaticResource RatingStar}" CommandParameter="3"
+                <Button Style="{StaticResource RatingStarButton}" CommandParameter="3"
                         Content="{Binding Rank, Converter={StaticResource RankStar}, ConverterParameter=3}"/>
-                <Button Style="{StaticResource RatingStar}" CommandParameter="4"
+                <Button Style="{StaticResource RatingStarButton}" CommandParameter="4"
                         Content="{Binding Rank, Converter={StaticResource RankStar}, ConverterParameter=4}"/>
-                <Button Style="{StaticResource RatingStar}" CommandParameter="5"
+                <Button Style="{StaticResource RatingStarButton}" CommandParameter="5"
                         Content="{Binding Rank, Converter={StaticResource RankStar}, ConverterParameter=5}"/>
 
                 <ItemsControl ItemsSource="{Binding ColorLabelChoices}"
-                              Margin="10,0,0,0" VerticalAlignment="Center">
+                              Margin="3,0,0,0" VerticalAlignment="Center">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
@@ -591,39 +528,8 @@
                         dark surround is a light rectangle with a border,
                         not a dark page.
                     -->
-                    <Border Background="{Binding ContentPalette.Background}">
-                        <Border.Style>
-                            <Style TargetType="Border">
-                                <Setter Property="Visibility" Value="Collapsed"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Kind}" Value="Image">
-                                        <Setter Property="Visibility" Value="Visible"/>
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding Kind}" Value="Gif">
-                                        <Setter Property="Visibility" Value="Visible"/>
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding Kind}" Value="Audio">
-                                        <Setter Property="Visibility" Value="Visible"/>
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding Kind}" Value="Folder">
-                                        <Setter Property="Visibility" Value="Visible"/>
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding Kind}" Value="Archive">
-                                        <Setter Property="Visibility" Value="Visible"/>
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding Kind}" Value="Executable">
-                                        <Setter Property="Visibility" Value="Visible"/>
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding Kind}" Value="None">
-                                        <Setter Property="Visibility" Value="Visible"/>
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding Kind}" Value="Unsupported">
-                                        <Setter Property="Visibility" Value="Visible"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Border.Style>
-                    </Border>
+                    <Border Background="{Binding ContentPalette.Background}"
+                            Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Image|Gif|Audio|Folder|Archive|Executable|None|Unsupported}"/>
                     <!--
                         Image preview. The fitted image stays in ImgFit; a
                         transparent canvas overlays it for the FastStone-style
@@ -701,29 +607,11 @@
                             is a small spinner in the corner rather than a
                             veil over the picture.
                         -->
-                        <Ellipse Width="22" Height="22" StrokeThickness="3"
-                                 Stroke="{StaticResource AccentStroke}" Fill="{StaticResource ReviewChartPlate}"
-                                 StrokeDashArray="4,2"
-                                 Margin="0,16,16,0"
-                                 HorizontalAlignment="Right" VerticalAlignment="Top"
-                                 IsHitTestVisible="False"
-                                 RenderTransformOrigin="0.5,0.5"
-                                 Visibility="{Binding IsRawDecoding, Converter={StaticResource BoolToVisibility}}">
-                            <Ellipse.RenderTransform>
-                                <RotateTransform x:Name="RawSpinnerRotate" Angle="0"/>
-                            </Ellipse.RenderTransform>
-                            <Ellipse.Triggers>
-                                <EventTrigger RoutedEvent="Loaded">
-                                    <BeginStoryboard>
-                                        <Storyboard RepeatBehavior="Forever">
-                                            <DoubleAnimation Storyboard.TargetName="RawSpinnerRotate"
-                                                             Storyboard.TargetProperty="Angle"
-                                                             From="0" To="360" Duration="0:0:1"/>
-                                        </Storyboard>
-                                    </BeginStoryboard>
-                                </EventTrigger>
-                            </Ellipse.Triggers>
-                        </Ellipse>
+                        <controls:Spinner Width="22" Height="22" StrokeThickness="3"
+                                          Stroke="{StaticResource AccentStroke}" Fill="{StaticResource ReviewChartPlate}"
+                                          Margin="0,16,16,0"
+                                          HorizontalAlignment="Right" VerticalAlignment="Top"
+                                          Visibility="{Binding IsRawDecoding, Converter={StaticResource BoolToVisibility}}"/>
                         <!-- Zoom view: visible only while the user holds the left button. -->
                         <Canvas x:Name="ImgZoomCanvas"
                                 Background="{Binding ContentPalette.Background}"
@@ -781,20 +669,7 @@
                         picture for a clip, the track's own card for a
                         song.
                     -->
-                    <Grid>
-                        <Grid.Style>
-                            <Style TargetType="Grid">
-                                <Setter Property="Visibility" Value="Collapsed"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Kind}" Value="Video">
-                                        <Setter Property="Visibility" Value="Visible"/>
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding Kind}" Value="Audio">
-                                        <Setter Property="Visibility" Value="Visible"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Grid.Style>
+                    <Grid Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Video|Audio}">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="*"/>
                             <RowDefinition Height="Auto"/>
@@ -1173,25 +1048,8 @@
                             <StackPanel Margin="0,18,0,0"
                                         HorizontalAlignment="Center"
                                         Visibility="{Binding IsCensusLoading, Converter={StaticResource BoolToVisibility}}">
-                                <Ellipse Width="20" Height="20" StrokeThickness="2"
-                                         Stroke="{StaticResource AccentStroke}" Fill="Transparent"
-                                         StrokeDashArray="3,2"
-                                         RenderTransformOrigin="0.5,0.5">
-                                    <Ellipse.RenderTransform>
-                                        <RotateTransform x:Name="CensusSpinnerRotate" Angle="0"/>
-                                    </Ellipse.RenderTransform>
-                                    <Ellipse.Triggers>
-                                        <EventTrigger RoutedEvent="Loaded">
-                                            <BeginStoryboard>
-                                                <Storyboard RepeatBehavior="Forever">
-                                                    <DoubleAnimation Storyboard.TargetName="CensusSpinnerRotate"
-                                                                     Storyboard.TargetProperty="Angle"
-                                                                     From="0" To="360" Duration="0:0:1"/>
-                                                </Storyboard>
-                                            </BeginStoryboard>
-                                        </EventTrigger>
-                                    </Ellipse.Triggers>
-                                </Ellipse>
+                                <controls:Spinner Width="20" Height="20" StrokeThickness="2"
+                                                  Stroke="{StaticResource AccentStroke}"/>
                                 <TextBlock Text="{x:Static res:Strings.PreviewCounting}"
                                            Style="{StaticResource PaneDim}"
                                            FontSize="11" Margin="0,8,0,0"
@@ -1428,27 +1286,41 @@
                                     </Style.Triggers>
                                 </Style>
                             </Border.Style>
-                            <StackPanel Orientation="Horizontal">
+                            <StackPanel>
                                 <!--
-                                    Full screen, the picture's name first
-                                    (BarPinned shows it): a long one is cut,
-                                    the whole of it in a tooltip.
+                                    What the picture is, over what can be done
+                                    to it (2026-10-07): among the stars and the
+                                    switches the score was lost. The bottom
+                                    margins sit on the two texts, so a bar with
+                                    neither - a half of a split with no score -
+                                    gets no empty line.
                                 -->
-                                <TextBlock x:Name="PictureNameText" Visibility="Collapsed"
-                                           Text="{Binding PictureName}" Foreground="{Binding ContentPalette.Foreground}"
-                                           MaxWidth="320" Margin="0,0,10,0" VerticalAlignment="Center" FontSize="12"
-                                           TextTrimming="CharacterEllipsis" controls:TrimmedToolTip.Enabled="True"/>
-                                <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource RatingControls}"
-                                                  VerticalAlignment="Center"
-                                                  Visibility="{Binding HasRating, Converter={StaticResource BoolToVisibility}}"/>
-                                <!-- The sharpness score beside the stars: a fact about this picture, as quiet as they are. -->
-                                <TextBlock Text="{Binding SharpnessText}" ToolTip="{Binding SharpnessTip}"
-                                           Margin="8,0,0,0" VerticalAlignment="Center" FontSize="12"
-                                           Foreground="{StaticResource ReviewSharp}"
-                                           Visibility="{Binding HasSharpnessScore, Converter={StaticResource BoolToVisibility}}"/>
-                                <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource HelperSwitches}"
-                                                  VerticalAlignment="Center"
-                                                  Visibility="{Binding PictureBarSwitches, Converter={StaticResource BoolToVisibility}}"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <!--
+                                        Full screen, the picture's name (BarPinned
+                                        shows it): quieter than the controls - it
+                                        is read once, they are worked with. A long
+                                        one is cut, the whole of it in a tooltip.
+                                    -->
+                                    <TextBlock x:Name="PictureNameText" Visibility="Collapsed"
+                                               Text="{Binding PictureName}" Foreground="{Binding ContentPalette.Foreground}"
+                                               Opacity="0.65"
+                                               MaxWidth="400" Margin="0,0,10,2" VerticalAlignment="Center" FontSize="12"
+                                               TextTrimming="CharacterEllipsis" controls:TrimmedToolTip.Enabled="True"/>
+                                    <!-- The sharpness score: a fact about this picture, beside its name. -->
+                                    <TextBlock Text="{Binding SharpnessText}" ToolTip="{Binding SharpnessTip}"
+                                               Margin="0,0,0,2" VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold"
+                                               Foreground="{StaticResource ReviewSharp}"
+                                               Visibility="{Binding HasSharpnessScore, Converter={StaticResource BoolToVisibility}}"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource RatingControls}"
+                                                      VerticalAlignment="Center"
+                                                      Visibility="{Binding HasRating, Converter={StaticResource BoolToVisibility}}"/>
+                                    <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource HelperSwitches}"
+                                                      VerticalAlignment="Center"
+                                                      Visibility="{Binding PictureBarSwitches, Converter={StaticResource BoolToVisibility}}"/>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
                     </StackPanel>
@@ -1501,26 +1373,9 @@
                     <Grid Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisibility}}"
                           Background="{StaticResource LoadingVeil}"
                           IsHitTestVisible="False">
-                        <Ellipse Width="32" Height="32" StrokeThickness="3"
-                                 Stroke="{StaticResource AccentStroke}" Fill="Transparent"
-                                 StrokeDashArray="3,2"
-                                 HorizontalAlignment="Center" VerticalAlignment="Center"
-                                 RenderTransformOrigin="0.5,0.5">
-                            <Ellipse.RenderTransform>
-                                <RotateTransform x:Name="SpinnerRotate" Angle="0"/>
-                            </Ellipse.RenderTransform>
-                            <Ellipse.Triggers>
-                                <EventTrigger RoutedEvent="Loaded">
-                                    <BeginStoryboard>
-                                        <Storyboard RepeatBehavior="Forever">
-                                            <DoubleAnimation Storyboard.TargetName="SpinnerRotate"
-                                                             Storyboard.TargetProperty="Angle"
-                                                             From="0" To="360" Duration="0:0:1"/>
-                                        </Storyboard>
-                                    </BeginStoryboard>
-                                </EventTrigger>
-                            </Ellipse.Triggers>
-                        </Ellipse>
+                        <controls:Spinner Width="32" Height="32" StrokeThickness="3"
+                                          Stroke="{StaticResource AccentStroke}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Grid>
 
                     <!--
@@ -1723,9 +1578,21 @@
                             the same reason as the stars above it: the
                             message that matters most is the one about a
                             file that had no companions a moment ago.
+                            Gone while there is nothing to say: empty, it
+                            still took a line under the stars.
                         -->
                         <TextBlock Text="{Binding CompanionStatus}"
-                                   FontSize="11" Foreground="{StaticResource TextDim}" TextWrapping="Wrap"/>
+                                   FontSize="11" Foreground="{StaticResource TextDim}" TextWrapping="Wrap">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding CompanionStatus}" Value="">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                         </StackPanel>
                         <!-- The chart of levels (HistogramChart). -->
                             <Border Grid.Column="1" Margin="8,0,0,0" HorizontalAlignment="Right" VerticalAlignment="Top"

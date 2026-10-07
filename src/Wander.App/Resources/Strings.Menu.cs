@@ -102,7 +102,7 @@ public static partial class Strings {
     /// <summary>Обновить</summary>
     public static string MenuRefresh => Get(nameof(MenuRefresh));
 
-    /// <summary>Область просмотра</summary>
+    /// <summary>Панель просмотра</summary>
     public static string MenuQuickPreview => Get(nameof(MenuQuickPreview));
 
     /// <summary>Панель папок</summary>

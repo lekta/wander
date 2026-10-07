@@ -1,17 +1,19 @@
 # Wander — сайт и руководство
 
-`lekta.github.io/wander/`, GitHub Pages, по-русски. Ни строки JS, без веб-
-и иконочных шрифтов и анимаций, CSS инлайном, тёмная тема —
+`lekta.github.io/wander/` (`SiteBuilder.SiteUrl`), GitHub Pages,
+по-русски. Ни строки JS (JSON-LD на лендинге — данные, «Поисковики»), без
+веб- и иконочных шрифтов и анимаций, CSS инлайном, тёмная тема —
 `prefers-color-scheme`. Генератор — `tools/site`: консоль на C#
 (`net10.0`, Markdig той же версии, что у App; без ссылок на App и Core) в
 решении: `check.bat` его собирает и форматирует. Вход: лендинг
-`docs/site/index.html` (руками; плейсхолдеры `{{css}}`, `{{guide}}`,
-`{{version}}`, `{{download}}`, `{{release}}`), `docs/GUIDE.md` —
+`docs/site/index.html` (руками; плейсхолдеры `{{css}}`, `{{site}}`,
+`{{guide}}`, `{{version}}`, `{{download}}`, `{{release}}`), `docs/GUIDE.md` —
 единственный источник руководства, `docs/screenshots/*.webp` и `og.jpg`,
 `docs/icons/*.svg`; шаблон и CSS — `tools/site/page.html`, `site.css`. Выход
 (`--out`, по умолчанию `artifacts\site`): `index.html`,
 `guide/<слаг>/index.html`, `guide/index.html` (`meta refresh` на первую),
-`versions/index.html`, `img/` (значки — `img/icons/`); чистятся только эти
+`versions/index.html`, `img/` (значки — `img/icons/`), `sitemap.xml` и
+`<ключ>.txt` для IndexNow; чистятся только эти
 папки. Приложение ведёт сюда: «Помощь» — `guide/`, `F1` в настройках —
 `guide/<слаг>/#<раздел>` (`CrashReporter.GuidePage`); сайт собирается из
 master — решение человека; GUIDE на master описывает выпущенную версию
@@ -107,9 +109,31 @@ headless Edge'ем. `check.bat` перезаписывает выход обыч
 `fetch-depth: 0` ради тегов. После релиза — новый тег `site-*`, иначе кнопка
 предлагает прошлую версию (RELEASING.md). Разово руками: Settings → Pages →
 Source = GitHub Actions; Environments → `github-pages` — разрешить теги
-`site-*` (по умолчанию пускает только ветку). Закроется репозиторий — та же
-`_site` уезжает на Cloudflare шагом workflow; адрес `og:image` в лендинге
-абсолютный — поправить.
+`site-*` (по умолчанию пускает только ветку). После деплоя шаг IndexNow
+(ниже). Закроется репозиторий — та же `_site` уезжает на Cloudflare шагом
+workflow; `SiteUrl` — поправить.
+
+## Поисковики
+
+Решение 2026-10-07. У каждой страницы — `<meta name="description">`,
+`<link rel="canonical">` на адрес папкой (`guide/<слаг>/`, `versions/`,
+лендинг — `SiteUrl`), `og:title`, `og:description`, `og:url`, `og:image`
+(`{{site}}img/og.jpg`); в шаблоне — плейсхолдеры `{{description}}`,
+`{{url}}`, `{{site}}`. Описание страницы руководства — первые предложения
+её вводного абзаца, целиком, пока укладываются в 160 знаков, иначе первое
+обрезается по слову (`Description`); страница без вводного абзаца —
+ошибка. Лендинг и «Версии» — руками. На лендинге JSON-LD
+`SoftwareApplication` (`<script type="application/ld+json">` — данные для
+Google, браузер не исполняет): название, ОС, версия, ссылка на exe, цена
+0, лицензия. `sitemap.xml` — все страницы адресами папкой, лендинг
+первым; `guide/index.html` (переадресация) — нет. `robots.txt` не
+пишется: читается только в корне хоста, сайт в папке — sitemap отдаётся
+в кабинетах (PROMOTION). IndexNow: ключ `SiteBuilder.IndexNowKey`
+(публичный, файл `<ключ>.txt` рядом с лендингом); шаг workflow после
+деплоя ждёт, пока Pages отдаст файл, и шлёт список из sitemap на
+`api.indexnow.org` — Яндекс и Bing; Google в протоколе нет, ему —
+Search Console. Строка подтверждения Google — в `docs/site/index.html`
+после `description`; Яндексу нужен корень хоста — PROMOTION, «Индексация».
 
 ## Скриншоты
 

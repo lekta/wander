@@ -5,6 +5,12 @@ using Wander.App.Resources;
 
 namespace Wander.App;
 
+/// <summary>
+/// One line of text to type - a name, mostly. Built in code, like
+/// <see cref="Dialogs.ChoiceDialog"/>: a label, a box and two buttons do
+/// not earn a XAML file. Sized to its content, so a long label wraps
+/// rather than pushing the buttons off the bottom.
+/// </summary>
 internal static class PromptDialog {
     private static readonly HashSet<char> _invalidFileChars = new(Path.GetInvalidFileNameChars());
     private static readonly string _invalidCharsDisplay = "\\ / : * ? \" < > |";
@@ -14,17 +20,18 @@ internal static class PromptDialog {
         var window = new Window {
             Title = title,
             Width = 380,
-            Height = 160,
+            SizeToContent = SizeToContent.Height,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             Owner = Application.Current.MainWindow,
             ResizeMode = ResizeMode.NoResize,
+            ShowInTaskbar = false,
         };
         App.ParkIfHeadless(window);
 
-        var stack = new StackPanel { Margin = new Thickness(12) };
-        stack.Children.Add(new TextBlock { Text = label, Margin = new Thickness(0, 0, 0, 6) });
+        var stack = new StackPanel { Margin = new Thickness(16) };
+        stack.Children.Add(new TextBlock { Text = label, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 6) });
 
-        var box = new TextBox { Text = initial };
+        var box = new TextBox { Text = initial, Padding = new Thickness(4, 2, 4, 2) };
         stack.Children.Add(box);
 
         var errorBlock = new TextBlock {
@@ -38,10 +45,11 @@ internal static class PromptDialog {
         var buttons = new StackPanel {
             Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 12, 0, 0),
+            Margin = new Thickness(0, 16, 0, 0),
         };
-        var ok = new Button { Content = Strings.ActionOk, Width = 70, IsDefault = true };
-        var cancel = new Button { Content = Strings.ActionCancel, Width = 90, IsCancel = true, Margin = new Thickness(6, 0, 0, 0) };
+        var buttonStyle = (Style)Application.Current.FindResource("DialogButton");
+        var ok = new Button { Content = Strings.ActionOk, Style = buttonStyle, IsDefault = true };
+        var cancel = new Button { Content = Strings.ActionCancel, Style = buttonStyle, IsCancel = true, Margin = new Thickness(8, 0, 0, 0) };
         buttons.Children.Add(ok);
         buttons.Children.Add(cancel);
         stack.Children.Add(buttons);
@@ -82,10 +90,6 @@ internal static class PromptDialog {
                 FlashError(errorBlock);
             }
         });
-        box.PreviewKeyDown += (_, e) => {
-            // Disallow Tab/Enter producing weird whitespace via composition. Default
-            // WPF already handles most; keep this hook in case we want more rules.
-        };
 
         // Live-validate the text in case something slipped in (e.g. via auto-fill).
         box.TextChanged += (_, _) => UpdateState(box, errorBlock, ok);
@@ -105,7 +109,9 @@ internal static class PromptDialog {
             return;
         }
 
-        box.BorderBrush = SystemColors.ControlDarkBrush;
+        // Back to the frame the box came with, not a system colour that
+        // only looks like it: the two differ by a shade.
+        box.ClearValue(Control.BorderBrushProperty);
         errorBlock.Visibility = Visibility.Collapsed;
         ok.IsEnabled = !empty;
     }

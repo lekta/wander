@@ -206,7 +206,7 @@
     <value>Обновить</value>
   </data>
   <data name="MenuQuickPreview" xml:space="preserve">
-    <value>Область просмотра</value>
+    <value>Панель просмотра</value>
   </data>
   <data name="MenuOptions" xml:space="preserve">
     <value>Настройки</value>

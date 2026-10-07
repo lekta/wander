@@ -29,7 +29,6 @@ public sealed class ShellExtensionRowViewModel : ObservableObject {
         // A dash, not a blank: an empty cell reads as "loading", and the
         // scope column next to it shows one for the same reason.
         AppName = row.AppName.Length > 0 ? row.AppName : Strings.SettingsShellScopeUnknown;
-        IsSystem = row.IsSystem;
         _isBlocked = row.IsBlocked;
         _onToggled = onToggled;
 
@@ -81,8 +80,6 @@ public sealed class ShellExtensionRowViewModel : ObservableObject {
     /// empty two thirds of the time is a column of nothing.
     /// </summary>
     public string? Description { get; }
-
-    public bool IsSystem { get; }
 
     /// <summary>
     /// Ticked = the row appears in menus - the table's "Вкл", the same way

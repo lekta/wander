@@ -136,7 +136,8 @@ internal sealed class Guide {
         page.Blocks.Add(heading);
     }
 
-    private static string PlainText(ContainerInline? container) {
+    /// <summary>The text of the inlines, markup dropped: headings and the opening of a page for its description.</summary>
+    internal static string PlainText(ContainerInline? container) {
         var text = new StringBuilder();
         Append(container, text);
 
@@ -153,6 +154,12 @@ internal sealed class Guide {
                 text.Append(literal.Content.ToString());
             } else if (inline is CodeInline code) {
                 text.Append(code.Content);
+            } else if (inline is LineBreakInline) {
+                // A sentence per line in the source: the break is a space.
+                text.Append(' ');
+            } else if (inline is EmphasisInline { DelimiterChar: '~' }) {
+                // Struck out: not the page's text.
+                continue;
             } else if (inline is ContainerInline inner) {
                 Append(inner, text);
             }

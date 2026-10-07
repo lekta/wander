@@ -5,9 +5,8 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <!-- Palette first: MenuStyles and every view resolve their colours out of it. -->
-                <ResourceDictionary Source="Resources/Palette.xaml"/>
-                <ResourceDictionary Source="Resources/MenuStyles.xaml"/>
+                <!-- The one list of dictionaries lives in Shared.xaml: the harness merges the same file. -->
+                <ResourceDictionary Source="Resources/Shared.xaml"/>
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>

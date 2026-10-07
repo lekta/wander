@@ -20,7 +20,6 @@
     -->
     <UserControl.Resources>
         <conv:TreeIndentConverter x:Key="TreeIndent"/>
-        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
 
         <!--
             One line of either panel. The highlight spans the whole line,

@@ -10,6 +10,7 @@
         MinWidth="380" MinHeight="280"
         WindowStartupLocation="CenterOwner"
         UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
         SourceInitialized="Window_SourceInitialized"
         PreviewKeyDown="Window_PreviewKeyDown">
     <!--
@@ -29,8 +30,6 @@
         frame that can be dragged.
     -->
     <Window.Resources>
-        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
-
         <Style x:Key="FieldLabel" TargetType="TextBlock">
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="Margin" Value="0,0,8,0"/>
@@ -96,16 +95,16 @@
 
         <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal"
                     HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,12,0,0">
-            <Button Content="{x:Static res:Strings.SearchClear}" MinWidth="90" Padding="10,4"
+            <Button Content="{x:Static res:Strings.SearchClear}" Style="{StaticResource DialogButton}"
                     Command="{Binding ClearSearchCommand}"/>
-            <Button Content="{x:Static res:Strings.SearchStop}" MinWidth="110" Padding="10,4" Margin="8,0,0,0"
+            <Button Content="{x:Static res:Strings.SearchStop}" Style="{StaticResource DialogButton}" Margin="8,0,0,0"
                     Command="{Binding StopSearchCommand}"
                     Visibility="{Binding ContentSearch.IsRunning, Converter={StaticResource BoolToVisibility}}"/>
-            <Button Content="{x:Static res:Strings.SearchRun}" MinWidth="110" Padding="10,4" Margin="8,0,0,0"
+            <Button Content="{x:Static res:Strings.SearchRun}" Margin="8,0,0,0"
                     IsDefault="True"
                     Command="{Binding SearchCommand}">
                 <Button.Style>
-                    <Style TargetType="Button">
+                    <Style TargetType="Button" BasedOn="{StaticResource DialogButton}">
                         <Setter Property="Visibility" Value="Visible"/>
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding ContentSearch.IsRunning}" Value="True">

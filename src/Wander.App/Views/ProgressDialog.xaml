@@ -134,12 +134,12 @@
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
                     <Button x:Name="MinimizeButton"
                             Content="{x:Static res:Strings.ActionMinimize}"
-                            Width="100" Padding="6,3" Margin="0,0,8,0"
+                            Style="{StaticResource DialogButton}" Margin="0,0,8,0"
                             IsCancel="True"
                             Click="MinimizeButton_Click"/>
                     <Button x:Name="CancelButton"
                             Content="{x:Static res:Strings.ActionCancel}"
-                            Width="100" Padding="6,3"
+                            Style="{StaticResource DialogButton}"
                             Click="CancelButton_Click"/>
                 </StackPanel>
             </StackPanel>

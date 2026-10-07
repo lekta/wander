@@ -49,3 +49,26 @@ jobs:
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
+
+      # Hands every page of the sitemap to Yandex and Bing: api.indexnow.org
+      # passes a submission on to every engine in the protocol (Google is not
+      # one; it reads the sitemap through Search Console, docs/PROMOTION.md).
+      # The key is the one SiteBuilder wrote as <key>.txt beside the landing;
+      # the engines fetch it to check the submission, so wait until the
+      # deployment serves it. A hiccup here must not fail a deployment that
+      # is already done.
+      - name: IndexNow
+        continue-on-error: true
+        run: |
+          key=$(basename "$(ls _site/*.txt | head -n 1)" .txt)
+          site=$(grep -o -m 1 '<loc>[^<]*</loc>' _site/sitemap.xml | sed 's/<[^>]*>//g')
+          host=$(echo "$site" | sed -E 's#^https?://([^/]+).*#\1#')
+          for attempt in $(seq 1 18); do
+            curl -sf "${site}${key}.txt" | grep -qx "$key" && break
+            sleep 10
+          done
+          grep -o '<loc>[^<]*</loc>' _site/sitemap.xml | sed 's/<[^>]*>//g' | jq -R . | jq -s \
+            --arg host "$host" --arg key "$key" --arg keyLocation "${site}${key}.txt" \
+            '{host: $host, key: $key, keyLocation: $keyLocation, urlList: .}' \
+            | curl -sS -o /dev/null -w 'IndexNow: HTTP %{http_code}\n' \
+                -H 'Content-Type: application/json; charset=utf-8' --data-binary @- https://api.indexnow.org/indexnow

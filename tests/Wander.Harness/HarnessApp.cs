@@ -35,11 +35,10 @@ public sealed class HarnessApp : Wander.App.App {
 
     public HarnessApp(RunContext context) {
         _context = context;
+        // The same one list App.xaml merges, so a dictionary added there
+        // reaches the harness without a second edit here.
         Resources.MergedDictionaries.Add(new ResourceDictionary {
-            Source = new Uri("/Wander;component/Resources/Palette.xaml", UriKind.Relative),
-        });
-        Resources.MergedDictionaries.Add(new ResourceDictionary {
-            Source = new Uri("/Wander;component/Resources/MenuStyles.xaml", UriKind.Relative),
+            Source = new Uri("/Wander;component/Resources/Shared.xaml", UriKind.Relative),
         });
     }
 

@@ -1,0 +1,18 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        The one list of the application's resource dictionaries. App.xaml
+        merges this and nothing else, and so does the harness, which cannot
+        run App.xaml's InitializeComponent and used to repeat the list by
+        hand - a dictionary added here reaches both.
+
+        Order matters for parse-time StaticResource lookups: the palette
+        first, then what draws with it.
+    -->
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="Palette.xaml"/>
+        <ResourceDictionary Source="MenuStyles.xaml"/>
+        <ResourceDictionary Source="Converters.xaml"/>
+        <ResourceDictionary Source="Controls.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+</ResourceDictionary>

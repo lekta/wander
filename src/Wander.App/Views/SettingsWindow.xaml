@@ -41,9 +41,7 @@
 
     <Window.Resources>
 
-        <conv:EnumRadioConverter x:Key="EnumRadio"/>
         <conv:PixelsToThicknessConverter x:Key="PixelsToThickness"/>
-        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
 
         <!-- Spacing shared by every page, so they look the same. -->
         <Thickness x:Key="Row">0,3,0,3</Thickness>
@@ -296,16 +294,16 @@
                 <TextBlock Text="{x:Static res:Strings.SettingsDefaultViewMode}" Style="{StaticResource GroupTitle}"/>
                 <RadioButton GroupName="DefaultViewMode"
                              Content="{x:Static res:Strings.MenuViewDetails}"
-                             IsChecked="{Binding Owner.DefaultViewMode, Converter={StaticResource EnumRadio}, ConverterParameter=Details}"/>
+                             IsChecked="{Binding Owner.DefaultViewMode, Converter={StaticResource EnumEquals}, ConverterParameter=Details}"/>
                 <RadioButton GroupName="DefaultViewMode"
                              Content="{x:Static res:Strings.MenuViewTiles}"
-                             IsChecked="{Binding Owner.DefaultViewMode, Converter={StaticResource EnumRadio}, ConverterParameter=Tiles}"/>
+                             IsChecked="{Binding Owner.DefaultViewMode, Converter={StaticResource EnumEquals}, ConverterParameter=Tiles}"/>
                 <RadioButton GroupName="DefaultViewMode"
                              Content="{x:Static res:Strings.MenuViewLargeIcons}"
-                             IsChecked="{Binding Owner.DefaultViewMode, Converter={StaticResource EnumRadio}, ConverterParameter=LargeIcons}"/>
+                             IsChecked="{Binding Owner.DefaultViewMode, Converter={StaticResource EnumEquals}, ConverterParameter=LargeIcons}"/>
                 <RadioButton GroupName="DefaultViewMode"
                              Content="{x:Static res:Strings.MenuViewGallery}"
-                             IsChecked="{Binding Owner.DefaultViewMode, Converter={StaticResource EnumRadio}, ConverterParameter=Gallery}"/>
+                             IsChecked="{Binding Owner.DefaultViewMode, Converter={StaticResource EnumEquals}, ConverterParameter=Gallery}"/>
 
                 <TextBlock Text="{x:Static res:Strings.SettingsPhotoFoldersGroup}" Style="{StaticResource GroupTitle}"/>
                 <StackPanel Orientation="Horizontal">
@@ -589,14 +587,14 @@
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
                     <RadioButton Grid.Row="0" GroupName="GalleryBackground"
-                                 IsChecked="{Binding Owner.GalleryBackground, Converter={StaticResource EnumRadio}, ConverterParameter=Light}">
+                                 IsChecked="{Binding Owner.GalleryBackground, Converter={StaticResource EnumEquals}, ConverterParameter=Light}">
                         <StackPanel Orientation="Horizontal">
                             <Border Style="{StaticResource BackgroundSwatch}" Background="{Binding Owner.GalleryLightSwatch}"/>
                             <TextBlock Text="{x:Static res:Strings.GalleryBackgroundLight}"/>
                         </StackPanel>
                     </RadioButton>
                     <RadioButton Grid.Row="1" GroupName="GalleryBackground"
-                                 IsChecked="{Binding Owner.GalleryBackground, Converter={StaticResource EnumRadio}, ConverterParameter=Grey}">
+                                 IsChecked="{Binding Owner.GalleryBackground, Converter={StaticResource EnumEquals}, ConverterParameter=Grey}">
                         <StackPanel Orientation="Horizontal">
                             <Border Style="{StaticResource BackgroundSwatch}" Background="{Binding Owner.GalleryGreySwatch}"/>
                             <TextBlock Text="{x:Static res:Strings.GalleryBackgroundGrey}"/>
@@ -606,7 +604,7 @@
                              ToolTip="{x:Static res:Strings.SettingsGalleryGreyLevel}"
                              Text="{Binding Owner.GalleryGreyLevel, UpdateSourceTrigger=Explicit}"/>
                     <RadioButton Grid.Row="2" GroupName="GalleryBackground"
-                                 IsChecked="{Binding Owner.GalleryBackground, Converter={StaticResource EnumRadio}, ConverterParameter=Dark}">
+                                 IsChecked="{Binding Owner.GalleryBackground, Converter={StaticResource EnumEquals}, ConverterParameter=Dark}">
                         <StackPanel Orientation="Horizontal">
                             <Border Style="{StaticResource BackgroundSwatch}" Background="{Binding Owner.GalleryDarkSwatch}"/>
                             <TextBlock Text="{x:Static res:Strings.GalleryBackgroundDark}"/>
@@ -1237,10 +1235,10 @@
                 <TextBlock Text="{x:Static res:Strings.SettingsRawRatingFormat}" Style="{StaticResource GroupTitle}"/>
                 <RadioButton GroupName="RawRatingFormat"
                              Content="{x:Static res:Strings.SettingsRawRatingFormatXmp}"
-                             IsChecked="{Binding Owner.RawRatingFormat, Converter={StaticResource EnumRadio}, ConverterParameter=Xmp}"/>
+                             IsChecked="{Binding Owner.RawRatingFormat, Converter={StaticResource EnumEquals}, ConverterParameter=Xmp}"/>
                 <RadioButton GroupName="RawRatingFormat"
                              Content="{x:Static res:Strings.SettingsRawRatingFormatPp3}"
-                             IsChecked="{Binding Owner.RawRatingFormat, Converter={StaticResource EnumRadio}, ConverterParameter=Pp3}"/>
+                             IsChecked="{Binding Owner.RawRatingFormat, Converter={StaticResource EnumEquals}, ConverterParameter=Pp3}"/>
                 <TextBlock Text="{x:Static res:Strings.SettingsRawRatingFormatHint}" Style="{StaticResource CheckNote}"/>
                 <CheckBox Content="{x:Static res:Strings.SettingsConfirmCreateSidecar}"
                           ToolTip="{x:Static res:Strings.SettingsConfirmCreateSidecarHint}"
@@ -1429,11 +1427,11 @@
                         ToolTip="{x:Static res:Strings.SettingsGuide}"
                         Padding="8,3" VerticalAlignment="Center"/>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                    <Button Content="{x:Static res:Strings.ActionOk}" Padding="14,4" Width="92" Margin="0,0,8,0"
+                    <Button Content="{x:Static res:Strings.ActionOk}" Style="{StaticResource DialogButton}" Margin="0,0,8,0"
                             IsDefault="True" Click="Ok_Click"/>
-                    <Button Content="{x:Static res:Strings.ActionApply}" Padding="14,4" Width="92" Margin="0,0,8,0"
+                    <Button Content="{x:Static res:Strings.ActionApply}" Style="{StaticResource DialogButton}" Margin="0,0,8,0"
                             Click="Apply_Click"/>
-                    <Button Content="{x:Static res:Strings.ActionCancel}" Padding="14,4" Width="92"
+                    <Button Content="{x:Static res:Strings.ActionCancel}" Style="{StaticResource DialogButton}"
                             IsCancel="True" Click="Cancel_Click"/>
                 </StackPanel>
             </DockPanel>

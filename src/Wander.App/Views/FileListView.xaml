@@ -20,9 +20,8 @@
         Visibility trigger here, not a change to the window.
     -->
     <UserControl.Resources>
-        <conv:EnumToVisibilityConverter x:Key="EnumToVisibility"/>
+        <!-- Its own converters; the ones every view shares are in Resources/Converters.xaml. -->
         <conv:TileSecondLineConverter x:Key="TileSecondLine"/>
-        <conv:EnumEqualsConverter x:Key="EnumEquals"/>
         <conv:RankTextConverter x:Key="RankText"/>
         <conv:ColorLabelBrushConverter x:Key="ColorLabelBrush"/>
         <conv:RatingBadgeVisibilityConverter x:Key="RatingBadge"/>
@@ -33,64 +32,17 @@
         <conv:TimeStampConverter x:Key="TimeStamp"/>
         <conv:FileTypeConverter x:Key="FileType"/>
         <conv:FileSizeConverter x:Key="FileSize"/>
-        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
 
         <!--
-            The glyphs that sit inside the filter field. Templated flat rather
-            than merely restyled: an ordinary WPF button dropped into a text
-            field reads as a second control with its own border, and the box
-            has to look like one field with affordances in it.
+            One star of the filter bar: the StarButton of Controls.xaml,
+            which is also the preview footer's rating widget - and
+            deliberately so: the row that says "this photo has three stars"
+            and the row that says "show me three stars" read the same
+            because they are the same alphabet.
         -->
-        <Style x:Key="BoxGlyphButton" TargetType="Button">
-            <Setter Property="Width" Value="22"/>
-            <Setter Property="Focusable" Value="False"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="{StaticResource TextMuted}"/>
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="2">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource ControlHover}"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.4"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <!--
-            One star of the filter bar. Same shape as the preview footer's
-            rating widget and deliberately so: the row that says "this photo
-            has three stars" and the row that says "show me three stars"
-            read the same because they are the same alphabet.
-        -->
-        <Style x:Key="FilterStar" TargetType="Button">
+        <Style x:Key="FilterStar" TargetType="Button" BasedOn="{StaticResource StarButton}">
             <Setter Property="Command" Value="{Binding SetFilterRankCommand}"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground" Value="{StaticResource RatingStar}"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Padding" Value="1,0"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Focusable" Value="False"/>
             <Setter Property="ToolTip" Value="{x:Static res:Strings.FilterRatingHint}"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter/>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
         </Style>
 
         <!--
@@ -129,32 +81,10 @@
             </Setter>
         </Style>
 
-        <!-- One colour swatch of the filter bar; the ring marks the chosen one. -->
-        <Style x:Key="FilterSwatch" TargetType="Button">
+        <!-- One colour swatch of the filter bar: the footer's SwatchButton with the filter's command. -->
+        <Style x:Key="FilterSwatch" TargetType="Button" BasedOn="{StaticResource SwatchButton}">
             <Setter Property="Command" Value="{Binding DataContext.SetFilterColorCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Focusable" Value="False"/>
-            <Setter Property="Margin" Value="1,0"/>
             <Setter Property="ToolTip" Value="{x:Static res:Strings.FilterColorHint}"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="Ring" Width="16" Height="16" CornerRadius="8"
-                                Background="Transparent"
-                                BorderBrush="Transparent" BorderThickness="2">
-                            <Ellipse Width="8" Height="8" Fill="{Binding Brush}"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                <Setter TargetName="Ring" Property="BorderBrush" Value="{StaticResource SwatchRing}"/>
-                            </DataTrigger>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Ring" Property="Background" Value="{StaticResource ControlHover}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
         </Style>
 
         <!-- One of the three background buttons on the gallery's own strip. -->
@@ -636,7 +566,7 @@
                             the same spot, because they answer the same impulse —
                             "that is not what I meant, undo it".
                         -->
-                        <Button Content="&#x25A0;" Style="{StaticResource BoxGlyphButton}"
+                        <Button Content="&#x25A0;" Style="{StaticResource GlyphButton}"
                                 Command="{Binding StopSearchCommand}"
                                 ToolTip="{x:Static res:Strings.SearchStop}"
                                 Visibility="{Binding ContentSearch.IsRunning, Converter={StaticResource BoolToVisibility}}"/>
@@ -644,7 +574,7 @@
                                 Command="{Binding ClearSearchCommand}"
                                 ToolTip="{x:Static res:Strings.SearchClear}">
                             <Button.Style>
-                                <Style TargetType="Button" BasedOn="{StaticResource BoxGlyphButton}">
+                                <Style TargetType="Button" BasedOn="{StaticResource GlyphButton}">
                                     <Setter Property="Visibility" Value="Collapsed"/>
                                     <Style.Triggers>
                                         <MultiDataTrigger>
@@ -670,7 +600,7 @@
                                 Click="SearchOptions_Click"
                                 ToolTip="{x:Static res:Strings.SearchOptions}">
                             <Button.Style>
-                                <Style TargetType="Button" BasedOn="{StaticResource BoxGlyphButton}">
+                                <Style TargetType="Button" BasedOn="{StaticResource GlyphButton}">
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding ContentSearch.HasNonDefaultOptions}" Value="True">
                                             <Setter Property="Foreground" Value="{StaticResource AccentText}"/>
@@ -721,7 +651,7 @@
                             Content="{Binding RatingFilter, Converter={StaticResource FilterStarGlyph}, ConverterParameter=5}"/>
 
                 <ItemsControl ItemsSource="{Binding FilterColorChoices}"
-                              Margin="12,0,0,0" VerticalAlignment="Center">
+                              Margin="3,0,0,0" VerticalAlignment="Center">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
@@ -735,28 +665,14 @@
                 </ItemsControl>
 
                 <!-- Reset: the arrow back, the words in the tooltip. -->
-                <Button Command="{Binding ClearRatingFilterCommand}"
+                <Button Style="{StaticResource GlyphButton}"
+                        Command="{Binding ClearRatingFilterCommand}"
                         Visibility="{Binding HasRatingFilter, Converter={StaticResource BoolToVisibility}}"
                         ToolTip="{x:Static res:Strings.FilterClear}"
                         Content="&#xE777;" FontFamily="Segoe MDL2 Assets" FontSize="12"
                         Foreground="{StaticResource TextSecondary}"
-                        Margin="8,0,0,0" Padding="4,2"
-                        Cursor="Hand" Focusable="False"
-                        VerticalAlignment="Center">
-                    <Button.Template>
-                        <ControlTemplate TargetType="Button">
-                            <Border x:Name="Bd" Background="Transparent"
-                                    Padding="{TemplateBinding Padding}" CornerRadius="3">
-                                <ContentPresenter/>
-                            </Border>
-                            <ControlTemplate.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="Bd" Property="Background" Value="{StaticResource ControlHover}"/>
-                                </Trigger>
-                            </ControlTemplate.Triggers>
-                        </ControlTemplate>
-                    </Button.Template>
-                </Button>
+                        Margin="8,0,0,0" Cursor="Hand"
+                        VerticalAlignment="Center"/>
                 </StackPanel>
             </DockPanel>
         </Border>
@@ -1240,26 +1156,9 @@
         <Grid Visibility="{Binding IsListLoading, Converter={StaticResource BoolToVisibility}}"
               Background="{StaticResource LoadingVeil}"
               IsHitTestVisible="False">
-            <Ellipse Width="32" Height="32" StrokeThickness="3"
-                     Stroke="{StaticResource AccentStroke}" Fill="Transparent"
-                     StrokeDashArray="3,2"
-                     HorizontalAlignment="Center" VerticalAlignment="Center"
-                     RenderTransformOrigin="0.5,0.5">
-                <Ellipse.RenderTransform>
-                    <RotateTransform x:Name="ListSpinnerRotate" Angle="0"/>
-                </Ellipse.RenderTransform>
-                <Ellipse.Triggers>
-                    <EventTrigger RoutedEvent="Loaded">
-                        <BeginStoryboard>
-                            <Storyboard RepeatBehavior="Forever">
-                                <DoubleAnimation Storyboard.TargetName="ListSpinnerRotate"
-                                                 Storyboard.TargetProperty="Angle"
-                                                 From="0" To="360" Duration="0:0:1"/>
-                            </Storyboard>
-                        </BeginStoryboard>
-                    </EventTrigger>
-                </Ellipse.Triggers>
-            </Ellipse>
+            <controls:Spinner Width="32" Height="32" StrokeThickness="3"
+                              Stroke="{StaticResource AccentStroke}"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
         </Grid>
 
         <!--
@@ -1272,26 +1171,9 @@
         <Grid Visibility="{Binding ContentSearch.IsRunning, Converter={StaticResource BoolToVisibility}}"
               Background="Transparent"
               IsHitTestVisible="False">
-            <Ellipse Width="26" Height="26" StrokeThickness="2"
-                     Stroke="{StaticResource SpinnerQuiet}" Fill="Transparent" Opacity="0.7"
-                     StrokeDashArray="3,2"
-                     HorizontalAlignment="Center" VerticalAlignment="Center"
-                     RenderTransformOrigin="0.5,0.5">
-                <Ellipse.RenderTransform>
-                    <RotateTransform x:Name="SearchSpinnerRotate" Angle="0"/>
-                </Ellipse.RenderTransform>
-                <Ellipse.Triggers>
-                    <EventTrigger RoutedEvent="Loaded">
-                        <BeginStoryboard>
-                            <Storyboard RepeatBehavior="Forever">
-                                <DoubleAnimation Storyboard.TargetName="SearchSpinnerRotate"
-                                                 Storyboard.TargetProperty="Angle"
-                                                 From="0" To="360" Duration="0:0:1.4"/>
-                            </Storyboard>
-                        </BeginStoryboard>
-                    </EventTrigger>
-                </Ellipse.Triggers>
-            </Ellipse>
+            <controls:Spinner Width="26" Height="26" StrokeThickness="2" Period="0:0:1.4"
+                              Stroke="{StaticResource SpinnerQuiet}" Opacity="0.7"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
         </Grid>
 
         <!--
@@ -1324,11 +1206,12 @@
                             HorizontalAlignment="Center"
                             Visibility="{Binding IsMissingBookmark, Converter={StaticResource BoolToVisibility}}">
                     <Button Content="{x:Static res:Strings.BookmarksLocate}"
+                            Style="{StaticResource DialogButton}"
                             Command="{Binding RelocateMissingBookmarkCommand}"
-                            Padding="10,4" Margin="0,0,8,0"/>
+                            Margin="0,0,8,0"/>
                     <Button Content="{x:Static res:Strings.BookmarksRemove}"
-                            Command="{Binding RemoveMissingBookmarkCommand}"
-                            Padding="10,4"/>
+                            Style="{StaticResource DialogButton}"
+                            Command="{Binding RemoveMissingBookmarkCommand}"/>
                 </StackPanel>
             </StackPanel>
         </Grid>

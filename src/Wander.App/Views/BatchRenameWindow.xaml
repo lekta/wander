@@ -23,16 +23,8 @@
         rename forty files. Escape cancels.
     -->
     <Window.Resources>
-        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
-
         <Style x:Key="FieldLabel" TargetType="TextBlock">
             <Setter Property="Margin" Value="0,10,0,3"/>
-        </Style>
-
-        <Style x:Key="Caption" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="Foreground" Value="{StaticResource TextCaption}"/>
-            <Setter Property="TextWrapping" Value="Wrap"/>
         </Style>
 
         <Style TargetType="TextBox">
@@ -81,7 +73,7 @@
                               IsEditable="True" IsTextSearchEnabled="False"
                               ItemsSource="{Binding TemplateHistory}"
                               Text="{Binding Template, UpdateSourceTrigger=PropertyChanged}"/>
-                    <TextBlock Text="{x:Static res:Strings.BatchRenameTemplateHint}" Style="{StaticResource Caption}"
+                    <TextBlock Text="{x:Static res:Strings.BatchRenameTemplateHint}" Style="{StaticResource CaptionText}"
                                Margin="0,4,0,0"/>
 
                     <TextBlock Text="{x:Static res:Strings.BatchRenameCounter}" Style="{StaticResource FieldLabel}"/>
@@ -129,7 +121,7 @@
                     <ComboBox ItemsSource="{Binding CaseChoices}"
                               DisplayMemberPath="Title" SelectedValuePath="Value"
                               SelectedValue="{Binding ExtensionCase}"/>
-                    <TextBlock Text="{x:Static res:Strings.BatchRenameExtensionHint}" Style="{StaticResource Caption}"
+                    <TextBlock Text="{x:Static res:Strings.BatchRenameExtensionHint}" Style="{StaticResource CaptionText}"
                                Margin="0,4,0,8"/>
                 </StackPanel>
             </ScrollViewer>
@@ -180,9 +172,9 @@
 
                 <DockPanel Grid.Row="1" Margin="0,6,0,0" LastChildFill="False">
                     <TextBlock DockPanel.Dock="Left" Text="{x:Static res:Strings.BatchRenameOrderNote}"
-                               Style="{StaticResource Caption}"/>
+                               Style="{StaticResource CaptionText}"/>
                     <TextBlock DockPanel.Dock="Right" Text="{x:Static res:Strings.BatchRenameReadingShotDates}"
-                               Style="{StaticResource Caption}"
+                               Style="{StaticResource CaptionText}"
                                Visibility="{Binding IsReadingShotDates, Converter={StaticResource BoolToVisibility}}"/>
                 </DockPanel>
             </Grid>
@@ -205,11 +197,12 @@
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button Content="{x:Static res:Strings.ActionOk}"
+                            Style="{StaticResource DialogButton}"
                             IsEnabled="{Binding CanApply}"
-                            Width="110" Padding="6,4" Margin="0,0,8,0"
+                            Margin="0,0,8,0"
                             Click="OnOk"/>
                     <Button Content="{x:Static res:Strings.ActionCancel}"
-                            Width="110" Padding="6,4"
+                            Style="{StaticResource DialogButton}"
                             IsCancel="True"/>
                 </StackPanel>
             </Grid>

@@ -1238,7 +1238,7 @@ PerfView, dotTrace из Rider: по требованию, не в прогон.
 `state.json` прогона). Ввод синтезируется на UI-поток; экран и мышь не
 трогаются. `HarnessApp : App` после базового `OnStartup` подменяет сервисы
 (ниже), показывает `MainWindow` сам (`InitializeComponent` не зовётся —
-BAML ищется в сборке наследника; словари вливаются руками) и стартует
+BAML ищется в сборке наследника; `Resources/Shared.xaml` вливается руками) и стартует
 `ScenarioRunner` на `ApplicationIdle`.
 
 ```pwsh

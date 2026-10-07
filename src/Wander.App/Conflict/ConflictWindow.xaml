@@ -1,7 +1,6 @@
 <Window x:Class="Wander.App.Conflict.ConflictWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:conv="clr-namespace:Wander.App.Converters"
         xmlns:controls="clr-namespace:Wander.App.Controls"
         xmlns:local="clr-namespace:Wander.App.Conflict"
         xmlns:res="clr-namespace:Wander.App.Resources"
@@ -40,14 +39,6 @@
         thing the safety pillar exists to prevent. Escape cancels.
     -->
     <Window.Resources>
-        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
-        <conv:EnumRadioConverter x:Key="EnumRadio"/>
-
-        <Style x:Key="Caption" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="Foreground" Value="{StaticResource TextCaption}"/>
-        </Style>
-
         <!--
             The two numbers. Bold is the whole vocabulary of difference on a
             row: the bigger size and the newer date carry it, and a badge on
@@ -76,14 +67,14 @@
                 -->
                 <WrapPanel Margin="0,0,0,4">
                     <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
-                    <TextBlock Text="{Binding ChoiceText}" Style="{StaticResource Caption}"
+                    <TextBlock Text="{Binding ChoiceText}" Style="{StaticResource CaptionText}"
                                VerticalAlignment="Center" Margin="8,0,0,0"
                                Visibility="{Binding HasChoiceText, Converter={StaticResource BoolToVisibility}}"/>
-                    <TextBlock Text="{Binding VerdictText}" Style="{StaticResource Caption}"
+                    <TextBlock Text="{Binding VerdictText}" Style="{StaticResource CaptionText}"
                                VerticalAlignment="Center" Margin="8,0,0,0"
                                Visibility="{Binding HasVerdictText, Converter={StaticResource BoolToVisibility}}"/>
                     <TextBlock Text="{x:Static res:Strings.ConflictComparing}"
-                               Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="8,0,0,0"
+                               Style="{StaticResource CaptionText}" VerticalAlignment="Center" Margin="8,0,0,0"
                                Visibility="{Binding IsComparing, Converter={StaticResource BoolToVisibility}}"/>
                     <TextBlock Text="{x:Static res:Strings.ConflictFolderReplaceNote}"
                                Foreground="{StaticResource TextWarning}" FontSize="11"
@@ -278,16 +269,16 @@
                       IsChecked="{Binding SkipIdentical}"/>
 
             <TextBlock Text="{x:Static res:Strings.ConflictBulkCaption}"
-                       Style="{StaticResource Caption}" Margin="0,10,0,4"/>
+                       Style="{StaticResource CaptionText}" Margin="0,10,0,4"/>
             <WrapPanel>
                 <RadioButton Content="{x:Static res:Strings.ConflictBulkReplace}" Margin="0,0,16,0"
-                             IsChecked="{Binding BulkAction, Converter={StaticResource EnumRadio}, ConverterParameter=Replace}"/>
+                             IsChecked="{Binding BulkAction, Converter={StaticResource EnumEquals}, ConverterParameter=Replace}"/>
                 <RadioButton Content="{x:Static res:Strings.ConflictBulkSkip}" Margin="0,0,16,0"
-                             IsChecked="{Binding BulkAction, Converter={StaticResource EnumRadio}, ConverterParameter=Skip}"/>
+                             IsChecked="{Binding BulkAction, Converter={StaticResource EnumEquals}, ConverterParameter=Skip}"/>
                 <RadioButton Content="{x:Static res:Strings.ConflictBulkKeepBoth}" Margin="0,0,16,0"
-                             IsChecked="{Binding BulkAction, Converter={StaticResource EnumRadio}, ConverterParameter=KeepBoth}"/>
+                             IsChecked="{Binding BulkAction, Converter={StaticResource EnumEquals}, ConverterParameter=KeepBoth}"/>
                 <RadioButton Content="{x:Static res:Strings.ConflictBulkReplaceIfNewer}"
-                             IsChecked="{Binding BulkAction, Converter={StaticResource EnumRadio}, ConverterParameter=ReplaceIfSourceNewer}"/>
+                             IsChecked="{Binding BulkAction, Converter={StaticResource EnumEquals}, ConverterParameter=ReplaceIfSourceNewer}"/>
             </WrapPanel>
         </StackPanel>
 
@@ -296,15 +287,16 @@
                 Background="{StaticResource StripBackground}"
                 BorderBrush="{StaticResource Separator}" BorderThickness="0,1,0,0">
             <Grid>
-                <TextBlock Text="{Binding DecidedText}" Style="{StaticResource Caption}"
+                <TextBlock Text="{Binding DecidedText}" Style="{StaticResource CaptionText}"
                            VerticalAlignment="Center" HorizontalAlignment="Left"/>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button Content="{x:Static res:Strings.ActionOk}"
+                            Style="{StaticResource DialogButton}"
                             IsEnabled="{Binding CanAccept}"
-                            Width="110" Padding="6,4" Margin="0,0,8,0"
+                            Margin="0,0,8,0"
                             Click="OnOk"/>
                     <Button Content="{x:Static res:Strings.ActionCancel}"
-                            Width="110" Padding="6,4"
+                            Style="{StaticResource DialogButton}"
                             IsCancel="True" Click="OnCancel"/>
                 </StackPanel>
             </Grid>

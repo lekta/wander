@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using Markdig;
 using Markdig.Extensions.EmphasisExtras;
 using Markdig.Extensions.Footnotes;
+using Markdig.Extensions.Tables;
 using Markdig.Renderers;
 using Markdig.Renderers.Html;
 using Markdig.Syntax;
@@ -33,6 +34,21 @@ namespace Wander.Site;
 internal sealed class SiteBuilder {
     public const string Repository = "https://github.com/lekta/wander";
 
+    /// <summary>
+    /// Where the site is served from, slash included: the canonical address
+    /// of every page, the sitemap and the link preview name it in full.
+    /// Moves with the site - another host, a domain of its own.
+    /// </summary>
+    public const string SiteUrl = "https://lekta.github.io/wander/";
+
+    /// <summary>
+    /// The IndexNow key: after a deployment site.yml hands the pages of the
+    /// sitemap to Yandex and Bing, which check the key against the file of
+    /// the same name written beside the landing. Public by design - the
+    /// file is on the site - so nothing to keep secret.
+    /// </summary>
+    public const string IndexNowKey = "c9a50c3e765621030e3adcaa5b3da083";
+
     private const string GuideSource = "docs/GUIDE.md";
     private const string LandingSource = "docs/site/index.html";
     private const string TemplateSource = "tools/site/page.html";
@@ -49,6 +65,9 @@ internal sealed class SiteBuilder {
 
     /// <summary>The text column of a guide page in pixels (44rem in site.css): a wider picture is shown shrunk to it.</summary>
     private const int ColumnWidth = 704;
+
+    /// <summary>About what a search result shows under the title before cutting it.</summary>
+    private const int DescriptionLength = 160;
 
     private static readonly Regex _guideArgument = new(@"\bguide: ""([^""]*)""");
 
@@ -81,7 +100,7 @@ internal sealed class SiteBuilder {
         .UseFootnotes()
         .Build();
 
-    /// <summary>Site path (relative, forward slashes) -> the page.</summary>
+    /// <summary>Site path (relative, forward slashes) -> the page; the sitemap and the IndexNow key file go the same way.</summary>
     private readonly Dictionary<string, string> _pages = new(StringComparer.Ordinal);
 
     /// <summary>Site path -> the file copied there.</summary>
@@ -132,10 +151,14 @@ internal sealed class SiteBuilder {
         string home = $"guide/{guide.Pages[0].Slug}/index.html";
         for (int i = 0; i < guide.Pages.Count; i++) {
             GuidePage page = guide.Pages[i];
+            string folder = $"guide/{page.Slug}/";
             // Inside the guide its own link in the header leads nowhere new:
             // the navigation beside the text is the guide.
-            _pages[$"guide/{page.Slug}/index.html"] = Fill(template, TemplateSource, new() {
+            _pages[folder + "index.html"] = Fill(template, TemplateSource, new() {
                 ["title"] = Escape(page.Title) + " | Wander",
+                ["description"] = Escape(Description(page)),
+                ["site"] = SiteUrl,
+                ["url"] = SiteUrl + folder,
                 ["css"] = css,
                 ["root"] = "../../",
                 ["guidelink"] = "",
@@ -153,6 +176,9 @@ internal sealed class SiteBuilder {
             $"<body><a href=\"{first}\">Руководство</a></body>\n</html>\n";
         _pages["versions/index.html"] = Fill(template, TemplateSource, new() {
             ["title"] = "Версии | Wander",
+            ["description"] = "Все выпуски Wander: дата, страница релиза и руководство каждой версии.",
+            ["site"] = SiteUrl,
+            ["url"] = SiteUrl + "versions/",
             ["css"] = css,
             ["root"] = "../",
             ["guidelink"] = $"<a class=\"wide\" href=\"../{home}\">Руководство</a>\n",
@@ -161,11 +187,27 @@ internal sealed class SiteBuilder {
         });
         _pages["index.html"] = Fill(Read(LandingSource), LandingSource, new() {
             ["css"] = css,
+            ["site"] = SiteUrl,
             ["guide"] = home,
             ["version"] = _latest.Version,
             ["download"] = $"{Repository}/releases/download/{_latest.Tag}/Wander.exe",
             ["release"] = $"{Repository}/releases/tag/{_latest.Tag}",
         });
+
+        // What the search engines get to crawl: every page by its canonical
+        // address, the folder form Pages serves, the landing first (site.yml
+        // reads the site's address off it). The forwarding page at guide/ is
+        // no page of its own. No robots.txt: engines read one at the root of
+        // the host only, and the site lives in a folder of it - the sitemap
+        // is handed to them in their consoles (docs/PROMOTION.md).
+        var canonical = new[] { "index.html" }
+            .Concat(_pages.Keys.Where(path => path != "index.html" && path != "guide/index.html"))
+            .Select(path => SiteUrl + path[..^"index.html".Length]);
+        _pages["sitemap.xml"] = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+            + "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n"
+            + string.Concat(canonical.Select(url => $"<url><loc>{url}</loc></url>\n"))
+            + "</urlset>\n";
+        _pages[IndexNowKey + ".txt"] = IndexNowKey;
 
         // After the sources are clean: a link GUIDE.md got wrong is already
         // reported with its line, and would come back here once per page.
@@ -309,6 +351,63 @@ internal sealed class SiteBuilder {
         // Back / next once more under the text: a narrow screen has no room
         // for them beside the group, and the stylesheet shows only this one.
         return main.Append(writer.ToString()).Append(Pager(guide, index, "pager end")).ToString();
+    }
+
+    /// <summary>
+    /// What a search result shows under the page's title: the page's opening
+    /// - its paragraphs and list items before the first section, tables
+    /// aside - cut to about <see cref="DescriptionLength"/> characters at
+    /// the end of a sentence when one falls in the second half, else at a
+    /// word with an ellipsis. A page that opens with no text has nothing to
+    /// show, and the guide's rules want an opening anyway.
+    /// </summary>
+    private string Description(GuidePage page) {
+        var opening = new StringBuilder();
+        foreach (Block block in page.Blocks.TakeWhile(b => b is not HeadingBlock)) {
+            if (block is Table) {
+                continue;
+            }
+            foreach (ParagraphBlock paragraph in Paragraphs(block)) {
+                opening.Append(Guide.PlainText(paragraph.Inline)).Append(' ');
+            }
+            if (opening.Length > DescriptionLength) {
+                break;
+            }
+        }
+
+        string text = Regex.Replace(opening.ToString(), @"\s+", " ").Trim();
+        if (text.Length == 0) {
+            Errors.Add($"{GuideSource}:{page.Heading.Line + 1}: the page opens with no text - a search result shows its first sentences");
+
+            return page.Title;
+        }
+        if (text.Length <= DescriptionLength) {
+            return text;
+        }
+
+        // A sentence ends where its mark is followed by a capital: "(см."
+        // before a link is not an end.
+        var ends = Regex.Matches(text, @"[.!?](?=\s\p{Lu})")
+            .Select(m => m.Index + 1)
+            .Where(end => end <= DescriptionLength)
+            .ToList();
+        if (ends.Count > 0 && ends[^1] >= DescriptionLength / 2) {
+            return text[..ends[^1]];
+        }
+        int cut = text.LastIndexOf(' ', DescriptionLength - 1);
+        // Not on a dangling "(см." or a separator.
+        string head = Regex.Replace(text[..(cut > 0 ? cut : DescriptionLength - 1)], @"(\s*\([^)]*|[\s,;:—-]+)$", "");
+
+        return head + "…";
+    }
+
+    /// <summary>The paragraphs of a block: itself, or those of its items and cells.</summary>
+    private static IEnumerable<ParagraphBlock> Paragraphs(Block block) {
+        return block switch {
+            ParagraphBlock paragraph => new[] { paragraph },
+            ContainerBlock container => container.Descendants<ParagraphBlock>(),
+            _ => Enumerable.Empty<ParagraphBlock>(),
+        };
     }
 
     private static string Pager(Guide guide, int index, string classes) {

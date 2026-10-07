@@ -12,27 +12,9 @@
         behaviour is switched off, or a wheel over the page would pull it.
     -->
     <UserControl.Resources>
-        <Style x:Key="ClearGlyph" TargetType="Button">
-            <Setter Property="Width" Value="22"/>
-            <Setter Property="Focusable" Value="False"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="{StaticResource TextMuted}"/>
-            <Setter Property="FontSize" Value="11"/>
+        <!-- The glyph button of Controls.xaml, with the arrow cursor over the box's I-beam. -->
+        <Style x:Key="ClearGlyph" TargetType="Button" BasedOn="{StaticResource GlyphButton}">
             <Setter Property="Cursor" Value="Arrow"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="2">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource ControlHover}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding Text, RelativeSource={RelativeSource AncestorType=controls:FilterBox}}" Value="">
                     <Setter Property="Visibility" Value="Collapsed"/>

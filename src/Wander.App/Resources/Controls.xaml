@@ -1,0 +1,153 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        The shapes the windows share: a flat button, a glyph in one, the
+        button of a dialog's bottom row, a star and a swatch of a rating, a
+        line of caption text.
+
+        WHY ONE FILE. Seven views each carried a template for "a button
+        with no frame that lights up under the cursor", and they had
+        drifted: one had a pressed colour, the next had not, corner radii
+        went two and three. A view that needs the shape takes a style from
+        here and adds what is its own - a font, a width, a command.
+
+        Colours come from Palette.xaml, merged below rather than inherited,
+        for the reason MenuStyles.xaml gives: a StaticResource has to
+        resolve at parse time, whatever merged this file.
+    -->
+
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="Palette.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+
+
+    <!--
+        A button with no frame of its own: a tint under the cursor, a darker
+        one while pressed, faded when disabled. The toolbar's arrows, the
+        journal button, every glyph inside a text field.
+    -->
+    <Style x:Key="FlatButton" TargetType="Button">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd"
+                            Background="{TemplateBinding Background}"
+                            Padding="{TemplateBinding Padding}"
+                            CornerRadius="3"
+                            SnapsToDevicePixels="True">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource ControlHover}"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource ControlPressed}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--
+        A flat button that is one glyph: the cross that clears a field, the
+        arrows of the find bar, the "more" dots. Not a Tab stop - it sits
+        inside or beside a field that is. The tooltip is its name, so a
+        screen reader says what the picture means instead of the picture's
+        character code.
+    -->
+    <Style x:Key="GlyphButton" TargetType="Button" BasedOn="{StaticResource FlatButton}">
+        <Setter Property="Width" Value="22"/>
+        <!-- 0, not the theme's 1: the glyph fills the box, as it did before the shared template. -->
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="Foreground" Value="{StaticResource TextMuted}"/>
+        <Setter Property="FontSize" Value="11"/>
+        <!-- TargetNullValue: a button whose tooltip is set after its style would otherwise trace a binding error for the frame in between. -->
+        <Setter Property="AutomationProperties.Name" Value="{Binding ToolTip, RelativeSource={RelativeSource Self}, TargetNullValue=''}"/>
+    </Style>
+
+    <!--
+        The buttons that end a dialog - OK, Cancel, Apply - and the few
+        that act like them inside a pane. One size across the windows: the
+        bottom row of the settings and of the batch rename used to differ
+        by twenty pixels for no reason anyone could name.
+    -->
+    <Style x:Key="DialogButton" TargetType="Button">
+        <Setter Property="MinWidth" Value="92"/>
+        <Setter Property="Padding" Value="14,4"/>
+    </Style>
+
+    <!--
+        One star of a rating widget: five in the preview footer, five more
+        on the filter strip, the same alphabet in both places. A click
+        leaves the keyboard where it was: a star with it took the next
+        Space for a second click. What the star does - the command and the
+        tooltip - is the view's.
+    -->
+    <Style x:Key="StarButton" TargetType="Button">
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Foreground" Value="{StaticResource RatingStar}"/>
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="Padding" Value="1,0"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter/>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--
+        One colour-label swatch, in the footer and on the filter strip. The
+        chosen one gets a ring rather than a different fill: the fill is
+        the information, so it must not change to say "selected". Bound to
+        a ColorLabelViewModel: its Brush and its IsSelected.
+
+        Laid at the stars' pace (2026-10-07): a swatch 13 wide beside a star
+        of 12, no margin. At 16 and a margin of 1 the dots stood half as far
+        apart again as the stars and read as a separate control.
+    -->
+    <Style x:Key="SwatchButton" TargetType="Button">
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Ring" Width="13" Height="13" CornerRadius="6.5"
+                            Background="Transparent"
+                            BorderBrush="Transparent" BorderThickness="1.5">
+                        <Ellipse Width="8" Height="8" Fill="{Binding Brush}"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                            <Setter TargetName="Ring" Property="BorderBrush" Value="{StaticResource SwatchRing}"/>
+                        </DataTrigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Ring" Property="Background" Value="{StaticResource ControlHover}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- A line of explanation beside or under a field: small and quiet. -->
+    <Style x:Key="CaptionText" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="Foreground" Value="{StaticResource TextCaption}"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+</ResourceDictionary>

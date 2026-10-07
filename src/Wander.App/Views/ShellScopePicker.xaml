@@ -6,9 +6,10 @@
         Title="{x:Static res:Strings.PickerTitle}"
         Width="520" Height="560"
         WindowStartupLocation="CenterOwner"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
         ShowInTaskbar="False"
-        Background="{StaticResource ChromeBackground}"
-        FontFamily="Segoe UI Variable Text, Segoe UI" FontSize="13">
+        Background="{StaticResource ChromeBackground}">
     <!--
         Adds rows to the context-menu table. Two ways in, because there are
         two ways someone thinks about it: "hide everything 7-Zip puts in my
@@ -68,9 +69,9 @@
 
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
             <Button Content="{x:Static res:Strings.ActionOk}" IsDefault="True"
-                    Width="94" Height="30" Margin="0,0,8,0" Click="Ok_Click"/>
+                    Style="{StaticResource DialogButton}" Margin="0,0,8,0" Click="Ok_Click"/>
             <Button Content="{x:Static res:Strings.ActionCancel}" IsCancel="True"
-                    Width="94" Height="30"/>
+                    Style="{StaticResource DialogButton}"/>
         </StackPanel>
     </Grid>
 </Window>

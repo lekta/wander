@@ -49,12 +49,13 @@ internal static class ChoiceDialog {
         };
         int result = -1;
         bool armed = request.ArmDelay is null;
+        var buttonStyle = (Style)Application.Current.FindResource("DialogButton");
         var choices = new List<Button>(request.Choices.Count);
         for (int i = 0; i < request.Choices.Count; i++) {
             int index = i;
             var choice = new Button {
                 Content = request.Choices[i],
-                Padding = new Thickness(12, 4, 12, 4),
+                Style = buttonStyle,
                 Margin = new Thickness(0, 0, 8, 0),
                 IsEnabled = armed,
             };
@@ -67,8 +68,7 @@ internal static class ChoiceDialog {
         }
         var cancel = new Button {
             Content = request.CancelLabel ?? Strings.ActionCancel,
-            Padding = new Thickness(12, 4, 12, 4),
-            MinWidth = 80,
+            Style = buttonStyle,
             IsCancel = true,
             IsDefault = true,
         };
