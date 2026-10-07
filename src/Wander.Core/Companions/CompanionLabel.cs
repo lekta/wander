@@ -10,7 +10,7 @@ namespace Wander.Core.Companions;
 public static class CompanionLabel {
     /// <param name="fileName">Name of the main file, with its extension.</param>
     /// <param name="companions">Paths or names of its companions; may be null.</param>
-    /// <returns>"(+.xmp)", "(+.xmp, .pp3)", or an empty string when there are none.</returns>
+    /// <returns>"(+.xmp)", "(+.xmp, .pp3)", "(+.xmp, IMG.xmp)", or an empty string when there are none.</returns>
     public static string For(string fileName, IReadOnlyList<string>? companions) {
         if (companions is null || companions.Count == 0) {
             return "";
@@ -22,13 +22,19 @@ public static class CompanionLabel {
             string name = Path.GetFileName(companion);
 
             // IMG.CR2.pp3 beside IMG.CR2 adds ".pp3"; IMG.xmp beside it adds
-            // ".xmp" to the stem; anything named otherwise is its extension,
-            // or its whole name when it has none.
-            string part = name.StartsWith(fileName, StringComparison.OrdinalIgnoreCase) && name.Length > fileName.Length
-                ? name[fileName.Length..]
-                : name.StartsWith(stem, StringComparison.OrdinalIgnoreCase) && name.Length > stem.Length
-                    ? name[stem.Length..]
-                    : Path.GetExtension(name) is { Length: > 0 } extension ? extension : name;
+            // ".xmp" to the stem - or says its whole name when IMG.CR2.xmp
+            // is there too, or the two would read as one; anything named
+            // otherwise is its extension, or its whole name when it has none.
+            string part;
+            if (name.StartsWith(fileName, StringComparison.OrdinalIgnoreCase) && name.Length > fileName.Length) {
+                part = name[fileName.Length..];
+            } else if (name.StartsWith(stem, StringComparison.OrdinalIgnoreCase) && name.Length > stem.Length) {
+                part = companions.Any(c => Path.GetFileName(c).Equals(fileName + name[stem.Length..], StringComparison.OrdinalIgnoreCase))
+                    ? name
+                    : name[stem.Length..];
+            } else {
+                part = Path.GetExtension(name) is { Length: > 0 } extension ? extension : name;
+            }
             if (!parts.Contains(part, StringComparer.OrdinalIgnoreCase)) {
                 parts.Add(part);
             }

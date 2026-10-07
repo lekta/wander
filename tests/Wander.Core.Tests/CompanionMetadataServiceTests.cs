@@ -247,6 +247,26 @@ public class CompanionMetadataServiceTests {
     }
 
     [Fact]
+    public void ReadRatingFor_TakesTheSidecarNamedAfterTheWholeFile_BeforeTheNeutralOne() {
+        // Decision 2026-10-01: darktable's IMG.CR2.xmp (or a .pp3) first,
+        // IMG.xmp after - whatever order the row lists them in.
+        var (service, fs, _) = Build(pp3: null, xmp: Xmp);
+        fs.Files[@"C:\photos\IMG_1234.CR2.xmp"] = Utf8(Xmp.Replace("xmp:Rating=\"2\"", "xmp:Rating=\"5\""));
+        var row = Row("IMG_1234.CR2", XmpPath, @"C:\photos\IMG_1234.CR2.xmp");
+
+        Assert.Equal(5, service.ReadRatingFor(row)?.Rank);
+    }
+
+    [Fact]
+    public void RatingSidecars_PutTheEditorsOwnFirst_AndKeepTheRestInOrder() {
+        var companions = new[] { @"C:\p\IMG.xmp", @"C:\p\IMG.CR2.pp3", @"C:\p\IMG.CR2.meta", @"C:\p\IMG.CR2.xmp" };
+
+        Assert.Equal(
+            new[] { @"C:\p\IMG.CR2.pp3", @"C:\p\IMG.CR2.xmp", @"C:\p\IMG.xmp" },
+            CompanionMetadataService.RatingSidecars("IMG.CR2", companions));
+    }
+
+    [Fact]
     public void CarryRatings_PutsTheShownRatingsBack_OnlyWhereACompanionIs() {
         var shown = new[] {
             Row("a.cr2", Pp3Path) with { Rating = new SidecarRating(5, null) },

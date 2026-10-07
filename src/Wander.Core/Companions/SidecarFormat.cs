@@ -40,4 +40,14 @@ public static class SidecarFormats {
     public static string Suffix(this SidecarFormat format) {
         return format == SidecarFormat.Pp3 ? ".pp3" : ".xmp";
     }
+
+
+    /// <summary>
+    /// How a new sidecar of this format is named. A new XMP is the neutral
+    /// IMG.xmp, not darktable's IMG.CR2.xmp: every XMP reader looks for
+    /// that one (decision 2026-10-01).
+    /// </summary>
+    public static CompanionNaming Naming(this SidecarFormat format) {
+        return format == SidecarFormat.Pp3 ? CompanionNaming.Appended : CompanionNaming.Replaced;
+    }
 }

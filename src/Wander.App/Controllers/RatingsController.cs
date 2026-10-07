@@ -420,17 +420,7 @@ public sealed class RatingsController {
 
     /// <summary>Path of the companion that holds this row's rating, or null when it has none.</summary>
     private static string? RatingSidecarOf(FileSystemEntry entry) {
-        if (entry.Companions is not { Count: > 0 } companions) {
-            return null;
-        }
-
-        foreach (string path in companions) {
-            if (CompanionMetadataService.IsRatingSidecar(path)) {
-                return path;
-            }
-        }
-
-        return null;
+        return CompanionMetadataService.RatingSidecars(entry.Name, entry.Companions).FirstOrDefault();
     }
 
 

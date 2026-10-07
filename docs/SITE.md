@@ -1,13 +1,17 @@
 # Wander — сайт и руководство
 
 `lekta.github.io/wander/` (`SiteBuilder.SiteUrl`), GitHub Pages,
-по-русски. Ни строки JS (JSON-LD на лендинге — данные, «Поисковики»), без
-веб- и иконочных шрифтов и анимаций, CSS инлайном, тёмная тема —
-`prefers-color-scheme`. Генератор — `tools/site`: консоль на C#
-(`net10.0`, Markdig той же версии, что у App; без ссылок на App и Core) в
-решении: `check.bat` его собирает и форматирует. Вход: лендинг
+по-русски. Страница открывается мгновенно — отсюда правило: ни строки JS
+(JSON-LD на лендинге — данные, браузер не исполняет; решение человека
+2026-10-07), без веб- и иконочных шрифтов и анимаций, CSS инлайном,
+тёмная тема — `prefers-color-scheme`. В подвале каждой страницы — метка
+сборки: время UTC и короткий хэш коммита ссылкой на него (`{{build}}`),
+чтобы отличить свежую страницу от кеша. Генератор — `tools/site`: консоль
+на C# (`net10.0`, Markdig той же версии, что у App; без ссылок на App и
+Core) в решении: `check.bat` его собирает и форматирует. Вход: лендинг
 `docs/site/index.html` (руками; плейсхолдеры `{{css}}`, `{{site}}`,
-`{{guide}}`, `{{version}}`, `{{download}}`, `{{release}}`), `docs/GUIDE.md` —
+`{{build}}`, `{{guide}}`, `{{version}}`, `{{download}}`, `{{release}}`),
+`docs/GUIDE.md` —
 единственный источник руководства, `docs/screenshots/*.webp` и `og.jpg`,
 `docs/icons/*.svg`; шаблон и CSS — `tools/site/page.html`, `site.css`. Выход
 (`--out`, по умолчанию `artifacts\site`): `index.html`,

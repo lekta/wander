@@ -158,6 +158,65 @@ public class CompanionResolverTests {
     }
 
 
+    // --- Both XMP namings: darktable appends, Adobe replaces ----------
+
+    [Fact]
+    public void Collapse_FoldsDarktableXmp_BesideAPp3() {
+        // By stem, IMG.CR3.xmp went to IMG.CR3.pp3 and stayed on its own
+        // line as a sidecar of a sidecar.
+        var result = CompanionResolver.Default.Collapse(new[] {
+            File("IMG.CR3"), File("IMG.CR3.pp3"), File("IMG.CR3.xmp"),
+        });
+
+        var only = Assert.Single(result);
+        Assert.Equal(new[] { @"C:\assets\IMG.CR3.pp3", @"C:\assets\IMG.CR3.xmp" }, only.Companions);
+    }
+
+    [Fact]
+    public void Collapse_FoldsBothXmps_IntoTheRaw() {
+        var result = CompanionResolver.Default.Collapse(new[] {
+            File("IMG.CR3"), File("IMG.CR3.xmp"), File("IMG.xmp"),
+        });
+
+        var only = Assert.Single(result);
+        Assert.Equal(new[] { @"C:\assets\IMG.CR3.xmp", @"C:\assets\IMG.xmp" }, only.Companions);
+    }
+
+    [Fact]
+    public void Group_FoldsDarktableXmp_IntoTheRaw() {
+        var groups = CompanionResolver.Default.Group(new[] { @"C:\p\IMG.CR3", @"C:\p\IMG.CR3.pp3", @"C:\p\IMG.CR3.xmp" });
+
+        var only = Assert.Single(groups);
+        Assert.Equal(@"C:\p\IMG.CR3", only.Primary);
+        Assert.Equal(new[] { @"C:\p\IMG.CR3.pp3", @"C:\p\IMG.CR3.xmp" }, only.Companions);
+    }
+
+    [Fact]
+    public void FindCompanions_FindsBothXmps() {
+        var fs = new FakeFileSystem();
+        fs.Files[@"C:\p\IMG.CR3"] = Array.Empty<byte>();
+        fs.Files[@"C:\p\IMG.CR3.xmp"] = Array.Empty<byte>();
+        fs.Files[@"C:\p\IMG.xmp"] = Array.Empty<byte>();
+
+        Assert.Equal(
+            new[] { @"C:\p\IMG.CR3.xmp", @"C:\p\IMG.xmp" },
+            CompanionResolver.Default.FindCompanions(@"C:\p\IMG.CR3", fs));
+    }
+
+    [Fact]
+    public void RenamePlan_KeepsEachXmpItsNaming() {
+        var plan = CompanionResolver.Default.RenamePlan(
+            @"C:\p\IMG.CR3", "NEW.CR3", new[] { @"C:\p\IMG.CR3.pp3", @"C:\p\IMG.CR3.xmp", @"C:\p\IMG.xmp" });
+
+        Assert.Equal(new[] {
+            (@"C:\p\IMG.CR3", "NEW.CR3"),
+            (@"C:\p\IMG.CR3.pp3", "NEW.CR3.pp3"),
+            (@"C:\p\IMG.CR3.xmp", "NEW.CR3.xmp"),
+            (@"C:\p\IMG.xmp", "NEW.xmp"),
+        }, plan);
+    }
+
+
     // --- FindCompanions / RenamePlan (the operation side) -------------
 
     [Fact]

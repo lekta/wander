@@ -64,6 +64,25 @@ public sealed class CompanionMetadataService {
     }
 
 
+    /// <summary>
+    /// The rating sidecars among <paramref name="companions"/>, in the order
+    /// their ratings count (decision 2026-10-01): the editor's own, named
+    /// after the whole file - darktable IMG.CR2.xmp, RawTherapee
+    /// IMG.CR2.pp3 - before the neutral IMG.xmp, which anybody may have
+    /// written. Two of the same kind keep the order given.
+    /// </summary>
+    public static IReadOnlyList<string> RatingSidecars(string mainName, IReadOnlyList<string>? companions) {
+        if (companions is not { Count: > 0 }) {
+            return Array.Empty<string>();
+        }
+
+        return companions
+            .Where(IsRatingSidecar)
+            .OrderBy(path => Path.GetFileName(path).StartsWith(mainName + ".", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .ToArray();
+    }
+
+
     /// <summary>Rating held by a <c>.pp3</c> or <c>.xmp</c>, or null when it can't be read.</summary>
     public SidecarRating? ReadRating(string path) {
         if (!IsRatingSidecar(path)) {
@@ -76,23 +95,14 @@ public sealed class CompanionMetadataService {
 
     /// <summary>
     /// The rating carried by one of <paramref name="entry"/>'s companions,
-    /// or null when it has none that holds ratings. The first rating
-    /// sidecar wins — a photo with both a <c>.pp3</c> and an <c>.xmp</c> is
-    /// rare, and picking by listing order is at least the same answer the
-    /// preview pane gives for the same file.
+    /// or null when it has none that holds ratings. The first of
+    /// <see cref="RatingSidecars"/> wins - the same one the preview pane
+    /// shows and a star writes into.
     /// </summary>
     public SidecarRating? ReadRatingFor(FileSystemEntry entry) {
-        if (entry.Companions is not { Count: > 0 } companions) {
-            return null;
-        }
+        var sidecars = RatingSidecars(entry.Name, entry.Companions);
 
-        foreach (string path in companions) {
-            if (IsRatingSidecar(path)) {
-                return ReadRating(path);
-            }
-        }
-
-        return null;
+        return sidecars.Count > 0 ? ReadRating(sidecars[0]) : null;
     }
 
 
@@ -100,7 +110,7 @@ public sealed class CompanionMetadataService {
     public string SidecarPathFor(string mainPath, SidecarFormat format) {
         string suffix = format.Suffix();
         var rule = _companions.Rules.FirstOrDefault(
-            r => r.Suffix.Equals(suffix, StringComparison.OrdinalIgnoreCase))
+            r => r.Suffix.Equals(suffix, StringComparison.OrdinalIgnoreCase) && r.Naming == format.Naming())
             ?? throw new NotSupportedException($"No companion rule for {suffix}");
 
         string directory = Path.GetDirectoryName(mainPath) ?? "";

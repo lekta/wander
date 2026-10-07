@@ -135,6 +135,12 @@ internal sealed class SiteBuilder {
         }
 
         _latest = releases[0];
+        // The footer says when and from what the site was built, so a stale
+        // cache is told from a fresh page at a glance: the build time in UTC
+        // and the commit, as a link to it.
+        string built = DateTime.UtcNow.ToString("dd.MM.yyyy HH:mm", CultureInfo.InvariantCulture) + " UTC";
+        string head = Releases.Head(_root, Errors) ?? "";
+        string build = $"<a href=\"{Repository}/commit/{head}\" title=\"Когда и из какого коммита собран сайт\">{built}, {head}</a>";
         foreach (string picture in Directory.GetFiles(Path.Combine(_root, "docs", "screenshots"), "*.webp")) {
             _files["img/" + Path.GetFileName(picture)] = picture;
         }
@@ -159,6 +165,7 @@ internal sealed class SiteBuilder {
                 ["description"] = Escape(Description(page)),
                 ["site"] = SiteUrl,
                 ["url"] = SiteUrl + folder,
+                ["build"] = build,
                 ["css"] = css,
                 ["root"] = "../../",
                 ["guidelink"] = "",
@@ -179,6 +186,7 @@ internal sealed class SiteBuilder {
             ["description"] = "Все выпуски Wander: дата, страница релиза и руководство каждой версии.",
             ["site"] = SiteUrl,
             ["url"] = SiteUrl + "versions/",
+            ["build"] = build,
             ["css"] = css,
             ["root"] = "../",
             ["guidelink"] = $"<a class=\"wide\" href=\"../{home}\">Руководство</a>\n",
@@ -188,6 +196,7 @@ internal sealed class SiteBuilder {
         _pages["index.html"] = Fill(Read(LandingSource), LandingSource, new() {
             ["css"] = css,
             ["site"] = SiteUrl,
+            ["build"] = build,
             ["guide"] = home,
             ["version"] = _latest.Version,
             ["download"] = $"{Repository}/releases/download/{_latest.Tag}/Wander.exe",

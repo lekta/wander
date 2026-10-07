@@ -186,9 +186,11 @@
             or off (2026-10-07): it reads as a button over a dark picture and
             on the light footer alike, and the plate keeps the grey pictures
             off the surround they would melt into. On, the plate takes the
-            accent's tint and the frame its colour - a helper left on changes
-            what every picture looks like, and this is where to see why. The
-            picture fills the frame: 16 inside 18.
+            accent's tint and a frame of two in the accent goes over its own,
+            so the picture inside does not move - a helper left on changes
+            what every picture looks like, and this is where to see why; a
+            frame of one in the accent was lost on the dark bar. The picture
+            fills the frame: 16 inside 18.
         -->
         <Style x:Key="HelperToggle" TargetType="ToggleButton">
             <Setter Property="Focusable" Value="False"/>
@@ -200,19 +202,23 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ToggleButton">
-                        <Border x:Name="Bd" CornerRadius="3"
-                                Background="{StaticResource ReviewToggleFill}"
-                                BorderBrush="{StaticResource ReviewToggleBorder}" BorderThickness="1"
-                                SnapsToDevicePixels="True">
+                        <Grid>
+                            <Border x:Name="Bd" CornerRadius="3"
+                                    Background="{StaticResource ReviewToggleFill}"
+                                    BorderBrush="{StaticResource ReviewToggleBorder}" BorderThickness="1"
+                                    SnapsToDevicePixels="True"/>
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
+                            <Border x:Name="OnFrame" CornerRadius="3"
+                                    BorderBrush="{StaticResource ReviewToggleOnBorder}" BorderThickness="2"
+                                    SnapsToDevicePixels="True" Visibility="Collapsed"/>
+                        </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="{StaticResource ReviewToggleHover}"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="{StaticResource ReviewToggleOn}"/>
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource ReviewToggleOnBorder}"/>
+                                <Setter TargetName="OnFrame" Property="Visibility" Value="Visible"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>

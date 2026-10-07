@@ -3121,7 +3121,8 @@ public sealed class PreviewController : ObservableObject {
         // Sidecars are tiny, but they still live on the same disk that can
         // be a sleeping spindle or a network share — off the UI thread like
         // every other read here.
-        var loaded = await Task.Run(() => Load(companions), ct);
+        string name = _primary.Name;
+        var loaded = await Task.Run(() => Load(name, companions), ct);
         if (ct.IsCancellationRequested) {
             return;
         }
@@ -3145,7 +3146,8 @@ public sealed class PreviewController : ObservableObject {
         NoteRatingShown(_primary.FullPath);
     }
 
-    private (UnityMetaInfo? Meta, string? RatingPath, SidecarRating? Rating) Load(IReadOnlyList<string> companions) {
+    private (UnityMetaInfo? Meta, string? RatingPath, SidecarRating? Rating) Load(
+        string mainName, IReadOnlyList<string> companions) {
         UnityMetaInfo? meta = null;
         string? ratingPath = null;
         SidecarRating? rating = null;
@@ -3153,11 +3155,13 @@ public sealed class PreviewController : ObservableObject {
         foreach (string path in companions) {
             if (meta is null && Path.GetExtension(path).Equals(".meta", StringComparison.OrdinalIgnoreCase)) {
                 meta = _companionMetadata!.ReadUnityMeta(path);
-            } else if (ratingPath is null && CompanionMetadataService.IsRatingSidecar(path)) {
-                rating = _companionMetadata!.ReadRating(path);
-                if (rating is not null) {
-                    ratingPath = path;
-                }
+            }
+        }
+        foreach (string path in CompanionMetadataService.RatingSidecars(mainName, companions)) {
+            rating = _companionMetadata!.ReadRating(path);
+            if (rating is not null) {
+                ratingPath = path;
+                break;
             }
         }
 

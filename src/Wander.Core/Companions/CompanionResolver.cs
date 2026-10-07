@@ -22,9 +22,14 @@ public sealed class CompanionResolver {
     public static readonly CompanionResolver Default = new(new[] {
         new CompanionRule(".meta", CompanionNaming.Appended, "Unity .meta"),
         new CompanionRule(".pp3", CompanionNaming.Appended, "RawTherapee .pp3"),
-        // XMP replaces the extension: IMG_1234.CR2 -> IMG_1234.xmp. Adobe,
-        // darktable and exiftool all write it, which makes it the widest
-        // reaching sidecar of the three.
+        // darktable appends: IMG_1234.CR2 -> IMG_1234.CR2.xmp. Ahead of the
+        // replaced rule on purpose - by stem, IMG.CR2.xmp would go to
+        // IMG.CR2.pp3 (stem "IMG.CR2") and stay on screen as a sidecar of
+        // a sidecar.
+        new CompanionRule(".xmp", CompanionNaming.Appended, "darktable .xmp"),
+        // XMP replaces the extension: IMG_1234.CR2 -> IMG_1234.xmp. Adobe
+        // and exiftool write it, which makes it the widest reaching
+        // sidecar of them all.
         new CompanionRule(".xmp", CompanionNaming.Replaced, "XMP"),
     });
 
@@ -45,6 +50,20 @@ public sealed class CompanionResolver {
         string name = Path.GetFileName(path);
 
         return _rules.FirstOrDefault(r => r.TryMatch(name, out _));
+    }
+
+
+    /// <summary>
+    /// The rule that names <paramref name="companionPath"/> after
+    /// <paramref name="mainName"/>, or null. The suffix alone does not
+    /// say it: IMG.CR2.xmp and IMG.xmp are both XMP, and only the main
+    /// file's name tells which one renames to NEW.CR2.xmp and which to
+    /// NEW.xmp.
+    /// </summary>
+    public CompanionRule? RuleFor(string companionPath, string mainName) {
+        string name = Path.GetFileName(companionPath);
+
+        return _rules.FirstOrDefault(r => string.Equals(r.CompanionNameFor(mainName), name, StringComparison.OrdinalIgnoreCase));
     }
 
 
@@ -242,8 +261,9 @@ public sealed class CompanionResolver {
         string mainPath, string newMainName, IReadOnlyList<string>? companions) {
 
         var plan = new List<(string, string)> { (mainPath, newMainName) };
+        string mainName = Path.GetFileName(mainPath);
         foreach (string companion in companions ?? Array.Empty<string>()) {
-            if (RuleFor(companion) is { } rule) {
+            if (RuleFor(companion, mainName) is { } rule) {
                 plan.Add((companion, rule.CompanionNameFor(newMainName)));
             }
         }

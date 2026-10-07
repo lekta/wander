@@ -206,9 +206,6 @@
     <!-- A toggle that is on - the recent-folders chevron. -->
     <SolidColorBrush x:Key="ControlChecked" Color="#D0D0D0"/>
 
-    <!-- The ring round the chosen colour label. -->
-    <SolidColorBrush x:Key="SwatchRing" Color="#666"/>
-
     <!-- The square round each gallery-background option: idle, chosen, under the cursor. -->
     <SolidColorBrush x:Key="OptionRing" Color="#BBB"/>
     <SolidColorBrush x:Key="OptionRingChecked" Color="#444"/>
@@ -303,11 +300,11 @@
     <!-- A helper's switch: a grey plate and frame, half see-through, so
          one switch reads over a dark picture and on the light footer
          alike; under the cursor, nearer the middle grey from either side;
-         on, the accent's tint and the accent's frame. -->
+         on, the accent's tint and a frame of two in the accent. -->
     <SolidColorBrush x:Key="ReviewToggleFill" Color="#40808080"/>
     <SolidColorBrush x:Key="ReviewToggleBorder" Color="#80808080"/>
     <SolidColorBrush x:Key="ReviewToggleHover" Color="#66909090"/>
-    <SolidColorBrush x:Key="ReviewToggleOn" Color="#330078D7"/>
+    <SolidColorBrush x:Key="ReviewToggleOn" Color="#590078D7"/>
     <SolidColorBrush x:Key="ReviewToggleOnBorder" Color="#0078D7"/>
 
     <!-- Under the stars and switches a picture carries in its corner:

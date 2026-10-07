@@ -30,6 +30,14 @@ public class CompanionLabelTests {
     }
 
     [Fact]
+    public void BothXmps_AreToldApart() {
+        // darktable's IMG.CR2.xmp and the neutral IMG.xmp would both read ".xmp".
+        Assert.Equal(
+            "(+.pp3, .xmp, IMG.xmp)",
+            CompanionLabel.For("IMG.CR2", new[] { "IMG.CR2.pp3", "IMG.CR2.xmp", "IMG.xmp" }));
+    }
+
+    [Fact]
     public void NamedOtherwise_FallsBackToTheExtension_OrTheName() {
         Assert.Equal("(+.json)", CompanionLabel.For("a.png", new[] { "b.json" }));
         Assert.Equal("(+notes)", CompanionLabel.For("a.png", new[] { "notes" }));

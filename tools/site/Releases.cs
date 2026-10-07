@@ -47,6 +47,11 @@ internal static class Releases {
         return rows.Select(row => new Release(row[0], row[1], !missing.Contains(row[0]))).ToList();
     }
 
+    /// <summary>The short hash of HEAD: the footer names the commit the site was built from.</summary>
+    public static string? Head(string root, List<string> errors) {
+        return Git(root, errors, null, "rev-parse", "--short", "HEAD")?.Trim();
+    }
+
 
     private static string? Git(string root, List<string> errors, string? input, params string[] args) {
         var info = new ProcessStartInfo("git") {
