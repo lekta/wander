@@ -85,26 +85,44 @@
     </Style>
 
     <!--
+        A five-pointed star centred in a cell of 13, 10 across: the shape of
+        a rating star, drawn rather than typed (2026-10-07). The glyph sat
+        on the font's baseline, below the middle of its line, and so below
+        the colour swatches beside it, by an amount that changed with the
+        font that happened to have it.
+    -->
+    <StreamGeometry x:Key="StarShape">M6.5,1.75 L7.73,5.3 L11.49,5.38 L8.5,7.65 L9.59,11.25 L6.5,9.1 L3.41,11.25 L4.5,7.65 L1.51,5.38 L5.27,5.3 Z</StreamGeometry>
+
+    <!--
         One star of a rating widget: five in the preview footer, five more
-        on the filter strip, the same alphabet in both places. A click
-        leaves the keyboard where it was: a star with it took the next
-        Space for a second click. What the star does - the command and the
-        tooltip - is the view's.
+        on the filter strip, the same alphabet in both places. A cell of 13,
+        as a swatch is, so the two rows share a middle and a pace. Filled
+        when the Content is "★" - the converters that say filled or hollow
+        say it that way - outlined otherwise. A click leaves the keyboard
+        where it was: a star with it took the next Space for a second
+        click. What the star does - the command and the tooltip - is the
+        view's.
     -->
     <Style x:Key="StarButton" TargetType="Button">
         <Setter Property="Focusable" Value="False"/>
         <Setter Property="Background" Value="Transparent"/>
-        <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="Foreground" Value="{StaticResource RatingStar}"/>
-        <Setter Property="FontSize" Value="13"/>
-        <Setter Property="Padding" Value="1,0"/>
         <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
-                        <ContentPresenter/>
+                    <Border Width="13" Height="13" Background="{TemplateBinding Background}">
+                        <Path x:Name="Star" Data="{StaticResource StarShape}"
+                              Stroke="{TemplateBinding Foreground}" StrokeThickness="1" StrokeLineJoin="Round"
+                              Fill="Transparent"/>
                     </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="Content" Value="&#x2605;">
+                            <Setter TargetName="Star" Property="Fill"
+                                    Value="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>

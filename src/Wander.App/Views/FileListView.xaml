@@ -64,16 +64,21 @@
             <Setter Property="Margin" Value="0,0,4,0"/>
             <Setter Property="Template">
                 <Setter.Value>
+                    <!-- The star of Controls.xaml, filled, and a slash with
+                         the strip's own colour either side of it cut through. -->
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
-                            <TextBlock x:Name="Glyph" Text="&#x2605;"
-                                       FontSize="{TemplateBinding FontSize}"
-                                       Foreground="{StaticResource RatingStarEmpty}"
-                                       TextDecorations="Strikethrough"/>
-                        </Border>
+                        <Grid Width="13" Height="13" Background="{TemplateBinding Background}">
+                            <Path x:Name="Glyph" Data="{StaticResource StarShape}"
+                                  Fill="{StaticResource RatingStarEmpty}"/>
+                            <Line X1="2" Y1="11.5" X2="11" Y2="2"
+                                  Stroke="{StaticResource StripBackground}" StrokeThickness="3"/>
+                            <Line x:Name="Slash" X1="2" Y1="11.5" X2="11" Y2="2"
+                                  Stroke="{StaticResource RatingStarEmpty}" StrokeThickness="1"/>
+                        </Grid>
                         <ControlTemplate.Triggers>
                             <DataTrigger Binding="{Binding FilterIncludesUnrated}" Value="True">
-                                <Setter TargetName="Glyph" Property="Foreground" Value="{StaticResource RatingStar}"/>
+                                <Setter TargetName="Glyph" Property="Fill" Value="{StaticResource RatingStar}"/>
+                                <Setter TargetName="Slash" Property="Stroke" Value="{StaticResource RatingStar}"/>
                             </DataTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>

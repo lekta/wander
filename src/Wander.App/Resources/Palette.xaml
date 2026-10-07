@@ -299,9 +299,16 @@
     <SolidColorBrush x:Key="ReviewChartBlue" Color="#994080FF"/>
     <SolidColorBrush x:Key="ReviewChartOver" Color="#FF5A5A"/>
     <SolidColorBrush x:Key="ReviewChartUnder" Color="#6F8BFF"/>
-    <SolidColorBrush x:Key="ReviewToggleOn" Color="#330078D7"/>
     <SolidColorBrush x:Key="ReviewSharp" Color="#C838E8"/>
-    <SolidColorBrush x:Key="IconRing" Color="#9A9A9A"/>
+    <!-- A helper's switch: a grey plate and frame, half see-through, so
+         one switch reads over a dark picture and on the light footer
+         alike; under the cursor, nearer the middle grey from either side;
+         on, the accent's tint and the accent's frame. -->
+    <SolidColorBrush x:Key="ReviewToggleFill" Color="#40808080"/>
+    <SolidColorBrush x:Key="ReviewToggleBorder" Color="#80808080"/>
+    <SolidColorBrush x:Key="ReviewToggleHover" Color="#66909090"/>
+    <SolidColorBrush x:Key="ReviewToggleOn" Color="#330078D7"/>
+    <SolidColorBrush x:Key="ReviewToggleOnBorder" Color="#0078D7"/>
 
     <!-- Under the stars and switches a picture carries in its corner:
          a dark tint of a fifth, the picture shows through. -->
