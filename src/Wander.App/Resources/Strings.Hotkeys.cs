@@ -87,9 +87,6 @@ public static partial class Strings {
     /// <summary>Переименовать папку под курсором</summary>
     public static string HotkeyTreeRename => Get(nameof(HotkeyTreeRename));
 
-    /// <summary>Справка по открытой странице настроек</summary>
-    public static string HotkeySettingsGuide => Get(nameof(HotkeySettingsGuide));
-
     /// <summary>Файловые операции</summary>
     public static string HotkeyGroupFileOps => Get(nameof(HotkeyGroupFileOps));
 
@@ -212,4 +209,10 @@ public static partial class Strings {
 
     /// <summary>Закрыть</summary>
     public static string HotkeyFullscreenClose => Get(nameof(HotkeyFullscreenClose));
+
+    /// <summary>Окно настроек</summary>
+    public static string HotkeyGroupSettings => Get(nameof(HotkeyGroupSettings));
+
+    /// <summary>Справка по открытой странице настроек</summary>
+    public static string HotkeySettingsGuide => Get(nameof(HotkeySettingsGuide));
 }

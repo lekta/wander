@@ -101,6 +101,8 @@ internal sealed class WorkspaceScene {
                 ReadBranch read => new BranchRead(read.Pane, read.Path, Level(read.Path), read.Epoch),
                 ProbeChevrons probe => new ChevronsProbed(
                     probe.Pane, probe.Paths.ToDictionary(p => p, HasChildren, StringComparer.OrdinalIgnoreCase)),
+                ProbeMissing probe => new MissingProbed(
+                    probe.Paths.ToDictionary(p => p, p => !Exists(p), StringComparer.OrdinalIgnoreCase)),
                 _ => null,
             };
             if (answer is null) {
@@ -209,5 +211,9 @@ internal sealed class WorkspaceScene {
 
     private bool HasChildren(string path) {
         return _folders.Any(f => PanelPaths.Same(PanelPaths.Parent(f), path));
+    }
+
+    private bool Exists(string path) {
+        return _folders.Contains(PanelPaths.Key(path)) || _drives.Any(d => PanelPaths.Same(d, path));
     }
 }

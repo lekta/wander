@@ -116,6 +116,9 @@ public sealed class WorkspaceController {
             case ProbeChevrons probe:
                 _ = ProbeAsync(probe);
                 break;
+            case ProbeMissing probe:
+                _ = ProbeMissingAsync(probe);
+                break;
             case ScheduleThrottle schedule:
                 Schedule(schedule.AtMs);
                 break;
@@ -218,6 +221,28 @@ public sealed class WorkspaceController {
         Post(new ChevronsProbed(probe.Pane, answers));
     }
 
+    /// <summary>
+    /// Whether each bookmark's folder is there, asked on the pool. Watched,
+    /// as a level read is: a bookmark on a sleeping share answers in seconds,
+    /// and on the UI thread it held the window up on every build of the rows.
+    /// </summary>
+    private async Task ProbeMissingAsync(ProbeMissing probe) {
+        var answers = await LongWait.WatchAsync(Task.Run(() => {
+            var missing = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            foreach (string path in probe.Paths) {
+                try {
+                    missing[path] = !_fs.DirectoryExists(path);
+                } catch (Exception ex) when (ex is not OutOfMemoryException) {
+                    missing[path] = true;
+                }
+            }
+
+            return missing;
+        }), _log, $"bookmarks: {probe.Paths.Count} folders looked for");
+
+        Post(new MissingProbed(answers));
+    }
+
     /// <summary>One timer for the throttle of the panels' arrow keys: a new time replaces the old one.</summary>
     private void Schedule(long atMs) {
         if (_throttle is null) {
@@ -254,6 +279,7 @@ public sealed class WorkspaceController {
         return e switch {
             BranchRead read => $"BranchRead {read.Pane} {Level(read.Path)} ({read.Rows.Count} rows, epoch {read.Epoch})",
             ChevronsProbed probed => $"ChevronsProbed {probed.Pane} ({probed.HasChildren.Count})",
+            MissingProbed probed => $"MissingProbed ({probed.Missing.Count(m => m.Value)} of {probed.Missing.Count} missing)",
             BookmarksChanged changed => $"BookmarksChanged ({changed.Rows.Count} rows)",
             WorkspaceStarted started => $"WorkspaceStarted ({started.Expanded.Count} open)",
             Removed removed => $"Removed {string.Join(", ", removed.Paths)}",
@@ -270,6 +296,7 @@ public sealed class WorkspaceController {
         return effect switch {
             ReadBranch read => $"ReadBranch {read.Pane} {Level(read.Path)} (epoch {read.Epoch})",
             ProbeChevrons probe => $"ProbeChevrons {probe.Pane} ({probe.Paths.Count})",
+            ProbeMissing probe => $"ProbeMissing ({probe.Paths.Count})",
             ApplyListSelection apply => $"ApplyListSelection ({Selected(apply.List.Selection)}, caret {apply.List.Caret}" +
                 $"{(apply.Scroll ? ", scroll" : "")}{(apply.Held is null ? "" : ", held")})",
             _ => effect.ToString(),

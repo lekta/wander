@@ -362,8 +362,11 @@ public sealed class FolderSession {
         }
 
         _arrival = null;
+        // Nothing found still takes the keyboard when the intent was to: a
+        // window come up on a folder with no row to stand on leaves it on
+        // itself otherwise, where the arrows move nothing.
         if (intent.Paths.Count == 0) {
-            return new ArrivalDecision(ArrivalOutcome.NothingFound, Array.Empty<FileSystemEntry>(), Top: intent.Top);
+            return new ArrivalDecision(ArrivalOutcome.NothingFound, Array.Empty<FileSystemEntry>(), intent.TakeFocus, Top: intent.Top);
         }
 
         var wanted = new HashSet<string>(intent.Paths, StringComparer.OrdinalIgnoreCase);
@@ -373,7 +376,7 @@ public sealed class FolderSession {
             found = rows.Where(e => IsSamePath(e.FullPath, next)).Take(1).ToList();
         }
         if (found.Count == 0) {
-            return new ArrivalDecision(ArrivalOutcome.NothingFound, Array.Empty<FileSystemEntry>());
+            return new ArrivalDecision(ArrivalOutcome.NothingFound, Array.Empty<FileSystemEntry>(), intent.TakeFocus);
         }
 
         // Only for the row it was asked for: a listing that landed for some

@@ -35,6 +35,7 @@ public static class PanelRules {
             BranchRead read => OnBranchRead(state, read, effects),
             ChevronsProbed probed => OnProbed(state, probed),
             BookmarksChanged bookmarks => OnBookmarks(state, bookmarks, effects),
+            MissingProbed probed => OnMissingProbed(state, probed, effects),
             Relocated relocated => OnRelocated(state, relocated),
             Removed removed => OnRemoved(state, removed),
             FolderChanged changed => OnFolderChanged(state, changed, effects),
@@ -197,16 +198,51 @@ public static class PanelRules {
     /// <summary>
     /// The bookmarks' rows were built again. What was open, the cursor and
     /// the open folder's place stay by path (P-15, N7); a row that is no
-    /// longer there takes the cursor to its neighbour.
+    /// longer there takes the cursor to its neighbour. Whether the user's
+    /// own bookmarks are still there is asked of the disk off the UI thread
+    /// - one on a sleeping share or a flash drive pulled out held the window
+    /// up on every build; until the answer comes, a row is as it was, a new
+    /// one an ordinary row.
     /// </summary>
     private static WorkspaceState OnBookmarks(WorkspaceState state, BookmarksChanged changed, ICollection<WorkspaceEffect> effects) {
         var panel = state.Bookmarks;
         var old = panel.Top;
-        var rows = Merge(panel, old, changed.Rows);
+        var rows = Merge(panel, old, changed.Rows)
+            .Select(row => old.FirstOrDefault(o => PanelPaths.Same(o.Path, row.Path)) is { IsMissing: true } ? row with { IsMissing = true } : row)
+            .ToImmutableArray();
         panel = panel.WithLevel(PanelState.TopKey, new PanelLevel(LevelState.Loaded, rows, 0));
         panel = SettleGone(panel, PanelState.TopKey, old, rows);
         state = state with { Bookmarks = panel };
         Probe(state, Pane.Bookmarks, rows, effects);
+
+        var own = rows.Where(r => r.Role == PanelRowRole.OwnBookmark && r.Kind == PanelRowKind.Folder).Select(r => r.Path).ToArray();
+        if (own.Length > 0) {
+            effects.Add(new ProbeMissing(own));
+        }
+
+        return state;
+    }
+
+    /// <summary>
+    /// The disk said which bookmarks' folders are gone: those are greyed,
+    /// with no chevron; one that came back has its chevron asked for.
+    /// </summary>
+    private static WorkspaceState OnMissingProbed(WorkspaceState state, MissingProbed probed, ICollection<WorkspaceEffect> effects) {
+        var panel = state.Bookmarks;
+        var rows = panel.Top;
+        foreach (var (path, missing) in probed.Missing) {
+            int at = IndexIn(rows, path);
+            if (at >= 0 && rows[at].Role == PanelRowRole.OwnBookmark && rows[at].IsMissing != missing) {
+                rows = rows.SetItem(at, rows[at] with { IsMissing = missing });
+            }
+        }
+        if (rows == panel.Top) {
+            return state;
+        }
+
+        var back = rows.Where(r => !r.IsMissing && panel.Top.Any(o => o.IsMissing && PanelPaths.Same(o.Path, r.Path))).ToImmutableArray();
+        state = state with { Bookmarks = panel.WithLevel(PanelState.TopKey, panel.LevelOf(PanelState.TopKey) with { Rows = rows }) };
+        Probe(state, Pane.Bookmarks, back, effects);
 
         return state;
     }

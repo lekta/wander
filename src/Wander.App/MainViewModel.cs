@@ -2331,6 +2331,14 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
+        // The window comes up with the keyboard on itself, where the arrows
+        // move nothing: the list takes it whatever folder it comes up on, a
+        // row to stand on or not. The last session's place below replaces
+        // this with its own, which takes it too.
+        if ((named ?? restored ?? home ?? first) is { } start) {
+            _session.SetArrival(ArrivalIntent.Rows(start, Array.Empty<string>(), takeFocus: true));
+        }
+
         if (named is not null) {
             _nav.NavigateTo(named, NavigationSource.External);
         } else if (restored is not null) {

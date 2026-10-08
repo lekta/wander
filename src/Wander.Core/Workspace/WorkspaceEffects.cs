@@ -22,6 +22,9 @@ public sealed record ReadBranch(Pane Pane, string Path, int Epoch) : WorkspaceEf
 /// <summary>Ask the disk whether these rows have subfolders, off the UI thread; answer with <see cref="ChevronsProbed"/>.</summary>
 public sealed record ProbeChevrons(Pane Pane, IReadOnlyList<string> Paths) : WorkspaceEffect;
 
+/// <summary>Ask the disk whether the folders of these bookmarks are there, off the UI thread; answer with <see cref="MissingProbed"/>.</summary>
+public sealed record ProbeMissing(IReadOnlyList<string> Paths) : WorkspaceEffect;
+
 /// <summary>Raise <see cref="ThrottleElapsed"/> at <paramref name="AtMs"/>.</summary>
 public sealed record ScheduleThrottle(long AtMs) : WorkspaceEffect;
 

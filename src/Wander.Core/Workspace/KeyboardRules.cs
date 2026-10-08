@@ -105,11 +105,17 @@ public static class KeyboardRules {
     /// session's place (K-3, K-6, L-6, L-7). The keyboard's row
     /// went - deleted, hidden by the filter, renamed: onto the row that took
     /// its place, nothing scrolling (K-1, K-11). Otherwise it stays (K-7,
-    /// K-12); a keyboard in a panel always does.
+    /// K-12); a keyboard in a panel always does. No row to stand on, and
+    /// asked to take it from nowhere - the window's first folder with
+    /// nothing to select: into the list all the same, as Ctrl+2 puts it.
     /// </summary>
     private static void Landed(WorkspaceState before, WorkspaceState state, ListingLanded landed, ICollection<WorkspaceEffect> effects) {
         var zone = state.Keyboard.Zone;
         if (state.List.Caret is not { } caret) {
+            if (zone is null && landed.Intent.TakeFocus) {
+                effects.Add(new FocusZone(WindowZone.FileList, ZoneReason.Programmatic));
+            }
+
             return;
         }
 

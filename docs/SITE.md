@@ -133,12 +133,14 @@ Google, браузер не исполняет): название, ОС, вер�
 0, лицензия. `sitemap.xml` — все страницы адресами папкой, лендинг
 первым; `guide/index.html` (переадресация) — нет. `robots.txt` не
 пишется: читается только в корне хоста, сайт в папке — sitemap отдаётся
-в кабинетах (PROMOTION). IndexNow: ключ `SiteBuilder.IndexNowKey`
+в кабинетах вебмастера. IndexNow: ключ `SiteBuilder.IndexNowKey`
 (публичный, файл `<ключ>.txt` рядом с лендингом); шаг workflow после
 деплоя ждёт, пока Pages отдаст файл, и шлёт список из sitemap на
 `api.indexnow.org` — Яндекс и Bing; Google в протоколе нет, ему —
 Search Console. Строка подтверждения Google — в `docs/site/index.html`
-после `description`; Яндексу нужен корень хоста — PROMOTION, «Индексация».
+после `description`; Яндекс Вебмастер принимает только корень хоста —
+репозиторий `lekta.github.io` с `robots.txt`, в нём строка `Sitemap:` на
+наш `sitemap.xml`.
 
 ## Статистика
 

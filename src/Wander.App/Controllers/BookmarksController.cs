@@ -286,11 +286,13 @@ public sealed class BookmarksController {
     /// row — dropping it would look like Wander forgot the bookmark, and
     /// the user is the one who decides whether it goes: no chevron, and
     /// clicking it lands on the "this folder is gone" panel in the file
-    /// area. A bookmark inside an archive is not missing, and not a folder
+    /// area. Whether it is gone is the window's model's to ask, off the UI
+    /// thread (PanelRules, ProbeMissing): built here, the row is an ordinary
+    /// one. A bookmark inside an archive is not missing, and not a folder
     /// either - the answer the Recycle Bin gets: a leaf. One on the archive
     /// itself opens like the archive's row under its folder.
     /// </summary>
-    private PanelRow? BuildFolderRow(string path, bool startsSection) {
+    private static PanelRow? BuildFolderRow(string path, bool startsSection) {
         if (string.IsNullOrEmpty(path)) {
             return null;
         }
@@ -303,13 +305,11 @@ public sealed class BookmarksController {
 
         bool isShell = ServiceLocator.TryGet<IShellNamespace>() is { } shell && shell.IsShellPath(path);
         bool isArchive = isShell && Archives.Of(path) is { IsRoot: true };
-        bool exists = isArchive || (!isShell && _fs.DirectoryExists(path));
         var kind = isArchive ? PanelRowKind.Archive : isShell ? PanelRowKind.Shell : PanelRowKind.Folder;
 
         return new PanelRow(path, name, kind) {
             Role = PanelRowRole.OwnBookmark,
             StartsSection = startsSection,
-            IsMissing = !exists && !isShell,
         };
     }
 

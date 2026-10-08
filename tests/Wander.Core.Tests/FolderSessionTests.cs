@@ -185,6 +185,23 @@ public class FolderSessionTests {
     }
 
     [Fact]
+    public void NothingFound_StillCarriesTheAskToTakeTheKeyboard() {
+        // The window's first folder: no row asked for, or the asked one gone.
+        var none = new FolderSession();
+        none.SetArrival(ArrivalIntent.Rows(@"C:\folder", Array.Empty<string>(), takeFocus: true));
+        var gone = new FolderSession();
+        gone.SetArrival(ArrivalIntent.Rows(@"C:\folder", new[] { @"C:\folder\gone.txt" }, takeFocus: true));
+
+        var nothingAsked = none.DecideArrival(@"C:\folder", new[] { Row("a.txt") });
+        var nothingLeft = gone.DecideArrival(@"C:\folder", new[] { Row("a.txt") });
+
+        Assert.Equal(ArrivalOutcome.NothingFound, nothingAsked.Outcome);
+        Assert.True(nothingAsked.TakeFocus);
+        Assert.Equal(ArrivalOutcome.NothingFound, nothingLeft.Outcome);
+        Assert.True(nothingLeft.TakeFocus);
+    }
+
+    [Fact]
     public void TheIntentIsConsumedByItsListing_NotByTheNextOne() {
         var session = new FolderSession();
         session.SetArrival(ArrivalIntent.Rows(@"C:\folder", new[] { @"C:\folder\a.txt" }));

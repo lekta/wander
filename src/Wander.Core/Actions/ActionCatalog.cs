@@ -29,7 +29,9 @@ public static class ActionCatalog {
     /// command line and everything else follow the code and an improved
     /// preset reaches a user who switched it off once; then the user's rows
     /// in stored order. A stored preset the code no longer ships is dropped.
-    /// A row without an id gets one - the menu finds actions by id.
+    /// A row without an id gets one - the menu finds actions by id. A row
+    /// that runs a listed program by its file name is that program's row
+    /// (<see cref="BoundToTool"/>).
     /// </summary>
     public static IReadOnlyList<CustomAction> Merge(IReadOnlyList<CustomAction> presets, IReadOnlyList<CustomAction> stored) {
         var presetIds = new HashSet<string>(presets.Select(p => p.Id), StringComparer.Ordinal);
@@ -50,11 +52,11 @@ public static class ActionCatalog {
                 continue;
             }
             if (row.Id.Length == 0) {
-                result.Add(row with { Id = NewId() });
+                result.Add(BoundToTool(row with { Id = NewId() }));
                 continue;
             }
             if (seen.Add(row.Id)) {
-                result.Add(row);
+                result.Add(BoundToTool(row));
             }
         }
 
@@ -307,6 +309,25 @@ public static class ActionCatalog {
             && !SameTool(program, action.RequiredTool + ".exe");
     }
 
+
+    /// <summary>
+    /// A row of the user's own that runs a listed program by its bare name
+    /// or file name - "ffmpeg.exe", typed before the program list existed -
+    /// pointed at that program as choosing it from the list would
+    /// (<see cref="WithProgram"/>): found where the "Программы" page finds
+    /// it, not on <c>PATH</c> alone, and shown as that program's line. A
+    /// path is the row's own and stays.
+    /// </summary>
+    private static CustomAction BoundToTool(CustomAction row) {
+        if (row.Kind != ActionKind.Command || row.RequiredTool.Length > 0) {
+            return row;
+        }
+
+        string program = row.Program.Trim();
+        var tool = ActionPresets.Tools.FirstOrDefault(t => SameTool(program, t.Name) || SameTool(program, t.Name + ".exe"));
+
+        return tool is null ? row : row with { Program = tool.Name, RequiredTool = tool.Name };
+    }
 
     private static bool SameTool(string a, string b) {
         return string.Equals(a, b, StringComparison.OrdinalIgnoreCase);

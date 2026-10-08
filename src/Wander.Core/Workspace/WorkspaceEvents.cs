@@ -123,6 +123,9 @@ public sealed record BranchRead(Pane Pane, string Path, IReadOnlyList<PanelRow> 
 /// <summary>Whether each of these rows has subfolders, as the disk answered.</summary>
 public sealed record ChevronsProbed(Pane Pane, IReadOnlyDictionary<string, bool> HasChildren) : WorkspaceEvent;
 
+/// <summary>Whether the folder of each of these bookmarks is gone, as the disk answered.</summary>
+public sealed record MissingProbed(IReadOnlyDictionary<string, bool> Missing) : WorkspaceEvent;
+
 /// <summary>The bookmarks panel's top rows are these now: a bookmark added, removed, moved, relocated, switched on or off.</summary>
 public sealed record BookmarksChanged(IReadOnlyList<PanelRow> Rows) : WorkspaceEvent;
 

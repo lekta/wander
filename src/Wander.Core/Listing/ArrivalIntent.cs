@@ -37,8 +37,9 @@ public enum ArrivalAction {
 /// <param name="TakeFocus">
 /// Whether the list should take the keyboard back along with the selection.
 /// Set by operations that ran behind a modal dialog — by the time it closes,
-/// the row that had the keyboard has been rebuilt out of existence - and by
-/// the last session's place (<see cref="Place"/>).
+/// the row that had the keyboard has been rebuilt out of existence - by the
+/// last session's place (<see cref="Place"/>) and by the window's first
+/// folder: with no row found, the list takes it all the same.
 /// </param>
 /// <param name="RenameTarget">
 /// A path whose inline editor should open once it is selected. Only ever the

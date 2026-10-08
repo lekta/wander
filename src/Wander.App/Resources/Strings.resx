@@ -2770,4 +2770,7 @@
   <data name="HotkeyFullscreenClose" xml:space="preserve">
     <value>Закрыть</value>
   </data>
+  <data name="HotkeyGroupSettings" xml:space="preserve">
+    <value>Окно настроек</value>
+  </data>
 </root>

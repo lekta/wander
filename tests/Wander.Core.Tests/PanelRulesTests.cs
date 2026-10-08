@@ -338,6 +338,34 @@ public class PanelRulesTests {
         Assert.True(s.Shows(Pane.Bookmarks, Year));
     }
 
+    /// <summary>
+    /// Whether a bookmark's folder is there is asked of the disk off the UI
+    /// thread: the row comes up ordinary, goes grey once the disk says the
+    /// folder is gone, stays grey when the rows are built again, and has its
+    /// chevron asked for when the folder is back.
+    /// </summary>
+    [Fact]
+    public void ABookmarksFolderGone_IsAskedOfTheDisk_AndGreyedOnTheAnswer() {
+        const string Gone = @"D:\Gone";
+        var s = Scene().Start();
+
+        s.Post(new BookmarksChanged(new[] { Bookmark(Photos), Bookmark(Gone) }));
+        Assert.False(Row(s, Gone).IsMissing);
+        Assert.Equal(new[] { Photos, Gone }, Assert.Single(s.Asked<ProbeMissing>()).Paths);
+
+        s.Settle();
+        Assert.True(Row(s, Gone).IsMissing);
+        Assert.False(Row(s, Photos).IsMissing);
+
+        s.Post(new BookmarksChanged(new[] { Bookmark(Photos), Bookmark(Gone) }));
+        Assert.True(Row(s, Gone).IsMissing);
+
+        s.Add(@"D:\Gone\Inside").Settle();
+        Assert.False(Row(s, Gone).IsMissing);
+        Assert.True(Row(s, Gone).HasChevron);
+        Assert.Contains(s.Effects.OfType<ProbeChevrons>(), p => p.Paths.Contains(Gone));
+    }
+
     /// <summary>P-16: a bookmark moved up keeps the cursor on it.</summary>
     [Fact]
     public void P16_ABookmarkMoved_TheCursorGoesWithIt() {
@@ -763,5 +791,10 @@ public class PanelRulesTests {
 
     private static PanelRow Bookmark(string path) {
         return WorkspaceScene.Bookmark(path);
+    }
+
+    /// <summary>The bookmarks panel's top row on <paramref name="path"/>.</summary>
+    private static PanelRow Row(WorkspaceScene s, string path) {
+        return s.Bookmarks.Top.Single(r => PanelPaths.Same(r.Path, path));
     }
 }

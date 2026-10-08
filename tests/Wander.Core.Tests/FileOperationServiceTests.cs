@@ -354,6 +354,16 @@ public class FileOperationServiceTests {
         Assert.Contains($"CreateDirectory:{NewFolderPath}", fs.CallLog);
     }
 
+    [Fact]
+    public void CreateFolder_InTheWindowsTree_Refused() {
+        var (ops, fs, _, undo) = Setup();
+        string system = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32");
+
+        Assert.Throws<IOException>(() => ops.CreateFolder(system, NewFolderName));
+        Assert.DoesNotContain(fs.CallLog, call => call.StartsWith("CreateDirectory:", StringComparison.Ordinal));
+        Assert.False(undo.CanUndo);
+    }
+
 
     // --- Undo round-trips ---------------------------------------------
 

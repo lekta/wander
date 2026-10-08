@@ -387,7 +387,10 @@ public sealed class ContentSearchController : ObservableObject {
             return;
         }
 
-        var scope = filterPass ? SearchScope.Subfolders : _scope;
+        // The box reaches past the folder with text too: "*.cs:word" typed
+        // at a project's root found nothing when the .cs files were all in
+        // subfolders. The window's checkbox speaks for the window only.
+        var scope = _fromFilterBox ? SearchScope.Subfolders : _scope;
 
         Cancel();
         _cts = new CancellationTokenSource();

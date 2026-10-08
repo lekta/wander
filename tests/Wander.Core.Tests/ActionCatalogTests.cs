@@ -69,6 +69,21 @@ public class ActionCatalogTests {
     }
 
     [Fact]
+    public void Merge_OwnRowRunningAListedProgramByFileName_IsThatProgramsRow() {
+        // Typed before the program list: found on PATH only, and the list
+        // could not choose FFmpeg for it - "already chosen".
+        var typed = _own with { Program = "FFmpeg.exe " };
+        var bare = _own with { Id = "bare", Program = "pandoc" };
+        var path = _own with { Id = "path", Program = Ffmpeg };
+
+        var catalog = ActionCatalog.Merge(_presets, new[] { typed, bare, path });
+
+        Assert.Equal(typed with { Program = "ffmpeg", RequiredTool = "ffmpeg" }, catalog[2]);
+        Assert.Equal(bare with { RequiredTool = "pandoc" }, catalog[3]);
+        Assert.Equal(path, catalog[4]);
+    }
+
+    [Fact]
     public void Merge_GivesAnIdToARowWithout() {
         var catalog = ActionCatalog.Merge(_presets, new[] { _own with { Id = "" } });
 

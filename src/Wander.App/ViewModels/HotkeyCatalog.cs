@@ -57,7 +57,6 @@ public static class HotkeyCatalog {
             new HotkeyRow("Enter в дереве", Strings.HotkeyTreeEnter),
             new HotkeyRow("Esc в дереве", Strings.HotkeyTreeEscape),
             new HotkeyRow("F2 в дереве", Strings.HotkeyTreeRename),
-            new HotkeyRow("F1 в настройках", Strings.HotkeySettingsGuide),
         }),
         new HotkeyGroup(Strings.HotkeyGroupFileOps, new[] {
             new HotkeyRow("Ctrl + C", Strings.HotkeyCopy),
@@ -104,6 +103,9 @@ public static class HotkeyCatalog {
             new HotkeyRow("Ctrl + Z", Strings.HotkeyFullscreenUndo),
             new HotkeyRow("Z", Strings.HotkeyFullscreenZoom),
             new HotkeyRow("Esc / Enter", Strings.HotkeyFullscreenClose),
+        }),
+        new HotkeyGroup(Strings.HotkeyGroupSettings, new[] {
+            new HotkeyRow("F1", Strings.HotkeySettingsGuide),
         }),
     };
 

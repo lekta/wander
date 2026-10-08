@@ -69,6 +69,31 @@ public class ListRulesTests {
         Assert.Equal(keyboardFollows, s.Effects.OfType<FocusRow>().Any(f => f.Path == C));
     }
 
+    /// <summary>
+    /// The window came up on a folder with no row to stand on - no last
+    /// place, or its file and the rows around it gone: nothing selected, the
+    /// keyboard - on the window itself - into the list all the same, as
+    /// Ctrl+2 puts it. Clicked into a panel meanwhile, it stays there.
+    /// </summary>
+    [Theory]
+    [InlineData(false, null, ZoneReason.FocusFell, true)]
+    [InlineData(true, null, ZoneReason.FocusFell, true)]
+    [InlineData(false, WindowZone.Drives, ZoneReason.Click, false)]
+    public void TheWindowsFirstFolder_NoRowToStandOn_TheListTakesTheKeyboardFromNowhere(
+        bool placeGone, WindowZone? zone, ZoneReason reason, bool keyboardFollows) {
+        var session = new FolderSession();
+        session.SetArrival(placeGone
+            ? ArrivalIntent.Place(Folder, F("x.jpg"), new[] { F("w.jpg"), F("x.jpg") }, top: null)
+            : ArrivalIntent.Rows(Folder, Array.Empty<string>(), takeFocus: true));
+        var decision = session.DecideArrival(Folder, _rows.Select(Entry).ToList());
+        var s = Opened().Enter(zone, reason);
+
+        s.Land(Array.Empty<string>(), _rows, ListingReason.Arrival, decision);
+
+        Assert.Empty(s.State.List.Selection);
+        Assert.Equal(keyboardFollows, s.Effects.Contains(new FocusZone(WindowZone.FileList, ZoneReason.Programmatic)));
+    }
+
     /// <summary>A folder opened from a panel row: nothing of its own listing is selected.</summary>
     [Fact]
     public void AFolderOpenedFromAPanel_SelectsNothingInIt() {

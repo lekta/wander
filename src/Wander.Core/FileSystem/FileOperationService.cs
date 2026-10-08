@@ -206,7 +206,12 @@ public sealed class FileOperationService {
     }
 
 
+    /// <exception cref="IOException">The parent is in the Windows tree (<see cref="SystemPathGuard.MayWriteInto"/>), or the create failed.</exception>
     public void CreateFolder(string parent, string name) {
+        if (!SystemPathGuard.MayWriteInto(parent, out string reason)) {
+            throw new IOException(reason);
+        }
+
         using var _ = _undo.BeginOperation();
         var path = Path.Combine(parent, name);
         _fs.CreateDirectory(path);

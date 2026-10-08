@@ -147,6 +147,27 @@ public class ContentSearchServiceTests {
 
 
     [Fact]
+    public async Task Search_CsSource_FoundByText_InSubfoldersOnlyWhenAsked() {
+        // A .cs as Visual Studio saves it: UTF-8 with a BOM, CRLF, Cyrillic
+        // in a comment - a few folders below the root the search starts at.
+        var fs = new FakeFileSystem();
+        fs.Directories.Add(@"C:\root");
+        fs.Directories.Add(@"C:\root\src");
+        fs.Directories.Add(@"C:\root\src\Core");
+        byte[] bom = { 0xEF, 0xBB, 0xBF };
+        fs.Files[@"C:\root\src\Core\Budget.cs"] = bom.Concat(Text("namespace A;\r\n// бюджет\r\nclass Budget { }\r\n")).ToArray();
+
+        var (deep, _) = await Run(fs, Request("*.cs", "бюджет", SearchScope.Subfolders));
+        var (here, _) = await Run(fs, Request("*.cs", "бюджет", SearchScope.CurrentFolder));
+
+        var hit = Assert.Single(deep);
+        Assert.Equal(@"C:\root\src\Core\Budget.cs", hit.Entry.FullPath);
+        Assert.Equal(2, hit.Line);
+        Assert.Empty(here);
+    }
+
+
+    [Fact]
     public async Task Search_MaskGatesTheRead_SoRejectedFilesAreNotScanned() {
         // "Every .cs that mentions X" must not open the .png next to it.
         var fs = new FakeFileSystem();

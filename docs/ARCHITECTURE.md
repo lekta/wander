@@ -493,7 +493,7 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
                                  ▲  очередь: событие от исполнения эффекта        │
                                  │  ждёт конца текущего                           ▼
                                  └─ эффекты ◀── StateChanged (проекция панелей, VM) ◀─ (состояние, эффекты)
-     Navigate, ReadBranch, ProbeChevrons, ScheduleThrottle — сам;
+     Navigate, ReadBranch, ProbeChevrons, ProbeMissing, ScheduleThrottle — сам;
      FocusZone, FocusRow, ApplyListSelection, OpenEditor — окну (ViewEffectRequested)
 ```
 
@@ -512,7 +512,7 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
   (`ZoneEntered(зона, причина)`, `MenuOpened` / `Closed`,
   `WindowActivated` / `Deactivated`, `PaneHidden`, `DialogOpened` /
   `Closed`, `OptionsChanged`), факты (`Navigated`, `BranchRead` с эпохой,
-  `ChevronsProbed`, `BookmarksChanged`, `Relocated`, `Removed`,
+  `ChevronsProbed`, `BookmarksChanged`, `MissingProbed`, `Relocated`, `Removed`,
   `FolderChanged`, `ListingLanded`, `ViewModeChanged`, `ThrottleElapsed`).
   Неизвестная причина ничего не выделяет и не раскрывает.
 - **Правила — модули в фиксированном порядке** (`WorkspaceReducer`):
@@ -1057,7 +1057,10 @@ X», «листинг эпохи N долетел», «сторож замети
   приоритете `Loaded` (до раскладки смещение прижалось бы к пустому
   списку) — таблице индекс, плиткам `VirtualizingWrapPanel.ShowFromTop`, —
   затем выделенную в видимость. Клавиатуру место берёт с собой
-  (`TakeFocus`). Пишется в `WriteStateNow` (`CurrentPlace`: не для выдачи
+  (`TakeFocus`). Без места старт ставит `ArrivalIntent.Rows` без строк с
+  `TakeFocus`: `NothingFound` несёт его, `KeyboardRules.Landed` без
+  каретки при клавиатуре на окне — `FocusZone(FileList)`, как `Ctrl+2`;
+  пустая папка намерение не тратит — клавиатура на окне. Пишется в `WriteStateNow` (`CurrentPlace`: не для выдачи
   и не пока листинг другой папки); верх отдаёт
   `MainViewModel.ListTopRow` ← `FileListView.FirstRowOnScreen`;
   `FlushState` при закрытии пишет, если место сдвинулось
@@ -1087,7 +1090,9 @@ X», «листинг эпохи N долетел», «сторож замети
   `ContentSearchService` со `SearchScope.Subfolders` (`IsFilterPass`),
   **засеянный** найденным (не мигает), повторы — по
   `SearchResultsController._seen`, `HereFirst` держит найденное здесь
-  выше. Окно поиска этим путём не ходит (`_fromFilterBox`).
+  выше. Окно поиска этим путём не ходит (`_fromFilterBox`). Текст из
+  поля (`маска:текст`) тоже ищется по подпапкам, без засева; галка «в
+  подпапках» — только для окна.
 - **Два критерия через «И»**: маска — ворота, отвергнутый файл не
   открывается (17 файлов / 43 мс против 5074 / 217). Галки «в содержимом»
   нет — её роль играет наличие текста.
@@ -1284,7 +1289,10 @@ Core, UI исполняет:
 - **Хранение пресетов** — `ActionCatalog.ToStored` / `Merge`: у пресета в
   `state.json` только `Id`, `Enabled` и свой `Program`
   (`ActionCatalog.Override`), остальное из кода — улучшенная команда
-  доезжает и до выключившего. Свои строки — целиком.
+  доезжает и до выключившего. Свои строки — целиком; своя с программой
+  каталога по имени или имени файла (`ffmpeg.exe`, набрана до списка
+  программ) при слиянии привязывается к инструменту, как выбор из списка
+  (`BoundToTool`).
 - **Программа строки** выбирается: `ActionCatalog.ProgramChoices` —
   инструменты каталога (порядок «Программ»), программы строк, встроенные
   обработчики по названию (`ActionPresets.BuiltinTitle`); новая — файлом.
@@ -1357,20 +1365,29 @@ CompanionResolver        Collapse() список → свёрнутый; FindCom
    └→ FileOperationService.RenameMany() (группа = один undo-шаг)
 CompanionMetadataService чтение/запись содержимого: UnityMetaSidecar.Read (GUID,
    импортёр), Pp3Sidecar.Read (Rank, ColorLabel), WithRank → IFileSystem.ReplaceAtomic,
-   CreateRatingSidecar (по согласию)
+   CreateRatingSidecar (по согласию); RatingSidecars() порядок чтения; PlanWrite()
+   Edit / Create / None; PhotoRating() → EmbeddedRating.Read (заголовок снимка) + EmbeddedRatingCache
 Listing/RatedListing     WithRatings() листинг → тот же с Rating (читалка делегатом)
 ```
 
 | Шаблон | Пример | Кто |
 |---|---|---|
-| `Appended` — к полному имени | `Sprite.png.meta`, `IMG.CR2.pp3` | Unity, RawTherapee, Takeout |
-| `Replaced` — заменяет расширение | `IMG_1234.xmp` | Adobe / darktable, `.AAE` |
+| `Appended` — к полному имени | `Sprite.png.meta`, `IMG.CR2.pp3`, `IMG.CR2.xmp` | Unity, RawTherapee, darktable, Takeout |
+| `Replaced` — заменяет расширение | `IMG_1234.xmp` | Adobe, Bridge, exiftool, `.AAE` |
 
 `Appended` — по точному имени, `Replaced` — по stem'у. Два претендента на
 stem: сайдкар — RAW, если RAW среди них ровно один (`IMG.CR2` +
 `IMG.jpg` при `IMG.xmp` — XMP у RAW, иначе после «Превью из RAW» сайдкар и
 оценка осиротеют); иначе — ни к кому. То же в `Group` и `FindCompanions`
 (`CompanionResolver.Owner`).
+
+Правило darktable `.xmp` стоит раньше `Replaced` (по stem'у `IMG.CR2.xmp`
+ушло бы к `IMG.CR2.pp3`) и с `Versions`: дубликаты `IMG_1234_01.CR2.xmp`
+(две цифры и больше после `_`, `CompanionRule.TryVersion`) — спутники
+`IMG_1234.CR2`, пока нет файла `IMG_1234_01.CR2` (решение 2026-10-01): в
+листинге — `FindMain`, с диска — `IFileSystem.FileNamesLike` (один запрос
+на картинку при вставке и броске), переименование — `VersionNameFor`; в
+`RatingSidecars` они не входят — звёзды основного.
 
 - Свёртка — в воркере `RefreshFolderAsync` **после** Hidden / System:
   спутник отфильтрованного файла и сирота видны.
@@ -1385,10 +1402,16 @@ stem: сайдкар — RAW, если RAW среди них ровно один
   `CompanionResolver.Group()` с диском, в `Task.Run`.
 - Авто-переименование тянет спутников (`Sprite (1).png.meta`)
   подстановкой общей части. Мимо батча — `RenamePlan` + `RenameMany`.
-- **Оценки** — `SidecarRating` (`Rank` / `ColorLabel`), формат — за
-  `CompanionMetadataService` по расширению; `ColorLabels` нумерованы
+- **Оценки** — `SidecarRating` (`Rank` / `ColorLabel`, `InPhoto`), формат —
+  за `CompanionMetadataService` по расширению; `ColorLabels` нумерованы
   одинаково (XMP хранит имя `Red`, pp3 — номер); `SidecarText` — BOM,
-  переводы строк.
+  переводы строк. **Порядок чтения** (решение 2026-10-01) —
+  `RatingSidecars`: `Appended` (darktable `IMG.CR2.xmp`, RawTherapee
+  `.pp3`) раньше `Replaced` (`IMG.xmp`); первый с оценкой — поверх оценки
+  из снимка (`EmbeddedRating.Merge`: поле сайдкара, и 0 тоже, перекрывает
+  камеру). **Запись** — во все сайдкары, где поле есть (`Holding`), ни в
+  одном — в первый; создаваемый несёт второе поле снимка, чтобы метка не
+  сняла звёзды камеры.
 - **Запись в чужой формат — узкий путь**: только поля оценки, в
   существующем — одна строка, остальные байты как есть (в `.pp3` вся
   проявка); XMP — строковая хирургия, не `XDocument` (round-trip переписал
@@ -1406,6 +1429,20 @@ stem: сайдкар — RAW, если RAW среди них ровно один
   читается с 5.7, синхронизируется с 5.11. `AppSettings.RawRatingFormat`,
   при `.pp3` — предупреждение.
 - **`.meta` только читается** — Unity владеет им, перезапись отвяжет ассет.
+- **Оценка из снимка** (`EmbeddedRating`, 2026-10-07) — читается, не
+  пишется: только заголовок (стенд: CR3 0,13 мс тёплый, MetadataExtractor
+  2 мс); где лежит — по контейнеру: ISO box (CR3, HEIF) — XMP в uuid-боксе,
+  EXIF Canon в `moov` → `CMT1`; JPEG — APP1; TIFF-образные RAW (CR2, NEF,
+  ARW, DNG, ORF, RW2, PEF) — IFD0, `0x02BC` XMP и `0x4746` EXIF `Rating`;
+  RAF — вшитый JPEG. XMP поверх EXIF; 0 без метки — «ничего». `Reads` —
+  RAW и то, что пишет камера (JPEG, TIFF, HEIF); HEIF `meta` не
+  разбирается (TECHDEBT). `PlanWrite`: сайдкар есть — `Edit`; нет —
+  `Create` при значении > 0 или при 0 поверх собственной оценки снимка
+  (решение 2026-10-01: в RAW не пишем, звёзды камеры снимает сайдкар с 0);
+  иначе `None`. Кэш `EmbeddedRatingCache` — только оценка из снимка, ключ
+  путь + размер + mtime, 50 000 записей; сторож — `ForgetPhotoRating` по
+  изменённому пути, `F5` — `ForgetPhotoRatings` папки (exiftool `-P`
+  сохраняет mtime).
 
 ## Галерея и оценки
 
@@ -1415,7 +1452,7 @@ stem: сайдкар — RAW, если RAW среди них ровно один
 
 ```
 RatingsController.Apply(строки, поле, значение)
-   ├ делит на «сайдкар есть / нет», спрашивает про вторую группу один раз
+   ├ PlanWrite: Edit / Create / None, про Create спрашивает один раз
    ├ CompanionMetadataService.ApplyRatingToMany → один CompositeAction
    └ ApplyResults
        ├ SearchController.Replace: состав видимого тот же → ItemsChanged (эти строки);
@@ -1468,8 +1505,9 @@ RefreshFolderAsync (листинг + свёртка, пул)
 ```
 
 Пятьсот RAW — пятьсот чтений, папка должна появиться раньше. Трогает
-только строки с `Companions`; без сайдкаров возвращает **тот же список по
-ссылке** — UI-проход пропускается. Как читать — делегат `ReadRatingFor`;
+только строки с `Companions` и снимки, которые могут нести оценку сами
+(`EmbeddedRating.Reads`, после первого раза — из кэша); без тех и других
+возвращает **тот же список по ссылке** — UI-проход пропускается. Как читать — делегат `ReadRatingFor`;
 отмена по эпохе; `ListingDiff` сверяет строки
 `FileSystemEntry.SaysTheSameAs` (с оценкой). **Сортировка по оценке** —
 `SortKey.Rating` в `EntryComparers`: первый проход при пустых оценках (=
@@ -1477,7 +1515,8 @@ RefreshFolderAsync (листинг + свёртка, пул)
 `SystemIOFileSystem.Enumerate` (компаратор имён ординальный — TECHDEBT).
 Неоценённое = 0 — папка не переставляется, пока null'ы становятся нулями.
 **Перечитывание той же папки** (`F5`, сторож, порядок) несёт оценки с
-экрана (`RatedListing.CarryRatings`, по пути, строкам со спутником) до
+экрана (`RatedListing.CarryRatings`, по пути, строкам со спутником и с
+оценкой из снимка) до
 нового прохода, при сортировке по оценке — сразу в её порядке: иначе
 фильтр по звёздам на миг прятал все снимки.
 
@@ -1860,6 +1899,12 @@ SYS ws=431 private=360 gen=167/155/134 alloc=+45 loh=6 handles=1060 threads=40 c
 - **Клавиатура панели коалесируется** (`TreeNavThrottle`: одиночное —
   сразу, серия — один переход после покоя); навигация в открытую папку
   гасится правилом. **Шевроны оптимистичные** до пробы `ProbeChevrons`.
+  **Пропавшая закладка** — тоже ответом с пула: `BookmarksController`
+  диск не спрашивает, `PanelRules` на `BookmarksChanged` шлёт
+  `ProbeMissing` по своим закладкам-папкам, `MissingProbed` ставит
+  `IsMissing`; до ответа строка как была, новая — обычная; вернувшейся —
+  проба шеврона. Встроенные (`AddSpecialFolder`) проверяются на UI-потоке
+  (TECHDEBT).
 - **Иконки**: `SHGetFileInfo` сериализован (`_shellIconLock` — под
   конкуренцией отдавал пусто для handler-иконок); негативный кэш
   `_missing` — только у миниатюр; `Unloaded` поднимает поколение —
