@@ -91,7 +91,7 @@ internal static class ReviewOverlay {
         ct.ThrowIfCancellationRequested();
 
         if (request.Peaking && request.FullReady && peaks is null) {
-            peaks = Peaks(full, request, Full);
+            peaks = Peaks(full, request.Path, request.Stamp, request.Noisy, Full);
         }
         ct.ThrowIfCancellationRequested();
 
@@ -135,13 +135,27 @@ internal static class ReviewOverlay {
 
 
     /// <summary>
+    /// Where the crisp edges of the big picture are thickest, in shares of
+    /// it (<see cref="SharpZone"/>); null when nothing in it is crisp. The
+    /// same marks peaking draws, and the same kept answer: with peaking on,
+    /// a lookup.
+    /// </summary>
+    /// <param name="noisy">The sensor decode is on show - see <see cref="Request"/>.</param>
+    public static (double X, double Y)? SharpSpot(BitmapSource full, string path, FileStamp stamp, bool noisy) {
+        var marks = Peaks(full, path, stamp, noisy, () => Working(full, int.MaxValue));
+
+        return SharpZone.Centre(marks, full.PixelWidth, full.PixelHeight);
+    }
+
+
+    /// <summary>
     /// The crisp edges of the big picture, measured once per file per
     /// session: the answer is kept (packed to a bit per pixel), so going
     /// back to a frame does not measure it again.
     /// </summary>
-    private static byte[] Peaks(BitmapSource full, Request request, Func<BgraImage> pixels) {
+    private static byte[] Peaks(BitmapSource full, string? path, FileStamp stamp, bool noisy, Func<BgraImage> pixels) {
         int length = full.PixelWidth * full.PixelHeight;
-        string key = $"{request.Path}|{request.Stamp.Ticks}|{request.Stamp.Size}|{length}|{(request.Noisy ? "raw" : "")}";
+        string key = $"{path}|{stamp.Ticks}|{stamp.Size}|{length}|{(noisy ? "raw" : "")}";
         lock (_peaksLock) {
             int at = _peaks.FindIndex(e => e.Key == key);
             if (at >= 0) {
@@ -155,7 +169,7 @@ internal static class ReviewOverlay {
 
         var big = pixels();
         var luma = Luma.Of(big);
-        if (request.Noisy) {
+        if (noisy) {
             // The sensor decode is not denoised, and every grain of it is a
             // crisp little edge.
             luma = Luma.Denoise(luma, big.Width, big.Height);

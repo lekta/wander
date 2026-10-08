@@ -775,6 +775,18 @@ public sealed class SystemIconProvider : IIconProvider {
             using var buffer = new MemoryStream(bytes);
             using var cover = new Bitmap(buffer);
 
+            // A page of one flat colour is a render that failed without
+            // saying so. Late in a long session Windows.Data.Pdf drew two
+            // scanned books (JPEG 2000 under a JBIG2 mask) as blank paper,
+            // while a fresh process drew the same files right (2026-10-08).
+            // Taken as the cover, the blank went to the disk cache and
+            // outlived the session; refused, the tile is the shell's icon.
+            if (PdfPageImage.Supports(path) && IsFlat(cover)) {
+                IconLog($"PDF page rendered blank - {path}");
+
+                return null;
+            }
+
             return RenderFramedCover(cover, side);
         } catch (Exception ex) when (ex is ArgumentException or OutOfMemoryException) {
             // GDI+ throws both of these for "these bytes are not an image
@@ -826,6 +838,40 @@ public sealed class SystemIconProvider : IIconProvider {
         g.DrawRectangle(border, x, y, w - 1, h - 1);
 
         return canvas;
+    }
+
+    /// <summary>Whether every pixel of the bitmap is the same colour. False when it cannot be locked.</summary>
+    private static bool IsFlat(Bitmap bmp) {
+        BitmapData data;
+        try {
+            data = bmp.LockBits(
+                new Rectangle(0, 0, bmp.Width, bmp.Height),
+                ImageLockMode.ReadOnly,
+                PixelFormat.Format32bppArgb);
+        } catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) {
+            return false;
+        }
+
+        try {
+            // A row at a time, as in DrawnExtent.
+            var row = new int[data.Width];
+            int first = 0;
+            for (int y = 0; y < data.Height; y++) {
+                Marshal.Copy(data.Scan0 + (y * data.Stride), row, 0, row.Length);
+                if (y == 0) {
+                    first = row[0];
+                }
+                foreach (int pixel in row) {
+                    if (pixel != first) {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        } finally {
+            bmp.UnlockBits(data);
+        }
     }
 
     private static bool IsShellNamespacePath(string path) {

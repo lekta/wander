@@ -657,6 +657,19 @@ public sealed class MainViewModel : ObservableObject {
         // RestoreState re-opens: they are the saved state coming back, not
         // a change worth saving.
         Settings.PropertyChanged += OnSettingsChanged;
+        // One volume for every file played, kept between sessions; either
+        // half of a split can be the one playing.
+        Preview.PropertyChanged += (_, e) => {
+            if (e.PropertyName == nameof(PreviewController.MediaVolume)) {
+                PreviewSecond.MediaVolume = Preview.MediaVolume;
+                SaveState();
+            }
+        };
+        PreviewSecond.PropertyChanged += (_, e) => {
+            if (e.PropertyName == nameof(PreviewController.MediaVolume)) {
+                Preview.MediaVolume = PreviewSecond.MediaVolume;
+            }
+        };
         Workspace.StateChanged += (before, after) => {
             if (!ReferenceEquals(before.Drives.Expanded, after.Drives.Expanded)
                 || !ReferenceEquals(before.Bookmarks.Expanded, after.Bookmarks.Expanded)) {
@@ -777,6 +790,7 @@ public sealed class MainViewModel : ObservableObject {
             ShowFooter = false,
             ShowPictureBar = true,
             PictureBarSwitches = true,
+            WalksEveryPicture = true,
             Listing = listing,
         };
         viewer.RatingRequested += (_, request) => request.Rating = ApplyRatingFromPane(request, wholeSelection: false);
@@ -2236,6 +2250,8 @@ public sealed class MainViewModel : ObservableObject {
         PreviewSecond.SetVisible(_isPreviewVisible && _isPreviewSplit);
         _isFoldersVisible = session.IsFoldersVisible;
         Raise(nameof(IsFoldersVisible));
+        Preview.MediaVolume = session.MediaVolume;
+        PreviewSecond.MediaVolume = session.MediaVolume;
         // Not applied here: what a saved pane size means depends on the
         // window it was saved from and the one it is coming back into, and
         // there is no window yet - the constructor runs before it exists.
@@ -2431,6 +2447,7 @@ public sealed class MainViewModel : ObservableObject {
                 LayoutWindowHeight = _savedWindowHeight,
                 IsBookmarksExpanded = _isBookmarksExpanded,
                 RecentPaths = _nav.RecentPaths.ToArray(),
+                MediaVolume = Preview.MediaVolume,
             },
             Favorites = Bookmarks.Paths.ToArray(),
             Settings = Settings.ToRecord(),

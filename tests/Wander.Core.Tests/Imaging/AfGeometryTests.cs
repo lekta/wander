@@ -28,4 +28,26 @@ public class AfGeometryTests {
         Assert.Equal(h, upright.H, 9);
         Assert.True(upright.InFocus);
     }
+
+
+    [Fact]
+    public void FocusCentre_IsTheMiddleOfTheAreasInFocus() {
+        var points = new[] {
+            new AfPoint(0.2, 0.4, 0.05, 0.05, InFocus: true),
+            new AfPoint(0.4, 0.6, 0.05, 0.05, InFocus: true),
+            new AfPoint(0.9, 0.1, 0.05, 0.05, InFocus: false),
+        };
+
+        var (x, y) = AfGeometry.FocusCentre(points)!.Value;
+
+        Assert.Equal(0.3, x, 9);
+        Assert.Equal(0.5, y, 9);
+    }
+
+
+    [Fact]
+    public void FocusCentre_NoneInFocus_IsNone() {
+        Assert.Null(AfGeometry.FocusCentre(new[] { new AfPoint(0.5, 0.5, 0.1, 0.1, InFocus: false) }));
+        Assert.Null(AfGeometry.FocusCentre(null));
+    }
 }

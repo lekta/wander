@@ -614,6 +614,12 @@
                              ToolTip="{x:Static res:Strings.SettingsGalleryDarkLevel}"
                              Text="{Binding Owner.GalleryDarkLevel, UpdateSourceTrigger=Explicit}"/>
                 </Grid>
+
+                <TextBlock Text="{x:Static res:Strings.SettingsZoomSpotGroup}" Style="{StaticResource GroupTitle}"/>
+                <RadioButton GroupName="ZoomSpot" Content="{x:Static res:Strings.SettingsZoomSpotSharp}"
+                             IsChecked="{Binding Owner.ZoomSpot, Converter={StaticResource EnumEquals}, ConverterParameter=SharpZone}"/>
+                <RadioButton GroupName="ZoomSpot" Content="{x:Static res:Strings.SettingsZoomSpotAf}"
+                             IsChecked="{Binding Owner.ZoomSpot, Converter={StaticResource EnumEquals}, ConverterParameter=AfPoint}"/>
             </StackPanel>
         </DataTemplate>
 

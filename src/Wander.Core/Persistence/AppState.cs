@@ -207,6 +207,13 @@ public sealed record SessionState {
 
     /// <summary>Window height when the sizes above were written; see <see cref="LayoutWindowWidth"/>.</summary>
     public double LayoutWindowHeight { get; init; }
+
+    /// <summary>
+    /// How loud the preview plays sound, 0..1 - one level for every track
+    /// and clip (2026-10-08). The default is the players' own, which is
+    /// what every file played at before there was a slider.
+    /// </summary>
+    public double MediaVolume { get; init; } = 0.5;
 }
 
 

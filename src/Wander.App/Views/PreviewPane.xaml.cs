@@ -497,6 +497,12 @@ public partial class PreviewPane : UserControl {
                 OpenMedia(Controller.MediaUri);
                 break;
 
+            case nameof(PreviewController.MediaVolume):
+                // The clip's element takes it by binding; the track's player
+                // is not an element and is told.
+                _audioPlayer.Volume = Controller.MediaVolume;
+                break;
+
             case nameof(PreviewController.ModelParts):
                 ShowModel();
                 break;
@@ -702,6 +708,12 @@ public partial class PreviewPane : UserControl {
     // at the same place without waiting for the mouse to move.
     private Point _zoomAt;
 
+    // Where the mouse stood when the zoom was put somewhere else - a spot
+    // (ZoomToSpotAsync), the other half's place. A mouse standing still gets
+    // MouseMove too when the picture under it changes, and the zoom would
+    // jump back under it; it takes over once it really moves.
+    private Point? _zoomMouse;
+
     /// <summary>
     /// What the 1:1 view draws and is measured by: the biggest picture the
     /// controller has of the file, which for a RAW is not the one fitted
@@ -734,6 +746,34 @@ public partial class PreviewPane : UserControl {
             ? Mouse.GetPosition(ImagePreviewHost)
             : new Point(ImagePreviewHost.ActualWidth / 2, ImagePreviewHost.ActualHeight / 2);
         MoveImageZoom(at, alone: false);
+    }
+
+    /// <summary>
+    /// <see cref="ToggleZoom"/> with no mouse to aim it - Z full screen while
+    /// the pointer is hidden (2026-10-08): on at the spot the setting names
+    /// (<see cref="PreviewController.ZoomSpotAsync"/>), brought to the middle
+    /// of the screen as far as the picture's edges let it; off when on.
+    /// </summary>
+    public async Task ZoomToSpotAsync(ZoomSpot choice) {
+        if (_imageZoomActive) {
+            ExitImageZoom();
+
+            return;
+        }
+
+        var controller = Controller;
+        string? shown = controller.ShownPath;
+        var spot = await controller.ZoomSpotAsync(choice);
+        // A zoom came on meanwhile, or the picture moved on: the spot is not its.
+        if (_imageZoomActive || !ReferenceEquals(DataContext, controller)
+            || !string.Equals(controller.ShownPath, shown, StringComparison.OrdinalIgnoreCase)
+            || !BeginImageZoom()) {
+            return;
+        }
+
+        _zoomPinned = true;
+        _zoomMouse = Mouse.GetPosition(ImagePreviewHost);
+        MoveImageZoom(CentredOn(spot), alone: false);
     }
 
 
@@ -850,6 +890,9 @@ public partial class PreviewPane : UserControl {
         }
 
         _zoomPinned = pinned;
+        if (pinned) {
+            _zoomMouse = Mouse.GetPosition(ImagePreviewHost);
+        }
         UpdateZoomPosition(new Point(at.X * ImagePreviewHost.ActualWidth, at.Y * ImagePreviewHost.ActualHeight));
     }
 
@@ -924,7 +967,14 @@ public partial class PreviewPane : UserControl {
             ExitImageZoom();
             return;
         }
-        MoveImageZoom(e.GetPosition(ImagePreviewHost), alone: e.RightButton == MouseButtonState.Pressed);
+
+        var mouse = e.GetPosition(ImagePreviewHost);
+        if (_zoomMouse is { } still && Math.Abs(mouse.X - still.X) < 1 && Math.Abs(mouse.Y - still.Y) < 1) {
+            return;
+        }
+
+        _zoomMouse = null;
+        MoveImageZoom(mouse, alone: e.RightButton == MouseButtonState.Pressed);
     }
 
     private void ImageZoom_LostCapture(object sender, MouseEventArgs e) {
@@ -1006,6 +1056,37 @@ public partial class PreviewPane : UserControl {
         Canvas.SetTop(ImgZoomOverlay, top);
     }
 
+    /// <summary>
+    /// The place in the picture area that brings <paramref name="spot"/> -
+    /// shares of the picture - to the middle of the screen at 1:1, as far as
+    /// the picture's edges let it. <see cref="UpdateZoomPosition"/> maps the
+    /// whole area onto the whole picture, so the place is worked back from
+    /// where the picture has to stand. No spot: the middle.
+    /// </summary>
+    private Point CentredOn((double X, double Y)? spot) {
+        double hw = ImagePreviewHost.ActualWidth;
+        double hh = ImagePreviewHost.ActualHeight;
+        if (spot is not { } at || ZoomFrame() is not { } frame) {
+            return new Point(hw / 2, hh / 2);
+        }
+
+        var dpi = VisualTreeHelper.GetDpi(this);
+
+        return new Point(Along(at.X, frame.Width / dpi.DpiScaleX, hw), Along(at.Y, frame.Height / dpi.DpiScaleY, hh));
+
+        // One axis: the picture's edge that puts the spot in the middle,
+        // kept inside the picture, and the place that stands it there.
+        static double Along(double share, double size, double room) {
+            if (size <= room) {
+                return room / 2;
+            }
+
+            double edge = Math.Clamp(room / 2 - share * size, room - size, 0);
+
+            return -edge * room / (size - room);
+        }
+    }
+
     /// <param name="notify">
     /// Tell the other half of a split. Not when this pane was only following
     /// it: the end came from there.
@@ -1016,6 +1097,7 @@ public partial class PreviewPane : UserControl {
         }
         _imageZoomActive = false;
         _zoomPinned = false;
+        _zoomMouse = null;
         ImgZoomCanvas.Visibility = Visibility.Collapsed;
         UpdateBar();
         if (ImagePreviewHost.IsMouseCaptured) {
@@ -1395,6 +1477,7 @@ public partial class PreviewPane : UserControl {
             _audioPlayer.Close();
         } else if (_transportIsAudio) {
             VideoPreview.Source = null;
+            _audioPlayer.Volume = Controller.MediaVolume;
             _audioPlayer.Open(uri);
         } else {
             _audioPlayer.Close();

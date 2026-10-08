@@ -1146,6 +1146,9 @@
   <data name="PreviewRepeat" xml:space="preserve">
     <value>Повторять. Для роликов короче трёх секунд включается сам</value>
   </data>
+  <data name="PreviewVolume" xml:space="preserve">
+    <value>Громкость — одна для всех файлов</value>
+  </data>
   <data name="StatusClipboardVirtualFiles" xml:space="preserve">
     <value>В буфере обмена файл, которого нет на диске (вложение письма, файл внутри архива) — вставить его Wander не может</value>
   </data>
@@ -1356,6 +1359,15 @@
   </data>
   <data name="SettingsGalleryDarkLevel" xml:space="preserve">
     <value>Яркость тёмного, 0–255</value>
+  </data>
+  <data name="SettingsZoomSpotGroup" xml:space="preserve">
+    <value>Лупа по Z, пока указатель спрятан</value>
+  </data>
+  <data name="SettingsZoomSpotSharp" xml:space="preserve">
+    <value>На самом резком месте снимка</value>
+  </data>
+  <data name="SettingsZoomSpotAf" xml:space="preserve">
+    <value>На точке фокусировки камеры</value>
   </data>
   <data name="StatusRatingApplied" xml:space="preserve">
     <value>Оценка {0} — файлов: {1}</value>
@@ -2765,7 +2777,7 @@
     <value>Отменить оценку или удаление</value>
   </data>
   <data name="HotkeyFullscreenZoom" xml:space="preserve">
-    <value>Лупа 1:1 без кнопки; ещё раз — снять</value>
+    <value>Лупа 1:1 без кнопки — под мышью, при спрятанном указателе — на резком месте или точке AF (настройка); ещё раз — снять</value>
   </data>
   <data name="HotkeyFullscreenClose" xml:space="preserve">
     <value>Закрыть</value>

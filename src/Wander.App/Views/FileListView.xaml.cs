@@ -1252,6 +1252,21 @@ public partial class FileListView : UserControl {
             return;
         }
 
+        // Delete in the table, the same way. Delete is the gesture of the
+        // grid's own row deletion (ApplicationCommands.Delete); a read-only
+        // grid refuses it, and the refusal still marks the key handled - the
+        // window's KeyBinding (Delete -> to the Recycle Bin) never saw it.
+        // Shift+Delete is not the grid's gesture and gets through.
+        if (sender is DataGrid && e.Key == Key.Delete && Keyboard.Modifiers == ModifierKeys.None
+            && Vm.RenamingPath is null) {
+            if (Vm.DeleteCommand.CanExecute(null)) {
+                Vm.DeleteCommand.Execute(null);
+            }
+            e.Handled = true;
+
+            return;
+        }
+
         if (sender is Selector target && TryEnterList(target, e.Key)) {
             e.Handled = true;
 

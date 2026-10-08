@@ -18,7 +18,8 @@ namespace Wander.App.Views;
 
 /// <summary>
 /// Pictures on their own, full screen: one, walked with the arrow
-/// keys, or two side by side (2026-09-24) - the one on the left stays while
+/// keys, the wheel or the mouse's side buttons, or two side by side
+/// (2026-09-24) - the one on the left stays while
 /// Shift and the arrows walk the one on the right, and a plain Left or
 /// Right keeps that side alone on the screen. Covers the monitor the main
 /// window is on; the keyboard is its own while it is open. Each picture
@@ -69,6 +70,9 @@ public partial class FullscreenWindow : Window {
 
     // A delete from here is under way (DeleteShownAsync); Delete again waits for it.
     private bool _deleting;
+
+    // The wheel turned short of a notch so far (OnPreviewMouseWheel).
+    private int _wheel;
 
     // Takes the pointer away once the mouse has stood still (OnPreviewMouseMove).
     private readonly DispatcherTimer _cursorTimer;
@@ -191,7 +195,9 @@ public partial class FullscreenWindow : Window {
         // Shift and an arrow: the picture on the right - brought up beside
         // the one on show, or walked on while the left one stays.
         if (modifiers == ModifierKeys.Shift && e.Key is Key.Left or Key.Up or Key.Right or Key.Down) {
-            WalkSide(e.Key is Key.Right or Key.Down ? +1 : -1);
+            if (MayStep(e, _side is null ? _mainViewer : _sideViewer)) {
+                WalkSide(e.Key is Key.Right or Key.Down ? +1 : -1);
+            }
             e.Handled = true;
 
             return;
@@ -230,7 +236,7 @@ public partial class FullscreenWindow : Window {
             case Key.Down:
             case Key.Space:
             case Key.PageDown:
-                if (!split) {
+                if (!split && MayStep(e, _mainViewer)) {
                     Step(+1);
                 }
                 e.Handled = true;
@@ -240,7 +246,7 @@ public partial class FullscreenWindow : Window {
             case Key.Up:
             case Key.Back:
             case Key.PageUp:
-                if (!split) {
+                if (!split && MayStep(e, _mainViewer)) {
                     Step(-1);
                 }
                 e.Handled = true;
@@ -288,6 +294,36 @@ public partial class FullscreenWindow : Window {
         _cursorAt = at;
         ShowCursor();
         _cursorTimer.Start();
+    }
+
+
+    /// <summary>
+    /// The wheel walks the pictures: down to the next, up to the one before.
+    /// A notch a step; a touchpad's small steps add up to one, and turning
+    /// back starts the count again.
+    /// </summary>
+    protected override void OnPreviewMouseWheel(MouseWheelEventArgs e) {
+        base.OnPreviewMouseWheel(e);
+        e.Handled = true;
+        if (Math.Sign(e.Delta) != Math.Sign(_wheel)) {
+            _wheel = 0;
+        }
+        _wheel += e.Delta;
+        while (Math.Abs(_wheel) >= Mouse.MouseWheelDeltaForOneLine) {
+            int by = _wheel < 0 ? +1 : -1;
+            _wheel += by * Mouse.MouseWheelDeltaForOneLine;
+            WalkByMouse(by);
+        }
+    }
+
+
+    /// <summary>The mouse's back and forward buttons: the picture before and the next one.</summary>
+    protected override void OnPreviewMouseDown(MouseButtonEventArgs e) {
+        base.OnPreviewMouseDown(e);
+        if (e.ChangedButton is MouseButton.XButton1 or MouseButton.XButton2) {
+            e.Handled = true;
+            WalkByMouse(e.ChangedButton == MouseButton.XButton2 ? +1 : -1);
+        }
     }
 
 
@@ -352,6 +388,16 @@ public partial class FullscreenWindow : Window {
     /// <summary>The row as the list has it now: a walked selection keeps the rows it was opened with, and a star written since made new ones.</summary>
     private FileSystemEntry Fresh(FileSystemEntry row) {
         return _vm.Ratings.FindInSource(row.FullPath) ?? row;
+    }
+
+    /// <summary>
+    /// Whether a walking key moves on now. A press always does; a held key
+    /// waits until the picture it stands on is up (2026-10-08): nothing but
+    /// the picture is on screen here, so one passed over undecoded is never
+    /// seen. The pictures flicker by at the pace they decode.
+    /// </summary>
+    private static bool MayStep(KeyEventArgs e, PreviewController? viewer) {
+        return !e.IsRepeat || viewer is null || viewer.IsSettled;
     }
 
     /// <summary>The picture on the left, or alone, to the next one the given way (<see cref="PictureWalk.Step"/>); at an end it stays.</summary>
@@ -515,7 +561,26 @@ public partial class FullscreenWindow : Window {
             : side is { IsZoomed: true } ? side
             : side is { IsMouseOver: true } ? side
             : _mainPane;
-        pane.ToggleZoom();
+        // The pointer hidden, the mouse says nothing about where to look: the
+        // spot the settings name (2026-10-08).
+        if (ForceCursor && !pane.IsZoomed) {
+            _ = pane.ZoomToSpotAsync(_vm.Settings.ZoomSpot);
+        } else {
+            pane.ToggleZoom();
+        }
+    }
+
+    /// <summary>
+    /// A walk by the mouse - the wheel, the side buttons (2026-10-08) - goes
+    /// as the arrows: with Shift the right one of two; of two without it,
+    /// nothing moves, as Down and Space do not.
+    /// </summary>
+    private void WalkByMouse(int by) {
+        if (Keyboard.Modifiers == ModifierKeys.Shift) {
+            WalkSide(by);
+        } else if (_side is null) {
+            Step(by);
+        }
     }
 
     /// <summary>What a digit rates or Delete takes, and on which pane: the picture on show; of two, the one the mouse is over, none when it is over neither.</summary>

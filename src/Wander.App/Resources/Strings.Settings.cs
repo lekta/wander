@@ -234,6 +234,15 @@ public static partial class Strings {
     /// <summary>Яркость тёмного, 0–255</summary>
     public static string SettingsGalleryDarkLevel => Get(nameof(SettingsGalleryDarkLevel));
 
+    /// <summary>Лупа по Z, пока указатель спрятан</summary>
+    public static string SettingsZoomSpotGroup => Get(nameof(SettingsZoomSpotGroup));
+
+    /// <summary>На самом резком месте снимка</summary>
+    public static string SettingsZoomSpotSharp => Get(nameof(SettingsZoomSpotSharp));
+
+    /// <summary>На точке фокусировки камеры</summary>
+    public static string SettingsZoomSpotAf => Get(nameof(SettingsZoomSpotAf));
+
     /// <summary>Вид по умолчанию</summary>
     public static string SettingsDefaultViewMode => Get(nameof(SettingsDefaultViewMode));
 

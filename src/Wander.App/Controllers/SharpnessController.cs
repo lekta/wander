@@ -42,8 +42,9 @@ public sealed class SharpnessController {
     private readonly RankedGate _gate;
 
     // What the rows on screen are to say, and what has already been asked
-    // about, both for the folder listed now. UI thread only.
-    private readonly HashSet<string> _asked = new(StringComparer.OrdinalIgnoreCase);
+    // about - the file as it was when asked - both for the folder listed
+    // now. UI thread only.
+    private readonly Dictionary<string, FileStamp> _asked = new(StringComparer.OrdinalIgnoreCase);
     private Dictionary<string, (FileStamp Stamp, double Value)> _shown = new(StringComparer.OrdinalIgnoreCase);
 
     private (string Path, int Epoch)? _listing;
@@ -72,15 +73,24 @@ public sealed class SharpnessController {
     }
 
 
-    /// <summary>A folder was listed: what was scored for the one before is not about these rows.</summary>
+    /// <summary>
+    /// A folder was listed. Another one: what was scored and asked about is
+    /// not about these rows. The same one again - a re-read after a change
+    /// in it, F5 - keeps all of it, and what is being measured goes on: an
+    /// answer is about a file and its stamp, not about a listing, and a cell
+    /// whose row came back unchanged does not ask again. Cancelled here, its
+    /// number never came (2026-10-08).
+    /// </summary>
     public void Listed(string path, int epoch) {
         bool sameFolder = _listing is { } previous
             && string.Equals(previous.Path, path, StringComparison.OrdinalIgnoreCase);
-        Cancel();
         _listing = (path, epoch);
-        if (!sameFolder) {
-            _shown = new Dictionary<string, (FileStamp, double)>(StringComparer.OrdinalIgnoreCase);
+        if (sameFolder) {
+            return;
         }
+
+        Cancel();
+        _shown = new Dictionary<string, (FileStamp, double)>(StringComparer.OrdinalIgnoreCase);
     }
 
 
@@ -113,15 +123,20 @@ public sealed class SharpnessController {
 
     /// <summary>A cell on screen wants its frame's score. Cheap to call again for one already asked about.</summary>
     public void Want(FileSystemEntry entry) {
-        if (_probe is null || !_active || _listing is not { } listing) {
-            return;
-        }
-        if (_shown.ContainsKey(entry.FullPath) || !_asked.Add(entry.FullPath)) {
+        if (_probe is null || !_active || _listing is null || Shown(entry) is not null) {
             return;
         }
 
+        // Asked about this file as it is now: in flight, or measured with
+        // nothing to say. A file rewritten since is asked about again.
+        var stamp = FileStamp.Of(entry.ModifiedUtc, entry.Size);
+        if (_asked.TryGetValue(entry.FullPath, out var asked) && asked == stamp) {
+            return;
+        }
+
+        _asked[entry.FullPath] = stamp;
         _pass ??= new CancellationTokenSource();
-        _ = ScoreAsync(entry, listing.Epoch, _pass.Token);
+        _ = ScoreAsync(entry, _pass.Token);
     }
 
 
@@ -143,7 +158,7 @@ public sealed class SharpnessController {
     }
 
 
-    private async Task ScoreAsync(FileSystemEntry entry, int epoch, CancellationToken ct) {
+    private async Task ScoreAsync(FileSystemEntry entry, CancellationToken ct) {
         double? score;
         try {
             await _gate.EnterAsync(entry.FullPath, ct);
@@ -160,29 +175,34 @@ public sealed class SharpnessController {
             return;
         }
 
-        if (ct.IsCancellationRequested || !_isCurrent(epoch) || score is not { } value) {
+        // Not checked against the listing it was asked under: the folder
+        // listed again since is the same files, and Shown holds each answer
+        // to the stamp of its row. Another folder cancelled the pass.
+        if (ct.IsCancellationRequested || score is not { } value) {
             return;
         }
 
         _shown[entry.FullPath] = (FileStamp.Of(entry.ModifiedUtc, entry.Size), value);
-        SchedulePublish(epoch);
+        SchedulePublish();
     }
 
 
     /// <summary>
     /// The rows are handed over once per quiet moment, not once per answer:
     /// a screenful arriving one at a time would rebuild a row and re-run the
-    /// filter thirty times over.
+    /// filter thirty times over. To the listing on screen then; while one is
+    /// still being read, the rows it lands with take the answers
+    /// (<see cref="Decorate"/>).
     /// </summary>
-    private void SchedulePublish(int epoch) {
+    private void SchedulePublish() {
         if (Interlocked.Exchange(ref _publishPending, 1) != 0) {
             return;
         }
 
         _dispatcher.BeginInvoke(DispatcherPriority.Background, () => {
             Interlocked.Exchange(ref _publishPending, 0);
-            if (_isCurrent(epoch)) {
-                _publish(epoch, SharpListing.WithScores(_rows(), Shown));
+            if (_listing is { } listing && _isCurrent(listing.Epoch)) {
+                _publish(listing.Epoch, SharpListing.WithScores(_rows(), Shown));
             }
         });
     }

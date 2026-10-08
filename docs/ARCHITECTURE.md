@@ -110,8 +110,8 @@ src/
 <!-- deps:generated:begin -->
 ```
 === Wander dependency graph (using sweep) ===
-date   : 2026-10-07
-commit : 1bf53d5
+date   : 2026-10-08
+commit : 4f9ea2a
 
 -- Wander.Core: levels --
   0: (root), Imaging, Layout, Localization, Logging, Operations, Panels
@@ -601,6 +601,7 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
 | свёрнутый элемент фокус не держит | `PaneHidden` до сворачивания → `FocusZone(список)` |
 | прокручивает к строке с фокусом по обеим осям | `Line_RequestBringIntoView`: горизонталь — видимая |
 | стрелки `DataGrid` идут от текущей ячейки | `FocusRow` ставит `CurrentCell` |
+| `DataGrid` забирает `Enter` и `Del` (правка, удаление строки; отказ read-only тоже помечает клавишу) | `List_PreviewKeyDown` исполняет `Open` / `Delete` сам |
 | двойной клик по строке дерева раскрывает | событие `ChevronToggled` |
 
 Тесты — `WorkspaceScene` (модель на событиях, диск — дерево папок):
@@ -688,6 +689,10 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
     получают). PDF — `PdfPageImage` (`Windows.Data.Pdf`, 14 + 13 мс),
     **всегда** (читалки вроде SumatraPDF provider не регистрируют);
     синхронно `.AsTask().GetAwaiter().GetResult()` — вызывающие на фоне.
+    Одноцветная страница — не обложка (`IsFlat`, строка `PDF page
+    rendered blank` в логе): в долгом сеансе сканы (JPX под маской JBIG2)
+    выходили белыми, свежий процесс рисовал их верно, а белая в дисковом
+    кэше переживала перезапуск.
     Аудио — `AudioCover` (тег, иначе картинка рядом; кэш на папку по
     mtime). `.lnk` — `ExistingLinkTarget` подменяет на цель, стрелку
     накладывает `DrawLinkOverlay` (шелл запекает её в значок, не в
@@ -1705,8 +1710,11 @@ RefreshFolderAsync (листинг + свёртка, пул)
 `★`; метка — кольцо цвета метки, залито при `IsSelected`; `CaptionText`.
 Переключатели хелперов (`HelperToggle`, `PreviewPane`) — 18 px, рамка и
 полупрозрачная серая подложка в обоих состояниях (`ReviewToggle*`
-палитры), включённый — тон акцента и рамка в 2 px поверх своей, значок
-не сдвигается; значок 16 px без своего контура, векторный `DrawingImage`
+палитры), включённый — подложка плотнее и поверх своей рамки два
+кольца по 1 px, тёмное снаружи и светлое внутри (`ReviewToggleOnOuter`,
+`ReviewToggleOnBorder`): шаблон один на полосу и футер, на тёмной полосе
+читается светлое, на светлом футере — тёмное; без цвета (решение
+человека 2026-10-08: синий отвлекал от снимка), значок не сдвигается; значок 16 px без своего контура, векторный `DrawingImage`
 (решение человека 2026-10-07: вектор, не растр).
 Вьюха берёт стиль и добавляет своё — шрифт, ширину, команду; свой шаблон
 остаётся у кнопки «…» закладки (ховер в цвет строки) и у кнопки
@@ -1988,7 +1996,9 @@ SYS ws=431 private=360 gen=167/155/134 alloc=+45 loh=6 handles=1060 threads=40 c
 - **Медиа.** `Audio` и `Video` делят `MediaUri` и транспорт; проигрыватель
   разный обязательно: `MediaElement` без площади открывает файл и стоит на
   нуле (200×120 играет, 1×1 молчит). Контроллер ставит `Kind` **до**
-  `MediaUri`. `RestartMedia` (повтор и второе нажатие кнопки): файл
+  `MediaUri`. Громкость — `PreviewController.MediaVolume`: хозяин держит обе
+  половины на одной и пишет её в `SessionState.MediaVolume`;
+  `MediaElement` берёт привязкой, `MediaPlayer` — из кода. `RestartMedia` (повтор и второе нажатие кнопки): файл
   объявил длительность — `Position = 0; Play()`, нет — только `Close()` +
   `Open()` (стенд `MediaPlayer`); пустой кадр переоткрытия закрывает снимок
   последнего кадра (`HoldLastFrame`, `VideoHold`, элемент держит размер
@@ -2048,6 +2058,18 @@ SYS ws=431 private=360 gen=167/155/134 alloc=+45 loh=6 handles=1060 threads=40 c
   - `Ctrl` + `Z` — `UndoCommand` из `OnPreviewKeyDown`; `Alt` + `Space` и
     `F10` (`Key.System`) гасятся — системное меню ломало окно без рамки;
     `Z` — `PreviewPane.ToggleZoom` (`_zoomPinned`, `ZoomMove.Pinned`).
+    При спрятанном курсоре (`ForceCursor`) — `ZoomToSpotAsync`:
+    `PreviewController.ZoomSpotAsync` по `AppSettings.ZoomSpot` — центр
+    точек AF в фокусе (`AfGeometry.FocusCentre`), иначе центр резкой зоны
+    (`ReviewOverlay.SharpSpot` → `SharpZone.Centre`: ячейки 1/24 длинной
+    стороны, побеждает блок 3×3 с большим числом меток пикинга, ответ —
+    центр меток в блоке; маска из кэша пикинга, без него 200–350 мс на
+    24 Мп), иначе середина. `CentredOn` пересчитывает точку в место мыши,
+    которое ставит её посреди экрана (лупа — навигатор, вся область на весь
+    кадр); `_zoomMouse` — где стояла мышь: синтетический `MouseMove` без
+    сдвига лупу не уводит, настоящий — забирает. Колесо (по 120, накопление
+    тачпада) и `XButton1` / `XButton2` — `WalkByMouse`: как стрелки, с
+    `Shift` — правый из пары.
   - `MainViewModel.Say` → `StatusSaid` → плашка 4 с. Строки после оценки
     — заново (`RatingsController.FindInSource`, и скрытые фильтром) по
     `Entries.CollectionChanged` и `Ratings.CompanionsChanged`.
@@ -2079,7 +2101,10 @@ SYS ws=431 private=360 gen=167/155/134 alloc=+45 loh=6 handles=1060 threads=40 c
     `PictureLoader.DecodedBytes`. Предел ставит
     `MainViewModel.ApplyThumbnailCacheSettings`, сразу.
   - Серия — смена чаще `BurstMs` = 150: промах кэша ждёт `BurstDelayMs` =
-    90 и переспрашивает. `preview.shown` — раз на смену выделения
+    90 и переспрашивает. Полный экран (`WalksEveryPicture`) серии не знает:
+    повтор клавиши шагает, только когда загрузка показанного кончилась
+    (`IsSettled`, `FullscreenWindow.MayStep`) — решение человека
+    2026-10-08: на полном экране не видно, что проскочило. `preview.shown` — раз на смену выделения
     (`_shownMeasured`).
   - **Между картинками панель не гаснет**: прежняя стоит до готовности
     следующей (`ClearPreviewContent(keepImage)`), вуаль — после
@@ -2311,7 +2336,9 @@ makernote (`CanonAfInfo`, поворот — `AfGeometry`), но бывает в
 — той же `ReviewOverlay.Marks`, что в панели; рамки AF — только точки в
 фокусе, приглушённым `ReviewAfThumb`, с тем же клипом по кадру),
 `SharpnessController`
-складывает баллы в строки пачками. Очередь — `RankedGate` (Core, два
+складывает баллы в строки пачками; перечитывание той же папки замеры не
+отменяет — ответ о файле и штампе, а строка, вернувшаяся тем же
+объектом, ячейку не переспрашивает. Очередь — `RankedGate` (Core, два
 потока): ранг спрашивается, когда освобождается место, — файлы в панели
 (`ShownPath`), остальное выделенное, прочее на экране
 (`MainViewModel.HelperRank`). Сама панель — мимо очереди.

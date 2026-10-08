@@ -204,7 +204,7 @@ public static partial class Strings {
     /// <summary>Отменить оценку или удаление</summary>
     public static string HotkeyFullscreenUndo => Get(nameof(HotkeyFullscreenUndo));
 
-    /// <summary>Лупа 1:1 без кнопки; ещё раз — снять</summary>
+    /// <summary>Лупа 1:1 без кнопки — под мышью, при спрятанном указателе — на резком месте или точке AF (настройка); ещё раз — снять</summary>
     public static string HotkeyFullscreenZoom => Get(nameof(HotkeyFullscreenZoom));
 
     /// <summary>Закрыть</summary>

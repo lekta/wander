@@ -300,12 +300,16 @@
     <!-- A helper's switch: a grey plate and frame, half see-through, so
          one switch reads over a dark picture and on the light footer
          alike; under the cursor, nearer the middle grey from either side;
-         on, the accent's tint and a frame of two in the accent. -->
+         on, a denser grey plate and a frame of two rings, dark outside and
+         light inside - no colour of its own (2026-10-08), the accent's blue
+         drew the eye off the picture. One ring reads on the dark bar, the
+         other on the light footer; light alone was lost on the footer. -->
     <SolidColorBrush x:Key="ReviewToggleFill" Color="#40808080"/>
     <SolidColorBrush x:Key="ReviewToggleBorder" Color="#80808080"/>
     <SolidColorBrush x:Key="ReviewToggleHover" Color="#66909090"/>
-    <SolidColorBrush x:Key="ReviewToggleOn" Color="#590078D7"/>
-    <SolidColorBrush x:Key="ReviewToggleOnBorder" Color="#0078D7"/>
+    <SolidColorBrush x:Key="ReviewToggleOn" Color="#80808080"/>
+    <SolidColorBrush x:Key="ReviewToggleOnOuter" Color="#99000000"/>
+    <SolidColorBrush x:Key="ReviewToggleOnBorder" Color="#D9D9D9"/>
 
     <!-- Under the stars and switches a picture carries in its corner:
          a dark tint of a fifth, the picture shows through. -->

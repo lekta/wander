@@ -15,6 +15,20 @@ public static class AfGeometry {
     }
 
 
+    /// <summary>
+    /// The middle of the areas the camera reports in focus, in shares of the
+    /// frame; null when none is - no areas recorded, or none achieved focus.
+    /// </summary>
+    public static (double X, double Y)? FocusCentre(IReadOnlyList<AfPoint>? points) {
+        var focused = points?.Where(p => p.InFocus).ToArray();
+        if (focused is not { Length: > 0 }) {
+            return null;
+        }
+
+        return (focused.Average(p => p.X), focused.Average(p => p.Y));
+    }
+
+
 
     // EXIF: 2 mirror, 3 half turn, 4 flip, 5 transpose, 6 quarter turn
     // clockwise, 7 transverse, 8 quarter turn counter-clockwise.

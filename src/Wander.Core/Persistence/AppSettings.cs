@@ -267,6 +267,14 @@ public sealed record AppSettings {
     public int GalleryDarkLevel { get; init; } = 30;
 
     /// <summary>
+    /// Where Z zooms in on the full screen while the pointer is hidden. The
+    /// sharp zone by default: it is measured on any picture, while an AF area
+    /// is recorded by some cameras only and lies where the camera focused
+    /// before the frame was recomposed (ARCHITECTURE, "Хелперы отсмотра").
+    /// </summary>
+    public ZoomSpot ZoomSpot { get; init; } = ZoomSpot.SharpZone;
+
+    /// <summary>
     /// Switch to the gallery by itself on entering a folder that is mostly
     /// pictures (see <see cref="Wander.Core.Listing.ImageFolderProbe"/>).
     /// On by default: the whole point is not having to ask for the right

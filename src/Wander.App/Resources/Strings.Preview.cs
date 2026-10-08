@@ -129,6 +129,9 @@ public static partial class Strings {
     /// <summary>Повторять. Для роликов короче трёх секунд включается сам</summary>
     public static string PreviewRepeat => Get(nameof(PreviewRepeat));
 
+    /// <summary>Громкость — одна для всех файлов</summary>
+    public static string PreviewVolume => Get(nameof(PreviewVolume));
+
     /// <summary>Оценки пока нет. Щелчок по звезде создаст файл рядом со снимком — с подтверждением.</summary>
     public static string PreviewRatingUnsaved => Get(nameof(PreviewRatingUnsaved));
 

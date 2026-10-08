@@ -470,6 +470,12 @@ public sealed class SettingsViewModel : ObservableObject {
     public Brush GalleryDarkSwatch =>
         ViewModels.GalleryPalette.Swatch(Wander.Core.Persistence.GalleryBackground.Dark, GalleryGreyLevel, GalleryDarkLevel);
 
+    private ZoomSpot _zoomSpot;
+    public ZoomSpot ZoomSpot {
+        get => _zoomSpot;
+        set => SetField(ref _zoomSpot, value);
+    }
+
     private bool _autoGallery;
     public bool AutoGallery {
         get => _autoGallery;
@@ -744,6 +750,7 @@ public sealed class SettingsViewModel : ObservableObject {
         GalleryBackground = s.GalleryBackground;
         GalleryGreyLevel = s.GalleryGreyLevel;
         GalleryDarkLevel = s.GalleryDarkLevel;
+        ZoomSpot = s.ZoomSpot;
         AutoGallery = s.AutoGallery;
         AutoGalleryPercent = s.AutoGalleryPercent;
         DefaultViewMode = s.DefaultViewMode;
@@ -976,6 +983,7 @@ public sealed class SettingsViewModel : ObservableObject {
             GalleryBackground = GalleryBackground,
             GalleryGreyLevel = GalleryGreyLevel,
             GalleryDarkLevel = GalleryDarkLevel,
+            ZoomSpot = ZoomSpot,
             AutoGallery = AutoGallery,
             AutoGalleryPercent = AutoGalleryPercent,
             DefaultViewMode = DefaultViewMode,

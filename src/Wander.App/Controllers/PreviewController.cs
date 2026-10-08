@@ -20,6 +20,7 @@ using Wander.Core.Icons;
 using Wander.Core.Imaging;
 using Wander.Core.Logging;
 using Wander.Core.Operations;
+using Wander.Core.Persistence;
 using Wander.Core.Preview;
 using Wander.Core.Search;
 using Wander.Core.Shell;
@@ -242,6 +243,10 @@ public sealed class PreviewController : ObservableObject {
     private string? _pictureOf;
     private bool _pictureFactsStale;
 
+    // The file whose load last ended - its picture up, or the pane saying
+    // why there is none. See IsSettled.
+    private string? _settledFor;
+
     // The file the footer's summary is about; null when it is about several,
     // a folder or nothing - see FooterWaitsForPicture.
     private string? _summaryOf;
@@ -272,6 +277,7 @@ public sealed class PreviewController : ObservableObject {
     private string? _webHtml;
     private Uri? _gifUri;
     private Uri? _mediaUri;
+    private double _mediaVolume = 0.5;
     private AudioTrackInfo? _audio;
     private IReadOnlyList<ModelPart> _modelParts = Array.Empty<ModelPart>();
     private Point3D _modelCenter;
@@ -479,6 +485,23 @@ public sealed class PreviewController : ObservableObject {
 
     /// <summary>The picture's bar carries the helpers' switches as well: full screen, where there is no footer to hold them.</summary>
     public bool PictureBarSwitches { get; init; }
+
+    /// <summary>
+    /// Walked one shown picture at a time - the full screen, where a held
+    /// key waits for each (<see cref="IsSettled"/>): selection changes close
+    /// together are not a key passing over pictures, and a decode does not
+    /// wait out <see cref="BurstDelayMs"/> first.
+    /// </summary>
+    public bool WalksEveryPicture { get; init; }
+
+    /// <summary>
+    /// The load of the file on show has ended: its picture is up, or the
+    /// pane says why there is none. Full screen shows nothing but the
+    /// picture, so a held arrow key walks on only then (2026-10-08) - a
+    /// picture passed over undecoded is one never seen.
+    /// </summary>
+    public bool IsSettled => _primary is { } shown
+        && string.Equals(_settledFor, shown.FullPath, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// The name of the file whose picture is on screen, empty while none is:
@@ -721,6 +744,16 @@ public sealed class PreviewController : ObservableObject {
     public Uri? MediaUri {
         get => _mediaUri;
         private set => SetField(ref _mediaUri, value);
+    }
+
+    /// <summary>
+    /// How loud the transport plays, 0..1. One level for the window: the
+    /// host keeps both halves of a split at the same one and remembers it
+    /// between sessions (2026-10-08).
+    /// </summary>
+    public double MediaVolume {
+        get => _mediaVolume;
+        set => SetField(ref _mediaVolume, Math.Clamp(value, 0, 1));
     }
 
     /// <summary>
@@ -1483,7 +1516,8 @@ public sealed class PreviewController : ObservableObject {
 
         if (!sameFile) {
             long now = Stopwatch.GetTimestamp();
-            _primaryBurst = _primaryChangedAt != 0 && Stopwatch.GetElapsedTime(_primaryChangedAt, now).TotalMilliseconds < BurstMs;
+            _primaryBurst = !WalksEveryPicture && _primaryChangedAt != 0
+                && Stopwatch.GetElapsedTime(_primaryChangedAt, now).TotalMilliseconds < BurstMs;
             _primaryChangedAt = now;
             // Measured only when the pane can show it: a selection moved
             // while the pane was put away is not a wait.
@@ -1503,6 +1537,36 @@ public sealed class PreviewController : ObservableObject {
         SchedulePreviewUpdate();
         ScheduleSummaryUpdate();
         ScheduleCompanionUpdate();
+    }
+
+    /// <summary>
+    /// Where a zoom with no mouse to aim it goes in (2026-10-08), in shares
+    /// of the picture on show: the AF area in focus when that is asked for
+    /// and the camera recorded one, else the thickest crisp edges; null when
+    /// there is neither - the middle then.
+    /// </summary>
+    public async Task<(double X, double Y)?> ZoomSpotAsync(ZoomSpot choice) {
+        if (choice == ZoomSpot.AfPoint && AfGeometry.FocusCentre(_imageMetadata?.AfPoints) is { } af) {
+            return af;
+        }
+        if (_kind != PreviewKind.Image || ZoomSource is not BitmapSource full || _primary is not { } shown) {
+            return null;
+        }
+
+        string path = shown.FullPath;
+        var stamp = FileStamp.Of(shown.ModifiedUtc, shown.Size);
+        bool noisy = _showRawDecode;
+        try {
+            return await Task.Run(() => {
+                using var measure = PerfLog.Measure("bg.sharp-zone");
+
+                return ReviewOverlay.SharpSpot(full, path, stamp, noisy);
+            });
+        } catch (Exception ex) {
+            Log.Warn($"Preview: sharp zone failed - {ex.Message}");
+
+            return null;
+        }
     }
 
     /// <summary>
@@ -1903,6 +1967,7 @@ public sealed class PreviewController : ObservableObject {
                     IsSvg = false;
                 }
                 _pictureOf = _kind == PreviewKind.Image ? loadingFor : null;
+                _settledFor = loadingFor;
                 Raise(nameof(PictureName));
                 ScheduleSummaryUpdate();  // metadata might have arrived
                 // Raised every time, the same text too: it is about this file.

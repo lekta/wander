@@ -209,8 +209,12 @@
                                     SnapsToDevicePixels="True"/>
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             <Border x:Name="OnFrame" CornerRadius="3"
-                                    BorderBrush="{StaticResource ReviewToggleOnBorder}" BorderThickness="2"
-                                    SnapsToDevicePixels="True" Visibility="Collapsed"/>
+                                    BorderBrush="{StaticResource ReviewToggleOnOuter}" BorderThickness="1"
+                                    SnapsToDevicePixels="True" Visibility="Collapsed">
+                                <Border CornerRadius="2"
+                                        BorderBrush="{StaticResource ReviewToggleOnBorder}" BorderThickness="1"
+                                        SnapsToDevicePixels="True"/>
+                            </Border>
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -664,6 +668,7 @@
                                       Stretch="Uniform" StretchDirection="DownOnly"
                                       Margin="8,12,8,4"
                                       VerticalAlignment="Top" HorizontalAlignment="Center"
+                                      Volume="{Binding MediaVolume}"
                                       MediaOpened="VideoPreview_MediaOpened"
                                       MediaEnded="VideoPreview_MediaEnded"
                                       MediaFailed="VideoPreview_MediaFailed"/>
@@ -753,6 +758,7 @@
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <Button x:Name="VideoPlayPauseButton"
                                     Content="▶" Width="32" Padding="0,2"
@@ -795,6 +801,22 @@
                                     PreviewMouseLeftButtonDown="VideoSlider_PreviewMouseDown"
                                     PreviewMouseLeftButtonUp="VideoSlider_PreviewMouseUp"
                                     ValueChanged="VideoSlider_ValueChanged"/>
+                            <!--
+                                Volume: one level for every file played, kept
+                                between sessions (PreviewController.MediaVolume).
+                            -->
+                            <StackPanel Grid.Column="4" Orientation="Horizontal" Margin="8,0,0,0"
+                                        ToolTip="{x:Static res:Strings.PreviewVolume}">
+                                <TextBlock Text="&#xE767;" FontFamily="Segoe MDL2 Assets" FontSize="12"
+                                           Style="{StaticResource PaneText}"
+                                           VerticalAlignment="Center"/>
+                                <Slider Width="64" Margin="4,0,0,0"
+                                        VerticalAlignment="Center"
+                                        Minimum="0" Maximum="1"
+                                        SmallChange="0.05" LargeChange="0.1"
+                                        IsMoveToPointEnabled="True"
+                                        Value="{Binding MediaVolume}"/>
+                            </StackPanel>
                         </Grid>
                     </Grid>
 
