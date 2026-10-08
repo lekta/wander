@@ -3,7 +3,7 @@
 Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 версии — по [SemVer](https://semver.org/lang/ru/). Даты в ISO-формате.
 
-## [Unreleased]
+## [0.5.1-beta] — 2026-10-08
 
 ### Added
 - **Долгое чтение ветки видно в дереве**: пока раскрытая папка или архив
@@ -1247,6 +1247,7 @@
   delete, подтверждения с Cancel по умолчанию, портативная сборка и
   CI-релиз по тегу, PolyForm Noncommercial 1.0.0.
 
+[0.5.1-beta]: https://github.com/lekta/wander/releases/tag/v0.5.1
 [0.5.0-beta]: https://github.com/lekta/wander/releases/tag/v0.5.0
 [0.4.1-beta]: https://github.com/lekta/wander/releases/tag/v0.4.1
 [0.4.0-beta]: https://github.com/lekta/wander/releases/tag/v0.4.0

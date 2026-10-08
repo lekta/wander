@@ -4972,9 +4972,9 @@ public sealed class MainViewModel : ObservableObject {
             : string.Format(Strings.StatusNamedMany, name, count - 1);
     }
 
+    /// <param name="takeFocus">Confirmed with Enter: the keyboard goes onto the renamed row once it lands (K-4).</param>
     [SuppressMessage("ReSharper", "AsyncVoidMethod",
         Justification = "A command body, nothing awaits it; every exception is caught, logged and shown in the status bar.")]
-    /// <param name="takeFocus">Confirmed with Enter: the keyboard goes onto the renamed row once it lands (K-4).</param>
     private async void Rename(FileSystemEntry? entry, string? newName, bool takeFocus) {
         if (entry is null || string.IsNullOrWhiteSpace(newName)) {
             return;

@@ -1,6 +1,6 @@
 === Wander dependency graph (using sweep) ===
 date   : 2026-10-08
-commit : 4f9ea2a
+commit : e875502
 
 -- projects --
 Wander.App -> Wander.Core   (71 files)

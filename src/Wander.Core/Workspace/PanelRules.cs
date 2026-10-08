@@ -177,7 +177,7 @@ public static class PanelRules {
 
         Probe(state, read.Pane, rows, effects);
         if (panel.OpenChildrenWhenRead.Contains(PanelPaths.Key(read.Path))) {
-            state = OpenChildren(state, read.Pane, read.Path, effects);
+            state = OpenChildren(state, read.Pane, read.Path);
         }
 
         return ContinueReveal(state, read.Pane, effects);
@@ -359,7 +359,7 @@ public static class PanelRules {
                 return Read(state, pane, path, effects);
             }
 
-            return all && level.State == LevelState.Loaded ? OpenChildren(state, pane, path, effects) : state;
+            return all && level.State == LevelState.Loaded ? OpenChildren(state, pane, path) : state;
         }
 
         panel = panel.WithExpanded(path, false) with { OpenChildrenWhenRead = panel.OpenChildrenWhenRead.Remove(key) };
@@ -374,7 +374,7 @@ public static class PanelRules {
     }
 
     /// <summary>Alt with the chevron: the children of a read row open, one level and no further.</summary>
-    private static WorkspaceState OpenChildren(WorkspaceState state, Pane pane, string path, ICollection<WorkspaceEffect> effects) {
+    private static WorkspaceState OpenChildren(WorkspaceState state, Pane pane, string path) {
         var panel = state.Panel(pane);
         panel = panel with { OpenChildrenWhenRead = panel.OpenChildrenWhenRead.Remove(PanelPaths.Key(path)) };
         foreach (var child in panel.LevelOf(path).Rows) {
