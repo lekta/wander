@@ -409,9 +409,6 @@
                                     ToolTip="{x:Static res:Strings.BookmarksRowMenuHint}"
                                     Click="BookmarkRowMenu_Click"
                                     Loaded="BookmarkRowMenu_Loaded">
-                                <Button.RenderTransform>
-                                    <TranslateTransform/>
-                                </Button.RenderTransform>
                                 <Button.Template>
                                     <ControlTemplate TargetType="Button">
                                         <!-- The line's background, the Row border of PanelLine: the first Border above. -->

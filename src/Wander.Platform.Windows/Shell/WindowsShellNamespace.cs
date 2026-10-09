@@ -69,8 +69,8 @@ public sealed class WindowsShellNamespace : IShellNamespace {
         return Task.Run(() => _archives.CopyOut(items, targetFolder, progress, ct, work), ct);
     }
 
-    public object? CreateDataObject(IReadOnlyList<string> paths) {
-        return ShellDataObject.Create(paths, _logger);
+    public object? CreateDataObject(IReadOnlyList<string> paths, IReadOnlyList<string>? fileList = null) {
+        return ShellDataObject.Create(paths, _logger, fileList);
     }
 
     /// <summary>

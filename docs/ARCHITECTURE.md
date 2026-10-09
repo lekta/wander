@@ -729,9 +729,9 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
   «закладку или папку» (`MainViewModel.DeleteFromBookmark`), на встроенной
   — выключение (`BookmarksController.HideSpecial`). «⋯» своей закладки —
   у правого края строки; строка шире панели (длинное имя ниже) — край
-  выталкивает его (`PinRowMenu`: `TranslateTransform` по `ScrollChanged`
-  и `Loaded`), фон под ним — строки (`Row` в покое — `PaneBackground`, не
-  прозрачный).
+  выталкивает его (`PinRowMenu`: свой `TranslateTransform` — из шаблона
+  заморожен — по `ScrollChanged` и `Loaded`), фон под ним — строки (`Row`
+  в покое — `PaneBackground`, не прозрачный).
 
 ## Shell-namespace: корзина и архивы
 
@@ -840,8 +840,13 @@ null); `Enumerate` принимает `CancellationToken` и смотрит на
   `SHGetIDListFromObject` → `SHCreateShellItemArrayFromIDLists` →
   `BindToHandler(BHID_DataObject)` (`ShellDataObject`); не `…FromShellItems`
   — shell32 её по имени не экспортирует. Внутри `CFSTR_SHELLIDLIST`, у zip
-  ещё `FileGroupDescriptor`.
-  - `OutgoingDrag.Run` — `DataObject(comObject)`, **только** `Copy`;
+  ещё `FileGroupDescriptor`. Файл в обычной папке — PIDL папки один раз,
+  имена в ней — `IShellFolder.ParseDisplayName` + `ILCombine`
+  (`IdListParser`): разбор полного пути — 3 мс на файл, 1,5 с на 500
+  ассетов со спутниками, по имени — 16 мс (стенд 2026-10-09); в архиве —
+  по-прежнему полный.
+  - `OutgoingDrag.Run` — `DataObject(comObject)`, из архива **только**
+    `Copy`, со спутниками — все три (см. «Drag & drop»);
     `Ctrl+C` — `ISystemClipboard.SetShellObject` (`OleSetClipboard`, OLE
     поднимается по `CO_E_NOTINITIALIZED`).
   - Свои приёмники берут пути у самого жеста —
@@ -984,6 +989,18 @@ Window.Activated → SyncFromSystem → ISystemClipboard.GetFiles → модел
   (`DescribeDropAsync` → `GroupPathsWithCompanions`, `Primary`): иначе
   один `.xmp` среди брошенного выключал бы действия над картинками. Меню —
   после возврата `DoDragDrop` (`ShowDropMenu`).
+- **Спутники наружу** (2026-10-09): в `CF_HDROP` — только выделенное
+  (`paths`); спутники — в `CFSTR_SHELLIDLIST` того же шеллового объекта
+  (`ShellDataObject.Create(…, fileList)` → `NarrowedFileDrop`, остальные
+  форматы и `SetData` — у обёрнутого). Приёмник оболочки (Explorer,
+  `SHCreateShellItemArrayFromDataObject`) берёт список id первым —
+  спутники едут (стенд: бросок через `IDropTarget` папки при `HDROP` из
+  одного файла кладёт оба); читающий только имена (редактор, браузер,
+  мессенджер) видит `icon.png` без `.meta`. Свой приёмник спутников в
+  payload не ждёт — `GroupPathsWithCompanions` с диска. Без спутников —
+  прежний `DataObject(FileDrop)`. Граница: кнопка панели задач открывает
+  и `.meta`; файловый менеджер, читающий только `HDROP`, спутников не
+  получит. Буфер (`Ctrl+C`) — полный `HDROP` (BACKLOG, «Файлы-спутники»).
 
 ### Слежение за папкой
 
@@ -1462,6 +1479,8 @@ stem: сайдкар — RAW, если RAW среди них ровно один
   `CompanionResolver.Group()` с диском, в `Task.Run`.
 - Авто-переименование тянет спутников (`Sprite (1).png.meta`)
   подстановкой общей части. Мимо батча — `RenamePlan` + `RenameMany`.
+- Наружу перетаскиванием — в списке id, не в `CF_HDROP`: «Drag & drop»,
+  «Спутники наружу».
 - **Оценки** — `SidecarRating` (`Rank` / `ColorLabel`, `InPhoto`), формат —
   за `CompanionMetadataService` по расширению; `ColorLabels` нумерованы
   одинаково (XMP хранит имя `Red`, pp3 — номер); `SidecarText` — BOM,

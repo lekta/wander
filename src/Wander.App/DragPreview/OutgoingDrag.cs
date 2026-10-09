@@ -95,12 +95,23 @@ public sealed class OutgoingDrag {
             // ShellPayload). Copy is then the only effect offered: a Move
             // would be asking the source to delete the entry afterwards,
             // and nothing writes into an archive.
-            var shell = ShellPayload(payload);
+            //
+            // With sidecars in the payload the shell's object goes too, its
+            // file list narrowed to what the user picked up: Explorer reads
+            // the id list and takes the sidecars along, an image editor
+            // reads the file list and is not handed an icon.png.meta it can
+            // only refuse. Our own drop side finds the sidecars on disk
+            // again (GroupPathsWithCompanions) and needs nothing more.
+            bool fromArchive = payload.Any(Archives.Inside);
+            var shell = fromArchive ? ShellPayload(payload)
+                : payload.Length > paths.Length ? ShellPayload(payload, fileList: paths)
+                : null;
+            bool withoutFileList = fromArchive && shell is not null;
             var data = shell ?? new DataObject(DataFormats.FileDrop, payload);
-            var effects = shell is null
-                ? DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link
-                : DragDropEffects.Copy;
-            InFlightPaths = shell is null ? null : payload;
+            var effects = withoutFileList
+                ? DragDropEffects.Copy
+                : DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link;
+            InFlightPaths = withoutFileList ? payload : null;
             InFlightRightButton = rightButton;
             System.Windows.DragDrop.DoDragDrop(src, data, effects);
         } catch {
@@ -141,18 +152,17 @@ public sealed class OutgoingDrag {
 
 
     /// <summary>
-    /// The shell's data object for a drag out of an archive, wrapped so WPF
-    /// can carry it, or null when the paths are ordinary files. What is in
-    /// it - item ids, and for a zip a file-group descriptor - is what the
-    /// receiver asks the shell to unpack; a <c>CF_HDROP</c> naming the same
-    /// entries would have it report a file that is not there.
+    /// The shell's data object for <paramref name="payload"/>, wrapped so
+    /// WPF can carry it, or null when the shell would not build one. Out of
+    /// an archive what is in it - item ids, and for a zip a file-group
+    /// descriptor - is what the receiver asks the shell to unpack; a
+    /// <c>CF_HDROP</c> naming the same entries would have it report a file
+    /// that is not there. For files with sidecars <paramref name="fileList"/>
+    /// is what the <c>CF_HDROP</c> inside names instead of the whole
+    /// payload (<c>IShellNamespace.CreateDataObject</c>).
     /// </summary>
-    private static DataObject? ShellPayload(string[] payload) {
-        if (!payload.Any(Archives.Inside)) {
-            return null;
-        }
-
-        var shellObject = ServiceLocator.TryGet<IShellNamespace>()?.CreateDataObject(payload);
+    private static DataObject? ShellPayload(string[] payload, string[]? fileList = null) {
+        var shellObject = ServiceLocator.TryGet<IShellNamespace>()?.CreateDataObject(payload, fileList);
 
         return shellObject is null ? null : new DataObject(shellObject);
     }

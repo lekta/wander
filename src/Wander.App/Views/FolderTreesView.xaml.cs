@@ -775,9 +775,15 @@ public partial class FolderTreesView : UserControl {
 
     /// <summary>Shifts <paramref name="menu"/> left by as much as its line's end is past the panel's right edge, back to none.</summary>
     private static void PinRowMenu(FrameworkElement menu) {
-        if (menu.RenderTransform is not TranslateTransform shift || !menu.IsVisible
+        if (!menu.IsVisible
             || ListVisuals.Ancestors(menu).OfType<ScrollContentPresenter>().FirstOrDefault() is not { } viewport) {
             return;
+        }
+
+        // Its own transform, made here: one declared in the template is
+        // shared by every line and frozen, so its X cannot be set.
+        if (menu.RenderTransform is not TranslateTransform shift) {
+            menu.RenderTransform = shift = new TranslateTransform();
         }
 
         // Where its right edge stands without the shift it has now.

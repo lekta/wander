@@ -148,7 +148,15 @@ public interface IShellNamespace {
     /// the ordinary file list.
     /// </para>
     /// </summary>
-    object? CreateDataObject(IReadOnlyList<string> paths);
+    /// <param name="fileList">
+    /// What the plain file list (<c>CF_HDROP</c>) inside should name when
+    /// that is fewer than <paramref name="paths"/>: a drag of files with
+    /// their sidecars, where a receiver that reads only file names - an
+    /// image editor, a browser - should see the files alone, and one that
+    /// asks the shell for items (Explorer) gets the sidecars too. Null for
+    /// the file list to name everything.
+    /// </param>
+    object? CreateDataObject(IReadOnlyList<string> paths, IReadOnlyList<string>? fileList = null);
 }
 
 

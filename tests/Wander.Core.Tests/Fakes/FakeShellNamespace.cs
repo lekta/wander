@@ -105,7 +105,7 @@ internal sealed class FakeShellNamespace : IShellNamespace {
     /// Stands in for the shell's data object: a marker holding the paths,
     /// enough for a test to see that one went out instead of a file list.
     /// </summary>
-    public object? CreateDataObject(IReadOnlyList<string> paths) {
+    public object? CreateDataObject(IReadOnlyList<string> paths, IReadOnlyList<string>? fileList = null) {
         return paths.Count == 0 ? null : string.Join(";", paths);
     }
 

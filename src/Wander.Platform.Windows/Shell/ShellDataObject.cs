@@ -22,6 +22,9 @@ namespace Wander.Platform.Windows.Shell;
 /// <para>
 /// Ordinary paths work through it too, and give the receiver everything
 /// Explorer would have offered rather than the bare file list WPF builds.
+/// With a <c>fileList</c> the <c>CF_HDROP</c> inside names those files
+/// only (<see cref="NarrowedFileDrop"/>) - a drag of files with their
+/// sidecars.
 /// </para>
 /// </summary>
 internal static class ShellDataObject {
@@ -30,7 +33,7 @@ internal static class ShellDataObject {
     /// failure here means a path it does not recognise or a file that has
     /// gone, and the caller has an ordinary file list to fall back on.
     /// </summary>
-    public static object? Create(IReadOnlyList<string> paths, ILogger log) {
+    public static object? Create(IReadOnlyList<string> paths, ILogger log, IReadOnlyList<string>? fileList = null) {
         if (paths.Count == 0) {
             return null;
         }
@@ -40,9 +43,10 @@ internal static class ShellDataObject {
         // ShellItemInterop), and the id list is what the object carries
         // anyway.
         var pidls = new List<IntPtr>(paths.Count);
+        using var parser = new IdListParser();
         try {
             foreach (string path in paths) {
-                if (CreateIdList(path) is not { } pidl) {
+                if (parser.Parse(path) is not { } pidl) {
                     log.Warn($"Data object: the shell does not know {path}");
 
                     return null;
@@ -67,7 +71,9 @@ internal static class ShellDataObject {
                     return null;
                 }
 
-                return data;
+                return fileList is null
+                    ? data
+                    : new NarrowedFileDrop((System.Runtime.InteropServices.ComTypes.IDataObject)data, fileList);
             } finally {
                 Release(array);
             }
@@ -103,6 +109,91 @@ internal static class ShellDataObject {
     private static void Release(object? comObject) {
         if (comObject is not null && Marshal.IsComObject(comObject)) {
             Marshal.ReleaseComObject(comObject);
+        }
+    }
+
+
+    /// <summary>
+    /// Id lists for the paths of one selection: the folder is parsed once
+    /// and the names are parsed by it. Parsing a full path binds the whole
+    /// chain anew for every item - 3 ms each on the stand of 2026-10-09,
+    /// 1.5 s for 500 assets with their sidecars picked up for a drag -
+    /// where a name handed to the folder it is in costs a thirtieth of
+    /// that. Only for files in a plain directory: inside an archive the
+    /// parse stays the full one, which is the one that has been exercised.
+    /// </summary>
+    private sealed class IdListParser : IDisposable {
+        private readonly Dictionary<string, Folder?> _folders = new(StringComparer.OrdinalIgnoreCase);
+
+
+        public IntPtr? Parse(string path) {
+            string? directory = Path.GetDirectoryName(path);
+            string name = Path.GetFileName(path);
+            if (string.IsNullOrEmpty(directory) || name.Length == 0) {
+                return CreateIdList(path);
+            }
+
+            if (!_folders.TryGetValue(directory, out Folder? folder)) {
+                folder = Directory.Exists(directory) ? Folder.Bind(directory) : null;
+                _folders[directory] = folder;
+            }
+
+            return folder?.Parse(name) ?? CreateIdList(path);
+        }
+
+        public void Dispose() {
+            foreach (Folder? folder in _folders.Values) {
+                folder?.Dispose();
+            }
+        }
+
+
+        private sealed class Folder : IDisposable {
+            private readonly IntPtr _pidl;
+            private readonly ShellContextMenuInterop.IShellFolder _folder;
+
+
+            private Folder(IntPtr pidl, ShellContextMenuInterop.IShellFolder folder) {
+                _pidl = pidl;
+                _folder = folder;
+            }
+
+
+            public static Folder? Bind(string directory) {
+                if (CreateIdList(directory) is not { } pidl) {
+                    return null;
+                }
+
+                var iid = ShellContextMenuInterop.IID_IShellFolder;
+                int hr = ShellContextMenuInterop.SHBindToObject(IntPtr.Zero, pidl, IntPtr.Zero, ref iid, out object raw);
+                if (hr < 0 || raw is not ShellContextMenuInterop.IShellFolder folder) {
+                    Marshal.FreeCoTaskMem(pidl);
+
+                    return null;
+                }
+
+                return new Folder(pidl, folder);
+            }
+
+            public IntPtr? Parse(string name) {
+                uint eaten = 0;
+                uint attributes = 0;
+                int hr = _folder.ParseDisplayName(IntPtr.Zero, IntPtr.Zero, name, ref eaten, out IntPtr child, ref attributes);
+                if (hr < 0) {
+                    return null;
+                }
+
+                try {
+                    return ILCombine(_pidl, child);
+                } finally {
+                    Marshal.FreeCoTaskMem(child);
+                }
+            }
+
+            public void Dispose() {
+                Release(_folder);
+                Marshal.FreeCoTaskMem(_pidl);
+            }
         }
     }
 }

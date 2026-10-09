@@ -464,6 +464,13 @@ internal static class ShellItemInterop {
     internal static extern uint ILGetSize(IntPtr pidl);
 
     /// <summary>
+    /// The absolute id list of a child from its folder's and its own
+    /// relative one. Freed with <c>Marshal.FreeCoTaskMem</c>.
+    /// </summary>
+    [DllImport("shell32.dll")]
+    internal static extern IntPtr ILCombine(IntPtr pidl1, IntPtr pidl2);
+
+    /// <summary>
     /// An item array over absolute id lists. This one rather than
     /// <c>SHCreateShellItemArrayFromShellItems</c>: the SDK declares both,
     /// but shell32 exports only this one by name, and a DllImport of the
