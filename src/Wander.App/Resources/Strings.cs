@@ -71,6 +71,42 @@ public static partial class Strings {
     /// <summary>EXIF по первым {0}</summary>
     public static string SummaryShotsSample => Get(nameof(SummaryShotsSample));
 
+    /// <summary>Аудио</summary>
+    public static string MediaAudio => Get(nameof(MediaAudio));
+
+    /// <summary>Субтитры</summary>
+    public static string MediaSubtitles => Get(nameof(MediaSubtitles));
+
+    /// <summary>{0} к/с</summary>
+    public static string MediaFps => Get(nameof(MediaFps));
+
+    /// <summary>{0} кбит/с</summary>
+    public static string MediaKbps => Get(nameof(MediaKbps));
+
+    /// <summary>{0} Мбит/с</summary>
+    public static string MediaMbps => Get(nameof(MediaMbps));
+
+    /// <summary>{0} кГц</summary>
+    public static string MediaKhz => Get(nameof(MediaKhz));
+
+    /// <summary>{0} бит</summary>
+    public static string MediaBitDepth => Get(nameof(MediaBitDepth));
+
+    /// <summary>моно</summary>
+    public static string MediaMono => Get(nameof(MediaMono));
+
+    /// <summary>стерео</summary>
+    public static string MediaStereo => Get(nameof(MediaStereo));
+
+    /// <summary>{0} кан.</summary>
+    public static string MediaChannels => Get(nameof(MediaChannels));
+
+    /// <summary>(форс.)</summary>
+    public static string MediaForced => Get(nameof(MediaForced));
+
+    /// <summary>«{0}»</summary>
+    public static string MediaTitle => Get(nameof(MediaTitle));
+
     /// <summary>Сапог</summary>
     public static string SummaryCameraMask => Get(nameof(SummaryCameraMask));
 

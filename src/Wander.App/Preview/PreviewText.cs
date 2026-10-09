@@ -23,6 +23,38 @@ internal static class PreviewText {
     private const long MaxFileSize = 1_048_576;     // 1 MB
     private const int MaxChars = 200_000;
 
+    /// <summary>A table page past this is built with fewer rows: the web view takes 2 MB as a string.</summary>
+    private const int MaxSheetPageBytes = 1_900_000;
+
+    /// <summary>
+    /// The grid of <see cref="SheetPage"/>: the page itself does not
+    /// scroll, each sheet does under the tabs, so the column letters and
+    /// row numbers can stick to its edges.
+    /// </summary>
+    private const string SheetCss = @"
+        :root { color-scheme: light dark; --paper: #FFFFFF; --ink: #222222; --chrome: #F3F3F3; --line: #E0E0E0; --dim: #7A7A7A; }
+        @media (prefers-color-scheme: dark) {
+            :root { --paper: #1E1E1E; --ink: #E0E0E0; --chrome: #2B2B2B; --line: #3A3A3A; --dim: #9A9A9A; }
+        }
+        html, body { margin: 0; height: 100%; overflow: hidden; background: var(--paper); color: var(--ink); }
+        body { font: 12px 'Segoe UI', sans-serif; }
+        input.tab { display: none; }
+        .tabs { position: absolute; top: 0; left: 0; right: 0; height: 26px; display: flex; overflow-x: auto; overflow-y: hidden;
+                white-space: nowrap; background: var(--chrome); border-bottom: 1px solid var(--line); }
+        .tabs label { padding: 4px 12px; cursor: pointer; color: var(--dim); border-right: 1px solid var(--line); }
+        .sheet { display: none; position: absolute; top: 27px; bottom: 0; left: 0; right: 0; overflow: auto; }
+        .single .sheet { top: 0; }
+        table { border-collapse: separate; border-spacing: 0; }
+        th, td { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 2px 6px;
+                 white-space: nowrap; max-width: 360px; overflow: hidden; text-overflow: ellipsis; vertical-align: top; }
+        th { background: var(--chrome); color: var(--dim); font-weight: normal; }
+        thead th { position: sticky; top: 0; z-index: 1; text-align: center; min-width: 24px; }
+        tbody th { position: sticky; left: 0; text-align: right; }
+        thead th.corner { left: 0; z-index: 2; }
+        td.n { text-align: right; }
+        .note { margin: 0; padding: 6px 8px; color: var(--dim); }
+        ";
+
     /// <summary>
     /// Books get a budget of their own: a novel is legitimately tens of
     /// megabytes once its illustrations are counted, and the 1 MB ceiling
@@ -218,6 +250,118 @@ internal static class PreviewText {
             $"html, body {{ margin: 0; height: 100%; background: {background}; }}" +
             "img { display: block; width: 100%; height: 100%; object-fit: contain; box-sizing: border-box; padding: 4px; }" +
             "</style></head><body><img src='data:image/svg+xml;base64," + Convert.ToBase64String(svg) + "'></body></html>";
+    }
+
+
+    /// <summary>
+    /// The page a table is shown on: a sheet at a time under tabs of their
+    /// names, columns lettered and rows numbered as in a spreadsheet, both
+    /// kept in view while the grid scrolls. Tabs are radio buttons and
+    /// CSS - the page needs no script. A long cell is cut to a line, the
+    /// whole of it in its tooltip; numbers stand to the right.
+    ///
+    /// <para>
+    /// The web view takes a page of at most 2 MB as a string: past
+    /// <see cref="MaxSheetPageBytes"/> the page is built again with half
+    /// the rows, and the note under each sheet says how many it shows.
+    /// </para>
+    /// </summary>
+    public static string SheetPage(IReadOnlyList<Sheet> sheets) {
+        int rows = int.MaxValue;
+        while (true) {
+            string page = BuildSheetPage(sheets, rows);
+            if (rows <= 1 || System.Text.Encoding.UTF8.GetByteCount(page) <= MaxSheetPageBytes) {
+                return page;
+            }
+
+            rows = Math.Min(rows, sheets.Max(s => s.Rows.Count)) / 2;
+        }
+    }
+
+
+    private static string BuildSheetPage(IReadOnlyList<Sheet> sheets, int rowLimit) {
+        var html = new System.Text.StringBuilder();
+        html.Append("<!doctype html><html><head><meta charset='utf-8'><style>").Append(SheetCss);
+        for (int i = 0; i < sheets.Count; i++) {
+            html.Append($"#s{i}:checked ~ #t{i} {{ display: block; }} ");
+            html.Append($"#s{i}:checked ~ .tabs label[for=s{i}] {{ background: var(--paper); color: var(--ink); font-weight: 600; }} ");
+        }
+        html.Append("</style></head><body").Append(sheets.Count == 1 ? " class='single'>" : ">");
+
+        for (int i = 0; i < sheets.Count; i++) {
+            html.Append($"<input type='radio' class='tab' name='sheet' id='s{i}'").Append(i == 0 ? " checked>" : ">");
+        }
+        if (sheets.Count > 1) {
+            html.Append("<div class='tabs'>");
+            for (int i = 0; i < sheets.Count; i++) {
+                html.Append($"<label for='s{i}'>{Html(sheets[i].Name)}</label>");
+            }
+            html.Append("</div>");
+        }
+
+        for (int i = 0; i < sheets.Count; i++) {
+            var sheet = sheets[i];
+            int shown = Math.Min(sheet.Rows.Count, rowLimit);
+            int columns = sheet.Columns;
+            html.Append($"<div class='sheet' id='t{i}'>");
+            if (columns == 0) {
+                html.Append($"<p class='note'>{Html(Strings.PreviewTableEmpty)}</p></div>");
+
+                continue;
+            }
+
+            html.Append("<table><thead><tr><th class='corner'></th>");
+            for (int c = 0; c < columns; c++) {
+                html.Append("<th>").Append(ColumnName(c)).Append("</th>");
+            }
+            html.Append("</tr></thead><tbody>");
+            for (int r = 0; r < shown; r++) {
+                var row = sheet.Rows[r];
+                html.Append("<tr><th>").Append(r + 1).Append("</th>");
+                for (int c = 0; c < columns; c++) {
+                    string cell = c < row.Length ? row[c] : "";
+                    if (cell.Length == 0) {
+                        html.Append("<td></td>");
+                    } else {
+                        string text = Html(cell);
+                        html.Append(LooksNumeric(cell) ? "<td class='n'" : "<td");
+                        html.Append(cell.Length > 40 || cell.Contains('\n') ? $" title='{text}'>" : ">");
+                        html.Append(text).Append("</td>");
+                    }
+                }
+                html.Append("</tr>");
+            }
+            html.Append("</tbody></table>");
+
+            if (shown < sheet.Rows.Count || sheet.Clipped) {
+                string note = sheet.TotalRows is { } total
+                    ? string.Format(Strings.PreviewTableRowsOf, shown, total)
+                    : string.Format(Strings.PreviewTableRowsMore, shown);
+                html.Append($"<p class='note'>{Html(note)}</p>");
+            }
+            html.Append("</div>");
+        }
+
+        return html.Append("</body></html>").ToString();
+    }
+
+    /// <summary>"A", "Z", "AA" - a spreadsheet's name for a zero-based column.</summary>
+    private static string ColumnName(int column) {
+        string name = "";
+        for (int n = column + 1; n > 0; n = (n - 1) / 26) {
+            name = (char)('A' + (n - 1) % 26) + name;
+        }
+
+        return name;
+    }
+
+    /// <summary>A number as a spreadsheet shows one - digits with group spaces, a decimal mark, a sign, a percent.</summary>
+    private static bool LooksNumeric(string text) {
+        return text.Length < 40 && System.Text.RegularExpressions.Regex.IsMatch(text, @"^[-+−]?[\d   ]*\d([.,]\d+)?([eE][-+]?\d+)?%?$");
+    }
+
+    private static string Html(string text) {
+        return System.Net.WebUtility.HtmlEncode(text);
     }
 
 

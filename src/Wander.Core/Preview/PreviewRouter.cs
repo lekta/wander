@@ -59,10 +59,17 @@ public enum PreviewRoute {
     Svg,
 
     /// <summary>
-    /// A document Wander does not lay out - Word, the Office and
-    /// OpenDocument formats, EPUB: its text, as the content search reads it.
+    /// A document Wander does not lay out - Word, PowerPoint, the
+    /// OpenDocument text and slides, EPUB: its text, as the content search
+    /// reads it.
     /// </summary>
     DocumentText,
+
+    /// <summary>
+    /// A table - CSV, TSV, XLSX, ODS: a grid of its sheets (see
+    /// <see cref="SheetReader"/>); the text ones offer their plain text too.
+    /// </summary>
+    Table,
 }
 
 
@@ -106,10 +113,19 @@ public static class PreviewRouter {
         ".mpg", ".mpeg", ".asf", ".3gp", ".3g2",
     };
 
+    /// <summary>
+    /// Plain text. CSV and TSV are here for the actions on text files; the
+    /// pane shows them as tables, their text a switch away.
+    /// </summary>
     private static readonly HashSet<string> _text = new(StringComparer.OrdinalIgnoreCase) {
         ".txt", ".log", ".csv", ".tsv",
         ".ini", ".cfg", ".conf", ".toml", ".env", ".gitignore", ".gitattributes",
-        ".editorconfig",
+        ".editorconfig", ".gitmodules", ".dockerignore", ".npmrc",
+        // What lies beside videos and music: subtitles, playlists, a CD's
+        // cue sheet, a release's description.
+        ".srt", ".vtt", ".ass", ".ssa", ".m3u", ".m3u8", ".pls", ".cue", ".nfo",
+        // Contacts, calendars, a registry export (UTF-16, by its mark).
+        ".vcf", ".ics", ".reg",
         // A .mtl is not a model, it is the short text file that names a
         // model's materials and their texture maps — and reading it is
         // usually the reason anyone opens one.
@@ -131,6 +147,11 @@ public static class PreviewRouter {
         ".diff", ".patch",
         // Unity shaders and their includes.
         ".shader", ".cginc", ".hlsl", ".compute",
+        // Other shaders, and what engines keep as text: Unity's UI and
+        // assembly definitions, Godot's scripts, scenes and resources.
+        ".glsl", ".vert", ".frag", ".wgsl", ".uxml", ".uss", ".asmdef", ".gd", ".tscn", ".tres",
+        ".lua", ".dart", ".scala", ".pl", ".vb", ".fs", ".r",
+        ".gradle", ".cmake", ".proto", ".graphql", ".vue", ".svelte", ".tf", ".jsonc", ".ipynb",
     };
 
     /// <summary>
@@ -159,10 +180,11 @@ public static class PreviewRouter {
     /// <summary>
     /// Documents shown as their text: what the content search's extractors
     /// read - the zip-and-XML ones in Core, <c>.doc</c> through the system's
-    /// filter. <c>.rtf</c> is not here: the rich-text view lays it out.
+    /// filter. <c>.rtf</c> is not here: the rich-text view lays it out; nor
+    /// are the workbooks, shown as tables.
     /// </summary>
     private static readonly HashSet<string> _documentText = new(StringComparer.OrdinalIgnoreCase) {
-        ".doc", ".dot", ".docx", ".xlsx", ".pptx", ".odt", ".ods", ".odp", ".epub",
+        ".doc", ".dot", ".docx", ".pptx", ".odt", ".odp", ".epub",
     };
 
 
@@ -232,6 +254,10 @@ public static class PreviewRouter {
         }
         if (ext.Equals(".rtf", StringComparison.OrdinalIgnoreCase)) {
             return PreviewRoute.Document;
+        }
+        // Before the text list, which has CSV and TSV too.
+        if (SheetReader.Extensions.Contains(ext)) {
+            return PreviewRoute.Table;
         }
         if (_documentText.Contains(ext)) {
             return PreviewRoute.DocumentText;

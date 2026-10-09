@@ -20,9 +20,9 @@
         set its own Template has to be BasedOn="{StaticResource {x:Type X}}",
         or WPF falls back to Aero2 under it and the control stays light.
 
-        Colours are DynamicResource: the palette dictionary is swapped when
-        the theme changes (Util/InterfaceTheme), and a StaticResource would
-        keep the brush it found at load time.
+        Colours are DynamicResource: the dark palette is laid over the light
+        one when the theme changes (Util/InterfaceTheme), and a
+        StaticResource would keep the brush it found at load time.
     -->
 
 

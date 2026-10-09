@@ -142,6 +142,21 @@
   <data name="PreviewSvgSourceHint" xml:space="preserve">
     <value>Показать разметку SVG вместо картинки — и обратно</value>
   </data>
+  <data name="PreviewTableSourceHint" xml:space="preserve">
+    <value>Показать текст файла вместо таблицы — и обратно</value>
+    <comment>Подсказка переключателя &lt;/&gt; у CSV и TSV: таблица или текст</comment>
+  </data>
+  <data name="PreviewTableRowsOf" xml:space="preserve">
+    <value>Показано строк: {0:N0} из {1:N0}</value>
+    <comment>Под листом таблицы, когда показана не вся: {0} — показано строк, {1} — всего в листе</comment>
+  </data>
+  <data name="PreviewTableRowsMore" xml:space="preserve">
+    <value>Показано строк: {0:N0}, дальше не читалось</value>
+    <comment>Под листом таблицы, когда сколько всего строк, неизвестно: {0} — показано строк</comment>
+  </data>
+  <data name="PreviewTableEmpty" xml:space="preserve">
+    <value>Лист пуст</value>
+  </data>
   <data name="SummaryDeleted" xml:space="preserve">
     <value>Удалён</value>
   </data>
@@ -2033,6 +2048,52 @@
   <data name="SummaryShotsSample" xml:space="preserve">
     <value>EXIF по первым {0}</value>
     <comment>{0} — сколько снимков прочитано для сводки, когда выделено больше</comment>
+  </data>
+  <data name="MediaAudio" xml:space="preserve">
+    <value>Аудио</value>
+    <comment>Начало строки звуковой дорожки видео в подписи просмотра: «Аудио: AC-3 5.1   48 кГц   rus»</comment>
+  </data>
+  <data name="MediaSubtitles" xml:space="preserve">
+    <value>Субтитры</value>
+    <comment>Начало строки субтитров видео в подписи просмотра: «Субтитры: rus SRT, eng PGS»</comment>
+  </data>
+  <data name="MediaFps" xml:space="preserve">
+    <value>{0} к/с</value>
+    <comment>{0} — кадров в секунду: 25, 23,976</comment>
+  </data>
+  <data name="MediaKbps" xml:space="preserve">
+    <value>{0} кбит/с</value>
+    <comment>{0} — битрейт в килобитах в секунду</comment>
+  </data>
+  <data name="MediaMbps" xml:space="preserve">
+    <value>{0} Мбит/с</value>
+    <comment>{0} — битрейт в мегабитах в секунду, с одним знаком после запятой</comment>
+  </data>
+  <data name="MediaKhz" xml:space="preserve">
+    <value>{0} кГц</value>
+    <comment>{0} — частота дискретизации звука: 48, 44,1</comment>
+  </data>
+  <data name="MediaBitDepth" xml:space="preserve">
+    <value>{0} бит</value>
+    <comment>{0} — глубина цвета видео: 10, 12; 8 не пишется</comment>
+  </data>
+  <data name="MediaMono" xml:space="preserve">
+    <value>моно</value>
+  </data>
+  <data name="MediaStereo" xml:space="preserve">
+    <value>стерео</value>
+  </data>
+  <data name="MediaChannels" xml:space="preserve">
+    <value>{0} кан.</value>
+    <comment>{0} — число каналов звука, когда это не моно, стерео, 5.1 или 7.1</comment>
+  </data>
+  <data name="MediaForced" xml:space="preserve">
+    <value>(форс.)</value>
+    <comment>После форсированных субтитров — тех, что показываются всегда: надписи, иностранная речь</comment>
+  </data>
+  <data name="MediaTitle" xml:space="preserve">
+    <value>«{0}»</value>
+    <comment>{0} — название дорожки из файла: «Дубляж», «Комментарий режиссёра»</comment>
   </data>
   <data name="TitleYielding" xml:space="preserve">
     <value>{0} — настройки не сохраняются</value>

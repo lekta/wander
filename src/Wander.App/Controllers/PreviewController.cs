@@ -271,6 +271,8 @@ public sealed class PreviewController : ObservableObject {
     private bool _showRawDecode;
     private bool _isSvg;
     private bool _showSvgSource;
+    private bool _isTableText;
+    private bool _showTableSource;
     private string? _codeText;
     private string? _codeExtension;
     private Uri? _webUri;
@@ -289,6 +291,11 @@ public sealed class PreviewController : ObservableObject {
     private IReadOnlyList<PreviewFact> _executableFacts = Array.Empty<PreviewFact>();
     private string? _documentPath;
     private ImageMetadata? _imageMetadata;
+
+    // A video's streams, and the file they were read from - the footer
+    // takes them only for that file (or a shortcut to it).
+    private MediaInfo? _media;
+    private string? _mediaOf;
     private string _summary = "";
     private string? _linkTarget;
     private bool _linkBroken;
@@ -704,6 +711,22 @@ public sealed class PreviewController : ObservableObject {
         get => _showSvgSource;
         set {
             if (SetField(ref _showSvgSource, value) && _isSvg) {
+                SchedulePreviewUpdate();
+            }
+        }
+    }
+
+    /// <summary>The file on screen is a CSV or a TSV - a table or its text; it shows the switch between the two.</summary>
+    public bool IsTableText {
+        get => _isTableText;
+        private set => SetField(ref _isTableText, value);
+    }
+
+    /// <summary>A text table is shown as its text rather than as a grid; a mode, as <see cref="ShowSvgSource"/> is.</summary>
+    public bool ShowTableSource {
+        get => _showTableSource;
+        set {
+            if (SetField(ref _showTableSource, value) && _isTableText) {
                 SchedulePreviewUpdate();
             }
         }
@@ -1823,6 +1846,7 @@ public sealed class PreviewController : ObservableObject {
         // twice a file. A shortcut's target or an archive entry's copy is
         // asked again when it is loaded (LoadSvgAsync).
         IsSvg = _primary is { Kind: EntryKind.File } file && PreviewRouter.Route(file.FullPath) is PreviewRoute.Svg;
+        IsTableText = _primary is { Kind: EntryKind.File } table && SheetReader.IsText(table.FullPath);
 
         if (!_isVisible) {
             Kind = PreviewKind.None;
@@ -1966,6 +1990,9 @@ public sealed class PreviewController : ObservableObject {
                 if (_kind is not (PreviewKind.Web or PreviewKind.Code)) {
                     IsSvg = false;
                 }
+                if (_kind is not (PreviewKind.Web or PreviewKind.Text)) {
+                    IsTableText = false;
+                }
                 _pictureOf = _kind == PreviewKind.Image ? loadingFor : null;
                 _settledFor = loadingFor;
                 Raise(nameof(PictureName));
@@ -2093,7 +2120,7 @@ public sealed class PreviewController : ObservableObject {
                 break;
 
             case PreviewRoute.Video:
-                LoadVideo(path);
+                await LoadVideoAsync(path, ct);
                 break;
 
             case PreviewRoute.Audio:
@@ -2155,6 +2182,10 @@ public sealed class PreviewController : ObservableObject {
 
             case PreviewRoute.Svg:
                 await LoadSvgAsync(path, ext, ct);
+                break;
+
+            case PreviewRoute.Table:
+                await LoadTableAsync(path, ct);
                 break;
 
             // A shortcut is resolved before we get here; one pointing at
@@ -2397,10 +2428,8 @@ public sealed class PreviewController : ObservableObject {
         Kind = PreviewKind.Gif;
     }
 
-    private void LoadVideo(string path) {
+    private async Task LoadVideoAsync(string path, CancellationToken ct) {
         // MediaElement does its own threaded decode; we just hand it the URI.
-        // No metadata extraction (MetadataExtractor's container support varies
-        // by format; not worth the bytes here for v1).
         //
         // Kind first, then the URI. The view picks which player to hand the
         // file to from the kind, so setting the URI while the kind still
@@ -2408,6 +2437,18 @@ public sealed class PreviewController : ObservableObject {
         // it, reports its length and then never plays it.
         Kind = PreviewKind.Video;
         MediaUri = new Uri(path);
+
+        // The streams for the footer: the container's own headers, read
+        // after the player has the file - a footer a moment late is better
+        // than a player a moment late.
+        var media = await Task.Run(() => MediaProbe.Read(path), ct);
+        if (ct.IsCancellationRequested) {
+            return;
+        }
+
+        _media = media;
+        _mediaOf = path;
+        ScheduleSummaryUpdate();
     }
 
     /// <summary>
@@ -2417,14 +2458,13 @@ public sealed class PreviewController : ObservableObject {
     /// <para>
     /// The playback itself needs nothing but the URI — Media Foundation
     /// reads both MP3 and FLAC on Windows 10 and later. The tags are ours
-    /// to read (see <see cref="AudioTags"/>), which is why this one is
-    /// async where <see cref="LoadVideo"/> is not: a cover can be a
-    /// megabyte of JPEG, and that is a decode, on a file that may be on a
+    /// to read (see <see cref="AudioTags"/>), on the pool: a cover can be
+    /// a megabyte of JPEG, and that is a decode, on a file that may be on a
     /// network share.
     /// </para>
     /// </summary>
     private async Task LoadAudioAsync(string path, CancellationToken ct) {
-        // Kind before the URI — see LoadVideo for why the order matters.
+        // Kind before the URI — see LoadVideoAsync for why the order matters.
         Kind = PreviewKind.Audio;
         MediaUri = new Uri(path);
 
@@ -2971,6 +3011,40 @@ public sealed class PreviewController : ObservableObject {
         await LoadCodeAsync(path, ext, ct);
     }
 
+    /// <summary>
+    /// A table: its sheets as a grid in the web view (<see cref="SheetReader"/>,
+    /// <see cref="PreviewText.SheetPage"/>). A CSV or TSV is text too, and
+    /// <see cref="ShowTableSource"/> shows it so; a file that does not read
+    /// as a table is shown the way it was before tables - text, or a
+    /// workbook's text as the content search reads it.
+    /// </summary>
+    private async Task LoadTableAsync(string path, CancellationToken ct) {
+        bool isText = SheetReader.IsText(path);
+        IsTableText = isText;
+        if (isText && _showTableSource) {
+            await LoadTextAsync(path, ct);
+
+            return;
+        }
+
+        string? page = await Task.Run(() => SheetReader.Read(path) is { Count: > 0 } sheets ? PreviewText.SheetPage(sheets) : null, ct);
+        if (ct.IsCancellationRequested) {
+            return;
+        }
+        if (page is null) {
+            if (isText) {
+                await LoadTextAsync(path, ct);
+            } else {
+                await LoadDocumentTextAsync(path, ct);
+            }
+
+            return;
+        }
+
+        WebHtml = page;
+        Kind = PreviewKind.Web;
+    }
+
     /// <summary>The whole file, or null when it is bigger than <paramref name="limit"/> or cannot be read.</summary>
     private static byte[]? ReadUpTo(string path, long limit) {
         try {
@@ -3124,6 +3198,8 @@ public sealed class PreviewController : ObservableObject {
         WebHtml = null;
         GifUri = null;
         MediaUri = null;
+        _media = null;
+        _mediaOf = null;
         Audio = null;
         AudioCover = null;
         ExecutableIcon = null;
@@ -3578,7 +3654,12 @@ public sealed class PreviewController : ObservableObject {
             if (!FooterWaitsForPicture(_selection[0])) {
                 bool othersFacts = _pictureFactsStale
                     && !string.Equals(_pictureOf, _selection[0].FullPath, StringComparison.OrdinalIgnoreCase);
-                Summary = SummaryText.ForFile(_selection[0], othersFacts ? null : _imageMetadata);
+                var media = _mediaOf is { } of
+                    && (string.Equals(of, _selection[0].FullPath, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(of, _linkTarget, StringComparison.OrdinalIgnoreCase))
+                    ? _media
+                    : null;
+                Summary = SummaryText.ForFile(_selection[0], othersFacts ? null : _imageMetadata, media);
                 SummaryNote = CompanionLabel.For(_selection[0].Name, _selection[0].Companions);
                 _summaryOf = _selection[0].FullPath;
             }

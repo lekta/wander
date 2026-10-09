@@ -491,6 +491,8 @@
         -->
         <Style x:Key="TilePanel" TargetType="ListBox" BasedOn="{StaticResource ListGestures}">
             <Setter Property="ItemsSource" Value="{Binding Entries}"/>
+            <!-- Said here, not left to Aero2: its list is white whatever the theme. -->
+            <Setter Property="Background" Value="{DynamicResource ContentBackground}"/>
             <Setter Property="SelectionMode" Value="Extended"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="AllowDrop" Value="True"/>

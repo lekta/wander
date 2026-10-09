@@ -46,14 +46,15 @@ internal static class TgaThumbnail {
         }
 
         try {
-            return RenderAsync(image, side).GetAwaiter().GetResult();
+            return EncodePngAsync(image, side).GetAwaiter().GetResult();
         } catch {
             return null;
         }
     }
 
 
-    private static async Task<byte[]> RenderAsync(BgraImage image, int side) {
+    /// <summary>A picture as a PNG of at most <paramref name="side"/> pixels on its long side - for the model tiles too.</summary>
+    internal static async Task<byte[]> EncodePngAsync(BgraImage image, int side) {
         double scale = Math.Min(1.0, side / (double)Math.Max(image.Width, image.Height));
         using var output = new InMemoryRandomAccessStream();
         var encoder = await BitmapEncoder.CreateAsync(BitmapEncoder.PngEncoderId, output);

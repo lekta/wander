@@ -1562,6 +1562,13 @@
                                           Visibility="{Binding IsSvg, Converter={StaticResource BoolToVisibility}}"
                                           VerticalAlignment="Top" Margin="0,6,0,0" Padding="8,1" MinWidth="44"
                                           FontSize="11" Focusable="False"/>
+                            <!-- A CSV or TSV: the table, or the text it is written in; a mode too. -->
+                            <ToggleButton Content="{x:Static res:Strings.PreviewSvgSourceToggle}"
+                                          ToolTip="{x:Static res:Strings.PreviewTableSourceHint}"
+                                          IsChecked="{Binding ShowTableSource, Mode=TwoWay}"
+                                          Visibility="{Binding IsTableText, Converter={StaticResource BoolToVisibility}}"
+                                          VerticalAlignment="Top" Margin="0,6,0,0" Padding="8,1" MinWidth="44"
+                                          FontSize="11" Focusable="False"/>
                         </WrapPanel>
 
                         <!--

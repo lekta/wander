@@ -45,6 +45,8 @@ $sets = @(
     @{ File = 'src\Wander.Core\Preview\AudioTags.cs'; Names = @('Extensions') },
     @{ File = 'src\Wander.Core\Preview\MeshFile.cs'; Names = @('Extensions') },
     @{ File = 'src\Wander.Core\Preview\BookCover.cs'; Names = @('_extensions') },
+    @{ File = 'src\Wander.Core\Preview\SheetReader.cs'; Names = @('Extensions') },
+    @{ File = 'src\Wander.Core\Preview\EmbeddedThumbnail.cs'; Names = @('_openDocument', '_package', 'Extensions') },
     @{ File = 'src\Wander.Core\Actions\FileTypeGroups.cs'; Names = @('Documents', 'Archives') }
 )
 # Routes and rules that name one extension at a time rather than a set.

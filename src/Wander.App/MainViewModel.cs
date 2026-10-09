@@ -393,8 +393,10 @@ public sealed class MainViewModel : ObservableObject {
             if (e.PropertyName == nameof(PreviewController.ShowRawDecode)) {
                 PreviewSecond.ShowRawDecode = Preview.ShowRawDecode;
             } else if (e.PropertyName == nameof(PreviewController.ShowSvgSource)) {
-                // The same for the SVG switch.
+                // The same for the SVG switch, and the table's.
                 PreviewSecond.ShowSvgSource = Preview.ShowSvgSource;
+            } else if (e.PropertyName == nameof(PreviewController.ShowTableSource)) {
+                PreviewSecond.ShowTableSource = Preview.ShowTableSource;
             }
         };
         // One set of review helpers for the window: the strip edits it,

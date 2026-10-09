@@ -18,7 +18,8 @@ Explorer: убрать лишнее, починить его баги, доба�
 - GUIDE — руководство пользователя, GUIDE.en — его перевод страница в
   страницу; SITE — сайт (два языка) и правила GUIDE;
   `docs/private/` — локальные заметки вне гита (`.git/info/exclude`)
-- `deps.txt` — рёбра графа папок; CHANGELOG; CONTRIBUTING; SECURITY;
+- `deps.txt` — рёбра графа папок; CHANGELOG (и CHANGELOG.en — с 0.6,
+  открывает текст релиза); CONTRIBUTING; SECURITY;
   README (английский) и README.ru в корне — витрина
 
 Новая сессия: этот файл → PLAN → ARCHITECTURE по задетому. Опус на блоке:

@@ -8,7 +8,7 @@ namespace Wander.App.Resources;
 /// четырёхсот, и одним файлом на полторы тысячи строк пользоваться нельзя.
 /// Ресурсы при этом лежат в одном <c>Strings.resx</c> — делить ещё и его
 /// значило бы искать ключ по нескольким <c>ResourceManager</c> подряд, а
-/// выигрыш тот же самый. Разбор — в BACKLOG.md.
+/// выигрыш тот же самый. Разбор — в REJECTED.md.
 /// </para>
 /// </summary>
 public static partial class Strings {

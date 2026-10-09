@@ -59,8 +59,15 @@ public sealed class ThumbnailDiskCache {
     /// of music (<c>AudioTags.CoverBeside</c>) - tracks in a mixed folder
     /// were cached wearing its screenshot.
     /// </para>
+    ///
+    /// <para>
+    /// v5 (2026-10-09): models are drawn (<c>ModelThumbnail</c>), and
+    /// OpenDocument, Office, 3MF, Krita, OpenRaster and CBZ files show the
+    /// picture they carry (<c>EmbeddedThumbnail</c>) - their slots were
+    /// cached as the type's icon.
+    /// </para>
     /// </summary>
-    private const int Generation = 4;
+    private const int Generation = 5;
 
     private readonly string _directory;
     private readonly ILogger _log;

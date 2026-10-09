@@ -12,7 +12,7 @@
 # прочитать замеры из логов этого прогона (см. ниже)
 .\tools\release-metrics.ps1 -Version 0.3.0   # снимок версии в docs/measurements/
 .\tools\version.ps1 0.3.0     # поднять версию везде
-# заполнить TODO в docs/CHANGELOG.md, сверить README
+# заполнить TODO в docs/CHANGELOG.md, перевести секцию в CHANGELOG.en.md, сверить README
 .\tools\check.bat
 git commit -am "Релиз 0.3.0-бета"
 git tag v0.3.0
@@ -32,7 +32,7 @@ origin site-2026-10-01`): кнопка «Скачать» на сайте бер
 | → `InformationalVersion` | `0.3.0-beta` | свойства exe, заголовок лога |
 | → `FileVersion` | `0.3.0.0` | Win32-ресурс, четыре числа |
 | git tag | `v0.3.0` | **без** `-beta`, CI-триггер |
-| `CHANGELOG.md` заголовок и сноска | `[0.3.0-beta]` → `…/tag/v0.3.0` | Keep a Changelog |
+| `CHANGELOG.md`, `CHANGELOG.en.md` заголовок и сноска | `[0.3.0-beta]` → `…/tag/v0.3.0` | Keep a Changelog |
 
 `AssemblyVersion` **не трогать** — приколочен к `0.0.0.0` как
 binding-идентичность; скрипт его не меняет.
@@ -60,9 +60,9 @@ master по тегу `site-*` и может опережать установл�
   подметаются следующим `-Install`. С `-Run` запускается установленная
   копия. Упавшая сборка ничего не устанавливает.
 - `tools\version.ps1 <MAJOR.MINOR.PATCH> [-Suffix rc1|''] [-DryRun]` —
-  проставляет три поля в `Directory.Build.props`, вставляет в CHANGELOG
-  секцию с датой и заготовками `### Added` / `### Fixed` (`TODO`), добавляет
-  сноску на будущий Release, печатает ручные шаги. Не коммитит, не тегает,
+  проставляет три поля в `Directory.Build.props`, вставляет в CHANGELOG и
+  CHANGELOG.en секцию с датой и заготовками `### Added` / `### Fixed`
+  (`TODO`), добавляет сноску на будущий Release, печатает ручные шаги. Не коммитит, не тегает,
   не пушит. Падает, если версия не в формате, секция уже есть или якоря в
   файлах не найдены.
 
@@ -111,6 +111,10 @@ X.Y.Z` собирает окружение, вес и SHA256, старт и `PER
 4. `.\tools\version.ps1 <версия>`.
 5. CHANGELOG: заменить `TODO`; секции Keep a Changelog (`Added`, `Changed`,
    `Deprecated`, `Removed`, `Fixed`, `Security`), лишние удалить.
+   `CHANGELOG.en.md` — та же секция по-английски (решение человека
+   2026-10-09): переводит Claude, человек пробегает глазами; слова — как в
+   интерфейсе и `GUIDE.en.md`. Она открывает текст релиза на GitHub, русская
+   идёт под ней.
 6. README: плашка `**Beta X.Y**`; возможности там не перечисляются — они на
    сайте. Бейдж и ссылка на релиз динамические — не трогать.
 7. `.\tools\check.bat` ещё раз — версия участвует в сборке.
@@ -155,8 +159,10 @@ X.Y.Z` собирает окружение, вес и SHA256, старт и `PER
 
 `.github/workflows/release.yml`, триггер — тег `v*`: `windows-latest`,
 .NET 10 SDK; `dotnet publish` Release / win-x64 / self-contained /
-single-file / сжатый; SHA256 рядом; `gh release create --generate-notes
---prerelease`. Сборка на раннере GitHub из публичного исходника — логи
+single-file / сжатый; SHA256 рядом; текст релиза — секция версии из
+`CHANGELOG.en.md`, под ней из `CHANGELOG.md` (английской нет — только
+русская и предупреждение в логе CI, выпуск не падает); `gh release create
+--notes-file --prerelease`. Сборка на раннере GitHub из публичного исходника — логи
 открыты, SHA256 подтверждает, что exe собран из этого кода (часть обещания
 README). `PublishTrimmed` для WPF не поддерживается — не включать.
 

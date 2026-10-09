@@ -1,8 +1,10 @@
+using System.Globalization;
 using System.IO;
 using Wander.App.Resources;
 using Wander.App.Util;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
+using Wander.Core.Preview;
 using Wander.Core.Shell;
 
 namespace Wander.App.Preview;
@@ -32,6 +34,12 @@ internal static class SummaryText {
     /// <summary>Between the parts of one fact - the four numbers of an exposure.</summary>
     private const string InnerGap = "  ";
 
+    /// <summary>Audio tracks of a video given a line each; the rest are counted on one more.</summary>
+    private const int MaxAudioLines = 3;
+
+    /// <summary>Subtitle tracks named on their line; the rest are counted after them.</summary>
+    private const int MaxSubtitles = 8;
+
 
     /// <summary>
     /// Debug menu: every camera is named by one stand-in word, so a
@@ -41,8 +49,9 @@ internal static class SummaryText {
 
 
     /// <summary>
-    /// One file: its name, then what it is - pixels when it is a picture,
-    /// size, when it was changed - then what the camera recorded. The first
+    /// One file: its name, then what it is - pixels when it is a picture or
+    /// a video, the length of a video, size, when it was changed - then
+    /// what the camera recorded, or a video's streams. The first
     /// line is the name alone: the footer draws the mention of the file's
     /// sidecars after it (<c>PreviewController.SummaryNote</c>).
     /// Recycle-bin items (<c>OriginalLocation</c> set) say "Deleted" before
@@ -50,16 +59,24 @@ internal static class SummaryText {
     /// line with the source folder, so the user can decide whether to
     /// restore them without context-switching.
     /// </summary>
-    public static string ForFile(FileSystemEntry e, ImageMetadata? metadata) {
+    public static string ForFile(FileSystemEntry e, ImageMetadata? metadata, MediaInfo? media = null) {
         string when = TimeFormat.FromUtc(e.ModifiedUtc);
         var facts = new List<string>();
         if (metadata is { PixelWidth: int w, PixelHeight: int h }) {
             facts.Add($"{w} × {h}");
+        } else if (media?.Video is { Width: > 0, Height: > 0 } video) {
+            facts.Add($"{video.Width} × {video.Height}");
+        }
+        if (media?.Duration is { } length) {
+            facts.Add(Timecode.Format(length, roundUp: true));
         }
         facts.Add(SizeFormatter.Format(e.Size));
         facts.Add(e.OriginalLocation is not null ? $"{Strings.SummaryDeleted}: {when}" : when);
 
         string summary = $"📄  {e.Name}\n{string.Join(Gap, facts)}";
+        if (media is not null && ForMedia(media) is { Length: > 0 } streams) {
+            summary += "\n" + streams;
+        }
         if (e.OriginalLocation is not null) {
             summary += $"\n{Strings.SummaryDeletedFrom}: {e.OriginalLocation}";
         }
@@ -225,6 +242,107 @@ internal static class SummaryText {
         }
 
         return string.Join(Gap, parts);
+    }
+
+
+    /// <summary>
+    /// A video's streams, under its facts: the picture on one line - codec,
+    /// depth past 8 bits, HDR, frame rate, bitrate (the stream's own, else
+    /// the whole file's) - then a line per audio track and one for all the
+    /// subtitles, each with its language as the file tags it.
+    /// </summary>
+    private static string ForMedia(MediaInfo media) {
+        var lines = new List<string>();
+        if (media.Video is { } video) {
+            var codec = new List<string> { video.Codec };
+            if (video.BitDepth is > 8 and int depth) {
+                codec.Add(string.Format(Strings.MediaBitDepth, depth));
+            }
+            if (video.Hdr is { } hdr) {
+                codec.Add(hdr);
+            }
+            var facts = new List<string> { string.Join(InnerGap, codec) };
+            if (video.FrameRate is > 0 and double fps) {
+                facts.Add(string.Format(Strings.MediaFps, Rate(fps)));
+            }
+            if ((video.Bitrate ?? media.Bitrate) is > 0 and long bps) {
+                facts.Add(Bitrate(bps));
+            }
+            lines.Add(string.Join(Gap, facts));
+        }
+
+        var audio = media.Tracks.Where(t => t.Kind == MediaTrackKind.Audio).ToList();
+        foreach (var track in audio.Take(MaxAudioLines)) {
+            lines.Add($"{Strings.MediaAudio}: {AudioTrack(track)}");
+        }
+        if (audio.Count > MaxAudioLines) {
+            lines.Add($"{Strings.MediaAudio}: {string.Format(Strings.AndMore, audio.Count - MaxAudioLines)}");
+        }
+
+        var subtitles = media.Tracks.Where(t => t.Kind == MediaTrackKind.Subtitle).ToList();
+        if (subtitles.Count > 0) {
+            var named = subtitles.Take(MaxSubtitles).Select(SubtitleTrack).ToList();
+            if (subtitles.Count > MaxSubtitles) {
+                named.Add(string.Format(Strings.AndMore, subtitles.Count - MaxSubtitles));
+            }
+            lines.Add($"{Strings.MediaSubtitles}: {string.Join(", ", named)}");
+        }
+
+        return string.Join("\n", lines);
+    }
+
+    /// <summary>"AC-3 5.1   48 kHz   640 kbps   rus   "Dub"".</summary>
+    private static string AudioTrack(MediaTrack track) {
+        var facts = new List<string>();
+        string? layout = track.Channels switch {
+            1 => Strings.MediaMono,
+            2 => Strings.MediaStereo,
+            6 => "5.1",
+            8 => "7.1",
+            > 0 => string.Format(Strings.MediaChannels, track.Channels),
+            _ => null,
+        };
+        facts.Add(layout is null ? track.Codec : $"{track.Codec} {layout}");
+        if (track.SampleRate > 0) {
+            facts.Add(string.Format(Strings.MediaKhz, (track.SampleRate / 1000.0).ToString("0.#", CultureInfo.CurrentCulture)));
+        }
+        if (track.Bitrate is > 0 and long bps) {
+            facts.Add(Bitrate(bps));
+        }
+        if (track.Language is { } language) {
+            facts.Add(language);
+        }
+        if (track.Title is { } title) {
+            facts.Add(string.Format(Strings.MediaTitle, title));
+        }
+
+        return string.Join(Gap, facts);
+    }
+
+    /// <summary>"rus SRT "Signs" (forced)".</summary>
+    private static string SubtitleTrack(MediaTrack track) {
+        string text = track.Language is { } language ? $"{language} {track.Codec}" : track.Codec;
+        if (track.Title is { } title) {
+            text += " " + string.Format(Strings.MediaTitle, title);
+        }
+        if (track.IsForced) {
+            text += " " + Strings.MediaForced;
+        }
+
+        return text;
+    }
+
+    /// <summary>"25", "23,976", "29,97": whole rates without a fraction, the NTSC ones with theirs.</summary>
+    private static string Rate(double fps) {
+        return Math.Abs(fps - Math.Round(fps)) < 0.005
+            ? Math.Round(fps).ToString(CultureInfo.CurrentCulture)
+            : fps.ToString("0.###", CultureInfo.CurrentCulture);
+    }
+
+    private static string Bitrate(long bitsPerSecond) {
+        return bitsPerSecond < 1_000_000
+            ? string.Format(Strings.MediaKbps, Math.Round(bitsPerSecond / 1000.0))
+            : string.Format(Strings.MediaMbps, (bitsPerSecond / 1_000_000.0).ToString("0.#", CultureInfo.CurrentCulture));
     }
 
 

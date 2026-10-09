@@ -132,6 +132,18 @@
   <data name="PreviewSvgSourceHint" xml:space="preserve">
     <value>Switch between the SVG image and its markup</value>
   </data>
+  <data name="PreviewTableSourceHint" xml:space="preserve">
+    <value>Show the file's text instead of the table, and back</value>
+  </data>
+  <data name="PreviewTableRowsOf" xml:space="preserve">
+    <value>Rows shown: {0:N0} of {1:N0}</value>
+  </data>
+  <data name="PreviewTableRowsMore" xml:space="preserve">
+    <value>Rows shown: {0:N0}; the rest was not read</value>
+  </data>
+  <data name="PreviewTableEmpty" xml:space="preserve">
+    <value>The sheet is empty</value>
+  </data>
   <data name="SummaryDeleted" xml:space="preserve">
     <value>Deleted</value>
   </data>
@@ -1895,6 +1907,42 @@
   </data>
   <data name="SummaryShotsSample" xml:space="preserve">
     <value>EXIF from the first {0}</value>
+  </data>
+  <data name="MediaAudio" xml:space="preserve">
+    <value>Audio</value>
+  </data>
+  <data name="MediaSubtitles" xml:space="preserve">
+    <value>Subtitles</value>
+  </data>
+  <data name="MediaFps" xml:space="preserve">
+    <value>{0} fps</value>
+  </data>
+  <data name="MediaKbps" xml:space="preserve">
+    <value>{0} kbps</value>
+  </data>
+  <data name="MediaMbps" xml:space="preserve">
+    <value>{0} Mbps</value>
+  </data>
+  <data name="MediaKhz" xml:space="preserve">
+    <value>{0} kHz</value>
+  </data>
+  <data name="MediaBitDepth" xml:space="preserve">
+    <value>{0}-bit</value>
+  </data>
+  <data name="MediaMono" xml:space="preserve">
+    <value>mono</value>
+  </data>
+  <data name="MediaStereo" xml:space="preserve">
+    <value>stereo</value>
+  </data>
+  <data name="MediaChannels" xml:space="preserve">
+    <value>{0} ch</value>
+  </data>
+  <data name="MediaForced" xml:space="preserve">
+    <value>(forced)</value>
+  </data>
+  <data name="MediaTitle" xml:space="preserve">
+    <value>“{0}”</value>
   </data>
   <data name="TitleYielding" xml:space="preserve">
     <value>{0} — settings aren't saved</value>

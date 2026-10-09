@@ -7,9 +7,9 @@
           that carry information, things drawn over a photograph, the 3D
           scene's light. Always merged.
         - Palette.Light.xaml and Palette.Dark.xaml: the window's chrome, the
-          same keys in both. One of the two is merged at a time; switching
-          the theme swaps it (Util/InterfaceTheme), and everything that
-          paints with it repaints.
+          same keys in both. The light one is always merged; the dark one is
+          laid over it while the theme is dark (Util/InterfaceTheme), and
+          everything that paints with it repaints.
 
         Merged into Shared.xaml, so a resource reference reaches any key
         from any window, view or control template, and Resources/Palette.cs
@@ -21,7 +21,7 @@
         controls paint with colours of their theme baked in; they are
         redrawn with these keys in StockControls.xaml.
 
-        A THEMED KEY IS A DynamicResource. The swap replaces the brushes; a
+        A THEMED KEY IS A DynamicResource. The switch replaces the brushes; a
         StaticResource holds the one it found when the view was built, and
         that view stays in the old theme. The keys in this file never change
         and may stay StaticResource. check-resources.ps1 checks that the two

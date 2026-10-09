@@ -47,6 +47,31 @@ jobs:
           "$hash  Wander.exe" | Out-File publish/Wander.exe.sha256 -Encoding ascii
           Write-Host "SHA256: $hash"
 
+      # Текст релиза - секция версии из CHANGELOG: английская сверху, русская
+      # под ней (решение человека 2026-10-09; список коммитов не нужен).
+      # Нет английской секции - только русская и предупреждение: тег уже
+      # опубликован, ронять выпуск из-за перевода незачем.
+      - name: Release notes
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart('v')
+          function Get-Section([string]$path) {
+            $text = Get-Content -Raw -Encoding UTF8 $path
+            $pattern = "(?ms)^## \[$([regex]::Escape($version))(?:-[^\]]*)?\][^\n]*\n(.*?)(?=^## \[|^\[[^\]]+\]:\s*http|\z)"
+            $match = [regex]::Match($text, $pattern)
+            if ($match.Success) { return $match.Groups[1].Value.Trim() }
+            return $null
+          }
+          $ru = Get-Section 'docs/CHANGELOG.md'
+          $en = Get-Section 'docs/CHANGELOG.en.md'
+          if (-not $ru) { throw "docs/CHANGELOG.md has no section for $version" }
+          if ($en) {
+            $notes = "$en`n`n---`n`n## По-русски`n`n$ru"
+          } else {
+            Write-Output "::warning::docs/CHANGELOG.en.md has no section for $version - the notes are in Russian only"
+            $notes = $ru
+          }
+          [IO.File]::WriteAllText("$PWD/release-notes.md", $notes, (New-Object Text.UTF8Encoding($false)))
+
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -55,5 +80,5 @@ jobs:
             publish/Wander.exe `
             publish/Wander.exe.sha256 `
             --title "Wander ${{ github.ref_name }}" `
-            --generate-notes `
+            --notes-file release-notes.md `
             --prerelease

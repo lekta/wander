@@ -13,13 +13,22 @@ namespace Wander.App.Util;
 /// Light or dark, for the whole session and every window in it.
 ///
 /// <para>
-/// The theme is a palette dictionary (<c>Resources/Palette.Light.xaml</c> or
-/// <c>Palette.Dark.xaml</c>) in the application's list of dictionaries;
-/// switching swaps that one entry, and everything painted from it by
+/// The light palette (<c>Resources/Palette.Light.xaml</c>) is always in the
+/// application's dictionaries, by way of <c>Shared.xaml</c>; the dark one
+/// (<c>Palette.Dark.xaml</c>, the same keys) is laid over it, at the end of
+/// <c>Application.Resources</c>, and taken off again. Everything painted by
 /// <c>DynamicResource</c> repaints - nothing is rebuilt, nothing is reread,
 /// the selection and the scroll position stay where they were. What WPF
 /// does not draw - a window's title bar - is told separately
 /// (<see cref="Attach"/>).
+/// </para>
+///
+/// <para>
+/// Not a swap inside <c>Shared.xaml</c>: a dictionary loaded through
+/// <c>Source</c> hands its list of merged dictionaries to an inner instance
+/// with no owners, and a change to that list reaches no window - every
+/// colour stayed where it was (stand 2026-10-09, real windows). The
+/// application's own dictionary tells its windows.
 /// </para>
 ///
 /// <para>
@@ -37,7 +46,6 @@ public static class InterfaceTheme {
 
     private static UiTheme _choice = UiTheme.System;
     private static bool _watching;
-    private static ResourceDictionary? _light;
     private static ResourceDictionary? _dark;
 
 
@@ -96,44 +104,26 @@ public static class InterfaceTheme {
 
     private static void Show(bool dark) {
         IsDark = dark;
-        if (Application.Current is not { } app || FindThemeSlot(app.Resources) is not { } slot) {
+        if (Application.Current is not { } app) {
             return;
         }
 
-        var (owner, index) = slot;
-        var current = owner.MergedDictionaries[index];
-        if (IsNamed(current, DarkName) == dark) {
+        // Last in the list, so a lookup finds it before Shared.xaml's light one.
+        var merged = app.Resources.MergedDictionaries;
+        if ((_dark is not null && merged.Contains(_dark)) == dark) {
             return;
         }
 
-        // The light one is the instance Shared.xaml loaded; each is loaded once and kept.
         if (dark) {
-            _light ??= current;
-            owner.MergedDictionaries[index] = _dark ??= new ResourceDictionary { Source = _darkSource };
+            merged.Add(_dark ??= new ResourceDictionary { Source = _darkSource });
         } else {
-            _dark ??= current;
-            owner.MergedDictionaries[index] = _light ??= new ResourceDictionary { Source = _lightSource };
+            merged.Remove(_dark!);
         }
         Log.Info($"Theme: {(dark ? "dark" : "light")} (setting {_choice}, Windows {(ReadWindowsIsDark() ? "dark" : "light")})");
         foreach (Window window in app.Windows) {
             PaintFrame(window);
         }
         Changed?.Invoke();
-    }
-
-    /// <summary>The dictionary holding the theme's palette and its place in it - found by name, so the list in Shared.xaml stays the one list.</summary>
-    private static (ResourceDictionary Owner, int Index)? FindThemeSlot(ResourceDictionary dictionary) {
-        for (int i = 0; i < dictionary.MergedDictionaries.Count; i++) {
-            var merged = dictionary.MergedDictionaries[i];
-            if (IsNamed(merged, LightName) || IsNamed(merged, DarkName)) {
-                return (dictionary, i);
-            }
-            if (FindThemeSlot(merged) is { } inner) {
-                return inner;
-            }
-        }
-
-        return null;
     }
 
     private static bool IsNamed(ResourceDictionary dictionary, string name) {

@@ -37,10 +37,11 @@ if ($Suffix -and $Suffix -notmatch '^[0-9A-Za-z.-]+$') {
 $repoRoot      = Split-Path -Parent $PSScriptRoot
 $propsPath     = Join-Path $repoRoot 'Directory.Build.props'
 $changelogPath = Join-Path $repoRoot 'docs\CHANGELOG.md'
+$changelogEnPath = Join-Path $repoRoot 'docs\CHANGELOG.en.md'
 # Счётчик сборки (PLAN AH): в гите его нет, сбрасывает только смена версии.
 $buildNumberPath = Join-Path $repoRoot 'src\Wander.App\build-number.txt'
 
-foreach ($p in @($propsPath, $changelogPath)) {
+foreach ($p in @($propsPath, $changelogPath, $changelogEnPath)) {
     if (-not (Test-Path $p)) { throw "File not found: $p" }
 }
 
@@ -87,42 +88,58 @@ $props = Set-XmlTagValue $props 'FileVersion'          $fileVersion
 
 Write-Text $propsPath $props
 
-# --- docs/CHANGELOG.md -----------------------------------------------------
+# --- docs/CHANGELOG.md, docs/CHANGELOG.en.md --------------------------------
 
-$changelog = Read-Text $changelogPath
+# Секция версии с заготовками и ссылка-сноска на релиз. Русский CHANGELOG -
+# источник, его якоря обязаны быть; английский (с 0.6, решение человека
+# 2026-10-09) начат пустым - первая секция и первая сноска ложатся в конец.
+function Add-ChangelogSection([string]$Path, [bool]$AnchorsRequired) {
+    $name = Split-Path -Leaf $Path
+    $text = Read-Text $Path
+    if ($text -match [regex]::Escape("## [$informational]")) {
+        throw "$name already has a [$informational] section - version not bumped."
+    }
 
-if ($changelog -match [regex]::Escape("## [$informational]")) {
-    throw "CHANGELOG.md already has a [$informational] section - version not bumped."
+    $nl = if ($text -match "`r`n") { "`r`n" } else { "`n" }
+    $section = @(
+        "## [$informational] - $today",
+        '',
+        '### Added',
+        '- TODO',
+        '',
+        '### Fixed',
+        '- TODO',
+        ''
+    ) -join $nl
+    $link = "[$informational]: $releaseUrl" + $nl
+
+    $firstSection = [regex]::Match($text, '(?m)^## \[')
+    $firstLink = [regex]::Match($text, '(?m)^\[[^\]]+\]:\s*http')
+    if ($AnchorsRequired -and -not $firstSection.Success) {
+        throw "$name has no ""## [...]"" section - check the file format."
+    }
+    if ($AnchorsRequired -and -not $firstLink.Success) {
+        throw "$name has no ""[x]: http..."" link refs - check the file format."
+    }
+
+    # Сноска внизу файла, перед самой свежей из существующих; секция - перед
+    # самой свежей секцией, а в пустом файле - перед сносками.
+    if ($firstLink.Success) {
+        $text = $text.Insert($firstLink.Index, $link)
+    } else {
+        $text = $text.TrimEnd() + $nl + $nl + $link
+    }
+    if ($firstSection.Success) {
+        $text = $text.Insert($firstSection.Index, $section + $nl)
+    } else {
+        $text = $text.Insert([regex]::Match($text, '(?m)^\[[^\]]+\]:\s*http').Index, $section + $nl)
+    }
+
+    Write-Text $Path $text
 }
 
-$nl = if ($changelog -match "`r`n") { "`r`n" } else { "`n" }
-
-$section = @(
-    "## [$informational] - $today",
-    '',
-    '### Added',
-    '- TODO',
-    '',
-    '### Fixed',
-    '- TODO',
-    ''
-) -join $nl
-
-# Новая секция идёт перед самой свежей из существующих.
-$firstSection = [regex]::Match($changelog, '(?m)^## \[')
-if (-not $firstSection.Success) {
-    throw 'CHANGELOG.md has no "## [...]" section - check the file format.'
-}
-$changelog = $changelog.Insert($firstSection.Index, $section + $nl)
-
-# Ссылка-сноска внизу файла, перед самой свежей из существующих.
-$firstLink = [regex]::Match($changelog, '(?m)^\[[^\]]+\]:\s*http')
-if (-not $firstLink.Success) {
-    throw 'CHANGELOG.md has no "[x]: http..." link refs - check the file format.'
-}
-$changelog = $changelog.Insert($firstLink.Index, "[$informational]: $releaseUrl" + $nl)
-
-Write-Text $changelogPath $changelog
+Add-ChangelogSection $changelogPath $true
+Add-ChangelogSection $changelogEnPath $false
 
 # --- Счётчик сборки --------------------------------------------------------
 
@@ -141,12 +158,13 @@ Write-Host "    FileVersion          = $fileVersion"
 Write-Host "    AssemblyVersion      = 0.0.0.0  (left alone on purpose)" -ForegroundColor DarkGray
 Write-Host "  src/Wander.App/build-number.txt"
 Write-Host "    build counter        = 0  (next local build is 1)"
-Write-Host "  docs/CHANGELOG.md"
+Write-Host "  docs/CHANGELOG.md, docs/CHANGELOG.en.md"
 Write-Host "    + section [$informational] - $today"
 Write-Host "    + link ref -> $releaseUrl"
 Write-Host ""
 Write-Host "Next, by hand:" -ForegroundColor Yellow
-Write-Host "  1. Fill in the TODOs in docs/CHANGELOG.md"
+Write-Host "  1. Fill in the TODOs in docs/CHANGELOG.md, then the same section in English"
+Write-Host "     in docs/CHANGELOG.en.md (it becomes the top of the release notes)"
 Write-Host "  2. .\tools\check.bat"
 Write-Host "  3. git commit; git tag $tag; git push origin master --follow-tags"
 Write-Host "     (pushing tag $tag triggers .github/workflows/release.yml)"

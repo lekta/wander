@@ -114,9 +114,10 @@ public readonly record struct MeshBounds(
 
 
 /// <summary>
-/// Reads the three model formats the preview pane understands, chosen for
+/// Reads the model formats the preview pane understands, chosen for
 /// being small, documented and self-contained: STL (both flavours), OBJ,
-/// and glTF in its binary and JSON forms.
+/// glTF in its binary and JSON forms, PLY (text and binary) and the 3MF
+/// package slicers save.
 ///
 /// <para>
 /// FBX is deliberately not among them. It is a versioned node tree with
@@ -142,7 +143,7 @@ public static class MeshFile {
 
     /// <summary>Extensions this reader understands.</summary>
     public static readonly IReadOnlySet<string> Extensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
-        ".stl", ".obj", ".gltf", ".glb",
+        ".stl", ".obj", ".gltf", ".glb", ".ply", ".3mf",
     };
 
 
@@ -170,15 +171,25 @@ public static class MeshFile {
                 ".stl" => StlReader.Read(SharedRead.ReadAllBytes(path)),
                 ".obj" => ObjReader.Read(path),
                 ".glb" or ".gltf" => GltfReader.Read(path),
+                ".ply" => PlyReader.Read(SharedRead.ReadAllBytes(path)),
+                ".3mf" => ReadPackage(path),
                 _ => null,
             };
 
             return mesh is not null && mesh.TriangleCount > 0 ? mesh : null;
         } catch (Exception ex) when (
             ex is IOException or UnauthorizedAccessException or NotSupportedException
-                or OutOfMemoryException or FormatException or ArgumentException) {
+                or OutOfMemoryException or FormatException or ArgumentException
+                or InvalidDataException or System.Xml.XmlException or OverflowException) {
             return null;
         }
+    }
+
+
+    private static MeshData? ReadPackage(string path) {
+        using var stream = SharedRead.Open(path);
+
+        return ThreeMfReader.Read(stream);
     }
 
 

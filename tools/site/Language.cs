@@ -15,6 +15,7 @@ internal sealed record Language {
         Locale = "ru_RU",
         GuideSource = "docs/GUIDE.md",
         LandingSource = "docs/site/index.html",
+        Changelog = "docs/CHANGELOG.md",
         Guide = "Руководство",
         Versions = "Версии",
         Sections = "Разделы",
@@ -42,6 +43,7 @@ internal sealed record Language {
         Locale = "en_US",
         GuideSource = "docs/GUIDE.en.md",
         LandingSource = "docs/site/index.en.html",
+        Changelog = "docs/CHANGELOG.en.md",
         Guide = "Guide",
         Versions = "Versions",
         Sections = "Contents",
@@ -79,6 +81,9 @@ internal sealed record Language {
     public required string GuideSource { get; init; }
 
     public required string LandingSource { get; init; }
+
+    /// <summary>What the versions page sends to for what changed: the English one starts at 0.6.</summary>
+    public required string Changelog { get; init; }
 
     public required string Guide { get; init; }
 

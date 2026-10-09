@@ -69,6 +69,9 @@ internal sealed class SiteBuilder {
     /// </summary>
     private const string LinkPreviewSource = "docs/screenshots/og.jpg";
 
+    /// <summary>The app's icon among the screenshots: the same in every language, never a screenshot to retake.</summary>
+    private const string AppIcon = "icon.webp";
+
     /// <summary>Where the settings pages name the guide section F1 opens.</summary>
     private const string SettingsPagesSource = "src/Wander.App/ViewModels/SettingsCategoryViewModel.cs";
 
@@ -98,6 +101,9 @@ internal sealed class SiteBuilder {
     /// </summary>
     private static readonly Regex _imageTag = new(@"^<img\s+([^>]*?)\s*/?>\s*$", RegexOptions.Singleline);
 
+    /// <summary>A picture of a landing, hand-written: <c>src="img/x.webp"</c> or, from en/, <c>src="../img/x.webp"</c>.</summary>
+    private static readonly Regex _landingPicture = new(@"(src=""(?:\.\./)?img/)([^""/]+\.webp)""");
+
     private static readonly Regex _attribute = new(@"([a-z]+)=""([^""]*)""");
     private static readonly Regex _scheme = new("^[a-z][a-z0-9+.-]*:", RegexOptions.IgnoreCase);
     private static readonly Regex _placeholder = new(@"\{\{([a-z]+)\}\}");
@@ -126,6 +132,9 @@ internal sealed class SiteBuilder {
 
     /// <summary>The language whose pages are being rendered.</summary>
     private Language _language = Language.Russian;
+
+    /// <summary>A screenshot file -> the languages whose pages showed it for want of their own (<see cref="Localized"/>).</summary>
+    private readonly SortedDictionary<string, HashSet<Language>> _sharedShots = new(StringComparer.Ordinal);
 
     private Release? _latest;
     private int _screenshots;
@@ -265,6 +274,10 @@ internal sealed class SiteBuilder {
         if (_screenshots > 0) {
             yield return $"{_screenshots} place(s) marked for a screenshot" + (_debug ? ", shown" : ", shown with --debug");
         }
+        var shared = _sharedShots.Where(shot => shot.Value.Count == Language.All.Length).Select(shot => shot.Key).ToList();
+        if (shared.Count > 0) {
+            yield return $"{shared.Count} screenshot(s) shared by both languages, no .ru / .en pair: {string.Join(", ", shared)}";
+        }
     }
 
 
@@ -310,12 +323,12 @@ internal sealed class SiteBuilder {
             ["main"] = RenderVersions(releases),
         }));
         string landing = language.Folder + "index.html";
-        _pages[landing] = Fill(Read(language.LandingSource), language.LandingSource, Frame(landing, null, css, build, analytics, new() {
+        _pages[landing] = LocalizedPictures(Fill(Read(language.LandingSource), language.LandingSource, Frame(landing, null, css, build, analytics, new() {
             ["guide"] = home,
             ["version"] = _latest!.Version,
             ["download"] = $"{Repository}/releases/download/{_latest.Tag}/Wander.exe",
             ["release"] = $"{Repository}/releases/tag/{_latest.Tag}",
-        }));
+        })));
     }
 
     /// <summary>
@@ -553,7 +566,7 @@ internal sealed class SiteBuilder {
         var main = new StringBuilder()
             .Append($"<h1>{language.Versions}</h1>\n")
             .Append($"<p>{language.VersionsIntro}")
-            .Append($"<a href=\"{Repository}/blob/master/docs/CHANGELOG.md\">CHANGELOG</a>.</p>\n")
+            .Append($"<a href=\"{Repository}/blob/master/{language.Changelog}\">CHANGELOG</a>.</p>\n")
             .Append("<table>\n<thead><tr>")
             .AppendJoin("", language.VersionColumns.Select(column => $"<th>{column}</th>"))
             .Append("</tr></thead>\n<tbody>\n");
@@ -647,6 +660,10 @@ internal sealed class SiteBuilder {
         int hash = url.IndexOf('#', StringComparison.Ordinal);
         string fragment = hash < 0 ? "" : url[hash..];
         string full = Path.GetFullPath(Path.Combine(_root, "docs", Uri.UnescapeDataString(hash < 0 ? url : url[..hash])));
+        if (link.IsImage) {
+            // The page's own language of a screenshot, when it has one.
+            full = Localized(full);
+        }
         string relative = Path.GetRelativePath(_root, full).Replace('\\', '/');
         if (relative.StartsWith("../", StringComparison.Ordinal) || Path.IsPathRooted(relative) || !Path.Exists(full)) {
             Errors.Add($"{where}: broken link {url}");
@@ -769,7 +786,7 @@ internal sealed class SiteBuilder {
             return "";
         }
 
-        string full = Path.GetFullPath(Path.Combine(_root, "docs", Uri.UnescapeDataString(src)));
+        string full = Localized(Path.GetFullPath(Path.Combine(_root, "docs", Uri.UnescapeDataString(src))));
         string relative = Path.GetRelativePath(_root, full).Replace('\\', '/');
         if (Screenshot(full, relative, where) is not { } size) {
             return "";
@@ -800,6 +817,50 @@ internal sealed class SiteBuilder {
         return right
             ? $"<div class=\"right\">{picture}</div>"
             : $"<p>{picture}</p>";
+    }
+
+    /// <summary>
+    /// The screenshot in the language being rendered (2026-10-09): a pair
+    /// <c>x.ru.webp</c> / <c>x.en.webp</c> gives each language its own, a
+    /// single <c>x.webp</c> serves both. The text may name the picture with
+    /// its language or without - the page gets its own language's file; none
+    /// found leaves the path as it was, for the link check to report. Other
+    /// files pass through. A shared one is noted for the summary: before a
+    /// release it is the list of pictures that may still show the other
+    /// language's interface.
+    /// </summary>
+    private string Localized(string full) {
+        string folder = Path.Combine(_root, "docs", "screenshots");
+        if (!string.Equals(Path.GetDirectoryName(full), folder, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(Path.GetExtension(full), ".webp", StringComparison.OrdinalIgnoreCase)) {
+            return full;
+        }
+
+        string name = Path.GetFileNameWithoutExtension(full);
+        string? suffix = Language.All.Select(l => "." + l.Code).FirstOrDefault(s => name.EndsWith(s, StringComparison.Ordinal));
+        string bare = suffix is null ? name : name[..^suffix.Length];
+        string own = Path.Combine(folder, $"{bare}.{_language.Code}.webp");
+        if (File.Exists(own)) {
+            return own;
+        }
+
+        string shared = Path.Combine(folder, bare + ".webp");
+        string found = File.Exists(shared) ? shared : full;
+        if (File.Exists(found) && Path.GetFileName(found) != AppIcon) {
+            string file = Path.GetFileName(found);
+            if (!_sharedShots.TryGetValue(file, out var languages)) {
+                _sharedShots[file] = languages = new HashSet<Language>();
+            }
+            languages.Add(_language);
+        }
+
+        return found;
+    }
+
+    /// <summary>A landing's pictures (<c>img/x.webp</c> in its HTML) in the landing's language - see <see cref="Localized"/>.</summary>
+    private string LocalizedPictures(string html) {
+        return _landingPicture.Replace(html, m =>
+            m.Groups[1].Value + Path.GetFileName(Localized(Path.Combine(_root, "docs", "screenshots", m.Groups[2].Value))) + "\"");
     }
 
     /// <summary>The size of a screenshot; anything but docs/screenshots/*.webp is an error, and null.</summary>

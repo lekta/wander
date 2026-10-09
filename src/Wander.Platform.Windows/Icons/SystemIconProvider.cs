@@ -722,10 +722,12 @@ public sealed class SystemIconProvider : IIconProvider {
     /// <summary>
     /// Whether this file's tile is drawn from its own cover rather than
     /// from the shell. Books carry one inside them; a PDF's first page
-    /// stands in for one.
+    /// stands in for one; documents and packages keep a picture of
+    /// themselves (<see cref="EmbeddedThumbnail"/>); a model is drawn.
     /// </summary>
     private static bool HasOwnCover(string path) {
-        return BookCover.Supports(path) || PdfPageImage.Supports(path) || AudioCover.Supports(path);
+        return BookCover.Supports(path) || PdfPageImage.Supports(path) || AudioCover.Supports(path)
+            || EmbeddedThumbnail.Supports(path) || ModelThumbnail.Supports(path);
     }
 
     /// <summary>
@@ -741,6 +743,13 @@ public sealed class SystemIconProvider : IIconProvider {
     /// </para>
     /// </summary>
     private static byte[]? TryRenderBookCover(string path, int side) {
+        // A model is not a book: drawn on transparency, no plate.
+        if (ModelThumbnail.Supports(path)) {
+            using (PerfLog.Measure("bg.model")) {
+                return ModelThumbnail.Render(path, side);
+            }
+        }
+
         using Bitmap? plate = RenderCoverPlate(path, side);
         if (plate is null) {
             return null;
@@ -765,6 +774,7 @@ public sealed class SystemIconProvider : IIconProvider {
         using (PerfLog.Measure("bg.book-cover")) {
             bytes = PdfPageImage.Supports(path) ? PdfPageImage.RenderFirstPage(path, side)
                 : AudioCover.Supports(path) ? AudioCover.Read(path)
+                : EmbeddedThumbnail.Supports(path) ? EmbeddedThumbnail.TryRead(path)
                 : BookCover.TryRead(path);
         }
         if (bytes is null) {

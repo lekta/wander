@@ -7,9 +7,9 @@
         hand - a dictionary added here reaches both.
 
         The palette first: the colours a theme leaves alone, then the
-        theme's own - the light one here, swapped for Palette.Dark.xaml at
-        run time by Util/InterfaceTheme, which finds it in this list by its
-        name. Then what draws with them. StockControls.xaml (WPF's own
+        light theme's. The dark one is not in this list: Util/InterfaceTheme
+        lays it over this one, in Application.Resources, while the theme is
+        dark. Then what draws with them. StockControls.xaml (WPF's own
         controls) is merged by Controls.xaml, whose styles are based on it
         and have to find it at parse time.
     -->

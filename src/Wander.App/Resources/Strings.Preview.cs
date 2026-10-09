@@ -8,7 +8,7 @@ namespace Wander.App.Resources;
 /// четырёхсот, и одним файлом на полторы тысячи строк пользоваться нельзя.
 /// Ресурсы при этом лежат в одном <c>Strings.resx</c> — делить ещё и его
 /// значило бы искать ключ по нескольким <c>ResourceManager</c> подряд, а
-/// выигрыш тот же самый. Разбор — в BACKLOG.md.
+/// выигрыш тот же самый. Разбор — в REJECTED.md.
 /// </para>
 /// </summary>
 public static partial class Strings {
@@ -86,6 +86,18 @@ public static partial class Strings {
 
     /// <summary>Показать разметку SVG вместо картинки — и обратно</summary>
     public static string PreviewSvgSourceHint => Get(nameof(PreviewSvgSourceHint));
+
+    /// <summary>Показать текст файла вместо таблицы — и обратно</summary>
+    public static string PreviewTableSourceHint => Get(nameof(PreviewTableSourceHint));
+
+    /// <summary>Показано строк: {0:N0} из {1:N0}</summary>
+    public static string PreviewTableRowsOf => Get(nameof(PreviewTableRowsOf));
+
+    /// <summary>Показано строк: {0:N0}, дальше не читалось</summary>
+    public static string PreviewTableRowsMore => Get(nameof(PreviewTableRowsMore));
+
+    /// <summary>Лист пуст</summary>
+    public static string PreviewTableEmpty => Get(nameof(PreviewTableEmpty));
 
     /// <summary>Оценка, пишется в {0}</summary>
     public static string PreviewRatingWrittenTo => Get(nameof(PreviewRatingWrittenTo));

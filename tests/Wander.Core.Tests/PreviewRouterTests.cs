@@ -39,6 +39,11 @@ public class PreviewRouterTests {
     [InlineData(".dll", PreviewRoute.Executable)]
     [InlineData(".doc", PreviewRoute.DocumentText)]
     [InlineData(".docx", PreviewRoute.DocumentText)]
+    [InlineData(".xlsx", PreviewRoute.Table)]
+    [InlineData(".ods", PreviewRoute.Table)]
+    [InlineData(".srt", PreviewRoute.Text)]
+    [InlineData(".cue", PreviewRoute.Text)]
+    [InlineData(".gd", PreviewRoute.Code)]
     [InlineData(".bin", PreviewRoute.Unsupported)]
     [InlineData(".zip", PreviewRoute.Unsupported)]
     public void Extension_DecidesTheRoute(string extension, PreviewRoute expected) {
@@ -70,6 +75,19 @@ public class PreviewRouterTests {
         Assert.Equal(PreviewRoute.Svg, PreviewRouter.ForExtension(".svg"));
         Assert.DoesNotContain(".svg", (IEnumerable<string>)Wander.Core.Icons.ImageFormats.All);
         Assert.Contains(".svg", (IEnumerable<string>)PreviewRouter.TextLike);
+    }
+
+
+    /// <summary>
+    /// A CSV is drawn as a table in the pane, its text a switch away, and
+    /// stays text to the actions for text files - as an SVG does.
+    /// </summary>
+    [Theory]
+    [InlineData(".csv")]
+    [InlineData(".tsv")]
+    public void TextTables_AreTables_AndStayText(string extension) {
+        Assert.Equal(PreviewRoute.Table, PreviewRouter.ForExtension(extension));
+        Assert.Contains(extension, (IEnumerable<string>)PreviewRouter.TextLike);
     }
 
 
