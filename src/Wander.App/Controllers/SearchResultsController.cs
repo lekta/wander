@@ -290,7 +290,8 @@ public sealed class SearchResultsController {
 
 
     /// <summary>
-    /// The search as one phrase for the status bar. Both halves when both
+    /// The search as one phrase for the status bar, quotes and all - the
+    /// status line puts it in as it is. Both halves when both
     /// were given, because "найдено 3 по запросу «отчёт»" is a different
     /// claim from "3 файла *.docx со словом «отчёт»".
     /// </summary>
@@ -302,7 +303,9 @@ public sealed class SearchResultsController {
             return string.Format(Strings.SearchDescriptionBoth, name, text);
         }
 
-        return text.Length > 0 ? string.Format(Strings.SearchDescriptionText, text) : name;
+        return text.Length > 0
+            ? string.Format(Strings.SearchDescriptionText, text)
+            : string.Format(Strings.SearchDescriptionName, name);
     }
 
 

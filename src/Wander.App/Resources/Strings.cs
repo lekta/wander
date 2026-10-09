@@ -15,10 +15,10 @@ namespace Wander.App.Resources;
 /// </para>
 ///
 /// <para>
-/// Добавить язык: положить рядом <c>Strings.&lt;culture&gt;.resx</c> с теми же
-/// ключами. <see cref="ResourceManager"/> выберет его по
-/// <see cref="CultureInfo.CurrentUICulture"/> сам. Сейчас язык один —
-/// русский, переключателя в интерфейсе нет намеренно.
+/// Языки: русский — сам <c>Strings.resx</c>, английский —
+/// <c>Strings.en.resx</c> с теми же ключами. <see cref="ResourceManager"/>
+/// выбирает по <see cref="CultureInfo.CurrentUICulture"/>, которую ставит
+/// <c>Util.InterfaceLanguage</c> при запуске.
 /// </para>
 ///
 /// <para>

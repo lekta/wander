@@ -9,9 +9,11 @@
     place of a label. The tests cannot cover this: they cover Wander.Core,
     and this is the app layer.
 
-    Two things are verified:
+    Three things are verified:
       * every key the code asks for exists in the resx;
-      * every key in the resx is used by somebody (otherwise it is dead).
+      * every key in the resx is used by somebody (otherwise it is dead);
+      * every translation (Strings.<culture>.resx) has the same keys, and
+        each value the same placeholders, line breaks and plural shape.
 
     Keys are collected from four places:
       * Strings.<Key>           - C#;
@@ -94,8 +96,75 @@ foreach ($file in $sources) {
 $missing = @($used | Where-Object { -not $defined.Contains($_) } | Sort-Object)
 $unused = @($defined | Where-Object { -not $used.Contains($_) } | Sort-Object)
 
-if ($missing.Count -eq 0 -and $unused.Count -eq 0) {
-    Write-Host "  $($defined.Count) keys, all accounted for"
+# The translations (Strings.<culture>.resx beside it): the same keys as the
+# neutral file, each value with the same placeholders and line breaks, and
+# plurals (the MenuCaption* counts) by the language's own rule - three forms
+# or one in Russian, two or one in English (Text.PluralForm). A key missing
+# from a translation falls back to Russian in the middle of an English
+# window; a placeholder lost is a number that never shows.
+function Read-Values([string] $path) {
+    $values = [ordered]@{}
+    foreach ($data in ([xml](Get-Content -Raw -Encoding UTF8 $path)).root.data) {
+        $values[$data.name] = [string] $data.value
+    }
+    return $values
+}
+
+function Get-Placeholders([string] $text) {
+    return (@([regex]::Matches($text, '\{\d+(?::[^}]*)?\}|\{[a-z]+\}') | ForEach-Object { $_.Value } | Sort-Object) -join ' ')
+}
+
+$translationProblems = @()
+$neutral = Read-Values $resxPath
+foreach ($key in $neutral.Keys) {
+    if ($key -like 'MenuCaption*' -and @(1, 3) -notcontains $neutral[$key].Split('|').Count) {
+        $translationProblems += "Strings.resx $key - a Russian plural has one form or three"
+    }
+}
+$satellites = @(Get-ChildItem -Path (Split-Path -Parent $resxPath) -Filter 'Strings.*.resx')
+foreach ($satellite in $satellites) {
+    $name = $satellite.Name
+    $values = Read-Values $satellite.FullName
+    foreach ($key in $neutral.Keys) {
+        if (-not $values.Contains($key)) {
+            $translationProblems += "$name $key - missing"
+            continue
+        }
+
+        $source = $neutral[$key]
+        $text = $values[$key]
+        if ($key -like 'MenuCaption*') {
+            $forms = $text.Split('|')
+            $wanted = Get-Placeholders $source.Split('|')[0]
+            if ($forms.Count -gt 2) {
+                $translationProblems += "$name $key - two forms at most (one|other)"
+            }
+            foreach ($form in $forms) {
+                if ((Get-Placeholders $form) -ne $wanted) {
+                    $translationProblems += "$name $key - placeholders differ in a form"
+                }
+            }
+        } else {
+            if ((Get-Placeholders $text) -ne (Get-Placeholders $source)) {
+                $translationProblems += "$name $key - placeholders differ: '$(Get-Placeholders $source)' vs '$(Get-Placeholders $text)'"
+            }
+            if ($text.Split('|').Count -ne $source.Split('|').Count) {
+                $translationProblems += "$name $key - '|' count differs"
+            }
+        }
+        if ($text.Split("`n").Count -ne $source.Split("`n").Count) {
+            $translationProblems += "$name $key - line breaks differ"
+        }
+    }
+    foreach ($key in $values.Keys) {
+        if (-not $neutral.Contains($key)) {
+            $translationProblems += "$name $key - not in Strings.resx"
+        }
+    }
+}
+
+if ($missing.Count -eq 0 -and $unused.Count -eq 0 -and $translationProblems.Count -eq 0) {
+    Write-Host "  $($defined.Count) keys, all accounted for; translations: $(@($satellites | ForEach-Object { $_.Name }) -join ', ')"
     exit 0
 }
 
@@ -106,6 +175,10 @@ if ($missing.Count -gt 0) {
 if ($unused.Count -gt 0) {
     Write-Host "  in Strings.resx but used nowhere:" -ForegroundColor Yellow
     $unused | ForEach-Object { Write-Host "    $_" -ForegroundColor Yellow }
+}
+if ($translationProblems.Count -gt 0) {
+    Write-Host "  translations out of step with Strings.resx:" -ForegroundColor Red
+    $translationProblems | ForEach-Object { Write-Host "    $_" -ForegroundColor Red }
 }
 
 exit 1

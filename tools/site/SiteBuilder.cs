@@ -60,8 +60,6 @@ internal sealed class SiteBuilder {
     /// </summary>
     private const string WebAnalyticsToken = "d74d8d284334461699e827bfc667146e";
 
-    private const string GuideSource = "docs/GUIDE.md";
-    private const string LandingSource = "docs/site/index.html";
     private const string TemplateSource = "tools/site/page.html";
 
     /// <summary>
@@ -80,13 +78,18 @@ internal sealed class SiteBuilder {
     /// <summary>About what a search result shows under the title before cutting it.</summary>
     private const int DescriptionLength = 160;
 
-    private static readonly Regex _guideArgument = new(@"\bguide: ""([^""]*)""");
+    /// <summary>The settings page's F1 target in each guide: <c>guide:</c> in GUIDE.md, <c>guideEn:</c> in GUIDE.en.md.</summary>
+    private static readonly Dictionary<Language, Regex> _guideArgument = new() {
+        [Language.Russian] = new(@"\bguide: ""([^""]*)"""),
+        [Language.English] = new(@"\bguideEn: ""([^""]*)"""),
+    };
 
     /// <summary>
-    /// A place in GUIDE.md that wants a screenshot: an HTML comment of its
-    /// own, invisible on GitHub, dropped from the published site.
+    /// A place in a guide that wants a screenshot: an HTML comment of its
+    /// own, invisible on GitHub, dropped from the published site -
+    /// <c>скрин:</c> in GUIDE.md, <c>screenshot:</c> in GUIDE.en.md.
     /// </summary>
-    private static readonly Regex _screenshot = new(@"^<!--\s*скрин:\s*(.*?)\s*-->\s*$", RegexOptions.Singleline);
+    private static readonly Regex _screenshot = new(@"^<!--\s*(?:скрин|screenshot):\s*(.*?)\s*-->\s*$", RegexOptions.Singleline);
 
     /// <summary>
     /// A picture GUIDE.md sizes or floats itself: a line of its own holding
@@ -118,6 +121,12 @@ internal sealed class SiteBuilder {
     /// <summary>Site path -> the file copied there.</summary>
     private readonly Dictionary<string, string> _files = new(StringComparer.Ordinal);
 
+    /// <summary>Each language's guide; the switch on a guide page leads to the page of the same number in the other.</summary>
+    private readonly Dictionary<Language, Guide> _guides = new();
+
+    /// <summary>The language whose pages are being rendered.</summary>
+    private Language _language = Language.Russian;
+
     private Release? _latest;
     private int _screenshots;
 
@@ -141,11 +150,14 @@ internal sealed class SiteBuilder {
     public void Build() {
         string css = Minify(Read("tools/site/site.css"));
         string template = Read(TemplateSource);
-        var guide = Guide.Parse(Markdown.Parse(Read(GuideSource), _pipeline), GuideSource, Errors);
+        foreach (Language language in Language.All) {
+            _guides[language] = Guide.Parse(Markdown.Parse(Read(language.GuideSource), _pipeline), language.GuideSource, Errors);
+        }
         var releases = Releases.Read(_root, Errors);
-        if (guide.Pages.Count == 0 || releases.Count == 0) {
+        if (_guides.Values.Any(guide => guide.Pages.Count == 0) || releases.Count == 0) {
             return;
         }
+        CheckPairs();
 
         _latest = releases[0];
         // The footer says when and from what the site was built, so a stale
@@ -153,7 +165,6 @@ internal sealed class SiteBuilder {
         // and the commit, as a link to it.
         string built = DateTime.UtcNow.ToString("dd.MM.yyyy HH:mm", CultureInfo.InvariantCulture) + " UTC";
         string head = Releases.Head(_root, Errors) ?? "";
-        string build = $"<a href=\"{Repository}/commit/{head}\" title=\"Когда и из какого коммита собран сайт\">{built}, {head}</a>";
         string analytics = _analytics
             ? "<script type=\"module\" src=\"https://static.cloudflareinsights.com/beacon.min.js\" data-cf-beacon='{\"token\": \"" + WebAnalyticsToken + "\"}'></script>\n"
             : "";
@@ -170,66 +181,19 @@ internal sealed class SiteBuilder {
             Errors.Add($"{LinkPreviewSource}: missing - the landing's og:image names it");
         }
 
-        string home = $"guide/{guide.Pages[0].Slug}/index.html";
-        for (int i = 0; i < guide.Pages.Count; i++) {
-            GuidePage page = guide.Pages[i];
-            string folder = $"guide/{page.Slug}/";
-            // Inside the guide its own link in the header leads nowhere new:
-            // the navigation beside the text is the guide.
-            _pages[folder + "index.html"] = Fill(template, TemplateSource, new() {
-                ["title"] = Escape(page.Title) + " | Wander",
-                ["description"] = Escape(Description(page)),
-                ["site"] = SiteUrl,
-                ["url"] = SiteUrl + folder,
-                ["build"] = build,
-                ["analytics"] = analytics,
-                ["css"] = css,
-                ["root"] = "../../",
-                ["guidelink"] = "",
-                ["nav"] = Nav(guide, page, "../"),
-                ["main"] = RenderPage(guide, i),
-            });
+        foreach (Language language in Language.All) {
+            _language = language;
+            BuildLanguage(template, css, $"{built}, {head}", head, analytics, releases);
         }
-        // What the app's "Помощь" opens (CrashReporter.GuideUrl): the guide
-        // has no page of its own at guide/, so this one sends the reader on
-        // to the first - a refresh and a link, no script.
-        string first = $"{guide.Pages[0].Slug}/index.html";
-        _pages["guide/index.html"] =
-            "<!doctype html>\n<html lang=\"ru\">\n<head>\n<meta charset=\"utf-8\">\n" +
-            $"<meta http-equiv=\"refresh\" content=\"0; url={first}\">\n<title>Руководство | Wander</title>\n</head>\n" +
-            $"<body><a href=\"{first}\">Руководство</a></body>\n</html>\n";
-        _pages["versions/index.html"] = Fill(template, TemplateSource, new() {
-            ["title"] = "Версии | Wander",
-            ["description"] = "Все выпуски Wander: дата, страница релиза и руководство каждой версии.",
-            ["site"] = SiteUrl,
-            ["url"] = SiteUrl + "versions/",
-            ["build"] = build,
-            ["analytics"] = analytics,
-            ["css"] = css,
-            ["root"] = "../",
-            ["guidelink"] = $"<a class=\"wide\" href=\"../{home}\">Руководство</a>\n",
-            ["nav"] = Nav(guide, null, "../guide/"),
-            ["main"] = RenderVersions(releases),
-        });
-        _pages["index.html"] = Fill(Read(LandingSource), LandingSource, new() {
-            ["css"] = css,
-            ["site"] = SiteUrl,
-            ["build"] = build,
-            ["analytics"] = analytics,
-            ["guide"] = home,
-            ["version"] = _latest.Version,
-            ["download"] = $"{Repository}/releases/download/{_latest.Tag}/Wander.exe",
-            ["release"] = $"{Repository}/releases/tag/{_latest.Tag}",
-        });
 
         // What the search engines get to crawl: every page by its canonical
         // address, the folder form Pages serves, the landing first (site.yml
-        // reads the site's address off it). The forwarding page at guide/ is
-        // no page of its own. No robots.txt: engines read one at the root of
-        // the host only, and the site lives in a folder of it - the sitemap
-        // is handed to them in their consoles (docs/PROMOTION.md).
+        // reads the site's address off it). The forwarding pages at guide/
+        // are no pages of their own. No robots.txt: engines read one at the
+        // root of the host only, and the site lives in a folder of it - the
+        // sitemap is handed to them in their consoles (docs/PROMOTION.md).
         var canonical = new[] { "index.html" }
-            .Concat(_pages.Keys.Where(path => path != "index.html" && path != "guide/index.html"))
+            .Concat(_pages.Keys.Where(path => path != "index.html" && !Language.All.Any(language => path == language.Folder + "guide/index.html")))
             .Select(path => SiteUrl + path[..^"index.html".Length]);
         _pages["sitemap.xml"] = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
             + "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n"
@@ -237,7 +201,7 @@ internal sealed class SiteBuilder {
             + "</urlset>\n";
         _pages[IndexNowKey + ".txt"] = IndexNowKey;
 
-        // After the sources are clean: a link GUIDE.md got wrong is already
+        // After the sources are clean: a link a guide got wrong is already
         // reported with its line, and would come back here once per page.
         if (Errors.Count == 0) {
             CheckLinks();
@@ -251,7 +215,7 @@ internal sealed class SiteBuilder {
     /// anything else with it.
     /// </summary>
     public void Write(string output) {
-        foreach (string owned in new[] { "guide", "versions", "img" }) {
+        foreach (string owned in new[] { "guide", "versions", "img", "en" }) {
             string dir = Path.Combine(output, owned);
             if (Directory.Exists(dir)) {
                 Directory.Delete(dir, recursive: true);
@@ -272,32 +236,164 @@ internal sealed class SiteBuilder {
 
     /// <summary>Sizes against the budget: a guide page 10-30 KB, the landing with its pictures under 300 KB.</summary>
     public IEnumerable<string> Summary() {
-        // guide/index.html only forwards to the first page.
-        var guidePages = _pages
-            .Where(p => p.Key.StartsWith("guide/", StringComparison.Ordinal) && p.Key != "guide/index.html")
-            .ToList();
-        var sizes = guidePages.ToDictionary(p => p.Key, p => (long)_utf8.GetByteCount(p.Value));
-        var largest = sizes.MaxBy(p => p.Value);
-        long smallest = sizes.Values.Min();
-        // The landing's budget counts the pictures it shows, not the guide's.
-        string landing = _pages["index.html"];
-        long page = _utf8.GetByteCount(landing);
-        long shown = _link.Matches(landing)
-            .Select(m => m.Groups[1].Value)
-            .Distinct()
-            .Where(_files.ContainsKey)
-            .Sum(path => new FileInfo(_files[path]).Length);
-        long pictures = _files.Values.Sum(file => new FileInfo(file).Length);
+        foreach (Language language in Language.All) {
+            // guide/index.html only forwards to the first page.
+            string guide = language.Folder + "guide/";
+            var guidePages = _pages
+                .Where(p => p.Key.StartsWith(guide, StringComparison.Ordinal) && p.Key != guide + "index.html")
+                .ToList();
+            var sizes = guidePages.ToDictionary(p => p.Key, p => (long)_utf8.GetByteCount(p.Value));
+            var largest = sizes.MaxBy(p => p.Value);
+            long smallest = sizes.Values.Min();
+            // The landing's budget counts the pictures it shows, not the guide's.
+            string path = language.Folder + "index.html";
+            string landing = _pages[path];
+            long page = _utf8.GetByteCount(landing);
+            long shown = _link.Matches(landing)
+                .Select(m => Resolve(path, m.Groups[1].Value))
+                .Distinct()
+                .Where(target => target is not null && _files.ContainsKey(target))
+                .Sum(target => new FileInfo(_files[target!]).Length);
 
-        yield return $"{guidePages.Count} guide pages, {Kb(smallest)} to {Kb(largest.Value)} of 10-30 KB (largest {largest.Key})"
-            + Over(smallest < 10 * 1024 || largest.Value > 30 * 1024);
-        yield return $"landing with its pictures {Kb(page + shown)} of 300 KB (the page {Kb(page)})" + Over(page + shown > 300 * 1024);
+            yield return $"{language.Code}: {guidePages.Count} guide pages, {Kb(smallest)} to {Kb(largest.Value)} of 10-30 KB (largest {largest.Key})"
+                + Over(smallest < 10 * 1024 || largest.Value > 30 * 1024);
+            yield return $"{language.Code}: landing with its pictures {Kb(page + shown)} of 300 KB (the page {Kb(page)})" + Over(page + shown > 300 * 1024);
+        }
+
+        long pictures = _files.Values.Sum(file => new FileInfo(file).Length);
         yield return $"all pictures {Kb(pictures)}; download {_latest!.Tag}";
         if (_screenshots > 0) {
             yield return $"{_screenshots} place(s) marked for a screenshot" + (_debug ? ", shown" : ", shown with --debug");
         }
     }
 
+
+    /// <summary>
+    /// The pages of <see cref="_language"/>: its guide, the forwarding page
+    /// at guide/, its versions and its landing, all under its folder.
+    /// </summary>
+    private void BuildLanguage(string template, string css, string built, string head, string analytics, List<Release> releases) {
+        Language language = _language;
+        Guide guide = _guides[language];
+        string build = $"<a href=\"{Repository}/commit/{head}\" title=\"{Escape(language.BuildTitle)}\">{built}</a>";
+        string home = $"guide/{guide.Pages[0].Slug}/index.html";
+        for (int i = 0; i < guide.Pages.Count; i++) {
+            GuidePage page = guide.Pages[i];
+            string folder = $"{language.Folder}guide/{page.Slug}/";
+            string path = folder + "index.html";
+            // Inside the guide its own link in the header leads nowhere new:
+            // the navigation beside the text is the guide.
+            _pages[path] = Fill(template, TemplateSource, Frame(path, i, css, build, analytics, new() {
+                ["title"] = Escape(page.Title) + " | Wander",
+                ["description"] = Escape(Description(page)),
+                ["url"] = SiteUrl + folder,
+                ["guidelink"] = "",
+                ["nav"] = Nav(guide, page, "../"),
+                ["main"] = RenderPage(guide, i),
+            }));
+        }
+        // What the app's "Help" opens (CrashReporter.GuideUrl): the guide
+        // has no page of its own at guide/, so this one sends the reader on
+        // to the first - a refresh and a link, no script.
+        string first = $"{guide.Pages[0].Slug}/index.html";
+        _pages[language.Folder + "guide/index.html"] =
+            $"<!doctype html>\n<html lang=\"{language.Code}\">\n<head>\n<meta charset=\"utf-8\">\n" +
+            $"<meta http-equiv=\"refresh\" content=\"0; url={first}\">\n<title>{language.Guide} | Wander</title>\n</head>\n" +
+            $"<body><a href=\"{first}\">{language.Guide}</a></body>\n</html>\n";
+        string versions = language.Folder + "versions/index.html";
+        _pages[versions] = Fill(template, TemplateSource, Frame(versions, null, css, build, analytics, new() {
+            ["title"] = $"{language.Versions} | Wander",
+            ["description"] = Escape(language.VersionsDescription),
+            ["url"] = SiteUrl + language.Folder + "versions/",
+            ["guidelink"] = $"<a class=\"wide\" href=\"../{home}\">{language.Guide}</a>\n",
+            ["nav"] = Nav(guide, null, "../guide/"),
+            ["main"] = RenderVersions(releases),
+        }));
+        string landing = language.Folder + "index.html";
+        _pages[landing] = Fill(Read(language.LandingSource), language.LandingSource, Frame(landing, null, css, build, analytics, new() {
+            ["guide"] = home,
+            ["version"] = _latest!.Version,
+            ["download"] = $"{Repository}/releases/download/{_latest.Tag}/Wander.exe",
+            ["release"] = $"{Repository}/releases/tag/{_latest.Tag}",
+        }));
+    }
+
+    /// <summary>
+    /// What every page of <see cref="_language"/> at <paramref name="path"/>
+    /// fills in besides <paramref name="own"/>: the frame's words, the ways
+    /// up to the site's root (pictures) and to the language's (landing,
+    /// versions), the other language's addresses for search engines and the
+    /// switch to it. <paramref name="guidePage"/> is the number of a guide
+    /// page - its twin in the other guide has the same one - or null.
+    /// </summary>
+    private Dictionary<string, string> Frame(
+        string path, int? guidePage, string css, string build, string analytics, Dictionary<string, string> own) {
+
+        Language language = _language;
+        Language other = Language.All.First(l => l != language);
+        string twin = guidePage is { } index
+            ? $"{other.Folder}guide/{_guides[other].Pages[Math.Min(index, _guides[other].Pages.Count - 1)].Slug}/index.html"
+            : other.Folder + path[language.Folder.Length..];
+        string ownPath = path[language.Folder.Length..];
+        // Every language's address of the page for search engines; a reader
+        // of neither language gets the English one (x-default).
+        string alternates = string.Join("\n", Language.All
+            .Select(l => (Code: l.Code, Path: l == language ? path : twin))
+            .Append((Code: "x-default", Path: language == Language.English ? path : twin))
+            .Select(a => $"<link rel=\"alternate\" hreflang=\"{a.Code}\" href=\"{SiteUrl}{a.Path[..^"index.html".Length]}\">"));
+
+        var values = new Dictionary<string, string>(own) {
+            ["css"] = css,
+            ["site"] = SiteUrl,
+            ["build"] = build,
+            ["analytics"] = analytics,
+            ["lang"] = language.Code,
+            ["locale"] = language.Locale,
+            ["root"] = Up(path),
+            ["home"] = Up(ownPath),
+            ["versions"] = language.Versions,
+            ["sections"] = language.Sections,
+            ["sectionslabel"] = language.SectionsLabel,
+            ["license"] = language.License,
+            ["report"] = language.Report,
+            ["alternates"] = alternates,
+            ["switch"] = $"<a class=\"lang\" href=\"{Up(path)}{twin}\" hreflang=\"{other.Code}\" lang=\"{other.Code}\">{other.Name}</a>",
+        };
+
+        return values;
+    }
+
+    /// <summary>The way from the page at <paramref name="path"/> (from the site's root) back up to the root: "../" a folder.</summary>
+    private static string Up(string path) {
+        return string.Concat(Enumerable.Repeat("../", path.Count(c => c == '/')));
+    }
+
+    /// <summary>img/ seen from a guide page of <see cref="_language"/>: the pictures are one set for both languages.</summary>
+    private string ImageFolder => "../../" + Up(_language.Folder) + "img/";
+
+    /// <summary>
+    /// The two guides pair page for page - the switch on a page leads to
+    /// the page of the same number in the other language - so they must
+    /// have the same pages in the same places: as many, and each a ## or a
+    /// ### where the other has one. A page added to one guide only is
+    /// caught here, not by a reader landing on the wrong page.
+    /// </summary>
+    private void CheckPairs() {
+        Guide russian = _guides[Language.Russian];
+        Guide english = _guides[Language.English];
+        if (russian.Pages.Count != english.Pages.Count) {
+            Errors.Add($"{Language.English.GuideSource}: {english.Pages.Count} pages, {Language.Russian.GuideSource} {russian.Pages.Count} - the guides pair page for page");
+
+            return;
+        }
+
+        for (int i = 0; i < russian.Pages.Count; i++) {
+            if (russian.Pages[i].Heading.Level != english.Pages[i].Heading.Level) {
+                Errors.Add($"{Language.English.GuideSource}:{english.Pages[i].Heading.Line + 1}: '{english.Pages[i].Title}' pairs with "
+                    + $"'{russian.Pages[i].Title}' ({Language.Russian.GuideSource}:{russian.Pages[i].Heading.Line + 1}) but is not the same level");
+            }
+        }
+    }
 
     private string RenderPage(Guide guide, int index) {
         GuidePage page = guide.Pages[index];
@@ -333,7 +429,7 @@ internal sealed class SiteBuilder {
         // The page's own sections, as a table of contents under the title.
         var toc = page.Sections.Where(s => s.Level == 4).ToList();
         if (toc.Count > 0) {
-            main.Append("<nav class=\"toc\" aria-label=\"Содержание страницы\"><div class=\"toc-title\">Содержание</div><ul>")
+            main.Append($"<nav class=\"toc\" aria-label=\"{_language.TocLabel}\"><div class=\"toc-title\">{_language.Toc}</div><ul>")
                 .AppendJoin("", toc.Select(s => $"<li><a href=\"#{s.Anchor}\">{Escape(s.Title)}</a></li>"))
                 .Append("</ul></nav>\n");
         }
@@ -345,13 +441,13 @@ internal sealed class SiteBuilder {
             if (block is HtmlBlock html && _screenshot.Match(html.Lines.ToString()) is { Success: true } shot) {
                 _screenshots++;
                 if (_debug) {
-                    renderer.WriteLine($"<p class=\"shot-todo\">Скриншот: {Escape(shot.Groups[1].Value)}</p>");
+                    renderer.WriteLine($"<p class=\"shot-todo\">{_language.Screenshot}: {Escape(shot.Groups[1].Value)}</p>");
                 }
 
                 continue;
             }
             if (block is HtmlBlock sized && _imageTag.Match(sized.Lines.ToString()) is { Success: true } tag) {
-                renderer.WriteLine(SizedPicture(tag.Groups[1].Value, $"{GuideSource}:{sized.Line + 1}"));
+                renderer.WriteLine(SizedPicture(tag.Groups[1].Value, $"{_language.GuideSource}:{sized.Line + 1}"));
 
                 continue;
             }
@@ -405,7 +501,7 @@ internal sealed class SiteBuilder {
 
         string text = Regex.Replace(opening.ToString(), @"\s+", " ").Trim();
         if (text.Length == 0) {
-            Errors.Add($"{GuideSource}:{page.Heading.Line + 1}: the page opens with no text - a search result shows its first sentences");
+            Errors.Add($"{_language.GuideSource}:{page.Heading.Line + 1}: the page opens with no text - a search result shows its first sentences");
 
             return page.Title;
         }
@@ -452,20 +548,25 @@ internal sealed class SiteBuilder {
         return pager.Append("</nav>").ToString();
     }
 
-    private static string RenderVersions(List<Release> releases) {
+    private string RenderVersions(List<Release> releases) {
+        Language language = _language;
         var main = new StringBuilder()
-            .Append("<h1>Версии</h1>\n")
-            .Append("<p>Руководство на сайте описывает последний релиз. ")
-            .Append("Руководство прошлой версии открывается из её строки, список изменений в ")
+            .Append($"<h1>{language.Versions}</h1>\n")
+            .Append($"<p>{language.VersionsIntro}")
             .Append($"<a href=\"{Repository}/blob/master/docs/CHANGELOG.md\">CHANGELOG</a>.</p>\n")
-            .Append("<table>\n<thead><tr><th>Версия</th><th>Дата</th><th>Релиз</th><th>Руководство</th></tr></thead>\n<tbody>\n");
+            .Append("<table>\n<thead><tr>")
+            .AppendJoin("", language.VersionColumns.Select(column => $"<th>{column}</th>"))
+            .Append("</tr></thead>\n<tbody>\n");
         foreach (Release release in releases) {
             string date = DateOnly.ParseExact(release.Date, "yyyy-MM-dd", CultureInfo.InvariantCulture)
-                .ToString("dd.MM.yyyy", CultureInfo.InvariantCulture);
+                .ToString(language.DateFormat, CultureInfo.InvariantCulture);
             main.Append($"<tr><td><b>{release.Version}</b></td><td>{date}</td>")
-                .Append($"<td><a href=\"{Repository}/releases/tag/{release.Tag}\">скачать</a></td><td>");
-            if (release.HasGuide) {
-                main.Append($"<a href=\"{Repository}/blob/{release.Tag}/docs/GUIDE.md\">открыть</a>");
+                .Append($"<td><a href=\"{Repository}/releases/tag/{release.Tag}\">{language.Download}</a></td><td>");
+            // A release older than this language's guide offers the Russian one, saying so.
+            if (release.Guides.Contains(language.GuideSource)) {
+                main.Append($"<a href=\"{Repository}/blob/{release.Tag}/{language.GuideSource}\">{language.Open}</a>");
+            } else if (release.Guides.Contains(Language.Russian.GuideSource)) {
+                main.Append($"<a href=\"{Repository}/blob/{release.Tag}/{Language.Russian.GuideSource}\">{language.OtherGuide}</a>");
             }
             main.Append("</td></tr>\n");
         }
@@ -535,7 +636,7 @@ internal sealed class SiteBuilder {
     /// </summary>
     private string Rewrite(LinkInline link, GuidePage page, Guide guide) {
         string url = link.Url ?? "";
-        string where = $"{GuideSource}:{link.Line + 1}";
+        string where = $"{_language.GuideSource}:{link.Line + 1}";
         if (url.StartsWith('#')) {
             return Anchor(url[1..], page, guide, where);
         }
@@ -552,7 +653,7 @@ internal sealed class SiteBuilder {
 
             return url;
         }
-        if (relative == GuideSource) {
+        if (relative == _language.GuideSource) {
             return fragment.Length > 1 ? Anchor(fragment[1..], page, guide, where) : $"../{guide.Pages[0].Slug}/index.html";
         }
         if (link.IsImage) {
@@ -596,13 +697,13 @@ internal sealed class SiteBuilder {
             attributes.AddProperty("width", icon.Width.ToString(CultureInfo.InvariantCulture));
             attributes.AddProperty("height", icon.Height.ToString(CultureInfo.InvariantCulture));
 
-            return "../../img/icons/" + Path.GetFileName(full);
+            return ImageFolder + "icons/" + Path.GetFileName(full);
         }
         if (Screenshot(full, relative, where) is not { } size) {
             return link.Url ?? "";
         }
 
-        string url = "../../img/" + Path.GetFileName(full);
+        string url = ImageFolder + Path.GetFileName(full);
         if (link.Parent is LinkInline || !Zooms(size.Width, size.Width)) {
             // Inside a link of its own, that link is what a click does; a
             // small picture has nothing more to open.
@@ -632,7 +733,7 @@ internal sealed class SiteBuilder {
         return $"<button type=\"button\" class=\"zoom\" popovertarget=\"{id}\">"
             + $"<img src=\"{url}\" alt=\"{Escape(alt)}\" width=\"{shown.Width}\" height=\"{shown.Height}\" loading=\"lazy\"></button>"
             + $"<span class=\"full\" id=\"{id}\" popover>"
-            + $"<button type=\"button\" popovertarget=\"{id}\" popovertargetaction=\"hide\" aria-label=\"Закрыть\">"
+            + $"<button type=\"button\" popovertarget=\"{id}\" popovertargetaction=\"hide\" aria-label=\"{_language.Close}\">"
             + $"<img src=\"{url}\" alt=\"\" width=\"{full.Width}\" height=\"{full.Height}\" loading=\"lazy\"></button></span>";
     }
 
@@ -688,7 +789,7 @@ internal sealed class SiteBuilder {
             return "";
         }
 
-        string url = "../../img/" + Path.GetFileName(full);
+        string url = ImageFolder + Path.GetFileName(full);
         int height = (int)Math.Round((double)width * size.Height / size.Width);
         string picture = Zooms(width, size.Width)
             ? Zoomable(url, alt, (width, height), size)
@@ -744,32 +845,35 @@ internal sealed class SiteBuilder {
 
     /// <summary>
     /// F1 on a settings page opens the site's guide at the page the settings
-    /// page names (<c>guide: "slug"</c> or <c>"slug#section"</c>). A heading
-    /// renamed in GUIDE.md renames the page, and F1 would land on a 404, so
-    /// every such target has to be a built page, and its section an id on
-    /// it - and there have to be some: a rename of the argument must not
-    /// pass as "nothing to check".
+    /// page names (<c>guide: "slug"</c> or <c>"slug#section"</c>, and
+    /// <c>guideEn:</c> the same in the English guide). A heading renamed in
+    /// a guide renames the page, and F1 would land on a 404, so every such
+    /// target has to be a built page, and its section an id on it - and
+    /// there have to be some in each language: a rename of the argument must
+    /// not pass as "nothing to check".
     /// </summary>
     private void CheckSettingsPages() {
         string[] lines = Read(SettingsPagesSource).Split('\n');
-        int found = 0;
-        for (int i = 0; i < lines.Length; i++) {
-            foreach (Match match in _guideArgument.Matches(lines[i])) {
-                found++;
-                string target = match.Groups[1].Value;
-                int hash = target.IndexOf('#', StringComparison.Ordinal);
-                string page = $"guide/{(hash < 0 ? target : target[..hash])}/index.html";
-                string section = hash < 0 ? "" : target[(hash + 1)..];
-                string where = $"{SettingsPagesSource}:{i + 1}: F1 opens {target}";
-                if (!_pages.TryGetValue(page, out string? html)) {
-                    Errors.Add($"{where}, no {page} in the site");
-                } else if (section.Length > 0 && !_id.Matches(html).Any(id => id.Groups[1].Value == section)) {
-                    Errors.Add($"{where}, no #{section} in {page}");
+        foreach (var (language, argument) in _guideArgument) {
+            int found = 0;
+            for (int i = 0; i < lines.Length; i++) {
+                foreach (Match match in argument.Matches(lines[i])) {
+                    found++;
+                    string target = match.Groups[1].Value;
+                    int hash = target.IndexOf('#', StringComparison.Ordinal);
+                    string page = $"{language.Folder}guide/{(hash < 0 ? target : target[..hash])}/index.html";
+                    string section = hash < 0 ? "" : target[(hash + 1)..];
+                    string where = $"{SettingsPagesSource}:{i + 1}: F1 opens {target}";
+                    if (!_pages.TryGetValue(page, out string? html)) {
+                        Errors.Add($"{where}, no {page} in the site");
+                    } else if (section.Length > 0 && !_id.Matches(html).Any(id => id.Groups[1].Value == section)) {
+                        Errors.Add($"{where}, no #{section} in {page}");
+                    }
                 }
             }
-        }
-        if (found == 0) {
-            Errors.Add($"{SettingsPagesSource}: no guide: \"...\" targets found - the settings pages' F1 is not checked");
+            if (found == 0) {
+                Errors.Add($"{SettingsPagesSource}: no {argument} targets found - the settings pages' F1 is not checked in {language.Code}");
+            }
         }
     }
 

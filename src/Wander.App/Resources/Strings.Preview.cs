@@ -153,8 +153,11 @@ public static partial class Strings {
     /// <summary>«{0}» с текстом «{1}»</summary>
     public static string SearchDescriptionBoth => Get(nameof(SearchDescriptionBoth));
 
-    /// <summary>тексту «{0}»</summary>
+    /// <summary>текст «{0}»</summary>
     public static string SearchDescriptionText => Get(nameof(SearchDescriptionText));
+
+    /// <summary>«{0}»</summary>
+    public static string SearchDescriptionName => Get(nameof(SearchDescriptionName));
 
     /// <summary>Поиск</summary>
     public static string SearchWindowTitle => Get(nameof(SearchWindowTitle));

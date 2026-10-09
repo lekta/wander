@@ -1,11 +1,11 @@
 === Wander dependency graph (using sweep) ===
 date   : 2026-10-08
-commit : e875502
+commit : 66c8939
 
 -- projects --
-Wander.App -> Wander.Core   (71 files)
+Wander.App -> Wander.Core   (72 files)
 Wander.App -> Wander.Platform.Windows   (1 files)
-Wander.Core.Tests -> Wander.Core   (162 files)
+Wander.Core.Tests -> Wander.Core   (163 files)
 Wander.Harness -> Wander.App   (4 files)
 Wander.Harness -> Wander.Core   (7 files)
 Wander.Harness -> Wander.Platform.Windows   (3 files)
@@ -47,6 +47,7 @@ Wander.Platform.Windows -> Wander.Core   (37 files)
   Persistence    -> Companions     (1 files)
   Persistence    -> FileSystem     (1 files)
   Persistence    -> Folders        (2 files)
+  Persistence    -> Localization   (1 files)
   Persistence    -> Navigation     (1 files)
   Persistence    -> Rename         (1 files)
   Preview        -> FileSystem     (10 files)
@@ -129,6 +130,7 @@ Wander.Platform.Windows -> Wander.Core   (37 files)
   Converters     -> Util           (3 files)
   Converters     -> ViewModels     (1 files)
   Diagnostics    -> Resources      (1 files)
+  Diagnostics    -> Util           (1 files)
   Dialogs        -> Conflict       (1 files)
   Dialogs        -> Resources      (1 files)
   DragPreview    -> Converters     (1 files)
@@ -137,9 +139,9 @@ Wander.Platform.Windows -> Wander.Core   (37 files)
   DragPreview    -> ViewModels     (1 files)
   Preview        -> Resources      (3 files)
   Preview        -> Util           (2 files)
-  Util           -> Resources      (1 files)
+  Util           -> Resources      (2 files)
   ViewModels     -> Resources      (9 files)
-  ViewModels     -> Util           (1 files)
+  ViewModels     -> Util           (2 files)
   Views          -> Conflict       (1 files)
   Views          -> Controllers    (4 files)
   Views          -> Controls       (3 files)
@@ -154,8 +156,8 @@ Wander.Platform.Windows -> Wander.Core   (37 files)
 
 -- Wander.App: levels --
   0: Highlighting, Menu, Resources
-  1: Diagnostics, Util
-  2: Preview, ViewModels
+  1: Util
+  2: Diagnostics, Preview, ViewModels
   3: Conflict, Converters
   4: Controllers, Controls, Dialogs, DragPreview
   5: Views

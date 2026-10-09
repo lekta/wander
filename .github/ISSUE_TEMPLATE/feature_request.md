@@ -1,19 +1,22 @@
 ---
-name: Идея / фича
-about: Предложить улучшение для Wander
+name: Idea / Идея
+about: Suggest an improvement for Wander / Предложить улучшение для Wander
 title: ''
 labels: enhancement
 assignees: ''
 ---
 
-**Проблема**
+<!-- English or Russian, whichever is easier for you. / Можно по-английски или по-русски. -->
+
+**Problem / Проблема**
+What task or annoyance this solves, e.g. "it's inconvenient when [...]". /
 Какую задачу или неудобство это решает. Напр.: «неудобно, когда [...]».
 
-**Предлагаемое решение**
-Что хотелось бы видеть.
+**Proposed solution / Предлагаемое решение**
+What you would like to see. / Что хотелось бы видеть.
 
-**Альтернативы**
-Что ещё рассматривал.
+**Alternatives / Альтернативы**
+What else you considered. / Что ещё рассматривал.
 
-**Дополнительно**
-Контекст, скриншоты, ссылки.
+**Anything else / Дополнительно**
+Context, screenshots, links. / Контекст, скриншоты, ссылки.

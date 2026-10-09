@@ -150,6 +150,21 @@ li {
   border-radius: 0;
 }
 
+/* The other language, framed at the header's end and kept on a narrow
+   screen: whoever cannot read the page has to find the way out of it. */
+.top .lang {
+  padding: .05rem .6rem;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+.top .lang:hover {
+  background: var(--accent);
+  color: var(--on-accent);
+  text-decoration: none;
+}
+
 .bottom {
   display: flex;
   flex-wrap: wrap;

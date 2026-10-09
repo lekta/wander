@@ -154,6 +154,7 @@ exe), переменная `WANDER_DATA_DIR`, иначе `%LOCALAPPDATA%\Wander`
 | Дерево, закладки, сторож | `PanelRulesTests`, `PanelKeyNavigationTests`, `PanelViewTests`, `PanelPathsTests`, `TreeNavThrottleTests`, `FolderChangesTests`, `NavigationFallbackTests`, `BranchReconcileTests` (уровень панели: строки живут, вставки / перестановки / удаления вокруг), `PathFollowingTests`, `UndoableActionsTests` (пары `MovesOnUndo`), `NavigationServiceTests` (`RewritePaths`); харнесс: `tree-bookmarks` (таблица сценариев), внешнее создание файла в песочнице → строка появилась | Дерево и закладки | `nav.trees`, `nav.watch`, `WS …` (с `LogActions`) |
 | Архивы как папки, извлечение, панель просмотра | `ArchivePathTests`, `ExtractionServiceTests`, `PreviewRouterTests`, `ContextMenuBuilderTests` («Извлечь рядом»); харнесс: `selfcheck` (ассоциации машины) + сценарий `archives` | Архивы как папки (извлечь рядом, перетаскивание из дерева); Файловые операции; Обмен с системой (наружу — только глазами) | `Extract:`, `Extract (temporary copy)`, `Archive enumerate`, «Archives open as folders» в первых строках лога |
 | Действия, каталог, запуск; групповое переименование | `ActionApplicabilityTests`, `CommandLineTests`, `ExternalActionRunnerTests`, `ActionCatalogTests`, `ActionReportTests`, `BuiltinArgumentsTests`, `ContextMenuBuilderTests`, `RenamePlannerTests`, `HoldFileActionTests`; харнесс: `smoke-walk` (меню), `focus-keys` (`F2`) — окна действий и переименования он не поднимает | **Действия** — целиком; Ход операции (окно действия) | `Action '…'`, `image-convert:`, `Batch rename:`, `Rename:` |
+| Строки, язык, `Strings.en.resx`, руководство и сайт | `check-strings.ps1` (ключи, плейсхолдеры и формы обоих языков), `UiLanguagesTests`, `PluralFormTests`; шаг «site» (`GUIDE.en.md` в пару, цели `guideEn`) | Настройки («Интерфейс»); английский интерфейс — окна по ширине | `Interface language: …` |
 | Сборка, поставка, версия, номер сборки | `check.bat run`, `size-report.ps1`, `AppStateVersionTests` | После обновления; чистая машина | `Startup: first frame`, первая строка лога — версия с номером сборки |
 
 ## Чек-листы ручного прогона
@@ -1072,6 +1073,13 @@ exe), переменная `WANDER_DATA_DIR`, иначе `%LOCALAPPDATA%\Wander`
 
 ### Настройки
 
+- [ ] **«Интерфейс» → «Язык (Language)»**: три переключателя, первый
+      называет язык Windows («Как в Windows: Русский»); выбрать «English»,
+      перезапустить — окно, меню, диалоги, настройки, подсказки, строка
+      состояния по-английски, ничего не обрезано и не вылезает за край
+      (настройки в 660 px); «Помощь» и `F1` открывают английское
+      руководство (`/wander/en/guide/`); «Как в Windows» возвращает
+      русский. В логе — `Interface language: en (setting English, …)`.
 - [ ] **Каждая страница в окне минимального размера** (перетащить угол
       до упора): ничего не уезжает вбок, нет горизонтальной прокрутки;
       превью «Размеров» уходят под поля; таблицы помещаются. В окне по

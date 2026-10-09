@@ -8,6 +8,7 @@ using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using Wander.App.Resources;
+using Wander.App.Util;
 using Wander.Core;
 using Wander.Core.Diagnostics;
 using Wander.Core.Logging;
@@ -44,13 +45,14 @@ public static class CrashReporter {
     public const string SiteUrl = "https://lekta.github.io/wander/";
 
     /// <summary>
-    /// The user guide on the site - what the "Help" menu row opens
-    /// (2026-09-28; before, GUIDE.md at the build's own tag). The site is
-    /// built from master on a site-* tag, and GUIDE.md on master describes
+    /// The user guide on the site, in the interface's language - what the
+    /// "Help" menu row opens (2026-09-28; before, GUIDE.md at the build's own
+    /// tag). The English pages live under en/ (GUIDE.en.md). The site is
+    /// built from master on a site-* tag, and the guide on master describes
     /// the latest release (docs/SITE.md); its "Версии" page links each
     /// release's own GUIDE.
     /// </summary>
-    public const string GuideUrl = SiteUrl + "guide/";
+    public static string GuideUrl => SiteUrl + (InterfaceLanguage.IsEnglish ? "en/guide/" : "guide/");
 
     private static bool _offeredThisSession;
 
@@ -58,7 +60,8 @@ public static class CrashReporter {
     /// <summary>
     /// A page of the guide, and its section when the target names one:
     /// "konvertatsiya#programmy" is
-    /// <c>guide/konvertatsiya/#programmy</c>. The settings
+    /// <c>guide/konvertatsiya/#programmy</c>, "conversion#programs" in
+    /// English <c>en/guide/conversion/#programs</c>. The settings
     /// pages' targets are checked against the built site by check.bat.
     /// </summary>
     public static string GuidePage(string target) {

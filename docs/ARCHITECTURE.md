@@ -48,7 +48,7 @@ src/
 │   ├── Imaging/        хелперы отсмотра, TGA, DIB, бюджет памяти картинок
 │   ├── Layout/         геометрия: плитки, сетка, области окна, размеры панелей, drag у края
 │   ├── Listing/        сессия папки: приход, сверка строк, преемник, место строки, фильтр
-│   ├── Localization/   ITextSource
+│   ├── Localization/   ITextSource, UiLanguage
 │   ├── Logging/        ILogger, Log, маскирование путей, журнал действий, ротация
 │   ├── Menu/           контекстное меню: правила, каталог, настройки, меню броска
 │   ├── Navigation/     история, адрес, MRU, стартовая папка, следование за путём
@@ -111,7 +111,7 @@ src/
 ```
 === Wander dependency graph (using sweep) ===
 date   : 2026-10-08
-commit : e875502
+commit : 66c8939
 
 -- Wander.Core: levels --
   0: (root), Imaging, Layout, Localization, Logging, Operations, Panels
@@ -131,8 +131,8 @@ commit : e875502
 
 -- Wander.App: levels --
   0: Highlighting, Menu, Resources
-  1: Diagnostics, Util
-  2: Preview, ViewModels
+  1: Util
+  2: Diagnostics, Preview, ViewModels
   3: Conflict, Converters
   4: Controllers, Controls, Dialogs, DragPreview
   5: Views
@@ -2523,9 +2523,10 @@ prevention выключен — браузер ничего не качает.
 1. **Страница — часть Wander, как её встречает человек**, не механизм и
    не «разное»: «Основного» и «Дополнительно» нет. Три группы слева
    отбивкой (`StartsCluster`): что на экране (Папки и закладки, Список
-   файлов, Вид — под ним Размеры и Галерея), что делается с файлами
-   (Файловые операции — под ними Контекстное меню, Действия, Программы,
-   Оценки), служебное (Кэш и память, Клавиатура, Отладка и сброс).
+   файлов, Вид — под ним Размеры и Галерея, Интерфейс), что делается с
+   файлами (Файловые операции — под ними Контекстное меню, Действия,
+   Программы, Оценки), служебное (Кэш и память, Клавиатура, Отладка и
+   сброс).
    Страница о части другой — под ней с отступом (`IsNested`). Пункт — на
    страницу той части, о которой он (оценки ставятся в любом виде — не на
    странице галереи). Не нашлось места — повод обсудить, не «Прочее».
@@ -2589,7 +2590,12 @@ prevention выключен — браузер ничего не качает.
 - Служебные файлы корня тома (`pagefile.sys`, `hiberfil.sys`,
   `swapfile.sys`, `DumpStack.log.tmp`) — той же настройкой, что служебные
   папки (`SystemRootFolders`).
-- «Помощь» — `CrashReporter.GuideUrl` (`lekta.github.io/wander/guide/`).
+- «Помощь» — `CrashReporter.GuideUrl` (`lekta.github.io/wander/guide/`,
+  в английском интерфейсе — `…/en/guide/`).
+- **«Интерфейс»** (2026-10-08) — язык; сюда же — цветовая схема, когда
+  будет (решение человека: [отдельная страница; «Вид» перестроить, если
+  подойдёт] — фон галереи с темой переедет сюда при тёмной теме, пока
+  «Вид» как был). Последняя в группе «что на экране».
 
 ### Новая настройка — по шагам
 
@@ -2642,7 +2648,23 @@ prevention выключен — браузер ничего не качает.
 `{x:Static res:Strings.Key}`; ненайденный ключ возвращает себя. Класс
 руками, не `MSBuild:Compile`: markup-компилятор WPF собирает XAML во
 временном проекте (`*_wpftmp.csproj`), куда designer-файл из `obj/` не
-попадает. Второй язык — `Strings.<culture>.resx` (BACKLOG). **Граница
+попадает. **Языки** (2026-10-08): русский — нейтральный `Strings.resx`
+(`NeutralLanguage=ru` в `Directory.Build.props`: «en» там заставлял
+`ResourceManager` отвечать на `en` русским и не открывать спутник),
+английский — `Strings.en.resx` с теми же ключами, сборка-спутник
+`en\Wander.resources.dll` (в single-file — внутри exe). Язык сеанса —
+`AppSettings.Language` (`UiLanguage`: `System` / `Russian` / `English`),
+правило — `UiLanguages.Resolve` (Core, тест): «как в Windows» — русский
+только в русской Windows, иначе английский. `InterfaceLanguage.Apply` в
+`App.OnStartup` ставит `CurrentUICulture` и `DefaultThreadCurrentUICulture`
+до первой строки; `CurrentCulture` (даты, числа) — региональный формат
+человека. Окна берут текст при создании (`{x:Static}`), поэтому смена —
+после перезапуска, без пересборки окон. Множественное число —
+`Text.PluralForm`: три формы через `|` — русское правило, две — английское
+one / other, одна — неизменное слово. Ссылки на сайт — по языку
+(`CrashReporter.GuideUrl`, у страниц настроек `guide` / `guideEn`).
+Клавиши со словами в `HotkeyCatalog` («Esc в дереве») — тоже ресурсы
+(`HotkeyGesture*`). **Граница
 слоёв**: Core отдаёт пользователю подписи меню (`ContextMenuCatalog`) и
 причину отказа drop'а (`PathSafety.FormatReason`) через `ITextSource`
 (`AppTextSource` в App); Core хранит ключи. Без источника `Text.Get`
@@ -2650,7 +2672,9 @@ prevention выключен — браузер ничего не качает.
 `FormatReason` принимает `ITextSource?` параметром.
 
 Проверки — шаги `check.bat`: `check-strings.ps1` — ключи в коде и XAML
-против `Strings.resx` в обе стороны (и константы `OperationVerbs`);
+против `Strings.resx` в обе стороны (и константы `OperationVerbs`), у
+каждого перевода — те же ключи, плейсхолдеры, переводы строк и формы
+множественного числа;
 `check-resources.ps1` — каждый `{StaticResource}` / `{DynamicResource}` и
 `FindResource` в App определён каким-то `x:Key` (без областей
 видимости; неиспользуемые печатаются, не роняют).

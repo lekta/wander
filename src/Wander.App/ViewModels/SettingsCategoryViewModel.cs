@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Windows.Data;
 using Wander.App.Resources;
+using Wander.App.Util;
 
 namespace Wander.App.ViewModels;
 
@@ -44,18 +45,20 @@ public abstract class SettingsCategoryViewModel : ObservableObject {
     /// Where F1 opens the guide on the site (2026-09-28): the page, and its
     /// section after a #, that tells what this page's settings do - what
     /// goes beyond a label is written there, not in hints on the page. The
-    /// site step of check.bat fails on a page or a section the built site
-    /// does not have; it finds them by the named argument <c>guide</c> of
+    /// guide of the interface's language: <c>guide</c> names a page of
+    /// GUIDE.md, <c>guideEn</c> the same page of GUIDE.en.md (2026-10-08).
+    /// The site step of check.bat fails on a page or a section the built
+    /// site does not have; it finds them by these two named arguments of
     /// each page's constructor.
     /// </summary>
     public string GuidePage { get; }
 
     protected SettingsCategoryViewModel(
-        string title, SettingsViewModel owner, string guide, bool startsCluster = false, bool nested = false) {
+        string title, SettingsViewModel owner, string guide, string guideEn, bool startsCluster = false, bool nested = false) {
 
         Title = title;
         Owner = owner;
-        GuidePage = guide;
+        GuidePage = InterfaceLanguage.IsEnglish ? guideEn : guide;
         StartsCluster = startsCluster;
         IsNested = nested;
     }
@@ -65,42 +68,57 @@ public abstract class SettingsCategoryViewModel : ObservableObject {
 /// <summary>Where a session starts, the folder panel and the standard bookmarks.</summary>
 public sealed class FoldersSettingsCategory : SettingsCategoryViewModel {
     public FoldersSettingsCategory(SettingsViewModel owner)
-        : base(Strings.SettingsCategoryFolders, owner, guide: "paneli-papok") { }
+        : base(Strings.SettingsCategoryFolders, owner, guide: "paneli-papok", guideEn: "folder-panes") { }
 }
 
 
 /// <summary>What the list shows and when it lists again.</summary>
 public sealed class ListSettingsCategory : SettingsCategoryViewModel {
     public ListSettingsCategory(SettingsViewModel owner)
-        : base(Strings.SettingsCategoryList, owner, guide: "oblast-faylov") { }
+        : base(Strings.SettingsCategoryList, owner, guide: "oblast-faylov", guideEn: "file-area") { }
 }
 
 
 /// <summary>Which view a folder gets: the default one, and the gallery for a folder of photos.</summary>
 public sealed class ViewsSettingsCategory : SettingsCategoryViewModel {
     public ViewsSettingsCategory(SettingsViewModel owner)
-        : base(Strings.SettingsCategoryViews, owner, guide: "vidy-i-sortirovka") { }
+        : base(Strings.SettingsCategoryViews, owner, guide: "vidy-i-sortirovka", guideEn: "views-and-sorting") { }
 }
 
 
 /// <summary>Every view's own sizes, each beside a preview drawn with them.</summary>
 public sealed class SizesSettingsCategory : SettingsCategoryViewModel {
     public SizesSettingsCategory(SettingsViewModel owner)
-        : base(Strings.SettingsCategorySizes, owner, guide: "vidy-i-sortirovka#razmery", nested: true) { }
+        : base(Strings.SettingsCategorySizes, owner, guide: "vidy-i-sortirovka#razmery", guideEn: "views-and-sorting#sizes", nested: true) { }
 }
 
 
 /// <summary>The gallery's background: three colours, two of them with a brightness of their own.</summary>
 public sealed class GallerySettingsCategory : SettingsCategoryViewModel {
     public GallerySettingsCategory(SettingsViewModel owner)
-        : base(Strings.SettingsCategoryGallery, owner, guide: "galereya", nested: true) { }
+        : base(Strings.SettingsCategoryGallery, owner, guide: "galereya", guideEn: "gallery", nested: true) { }
+}
+
+
+/// <summary>
+/// The interface as a whole: its language now, its colour scheme when there
+/// is one (2026-10-08). The guide has no section of its own for it yet - F1
+/// opens the settings catalog.
+/// </summary>
+public sealed class InterfaceSettingsCategory : SettingsCategoryViewModel {
+    public InterfaceSettingsCategory(SettingsViewModel owner)
+        : base(Strings.SettingsCategoryInterface, owner, guide: "nastroyki", guideEn: "settings") { }
+
+
+    /// <summary>"Как в Windows: Русский" - the first choice names what following Windows means here.</summary>
+    public string SystemChoice => string.Format(Strings.SettingsLanguageSystem, InterfaceLanguage.WindowsChoiceName);
 }
 
 
 /// <summary>What is asked before a delete or a move, and about files that turn out the same.</summary>
 public sealed class OperationsSettingsCategory : SettingsCategoryViewModel {
     public OperationsSettingsCategory(SettingsViewModel owner)
-        : base(Strings.SettingsCategoryOperations, owner, guide: "rabota-s-faylami", startsCluster: true) { }
+        : base(Strings.SettingsCategoryOperations, owner, guide: "rabota-s-faylami", guideEn: "working-with-files", startsCluster: true) { }
 }
 
 
@@ -111,7 +129,7 @@ public sealed class OperationsSettingsCategory : SettingsCategoryViewModel {
 /// </summary>
 public sealed class ContextMenuSettingsCategory : SettingsCategoryViewModel {
     public ContextMenuSettingsCategory(SettingsViewModel owner)
-        : base(Strings.SettingsCategoryContextMenu, owner, guide: "kontekstnoe-menyu#nastroyka", nested: true) {
+        : base(Strings.SettingsCategoryContextMenu, owner, guide: "kontekstnoe-menyu#nastroyka", guideEn: "context-menu#customizing", nested: true) {
         ShellRows = new ListCollectionView(owner.ShellExtensionRows) { Filter = Passes };
     }
 
@@ -150,7 +168,7 @@ public sealed class ContextMenuSettingsCategory : SettingsCategoryViewModel {
 /// </summary>
 public sealed class ActionsSettingsCategory : SettingsCategoryViewModel {
     public ActionsSettingsCategory(SettingsViewModel owner)
-        : base(Strings.SettingsCategoryActions, owner, guide: "svoi-deystviya", nested: true) {
+        : base(Strings.SettingsCategoryActions, owner, guide: "svoi-deystviya", guideEn: "custom-actions", nested: true) {
         // The owner builds its rows anew on a reset of all settings, with
         // this page off screen and no table to drop the selection: a row
         // no longer in the table would stay on the card, and what is typed
@@ -202,7 +220,7 @@ public sealed class ActionsSettingsCategory : SettingsCategoryViewModel {
 /// <summary>The programs the presets need: found by themselves or pointed at by hand, one block each.</summary>
 public sealed class ToolsSettingsCategory : SettingsCategoryViewModel {
     public ToolsSettingsCategory(SettingsViewModel owner)
-        : base(Strings.SettingsCategoryTools, owner, guide: "konvertatsiya#programmy", nested: true) { }
+        : base(Strings.SettingsCategoryTools, owner, guide: "konvertatsiya#programmy", guideEn: "conversion#programs", nested: true) { }
 }
 
 
@@ -212,14 +230,14 @@ public sealed class ToolsSettingsCategory : SettingsCategoryViewModel {
 /// </summary>
 public sealed class RatingsSettingsCategory : SettingsCategoryViewModel {
     public RatingsSettingsCategory(SettingsViewModel owner)
-        : base(Strings.SettingsCategoryRatings, owner, guide: "otsenki-i-metki", nested: true) { }
+        : base(Strings.SettingsCategoryRatings, owner, guide: "otsenki-i-metki", guideEn: "ratings-and-labels", nested: true) { }
 }
 
 
 /// <summary>What Wander keeps on disk and in memory: thumbnails, pictures, scratch copies.</summary>
 public sealed class CacheSettingsCategory : SettingsCategoryViewModel {
     public CacheSettingsCategory(SettingsViewModel owner)
-        : base(Strings.SettingsCategoryCache, owner, guide: "dannye-i-kesh#kesh-miniatyur", startsCluster: true) { }
+        : base(Strings.SettingsCategoryCache, owner, guide: "dannye-i-kesh#kesh-miniatyur", guideEn: "data-and-cache#thumbnail-cache", startsCluster: true) { }
 }
 
 
@@ -229,7 +247,7 @@ public sealed class CacheSettingsCategory : SettingsCategoryViewModel {
 /// </summary>
 public sealed class HotkeysSettingsCategory : SettingsCategoryViewModel {
     public HotkeysSettingsCategory(SettingsViewModel owner)
-        : base(Strings.SettingsCategoryHotkeys, owner, guide: "goryachie-klavishi") { }
+        : base(Strings.SettingsCategoryHotkeys, owner, guide: "goryachie-klavishi", guideEn: "keyboard-shortcuts") { }
 
 
     private string _query = string.Empty;
@@ -254,5 +272,5 @@ public sealed class HotkeysSettingsCategory : SettingsCategoryViewModel {
 /// <summary>The session log, the debug menu and putting every setting back.</summary>
 public sealed class DebugSettingsCategory : SettingsCategoryViewModel {
     public DebugSettingsCategory(SettingsViewModel owner)
-        : base(Strings.SettingsCategoryDebug, owner, guide: "problemy-i-otchety") { }
+        : base(Strings.SettingsCategoryDebug, owner, guide: "problemy-i-otchety", guideEn: "troubleshooting") { }
 }

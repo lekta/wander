@@ -15,10 +15,11 @@ Explorer: убрать лишнее, починить его баги, доба�
   релиз
 - QA — песочница, харнесс, smoke, чек-листы, матрица «трогал → проверь»
 - PERFORMANCE — вес, старт, поставка; `measurements/` — замеры версий
-- GUIDE — руководство пользователя; SITE — сайт и правила GUIDE;
+- GUIDE — руководство пользователя, GUIDE.en — его перевод страница в
+  страницу; SITE — сайт (два языка) и правила GUIDE;
   `docs/private/` — локальные заметки вне гита (`.git/info/exclude`)
 - `deps.txt` — рёбра графа папок; CHANGELOG; CONTRIBUTING; SECURITY;
-  README в корне — витрина
+  README (английский) и README.ru в корне — витрина
 
 Новая сессия: этот файл → PLAN → ARCHITECTURE по задетому. Опус на блоке:
 этот файл → WORKFLOW, «Блок по спеке» → свой блок PLAN.
@@ -79,8 +80,9 @@ X» — только где карта не отвечает. Решения ч�
 - **Новая операция с файлами обязана**: `SystemPathGuard`, лог,
   `IUndoableAction` в `UndoService`, деструктивная — подтверждение с
   Cancel по умолчанию. Отступление — осознанное и записанное в доке.
-- **Текст для пользователя** — только
-  `src/Wander.App/Resources/Strings.resx`; Core — через `ITextSource`.
+- **Текст для пользователя** — только `Strings.resx` (русский) и
+  `Strings.en.resx` в `src/Wander.App/Resources/`, новый ключ — в оба
+  (`check-strings`); Core — через `ITextSource`.
 
 ## Проверка
 

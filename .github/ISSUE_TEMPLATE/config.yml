@@ -4,6 +4,6 @@
 # URL на /choose и потеряет предзаполненный отчёт.
 blank_issues_enabled: true
 contact_links:
-  - name: Уязвимость безопасности
+  - name: Security vulnerability / Уязвимость безопасности
     url: https://github.com/lekta/wander/security/policy
-    about: Не открывай публичный issue — сообщи приватно (см. Security Policy).
+    about: Do not open a public issue, report it privately (see the Security Policy). / Не открывай публичный issue — сообщи приватно.

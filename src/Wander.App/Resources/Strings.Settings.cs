@@ -399,6 +399,24 @@ public static partial class Strings {
     /// <summary>Кэш и память</summary>
     public static string SettingsCategoryCache => Get(nameof(SettingsCategoryCache));
 
+    /// <summary>Интерфейс</summary>
+    public static string SettingsCategoryInterface => Get(nameof(SettingsCategoryInterface));
+
+    /// <summary>Язык (Language)</summary>
+    public static string SettingsLanguageGroup => Get(nameof(SettingsLanguageGroup));
+
+    /// <summary>Как в Windows: {0}</summary>
+    public static string SettingsLanguageSystem => Get(nameof(SettingsLanguageSystem));
+
+    /// <summary>Русский</summary>
+    public static string SettingsLanguageRussian => Get(nameof(SettingsLanguageRussian));
+
+    /// <summary>English</summary>
+    public static string SettingsLanguageEnglish => Get(nameof(SettingsLanguageEnglish));
+
+    /// <summary>Применится после перезапуска Wander.</summary>
+    public static string SettingsLanguageNote => Get(nameof(SettingsLanguageNote));
+
     /// <summary>При запуске</summary>
     public static string SettingsStartupGroup => Get(nameof(SettingsStartupGroup));
 

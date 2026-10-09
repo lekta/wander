@@ -3,8 +3,8 @@ using System.Diagnostics;
 
 namespace Wander.Site;
 
-/// <summary>A released version: its <c>v*</c> tag, the day it was tagged, whether the tag has a guide.</summary>
-internal sealed record Release(string Tag, string Date, bool HasGuide) {
+/// <summary>A released version: its <c>v*</c> tag, the day it was tagged, which of the guides the tag has.</summary>
+internal sealed record Release(string Tag, string Date, IReadOnlySet<string> Guides) {
     public string Version => Tag[1..];
 }
 
@@ -32,8 +32,10 @@ internal static class Releases {
             return new();
         }
 
-        // One process for every tag: "<object> missing" when the tag predates the guide.
-        string input = string.Concat(rows.Select(row => row[0] + ":docs/GUIDE.md\n"));
+        // One process for every tag and guide: "<object> missing" when the
+        // tag predates that guide.
+        string[] guides = Language.All.Select(language => language.GuideSource).ToArray();
+        string input = string.Concat(rows.SelectMany(row => guides.Select(guide => $"{row[0]}:{guide}\n")));
         string? found = Git(root, errors, input, "cat-file", "--batch-check");
         if (found is null) {
             return new();
@@ -41,10 +43,12 @@ internal static class Releases {
 
         var missing = found.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(line => line.EndsWith(" missing", StringComparison.Ordinal))
-            .Select(line => line[..line.IndexOf(':', StringComparison.Ordinal)])
+            .Select(line => line[..^" missing".Length])
             .ToHashSet(StringComparer.Ordinal);
 
-        return rows.Select(row => new Release(row[0], row[1], !missing.Contains(row[0]))).ToList();
+        return rows
+            .Select(row => new Release(row[0], row[1], guides.Where(guide => !missing.Contains($"{row[0]}:{guide}")).ToHashSet(StringComparer.Ordinal)))
+            .ToList();
     }
 
     /// <summary>The short hash of HEAD: the footer names the commit the site was built from.</summary>

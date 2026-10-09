@@ -24,6 +24,17 @@ public class PluralFormTests {
         Assert.Equal(expected, Text.PluralForm(Folders, count));
     }
 
+    [Theory]
+    [InlineData(1, "1 folder")]
+    [InlineData(0, "0 folders")]
+    [InlineData(2, "2 folders")]
+    [InlineData(11, "11 folders")]
+    [InlineData(21, "21 folders")]
+    [InlineData(101, "101 folders")]
+    public void TwoForms_AreEnglishOneAndOther(long count, string expected) {
+        Assert.Equal(expected, Text.PluralForm("{0} folder|{0} folders", count));
+    }
+
     [Fact]
     public void AWordThatDoesNotChange_IsWrittenOnce() {
         Assert.Equal("1 видео", Text.PluralForm("{0} видео", 1));

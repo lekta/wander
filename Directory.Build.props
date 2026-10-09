@@ -5,7 +5,10 @@
     <Company>Lekta</Company>
     <Product>Wander</Product>
     <Copyright>© Lekta 2026</Copyright>
-    <NeutralLanguage>en</NeutralLanguage>
+    <!-- The language of the neutral resources (Strings.resx is Russian). Said
+         wrong, the resource manager answers that culture from them and never
+         opens its satellite: "en" here hid Strings.en.resx. -->
+    <NeutralLanguage>ru</NeutralLanguage>
     <Version>0.5.1</Version>
     <InformationalVersion>0.5.1-beta</InformationalVersion>
     <FileVersion>0.5.1.0</FileVersion>

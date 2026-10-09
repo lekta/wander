@@ -320,6 +320,33 @@
 
 
         <!--
+            Интерфейс: the language now, the colour scheme when there is
+            one (2026-10-08). A language a line, each in its own name, the
+            first saying what following Windows means here; the group title
+            carries "Language" in Russian too, for whoever lands on a page
+            they cannot read. The note is the cost: windows keep their text
+            until the next start.
+        -->
+        <DataTemplate DataType="{x:Type vm:InterfaceSettingsCategory}">
+            <StackPanel>
+                <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}"/>
+
+                <TextBlock Text="{x:Static res:Strings.SettingsLanguageGroup}" Style="{StaticResource GroupTitle}"/>
+                <RadioButton GroupName="Language"
+                             Content="{Binding SystemChoice}"
+                             IsChecked="{Binding Owner.Language, Converter={StaticResource EnumEquals}, ConverterParameter=System}"/>
+                <RadioButton GroupName="Language"
+                             Content="{x:Static res:Strings.SettingsLanguageRussian}"
+                             IsChecked="{Binding Owner.Language, Converter={StaticResource EnumEquals}, ConverterParameter=Russian}"/>
+                <RadioButton GroupName="Language"
+                             Content="{x:Static res:Strings.SettingsLanguageEnglish}"
+                             IsChecked="{Binding Owner.Language, Converter={StaticResource EnumEquals}, ConverterParameter=English}"/>
+                <TextBlock Text="{x:Static res:Strings.SettingsLanguageNote}" Style="{StaticResource Note}"/>
+            </StackPanel>
+        </DataTemplate>
+
+
+        <!--
             Размеры: one group per view with its own sizes - what makes a
             comfortable table is not what makes a comfortable grid of
             photographs. Ctrl + wheel over the list writes these same fields,

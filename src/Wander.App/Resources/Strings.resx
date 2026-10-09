@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <root>
   <!--
-    Все пользовательские строки Wander. Отдельно от кода намеренно: чтобы
-    добавить язык, достаточно положить рядом Strings.<culture>.resx с теми
-    же ключами — правки в коде не нужны.
+    Все пользовательские строки Wander, по-русски — нейтральный язык.
+    Английские — Strings.en.resx с теми же ключами: новый ключ — в оба
+    файла, check-strings.ps1 сверяет ключи, плейсхолдеры и формы.
 
     Типизированный доступ — Resources/Strings.cs, одна строка на ключ.
     Ключи именуются по месту: Menu*, Status*, Preview*, Settings*, Dialog*.
@@ -1317,10 +1317,10 @@
     <value>Поиск: найдено {0:N0}, просмотрено {1:N0}</value>
   </data>
   <data name="StatusSearchFound" xml:space="preserve">
-    <value>Найдено {0:N0} по запросу «{1}» (просмотрено файлов: {2:N0})</value>
+    <value>Найдено {0:N0}: {1} (просмотрено файлов: {2:N0})</value>
   </data>
   <data name="StatusSearchNothing" xml:space="preserve">
-    <value>Ничего не найдено по запросу «{0}»</value>
+    <value>Ничего не найдено: {0}</value>
   </data>
   <data name="StatusSearchStopped" xml:space="preserve">
     <value>Поиск остановлен, найдено: {0:N0}</value>
@@ -1397,7 +1397,11 @@
     <value>«{0}» с текстом «{1}»</value>
   </data>
   <data name="SearchDescriptionText" xml:space="preserve">
-    <value>тексту «{0}»</value>
+    <value>текст «{0}»</value>
+  </data>
+  <data name="SearchDescriptionName" xml:space="preserve">
+    <value>«{0}»</value>
+    <comment>Запрос только по имени в строке состояния; {0} — маска имени</comment>
   </data>
   <data name="SearchWindowTitle" xml:space="preserve">
     <value>Поиск</value>
@@ -2650,6 +2654,29 @@
   <data name="SettingsCategoryCache" xml:space="preserve">
     <value>Кэш и память</value>
   </data>
+  <data name="SettingsCategoryInterface" xml:space="preserve">
+    <value>Интерфейс</value>
+    <comment>Страница настроек: язык, позже — цветовая схема</comment>
+  </data>
+  <data name="SettingsLanguageGroup" xml:space="preserve">
+    <value>Язык (Language)</value>
+    <comment>Слово по-английски в скобках — чтобы найти пункт, если язык интерфейса непонятен</comment>
+  </data>
+  <data name="SettingsLanguageSystem" xml:space="preserve">
+    <value>Как в Windows: {0}</value>
+    <comment>{0} — язык Windows своим названием: SettingsLanguageRussian или SettingsLanguageEnglish</comment>
+  </data>
+  <data name="SettingsLanguageRussian" xml:space="preserve">
+    <value>Русский</value>
+    <comment>Название языка — на нём самом, одинаково во всех языках интерфейса</comment>
+  </data>
+  <data name="SettingsLanguageEnglish" xml:space="preserve">
+    <value>English</value>
+    <comment>Название языка — на нём самом, одинаково во всех языках интерфейса</comment>
+  </data>
+  <data name="SettingsLanguageNote" xml:space="preserve">
+    <value>Применится после перезапуска Wander.</value>
+  </data>
   <data name="SettingsStartupGroup" xml:space="preserve">
     <value>При запуске</value>
   </data>
@@ -2784,5 +2811,64 @@
   </data>
   <data name="HotkeyGroupSettings" xml:space="preserve">
     <value>Окно настроек</value>
+  </data>
+  <data name="HotkeyGestureAddressGo" xml:space="preserve">
+    <value>Enter в адресной строке</value>
+    <comment>Колонка клавиш на странице «Клавиатура»: клавиша и где она действует</comment>
+  </data>
+  <data name="HotkeyGestureAddressCancel" xml:space="preserve">
+    <value>Esc в адресной строке</value>
+  </data>
+  <data name="HotkeyGesturePreviewEscape" xml:space="preserve">
+    <value>Esc в панели просмотра</value>
+  </data>
+  <data name="HotkeyGestureTreeExpand" xml:space="preserve">
+    <value>← / → в дереве</value>
+  </data>
+  <data name="HotkeyGestureTreeEnter" xml:space="preserve">
+    <value>Enter в дереве</value>
+  </data>
+  <data name="HotkeyGestureTreeEscape" xml:space="preserve">
+    <value>Esc в дереве</value>
+  </data>
+  <data name="HotkeyGestureTreeRename" xml:space="preserve">
+    <value>F2 в дереве</value>
+  </data>
+  <data name="HotkeyGestureSearchNow" xml:space="preserve">
+    <value>Enter в окне поиска</value>
+  </data>
+  <data name="HotkeyGestureSearchClose" xml:space="preserve">
+    <value>Esc в окне поиска</value>
+  </data>
+  <data name="HotkeyGestureFilterEscape" xml:space="preserve">
+    <value>Esc в поле поиска</value>
+  </data>
+  <data name="HotkeyGestureSearchRepeat" xml:space="preserve">
+    <value>F5 на результатах поиска</value>
+  </data>
+  <data name="HotkeyGestureClearSelection" xml:space="preserve">
+    <value>Esc среди файлов</value>
+  </data>
+  <data name="HotkeyGestureTypeAhead" xml:space="preserve">
+    <value>Буквы среди файлов</value>
+  </data>
+  <data name="HotkeyGestureGridArrows" xml:space="preserve">
+    <value>Стрелки в плитке и значках</value>
+  </data>
+  <data name="HotkeyGestureRateInGallery" xml:space="preserve">
+    <value>0–5 в галерее</value>
+  </data>
+  <data name="HotkeyGestureColorInGallery" xml:space="preserve">
+    <value>Shift + 0–5 в галерее</value>
+  </data>
+  <data name="HotkeyGestureFullscreenSide" xml:space="preserve">
+    <value>Shift + стрелки</value>
+  </data>
+  <data name="HotkeyGestureFullscreenKeepSide" xml:space="preserve">
+    <value>← / → на двух</value>
+    <comment>Полный экран, на нём пара снимков</comment>
+  </data>
+  <data name="HotkeyGestureFullscreenPeek" xml:space="preserve">
+    <value>Alt (держать)</value>
   </data>
 </root>

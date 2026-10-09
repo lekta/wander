@@ -1,5 +1,30 @@
 # Security Policy
 
+🌐 **English** · [Русский](#политика-безопасности)
+
+Wander is a local desktop application: there is no server side, no accounts
+and no data sent out; the attack surface is the application itself and what
+it does with the file system.
+
+## Supported versions
+
+Only the latest beta release; fixes ship in new versions.
+
+| Version | Supported |
+|---------|-----------|
+| latest release | ✅ |
+| older | ❌ |
+
+## Reporting a vulnerability
+
+Do not open a public issue. Report it privately: **GitHub → Security →
+Report a vulnerability**, or by the address in the
+[author's profile](https://github.com/lekta). The project is developed by one
+person - replies and fixes come as time allows, with no guaranteed timelines
+and no bug bounty. Thank you for responsible disclosure.
+
+# Политика безопасности
+
 Wander — локальное десктоп-приложение: серверной части, аккаунтов и передачи
 данных наружу нет; поверхность атаки — само приложение и его операции с
 файловой системой.
@@ -10,8 +35,8 @@ Wander — локальное десктоп-приложение: сервер�
 
 | Версия | Поддержка |
 |--------|-----------|
-| 0.3.x  | ✅        |
-| < 0.3  | ❌        |
+| последний релиз | ✅ |
+| более ранние | ❌ |
 
 ## Как сообщить об уязвимости
 

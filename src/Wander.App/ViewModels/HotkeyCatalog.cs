@@ -17,11 +17,12 @@ namespace Wander.App.ViewModels;
 /// </para>
 ///
 /// <para>
-/// The gesture column is deliberately literal rather than a resource, the
-/// same way <c>InputGestureText</c> is spelled out in the menus: these are
-/// the names printed on the keys, and they do not change with the
-/// interface language. The descriptions beside them do, so those come
-/// from <see cref="Strings"/>.
+/// The gesture column is literal where it is only keys, the same way
+/// <c>InputGestureText</c> is spelled out in the menus: these are the
+/// names printed on the keys, and they do not change with the interface
+/// language. A gesture that says where it acts ("Esc in the tree") and
+/// the descriptions beside every one do, so those come from
+/// <see cref="Strings"/>.
 /// </para>
 ///
 /// <para>
@@ -40,8 +41,8 @@ public static class HotkeyCatalog {
             new HotkeyRow("Enter", Strings.HotkeyOpen),
             new HotkeyRow("Ctrl + L, Alt + D", Strings.HotkeyAddressBar),
             new HotkeyRow("F4", Strings.HotkeyRecent),
-            new HotkeyRow("Enter в адресной строке", Strings.HotkeyAddressGo),
-            new HotkeyRow("Esc в адресной строке", Strings.HotkeyAddressCancel),
+            new HotkeyRow(Strings.HotkeyGestureAddressGo, Strings.HotkeyAddressGo),
+            new HotkeyRow(Strings.HotkeyGestureAddressCancel, Strings.HotkeyAddressCancel),
             new HotkeyRow("F5", Strings.HotkeyRefresh),
         }),
         new HotkeyGroup(Strings.HotkeyGroupPanes, new[] {
@@ -49,14 +50,14 @@ public static class HotkeyCatalog {
             new HotkeyRow("Ctrl + 1", Strings.HotkeyToTree),
             new HotkeyRow("Ctrl + 2", Strings.HotkeyToList),
             new HotkeyRow("Ctrl + 3", Strings.HotkeyToPreview),
-            new HotkeyRow("Esc в панели просмотра", Strings.HotkeyPreviewEscape),
+            new HotkeyRow(Strings.HotkeyGesturePreviewEscape, Strings.HotkeyPreviewEscape),
             new HotkeyRow("Ctrl + Shift + E", Strings.HotkeyRevealInTree),
             new HotkeyRow("Ctrl + Q", Strings.HotkeyTogglePreview),
             new HotkeyRow("Ctrl + B", Strings.HotkeyToggleFolders),
-            new HotkeyRow("← / → в дереве", Strings.HotkeyTreeExpand),
-            new HotkeyRow("Enter в дереве", Strings.HotkeyTreeEnter),
-            new HotkeyRow("Esc в дереве", Strings.HotkeyTreeEscape),
-            new HotkeyRow("F2 в дереве", Strings.HotkeyTreeRename),
+            new HotkeyRow(Strings.HotkeyGestureTreeExpand, Strings.HotkeyTreeExpand),
+            new HotkeyRow(Strings.HotkeyGestureTreeEnter, Strings.HotkeyTreeEnter),
+            new HotkeyRow(Strings.HotkeyGestureTreeEscape, Strings.HotkeyTreeEscape),
+            new HotkeyRow(Strings.HotkeyGestureTreeRename, Strings.HotkeyTreeRename),
         }),
         new HotkeyGroup(Strings.HotkeyGroupFileOps, new[] {
             new HotkeyRow("Ctrl + C", Strings.HotkeyCopy),
@@ -74,19 +75,19 @@ public static class HotkeyCatalog {
             new HotkeyRow("Ctrl + F", Strings.HotkeyFilter),
             new HotkeyRow("F3 / Shift + F3", Strings.HotkeyFindNext),
             new HotkeyRow("Ctrl + Shift + F", Strings.HotkeySearchWindow),
-            new HotkeyRow("Enter в окне поиска", Strings.HotkeySearchNow),
-            new HotkeyRow("Esc в окне поиска", Strings.HotkeySearchClose),
-            new HotkeyRow("Esc в поле поиска", Strings.HotkeyFilterEscape),
-            new HotkeyRow("F5 на результатах поиска", Strings.HotkeySearchRepeat),
-            new HotkeyRow("Esc среди файлов", Strings.HotkeyClearSelection),
-            new HotkeyRow("Буквы среди файлов", Strings.HotkeyTypeAhead),
-            new HotkeyRow("Стрелки в плитке и значках", Strings.HotkeyGridArrows),
+            new HotkeyRow(Strings.HotkeyGestureSearchNow, Strings.HotkeySearchNow),
+            new HotkeyRow(Strings.HotkeyGestureSearchClose, Strings.HotkeySearchClose),
+            new HotkeyRow(Strings.HotkeyGestureFilterEscape, Strings.HotkeyFilterEscape),
+            new HotkeyRow(Strings.HotkeyGestureSearchRepeat, Strings.HotkeySearchRepeat),
+            new HotkeyRow(Strings.HotkeyGestureClearSelection, Strings.HotkeyClearSelection),
+            new HotkeyRow(Strings.HotkeyGestureTypeAhead, Strings.HotkeyTypeAhead),
+            new HotkeyRow(Strings.HotkeyGestureGridArrows, Strings.HotkeyGridArrows),
             new HotkeyRow("Alt + Enter", Strings.HotkeyProperties),
         }),
         new HotkeyGroup(Strings.HotkeyGroupView, new[] {
             new HotkeyRow("Ctrl + Shift + 1", Strings.HotkeyViewGallery),
-            new HotkeyRow("0–5 в галерее", Strings.HotkeyRateInGallery),
-            new HotkeyRow("Shift + 0–5 в галерее", Strings.HotkeyColorInGallery),
+            new HotkeyRow(Strings.HotkeyGestureRateInGallery, Strings.HotkeyRateInGallery),
+            new HotkeyRow(Strings.HotkeyGestureColorInGallery, Strings.HotkeyColorInGallery),
             new HotkeyRow("Ctrl + Shift + 2", Strings.HotkeyViewLargeIcons),
             new HotkeyRow("Ctrl + Shift + 6", Strings.HotkeyViewDetails),
             new HotkeyRow("Ctrl + Shift + 7", Strings.HotkeyViewTiles),
@@ -95,11 +96,11 @@ public static class HotkeyCatalog {
             new HotkeyRow("→ ↓ Space PgDn", Strings.HotkeyFullscreenNext),
             new HotkeyRow("← ↑ Backspace PgUp", Strings.HotkeyFullscreenPrevious),
             new HotkeyRow("Home / End", Strings.HotkeyFullscreenEnds),
-            new HotkeyRow("Shift + стрелки", Strings.HotkeyFullscreenSide),
-            new HotkeyRow("← / → на двух", Strings.HotkeyFullscreenKeepSide),
+            new HotkeyRow(Strings.HotkeyGestureFullscreenSide, Strings.HotkeyFullscreenSide),
+            new HotkeyRow(Strings.HotkeyGestureFullscreenKeepSide, Strings.HotkeyFullscreenKeepSide),
             new HotkeyRow("0–5, Shift + 0–5", Strings.HotkeyFullscreenRate),
             new HotkeyRow("Delete / Shift + Delete", Strings.HotkeyFullscreenDelete),
-            new HotkeyRow("Alt (держать)", Strings.HotkeyFullscreenPeek),
+            new HotkeyRow(Strings.HotkeyGestureFullscreenPeek, Strings.HotkeyFullscreenPeek),
             new HotkeyRow("Ctrl + Z", Strings.HotkeyFullscreenUndo),
             new HotkeyRow("Z", Strings.HotkeyFullscreenZoom),
             new HotkeyRow("Esc / Enter", Strings.HotkeyFullscreenClose),
@@ -147,7 +148,7 @@ public static class HotkeyCatalog {
             // Spaces removed from both sides, so "ctrl+q" finds the row the
             // catalogue spells "Ctrl + Q". Nobody types a shortcut with the
             // spaces in, and the literal comparison above stays for the
-            // gestures written as a phrase ("Esc в поле поиска").
+            // gestures written as a phrase ("Esc in the search box").
             || Contains(Squeeze(row.Gesture), Squeeze(needle));
     }
 

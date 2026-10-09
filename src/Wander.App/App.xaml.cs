@@ -79,10 +79,13 @@ public partial class App : Application {
         // background passes inherit.
         NumberFormat.Install();
         PlatformBootstrapper.RegisterDefaults();
+        // The interface language, read from the settings before the first
+        // string is: every window takes its text when it is built.
+        InterfaceLanguage.Apply(ServiceLocator.Get<IAppStateStore>().Load().Settings.Language);
         // The string table lives in this assembly, so Core cannot reach it
         // directly. Registering the source here — before anything builds a
-        // menu — is what makes ContextMenuCatalog and PathSafety speak
-        // Russian instead of returning resource keys.
+        // menu — is what makes ContextMenuCatalog and PathSafety speak the
+        // interface language instead of returning resource keys.
         ServiceLocator.Register<ITextSource>(new AppTextSource());
         // Every modal question goes through this seam; the harness swaps
         // in a scripted answerer before it builds the view model.

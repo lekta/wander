@@ -1,6 +1,8 @@
 # Wander
 
-**Медиа-менеджер для Windows 10 и 11** - с упором на удобство и работу с фото: навигация без сюрпризов, мгновенный просмотр, отбор снимков, групповые операции.
+🌐 **English** · [Русский](README.ru.md)
+
+**A media manager for Windows 10 and 11** - built for comfort and for working with photos: navigation without surprises, instant preview, photo culling, batch operations.
 
 <p>
   <a href="https://github.com/lekta/wander/releases/latest">
@@ -10,43 +12,43 @@
   <img alt="License" src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-orange">
 </p>
 
-![Главное окно](docs/screenshots/main.webp)
+![Main window](docs/screenshots/main.webp)
 
-- 🌐 **[Сайт и руководство](https://lekta.github.io/wander/)** - что умеет Wander и как им пользоваться.
-- ⬇️ **[Скачать последнюю версию](https://github.com/lekta/wander/releases/latest)** - `Wander.exe` в блоке Assets.
-- 🛡️ **[Надёжность и скорость](https://lekta.github.io/wander/guide/nadezhnost-i-skorost/index.html)** - как Wander проверяется и собирается.
+- 🌐 **[Website and guide](https://lekta.github.io/wander/en/)** - what Wander can do and how to use it.
+- ⬇️ **[Download the latest version](https://github.com/lekta/wander/releases/latest)** - `Wander.exe` under Assets.
+- 🛡️ **[Reliability and speed](https://lekta.github.io/wander/en/guide/reliability-and-speed/index.html)** - how Wander is tested and built.
 
-> ⚠️ **Beta 0.5** - ранняя версия. Работает, активно используется, но не исключены баги.
-> Распространяется как есть, без гарантий.
+> ⚠️ **Beta 0.5** - an early version. It works and is in daily use, but bugs are possible.
+> Provided as is, without warranty.
 
-## Запуск
+## Running
 
-Скачать `Wander.exe` и запустить, установка не нужна: один файл, .NET
-внутри, в систему ничего не прописывается. Поддерживаемая ОС - **Windows 10 версии 2004
-(build 19041) или новее, либо Windows 11**, x64.
+Download `Wander.exe` and run it, no installation needed: a single file with
+.NET inside, nothing is registered in the system. Supported OS - **Windows 10
+version 2004 (build 19041) or later, or Windows 11**, x64.
 
-- SmartScreen может предупредить, что файл не подписан сертификатом:
-  «Подробнее» → «Выполнить в любом случае».
-- Целостность файла: хэш скачанного - `(Get-FileHash Wander.exe -Algorithm
-  SHA256).Hash` в PowerShell. Сравнивать с `sha256:…` в строке
-  **`Wander.exe`** на странице релиза или с содержимым файла
-  `Wander.exe.sha256`; регистр букв не важен. Хэш в строке
-  `Wander.exe.sha256` - это хэш самого текстового файла, не программы.
-- Превью HTML, Markdown и PDF использует **WebView2 Runtime** - он уже есть
-  в Windows 11 и актуальной Windows 10; если нет -
-  [Evergreen Runtime от Microsoft](https://developer.microsoft.com/microsoft-edge/webview2/).
+- SmartScreen may warn that the file is not signed with a certificate:
+  “More info” → “Run anyway”.
+- File integrity: the hash of the download is `(Get-FileHash Wander.exe
+  -Algorithm SHA256).Hash` in PowerShell. Compare it with `sha256:…` in the
+  **`Wander.exe`** row of the release page or with the contents of
+  `Wander.exe.sha256`; letter case does not matter. The hash in the
+  `Wander.exe.sha256` row is the hash of that text file, not of the program.
+- Previews of HTML, Markdown and PDF use the **WebView2 Runtime** - it is
+  already part of Windows 11 and an up-to-date Windows 10; if it is missing,
+  get the [Evergreen Runtime from Microsoft](https://developer.microsoft.com/microsoft-edge/webview2/).
 
-## Лицензия
+## License
 
-[PolyForm Noncommercial 1.0.0](LICENSE) © Lekta, 2026. Пользоваться,
-изучать и менять код, распространять - свободно **в любых некоммерческих
-целях**. Коммерческое использование - только по договорённости с автором. Это
-source-available лицензия (не OSI open-source); ПО поставляется «как
-есть», без гарантий и ответственности.
+[PolyForm Noncommercial 1.0.0](LICENSE) © Lekta, 2026. Use, study, change
+and share the code freely **for any noncommercial purpose**. Commercial use
+only by agreement with the author. This is a source-available license (not
+OSI open source); the software is provided “as is”, without warranty or
+liability.
 
-## Разработка
+## Development
 
-Сборка из исходников, тесты и правила для pull request -
-[CONTRIBUTING.md](docs/CONTRIBUTING.md); устройство кода -
-[ARCHITECTURE.md](docs/ARCHITECTURE.md); уязвимости -
-[SECURITY.md](docs/SECURITY.md).
+Building from source, tests and pull request rules -
+[CONTRIBUTING.md](docs/CONTRIBUTING.md); how the code is organized -
+[ARCHITECTURE.md](docs/ARCHITECTURE.md); vulnerabilities -
+[SECURITY.md](docs/SECURITY.md). The project documentation is in Russian.

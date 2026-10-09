@@ -1,14 +1,15 @@
 <!doctype html>
-<html lang="ru">
+<html lang="{{lang}}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{title}}</title>
 <meta name="description" content="{{description}}">
 <link rel="canonical" href="{{url}}">
+{{alternates}}
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Wander">
-<meta property="og:locale" content="ru_RU">
+<meta property="og:locale" content="{{locale}}">
 <meta property="og:title" content="{{title}}">
 <meta property="og:description" content="{{description}}">
 <meta property="og:url" content="{{url}}">
@@ -21,25 +22,26 @@
 </head>
 <body>
 <header class="top">
-<a class="brand" href="{{root}}index.html"><img src="{{root}}img/icon.webp" width="32" height="32" alt="">Wander</a>
-{{guidelink}}<a class="wide" href="{{root}}versions/index.html">Версии</a>
+<a class="brand" href="{{home}}index.html"><img src="{{root}}img/icon.webp" width="32" height="32" alt="">Wander</a>
+{{guidelink}}<a class="wide" href="{{home}}versions/index.html">{{versions}}</a>
 <a class="wide" href="https://github.com/lekta/wander">GitHub</a>
-<a class="to-menu" href="#menu">Разделы</a>
+<a class="to-menu" href="#menu">{{sections}}</a>
+{{switch}}
 </header>
 <div class="page">
 <main>
 {{main}}
 </main>
-<nav class="side" id="menu" aria-label="Разделы руководства">
+<nav class="side" id="menu" aria-label="{{sectionslabel}}">
 {{nav}}
 </nav>
 </div>
 <footer class="bottom">
-<a class="narrow" href="{{root}}versions/index.html">Версии</a>
+<a class="narrow" href="{{home}}versions/index.html">{{versions}}</a>
 <a class="narrow" href="https://github.com/lekta/wander">GitHub</a>
-<a href="https://github.com/lekta/wander/blob/master/LICENSE">Лицензия PolyForm Noncommercial</a>
+<a href="https://github.com/lekta/wander/blob/master/LICENSE">{{license}}</a>
 <span>© Lekta, 2026</span>
-<a href="https://github.com/lekta/wander/issues">Сообщить о проблеме</a>
+<a href="https://github.com/lekta/wander/issues">{{report}}</a>
 {{build}}
 </footer>
 {{analytics}}</body>

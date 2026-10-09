@@ -1,7 +1,9 @@
 # Wander — руководство пользователя
 
+🌐 **Русский** · [English](GUIDE.en.md)
+
 Что умеет Wander и как им пользоваться.
-Скачать программу можно по ссылке из [README](../README.md); это же руководство по страницам есть на сайте [lekta.github.io/wander](https://lekta.github.io/wander/guide/).
+Скачать программу можно по ссылке из [README](../README.ru.md); это же руководство по страницам есть на сайте [lekta.github.io/wander](https://lekta.github.io/wander/guide/).
 
 ## Начало работы
 

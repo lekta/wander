@@ -2,6 +2,7 @@ using Wander.Core.Actions;
 using Wander.Core.Companions;
 using Wander.Core.FileSystem;
 using Wander.Core.Folders;
+using Wander.Core.Localization;
 
 namespace Wander.Core.Persistence;
 
@@ -31,6 +32,13 @@ public sealed record AppSettings {
     /// means the system Documents folder.
     /// </summary>
     public string WorkFolder { get; init; } = "";
+
+    /// <summary>
+    /// The interface language. Follows Windows by default (2026-10-08):
+    /// Russian on a Russian Windows, English on any other. Read once at
+    /// startup - windows take their text when they are built.
+    /// </summary>
+    public UiLanguage Language { get; init; } = UiLanguage.System;
 
 
     // --- Behaviour -----------------------------------------------------

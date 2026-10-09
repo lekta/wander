@@ -215,4 +215,61 @@ public static partial class Strings {
 
     /// <summary>Справка по открытой странице настроек</summary>
     public static string HotkeySettingsGuide => Get(nameof(HotkeySettingsGuide));
+
+    /// <summary>Enter в адресной строке</summary>
+    public static string HotkeyGestureAddressGo => Get(nameof(HotkeyGestureAddressGo));
+
+    /// <summary>Esc в адресной строке</summary>
+    public static string HotkeyGestureAddressCancel => Get(nameof(HotkeyGestureAddressCancel));
+
+    /// <summary>Esc в панели просмотра</summary>
+    public static string HotkeyGesturePreviewEscape => Get(nameof(HotkeyGesturePreviewEscape));
+
+    /// <summary>← / → в дереве</summary>
+    public static string HotkeyGestureTreeExpand => Get(nameof(HotkeyGestureTreeExpand));
+
+    /// <summary>Enter в дереве</summary>
+    public static string HotkeyGestureTreeEnter => Get(nameof(HotkeyGestureTreeEnter));
+
+    /// <summary>Esc в дереве</summary>
+    public static string HotkeyGestureTreeEscape => Get(nameof(HotkeyGestureTreeEscape));
+
+    /// <summary>F2 в дереве</summary>
+    public static string HotkeyGestureTreeRename => Get(nameof(HotkeyGestureTreeRename));
+
+    /// <summary>Enter в окне поиска</summary>
+    public static string HotkeyGestureSearchNow => Get(nameof(HotkeyGestureSearchNow));
+
+    /// <summary>Esc в окне поиска</summary>
+    public static string HotkeyGestureSearchClose => Get(nameof(HotkeyGestureSearchClose));
+
+    /// <summary>Esc в поле поиска</summary>
+    public static string HotkeyGestureFilterEscape => Get(nameof(HotkeyGestureFilterEscape));
+
+    /// <summary>F5 на результатах поиска</summary>
+    public static string HotkeyGestureSearchRepeat => Get(nameof(HotkeyGestureSearchRepeat));
+
+    /// <summary>Esc среди файлов</summary>
+    public static string HotkeyGestureClearSelection => Get(nameof(HotkeyGestureClearSelection));
+
+    /// <summary>Буквы среди файлов</summary>
+    public static string HotkeyGestureTypeAhead => Get(nameof(HotkeyGestureTypeAhead));
+
+    /// <summary>Стрелки в плитке и значках</summary>
+    public static string HotkeyGestureGridArrows => Get(nameof(HotkeyGestureGridArrows));
+
+    /// <summary>0–5 в галерее</summary>
+    public static string HotkeyGestureRateInGallery => Get(nameof(HotkeyGestureRateInGallery));
+
+    /// <summary>Shift + 0–5 в галерее</summary>
+    public static string HotkeyGestureColorInGallery => Get(nameof(HotkeyGestureColorInGallery));
+
+    /// <summary>Shift + стрелки</summary>
+    public static string HotkeyGestureFullscreenSide => Get(nameof(HotkeyGestureFullscreenSide));
+
+    /// <summary>← / → на двух</summary>
+    public static string HotkeyGestureFullscreenKeepSide => Get(nameof(HotkeyGestureFullscreenKeepSide));
+
+    /// <summary>Alt (держать)</summary>
+    public static string HotkeyGestureFullscreenPeek => Get(nameof(HotkeyGestureFullscreenPeek));
 }

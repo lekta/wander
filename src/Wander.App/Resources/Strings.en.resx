@@ -1,0 +1,2676 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!--
+    English strings. Same keys as Strings.resx (Russian, the neutral
+    resources); check-strings.ps1 holds the two files to the same keys,
+    placeholders and plural forms. Plurals here have two forms, one|other.
+  -->
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="PreviewSelectFile" xml:space="preserve">
+    <value>Select a file to preview</value>
+  </data>
+  <data name="PreviewUnsupported" xml:space="preserve">
+    <value>No preview available for this file</value>
+  </data>
+  <data name="PreviewNeedsHeif" xml:space="preserve">
+    <value>To open HEIC and HEIF, Windows needs the free “HEIF Image Extensions” add-on from the Microsoft Store</value>
+  </data>
+  <data name="PreviewNeedsHevc" xml:space="preserve">
+    <value>HEIC photos use the HEVC codec: Windows needs the “HEVC Video Extensions” add-on from the Microsoft Store (paid, but many PCs already have it from the manufacturer)</value>
+  </data>
+  <data name="PreviewOpenStore" xml:space="preserve">
+    <value>Open in Microsoft Store</value>
+  </data>
+  <data name="PreviewFileLocked" xml:space="preserve">
+    <value>The file is in use by another program and can't be read</value>
+  </data>
+  <data name="PreviewFileLockedBy" xml:space="preserve">
+    <value>The file is in use by {0}: it can't be read until that program releases it</value>
+  </data>
+  <data name="PreviewCounting" xml:space="preserve">
+    <value>Analyzing contents</value>
+  </data>
+  <data name="PreviewFolderHeadline" xml:space="preserve">
+    <value>Files: {0:N0} · Folders: {1:N0} · {2}</value>
+  </data>
+  <data name="PreviewFolderTruncated" xml:space="preserve">
+    <value>Nesting is too deep: not every level was scanned, so the numbers are incomplete</value>
+  </data>
+  <data name="PreviewFolderTypeCount" xml:space="preserve">
+    <value>{0:N0}</value>
+  </data>
+  <data name="PreviewFolderTypes" xml:space="preserve">
+    <value>What's inside</value>
+  </data>
+  <data name="PreviewArchiveHeadline" xml:space="preserve">
+    <value>Archive · Files: {0:N0} · Folders: {1:N0} · {2}</value>
+  </data>
+  <data name="PreviewArchiveFolderHeadline" xml:space="preserve">
+    <value>In the archive · Files: {0:N0} · Folders: {1:N0}</value>
+  </data>
+  <data name="PreviewArchiveMore" xml:space="preserve">
+    <value>and {0:N0} more</value>
+  </data>
+  <data name="PreviewArchiveEmpty" xml:space="preserve">
+    <value>The archive is empty or password-protected</value>
+  </data>
+  <data name="PreviewArchiveBroken" xml:space="preserve">
+    <value>The archive is damaged or protected</value>
+  </data>
+  <data name="PreviewFolderEmpty" xml:space="preserve">
+    <value>This folder is empty</value>
+  </data>
+  <data name="PreviewCopyGuid" xml:space="preserve">
+    <value>Copy GUID</value>
+  </data>
+  <data name="PreviewRawToggle" xml:space="preserve">
+    <value>RAW</value>
+  </data>
+  <data name="PreviewRawToggleHint" xml:space="preserve">
+    <value>Show the full RAW frame instead of the embedded preview: slower, but it's the real image from the sensor</value>
+  </data>
+  <data name="PreviewSvgSourceToggle" xml:space="preserve">
+    <value>&lt;/&gt;</value>
+  </data>
+  <data name="PreviewSvgSourceHint" xml:space="preserve">
+    <value>Switch between the SVG image and its markup</value>
+  </data>
+  <data name="SummaryDeleted" xml:space="preserve">
+    <value>Deleted</value>
+  </data>
+  <data name="SummaryDeletedFrom" xml:space="preserve">
+    <value>Original location</value>
+  </data>
+  <data name="SummarySelectedCounting" xml:space="preserve">
+    <value>Selected: {0}, counting…</value>
+  </data>
+  <data name="SummarySelected" xml:space="preserve">
+    <value>Selected: {0}</value>
+  </data>
+  <data name="SummaryFilesInside" xml:space="preserve">
+    <value>files inside: {0}</value>
+  </data>
+  <data name="NavBack" xml:space="preserve">
+    <value>Back (Alt+←)</value>
+  </data>
+  <data name="NavForward" xml:space="preserve">
+    <value>Forward (Alt+→)</value>
+  </data>
+  <data name="NavUp" xml:space="preserve">
+    <value>Up (Alt+↑ / Backspace)</value>
+  </data>
+  <data name="MenuView" xml:space="preserve">
+    <value>View</value>
+  </data>
+  <data name="MenuViewDetails" xml:space="preserve">
+    <value>Details</value>
+  </data>
+  <data name="MenuViewTiles" xml:space="preserve">
+    <value>Tiles</value>
+  </data>
+  <data name="MenuViewLargeIcons" xml:space="preserve">
+    <value>Icons</value>
+  </data>
+  <data name="MenuSortBy" xml:space="preserve">
+    <value>Sort</value>
+  </data>
+  <data name="MenuSortName" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="MenuSortDate" xml:space="preserve">
+    <value>Date modified</value>
+  </data>
+  <data name="MenuSortSize" xml:space="preserve">
+    <value>Size</value>
+  </data>
+  <data name="MenuSortType" xml:space="preserve">
+    <value>Type</value>
+  </data>
+  <data name="MenuSortAscending" xml:space="preserve">
+    <value>Ascending</value>
+  </data>
+  <data name="MenuSortFoldersFirst" xml:space="preserve">
+    <value>Folders first</value>
+  </data>
+  <data name="MenuRefresh" xml:space="preserve">
+    <value>Refresh</value>
+  </data>
+  <data name="MenuQuickPreview" xml:space="preserve">
+    <value>Preview pane</value>
+  </data>
+  <data name="MenuOptions" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+  <data name="MenuReportIssue" xml:space="preserve">
+    <value>Feedback</value>
+  </data>
+  <data name="MenuReportIssueHint" xml:space="preserve">
+    <value>Opens a form on GitHub for a bug report or a suggestion</value>
+  </data>
+  <data name="MenuDebug" xml:space="preserve">
+    <value>Debug</value>
+  </data>
+  <data name="MenuLogs" xml:space="preserve">
+    <value>Session log</value>
+  </data>
+  <data name="MenuLogsHint" xml:space="preserve">
+    <value>Open the technical log of the current session</value>
+  </data>
+  <data name="MenuDebugOperation" xml:space="preserve">
+    <value>Operation</value>
+  </data>
+  <data name="MenuDebugOperationHint" xml:space="preserve">
+    <value>Fake operation: reads and writes nothing, shows the progress window and the status bar</value>
+  </data>
+  <data name="MenuDebugOperationPlain" xml:space="preserve">
+    <value>Smooth</value>
+  </data>
+  <data name="MenuDebugOperationFails" xml:space="preserve">
+    <value>Fails on the 4th</value>
+  </data>
+  <data name="MenuDebugOperationCancels" xml:space="preserve">
+    <value>Cancels midway</value>
+  </data>
+  <data name="MenuDebugOperationThree" xml:space="preserve">
+    <value>Three at once</value>
+  </data>
+  <data name="MenuDebugMaskCamera" xml:space="preserve">
+    <value>Mask camera</value>
+  </data>
+  <data name="MenuDebugMaskCameraHint" xml:space="preserve">
+    <value>Replaces the camera model in the preview caption with a placeholder; for screenshots, until the session ends</value>
+  </data>
+  <data name="MenuExit" xml:space="preserve">
+    <value>Exit</value>
+  </data>
+  <data name="SearchHint" xml:space="preserve">
+    <value>Search by name or content: name, or name:text (Ctrl+F). Search window: Ctrl+Shift+F. Esc to clear</value>
+  </data>
+  <data name="SearchPlaceholder" xml:space="preserve">
+    <value>Search by name or content</value>
+  </data>
+  <data name="RecentFoldersHint" xml:space="preserve">
+    <value>Recent folders (F4)</value>
+  </data>
+  <data name="ColumnName" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="ColumnType" xml:space="preserve">
+    <value>Type</value>
+  </data>
+  <data name="ColumnSize" xml:space="preserve">
+    <value>Size</value>
+  </data>
+  <data name="ColumnModified" xml:space="preserve">
+    <value>Modified</value>
+  </data>
+  <data name="ActionCopy" xml:space="preserve">
+    <value>Copy</value>
+  </data>
+  <data name="StatusPathNotFound" xml:space="preserve">
+    <value>Path not found: {0}</value>
+  </data>
+  <data name="StatusOpenFailed" xml:space="preserve">
+    <value>Couldn't open: {0}</value>
+  </data>
+  <data name="StatusNoDropTarget" xml:space="preserve">
+    <value>Nowhere to drop: the target folder is unknown.</value>
+  </data>
+  <data name="StatusDropFailed" xml:space="preserve">
+    <value>Drag and drop failed: {0}</value>
+  </data>
+  <data name="StatusShortcutFailed" xml:space="preserve">
+    <value>Couldn't create a shortcut to “{0}”: {1}</value>
+  </data>
+  <data name="StatusShortcutsCreated" xml:space="preserve">
+    <value>Shortcuts created: {0} in {1}</value>
+  </data>
+  <data name="StatusBrowserFailed" xml:space="preserve">
+    <value>Couldn't open the browser: {0}</value>
+  </data>
+  <data name="StatusNoLogging" xml:space="preserve">
+    <value>Logging is off.</value>
+  </data>
+  <data name="StatusNoLogFile" xml:space="preserve">
+    <value>Log file not found.</value>
+  </data>
+  <data name="StatusOpenLogFailed" xml:space="preserve">
+    <value>Couldn't open the log: {0}</value>
+  </data>
+  <data name="StatusJournalFailed" xml:space="preserve">
+    <value>Couldn't open the action journal: {0}</value>
+  </data>
+  <data name="StatusTextCopied" xml:space="preserve">
+    <value>Text copied from the Preview pane (characters: {0})</value>
+  </data>
+  <data name="StatusFindNoMoreFiles" xml:space="preserve">
+    <value>No further matches in the search results; the search wrapped to the top of the file</value>
+  </data>
+  <data name="JournalTooltip" xml:space="preserve">
+    <value>Action journal for this session (opens in the text viewer)</value>
+  </data>
+  <data name="JournalOpenedFolder" xml:space="preserve">
+    <value>Opened folder: {0}</value>
+  </data>
+  <data name="StatusPropertiesFailed" xml:space="preserve">
+    <value>Couldn't show properties: {0}</value>
+  </data>
+  <data name="StatusOpenWithFailed" xml:space="preserve">
+    <value>“Open with” failed: {0}</value>
+  </data>
+  <data name="StatusTerminalFailed" xml:space="preserve">
+    <value>Couldn't open the terminal: {0}</value>
+  </data>
+  <data name="StatusCopiedToClipboard" xml:space="preserve">
+    <value>Copied to clipboard: {0}</value>
+  </data>
+  <data name="StatusClipboardBusy" xml:space="preserve">
+    <value>The clipboard is busy: {0}</value>
+  </data>
+  <data name="StatusDeleteFailed" xml:space="preserve">
+    <value>Delete failed: {0}</value>
+  </data>
+  <data name="StatusUndone" xml:space="preserve">
+    <value>Undone: {0}</value>
+  </data>
+  <data name="StatusUndoFailed" xml:space="preserve">
+    <value>Couldn't undo {0}: {1}</value>
+  </data>
+  <data name="StatusUndoError" xml:space="preserve">
+    <value>Undo failed: {0}</value>
+  </data>
+  <data name="StatusUndonePartly" xml:space="preserve">
+    <value>Undone: {0}; {1} couldn't be restored: {2}</value>
+  </data>
+  <data name="StatusUndoStopped" xml:space="preserve">
+    <value>Undo stopped; the next Ctrl+Z will bring back {0}</value>
+  </data>
+  <data name="StatusNamedOne" xml:space="preserve">
+    <value>“{0}”</value>
+  </data>
+  <data name="StatusNamedMany" xml:space="preserve">
+    <value>“{0}” and {1} more</value>
+  </data>
+  <data name="ProgressUndoing" xml:space="preserve">
+    <value>Undoing</value>
+  </data>
+  <data name="ProgressWeighing" xml:space="preserve">
+    <value>Counting…</value>
+  </data>
+  <data name="StatusRenamedWithCompanions" xml:space="preserve">
+    <value>Renamed along with companion files: {0}</value>
+  </data>
+  <data name="StatusRenameFailed" xml:space="preserve">
+    <value>Rename failed: {0}</value>
+  </data>
+  <data name="StatusCopied" xml:space="preserve">
+    <value>Items copied: {0}</value>
+  </data>
+  <data name="StatusCut" xml:space="preserve">
+    <value>Items cut: {0}</value>
+  </data>
+  <data name="StatusCutAlreadyHere" xml:space="preserve">
+    <value>Already in this folder; cut canceled</value>
+  </data>
+  <data name="StatusPasteFailed" xml:space="preserve">
+    <value>Paste failed: {0}</value>
+  </data>
+  <data name="StatusPastedText" xml:space="preserve">
+    <value>Clipboard text pasted as {0}</value>
+  </data>
+  <data name="StatusPastedImage" xml:space="preserve">
+    <value>Clipboard image pasted as {0}</value>
+  </data>
+  <data name="StatusPasteUnreadable" xml:space="preserve">
+    <value>Couldn't read the clipboard; nothing was pasted</value>
+  </data>
+  <data name="StatusPasteNothing" xml:space="preserve">
+    <value>Nothing pasted: the clipboard has no files, text or image (formats: {0})</value>
+  </data>
+  <data name="PasteLeftImageForText" xml:space="preserve">
+    <value>Image not pasted: the clipboard also held text</value>
+  </data>
+  <data name="PasteLeftTextForFiles" xml:space="preserve">
+    <value>Text not pasted: the clipboard also held files</value>
+  </data>
+  <data name="PasteLeftImageForFiles" xml:space="preserve">
+    <value>Image not pasted: the clipboard also held files</value>
+  </data>
+  <data name="StatusCreateFailed" xml:space="preserve">
+    <value>Couldn't create: {0}</value>
+  </data>
+  <data name="StatusError" xml:space="preserve">
+    <value>Error: {0}</value>
+  </data>
+  <data name="StatusCancelled" xml:space="preserve">
+    <value>Operation canceled.</value>
+  </data>
+  <data name="StatusAlreadyBookmarked" xml:space="preserve">
+    <value>This folder is already in Bookmarks.</value>
+  </data>
+  <data name="StatusBookmarkAdded" xml:space="preserve">
+    <value>Added to Bookmarks: {0}</value>
+  </data>
+  <data name="StatusItems" xml:space="preserve">
+    <value>Items: {0:N0}</value>
+  </data>
+  <data name="StatusItemsWithHidden" xml:space="preserve">
+    <value>Items: {0:N0} (hidden: {1:N0})</value>
+  </data>
+  <data name="StatusFilterMatches" xml:space="preserve">
+    <value>Matching “{2}”: {0:N0} of {1:N0}</value>
+  </data>
+  <data name="StatusDeleted" xml:space="preserve">
+    <value>Permanently deleted: {0}</value>
+  </data>
+  <data name="StatusDeletedPartly" xml:space="preserve">
+    <value>Permanently deleted: {0}, failed: {1}{2}</value>
+  </data>
+  <data name="StatusRecycled" xml:space="preserve">
+    <value>Moved to the Recycle Bin: {0}</value>
+  </data>
+  <data name="StatusRecycledPartly" xml:space="preserve">
+    <value>Moved to the Recycle Bin: {0}, failed: {1}{2}</value>
+  </data>
+  <data name="StatusWasBusyOne" xml:space="preserve">
+    <value>“{0}” was in use{1}, released after {2:0.0} s</value>
+  </data>
+  <data name="StatusWasBusyMany" xml:space="preserve">
+    <value>“{0}” and {1} more were in use{2}, released after {3:0.0} s</value>
+  </data>
+  <data name="StatusBatchDone" xml:space="preserve">
+    <value>{0} {1} to {2}</value>
+  </data>
+  <data name="StatusBatchSkipped" xml:space="preserve">
+    <value>{0} skipped</value>
+  </data>
+  <data name="StatusBatchCancelled" xml:space="preserve">
+    <value>{0} canceled</value>
+  </data>
+  <data name="StatusBatchFailed" xml:space="preserve">
+    <value>{0} failed{1}</value>
+  </data>
+  <data name="StatusRestored" xml:space="preserve">
+    <value>Restored: {0}</value>
+  </data>
+  <data name="StatusRestoredPartly" xml:space="preserve">
+    <value>Restored: {0}, failed: {1} (for example, “{2}”)</value>
+  </data>
+  <data name="VerbCopied" xml:space="preserve">
+    <value>Copied</value>
+  </data>
+  <data name="VerbMoved" xml:space="preserve">
+    <value>Moved</value>
+  </data>
+  <data name="NewFolderName" xml:space="preserve">
+    <value>New folder</value>
+  </data>
+  <data name="PasteTextFileName" xml:space="preserve">
+    <value>Text.txt</value>
+  </data>
+  <data name="PasteImageFileName" xml:space="preserve">
+    <value>Image.png</value>
+  </data>
+  <data name="KindFile" xml:space="preserve">
+    <value>file</value>
+  </data>
+  <data name="KindFolder" xml:space="preserve">
+    <value>folder</value>
+  </data>
+  <data name="AndMore" xml:space="preserve">
+    <value>… and {0} more</value>
+  </data>
+  <data name="ConfirmDeleteTitle" xml:space="preserve">
+    <value>Delete permanently?</value>
+  </data>
+  <data name="ConfirmRecycleTitle" xml:space="preserve">
+    <value>Move to the Recycle Bin?</value>
+  </data>
+  <data name="ConfirmDeleteOne" xml:space="preserve">
+    <value>Permanently delete the {0} “{1}”?&#xA;&#xA;{2}</value>
+  </data>
+  <data name="ConfirmRecycleOne" xml:space="preserve">
+    <value>Move the {0} “{1}” to the Recycle Bin?&#xA;&#xA;{2}</value>
+  </data>
+  <data name="ConfirmDeleteMany" xml:space="preserve">
+    <value>Permanently delete {0}?&#xA;&#xA;{1}</value>
+  </data>
+  <data name="ConfirmRecycleMany" xml:space="preserve">
+    <value>Move {0} to the Recycle Bin?&#xA;&#xA;{1}</value>
+  </data>
+  <data name="ConfirmWithCompanions" xml:space="preserve">
+    <value>Companion files will go too: {0}.</value>
+  </data>
+  <data name="ConfirmIrreversible" xml:space="preserve">
+    <value>This action can't be undone.</value>
+  </data>
+  <data name="ConfirmReadOnlyTitle" xml:space="preserve">
+    <value>Read-only</value>
+  </data>
+  <data name="ConfirmReadOnlyOne" xml:space="preserve">
+    <value>This item is read-only:&#xA;&#xA;{0}&#xA;&#xA;Delete it anyway?</value>
+  </data>
+  <data name="ConfirmReadOnlyMany" xml:space="preserve">
+    <value>These items are read-only:&#xA;&#xA;{0}&#xA;&#xA;Delete them all anyway?</value>
+  </data>
+  <data name="CannotPasteTitle" xml:space="preserve">
+    <value>Can't paste</value>
+  </data>
+  <data name="ConfirmMoveTitle" xml:space="preserve">
+    <value>Move?</value>
+  </data>
+  <data name="ConfirmMoveOne" xml:space="preserve">
+    <value>Move this item?&#xA;&#xA;From: {0}&#xA;To:   {1}</value>
+  </data>
+  <data name="ConfirmMoveMany" xml:space="preserve">
+    <value>Move {0} to:&#xA;{1}?</value>
+  </data>
+  <data name="ExitWithOperationsTitle" xml:space="preserve">
+    <value>Exit Wander?</value>
+  </data>
+  <data name="ExitWithOperationsMessage" xml:space="preserve">
+    <value>Operations in progress: {0}. Stop them and exit?</value>
+  </data>
+  <data name="ConflictVerdictIdentical" xml:space="preserve">
+    <value>Files are identical</value>
+  </data>
+  <data name="ConflictVerdictContentDiffers" xml:space="preserve">
+    <value>Content differs</value>
+  </data>
+  <data name="ConflictVerdictDifferentKind" xml:space="preserve">
+    <value>Different types: file and folder</value>
+  </data>
+  <data name="ConflictTitleCopy" xml:space="preserve">
+    <value>Copying {0}, name conflicts: {1}</value>
+  </data>
+  <data name="ConflictTitleMove" xml:space="preserve">
+    <value>Moving {0}, name conflicts: {1}</value>
+  </data>
+  <data name="ConflictFrom" xml:space="preserve">
+    <value>From: {0}</value>
+  </data>
+  <data name="ConflictFromSeveral" xml:space="preserve">
+    <value>From: several folders</value>
+  </data>
+  <data name="ConflictTo" xml:space="preserve">
+    <value>To: {0}</value>
+  </data>
+  <data name="ConflictComparing" xml:space="preserve">
+    <value>Comparing…</value>
+  </data>
+  <data name="ConflictChoiceReplace" xml:space="preserve">
+    <value>replace</value>
+  </data>
+  <data name="ConflictChoiceKeep" xml:space="preserve">
+    <value>keep existing</value>
+  </data>
+  <data name="ConflictChoiceBoth" xml:space="preserve">
+    <value>keep both</value>
+  </data>
+  <data name="ConflictMergeScanning" xml:space="preserve">
+    <value>merge, reading…</value>
+  </data>
+  <data name="ConflictMergeFailed" xml:space="preserve">
+    <value>merge, contents not read</value>
+  </data>
+  <data name="ConflictMergeSummary" xml:space="preserve">
+    <value>merge (conflicts: {0}, other files: {1})</value>
+  </data>
+  <data name="ConflictFolderReplaceNote" xml:space="preserve">
+    <value>The folder will be replaced entirely, without merging</value>
+  </data>
+  <data name="ConflictSkipIdentical" xml:space="preserve">
+    <value>Don't ask about identical files</value>
+  </data>
+  <data name="ConflictSkipIdenticalHint" xml:space="preserve">
+    <value>For byte-identical pairs, answer “keep existing”: nothing is copied or moved.</value>
+  </data>
+  <data name="ConflictBulkCaption" xml:space="preserve">
+    <value>Apply to unresolved:</value>
+  </data>
+  <data name="ConflictBulkReplace" xml:space="preserve">
+    <value>Replace</value>
+  </data>
+  <data name="ConflictBulkSkip" xml:space="preserve">
+    <value>Keep existing</value>
+  </data>
+  <data name="ConflictBulkKeepBoth" xml:space="preserve">
+    <value>Keep both</value>
+  </data>
+  <data name="ConflictBulkReplaceIfNewer" xml:space="preserve">
+    <value>Replace if newer</value>
+  </data>
+  <data name="ConflictDecided" xml:space="preserve">
+    <value>{0} of {1} resolved</value>
+  </data>
+  <data name="KindFolderNoun" xml:space="preserve">
+    <value>Folder</value>
+  </data>
+  <data name="TileFileLine" xml:space="preserve">
+    <value>{0} · {1}</value>
+  </data>
+  <data name="PreviewRatingWrittenTo" xml:space="preserve">
+    <value>Rating, written to {0}</value>
+  </data>
+  <data name="ActionOk" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="ActionCancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="ActionRetry" xml:space="preserve">
+    <value>Retry</value>
+  </data>
+  <data name="ActionDeleteForGood" xml:space="preserve">
+    <value>Delete permanently</value>
+  </data>
+  <data name="ActionAbort" xml:space="preserve">
+    <value>Don't delete</value>
+  </data>
+  <data name="RenameTitle" xml:space="preserve">
+    <value>Rename</value>
+  </data>
+  <data name="RenamePrompt" xml:space="preserve">
+    <value>New name:</value>
+  </data>
+  <data name="InvalidFileNameChars" xml:space="preserve">
+    <value>A file name can't contain these characters: </value>
+  </data>
+  <data name="DragMove" xml:space="preserve">
+    <value>Move</value>
+  </data>
+  <data name="DragCopy" xml:space="preserve">
+    <value>Copy</value>
+  </data>
+  <data name="DragLink" xml:space="preserve">
+    <value>Create shortcut to</value>
+  </data>
+  <data name="DragTarget" xml:space="preserve">
+    <value>into {0}</value>
+  </data>
+  <data name="DragAddToBookmarks" xml:space="preserve">
+    <value>Add {0} to Bookmarks</value>
+  </data>
+  <data name="CrashTitle" xml:space="preserve">
+    <value>Wander — error report</value>
+  </data>
+  <data name="CrashFatal" xml:space="preserve">
+    <value>Wander has crashed and must close.</value>
+  </data>
+  <data name="CrashNonFatal" xml:space="preserve">
+    <value>Wander ran into an unexpected error.</value>
+  </data>
+  <data name="CrashFallbackPrompt" xml:space="preserve">
+    <value>Wander ran into an unexpected error.&#xA;&#xA;{0}: {1}&#xA;&#xA;Prepare a report (error details only, without the session log)?</value>
+  </data>
+  <data name="CrashExplain" xml:space="preserve">
+    <value>Wander can pack a report into a zip archive, show it in File Explorer and open a prefilled GitHub issue in your browser. Nothing leaves your computer until you submit the issue yourself.</value>
+  </data>
+  <data name="CrashIncludeLog" xml:space="preserve">
+    <value>Attach this session's log: it makes the problem much easier to investigate, but it contains paths to the files you worked with</value>
+  </data>
+  <data name="CrashIncludeLogMasked" xml:space="preserve">
+    <value>Attach this session's log: it makes the problem much easier to investigate; file paths and names in it are replaced with placeholders</value>
+  </data>
+  <data name="CrashPrepare" xml:space="preserve">
+    <value>Prepare report</value>
+  </data>
+  <data name="CrashClose" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="ErrorFileInUse" xml:space="preserve">
+    <value>the file is open in {0}</value>
+  </data>
+  <data name="ErrorInUse" xml:space="preserve">
+    <value>the file is in use by another program</value>
+  </data>
+  <data name="ErrorClaimedByOperation" xml:space="preserve">
+    <value>“{0}” is in use by a Wander operation: {1}</value>
+  </data>
+  <data name="GuardDriveRoot" xml:space="preserve">
+    <value>“{0}” is a drive root and can't be moved or deleted</value>
+  </data>
+  <data name="GuardShareRoot" xml:space="preserve">
+    <value>“{0}” is the root of a network share and can't be moved or deleted</value>
+  </data>
+  <data name="GuardSystemFolder" xml:space="preserve">
+    <value>“{0}” is a system folder and can't be moved, renamed or deleted</value>
+  </data>
+  <data name="GuardUserFolder" xml:space="preserve">
+    <value>“{0}” is a system profile folder: it can't be moved, renamed or deleted, but its contents can</value>
+  </data>
+  <data name="GuardWindowsTree" xml:space="preserve">
+    <value>“{0}” is in the Windows system folder, which Wander doesn't modify</value>
+  </data>
+  <data name="HolderWander" xml:space="preserve">
+    <value>Wander: {0}</value>
+  </data>
+  <data name="HolderThumbnail" xml:space="preserve">
+    <value>thumbnail</value>
+  </data>
+  <data name="HolderContentSearch" xml:space="preserve">
+    <value>content search</value>
+  </data>
+  <data name="WorkBadgeHint" xml:space="preserve">
+    <value>A Wander operation is working on this; details in the Preview pane</value>
+  </data>
+  <data name="PreviewWorkRunning" xml:space="preserve">
+    <value>In progress: {0}</value>
+  </data>
+  <data name="PreviewWorkQueued" xml:space="preserve">
+    <value>Queued: {0}</value>
+  </data>
+  <data name="ErrorRecycleUnavailable" xml:space="preserve">
+    <value>“{0}” can't go to the Recycle Bin: the path is longer than 259 characters or the drive has no Recycle Bin. Nothing was deleted; Shift+Delete deletes permanently</value>
+  </data>
+  <data name="DeleteInUseTitle" xml:space="preserve">
+    <value>File in use</value>
+  </data>
+  <data name="DeleteInUseOne" xml:space="preserve">
+    <value>Couldn't delete “{0}”: {1}.&#xA;&#xA;Close it there and click “Retry”.</value>
+  </data>
+  <data name="DeleteInUseMany" xml:space="preserve">
+    <value>Couldn't delete {0}: they're in use. For example, “{1}”: {2}.&#xA;&#xA;Close them there and click “Retry”.</value>
+  </data>
+  <data name="RecycleUnavailableTitle" xml:space="preserve">
+    <value>Can't move to the Recycle Bin</value>
+  </data>
+  <data name="RecycleUnavailableIntro" xml:space="preserve">
+    <value>The Recycle Bin won't accept these, so they weren't deleted:</value>
+  </data>
+  <data name="RecycleUnavailableItem" xml:space="preserve">
+    <value>• {0} — {1}</value>
+  </data>
+  <data name="RecycleUnavailableTooLong" xml:space="preserve">
+    <value>Reason: the path of the item, or of a file inside the folder, is longer than 259 characters.</value>
+  </data>
+  <data name="RecycleUnavailableNoBin" xml:space="preserve">
+    <value>Reason: the drive has no Recycle Bin.</value>
+  </data>
+  <data name="RecycleUnavailableRestRecycled" xml:space="preserve">
+    <value>Others already in the Recycle Bin: {0}.</value>
+  </data>
+  <data name="RecycleUnavailableIrreversible" xml:space="preserve">
+    <value>Delete permanently? This can't be undone with Ctrl+Z or restored from the Recycle Bin.</value>
+  </data>
+  <data name="MenuCmdOpenSubmenu" xml:space="preserve">
+    <value>Open with</value>
+  </data>
+  <data name="MenuCmdFileSubmenu" xml:space="preserve">
+    <value>File</value>
+  </data>
+  <data name="MenuCmdOpen" xml:space="preserve">
+    <value>Open</value>
+  </data>
+  <data name="MenuCmdOpenWith" xml:space="preserve">
+    <value>Choose an app...</value>
+  </data>
+  <data name="MenuCmdOpenInTerminal" xml:space="preserve">
+    <value>Open in Terminal</value>
+  </data>
+  <data name="MenuCmdCut" xml:space="preserve">
+    <value>Cut</value>
+  </data>
+  <data name="MenuCmdCopy" xml:space="preserve">
+    <value>Copy</value>
+  </data>
+  <data name="MenuCmdPaste" xml:space="preserve">
+    <value>Paste</value>
+  </data>
+  <data name="MenuCmdCopyPath" xml:space="preserve">
+    <value>Copy path</value>
+  </data>
+  <data name="MenuCmdCopyName" xml:space="preserve">
+    <value>Copy name</value>
+  </data>
+  <data name="MenuCmdCreateShortcut" xml:space="preserve">
+    <value>Create shortcut</value>
+  </data>
+  <data name="MenuCmdRename" xml:space="preserve">
+    <value>Rename</value>
+  </data>
+  <data name="MenuCmdDelete" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="MenuCmdNewFolder" xml:space="preserve">
+    <value>Folder</value>
+  </data>
+  <data name="MenuCmdRestore" xml:space="preserve">
+    <value>Restore</value>
+  </data>
+  <data name="MenuCmdExtract" xml:space="preserve">
+    <value>Extract…</value>
+  </data>
+  <data name="MenuCmdExtractHere" xml:space="preserve">
+    <value>Extract here</value>
+  </data>
+  <data name="MenuCmdProperties" xml:space="preserve">
+    <value>Properties</value>
+  </data>
+  <data name="DropThis" xml:space="preserve">
+    <value>this</value>
+  </data>
+  <data name="DropOntoItself" xml:space="preserve">
+    <value>Can't move “{0}” into itself</value>
+  </data>
+  <data name="DropAlreadyThere" xml:space="preserve">
+    <value>“{0}” is already in “{1}”</value>
+  </data>
+  <data name="DropIntoOwnSubfolder" xml:space="preserve">
+    <value>Can't move “{0}” into its own subfolder “{1}”</value>
+  </data>
+  <data name="DropNotAllowed" xml:space="preserve">
+    <value>Can't drop here</value>
+  </data>
+  <data name="SettingsTitle" xml:space="preserve">
+    <value>Wander settings</value>
+  </data>
+  <data name="ActionApply" xml:space="preserve">
+    <value>Apply</value>
+  </data>
+  <data name="SettingsCategoryContextMenu" xml:space="preserve">
+    <value>Context menu</value>
+  </data>
+  <data name="SettingsCategoryDebug" xml:space="preserve">
+    <value>Debug and reset</value>
+  </data>
+  <data name="SettingsRestoreLastFolder" xml:space="preserve">
+    <value>Last folder</value>
+  </data>
+  <data name="SettingsRestoreLastFolderHint" xml:space="preserve">
+    <value>If the folder no longer exists, the nearest surviving folder above it opens; if it was on a disconnected drive (USB stick, network), the working folder opens.</value>
+  </data>
+  <data name="SettingsWorkFolder" xml:space="preserve">
+    <value>Working folder</value>
+  </data>
+  <data name="SettingsWorkFolderDefault" xml:space="preserve">
+    <value>{0} (system “Documents”)</value>
+  </data>
+  <data name="SettingsWorkFolderPick" xml:space="preserve">
+    <value>Choose a working folder</value>
+  </data>
+  <data name="SettingsWorkFolderReset" xml:space="preserve">
+    <value>Reset to system “Documents”</value>
+  </data>
+  <data name="SettingsShowHidden" xml:space="preserve">
+    <value>Hidden files and folders</value>
+  </data>
+  <data name="SettingsShowSystem" xml:space="preserve">
+    <value>Protected operating system files</value>
+  </data>
+  <data name="SettingsHideSystemRootFoldersHint" xml:space="preserve">
+    <value>$RECYCLE.BIN, System Volume Information, pagefile.sys and the like: the folders can't be opened anyway. Shown only together with hidden files.</value>
+  </data>
+  <data name="SettingsConfirmRecycle" xml:space="preserve">
+    <value>Ask before moving to the Recycle Bin</value>
+  </data>
+  <data name="SettingsConfirmRecycleHint" xml:space="preserve">
+    <value>Ctrl+Z restores from the Recycle Bin either way, and permanent deletion (Shift+Delete) always asks.</value>
+  </data>
+  <data name="SettingsIntegrateCompanions" xml:space="preserve">
+    <value>Show a file and its companions as one item</value>
+  </data>
+  <data name="SettingsLargeIconsGroup" xml:space="preserve">
+    <value>Icons</value>
+  </data>
+  <data name="SettingsCellWidth" xml:space="preserve">
+    <value>Cell width, px</value>
+  </data>
+  <data name="SettingsIconSize" xml:space="preserve">
+    <value>Icon size, px</value>
+  </data>
+  <data name="SettingsCellMargin" xml:space="preserve">
+    <value>Cell margin, px</value>
+  </data>
+  <data name="SettingsLabelFontSize" xml:space="preserve">
+    <value>Label font size, px</value>
+  </data>
+  <data name="SettingsThumbnailDiskCache" xml:space="preserve">
+    <value>Keep thumbnails between launches</value>
+  </data>
+  <data name="SettingsThumbnailDiskMb" xml:space="preserve">
+    <value>Max size, MB</value>
+  </data>
+  <data name="SettingsPictureMemory" xml:space="preserve">
+    <value>For images, MB</value>
+  </data>
+  <data name="SettingsPictureMemoryHint" xml:space="preserve">
+    <value>Thumbnails and Preview pane frames combined. 0 means a sixteenth of the computer's memory, {0} MB here.</value>
+  </data>
+  <data name="SettingsClearCache" xml:space="preserve">
+    <value>Clear cache</value>
+  </data>
+  <data name="SettingsCacheOff" xml:space="preserve">
+    <value>Disk cache is off.</value>
+  </data>
+  <data name="SettingsCacheUsage" xml:space="preserve">
+    <value>{0} used in {1}</value>
+  </data>
+  <data name="SettingsBookmarkDownloads" xml:space="preserve">
+    <value>Downloads</value>
+  </data>
+  <data name="SettingsBookmarkDocuments" xml:space="preserve">
+    <value>Documents</value>
+  </data>
+  <data name="SettingsBookmarkPictures" xml:space="preserve">
+    <value>Pictures</value>
+  </data>
+  <data name="SettingsBookmarkRecycleBin" xml:space="preserve">
+    <value>Recycle Bin</value>
+  </data>
+  <data name="SettingsBookmarksHint" xml:space="preserve">
+    <value>Standard folders come from the system: their names depend on the Windows language, and a folder may be on another drive. A folder that can't be found isn't shown.</value>
+  </data>
+  <data name="SettingsShellExtensions" xml:space="preserve">
+    <value>Show in the menu</value>
+  </data>
+  <data name="SettingsShellExtensionsGroup" xml:space="preserve">
+    <value>Items from other apps</value>
+  </data>
+  <data name="SettingsOwnItemsGroup" xml:space="preserve">
+    <value>Main items</value>
+  </data>
+  <data name="SettingsShowDebugMenu" xml:space="preserve">
+    <value>Show in the main menu</value>
+  </data>
+  <data name="SettingsLogGroup" xml:space="preserve">
+    <value>Session log</value>
+  </data>
+  <data name="SettingsLogActions" xml:space="preserve">
+    <value>Record keystrokes, clicks and selection</value>
+  </data>
+  <data name="SettingsLogActionsHint" xml:space="preserve">
+    <value>Every keystroke, click and selection change in the file list and the Folders pane becomes a line in the log, showing what was done before an error. The log grows faster.</value>
+  </data>
+  <data name="SettingsLogPaths" xml:space="preserve">
+    <value>Write real file paths</value>
+  </data>
+  <data name="SettingsLogPathsHint" xml:space="preserve">
+    <value>Within a session, a folder always gets the same mask. The first lines of a session, written before the settings are read, are always anonymized. Turn this on when the log is for your own use.</value>
+  </data>
+  <data name="SettingsResetGroup" xml:space="preserve">
+    <value>Reset settings</value>
+  </data>
+  <data name="SettingsResetAll" xml:space="preserve">
+    <value>Reset all settings…</value>
+  </data>
+  <data name="SettingsResetConfirm" xml:space="preserve">
+    <value>Reset all settings to their defaults?&#xA;&#xA;All context menu items will be turned back on, and icon sizes and special-folder bookmarks will return to their defaults. “Cancel” in the Settings window can still undo all of this.</value>
+  </data>
+  <data name="BookmarksHeader" xml:space="preserve">
+    <value>Bookmarks</value>
+  </data>
+  <data name="ComputerHeader" xml:space="preserve">
+    <value>Computer</value>
+  </data>
+  <data name="BookmarksToggleHint" xml:space="preserve">
+    <value>Collapse / expand bookmarks</value>
+  </data>
+  <data name="BookmarksAddHint" xml:space="preserve">
+    <value>Drag a folder here to bookmark it</value>
+  </data>
+  <data name="BookmarksRowMenuHint" xml:space="preserve">
+    <value>Bookmark actions</value>
+  </data>
+  <data name="BookmarksRemove" xml:space="preserve">
+    <value>Remove from bookmarks</value>
+  </data>
+  <data name="BookmarkDeleteTitle" xml:space="preserve">
+    <value>Bookmark or folder?</value>
+  </data>
+  <data name="BookmarkDeleteMessage" xml:space="preserve">
+    <value>Remove the bookmark “{0}” or delete the folder itself?&#xA;&#xA;{1}</value>
+  </data>
+  <data name="BookmarkDeleteRemove" xml:space="preserve">
+    <value>Remove bookmark</value>
+  </data>
+  <data name="BookmarkDeleteFolder" xml:space="preserve">
+    <value>Move folder to the Recycle Bin</value>
+  </data>
+  <data name="BookmarkDeleteFolderForever" xml:space="preserve">
+    <value>Delete folder permanently</value>
+  </data>
+  <data name="BookmarkSwitchedOff" xml:space="preserve">
+    <value>Bookmark “{0}” removed from the pane. To bring it back: Settings → Folders and bookmarks</value>
+  </data>
+  <data name="BookmarksMoveUp" xml:space="preserve">
+    <value>Move up</value>
+  </data>
+  <data name="BookmarksMoveDown" xml:space="preserve">
+    <value>Move down</value>
+  </data>
+  <data name="BookmarksLocate" xml:space="preserve">
+    <value>Locate…</value>
+  </data>
+  <data name="BookmarksLocateTitle" xml:space="preserve">
+    <value>Where is this folder now?</value>
+  </data>
+  <data name="MissingFolderTitle" xml:space="preserve">
+    <value>This folder was deleted or is unavailable</value>
+  </data>
+  <data name="BookmarksFoldersOnly" xml:space="preserve">
+    <value>Only folders can be dragged to Bookmarks.</value>
+  </data>
+  <data name="SpecialFolderDownloads" xml:space="preserve">
+    <value>Downloads</value>
+  </data>
+  <data name="SpecialFolderDocuments" xml:space="preserve">
+    <value>Documents</value>
+  </data>
+  <data name="SpecialFolderPictures" xml:space="preserve">
+    <value>Pictures</value>
+  </data>
+  <data name="SpecialFolderRecycleBin" xml:space="preserve">
+    <value>Recycle Bin</value>
+  </data>
+  <data name="ProgressCopying" xml:space="preserve">
+    <value>Copying</value>
+  </data>
+  <data name="ProgressMoving" xml:space="preserve">
+    <value>Moving</value>
+  </data>
+  <data name="ProgressDeleting" xml:space="preserve">
+    <value>Deleting</value>
+  </data>
+  <data name="ProgressRecycling" xml:space="preserve">
+    <value>Moving to the Recycle Bin</value>
+  </data>
+  <data name="ProgressCancelling" xml:space="preserve">
+    <value>Canceling…</value>
+  </data>
+  <data name="PreviewVideoUnavailable" xml:space="preserve">
+    <value>Playback unavailable</value>
+  </data>
+  <data name="DragOneItem" xml:space="preserve">
+    <value>“{0}”</value>
+  </data>
+  <data name="PreviewPlayPause" xml:space="preserve">
+    <value>Play / pause (Space)</value>
+  </data>
+  <data name="PreviewRepeat" xml:space="preserve">
+    <value>Repeat. Turns on by itself for clips under three seconds</value>
+  </data>
+  <data name="PreviewVolume" xml:space="preserve">
+    <value>Volume, shared by all files</value>
+  </data>
+  <data name="StatusClipboardVirtualFiles" xml:space="preserve">
+    <value>The clipboard holds a file that isn't on disk (an email attachment, a file inside an archive); Wander can't paste it</value>
+  </data>
+  <data name="StatusClipboardNotShared" xml:space="preserve">
+    <value>Copied within Wander: the system clipboard is in use by another app</value>
+  </data>
+  <data name="StatusSelection" xml:space="preserve">
+    <value>Selected: {0} · {1}</value>
+  </data>
+  <data name="StatusSelectionFolders" xml:space="preserve">
+    <value> · folders: {0} (size not counted)</value>
+  </data>
+  <data name="SettingsAutoRefresh" xml:space="preserve">
+    <value>Show right away</value>
+  </data>
+  <data name="SettingsAutoRefreshHint" xml:space="preserve">
+    <value>Off: only on F5.</value>
+  </data>
+  <data name="SettingsVisibleFirstLoading" xml:space="preserve">
+    <value>What's on screen first</value>
+  </data>
+  <data name="SettingsVisibleFirstLoadingHint" xml:space="preserve">
+    <value>Icons and thumbnails of what's on screen load before everything else: Details rows beyond the window edge and tree folders out of view wait their turn. How long the first screen took to draw is in the session log.</value>
+  </data>
+  <data name="SettingsDetailsGroup" xml:space="preserve">
+    <value>Details</value>
+  </data>
+  <data name="SettingsTilesGroup" xml:space="preserve">
+    <value>Tiles</value>
+  </data>
+  <data name="SettingsRowHeight" xml:space="preserve">
+    <value>Row height, px</value>
+  </data>
+  <data name="SettingsTileWidth" xml:space="preserve">
+    <value>Tile width, px</value>
+  </data>
+  <data name="StatusViewSize" xml:space="preserve">
+    <value>{0}: {1} px · Ctrl + wheel click resets to {2} px</value>
+  </data>
+  <data name="StatusViewSizeDefault" xml:space="preserve">
+    <value>{0}: {1} px (default)</value>
+  </data>
+  <data name="PreviewBookTruncated" xml:space="preserve">
+    <value>Showing the beginning of the book; the rest wasn't processed</value>
+  </data>
+  <data name="PreviewLinkTarget" xml:space="preserve">
+    <value>Shortcut to:</value>
+  </data>
+  <data name="PreviewGoToTarget" xml:space="preserve">
+    <value>Go to target</value>
+  </data>
+  <data name="PreviewGoToTargetHint" xml:space="preserve">
+    <value>Open the target's folder and select it</value>
+  </data>
+  <data name="PreviewLinkBroken" xml:space="preserve">
+    <value>Target not found: the shortcut leads nowhere</value>
+  </data>
+  <data name="PreviewVolumeUsage" xml:space="preserve">
+    <value>{0} of {1} used</value>
+  </data>
+  <data name="PreviewVolumeFree" xml:space="preserve">
+    <value>{0} free</value>
+  </data>
+  <data name="PreviewVolumeNotReady" xml:space="preserve">
+    <value>Device not ready</value>
+  </data>
+  <data name="VolumeKindFixed" xml:space="preserve">
+    <value>Local drive</value>
+  </data>
+  <data name="VolumeKindRemovable" xml:space="preserve">
+    <value>Removable drive</value>
+  </data>
+  <data name="VolumeKindNetwork" xml:space="preserve">
+    <value>Network drive</value>
+  </data>
+  <data name="VolumeKindOptical" xml:space="preserve">
+    <value>Optical drive</value>
+  </data>
+  <data name="VolumeKindRam" xml:space="preserve">
+    <value>RAM disk</value>
+  </data>
+  <data name="VolumeKindUnknown" xml:space="preserve">
+    <value>Drive</value>
+  </data>
+  <data name="MenuViewGallery" xml:space="preserve">
+    <value>Gallery</value>
+  </data>
+  <data name="MenuSortRating" xml:space="preserve">
+    <value>Rating</value>
+  </data>
+  <data name="ColumnRating" xml:space="preserve">
+    <value>Rating</value>
+  </data>
+  <data name="GalleryBackgroundLight" xml:space="preserve">
+    <value>Light</value>
+  </data>
+  <data name="GalleryBackgroundGrey" xml:space="preserve">
+    <value>Gray</value>
+  </data>
+  <data name="GalleryBackgroundDark" xml:space="preserve">
+    <value>Dark</value>
+  </data>
+  <data name="FilterColorHint" xml:space="preserve">
+    <value>Show only photos with this color label. Click again to clear the filter.</value>
+  </data>
+  <data name="FilterClear" xml:space="preserve">
+    <value>Clear filter</value>
+  </data>
+  <data name="StatusRatingFilterMatches" xml:space="preserve">
+    <value>{0} of {1} match the rating filter</value>
+  </data>
+  <data name="ConfirmCreateSidecarTitle" xml:space="preserve">
+    <value>Create a rating file?</value>
+  </data>
+  <data name="ConfirmCreateSidecar" xml:space="preserve">
+    <value>Photo “{1}” has no rating file. “{0}” will be created next to it to store the rating.&#xA;&#xA;You can undo the creation with Ctrl+Z.</value>
+  </data>
+  <data name="ConfirmCreateSidecarPp3Warning" xml:space="preserve">
+    <value>Note: RawTherapee applies its default profile (Auto-Matched Curve) only to photos without a .pp3. Once a .pp3 appears, RawTherapee will open the photo with neutral values instead of the auto-matched ones. You can change the format in Settings, on the “Ratings” page.</value>
+  </data>
+  <data name="PreviewRatingUnsaved" xml:space="preserve">
+    <value>No rating yet. Clicking a star creates a file next to the photo, after confirmation.</value>
+  </data>
+  <data name="PreviewRatingInPhoto" xml:space="preserve">
+    <value>This rating comes from the photo itself, set by the camera. Clicking a star creates a file next to it with the new rating, after confirmation; the photo isn't changed.</value>
+  </data>
+  <data name="SettingsCategoryGallery" xml:space="preserve">
+    <value>Gallery</value>
+  </data>
+  <data name="SettingsGalleryGroup" xml:space="preserve">
+    <value>Gallery</value>
+  </data>
+  <data name="SettingsGalleryBackground" xml:space="preserve">
+    <value>Background</value>
+  </data>
+  <data name="SettingsAutoGallery" xml:space="preserve">
+    <value>Use Gallery when photos in a folder exceed</value>
+  </data>
+  <data name="SettingsPhotoFoldersGroup" xml:space="preserve">
+    <value>Photo folders</value>
+  </data>
+  <data name="SettingsAutoGalleryUnit" xml:space="preserve">
+    <value>%</value>
+  </data>
+  <data name="SettingsRawRatingFormat" xml:space="preserve">
+    <value>Rating file for a photo without a companion</value>
+  </data>
+  <data name="SettingsRawRatingFormatXmp" xml:space="preserve">
+    <value>.xmp — Adobe, darktable, RawTherapee 5.11+</value>
+  </data>
+  <data name="SettingsRawRatingFormatPp3" xml:space="preserve">
+    <value>.pp3 — RawTherapee</value>
+  </data>
+  <data name="SettingsRawRatingFormatHint" xml:space="preserve">
+    <value>.xmp affects nothing but the rating. .pp3 is a RawTherapee settings file: once it appears, the photo no longer gets the default processing profile.</value>
+  </data>
+  <data name="StatusSearching" xml:space="preserve">
+    <value>Searching: {0:N0} found, {1:N0} scanned</value>
+  </data>
+  <data name="StatusSearchFound" xml:space="preserve">
+    <value>Found {0:N0} for {1} (files scanned: {2:N0})</value>
+  </data>
+  <data name="StatusSearchNothing" xml:space="preserve">
+    <value>Nothing found for {0}</value>
+  </data>
+  <data name="StatusSearchStopped" xml:space="preserve">
+    <value>Search stopped, found: {0:N0}</value>
+  </data>
+  <data name="StatusSearchTruncated" xml:space="preserve">
+    <value> — showing the first {0:N0}</value>
+  </data>
+  <data name="StatusSearchUnreadable" xml:space="preserve">
+    <value> — couldn't read files: {0}</value>
+  </data>
+  <data name="SearchOptions" xml:space="preserve">
+    <value>Search window (Ctrl+Shift+F)</value>
+  </data>
+  <data name="SearchScopeSubfolders" xml:space="preserve">
+    <value>Search subfolders</value>
+  </data>
+  <data name="SearchStop" xml:space="preserve">
+    <value>Stop search</value>
+  </data>
+  <data name="SearchClear" xml:space="preserve">
+    <value>Clear search</value>
+  </data>
+  <data name="ColumnFolder" xml:space="preserve">
+    <value>Folder</value>
+  </data>
+  <data name="ColumnMatch" xml:space="preserve">
+    <value>Match</value>
+  </data>
+  <data name="ConfirmCreateSidecarMany" xml:space="preserve">
+    <value>{0} photos have no rating file. A “{1}” file will be created next to each one to store the rating.&#xA;&#xA;You can undo the creation with Ctrl+Z, one press for the whole batch.</value>
+  </data>
+  <data name="SettingsGalleryGreyLevel" xml:space="preserve">
+    <value>Gray brightness, 0–255</value>
+  </data>
+  <data name="SettingsGalleryDarkLevel" xml:space="preserve">
+    <value>Dark brightness, 0–255</value>
+  </data>
+  <data name="SettingsZoomSpotGroup" xml:space="preserve">
+    <value>Z loupe while the pointer is hidden</value>
+  </data>
+  <data name="SettingsZoomSpotSharp" xml:space="preserve">
+    <value>On the sharpest spot of the photo</value>
+  </data>
+  <data name="SettingsZoomSpotAf" xml:space="preserve">
+    <value>On the camera's focus point</value>
+  </data>
+  <data name="StatusRatingApplied" xml:space="preserve">
+    <value>Rating {0}, files: {1}</value>
+  </data>
+  <data name="StatusRatingCleared" xml:space="preserve">
+    <value>Rating cleared, files: {0}</value>
+  </data>
+  <data name="StatusRatingNotWritten" xml:space="preserve">
+    <value>Not saved to companion: {0}{1}</value>
+  </data>
+  <data name="StatusRatingNotWrittenMany" xml:space="preserve">
+    <value>Not saved to companions, files: {0}{1}</value>
+  </data>
+  <data name="ErrorNoWriteAccess" xml:space="preserve">
+    <value>no write access</value>
+  </data>
+  <data name="FilterRatingHint" xml:space="preserve">
+    <value>Show photos with this rating and higher. With Ctrl, add or remove a single rating. Click again to clear the filter.</value>
+  </data>
+  <data name="FilterUnratedHint" xml:space="preserve">
+    <value>Show unrated photos. With Ctrl, add them to the ratings already selected.</value>
+  </data>
+  <data name="SearchDescriptionBoth" xml:space="preserve">
+    <value>“{0}” containing “{1}”</value>
+  </data>
+  <data name="SearchDescriptionText" xml:space="preserve">
+    <value>text “{0}”</value>
+  </data>
+  <data name="SearchDescriptionName" xml:space="preserve">
+    <value>“{0}”</value>
+  </data>
+  <data name="SearchWindowTitle" xml:space="preserve">
+    <value>Search</value>
+  </data>
+  <data name="SearchFieldName" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="SearchFieldNameHint" xml:space="preserve">
+    <value>Part of a name, or a mask with * and ?: *.cs;*.xaml. Empty means any name</value>
+  </data>
+  <data name="SearchFieldText" xml:space="preserve">
+    <value>Text</value>
+  </data>
+  <data name="SearchFieldTextHint" xml:space="preserve">
+    <value>Text inside files. Empty: search by name only; both fields filled: both must match</value>
+  </data>
+  <data name="SearchBinaries" xml:space="preserve">
+    <value>Also search binary files</value>
+  </data>
+  <data name="SearchBinariesHint" xml:space="preserve">
+    <value>Byte-by-byte search in files that aren't text (exe, dll, resources). Latin letters and digits only: a binary file has nothing to decode, and guessing the encoding would be misleading</value>
+  </data>
+  <data name="SearchRun" xml:space="preserve">
+    <value>Search</value>
+  </data>
+  <data name="SearchFieldFolder" xml:space="preserve">
+    <value>Folder</value>
+  </data>
+  <data name="MenuAbout" xml:space="preserve">
+    <value>About Wander</value>
+  </data>
+  <data name="MenuHelp" xml:space="preserve">
+    <value>Help</value>
+  </data>
+  <data name="MenuHelpHint" xml:space="preserve">
+    <value>Opens the guide in your browser: what Wander can do and its keyboard shortcuts</value>
+  </data>
+  <data name="MenuVersion" xml:space="preserve">
+    <value>Version {0}</value>
+  </data>
+  <data name="MenuCmdNewSubmenu" xml:space="preserve">
+    <value>New</value>
+  </data>
+  <data name="PreviewClipped" xml:space="preserve">
+    <value>… showing the start of the file, {0} in total</value>
+  </data>
+  <data name="PreviewAudioBitrate" xml:space="preserve">
+    <value>{0} kbps</value>
+  </data>
+  <data name="PreviewAudioSampleRate" xml:space="preserve">
+    <value>{0:0.#} kHz</value>
+  </data>
+  <data name="PreviewAudioMono" xml:space="preserve">
+    <value>mono</value>
+  </data>
+  <data name="PreviewAudioStereo" xml:space="preserve">
+    <value>stereo</value>
+  </data>
+  <data name="PreviewModelDetail" xml:space="preserve">
+    <value>Triangles: {0:N0} · Vertices: {1:N0}</value>
+  </data>
+  <data name="PreviewExeVersion" xml:space="preserve">
+    <value>Version</value>
+  </data>
+  <data name="PreviewExeProduct" xml:space="preserve">
+    <value>Product</value>
+  </data>
+  <data name="PreviewExeCompany" xml:space="preserve">
+    <value>Publisher</value>
+  </data>
+  <data name="PreviewExeCopyright" xml:space="preserve">
+    <value>Copyright</value>
+  </data>
+  <data name="PreviewExePlatform" xml:space="preserve">
+    <value>Platform</value>
+  </data>
+  <data name="PreviewExeSignature" xml:space="preserve">
+    <value>Signature</value>
+  </data>
+  <data name="PreviewExeWindowsApp" xml:space="preserve">
+    <value>GUI program</value>
+  </data>
+  <data name="PreviewExeConsoleApp" xml:space="preserve">
+    <value>console program</value>
+  </data>
+  <data name="PreviewExeNative" xml:space="preserve">
+    <value>driver or system module</value>
+  </data>
+  <data name="PreviewExeEfi" xml:space="preserve">
+    <value>EFI module</value>
+  </data>
+  <data name="PreviewExeLibrary" xml:space="preserve">
+    <value>library</value>
+  </data>
+  <data name="PreviewExeSignedBy" xml:space="preserve">
+    <value>valid, signed by {0}</value>
+  </data>
+  <data name="PreviewExeSigned" xml:space="preserve">
+    <value>valid</value>
+  </data>
+  <data name="PreviewExeSignatureChecking" xml:space="preserve">
+    <value>checking…</value>
+  </data>
+  <data name="PreviewExeSignatureNotChecked" xml:space="preserve">
+    <value>not checked ({0})</value>
+  </data>
+  <data name="PreviewExeCheckSignature" xml:space="preserve">
+    <value>Check</value>
+  </data>
+  <data name="PreviewExeCheckSignatureHint" xml:space="preserve">
+    <value>Checking the signature reads the whole file: tens of seconds for a large one, and once started it can't be stopped</value>
+  </data>
+  <data name="PreviewExeSignatureInvalid" xml:space="preserve">
+    <value>can't be verified: the file was changed after signing, or the certificate isn't trusted</value>
+  </data>
+  <data name="PreviewExeUnsigned" xml:space="preserve">
+    <value>no embedded signature</value>
+  </data>
+  <data name="PreviewDocumentTextNote" xml:space="preserve">
+    <value>Text only; formatting isn't shown</value>
+  </data>
+  <data name="PreviewFindCount" xml:space="preserve">
+    <value>{0} of {1}</value>
+  </data>
+  <data name="PreviewFindNone" xml:space="preserve">
+    <value>Not found</value>
+  </data>
+  <data name="PreviewFindBeyond" xml:space="preserve">
+    <value>{0} more later in the file; open it to see them</value>
+  </data>
+  <data name="PreviewFindPrevious" xml:space="preserve">
+    <value>Previous (Shift+Enter)</value>
+  </data>
+  <data name="PreviewFindNext" xml:space="preserve">
+    <value>Next (Enter)</value>
+  </data>
+  <data name="PreviewFindClose" xml:space="preserve">
+    <value>Close (Esc)</value>
+  </data>
+  <data name="PreviewFindBox" xml:space="preserve">
+    <value>Find in text</value>
+  </data>
+  <data name="CompareTitle" xml:space="preserve">
+    <value>Compare — {0}</value>
+  </data>
+  <data name="CompareOverlay" xml:space="preserve">
+    <value>Overlay: both images in the same place, Space switches between them</value>
+  </data>
+  <data name="CompareSwitch" xml:space="preserve">
+    <value>Show the other one (Space)</value>
+  </data>
+  <data name="CompareOpen" xml:space="preserve">
+    <value>Compare: two files side by side, texts scroll together</value>
+  </data>
+  <data name="CompareTitlePair" xml:space="preserve">
+    <value>Compare — {0} ↔ {1}</value>
+  </data>
+  <data name="CompareSideA" xml:space="preserve">
+    <value>A: {0}</value>
+  </data>
+  <data name="CompareSideB" xml:space="preserve">
+    <value>B: {0}</value>
+  </data>
+  <data name="HotkeyGroupNavigation" xml:space="preserve">
+    <value>Navigation</value>
+  </data>
+  <data name="HotkeyBack" xml:space="preserve">
+    <value>Back</value>
+  </data>
+  <data name="HotkeyForward" xml:space="preserve">
+    <value>Forward</value>
+  </data>
+  <data name="HotkeyUp" xml:space="preserve">
+    <value>Up one level</value>
+  </data>
+  <data name="HotkeyUpBackspace" xml:space="preserve">
+    <value>Up one level</value>
+  </data>
+  <data name="HotkeyOpen" xml:space="preserve">
+    <value>Open the selection: enter a folder, open a file in its default app</value>
+  </data>
+  <data name="HotkeyAddressBar" xml:space="preserve">
+    <value>Edit the path in the address bar, with all the text selected</value>
+  </data>
+  <data name="HotkeyRecent" xml:space="preserve">
+    <value>Recently visited folders</value>
+  </data>
+  <data name="HotkeyAddressGo" xml:space="preserve">
+    <value>Go to the typed path</value>
+  </data>
+  <data name="HotkeyAddressCancel" xml:space="preserve">
+    <value>Cancel editing and return the keyboard to the files</value>
+  </data>
+  <data name="HotkeyRefresh" xml:space="preserve">
+    <value>Refresh the folder contents</value>
+  </data>
+  <data name="HotkeyGroupPanes" xml:space="preserve">
+    <value>Moving around the window</value>
+  </data>
+  <data name="HotkeyNextPane" xml:space="preserve">
+    <value>Next / previous window area</value>
+  </data>
+  <data name="HotkeyToList" xml:space="preserve">
+    <value>To the files</value>
+  </data>
+  <data name="HotkeyToPreview" xml:space="preserve">
+    <value>To the Preview pane: text, document, player; press again for the other half of a pair</value>
+  </data>
+  <data name="HotkeyPreviewEscape" xml:space="preserve">
+    <value>Return the keyboard to the files</value>
+  </data>
+  <data name="HotkeyToTree" xml:space="preserve">
+    <value>To the current folder tree, at the open folder. Press again for the other tree (Bookmarks ↔ Computer)</value>
+  </data>
+  <data name="HotkeyRevealInTree" xml:space="preserve">
+    <value>Show the current folder in the tree and move to it</value>
+  </data>
+  <data name="HotkeyTogglePreview" xml:space="preserve">
+    <value>Show or hide the Preview pane</value>
+  </data>
+  <data name="HotkeyTreeExpand" xml:space="preserve">
+    <value>Collapse or expand a branch</value>
+  </data>
+  <data name="HotkeyTreeEnter" xml:space="preserve">
+    <value>Open the folder under the cursor</value>
+  </data>
+  <data name="HotkeyTreeEscape" xml:space="preserve">
+    <value>Return the keyboard to the files</value>
+  </data>
+  <data name="HotkeyTreeRename" xml:space="preserve">
+    <value>Rename the folder under the cursor</value>
+  </data>
+  <data name="HotkeyGroupFileOps" xml:space="preserve">
+    <value>File operations</value>
+  </data>
+  <data name="HotkeyCopy" xml:space="preserve">
+    <value>Copy</value>
+  </data>
+  <data name="HotkeyCopyPath" xml:space="preserve">
+    <value>Copy the full path to the clipboard</value>
+  </data>
+  <data name="HotkeyCut" xml:space="preserve">
+    <value>Cut</value>
+  </data>
+  <data name="HotkeyPaste" xml:space="preserve">
+    <value>Paste</value>
+  </data>
+  <data name="HotkeyDelete" xml:space="preserve">
+    <value>Move to the Recycle Bin</value>
+  </data>
+  <data name="HotkeyDeleteForever" xml:space="preserve">
+    <value>Delete permanently: always asks, can't be undone</value>
+  </data>
+  <data name="HotkeyRename" xml:space="preserve">
+    <value>Rename in place (Enter applies, Esc cancels); two or more: batch rename in its own window</value>
+  </data>
+  <data name="HotkeyNewFolder" xml:space="preserve">
+    <value>New folder</value>
+  </data>
+  <data name="HotkeyUndo" xml:space="preserve">
+    <value>Undo the last operation</value>
+  </data>
+  <data name="HotkeyGroupSearch" xml:space="preserve">
+    <value>Selection and search</value>
+  </data>
+  <data name="HotkeySelectAll" xml:space="preserve">
+    <value>Select all</value>
+  </data>
+  <data name="HotkeyFilter" xml:space="preserve">
+    <value>Search box above the files</value>
+  </data>
+  <data name="HotkeyFindNext" xml:space="preserve">
+    <value>Next / previous match in the Preview pane; after the last one, the next found file</value>
+  </data>
+  <data name="HotkeySearchWindow" xml:space="preserve">
+    <value>Open the Search window</value>
+  </data>
+  <data name="HotkeySearchNow" xml:space="preserve">
+    <value>Search now, without waiting for a pause or a minimum number of characters</value>
+  </data>
+  <data name="HotkeySearchClose" xml:space="preserve">
+    <value>Close the window and return the keyboard to the files</value>
+  </data>
+  <data name="HotkeyFilterEscape" xml:space="preserve">
+    <value>In one press: stop and clear the search, return the keyboard to the files</value>
+  </data>
+  <data name="HotkeySearchRepeat" xml:space="preserve">
+    <value>Repeat the search</value>
+  </data>
+  <data name="HotkeyClearSelection" xml:space="preserve">
+    <value>Clear the selection</value>
+  </data>
+  <data name="HotkeyTypeAhead" xml:space="preserve">
+    <value>Jump to the file whose name starts with the typed letters. A one-second pause starts over; repeating the same letter cycles through the files starting with it</value>
+  </data>
+  <data name="HotkeyGridArrows" xml:space="preserve">
+    <value>Normal movement plus wrapping at row edges: → at the right end goes to the next row, ← at the left end to the previous one, ↑ in the top row to the first file, ↓ in the bottom row to the last. With Shift, the selection extends</value>
+  </data>
+  <data name="HotkeyProperties" xml:space="preserve">
+    <value>Properties of the selection</value>
+  </data>
+  <data name="HotkeyGroupView" xml:space="preserve">
+    <value>View</value>
+  </data>
+  <data name="HotkeyViewGallery" xml:space="preserve">
+    <value>Gallery</value>
+  </data>
+  <data name="HotkeyRateInGallery" xml:space="preserve">
+    <value>Rate the selected files; 0 clears the rating</value>
+  </data>
+  <data name="HotkeyViewLargeIcons" xml:space="preserve">
+    <value>Icons</value>
+  </data>
+  <data name="HotkeyViewDetails" xml:space="preserve">
+    <value>Details</value>
+  </data>
+  <data name="HotkeyViewTiles" xml:space="preserve">
+    <value>Tiles</value>
+  </data>
+  <data name="SettingsCategoryHotkeys" xml:space="preserve">
+    <value>Keyboard</value>
+  </data>
+  <data name="ScopeAllFiles" xml:space="preserve">
+    <value>all files</value>
+  </data>
+  <data name="ScopeAllObjects" xml:space="preserve">
+    <value>files and folders</value>
+  </data>
+  <data name="ScopeDirectory" xml:space="preserve">
+    <value>folders</value>
+  </data>
+  <data name="ScopeBackground" xml:space="preserve">
+    <value>folder background</value>
+  </data>
+  <data name="ScopeFolder" xml:space="preserve">
+    <value>folders and archives</value>
+  </data>
+  <data name="ScopeDrive" xml:space="preserve">
+    <value>drives</value>
+  </data>
+  <data name="ShellAppOs" xml:space="preserve">
+    <value>Windows</value>
+  </data>
+  <data name="SettingsColumnOn" xml:space="preserve">
+    <value>On</value>
+  </data>
+  <data name="SettingsShellColumnItem" xml:space="preserve">
+    <value>Item</value>
+  </data>
+  <data name="SettingsShellColumnApp" xml:space="preserve">
+    <value>Program</value>
+  </data>
+  <data name="SettingsShellColumnScopes" xml:space="preserve">
+    <value>Applies to</value>
+  </data>
+  <data name="SettingsShellAdd" xml:space="preserve">
+    <value>Add a program or file type…</value>
+  </data>
+  <data name="SettingsShellScopeUnknown" xml:space="preserve">
+    <value>—</value>
+  </data>
+  <data name="SettingsShellAppSection" xml:space="preserve">
+    <value>This program's whole section of the menu. What it puts inside is decided only when the menu opens; no one can know in advance.</value>
+  </data>
+  <data name="PickerTitle" xml:space="preserve">
+    <value>Add to the table</value>
+  </data>
+  <data name="PickerHint" xml:space="preserve">
+    <value>Pick a program to add every file type it registers for, or pick individual file types. The items found are added to the table, where you can hide them one by one.</value>
+  </data>
+  <data name="PickerByApp" xml:space="preserve">
+    <value>Program</value>
+  </data>
+  <data name="PickerByType" xml:space="preserve">
+    <value>File type</value>
+  </data>
+  <data name="PickerRecentNote" xml:space="preserve">
+    <value>recently used</value>
+  </data>
+  <data name="SpecialFolderDesktop" xml:space="preserve">
+    <value>Desktop</value>
+  </data>
+  <data name="SpecialFolderMusic" xml:space="preserve">
+    <value>Music</value>
+  </data>
+  <data name="SpecialFolderVideos" xml:space="preserve">
+    <value>Videos</value>
+  </data>
+  <data name="SettingsBookmarkDesktop" xml:space="preserve">
+    <value>Desktop</value>
+  </data>
+  <data name="SettingsBookmarkMusic" xml:space="preserve">
+    <value>Music</value>
+  </data>
+  <data name="SettingsBookmarkVideos" xml:space="preserve">
+    <value>Videos</value>
+  </data>
+  <data name="SettingsTreeKeyboardNavigates" xml:space="preserve">
+    <value>Open folders as you move to them with the keyboard</value>
+  </data>
+  <data name="SettingsTreeKeyboardNavigatesHint" xml:space="preserve">
+    <value>Arrow keys, PgUp, PgDn, Home, End. Like in File Explorer, except that a held key opens only one folder: the one where the cursor stops. Off: the keys move the cursor, and Enter opens.</value>
+  </data>
+  <data name="SettingsTreeScrollsSideways" xml:space="preserve">
+    <value>Scroll sideways to long names</value>
+  </data>
+  <data name="SettingsTreeScrollsSidewaysHint" xml:space="preserve">
+    <value>When a folder name is wider than the pane, the pane scrolls right to show it in full, and the triangles move past the left edge. Off: the pane scrolls only up and down; sideways with Shift + wheel.</value>
+  </data>
+  <data name="PanelShowHidden" xml:space="preserve">
+    <value>Show hidden files</value>
+  </data>
+  <data name="PanelShowSystem" xml:space="preserve">
+    <value>Show system files</value>
+  </data>
+  <data name="PanelTreeKeyboardNavigates" xml:space="preserve">
+    <value>Open folders as you move to them with the keyboard</value>
+  </data>
+  <data name="PanelTreeKeyboardNavigatesHint" xml:space="preserve">
+    <value>Like in File Explorer. Off: the keys only move the cursor, and Enter opens</value>
+  </data>
+  <data name="PanelConfirmRecycle" xml:space="preserve">
+    <value>Ask before moving to the Recycle Bin</value>
+  </data>
+  <data name="PanelConfirmRecycleHint" xml:space="preserve">
+    <value>Ctrl+Z restores from the Recycle Bin either way; Shift+Delete always asks</value>
+  </data>
+  <data name="PanelAutoRefresh" xml:space="preserve">
+    <value>Show changes from other programs right away</value>
+  </data>
+  <data name="SettingsOwnColumnGesture" xml:space="preserve">
+    <value>Shortcut</value>
+  </data>
+  <data name="SettingsShowSystemRootFolders" xml:space="preserve">
+    <value>System folders and files at drive roots</value>
+  </data>
+  <data name="SettingsShowGroup" xml:space="preserve">
+    <value>Show in the list</value>
+  </data>
+  <data name="SettingsPreviewName" xml:space="preserve">
+    <value>Document.txt</value>
+  </data>
+  <data name="SettingsPreviewName2" xml:space="preserve">
+    <value>Photo.jpg</value>
+  </data>
+  <data name="SettingsPreviewMeta" xml:space="preserve">
+    <value>14 KB · Text file</value>
+  </data>
+  <data name="SettingsShellReset" xml:space="preserve">
+    <value>Reset context menu settings…</value>
+  </data>
+  <data name="SettingsShellResetConfirm" xml:space="preserve">
+    <value>Reset context menu settings?&#xA;&#xA;All items, both other programs' and the main ones, will be turned back on; added programs and file types, and everything Wander has seen in the menu, will be forgotten. “Cancel” in the Settings window can still undo all of this.</value>
+  </data>
+  <data name="SettingsHotkeysSearch" xml:space="preserve">
+    <value>Search by shortcut or action</value>
+  </data>
+  <data name="SettingsHotkeysNoMatch" xml:space="preserve">
+    <value>Nothing found.</value>
+  </data>
+  <data name="SettingsConfirmMove" xml:space="preserve">
+    <value>Ask before moving</value>
+  </data>
+  <data name="SettingsConfirmMoveHint" xml:space="preserve">
+    <value>Moving by drag and drop, and pasting after Ctrl+X. Ctrl+Z puts the files back either way, and overwriting an existing file always asks.</value>
+  </data>
+  <data name="SettingsSkipIdentical" xml:space="preserve">
+    <value>Skip identical files without asking</value>
+  </data>
+  <data name="SettingsSkipIdenticalHint" xml:space="preserve">
+    <value>A file that is byte-for-byte identical to the one already there isn't copied or moved; in the conflict window, such a pair is already set to “keep existing”.</value>
+  </data>
+  <data name="SettingsDragHoverEntersFolders" xml:space="preserve">
+    <value>Open a folder when a dragged file hovers over it</value>
+  </data>
+  <data name="SettingsDragHoverEntersFoldersHint" xml:space="preserve">
+    <value>A folder in the list opens after a little over a second, so you can drop the file inside. Collapsed folders in the tree and bookmarks always expand this way.</value>
+  </data>
+  <data name="SettingsUseSystemTemp" xml:space="preserve">
+    <value>Keep in the system Temp folder</value>
+  </data>
+  <data name="SettingsUseSystemTempHint" xml:space="preserve">
+    <value>In portable mode, the data folder is “data” next to the exe. Copies older than a day are deleted at startup. On by default in portable mode. After a restart, the Preview pane's built-in browser moves its data there too.</value>
+  </data>
+  <data name="SettingsConfirmCreateSidecar" xml:space="preserve">
+    <value>Ask before creating a rating file</value>
+  </data>
+  <data name="SettingsConfirmCreateSidecarHint" xml:space="preserve">
+    <value>The first rating of a photo without a companion creates a file next to it. Uncheck this when culling a folder of RAW files, where the answer is the same every time. Ctrl+Z undoes the creation either way.</value>
+  </data>
+  <data name="StatusArchiveUnreadable" xml:space="preserve">
+    <value>Can't read archive “{0}”: it's damaged or unavailable</value>
+  </data>
+  <data name="StatusArchiveEmptyOrLocked" xml:space="preserve">
+    <value>“{0}”: empty or password-protected</value>
+  </data>
+  <data name="StatusArchiveCopied" xml:space="preserve">
+    <value>Copied from archive: {0}</value>
+  </data>
+  <data name="StatusArchiveTempCopy" xml:space="preserve">
+    <value>Opened a temporary copy of “{0}”; changes won't go back into the archive</value>
+  </data>
+  <data name="StatusArchiveLocked" xml:space="preserve">
+    <value>Can't extract: the archive is password-protected</value>
+  </data>
+  <data name="StatusExtractFailed" xml:space="preserve">
+    <value>Extraction failed: {0}</value>
+  </data>
+  <data name="VerbExtracted" xml:space="preserve">
+    <value>Extracted</value>
+  </data>
+  <data name="ProgressExtracting" xml:space="preserve">
+    <value>Extracting</value>
+  </data>
+  <data name="ExtractPickFolderTitle" xml:space="preserve">
+    <value>Extract to</value>
+  </data>
+  <data name="PreviewArchiveTooBig" xml:space="preserve">
+    <value>This file in the archive is over 32 MB; “Open” extracts it to a temporary copy</value>
+  </data>
+  <data name="SummaryInsideArchive" xml:space="preserve">
+    <value>In archive</value>
+  </data>
+  <data name="ActionMinimize" xml:space="preserve">
+    <value>Minimize</value>
+  </data>
+  <data name="ActionShow" xml:space="preserve">
+    <value>Show</value>
+  </data>
+  <data name="OperationItems" xml:space="preserve">
+    <value>Files: {0} of {1}</value>
+  </data>
+  <data name="OperationBytes" xml:space="preserve">
+    <value>{0} of {1}</value>
+  </data>
+  <data name="OperationSpeed" xml:space="preserve">
+    <value>{0}/s</value>
+  </data>
+  <data name="OperationRemaining" xml:space="preserve">
+    <value>~{0} left</value>
+  </data>
+  <data name="OperationPercent" xml:space="preserve">
+    <value>{0}%</value>
+  </data>
+  <data name="OperationOne" xml:space="preserve">
+    <value>{0}: {1}%</value>
+  </data>
+  <data name="OperationWeighing" xml:space="preserve">
+    <value>{0}: calculating…</value>
+  </data>
+  <data name="OperationMany" xml:space="preserve">
+    <value>Operations: {0} — {1}%</value>
+  </data>
+  <data name="DurationSeconds" xml:space="preserve">
+    <value>{0} s</value>
+  </data>
+  <data name="DurationMinutes" xml:space="preserve">
+    <value>{0} min {1} s</value>
+  </data>
+  <data name="DurationHours" xml:space="preserve">
+    <value>{0} h {1} min</value>
+  </data>
+  <data name="ConflictReplaceAll" xml:space="preserve">
+    <value>Replace all</value>
+  </data>
+  <data name="ConflictSkipAll" xml:space="preserve">
+    <value>Skip all</value>
+  </data>
+  <data name="ConflictReplaceAllHint" xml:space="preserve">
+    <value>Replaces all files, including ones already decided, and closes the window right away. Replaced files go to the Recycle Bin; Ctrl+Z brings everything back.</value>
+  </data>
+  <data name="ConflictSkipAllHint" xml:space="preserve">
+    <value>Copies or moves nothing and closes the window right away.</value>
+  </data>
+  <data name="MenuFoldersPane" xml:space="preserve">
+    <value>Folders pane</value>
+  </data>
+  <data name="NavToggleFolders" xml:space="preserve">
+    <value>Show or hide the Folders pane (Ctrl+B)</value>
+  </data>
+  <data name="HotkeyToggleFolders" xml:space="preserve">
+    <value>Show or hide the Folders pane (Bookmarks and Computer)</value>
+  </data>
+  <data name="HotkeyColorInGallery" xml:space="preserve">
+    <value>Color label for the selected files; the same one again or 0 clears it</value>
+  </data>
+  <data name="PreviewRatingOthers" xml:space="preserve">
+    <value>and {0} more</value>
+  </data>
+  <data name="PreviewRatingOthersHint" xml:space="preserve">
+    <value>Stars and the label apply to the whole selection: this file and {0} more. Digits and Shift+digits in the gallery do the same.</value>
+  </data>
+  <data name="StatusColorApplied" xml:space="preserve">
+    <value>Label set on files: {0}</value>
+  </data>
+  <data name="StatusColorCleared" xml:space="preserve">
+    <value>Label removed from files: {0}</value>
+  </data>
+  <data name="SummaryShots" xml:space="preserve">
+    <value>📷 {0}</value>
+  </data>
+  <data name="SummaryCameraMask" xml:space="preserve">
+    <value>Potato</value>
+  </data>
+  <data name="SummaryShotsSample" xml:space="preserve">
+    <value>EXIF from the first {0}</value>
+  </data>
+  <data name="TitleYielding" xml:space="preserve">
+    <value>{0} — settings aren't saved</value>
+  </data>
+  <data name="MenuCmdActionsSubmenu" xml:space="preserve">
+    <value>My actions</value>
+  </data>
+  <data name="MenuCmdConvertSubmenu" xml:space="preserve">
+    <value>Convert</value>
+  </data>
+  <data name="MenuCmdBatchRename" xml:space="preserve">
+    <value>Batch rename…</value>
+  </data>
+  <data name="MenuCmdRunAction" xml:space="preserve">
+    <value>Action</value>
+  </data>
+  <data name="MenuCmdNoActions" xml:space="preserve">
+    <value>No actions for these files</value>
+  </data>
+  <data name="MenuCmdConfigureActions" xml:space="preserve">
+    <value>Configure actions…</value>
+  </data>
+  <data name="MenuReasonToolMissing" xml:space="preserve">
+    <value>Requires {0} (Settings → Programs)</value>
+  </data>
+  <data name="MenuCaptionFolder" xml:space="preserve">
+    <value>Folder: {0}</value>
+  </data>
+  <data name="MenuCaptionSelection" xml:space="preserve">
+    <value>{0} item|{0} items</value>
+  </data>
+  <data name="MenuCaptionImages" xml:space="preserve">
+    <value>{0} image|{0} images</value>
+  </data>
+  <data name="MenuCaptionVideo" xml:space="preserve">
+    <value>{0} video|{0} videos</value>
+  </data>
+  <data name="MenuCaptionAudio" xml:space="preserve">
+    <value>{0} audio file|{0} audio files</value>
+  </data>
+  <data name="MenuCaptionTextAndCode" xml:space="preserve">
+    <value>{0} text file|{0} text files</value>
+  </data>
+  <data name="MenuCaptionDocuments" xml:space="preserve">
+    <value>{0} document|{0} documents</value>
+  </data>
+  <data name="MenuCaptionArchives" xml:space="preserve">
+    <value>{0} archive|{0} archives</value>
+  </data>
+  <data name="MenuCaptionFolders" xml:space="preserve">
+    <value>{0} folder|{0} folders</value>
+  </data>
+  <data name="MenuCaptionFiles" xml:space="preserve">
+    <value>{0} file|{0} files</value>
+  </data>
+  <data name="MenuCaptionRaw" xml:space="preserve">
+    <value>{0} RAW</value>
+  </data>
+  <data name="MenuCaptionExtension" xml:space="preserve">
+    <value>{0} {1}</value>
+  </data>
+  <data name="FileTypeAll" xml:space="preserve">
+    <value>all</value>
+  </data>
+  <data name="FileTypeImages" xml:space="preserve">
+    <value>images</value>
+  </data>
+  <data name="FileTypeVideo" xml:space="preserve">
+    <value>video</value>
+  </data>
+  <data name="FileTypeAudio" xml:space="preserve">
+    <value>audio</value>
+  </data>
+  <data name="FileTypeTextAndCode" xml:space="preserve">
+    <value>text and code</value>
+  </data>
+  <data name="FileTypeDocuments" xml:space="preserve">
+    <value>documents</value>
+  </data>
+  <data name="FileTypeArchives" xml:space="preserve">
+    <value>archives</value>
+  </data>
+  <data name="FileTypeFolders" xml:space="preserve">
+    <value>folders</value>
+  </data>
+  <data name="RenameErrorRegex" xml:space="preserve">
+    <value>Invalid regular expression</value>
+  </data>
+  <data name="RenameErrorDateFormat" xml:space="preserve">
+    <value>Invalid date format</value>
+  </data>
+  <data name="ActionsErrorPerFileWithList" xml:space="preserve">
+    <value>“Per file” mode can't use {paths} or {list}</value>
+  </data>
+  <data name="ActionsErrorGroupWithoutList" xml:space="preserve">
+    <value>“All in one command” mode needs {paths} or {list}</value>
+  </data>
+  <data name="ActionsErrorOutdir" xml:space="preserve">
+    <value>{outdir} needs “per file” mode and an output file: Wander picks up the file with that name from it</value>
+  </data>
+  <data name="ActionsOutdirMissing" xml:space="preserve">
+    <value>the program didn't save {0}; check the output file name</value>
+  </data>
+  <data name="ActionsErrorNoProgram" xml:space="preserve">
+    <value>No program selected</value>
+  </data>
+  <data name="ActionsErrorProgramNotFound" xml:space="preserve">
+    <value>Program not found</value>
+  </data>
+  <data name="MenuOperations" xml:space="preserve">
+    <value>Actions</value>
+  </data>
+  <data name="BatchRenameTitle" xml:space="preserve">
+    <value>Batch rename ({0})</value>
+  </data>
+  <data name="BatchRenameUseFind" xml:space="preserve">
+    <value>Find and replace</value>
+  </data>
+  <data name="BatchRenameFind" xml:space="preserve">
+    <value>Find</value>
+  </data>
+  <data name="BatchRenameReplace" xml:space="preserve">
+    <value>Replace</value>
+  </data>
+  <data name="BatchRenameIgnoreCase" xml:space="preserve">
+    <value>Ignore case</value>
+  </data>
+  <data name="BatchRenameRegex" xml:space="preserve">
+    <value>Regular expression</value>
+  </data>
+  <data name="BatchRenameRegexHint" xml:space="preserve">
+    <value>.NET syntax; in “Replace”, $1 is the first group in parentheses</value>
+  </data>
+  <data name="BatchRenameTemplate" xml:space="preserve">
+    <value>Template</value>
+  </data>
+  <data name="BatchRenameTemplateHint" xml:space="preserve">
+    <value>[N] name · [C] counter · [D] date modified · [D:yyyy-MM-dd] date in your own format · [X] date taken · [P] folder. Anything else stays as typed</value>
+  </data>
+  <data name="BatchRenameCounter" xml:space="preserve">
+    <value>Counter [C]</value>
+  </data>
+  <data name="BatchRenameCounterStart" xml:space="preserve">
+    <value>start</value>
+  </data>
+  <data name="BatchRenameCounterStep" xml:space="preserve">
+    <value>step</value>
+  </data>
+  <data name="BatchRenameCounterWidth" xml:space="preserve">
+    <value>digits</value>
+  </data>
+  <data name="BatchRenameNameCase" xml:space="preserve">
+    <value>Name case</value>
+  </data>
+  <data name="BatchRenameExtensionCase" xml:space="preserve">
+    <value>Extension case</value>
+  </data>
+  <data name="BatchRenameExtensionHint" xml:space="preserve">
+    <value>The template and replace don't change the extension, only its case</value>
+  </data>
+  <data name="BatchRenameCaseUnchanged" xml:space="preserve">
+    <value>as is</value>
+  </data>
+  <data name="BatchRenameCaseLower" xml:space="preserve">
+    <value>lowercase</value>
+  </data>
+  <data name="BatchRenameCaseUpper" xml:space="preserve">
+    <value>UPPERCASE</value>
+  </data>
+  <data name="BatchRenameCaseSentence" xml:space="preserve">
+    <value>Sentence case</value>
+  </data>
+  <data name="BatchRenameColumnOld" xml:space="preserve">
+    <value>Before</value>
+  </data>
+  <data name="BatchRenameColumnNew" xml:space="preserve">
+    <value>After</value>
+  </data>
+  <data name="BatchRenameColumnStatus" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="BatchRenameOrderNote" xml:space="preserve">
+    <value>Numbered in list order</value>
+  </data>
+  <data name="BatchRenameReadingShotDates" xml:space="preserve">
+    <value>Reading dates taken…</value>
+  </data>
+  <data name="RenameSummary" xml:space="preserve">
+    <value>{0} of {1} will change, conflicts: {2}</value>
+  </data>
+  <data name="RenameStatusUnchanged" xml:space="preserve">
+    <value>No change</value>
+  </data>
+  <data name="RenameStatusRenamed" xml:space="preserve">
+    <value>Will change</value>
+  </data>
+  <data name="RenameStatusInvalidName" xml:space="preserve">
+    <value>Invalid name</value>
+  </data>
+  <data name="RenameStatusDuplicateInBatch" xml:space="preserve">
+    <value>Duplicate in batch</value>
+  </data>
+  <data name="RenameStatusCollides" xml:space="preserve">
+    <value>Name already in use</value>
+  </data>
+  <data name="StatusBatchRenamed" xml:space="preserve">
+    <value>Renamed: {0}</value>
+  </data>
+  <data name="StatusBatchRenameMixed" xml:space="preserve">
+    <value>Batch rename works on files only or on folders only</value>
+  </data>
+  <data name="SettingsCategoryActions" xml:space="preserve">
+    <value>Actions</value>
+  </data>
+  <data name="SettingsActionsColumnTitle" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="SettingsActionsColumnTypes" xml:space="preserve">
+    <value>Applies to</value>
+  </data>
+  <data name="SettingsActionsColumnProgram" xml:space="preserve">
+    <value>Program</value>
+  </data>
+  <data name="SettingsActionsColumnArguments" xml:space="preserve">
+    <value>Arguments</value>
+  </data>
+  <data name="SettingsActionsColumnMode" xml:space="preserve">
+    <value>Mode</value>
+  </data>
+  <data name="SettingsActionsColumnPlacement" xml:space="preserve">
+    <value>Where</value>
+  </data>
+  <data name="SettingsActionsColumnSubmenu" xml:space="preserve">
+    <value>In submenu</value>
+  </data>
+  <data name="SettingsActionsShowConsole" xml:space="preserve">
+    <value>Show console</value>
+  </data>
+  <data name="SettingsActionsColumnOutput" xml:space="preserve">
+    <value>Output file</value>
+  </data>
+  <data name="SettingsActionsMaskHint" xml:space="preserve">
+    <value>A mask instead of a group, e.g. *.psd;*.ai. A non-empty mask overrides the group and never matches folders</value>
+  </data>
+  <data name="SettingsActionsPlaceholders" xml:space="preserve">
+    <value>Placeholders: {path} — the file, {name} — its name without extension, {ext} — extension, {dir} — the file's folder, {paths} — all selected, {list} — a temporary file listing the paths, {out} — output, {outdir} — an empty folder for a program that names its output itself (Wander picks up the file with the output name from it). Quotes are added automatically.</value>
+  </data>
+  <data name="SettingsActionsBuiltinSettings" xml:space="preserve">
+    <value>Settings separated by “;”: format=jpeg, png, bmp, tiff or gif — required; quality=1–100 — JPEG quality, default 90; maxside — long side, px; source=preview or preview-full — the JPEG the camera embedded in the RAW: small or the largest.</value>
+  </data>
+  <data name="SettingsActionsOutputHint" xml:space="preserve">
+    <value>Output name next to the source, e.g. {name}.mp4. A taken name gets “(1)”; Ctrl+Z moves the output to the Recycle Bin. Empty: no output declared, nothing to undo.</value>
+  </data>
+  <data name="ActionsModePerFile" xml:space="preserve">
+    <value>per file</value>
+  </data>
+  <data name="ActionsModeOnce" xml:space="preserve">
+    <value>all in one command</value>
+  </data>
+  <data name="ActionsPlacementBoth" xml:space="preserve">
+    <value>both menus</value>
+  </data>
+  <data name="ActionsPlacementContext" xml:space="preserve">
+    <value>context menu</value>
+  </data>
+  <data name="ActionsPlacementHeader" xml:space="preserve">
+    <value>header</value>
+  </data>
+  <data name="ActionsToolMissingHint" xml:space="preserve">
+    <value>{0} not found; set its path on the “Programs” page</value>
+  </data>
+  <data name="SettingsCategoryTools" xml:space="preserve">
+    <value>Programs</value>
+  </data>
+  <data name="ToolsPurposeFfmpeg" xml:space="preserve">
+    <value>video and audio, WebP</value>
+  </data>
+  <data name="ToolsPurposeLibreOffice" xml:space="preserve">
+    <value>documents to PDF</value>
+  </data>
+  <data name="ToolsPurposePandoc" xml:space="preserve">
+    <value>Markdown ↔ DOCX</value>
+  </data>
+  <data name="ToolsStatusFound" xml:space="preserve">
+    <value>Found on this PC</value>
+  </data>
+  <data name="ToolsStatusSpecified" xml:space="preserve">
+    <value>Set manually</value>
+  </data>
+  <data name="ToolsStatusMissing" xml:space="preserve">
+    <value>Not found</value>
+  </data>
+  <data name="ToolsStatusSpecifiedMissing" xml:space="preserve">
+    <value>No file at the specified path</value>
+  </data>
+  <data name="ToolsInstallHint" xml:space="preserve">
+    <value>Install: winget install {0}</value>
+  </data>
+  <data name="ToolsPointAt" xml:space="preserve">
+    <value>Browse…</value>
+  </data>
+  <data name="ToolsPointAtTitle" xml:space="preserve">
+    <value>Where is {0}?</value>
+  </data>
+  <data name="ToolsProgramFilter" xml:space="preserve">
+    <value>Programs (*.exe)|*.exe</value>
+  </data>
+  <data name="ActionsProgramFilter" xml:space="preserve">
+    <value>Programs (*.exe, *.cmd, *.bat)|*.exe;*.cmd;*.bat</value>
+  </data>
+  <data name="ToolsReset" xml:space="preserve">
+    <value>Reset</value>
+  </data>
+  <data name="ToolsResetHint" xml:space="preserve">
+    <value>Forget the chosen file and find the program automatically again</value>
+  </data>
+  <data name="ActionsErrorImageNoFormat" xml:space="preserve">
+    <value>The built-in encoder needs format=jpeg, png, bmp, tiff or gif</value>
+  </data>
+  <data name="ActionsErrorImageFormat" xml:space="preserve">
+    <value>The built-in encoder can't write “{0}”</value>
+  </data>
+  <data name="ActionsErrorImageSource" xml:space="preserve">
+    <value>The built-in encoder can't read from “{0}”</value>
+  </data>
+  <data name="ActionsBuiltinImageConvert" xml:space="preserve">
+    <value>Built-in image encoder</value>
+  </data>
+  <data name="ImageConvertNoPreview" xml:space="preserve">
+    <value>The file has no embedded preview Wander can extract</value>
+  </data>
+  <data name="ImageConvertNoDecoder" xml:space="preserve">
+    <value>No decoder for this format, and no embedded preview found</value>
+  </data>
+  <data name="ActionPresetRawPreview" xml:space="preserve">
+    <value>Small preview from RAW (JPEG)</value>
+  </data>
+  <data name="ActionPresetRawPreviewFull" xml:space="preserve">
+    <value>Large preview from RAW (JPEG)</value>
+  </data>
+  <data name="ActionsAdd" xml:space="preserve">
+    <value>Add</value>
+  </data>
+  <data name="ActionsCopy" xml:space="preserve">
+    <value>Duplicate</value>
+  </data>
+  <data name="ActionsPickProgram" xml:space="preserve">
+    <value>Choose program file</value>
+  </data>
+  <data name="ActionsRemove" xml:space="preserve">
+    <value>Remove</value>
+  </data>
+  <data name="ActionsRemoveHint" xml:space="preserve">
+    <value>A built-in action can't be removed; turn it off with the checkbox</value>
+  </data>
+  <data name="ActionsNewTitle" xml:space="preserve">
+    <value>New action</value>
+  </data>
+  <data name="ActionsCopyTitle" xml:space="preserve">
+    <value>{0} (copy)</value>
+  </data>
+  <data name="ActionPresetVideoMpeg" xml:space="preserve">
+    <value>To MP4 (H.264)</value>
+  </data>
+  <data name="ActionPresetVideoCompress" xml:space="preserve">
+    <value>Compress (H.264, CRF 28)</value>
+  </data>
+  <data name="ActionPresetVideoAudioAac" xml:space="preserve">
+    <value>Extract audio (M4A)</value>
+  </data>
+  <data name="ActionPresetVideoAudioLame" xml:space="preserve">
+    <value>Extract audio (MP3)</value>
+  </data>
+  <data name="ActionPresetVideoFrame" xml:space="preserve">
+    <value>Frame to PNG</value>
+  </data>
+  <data name="ActionPresetAudioLame" xml:space="preserve">
+    <value>To MP3 (192k)</value>
+  </data>
+  <data name="ActionPresetAudioAac" xml:space="preserve">
+    <value>To M4A (AAC)</value>
+  </data>
+  <data name="ActionPresetAudioFlac" xml:space="preserve">
+    <value>To FLAC</value>
+  </data>
+  <data name="ActionPresetAudioWav" xml:space="preserve">
+    <value>To WAV</value>
+  </data>
+  <data name="ActionPresetImageJpeg" xml:space="preserve">
+    <value>To JPEG (quality 90)</value>
+  </data>
+  <data name="ActionPresetImagePng" xml:space="preserve">
+    <value>To PNG</value>
+  </data>
+  <data name="ActionPresetImageShrink" xml:space="preserve">
+    <value>Shrink to 1920 (JPEG)</value>
+  </data>
+  <data name="ActionPresetImageWebp" xml:space="preserve">
+    <value>To WebP (ffmpeg)</value>
+  </data>
+  <data name="ActionPresetDocumentPdf" xml:space="preserve">
+    <value>To PDF (LibreOffice)</value>
+  </data>
+  <data name="ActionPresetMarkdownDocx" xml:space="preserve">
+    <value>Markdown → DOCX (pandoc)</value>
+  </data>
+  <data name="ActionPresetDocxMarkdown" xml:space="preserve">
+    <value>DOCX → Markdown (pandoc)</value>
+  </data>
+  <data name="ActionPresetDebugHoldShort" xml:space="preserve">
+    <value>Debug: hold for 5 s</value>
+  </data>
+  <data name="ActionPresetDebugHoldLong" xml:space="preserve">
+    <value>Debug: hold for 30 s</value>
+  </data>
+  <data name="ProgressRunningAction" xml:space="preserve">
+    <value>Running an action</value>
+  </data>
+  <data name="ProgressDebug" xml:space="preserve">
+    <value>Debug operation</value>
+  </data>
+  <data name="StatusDebugDone" xml:space="preserve">
+    <value>Debug operation: {0} of {1} done</value>
+  </data>
+  <data name="StatusActionDone" xml:space="preserve">
+    <value>{0}: {1} of {2} done</value>
+  </data>
+  <data name="StatusActionFailed" xml:space="preserve">
+    <value>{0}: failed — {1}</value>
+  </data>
+  <data name="ActionReportHeader" xml:space="preserve">
+    <value>{0} of {1} done. Failed:</value>
+  </data>
+  <data name="ActionReportCancelled" xml:space="preserve">
+    <value>{0} — canceled</value>
+  </data>
+  <data name="ActionReportError" xml:space="preserve">
+    <value>{0} — {1}</value>
+  </data>
+  <data name="ActionReportExitCode" xml:space="preserve">
+    <value>{0} — exit code {1}: {2}</value>
+  </data>
+  <data name="ActionReportExitCodeOnly" xml:space="preserve">
+    <value>{0} — exit code {1}</value>
+  </data>
+  <data name="ActionReportMore" xml:space="preserve">
+    <value>… and {0} more (details in the log)</value>
+  </data>
+  <data name="ActionReportOnce" xml:space="preserve">
+    <value>Files: {0}, in one command. {1}</value>
+  </data>
+  <data name="MenuCmdToFolderSubmenu" xml:space="preserve">
+    <value>To another folder…</value>
+  </data>
+  <data name="MenuCmdRunActionTo" xml:space="preserve">
+    <value>Action to folder…</value>
+  </data>
+  <data name="ActionsPickFolderTitle" xml:space="preserve">
+    <value>Output folder</value>
+  </data>
+  <data name="MenuCmdDropCopyHere" xml:space="preserve">
+    <value>Copy here</value>
+  </data>
+  <data name="MenuCmdDropMoveHere" xml:space="preserve">
+    <value>Move here</value>
+  </data>
+  <data name="MenuCmdDropLinkHere" xml:space="preserve">
+    <value>Create shortcuts here</value>
+  </data>
+  <data name="MenuCmdDropCancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="HelperFocusTip" xml:space="preserve">
+    <value>Focus peaking: crisp edges across the full frame show what's sharp. Alt hides the overlay</value>
+  </data>
+  <data name="HelperSharpTip" xml:space="preserve">
+    <value>Sharpness 0–100 at the center of the frame: by the buttons and on gallery thumbnails</value>
+  </data>
+  <data name="HelperClipTip" xml:space="preserve">
+    <value>Clipping: clipped highlights in the channel's color, clipped shadows in blue. Alt hides the overlay</value>
+  </data>
+  <data name="HelperHistTip" xml:space="preserve">
+    <value>Per-channel histogram; arrows mark clipped highlights and shadows</value>
+  </data>
+  <data name="HelperShadowsTip" xml:space="preserve">
+    <value>Lift shadows: see what's in the dark areas</value>
+  </data>
+  <data name="HelperHighlightsTip" xml:space="preserve">
+    <value>Tone down highlights: see what's in the bright areas</value>
+  </data>
+  <data name="HelperHistNote" xml:space="preserve">
+    <value>Clipped highlights {0:0.0}%, shadows {1:0.0}%</value>
+  </data>
+  <data name="HelperAfTip" xml:space="preserve">
+    <value>Camera focus point: pink means in focus (Canon)</value>
+  </data>
+  <data name="HelperSharpScoreTip" xml:space="preserve">
+    <value>Sharpness {0} of 100, from the crispest edges at the center of the frame; isolated dots (noise, snow, glints) count as a fraction of an edge. 70 and above is sharp, 45–70 soft, lower is a miss</value>
+  </data>
+  <data name="MenuViewThisFolder" xml:space="preserve">
+    <value>This folder · {0}</value>
+  </data>
+  <data name="MenuViewPinHint" xml:space="preserve">
+    <value>Pin this view to the open folder</value>
+  </data>
+  <data name="MenuViewAuto" xml:space="preserve">
+    <value>Automatic</value>
+  </data>
+  <data name="MenuViewAutoHint" xml:space="preserve">
+    <value>Unpin: Gallery for a folder of photos, otherwise the default view</value>
+  </data>
+  <data name="MenuViewMakeDefault" xml:space="preserve">
+    <value>Set as default view</value>
+  </data>
+  <data name="MenuViewMakeDefaultHint" xml:space="preserve">
+    <value>Folders without a pinned view get this view; the open folder is unpinned</value>
+  </data>
+  <data name="ViewReasonPinned" xml:space="preserve">
+    <value>pinned</value>
+  </data>
+  <data name="ViewReasonPictures" xml:space="preserve">
+    <value>auto: photos</value>
+  </data>
+  <data name="ViewReasonDefault" xml:space="preserve">
+    <value>default</value>
+  </data>
+  <data name="MenuSortPinHint" xml:space="preserve">
+    <value>Pin this sort order to the open folder</value>
+  </data>
+  <data name="MenuSortAuto" xml:space="preserve">
+    <value>Default</value>
+  </data>
+  <data name="MenuSortAutoHint" xml:space="preserve">
+    <value>Unpin: default sort order</value>
+  </data>
+  <data name="MenuSortMakeDefault" xml:space="preserve">
+    <value>Set as default sort</value>
+  </data>
+  <data name="MenuSortMakeDefaultHint" xml:space="preserve">
+    <value>Folders without a pinned order get this sort order; the open folder is unpinned</value>
+  </data>
+  <data name="MenuCmdViewSubmenu" xml:space="preserve">
+    <value>View</value>
+  </data>
+  <data name="MenuCmdSortSubmenu" xml:space="preserve">
+    <value>Sort</value>
+  </data>
+  <data name="SettingsDefaultViewMode" xml:space="preserve">
+    <value>Default view</value>
+  </data>
+  <data name="SettingsCategoryFolders" xml:space="preserve">
+    <value>Folders and bookmarks</value>
+  </data>
+  <data name="SettingsCategoryList" xml:space="preserve">
+    <value>File list</value>
+  </data>
+  <data name="SettingsCategoryViews" xml:space="preserve">
+    <value>View</value>
+  </data>
+  <data name="SettingsCategorySizes" xml:space="preserve">
+    <value>Sizes</value>
+  </data>
+  <data name="SettingsCategoryOperations" xml:space="preserve">
+    <value>File operations</value>
+  </data>
+  <data name="SettingsCategoryRatings" xml:space="preserve">
+    <value>Ratings</value>
+  </data>
+  <data name="SettingsCategoryCache" xml:space="preserve">
+    <value>Cache and memory</value>
+  </data>
+  <data name="SettingsCategoryInterface" xml:space="preserve">
+    <value>Interface</value>
+  </data>
+  <data name="SettingsLanguageGroup" xml:space="preserve">
+    <value>Language</value>
+  </data>
+  <data name="SettingsLanguageSystem" xml:space="preserve">
+    <value>Same as Windows: {0}</value>
+  </data>
+  <data name="SettingsLanguageRussian" xml:space="preserve">
+    <value>Русский</value>
+  </data>
+  <data name="SettingsLanguageEnglish" xml:space="preserve">
+    <value>English</value>
+  </data>
+  <data name="SettingsLanguageNote" xml:space="preserve">
+    <value>Takes effect after Wander restarts.</value>
+  </data>
+  <data name="SettingsStartupGroup" xml:space="preserve">
+    <value>On startup</value>
+  </data>
+  <data name="SettingsTreeGroup" xml:space="preserve">
+    <value>Folders pane</value>
+  </data>
+  <data name="SettingsBookmarksGroup" xml:space="preserve">
+    <value>Standard bookmarks</value>
+  </data>
+  <data name="SettingsShowSystemHint" xml:space="preserve">
+    <value>Files that are both hidden and system, like pagefile.sys; the system attribute alone means nothing, since any folder with desktop.ini sets it. Shown only together with hidden files.</value>
+  </data>
+  <data name="SettingsCompanionsGroup" xml:space="preserve">
+    <value>Companion files</value>
+  </data>
+  <data name="SettingsCompanionsNote" xml:space="preserve">
+    <value>Renaming, moving and deleting take companion files (.meta, .xmp, .pp3 next to the file) along with it; Ctrl+Z brings everything back at once.</value>
+  </data>
+  <data name="SettingsRefreshGroup" xml:space="preserve">
+    <value>Changes made by other programs</value>
+  </data>
+  <data name="SettingsPictureSize" xml:space="preserve">
+    <value>Image size, px</value>
+  </data>
+  <data name="SettingsConfirmGroup" xml:space="preserve">
+    <value>Confirmations</value>
+  </data>
+  <data name="SettingsConflictsGroup" xml:space="preserve">
+    <value>Name conflicts when copying and moving</value>
+  </data>
+  <data name="SettingsDragGroup" xml:space="preserve">
+    <value>Drag and drop</value>
+  </data>
+  <data name="SettingsShellExtensionsSwitchHint" xml:space="preserve">
+    <value>Off: the menu loads no shell extensions at all; it's faster, and no third-party code gets into Wander.</value>
+  </data>
+  <data name="SettingsShellFilter" xml:space="preserve">
+    <value>Search by item, program or extension</value>
+  </data>
+  <data name="SettingsShellFilterHint" xml:space="preserve">
+    <value>An extension with a dot (.mp4) also finds items for all files: they appear in the .mp4 menu too.</value>
+  </data>
+  <data name="SettingsGuide" xml:space="preserve">
+    <value>Help for this page (F1)</value>
+  </data>
+  <data name="FieldClear" xml:space="preserve">
+    <value>Clear</value>
+  </data>
+  <data name="PickerTypeFilter" xml:space="preserve">
+    <value>Search by extension</value>
+  </data>
+  <data name="HotkeySettingsGuide" xml:space="preserve">
+    <value>Help for the open settings page</value>
+  </data>
+  <data name="SettingsActionsPlacement" xml:space="preserve">
+    <value>Show in</value>
+  </data>
+  <data name="SettingsActionsPresetNote" xml:space="preserve">
+    <value>A built-in action can't be edited: turn it off with its checkbox in the table, or duplicate it and edit the copy.</value>
+  </data>
+  <data name="SettingsActionsPreset" xml:space="preserve">
+    <value>built-in</value>
+  </data>
+  <data name="SettingsActionsNoSelection" xml:space="preserve">
+    <value>Select a row to see its command here.</value>
+  </data>
+  <data name="SettingsThumbnailCacheGroup" xml:space="preserve">
+    <value>Thumbnail cache on disk</value>
+  </data>
+  <data name="SettingsThumbnailDiskMbHint" xml:space="preserve">
+    <value>16…8192 MB, default 256; over the limit, the least recently opened are removed.</value>
+  </data>
+  <data name="SettingsMemoryGroup" xml:space="preserve">
+    <value>Memory</value>
+  </data>
+  <data name="SettingsPictureMemoryLimits" xml:space="preserve">
+    <value>128…65536 MB or 0, default 0.</value>
+  </data>
+  <data name="SettingsTempGroup" xml:space="preserve">
+    <value>Temporary copies</value>
+  </data>
+  <data name="SettingsUseSystemTempNote" xml:space="preserve">
+    <value>Copies of files from archives, for preview and “Open”. Unchecked: in the Wander data folder.</value>
+  </data>
+  <data name="SettingsLoadingGroup" xml:space="preserve">
+    <value>Icon loading</value>
+  </data>
+  <data name="SettingsLogPathsNote" xml:space="preserve">
+    <value>Off: paths are replaced by masks that keep the drive, depth and extension but not the names. Such a log can be attached to a bug report.</value>
+  </data>
+  <data name="SettingsDebugMenuGroup" xml:space="preserve">
+    <value>“Debug” menu</value>
+  </data>
+  <data name="HotkeyGroupFullscreen" xml:space="preserve">
+    <value>Full screen</value>
+  </data>
+  <data name="HotkeyFullscreenNext" xml:space="preserve">
+    <value>Next photo</value>
+  </data>
+  <data name="HotkeyFullscreenPrevious" xml:space="preserve">
+    <value>Previous photo</value>
+  </data>
+  <data name="HotkeyFullscreenEnds" xml:space="preserve">
+    <value>First / last photo</value>
+  </data>
+  <data name="HotkeyFullscreenSide" xml:space="preserve">
+    <value>Adjacent photo on the right, splitting the screen; repeat to browse the right one</value>
+  </data>
+  <data name="HotkeyFullscreenKeepSide" xml:space="preserve">
+    <value>Keep the left / right one on screen</value>
+  </data>
+  <data name="HotkeyFullscreenRate" xml:space="preserve">
+    <value>Rate and label the photo; with two, the one under the mouse</value>
+  </data>
+  <data name="HotkeyFullscreenDelete" xml:space="preserve">
+    <value>Photo to the Recycle Bin / delete permanently, then the next one</value>
+  </data>
+  <data name="HotkeyFullscreenPeek" xml:space="preserve">
+    <value>Frame without helper overlays</value>
+  </data>
+  <data name="HotkeyFullscreenUndo" xml:space="preserve">
+    <value>Undo rating or deletion</value>
+  </data>
+  <data name="HotkeyFullscreenZoom" xml:space="preserve">
+    <value>1:1 loupe without a mouse button: under the mouse, or with the pointer hidden, on the sharpest spot or AF point (setting); again to turn off</value>
+  </data>
+  <data name="HotkeyFullscreenClose" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="HotkeyGroupSettings" xml:space="preserve">
+    <value>Settings window</value>
+  </data>
+  <data name="HotkeyGestureAddressGo" xml:space="preserve">
+    <value>Enter in the address bar</value>
+  </data>
+  <data name="HotkeyGestureAddressCancel" xml:space="preserve">
+    <value>Esc in the address bar</value>
+  </data>
+  <data name="HotkeyGesturePreviewEscape" xml:space="preserve">
+    <value>Esc in the Preview pane</value>
+  </data>
+  <data name="HotkeyGestureTreeExpand" xml:space="preserve">
+    <value>← / → in the tree</value>
+  </data>
+  <data name="HotkeyGestureTreeEnter" xml:space="preserve">
+    <value>Enter in the tree</value>
+  </data>
+  <data name="HotkeyGestureTreeEscape" xml:space="preserve">
+    <value>Esc in the tree</value>
+  </data>
+  <data name="HotkeyGestureTreeRename" xml:space="preserve">
+    <value>F2 in the tree</value>
+  </data>
+  <data name="HotkeyGestureSearchNow" xml:space="preserve">
+    <value>Enter in the Search window</value>
+  </data>
+  <data name="HotkeyGestureSearchClose" xml:space="preserve">
+    <value>Esc in the Search window</value>
+  </data>
+  <data name="HotkeyGestureFilterEscape" xml:space="preserve">
+    <value>Esc in the search box</value>
+  </data>
+  <data name="HotkeyGestureSearchRepeat" xml:space="preserve">
+    <value>F5 on search results</value>
+  </data>
+  <data name="HotkeyGestureClearSelection" xml:space="preserve">
+    <value>Esc in the files</value>
+  </data>
+  <data name="HotkeyGestureTypeAhead" xml:space="preserve">
+    <value>Letters in the files</value>
+  </data>
+  <data name="HotkeyGestureGridArrows" xml:space="preserve">
+    <value>Arrows in Tiles and Icons</value>
+  </data>
+  <data name="HotkeyGestureRateInGallery" xml:space="preserve">
+    <value>0–5 in the gallery</value>
+  </data>
+  <data name="HotkeyGestureColorInGallery" xml:space="preserve">
+    <value>Shift + 0–5 in the gallery</value>
+  </data>
+  <data name="HotkeyGestureFullscreenSide" xml:space="preserve">
+    <value>Shift + arrows</value>
+  </data>
+  <data name="HotkeyGestureFullscreenKeepSide" xml:space="preserve">
+    <value>← / → on a pair</value>
+  </data>
+  <data name="HotkeyGestureFullscreenPeek" xml:space="preserve">
+    <value>Alt (hold)</value>
+  </data>
+</root>

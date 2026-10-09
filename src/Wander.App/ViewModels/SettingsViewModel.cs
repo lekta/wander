@@ -8,6 +8,7 @@ using Wander.Core.FileSystem;
 using Wander.Core.Folders;
 using Wander.Core.Imaging;
 using Wander.Core.Layout;
+using Wander.Core.Localization;
 using Wander.Core.Menu;
 using Wander.Core.Persistence;
 using Wander.Core.Shell;
@@ -56,6 +57,7 @@ public sealed class SettingsViewModel : ObservableObject {
             new ViewsSettingsCategory(this),
             new SizesSettingsCategory(this),
             new GallerySettingsCategory(this),
+            new InterfaceSettingsCategory(this),
             new OperationsSettingsCategory(this),
             new ContextMenuSettingsCategory(this),
             new ActionsSettingsCategory(this),
@@ -100,6 +102,13 @@ public sealed class SettingsViewModel : ObservableObject {
     }
 
     public bool HasCustomWorkFolder => _workFolder.Length > 0;
+
+    private UiLanguage _language;
+    /// <summary>The interface language; applies on the next start (<see cref="Util.InterfaceLanguage"/>).</summary>
+    public UiLanguage Language {
+        get => _language;
+        set => SetField(ref _language, value);
+    }
 
     /// <summary>What the settings page shows: the chosen folder, or the system one it stands for.</summary>
     public string WorkFolderText => HasCustomWorkFolder
@@ -720,6 +729,7 @@ public sealed class SettingsViewModel : ObservableObject {
         // refresh when something actually shifted.
         RestoreLastFolder = s.RestoreLastFolder;
         WorkFolder = s.WorkFolder;
+        Language = s.Language;
         AutoRefresh = s.AutoRefresh;
         VisibleFirstLoading = s.VisibleFirstLoading;
         ShowHidden = s.ShowHidden;
@@ -953,6 +963,7 @@ public sealed class SettingsViewModel : ObservableObject {
         return new AppSettings {
             RestoreLastFolder = RestoreLastFolder,
             WorkFolder = WorkFolder,
+            Language = Language,
             AutoRefresh = AutoRefresh,
             VisibleFirstLoading = VisibleFirstLoading,
             ShowHidden = ShowHidden,

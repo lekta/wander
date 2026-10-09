@@ -54,15 +54,17 @@ public static class Text {
 
     /// <summary>
     /// Picks one of the forms in <paramref name="forms"/> - separated by
-    /// <c>|</c>, in the order one / few / many, each free to carry
-    /// <c>{0}</c> for the count - by the Russian rule: 1, 21, 101 take the
-    /// first; 2-4, 22-24 the second; the rest, 11-14 included, the third.
-    /// A resource with fewer forms uses its last one for the missing ones,
-    /// so a word that does not change ("видео") is written once.
+    /// <c>|</c>, each free to carry <c>{0}</c> for the count. The number of
+    /// forms says whose rule it is. Three are Russian's one / few / many: 1,
+    /// 21, 101 take the first; 2-4, 22-24 the second; the rest, 11-14
+    /// included, the third. Two are English's one / other: 1 takes the
+    /// first, any other count the second. One form is a word that does not
+    /// change ("видео") and is written once.
     /// </summary>
     public static string PluralForm(string forms, long count) {
         string[] parts = forms.Split('|');
-        string form = parts[Math.Min(PluralIndex(count), parts.Length - 1)];
+        int index = parts.Length == 2 ? (Math.Abs(count) == 1 ? 0 : 1) : PluralIndex(count);
+        string form = parts[Math.Min(index, parts.Length - 1)];
         try {
             return string.Format(form, count);
         } catch (FormatException) {
