@@ -11,13 +11,16 @@
         went two and three. A view that needs the shape takes a style from
         here and adds what is its own - a font, a width, a command.
 
-        Colours come from Palette.xaml, merged below rather than inherited,
-        for the reason MenuStyles.xaml gives: a StaticResource has to
-        resolve at parse time, whatever merged this file.
+        Colours come from the palette: the theme's own by DynamicResource,
+        so they follow a switch of the theme; the ones a theme leaves alone
+        (Palette.xaml) by StaticResource, which has to resolve at parse
+        time, whatever merged this file - hence merged below, with WPF's
+        own controls (StockControls.xaml) that the button styles are based on.
     -->
 
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="Palette.xaml"/>
+        <ResourceDictionary Source="StockControls.xaml"/>
     </ResourceDictionary.MergedDictionaries>
 
 
@@ -41,10 +44,10 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource ControlHover}"/>
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ControlHover}"/>
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource ControlPressed}"/>
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ControlPressed}"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.4"/>
@@ -67,7 +70,7 @@
         <!-- 0, not the theme's 1: the glyph fills the box, as it did before the shared template. -->
         <Setter Property="Padding" Value="0"/>
         <Setter Property="Focusable" Value="False"/>
-        <Setter Property="Foreground" Value="{StaticResource TextMuted}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextMuted}"/>
         <Setter Property="FontSize" Value="11"/>
         <!-- TargetNullValue: a button whose tooltip is set after its style would otherwise trace a binding error for the frame in between. -->
         <Setter Property="AutomationProperties.Name" Value="{Binding ToolTip, RelativeSource={RelativeSource Self}, TargetNullValue=''}"/>
@@ -79,7 +82,7 @@
         bottom row of the settings and of the batch rename used to differ
         by twenty pixels for no reason anyone could name.
     -->
-    <Style x:Key="DialogButton" TargetType="Button">
+    <Style x:Key="DialogButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
         <Setter Property="MinWidth" Value="92"/>
         <Setter Property="Padding" Value="14,4"/>
     </Style>
@@ -155,7 +158,7 @@
                             <Setter TargetName="Dot" Property="Fill" Value="{Binding Brush}"/>
                         </DataTrigger>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Hover" Property="Fill" Value="{StaticResource ControlHover}"/>
+                            <Setter TargetName="Hover" Property="Fill" Value="{DynamicResource ControlHover}"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -166,7 +169,7 @@
     <!-- A line of explanation beside or under a field: small and quiet. -->
     <Style x:Key="CaptionText" TargetType="TextBlock">
         <Setter Property="FontSize" Value="11"/>
-        <Setter Property="Foreground" Value="{StaticResource TextCaption}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextCaption}"/>
         <Setter Property="TextWrapping" Value="Wrap"/>
     </Style>
 </ResourceDictionary>

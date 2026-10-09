@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using Wander.App.Resources;
+using Wander.App.Util;
 
 namespace Wander.App.Dialogs;
 
@@ -29,6 +30,8 @@ internal static class ChoiceDialog {
             ShowInTaskbar = false,
         };
         App.ParkIfHeadless(window);
+        InterfaceTheme.Attach(window);
+        Palette.ChromeBackground.Paint(window, Control.BackgroundProperty);
 
         var stack = new StackPanel { Margin = new Thickness(16) };
         stack.Children.Add(new ScrollViewer {

@@ -50,7 +50,12 @@ internal static class PreviewText {
         .fb2-image { display: block; margin: 1em auto; max-width: 100%; }
         .fb2-cut { color: #A05000; border-top: 1px solid #DDD; padding-top: 8px; }
         p { text-indent: 1.2em; margin: 0.2em 0; text-align: justify; }
-        blockquote p { text-indent: 0; }";
+        blockquote p { text-indent: 0; }
+        @media (prefers-color-scheme: dark) {
+            .fb2-author, .fb2-text-author { color: #BDBDBD; }
+            .fb2-annotation { color: #BDBDBD; border-top-color: #3A3A3A; }
+            .fb2-cut { color: #E8A33D; border-top-color: #3A3A3A; }
+        }";
 
 
     /// <summary>
@@ -170,9 +175,13 @@ internal static class PreviewText {
     /// <summary>
     /// The page the web view is handed. Everything rendered — Markdown and
     /// FB2 — goes through here, so both look like the same application.
+    /// Both schemes are in the stylesheet: the pane tells the browser which
+    /// one the window is in (<c>PreferredColorScheme</c>), and the dark one
+    /// takes the dark theme's surface and text.
     /// </summary>
     public static string WrapHtml(string body, string extraCss = "") {
         return $@"<!doctype html><html><head><meta charset='utf-8'><style>
+            :root {{ color-scheme: light dark; }}
             body {{ font-family: 'Segoe UI', sans-serif; font-size: 13px; padding: 10px; color: #222; }}
             pre, code {{ font-family: Consolas, monospace; background: #f4f4f4; padding: 2px 4px; border-radius: 3px; }}
             pre {{ padding: 8px; overflow-x: auto; }}
@@ -185,6 +194,14 @@ internal static class PreviewText {
             th {{ background: #F0F0F0; }}
             img {{ max-width: 100%; }}
             ul.contains-task-list {{ list-style: none; padding-left: 1.2em; }}
+            @media (prefers-color-scheme: dark) {{
+                html, body {{ background: #1E1E1E; color: #E0E0E0; }}
+                pre, code {{ background: #2B2B2B; }}
+                blockquote {{ border-left-color: #555; color: #BDBDBD; }}
+                th, td {{ border-color: #474747; }}
+                th {{ background: #2B2B2B; }}
+                a {{ color: #60B0F0; }}
+            }}
             {extraCss}
         </style></head><body>{body}</body></html>";
     }

@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using Wander.App.Resources;
+using Wander.App.Util;
 
 namespace Wander.App;
 
@@ -27,6 +28,8 @@ internal static class PromptDialog {
             ShowInTaskbar = false,
         };
         App.ParkIfHeadless(window);
+        InterfaceTheme.Attach(window);
+        Palette.ChromeBackground.Paint(window, Control.BackgroundProperty);
 
         var stack = new StackPanel { Margin = new Thickness(16) };
         stack.Children.Add(new TextBlock { Text = label, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 6) });
@@ -35,11 +38,11 @@ internal static class PromptDialog {
         stack.Children.Add(box);
 
         var errorBlock = new TextBlock {
-            Foreground = Palette.TextError,
             FontSize = 11,
             Margin = new Thickness(0, 4, 0, 0),
             Visibility = Visibility.Collapsed,
         };
+        Palette.TextError.Paint(errorBlock, TextBlock.ForegroundProperty);
         stack.Children.Add(errorBlock);
 
         var buttons = new StackPanel {
@@ -102,7 +105,7 @@ internal static class PromptDialog {
         bool hasInvalid = text.Any(_invalidFileChars.Contains);
 
         if (hasInvalid) {
-            box.BorderBrush = Palette.InputBorderError;
+            Palette.InputBorderError.Paint(box, Control.BorderBrushProperty);
             errorBlock.Text = Strings.InvalidFileNameChars + _invalidCharsDisplay;
             errorBlock.Visibility = Visibility.Visible;
             ok.IsEnabled = false;

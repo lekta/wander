@@ -11,7 +11,7 @@
         SnapsToDevicePixels="True"
         ShowInTaskbar="False"
         FocusManager.FocusedElement="{Binding ElementName=TemplateBox}"
-        Background="{StaticResource ChromeBackground}">
+        Background="{DynamicResource ChromeBackground}">
 
     <!--
         Rules on the left, what they do on the right, recomputed on every
@@ -27,11 +27,11 @@
             <Setter Property="Margin" Value="0,10,0,3"/>
         </Style>
 
-        <Style TargetType="TextBox">
+        <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
             <Setter Property="Padding" Value="4,2"/>
         </Style>
 
-        <Style TargetType="CheckBox">
+        <Style TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
             <Setter Property="Margin" Value="0,6,0,0"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
@@ -139,11 +139,11 @@
                           CanUserSortColumns="False"
                           SelectionMode="Extended" SelectionUnit="FullRow"
                           HeadersVisibility="Column" GridLinesVisibility="Horizontal"
-                          HorizontalGridLinesBrush="{StaticResource GridLine}"
-                          BorderBrush="{StaticResource Separator}"
-                          Background="{StaticResource ContentBackground}"
-                          RowBackground="{StaticResource ContentBackground}"
-                          AlternatingRowBackground="{StaticResource TableRowAlternate}"
+                          HorizontalGridLinesBrush="{DynamicResource GridLine}"
+                          BorderBrush="{DynamicResource Separator}"
+                          Background="{DynamicResource ContentBackground}"
+                          RowBackground="{DynamicResource ContentBackground}"
+                          AlternatingRowBackground="{DynamicResource TableRowAlternate}"
                           VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Auto"
                           EnableRowVirtualization="True">
@@ -160,10 +160,10 @@
                         <Style TargetType="DataGridRow">
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding IsUnchanged}" Value="True">
-                                    <Setter Property="Foreground" Value="{StaticResource TextDisabled}"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource TextDisabled}"/>
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding IsConflict}" Value="True">
-                                    <Setter Property="Foreground" Value="{StaticResource TextError}"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource TextError}"/>
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
@@ -182,15 +182,15 @@
 
         <!-- The strip that ends the window, set apart from everything above it. -->
         <Border Grid.Row="1" Margin="0,12,0,0" Padding="16,12"
-                Background="{StaticResource StripBackground}"
-                BorderBrush="{StaticResource Separator}" BorderThickness="0,1,0,0">
+                Background="{DynamicResource StripBackground}"
+                BorderBrush="{DynamicResource Separator}" BorderThickness="0,1,0,0">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                    <TextBlock Text="{Binding RuleError}" Foreground="{StaticResource TextError}"
+                    <TextBlock Text="{Binding RuleError}" Foreground="{DynamicResource TextError}"
                                TextWrapping="Wrap" Margin="0,0,0,2"
                                Visibility="{Binding HasRuleError, Converter={StaticResource BoolToVisibility}}"/>
                     <TextBlock Text="{Binding Summary}"/>

@@ -1,4 +1,5 @@
 using System.Windows;
+using Wander.App.Util;
 using Wander.Core;
 using Wander.Core.FileSystem;
 using Wander.Core.Layout;
@@ -28,6 +29,7 @@ public partial class ConflictWindow : Window {
         // After the geometry: parking wins, or a headless run would put the
         // window back on the screen a person is working at.
         App.ParkIfHeadless(this);
+        InterfaceTheme.Attach(this);
 
         Loaded += (_, _) => vm.Start();
         Closing += (_, _) => {

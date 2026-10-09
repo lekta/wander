@@ -7,7 +7,7 @@
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         UseLayoutRounding="True"
-        Background="{StaticResource ChromeBackground}">
+        Background="{DynamicResource ChromeBackground}">
     <!--
         Two files side by side: two preview panes, each with its
         own controller, so each draws what the main pane would - a picture,

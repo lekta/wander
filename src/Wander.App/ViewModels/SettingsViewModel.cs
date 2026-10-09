@@ -3,6 +3,7 @@ using System.Windows.Media;
 using Wander.App.Resources;
 using Wander.Core;
 using Wander.Core.Actions;
+using Wander.Core.Appearance;
 using Wander.Core.Companions;
 using Wander.Core.FileSystem;
 using Wander.Core.Folders;
@@ -108,6 +109,13 @@ public sealed class SettingsViewModel : ObservableObject {
     public UiLanguage Language {
         get => _language;
         set => SetField(ref _language, value);
+    }
+
+    private UiTheme _theme;
+    /// <summary>Light, dark or as Windows has it; applies at once (<see cref="Util.InterfaceTheme"/>).</summary>
+    public UiTheme Theme {
+        get => _theme;
+        set => SetField(ref _theme, value);
     }
 
     /// <summary>What the settings page shows: the chosen folder, or the system one it stands for.</summary>
@@ -730,6 +738,7 @@ public sealed class SettingsViewModel : ObservableObject {
         RestoreLastFolder = s.RestoreLastFolder;
         WorkFolder = s.WorkFolder;
         Language = s.Language;
+        Theme = s.Theme;
         AutoRefresh = s.AutoRefresh;
         VisibleFirstLoading = s.VisibleFirstLoading;
         ShowHidden = s.ShowHidden;
@@ -959,11 +968,21 @@ public sealed class SettingsViewModel : ObservableObject {
         OnActionsChanged();
     }
 
+    /// <summary>
+    /// The theme switched: the gallery's background that follows the window
+    /// and the list's highlights it takes come out of the theme's palette.
+    /// </summary>
+    public void OnThemeChanged() {
+        RaisePalette();
+    }
+
+
     public AppSettings ToRecord() {
         return new AppSettings {
             RestoreLastFolder = RestoreLastFolder,
             WorkFolder = WorkFolder,
             Language = Language,
+            Theme = Theme,
             AutoRefresh = AutoRefresh,
             VisibleFirstLoading = VisibleFirstLoading,
             ShowHidden = ShowHidden,

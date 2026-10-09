@@ -9,7 +9,7 @@
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
         ShowInTaskbar="False"
-        Background="{StaticResource ChromeBackground}">
+        Background="{DynamicResource ChromeBackground}">
     <!--
         Adds rows to the context-menu table. Two ways in, because there are
         two ways someone thinks about it: "hide everything 7-Zip puts in my
@@ -26,7 +26,7 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" TextWrapping="Wrap" Foreground="{StaticResource TextCaption}" Margin="0,0,0,12"
+        <TextBlock Grid.Row="0" TextWrapping="Wrap" Foreground="{DynamicResource TextCaption}" Margin="0,0,0,12"
                    Text="{x:Static res:Strings.PickerHint}"/>
 
         <TabControl Grid.Row="1" Background="Transparent" BorderThickness="0">
@@ -37,7 +37,7 @@
                     </Grid.RowDefinitions>
                     <ListBox x:Name="AppList" SelectionMode="Extended"
                              DisplayMemberPath="Title"
-                             BorderBrush="{StaticResource Separator}" Background="{StaticResource InputBackground}"/>
+                             BorderBrush="{DynamicResource Separator}" Background="{DynamicResource InputBackground}"/>
                 </Grid>
             </TabItem>
 
@@ -51,14 +51,14 @@
                                         Prompt="{x:Static res:Strings.PickerTypeFilter}"
                                         TextChanged="TypeFilter_TextChanged"/>
                     <ListBox x:Name="TypeList" Grid.Row="1" SelectionMode="Extended"
-                             BorderBrush="{StaticResource Separator}" Background="{StaticResource InputBackground}">
+                             BorderBrush="{DynamicResource Separator}" Background="{DynamicResource InputBackground}">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="{Binding Name}" Width="90"/>
                                     <!-- Marks the ones just right-clicked, which is the
                                          only ranking signal there is. -->
-                                    <TextBlock Text="{Binding Note}" Foreground="{StaticResource TextDim}"/>
+                                    <TextBlock Text="{Binding Note}" Foreground="{DynamicResource TextDim}"/>
                                 </StackPanel>
                             </DataTemplate>
                         </ListBox.ItemTemplate>

@@ -51,7 +51,7 @@
                             <Border x:Name="SectionRule"
                                     Height="1"
                                     Margin="4,2,4,2"
-                                    Background="{StaticResource SectionRule}"
+                                    Background="{DynamicResource SectionRule}"
                                     Visibility="Collapsed"/>
                             <Border x:Name="Row"
                                     Background="Transparent"
@@ -71,7 +71,7 @@
                                             <Grid>
                                                 <Path x:Name="Arrow"
                                                       Data="M 0,0 L 5,4.5 L 0,9 Z"
-                                                      Fill="{StaticResource TreeChevron}"
+                                                      Fill="{DynamicResource TreeChevron}"
                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                                 <!--
                                                     The branch is open and its first read is
@@ -83,7 +83,7 @@
                                                 -->
                                                 <Ellipse x:Name="Spinner"
                                                          Width="10" Height="10" StrokeThickness="1.5"
-                                                         Stroke="{StaticResource AccentStroke}" Fill="Transparent"
+                                                         Stroke="{DynamicResource AccentStroke}" Fill="Transparent"
                                                          StrokeDashArray="2,1.5"
                                                          HorizontalAlignment="Center" VerticalAlignment="Center"
                                                          RenderTransformOrigin="0.5,0.5"
@@ -127,7 +127,7 @@
                             </DataTrigger>
                             <DataTrigger Binding="{Binding IsExpanded}" Value="True">
                                 <Setter TargetName="Arrow" Property="Data" Value="M 0,0 L 9,0 L 4.5,5 Z"/>
-                                <Setter TargetName="Arrow" Property="Fill" Value="{StaticResource TreeChevronExpanded}"/>
+                                <Setter TargetName="Arrow" Property="Fill" Value="{DynamicResource TreeChevronExpanded}"/>
                             </DataTrigger>
                             <DataTrigger Binding="{Binding IsReading}" Value="True">
                                 <DataTrigger.EnterActions>
@@ -151,22 +151,22 @@
                                 </DataTrigger.ExitActions>
                             </DataTrigger>
                             <Trigger Property="IsMouseOver" SourceName="Chevron" Value="True">
-                                <Setter TargetName="Arrow" Property="Fill" Value="{StaticResource TreeChevronHover}"/>
+                                <Setter TargetName="Arrow" Property="Fill" Value="{DynamicResource TreeChevronHover}"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" SourceName="Row" Value="True">
-                                <Setter TargetName="Row" Property="Background" Value="{StaticResource RowHover}"/>
+                                <Setter TargetName="Row" Property="Background" Value="{DynamicResource RowHover}"/>
                             </Trigger>
                             <DataTrigger Binding="{Binding IsCaret}" Value="True">
-                                <Setter TargetName="Row" Property="Background" Value="{StaticResource RowSelectedInactive}"/>
+                                <Setter TargetName="Row" Property="Background" Value="{DynamicResource RowSelectedInactive}"/>
                             </DataTrigger>
                             <DataTrigger Binding="{Binding IsActive}" Value="True">
-                                <Setter TargetName="Row" Property="Background" Value="{StaticResource RowSelected}"/>
+                                <Setter TargetName="Row" Property="Background" Value="{DynamicResource RowSelected}"/>
                             </DataTrigger>
                             <DataTrigger Binding="{Binding StartsUserSection}" Value="True">
                                 <Setter TargetName="SectionRule" Property="Visibility" Value="Visible"/>
                             </DataTrigger>
                             <DataTrigger Binding="{Binding IsMenuSubject}" Value="True">
-                                <Setter TargetName="MenuFrame" Property="BorderBrush" Value="{StaticResource RowCaretBorder}"/>
+                                <Setter TargetName="MenuFrame" Property="BorderBrush" Value="{DynamicResource RowCaretBorder}"/>
                             </DataTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -193,7 +193,7 @@
                     <Setter Property="FontWeight" Value="SemiBold"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding IsMissing}" Value="True">
-                    <Setter Property="Foreground" Value="{StaticResource TextDisabled}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource TextDisabled}"/>
                     <Setter Property="FontStyle" Value="Italic"/>
                 </DataTrigger>
             </Style.Triggers>
@@ -248,7 +248,7 @@
         </ContextMenu>
     </UserControl.Resources>
 
-    <Grid Background="{StaticResource PaneBackground}" SizeChanged="Panes_SizeChanged">
+    <Grid Background="{DynamicResource PaneBackground}" SizeChanged="Panes_SizeChanged">
         <Grid.RowDefinitions>
             <!--
                 Header, list and the "+" strip share one row, so the
@@ -286,8 +286,8 @@
                     Command="{Binding ToggleBookmarksCommand}"
                     HorizontalContentAlignment="Stretch"
                     Padding="6,4"
-                    Background="{StaticResource HeaderBackground}"
-                    BorderBrush="{StaticResource Separator}"
+                    Background="{DynamicResource HeaderBackground}"
+                    BorderBrush="{DynamicResource Separator}"
                     BorderThickness="0,0,0,1"
                     Cursor="Hand"
                     ToolTip="{x:Static res:Strings.BookmarksToggleHint}">
@@ -327,7 +327,7 @@
                     DockPanel.Dock="Bottom"
                     Height="20"
                     Margin="12,2,12,2"
-                    Background="{StaticResource DropZoneFill}"
+                    Background="{DynamicResource DropZoneFill}"
                     CornerRadius="2"
                     ToolTip="{x:Static res:Strings.BookmarksAddHint}"
                     AllowDrop="True"
@@ -339,7 +339,7 @@
                 <TextBlock x:Name="BookmarkDropZoneGlyph"
                            Text="+"
                            FontSize="13"
-                           Foreground="{StaticResource DropZoneGlyph}"
+                           Foreground="{DynamicResource DropZoneGlyph}"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"/>
             </Border>
@@ -397,7 +397,7 @@
                                     Padding="0"
                                     Content="&#x22EF;"
                                     FontSize="13"
-                                    Foreground="{StaticResource TextMuted}"
+                                    Foreground="{DynamicResource TextMuted}"
                                     Focusable="False"
                                     Cursor="Hand"
                                     ToolTip="{x:Static res:Strings.BookmarksRowMenuHint}"
@@ -409,7 +409,7 @@
                                         </Border>
                                         <ControlTemplate.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource RowActionHover}"/>
+                                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource RowActionHover}"/>
                                             </Trigger>
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>
@@ -455,7 +455,7 @@
                       VerticalAlignment="Center"
                       ResizeDirection="Rows"
                       ResizeBehavior="PreviousAndNext"
-                      Background="{StaticResource Separator}"
+                      Background="{DynamicResource Separator}"
                       Visibility="{Binding IsBookmarksExpanded, Converter={StaticResource BoolToVisibility}}"
                       DragCompleted="BookmarksSplitter_DragCompleted"/>
 
@@ -467,8 +467,8 @@
         <DockPanel Grid.Row="2">
             <Border DockPanel.Dock="Top"
                     Padding="6,4"
-                    Background="{StaticResource HeaderBackground}"
-                    BorderBrush="{StaticResource Separator}"
+                    Background="{DynamicResource HeaderBackground}"
+                    BorderBrush="{DynamicResource Separator}"
                     BorderThickness="0,0,0,1"
                     SizeChanged="DrivesHeader_SizeChanged">
                 <TextBlock Text="{x:Static res:Strings.ComputerHeader}" FontWeight="SemiBold"/>

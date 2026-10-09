@@ -16,6 +16,7 @@ using Wander.App.Controllers;
 using Wander.App.Controls;
 using Wander.App.Highlighting;
 using Wander.App.Resources;
+using Wander.App.Util;
 using Wander.App.ViewModels;
 using Wander.Core.FileSystem;
 using Wander.Core.Persistence;
@@ -66,7 +67,10 @@ public partial class PreviewPane : UserControl {
         Loaded += (_, _) => {
             DpiScale = VisualTreeHelper.GetDpi(this).DpiScaleX;
             ReportViewport();
+            InterfaceTheme.Changed -= OnThemeChanged;
+            InterfaceTheme.Changed += OnThemeChanged;
         };
+        Unloaded += (_, _) => InterfaceTheme.Changed -= OnThemeChanged;
 
         // The audio player has the same three events as the MediaElement,
         // just not as routed ones, so they are hooked here rather than in
@@ -437,6 +441,7 @@ public partial class PreviewPane : UserControl {
             case nameof(PreviewController.WebUri):
                 if (Controller.WebUri is { } uri) {
                     await EnsureWebViewReadyAsync();
+                    WebPreview.DefaultBackgroundColor = System.Drawing.Color.White;
                     try { WebPreview.Source = uri; } catch { /* webview not ready */ }
                 }
                 break;
@@ -444,6 +449,10 @@ public partial class PreviewPane : UserControl {
             case nameof(PreviewController.WebHtml):
                 if (Controller.WebHtml is { } html) {
                     await EnsureWebViewReadyAsync();
+                    // Wander's own page: its stylesheet is dark with the
+                    // theme, so the paper under it is too - no white frame
+                    // before the page is drawn.
+                    WebPreview.DefaultBackgroundColor = OwnPagePaper();
                     try { WebPreview.NavigateToString(html); } catch { /* webview not ready */ }
                 }
                 break;
@@ -513,6 +522,34 @@ public partial class PreviewPane : UserControl {
         }
     }
 
+
+    /// <summary>
+    /// The theme switched: the code is painted again in the new colours, and
+    /// the browser is told - Wander's own page follows by its stylesheet,
+    /// a page of the user's that knows both schemes by its own.
+    /// </summary>
+    private void OnThemeChanged() {
+        CodeEditor.Repaint();
+        TellWebScheme();
+        if (Controller is { WebHtml: not null } && WebPreview.CoreWebView2 is not null) {
+            WebPreview.DefaultBackgroundColor = OwnPagePaper();
+        }
+    }
+
+    private void TellWebScheme() {
+        if (WebPreview.CoreWebView2 is { } core) {
+            core.Profile.PreferredColorScheme = InterfaceTheme.IsDark
+                ? CoreWebView2PreferredColorScheme.Dark
+                : CoreWebView2PreferredColorScheme.Light;
+        }
+    }
+
+    /// <summary>The paper under Wander's own page: the preview's surface in the dark theme, white in the light one as for any page.</summary>
+    private static System.Drawing.Color OwnPagePaper() {
+        return InterfaceTheme.IsDark && Palette.PreviewBackground.Current is SolidColorBrush { Color: var c }
+            ? System.Drawing.Color.FromArgb(c.R, c.G, c.B)
+            : System.Drawing.Color.White;
+    }
 
     private void UpdateCodeEditor() {
         if (string.IsNullOrEmpty(Controller.CodeText)) {
@@ -643,6 +680,7 @@ public partial class PreviewPane : UserControl {
                             null, 403, "Blocked", "");
                     }
                 };
+                TellWebScheme();
             }
             _webInitialized = true;
         } catch {

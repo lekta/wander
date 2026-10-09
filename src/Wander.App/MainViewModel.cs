@@ -657,6 +657,9 @@ public sealed class MainViewModel : ObservableObject {
         // RestoreState re-opens: they are the saved state coming back, not
         // a change worth saving.
         Settings.PropertyChanged += OnSettingsChanged;
+        // The gallery's colours derive from the theme's; the view model and
+        // the theme both live as long as the application.
+        InterfaceTheme.Changed += Settings.OnThemeChanged;
         // One volume for every file played, kept between sessions; either
         // half of a split can be the one playing.
         Preview.PropertyChanged += (_, e) => {
@@ -4099,6 +4102,11 @@ public sealed class MainViewModel : ObservableObject {
         if (e.PropertyName is nameof(SettingsViewModel.LogActions) or nameof(SettingsViewModel.LogPaths)) {
             // From the next line on; what is written stays as it was.
             ApplyLogSettings();
+        }
+
+        if (e.PropertyName == nameof(SettingsViewModel.Theme)) {
+            // At once and both ways: Cancel and the reset come back through here.
+            InterfaceTheme.Apply(Settings.Theme);
         }
 
         // Tile geometry and the icon column's width are projections of the

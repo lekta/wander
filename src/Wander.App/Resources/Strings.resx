@@ -1249,7 +1249,8 @@
     <value>Оценка</value>
   </data>
   <data name="GalleryBackgroundLight" xml:space="preserve">
-    <value>Светлый</value>
+    <value>Как у окна</value>
+    <comment>Фон галереи — фон самого окна: светлый в светлой теме, тёмный в тёмной</comment>
   </data>
   <data name="GalleryBackgroundGrey" xml:space="preserve">
     <value>Серый</value>
@@ -1290,7 +1291,7 @@
     <value>Галерея</value>
   </data>
   <data name="SettingsGalleryBackground" xml:space="preserve">
-    <value>Фон</value>
+    <value>Фон галереи</value>
   </data>
   <data name="SettingsAutoGallery" xml:space="preserve">
     <value>Включать галерею, если снимков в папке больше</value>
@@ -2656,7 +2657,20 @@
   </data>
   <data name="SettingsCategoryInterface" xml:space="preserve">
     <value>Интерфейс</value>
-    <comment>Страница настроек: язык, позже — цветовая схема</comment>
+    <comment>Страница настроек: цветовая схема, фон галереи, язык</comment>
+  </data>
+  <data name="SettingsThemeGroup" xml:space="preserve">
+    <value>Цветовая схема</value>
+  </data>
+  <data name="SettingsThemeSystem" xml:space="preserve">
+    <value>Как в Windows: {0}</value>
+    <comment>{0} — режим приложений в Windows сейчас: SettingsThemeLight или SettingsThemeDark, со строчной</comment>
+  </data>
+  <data name="SettingsThemeLight" xml:space="preserve">
+    <value>Светлая</value>
+  </data>
+  <data name="SettingsThemeDark" xml:space="preserve">
+    <value>Тёмная</value>
   </data>
   <data name="SettingsLanguageGroup" xml:space="preserve">
     <value>Язык (Language)</value>

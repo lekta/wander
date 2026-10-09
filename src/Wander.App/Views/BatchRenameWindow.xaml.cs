@@ -1,4 +1,5 @@
 using System.Windows;
+using Wander.App.Util;
 using Wander.App.ViewModels;
 
 namespace Wander.App.Views;
@@ -14,6 +15,7 @@ public partial class BatchRenameWindow : Window {
         InitializeComponent();
         DataContext = vm;
         App.ParkIfHeadless(this);
+        InterfaceTheme.Attach(this);
 
         Closing += (_, _) => vm.Stop();
     }

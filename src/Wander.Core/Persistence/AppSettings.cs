@@ -1,4 +1,5 @@
 using Wander.Core.Actions;
+using Wander.Core.Appearance;
 using Wander.Core.Companions;
 using Wander.Core.FileSystem;
 using Wander.Core.Folders;
@@ -39,6 +40,13 @@ public sealed record AppSettings {
     /// startup - windows take their text when they are built.
     /// </summary>
     public UiLanguage Language { get; init; } = UiLanguage.System;
+
+    /// <summary>
+    /// Light or dark. Follows Windows by default, as the language does: the
+    /// app mode set in Personalisation, read again when it changes.
+    /// Applies at once - the windows repaint, nothing is rebuilt.
+    /// </summary>
+    public UiTheme Theme { get; init; } = UiTheme.System;
 
 
     // --- Behaviour -----------------------------------------------------

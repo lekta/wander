@@ -158,9 +158,17 @@ public partial class FolderTreesView : UserControl {
     /// off the other. The brush comes from the window: the same one outlines
     /// the file list, and one state in two colours would read as two states.
     /// </summary>
-    public void ShowFocusOutline(NavigationSource? pane, Brush active) {
-        BookmarksFrame.BorderBrush = pane == NavigationSource.Bookmark ? active : Brushes.Transparent;
-        DrivesList.BorderBrush = pane == NavigationSource.Drives ? active : Brushes.Transparent;
+    public void ShowFocusOutline(NavigationSource? pane) {
+        Outline(BookmarksFrame, Border.BorderBrushProperty, pane == NavigationSource.Bookmark);
+        Outline(DrivesList, Control.BorderBrushProperty, pane == NavigationSource.Drives);
+
+        static void Outline(FrameworkElement element, DependencyProperty property, bool on) {
+            if (on) {
+                Palette.FocusOutline.Paint(element, property);
+            } else {
+                element.SetValue(property, Brushes.Transparent);
+            }
+        }
     }
 
     /// <summary>
@@ -1089,8 +1097,8 @@ public partial class FolderTreesView : UserControl {
     /// </summary>
     private void SetBookmarkDropZoneActive(bool active) {
         _drops.IsBookmarkTarget = active;
-        BookmarkDropZone.Background = active ? Palette.DropZoneActiveFill : Palette.DropZoneFill;
-        BookmarkDropZoneGlyph.Foreground = active ? Palette.DropZoneActiveGlyph : Palette.DropZoneGlyph;
+        (active ? Palette.DropZoneActiveFill : Palette.DropZoneFill).Paint(BookmarkDropZone, Border.BackgroundProperty);
+        (active ? Palette.DropZoneActiveGlyph : Palette.DropZoneGlyph).Paint(BookmarkDropZoneGlyph, TextBlock.ForegroundProperty);
         BookmarkDropZoneGlyph.FontWeight = active ? FontWeights.Bold : FontWeights.Normal;
         _drag.UpdateForCurrentTarget();
     }

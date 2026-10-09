@@ -3,9 +3,9 @@ date   : 2026-10-08
 commit : 66c8939
 
 -- projects --
-Wander.App -> Wander.Core   (72 files)
+Wander.App -> Wander.Core   (74 files)
 Wander.App -> Wander.Platform.Windows   (1 files)
-Wander.Core.Tests -> Wander.Core   (163 files)
+Wander.Core.Tests -> Wander.Core   (165 files)
 Wander.Harness -> Wander.App   (4 files)
 Wander.Harness -> Wander.Core   (7 files)
 Wander.Harness -> Wander.Platform.Windows   (3 files)
@@ -44,6 +44,7 @@ Wander.Platform.Windows -> Wander.Core   (37 files)
   Menu           -> Shell          (2 files)
   Navigation     -> FileSystem     (2 files)
   Persistence    -> Actions        (1 files)
+  Persistence    -> Appearance     (1 files)
   Persistence    -> Companions     (1 files)
   Persistence    -> FileSystem     (1 files)
   Persistence    -> Folders        (2 files)
@@ -73,7 +74,7 @@ Wander.Platform.Windows -> Wander.Core   (37 files)
   Workspace      -> Preview        (1 files)
 
 -- Wander.Core: levels --
-  0: (root), Imaging, Layout, Localization, Logging, Operations, Panels
+  0: (root), Appearance, Imaging, Layout, Localization, Logging, Operations, Panels
   1: Diagnostics, Icons, Undo
   2: FileSystem
   3: Companions, Folders, Navigation, Preview
@@ -109,11 +110,11 @@ Wander.Platform.Windows -> Wander.Core   (37 files)
   (root)         -> Menu           (2 files)
   (root)         -> Preview        (1 files)
   (root)         -> Resources      (4 files)
-  (root)         -> Util           (3 files)
+  (root)         -> Util           (4 files)
   (root)         -> ViewModels     (2 files)
   (root)         -> Views          (2 files)
   Conflict       -> Resources      (2 files)
-  Conflict       -> Util           (2 files)
+  Conflict       -> Util           (3 files)
   Conflict       -> ViewModels     (2 files)
   Controllers    -> Converters     (1 files)
   Controllers    -> Preview        (1 files)
@@ -133,14 +134,17 @@ Wander.Platform.Windows -> Wander.Core   (37 files)
   Diagnostics    -> Util           (1 files)
   Dialogs        -> Conflict       (1 files)
   Dialogs        -> Resources      (1 files)
+  Dialogs        -> Util           (1 files)
   DragPreview    -> Converters     (1 files)
   DragPreview    -> Resources      (3 files)
   DragPreview    -> Util           (1 files)
   DragPreview    -> ViewModels     (1 files)
+  Highlighting   -> Resources      (1 files)
+  Highlighting   -> Util           (1 files)
   Preview        -> Resources      (3 files)
   Preview        -> Util           (2 files)
   Util           -> Resources      (2 files)
-  ViewModels     -> Resources      (9 files)
+  ViewModels     -> Resources      (10 files)
   ViewModels     -> Util           (2 files)
   Views          -> Conflict       (1 files)
   Views          -> Controllers    (4 files)
@@ -151,13 +155,13 @@ Wander.Platform.Windows -> Wander.Core   (37 files)
   Views          -> Highlighting   (1 files)
   Views          -> Preview        (1 files)
   Views          -> Resources      (8 files)
-  Views          -> Util           (4 files)
+  Views          -> Util           (10 files)
   Views          -> ViewModels     (8 files)
 
 -- Wander.App: levels --
-  0: Highlighting, Menu, Resources
+  0: Menu, Resources
   1: Util
-  2: Diagnostics, Preview, ViewModels
+  2: Diagnostics, Highlighting, Preview, ViewModels
   3: Conflict, Converters
   4: Controllers, Controls, Dialogs, DragPreview
   5: Views

@@ -318,7 +318,7 @@ public static partial class Strings {
     /// <summary>Оценка</summary>
     public static string ColumnRating => Get(nameof(ColumnRating));
 
-    /// <summary>Светлый</summary>
+    /// <summary>Как у окна</summary>
     public static string GalleryBackgroundLight => Get(nameof(GalleryBackgroundLight));
 
     /// <summary>Серый</summary>

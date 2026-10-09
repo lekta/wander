@@ -3,6 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Windows;
 using Wander.App.Dialogs;
 using Wander.App.Resources;
+using Wander.App.Util;
 using Wander.App.ViewModels;
 using Wander.Core.Operations;
 
@@ -62,6 +63,7 @@ public partial class ProgressDialog : Window, INotifyPropertyChanged, ITransient
         // owner parked off-screen, this one came up at (0, 0) with the focus
         // on every paste.
         App.ParkIfHeadless(this);
+        InterfaceTheme.Attach(this);
         DialogTitle = headline;
         Headline = headline + "...";
         _tracker = tracker;

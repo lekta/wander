@@ -1,5 +1,6 @@
-using System.Windows;
 using System.Windows.Media;
+using Wander.App.Resources;
+using Wander.Core.Appearance;
 using Wander.Core.Persistence;
 
 namespace Wander.App.ViewModels;
@@ -18,18 +19,14 @@ namespace Wander.App.ViewModels;
 /// </para>
 ///
 /// <para>
-/// This is also the first piece of the dark theme on the roadmap: the
-/// content area already switches palette rather than one hard-coded colour,
-/// so the rest of the window can join it later instead of this having to be
-/// torn out.
+/// The background that follows the window is the theme's own: the list's
+/// surface and the list's highlights, light or dark with the theme, so the
+/// gallery matches the other views exactly where it can. What else sits in
+/// the gallery - its scroll bar, the stars on a cell - follows the surface
+/// through <see cref="IsDark"/> (<c>Util/ThemeScope</c>).
 /// </para>
 /// </summary>
 public sealed class GalleryPalette {
-    /// <summary>
-    /// Explorer's own three, used as-is on the light background so the
-    /// gallery matches the other views exactly where it can. Only the
-    /// darkened backgrounds need colours of their own.
-    /// </summary>
     /// <summary>
     /// Contrast the caption tone has to clear. 4.5:1 is the usual floor for
     /// text this size.
@@ -45,6 +42,11 @@ public sealed class GalleryPalette {
     private const double SecondaryContrast = 3.4;
 
 
+    /// <summary>
+    /// Explorer's own highlights, for a light grey surround: the light
+    /// theme's row colours, kept here because a light surround is light in
+    /// either theme - in the dark one the theme's rows are dark.
+    /// </summary>
     private static readonly Color _explorerHover = Color.FromRgb(0xE5, 0xF3, 0xFB);
     private static readonly Color _explorerHoverBorder = Color.FromRgb(0xD2, 0xEC, 0xF8);
     private static readonly Color _explorerSelected = Color.FromRgb(0xCC, 0xE8, 0xFF);
@@ -56,16 +58,19 @@ public sealed class GalleryPalette {
     public GalleryPalette(GalleryBackground background, int greyLevel, int darkLevel) {
         Kind = background;
 
-        // "Light" is the window's own background rather than a white of our
-        // choosing: the point of that option is that the gallery stops
-        // looking like a separate application inside the window.
-        Color surface = background switch {
-            GalleryBackground.Grey => Grey(greyLevel),
-            GalleryBackground.Dark => Grey(darkLevel),
-            _ => SystemColors.WindowColor,
+        // "Same as window" is the theme's own list surface rather than a
+        // colour of our choosing: the point of that option is that the
+        // gallery stops looking like a separate application inside the
+        // window.
+        bool window = background is not (GalleryBackground.Grey or GalleryBackground.Dark);
+        Rgb surface = background switch {
+            GalleryBackground.Grey => Rgb.Grey(greyLevel),
+            GalleryBackground.Dark => Rgb.Grey(darkLevel),
+            _ => ToRgb(Palette.ContentBackground.Current),
         };
 
         Background = Frozen(surface);
+        IsDark = Tone.IsDark(surface);
 
         // Both text tones are measured against the surface rather than
         // picked from a pair of constants. The constants worked at the ends
@@ -74,12 +79,22 @@ public sealed class GalleryPalette {
         // 2.2:1, which is not dim text, it is absent text. A mid tone is
         // the hard case for exactly this reason, and it is the one a fixed
         // pair cannot cover.
-        bool onDark = Luminance(surface) < 0.55;
-        Color ink = onDark ? Grey(0xFF) : Grey(0x00);
-        Foreground = Frozen(Quietest(ink, surface, PrimaryContrast));
-        Dim = Frozen(Quietest(ink, surface, SecondaryContrast));
+        var ink = IsDark ? Rgb.Grey(0xFF) : Rgb.Grey(0x00);
+        Foreground = Frozen(Tone.Quietest(ink, surface, PrimaryContrast));
+        Dim = Frozen(Tone.Quietest(ink, surface, SecondaryContrast));
 
-        if (!onDark) {
+        if (window) {
+            Hover = Palette.RowHover.Current;
+            HoverBorder = Palette.RowHoverBorder.Current;
+            Selected = Palette.RowSelected.Current;
+            SelectedBorder = Palette.RowSelectedBorder.Current;
+            SelectedInactive = Palette.RowSelectedInactive.Current;
+            SelectedInactiveBorder = Palette.RowSelectedInactiveBorder.Current;
+
+            return;
+        }
+
+        if (!IsDark) {
             Hover = Frozen(_explorerHover);
             HoverBorder = Frozen(_explorerHoverBorder);
             Selected = Frozen(_explorerSelected);
@@ -95,26 +110,29 @@ public sealed class GalleryPalette {
         // levels is brighter than most of the photographs and the eye goes
         // to the frame instead of the picture. The active selection keeps a
         // blue lean so it still reads as "chosen" rather than "lighter".
-        Hover = Frozen(Lift(surface, 14));
-        HoverBorder = Frozen(Lift(surface, 26));
-        Selected = Frozen(Lift(surface, 34, blue: 14));
-        SelectedBorder = Frozen(Lift(surface, 56, blue: 26));
-        SelectedInactive = Frozen(Lift(surface, 22));
-        SelectedInactiveBorder = Frozen(Lift(surface, 38));
+        Hover = Frozen(Tone.Lift(surface, 14));
+        HoverBorder = Frozen(Tone.Lift(surface, 26));
+        Selected = Frozen(Tone.Lift(surface, 34, blue: 14));
+        SelectedBorder = Frozen(Tone.Lift(surface, 56, blue: 26));
+        SelectedInactive = Frozen(Tone.Lift(surface, 22));
+        SelectedInactiveBorder = Frozen(Tone.Lift(surface, 38));
     }
 
 
     /// <summary>
-    /// The untinted palette: the window's own background and text on it.
-    /// What every view except the gallery is drawn on, and therefore what
-    /// the preview pane follows outside the gallery — see
-    /// <c>MainViewModel.ContentPalette</c>.
+    /// The untinted palette: the window's own background and text on it, in
+    /// the theme shown now. What every view except the gallery is drawn on,
+    /// and therefore what the preview pane follows outside the gallery —
+    /// see <c>MainViewModel.ContentPalette</c>.
     /// </summary>
-    public static GalleryPalette Plain { get; } = new(GalleryBackground.Light, 0, 0);
+    public static GalleryPalette Plain => new(GalleryBackground.Light, 0, 0);
 
 
     /// <summary>Which of the three the user picked — for the toolbar's checked state.</summary>
     public GalleryBackground Kind { get; }
+
+    /// <summary>Whether the surround is dark: what the gallery's other parts follow (<c>Util/ThemeScope</c>).</summary>
+    public bool IsDark { get; }
 
     public Brush Background { get; }
 
@@ -148,67 +166,12 @@ public sealed class GalleryPalette {
     }
 
 
-    /// <summary>
-    /// The most restrained tone between <paramref name="ink"/> and the
-    /// surface that still reads at <paramref name="target"/>. Steps toward
-    /// the surface as far as it can and stops; on a surface where even
-    /// undiluted ink cannot reach the target, it returns the ink, which is
-    /// the best available.
-    /// </summary>
-    private static Color Quietest(Color ink, Color surface, double target) {
-        for (int percent = 60; percent > 0; percent -= 4) {
-            var candidate = Mix(ink, surface, percent / 100.0);
-            if (Contrast(candidate, surface) >= target) {
-                return candidate;
-            }
-        }
-
-        return ink;
+    private static Rgb ToRgb(Brush brush) {
+        return brush is SolidColorBrush solid ? new Rgb(solid.Color.R, solid.Color.G, solid.Color.B) : Rgb.Grey(0xFF);
     }
 
-    /// <summary><paramref name="amount"/> of the way from <paramref name="to"/> to <paramref name="from"/>.</summary>
-    private static Color Mix(Color from, Color to, double amount) {
-        return Color.FromRgb(
-            (byte)Math.Round((to.R * amount) + (from.R * (1 - amount))),
-            (byte)Math.Round((to.G * amount) + (from.G * (1 - amount))),
-            (byte)Math.Round((to.B * amount) + (from.B * (1 - amount))));
-    }
-
-    /// <summary>WCAG contrast ratio, 1:1 to 21:1.</summary>
-    private static double Contrast(Color a, Color b) {
-        double la = RelativeLuminance(a);
-        double lb = RelativeLuminance(b);
-
-        return (Math.Max(la, lb) + 0.05) / (Math.Min(la, lb) + 0.05);
-    }
-
-    private static double RelativeLuminance(Color c) {
-        return (0.2126 * Linear(c.R)) + (0.7152 * Linear(c.G)) + (0.0722 * Linear(c.B));
-    }
-
-    private static double Linear(byte value) {
-        double v = value / 255.0;
-
-        return v <= 0.03928 ? v / 12.92 : Math.Pow((v + 0.055) / 1.055, 2.4);
-    }
-
-
-    private static Color Grey(int level) {
-        byte v = (byte)Math.Clamp(level, 0, 255);
-
-        return Color.FromRgb(v, v, v);
-    }
-
-    private static Color Lift(Color from, int by, int blue = 0) {
-        return Color.FromRgb(
-            (byte)Math.Clamp(from.R + by, 0, 255),
-            (byte)Math.Clamp(from.G + by, 0, 255),
-            (byte)Math.Clamp(from.B + by + blue, 0, 255));
-    }
-
-    /// <summary>Perceived lightness, 0…1 — Rec. 601 weights, which is plenty for a light/dark decision.</summary>
-    private static double Luminance(Color color) {
-        return ((0.299 * color.R) + (0.587 * color.G) + (0.114 * color.B)) / 255.0;
+    private static Brush Frozen(Rgb color) {
+        return Frozen(Color.FromRgb(color.R, color.G, color.B));
     }
 
     private static Brush Frozen(Color color) {

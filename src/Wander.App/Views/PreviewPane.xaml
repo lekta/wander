@@ -4,10 +4,11 @@
              xmlns:conv="clr-namespace:Wander.App.Converters"
              xmlns:controls="clr-namespace:Wander.App.Controls"
              xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
-             xmlns:ae="http://icsharpcode.net/sharpdevelop/avalonedit"
+             xmlns:hl="clr-namespace:Wander.App.Highlighting"
              xmlns:res="clr-namespace:Wander.App.Resources"
-             BorderBrush="{StaticResource Separator}" BorderThickness="1,0,0,0"
-             Background="{StaticResource PreviewBackground}">
+             xmlns:util="clr-namespace:Wander.App.Util"
+             BorderBrush="{DynamicResource Separator}" BorderThickness="1,0,0,0"
+             Background="{DynamicResource PreviewBackground}">
     <!--
         The preview pane: one content area that switches by
         PreviewController.Kind (image, animated GIF, video, text, code, web,
@@ -577,7 +578,7 @@
                             veil over the picture.
                         -->
                         <controls:Spinner Width="22" Height="22" StrokeThickness="3"
-                                          Stroke="{StaticResource AccentStroke}" Fill="{StaticResource ReviewChartPlate}"
+                                          Stroke="{DynamicResource AccentStroke}" Fill="{StaticResource ReviewChartPlate}"
                                           Margin="0,16,16,0"
                                           HorizontalAlignment="Right" VerticalAlignment="Top"
                                           Visibility="{Binding IsRawDecoding, Converter={StaticResource BoolToVisibility}}"/>
@@ -900,7 +901,7 @@
                         <TextBlock Grid.Row="1"
                                    Text="{Binding ModelDetail}"
                                    Margin="8,4,8,6"
-                                   FontSize="11" Foreground="{StaticResource TextDim}"
+                                   FontSize="11" Foreground="{DynamicResource TextDim}"
                                    HorizontalAlignment="Center"/>
                     </Grid>
 
@@ -922,7 +923,7 @@
                              Padding="6"/>
 
                     <!-- Code with syntax highlighting -->
-                    <ae:TextEditor x:Name="CodeEditor"
+                    <hl:ThemedTextEditor x:Name="CodeEditor"
                                    Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Code}"
                                    IsReadOnly="True"
                                    ShowLineNumbers="True"
@@ -941,18 +942,21 @@
                                  Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Document}"
                                  IsReadOnly="True" IsDocumentEnabled="True"
                                  IsInactiveSelectionHighlightEnabled="True"
-                                 Background="{StaticResource InputBackground}" BorderThickness="0"
+                                 Background="{StaticResource PaperBackground}" Foreground="{StaticResource PaperText}"
+                                 BorderThickness="0"
                                  VerticalScrollBarVisibility="Auto"
                                  HorizontalScrollBarVisibility="Auto"
                                  Padding="6"/>
 
                     <!--
                         PDF / HTML / MHTML / Markdown / FB2 via WebView2.
-                        DefaultBackgroundColor is the only colour in the app
-                        outside Resources/Palette.xaml: it is a
-                        System.Drawing colour on a native control and takes
-                        no brush resource. It is also the paper a document
-                        is drawn on rather than window chrome.
+                        DefaultBackgroundColor is a System.Drawing colour on
+                        a native control and takes no brush resource: the
+                        paper a document is drawn on, white in either theme -
+                        a page that does not say its colours is made for it.
+                        Wander's own pages (Markdown, books) are dark with
+                        the theme by their stylesheet; the code-behind hands
+                        them a dark paper and tells the browser the scheme.
                     -->
                     <wv2:WebView2 x:Name="WebPreview"
                                   Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Web}"
@@ -996,7 +1000,7 @@
                                              Minimum="0" Maximum="100"
                                              Value="{Binding VolumeUsedPercent, Mode=OneWay}"
                                              Foreground="{Binding VolumeBarColor}"
-                                             Background="{StaticResource TrackBackground}" BorderBrush="{StaticResource TrackBorder}" BorderThickness="1"/>
+                                             Background="{DynamicResource TrackBackground}" BorderBrush="{DynamicResource TrackBorder}" BorderThickness="1"/>
                                 <Grid Margin="0,4,0,0">
                                     <TextBlock Text="{Binding VolumeUsage}"
                                                Style="{StaticResource PaneText}"
@@ -1017,7 +1021,7 @@
                                        Style="{StaticResource PaneDim}"
                                        Margin="0,4,0,0" TextWrapping="Wrap"/>
                             <TextBlock Text="{Binding FolderNote}"
-                                       Foreground="{StaticResource TextWarning}" FontSize="11"
+                                       Foreground="{DynamicResource TextWarning}" FontSize="11"
                                        Margin="0,4,0,0" TextWrapping="Wrap"
                                        Visibility="{Binding HasFolderNote, Converter={StaticResource BoolToVisibility}}"/>
 
@@ -1036,7 +1040,7 @@
                                         HorizontalAlignment="Center"
                                         Visibility="{Binding IsCensusLoading, Converter={StaticResource BoolToVisibility}}">
                                 <controls:Spinner Width="20" Height="20" StrokeThickness="2"
-                                                  Stroke="{StaticResource AccentStroke}"/>
+                                                  Stroke="{DynamicResource AccentStroke}"/>
                                 <TextBlock Text="{x:Static res:Strings.PreviewCounting}"
                                            Style="{StaticResource PaneDim}"
                                            FontSize="11" Margin="0,8,0,0"
@@ -1219,7 +1223,8 @@
                         transport.
                     -->
                     <StackPanel x:Name="PictureBar" Orientation="Horizontal"
-                                HorizontalAlignment="Left" VerticalAlignment="Bottom">
+                                HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                                util:ThemeScope.Dark="{Binding ContentPalette.IsDark}">
                         <StackPanel.Style>
                             <Style TargetType="StackPanel">
                                 <Setter Property="Visibility" Value="Collapsed"/>
@@ -1358,10 +1363,10 @@
 
                     <!-- Loading spinner — overlays content while content loads -->
                     <Grid Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisibility}}"
-                          Background="{StaticResource LoadingVeil}"
+                          Background="{DynamicResource LoadingVeil}"
                           IsHitTestVisible="False">
                         <controls:Spinner Width="32" Height="32" StrokeThickness="3"
-                                          Stroke="{StaticResource AccentStroke}"
+                                          Stroke="{DynamicResource AccentStroke}"
                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Grid>
 
@@ -1373,8 +1378,8 @@
                     -->
                     <Border x:Name="FindBar" Visibility="Collapsed"
                             HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,20,0"
-                            Background="{StaticResource InputBackground}"
-                            BorderBrush="{StaticResource Separator}" BorderThickness="1" CornerRadius="3"
+                            Background="{DynamicResource InputBackground}"
+                            BorderBrush="{DynamicResource Separator}" BorderThickness="1" CornerRadius="3"
                             Padding="4,1">
                         <StackPanel>
                             <StackPanel Orientation="Horizontal">
@@ -1383,7 +1388,7 @@
                                          ToolTip="{x:Static res:Strings.PreviewFindBox}"
                                          TextChanged="FindBox_TextChanged"
                                          PreviewKeyDown="FindBox_PreviewKeyDown"/>
-                                <TextBlock x:Name="FindCount" Foreground="{StaticResource TextDim}" FontSize="11"
+                                <TextBlock x:Name="FindCount" Foreground="{DynamicResource TextDim}" FontSize="11"
                                            VerticalAlignment="Center" Margin="6,0,4,0"/>
                                 <Button Style="{StaticResource FindGlyphButton}" Content="&#xE70E;"
                                         ToolTip="{x:Static res:Strings.PreviewFindPrevious}" Click="FindPrevious_Click"/>
@@ -1399,7 +1404,7 @@
                                 line says where they are to be seen.
                             -->
                             <TextBlock x:Name="FindBeyond" Visibility="Collapsed"
-                                       Foreground="{StaticResource TextDim}" FontSize="11"
+                                       Foreground="{DynamicResource TextDim}" FontSize="11"
                                        Margin="2,0,4,2" TextWrapping="Wrap" MaxWidth="260"/>
                         </StackPanel>
                     </Border>
@@ -1414,8 +1419,8 @@
 
                 <!-- Summary footer; absent on the second half of a split (ShowFooter) -->
                 <Border Grid.Row="2" Grid.ColumnSpan="2"
-                        BorderBrush="{StaticResource Separator}" BorderThickness="0,1,0,0"
-                        Padding="8,6" Background="{StaticResource ChromeBackground}"
+                        BorderBrush="{DynamicResource Separator}" BorderThickness="0,1,0,0"
+                        Padding="8,6" Background="{DynamicResource ChromeBackground}"
                         Visibility="{Binding ShowFooter, Converter={StaticResource BoolToVisibility}}">
                     <!--
                         The file's details on the left, the chart of levels
@@ -1438,9 +1443,9 @@
                             sharpness score after the last of them. One
                             TextBlock, so they wrap as one text.
                         -->
-                        <TextBlock FontSize="11" Foreground="{StaticResource TextSecondary}"
+                        <TextBlock FontSize="11" Foreground="{DynamicResource TextSecondary}"
                                    TextWrapping="Wrap">
-                            <Run Text="{Binding SummaryHead, Mode=OneWay}"/><Run Text="  "/><Run Text="{Binding SummaryNote, Mode=OneWay}" Foreground="{StaticResource TextDim}"/><Run Text="{Binding SummaryRest, Mode=OneWay}"/><Run Text="   "/><Run Style="{StaticResource FooterSharpness}" Foreground="{StaticResource ReviewSharp}" FontWeight="SemiBold" ToolTip="{Binding SharpnessTip}"/>
+                            <Run Text="{Binding SummaryHead, Mode=OneWay}"/><Run Text="  "/><Run Text="{Binding SummaryNote, Mode=OneWay}" Foreground="{DynamicResource TextDim}"/><Run Text="{Binding SummaryRest, Mode=OneWay}"/><Run Text="   "/><Run Style="{StaticResource FooterSharpness}" Foreground="{StaticResource ReviewSharp}" FontWeight="SemiBold" ToolTip="{Binding SharpnessTip}"/>
                         </TextBlock>
 
                         <!--
@@ -1463,9 +1468,9 @@
                         <StackPanel Orientation="Horizontal" Margin="0,6,0,0"
                                     Visibility="{Binding HasLinkTarget, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="{x:Static res:Strings.PreviewLinkTarget}"
-                                       FontSize="11" Foreground="{StaticResource TextDim}" VerticalAlignment="Center"/>
+                                       FontSize="11" Foreground="{DynamicResource TextDim}" VerticalAlignment="Center"/>
                             <TextBlock Text="{Binding LinkTargetName}"
-                                       FontSize="11" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"
+                                       FontSize="11" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center"
                                        Margin="4,0,0,0" MaxWidth="220"
                                        TextTrimming="CharacterEllipsis"
                                        ToolTip="{Binding LinkTarget}"/>
@@ -1488,7 +1493,7 @@
                             <!-- Unity .meta — the GUID, and a button to take it away -->
                             <StackPanel Orientation="Horizontal"
                                         Visibility="{Binding HasUnityGuid, Converter={StaticResource BoolToVisibility}}">
-                                <TextBlock Text="GUID" FontSize="11" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"/>
+                                <TextBlock Text="GUID" FontSize="11" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center"/>
                                 <TextBox Text="{Binding UnityGuid, Mode=OneWay}"
                                          IsReadOnly="True" IsReadOnlyCaretVisible="True"
                                          FontFamily="Consolas" FontSize="11"
@@ -1501,7 +1506,7 @@
                                         VerticalAlignment="Center"/>
                             </StackPanel>
                             <TextBlock Text="{Binding UnityDetail}"
-                                       FontSize="11" Foreground="{StaticResource TextDim}" TextWrapping="Wrap"/>
+                                       FontSize="11" Foreground="{DynamicResource TextDim}" TextWrapping="Wrap"/>
                         </StackPanel>
 
                         <!--
@@ -1531,7 +1536,7 @@
                                 <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource RatingControls}"/>
 
                                 <TextBlock Text="{Binding CustomColorLabel}"
-                                           FontSize="11" Foreground="{StaticResource TextDim}"
+                                           FontSize="11" Foreground="{DynamicResource TextDim}"
                                            VerticalAlignment="Center" Margin="8,0,0,0"/>
 
                                 <!--
@@ -1542,7 +1547,7 @@
                                 -->
                                 <TextBlock Text="{Binding RatingOthers}"
                                            ToolTip="{Binding RatingOthersHint}"
-                                           FontSize="11" Foreground="{StaticResource TextDim}"
+                                           FontSize="11" Foreground="{DynamicResource TextDim}"
                                            VerticalAlignment="Center" Margin="8,0,0,0"
                                            Visibility="{Binding HasRatingOthers, Converter={StaticResource BoolToVisibility}}"/>
                             </StackPanel>
@@ -1569,7 +1574,7 @@
                             still took a line under the stars.
                         -->
                         <TextBlock Text="{Binding CompanionStatus}"
-                                   FontSize="11" Foreground="{StaticResource TextDim}" TextWrapping="Wrap">
+                                   FontSize="11" Foreground="{DynamicResource TextDim}" TextWrapping="Wrap">
                             <TextBlock.Style>
                                 <Style TargetType="TextBlock">
                                     <Style.Triggers>

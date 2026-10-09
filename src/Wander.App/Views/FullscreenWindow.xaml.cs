@@ -115,6 +115,7 @@ public partial class FullscreenWindow : Window {
             }
         };
         App.ParkIfHeadless(this);
+        InterfaceTheme.Attach(this);
         Closed += (_, _) => {
             _closed = true;
             vm.Entries.CollectionChanged -= OnEntriesChanged;

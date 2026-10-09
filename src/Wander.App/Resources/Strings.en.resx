@@ -1144,7 +1144,7 @@
     <value>Rating</value>
   </data>
   <data name="GalleryBackgroundLight" xml:space="preserve">
-    <value>Light</value>
+    <value>Same as window</value>
   </data>
   <data name="GalleryBackgroundGrey" xml:space="preserve">
     <value>Gray</value>
@@ -1183,7 +1183,7 @@
     <value>Gallery</value>
   </data>
   <data name="SettingsGalleryBackground" xml:space="preserve">
-    <value>Background</value>
+    <value>Gallery background</value>
   </data>
   <data name="SettingsAutoGallery" xml:space="preserve">
     <value>Use Gallery when photos in a folder exceed</value>
@@ -2468,6 +2468,18 @@
   </data>
   <data name="SettingsCategoryInterface" xml:space="preserve">
     <value>Interface</value>
+  </data>
+  <data name="SettingsThemeGroup" xml:space="preserve">
+    <value>Color scheme</value>
+  </data>
+  <data name="SettingsThemeSystem" xml:space="preserve">
+    <value>Same as Windows: {0}</value>
+  </data>
+  <data name="SettingsThemeLight" xml:space="preserve">
+    <value>Light</value>
+  </data>
+  <data name="SettingsThemeDark" xml:space="preserve">
+    <value>Dark</value>
   </data>
   <data name="SettingsLanguageGroup" xml:space="preserve">
     <value>Language</value>

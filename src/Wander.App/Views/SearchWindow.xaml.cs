@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
+using Wander.App.Util;
 
 namespace Wander.App.Views;
 
@@ -19,6 +20,7 @@ public partial class SearchWindow : Window {
     public SearchWindow() {
         InitializeComponent();
         App.ParkIfHeadless(this);
+        InterfaceTheme.Attach(this);
     }
 
 

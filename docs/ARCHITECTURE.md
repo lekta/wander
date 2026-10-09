@@ -39,6 +39,7 @@ WIC без `PresentationCore`). `Preview/ImageDecoder` в App правомерн
 src/
 ├── Wander.Core/
 │   ├── Actions/        свои действия: каталог и пресеты, применимость, командная строка, запуск
+│   ├── Appearance/     UiTheme, арифметика тонов (контраст, подъём, читаемый цвет)
 │   ├── Companions/     спутники: правила, группы, сайдкары оценок
 │   ├── Diagnostics/    PerfLog, LongWait, BuildInfo, кто держит файл
 │   ├── FileSystem/     IFileSystem, операции и батчи, конфликты, буфер, сторож, гарды,
@@ -84,11 +85,11 @@ src/
     ├── Diagnostics/    CrashReporter, счётчики, UiStallWatch, SystemVitals, стенд операции
     ├── Dialogs/        IDialogs, WpfDialogs
     ├── DragPreview/    перетаскивание: приём, отдача, плашка
-    ├── Highlighting/   *.xshd
+    ├── Highlighting/   *.xshd, редактор кода с цветами по теме
     ├── Menu/           ContextMenuFactory, ShellMenuCache
     ├── Preview/        раскодирование и отрисовка для панели просмотра
-    ├── Resources/      Strings*.resx и аксессоры, Palette, MenuStyles
-    ├── Util/           форматы чисел и времени, ListVisuals, SelectionController
+    ├── Resources/      Strings*.resx и аксессоры, палитра (общая и две темы), StockControls, MenuStyles
+    ├── Util/           форматы чисел и времени, ListVisuals, SelectionController, тема и язык
     ├── ViewModels/     вьюмодели настроек и строк, базовые типы
     ├── Views/          виды и окна
     ├── MainViewModel.cs — при окне, не в ViewModels/ (см. «Окно и его контролы»)
@@ -114,7 +115,7 @@ date   : 2026-10-08
 commit : 66c8939
 
 -- Wander.Core: levels --
-  0: (root), Imaging, Layout, Localization, Logging, Operations, Panels
+  0: (root), Appearance, Imaging, Layout, Localization, Logging, Operations, Panels
   1: Diagnostics, Icons, Undo
   2: FileSystem
   3: Companions, Folders, Navigation, Preview
@@ -130,9 +131,9 @@ commit : 66c8939
   2: (root)
 
 -- Wander.App: levels --
-  0: Highlighting, Menu, Resources
+  0: Menu, Resources
   1: Util
-  2: Diagnostics, Preview, ViewModels
+  2: Diagnostics, Highlighting, Preview, ViewModels
   3: Conflict, Converters
   4: Controllers, Controls, Dialogs, DragPreview
   5: Views
@@ -1575,13 +1576,18 @@ RefreshFolderAsync (листинг + свёртка, пул)
 ### Фон галереи — палитра
 
 `GalleryBackground` (Light / Grey / Dark) в Core, яркость тёмных —
-`GalleryGreyLevel` / `GalleryDarkLevel`. `GalleryPalette` (App) из трёх
-чисел собирает **весь** набор: фон, подпись, приглушённый, ховер,
-выделение активное / неактивное, рамки — роли двигаются вместе (тёмный
-фон со светлой подписью нечитаем, с голубым Проводника — лайтбоксы ярче
-фото); на тёмном подсветка — `Lift` фона, на светлом — `#CCE8FF` /
-`#E8E8E8`. `Light` = `SystemColors.WindowColor`, по умолчанию. Панель
-просмотра берёт фон только под картинкой (`Image`, `Gif`, лупа).
+`GalleryGreyLevel` / `GalleryDarkLevel`; по умолчанию серый. `GalleryPalette`
+(App) из трёх чисел собирает **весь** набор: фон, подпись, приглушённый,
+ховер, выделение активное / неактивное, рамки — роли двигаются вместе
+(тёмный фон со светлой подписью нечитаем, с голубым Проводника — лайтбоксы
+ярче фото); на тёмном подсветка — подъём фона (`Tone.Lift`), на светлом сером
+— цвета Проводника; подпись — самый тихий тон с контрастом 4,5:1
+(`Tone.Quietest`). Арифметика — `Core/Appearance/Tone` (тест). `Light` —
+«Как у окна» (решение человека 2026-10-08): фон списка темы и её подсветка
+строк, светлый или тёмный с темой; в настройках — на «Интерфейсе» рядом со
+схемой. `IsDark` — что ещё в галерее идёт за фоном (`ThemeScope`, «Цвета —
+один словарь»). Панель просмотра берёт фон только под картинкой (`Image`,
+`Gif`, лупа).
 
 ## Окно и его контролы
 
@@ -1687,15 +1693,58 @@ RefreshFolderAsync (листинг + свёртка, пул)
 
 ### Цвета — один словарь
 
-`Resources/Palette.xaml` — кисти по тому, **что красят** (поверхности,
-линии, текст, строки, контролы, акцент, метки, меню); влит в `App.xaml`
-первым; `MenuStyles.xaml` вливает сам. Code-behind — `Resources/Palette.cs`,
-`static readonly` на одном классе: опечатка падает на первой отрисовке.
-Тёмная тема — второй набор тех же значений, если больше ничего нет
-(`Foreground="#888"` во вьюхе — светлый угол). Не в словаре намеренно
-(шапка файла): `GalleryPalette` (вычисляется), `*.xshd`,
-`DefaultBackgroundColor` WebView2, обложка книги в `SystemIconProvider`;
-свет 3D-сцены — раздел «Not chrome». Семь градаций серого текста — TECHDEBT.
+Кисти — по тому, **что красят**, в трёх файлах `Resources/`: `Palette.xaml`
+— что тема не трогает (метки и оценки, хелперы и плашки поверх снимка,
+бумага документа, плашка перетаскивания, свет 3D-сцены);
+`Palette.Light.xaml` / `Palette.Dark.xaml` — хром окна, одни ключи в одном
+порядке (сверяет `check-resources.ps1`). Все три — в `Shared.xaml`, тема —
+вторым пунктом. Code-behind — `Resources/Palette.cs`: постоянные — `Brush`,
+тематические — `ThemeKey` (`Paint` красит ссылкой на ресурс, `Current` — для
+арифметики); поля `static readonly` на одном классе — опечатка падает на
+первой отрисовке. Серого текста — четыре ступени на восемь ключей-ролей.
+
+**Тема** — `AppSettings.Theme` (`UiTheme`: `System` / `Light` / `Dark`),
+правило — `UiThemes.IsDark` (Core, тест); «как в Windows» — режим приложений
+(`AppsUseLightTheme`), перечитывается по `UserPreferenceChanged`. Решения
+человека 2026-10-08: [сразу, на лету]; [фон диалогов — один, серый хрома];
+[подтверждения — системный `MessageBox`, в тёмной теме светлый] (TECHDEBT).
+`Util/InterfaceTheme.Apply` — в `App.OnStartup` до первого окна и из
+`MainViewModel.OnSettingsChanged`: меняет пункт темы в `Shared.xaml`
+(экземпляры грузятся раз), и всё, что красится `DynamicResource`,
+перекрашивается — без пересборки, выделение и прокрутка на месте. Поэтому
+тематический ключ во вьюхе — только `DynamicResource` (`StaticResource`
+держит кисть со времени постройки), ключи `Palette.xaml` —
+`StaticResource`. `Changed` — тем, кто цвета выводит, а не берёт:
+`GalleryPalette`, редактор кода, WebView2. Заголовок окна — DWM
+(`DWMWA_USE_IMMERSIVE_DARK_MODE`) и цвет очистки до первого кадра:
+`InterfaceTheme.Attach` в конструкторе каждого окна рядом с
+`ParkIfHeadless`.
+
+**Стандартные контролы** — `Resources/StockControls.xaml` (вливает
+`Controls.xaml`): шаблоны Aero2 элемент в элемент, жёсткие цвета Aero2 —
+ключами палитры; светлая несёт значения Aero2, и светлая тема совпала с
+прежней до пикселя (стенд отрисовки), кроме заголовка колонки таблицы: у
+Aero2 он — хром `DataGridHeaderBorder` с зашитыми цветами, здесь плоский,
+как у Проводника Win11. Стили неявные; свой ключевой стиль такого контрола
+без своего `Template` — `BasedOn="{StaticResource {x:Type X}}"`, иначе под
+ним Aero2. Что WPF рисует системными цветами (окно по умолчанию, ячейки
+таблицы, серый выключенного, бумага AvalonEdit, угол `ScrollViewer`),
+переопределяет только тёмная палитра; в светлой системные цвета — Windows.
+
+**Область своей темы** — `Util/ThemeScope.Dark` на элементе: внутрь
+вливается палитра той темы, на какой поверхности элемент лежит (галерея —
+`GalleryPalette.IsDark`, полоса снимка поверх картинки —
+`ContentPalette.IsDark`), и полосы прокрутки, звёзды, кнопка RAW берут её
+цвета. Пока поверхность совпадает с темой — ничего не вливается; смена темы
+решает заново. Всплывающее (подсказки, меню) — в теме окна.
+
+Не в палитре намеренно (шапка `Palette.xaml`): `GalleryPalette`
+(вычисляется); цвета подсветки кода — `*.xshd` и встроенные AvalonEdit
+сделаны для белой бумаги, в тёмной теме `Highlighting/ThemedTextEditor`
+сдвигает каждый к белому до 4,5:1 (`Tone.Readable`); стили страниц
+Markdown и книг (`PreviewText`, обе схемы; WebView2 —
+`PreferredColorScheme`); `DefaultBackgroundColor` WebView2 (белая бумага,
+под своей страницей — фон панели); обложка книги в `SystemIconProvider`.
 
 **Общие формы — `Resources/Controls.xaml`, конвертеры —
 `Resources/Converters.xaml`**; `Resources/Shared.xaml` — единственный
@@ -2592,10 +2641,9 @@ prevention выключен — браузер ничего не качает.
   папки (`SystemRootFolders`).
 - «Помощь» — `CrashReporter.GuideUrl` (`lekta.github.io/wander/guide/`,
   в английском интерфейсе — `…/en/guide/`).
-- **«Интерфейс»** (2026-10-08) — язык; сюда же — цветовая схема, когда
-  будет (решение человека: [отдельная страница; «Вид» перестроить, если
-  подойдёт] — фон галереи с темой переедет сюда при тёмной теме, пока
-  «Вид» как был). Последняя в группе «что на экране».
+- **«Интерфейс»** (2026-10-08) — цветовая схема (сразу), фон галереи
+  (переехал с «Галереи»: видны вместе, «Как у окна» светлый или тёмный со
+  схемой), язык (после перезапуска). Последняя в группе «что на экране».
 
 ### Новая настройка — по шагам
 

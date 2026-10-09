@@ -6,6 +6,7 @@ using Wander.App.Conflict;
 using Wander.App.Controllers;
 using Wander.App.Preview;
 using Wander.App.Resources;
+using Wander.App.Util;
 using Wander.App.ViewModels;
 using Wander.Core;
 using Wander.Core.FileSystem;
@@ -76,6 +77,7 @@ public partial class CompareWindow : Window {
         PaneB.TextScrolled += (_, at) => PaneA.FollowTextScroll(at);
 
         App.ParkIfHeadless(this);
+        InterfaceTheme.Attach(this);
         Closed += (_, _) => {
             _a.Detach();
             _b.Detach();

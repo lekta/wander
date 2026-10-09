@@ -9,6 +9,7 @@
         ShowInTaskbar="False"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
+        Background="{DynamicResource ChromeBackground}"
         Closing="OnClosing">
     <!--
         The operation, while it runs. Not modal: a copy of five gigabytes
@@ -39,7 +40,7 @@
     <Window.Resources>
         <Style x:Key="CaptionButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="{StaticResource TextMuted}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMuted}"/>
             <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
             <Setter Property="FontSize" Value="10"/>
             <Setter Property="Focusable" Value="False"/>
@@ -52,10 +53,10 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource ControlHover}"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ControlHover}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource ControlPressed}"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ControlPressed}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -67,7 +68,7 @@
     <DockPanel>
         <Grid DockPanel.Dock="Top" Height="30">
             <TextBlock Text="{Binding DialogTitle}"
-                       Foreground="{StaticResource TextCaption}" FontSize="12"
+                       Foreground="{DynamicResource TextCaption}" FontSize="12"
                        TextTrimming="CharacterEllipsis"
                        VerticalAlignment="Center"
                        Margin="12,0,52,0"/>
@@ -92,7 +93,7 @@
                            Margin="0,0,0,10"/>
 
                 <TextBlock Text="{Binding Operation.CurrentFile}"
-                           Foreground="{StaticResource TextCaption}" FontSize="11"
+                           Foreground="{DynamicResource TextCaption}" FontSize="11"
                            TextTrimming="CharacterEllipsis"
                            Margin="0,0,0,8"/>
 
@@ -114,18 +115,18 @@
 
                     <StackPanel Grid.Column="0">
                         <TextBlock Text="{Binding Operation.ItemsText}"
-                                   Foreground="{StaticResource TextDim}" FontSize="11"/>
+                                   Foreground="{DynamicResource TextDim}" FontSize="11"/>
                         <TextBlock Text="{Binding Operation.BytesText}"
-                                   Foreground="{StaticResource TextDim}" FontSize="11"
+                                   Foreground="{DynamicResource TextDim}" FontSize="11"
                                    Margin="0,2,0,0"/>
                     </StackPanel>
 
                     <StackPanel Grid.Column="1" HorizontalAlignment="Right" Margin="12,0,0,0">
                         <TextBlock Text="{Binding Operation.SpeedText}"
-                                   Foreground="{StaticResource TextDim}" FontSize="11"
+                                   Foreground="{DynamicResource TextDim}" FontSize="11"
                                    HorizontalAlignment="Right"/>
                         <TextBlock Text="{Binding Operation.RemainingText}"
-                                   Foreground="{StaticResource TextDim}" FontSize="11"
+                                   Foreground="{DynamicResource TextDim}" FontSize="11"
                                    HorizontalAlignment="Right"
                                    Margin="0,2,0,0"/>
                     </StackPanel>

@@ -154,6 +154,7 @@ exe), переменная `WANDER_DATA_DIR`, иначе `%LOCALAPPDATA%\Wander`
 | Дерево, закладки, сторож | `PanelRulesTests`, `PanelKeyNavigationTests`, `PanelViewTests`, `PanelPathsTests`, `TreeNavThrottleTests`, `FolderChangesTests`, `NavigationFallbackTests`, `BranchReconcileTests` (уровень панели: строки живут, вставки / перестановки / удаления вокруг), `PathFollowingTests`, `UndoableActionsTests` (пары `MovesOnUndo`), `NavigationServiceTests` (`RewritePaths`); харнесс: `tree-bookmarks` (таблица сценариев), внешнее создание файла в песочнице → строка появилась | Дерево и закладки | `nav.trees`, `nav.watch`, `WS …` (с `LogActions`) |
 | Архивы как папки, извлечение, панель просмотра | `ArchivePathTests`, `ExtractionServiceTests`, `PreviewRouterTests`, `ContextMenuBuilderTests` («Извлечь рядом»); харнесс: `selfcheck` (ассоциации машины) + сценарий `archives` | Архивы как папки (извлечь рядом, перетаскивание из дерева); Файловые операции; Обмен с системой (наружу — только глазами) | `Extract:`, `Extract (temporary copy)`, `Archive enumerate`, «Archives open as folders» в первых строках лога |
 | Действия, каталог, запуск; групповое переименование | `ActionApplicabilityTests`, `CommandLineTests`, `ExternalActionRunnerTests`, `ActionCatalogTests`, `ActionReportTests`, `BuiltinArgumentsTests`, `ContextMenuBuilderTests`, `RenamePlannerTests`, `HoldFileActionTests`; харнесс: `smoke-walk` (меню), `focus-keys` (`F2`) — окна действий и переименования он не поднимает | **Действия** — целиком; Ход операции (окно действия) | `Action '…'`, `image-convert:`, `Batch rename:`, `Rename:` |
+| Цвет: палитра, `StockControls.xaml`, тема, `ThemeScope`, `GalleryPalette` | `ToneTests`, `UiThemesTests`; `check-resources.ps1` (ключи двух тем совпадают); стенд отрисовки: светлая тема против Aero2 попиксельно, страницы настроек в обеих темах | Настройки («Цветовая схема»); Окружения (тёмная Windows); Просмотр и галерея (фон галереи) | `Theme: …` |
 | Строки, язык, `Strings.en.resx`, руководство и сайт | `check-strings.ps1` (ключи, плейсхолдеры и формы обоих языков), `UiLanguagesTests`, `PluralFormTests`; шаг «site» (`GUIDE.en.md` в пару, цели `guideEn`) | Настройки («Интерфейс»); английский интерфейс — окна по ширине | `Interface language: …` |
 | Сборка, поставка, версия, номер сборки | `check.bat run`, `size-report.ps1`, `AppStateVersionTests` | После обновления; чистая машина | `Startup: first frame`, первая строка лога — версия с номером сборки |
 
@@ -1063,7 +1064,9 @@ exe), переменная `WANDER_DATA_DIR`, иначе `%LOCALAPPDATA%\Wander`
 
 - [ ] DPI 100 / 150 / 200 %, два монитора с разным DPI, геометрия окна при
       отключённом мониторе (`WindowPlacement`).
-- [ ] Тёмная тема Windows и высокая контрастность — всё читаемо.
+- [ ] Тёмная тема Windows и высокая контрастность — всё читаемо; в
+      тёмной Windows Wander со схемой «Как в Windows» тёмный с первого
+      кадра, без светлой вспышки окна и заголовка.
 - [ ] Не-администратор и elevated; профиль с кириллицей в пути.
 - [ ] OneDrive «файлы по требованию»: листинг и миниатюры не тянут файлы
       из облака.
@@ -1073,6 +1076,22 @@ exe), переменная `WANDER_DATA_DIR`, иначе `%LOCALAPPDATA%\Wander`
 
 ### Настройки
 
+- [ ] **«Интерфейс» → «Цветовая схема»**: первый переключатель называет
+      режим Windows («Как в Windows: светлая»). «Тёмная» — окно, панели,
+      таблица, меню, подсказки, полосы прокрутки, поля, заголовки окон
+      тёмные сразу, выделение и прокрутка на месте; открыть каждый диалог
+      (совпадения, переименование группой, сравнение, поиск, ввод имени,
+      вопрос с вариантами, окно операции) — тёмный, текст читается;
+      «Отмена» в настройках возвращает прежнюю схему. «Как в Windows» +
+      переключить режим в «Параметрах» Windows — Wander следует сам. В
+      логе — `Theme: dark (setting Dark, …)`.
+- [ ] **Тёмная тема, панель просмотра**: код (`.cs`, `.json`, `.xml`) —
+      цвета подсветки читаются; Markdown и FB2 — тёмные; `.html` без своей
+      тёмной схемы, PDF и `.rtf` — на белой бумаге.
+- [ ] **Фон галереи** (на «Интерфейсе»): «Как у окна» — в тёмной теме
+      тёмный, подсветка как у списка; «Серый» и «Тёмный» в светлой теме —
+      полоса прокрутки, звёзды, рамка курсора в галерее тёмные; полный
+      экран на тёмном фоне — кнопка RAW читается, на светлом футере тоже.
 - [ ] **«Интерфейс» → «Язык (Language)»**: три переключателя, первый
       называет язык Windows («Как в Windows: Русский»); выбрать «English»,
       перезапустить — окно, меню, диалоги, настройки, подсказки, строка

@@ -6,11 +6,16 @@
         run App.xaml's InitializeComponent and used to repeat the list by
         hand - a dictionary added here reaches both.
 
-        Order matters for parse-time StaticResource lookups: the palette
-        first, then what draws with it.
+        The palette first: the colours a theme leaves alone, then the
+        theme's own - the light one here, swapped for Palette.Dark.xaml at
+        run time by Util/InterfaceTheme, which finds it in this list by its
+        name. Then what draws with them. StockControls.xaml (WPF's own
+        controls) is merged by Controls.xaml, whose styles are based on it
+        and have to find it at parse time.
     -->
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="Palette.xaml"/>
+        <ResourceDictionary Source="Palette.Light.xaml"/>
         <ResourceDictionary Source="MenuStyles.xaml"/>
         <ResourceDictionary Source="Converters.xaml"/>
         <ResourceDictionary Source="Controls.xaml"/>

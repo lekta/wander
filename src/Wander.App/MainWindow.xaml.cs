@@ -81,6 +81,7 @@ public partial class MainWindow : Window {
         // away from whoever is working on this desktop, and parking it
         // off-screen alone would not stop it doing that.
         App.ParkIfHeadless(this);
+        InterfaceTheme.Attach(this);
 
         Loaded += OnLoaded;
         ContentRendered += OnFirstFrame;
@@ -1168,10 +1169,12 @@ public partial class MainWindow : Window {
         if (Log.Details && ZoneOf(e.OldFocus) is var was && was != zone) {
             Log.Detail($"Focus: {ZoneName(was, e.OldFocus)} -> {ZoneName(zone, e.NewFocus)}");
         }
-        FileListZone.BorderBrush = zone == WindowZone.FileList ? Palette.FocusOutline : Brushes.Transparent;
-        FolderTrees.ShowFocusOutline(
-            zone is WindowZone.Bookmarks or WindowZone.Drives ? PaneSource(zone.Value) : null,
-            Palette.FocusOutline);
+        if (zone == WindowZone.FileList) {
+            Palette.FocusOutline.Paint(FileListZone, Border.BorderBrushProperty);
+        } else {
+            FileListZone.BorderBrush = Brushes.Transparent;
+        }
+        FolderTrees.ShowFocusOutline(zone is WindowZone.Bookmarks or WindowZone.Drives ? PaneSource(zone.Value) : null);
 
         if (zone is WindowZone.Bookmarks or WindowZone.Drives) {
             _lastFolderPane = zone.Value;

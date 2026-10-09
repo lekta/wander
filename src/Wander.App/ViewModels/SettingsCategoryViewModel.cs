@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using System.Windows.Data;
 using Wander.App.Resources;
 using Wander.App.Util;
@@ -101,9 +102,9 @@ public sealed class GallerySettingsCategory : SettingsCategoryViewModel {
 
 
 /// <summary>
-/// The interface as a whole: its language now, its colour scheme when there
-/// is one (2026-10-08). The guide has no section of its own for it yet - F1
-/// opens the settings catalog.
+/// The interface as a whole: its colour scheme, the gallery's background
+/// that goes with it, its language. The guide has no section of its own for
+/// it yet - F1 opens the settings catalog.
 /// </summary>
 public sealed class InterfaceSettingsCategory : SettingsCategoryViewModel {
     public InterfaceSettingsCategory(SettingsViewModel owner)
@@ -112,6 +113,11 @@ public sealed class InterfaceSettingsCategory : SettingsCategoryViewModel {
 
     /// <summary>"Как в Windows: Русский" - the first choice names what following Windows means here.</summary>
     public string SystemChoice => string.Format(Strings.SettingsLanguageSystem, InterfaceLanguage.WindowsChoiceName);
+
+    /// <summary>"Как в Windows: тёмная" - the same for the colour scheme, as Windows has it when the page is shown.</summary>
+    public string ThemeSystemChoice => string.Format(
+        Strings.SettingsThemeSystem,
+        (InterfaceTheme.WindowsIsDark ? Strings.SettingsThemeDark : Strings.SettingsThemeLight).ToLower(CultureInfo.CurrentUICulture));
 }
 
 

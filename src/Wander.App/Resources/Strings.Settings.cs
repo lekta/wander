@@ -198,7 +198,7 @@ public static partial class Strings {
     /// <summary>Галерея</summary>
     public static string SettingsGalleryGroup => Get(nameof(SettingsGalleryGroup));
 
-    /// <summary>Фон</summary>
+    /// <summary>Фон галереи</summary>
     public static string SettingsGalleryBackground => Get(nameof(SettingsGalleryBackground));
 
     /// <summary>Включать галерею, если снимков в папке больше</summary>
@@ -401,6 +401,18 @@ public static partial class Strings {
 
     /// <summary>Интерфейс</summary>
     public static string SettingsCategoryInterface => Get(nameof(SettingsCategoryInterface));
+
+    /// <summary>Цветовая схема</summary>
+    public static string SettingsThemeGroup => Get(nameof(SettingsThemeGroup));
+
+    /// <summary>Как в Windows: {0}</summary>
+    public static string SettingsThemeSystem => Get(nameof(SettingsThemeSystem));
+
+    /// <summary>Светлая</summary>
+    public static string SettingsThemeLight => Get(nameof(SettingsThemeLight));
+
+    /// <summary>Тёмная</summary>
+    public static string SettingsThemeDark => Get(nameof(SettingsThemeDark));
 
     /// <summary>Язык (Language)</summary>
     public static string SettingsLanguageGroup => Get(nameof(SettingsLanguageGroup));

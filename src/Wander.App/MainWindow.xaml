@@ -69,7 +69,7 @@
         <KeyBinding Modifiers="Ctrl+Shift" Key="D7" Command="{Binding SetViewModeCommand}" CommandParameter="Tiles"/>
     </Window.InputBindings>
     <DockPanel>
-        <DockPanel DockPanel.Dock="Top" Background="{StaticResource ChromeBackground}">
+        <DockPanel DockPanel.Dock="Top" Background="{DynamicResource ChromeBackground}">
             <StackPanel x:Name="NavToolbar" Orientation="Horizontal" DockPanel.Dock="Left" Margin="4,4,8,4">
                 <!--
                     The folders pane, on and off. Leftmost because the pane
@@ -86,13 +86,13 @@
                         Focusable="False"
                         Width="28" Height="28" Margin="0" Padding="0">
                     <Border Width="16" Height="12" CornerRadius="2" SnapsToDevicePixels="True"
-                            BorderBrush="{StaticResource TextSecondary}" BorderThickness="1">
+                            BorderBrush="{DynamicResource TextSecondary}" BorderThickness="1">
                         <Border HorizontalAlignment="Left" Width="6"
-                                BorderBrush="{StaticResource TextSecondary}" BorderThickness="0,0,1,0"
+                                BorderBrush="{DynamicResource TextSecondary}" BorderThickness="0,0,1,0"
                                 Opacity="0.75">
                             <Border.Style>
                                 <Style TargetType="Border">
-                                    <Setter Property="Background" Value="{StaticResource TextSecondary}"/>
+                                    <Setter Property="Background" Value="{DynamicResource TextSecondary}"/>
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsFoldersVisible}" Value="False">
                                             <Setter Property="Background" Value="Transparent"/>
@@ -103,7 +103,7 @@
                         </Border>
                     </Border>
                 </Button>
-                <Border Width="1" Margin="4,6,6,6" Background="{StaticResource Separator}"/>
+                <Border Width="1" Margin="4,6,6,6" Background="{DynamicResource Separator}"/>
                 <Button Style="{StaticResource ToolbarButton}"
                         Command="{Binding BackCommand}" ToolTip="{x:Static res:Strings.NavBack}"
                         Width="28" Height="28" Margin="0" Content="&#x2190;"/>
@@ -314,7 +314,7 @@
                                 of a gesture hint and simply takes no input.
                             -->
                             <MenuItem Header="{Binding VersionLabel}"
-                                      Foreground="{StaticResource MenuForegroundGesture}"
+                                      Foreground="{DynamicResource MenuForegroundGesture}"
                                       Focusable="False" IsHitTestVisible="False"/>
                         </MenuItem>
                         <MenuItem Header="{x:Static res:Strings.MenuDebug}"
@@ -373,7 +373,7 @@
             -->
             <Border x:Name="AddressBar"
                     VerticalAlignment="Center" Margin="0,4,4,4" MinHeight="26"
-                    Background="{StaticResource InputBackground}" BorderBrush="{StaticResource InputBorder}" BorderThickness="1"
+                    Background="{DynamicResource InputBackground}" BorderBrush="{DynamicResource InputBorder}" BorderThickness="1"
                     PreviewMouseLeftButtonDown="AddressBar_PreviewMouseLeftButtonDown">
                 <DockPanel>
                     <ToggleButton x:Name="RecentToggle" DockPanel.Dock="Right"
@@ -383,15 +383,15 @@
                         <ToggleButton.Template>
                             <ControlTemplate TargetType="ToggleButton">
                                 <Border x:Name="Bd" Background="{TemplateBinding Background}">
-                                    <TextBlock Text="&#x25BE;" FontSize="10" Foreground="{StaticResource TextSecondary}"
+                                    <TextBlock Text="&#x25BE;" FontSize="10" Foreground="{DynamicResource TextSecondary}"
                                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter TargetName="Bd" Property="Background" Value="{StaticResource ControlHover}"/>
+                                        <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ControlHover}"/>
                                     </Trigger>
                                     <Trigger Property="IsChecked" Value="True">
-                                        <Setter TargetName="Bd" Property="Background" Value="{StaticResource ControlChecked}"/>
+                                        <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ControlChecked}"/>
                                     </Trigger>
                                 </ControlTemplate.Triggers>
                             </ControlTemplate>
@@ -436,7 +436,7 @@
                                                         Command="{Binding DataContext.Nav.NavigateToCrumbCommand,
                                                                           RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding Path}"/>
-                                                <TextBlock Text="&#x203A;" Foreground="{StaticResource TextDim}" FontSize="13"
+                                                <TextBlock Text="&#x203A;" Foreground="{DynamicResource TextDim}" FontSize="13"
                                                            Margin="1,0" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </DataTemplate>
@@ -458,7 +458,7 @@
                                Width="{Binding ActualWidth, ElementName=AddressBar}"
                                IsOpen="{Binding IsChecked, ElementName=RecentToggle, Mode=TwoWay}"
                                StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
-                            <Border Background="{StaticResource InputBackground}" BorderBrush="{StaticResource InputBorder}" BorderThickness="1">
+                            <Border Background="{DynamicResource InputBackground}" BorderBrush="{DynamicResource InputBorder}" BorderThickness="1">
                                 <ListBox x:Name="RecentList" MaxHeight="320" BorderThickness="0"
                                          ItemsSource="{Binding Nav.RecentPaths}"
                                          SelectionChanged="RecentList_SelectionChanged"
@@ -510,7 +510,7 @@
                 click.
             -->
             <StatusBarItem DockPanel.Dock="Right" Margin="12,0,0,0">
-                <TextBlock Text="{Binding SelectionSummary}" Foreground="{StaticResource TextMuted}"
+                <TextBlock Text="{Binding SelectionSummary}" Foreground="{DynamicResource TextMuted}"
                            TextTrimming="CharacterEllipsis"/>
             </StatusBarItem>
             <!--
@@ -531,7 +531,7 @@
                                   Focusable="False">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="{Binding OperationsSummary}"
-                                       Foreground="{StaticResource TextMuted}"
+                                       Foreground="{DynamicResource TextMuted}"
                                        VerticalAlignment="Center" TextAlignment="Right"
                                        TextTrimming="CharacterEllipsis" MaxWidth="220"/>
                             <ProgressBar Width="110" Height="12" Margin="8,0,0,0"
@@ -554,8 +554,8 @@
                            Placement="Top" HorizontalOffset="-8" VerticalOffset="-4"
                            StaysOpen="False" AllowsTransparency="True"
                            PopupAnimation="Fade">
-                        <Border Background="{StaticResource ContentBackground}"
-                                BorderBrush="{StaticResource CardBorder}" BorderThickness="1"
+                        <Border Background="{DynamicResource ContentBackground}"
+                                BorderBrush="{DynamicResource CardBorder}" BorderThickness="1"
                                 Padding="12,10" MinWidth="340" MaxWidth="440">
                             <ItemsControl ItemsSource="{Binding Operations}">
                                 <ItemsControl.ItemTemplate>
@@ -570,21 +570,21 @@
                                                 <StackPanel Orientation="Horizontal">
                                                     <TextBlock Text="{Binding Verb}" FontWeight="SemiBold" FontSize="12"/>
                                                     <TextBlock Text="{Binding PercentText}" FontSize="12"
-                                                               Foreground="{StaticResource TextMuted}"
+                                                               Foreground="{DynamicResource TextMuted}"
                                                                Margin="8,0,0,0"/>
                                                 </StackPanel>
                                                 <TextBlock Text="{Binding CurrentFile}" FontSize="11"
-                                                           Foreground="{StaticResource TextCaption}"
+                                                           Foreground="{DynamicResource TextCaption}"
                                                            TextTrimming="CharacterEllipsis"
                                                            Margin="0,2,0,0"/>
                                                 <ProgressBar Height="6" Margin="0,4,0,0"
                                                              Minimum="0" Maximum="100"
                                                              Value="{Binding Percent, Mode=OneWay}"/>
                                                 <TextBlock Text="{Binding ItemsText}" FontSize="11"
-                                                           Foreground="{StaticResource TextDim}"
+                                                           Foreground="{DynamicResource TextDim}"
                                                            Margin="0,3,0,0"/>
                                                 <TextBlock Text="{Binding BytesText}" FontSize="11"
-                                                           Foreground="{StaticResource TextDim}"
+                                                           Foreground="{DynamicResource TextDim}"
                                                            Margin="0,1,0,0"/>
                                             </StackPanel>
 
@@ -626,12 +626,12 @@
                                     <DataTrigger Binding="{Binding StatusSeverity}" Value="Warning">
                                         <Setter Property="Visibility" Value="Visible"/>
                                         <Setter Property="Text" Value="&#xE7BA;"/>
-                                        <Setter Property="Foreground" Value="{StaticResource StatusWarningGlyph}"/>
+                                        <Setter Property="Foreground" Value="{DynamicResource StatusWarningGlyph}"/>
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding StatusSeverity}" Value="Error">
                                         <Setter Property="Visibility" Value="Visible"/>
                                         <Setter Property="Text" Value="&#xEA39;"/>
-                                        <Setter Property="Foreground" Value="{StaticResource StatusErrorGlyph}"/>
+                                        <Setter Property="Foreground" Value="{DynamicResource StatusErrorGlyph}"/>
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
@@ -670,7 +670,7 @@
                 keys, which put a grip nobody was looking for in the middle
                 of the Tab cycle. Resizing them is a mouse gesture here.
             -->
-            <GridSplitter Grid.Column="1" Focusable="False" HorizontalAlignment="Stretch" Background="{StaticResource Separator}"
+            <GridSplitter Grid.Column="1" Focusable="False" HorizontalAlignment="Stretch" Background="{DynamicResource Separator}"
                           DragCompleted="FoldersSplitter_DragCompleted"/>
 
             <!--
@@ -700,7 +700,7 @@
                           Grid.Column="3"
                           Focusable="False"
                           HorizontalAlignment="Stretch"
-                          Background="{StaticResource Separator}"
+                          Background="{DynamicResource Separator}"
                           DragCompleted="PreviewSplitter_DragCompleted"/>
 
             <!--

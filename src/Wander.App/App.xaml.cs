@@ -80,8 +80,11 @@ public partial class App : Application {
         NumberFormat.Install();
         PlatformBootstrapper.RegisterDefaults();
         // The interface language, read from the settings before the first
-        // string is: every window takes its text when it is built.
-        InterfaceLanguage.Apply(ServiceLocator.Get<IAppStateStore>().Load().Settings.Language);
+        // string is: every window takes its text when it is built. The
+        // theme before the first window too, so none starts light and turns.
+        var settings = ServiceLocator.Get<IAppStateStore>().Load().Settings;
+        InterfaceLanguage.Apply(settings.Language);
+        InterfaceTheme.Apply(settings.Theme);
         // The string table lives in this assembly, so Core cannot reach it
         // directly. Registering the source here — before anything builds a
         // menu — is what makes ContextMenuCatalog and PathSafety speak the

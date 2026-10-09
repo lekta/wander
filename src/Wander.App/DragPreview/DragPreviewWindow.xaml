@@ -12,6 +12,7 @@
         ResizeMode="NoResize">
     <Border Background="{StaticResource DragPlaqueBackground}"
             BorderBrush="{StaticResource DragPlaqueBorder}"
+            TextElement.Foreground="{StaticResource DragPlaqueText}"
             BorderThickness="1"
             CornerRadius="6"
             Padding="8"
@@ -46,7 +47,7 @@
                                TextTrimming="CharacterEllipsis"/>
                 </StackPanel>
                 <TextBlock x:Name="TargetLabel"
-                           FontSize="11" Foreground="{StaticResource TextCaption}"
+                           FontSize="11" Foreground="{StaticResource DragPlaqueCaption}"
                            TextTrimming="CharacterEllipsis"/>
             </StackPanel>
         </StackPanel>

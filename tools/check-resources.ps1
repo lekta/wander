@@ -87,12 +87,28 @@ foreach ($file in $files) {
     foreach ($m in [regex]::Matches($text, "\b(?:Try)?FindResource\(""($name)""\)")) {
         [void] $used.Add($m.Groups[1].Value)
     }
-    # Palette funnels FindResource through a local Find helper.
+    # Palette funnels FindResource through its local Find and Themed helpers.
     if ($file.Name -eq 'Palette.cs') {
-        foreach ($m in [regex]::Matches($text, "\bFind\(""($name)""\)")) {
+        foreach ($m in [regex]::Matches($text, "\b(?:Find|Themed)\(""($name)""\)")) {
             [void] $used.Add($m.Groups[1].Value)
         }
     }
+}
+
+# The two themes are one set of keys with two sets of values: a key only
+# one of them has fails as a DynamicResource that finds nothing - silently,
+# the default look left in place - on the other theme only.
+$themes = @('Palette.Light.xaml', 'Palette.Dark.xaml') | ForEach-Object {
+    $text = Get-Content -Raw -Encoding UTF8 (Join-Path $appRoot "Resources\$_")
+    , @([regex]::Matches($text, "x:Key=""($name)""") | ForEach-Object { $_.Groups[1].Value })
+}
+$onlyLight = @($themes[0] | Where-Object { $themes[1] -notcontains $_ })
+$onlyDark = @($themes[1] | Where-Object { $themes[0] -notcontains $_ })
+if ($onlyLight.Count -gt 0 -or $onlyDark.Count -gt 0) {
+    Write-Host "  the two themes differ in keys:" -ForegroundColor Red
+    $onlyLight | ForEach-Object { Write-Host "    light only: $_" -ForegroundColor Red }
+    $onlyDark | ForEach-Object { Write-Host "    dark only: $_" -ForegroundColor Red }
+    exit 1
 }
 
 $missing = @($used | Where-Object { -not $defined.Contains($_) } | Sort-Object)

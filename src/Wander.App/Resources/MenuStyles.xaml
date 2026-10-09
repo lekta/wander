@@ -12,10 +12,11 @@
         Merged into App.xaml, which is the only way the code-built menus can
         pick it up: they have no XAML of their own.
 
-        Colours come from Resources/Palette.xaml, merged below rather than
-        inherited: this dictionary is also loaded on its own, and a
-        StaticResource has to resolve at parse time. The dark theme, when it
-        lands, is a second set of the values there and nothing else.
+        Colours come from the palette by DynamicResource, so a switch of the
+        theme repaints an open menu too. The shadow's colour, which no theme
+        changes, is a StaticResource from Palette.xaml, merged below rather
+        than inherited: this dictionary is also loaded on its own, and a
+        StaticResource has to resolve at parse time.
     -->
 
     <ResourceDictionary.MergedDictionaries>
@@ -41,8 +42,8 @@
     <ControlTemplate x:Key="MenuPopupCard" TargetType="ContentControl">
         <Border Margin="6,2,6,8"
                 MinWidth="180"
-                Background="{StaticResource MenuPopupBackground}"
-                BorderBrush="{StaticResource MenuPopupBorder}"
+                Background="{DynamicResource MenuPopupBackground}"
+                BorderBrush="{DynamicResource MenuPopupBorder}"
                 BorderThickness="1"
                 CornerRadius="8"
                 Padding="0,4,0,4"
@@ -93,13 +94,13 @@
 
                 <TextBlock x:Name="Gesture" Grid.Column="2"
                            Text="{TemplateBinding InputGestureText}"
-                           Foreground="{StaticResource MenuForegroundGesture}"
+                           Foreground="{DynamicResource MenuForegroundGesture}"
                            VerticalAlignment="Center"
                            Margin="0,0,12,0"/>
 
                 <TextBlock x:Name="Arrow" Grid.Column="3"
                            Text="&#xE76C;" FontFamily="Segoe MDL2 Assets" FontSize="10"
-                           Foreground="{StaticResource MenuForegroundGesture}"
+                           Foreground="{DynamicResource MenuForegroundGesture}"
                            VerticalAlignment="Center"
                            Margin="0,0,10,0"
                            Visibility="Collapsed"/>
@@ -137,12 +138,12 @@
                 <Setter TargetName="Gesture" Property="Visibility" Value="Collapsed"/>
             </Trigger>
             <Trigger Property="IsHighlighted" Value="True">
-                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource MenuHighlight}"/>
+                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource MenuHighlight}"/>
             </Trigger>
             <Trigger Property="IsEnabled" Value="False">
-                <Setter Property="Foreground" Value="{StaticResource MenuForegroundDisabled}"/>
-                <Setter TargetName="Gesture" Property="Foreground" Value="{StaticResource MenuForegroundDisabled}"/>
-                <Setter TargetName="Arrow" Property="Foreground" Value="{StaticResource MenuForegroundDisabled}"/>
+                <Setter Property="Foreground" Value="{DynamicResource MenuForegroundDisabled}"/>
+                <Setter TargetName="Gesture" Property="Foreground" Value="{DynamicResource MenuForegroundDisabled}"/>
+                <Setter TargetName="Arrow" Property="Foreground" Value="{DynamicResource MenuForegroundDisabled}"/>
                 <Setter TargetName="Icon" Property="Opacity" Value="0.4"/>
             </Trigger>
         </ControlTemplate.Triggers>
@@ -182,13 +183,13 @@
 
         <ControlTemplate.Triggers>
             <Trigger Property="IsHighlighted" Value="True">
-                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource MenuHighlight}"/>
+                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource MenuHighlight}"/>
             </Trigger>
             <Trigger Property="IsSubmenuOpen" Value="True">
-                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource MenuHighlight}"/>
+                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource MenuHighlight}"/>
             </Trigger>
             <Trigger Property="IsEnabled" Value="False">
-                <Setter Property="Foreground" Value="{StaticResource MenuForegroundDisabled}"/>
+                <Setter Property="Foreground" Value="{DynamicResource MenuForegroundDisabled}"/>
             </Trigger>
         </ControlTemplate.Triggers>
     </ControlTemplate>
@@ -197,7 +198,7 @@
     <Style TargetType="MenuItem">
         <Setter Property="FontFamily" Value="{StaticResource MenuFontFamily}"/>
         <Setter Property="FontSize" Value="14"/>
-        <Setter Property="Foreground" Value="{StaticResource MenuForeground}"/>
+        <Setter Property="Foreground" Value="{DynamicResource MenuForeground}"/>
         <Setter Property="Padding" Value="10,5"/>
         <Setter Property="Template" Value="{StaticResource MenuRowTemplate}"/>
         <Style.Triggers>
@@ -212,7 +213,7 @@
 
 
     <Style TargetType="ContextMenu">
-        <Setter Property="Foreground" Value="{StaticResource MenuForeground}"/>
+        <Setter Property="Foreground" Value="{DynamicResource MenuForeground}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ContextMenu">
@@ -237,7 +238,7 @@
             <Setter.Value>
                 <ControlTemplate TargetType="Separator">
                     <Border Height="1" Margin="10,4,10,4"
-                            Background="{StaticResource MenuSeparator}"
+                            Background="{DynamicResource MenuSeparator}"
                             SnapsToDevicePixels="True"/>
                 </ControlTemplate>
             </Setter.Value>

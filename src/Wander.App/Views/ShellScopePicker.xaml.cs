@@ -1,5 +1,6 @@
 using System.Windows;
 using Wander.App.Resources;
+using Wander.App.Util;
 using Wander.Core.Shell;
 
 namespace Wander.App.Views;
@@ -23,6 +24,7 @@ public partial class ShellScopePicker : Window {
         InitializeComponent();
         // Off the desktop in a harness run, like every window.
         App.ParkIfHeadless(this);
+        InterfaceTheme.Attach(this);
 
         var extensions = registry.ListExtensions();
         var handlers = registry.Scan(ShellScopes.Base.Concat(extensions).ToArray());
