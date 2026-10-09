@@ -32,8 +32,7 @@
 
         NOT HERE, on purpose:
         - GalleryPalette (ViewModels/) computes the gallery's colours from
-          the chosen background, and takes the theme's own row colours for
-          the background that follows the window.
+          the chosen background.
         - Highlighting/*.xshd and AvalonEdit's built-in definitions: colours
           made for white paper, redrawn for a dark one by arithmetic
           (Highlighting/ThemedTextEditor) rather than kept twice.

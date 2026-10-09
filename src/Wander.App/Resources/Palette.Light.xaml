@@ -32,6 +32,11 @@
     <!-- What a listing or a table is drawn on. -->
     <SolidColorBrush x:Key="ContentBackground" Color="White"/>
 
+    <!-- The gallery's light background: the list's own white here, a shade
+         darker in the dark theme so it does not glare out of a dark window
+         (decision 2026-10-09). -->
+    <SolidColorBrush x:Key="GalleryLightBackground" Color="White"/>
+
     <!-- A field that shows a value the user cannot edit. -->
     <SolidColorBrush x:Key="ReadOnlyFieldBackground" Color="#F7F7F7"/>
 
@@ -145,8 +150,8 @@
     <!--
         Explorer's own selection colours, used as-is: the list and the trees
         are the part of Wander that has to feel like the shell. The gallery
-        takes these too while its background follows the window
-        (GalleryPalette).
+        computes its own from the chosen background - see GalleryPalette,
+        which repeats these six for a light background in either theme.
     -->
 
     <SolidColorBrush x:Key="RowHover" Color="#E5F3FB"/>

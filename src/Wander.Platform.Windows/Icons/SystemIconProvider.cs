@@ -631,6 +631,9 @@ public sealed class SystemIconProvider : IIconProvider {
         if (thumbTarget is null && TgaThumbnail.Render(path, MediumSize) is { } tgaThumb) {
             return tgaThumb;
         }
+        if (thumbTarget is null && PsdThumbnail.Render(path, MediumSize) is { } psdThumb) {
+            return psdThumb;
+        }
 
         using Bitmap? bmp = LoadShellBitmap(source, MediumSize);
         if (bmp is null) {
@@ -723,11 +726,12 @@ public sealed class SystemIconProvider : IIconProvider {
     /// Whether this file's tile is drawn from its own cover rather than
     /// from the shell. Books carry one inside them; a PDF's first page
     /// stands in for one; documents and packages keep a picture of
-    /// themselves (<see cref="EmbeddedThumbnail"/>); a model is drawn.
+    /// themselves (<see cref="EmbeddedThumbnail"/>); a model is drawn, a
+    /// font sets a page of its letters (<see cref="FontThumbnail"/>).
     /// </summary>
     private static bool HasOwnCover(string path) {
         return BookCover.Supports(path) || PdfPageImage.Supports(path) || AudioCover.Supports(path)
-            || EmbeddedThumbnail.Supports(path) || ModelThumbnail.Supports(path);
+            || EmbeddedThumbnail.Supports(path) || ModelThumbnail.Supports(path) || FontThumbnail.Supports(path);
     }
 
     /// <summary>
@@ -773,6 +777,7 @@ public sealed class SystemIconProvider : IIconProvider {
         byte[]? bytes;
         using (PerfLog.Measure("bg.book-cover")) {
             bytes = PdfPageImage.Supports(path) ? PdfPageImage.RenderFirstPage(path, side)
+                : FontThumbnail.Supports(path) ? FontThumbnail.Render(path, side)
                 : AudioCover.Supports(path) ? AudioCover.Read(path)
                 : EmbeddedThumbnail.Supports(path) ? EmbeddedThumbnail.TryRead(path)
                 : BookCover.TryRead(path);
@@ -1117,6 +1122,10 @@ public sealed class SystemIconProvider : IIconProvider {
         if (thumbTarget is null && TgaThumbnail.Render(path, side) is { } tgaThumb) {
             return tgaThumb;
         }
+        // Nor for Photoshop: the preview the file keeps, or its flattened picture.
+        if (thumbTarget is null && PsdThumbnail.Render(path, side) is { } psdThumb) {
+            return psdThumb;
+        }
 
         Bitmap? baseBmp = IsThumbnailable(source)
             ? LoadShellBitmap(source, side)
@@ -1191,6 +1200,9 @@ public sealed class SystemIconProvider : IIconProvider {
         ".ogv", ".mpg", ".mpeg", ".asf", ".3gp", ".3g2",
         // Documents with shell thumbnail providers
         ".pdf", ".docx", ".xlsx", ".pptx", ".doc", ".xls", ".ppt",
+        // Fonts: Wander sets its own page (FontThumbnail); the shell's few
+        // letters of the face are what a font GDI cannot select falls to.
+        ".ttf", ".otf", ".ttc",
     }), StringComparer.OrdinalIgnoreCase);
 
     /// <summary>

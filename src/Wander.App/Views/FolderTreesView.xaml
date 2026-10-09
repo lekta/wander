@@ -23,7 +23,10 @@
 
         <!--
             One line of either panel. The highlight spans the whole line,
-            the way Explorer draws it, and only the content is indented.
+            the way Explorer draws it, and only the content is indented. At
+            rest the line is the pane's colour, not transparent: a
+            bookmark's "..." pushed back by the panel's edge takes the line's
+            background, and covers the text under it (PinRowMenu).
             Colours are Explorer's: #E5F3FB on hover, #CCE8FF lit in the
             panel with the keyboard, #E8E8E8 lit in the other one. The
             chevron is not a button: a click on it is an event for the
@@ -54,7 +57,7 @@
                                     Background="{DynamicResource SectionRule}"
                                     Visibility="Collapsed"/>
                             <Border x:Name="Row"
-                                    Background="Transparent"
+                                    Background="{DynamicResource PaneBackground}"
                                     MinHeight="22"
                                     SnapsToDevicePixels="True">
                                 <Grid>
@@ -354,6 +357,7 @@
             -->
             <controls:FolderPanelList x:Name="BookmarksList"
                                       Style="{StaticResource PanelList}"
+                                      ScrollViewer.ScrollChanged="BookmarksList_ScrollChanged"
                                       ContextMenu="{StaticResource PanelSettingsMenu}"
                                       ItemsSource="{Binding Trees.BookmarkLines}"
                                       PreviewMouseLeftButtonDown="List_PreviewMouseLeftButtonDown"
@@ -371,8 +375,9 @@
                     <!--
                         Stretched lines, unlike the drives: the "..." menu
                         button lives at the right edge, so the line has to
-                        reach it. Bookmark names are short, so nothing is
-                        lost by giving up the sideways scroll here.
+                        reach it. A long name below scrolls the panel
+                        sideways all the same; the button is kept on screen
+                        (BookmarksList_ScrollChanged).
                     -->
                     <Style TargetType="controls:FolderPanelItem" BasedOn="{StaticResource PanelLine}">
                         <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
@@ -391,7 +396,8 @@
                                 rather than on hover: a muted glyph on the
                                 handful of lines that have one.
                             -->
-                            <Button DockPanel.Dock="Right"
+                            <Button x:Name="RowMenu"
+                                    DockPanel.Dock="Right"
                                     Width="18" Height="18"
                                     Margin="4,0,2,0"
                                     Padding="0"
@@ -401,10 +407,16 @@
                                     Focusable="False"
                                     Cursor="Hand"
                                     ToolTip="{x:Static res:Strings.BookmarksRowMenuHint}"
-                                    Click="BookmarkRowMenu_Click">
+                                    Click="BookmarkRowMenu_Click"
+                                    Loaded="BookmarkRowMenu_Loaded">
+                                <Button.RenderTransform>
+                                    <TranslateTransform/>
+                                </Button.RenderTransform>
                                 <Button.Template>
                                     <ControlTemplate TargetType="Button">
-                                        <Border x:Name="Bd" Background="Transparent" CornerRadius="2">
+                                        <!-- The line's background, the Row border of PanelLine: the first Border above. -->
+                                        <Border x:Name="Bd" CornerRadius="2"
+                                                Background="{Binding Background, RelativeSource={RelativeSource AncestorType=Border}}">
                                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                         </Border>
                                         <ControlTemplate.Triggers>
@@ -456,13 +468,14 @@
                       ResizeDirection="Rows"
                       ResizeBehavior="PreviousAndNext"
                       Background="{DynamicResource Separator}"
-                      Visibility="{Binding IsBookmarksExpanded, Converter={StaticResource BoolToVisibility}}"
                       DragCompleted="BookmarksSplitter_DragCompleted"/>
 
         <!--
-            The drives panel gets a title strip like the bookmarks, minus
-            the toggle: it is the main panel, and there is nothing to fold
-            it into.
+            The drives panel gets a title strip like the bookmarks. Only the
+            triangle folds it (decision 2026-10-02): a click on the title is
+            kept for opening the computer's drives in the list. Folded, the
+            strip sits at the bottom of the pane and the bookmarks take the
+            height (ApplyPanelsLayout).
         -->
         <DockPanel Grid.Row="2">
             <Border DockPanel.Dock="Top"
@@ -471,7 +484,46 @@
                     BorderBrush="{DynamicResource Separator}"
                     BorderThickness="0,0,0,1"
                     SizeChanged="DrivesHeader_SizeChanged">
-                <TextBlock Text="{x:Static res:Strings.ComputerHeader}" FontWeight="SemiBold"/>
+                <DockPanel>
+                    <!--
+                        The strip's padding is the button's: it reaches the
+                        strip's edges, the triangle stands where the
+                        bookmarks' does.
+                    -->
+                    <Button DockPanel.Dock="Left"
+                            Margin="-6,-4,0,-4"
+                            Padding="6,4"
+                            Focusable="False"
+                            Cursor="Hand"
+                            Command="{Binding ToggleDrivesCommand}"
+                            ToolTip="{x:Static res:Strings.ComputerToggleHint}">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="Bd" Background="Transparent" Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="{DynamicResource RowActionHover}"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                        <TextBlock FontSize="10" VerticalAlignment="Center">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Text" Value="&#x25BC;"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsDrivesExpanded}" Value="False">
+                                            <Setter Property="Text" Value="&#x25B6;"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Button>
+                    <TextBlock Text="{x:Static res:Strings.ComputerHeader}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                </DockPanel>
             </Border>
             <!--
                 No top margin: the outline is this panel's own edge, and
@@ -495,7 +547,8 @@
                                       PreviewTextInput="List_PreviewTextInput"
                                       AllowDrop="True"
                                       DragOver="OnDragOver"
-                                      Drop="OnDrop">
+                                      Drop="OnDrop"
+                                      Visibility="{Binding IsDrivesExpanded, Converter={StaticResource BoolToVisibility}}">
                 <controls:FolderPanelList.ItemTemplate>
                     <DataTemplate>
                         <StackPanel Orientation="Horizontal" Background="Transparent">

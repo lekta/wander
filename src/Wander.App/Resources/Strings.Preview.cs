@@ -24,6 +24,36 @@ public static partial class Strings {
     /// <summary>Снимки HEIC сжаты кодеком HEVC: Windows нужно дополнение «Расширения для видео HEVC» из Microsoft Store — платное, на многих компьютерах оно уже стоит от производителя</summary>
     public static string PreviewNeedsHevc => Get(nameof(PreviewNeedsHevc));
 
+    /// <summary>Видео сжато кодеком HEVC: чтобы его воспроизвести, Windows нужно дополнение «Расширения для видео HEVC» из Microsoft Store — платное, на многих компьютерах оно уже стоит от производителя</summary>
+    public static string PreviewVideoNeedsHevc => Get(nameof(PreviewVideoNeedsHevc));
+
+    /// <summary>Съешь же ещё этих мягких французских булок, да выпей чаю</summary>
+    public static string PreviewFontSample => Get(nameof(PreviewFontSample));
+
+    /// <summary>Начертание</summary>
+    public static string PreviewFontFace => Get(nameof(PreviewFontFace));
+
+    /// <summary>Версия</summary>
+    public static string PreviewFontVersion => Get(nameof(PreviewFontVersion));
+
+    /// <summary>Автор</summary>
+    public static string PreviewFontMaker => Get(nameof(PreviewFontMaker));
+
+    /// <summary>Глифов</summary>
+    public static string PreviewFontGlyphs => Get(nameof(PreviewFontGlyphs));
+
+    /// <summary>Начертаний</summary>
+    public static string PreviewFontFaces => Get(nameof(PreviewFontFaces));
+
+    /// <summary>Права</summary>
+    public static string PreviewFontCopyright => Get(nameof(PreviewFontCopyright));
+
+    /// <summary>Windows не может воспроизвести этот файл: нет нужного декодера, или файл повреждён</summary>
+    public static string PreviewMediaUnplayable => Get(nameof(PreviewMediaUnplayable));
+
+    /// <summary>Windows не может воспроизвести этот файл: нет декодера {0}, или файл повреждён</summary>
+    public static string PreviewMediaUnplayableCodec => Get(nameof(PreviewMediaUnplayableCodec));
+
     /// <summary>Открыть в Microsoft Store</summary>
     public static string PreviewOpenStore => Get(nameof(PreviewOpenStore));
 
@@ -132,8 +162,6 @@ public static partial class Strings {
     /// <summary>Поиск по имени/содержимому</summary>
     public static string SearchPlaceholder => Get(nameof(SearchPlaceholder));
 
-    /// <summary>Воспроизведение недоступно</summary>
-    public static string PreviewVideoUnavailable => Get(nameof(PreviewVideoUnavailable));
 
     /// <summary>Воспроизведение / пауза (Пробел)</summary>
     public static string PreviewPlayPause => Get(nameof(PreviewPlayPause));

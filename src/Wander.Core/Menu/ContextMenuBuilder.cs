@@ -122,6 +122,10 @@ public static class ContextMenuBuilder {
         if (t.IsSingle && t.AllFolders && fs) {
             items.Add(Cmd(MenuCommandId.OpenInTerminal));
         }
+        // A result was found somewhere below: where, is the next question.
+        if (t.IsSingle && t.IsSearchResult) {
+            items.Add(Cmd(MenuCommandId.GoToLocation));
+        }
         items.Add(MenuEntry.Divider);
 
         // Third-party verbs sit where the eye lands first: for a photo,

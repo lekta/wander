@@ -23,6 +23,27 @@ public class ContextMenuBuilderTests {
     }
 
     [Fact]
+    public void SearchResult_OffersItsLocation_InTheOpenGroup() {
+        var target = SelectionOf(File("a.txt")) with { IsSearchResult = true };
+
+        var menu = ContextMenuBuilder.Build(target, ContextMenuSettings.Default);
+
+        int at = IndexOf(menu, MenuCommandId.GoToLocation);
+        Assert.True(at > IndexOf(menu, MenuCommandId.Open));
+        Assert.True(menu[at + 1].IsSeparator);
+    }
+
+    [Fact]
+    public void Location_IsNotOffered_InAFolder_OrForSeveralResults() {
+        var inFolder = ContextMenuBuilder.Build(SelectionOf(File("a.txt")), ContextMenuSettings.Default);
+        var several = ContextMenuBuilder.Build(
+            SelectionOf(File("a.txt"), File("b.txt")) with { IsSearchResult = true }, ContextMenuSettings.Default);
+
+        Assert.Null(Find(inFolder, MenuCommandId.GoToLocation));
+        Assert.Null(Find(several, MenuCommandId.GoToLocation));
+    }
+
+    [Fact]
     public void SelectionMenu_EndsWithProperties() {
         var menu = ContextMenuBuilder.Build(SelectionOf(File("a.txt")), ContextMenuSettings.Default);
 

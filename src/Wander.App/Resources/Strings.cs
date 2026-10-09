@@ -71,6 +71,9 @@ public static partial class Strings {
     /// <summary>EXIF по первым {0}</summary>
     public static string SummaryShotsSample => Get(nameof(SummaryShotsSample));
 
+    /// <summary>Видео</summary>
+    public static string MediaVideo => Get(nameof(MediaVideo));
+
     /// <summary>Аудио</summary>
     public static string MediaAudio => Get(nameof(MediaAudio));
 
@@ -104,8 +107,6 @@ public static partial class Strings {
     /// <summary>(форс.)</summary>
     public static string MediaForced => Get(nameof(MediaForced));
 
-    /// <summary>«{0}»</summary>
-    public static string MediaTitle => Get(nameof(MediaTitle));
 
     /// <summary>Сапог</summary>
     public static string SummaryCameraMask => Get(nameof(SummaryCameraMask));

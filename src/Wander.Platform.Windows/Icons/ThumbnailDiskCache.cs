@@ -66,8 +66,18 @@ public sealed class ThumbnailDiskCache {
     /// picture they carry (<c>EmbeddedThumbnail</c>) - their slots were
     /// cached as the type's icon.
     /// </para>
+    ///
+    /// <para>
+    /// v6 (2026-10-09): fonts by the shell, PSD by Wander, models at their
+    /// turned view - development builds had cached v5 slots as icons.
+    /// </para>
+    ///
+    /// <para>
+    /// v7 (2026-10-09): fonts by Wander (<c>FontThumbnail</c>) - v6 slots
+    /// hold the shell's letters.
+    /// </para>
     /// </summary>
-    private const int Generation = 5;
+    private const int Generation = 7;
 
     private readonly string _directory;
     private readonly ILogger _log;

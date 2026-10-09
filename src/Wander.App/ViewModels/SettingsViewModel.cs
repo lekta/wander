@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Windows.Media;
 using Wander.App.Resources;
+using Wander.App.Util;
 using Wander.Core;
 using Wander.Core.Actions;
 using Wander.Core.Appearance;
@@ -138,6 +139,20 @@ public sealed class SettingsViewModel : ObservableObject {
     public bool AutoRefresh {
         get => _autoRefresh;
         set => SetField(ref _autoRefresh, value);
+    }
+
+    private bool _rememberFolderPlace;
+    /// <summary>Coming back to a folder lands where it was left - see <see cref="AppSettings.RememberFolderPlace"/>.</summary>
+    public bool RememberFolderPlace {
+        get => _rememberFolderPlace;
+        set => SetField(ref _rememberFolderPlace, value);
+    }
+
+    private bool _rememberFolderFilter;
+    /// <summary>Coming back to a folder puts its rating filter back - see <see cref="AppSettings.RememberFolderFilter"/>.</summary>
+    public bool RememberFolderFilter {
+        get => _rememberFolderFilter;
+        set => SetField(ref _rememberFolderFilter, value);
     }
 
     private bool _visibleFirstLoading;
@@ -439,14 +454,25 @@ public sealed class SettingsViewModel : ObservableObject {
         (3 * GalleryMargin) + GalleryCellWidth + Math.Max(0, (GalleryCellWidth - GalleryImageSize) / 2) + GalleryPreviewEdge;
 
     private GalleryBackground _galleryBackground;
+    private GalleryBackground _galleryBackgroundDark;
+    /// <summary>The gallery's background in the theme shown now: each theme keeps its own (<see cref="AppSettings.GalleryBackgroundDark"/>).</summary>
     public GalleryBackground GalleryBackground {
-        get => _galleryBackground;
+        get => InterfaceTheme.IsDark ? _galleryBackgroundDark : _galleryBackground;
         set {
-            if (SetField(ref _galleryBackground, value)) {
+            bool changed = InterfaceTheme.IsDark
+                ? SetField(ref _galleryBackgroundDark, value)
+                : SetField(ref _galleryBackground, value);
+            if (changed) {
                 RaisePalette();
             }
         }
     }
+
+    /// <summary>
+    /// True while <see cref="GalleryBackground"/> is raised because the
+    /// theme switched, not because the user chose: nothing to save.
+    /// </summary>
+    public bool FollowingTheme { get; private set; }
 
     private int _galleryGreyLevel;
     public int GalleryGreyLevel {
@@ -740,6 +766,8 @@ public sealed class SettingsViewModel : ObservableObject {
         Language = s.Language;
         Theme = s.Theme;
         AutoRefresh = s.AutoRefresh;
+        RememberFolderPlace = s.RememberFolderPlace;
+        RememberFolderFilter = s.RememberFolderFilter;
         VisibleFirstLoading = s.VisibleFirstLoading;
         ShowHidden = s.ShowHidden;
         ShowSystem = s.ShowSystem;
@@ -766,7 +794,13 @@ public sealed class SettingsViewModel : ObservableObject {
         GalleryImageSize = s.GalleryImageSize;
         GalleryMargin = s.GalleryMargin;
         GalleryLabelFontSize = s.GalleryLabelFontSize;
-        GalleryBackground = s.GalleryBackground;
+        // Both themes' at once: through the property only the shown one would come back.
+        if (_galleryBackground != s.GalleryBackground || _galleryBackgroundDark != s.GalleryBackgroundDark) {
+            _galleryBackground = s.GalleryBackground;
+            _galleryBackgroundDark = s.GalleryBackgroundDark;
+            Raise(nameof(GalleryBackground));
+            RaisePalette();
+        }
         GalleryGreyLevel = s.GalleryGreyLevel;
         GalleryDarkLevel = s.GalleryDarkLevel;
         ZoomSpot = s.ZoomSpot;
@@ -969,11 +1003,18 @@ public sealed class SettingsViewModel : ObservableObject {
     }
 
     /// <summary>
-    /// The theme switched: the gallery's background that follows the window
-    /// and the list's highlights it takes come out of the theme's palette.
+    /// The theme switched: the gallery's background is the new theme's own
+    /// choice, its light one comes out of the theme's palette, and so does
+    /// the window's surface the preview follows.
     /// </summary>
     public void OnThemeChanged() {
-        RaisePalette();
+        FollowingTheme = true;
+        try {
+            Raise(nameof(GalleryBackground));
+            RaisePalette();
+        } finally {
+            FollowingTheme = false;
+        }
     }
 
 
@@ -984,6 +1025,8 @@ public sealed class SettingsViewModel : ObservableObject {
             Language = Language,
             Theme = Theme,
             AutoRefresh = AutoRefresh,
+            RememberFolderPlace = RememberFolderPlace,
+            RememberFolderFilter = RememberFolderFilter,
             VisibleFirstLoading = VisibleFirstLoading,
             ShowHidden = ShowHidden,
             ShowSystem = ShowSystem,
@@ -1010,7 +1053,8 @@ public sealed class SettingsViewModel : ObservableObject {
             GalleryImageSize = GalleryImageSize,
             GalleryMargin = GalleryMargin,
             GalleryLabelFontSize = GalleryLabelFontSize,
-            GalleryBackground = GalleryBackground,
+            GalleryBackground = _galleryBackground,
+            GalleryBackgroundDark = _galleryBackgroundDark,
             GalleryGreyLevel = GalleryGreyLevel,
             GalleryDarkLevel = GalleryDarkLevel,
             ZoomSpot = ZoomSpot,

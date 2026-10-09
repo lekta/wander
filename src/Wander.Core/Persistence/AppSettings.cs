@@ -61,6 +61,25 @@ public sealed record AppSettings {
     public bool AutoRefresh { get; init; } = true;
 
     /// <summary>
+    /// Coming back to a folder puts the list where it was left - the same
+    /// file selected, the same row on top - however the folder is reached
+    /// and in the next session too (decision 2026-10-02: a flag). On by
+    /// default: asked for by the author. Off, a folder walked back into by
+    /// the history, the address or the list brings the file left selected
+    /// into view, as before.
+    /// </summary>
+    public bool RememberFolderPlace { get; init; } = true;
+
+    /// <summary>
+    /// Coming back to a folder puts back the filter by stars and labels it
+    /// was left with (2026-10-09). Off by default: a filter coming back by
+    /// itself hides files in a folder the user was not filtering in their
+    /// head - the filter bar says so, but a list shorter than remembered is
+    /// read first.
+    /// </summary>
+    public bool RememberFolderFilter { get; init; }
+
+    /// <summary>
     /// Icons and thumbnails for what is on screen are loaded ahead of those
     /// for what is not - table rows beyond the window's edge, tree nodes
     /// out of view. On by default since 2026-09-30 (the author's own
@@ -261,13 +280,21 @@ public sealed record AppSettings {
     public int GalleryLabelFontSize { get; init; } = 11;
 
     /// <summary>
-    /// What the gallery draws behind the pictures. Grey by default (decision
-    /// 2026-09-30; the window's own background before): the grey most
-    /// photographers want, and the change of colour is what tells a folder
-    /// of pictures from a folder of files. Light and dark are one click
-    /// away and persist once chosen.
+    /// What the gallery draws behind the pictures while the theme is light.
+    /// Grey by default (decision 2026-09-30; the window's own background
+    /// before): the grey most photographers want, and the change of colour
+    /// is what tells a folder of pictures from a folder of files. Light and
+    /// dark are one click away and persist once chosen.
     /// </summary>
     public GalleryBackground GalleryBackground { get; init; } = GalleryBackground.Grey;
+
+    /// <summary>
+    /// ...and while the theme is dark: a choice of its own, dark by default
+    /// (decision 2026-10-09) - in a dark window a grey surround is the
+    /// brightest thing on the screen. Chosen in the dark theme, kept for it;
+    /// the light theme's stays as it was.
+    /// </summary>
+    public GalleryBackground GalleryBackgroundDark { get; init; } = GalleryBackground.Dark;
 
     /// <summary>
     /// Lightness of the "grey" gallery background, 0…255. Settable because

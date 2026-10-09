@@ -203,6 +203,7 @@ public sealed class MainViewModel : ObservableObject {
     private readonly ClipboardController _clipboard;
 
     private bool _isBookmarksExpanded = true;
+    private bool _isDrivesExpanded = true;
     private bool _isFoldersVisible = true;
     private bool _isPreviewSplit;
     private string? _missingFolderPath;
@@ -366,6 +367,7 @@ public sealed class MainViewModel : ObservableObject {
             FindTextFor = entry => entry.MatchSnippet is not null && ContentSearch!.TextQuery.Length > 0
                 ? ContentSearch.TextQuery
                 : null,
+            ResultsRoot = () => ResultsRoot,
         };
         // A click in the footer is about the whole selection the shown file
         // is part of. Split, each picture carries its own stars on its bar,
@@ -526,6 +528,13 @@ public sealed class MainViewModel : ObservableObject {
         PropertiesCommand = new RelayCommand(ShowProperties, p => TargetRules.PropertiesOf(ResolveTarget(p).Target, _nav.Current) is not null);
         OpenWithCommand = new RelayCommand(OpenWith, p => OpenWithTarget(p) is not null);
         OpenInTerminalCommand = new RelayCommand(OpenInTerminal, p => TerminalFolder(p) is not null);
+        GoToLocationCommand = new RelayCommand(
+            p => {
+                if (TargetRules.Items(ResolveTarget(p).Target) is [var found]) {
+                    RevealPath(found.FullPath);
+                }
+            },
+            p => TargetRules.Items(ResolveTarget(p).Target).Count == 1);
         // The text they put on the clipboard is noted at once: Wander stays
         // in front, and Ctrl+V pastes it as a file.
         CopyPathCommand = new RelayCommand(
@@ -551,6 +560,7 @@ public sealed class MainViewModel : ObservableObject {
         OpenLogFileCommand = new RelayCommand(_ => Shell.OpenLogFile(), _ => ServiceLocator.IsRegistered<ILogFile>());
         DebugOperationCommand = new RelayCommand(p => _ = RunDebugOperationAsync(p as string));
         ToggleBookmarksCommand = new RelayCommand(_ => IsBookmarksExpanded = !IsBookmarksExpanded);
+        ToggleDrivesCommand = new RelayCommand(_ => IsDrivesExpanded = !IsDrivesExpanded);
         AddBookmarkCommand = new RelayCommand(p => Bookmarks.Add(p as string));
         RemoveBookmarkCommand = new RelayCommand(p => Bookmarks.Remove((p as TreeNodeViewModel)?.FullPath));
         RemoveMissingBookmarkCommand = new RelayCommand(_ => Bookmarks.Remove(_missingFolderPath), _ => IsMissingBookmark);
@@ -604,6 +614,11 @@ public sealed class MainViewModel : ObservableObject {
                 Raise(nameof(RatingFilter));
                 Raise(nameof(FilterIncludesUnrated));
                 SyncFilterChoices();
+                // Kept for the folder: a window closed right after is
+                // written with it (FlushState writes an armed save).
+                if (Settings.RememberFolderFilter) {
+                    SaveState();
+                }
             } else if (e.PropertyName == nameof(SearchController.HasRatingFilter)) {
                 Raise(nameof(HasRatingFilter));
                 ClearRatingFilterCommand.RaiseCanExecuteChanged();
@@ -1004,7 +1019,7 @@ public sealed class MainViewModel : ObservableObject {
     public MenuContext MenuContextForList(bool isBackground) {
         return MenuContextFor(isBackground
             ? Target.OfBackground(_nav.Current)
-            : Target.OfRows(_selectedEntries, _selectedEntry));
+            : Target.OfRows(_selectedEntries, _selectedEntry)) with { InSearchResults = IsSearchResults };
     }
 
     /// <summary>
@@ -1369,6 +1384,13 @@ public sealed class MainViewModel : ObservableObject {
     public bool IsSearchResults => ContentSearch.IsShowingResults;
 
     /// <summary>
+    /// The folder the results on the list are said from - where the search
+    /// started, the folder on screen until it says so; null for a folder
+    /// listing.
+    /// </summary>
+    public string? ResultsRoot => IsSearchResults ? SearchResults.Root ?? _nav.Current : null;
+
+    /// <summary>
     /// The row first on screen in the list, asked when the session is
     /// written (<see cref="ListPlace"/>); the list's view answers it.
     /// </summary>
@@ -1651,6 +1673,7 @@ public sealed class MainViewModel : ObservableObject {
         }
     }
     public RelayCommand ToggleBookmarksCommand { get; }
+    public RelayCommand ToggleDrivesCommand { get; }
     public RelayCommand ToggleFoldersCommand { get; }
     public RelayCommand AddBookmarkCommand { get; }
 
@@ -1660,6 +1683,9 @@ public sealed class MainViewModel : ObservableObject {
     public RelayCommand OpenWithCommand { get; }
     public RelayCommand OpenJournalCommand { get; }
     public RelayCommand OpenInTerminalCommand { get; }
+
+    /// <summary>A search result's menu: to the folder it is in, the row selected (<see cref="RevealPath"/>).</summary>
+    public RelayCommand GoToLocationCommand { get; }
     public RelayCommand CopyPathCommand { get; }
     public RelayCommand CopyNameCommand { get; }
     public RelayCommand CreateShortcutCommand { get; }
@@ -1672,10 +1698,27 @@ public sealed class MainViewModel : ObservableObject {
     /// </summary>
     public ContextMenuSettings MenuSettings => ContextMenuSettings.From(Settings.ToRecord());
 
+    /// <summary>The bookmarks are unfolded. Never both panels folded (2026-10-09): folding one unfolds the other.</summary>
     public bool IsBookmarksExpanded {
         get => _isBookmarksExpanded;
         set {
             if (SetField(ref _isBookmarksExpanded, value)) {
+                if (!value) {
+                    IsDrivesExpanded = true;
+                }
+                SaveState();
+            }
+        }
+    }
+
+    /// <summary>The "Computer" panel is unfolded; folded, the bookmarks - unfolded with it - take its height.</summary>
+    public bool IsDrivesExpanded {
+        get => _isDrivesExpanded;
+        set {
+            if (SetField(ref _isDrivesExpanded, value)) {
+                if (!value) {
+                    IsBookmarksExpanded = true;
+                }
                 SaveState();
             }
         }
@@ -2270,6 +2313,10 @@ public sealed class MainViewModel : ObservableObject {
         Bookmarks.Load(state.Favorites);
         _isBookmarksExpanded = session.IsBookmarksExpanded;
         Raise(nameof(IsBookmarksExpanded));
+        // Both folded is not a state the panels have (a file from a build
+        // that allowed it): the bookmarks come back.
+        _isDrivesExpanded = session.IsDrivesExpanded || !session.IsBookmarksExpanded;
+        Raise(nameof(IsDrivesExpanded));
         _log.Info($"State loaded: {DescribeSavedPanes()}{(_stateStore.IsReadOnly ? "; read-only, nothing will be written" : "")}");
 
         // A remembered branch whose folder has gone opens as far as it
@@ -2301,6 +2348,8 @@ public sealed class MainViewModel : ObservableObject {
         // Honour the RestoreLastFolder preference: when off, ignore
         // LastPath and start in the working folder.
         _writtenPlace = session.LastPlace;
+        ApplyFolderMemory();
+        _session.LoadPlaces(session.FolderPlaces);
         _ = OpenStartFolderAsync(Settings.RestoreLastFolder ? session.LastPath : null, session.LastPlace);
 
         // Restore is the saved state coming back, not a change worth
@@ -2434,12 +2483,18 @@ public sealed class MainViewModel : ObservableObject {
         // every navigation/preview toggle.
         var current = _stateStore.Load();
         var place = CurrentPlace();
+        // The folder on screen is one the next session may come back to
+        // too: noted as if left now.
+        if (!IsSearchResults && IsSamePath(_session.ListedPath, _nav.Current)) {
+            _session.RememberSelection(null, place, _search.RatingFilter);
+        }
         _stateStore.Save(current with {
             Session = new SessionState {
                 LastPath = _nav.Current is not null
                     ? new NavigationStop(_nav.Current, _nav.CurrentSource ?? NavigationSource.External)
                     : null,
                 LastPlace = place,
+                FolderPlaces = Settings.RememberFolderPlace || Settings.RememberFolderFilter ? _session.Places : Array.Empty<FolderPlace>(),
                 ExpandedPaths = Trees.CollectExpanded(),
                 // The pair the user set, not the scaled sizes on screen -
                 // see RebasePaneSizes.
@@ -2451,6 +2506,7 @@ public sealed class MainViewModel : ObservableObject {
                 LayoutWindowWidth = _savedWindowWidth,
                 LayoutWindowHeight = _savedWindowHeight,
                 IsBookmarksExpanded = _isBookmarksExpanded,
+                IsDrivesExpanded = _isDrivesExpanded,
                 RecentPaths = _nav.RecentPaths.ToArray(),
                 MediaVolume = Preview.MediaVolume,
             },
@@ -2486,6 +2542,23 @@ public sealed class MainViewModel : ObservableObject {
         }
 
         return ListPlace.Of(PathsOf(Entries), _selectedEntry?.FullPath, ListTopRow?.Invoke());
+    }
+
+    /// <summary>
+    /// Where the list stands in the folder being left, asked as navigation
+    /// starts - the rows are still that folder's (<see cref="FolderSession.ListedPath"/>);
+    /// null over search results and before its listing landed.
+    /// </summary>
+    private ListPlace? LeavingPlace() {
+        return IsSearchResults || _session.ListedPath is null
+            ? null
+            : ListPlace.Of(PathsOf(Entries), _selectedEntry?.FullPath, ListTopRow?.Invoke());
+    }
+
+    /// <summary>What the session remembers of a folder left is applied as the two settings say (<see cref="FolderSession.RestoresPlace"/>).</summary>
+    private void ApplyFolderMemory() {
+        _session.RestoresPlace = Settings.RememberFolderPlace;
+        _session.RestoresFilter = Settings.RememberFolderFilter;
     }
 
     /// <summary>
@@ -2531,7 +2604,7 @@ public sealed class MainViewModel : ObservableObject {
         // drops an intent this navigation overtook, and plans the default
         // arrival (up highlights the folder we came out of; otherwise
         // whatever was selected there last time).
-        _session.OnNavigating(_nav.Current, _selectedEntry?.FullPath);
+        _session.OnNavigating(_nav.Current, _selectedEntry?.FullPath, LeavingPlace(), _search.RatingFilter);
 
         // Renames noted for the rows of the folder being left mean nothing
         // in the next one - unless this navigation is the listing following
@@ -2548,8 +2621,10 @@ public sealed class MainViewModel : ObservableObject {
         // Drop any active filter when the user moves to a new folder — the
         // filter is scoped to "the folder I'm looking at right now".
         // SearchController.Reset cancels any in-flight pass; the upcoming
-        // Refresh → SetSource will reapply the (now empty) query.
-        _search.Reset();
+        // Refresh → SetSource will reapply the (now empty) query. The rating
+        // filter is the one the folder was left with, when that is kept
+        // (AppSettings.RememberFolderFilter), else none.
+        _search.Reset(_session.FilterFor(_nav.Current));
         // Same rule one level up, and it has to run every time rather than
         // only when results are on screen: the box holds its own copy of
         // the criteria now, so clearing just the filter behind it left the
@@ -4111,6 +4186,12 @@ public sealed class MainViewModel : ObservableObject {
             InterfaceTheme.Apply(Settings.Theme);
         }
 
+        // The other theme's background shown after a switch: a choice
+        // already saved, not a new one.
+        if (e.PropertyName == nameof(SettingsViewModel.GalleryBackground) && Settings.FollowingTheme) {
+            return;
+        }
+
         // Tile geometry and the icon column's width are projections of the
         // size settings, not settings of their own: the knob that moved has
         // already come through here and saved. Falling through would just
@@ -4186,6 +4267,10 @@ public sealed class MainViewModel : ObservableObject {
             // Switching it on has to start watching the folder already on
             // screen, not only the next one navigated to.
             UpdateFolderWatch();
+        }
+
+        if (e.PropertyName is nameof(SettingsViewModel.RememberFolderPlace) or nameof(SettingsViewModel.RememberFolderFilter)) {
+            ApplyFolderMemory();
         }
 
         if (e.PropertyName == nameof(SettingsViewModel.PictureMemoryMb) ||
@@ -4407,8 +4492,15 @@ public sealed class MainViewModel : ObservableObject {
         _session.SetArrival(ArrivalIntent.Rows(folder, new[] { path }, takeFocus: true));
 
         // Already there: no navigation will happen, so no listing will land
-        // to consume the intent - the rows on screen land again for it.
+        // to consume the intent - the rows on screen land again for it. Over
+        // search results the folder's own rows come back and take it: a
+        // result is shown in its folder, not among the results.
         if (IsSamePath(folder, _nav.Current)) {
+            if (IsSearchResults) {
+                ClearSearch();
+
+                return;
+            }
             PostLanding(PathsOf(Entries), ListingReason.Relist, _session.DecideArrival(_nav.Current, Entries));
 
             return;

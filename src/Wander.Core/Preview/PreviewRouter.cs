@@ -70,6 +70,9 @@ public enum PreviewRoute {
     /// <see cref="SheetReader"/>); the text ones offer their plain text too.
     /// </summary>
     Table,
+
+    /// <summary>A font file: its face at several sizes, and its names.</summary>
+    Font,
 }
 
 
@@ -172,6 +175,11 @@ public static class PreviewRouter {
         ".pdf", ".html", ".htm", ".mht", ".mhtml",
     };
 
+    /// <summary>Font files WPF reads: TrueType, OpenType, a collection of either.</summary>
+    private static readonly HashSet<string> _font = new(StringComparer.OrdinalIgnoreCase) {
+        ".ttf", ".otf", ".ttc",
+    };
+
     /// <summary>Windows programs and libraries, and the installer packages signed the same way.</summary>
     private static readonly HashSet<string> _executable = new(StringComparer.OrdinalIgnoreCase) {
         ".exe", ".dll", ".sys", ".msi", ".ocx", ".scr", ".cpl", ".drv",
@@ -264,6 +272,9 @@ public static class PreviewRouter {
         }
         if (_executable.Contains(ext)) {
             return PreviewRoute.Executable;
+        }
+        if (_font.Contains(ext)) {
+            return PreviewRoute.Font;
         }
         if (ext.Equals(".md", StringComparison.OrdinalIgnoreCase) ||
             ext.Equals(".markdown", StringComparison.OrdinalIgnoreCase)) {

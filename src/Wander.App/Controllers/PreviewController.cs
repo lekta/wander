@@ -7,6 +7,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Media.Media3D;
 using System.Windows.Threading;
+using Wander.App.Controls;
 using Wander.App.Converters;
 using Wander.App.Preview;
 using Wander.App.Resources;
@@ -124,6 +125,9 @@ public sealed class PreviewController : ObservableObject {
     /// comes with the machines it is meant for.
     /// </summary>
     private const string HevcStoreProduct = "9NMZLZ57R3T7";
+
+    /// <summary>A file read by its content is copied to be loaded under the right extension - up to this size.</summary>
+    private const long MaxContentCopyBytes = 256L * 1024 * 1024;
 
 
     /// <summary>
@@ -296,6 +300,12 @@ public sealed class PreviewController : ObservableObject {
     // takes them only for that file (or a shortcut to it).
     private MediaInfo? _media;
     private string? _mediaOf;
+
+    // The model on screen, for the view it is turned to (RememberModelView).
+    private string? _modelPath;
+    private FontFace? _font;
+    private IReadOnlyList<MediaRow> _mediaRows = Array.Empty<MediaRow>();
+    private string _mediaSubtitles = "";
     private string _summary = "";
     private string? _linkTarget;
     private bool _linkBroken;
@@ -305,6 +315,10 @@ public sealed class PreviewController : ObservableObject {
 
     // The Store extension a HEIF picture could not be shown without.
     private MissingCodec _missingCodec;
+
+    // Why a clip or a track did not play with either player - said instead
+    // of the transport (ReportUnplayable).
+    private string? _mediaProblem;
     private VolumeInfo? _volume;
     private string _workLine = "";
     private int _workLinePending;
@@ -531,6 +545,14 @@ public sealed class PreviewController : ObservableObject {
     /// every other row.
     /// </summary>
     public Func<FileSystemEntry, string?>? FindTextFor { get; init; }
+
+    /// <summary>
+    /// The folder a search started in while the list shows its results,
+    /// else null: the footer then names a file by its path from there
+    /// (<see cref="ResultPath.Relative"/>) - a result's name alone does not
+    /// say which of the folders below it is in.
+    /// </summary>
+    public Func<string?>? ResultsRoot { get; init; }
 
     /// <summary>
     /// Raised with every text the pane has just shown: what to find in it
@@ -931,6 +953,15 @@ public sealed class PreviewController : ObservableObject {
         private set => SetField(ref _modelRadius, value);
     }
 
+    /// <summary>The font on screen (<see cref="PreviewKind.Font"/>); null for anything else.</summary>
+    public FontFace? Font {
+        get => _font;
+        private set => SetField(ref _font, value);
+    }
+
+    /// <summary>How the model opens turned: as it was last left (<see cref="IModelViews"/>), or the default view.</summary>
+    public ModelView ModelView { get; private set; } = ModelView.Default;
+
     /// <summary>Triangle and vertex counts, for the footer under the viewport.</summary>
     public string ModelDetail {
         get => _modelDetail;
@@ -1009,6 +1040,30 @@ public sealed class PreviewController : ObservableObject {
 
     /// <summary>The lines under the name, line break included; empty when there are none.</summary>
     public string SummaryRest => _summary.IndexOf('\n') is >= 0 and int end ? _summary[end..] : "";
+
+    /// <summary>A video's streams under the summary, a row each (<see cref="Preview.MediaRows"/>); empty for anything else.</summary>
+    public IReadOnlyList<MediaRow> MediaRows {
+        get => _mediaRows;
+        private set {
+            if (SetField(ref _mediaRows, value)) {
+                Raise(nameof(HasMediaRows));
+            }
+        }
+    }
+
+    public bool HasMediaRows => _mediaRows.Count > 0;
+
+    /// <summary>A video's subtitles on one line under its rows; empty when it has none.</summary>
+    public string MediaSubtitles {
+        get => _mediaSubtitles;
+        private set {
+            if (SetField(ref _mediaSubtitles, value)) {
+                Raise(nameof(HasMediaSubtitles));
+            }
+        }
+    }
+
+    public bool HasMediaSubtitles => _mediaSubtitles.Length > 0;
 
     /// <summary>
     /// The mention of the file's sidecars beside its name: "(+.xmp)", dim,
@@ -1164,6 +1219,7 @@ public sealed class PreviewController : ObservableObject {
         // archive is previewed off its scratch copy, and a format the pane
         // cannot read says so in the ordinary words.
         : _archiveEntryTooBig ? Strings.PreviewArchiveTooBig
+        : _mediaProblem is { } problem ? problem
         : _missingCodec == MissingCodec.Heif ? Strings.PreviewNeedsHeif
         : _missingCodec == MissingCodec.Hevc ? Strings.PreviewNeedsHevc
         : _lockedBy is { Length: > 0 } holders ? string.Format(Strings.PreviewFileLockedBy, holders)
@@ -2109,8 +2165,99 @@ public sealed class PreviewController : ObservableObject {
         // ordinary file without leaving this thread.
         bool isArchive = Archives.Of(path) is { IsRoot: true }
             && await Task.Run(() => CanNavigate(path), ct);
+        var route = PreviewRouter.Route(path, isArchive);
 
-        switch (PreviewRouter.Route(path, isArchive)) {
+        // An extension the pane does not know, or none on a file that may
+        // not be text: the first bytes say what it is (ContentSniffer).
+        if (route == PreviewRoute.Unsupported || (route == PreviewRoute.Text && ext.Length == 0)) {
+            string? real = await SniffAsync(path, ct);
+            if (real is not null && await LoadByContentAsync(path, real, ct)) {
+                return;
+            }
+            // Named by nothing: text is shown as text, whatever the file is called.
+            if (route == PreviewRoute.Unsupported && real is null && await Task.Run(() => LooksLikeTextAsync(path, ct), ct)) {
+                route = PreviewRoute.Text;
+            }
+        }
+
+        await LoadRoutedAsync(path, route, ext, ct);
+
+        // The extension promised a format the file is not - a PDF saved as
+        // .png, a video renamed .dat: asked again by its bytes.
+        if (_kind == PreviewKind.Unsupported && !ct.IsCancellationRequested
+            && route is not (PreviewRoute.Unsupported or PreviewRoute.Archive or PreviewRoute.Shortcut)
+            && await SniffAsync(path, ct) is { } actual && PreviewRouter.ForExtension(actual) != route) {
+            await LoadByContentAsync(path, actual, ct);
+        }
+    }
+
+    /// <summary>
+    /// A file loaded as what its bytes say (<paramref name="extension"/>)
+    /// rather than its name. Sound and video go to the players as they are
+    /// - the system's reads by content; everything else is loaded from a
+    /// scratch copy named with the right extension, up to
+    /// <see cref="MaxContentCopyBytes"/>, so every loader keyed by the
+    /// extension takes it as its own. False when no route takes it.
+    /// </summary>
+    private async Task<bool> LoadByContentAsync(string path, string extension, CancellationToken ct) {
+        var route = PreviewRouter.ForExtension(extension);
+        if (route is PreviewRoute.Unsupported) {
+            return false;
+        }
+
+        Log.Info($"Preview: read by its content as {extension}");
+        if (route is PreviewRoute.Video or PreviewRoute.Audio) {
+            await LoadRoutedAsync(path, route, extension, ct);
+
+            return true;
+        }
+
+        string? copy = await Task.Run(() => {
+            try {
+                var info = new FileInfo(path);
+                if (info.Length > MaxContentCopyBytes) {
+                    return null;
+                }
+
+                string folder = TempFiles.FolderFor($"{path}|content|{info.LastWriteTimeUtc.Ticks}|{info.Length}");
+                string target = Path.Combine(folder, info.Name + extension);
+                if (!File.Exists(target)) {
+                    Directory.CreateDirectory(folder);
+                    File.Copy(path, target);
+                }
+
+                return target;
+            } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+                return null;
+            }
+        }, ct);
+        if (copy is null || ct.IsCancellationRequested) {
+            return false;
+        }
+
+        await LoadRoutedAsync(copy, route, extension, ct);
+
+        return true;
+    }
+
+    /// <summary>The extension the file's first bytes name (<see cref="ContentSniffer"/>), or null.</summary>
+    private static async Task<string?> SniffAsync(string path, CancellationToken ct) {
+        return await Task.Run(() => {
+            try {
+                using var file = SharedRead.Open(path);
+                var head = new byte[(int)Math.Min(file.Length, ContentSniffer.HeadBytes)];
+                file.ReadExactly(head);
+
+                return ContentSniffer.Extension(head);
+            } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+                return null;
+            }
+        }, ct);
+    }
+
+    /// <summary>The loader for <paramref name="route"/>; <paramref name="ext"/> picks the highlighting of code.</summary>
+    private async Task LoadRoutedAsync(string path, PreviewRoute route, string ext, CancellationToken ct) {
+        switch (route) {
             case PreviewRoute.Archive:
                 await LoadArchiveAsync(path, ct);
                 break;
@@ -2186,6 +2333,10 @@ public sealed class PreviewController : ObservableObject {
 
             case PreviewRoute.Table:
                 await LoadTableAsync(path, ct);
+                break;
+
+            case PreviewRoute.Font:
+                await LoadFontAsync(path, ct);
                 break;
 
             // A shortcut is resolved before we get here; one pointing at
@@ -2452,6 +2603,35 @@ public sealed class PreviewController : ObservableObject {
     }
 
     /// <summary>
+    /// Neither the pane's player nor the system's opened the file at
+    /// <paramref name="uri"/>: the transport goes - nothing in it would
+    /// work - and the pane says why in its place. The codec, when the
+    /// container named it (<see cref="MediaProbe"/>); for HEVC, the
+    /// extension from the Microsoft Store and the button to its page.
+    /// A report about a file no longer shown is dropped.
+    /// </summary>
+    public void ReportUnplayable(Uri? uri) {
+        if (uri is null || MediaUri != uri || _kind is not (PreviewKind.Video or PreviewKind.Audio)) {
+            return;
+        }
+
+        string? codec = _media?.Video?.Codec ?? _media?.Tracks.FirstOrDefault(t => t.Kind == MediaTrackKind.Audio)?.Codec;
+        if (codec == "H.265") {
+            _missingCodec = MissingCodec.Hevc;
+            _mediaProblem = Strings.PreviewVideoNeedsHevc;
+        } else {
+            _mediaProblem = codec is null ? Strings.PreviewMediaUnplayable : string.Format(Strings.PreviewMediaUnplayableCodec, codec);
+        }
+        Log.Info($"Preview: no player opened the file ({codec ?? "codec unknown"})");
+
+        MediaUri = null;
+        Kind = PreviewKind.Unsupported;
+        Raise(nameof(PlaceholderText));
+        Raise(nameof(HasStoreHint));
+        OpenStoreCommand.RaiseCanExecuteChanged();
+    }
+
+    /// <summary>
     /// A music file: the same transport the video preview uses, plus what
     /// the container says about the track.
     ///
@@ -2524,8 +2704,26 @@ public sealed class PreviewController : ObservableObject {
         ModelCenter = model.Center;
         ModelRadius = model.Radius;
         ModelDetail = string.Format(Strings.PreviewModelDetail, model.Triangles, model.Vertices);
+        // Before the parts: their arrival is what places the model.
+        _modelPath = path;
+        ModelView = ServiceLocator.TryGet<IModelViews>()?.Get(path) ?? ModelView.Default;
         ModelParts = model.Parts;
         Kind = PreviewKind.Model;
+    }
+
+    /// <summary>
+    /// The model on screen was turned by hand: the view is kept for the
+    /// next time it opens (<see cref="IModelViews"/>), and its tile is drawn
+    /// again the way it now stands.
+    /// </summary>
+    public void RememberModelView(ModelView view) {
+        if (_modelPath is not { } path || ServiceLocator.TryGet<IModelViews>() is not { } views) {
+            return;
+        }
+
+        ModelView = view.Normalized();
+        views.Set(path, ModelView);
+        AsyncIcon.Invalidate(path);
     }
 
 
@@ -3045,6 +3243,44 @@ public sealed class PreviewController : ObservableObject {
         Kind = PreviewKind.Web;
     }
 
+    /// <summary>
+    /// A font: its names and its face at several sizes
+    /// (<see cref="FontCard"/>). Read from a copy in the scratch folder -
+    /// WPF keeps a font file it has read open for the life of the process,
+    /// and the user's own file must stay free to move, rename and delete.
+    /// One copy per reading of the file (path, time, size): a changed font
+    /// is a new copy, the held one waits for the sweep.
+    /// </summary>
+    private async Task LoadFontAsync(string path, CancellationToken ct) {
+        string? copy = await Task.Run(() => {
+            try {
+                var info = new FileInfo(path);
+                string folder = TempFiles.FolderFor($"{path}|{info.LastWriteTimeUtc.Ticks}|{info.Length}");
+                string target = Path.Combine(folder, info.Name);
+                if (!File.Exists(target)) {
+                    Directory.CreateDirectory(folder);
+                    File.Copy(path, target);
+                }
+
+                return target;
+            } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+                return null;
+            }
+        }, ct);
+        if (ct.IsCancellationRequested) {
+            return;
+        }
+
+        if (copy is null || FontCard.Read(copy) is not { } face) {
+            Kind = PreviewKind.Unsupported;
+
+            return;
+        }
+
+        Font = face;
+        Kind = PreviewKind.Font;
+    }
+
     /// <summary>The whole file, or null when it is bigger than <paramref name="limit"/> or cannot be read.</summary>
     private static byte[]? ReadUpTo(string path, long limit) {
         try {
@@ -3200,6 +3436,7 @@ public sealed class PreviewController : ObservableObject {
         MediaUri = null;
         _media = null;
         _mediaOf = null;
+        _mediaProblem = null;
         Audio = null;
         AudioCover = null;
         ExecutableIcon = null;
@@ -3210,6 +3447,8 @@ public sealed class PreviewController : ObservableObject {
         _executableInfo = null;
         CanCheckSignature = false;
         ModelParts = Array.Empty<ModelPart>();
+        _modelPath = null;
+        Font = null;
         ModelDetail = "";
         DocumentPath = null;
         LinkTarget = null;
@@ -3637,11 +3876,22 @@ public sealed class PreviewController : ObservableObject {
             && PreviewRouter.Route(selected.FullPath) is PreviewRoute.Image;
     }
 
+    /// <summary>A row's name in the footer: its path from the folder searched among results (<see cref="ResultsRoot"/>), its name elsewhere.</summary>
+    private string ShownName(FileSystemEntry entry) {
+        return ResultsRoot?.Invoke() is { } root ? ResultPath.Relative(root, entry.FullPath) : entry.Name;
+    }
+
+    private void ShowMediaRows(MediaInfo? media) {
+        MediaRows = media is null ? Array.Empty<MediaRow>() : Preview.MediaRows.For(media);
+        MediaSubtitles = media is null ? "" : Preview.MediaRows.Subtitles(media);
+    }
+
     private async Task UpdateSummaryAsync(CancellationToken ct) {
         if (!_isVisible) {
             Summary = "";
             SummaryNote = "";
             _summaryOf = null;
+            ShowMediaRows(null);
 
             return;
         }
@@ -3659,9 +3909,10 @@ public sealed class PreviewController : ObservableObject {
                         || string.Equals(of, _linkTarget, StringComparison.OrdinalIgnoreCase))
                     ? _media
                     : null;
-                Summary = SummaryText.ForFile(_selection[0], othersFacts ? null : _imageMetadata, media);
+                Summary = SummaryText.ForFile(_selection[0], othersFacts ? null : _imageMetadata, media, ShownName(_selection[0]));
                 SummaryNote = CompanionLabel.For(_selection[0].Name, _selection[0].Companions);
                 _summaryOf = _selection[0].FullPath;
+                ShowMediaRows(media);
             }
 
             return;
@@ -3669,12 +3920,13 @@ public sealed class PreviewController : ObservableObject {
 
         SummaryNote = "";
         _summaryOf = null;
+        ShowMediaRows(null);
 
         // 2. Single folder selected. Counts and sizes are the census
         //    panel's job now (it walks the tree once); repeating them here
         //    meant walking it twice and printing the same numbers twice.
         if (_selection.Count == 1 && _selection[0].Kind == EntryKind.Directory) {
-            Summary = SummaryText.ForFolder(_selection[0]);
+            Summary = SummaryText.ForFolder(_selection[0], ShownName(_selection[0]));
 
             return;
         }

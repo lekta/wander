@@ -22,6 +22,7 @@
     <SolidColorBrush x:Key="ListBackground" Color="#1E1E1E"/>
     <SolidColorBrush x:Key="InputBackground" Color="#2B2B2B"/>
     <SolidColorBrush x:Key="ContentBackground" Color="#191919"/>
+    <SolidColorBrush x:Key="GalleryLightBackground" Color="#E0E0E0"/>
     <SolidColorBrush x:Key="ReadOnlyFieldBackground" Color="#242424"/>
     <SolidColorBrush x:Key="StripBackground" Color="#242424"/>
     <SolidColorBrush x:Key="HeaderBackground" Color="#2B2B2B"/>

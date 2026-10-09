@@ -23,6 +23,7 @@
     <UserControl.Resources>
         <!-- Its own converters; the ones every view shares are in Resources/Converters.xaml. -->
         <conv:TileSecondLineConverter x:Key="TileSecondLine"/>
+        <conv:ResultFolderConverter x:Key="ResultFolder"/>
         <conv:RankTextConverter x:Key="RankText"/>
         <conv:ColorLabelBrushConverter x:Key="ColorLabelBrush"/>
         <conv:RatingBadgeVisibilityConverter x:Key="RatingBadge"/>
@@ -747,7 +748,9 @@
                     the identifier the view model understands.
                 -->
                 <!--
-                    Where the file is, and what it matched on. Both are
+                    Where the file is - from the folder the search started
+                    in, the prefix every row shares left off (ResultFolder)
+                    - and what it matched on. Both are
                     meaningless in a folder listing — every row shares the
                     folder, and nothing matched anything — so both are
                     collapsed until the list is showing search results (see
@@ -762,7 +765,7 @@
                 -->
                 <DataGridTextColumn x:Name="FolderColumn"
                                     Header="{x:Static res:Strings.ColumnFolder}"
-                                    Binding="{Binding ParentFolder}"
+                                    Binding="{Binding Converter={StaticResource ResultFolder}}"
                                     Width="220" CanUserSort="False"/>
                 <DataGridTextColumn x:Name="MatchColumn"
                                     Header="{x:Static res:Strings.ColumnMatch}"
@@ -921,7 +924,8 @@
                         badge (J4) can sit over the picture's corner: the
                         picture and the badge share the first row.
                     -->
-                    <Grid>
+                    <!-- A search result's path as a tooltip; none in a folder (ResultCell_ToolTipOpening). -->
+                    <Grid ToolTip="" ToolTipOpening="ResultCell_ToolTipOpening">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
@@ -1041,7 +1045,7 @@
             </ListBox.ItemsPanel>
             <ListBox.ItemTemplate>
                 <DataTemplate>
-                    <!-- The name as a tooltip only while the caption cuts it (GalleryCell_ToolTipOpening). -->
+                    <!-- The name as a tooltip only while the caption cuts it; a search result's path always (GalleryCell_ToolTipOpening). -->
                     <StackPanel ToolTip="{Binding Name}" ToolTipOpening="GalleryCell_ToolTipOpening">
                         <!--
                             Sized explicitly rather than left to the

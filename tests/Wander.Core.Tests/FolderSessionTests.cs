@@ -1,5 +1,7 @@
+using Wander.Core.Companions;
 using Wander.Core.FileSystem;
 using Wander.Core.Listing;
+using Wander.Core.Persistence;
 
 namespace Wander.Core.Tests;
 
@@ -366,6 +368,121 @@ public class FolderSessionTests {
 
         session.OnNavigating(@"C:\folder69", selectedPath: null);
         Assert.NotNull(session.Arrival);
+    }
+
+
+    // --- A place in each folder (2026-10-09) --------------------------------
+
+    /// <summary>Left at d.txt with c.txt on top: walking back in - by any way - puts both back, the keyboard where it is.</summary>
+    [Fact]
+    public void WithPlaces_WalkingBackIn_LandsOnTheWholePlace() {
+        var session = new FolderSession { RestoresPlace = true };
+        session.NoteListed(@"C:\folder");
+        var left = ListPlace.Of(Paths("a.txt", "b.txt", "c.txt", "d.txt"), @"C:\folder\d.txt", @"C:\folder\c.txt");
+
+        session.OnNavigating(@"C:\elsewhere", @"C:\folder\d.txt", left);
+        session.NoteListed(@"C:\elsewhere");
+        session.OnNavigating(@"C:\folder", selectedPath: null);
+
+        var intent = session.Arrival!;
+        Assert.Equal(new[] { @"C:\folder\d.txt" }, intent.Paths);
+        Assert.Equal(@"C:\folder\c.txt", intent.Top);
+        Assert.NotNull(intent.StoodAmong);
+        Assert.False(intent.TakeFocus);
+    }
+
+    /// <summary>A panel row asks for the folder itself; with places kept, the place left there wins.</summary>
+    [Fact]
+    public void WithPlaces_APanelRow_GivesWayToThePlace() {
+        var session = new FolderSession { RestoresPlace = true };
+        session.NoteListed(@"C:\folder");
+        session.OnNavigating(@"C:\elsewhere", @"C:\folder\b.txt", ListPlace.Of(Paths("a.txt", "b.txt"), @"C:\folder\b.txt", null));
+        session.NoteListed(@"C:\elsewhere");
+
+        session.SetArrival(ArrivalIntent.Folder(@"C:\folder"));
+        session.OnNavigating(@"C:\folder", selectedPath: null);
+
+        Assert.Equal(ArrivalAction.SelectRows, session.Arrival!.Action);
+        Assert.Equal(new[] { @"C:\folder\b.txt" }, session.Arrival.Paths);
+    }
+
+    /// <summary>Without places: the panel row's folder itself, and the file left on - no row on top - by the history.</summary>
+    [Fact]
+    public void WithoutPlaces_ThePanelRowAndTheFileAlone_AsBefore() {
+        var session = new FolderSession();
+        session.NoteListed(@"C:\folder");
+        session.OnNavigating(@"C:\elsewhere", @"C:\folder\b.txt", ListPlace.Of(Paths("a.txt", "b.txt"), @"C:\folder\b.txt", @"C:\folder\a.txt"));
+        session.NoteListed(@"C:\elsewhere");
+
+        session.SetArrival(ArrivalIntent.Folder(@"C:\folder"));
+        session.OnNavigating(@"C:\folder", selectedPath: null);
+        Assert.Equal(ArrivalAction.SelectFolderItself, session.Arrival!.Action);
+
+        session.SetArrival(ArrivalIntent.Rows(@"C:\elsewhere", Array.Empty<string>()));
+        session.OnNavigating(@"C:\folder", selectedPath: null);
+        Assert.Equal(new[] { @"C:\folder\b.txt" }, session.Arrival!.Paths);
+        Assert.Null(session.Arrival.Top);
+    }
+
+    /// <summary>Up highlights the folder come out of, as always; with places, on the row the parent was left with on top.</summary>
+    [Fact]
+    public void WithPlaces_GoingUp_KeepsTheParentsRowOnTop() {
+        var session = new FolderSession { RestoresPlace = true };
+        session.NoteListed(@"C:\parent");
+        session.OnNavigating(@"C:\parent\child", null, ListPlace.Of(new[] { @"C:\parent\a", @"C:\parent\child" }, @"C:\parent\child", @"C:\parent\a"));
+        session.NoteListed(@"C:\parent\child");
+
+        session.OnNavigating(@"C:\parent", selectedPath: null);
+
+        Assert.Equal(new[] { @"C:\parent\child" }, session.Arrival!.Paths);
+        Assert.Equal(@"C:\parent\a", session.Arrival.Top);
+    }
+
+    [Fact]
+    public void Filter_ComesBackWithItsFolder_OnlyWhenKept() {
+        var session = new FolderSession();
+        var stars = RatingFilter.None.PickRank(3);
+        session.NoteListed(@"C:\folder");
+        session.OnNavigating(@"C:\elsewhere", null, filter: stars);
+
+        Assert.Equal(RatingFilter.None, session.FilterFor(@"C:\folder"));
+
+        session.RestoresFilter = true;
+        Assert.Equal(stars, session.FilterFor(@"C:\FOLDER"));
+        Assert.Equal(RatingFilter.None, session.FilterFor(@"C:\elsewhere"));
+    }
+
+    /// <summary>The next session starts with what this one remembered, the folder left last first.</summary>
+    [Fact]
+    public void Places_RoundTrip_NewestFirst() {
+        var session = new FolderSession { RestoresPlace = true };
+        foreach (string folder in new[] { @"C:\one", @"C:\two", @"C:\one" }) {
+            session.NoteListed(folder);
+            session.RememberSelection(folder + @"\row.txt");
+        }
+
+        var next = new FolderSession { RestoresPlace = true };
+        next.LoadPlaces(session.Places);
+
+        Assert.Equal(new[] { @"C:\one", @"C:\two" }, next.Places.Select(p => p.Folder));
+        next.NoteListed(@"C:\elsewhere");
+        next.OnNavigating(@"C:\two", selectedPath: null);
+        Assert.Equal(new[] { @"C:\two\row.txt" }, next.Arrival!.Paths);
+    }
+
+    /// <summary>A folder moved: its place moves with it, rows on top included.</summary>
+    [Fact]
+    public void AMovedFolder_TakesItsPlaceAlong() {
+        var session = new FolderSession { RestoresPlace = true };
+        session.NoteListed(@"C:\folder");
+        session.OnNavigating(@"C:\elsewhere", null, ListPlace.Of(Paths("a.txt", "b.txt"), @"C:\folder\b.txt", @"C:\folder\a.txt"));
+        session.NoteListed(@"C:\elsewhere");
+
+        session.RewriteMemory(@"C:\folder", @"D:\moved");
+        session.OnNavigating(@"D:\moved", selectedPath: null);
+
+        Assert.Equal(new[] { @"D:\moved\b.txt" }, session.Arrival!.Paths);
+        Assert.Equal(@"D:\moved\a.txt", session.Arrival.Top);
     }
 
 

@@ -16,6 +16,19 @@ public class MenuContextTests {
     private const string Row = @"D:\photos";
 
 
+    /// <summary>Search results are the list's rows: a panel row's menu is not a result's, whatever the list shows.</summary>
+    [Fact]
+    public void SearchResult_IsAboutTheListsRowsOnly() {
+        var row = new FileSystemEntry("a.txt", Open + @"\sub\a.txt", EntryKind.File, 1, DateTime.UnixEpoch, false, false, false, false);
+        var rows = MenuContext.For(Target.OfRows(new[] { row }, row), PlaceFacts.Ordinary, clipboardHasContent: false, selectionIsArchive: false)
+            with { InSearchResults = true };
+        var panel = MenuContext.For(Target.OfPanelRow(Pane.Drives, Row), PlaceFacts.Ordinary, clipboardHasContent: false, selectionIsArchive: false)
+            with { InSearchResults = true };
+
+        Assert.True(rows.ToMenuTarget(Open).IsSearchResult);
+        Assert.False(panel.ToMenuTarget(Open).IsSearchResult);
+    }
+
     /// <summary>A panel row is one folder row of its own; the shell's verbs run in that folder.</summary>
     [Fact]
     public void PanelRow_IsAFolderRowOfItsOwn() {

@@ -41,7 +41,7 @@ if (-not $Root) {
 
 $sets = @(
     @{ File = 'src\Wander.Core\Icons\ImageFormats.cs'; Names = @('Raw', 'All', 'Heif') },
-    @{ File = 'src\Wander.Core\Preview\PreviewRouter.cs'; Names = @('_animation', '_video', '_text', '_code', '_maybeText', '_web', '_executable', '_documentText') },
+    @{ File = 'src\Wander.Core\Preview\PreviewRouter.cs'; Names = @('_animation', '_video', '_text', '_code', '_maybeText', '_web', '_executable', '_documentText', '_font') },
     @{ File = 'src\Wander.Core\Preview\AudioTags.cs'; Names = @('Extensions') },
     @{ File = 'src\Wander.Core\Preview\MeshFile.cs'; Names = @('Extensions') },
     @{ File = 'src\Wander.Core\Preview\BookCover.cs'; Names = @('_extensions') },

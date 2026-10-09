@@ -56,24 +56,14 @@ internal static class Palette {
     /// <summary>A dialog's own surface - what the dialogs built in code are drawn on.</summary>
     public static readonly ThemeKey ChromeBackground = Themed("ChromeBackground");
 
-    /// <summary>What a listing is drawn on - the gallery's background when it follows the window.</summary>
+    /// <summary>What a listing is drawn on - and the preview's surround outside the gallery (GalleryPalette.Plain).</summary>
     public static readonly ThemeKey ContentBackground = Themed("ContentBackground");
+
+    /// <summary>The gallery's light background: white in the light theme, a shade darker in the dark one.</summary>
+    public static readonly ThemeKey GalleryLightBackground = Themed("GalleryLightBackground");
 
     /// <summary>The preview pane's surface - what a code colour has to read on.</summary>
     public static readonly ThemeKey PreviewBackground = Themed("PreviewBackground");
-
-    /// <summary>The list's own highlights, which the gallery takes while its background follows the window.</summary>
-    public static readonly ThemeKey RowHover = Themed("RowHover");
-
-    public static readonly ThemeKey RowHoverBorder = Themed("RowHoverBorder");
-
-    public static readonly ThemeKey RowSelected = Themed("RowSelected");
-
-    public static readonly ThemeKey RowSelectedBorder = Themed("RowSelectedBorder");
-
-    public static readonly ThemeKey RowSelectedInactive = Themed("RowSelectedInactive");
-
-    public static readonly ThemeKey RowSelectedInactiveBorder = Themed("RowSelectedInactiveBorder");
 
 
     // --- No theme changes these --------------------------------------------------------------

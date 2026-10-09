@@ -44,6 +44,9 @@ public sealed record MenuContext {
     /// </summary>
     public bool SelectionIsArchive { get; init; }
 
+    /// <summary>The list shows search results; meaningful for its rows only.</summary>
+    public bool InSearchResults { get; init; }
+
 
     /// <summary>
     /// The snapshot for <paramref name="subject"/>. A paste is offered only
@@ -78,6 +81,7 @@ public sealed record MenuContext {
             IsRecycleBin = Place.IsRecycleBin,
             IsArchive = Place.IsArchive,
             SelectionIsArchive = SelectionIsArchive,
+            IsSearchResult = InSearchResults && Subject.Kind == TargetKind.ListRows,
             CanPaste = CanPaste,
         };
     }

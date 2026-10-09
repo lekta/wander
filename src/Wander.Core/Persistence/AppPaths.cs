@@ -54,6 +54,9 @@ public static class AppPaths {
     /// <summary>Per-folder records (<c>IFolderSettingsStore</c>): pinned views, later more.</summary>
     public static string FoldersFile => Path.Combine(DataRoot, "folders.json");
 
+    /// <summary>How each model was last turned in the preview (<c>IModelViews</c>).</summary>
+    public static string ModelViewsFile => Path.Combine(DataRoot, "model-views.json");
+
     public static string Logs => Path.Combine(DataRoot, "logs");
 
     public static string Thumbs => Path.Combine(DataRoot, "thumbs");

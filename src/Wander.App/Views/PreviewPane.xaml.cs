@@ -15,6 +15,7 @@ using Microsoft.Web.WebView2.Core;
 using Wander.App.Controllers;
 using Wander.App.Controls;
 using Wander.App.Highlighting;
+using Wander.App.Preview;
 using Wander.App.Resources;
 using Wander.App.Util;
 using Wander.App.ViewModels;
@@ -77,7 +78,7 @@ public partial class PreviewPane : UserControl {
         // XAML and land in the same handlers.
         _audioPlayer.MediaOpened += (_, _) => MediaOpened();
         _audioPlayer.MediaEnded += (_, _) => MediaEnded();
-        _audioPlayer.MediaFailed += (_, _) => VideoTimeText.Text = Strings.PreviewVideoUnavailable;
+        _audioPlayer.MediaFailed += (_, _) => PlayWithSystem();
     }
 
 
@@ -508,8 +509,11 @@ public partial class PreviewPane : UserControl {
 
             case nameof(PreviewController.MediaVolume):
                 // The clip's element takes it by binding; the track's player
-                // is not an element and is told.
+                // and the system's are not elements and are told.
                 _audioPlayer.Volume = Controller.MediaVolume;
+                if (_system is not null) {
+                    _system.Volume = Controller.MediaVolume;
+                }
                 break;
 
             case nameof(PreviewController.ModelParts):
@@ -1305,6 +1309,15 @@ public partial class PreviewPane : UserControl {
     private bool _transportIsAudio;
 
     /// <summary>
+    /// The system's player, for a file the two above did not open
+    /// (<see cref="PlayWithSystem"/>); made the first time it is needed.
+    /// </summary>
+    private SystemPlayer? _system;
+
+    /// <summary>The transport drives <see cref="_system"/>, the clip or the track alike.</summary>
+    private bool _transportIsSystem;
+
+    /// <summary>
     /// Notices a clip finishing when the player does not say so — see
     /// <see cref="PlaybackClock"/>. Fed by the same 200 ms tick that moves
     /// the seek bar.
@@ -1345,9 +1358,11 @@ public partial class PreviewPane : UserControl {
     // --- one transport, two players -------------------------------------
 
     private TimeSpan TransportPosition {
-        get => _transportIsAudio ? _audioPlayer.Position : VideoPreview.Position;
+        get => _transportIsSystem ? _system!.Position : _transportIsAudio ? _audioPlayer.Position : VideoPreview.Position;
         set {
-            if (_transportIsAudio) {
+            if (_transportIsSystem) {
+                _system!.Position = value;
+            } else if (_transportIsAudio) {
                 _audioPlayer.Position = value;
             } else {
                 VideoPreview.Position = value;
@@ -1358,6 +1373,10 @@ public partial class PreviewPane : UserControl {
     /// <summary>How long the track or clip runs, or null while that is still unknown.</summary>
     private TimeSpan? TransportDuration {
         get {
+            if (_transportIsSystem) {
+                return _system!.Duration;
+            }
+
             var duration = _transportIsAudio ? _audioPlayer.NaturalDuration : VideoPreview.NaturalDuration;
 
             return duration.HasTimeSpan ? duration.TimeSpan : null;
@@ -1365,7 +1384,9 @@ public partial class PreviewPane : UserControl {
     }
 
     private void TransportPlay() {
-        if (_transportIsAudio) {
+        if (_transportIsSystem) {
+            _system!.Play();
+        } else if (_transportIsAudio) {
             _audioPlayer.Play();
         } else {
             VideoPreview.Play();
@@ -1373,7 +1394,9 @@ public partial class PreviewPane : UserControl {
     }
 
     private void TransportPause() {
-        if (_transportIsAudio) {
+        if (_transportIsSystem) {
+            _system!.Pause();
+        } else if (_transportIsAudio) {
             _audioPlayer.Pause();
         } else {
             VideoPreview.Pause();
@@ -1405,7 +1428,8 @@ public partial class PreviewPane : UserControl {
         _finished = false;
         _clock.Reset();
 
-        if (TransportDuration is not null) {
+        // The system's player seeks a file of unknown length as well.
+        if (TransportDuration is not null || _transportIsSystem) {
             TransportPosition = TimeSpan.Zero;
             TransportPlay();
         } else {
@@ -1437,7 +1461,10 @@ public partial class PreviewPane : UserControl {
     /// <see cref="RestartMedia"/>'s question, not this one's.
     /// </summary>
     private void TransportRewind() {
-        if (_transportIsAudio) {
+        if (_transportIsSystem) {
+            _system!.Pause();
+            _system.Position = TimeSpan.Zero;
+        } else if (_transportIsAudio) {
             _audioPlayer.Stop();
         } else {
             VideoPreview.Stop();
@@ -1503,6 +1530,9 @@ public partial class PreviewPane : UserControl {
     private void OpenMedia(Uri? uri) {
         try { VideoPreview.Stop(); } catch { /* not yet loaded */ }
         try { _audioPlayer.Stop(); } catch { /* nothing open */ }
+        _system?.Close();
+        _transportIsSystem = false;
+        SystemVideo.Visibility = Visibility.Collapsed;
 
         _mediaUri = uri;
         _restarting = false;
@@ -1613,11 +1643,42 @@ public partial class PreviewPane : UserControl {
     }
 
     private void VideoPreview_MediaFailed(object sender, ExceptionRoutedEventArgs e) {
-        // Codec this engine cannot use (.webm, .ogv: the Store codecs are
-        // invisible to it) or corrupt file. Surface a minimal hint in the
-        // slider area.
         ReleaseHeldFrame();
-        VideoTimeText.Text = Strings.PreviewVideoUnavailable;
+        PlayWithSystem();
+    }
+
+    /// <summary>
+    /// WPF's engine did not open the file - a codec it cannot use (WebM,
+    /// Ogg: the codecs from the Microsoft Store are invisible to it) or a
+    /// damaged file. The system's player takes it over; when it fails too,
+    /// the controller turns the pane into the reason why
+    /// (<see cref="PreviewController.ReportUnplayable"/>), with no
+    /// transport left to press.
+    /// </summary>
+    private void PlayWithSystem() {
+        if (_transportIsSystem || _mediaUri is not { } uri) {
+            return;
+        }
+
+        try { VideoPreview.Source = null; } catch { /* not yet loaded */ }
+        _audioPlayer.Close();
+        if (_system is null) {
+            _system = new SystemPlayer(Dispatcher);
+            _system.Opened += SystemMediaOpened;
+            _system.Ended += MediaEnded;
+            _system.Failed += () => Controller.ReportUnplayable(_mediaUri);
+            _system.FrameChanged += () => SystemVideo.Source = _system.Frame;
+        }
+        _transportIsSystem = true;
+        SystemVideo.Visibility = _transportIsAudio ? Visibility.Collapsed : Visibility.Visible;
+        _system.Open(uri, video: !_transportIsAudio, Controller.MediaVolume);
+    }
+
+    private void SystemMediaOpened() {
+        // Capped at the clip's own size, as the element is.
+        SystemVideo.MaxWidth = _system!.VideoWidth > 0 ? _system.VideoWidth : double.PositiveInfinity;
+        SystemVideo.MaxHeight = _system.VideoHeight > 0 ? _system.VideoHeight : double.PositiveInfinity;
+        MediaOpened();
     }
 
     private void EnsureVideoTimer() {
@@ -1740,6 +1801,7 @@ public partial class PreviewPane : UserControl {
         // background after the user selects another file.
         try { VideoPreview.Pause(); } catch { /* not yet loaded */ }
         try { _audioPlayer.Pause(); } catch { /* nothing open */ }
+        _system?.Pause();
         ReleaseHeldFrame();
         _clock.Reset();
         _videoIsPlaying = false;
@@ -1803,11 +1865,20 @@ public partial class PreviewPane : UserControl {
         ResetModelView();
     }
 
+    /// <summary>
+    /// The model as it opens: turned the way it was last left
+    /// (<see cref="PreviewController.ModelView"/>), at the fitted distance.
+    /// The centre of the turn is set before the first frame - turned about
+    /// the origin, a model away from it would swing out of view.
+    /// </summary>
     private void ResetModelView() {
         _modelDragging = false;
         _modelZoom = 1.0;
-        ModelSpin.Angle = 0;
-        ModelTilt.Angle = 0;
+        ModelSpin.Angle = Controller.ModelView.Spin;
+        ModelTilt.Angle = Controller.ModelView.Tilt;
+        if (Controller.HasModel) {
+            ApplyModelRotationCentre();
+        }
         PlaceModelCamera();
     }
 
@@ -1899,6 +1970,12 @@ public partial class PreviewPane : UserControl {
     private void Model_MouseUp(object sender, MouseButtonEventArgs e) {
         _modelDragging = false;
         ((UIElement)sender).ReleaseMouseCapture();
+
+        // Turned: kept for the next opening and for the tile.
+        var view = new ModelView(ModelSpin.Angle, ModelTilt.Angle);
+        if (Controller.HasModel && view != Controller.ModelView) {
+            Controller.RememberModelView(view);
+        }
     }
 
     private void Model_MouseMove(object sender, MouseEventArgs e) {

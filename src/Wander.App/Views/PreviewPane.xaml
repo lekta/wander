@@ -645,7 +645,9 @@
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
                         <!--
-                            Video only. Audio is played by a MediaPlayer in
+                            Video only, in the middle both ways as a picture
+                            is (2026-10-09: at the top it read as a page).
+                            Audio is played by a MediaPlayer in
                             the code-behind instead, because a MediaElement
                             that is not drawn does not play: with nothing to
                             render it measures to nothing, and a
@@ -668,7 +670,7 @@
                                       ScrubbingEnabled="True"
                                       Stretch="Uniform" StretchDirection="DownOnly"
                                       Margin="8,12,8,4"
-                                      VerticalAlignment="Top" HorizontalAlignment="Center"
+                                      VerticalAlignment="Center" HorizontalAlignment="Center"
                                       Volume="{Binding MediaVolume}"
                                       MediaOpened="VideoPreview_MediaOpened"
                                       MediaEnded="VideoPreview_MediaEnded"
@@ -689,8 +691,22 @@
                         <Image x:Name="VideoHold"
                                Grid.Row="0"
                                Margin="8,12,8,4"
-                               VerticalAlignment="Top" HorizontalAlignment="Center"
+                               VerticalAlignment="Center" HorizontalAlignment="Center"
                                Stretch="Fill"
+                               IsHitTestVisible="False"
+                               Visibility="Collapsed"/>
+                        <!--
+                            The picture of a clip the system's player plays
+                            (PreviewPane.PlayWithSystem): its frames are
+                            drawn into a bitmap shown here, where the
+                            element above would have drawn them.
+                        -->
+                        <Image x:Name="SystemVideo"
+                               Grid.Row="0"
+                               Margin="8,12,8,4"
+                               VerticalAlignment="Center" HorizontalAlignment="Center"
+                               Stretch="Uniform" StretchDirection="DownOnly"
+                               RenderOptions.BitmapScalingMode="HighQuality"
                                IsHitTestVisible="False"
                                Visibility="Collapsed"/>
 
@@ -698,11 +714,13 @@
                             The track's card. The cover gets the room it can
                             have and no more: a sleeve is square, a pane is
                             not, and a 1500-px scan blown up to fill the
-                            height would push the name off the bottom.
+                            height would push the name off the bottom. In
+                            the middle both ways, as a clip and a picture
+                            (2026-10-09).
                         -->
                         <StackPanel Grid.Row="0"
                                     Margin="16,20,16,8"
-                                    VerticalAlignment="Top" HorizontalAlignment="Center"
+                                    VerticalAlignment="Center" HorizontalAlignment="Center"
                                     Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Audio}">
                             <Border MaxWidth="260" MaxHeight="260"
                                     HorizontalAlignment="Center"
@@ -1160,6 +1178,52 @@
                     </ScrollViewer>
 
                     <!--
+                        A font (FontCard): its name, the facts of its name
+                        table in the program card's columns, then the face
+                        at sizes from text to display. The samples take the
+                        face by inheritance from their list.
+                    -->
+                    <ScrollViewer Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Font}"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="12,10,12,10">
+                        <StackPanel>
+                            <TextBlock Text="{Binding Font.Title}"
+                                       Style="{StaticResource PaneText}"
+                                       FontSize="14" FontWeight="SemiBold"
+                                       Margin="0,0,0,10" TextWrapping="Wrap"/>
+                            <ItemsControl ItemsSource="{Binding Font.Facts}" Focusable="False">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,2,0,2">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="84"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding Label}"
+                                                       Style="{StaticResource PaneDim}"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Value}"
+                                                       Style="{StaticResource PaneText}"
+                                                       TextWrapping="Wrap"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <ItemsControl ItemsSource="{Binding Font.Samples}" Focusable="False" Margin="0,14,0,0"
+                                          TextElement.FontFamily="{Binding Font.Family}"
+                                          TextElement.FontStyle="{Binding Font.Style}"
+                                          TextElement.FontWeight="{Binding Font.Weight}"
+                                          TextElement.FontStretch="{Binding Font.Stretch}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Text}" FontSize="{Binding Size}"
+                                                   Style="{StaticResource PaneText}"
+                                                   TextWrapping="Wrap" Margin="0,0,0,6"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!--
                         A program or a library (B7): its icon, what it calls
                         itself, and the facts it carries - in the census's
                         clothes, as the archive listing is.
@@ -1447,6 +1511,54 @@
                                    TextWrapping="Wrap">
                             <Run Text="{Binding SummaryHead, Mode=OneWay}"/><Run Text="  "/><Run Text="{Binding SummaryNote, Mode=OneWay}" Foreground="{DynamicResource TextDim}"/><Run Text="{Binding SummaryRest, Mode=OneWay}"/><Run Text="   "/><Run Style="{StaticResource FooterSharpness}" Foreground="{StaticResource ReviewSharp}" FontWeight="SemiBold" ToolTip="{Binding SharpnessTip}"/>
                         </TextBlock>
+
+                        <!--
+                            A video's streams (MediaRows): a row each for the
+                            picture and the sound tracks, columns shared, so
+                            codec under codec and rate under rate; the kind a
+                            glyph, its word in the tooltip; a track's name
+                            last and dim. The subtitles on one line under.
+                        -->
+                        <ItemsControl ItemsSource="{Binding MediaRows}"
+                                      Grid.IsSharedSizeScope="True" Focusable="False" Margin="0,4,0,0"
+                                      Visibility="{Binding HasMediaRows, Converter={StaticResource BoolToVisibility}}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid TextElement.FontSize="11">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" SharedSizeGroup="MediaGlyph"/>
+                                            <ColumnDefinition Width="Auto" SharedSizeGroup="MediaLanguage"/>
+                                            <ColumnDefinition Width="Auto" SharedSizeGroup="MediaMain"/>
+                                            <ColumnDefinition Width="Auto" SharedSizeGroup="MediaRate"/>
+                                            <ColumnDefinition Width="Auto" SharedSizeGroup="MediaBitrate"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding Glyph}" ToolTip="{Binding Tip}"
+                                                   FontFamily="Segoe MDL2 Assets" FontSize="11" Margin="0,2,8,0"
+                                                   Foreground="{DynamicResource TextDim}"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Language}" Margin="0,0,8,0"
+                                                   Foreground="{DynamicResource TextSecondary}"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding Main}" Margin="0,0,14,0"
+                                                   Foreground="{DynamicResource TextSecondary}"/>
+                                        <TextBlock Grid.Column="3" Text="{Binding Rate}" Margin="0,0,14,0"
+                                                   Foreground="{DynamicResource TextDim}"/>
+                                        <TextBlock Grid.Column="4" Text="{Binding Bitrate}" Margin="0,0,14,0"
+                                                   Foreground="{DynamicResource TextDim}"/>
+                                        <TextBlock Grid.Column="5" Text="{Binding Title}" ToolTip="{Binding Title}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Foreground="{DynamicResource TextDim}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <DockPanel Margin="0,1,0,0"
+                                   Visibility="{Binding HasMediaSubtitles, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock DockPanel.Dock="Left" Text="&#xE7F0;" ToolTip="{x:Static res:Strings.MediaSubtitles}"
+                                       FontFamily="Segoe MDL2 Assets" FontSize="11" Margin="0,2,8,0"
+                                       Foreground="{DynamicResource TextDim}"/>
+                            <TextBlock Text="{Binding MediaSubtitles}" FontSize="11" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource TextSecondary}"/>
+                        </DockPanel>
 
                         <!--
                             An operation of the user's has this file: running

@@ -116,17 +116,11 @@ public readonly record struct MeshBounds(
 /// <summary>
 /// Reads the model formats the preview pane understands, chosen for
 /// being small, documented and self-contained: STL (both flavours), OBJ,
-/// glTF in its binary and JSON forms, PLY (text and binary) and the 3MF
-/// package slicers save.
-///
-/// <para>
-/// FBX is deliberately not among them. It is a versioned node tree with
-/// deflate-compressed arrays and a geometry layer model on top, which is a
-/// parser an order of magnitude larger than all three of these together;
-/// the alternative, a native importer, is fifteen megabytes of DLL per
-/// architecture against a portable single-file executable. The reasoning is
-/// written down in BACKLOG.md rather than here, so it survives the next
-/// time somebody asks — along with why COLLADA and DXF are not here either.
+/// glTF in its binary and JSON forms, PLY (text and binary), the 3MF
+/// package slicers save, and FBX 7 - read here (<see cref="FbxReader"/>)
+/// rather than by a native importer, fifteen megabytes of DLL per
+/// architecture against a portable single-file executable (decision of
+/// 2026-10-09). Why COLLADA and DXF are not here - BACKLOG.md.
 /// </para>
 /// </summary>
 public static class MeshFile {
@@ -143,7 +137,7 @@ public static class MeshFile {
 
     /// <summary>Extensions this reader understands.</summary>
     public static readonly IReadOnlySet<string> Extensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
-        ".stl", ".obj", ".gltf", ".glb", ".ply", ".3mf",
+        ".stl", ".obj", ".gltf", ".glb", ".ply", ".3mf", ".fbx",
     };
 
 
@@ -172,6 +166,7 @@ public static class MeshFile {
                 ".obj" => ObjReader.Read(path),
                 ".glb" or ".gltf" => GltfReader.Read(path),
                 ".ply" => PlyReader.Read(SharedRead.ReadAllBytes(path)),
+                ".fbx" => FbxReader.Read(SharedRead.ReadAllBytes(path)),
                 ".3mf" => ReadPackage(path),
                 _ => null,
             };
@@ -180,7 +175,7 @@ public static class MeshFile {
         } catch (Exception ex) when (
             ex is IOException or UnauthorizedAccessException or NotSupportedException
                 or OutOfMemoryException or FormatException or ArgumentException
-                or InvalidDataException or System.Xml.XmlException or OverflowException) {
+                or InvalidDataException or System.Xml.XmlException or OverflowException or IndexOutOfRangeException) {
             return null;
         }
     }

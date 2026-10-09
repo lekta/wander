@@ -46,12 +46,13 @@ internal static class PreviewText {
         .single .sheet { top: 0; }
         table { border-collapse: separate; border-spacing: 0; }
         th, td { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 2px 6px;
-                 white-space: nowrap; max-width: 360px; overflow: hidden; text-overflow: ellipsis; vertical-align: top; }
+                 white-space: nowrap; vertical-align: top; }
+        td { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 360px; }
         th { background: var(--chrome); color: var(--dim); font-weight: normal; }
         thead th { position: sticky; top: 0; z-index: 1; text-align: center; min-width: 24px; }
         tbody th { position: sticky; left: 0; text-align: right; }
         thead th.corner { left: 0; z-index: 2; }
-        td.n { text-align: right; }
+        td.n { text-align: right; white-space: nowrap; }
         .note { margin: 0; padding: 6px 8px; color: var(--dim); }
         ";
 
@@ -257,8 +258,10 @@ internal static class PreviewText {
     /// The page a table is shown on: a sheet at a time under tabs of their
     /// names, columns lettered and rows numbered as in a spreadsheet, both
     /// kept in view while the grid scrolls. Tabs are radio buttons and
-    /// CSS - the page needs no script. A long cell is cut to a line, the
-    /// whole of it in its tooltip; numbers stand to the right.
+    /// CSS - the page needs no script. Every cell is shown whole, wrapped
+    /// inside a column of at most 360 px (2026-10-09: a cell cut to a line
+    /// and opened by a click hid what the table is read for). Numbers
+    /// stand to the right, on one line.
     ///
     /// <para>
     /// The web view takes a page of at most 2 MB as a string: past
@@ -323,10 +326,8 @@ internal static class PreviewText {
                     if (cell.Length == 0) {
                         html.Append("<td></td>");
                     } else {
-                        string text = Html(cell);
-                        html.Append(LooksNumeric(cell) ? "<td class='n'" : "<td");
-                        html.Append(cell.Length > 40 || cell.Contains('\n') ? $" title='{text}'>" : ">");
-                        html.Append(text).Append("</td>");
+                        html.Append(LooksNumeric(cell) ? "<td class='n'>" : "<td>");
+                        html.Append(Html(cell)).Append("</td>");
                     }
                 }
                 html.Append("</tr>");

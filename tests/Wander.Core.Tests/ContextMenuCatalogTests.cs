@@ -89,6 +89,11 @@ public class ContextMenuCatalogTests {
             new ContextMenuTarget { FolderPath = @"C:\work", IsBackground = true },
             ContextMenuSettings.Default);
 
+        // A search result: one more row, "go to its folder".
+        yield return ContextMenuBuilder.Build(
+            new ContextMenuTarget { Selection = new[] { file }, FolderPath = @"C:\work", IsSearchResult = true },
+            ContextMenuSettings.Default);
+
         // The header's "Actions" menu, with and without a selection: its
         // rows must be hideable and labelled too.
         yield return ContextMenuBuilder.Build(

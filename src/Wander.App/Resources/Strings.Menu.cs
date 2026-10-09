@@ -207,6 +207,9 @@ public static partial class Strings {
     /// <summary>Открыть в терминале</summary>
     public static string MenuCmdOpenInTerminal => Get(nameof(MenuCmdOpenInTerminal));
 
+    /// <summary>Перейти к расположению</summary>
+    public static string MenuCmdGoToLocation => Get(nameof(MenuCmdGoToLocation));
+
     /// <summary>Вырезать</summary>
     public static string MenuCmdCut => Get(nameof(MenuCmdCut));
 
@@ -251,6 +254,9 @@ public static partial class Strings {
 
     /// <summary>Свернуть / развернуть закладки</summary>
     public static string BookmarksToggleHint => Get(nameof(BookmarksToggleHint));
+
+    /// <summary>Свернуть / развернуть «Компьютер»</summary>
+    public static string ComputerToggleHint => Get(nameof(ComputerToggleHint));
 
     /// <summary>Убрать из закладок</summary>
     public static string BookmarksRemove => Get(nameof(BookmarksRemove));
@@ -318,7 +324,7 @@ public static partial class Strings {
     /// <summary>Оценка</summary>
     public static string ColumnRating => Get(nameof(ColumnRating));
 
-    /// <summary>Как у окна</summary>
+    /// <summary>Светлый</summary>
     public static string GalleryBackgroundLight => Get(nameof(GalleryBackgroundLight));
 
     /// <summary>Серый</summary>

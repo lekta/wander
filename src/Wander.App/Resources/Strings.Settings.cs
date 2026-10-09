@@ -441,6 +441,21 @@ public static partial class Strings {
     /// <summary>Скрытые и системные разом, как pagefile.sys; один системный атрибут ничего…</summary>
     public static string SettingsShowSystemHint => Get(nameof(SettingsShowSystemHint));
 
+    /// <summary>Возвращаясь в папку</summary>
+    public static string SettingsReturnGroup => Get(nameof(SettingsReturnGroup));
+
+    /// <summary>Тот же файл и та же прокрутка</summary>
+    public static string SettingsRememberFolderPlace => Get(nameof(SettingsRememberFolderPlace));
+
+    /// <summary>Как её оставили, и после перезапуска тоже…</summary>
+    public static string SettingsRememberFolderPlaceHint => Get(nameof(SettingsRememberFolderPlaceHint));
+
+    /// <summary>Тот же фильтр по оценкам и меткам</summary>
+    public static string SettingsRememberFolderFilter => Get(nameof(SettingsRememberFolderFilter));
+
+    /// <summary>Фильтр, оставленный в папке, снова прячет её файлы…</summary>
+    public static string SettingsRememberFolderFilterHint => Get(nameof(SettingsRememberFolderFilterHint));
+
     /// <summary>Спутники</summary>
     public static string SettingsCompanionsGroup => Get(nameof(SettingsCompanionsGroup));
 

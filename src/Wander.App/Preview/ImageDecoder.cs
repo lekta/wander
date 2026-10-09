@@ -98,6 +98,32 @@ internal static class ImageDecoder {
 
 
     /// <summary>
+    /// A Photoshop file: the flattened picture it keeps, decoded by Core's
+    /// <see cref="PsdDecoder"/>; a file saved without one, or too large,
+    /// shows its small JPEG preview. Null when neither can be read.
+    /// </summary>
+    public static BitmapSource? Psd(string path) {
+        try {
+            PsdPicture? picture;
+            using (var file = SharedRead.Open(path)) {
+                picture = PsdDecoder.Decode(file);
+            }
+            if (picture?.Composite is { } image) {
+                var bitmap = BitmapSource.Create(
+                    image.Width, image.Height, 96, 96, PixelFormats.Bgra32, null, image.Pixels, image.Stride);
+                bitmap.Freeze();
+
+                return bitmap;
+            }
+
+            return picture?.Thumbnail is { } jpeg ? Stream(jpeg) : null;
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or OutOfMemoryException) {
+            return null;
+        }
+    }
+
+
+    /// <summary>
     /// The stored size of a picture file, read from its header without
     /// decoding a pixel - what decides the size it is decoded at
     /// (<c>PictureFit</c>). Null when WIC cannot read the header.

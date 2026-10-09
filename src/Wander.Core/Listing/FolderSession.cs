@@ -1,4 +1,6 @@
+using Wander.Core.Companions;
 using Wander.Core.FileSystem;
+using Wander.Core.Persistence;
 
 namespace Wander.Core.Listing;
 
@@ -109,7 +111,7 @@ public sealed record WatchTickDecision(
 /// </para>
 /// </summary>
 public sealed class FolderSession {
-    private const int SelectionMemoryLimit = 64;
+    private const int PlaceMemoryLimit = 64;
 
     // Which listing the rows on screen belong to. Bumped whenever a new one
     // starts, and captured by every background pass that computes rows for
@@ -127,11 +129,12 @@ public sealed class FolderSession {
     // why there is only one.
     private ArrivalIntent? _arrival;
 
-    // Where the user was in each folder they have been in, so coming back
-    // lands on the same row. Capped and oldest-first: a long session walks
+    // Where the user was in each folder they have been in - the place in
+    // its list and the rating filter over it - so coming back lands there.
+    // Capped, the folder left longest ago going first: a long session walks
     // through a lot of folders, and none of this is worth keeping forever.
-    private readonly Dictionary<string, string> _selectionMemory = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Queue<string> _selectionMemoryOrder = new();
+    private readonly Dictionary<string, FolderPlace> _places = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<string> _placeOrder = new();
 
     // What the watcher has noted since the last tick answered. Lives here
     // because "re-list everything" versus "re-read these two rows" is a
@@ -144,6 +147,21 @@ public sealed class FolderSession {
 
     /// <summary>The pending intent, or null. Read-only outside; set through <see cref="SetArrival"/>.</summary>
     public ArrivalIntent? Arrival => _arrival;
+
+    /// <summary>
+    /// Coming back to a folder puts the list where it was left - the same
+    /// file, the same row on top - however it is reached, a panel row too
+    /// (<c>AppSettings.RememberFolderPlace</c>). Off: the file left selected
+    /// there, brought into view, and only on a way in that names nothing
+    /// else - the history, the address, a row of the list.
+    /// </summary>
+    public bool RestoresPlace { get; set; }
+
+    /// <summary>Coming back to a folder puts back the rating filter it was left with (<see cref="FilterFor"/>).</summary>
+    public bool RestoresFilter { get; set; }
+
+    /// <summary>The folders remembered, the most recently left first - what the next session starts with (<see cref="LoadPlaces"/>).</summary>
+    public IReadOnlyList<FolderPlace> Places => Enumerable.Reverse(_placeOrder).Select(folder => _places[folder]).ToArray();
 
 
     // --- Epochs -----------------------------------------------------------
@@ -242,35 +260,54 @@ public sealed class FolderSession {
             };
         }
 
-        var moved = _selectionMemory
-            .Where(m => PathRewrite.Under(m.Key, from, to) is not null || PathRewrite.Under(m.Value, from, to) is not null)
-            .ToList();
-        foreach (var (folder, row) in moved) {
-            _selectionMemory.Remove(folder);
-            _selectionMemory[Moved(folder, from, to)!] = Moved(row, from, to)!;
+        // A folder under the moved one, or a row of one: the remembered
+        // place follows, in its slot of the order.
+        for (int i = 0; i < _placeOrder.Count; i++) {
+            var place = _places[_placeOrder[i]];
+            var moved = place with { Folder = Moved(place.Folder, from, to)!, Place = place.Place?.Moved(from, to) };
+            _places.Remove(place.Folder);
+            _places[moved.Folder] = moved;
+            _placeOrder[i] = moved.Folder;
         }
-        if (moved.Count > 0) {
-            var order = _selectionMemoryOrder.Select(f => Moved(f, from, to)!).ToList();
-            _selectionMemoryOrder.Clear();
-            foreach (string folder in order) {
-                _selectionMemoryOrder.Enqueue(folder);
-            }
+    }
+
+
+    /// <summary>What the last session remembered, the most recently left first (<see cref="Places"/>). Replaces what is held.</summary>
+    public void LoadPlaces(IReadOnlyList<FolderPlace> places) {
+        _places.Clear();
+        _placeOrder.Clear();
+        foreach (var place in places.Reverse().Where(p => p.Folder.Length > 0)) {
+            Note(place);
         }
+    }
+
+    /// <summary>
+    /// The rating filter <paramref name="folder"/> starts with as it is
+    /// walked into: the one it was left with, while
+    /// <see cref="RestoresFilter"/>; none otherwise.
+    /// </summary>
+    public RatingFilter FilterFor(string? folder) {
+        return RestoresFilter && folder is not null && _places.TryGetValue(folder, out var left)
+            ? new RatingFilter(left.FilterRanks, left.FilterColors)
+            : RatingFilter.None;
     }
 
 
     /// <summary>
     /// Navigation is happening. Notes where the user was in the folder
-    /// being left (so walking back in lands on the same row), drops an
-    /// intent that belongs to an overtaken navigation, and — when no caller
-    /// knew better — plans the default: going up highlights the folder we
-    /// came out of, anything else falls back to what was selected there
-    /// last time.
+    /// being left (so walking back in lands there), drops an intent that
+    /// belongs to an overtaken navigation, and — when no caller knew better
+    /// — plans the default: going up highlights the folder we came out of,
+    /// anything else falls back to where the user was there last time.
+    /// With <see cref="RestoresPlace"/> that is the whole place, the row on
+    /// top too, and a panel row's "the folder itself" gives way to it.
     /// </summary>
     /// <param name="navigatingTo">Where navigation is going; null when leaving to nowhere.</param>
     /// <param name="selectedPath">The primary selected row of the folder being left, if any.</param>
-    public void OnNavigating(string? navigatingTo, string? selectedPath) {
-        RememberSelection(selectedPath);
+    /// <param name="place">Where the list stood in the folder being left; null when its rows are not the folder's - search results.</param>
+    /// <param name="filter">The rating filter over the folder being left; null leaves the one remembered.</param>
+    public void OnNavigating(string? navigatingTo, string? selectedPath, ListPlace? place = null, RatingFilter? filter = null) {
+        RememberSelection(selectedPath, place, filter);
 
         // An intent for another folder belongs to a navigation this one
         // overtook — including the plain "keep what was selected", which
@@ -278,42 +315,62 @@ public sealed class FolderSession {
         if (_arrival is { } pending && !IsSamePath(pending.ForFolder, navigatingTo)) {
             _arrival = null;
         }
+        if (navigatingTo is null) {
+            return;
+        }
+
+        _places.TryGetValue(navigatingTo, out var remembered);
+        var kept = RestoresPlace ? remembered?.Place : null;
+
+        // A panel row asks for the folder itself, nothing in the list; the
+        // place left there is the list the user comes back to all the same.
+        if (_arrival is { Action: ArrivalAction.SelectFolderItself } && kept is not null) {
+            _arrival = Back(navigatingTo, kept);
+
+            return;
+        }
 
         // A caller that already said what it wants said it about this
         // navigation, one line before starting it. Nothing to guess.
-        if (_arrival is not null || navigatingTo is null) {
+        if (_arrival is not null) {
             return;
         }
 
         if (_listedPath is { } left && IsSamePath(navigatingTo, ParentOf(left))) {
-            _arrival = ArrivalIntent.Rows(navigatingTo, new[] { left });
+            _arrival = ArrivalIntent.Rows(navigatingTo, new[] { left }) with { Top = kept?.Top };
 
             return;
         }
 
-        if (_selectionMemory.TryGetValue(navigatingTo, out string? remembered)) {
-            _arrival = ArrivalIntent.Rows(navigatingTo, new[] { remembered });
+        if (kept is not null) {
+            _arrival = Back(navigatingTo, kept);
+        } else if (remembered?.Place?.Row is { } row) {
+            _arrival = ArrivalIntent.Rows(navigatingTo, new[] { row });
         }
     }
 
 
     /// <summary>
-    /// Notes where the user is in the folder currently on screen. Bounded:
-    /// the oldest folder's memory goes when the cap is reached.
+    /// Notes where the user is in the folder currently on screen: its place
+    /// - or only the selected row, when the rows are not the folder's - and
+    /// its rating filter; what is not given stays as remembered. Bounded:
+    /// the folder left longest ago goes when the cap is reached.
     /// </summary>
-    public void RememberSelection(string? selectedPath) {
-        if (_listedPath is not { } path || selectedPath is null) {
+    public void RememberSelection(string? selectedPath, ListPlace? place = null, RatingFilter? filter = null) {
+        if (_listedPath is not { } folder || (selectedPath is null && place is null && filter is null)) {
             return;
         }
 
-        if (!_selectionMemory.ContainsKey(path)) {
-            _selectionMemoryOrder.Enqueue(path);
-            if (_selectionMemoryOrder.Count > SelectionMemoryLimit) {
-                _selectionMemory.Remove(_selectionMemoryOrder.Dequeue());
-            }
+        var now = _places.TryGetValue(folder, out var was) ? was : new FolderPlace { Folder = folder };
+        if (place is not null) {
+            now = now with { Place = place };
+        } else if (selectedPath is not null) {
+            now = now with { Place = new ListPlace { Row = selectedPath } };
         }
-
-        _selectionMemory[path] = selectedPath;
+        if (filter is not null) {
+            now = now with { FilterRanks = filter.Ranks, FilterColors = filter.Colors };
+        }
+        Note(now);
     }
 
 
@@ -465,6 +522,23 @@ public sealed class FolderSession {
 
     private static string? Moved(string? path, string from, string to) {
         return path is null ? null : PathRewrite.Under(path, from, to) ?? path;
+    }
+
+    /// <summary>Coming back to where the list stood: a walk, not a start - the keyboard stays where it is.</summary>
+    private static ArrivalIntent Back(string folder, ListPlace place) {
+        return ArrivalIntent.Place(folder, place.Row, place.StoodAmong, place.Top) with { TakeFocus = false };
+    }
+
+    /// <summary>Keeps <paramref name="place"/> as the folder left last; the one left longest ago goes past the cap.</summary>
+    private void Note(FolderPlace place) {
+        _placeOrder.RemoveAll(folder => IsSamePath(folder, place.Folder));
+        _placeOrder.Add(place.Folder);
+        _places.Remove(place.Folder);
+        _places[place.Folder] = place;
+        if (_placeOrder.Count > PlaceMemoryLimit) {
+            _places.Remove(_placeOrder[0]);
+            _placeOrder.RemoveAt(0);
+        }
     }
 
 

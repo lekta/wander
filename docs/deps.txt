@@ -1,15 +1,15 @@
 === Wander dependency graph (using sweep) ===
-date   : 2026-10-08
-commit : 66c8939
+date   : 2026-10-09
+commit : 4252335
 
 -- projects --
-Wander.App -> Wander.Core   (74 files)
+Wander.App -> Wander.Core   (77 files)
 Wander.App -> Wander.Platform.Windows   (1 files)
-Wander.Core.Tests -> Wander.Core   (165 files)
+Wander.Core.Tests -> Wander.Core   (174 files)
 Wander.Harness -> Wander.App   (4 files)
 Wander.Harness -> Wander.Core   (7 files)
 Wander.Harness -> Wander.Platform.Windows   (3 files)
-Wander.Platform.Windows -> Wander.Core   (37 files)
+Wander.Platform.Windows -> Wander.Core   (41 files)
 
 -- Wander.Core: folder -> folder --
   Actions        -> FileSystem     (6 files)
@@ -31,9 +31,10 @@ Wander.Platform.Windows -> Wander.Core   (37 files)
   FileSystem     -> Undo           (3 files)
   Folders        -> FileSystem     (2 files)
   Icons          -> Imaging        (1 files)
-  Listing        -> Companions     (3 files)
+  Listing        -> Companions     (4 files)
   Listing        -> FileSystem     (8 files)
   Listing        -> Icons          (1 files)
+  Listing        -> Persistence    (1 files)
   Listing        -> Search         (1 files)
   Menu           -> Actions        (3 files)
   Menu           -> FileSystem     (3 files)
@@ -46,13 +47,14 @@ Wander.Platform.Windows -> Wander.Core   (37 files)
   Persistence    -> Actions        (1 files)
   Persistence    -> Appearance     (1 files)
   Persistence    -> Companions     (1 files)
-  Persistence    -> FileSystem     (1 files)
+  Persistence    -> FileSystem     (2 files)
   Persistence    -> Folders        (2 files)
   Persistence    -> Localization   (1 files)
   Persistence    -> Navigation     (1 files)
   Persistence    -> Rename         (1 files)
-  Preview        -> FileSystem     (10 files)
+  Preview        -> FileSystem     (13 files)
   Preview        -> Icons          (1 files)
+  Preview        -> Imaging        (1 files)
   Rename         -> Companions     (1 files)
   Rename         -> FileSystem     (2 files)
   Search         -> FileSystem     (5 files)
@@ -79,8 +81,8 @@ Wander.Platform.Windows -> Wander.Core   (37 files)
   2: FileSystem
   3: Companions, Folders, Navigation, Preview
   4: Actions, Rename, Search
-  5: Listing, Persistence
-  6: Shell
+  5: Persistence
+  6: Listing, Shell
   7: Menu
   8: Workspace
 
@@ -116,6 +118,7 @@ Wander.Platform.Windows -> Wander.Core   (37 files)
   Conflict       -> Resources      (2 files)
   Conflict       -> Util           (3 files)
   Conflict       -> ViewModels     (2 files)
+  Controllers    -> Controls       (1 files)
   Controllers    -> Converters     (1 files)
   Controllers    -> Preview        (1 files)
   Controllers    -> Resources      (6 files)
@@ -141,11 +144,11 @@ Wander.Platform.Windows -> Wander.Core   (37 files)
   DragPreview    -> ViewModels     (1 files)
   Highlighting   -> Resources      (1 files)
   Highlighting   -> Util           (1 files)
-  Preview        -> Resources      (3 files)
+  Preview        -> Resources      (5 files)
   Preview        -> Util           (2 files)
   Util           -> Resources      (2 files)
   ViewModels     -> Resources      (10 files)
-  ViewModels     -> Util           (2 files)
+  ViewModels     -> Util           (3 files)
   Views          -> Conflict       (1 files)
   Views          -> Controllers    (4 files)
   Views          -> Controls       (3 files)
@@ -153,7 +156,7 @@ Wander.Platform.Windows -> Wander.Core   (37 files)
   Views          -> Dialogs        (3 files)
   Views          -> DragPreview    (1 files)
   Views          -> Highlighting   (1 files)
-  Views          -> Preview        (1 files)
+  Views          -> Preview        (2 files)
   Views          -> Resources      (8 files)
   Views          -> Util           (10 files)
   Views          -> ViewModels     (8 files)
@@ -163,9 +166,10 @@ Wander.Platform.Windows -> Wander.Core   (37 files)
   1: Util
   2: Diagnostics, Highlighting, Preview, ViewModels
   3: Conflict, Converters
-  4: Controllers, Controls, Dialogs, DragPreview
-  5: Views
-  6: (root)
+  4: Controls, Dialogs, DragPreview
+  5: Controllers
+  6: Views
+  7: (root)
 
 -- namespace <> folder mismatches --
   (none)

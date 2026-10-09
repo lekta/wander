@@ -39,6 +39,8 @@ public enum MenuCommandId {
     Open,
     OpenWith,
     OpenInTerminal,
+    /// <summary>A search result: to its folder, the row selected.</summary>
+    GoToLocation,
 
     // --- Clipboard / file ops -------------------------------------------
     Cut,

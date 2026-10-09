@@ -313,13 +313,16 @@ public class MeshFileTests {
 
     // --- routing ----------------------------------------------------------
 
+    /// <summary>FBX joined on 2026-10-09 (decision: a simple reader of our own); Blender's files are not read.</summary>
     [Fact]
-    public void OnlyTheFourExtensionsAreOurs() {
+    public void TheModelExtensionsAreOurs() {
         Assert.True(MeshFile.IsMesh("thing.stl"));
         Assert.True(MeshFile.IsMesh("thing.OBJ"));
         Assert.True(MeshFile.IsMesh("thing.glb"));
         Assert.True(MeshFile.IsMesh("thing.gltf"));
-        Assert.False(MeshFile.IsMesh("thing.fbx"));
+        Assert.True(MeshFile.IsMesh("thing.ply"));
+        Assert.True(MeshFile.IsMesh("thing.3mf"));
+        Assert.True(MeshFile.IsMesh("thing.fbx"));
         Assert.False(MeshFile.IsMesh("thing.blend"));
     }
 

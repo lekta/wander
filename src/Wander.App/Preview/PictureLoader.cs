@@ -122,6 +122,12 @@ internal static class PictureLoader {
                 ? new DecodedPicture(tga, meta, false, null, false, tga.PixelWidth, tga.PixelHeight)
                 : null;
         }
+        if (Path.GetExtension(path) is { } ext
+            && (ext.Equals(".psd", StringComparison.OrdinalIgnoreCase) || ext.Equals(".psb", StringComparison.OrdinalIgnoreCase))) {
+            return ImageDecoder.Psd(path) is { } psd
+                ? new DecodedPicture(psd, meta, false, null, false, psd.PixelWidth, psd.PixelHeight)
+                : null;
+        }
 
         return Whole(ImageDecoder.File(path), orientation) is { } plain ? plain with { Meta = meta } : null;
     }

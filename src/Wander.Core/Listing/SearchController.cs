@@ -137,7 +137,8 @@ public sealed class SearchController : INotifyPropertyChanged {
     /// folder changes (the next <see cref="SetSource"/> immediately reapplies
     /// the empty filter, and we'd otherwise race against a stale pass).
     /// </summary>
-    public void Reset() {
+    /// <param name="rating">The rating filter the next folder starts with - the one it was left with, when that is remembered; none otherwise.</param>
+    public void Reset(RatingFilter? rating = null) {
         _cts?.Cancel();
         _rearranged = false;
         if (_query.Length > 0) {
@@ -146,8 +147,9 @@ public sealed class SearchController : INotifyPropertyChanged {
             Raise(nameof(Query));
             Raise(nameof(HasQuery));
         }
-        if (_rating.IsActive) {
-            _rating = RatingFilter.None;
+        rating ??= RatingFilter.None;
+        if (_rating != rating) {
+            _rating = rating;
             Raise(nameof(RatingFilter));
             Raise(nameof(HasRatingFilter));
         }

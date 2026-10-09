@@ -197,7 +197,9 @@
 
 
         <!--
-            Список файлов: what the list shows and when it lists again. The
+            Список файлов: what the list shows, where it stands in a folder
+            come back to (place and filter, 2026-10-09) and when it lists
+            again. The
             protected and the volume-root rows are hidden files too - they
             show only with hidden files shown (EntryVisibility.Allows), so
             they are under that row and off with it. The last of them is
@@ -219,6 +221,14 @@
                               ToolTip="{x:Static res:Strings.SettingsHideSystemRootFoldersHint}"
                               IsChecked="{Binding Owner.ShowSystemRootFolders}"/>
                 </StackPanel>
+
+                <TextBlock Text="{x:Static res:Strings.SettingsReturnGroup}" Style="{StaticResource GroupTitle}"/>
+                <CheckBox Content="{x:Static res:Strings.SettingsRememberFolderPlace}"
+                          ToolTip="{x:Static res:Strings.SettingsRememberFolderPlaceHint}"
+                          IsChecked="{Binding Owner.RememberFolderPlace}"/>
+                <CheckBox Content="{x:Static res:Strings.SettingsRememberFolderFilter}"
+                          ToolTip="{x:Static res:Strings.SettingsRememberFolderFilterHint}"
+                          IsChecked="{Binding Owner.RememberFolderFilter}"/>
 
                 <TextBlock Text="{x:Static res:Strings.SettingsCompanionsGroup}" Style="{StaticResource GroupTitle}"/>
                 <!-- The one line kept under a row on this page: what the
@@ -325,8 +335,8 @@
             background that goes with it, the language. The scheme applies
             at once; its first line says what following Windows means now.
             The gallery's background moved here with the scheme - the two
-            are seen together, and "same as window" is light or dark with
-            it: an option a line, each colour drawn beside its name, the two
+            are seen together, the light one a shade darker in the dark
+            scheme: an option a line, each colour drawn beside its name, the two
             darkened ones with their brightness in a box after it, the boxes
             in one column - numbers rather than fixed colours, since the
             neutral that reads right depends on the monitor and the room as

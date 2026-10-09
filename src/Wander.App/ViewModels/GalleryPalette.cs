@@ -19,11 +19,12 @@ namespace Wander.App.ViewModels;
 /// </para>
 ///
 /// <para>
-/// The background that follows the window is the theme's own: the list's
-/// surface and the list's highlights, light or dark with the theme, so the
-/// gallery matches the other views exactly where it can. What else sits in
-/// the gallery - its scroll bar, the stars on a cell - follows the surface
-/// through <see cref="IsDark"/> (<c>Util/ThemeScope</c>).
+/// The light background stays light in either theme (decision 2026-10-09):
+/// the window's own white in the light one, a shade darker in the dark one
+/// (<c>GalleryLightBackground</c> in the palette). What else sits in the
+/// gallery - its scroll bar, the stars on a cell - follows the surface
+/// through <see cref="IsDark"/> (<c>Util/ThemeScope</c>). The window's own
+/// surface, whatever the theme, is <see cref="Plain"/>.
 /// </para>
 /// </summary>
 public sealed class GalleryPalette {
@@ -43,9 +44,9 @@ public sealed class GalleryPalette {
 
 
     /// <summary>
-    /// Explorer's own highlights, for a light grey surround: the light
-    /// theme's row colours, kept here because a light surround is light in
-    /// either theme - in the dark one the theme's rows are dark.
+    /// Explorer's own highlights, for a light surround: the light theme's
+    /// row colours, kept here because a light surround is light in either
+    /// theme - in the dark one the theme's rows are dark.
     /// </summary>
     private static readonly Color _explorerHover = Color.FromRgb(0xE5, 0xF3, 0xFB);
     private static readonly Color _explorerHoverBorder = Color.FromRgb(0xD2, 0xEC, 0xF8);
@@ -55,19 +56,20 @@ public sealed class GalleryPalette {
     private static readonly Color _explorerInactiveBorder = Color.FromRgb(0xDC, 0xDC, 0xDC);
 
 
-    public GalleryPalette(GalleryBackground background, int greyLevel, int darkLevel) {
+    public GalleryPalette(GalleryBackground background, int greyLevel, int darkLevel)
+        : this(background, greyLevel, darkLevel, window: false) { }
+
+
+    private GalleryPalette(GalleryBackground background, int greyLevel, int darkLevel, bool window) {
         Kind = background;
 
-        // "Same as window" is the theme's own list surface rather than a
-        // colour of our choosing: the point of that option is that the
-        // gallery stops looking like a separate application inside the
-        // window.
-        bool window = background is not (GalleryBackground.Grey or GalleryBackground.Dark);
-        Rgb surface = background switch {
-            GalleryBackground.Grey => Rgb.Grey(greyLevel),
-            GalleryBackground.Dark => Rgb.Grey(darkLevel),
-            _ => ToRgb(Palette.ContentBackground.Current),
-        };
+        Rgb surface = window
+            ? ToRgb(Palette.ContentBackground.Current)
+            : background switch {
+                GalleryBackground.Grey => Rgb.Grey(greyLevel),
+                GalleryBackground.Dark => Rgb.Grey(darkLevel),
+                _ => ToRgb(Palette.GalleryLightBackground.Current),
+            };
 
         Background = Frozen(surface);
         IsDark = Tone.IsDark(surface);
@@ -82,17 +84,6 @@ public sealed class GalleryPalette {
         var ink = IsDark ? Rgb.Grey(0xFF) : Rgb.Grey(0x00);
         Foreground = Frozen(Tone.Quietest(ink, surface, PrimaryContrast));
         Dim = Frozen(Tone.Quietest(ink, surface, SecondaryContrast));
-
-        if (window) {
-            Hover = Palette.RowHover.Current;
-            HoverBorder = Palette.RowHoverBorder.Current;
-            Selected = Palette.RowSelected.Current;
-            SelectedBorder = Palette.RowSelectedBorder.Current;
-            SelectedInactive = Palette.RowSelectedInactive.Current;
-            SelectedInactiveBorder = Palette.RowSelectedInactiveBorder.Current;
-
-            return;
-        }
 
         if (!IsDark) {
             Hover = Frozen(_explorerHover);
@@ -125,7 +116,7 @@ public sealed class GalleryPalette {
     /// and therefore what the preview pane follows outside the gallery —
     /// see <c>MainViewModel.ContentPalette</c>.
     /// </summary>
-    public static GalleryPalette Plain => new(GalleryBackground.Light, 0, 0);
+    public static GalleryPalette Plain => new(GalleryBackground.Light, 0, 0, window: true);
 
 
     /// <summary>Which of the three the user picked — for the toolbar's checked state.</summary>

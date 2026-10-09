@@ -70,7 +70,7 @@ src/
 │   ├── Icons/          значки и миниатюры, дисковый кэш, EXIF, проба резкости
 │   ├── Imaging/        кодировщик картинок (WinRT)
 │   ├── Logging/        FileLogger, чистка логов
-│   ├── Persistence/    state.json, folders.json, InstanceLock
+│   ├── Persistence/    state.json, folders.json, model-views.json, InstanceLock
 │   ├── Preview/        карточка программы, проба кодеков
 │   ├── Search/         IFilter
 │   ├── Shell/          запуск, ярлыки, namespace (корзина, архивы), меню оболочки,
@@ -111,8 +111,8 @@ src/
 <!-- deps:generated:begin -->
 ```
 === Wander dependency graph (using sweep) ===
-date   : 2026-10-08
-commit : 66c8939
+date   : 2026-10-09
+commit : 4252335
 
 -- Wander.Core: levels --
   0: (root), Appearance, Imaging, Layout, Localization, Logging, Operations, Panels
@@ -120,8 +120,8 @@ commit : 66c8939
   2: FileSystem
   3: Companions, Folders, Navigation, Preview
   4: Actions, Rename, Search
-  5: Listing, Persistence
-  6: Shell
+  5: Persistence
+  6: Listing, Shell
   7: Menu
   8: Workspace
 
@@ -135,9 +135,10 @@ commit : 66c8939
   1: Util
   2: Diagnostics, Highlighting, Preview, ViewModels
   3: Conflict, Converters
-  4: Controllers, Controls, Dialogs, DragPreview
-  5: Views
-  6: (root)
+  4: Controls, Dialogs, DragPreview
+  5: Controllers
+  6: Views
+  7: (root)
 
 -- namespace <> folder mismatches --
   (none)
@@ -701,20 +702,36 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
     CBZ — первая картинка по имени; тоже «страницей», нет картинки —
     дальше как раньше (Office-документы — шелл). Модели (`MeshFile`) —
     `ModelThumbnail`: картинка 3MF без рамки, иначе `MeshRaster` (Core,
-    тест: ракурс и свет панели, z-буфер, сглаживание 2×2, кадр по
-    проекции, а не по сфере; до 64 МБ). Все они — ветка `HasOwnCover`:
-    ключ по пути. `.lnk` — `ExistingLinkTarget` подменяет на цель, стрелку
+    тест: ракурс панели — сохранённый или по умолчанию, её свет, z-буфер,
+    сглаживание 2×2, кадр по проекции, а не по сфере; до 64 МБ). Все они
+    — ветка `HasOwnCover`: ключ по пути. PSD — `PsdThumbnail`, рядом с
+    TGA. `.lnk` — `ExistingLinkTarget` подменяет на цель, стрелку
     накладывает `DrawLinkOverlay` (шелл запекает её в значок, не в
     миниатюру); ключ по `.lnk` (TECHDEBT).
   - Ключ кэша: по пути, где картинка своя, по расширению, где общая;
     бюджет считает первые. На диск — только крупная; размер в ключе,
     когда не 256; поколение (`ThumbnailDiskCache.Generation`) — правка
-    того, как рисуется миниатюра, инвалидирует диск.
+    того, как рисуется миниатюра, инвалидирует диск; поднимать без
+    оглядки (решение человека 2026-10-09): кэш собирается быстро,
+    обновивший версию принимает, что что-то перестроится.
+- **«Компьютер»** сворачивается треугольником (`IsDrivesExpanded`;
+  щелчок по заголовку оставлен под «диски в списке», PLAN).
+  `FolderTreesView.ApplyPanelsLayout`: свёрнутая — заголовок у низа
+  панели (`DrivesRow` — `Auto`), закладки над ней — `*`; делитель — только
+  между двумя развёрнутыми. Обе сразу не сворачиваются (2026-10-09):
+  сеттер одной раскрывает другую, состояние «обе» из файла — раскрытый
+  «Компьютер». Свёрнутая клавиатуру не берёт
+  (`FocusDrives` — `false`, `PaneHidden`); `Ctrl+1` / `Ctrl+Shift+E`
+  разворачивают (`RevealAndFocus`).
 - **Закладки** — drag-add, сворачиваемые, `AppState.Favorites` /
   `IsBookmarksExpanded`; спец-папки через `IKnownFolders` →
   `SHGetKnownFolderPath` плюс Корзина. `Delete` на своей — `ChoiceDialog`
   «закладку или папку» (`MainViewModel.DeleteFromBookmark`), на встроенной
-  — выключение (`BookmarksController.HideSpecial`).
+  — выключение (`BookmarksController.HideSpecial`). «⋯» своей закладки —
+  у правого края строки; строка шире панели (длинное имя ниже) — край
+  выталкивает его (`PinRowMenu`: `TranslateTransform` по `ScrollChanged`
+  и `Loaded`), фон под ним — строки (`Row` в покое — `PaneBackground`, не
+  прозрачный).
 
 ## Shell-namespace: корзина и архивы
 
@@ -1008,9 +1025,16 @@ X», «листинг эпохи N долетел», «сторож замети
 - **`FolderSession`** — `BeginListing` выдаёт эпоху и «прибытие /
   перечитывание»; `IsCurrent(epoch)` — единственный вопрос «мой ли ответ»
   (листинг, проход оценок через `RatingsController.isCurrent`,
-  публикация). `OnNavigating` запоминает выделение покидаемой папки, гасит
-  обогнанное намерение, планирует умолчание (подъём — покинутая, иначе
-  память LRU 64). `DecideArrival` — единственное потребление намерения.
+  публикация). `OnNavigating` запоминает покидаемую папку — место
+  (`ListPlace`) и фильтр по оценкам (`FolderPlace`, LRU 64), — гасит
+  обогнанное намерение, планирует умолчание: подъём — покинутая (с
+  `RestoresPlace` — и верх, как оставили); иначе память — с
+  `RestoresPlace` место целиком (`Place` без клавиатуры), и щелчку по
+  строке панели (`SelectFolderItself`) оно тоже ставится; без — файл в
+  видимость, только без намерения. Фильтр папки — `FilterFor` →
+  `SearchController.Reset(filter)`: ставится без прохода, первым его
+  применяет листинг новой папки. `DecideArrival` — единственное
+  потребление намерения.
   `SetArrivalHere` — намерение операции (вставка — вставленное, с
   клавиатурой) только для папки на экране.
   `RewriteMemory` — папка перенесена Wander'ом. `DecideWatchTick` поверх
@@ -1079,6 +1103,15 @@ X», «листинг эпохи N долетел», «сторож замети
   `MainViewModel.ListTopRow` ← `FileListView.FirstRowOnScreen`;
   `FlushState` при закрытии пишет, если место сдвинулось
   (`ListPlace.SameAs`).
+- **Место каждой папки** (2026-10-09; `AppSettings.RememberFolderPlace`,
+  `RememberFolderFilter` → `FolderSession.RestoresPlace` /
+  `RestoresFilter`) — та же механика при каждом возврате. Место
+  покидаемой снимает `MainViewModel.LeavingPlace` (строки ещё той папки;
+  не для выдачи и не до её листинга); `FolderSession.Places` пишется в
+  `WriteStateNow` вместе с текущей папкой (`RememberSelection`), пока
+  включён хоть один флажок, читается `LoadPlaces` до первой навигации.
+  Смена фильтра при `RememberFolderFilter` взводит сохранение — закрытие
+  его не теряет.
 
 Инварианты — `FolderSessionTests` / `ListingDiffTests` / `ListRulesTests`.
 У VM осознанно: правило спиннера (тайминг вокруг `Task.WhenAny`),
@@ -1158,6 +1191,19 @@ X», «листинг эпохи N долетел», «сторож замети
   `OriginalLocation`: одна строка, без параллельной таблицы. Пока
   результаты на экране, `Refresh()` не пересобирает — только
   `PruneMissingAsync` на пуле; повторить — `F5`.
+- **Где результат** — от папки поиска (`ResultPath`, Core, тест; не под
+  ней — полный путь): `Folder` — столбец «Папка» (`ResultFolderConverter`)
+  и вторая строка плитки, пусто в самой папке; `Relative` — подсказка
+  «Значков» и галереи (`ResultCell_ToolTipOpening`,
+  `GalleryCell_ToolTipOpening`: `SetCurrentValue`, привязка имени
+  остаётся) и имя в подвале (`PreviewController.ResultsRoot` →
+  `SummaryText`). Корень — `MainViewModel.ResultsRoot`: результаты
+  включаются раньше `Begin`, до него — папка на экране; конвертеры
+  спрашивают его на каждой строке. «Перейти к расположению» —
+  `MenuCommandId.GoToLocation` у одной строки выдачи
+  (`MenuContext.InSearchResults` → `ContextMenuTarget.IsSearchResult`) →
+  `RevealPath`; файл в самой папке поиска — `ClearSearch`, намерение
+  берут вернувшиеся строки папки.
 
 ## Контекстное меню
 
@@ -1584,17 +1630,22 @@ RefreshFolderAsync (листинг + свёртка, пул)
 ### Фон галереи — палитра
 
 `GalleryBackground` (Light / Grey / Dark) в Core, яркость тёмных —
-`GalleryGreyLevel` / `GalleryDarkLevel`; по умолчанию серый. `GalleryPalette`
+`GalleryGreyLevel` / `GalleryDarkLevel`. У каждой темы свой выбор
+(решение человека 2026-10-09): `AppSettings.GalleryBackground` — светлой,
+по умолчанию серый, `GalleryBackgroundDark` — тёмной, по умолчанию тёмный;
+`SettingsViewModel.GalleryBackground` — выбор показанной темы, смена темы
+его поднимает без сохранения (`FollowingTheme`). `GalleryPalette`
 (App) из трёх чисел собирает **весь** набор: фон, подпись, приглушённый,
 ховер, выделение активное / неактивное, рамки — роли двигаются вместе
 (тёмный фон со светлой подписью нечитаем, с голубым Проводника — лайтбоксы
 ярче фото); на тёмном подсветка — подъём фона (`Tone.Lift`), на светлом сером
 — цвета Проводника; подпись — самый тихий тон с контрастом 4,5:1
 (`Tone.Quietest`). Арифметика — `Core/Appearance/Tone` (тест). `Light` —
-«Как у окна» (решение человека 2026-10-08): фон списка темы и её подсветка
-строк, светлый или тёмный с темой; в настройках — на «Интерфейсе» рядом со
-схемой. `IsDark` — что ещё в галерее идёт за фоном (`ThemeScope`, «Цвета —
-один словарь»). Панель просмотра берёт фон только под картинкой (`Image`,
+светлый в обеих темах (решение человека 2026-10-09): белый, в тёмной — на
+тон темнее (`GalleryLightBackground`, `#E0E0E0`); в настройках — на
+«Интерфейсе» рядом со схемой. Фон самого окна, по теме, — `Plain` (то, за
+чем идёт панель просмотра вне галереи). `IsDark` — что ещё в галерее идёт
+за фоном (`ThemeScope`, «Цвета — один словарь»). Панель просмотра берёт фон только под картинкой (`Image`,
 `Gif`, лупа).
 
 ## Окно и его контролы
@@ -2039,15 +2090,16 @@ SYS ws=431 private=360 gen=167/155/134 alloc=+45 loh=6 handles=1060 threads=40 c
 |---|---|
 | `Image` | `BitmapImage`, `DownOnly`; RAW — встроенное превью |
 | `Gif` | `Controls/GifImage` |
-| `Video` | `MediaElement` |
+| `Video` | `MediaElement`; не открыл — `SystemPlayer` (WinRT) |
 | `Audio` | тот же транспорт, карточка трека; играет `MediaPlayer` |
 | `Text` | `TextBox`; документ текстом — с переносом (`TextWrap`) |
 | `Code` | AvalonEdit |
 | `Document` | `RichTextBox` (RTF) |
 | `Web` | WebView2 — PDF / HTML / MHTML / Markdown / FB2 / SVG / таблицы |
-| `Model` | `Viewport3D` — STL / OBJ / glTF / GLB / PLY / 3MF |
+| `Model` | `Viewport3D` — STL / OBJ / glTF / GLB / PLY / 3MF / FBX |
 | `Folder` | перепись + блок тома на корне |
 | `Executable` | карточка программы: значок, строки `ExecutableCard` |
+| `Font` | карточка шрифта: имена, образец кеглями (`FontCard`) |
 
 - **`PreviewRouter`** (Core, `PreviewRouterTests`) — «расширение →
   `PreviewRoute`», без диска; `Route` (каким загрузчиком) ≠ `Kind` (каким
@@ -2245,10 +2297,14 @@ SYS ws=431 private=360 gen=167/155/134 alloc=+45 loh=6 handles=1060 threads=40 c
   XLSX — общие строки, ячейка по ссылке `r`, число по стилю `cellXfs`
   (дата, время, процент; прочие форматы — число как есть), формула —
   кэш; ODS — текст `text:p`, повторы раскрываются до последней
-  заполненной. Первые 1000 строк, 100 столбцов, 500 знаков в ячейке; итог
-  строк — CSV счётом, XLSX из `dimension`. Страница без скрипта: листы —
-  радиокнопки и CSS, буквы столбцов и номера строк `sticky`; больше
-  `MaxSheetPageBytes` — строк вдвое меньше (`NavigateToString` берёт 2 МБ).
+  заполненной. Первые 1000 строк, 100 столбцов, 2000 знаков в ячейке;
+  пустой хвост отрезается, итог — до последней заполненной строки (CSV
+  счётом, XLSX дочитыванием до 200 000 строк: Excel пишет строку на каждую
+  оформленную, `dimension` врёт). Страница без скрипта: листы —
+  радиокнопки и CSS, буквы столбцов и номера строк `sticky`; ячейка —
+  целиком, с переносом в ширину столбца до 360 px (2026-10-09; числа — в
+  строку); больше `MaxSheetPageBytes` — строк вдвое меньше
+  (`NavigateToString` берёт 2 МБ).
   `</>` у CSV / TSV — `ShowTableSource`, режим, как у SVG. Не читается
   таблицей — текстом, как раньше. `.xls` — нет (BIFF, PLAN).
 - **Видео — что внутри**: `MediaProbe` (Core, тест) по первым байтам —
@@ -2260,9 +2316,23 @@ SYS ws=431 private=360 gen=167/155/134 alloc=+45 loh=6 handles=1060 threads=40 c
   характеристика контейнера (16 — HDR10, 18 — HLG) или конфиг Dolby
   Vision, каналы (`esds`, `dac3`, `dec3`, `dOps`), язык, имя, битрейт
   (MP4 — сумма `stsz`, MKV — тег `BPS`). HDR, записанный только в потоке
-  (VUI), не виден. `LoadVideoAsync` читает на пуле после `MediaUri`,
-  футер — `SummaryText.ForMedia` (видео строкой, аудио — до трёх строк,
-  субтитры одной).
+  (VUI), не виден. `LoadVideoAsync` читает на пуле после `MediaUri`.
+  Футер — таблица `MediaRows` под подписью (решение человека 2026-10-09:
+  строки текстом — «неорганизованно»): значок вида дорожки (слово — в
+  подсказке), язык, кодек, частота, битрейт в общих столбцах
+  (`SharedSizeGroup`), имя дорожки последним и приглушённо; до четырёх
+  звуковых, субтитры одной строкой, кодек один раз, если общий.
+- **Не проигрывается движком WPF** (WebM, Ogg, Opus, AV1 — кодеки из
+  Store он не видит): `MediaFailed` → `PreviewPane.PlayWithSystem` —
+  `SystemPlayer` (WinRT `MediaPlayer`, открывает по содержимому при любом
+  расширении). Звук — сам; картинка — frame server: `VideoFrameAvailable`
+  → `CopyFrameToVideoSurface` в D3D-поверхность → `CopyToAsync` в
+  программный кадр → `WriteableBitmap` в `SystemVideo` (стенд 2026-10-09:
+  3–5 мс на 1080p; больше 1920 по длинной стороне — ужимается на GPU);
+  кадр в полёте один, лишние пропускаются. Не открыл и он —
+  `PreviewController.ReportUnplayable`: `Kind = Unsupported`, транспорта
+  нет, в заглушке — причина по кодеку из `MediaProbe` (HEVC — с кнопкой
+  Store).
 - **Поиск в тексте** (B6): `TextFind` (Core, тест) — смещения, первое от
   каретки, по кругу, без регистра, от 10 000 — «N+». `FindBar`: смещения в
   тексте и коде, диапазоны в RTF (по run'ам — через смену формата не
@@ -2284,6 +2354,47 @@ SYS ws=431 private=360 gen=167/155/134 alloc=+45 loh=6 handles=1060 threads=40 c
     слова заметки не ищутся.
 - **`Ctrl+C` в панели** — выделенный текст, не файл; решает окно
   (`PreviewPane.TryCopySelectedText`), не каждое поле.
+- **PSD / PSB** (решение человека 2026-10-09: свой декодер, как TGA):
+  `PsdDecoder` (Core, тест) — не слои, а составная
+  картинка в конце файла («Максимальная совместимость»): плоские каналы,
+  без сжатия или PackBits; RGB, серый, дуплекс, индексный, CMYK (хранится
+  «остатком бумаги»), битовая карта; 8 / 16 / 32 бита; четвёртый канал —
+  альфа, если число слоёв отрицательное. Слои перескакиваются по длине.
+  Без составной (`hasRealMergedData` = 0 в ресурсе 1057) или больше 36 Мп
+  — вшитое JPEG-превью (ресурс 1036, до 160 px). Панель — `ImageDecoder.Psd`
+  (как TGA, в `ImageFormats.All`), плитки — `PsdThumbnail`: до 160 px —
+  превью без декода, крупнее — составная (файл до 256 МБ).
+- **Шрифты** (TTF, OTF, TTC): `PreviewRoute.Font` → `LoadFontAsync` —
+  копия в `TempFiles` (своя папка на путь, время, размер: WPF не отпускает
+  прочитанный файл шрифта до конца процесса) → `FontCard`: имена из
+  `GlyphTypeface` по самому файлу, семейство — `Fonts.GetFontFamilies` по
+  папке копии (стенд 2026-10-09: `GetTypefaces` на файле перечисляет всю
+  папку с синтетическими начертаниями), число начертаний `.ttc` — из
+  заголовка `ttcf`; образец — только знаки шрифта (иначе WPF подставит
+  чужие глифы; глиф 0 — «нет»): панграмма кеглями 12–48 целиком или
+  никак, строки алфавита — теми знаками, что есть; символьный шрифт
+  (`GlyphTypeface.Symbol`: картинки на местах букв по кодовой странице) и
+  шрифт без строк — первые 64 своих знака. Миниатюра — `FontThumbnail`
+  (Platform): GDI, файл на время рисунка `AddFontResourceEx(FR_PRIVATE)`,
+  гарнитура по `FontHeader` (Core, тест: семейство из `name` 1 Windows,
+  насыщенность и курсив из `OS/2`, у `.ttc` — первое начертание),
+  подмена отсекается по `GetTextFace`; «Abc» / «Абв» по индексам глифов
+  (`ETO_GLYPH_INDEX`), чего нет — не рисуется; символьный
+  (`SYMBOL_CHARSET`) и без строк — три первых своих знака. Страница —
+  в рамке обложки (`RenderCoverPlate`); не вышло — миниатюра шелла
+  (`_thumbnailableExtensions`; стенд 2026-10-09: шелл рисует «Абф»,
+  у символьных — значки на местах букв).
+- **По содержимому** (решение человека 2026-10-02, сделано 2026-10-09):
+  `ContentSniffer` (Core, тест) называет формат по первым 64 КБ —
+  подписи картинок, контейнеров, PDF, zip по содержимому (ODF / EPUB по
+  `mimetype`, OOXML по папкам частей, 3MF), моделей, PE, шрифтов; из
+  текста — RTF, XML / SVG, HTML, JSON. `LoadFileAsync` спрашивает его,
+  когда расширение неизвестно или его нет у не-текста, и когда загрузчик
+  по расширению не справился (`Kind = Unsupported`, а подпись говорит о
+  другом маршруте). Видео и звук идут в проигрыватели как есть (системный
+  открывает по содержимому), остальное — копией в `TempFiles` с верным
+  расширением (до 256 МБ) по обычному маршруту. Не названный подписью, но
+  текст (`TextProbe`) — текстом при любом расширении.
 - **TGA** (B8): `TgaDecoder` (Core, тест) → `BgraImage`: несжатый и RLE,
   палитра (индекс 8 / 16, записи 15–32 бит), цвет 15–32 бит, серый 8,
   угол из дескриптора, нулевая во всём кадре альфа — непрозрачно; до
@@ -2325,7 +2436,22 @@ SYS ws=431 private=360 gen=167/155/134 alloc=+45 loh=6 handles=1060 threads=40 c
     оба порядка байт, многоугольники веером, чужие элементы — по размерам
     заголовка, облако точек — не модель; 3MF — `build` → объекты и
     компоненты с матрицами 4×3, чужие части по `p:path` (Bambu, Orca),
-    цвет — `basematerials`.
+    цвет — `basematerials`. FBX 7 (решение человека 2026-10-09: свой
+    разбор) — `FbxDocument`: двоичный (записи с 32- или 64-битными
+    смещениями с версии 7500, массивы zlib) и текстовый в одно дерево
+    узлов; `FbxReader`: `Geometry` (Mesh) через связи «OO» к `Model` и
+    цепочке родителей, формула FBX (смещения и опоры поворота и масштаба,
+    пред- и пост-поворот, порядок Эйлера) плюс геометрический сдвиг, цвет
+    — `DiffuseColor` материала полигона, ось «вверх» из `GlobalSettings`.
+    FBX 6, NURBS, скиннинг, текстуры — нет.
+  - **Ракурс** — `ModelView` (Core: поворот вокруг вертикали, затем
+    наклон, вокруг центра коробки — порядок панели); по умолчанию 30°
+    (решение 2026-10-09: «в лоб» шкаф или бензопила — плоский силуэт).
+    Повёрнутое мышью — `PreviewController.RememberModelView` →
+    `IModelViews` (`JsonModelViewStore`, `model-views.json`, до 4000) и
+    `AsyncIcon.Invalidate`: модель открывается так же, плитка
+    перерисовывается в этом ракурсе (`MeshRaster` поворачивает так же; 3MF
+    с повёрнутым видом рисуется, а не берёт картинку слайсера).
   - `Fb2Document` (HTML-фрагмент, потоковый `ReadCover`, namespace по
     локальному имени, бюджет 400 000 по ходу обхода с закрытием тегов,
     картинки `data:` до 6 МБ); `BookCover` (`.fb2`, `.epub`:
@@ -2471,8 +2597,9 @@ prevention выключен — браузер ничего не качает.
   восстановление раскроет свёрнутого родителя),
   `ViewMode`, `IsPreviewVisible`, `PreviewWidth`, `IsFoldersVisible`
   (убрана — колонка и сплиттер в 0, `FoldersWidth` ждёт),
-  `IsBookmarksExpanded`, `RecentPaths`, `ManualViewModes` (легаси, для
-  миграции в `folders.json`), `BookmarksHeight`, `FoldersWidth`,
+  `IsBookmarksExpanded`, `IsDrivesExpanded`, `FolderPlaces`, `RecentPaths`,
+  `ManualViewModes` (легаси, для миграции в `folders.json`),
+  `BookmarksHeight`, `FoldersWidth`,
   `LayoutWindowWidth` / `LayoutWindowHeight` — окно, долей которого были
   три размера панелей.
   - `PaneSizes.Restore` (Core/Layout, тест): окно того же размера — те же
@@ -2515,7 +2642,10 @@ prevention выключен — браузер ничего не качает.
 `DefaultCapacity` = 3000, вытеснение по дню захода.
 `IFolderSettingsStore` → `JsonFolderSettingsStore` (Platform, тот же
 `InstanceLock`): своя `Version` = 1, файл новее сборки не перезаписывается,
-запись через `.tmp` + `Move`, `--yield` не пишет. Читается синхронно в
+запись через `.tmp` + `Move`, `--yield` не пишет. Тем же образцом —
+`model-views.json` (`IModelViews` → `JsonModelViewStore`): ракурс каждой
+повёрнутой модели, до 4000, пишется целиком на пуле после поворота.
+`folders.json` читается синхронно в
 `RestoreState` (тысячи строк — миллисекунды), пишется из `WriteStateNow`
 по `_foldersDirty` тем же дебаунсом. На приходе дата создания читается на
 пуле с листингом (`IFileSystem.GetCreationTimeUtc`), `Touch` двигает день
@@ -2684,8 +2814,7 @@ prevention выключен — браузер ничего не качает.
 - «Помощь» — `CrashReporter.GuideUrl` (`lekta.github.io/wander/guide/`,
   в английском интерфейсе — `…/en/guide/`).
 - **«Интерфейс»** (2026-10-08) — цветовая схема (сразу), фон галереи
-  (переехал с «Галереи»: видны вместе, «Как у окна» светлый или тёмный со
-  схемой), язык (после перезапуска). Последняя в группе «что на экране».
+  (переехал с «Галереи»: видны вместе), язык (после перезапуска). Последняя в группе «что на экране».
 
 ### Новая настройка — по шагам
 

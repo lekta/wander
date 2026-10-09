@@ -327,6 +327,23 @@ public class SearchControllerTests {
     }
 
     [Fact]
+    public void Reset_PutsTheNextFoldersFilter_WithoutFiltering() {
+        // The filter a folder was left with comes back as it is walked into:
+        // set, not applied - the next SetSource applies it to that folder's
+        // rows, not to the rows of the folder being left.
+        var sc = new SearchController();
+        sc.SetSource(new[] { _apple, _banana });
+        int passes = 0;
+        sc.FilteredChanged += (_, _) => passes++;
+
+        sc.Reset(RatingFilter.None.PickRank(3));
+
+        Assert.Equal(RatingFilter.None.PickRank(3), sc.RatingFilter);
+        Assert.True(sc.HasRatingFilter);
+        Assert.Equal(0, passes);
+    }
+
+    [Fact]
     public void RatingFilter_RaisesItsProperties() {
         var sc = new SearchController();
         var seen = new List<string?>();

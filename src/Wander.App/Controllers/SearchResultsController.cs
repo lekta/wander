@@ -70,6 +70,9 @@ public sealed class SearchResultsController {
     /// <summary>How many rows have been found so far.</summary>
     public int Count => _rows.Count;
 
+    /// <summary>The folder the search started from; null between searches.</summary>
+    public string? Root => _root;
+
 
     /// <summary>
     /// A pass is starting.

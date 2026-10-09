@@ -78,6 +78,46 @@
   <data name="PreviewNeedsHevc" xml:space="preserve">
     <value>Снимки HEIC сжаты кодеком HEVC: Windows нужно дополнение «Расширения для видео HEVC» из Microsoft Store — платное, на многих компьютерах оно уже стоит от производителя</value>
   </data>
+  <data name="PreviewVideoNeedsHevc" xml:space="preserve">
+    <value>Видео сжато кодеком HEVC: чтобы его воспроизвести, Windows нужно дополнение «Расширения для видео HEVC» из Microsoft Store — платное, на многих компьютерах оно уже стоит от производителя</value>
+    <comment>Вместо проигрывателя, когда видео HEVC не открыл ни один проигрыватель; под текстом — кнопка «Открыть в Microsoft Store»</comment>
+  </data>
+  <data name="PreviewFontSample" xml:space="preserve">
+    <value>Съешь же ещё этих мягких французских булок, да выпей чаю</value>
+    <comment>Образец текста в просмотре шрифта; панграмма — все буквы алфавита</comment>
+  </data>
+  <data name="PreviewFontFace" xml:space="preserve">
+    <value>Начертание</value>
+    <comment>Подпись строки в карточке шрифта: Bold Italic</comment>
+  </data>
+  <data name="PreviewFontVersion" xml:space="preserve">
+    <value>Версия</value>
+    <comment>Подпись строки в карточке шрифта</comment>
+  </data>
+  <data name="PreviewFontMaker" xml:space="preserve">
+    <value>Автор</value>
+    <comment>Подпись строки в карточке шрифта: дизайнер или производитель</comment>
+  </data>
+  <data name="PreviewFontGlyphs" xml:space="preserve">
+    <value>Глифов</value>
+    <comment>Подпись строки в карточке шрифта: сколько знаков в шрифте</comment>
+  </data>
+  <data name="PreviewFontFaces" xml:space="preserve">
+    <value>Начертаний</value>
+    <comment>Подпись строки в карточке шрифта: сколько начертаний в файле-коллекции .ttc</comment>
+  </data>
+  <data name="PreviewFontCopyright" xml:space="preserve">
+    <value>Права</value>
+    <comment>Подпись строки в карточке шрифта</comment>
+  </data>
+  <data name="PreviewMediaUnplayable" xml:space="preserve">
+    <value>Windows не может воспроизвести этот файл: нет нужного декодера, или файл повреждён</value>
+    <comment>Вместо проигрывателя, когда файл не открыл ни один проигрыватель и кодек неизвестен</comment>
+  </data>
+  <data name="PreviewMediaUnplayableCodec" xml:space="preserve">
+    <value>Windows не может воспроизвести этот файл: нет декодера {0}, или файл повреждён</value>
+    <comment>{0} — кодек из заголовка файла: VP9, Theora, AC-3</comment>
+  </data>
   <data name="PreviewOpenStore" xml:space="preserve">
     <value>Открыть в Microsoft Store</value>
   </data>
@@ -865,6 +905,10 @@
   <data name="MenuCmdOpenInTerminal" xml:space="preserve">
     <value>Открыть в терминале</value>
   </data>
+  <data name="MenuCmdGoToLocation" xml:space="preserve">
+    <value>Перейти к расположению</value>
+    <comment>Меню результата поиска: открыть его папку и выделить его</comment>
+  </data>
   <data name="MenuCmdCut" xml:space="preserve">
     <value>Вырезать</value>
   </data>
@@ -1072,6 +1116,9 @@
   <data name="BookmarksToggleHint" xml:space="preserve">
     <value>Свернуть / развернуть закладки</value>
   </data>
+  <data name="ComputerToggleHint" xml:space="preserve">
+    <value>Свернуть / развернуть «Компьютер»</value>
+  </data>
   <data name="BookmarksAddHint" xml:space="preserve">
     <value>Перетащите сюда папку, чтобы добавить её в закладки</value>
   </data>
@@ -1148,9 +1195,6 @@
   <data name="ProgressCancelling" xml:space="preserve">
     <value>Отмена…</value>
   </data>
-  <data name="PreviewVideoUnavailable" xml:space="preserve">
-    <value>Воспроизведение недоступно</value>
-  </data>
   <data name="DragOneItem" xml:space="preserve">
     <value>«{0}»</value>
     <comment>{0} — имя единственного перетаскиваемого файла</comment>
@@ -1180,6 +1224,21 @@
   </data>
   <data name="SettingsAutoRefresh" xml:space="preserve">
     <value>Показывать сразу</value>
+  </data>
+  <data name="SettingsReturnGroup" xml:space="preserve">
+    <value>Возвращаясь в папку</value>
+  </data>
+  <data name="SettingsRememberFolderPlace" xml:space="preserve">
+    <value>Тот же файл и та же прокрутка</value>
+  </data>
+  <data name="SettingsRememberFolderPlaceHint" xml:space="preserve">
+    <value>Как её оставили, и после перезапуска тоже — откуда бы ни пришли: из закладок, дерева, истории. Выключено — выделен файл, на котором ушли, при возврате историей, адресом или из списка.</value>
+  </data>
+  <data name="SettingsRememberFolderFilter" xml:space="preserve">
+    <value>Тот же фильтр по оценкам и меткам</value>
+  </data>
+  <data name="SettingsRememberFolderFilterHint" xml:space="preserve">
+    <value>Фильтр, оставленный в папке, снова прячет её файлы, когда в неё возвращаетесь, и после перезапуска. Выключено — каждая папка открывается без фильтра.</value>
   </data>
   <data name="SettingsAutoRefreshHint" xml:space="preserve">
     <value>Выключено — только по F5.</value>
@@ -1264,8 +1323,8 @@
     <value>Оценка</value>
   </data>
   <data name="GalleryBackgroundLight" xml:space="preserve">
-    <value>Как у окна</value>
-    <comment>Фон галереи — фон самого окна: светлый в светлой теме, тёмный в тёмной</comment>
+    <value>Светлый</value>
+    <comment>Фон галереи; в тёмной теме — на тон темнее белого</comment>
   </data>
   <data name="GalleryBackgroundGrey" xml:space="preserve">
     <value>Серый</value>
@@ -2049,13 +2108,17 @@
     <value>EXIF по первым {0}</value>
     <comment>{0} — сколько снимков прочитано для сводки, когда выделено больше</comment>
   </data>
+  <data name="MediaVideo" xml:space="preserve">
+    <value>Видео</value>
+    <comment>Подсказка значка строки видео в таблице дорожек под проигрывателем</comment>
+  </data>
   <data name="MediaAudio" xml:space="preserve">
     <value>Аудио</value>
-    <comment>Начало строки звуковой дорожки видео в подписи просмотра: «Аудио: AC-3 5.1   48 кГц   rus»</comment>
+    <comment>Подсказка значка звуковой дорожки в таблице дорожек под проигрывателем</comment>
   </data>
   <data name="MediaSubtitles" xml:space="preserve">
     <value>Субтитры</value>
-    <comment>Начало строки субтитров видео в подписи просмотра: «Субтитры: rus SRT, eng PGS»</comment>
+    <comment>Подсказка значка строки субтитров под таблицей дорожек</comment>
   </data>
   <data name="MediaFps" xml:space="preserve">
     <value>{0} к/с</value>
@@ -2090,10 +2153,6 @@
   <data name="MediaForced" xml:space="preserve">
     <value>(форс.)</value>
     <comment>После форсированных субтитров — тех, что показываются всегда: надписи, иностранная речь</comment>
-  </data>
-  <data name="MediaTitle" xml:space="preserve">
-    <value>«{0}»</value>
-    <comment>{0} — название дорожки из файла: «Дубляж», «Комментарий режиссёра»</comment>
   </data>
   <data name="TitleYielding" xml:space="preserve">
     <value>{0} — настройки не сохраняются</value>

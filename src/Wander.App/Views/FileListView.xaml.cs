@@ -24,6 +24,7 @@ using Wander.Core.Layout;
 using Wander.Core.Listing;
 using Wander.Core.Logging;
 using Wander.Core.Preview;
+using Wander.Core.Search;
 using Wander.Core.Workspace;
 
 namespace Wander.App.Views;
@@ -158,6 +159,8 @@ public partial class FileListView : UserControl {
             vm.FolderArrived += OnFolderArrived;
             vm.RowsLanding += OnRowsLanding;
             vm.Entries.CollectionChanged += OnEntriesChanged;
+            ((ResultFolderConverter)Resources["ResultFolder"]).Root = () => vm.ResultsRoot;
+            ((TileSecondLineConverter)Resources["TileSecondLine"]).Root = () => vm.ResultsRoot;
             ShowSortIndicator();
             ApplyDetailsIconSize();
             ApplyTileMetrics();
@@ -1143,13 +1146,45 @@ public partial class FileListView : UserControl {
 
     /// <summary>
     /// A gallery cell names its picture only while the caption under it cuts
-    /// the name (2026-10-07): a tip that repeats the caption is noise.
+    /// the name (2026-10-07): a tip that repeats the caption is noise. A
+    /// search result's cell says where the file is instead, always
+    /// (2026-10-09): the caption names a file found anywhere below.
     /// </summary>
     private void GalleryCell_ToolTipOpening(object sender, ToolTipEventArgs e) {
-        if (sender is DependencyObject cell && ListVisuals.FindDescendant<TextBlock>(cell, "NameLabel") is { } label
-            && !TrimmedToolTip.IsCut(label)) {
+        if (sender is not FrameworkElement cell || cell.DataContext is not FileSystemEntry entry) {
+            return;
+        }
+        if (ShowResultPath(cell, entry)) {
+            return;
+        }
+
+        // The name back, after a result's path took its place.
+        cell.SetCurrentValue(ToolTipProperty, entry.Name);
+        if (ListVisuals.FindDescendant<TextBlock>(cell, "NameLabel") is { } label && !TrimmedToolTip.IsCut(label)) {
             e.Handled = true;
         }
+    }
+
+    /// <summary>A large icon has no tooltip in a folder - the selected one shows its name whole; a search result's says where it is.</summary>
+    private void ResultCell_ToolTipOpening(object sender, ToolTipEventArgs e) {
+        if (sender is not FrameworkElement cell || cell.DataContext is not FileSystemEntry entry || !ShowResultPath(cell, entry)) {
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>
+    /// While the list shows search results, <paramref name="cell"/>'s tooltip
+    /// becomes the path of its file from the folder searched
+    /// (<see cref="ResultPath.Relative"/>); false in a folder listing.
+    /// </summary>
+    private bool ShowResultPath(FrameworkElement cell, FileSystemEntry entry) {
+        if (Vm.ResultsRoot is not { } root) {
+            return false;
+        }
+
+        cell.SetCurrentValue(ToolTipProperty, ResultPath.Relative(root, entry.FullPath));
+
+        return true;
     }
 
 

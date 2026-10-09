@@ -1,3 +1,4 @@
+using Wander.Core.FileSystem;
 using Wander.Core.Navigation;
 using Wander.Core.Rename;
 
@@ -135,6 +136,16 @@ public sealed record SessionState {
     public ListPlace? LastPlace { get; init; }
 
     /// <summary>
+    /// The folders the user left, the most recently left first, each with
+    /// where its list stood and the rating filter over it (decision
+    /// 2026-10-02, made 2026-10-09): coming back - in the next session too -
+    /// lands there (<c>FolderSession</c>). Written while either setting that
+    /// reads it is on (<see cref="AppSettings.RememberFolderPlace"/>,
+    /// <see cref="AppSettings.RememberFolderFilter"/>); empty otherwise.
+    /// </summary>
+    public IReadOnlyList<FolderPlace> FolderPlaces { get; init; } = Array.Empty<FolderPlace>();
+
+    /// <summary>
     /// Legacy (up to 0.4.x): folders where the user picked a view by hand.
     /// Read once, on the first start after the update, and moved into
     /// <c>folders.json</c> (<c>IFolderSettingsStore</c>); never written
@@ -186,6 +197,13 @@ public sealed record SessionState {
     /// matters more than chrome conservation on first run.
     /// </summary>
     public bool IsBookmarksExpanded { get; init; } = true;
+
+    /// <summary>
+    /// Collapsed state of the "Computer" panel (decision 2026-10-02):
+    /// folded, it sits at the bottom of the pane as its header and the
+    /// bookmarks take the height.
+    /// </summary>
+    public bool IsDrivesExpanded { get; init; } = true;
 
     /// <summary>
     /// Height of the bookmarks region in the left pane, in pixels — where
@@ -269,6 +287,15 @@ public sealed record ListPlace {
             && string.Equals(Top, other.Top, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>The place with every path under <paramref name="from"/> moved under <paramref name="to"/> - a folder Wander moved or renamed.</summary>
+    public ListPlace Moved(string from, string to) {
+        return new ListPlace {
+            Row = Row is null ? null : PathRewrite.Under(Row, from, to) ?? Row,
+            StoodAmong = StoodAmong.Select(p => PathRewrite.Under(p, from, to) ?? p).ToArray(),
+            Top = Top is null ? null : PathRewrite.Under(Top, from, to) ?? Top,
+        };
+    }
+
 
     private static int IndexOf(IReadOnlyList<string> rows, string path) {
         for (int i = 0; i < rows.Count; i++) {
@@ -279,6 +306,25 @@ public sealed record ListPlace {
 
         return -1;
     }
+}
+
+
+/// <summary>
+/// One folder as the user left it (<see cref="SessionState.FolderPlaces"/>):
+/// where its list stood and the rating filter over it, the filter as the
+/// two sets of <c>RatingFilter</c>.
+/// </summary>
+public sealed record FolderPlace {
+    public string Folder { get; init; } = "";
+
+    /// <summary>Where the list stood; null when nothing was noted there but the filter.</summary>
+    public ListPlace? Place { get; init; }
+
+    /// <summary>The star counts the filter let through, <c>RatingFilter.Ranks</c>; 0 - no filter by stars.</summary>
+    public int FilterRanks { get; init; }
+
+    /// <summary>The colour labels the filter let through, <c>RatingFilter.Colors</c>; 0 - no filter by labels.</summary>
+    public int FilterColors { get; init; }
 }
 
 

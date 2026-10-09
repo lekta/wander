@@ -167,6 +167,27 @@ public class ModelFormatsTests {
     }
 
     [Fact]
+    public void Raster_TurnsTheModelByItsView() {
+        // A bar along X: across the tile seen from the front, end-on
+        // once turned a quarter round.
+        var bar = Box(10, 1, 1);
+
+        var front = Extent(MeshRaster.Render(bar, 100, new ModelView(0, 0))!);
+        var endOn = Extent(MeshRaster.Render(bar, 100, new ModelView(90, 0))!);
+
+        Assert.True(front.Width > front.Height * 3);
+        Assert.True(endOn.Width < endOn.Height * 2);
+    }
+
+    [Theory]
+    [InlineData(400, 10, 40, 10)]
+    [InlineData(-190, 120, 170, 89)]
+    [InlineData(180, -95, 180, -89)]
+    public void View_IsNormalized(double spin, double tilt, double expectedSpin, double expectedTilt) {
+        Assert.Equal(new ModelView(expectedSpin, expectedTilt), new ModelView(spin, tilt).Normalized());
+    }
+
+    [Fact]
     public void Raster_EmptyMesh_IsNull() {
         Assert.Null(MeshRaster.Render(new MeshData(Array.Empty<float>(), Array.Empty<MeshPart>()), 64));
     }
@@ -194,6 +215,22 @@ public class ModelFormatsTests {
         };
 
         return new MeshData(positions.ToArray(), new[] { new MeshPart(indices, null) });
+    }
+
+    /// <summary>The box the drawn pixels take.</summary>
+    private static (int Width, int Height) Extent(Wander.Core.Imaging.BgraImage image) {
+        var xs = new List<int>();
+        var ys = new List<int>();
+        for (int y = 0; y < image.Height; y++) {
+            for (int x = 0; x < image.Width; x++) {
+                if (Alpha(image, x, y) > 0) {
+                    xs.Add(x);
+                    ys.Add(y);
+                }
+            }
+        }
+
+        return (xs.Max() - xs.Min() + 1, ys.Max() - ys.Min() + 1);
     }
 
     private static int Alpha(Wander.Core.Imaging.BgraImage image, int x, int y) {

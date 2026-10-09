@@ -75,6 +75,36 @@
   <data name="PreviewNeedsHevc" xml:space="preserve">
     <value>HEIC photos use the HEVC codec: Windows needs the “HEVC Video Extensions” add-on from the Microsoft Store (paid, but many PCs already have it from the manufacturer)</value>
   </data>
+  <data name="PreviewVideoNeedsHevc" xml:space="preserve">
+    <value>The video uses the HEVC codec: to play it, Windows needs the “HEVC Video Extensions” add-on from the Microsoft Store (paid, but many PCs already have it from the manufacturer)</value>
+  </data>
+  <data name="PreviewFontSample" xml:space="preserve">
+    <value>The quick brown fox jumps over the lazy dog</value>
+  </data>
+  <data name="PreviewFontFace" xml:space="preserve">
+    <value>Style</value>
+  </data>
+  <data name="PreviewFontVersion" xml:space="preserve">
+    <value>Version</value>
+  </data>
+  <data name="PreviewFontMaker" xml:space="preserve">
+    <value>Designer</value>
+  </data>
+  <data name="PreviewFontGlyphs" xml:space="preserve">
+    <value>Glyphs</value>
+  </data>
+  <data name="PreviewFontFaces" xml:space="preserve">
+    <value>Faces</value>
+  </data>
+  <data name="PreviewFontCopyright" xml:space="preserve">
+    <value>Copyright</value>
+  </data>
+  <data name="PreviewMediaUnplayable" xml:space="preserve">
+    <value>Windows can't play this file: there is no decoder for it, or the file is damaged</value>
+  </data>
+  <data name="PreviewMediaUnplayableCodec" xml:space="preserve">
+    <value>Windows can't play this file: there is no decoder for {0}, or the file is damaged</value>
+  </data>
   <data name="PreviewOpenStore" xml:space="preserve">
     <value>Open in Microsoft Store</value>
   </data>
@@ -777,6 +807,9 @@
   <data name="MenuCmdOpenInTerminal" xml:space="preserve">
     <value>Open in Terminal</value>
   </data>
+  <data name="MenuCmdGoToLocation" xml:space="preserve">
+    <value>Go to location</value>
+  </data>
   <data name="MenuCmdCut" xml:space="preserve">
     <value>Cut</value>
   </data>
@@ -975,6 +1008,9 @@
   <data name="BookmarksToggleHint" xml:space="preserve">
     <value>Collapse / expand bookmarks</value>
   </data>
+  <data name="ComputerToggleHint" xml:space="preserve">
+    <value>Collapse / expand Computer</value>
+  </data>
   <data name="BookmarksAddHint" xml:space="preserve">
     <value>Drag a folder here to bookmark it</value>
   </data>
@@ -1047,9 +1083,6 @@
   <data name="ProgressCancelling" xml:space="preserve">
     <value>Canceling…</value>
   </data>
-  <data name="PreviewVideoUnavailable" xml:space="preserve">
-    <value>Playback unavailable</value>
-  </data>
   <data name="DragOneItem" xml:space="preserve">
     <value>“{0}”</value>
   </data>
@@ -1076,6 +1109,21 @@
   </data>
   <data name="SettingsAutoRefresh" xml:space="preserve">
     <value>Show right away</value>
+  </data>
+  <data name="SettingsReturnGroup" xml:space="preserve">
+    <value>Coming back to a folder</value>
+  </data>
+  <data name="SettingsRememberFolderPlace" xml:space="preserve">
+    <value>The same file and scroll position</value>
+  </data>
+  <data name="SettingsRememberFolderPlaceHint" xml:space="preserve">
+    <value>As you left it, after a restart too, however you come back: from the bookmarks, the tree, the history. Off: the file you left on is selected when you come back by the history, the address or the list.</value>
+  </data>
+  <data name="SettingsRememberFolderFilter" xml:space="preserve">
+    <value>The same rating and label filter</value>
+  </data>
+  <data name="SettingsRememberFolderFilterHint" xml:space="preserve">
+    <value>A filter left on a folder hides its files again when you come back, after a restart too. Off: every folder opens unfiltered.</value>
   </data>
   <data name="SettingsAutoRefreshHint" xml:space="preserve">
     <value>Off: only on F5.</value>
@@ -1156,7 +1204,7 @@
     <value>Rating</value>
   </data>
   <data name="GalleryBackgroundLight" xml:space="preserve">
-    <value>Same as window</value>
+    <value>Light</value>
   </data>
   <data name="GalleryBackgroundGrey" xml:space="preserve">
     <value>Gray</value>
@@ -1908,6 +1956,9 @@
   <data name="SummaryShotsSample" xml:space="preserve">
     <value>EXIF from the first {0}</value>
   </data>
+  <data name="MediaVideo" xml:space="preserve">
+    <value>Video</value>
+  </data>
   <data name="MediaAudio" xml:space="preserve">
     <value>Audio</value>
   </data>
@@ -1940,9 +1991,6 @@
   </data>
   <data name="MediaForced" xml:space="preserve">
     <value>(forced)</value>
-  </data>
-  <data name="MediaTitle" xml:space="preserve">
-    <value>“{0}”</value>
   </data>
   <data name="TitleYielding" xml:space="preserve">
     <value>{0} — settings aren't saved</value>

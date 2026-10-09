@@ -4,6 +4,7 @@ using System.Windows.Data;
 using Wander.App.Resources;
 using Wander.App.Util;
 using Wander.Core.FileSystem;
+using Wander.Core.Search;
 
 namespace Wander.App.Converters;
 
@@ -12,8 +13,9 @@ namespace Wander.App.Converters;
 /// extension and size, as the table's columns say them, and the word for
 /// a folder - its stars, once it has any (J4, decision B28: no new visual
 /// in the tile, and a photograph's kind is not news) - and its folder in a
-/// search result: results come from everywhere, and the path says more
-/// than the kind would.
+/// search result, from the folder the search started in
+/// (<see cref="ResultPath.Folder"/>; empty right in it): results come from
+/// everywhere, and the path says more than the kind would.
 ///
 /// <para>
 /// One converter over the row instead of a Style with a DataTrigger on
@@ -28,13 +30,16 @@ public sealed class TileSecondLineConverter : IValueConverter {
     /// <summary>True while the list is showing search results.</summary>
     public bool ShowFolder { get; set; }
 
+    /// <summary>The folder the search started in, asked at each tile (<see cref="ResultFolderConverter.Root"/>).</summary>
+    public Func<string?> Root { get; set; } = () => null;
+
 
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture) {
         if (value is not FileSystemEntry entry) {
             return null;
         }
         if (ShowFolder) {
-            return entry.ParentFolder;
+            return ResultPath.Folder(Root(), entry.FullPath);
         }
 
         int rank = entry.Rating?.Rank ?? 0;

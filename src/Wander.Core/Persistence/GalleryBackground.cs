@@ -21,7 +21,7 @@ namespace Wander.Core.Persistence;
 /// </para>
 /// </summary>
 public enum GalleryBackground {
-    /// <summary>The window's own background, light or dark with the theme — the gallery blends in. Stored by name, hence the old one.</summary>
+    /// <summary>Light: the window's own white in the light theme, a shade darker in the dark one.</summary>
     Light,
 
     /// <summary>Neutral mid grey. The default.</summary>

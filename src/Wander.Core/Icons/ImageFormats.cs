@@ -42,8 +42,9 @@ public static class ImageFormats {
     public static readonly IReadOnlySet<string> All = new HashSet<string>(new[] {
         ".png", ".jpg", ".jpeg", ".jpe", ".jfif", ".bmp", ".ico", ".tif", ".tiff", ".gif", ".webp",
         ".jxr", ".wdp",
-        // No codec in Windows: decoded by Wander (Imaging/TgaDecoder).
-        ".tga",
+        // No codec in Windows: decoded by Wander (Imaging/TgaDecoder,
+        // Imaging/PsdDecoder - the flattened picture, not the layers).
+        ".tga", ".psd", ".psb",
         // Decoded by the system's codec from the Microsoft Store, when the
         // extensions for it are installed.
         ".heic", ".heif", ".hif", ".avif", ".jxl",

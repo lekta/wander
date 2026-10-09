@@ -8,7 +8,7 @@ namespace Wander.Core.Preview;
 
 /// <summary>One sheet of a table, cut to what a preview shows.</summary>
 /// <param name="Rows">From the top, in place: an empty row of the sheet is an empty row here.</param>
-/// <param name="TotalRows">Rows the sheet has, when the file says; null when only "more than shown" is known.</param>
+/// <param name="TotalRows">Rows up to the last filled one; null when only "more than shown" is known.</param>
 /// <param name="Clipped">Rows were left out past <see cref="SheetReader.MaxRows"/>.</param>
 public sealed record Sheet(string Name, IReadOnlyList<string[]> Rows, int? TotalRows, bool Clipped) {
     public int Columns => Rows.Count == 0 ? 0 : Rows.Max(r => r.Length);
@@ -33,8 +33,8 @@ public static class SheetReader {
     public const int MaxRows = 1000;
     public const int MaxColumns = 100;
 
-    /// <summary>A cell past this is cut: the grid shows a line of it, the tooltip the rest.</summary>
-    public const int MaxCellChars = 500;
+    /// <summary>A cell past this is cut: the grid shows a line of it, all of it once clicked.</summary>
+    public const int MaxCellChars = 2000;
 
     private const int MaxSheets = 32;
 
@@ -49,6 +49,9 @@ public static class SheetReader {
 
     /// <summary>How many lines of a text table the delimiter is guessed from.</summary>
     private const int SniffLines = 20;
+
+    /// <summary>Rows of a workbook's sheet read past the shown ones to find its last filled row.</summary>
+    private const int MaxScanRows = 200_000;
 
     private static readonly char[] _delimiters = { ',', ';', '\t', '|' };
 
@@ -121,7 +124,8 @@ public static class SheetReader {
     /// delimiters, line breaks and doubled quotes), an Excel <c>sep=</c>
     /// first line obeyed, otherwise the delimiter guessed - comma,
     /// semicolon (Excel in most of Europe), tab or bar, whichever splits
-    /// the first lines most evenly.
+    /// the first lines most evenly. Rows past the last filled one - an
+    /// export padded with lines of bare delimiters - are left out.
     /// </summary>
     /// <param name="cut">The text is the start of a longer file: the total is not known.</param>
     public static Sheet Csv(string text, string name, char? delimiter = null, bool cut = false) {
@@ -137,6 +141,7 @@ public static class SheetReader {
         var row = new List<string>();
         var cell = new StringBuilder();
         int count = 0;
+        int filled = 0;
         bool quoted = false;
         bool rowOpen = false;
         for (int i = start; i < text.Length; i++) {
@@ -167,10 +172,7 @@ public static class SheetReader {
                 }
                 row.Add(CellText(cell));
                 cell.Clear();
-                if (count < MaxRows) {
-                    rows.Add(Trimmed(row));
-                }
-                count++;
+                AddRow(rows, Trimmed(row), ref count, ref filled);
                 row.Clear();
                 rowOpen = false;
             } else {
@@ -180,13 +182,32 @@ public static class SheetReader {
         }
         if (rowOpen || cell.Length > 0) {
             row.Add(CellText(cell));
-            if (count < MaxRows) {
-                rows.Add(Trimmed(row));
-            }
-            count++;
+            AddRow(rows, Trimmed(row), ref count, ref filled);
         }
+        DropEmptyTail(rows);
 
-        return new Sheet(name, rows, cut ? null : count, cut || count > MaxRows);
+        return new Sheet(name, rows, cut ? null : filled, cut || filled > MaxRows);
+    }
+
+
+    /// <summary>A row in its place: kept while under the limit, counted past it; <paramref name="filled"/> - rows up to the last with a value.</summary>
+    private static void AddRow(List<string[]> rows, string[] row, ref int count, ref int filled) {
+        if (count < MaxRows) {
+            rows.Add(row);
+        }
+        count++;
+        if (row.Length > 0) {
+            filled = count;
+        }
+    }
+
+
+    private static void DropEmptyTail(List<string[]> rows) {
+        int last = rows.Count;
+        while (last > 0 && rows[last - 1].Length == 0) {
+            last--;
+        }
+        rows.RemoveRange(last, rows.Count - last);
     }
 
 
@@ -278,33 +299,47 @@ public static class SheetReader {
     }
 
 
+    /// <summary>
+    /// One sheet. Excel writes a row for every formatted one, values or
+    /// not, and a sheet formatted to the end has thousands of them: the
+    /// total is the last row with a value, found by reading on past the
+    /// shown ones - up to <see cref="MaxScanRows"/>, then it is not known.
+    /// </summary>
     private static Sheet XlsxSheet(ZipArchiveEntry entry, string name, List<string> shared, List<CellStyle> styles, bool date1904) {
         var rows = new List<string[]>();
-        int? total = null;
-        bool clipped = false;
+        int filled = 0;
+        int scanned = 0;
+        bool known = true;
         using var reader = XmlReader.Create(entry.Open(), _xml);
         while (reader.Read()) {
-            if (reader.NodeType != XmlNodeType.Element) {
+            if (reader.NodeType != XmlNodeType.Element || reader.LocalName != "row") {
                 continue;
             }
 
-            if (reader.LocalName == "dimension" && reader.GetAttribute("ref") is { } extent) {
-                int colon = extent.IndexOf(':');
-                total = RowOf(colon >= 0 ? extent[(colon + 1)..] : extent);
-            } else if (reader.LocalName == "row") {
-                int number = int.TryParse(reader.GetAttribute("r"), out int r) ? r : rows.Count + 1;
-                if (number > MaxRows) {
-                    clipped = true;
+            int number = int.TryParse(reader.GetAttribute("r"), out int r) ? r : Math.Max(rows.Count, filled) + 1;
+            string[] cells = reader.IsEmptyElement ? Array.Empty<string>() : XlsxRow(reader, shared, styles, date1904);
+            if (cells.Length > 0) {
+                filled = Math.Max(filled, number);
+            }
+            if (number > MaxRows) {
+                if (++scanned > MaxScanRows) {
+                    known = false;
 
                     break;
                 }
-                while (rows.Count < number - 1) {
-                    rows.Add(Array.Empty<string>());
-                }
-                rows.Add(reader.IsEmptyElement ? Array.Empty<string>() : XlsxRow(reader, shared, styles, date1904));
+
+                continue;
             }
+
+            while (rows.Count < number - 1) {
+                rows.Add(Array.Empty<string>());
+            }
+            rows.Add(cells);
         }
-        return new Sheet(name, rows, clipped ? total is > MaxRows ? total : null : rows.Count, clipped);
+        DropEmptyTail(rows);
+        bool clipped = !known || filled > MaxRows;
+
+        return new Sheet(name, rows, known ? filled : null, clipped);
     }
 
 
@@ -744,16 +779,6 @@ public static class SheetReader {
         return null;
     }
 
-
-    /// <summary>The row number of a cell reference: "C12" is 12.</summary>
-    private static int? RowOf(string reference) {
-        int digits = 0;
-        while (digits < reference.Length && char.IsLetter(reference[digits])) {
-            digits++;
-        }
-
-        return int.TryParse(reference.AsSpan(digits), out int row) ? row : null;
-    }
 
 
     /// <summary>The zero-based column of a cell reference: "A1" is 0, "AB7" is 27.</summary>

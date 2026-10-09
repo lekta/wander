@@ -51,6 +51,12 @@ public sealed record ContextMenuTarget {
     public bool IsPanelRow { get; init; }
 
     /// <summary>
+    /// The rows are search results - found anywhere under the open folder,
+    /// so one of them earns "go to its folder" (2026-10-09).
+    /// </summary>
+    public bool IsSearchResult { get; init; }
+
+    /// <summary>
     /// True inside a shell namespace (the Recycle Bin today). Entries there
     /// are backed by <c>$Recycle.Bin</c> files, so every filesystem verb is
     /// suppressed — same reason the commands themselves refuse to run.

@@ -4,7 +4,8 @@ namespace Wander.Core.Preview;
 
 /// <summary>
 /// A model drawn into a square of pixels, for its tile: the view the
-/// preview pane opens on - from the front and a little above, Y up - lit
+/// preview pane opens on - the camera in front and a little above, Y up,
+/// the model turned by its <see cref="ModelView"/> - lit
 /// by the pane's three lights, flat-shaded, on transparency. Drawn here
 /// rather than by WPF off screen: thumbnails are made on pool threads in
 /// a layer without WPF, and a z-buffer over triangles is arithmetic a test
@@ -44,7 +45,8 @@ public static class MeshRaster {
 
 
     /// <summary>The model on a <paramref name="side"/>-pixel square, or null when it has nothing to draw.</summary>
-    public static BgraImage? Render(MeshData mesh, int side) {
+    /// <param name="view">How the model is turned; <see cref="ModelView.Default"/> when not given.</param>
+    public static BgraImage? Render(MeshData mesh, int side, ModelView? view = null) {
         if (side <= 0 || mesh.Bounds() is not { } box) {
             return null;
         }
@@ -57,15 +59,31 @@ public static class MeshRaster {
         var right = forward.Cross(new Vector(0, 1, 0)).Unit();
         var up = right.Cross(forward);
 
+        // The pane's rotations, in its order: spin about the vertical
+        // through the centre, then tilt about the horizontal (right-handed,
+        // as WPF's AxisAngleRotation3D).
+        var turn = view ?? ModelView.Default;
+        double spin = turn.Spin * Math.PI / 180, tilt = turn.Tilt * Math.PI / 180;
+        double cs = Math.Cos(spin), ss = Math.Sin(spin), ct = Math.Cos(tilt), st = Math.Sin(tilt);
+        int count = mesh.VertexCount;
+        var turned = new float[count * 3];
+        for (int i = 0; i < count; i++) {
+            double x = mesh.Positions[i * 3] - centre.X, y = mesh.Positions[i * 3 + 1] - centre.Y, z = mesh.Positions[i * 3 + 2] - centre.Z;
+            double x1 = x * cs + z * ss, z1 = -x * ss + z * cs;
+            double y2 = y * ct - z1 * st, z2 = y * st + z1 * ct;
+            turned[i * 3] = (float)(x1 + centre.X);
+            turned[i * 3 + 1] = (float)(y2 + centre.Y);
+            turned[i * 3 + 2] = (float)(z2 + centre.Z);
+        }
+
         // Camera space, the projection on a unit focal plane. Floats: a
         // model at the triangle limit is six million corners.
-        int count = mesh.VertexCount;
         var px = new float[count];
         var py = new float[count];
         var depth = new float[count];
         double minX = double.MaxValue, minY = double.MaxValue, maxX = double.MinValue, maxY = double.MinValue;
         for (int i = 0; i < count; i++) {
-            var p = new Vector(mesh.Positions[i * 3], mesh.Positions[i * 3 + 1], mesh.Positions[i * 3 + 2]) - eye;
+            var p = Point(turned, i) - eye;
             double z = p.Dot(forward);
             if (!(z > 1e-9) || double.IsNaN(z)) {
                 depth[i] = float.NaN;
@@ -107,8 +125,8 @@ public static class MeshRaster {
                     continue;
                 }
 
-                var pa = Point(mesh, a);
-                var normal = (Point(mesh, b) - pa).Cross(Point(mesh, c) - pa);
+                var pa = Point(turned, a);
+                var normal = (Point(turned, b) - pa).Cross(Point(turned, c) - pa);
                 if (normal.Length() == 0) {
                     continue;
                 }
@@ -212,8 +230,8 @@ public static class MeshRaster {
     }
 
 
-    private static Vector Point(MeshData mesh, int i) {
-        return new Vector(mesh.Positions[i * 3], mesh.Positions[i * 3 + 1], mesh.Positions[i * 3 + 2]);
+    private static Vector Point(float[] positions, int i) {
+        return new Vector(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]);
     }
 
 

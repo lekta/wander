@@ -131,9 +131,9 @@ public partial class FolderTreesView : UserControl {
         return Vm.IsBookmarksExpanded && BookmarksList.HasItems && FocusPanel(BookmarksList);
     }
 
-    /// <summary>Puts the keyboard in the drives panel.</summary>
+    /// <summary>Puts the keyboard in the drives panel. False when it is folded, as for the bookmarks.</summary>
     public bool FocusDrives() {
-        return FocusPanel(DrivesList);
+        return Vm.IsDrivesExpanded && FocusPanel(DrivesList);
     }
 
     /// <summary>
@@ -179,10 +179,13 @@ public partial class FolderTreesView : UserControl {
     /// gives; the panel then puts the keyboard on that line.
     /// </summary>
     public void RevealAndFocus(NavigationSource pane) {
-        if (pane == NavigationSource.Bookmark) {
-            // Put away, the list is Collapsed and cannot take focus; a
-            // shortcut that silently did nothing would read as broken.
+        // Put away, the list is Collapsed and cannot take focus; a
+        // shortcut that silently did nothing would read as broken.
+        if (pane == NavigationSource.Bookmark && !Vm.IsBookmarksExpanded) {
             Vm.IsBookmarksExpanded = true;
+            UpdateLayout();
+        } else if (pane != NavigationSource.Bookmark && !Vm.IsDrivesExpanded) {
+            Vm.IsDrivesExpanded = true;
             UpdateLayout();
         }
 
@@ -233,7 +236,7 @@ public partial class FolderTreesView : UserControl {
         if (e.NewValue is MainViewModel vm) {
             vm.PropertyChanged += OnViewModelChanged;
             vm.Trees.Projected += OnProjected;
-            ApplyBookmarksLayout();
+            ApplyPanelsLayout();
         }
     }
 
@@ -243,11 +246,15 @@ public partial class FolderTreesView : UserControl {
         if (e.PropertyName == nameof(MainViewModel.IsBookmarksExpanded) && !Vm.IsBookmarksExpanded) {
             Post(new PaneHidden(new[] { WindowZone.Bookmarks }));
         }
-        // BookmarksHeight as well as the toggle: the saved height arrives
+        if (e.PropertyName == nameof(MainViewModel.IsDrivesExpanded) && !Vm.IsDrivesExpanded) {
+            Post(new PaneHidden(new[] { WindowZone.Drives }));
+        }
+        // BookmarksHeight as well as the toggles: the saved height arrives
         // after the window is loaded (MainViewModel.RestorePaneSizes), long
         // after the data context did.
-        if (e.PropertyName is nameof(MainViewModel.IsBookmarksExpanded) or nameof(MainViewModel.BookmarksHeight)) {
-            ApplyBookmarksLayout();
+        if (e.PropertyName is nameof(MainViewModel.IsBookmarksExpanded) or nameof(MainViewModel.IsDrivesExpanded)
+            or nameof(MainViewModel.BookmarksHeight)) {
+            ApplyPanelsLayout();
         }
     }
 
@@ -323,16 +330,25 @@ public partial class FolderTreesView : UserControl {
     /// <summary>
     /// The bookmarks region owns a fixed pixel height that the divider
     /// changes. Collapsed, it falls back to Auto - the header row is all
-    /// that is left, and everything below it moves up.
+    /// that is left, and everything below it moves up. The drives folded,
+    /// their header goes to the bottom of the pane (decision 2026-10-02)
+    /// and the bookmarks take all the height above it; the two are never
+    /// folded together (<see cref="MainViewModel.IsDrivesExpanded"/>). The
+    /// divider is there only between two unfolded panels.
     /// </summary>
-    private void ApplyBookmarksLayout() {
-        if (Vm.IsBookmarksExpanded) {
+    private void ApplyPanelsLayout() {
+        bool bookmarks = Vm.IsBookmarksExpanded;
+        bool drives = Vm.IsDrivesExpanded;
+        if (bookmarks) {
             BookmarksRow.MinHeight = 44;
-            BookmarksRow.Height = new GridLength(Vm.BookmarksHeight);
+            BookmarksRow.Height = drives ? new GridLength(Vm.BookmarksHeight) : new GridLength(1, GridUnitType.Star);
         } else {
             BookmarksRow.MinHeight = 0;
             BookmarksRow.Height = GridLength.Auto;
         }
+        DrivesRow.Height = drives ? new GridLength(1, GridUnitType.Star) : GridLength.Auto;
+        BookmarksSplitter.Visibility = bookmarks && drives ? Visibility.Visible : Visibility.Collapsed;
+        CapBookmarksRow();
     }
 
     /// <summary>
@@ -353,7 +369,8 @@ public partial class FolderTreesView : UserControl {
     }
 
     private void CapBookmarksRow() {
-        BookmarksRow.MaxHeight = Math.Max(0, ActualHeight - BookmarksSplitter.Height - DrivesRow.MinHeight);
+        double divider = BookmarksSplitter.Visibility == Visibility.Visible ? BookmarksSplitter.Height : 0;
+        BookmarksRow.MaxHeight = Math.Max(0, ActualHeight - divider - DrivesRow.MinHeight);
     }
 
     private void BookmarksSplitter_DragCompleted(object sender, DragCompletedEventArgs e) {
@@ -733,6 +750,39 @@ public partial class FolderTreesView : UserControl {
             ShowBookmarkMenu(button, line);
             e.Handled = true;
         }
+    }
+
+    private void BookmarkRowMenu_Loaded(object sender, RoutedEventArgs e) {
+        PinRowMenu((FrameworkElement)sender);
+    }
+
+    /// <summary>
+    /// A bookmark's "..." stays on screen when the panel scrolls sideways
+    /// (2026-10-09): a long name further down makes every line that wide,
+    /// and the button at a line's end went past the right edge with it. The
+    /// edge pushes it back over the line - the line's own background under
+    /// it (<c>PanelLine</c>), so no text shows through.
+    /// </summary>
+    private void BookmarksList_ScrollChanged(object sender, ScrollChangedEventArgs e) {
+        var generator = BookmarksList.ItemContainerGenerator;
+        for (int i = 0; i < BookmarksList.Items.Count; i++) {
+            if (generator.ContainerFromIndex(i) is FrameworkElement line
+                && ListVisuals.FindDescendant<Button>(line, "RowMenu") is { } menu) {
+                PinRowMenu(menu);
+            }
+        }
+    }
+
+    /// <summary>Shifts <paramref name="menu"/> left by as much as its line's end is past the panel's right edge, back to none.</summary>
+    private static void PinRowMenu(FrameworkElement menu) {
+        if (menu.RenderTransform is not TranslateTransform shift || !menu.IsVisible
+            || ListVisuals.Ancestors(menu).OfType<ScrollContentPresenter>().FirstOrDefault() is not { } viewport) {
+            return;
+        }
+
+        // Where its right edge stands without the shift it has now.
+        double right = menu.TranslatePoint(new Point(menu.ActualWidth, 0), viewport).X - shift.X;
+        shift.X = Math.Min(0, viewport.ActualWidth - menu.Margin.Right - right);
     }
 
 

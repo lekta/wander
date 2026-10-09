@@ -52,6 +52,17 @@ public class SheetReaderTests {
     }
 
     [Fact]
+    public void Csv_LinesOfBareDelimitersAtTheEnd_AreLeftOut() {
+        var text = "a;b\n1;2\n" + string.Concat(Enumerable.Range(0, SheetReader.MaxRows + 10).Select(_ => ";;\n"));
+
+        var sheet = SheetReader.Csv(text, "t");
+
+        Assert.Equal(2, sheet.Rows.Count);
+        Assert.False(sheet.Clipped);
+        Assert.Equal(2, sheet.TotalRows);
+    }
+
+    [Fact]
     public void Csv_PastTheRowLimit_IsClippedWithItsTotal() {
         var text = string.Concat(Enumerable.Range(0, SheetReader.MaxRows + 5).Select(i => $"{i},x\n"));
 
@@ -137,15 +148,30 @@ public class SheetReaderTests {
     }
 
     [Fact]
-    public void Xlsx_PastTheRowLimit_TotalComesFromTheDimension() {
-        var rows = string.Concat(Enumerable.Range(1, SheetReader.MaxRows + 1).Select(r => $"<row r=\"{r}\"><c r=\"A{r}\"><v>{r}</v></c></row>"));
+    public void Xlsx_PastTheRowLimit_TotalIsTheLastFilledRow() {
+        // The dimension claims 5000, formatting does; the values end at 1500.
+        var rows = string.Concat(Enumerable.Range(1, 1500).Select(r => $"<row r=\"{r}\"><c r=\"A{r}\"><v>{r}</v></c></row>"))
+            + string.Concat(Enumerable.Range(1501, 3500).Select(r => $"<row r=\"{r}\"><c r=\"A{r}\" s=\"1\"/></row>"));
         var book = Xlsx(sheets: new[] { ("S", $"<dimension ref=\"A1:A5000\"/><sheetData>{rows}</sheetData>") });
 
         var sheet = SheetReader.Xlsx(book)![0];
 
         Assert.Equal(SheetReader.MaxRows, sheet.Rows.Count);
         Assert.True(sheet.Clipped);
-        Assert.Equal(5000, sheet.TotalRows);
+        Assert.Equal(1500, sheet.TotalRows);
+    }
+
+    [Fact]
+    public void Xlsx_FormattedEmptyRowsAtTheEnd_AreLeftOut() {
+        var rows = string.Concat(Enumerable.Range(1, 3).Select(r => $"<row r=\"{r}\"><c r=\"A{r}\"><v>{r}</v></c></row>"))
+            + string.Concat(Enumerable.Range(4, SheetReader.MaxRows + 500).Select(r => $"<row r=\"{r}\"><c r=\"A{r}\" s=\"1\"/><c r=\"B{r}\" t=\"s\"><v>0</v></c></row>"));
+        var book = Xlsx(sheets: new[] { ("S", $"<sheetData>{rows}</sheetData>") }, shared: new[] { "<si><t></t></si>" });
+
+        var sheet = SheetReader.Xlsx(book)![0];
+
+        Assert.Equal(3, sheet.Rows.Count);
+        Assert.False(sheet.Clipped);
+        Assert.Equal(3, sheet.TotalRows);
     }
 
     [Theory]
