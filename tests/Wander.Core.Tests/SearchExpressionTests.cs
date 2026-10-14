@@ -84,4 +84,63 @@ public class SearchExpressionTests {
 
         Assert.Equal(expression, SearchExpression.Format(name, text));
     }
+
+
+    // --- The type in the name half -------------------------------------
+
+    [Theory]
+    [InlineData("report", "report", "")]
+    [InlineData("/images", "", "images")]
+    [InlineData("holiday /video", "holiday", "video")]
+    [InlineData("holiday/ video ", "holiday", "video")]
+    [InlineData("/", "", "")]
+    [InlineData("", "", "")]
+    public void SplitType_SlashParts_NameFromType(string head, string name, string type) {
+        Assert.Equal((name, type), SearchExpression.SplitType(head));
+    }
+
+
+    [Fact]
+    public void Parse_SlashAfterTheColon_BelongsToTheText() {
+        // The type is looked for in the name half only: a path or a URL in
+        // the text half must not turn into a type.
+        var (head, text) = SearchExpression.Parse("*.cs:a/b");
+
+        Assert.Equal(("*.cs", ""), SearchExpression.SplitType(head));
+        Assert.Equal("a/b", text);
+    }
+
+
+    [Fact]
+    public void JoinType_SpaceBeforeTheSlash_OnlyAfterAName() {
+        Assert.Equal("holiday /video", SearchExpression.JoinType("holiday", "video"));
+        Assert.Equal("/video", SearchExpression.JoinType("", "video"));
+        Assert.Equal("holiday", SearchExpression.JoinType("holiday", ""));
+    }
+
+
+    [Theory]
+    [InlineData("/im", 1, 3)]
+    [InlineData("x /im:text", 3, 5)]
+    [InlineData("x /", 3, 3)]
+    public void TypeSpan_FromPastTheSlash_ToTheColonOrTheEnd(string expression, int start, int end) {
+        Assert.Equal((start, end), SearchExpression.TypeSpan(expression));
+    }
+
+
+    [Theory]
+    [InlineData("report")]
+    [InlineData(":a/b")]
+    [InlineData("")]
+    public void TypeSpan_NoSlashInTheNameHalf_IsNull(string expression) {
+        Assert.Null(SearchExpression.TypeSpan(expression));
+    }
+
+
+    [Fact]
+    public void WithType_ReplacesTheWord_KeepsTheRest() {
+        Assert.Equal(("x /images:text", 9), SearchExpression.WithType("x /im:text", "images"));
+        Assert.Equal(("/images", 7), SearchExpression.WithType("/", "images"));
+        Assert.Equal(("report", 6), SearchExpression.WithType("report", "images"));
+    }
 }

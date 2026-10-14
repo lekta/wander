@@ -1,4 +1,5 @@
 using System.Text;
+using Wander.Core.Actions;
 using Wander.Core.FileSystem;
 using Wander.Core.Search;
 using Wander.Core.Tests.Fakes;
@@ -393,6 +394,55 @@ public class ContentSearchServiceTests {
         // against it; the service must not depend on them remembering.
         var fs = Tree();
         var (hits, outcome) = await Run(fs, Request("", "", SearchScope.Subfolders));
+
+        Assert.Empty(hits);
+        Assert.Equal(0, outcome.FilesScanned);
+    }
+
+
+    // --- Type ----------------------------------------------------------
+
+    [Fact]
+    public async Task Search_TypeAlone_IsASearch_AndKeepsOnlyThatKind() {
+        // "/images" with nothing else: every picture under the folder, and
+        // a folder is not one, whatever it is called.
+        var fs = new FakeFileSystem();
+        fs.Directories.Add(@"C:\root");
+        fs.Directories.Add(@"C:\root\shots.jpg");
+        fs.Files[@"C:\root\a.jpg"] = Text("x");
+        fs.Files[@"C:\root\b.txt"] = Text("x");
+        fs.Files[@"C:\root\shots.jpg\c.png"] = Text("x");
+
+        var request = Request("", "", SearchScope.Subfolders) with { Type = TypeFilter.Of(FileTypeGroup.Images) };
+        var (hits, _) = await Run(fs, request);
+
+        Assert.Equal(
+            new[] { @"C:\root\a.jpg", @"C:\root\shots.jpg\c.png" },
+            Paths(hits).Order(StringComparer.Ordinal).ToArray());
+    }
+
+
+    [Fact]
+    public async Task Search_TypeGatesTheRead_LikeTheMask() {
+        var fs = new FakeFileSystem();
+        fs.Directories.Add(@"C:\root");
+        fs.Files[@"C:\root\notes.txt"] = Text("budget");
+        fs.Files[@"C:\root\notes.md"] = Text("budget");
+        fs.Files[@"C:\root\photo.jpg"] = Text("budget");
+
+        var request = Request("", "budget", SearchScope.CurrentFolder) with { Type = TypeFilter.Of(FileTypeGroup.TextAndCode) };
+        var (hits, outcome) = await Run(fs, request);
+
+        Assert.Equal(new[] { @"C:\root\notes.md", @"C:\root\notes.txt" }, Paths(hits).Order(StringComparer.Ordinal).ToArray());
+        Assert.Equal(2, outcome.FilesScanned);
+    }
+
+
+    [Fact]
+    public async Task Search_UnknownType_WalksNothing() {
+        var fs = Tree();
+        var request = ByName("report", SearchScope.Subfolders) with { Type = TypeFilter.Unknown };
+        var (hits, outcome) = await Run(fs, request);
 
         Assert.Empty(hits);
         Assert.Equal(0, outcome.FilesScanned);

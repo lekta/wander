@@ -109,6 +109,10 @@ public partial class FileListView : UserControl {
     /// </summary>
     private TextBox? _renameBox;
 
+    // A type picked from the list is being written into the filter field:
+    // the text change that makes is not typing, and must not reopen the list.
+    private bool _pickingType;
+
 
     public FileListView() {
         InitializeComponent();
@@ -1715,6 +1719,32 @@ public partial class FileListView : UserControl {
     // ring) through SearchBox.
 
     private void SearchBox_PreviewKeyDown(object sender, KeyEventArgs e) {
+        // The type list, while it is open, has the keys a list has: arrows
+        // walk it, Enter and Tab pick, Esc closes it and nothing more.
+        if (TypePopup.IsOpen) {
+            switch (e.Key) {
+                case Key.Down:
+                case Key.Up:
+                    int last = TypeList.Items.Count - 1;
+                    TypeList.SelectedIndex = Math.Clamp(TypeList.SelectedIndex + (e.Key == Key.Down ? 1 : -1), 0, last);
+                    TypeList.ScrollIntoView(TypeList.SelectedItem);
+                    e.Handled = true;
+
+                    return;
+                case Key.Enter:
+                case Key.Tab:
+                    PickType();
+                    e.Handled = true;
+
+                    return;
+                case Key.Escape:
+                    TypePopup.IsOpen = false;
+                    e.Handled = true;
+
+                    return;
+            }
+        }
+
         // Esc: one press does the lot — stop whatever is running, drop the
         // filter and the results, and put the keyboard back in the list. A
         // ladder of three presses meant the user had to know which rung
@@ -1743,6 +1773,86 @@ public partial class FileListView : UserControl {
 
     private void SearchOptions_Click(object sender, RoutedEventArgs e) {
         SearchWindowRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+
+    /// <summary>
+    /// Typing in the type word - after "/" - lists the groups it can still
+    /// be, the first one lit: that is the one filtering already. A word
+    /// that is a whole keyword or name, or starts none, has nothing to offer.
+    /// </summary>
+    private void SearchBox_TextChanged(object sender, TextChangedEventArgs e) {
+        if (_pickingType) {
+            return;
+        }
+
+        string text = SearchBox.Text;
+        if (!SearchBox.IsKeyboardFocusWithin || !CaretInTypeWord() || SearchExpression.TypeSpan(text) is not { } span) {
+            TypePopup.IsOpen = false;
+
+            return;
+        }
+
+        string word = text[span.Start..span.End].Trim();
+        var candidates = TypeFilter.Candidates(word, TypeFilter.Names());
+        if (candidates.Count == 0 || (candidates.Count == 1 && candidates[0].IsSpelledBy(word))) {
+            TypePopup.IsOpen = false;
+
+            return;
+        }
+
+        TypeList.ItemsSource = candidates;
+        TypeList.SelectedIndex = 0;
+        TypePopup.IsOpen = true;
+    }
+
+
+    /// <summary>The caret walked out of the type word: the list is about a word no longer being typed.</summary>
+    private void SearchBox_SelectionChanged(object sender, RoutedEventArgs e) {
+        if (TypePopup.IsOpen && !CaretInTypeWord()) {
+            TypePopup.IsOpen = false;
+        }
+    }
+
+
+    // The keyboard left the field - for the list, another window: a popup
+    // that stayed would float over whatever came up.
+    private void SearchBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e) {
+        TypePopup.IsOpen = false;
+    }
+
+
+    // On the press, not the release: nothing has moved the keyboard yet.
+    private void TypeList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
+        if (ItemsControl.ContainerFromElement(TypeList, (DependencyObject)e.OriginalSource) is ListBoxItem item) {
+            item.IsSelected = true;
+            PickType();
+        }
+        e.Handled = true;
+    }
+
+
+    private bool CaretInTypeWord() {
+        return SearchExpression.TypeSpan(SearchBox.Text) is { } span
+            && SearchBox.CaretIndex >= span.Start && SearchBox.CaretIndex <= span.End;
+    }
+
+
+    /// <summary>Writes the lit group's keyword in place of the type word, caret after it.</summary>
+    private void PickType() {
+        TypePopup.IsOpen = false;
+        if (TypeList.SelectedItem is not TypeName pick) {
+            return;
+        }
+
+        var (text, caret) = SearchExpression.WithType(SearchBox.Text, pick.Keyword);
+        _pickingType = true;
+        try {
+            SearchBox.Text = text;
+            SearchBox.CaretIndex = caret;
+        } finally {
+            _pickingType = false;
+        }
     }
 
 

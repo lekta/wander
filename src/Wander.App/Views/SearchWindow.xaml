@@ -3,11 +3,12 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:Wander.App.Controls"
         xmlns:res="clr-namespace:Wander.App.Resources"
+        xmlns:vm="clr-namespace:Wander.App.ViewModels"
         Title="{x:Static res:Strings.SearchWindowTitle}"
         ShowInTaskbar="False"
         ResizeMode="CanResize"
-        Width="470" Height="300"
-        MinWidth="380" MinHeight="280"
+        Width="470" Height="330"
+        MinWidth="380" MinHeight="310"
         WindowStartupLocation="CenterOwner"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
@@ -43,6 +44,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
@@ -58,10 +60,20 @@
                             ToolTip="{x:Static res:Strings.SearchFieldNameHint}"
                             Text="{Binding ContentSearch.NameQuery}"/>
 
+        <!-- The box's "/type": the same groups as the actions'; nothing chosen for a word that names none. -->
         <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,8,8,0"
                    Style="{StaticResource FieldLabel}"
+                   Text="{x:Static res:Strings.SearchFieldType}"/>
+        <ComboBox x:Name="TypeBox" Grid.Row="1" Grid.Column="1" Margin="0,8,0,0" HorizontalAlignment="Left" MinWidth="160"
+                  ToolTip="{x:Static res:Strings.SearchFieldTypeHint}"
+                  ItemsSource="{x:Static vm:ActionRowViewModel.GroupChoices}"
+                  DisplayMemberPath="Title" SelectedValuePath="Value"
+                  SelectedValue="{Binding ContentSearch.TypeGroup}"/>
+
+        <TextBlock Grid.Row="2" Grid.Column="0" Margin="0,8,8,0"
+                   Style="{StaticResource FieldLabel}"
                    Text="{x:Static res:Strings.SearchFieldText}"/>
-        <controls:FilterBox Grid.Row="1" Grid.Column="1" Margin="0,8,0,0"
+        <controls:FilterBox Grid.Row="2" Grid.Column="1" Margin="0,8,0,0"
                             ToolTip="{x:Static res:Strings.SearchFieldTextHint}"
                             Text="{Binding ContentSearch.TextQuery}"/>
 
@@ -71,14 +83,14 @@
             window outlives the moment its criteria were typed, and "in this
             folder" stops meaning anything once you have forgotten which.
         -->
-        <TextBlock Grid.Row="2" Grid.Column="0" Margin="0,8,8,0"
+        <TextBlock Grid.Row="3" Grid.Column="0" Margin="0,8,8,0"
                    Style="{StaticResource FieldLabel}"
                    Text="{x:Static res:Strings.SearchFieldFolder}"/>
-        <TextBox Grid.Row="2" Grid.Column="1" Padding="4,3" Margin="0,8,0,0"
+        <TextBox Grid.Row="3" Grid.Column="1" Padding="4,3" Margin="0,8,0,0"
                  IsReadOnly="True" Background="{DynamicResource ReadOnlyFieldBackground}" Foreground="{DynamicResource TextMuted}"
                  Text="{Binding ContentSearch.Root, Mode=OneWay}"/>
 
-        <StackPanel Grid.Row="3" Grid.Column="1" Margin="0,10,0,0">
+        <StackPanel Grid.Row="4" Grid.Column="1" Margin="0,10,0,0">
             <CheckBox Content="{x:Static res:Strings.SearchScopeSubfolders}"
                       IsChecked="{Binding ContentSearch.SearchSubfolders}"/>
             <!--
@@ -94,7 +106,7 @@
                       IsEnabled="{Binding ContentSearch.BinariesApplicable}"/>
         </StackPanel>
 
-        <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal"
+        <StackPanel Grid.Row="5" Grid.Column="1" Orientation="Horizontal"
                     HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,12,0,0">
             <Button Content="{x:Static res:Strings.SearchClear}" Style="{StaticResource DialogButton}"
                     Command="{Binding ClearSearchCommand}"/>

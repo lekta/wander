@@ -862,7 +862,10 @@ public sealed class ScenarioRunner {
         if (step.Str("box") is { } typed) {
             // Typed into the box over the list: the live filter, landed
             // first as it is under the pause a person types with, and the
-            // walk under the folder that continues it (IsFilterPass).
+            // walk under the folder that continues it (IsFilterPass). The
+            // switch beside the box is set first: it outlives a step, and a
+            // window step before this one may have turned it off.
+            search.SearchSubfolders = step.Bool("subfolders") ?? true;
             search.FilterText = typed;
             await WaitIdleAsync(step);
         } else {

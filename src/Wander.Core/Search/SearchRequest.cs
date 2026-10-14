@@ -40,6 +40,12 @@ public sealed record SearchRequest(
     SearchScope Scope,
     bool SearchBinaries,
     EntryVisibility Visibility) {
+    /// <summary>
+    /// The kind of file that passes - the <c>/тип</c> of the box. A gate
+    /// beside the mask: a file of another kind is never opened.
+    /// </summary>
+    public TypeFilter Type { get; init; } = TypeFilter.None;
+
     /// <summary>True when files have to be opened to answer this.</summary>
     public bool HasText => Text.Length > 0;
 
@@ -48,7 +54,7 @@ public sealed record SearchRequest(
     /// "show me every file on the disk" is not a search, it is a mistake
     /// with a five-thousand-row result.
     /// </summary>
-    public bool IsEmpty => Name.IsEmpty && Text.Length == 0;
+    public bool IsEmpty => Name.IsEmpty && Type.IsEmpty && Text.Length == 0;
 
     /// <summary>
     /// Files larger than this are not read for content. Not a parser limit:

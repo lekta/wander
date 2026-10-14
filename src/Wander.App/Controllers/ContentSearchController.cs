@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Windows.Threading;
 using Wander.App.ViewModels;
+using Wander.Core.Actions;
 using Wander.Core.FileSystem;
 using Wander.Core.Logging;
 using Wander.Core.Search;
@@ -43,18 +44,19 @@ public enum SearchState {
 /// </para>
 ///
 /// <para>
-/// The two do meet, though, and this is where: a mask typed in the
-/// toolbar narrows the folder live <em>and</em>, once the typing settles,
-/// starts a pass under that folder — see <see cref="IsFilterPass"/>. The
-/// answer for the folder you are standing in is instant, the rest arrives
-/// underneath it. That is the one case where a keystroke does end in a
-/// disk walk, and the pause plus <see cref="MinAutoRunLength"/> are what
-/// keep it to one walk per word rather than one per letter.
+/// The two do meet, though, and this is where: a mask or a type narrows
+/// the folder live <em>and</em>, once the typing settles and the
+/// subfolders are switched on, starts a pass under that folder - see
+/// <see cref="IsFilterPass"/>. The answer for the folder you are standing
+/// in is instant, the rest arrives underneath it. That is the one case
+/// where a keystroke does end in a disk walk, and the pause plus
+/// <see cref="MinAutoRunLength"/> are what keep it to one walk per word
+/// rather than one per letter.
 /// </para>
 ///
 /// <para>
-/// Two criteria, combined with <em>and</em>: a mask on the name and text
-/// inside the file. Either may be empty. That is what makes "every
+/// Criteria combined with <em>and</em>: a mask on the name, a type, text
+/// inside the file. Any may be empty. That is what makes "every
 /// <c>*.cs</c> that mentions X" expressible, and it is why there is no
 /// "search in contents" checkbox — the text field is the switch, and a
 /// switch you can see the state of is one that cannot surprise you later.
@@ -100,18 +102,20 @@ public sealed class ContentSearchController : ObservableObject {
     // typed — and the text half could never be started.
     private string _filterText = "";
     private string _nameQuery = "";
+
+    // The type word as typed, and what it filters by: "изо" stays in the
+    // box while it already means pictures.
+    private string _typeQuery = "";
+    private TypeFilter _type = TypeFilter.None;
     private string _textQuery = "";
-    private SearchScope _scope = SearchScope.CurrentFolder;
+
+    // Subfolders by default: the box reached into them always, before the
+    // switch beside it (2026-10-14).
+    private SearchScope _scope = SearchScope.Subfolders;
     private bool _searchBinaries;
     private SearchState _state = SearchState.Idle;
     private bool _isShowingResults;
     private bool _isFilterPass;
-
-    // Where the criteria last came from. Only the toolbar box reaches past
-    // the folder on its own; the search window has a checkbox for that, and
-    // a search that walked subfolders with the box unticked would be lying
-    // about itself.
-    private bool _fromFilterBox;
 
 
     public ContentSearchController(
@@ -178,21 +182,27 @@ public sealed class ContentSearchController : ObservableObject {
             _filterText = value;
             Raise();
 
-            var (name, text) = SearchExpression.Parse(value);
-            if (_nameQuery == name && _textQuery == text) {
-                // A trailing colon and no colon are the same criteria. The
-                // box keeps the character so the text half can be typed
-                // after it; nothing else needs to hear about it.
+            var (head, text) = SearchExpression.Parse(value);
+            var (name, typeWord) = SearchExpression.SplitType(head);
+            var type = TypeFilter.Parse(typeWord, TypeFilter.Names());
+            _typeQuery = typeWord;
+            if (_nameQuery == name && _type == type && _textQuery == text) {
+                // A trailing colon and no colon are the same criteria, and
+                // so are "/i", "/изо" and "/img". The box keeps what was
+                // typed so the rest can be typed after it; nothing else
+                // needs to hear about it.
                 return;
             }
 
             _nameQuery = name;
+            _type = type;
             _textQuery = text;
             Raise(nameof(NameQuery));
+            Raise(nameof(TypeGroup));
             Raise(nameof(TextQuery));
             Raise(nameof(IsDeep));
             Raise(nameof(BinariesApplicable));
-            OnCriteriaChanged(immediate: false, fromFilterBox: true);
+            OnCriteriaChanged(immediate: false);
         }
     }
 
@@ -206,6 +216,36 @@ public sealed class ContentSearchController : ObservableObject {
                 SyncFilterText();
                 OnCriteriaChanged(immediate: false);
             }
+        }
+    }
+
+
+    /// <summary>The type word as typed after the slash - "изо" while it is being typed. Empty for none.</summary>
+    public string TypeQuery => _typeQuery;
+
+    /// <summary>What the type word filters by, for the live filter to apply.</summary>
+    public TypeFilter Type => _type;
+
+
+    /// <summary>
+    /// The group the type filters by: <see cref="FileTypeGroup.All"/> for
+    /// none, null for a word that names no group. The window's list sets
+    /// it, and the box then reads the group's keyword.
+    /// </summary>
+    public FileTypeGroup? TypeGroup {
+        get => _type.Group;
+        set {
+            var type = value is { } group ? TypeFilter.Of(group) : TypeFilter.None;
+            if (type == _type) {
+                return;
+            }
+
+            _type = type;
+            _typeQuery = type.IsEmpty ? "" : TypeFilter.Names().First(name => name.Group == value).Keyword;
+            Raise();
+            SyncFilterText();
+            // A pick from a list is a decision, not a keystroke: it runs at once.
+            OnCriteriaChanged(immediate: true);
         }
     }
 
@@ -233,9 +273,7 @@ public sealed class ContentSearchController : ObservableObject {
         get => _scope;
         set {
             if (SetField(ref _scope, value)) {
-                Raise(nameof(IsDeep));
                 Raise(nameof(SearchSubfolders));
-                Raise(nameof(HasNonDefaultOptions));
                 // A switch is a decision, not a keystroke: it runs at once.
                 OnCriteriaChanged(immediate: true);
             }
@@ -271,6 +309,16 @@ public sealed class ContentSearchController : ObservableObject {
     /// Walk into subfolders. A checkbox rather than one of three radio
     /// buttons because that is what it is — a modifier on "here", the same
     /// shape every other search dialog gives it.
+    ///
+    /// <para>
+    /// One switch for the box and the window: the button beside the box
+    /// and the window's checkbox are the same one. Both are needed, by
+    /// turns: under a project's root the box's walk finds the file wherever
+    /// it is, in a folder of photos it buries the folder's own under its
+    /// subfolders'. It survives navigation, unlike the rest of a search:
+    /// what made a forgotten switch a trap was that it was in a closed
+    /// window, and this one is on screen beside the box.
+    /// </para>
     /// </summary>
     public bool SearchSubfolders {
         get => _scope == SearchScope.Subfolders;
@@ -279,12 +327,11 @@ public sealed class ContentSearchController : ObservableObject {
 
 
     /// <summary>
-    /// True when something other than the two text fields is in force.
-    /// The toolbar's search button marks itself when it is, so a list
-    /// narrowed by a switch set in a window that is now closed still says
-    /// as much.
+    /// True when something the box does not show is in force. The box's
+    /// "more" button marks itself when it is, so a list narrowed by a
+    /// switch set in a window that is now closed still says as much.
     /// </summary>
-    public bool HasNonDefaultOptions => _scope != SearchScope.CurrentFolder || _searchBinaries;
+    public bool HasNonDefaultOptions => _searchBinaries;
 
 
     /// <summary>The folder the next search would start from, for the window to show.</summary>
@@ -292,12 +339,13 @@ public sealed class ContentSearchController : ObservableObject {
 
 
     /// <summary>
-    /// True when answering needs a disk walk rather than a re-filter of
+    /// True when answering needs files opened rather than a re-filter of
     /// what is already on screen. This is the line between the two
-    /// interactions: below it the owner's live filter handles everything,
-    /// above it this class does.
+    /// interactions: below it the owner's live filter answers for the
+    /// folder and a walk only continues the answer, above it this class
+    /// answers alone.
     /// </summary>
-    public bool IsDeep => _textQuery.Length > 0 || _scope != SearchScope.CurrentFolder;
+    public bool IsDeep => _textQuery.Length > 0;
 
 
     /// <summary>Where the search is in its life. Drives the indicator.</summary>
@@ -324,9 +372,9 @@ public sealed class ContentSearchController : ObservableObject {
 
 
     /// <summary>
-    /// The pass that owns the list right now is the quick filter reaching
-    /// past the folder on screen, rather than a search set up in the search
-    /// window.
+    /// The pass that owns the list right now is the live filter - name and
+    /// type - reaching past the folder on screen, rather than a search
+    /// inside files.
     ///
     /// <para>
     /// The owner shows the two differently. A search replaces the list; this
@@ -360,7 +408,7 @@ public sealed class ContentSearchController : ObservableObject {
         }
 
         var name = NameFilter.Parse(_nameQuery);
-        if (name.IsEmpty && _textQuery.Length == 0) {
+        if (name.IsEmpty && _type.IsEmpty && _textQuery.Length == 0) {
             return;
         }
 
@@ -378,19 +426,13 @@ public sealed class ContentSearchController : ObservableObject {
         }
 
         // Shallow criteria mean the live filter has already answered for
-        // the folder on screen. What the toolbar box starts here is the
-        // continuation of that answer: the same mask, under the same
-        // folder. The window's own shallow search has nothing to add — the
-        // filter already showed it — so it does not run at all.
-        bool filterPass = !IsDeep && _fromFilterBox;
-        if (!IsDeep && !filterPass) {
+        // the folder on screen. What starts here is the continuation of that
+        // answer: the same mask and type, under the same folder - and with
+        // the subfolders switched off there is nothing to continue.
+        bool filterPass = !IsDeep;
+        if (filterPass && _scope == SearchScope.CurrentFolder) {
             return;
         }
-
-        // The box reaches past the folder with text too: "*.cs:word" typed
-        // at a project's root found nothing when the .cs files were all in
-        // subfolders. The window's checkbox speaks for the window only.
-        var scope = _fromFilterBox ? SearchScope.Subfolders : _scope;
 
         Cancel();
         _cts = new CancellationTokenSource();
@@ -404,7 +446,7 @@ public sealed class ContentSearchController : ObservableObject {
         State = SearchState.Running;
 
         var request = new SearchRequest(
-            name, _textQuery, root, scope, _searchBinaries, _visibility());
+            name, _textQuery, root, _scope, _searchBinaries, _visibility()) { Type = _type };
 
         Started?.Invoke();
         _ = RunAsync(request, token, generation);
@@ -463,37 +505,34 @@ public sealed class ContentSearchController : ObservableObject {
 
 
     /// <summary>
-    /// Everything a search is, back to nothing — text, area, the binaries
+    /// Everything a search is, back to nothing - text, type, the binaries
     /// switch. Called when the user walks into another folder.
     ///
     /// <para>
-    /// The flags go too, and that is the point. A ticked "search
-    /// subfolders" used to survive both navigation and the window being
-    /// closed, and while it was on, every keystroke in the box was a disk
-    /// walk rather than a filter — so the box quietly stopped narrowing the
-    /// folder and nothing on screen explained why. A search belongs to the
-    /// folder it was set up in.
+    /// The binaries flag goes too, and that is the point: it lives in the
+    /// window, and a switch in a closed window that keeps changing what the
+    /// box finds is one nothing on screen explains. A search belongs to the
+    /// folder it was set up in. The subfolders switch stays - it is on
+    /// screen beside the box (<see cref="SearchSubfolders"/>).
     /// </para>
     /// </summary>
     public void Reset() {
         _searchBinaries = false;
         Raise(nameof(SearchBinaries));
-
-        // Through the property, so the scope change raises what the window
-        // binds to; its own OnCriteriaChanged is harmless with both fields
-        // already empty.
         Clear();
-        Scope = SearchScope.CurrentFolder;
         Raise(nameof(HasNonDefaultOptions));
     }
 
 
-    /// <summary>Empties both fields and leaves results. What the clear button and Esc do.</summary>
+    /// <summary>Empties the criteria and leaves results. What the clear button and Esc do.</summary>
     public void Clear() {
         _nameQuery = "";
+        _typeQuery = "";
+        _type = TypeFilter.None;
         _textQuery = "";
         _filterText = "";
         Raise(nameof(NameQuery));
+        Raise(nameof(TypeGroup));
         Raise(nameof(TextQuery));
         Raise(nameof(FilterText));
         Raise(nameof(IsDeep));
@@ -517,7 +556,7 @@ public sealed class ContentSearchController : ObservableObject {
     /// re-formatting it there is what ate the colon.
     /// </summary>
     private void SyncFilterText() {
-        _filterText = SearchExpression.Format(_nameQuery, _textQuery);
+        _filterText = SearchExpression.Format(SearchExpression.JoinType(_nameQuery, _typeQuery), _textQuery);
         Raise(nameof(FilterText));
     }
 
@@ -526,9 +565,7 @@ public sealed class ContentSearchController : ObservableObject {
     /// A criterion moved. Decides between "start the clock", "start now"
     /// and "this is not our business at all".
     /// </summary>
-    private void OnCriteriaChanged(bool immediate, bool fromFilterBox = false) {
-        _fromFilterBox = fromFilterBox;
-
+    private void OnCriteriaChanged(bool immediate) {
         // A walk whose answer nobody wants any more is wasted disk, and a
         // pass left running would land on top of the new criteria's state.
         Cancel();
@@ -548,7 +585,7 @@ public sealed class ContentSearchController : ObservableObject {
 
         ShallowChanged?.Invoke();
 
-        if (NameFilter.Parse(_nameQuery).IsEmpty && _textQuery.Length == 0) {
+        if (NameFilter.Parse(_nameQuery).IsEmpty && _type.IsEmpty && _textQuery.Length == 0) {
             if (IsShowingResults) {
                 ExitResults();
             }
@@ -563,16 +600,16 @@ public sealed class ContentSearchController : ObservableObject {
         }
 
         if (!IsDeep) {
-            // Shallow and not from the box: the live filter is the whole
-            // answer, and there is nothing left to walk for.
-            if (!fromFilterBox) {
+            // Shallow with the subfolders off: the live filter is the
+            // whole answer, and there is nothing left to walk for.
+            if (_scope == SearchScope.CurrentFolder) {
                 return;
             }
 
             // The floor guards the automatic walk only. One character
             // matches most of a disk, and the walk it starts is wasted
-            // before it begins.
-            if (_nameQuery.Length < MinAutoRunLength) {
+            // before it begins; a type is a fraction of one.
+            if (_type.IsEmpty && _nameQuery.Length < MinAutoRunLength) {
                 return;
             }
         }

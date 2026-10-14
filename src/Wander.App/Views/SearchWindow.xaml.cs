@@ -87,6 +87,11 @@ public partial class SearchWindow : Window {
 
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e) {
+        // An open type list takes its own Enter and Esc: pick, or close it.
+        if (TypeBox.IsDropDownOpen) {
+            return;
+        }
+
         // Esc closes the window and leaves whatever is on screen alone;
         // clearing is a button, because a key that both closed the window
         // and threw away the results would be one keystroke doing two

@@ -28,6 +28,7 @@ namespace Wander.Core.Listing;
 public sealed class SearchController : INotifyPropertyChanged {
     private string _query = "";
     private NameFilter _name = NameFilter.Empty;
+    private TypeFilter _type = TypeFilter.None;
     private RatingFilter _rating = RatingFilter.None;
     private IReadOnlyList<FileSystemEntry> _source = Array.Empty<FileSystemEntry>();
     private CancellationTokenSource? _cts;
@@ -72,23 +73,14 @@ public sealed class SearchController : INotifyPropertyChanged {
     /// </summary>
     public string Query {
         get => _query;
-        set {
-            value ??= "";
-            if (_query == value) {
-                return;
-            }
-            _query = value;
-            // Parsed here rather than in the loop: the mask is re-read on
-            // every keystroke and applied to every row of the folder.
-            _name = NameFilter.Parse(value);
-            _rearranged = true;
-            Raise();
-            Raise(nameof(HasQuery));
-            _ = ApplyAsync();
-        }
+        set => Filter(value, _type);
     }
 
-    public bool HasQuery => _query.Length > 0;
+    /// <summary>The kind of file the rows have to be - the box's <c>/тип</c>. Set with <see cref="Filter"/>.</summary>
+    public TypeFilter Type => _type;
+
+    /// <summary>True when the name or the type narrows the list.</summary>
+    public bool HasQuery => _query.Length > 0 || !_type.IsEmpty;
 
     /// <summary>
     /// Stars and colour label the rows have to carry. Lives here rather
@@ -133,6 +125,37 @@ public sealed class SearchController : INotifyPropertyChanged {
     }
 
     /// <summary>
+    /// The name and the type together, in one pass. Set one after the
+    /// other, the first would publish a projection the second replaces at
+    /// once: going from "x" to "/images", the whole folder flashed up
+    /// between the two. Same fire-and-forget as <see cref="Query"/>.
+    /// </summary>
+    public void Filter(string? query, TypeFilter? type) {
+        query ??= "";
+        type ??= TypeFilter.None;
+        bool queryChanged = _query != query;
+        bool typeChanged = _type != type;
+        if (!queryChanged && !typeChanged) {
+            return;
+        }
+
+        if (queryChanged) {
+            _query = query;
+            // Parsed here rather than in the loop: the mask is re-read on
+            // every keystroke and applied to every row of the folder.
+            _name = NameFilter.Parse(query);
+            Raise(nameof(Query));
+        }
+        if (typeChanged) {
+            _type = type;
+            Raise(nameof(Type));
+        }
+        _rearranged = true;
+        Raise(nameof(HasQuery));
+        _ = ApplyAsync();
+    }
+
+    /// <summary>
     /// Silently clear the query without firing a refilter — used when the
     /// folder changes (the next <see cref="SetSource"/> immediately reapplies
     /// the empty filter, and we'd otherwise race against a stale pass).
@@ -141,10 +164,12 @@ public sealed class SearchController : INotifyPropertyChanged {
     public void Reset(RatingFilter? rating = null) {
         _cts?.Cancel();
         _rearranged = false;
-        if (_query.Length > 0) {
+        if (HasQuery) {
             _query = "";
             _name = NameFilter.Empty;
+            _type = TypeFilter.None;
             Raise(nameof(Query));
+            Raise(nameof(Type));
             Raise(nameof(HasQuery));
         }
         rating ??= RatingFilter.None;
@@ -214,7 +239,7 @@ public sealed class SearchController : INotifyPropertyChanged {
 
     /// <summary>Whether one row survives the current filters. Cheap enough to run inline.</summary>
     private bool Passes(FileSystemEntry entry) {
-        if (!_name.Matches(entry.Name)) {
+        if (!_name.Matches(entry.Name) || !_type.Matches(entry)) {
             return false;
         }
 
@@ -231,10 +256,11 @@ public sealed class SearchController : INotifyPropertyChanged {
         // Snapshot the inputs so a Refresh / new keystroke mid-flight cannot
         // race us — we either complete with these inputs or get cancelled.
         var name = _name;
+        var type = _type;
         var rating = _rating;
         var source = _source;
 
-        if (name.IsEmpty && !rating.IsActive) {
+        if (name.IsEmpty && type.IsEmpty && !rating.IsActive) {
             Publish(source);
             return;
         }
@@ -245,7 +271,7 @@ public sealed class SearchController : INotifyPropertyChanged {
                 var result = new List<FileSystemEntry>();
                 foreach (var e in source) {
                     token.ThrowIfCancellationRequested();
-                    if (!name.Matches(e.Name)) {
+                    if (!name.Matches(e.Name) || !type.Matches(e)) {
                         continue;
                     }
                     // Folders are never filtered out by a rating: a folder

@@ -310,7 +310,7 @@
     <value>Exit</value>
   </data>
   <data name="SearchHint" xml:space="preserve">
-    <value>Search by name or content: name, or name:text (Ctrl+F). Search window: Ctrl+Shift+F. Esc to clear</value>
+    <value>Search by name or content: name, name /type, name:text (Ctrl+F). Search window: Ctrl+Shift+F. Esc to clear</value>
   </data>
   <data name="SearchPlaceholder" xml:space="preserve">
     <value>Search by name or content</value>
@@ -1403,6 +1403,12 @@
   </data>
   <data name="SearchFieldFolder" xml:space="preserve">
     <value>Folder</value>
+  </data>
+  <data name="SearchFieldType" xml:space="preserve">
+    <value>Type</value>
+  </data>
+  <data name="SearchFieldTypeHint" xml:space="preserve">
+    <value>In the box above the list, after a slash: /img, /doc, holiday /vid</value>
   </data>
   <data name="MenuAbout" xml:space="preserve">
     <value>About Wander</value>

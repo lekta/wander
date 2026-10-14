@@ -126,6 +126,76 @@
         </Style>
 
         <!--
+            The switch beside the filter field: walk into subfolders
+            (2026-10-14). Drawn, not typed: a branch with two folders on
+            it, 13 inside 22 so it does not stand out from the field. Off
+            it is as faint as the field's placeholder; on, the field's glyph
+            grey on the checked fill - no accent, the strip has none. Not a
+            Tab stop, as the glyphs inside the field are not.
+        -->
+        <StreamGeometry x:Key="SubfoldersShape">M2,1 V9.5 H5 M2,3.5 H5 M5,1.5 H7.3 L8.1,2.3 H12 V5.5 H5 Z M5,7.5 H7.3 L8.1,8.3 H12 V11.5 H5 Z</StreamGeometry>
+        <Style x:Key="SubfoldersToggle" TargetType="ToggleButton">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Width" Value="22"/>
+            <Setter Property="Height" Value="22"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPlaceholder}"/>
+            <Setter Property="AutomationProperties.Name" Value="{Binding ToolTip, RelativeSource={RelativeSource Self}, TargetNullValue=''}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="3" SnapsToDevicePixels="True">
+                            <Path Width="13" Height="13" Data="{StaticResource SubfoldersShape}"
+                                  Stroke="{TemplateBinding Foreground}" StrokeThickness="1.1"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ControlHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ControlChecked}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextMuted}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!--
+            A row of the type list under the filter field. Lit as the
+            selection of a focused list: the keyboard stays in the field,
+            and the stock item would draw the pick as an inactive grey.
+        -->
+        <Style x:Key="TypeListItem" TargetType="ListBoxItem">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Padding" Value="6,2"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" Padding="{TemplateBinding Padding}"
+                                Background="Transparent" BorderBrush="Transparent" BorderThickness="1"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ItemHover}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource ItemHoverBorder}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ItemSelected}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource ItemSelectedBorder}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!--
             Inline rename (A3) has no element in the row templates any more:
             the editor is one TextBox for the whole control, laid over the
             name label of the row being renamed (RenameAdorner, see the
@@ -542,12 +612,37 @@
                     looks like one control, and the TextBox's right padding
                     is what keeps the caret out from under them.
                 -->
-                <Grid DockPanel.Dock="Right" Width="220" VerticalAlignment="Center" Margin="12,0,0,0">
+                <Grid DockPanel.Dock="Right" Width="220" VerticalAlignment="Center" Margin="2,0,0,0">
                     <TextBox x:Name="SearchBox"
                              Padding="6,4,48,4"
                              Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
                              ToolTip="{x:Static res:Strings.SearchHint}"
-                             PreviewKeyDown="SearchBox_PreviewKeyDown"/>
+                             PreviewKeyDown="SearchBox_PreviewKeyDown"
+                             TextChanged="SearchBox_TextChanged"
+                             SelectionChanged="SearchBox_SelectionChanged"
+                             LostKeyboardFocus="SearchBox_LostKeyboardFocus"/>
+                    <!--
+                        The groups a "/type" can name, under the field while
+                        the caret is in the type word. The keyboard stays in
+                        the field (arrows, Enter, Tab, Esc - see the
+                        code-behind); a click picks too.
+                    -->
+                    <Popup x:Name="TypePopup" PlacementTarget="{Binding ElementName=SearchBox}" Placement="Bottom"
+                           StaysOpen="True" AllowsTransparency="True" Focusable="False">
+                        <Border Background="{DynamicResource InputBackground}" BorderBrush="{DynamicResource InputBorder}" BorderThickness="1"
+                                MinWidth="{Binding ActualWidth, ElementName=SearchBox}">
+                            <!-- "img (images)": the keyword a pick writes, the name it can also be typed by. -->
+                            <ListBox x:Name="TypeList" Focusable="False" BorderThickness="0" Background="Transparent"
+                                     ItemContainerStyle="{StaticResource TypeListItem}"
+                                     PreviewMouseLeftButtonDown="TypeList_PreviewMouseLeftButtonDown">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock><Run Text="{Binding Keyword, Mode=OneWay}"/> <Run Text="{Binding Name, Mode=OneWay, StringFormat='({0})'}" Foreground="{DynamicResource TextMuted}"/></TextBlock>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Border>
+                    </Popup>
                     <!-- Only the "more" glyph is up while the box is empty: the placeholder runs under where the other two would be. -->
                     <TextBlock Text="{x:Static res:Strings.SearchPlaceholder}"
                                Foreground="{DynamicResource TextPlaceholder}"
@@ -598,11 +693,11 @@
                             </Button.Style>
                         </Button>
                         <!--
-                            Marked when the search window holds something other
-                            than the two text criteria — subfolders, the whole
-                            machine, binaries. Those do not fit in the box's own
-                            text, and a list narrowed by a switch set in a window
-                            that is now closed has to say so somewhere.
+                            Marked when the search window holds a switch the box
+                            does not show - binaries. It does not fit in the
+                            box's own text, and a list narrowed by a switch set
+                            in a window that is now closed has to say so
+                            somewhere.
                         -->
                         <Button Content="&#x22EE;"
                                 FontSize="13"
@@ -621,6 +716,12 @@
                         </Button>
                     </StackPanel>
                 </Grid>
+
+                <!-- Walk into subfolders: the field's own switch, at its left. -->
+                <ToggleButton DockPanel.Dock="Right" Margin="12,0,0,0"
+                              Style="{StaticResource SubfoldersToggle}"
+                              IsChecked="{Binding ContentSearch.SearchSubfolders}"
+                              ToolTip="{x:Static res:Strings.SearchScopeSubfolders}"/>
 
                 <!-- Background switcher, left of the filter field: it belongs
                      to the view, not to the folder, so it stays out of the

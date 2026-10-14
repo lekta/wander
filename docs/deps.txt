@@ -1,11 +1,11 @@
 === Wander dependency graph (using sweep) ===
-date   : 2026-10-13
-commit : 89dc107
+date   : 2026-10-14
+commit : d368d2d
 
 -- projects --
 Wander.App -> Wander.Core   (77 files)
 Wander.App -> Wander.Platform.Windows   (1 files)
-Wander.Core.Tests -> Wander.Core   (176 files)
+Wander.Core.Tests -> Wander.Core   (177 files)
 Wander.Harness -> Wander.App   (4 files)
 Wander.Harness -> Wander.Core   (7 files)
 Wander.Harness -> Wander.Platform.Windows   (3 files)
@@ -57,7 +57,9 @@ Wander.Platform.Windows -> Wander.Core   (41 files)
   Preview        -> Imaging        (1 files)
   Rename         -> Companions     (1 files)
   Rename         -> FileSystem     (2 files)
-  Search         -> FileSystem     (5 files)
+  Search         -> Actions        (1 files)
+  Search         -> FileSystem     (6 files)
+  Search         -> Localization   (1 files)
   Search         -> Logging        (1 files)
   Search         -> Preview        (1 files)
   Shell          -> FileSystem     (3 files)
@@ -80,8 +82,8 @@ Wander.Platform.Windows -> Wander.Core   (41 files)
   1: Diagnostics, Icons, Undo
   2: FileSystem
   3: Companions, Folders, Navigation, Preview
-  4: Actions, Rename, Search
-  5: Persistence
+  4: Actions, Rename
+  5: Persistence, Search
   6: Listing, Shell
   7: Menu
   8: Workspace

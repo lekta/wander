@@ -690,6 +690,12 @@ public sealed class MainViewModel : ObservableObject {
                 Preview.MediaVolume = PreviewSecond.MediaVolume;
             }
         };
+        // The subfolders switch beside the search box, kept between sessions.
+        ContentSearch.PropertyChanged += (_, e) => {
+            if (e.PropertyName == nameof(ContentSearchController.SearchSubfolders)) {
+                SaveState();
+            }
+        };
         Workspace.StateChanged += (before, after) => {
             if (!ReferenceEquals(before.Drives.Expanded, after.Drives.Expanded)
                 || !ReferenceEquals(before.Bookmarks.Expanded, after.Bookmarks.Expanded)) {
@@ -1372,7 +1378,9 @@ public sealed class MainViewModel : ObservableObject {
         set => ContentSearch.FilterText = value;
     }
 
-    public bool HasSearchQuery => ContentSearch.NameQuery.Length > 0 || ContentSearch.TextQuery.Length > 0;
+    // The box's text, not the criteria: a lone "/" or ":" asks for nothing
+    // yet, but the placeholder must not be drawn over it.
+    public bool HasSearchQuery => ContentSearch.FilterText.Length > 0;
 
     /// <summary>
     /// The deep half of search — subfolders, file contents, the system
@@ -2300,6 +2308,7 @@ public sealed class MainViewModel : ObservableObject {
         Raise(nameof(IsFoldersVisible));
         Preview.MediaVolume = session.MediaVolume;
         PreviewSecond.MediaVolume = session.MediaVolume;
+        ContentSearch.SearchSubfolders = session.SearchSubfolders;
         // Not applied here: what a saved pane size means depends on the
         // window it was saved from and the one it is coming back into, and
         // there is no window yet - the constructor runs before it exists.
@@ -2509,6 +2518,7 @@ public sealed class MainViewModel : ObservableObject {
                 IsDrivesExpanded = _isDrivesExpanded,
                 RecentPaths = _nav.RecentPaths.ToArray(),
                 MediaVolume = Preview.MediaVolume,
+                SearchSubfolders = ContentSearch.SearchSubfolders,
             },
             Favorites = Bookmarks.Paths.ToArray(),
             Settings = Settings.ToRecord(),
@@ -3665,7 +3675,7 @@ public sealed class MainViewModel : ObservableObject {
             SetStatusQuietly(string.Format(Strings.StatusRatingFilterMatches, shown, total));
         } else if (_search.HasQuery) {
             SetStatusQuietly(total > 0
-                ? string.Format(Strings.StatusFilterMatches, shown, total, _search.Query)
+                ? string.Format(Strings.StatusFilterMatches, shown, total, SearchQuery)
                 : string.Format(Strings.StatusItems, shown));
         } else if (_hiddenCount > 0) {
             SetStatusQuietly(string.Format(Strings.StatusItemsWithHidden, shown, _hiddenCount));
@@ -3774,11 +3784,13 @@ public sealed class MainViewModel : ObservableObject {
     /// screen.
     /// </summary>
     private void SyncLiveFilter() {
-        // The live filter only ever gets the name half: the box may read
-        // "*.cs:budget", but a filter over the folder on screen has no way
-        // to honour the second half, and pretending otherwise would narrow
-        // the list by a rule it is not applying.
-        _search.Query = ContentSearch.IsDeep ? "" : ContentSearch.NameQuery;
+        // The live filter only ever gets the name half - mask and type: the
+        // box may read "*.cs:budget", but a filter over the folder on screen
+        // has no way to honour the second half, and pretending otherwise
+        // would narrow the list by a rule it is not applying.
+        _search.Filter(
+            ContentSearch.IsDeep ? "" : ContentSearch.NameQuery,
+            ContentSearch.IsDeep ? TypeFilter.None : ContentSearch.Type);
         Raise(nameof(SearchQuery));
         Raise(nameof(HasSearchQuery));
     }

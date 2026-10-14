@@ -232,6 +232,12 @@ public sealed record SessionState {
     /// what every file played at before there was a slider.
     /// </summary>
     public double MediaVolume { get; init; } = 0.5;
+
+    /// <summary>
+    /// The switch beside the search box: walk into subfolders (2026-10-14).
+    /// On by default - the box always did before there was a switch.
+    /// </summary>
+    public bool SearchSubfolders { get; init; } = true;
 }
 
 

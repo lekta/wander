@@ -25,10 +25,20 @@ namespace Wander.Core.Search;
 /// No colon at all means "all of it is a name mask" — that is what the
 /// box has always done, and typing a word into it still filters by name.
 /// </para>
+///
+/// <para>
+/// The name half has a half of its own: <c>маска /тип</c>, a group of
+/// files after a slash - <c>/изображения</c>, <c>отпуск /видео</c>. The
+/// slash is forbidden in names too, so it never needs escaping either; it
+/// is looked for before the colon only, which keeps <c>:a/b</c> text.
+/// </para>
 /// </summary>
 public static class SearchExpression {
     /// <summary>Separates the name mask from the text. Illegal in file names, so unambiguous.</summary>
     public const char Separator = ':';
+
+    /// <summary>Separates the type from the name mask, in the name half. Illegal in file names as well.</summary>
+    public const char TypeSeparator = '/';
 
 
     /// <summary>Splits one line into the two criteria.</summary>
@@ -55,5 +65,66 @@ public static class SearchExpression {
         text ??= "";
 
         return text.Length == 0 ? name : name + Separator + text;
+    }
+
+
+    /// <summary>
+    /// Splits the name half into the mask and the type word, both
+    /// trimmed: the space a reader puts before the slash is not part of
+    /// the mask.
+    /// </summary>
+    public static (string Name, string Type) SplitType(string? head) {
+        if (string.IsNullOrEmpty(head)) {
+            return ("", "");
+        }
+
+        int at = head.IndexOf(TypeSeparator);
+
+        return at < 0
+            ? (head, "")
+            : (head[..at].TrimEnd(), head[(at + 1)..].Trim());
+    }
+
+
+    /// <summary>The name half from the mask and the type word: the slash only when there is a type.</summary>
+    public static string JoinType(string? name, string? type) {
+        name ??= "";
+        if (string.IsNullOrEmpty(type)) {
+            return name;
+        }
+
+        return name.Length == 0 ? TypeSeparator + type : name + " " + TypeSeparator + type;
+    }
+
+
+    /// <summary>
+    /// Where the type word sits in the line: from past the slash to the
+    /// colon, or to the end. Null without a slash in the name half. What
+    /// the box's list of types is opened for, and what a pick replaces.
+    /// </summary>
+    public static (int Start, int End)? TypeSpan(string? expression) {
+        if (string.IsNullOrEmpty(expression)) {
+            return null;
+        }
+
+        int colon = expression.IndexOf(Separator);
+        int head = colon < 0 ? expression.Length : colon;
+        int slash = expression.IndexOf(TypeSeparator, 0, head);
+
+        return slash < 0 ? null : (slash + 1, head);
+    }
+
+
+    /// <summary>
+    /// The line with its type word replaced by <paramref name="type"/>, and
+    /// where the caret goes - right after it. The line as it was without a
+    /// type word to replace.
+    /// </summary>
+    public static (string Text, int Caret) WithType(string expression, string type) {
+        if (TypeSpan(expression) is not { } span) {
+            return (expression, expression.Length);
+        }
+
+        return (expression[..span.Start] + type + expression[span.End..], span.Start + type.Length);
     }
 }

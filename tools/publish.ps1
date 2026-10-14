@@ -63,9 +63,12 @@ $exe = Join-Path $outDir 'Wander.exe'
 $hash = (Get-FileHash $exe -Algorithm SHA256).Hash
 $size = [math]::Round((Get-Item $exe).Length / 1MB, 1)
 $version = (Get-Item $exe).VersionInfo.ProductVersion
+# When it was built: Rider's terminal keeps no times, and "did I publish
+# after that fix" is otherwise unanswerable from the scrollback.
+$stamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
 
 Write-Host ""
-Write-Host "OK  -> $exe  (${size} MB, $version)" -ForegroundColor Green
+Write-Host "OK  -> $exe  (${size} MB, $version)  $stamp" -ForegroundColor Green
 Write-Host "SHA256: $hash"
 
 $toRun = $exe
@@ -90,7 +93,7 @@ if ($Install) {
     }
     Copy-Item -Path $exe -Destination $target -Force
 
-    Write-Host "Installed -> $target" -ForegroundColor Green
+    Write-Host "Installed -> $target  $stamp" -ForegroundColor Green
     $toRun = $target
 }
 

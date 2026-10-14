@@ -116,7 +116,9 @@ public sealed class ContentSearchService {
         // "Everything, anywhere" is not a search, it is a mistake with a
         // five-thousand-row result. The callers all guard against it; this
         // is the guard that does not depend on them remembering.
-        if (request.IsEmpty) {
+        // A type word that names nothing lets nothing through, and walking
+        // the tree to prove it is a disk read for an answer known now.
+        if (request.IsEmpty || request.Type.Group is null) {
             return new SearchOutcome(0, 0, false, 0);
         }
 
@@ -162,7 +164,7 @@ public sealed class ContentSearchService {
                 // A folder has no contents, so a search that asks for
                 // text cannot be satisfied by one. Asking for a name only
                 // — it can.
-                if (!request.HasText && request.Name.Matches(entry.Name)) {
+                if (!request.HasText && request.Name.Matches(entry.Name) && request.Type.Matches(entry)) {
                     hits.Add(new SearchHit(entry, null, 0));
                 }
                 if (request.Scope == SearchScope.Subfolders
@@ -193,7 +195,7 @@ public sealed class ContentSearchService {
         }
 
         _log.Info(
-            $"Search name '{request.Name.Text}' text '{request.Text}' in {request.Root} " +
+            $"Search name '{request.Name.Text}' type {request.Type.Group} text '{request.Text}' in {request.Root} " +
             $"({request.Scope}, binaries: {request.SearchBinaries}): " +
             $"{found} hits, {counters.Scanned} files scanned, {counters.Unreadable} unreadable" +
             (truncated ? ", truncated" : ""));
@@ -228,9 +230,10 @@ public sealed class ContentSearchService {
         Parallel.For(0, files.Count, options, i => {
             var entry = files[i];
 
-            // The mask is a gate. Rejected here, the file is never opened
-            // and never counted as scanned — it was not a candidate.
-            if (!request.Name.Matches(entry.Name)) {
+            // The mask and the type are gates. Rejected here, the file is
+            // never opened and never counted as scanned - it was not a
+            // candidate.
+            if (!request.Name.Matches(entry.Name) || !request.Type.Matches(entry)) {
                 return;
             }
 

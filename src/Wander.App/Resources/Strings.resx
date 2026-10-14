@@ -346,7 +346,7 @@
     <value>Выход</value>
   </data>
   <data name="SearchHint" xml:space="preserve">
-    <value>Поиск по имени/содержимому: имя, либо имя:текст (Ctrl+F). Окно поиска — Ctrl+Shift+F. Esc — сбросить</value>
+    <value>Поиск по имени/содержимому: имя, имя /тип, имя:текст (Ctrl+F). Окно поиска — Ctrl+Shift+F. Esc — сбросить</value>
   </data>
   <data name="SearchPlaceholder" xml:space="preserve">
     <value>Поиск по имени/содержимому</value>
@@ -1541,6 +1541,12 @@
   </data>
   <data name="SearchFieldFolder" xml:space="preserve">
     <value>Папка</value>
+  </data>
+  <data name="SearchFieldType" xml:space="preserve">
+    <value>Тип</value>
+  </data>
+  <data name="SearchFieldTypeHint" xml:space="preserve">
+    <value>В поле над списком — после косой черты: /img, /doc, отпуск /vid</value>
   </data>
   <data name="MenuAbout" xml:space="preserve">
     <value>О Wander</value>

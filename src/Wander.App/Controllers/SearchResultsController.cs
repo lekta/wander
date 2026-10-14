@@ -299,7 +299,8 @@ public sealed class SearchResultsController {
     /// claim from "3 файла *.docx со словом «отчёт»".
     /// </summary>
     private string Describe() {
-        string name = _search.NameQuery;
+        // The type goes with the name, as the box writes it: "отпуск /видео".
+        string name = SearchExpression.JoinType(_search.NameQuery, _search.TypeQuery);
         string text = _search.TextQuery;
 
         if (name.Length > 0 && text.Length > 0) {

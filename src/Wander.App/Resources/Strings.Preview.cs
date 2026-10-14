@@ -183,7 +183,7 @@ public static partial class Strings {
     /// <summary>Устройство не готово</summary>
     public static string PreviewVolumeNotReady => Get(nameof(PreviewVolumeNotReady));
 
-    /// <summary>Поиск по имени/содержимому: имя, либо имя:текст (Ctrl+F). Окно поиска — Ctrl+Shift+F. Esc — сбросить</summary>
+    /// <summary>Поиск по имени/содержимому: имя, имя /тип, имя:текст (Ctrl+F). Окно поиска — Ctrl+Shift+F. Esc — сбросить</summary>
     public static string SearchHint => Get(nameof(SearchHint));
 
     /// <summary>Поиск по имени/содержимому</summary>
@@ -252,6 +252,12 @@ public static partial class Strings {
 
     /// <summary>Папка</summary>
     public static string SearchFieldFolder => Get(nameof(SearchFieldFolder));
+
+    /// <summary>Тип</summary>
+    public static string SearchFieldType => Get(nameof(SearchFieldType));
+
+    /// <summary>В поле над списком — после косой черты: /img, /doc, отпуск /vid</summary>
+    public static string SearchFieldTypeHint => Get(nameof(SearchFieldTypeHint));
 
     /// <summary>… показано начало файла, всего {0}</summary>
     public static string PreviewClipped => Get(nameof(PreviewClipped));

@@ -1,6 +1,8 @@
+using Wander.Core.Actions;
 using Wander.Core.Companions;
 using Wander.Core.FileSystem;
 using Wander.Core.Listing;
+using Wander.Core.Search;
 
 namespace Wander.Core.Tests;
 
@@ -105,6 +107,57 @@ public class SearchControllerTests {
         sc.Query = "";
         var result = await cleared;
         Assert.Equal(new[] { _apple, _banana }, result);
+    }
+
+
+    // --- Type ----------------------------------------------------------
+
+    [Fact]
+    public async Task Filter_NameAndType_BothApply_FoldersAreNotOfAType() {
+        var photo = Entry("apple.jpg");
+        var folder = Entry("apple.png") with { Kind = EntryKind.Directory };
+        var sc = new SearchController();
+        sc.SetSource(new[] { _apple, photo, Entry("pear.png"), folder });
+
+        var next = WaitForNextFilteredAsync(sc);
+        sc.Filter("apple", TypeFilter.Of(FileTypeGroup.Images));
+
+        Assert.Equal(new[] { photo }, await next);
+        Assert.True(sc.HasQuery);
+    }
+
+
+    [Fact]
+    public async Task Filter_NameToType_DoesNotFlashTheWholeFolder() {
+        // Set one after the other, clearing the name first published the
+        // folder unfiltered on the spot, and the type's pass replaced it a
+        // moment later.
+        var photo = Entry("pear.jpg");
+        var sc = new SearchController();
+        var initial = WaitForNextFilteredAsync(sc);
+        sc.SetSource(new[] { _apple, photo });
+        await initial;
+        var named = WaitForNextFilteredAsync(sc);
+        sc.Query = "apple";
+        await named;
+
+        var next = WaitForNextFilteredAsync(sc);
+        sc.Filter("", TypeFilter.Of(FileTypeGroup.Images));
+
+        Assert.Equal(new[] { photo }, await next);
+    }
+
+
+    [Fact]
+    public void Reset_DropsTheType() {
+        var sc = new SearchController();
+        sc.Filter("", TypeFilter.Of(FileTypeGroup.Images));
+        Assert.True(sc.HasQuery);
+
+        sc.Reset();
+
+        Assert.Same(TypeFilter.None, sc.Type);
+        Assert.False(sc.HasQuery);
     }
 
 
