@@ -69,8 +69,35 @@
   <data name="PreviewUnsupported" xml:space="preserve">
     <value>No preview available for this file</value>
   </data>
-  <data name="PreviewNeedsHeif" xml:space="preserve">
-    <value>To open HEIC and HEIF, Windows needs the free “HEIF Image Extensions” add-on from the Microsoft Store</value>
+  <data name="PreviewNeedsCodec" xml:space="preserve">
+    <value>To open {0}, Windows needs the free “{1}” add-on from the Microsoft Store</value>
+  </data>
+  <data name="PreviewMediaNeedsCodec" xml:space="preserve">
+    <value>To play {0}, Windows needs the free “{1}” add-on from the Microsoft Store</value>
+  </data>
+  <data name="PreviewStoreHeif" xml:space="preserve">
+    <value>HEIF Image Extensions</value>
+  </data>
+  <data name="PreviewStoreAv1" xml:space="preserve">
+    <value>AV1 Video Extension</value>
+  </data>
+  <data name="PreviewStoreJpegXl" xml:space="preserve">
+    <value>JPEG XL Image Extension</value>
+  </data>
+  <data name="PreviewStoreWebp" xml:space="preserve">
+    <value>WebP Image Extension</value>
+  </data>
+  <data name="PreviewStoreRaw" xml:space="preserve">
+    <value>Raw Image Extension</value>
+  </data>
+  <data name="PreviewStoreVp9" xml:space="preserve">
+    <value>VP9 Video Extensions</value>
+  </data>
+  <data name="PreviewStoreMpeg2" xml:space="preserve">
+    <value>MPEG-2 Video Extension</value>
+  </data>
+  <data name="PreviewStoreWebMedia" xml:space="preserve">
+    <value>Web Media Extensions</value>
   </data>
   <data name="PreviewNeedsHevc" xml:space="preserve">
     <value>HEIC photos use the HEVC codec: Windows needs the “HEVC Video Extensions” add-on from the Microsoft Store (paid, but many PCs already have it from the manufacturer)</value>

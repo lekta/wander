@@ -1652,7 +1652,7 @@ public partial class PreviewPane : UserControl {
     /// Ogg: the codecs from the Microsoft Store are invisible to it) or a
     /// damaged file. The system's player takes it over; when it fails too,
     /// the controller turns the pane into the reason why
-    /// (<see cref="PreviewController.ReportUnplayable"/>), with no
+    /// (<see cref="PreviewController.ReportUnplayableAsync"/>), with no
     /// transport left to press.
     /// </summary>
     private void PlayWithSystem() {
@@ -1666,7 +1666,7 @@ public partial class PreviewPane : UserControl {
             _system = new SystemPlayer(Dispatcher);
             _system.Opened += SystemMediaOpened;
             _system.Ended += MediaEnded;
-            _system.Failed += () => Controller.ReportUnplayable(_mediaUri);
+            _system.Failed += () => _ = Controller.ReportUnplayableAsync(_mediaUri);
             _system.FrameChanged += () => SystemVideo.Source = _system.Frame;
         }
         _transportIsSystem = true;

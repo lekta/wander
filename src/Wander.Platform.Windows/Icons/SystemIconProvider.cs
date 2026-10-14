@@ -204,7 +204,11 @@ public sealed class SystemIconProvider : IIconProvider {
                 }
             } else {
                 Remember(key, bytes, perPath, path);
-                if (cacheable) {
+                // The type's icon drawn for want of a Store extension stays
+                // off the disk: the extension installed, it would go on
+                // being found there. A RAW is drawn from its own JPEG,
+                // extension or not.
+                if (cacheable && (ImageFormats.IsRaw(path) || !LacksCodec(path))) {
                     using (PerfLog.Measure("bg.thumb-disk-write")) {
                         _disk!.Write(path, bytes);
                     }
@@ -635,7 +639,7 @@ public sealed class SystemIconProvider : IIconProvider {
             return psdThumb;
         }
 
-        using Bitmap? bmp = LoadShellBitmap(source, MediumSize);
+        using Bitmap? bmp = LacksCodec(source) ? null : LoadShellBitmap(source, MediumSize);
         if (bmp is null) {
             return LoadShellIcon(path, IconSize.Normal);
         }
@@ -1127,7 +1131,7 @@ public sealed class SystemIconProvider : IIconProvider {
             return psdThumb;
         }
 
-        Bitmap? baseBmp = IsThumbnailable(source)
+        Bitmap? baseBmp = IsThumbnailable(source) && !LacksCodec(source)
             ? LoadShellBitmap(source, side)
             : LoadIconBitmapJumbo(path);
 
@@ -1224,6 +1228,20 @@ public sealed class SystemIconProvider : IIconProvider {
         }
 
         return _thumbnailableExtensions.Contains(Path.GetExtension(path));
+    }
+
+
+    /// <summary>
+    /// Windows lacks the Store extension this file is read with
+    /// (<see cref="StoreCodecs"/>): the shell would answer with the type's
+    /// icon and write it into <c>thumbcache_*.db</c>, as for a file with no
+    /// thumbnail provider - the icon is taken the icon's way instead.
+    /// </summary>
+    private static bool LacksCodec(string path) {
+        var needed = StoreCodecs.ForFile(path);
+
+        return needed.Count > 0 && ServiceLocator.TryGet<ICodecProbe>() is { } probe
+            && StoreCodecs.FirstMissing(needed, probe) != MissingCodec.None;
     }
 
 

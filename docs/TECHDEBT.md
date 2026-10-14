@@ -294,10 +294,12 @@
   `.tga` в `_thumbnailableExtensions`, и при провале `TgaThumbnail` —
   `LoadShellBitmap`, то есть запись значка в `thumbcache_*.db`, от которой
   `LoadJumboImage` бережёт. Провал TGA — сразу значок по расширению.
-- **AVIF и JPEG XL без кодека — тоже в шелл**: они в
-  `_thumbnailableExtensions` через `ImageFormats.All`; без расширений из
-  Store шелл отвечает значком и пишет его в `thumbcache_*.db`, как TGA
-  выше. Лечится проверкой кодека (`ICodecProbe`) до шелла.
+- **Видео без кодека из Store — в шелл** (2026-10-13): миниатюра MP4 /
+  MKV / WebM с HEVC, AV1, VP9 без расширения — шелл отвечает значком,
+  пишет его в `thumbcache_*.db`, а Wander — в свой кэш на диске, и после
+  установки расширения значок остаётся. Картинки и Ogg отсекает
+  `LacksCodec` по расширению файла; видео — только по кодеку внутри
+  (`MediaProbe` на каждую миниатюру).
 - **`Ctrl+Shift+F` не работает в просмотре кода** (`MainWindow`,
   `IsCodeEditorFocused`): защита ради «своей панели поиска AvalonEdit»,
   которую никто не ставит (`SearchPanel.Install` нет).

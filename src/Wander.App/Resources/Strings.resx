@@ -72,8 +72,45 @@
   <data name="PreviewUnsupported" xml:space="preserve">
     <value>Для этого файла просмотр недоступен</value>
   </data>
-  <data name="PreviewNeedsHeif" xml:space="preserve">
-    <value>Чтобы открыть HEIC и HEIF, Windows нужно бесплатное дополнение «Расширения для изображений HEIF» из Microsoft Store</value>
+  <data name="PreviewNeedsCodec" xml:space="preserve">
+    <value>Чтобы открыть {0}, Windows нужно бесплатное дополнение «{1}» из Microsoft Store</value>
+    <comment>Вместо картинки, которую Windows не прочитала; {0} — расширение файла: JXL, AVIF, WEBP, CR3; {1} — название дополнения (PreviewStore…); под текстом — кнопка «Открыть в Microsoft Store»</comment>
+  </data>
+  <data name="PreviewMediaNeedsCodec" xml:space="preserve">
+    <value>Чтобы воспроизвести {0}, Windows нужно бесплатное дополнение «{1}» из Microsoft Store</value>
+    <comment>Вместо проигрывателя, когда файл не открыл ни один проигрыватель; {0} — кодек или расширение файла: AV1, VP9, MPEG-2, Vorbis, OGG; {1} — название дополнения (PreviewStore…)</comment>
+  </data>
+  <data name="PreviewStoreHeif" xml:space="preserve">
+    <value>Расширения для изображений HEIF</value>
+    <comment>Название дополнения, как в Microsoft Store</comment>
+  </data>
+  <data name="PreviewStoreAv1" xml:space="preserve">
+    <value>Расширение для видео AV1</value>
+    <comment>Название дополнения, как в Microsoft Store</comment>
+  </data>
+  <data name="PreviewStoreJpegXl" xml:space="preserve">
+    <value>Расширение для изображений JPEG XL</value>
+    <comment>Название дополнения, как в Microsoft Store</comment>
+  </data>
+  <data name="PreviewStoreWebp" xml:space="preserve">
+    <value>Расширение для изображений WebP</value>
+    <comment>Название дополнения, как в Microsoft Store</comment>
+  </data>
+  <data name="PreviewStoreRaw" xml:space="preserve">
+    <value>Расширение для необработанных изображений</value>
+    <comment>Название дополнения, как в Microsoft Store (Raw Image Extension)</comment>
+  </data>
+  <data name="PreviewStoreVp9" xml:space="preserve">
+    <value>Расширения для VP9-видео</value>
+    <comment>Название дополнения, как в Microsoft Store</comment>
+  </data>
+  <data name="PreviewStoreMpeg2" xml:space="preserve">
+    <value>Расширение для видео MPEG-2</value>
+    <comment>Название дополнения, как в Microsoft Store</comment>
+  </data>
+  <data name="PreviewStoreWebMedia" xml:space="preserve">
+    <value>Расширения для интернет-мультимедиа</value>
+    <comment>Название дополнения, как в Microsoft Store (Web Media Extensions: Ogg, Vorbis, Theora)</comment>
   </data>
   <data name="PreviewNeedsHevc" xml:space="preserve">
     <value>Снимки HEIC сжаты кодеком HEVC: Windows нужно дополнение «Расширения для видео HEVC» из Microsoft Store — платное, на многих компьютерах оно уже стоит от производителя</value>

@@ -69,9 +69,4 @@ public static class ImageFormats {
     public static bool IsRaw(string path) {
         return Raw.Contains(Path.GetExtension(path));
     }
-
-
-    public static bool IsHeif(string path) {
-        return Heif.Contains(Path.GetExtension(path));
-    }
 }

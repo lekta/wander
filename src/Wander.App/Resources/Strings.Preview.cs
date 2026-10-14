@@ -18,8 +18,35 @@ public static partial class Strings {
     /// <summary>Для этого файла просмотр недоступен</summary>
     public static string PreviewUnsupported => Get(nameof(PreviewUnsupported));
 
-    /// <summary>Чтобы открыть HEIC и HEIF, Windows нужно бесплатное дополнение «Расширения для изображений HEIF» из Microsoft Store</summary>
-    public static string PreviewNeedsHeif => Get(nameof(PreviewNeedsHeif));
+    /// <summary>Чтобы открыть {0}, Windows нужно бесплатное дополнение «{1}» из Microsoft Store</summary>
+    public static string PreviewNeedsCodec => Get(nameof(PreviewNeedsCodec));
+
+    /// <summary>Чтобы воспроизвести {0}, Windows нужно бесплатное дополнение «{1}» из Microsoft Store</summary>
+    public static string PreviewMediaNeedsCodec => Get(nameof(PreviewMediaNeedsCodec));
+
+    /// <summary>Расширения для изображений HEIF</summary>
+    public static string PreviewStoreHeif => Get(nameof(PreviewStoreHeif));
+
+    /// <summary>Расширение для видео AV1</summary>
+    public static string PreviewStoreAv1 => Get(nameof(PreviewStoreAv1));
+
+    /// <summary>Расширение для изображений JPEG XL</summary>
+    public static string PreviewStoreJpegXl => Get(nameof(PreviewStoreJpegXl));
+
+    /// <summary>Расширение для изображений WebP</summary>
+    public static string PreviewStoreWebp => Get(nameof(PreviewStoreWebp));
+
+    /// <summary>Расширение для необработанных изображений</summary>
+    public static string PreviewStoreRaw => Get(nameof(PreviewStoreRaw));
+
+    /// <summary>Расширения для VP9-видео</summary>
+    public static string PreviewStoreVp9 => Get(nameof(PreviewStoreVp9));
+
+    /// <summary>Расширение для видео MPEG-2</summary>
+    public static string PreviewStoreMpeg2 => Get(nameof(PreviewStoreMpeg2));
+
+    /// <summary>Расширения для интернет-мультимедиа</summary>
+    public static string PreviewStoreWebMedia => Get(nameof(PreviewStoreWebMedia));
 
     /// <summary>Снимки HEIC сжаты кодеком HEVC: Windows нужно дополнение «Расширения для видео HEVC» из Microsoft Store — платное, на многих компьютерах оно уже стоит от производителя</summary>
     public static string PreviewNeedsHevc => Get(nameof(PreviewNeedsHevc));

@@ -116,16 +116,6 @@ public sealed class PreviewController : ObservableObject {
     /// </summary>
     private const long MaxSvgPictureBytes = 1024 * 1024;
 
-    /// <summary>The Microsoft Store's product of HEIF Image Extensions - free.</summary>
-    private const string HeifStoreProduct = "9PMMSR1CGPWG";
-
-    /// <summary>
-    /// The Microsoft Store's product of HEVC Video Extensions - paid; the free
-    /// "from Device Manufacturer" one is not listed by the Store's search, and
-    /// comes with the machines it is meant for.
-    /// </summary>
-    private const string HevcStoreProduct = "9NMZLZ57R3T7";
-
     /// <summary>A file read by its content is copied to be loaded under the right extension - up to this size.</summary>
     private const long MaxContentCopyBytes = 256L * 1024 * 1024;
 
@@ -313,11 +303,13 @@ public sealed class PreviewController : ObservableObject {
     // when nobody can be named, null when the file is not held.
     private string? _lockedBy;
 
-    // The Store extension a HEIF picture could not be shown without.
+    // The Store extension a picture could not be shown without, and the
+    // format named in the words (StoreCodecs).
     private MissingCodec _missingCodec;
+    private string _missingFor = "";
 
     // Why a clip or a track did not play with either player - said instead
-    // of the transport (ReportUnplayable).
+    // of the transport (ReportUnplayableAsync).
     private string? _mediaProblem;
     private VolumeInfo? _volume;
     private string _workLine = "";
@@ -1203,7 +1195,7 @@ public sealed class PreviewController : ObservableObject {
     public string? ShownPath => _isVisible ? _primary?.FullPath : null;
 
     /// <summary>
-    /// A HEIF picture needs an extension from the Microsoft Store:
+    /// A file needs an extension from the Microsoft Store (<see cref="StoreCodecs"/>):
     /// the placeholder says which, and a button under it opens its page -
     /// the system's own way to get it (pillar 3).
     /// </summary>
@@ -1220,8 +1212,8 @@ public sealed class PreviewController : ObservableObject {
         // cannot read says so in the ordinary words.
         : _archiveEntryTooBig ? Strings.PreviewArchiveTooBig
         : _mediaProblem is { } problem ? problem
-        : _missingCodec == MissingCodec.Heif ? Strings.PreviewNeedsHeif
         : _missingCodec == MissingCodec.Hevc ? Strings.PreviewNeedsHevc
+        : _missingCodec != MissingCodec.None ? string.Format(Strings.PreviewNeedsCodec, _missingFor, StoreName(_missingCodec))
         : _lockedBy is { Length: > 0 } holders ? string.Format(Strings.PreviewFileLockedBy, holders)
         : _lockedBy is not null ? Strings.PreviewFileLocked
         : Strings.PreviewUnsupported;
@@ -2013,11 +2005,9 @@ public sealed class PreviewController : ObservableObject {
             }
 
             await LoadFileAsync(path, ct);
-            // Nothing shown: a HEIF picture may need an extension Windows
-            // does not have, anything may be a file another
-            // program holds shut.
-            if (_kind == PreviewKind.Unsupported
-                && (!ImageFormats.IsHeif(path) || !await ExplainMissingCodecAsync(ct))) {
+            // Nothing shown: a picture may need an extension Windows does
+            // not have, anything may be a file another program holds shut.
+            if (_kind == PreviewKind.Unsupported && !await ExplainMissingCodecAsync(path, ct)) {
                 await ExplainUnreadableAsync(path, ct);
             }
         } catch (OperationCanceledException) {
@@ -2095,35 +2085,64 @@ public sealed class PreviewController : ObservableObject {
     }
 
     /// <summary>
-    /// A HEIF picture that did not decode: whether Windows lacks one of the
-    /// two extensions from the Microsoft Store it is read with -
-    /// then the pane says which and offers its page. False when both are
-    /// there: the file itself is at fault.
+    /// A file that did not open: whether Windows lacks an extension from
+    /// the Microsoft Store it is read with (<see cref="StoreCodecs"/>) -
+    /// then the pane says which and offers its page. False for a format
+    /// Windows reads itself, and when every extension is there: the file
+    /// itself is at fault.
     /// </summary>
-    private async Task<bool> ExplainMissingCodecAsync(CancellationToken ct) {
-        if (ServiceLocator.TryGet<ICodecProbe>() is not { } probe) {
+    private async Task<bool> ExplainMissingCodecAsync(string path, CancellationToken ct) {
+        var needed = StoreCodecs.ForFile(path);
+        if (needed.Count == 0 || ServiceLocator.TryGet<ICodecProbe>() is not { } probe) {
             return false;
         }
 
-        var missing = await Task.Run(probe.MissingForHeif, ct);
+        var missing = await Task.Run(() => StoreCodecs.FirstMissing(needed, probe), ct);
         if (ct.IsCancellationRequested || missing == MissingCodec.None) {
             return false;
         }
 
         _missingCodec = missing;
+        _missingFor = Path.GetExtension(path).TrimStart('.').ToUpperInvariant();
         Raise(nameof(PlaceholderText));
         Raise(nameof(HasStoreHint));
         OpenStoreCommand.RaiseCanExecuteChanged();
-        Log.Info($"Preview: a HEIF picture cannot be read - Windows lacks the {missing} extension from the Microsoft Store");
+        Log.Info($"Preview: a {_missingFor} file cannot be read - Windows lacks the {missing} extension from the Microsoft Store");
 
         return true;
     }
 
+    /// <summary>The extension's name as the Store shows it, for the placeholder's words.</summary>
+    private static string StoreName(MissingCodec codec) {
+        return codec switch {
+            MissingCodec.Heif => Strings.PreviewStoreHeif,
+            MissingCodec.Av1 => Strings.PreviewStoreAv1,
+            MissingCodec.JpegXl => Strings.PreviewStoreJpegXl,
+            MissingCodec.Webp => Strings.PreviewStoreWebp,
+            MissingCodec.Raw => Strings.PreviewStoreRaw,
+            MissingCodec.Vp9 => Strings.PreviewStoreVp9,
+            MissingCodec.Mpeg2 => Strings.PreviewStoreMpeg2,
+            MissingCodec.WebMedia => Strings.PreviewStoreWebMedia,
+            _ => "",
+        };
+    }
+
     /// <summary>The Store's page of the missing extension, in the Store itself.</summary>
     private void OpenStore() {
+        // Product ids from apps.microsoft.com (2026-10-13); all free but
+        // HEVC Video Extensions - its free "from Device Manufacturer" twin is
+        // not listed by the Store's search, and comes with the machines it
+        // is meant for.
         string? product = _missingCodec switch {
-            MissingCodec.Heif => HeifStoreProduct,
-            MissingCodec.Hevc => HevcStoreProduct,
+            MissingCodec.Heif => "9PMMSR1CGPWG",
+            MissingCodec.Hevc => "9NMZLZ57R3T7",
+            MissingCodec.Av1 => "9MVZQVXJBQ9V",
+            MissingCodec.JpegXl => "9MZPRTH5C0TB",
+            MissingCodec.Webp => "9PG2DK419DRG",
+            MissingCodec.Raw => "9NCTDW2W1BH8",
+            MissingCodec.Vp9 => "9N4D0MSMP0PT",
+            MissingCodec.Mpeg2 => "9N95Q1ZZPMH4",
+            MissingCodec.WebMedia => "9N5TDP8VCMHS",
             _ => null,
         };
         if (product is null || ServiceLocator.TryGet<IShellLauncher>() is not { } shell) {
@@ -2569,6 +2588,15 @@ public sealed class PreviewController : ObservableObject {
 
 
     private void LoadGif(string path) {
+        // A header WIC cannot read - no codec (a .webp without its extension
+        // from the Store), a damaged file - would leave the player blank;
+        // the pane says why instead (ExplainMissingCodecAsync).
+        if (ImageDecoder.StoredSize(path) is null) {
+            Kind = PreviewKind.Unsupported;
+
+            return;
+        }
+
         // GifImage decodes the file lazily on the UI thread; we just set the URI.
         // Metadata (pixel size, EXIF if any) goes through the same reader as
         // for normal images so the footer summary line still works.
@@ -2606,23 +2634,35 @@ public sealed class PreviewController : ObservableObject {
     /// Neither the pane's player nor the system's opened the file at
     /// <paramref name="uri"/>: the transport goes - nothing in it would
     /// work - and the pane says why in its place. The codec, when the
-    /// container named it (<see cref="MediaProbe"/>); for HEVC, the
-    /// extension from the Microsoft Store and the button to its page.
-    /// A report about a file no longer shown is dropped.
+    /// container named it (<see cref="MediaProbe"/>); for an extension from
+    /// the Microsoft Store Windows lacks (<see cref="StoreCodecs"/>), the
+    /// extension and the button to its page. A report about a file no
+    /// longer shown is dropped.
     /// </summary>
-    public void ReportUnplayable(Uri? uri) {
+    public async Task ReportUnplayableAsync(Uri? uri) {
         if (uri is null || MediaUri != uri || _kind is not (PreviewKind.Video or PreviewKind.Audio)) {
             return;
         }
 
-        string? codec = _media?.Video?.Codec ?? _media?.Tracks.FirstOrDefault(t => t.Kind == MediaTrackKind.Audio)?.Codec;
-        if (codec == "H.265") {
-            _missingCodec = MissingCodec.Hevc;
-            _mediaProblem = Strings.PreviewVideoNeedsHevc;
-        } else {
-            _mediaProblem = codec is null ? Strings.PreviewMediaUnplayable : string.Format(Strings.PreviewMediaUnplayableCodec, codec);
+        string path = uri.LocalPath;
+        var codecs = _media?.Tracks.Where(t => t.Kind != MediaTrackKind.Subtitle).Select(t => (string?)t.Codec).ToList() ?? new();
+        var (name, missing) = ServiceLocator.TryGet<ICodecProbe>() is { } probe
+            ? await Task.Run(() => StoreCodecs.FirstMissingForMedia(path, codecs, probe))
+            : (null, MissingCodec.None);
+        // The registry was asked off the UI thread; the selection may have moved meanwhile.
+        if (MediaUri != uri || _kind is not (PreviewKind.Video or PreviewKind.Audio)) {
+            return;
         }
-        Log.Info($"Preview: no player opened the file ({codec ?? "codec unknown"})");
+
+        string? codec = _media?.Video?.Codec ?? _media?.Tracks.FirstOrDefault(t => t.Kind == MediaTrackKind.Audio)?.Codec;
+        _missingCodec = missing;
+        _mediaProblem = missing switch {
+            MissingCodec.None when codec is null => Strings.PreviewMediaUnplayable,
+            MissingCodec.None => string.Format(Strings.PreviewMediaUnplayableCodec, codec),
+            MissingCodec.Hevc => Strings.PreviewVideoNeedsHevc,
+            _ => string.Format(Strings.PreviewMediaNeedsCodec, name, StoreName(missing)),
+        };
+        Log.Info($"Preview: no player opened the file ({codec ?? "codec unknown"}; missing extension: {missing})");
 
         MediaUri = null;
         Kind = PreviewKind.Unsupported;

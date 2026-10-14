@@ -1411,7 +1411,7 @@
 
                     <!--
                         Placeholder (None / Unsupported), and under it the way
-                        to the extension a HEIF picture needs.
+                        to the Store extension a file needs (StoreCodecs).
                     -->
                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="16,0"
                                 Visibility="{Binding IsPlaceholderVisible, Converter={StaticResource BoolToVisibility}}">

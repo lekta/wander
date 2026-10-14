@@ -111,8 +111,8 @@ src/
 <!-- deps:generated:begin -->
 ```
 === Wander dependency graph (using sweep) ===
-date   : 2026-10-09
-commit : 4252335
+date   : 2026-10-13
+commit : 89dc107
 
 -- Wander.Core: levels --
   0: (root), Appearance, Imaging, Layout, Localization, Logging, Operations, Panels
@@ -678,9 +678,10 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
     типы со значком в файле — `.exe`, `.ico`, `.url`…, `_ownIconExtensions`
     — по пути, как `.lnk`); `Medium` (96) / `Large` (256; 384 / 512 на
     крупном масштабе системы — `ThumbnailCacheOptions.SideFor`) —
-    `IShellItemImageFactory` только для `IsThumbnailable` (иначе шелл
-    пишет значок в общий `thumbcache`). Прочее на `Large` — `SHIL_JUMBO`:
-    слот 256, значок не масштабируется; `TrimJumboSlot` режет слот до
+    `IShellItemImageFactory` только для `IsThumbnailable`, кроме файлов без
+    их расширения из Store (`LacksCodec`): иначе шелл пишет значок в общий
+    `thumbcache`. Прочее на `Large` — `SHIL_JUMBO`: слот 256, значок не
+    масштабируется; `TrimJumboSlot` режет слот до
     ступени над нарисованным. Шелл не увеличивает (`SIIGBF_RESIZETOFIT`
     только ужимает) — `StretchDirection=DownOnly`, ячейка — потолок.
   - Мимо шелла: RAW — `RawThumbnail` (`RawPreviewExtractor` + WinRT
@@ -2349,9 +2350,10 @@ SYS ws=431 private=360 gen=167/155/134 alloc=+45 loh=6 handles=1060 threads=40 c
   программный кадр → `WriteableBitmap` в `SystemVideo` (стенд 2026-10-09:
   3–5 мс на 1080p; больше 1920 по длинной стороне — ужимается на GPU);
   кадр в полёте один, лишние пропускаются. Не открыл и он —
-  `PreviewController.ReportUnplayable`: `Kind = Unsupported`, транспорта
-  нет, в заглушке — причина по кодеку из `MediaProbe` (HEVC — с кнопкой
-  Store).
+  `PreviewController.ReportUnplayableAsync`: `Kind = Unsupported`,
+  транспорта нет, в заглушке — причина по кодеку из `MediaProbe`; нет
+  расширения из Store (`StoreCodecs.FirstMissingForMedia`) — его название и
+  кнопка.
 - **Поиск в тексте** (B6): `TextFind` (Core, тест) — смещения, первое от
   каретки, по кругу, без регистра, от 10 000 — «N+». `FindBar`: смещения в
   тексте и коде, диапазоны в RTF (по run'ам — через смену формата не
@@ -2425,12 +2427,28 @@ SYS ws=431 private=360 gen=167/155/134 alloc=+45 loh=6 handles=1060 threads=40 c
   вместо 600–1000); поворот
   контейнера — `UprightHeif` в `MetadataExtractorImageReader` (WIC
   EXIF-тег игнорирует); 1×1 без пикселей — `DecodeFailed` в
-  `ImageDecoder.Decode`. После провала — `ICodecProbe` /
-  `WindowsCodecProbe` (`MFTEnumEx`: `CLSID_WICHeifDecoder` — HEIF Image
-  Extensions, `MFVideoFormat_HEVC` — HEVC Video Extensions; список WIC не
-  годится — заглушка в `windowscodecs.dll` есть всегда) →
-  `PreviewController.ExplainMissingCodecAsync`, плашка и
-  `OpenStoreCommand` (`ms-windows-store://pdp/?ProductId=…`).
+  `ImageDecoder.Decode`.
+- **Кодеки из Store** (2026-10-13): `StoreCodecs` (Core, тест) — какие
+  расширения нужны файлу по расширению (`ForFile`: HEIC — HEIF + HEVC,
+  AVIF — HEIF + AV1, JXL, WebP, RAW кроме DNG, контейнер Ogg — Web Media)
+  и потоку по кодеку из `MediaProbe` (`ForStream`: HEVC, AV1, VP9,
+  MPEG-1/2, Theora, Vorbis); первое недостающее — `FirstMissing`,
+  `FirstMissingForMedia`. `ICodecProbe.Has` → `WindowsCodecProbe`
+  (`MFTEnumEx`): расширения картинок регистрируют декодер MF с входным
+  типом = CLSID своей заглушки WIC в `windowscodecs.dll` (HEIF, WebP, RAW,
+  JPEG XL — стенды 2026-09-25 и 2026-10-13; список WIC не годится —
+  заглушка в нём есть всегда), видео — обычные видеодекодеры, Web Media —
+  звуковой Vorbis. ~20–30 мс вопрос, ответ держится минуту; не смог
+  спросить (нет `mfplat.dll` в Windows N) — «есть». Встроит Microsoft
+  кодек мимо MF — миниатюры этого формата станут значками. Панель: не
+  открылось → `PreviewController.ExplainMissingCodecAsync`, плашка
+  `PreviewNeedsCodec` (HEVC — своя, платное) и `OpenStoreCommand`
+  (`ms-windows-store://pdp/?ProductId=…`, номера — в `OpenStore`); GIF /
+  WebP — заголовок через `ImageDecoder.StoredSize` до `GifImage`, иначе
+  пустая панель. Миниатюры — `SystemIconProvider.LacksCodec`: шелл не
+  спрашивается (ответил бы значком и записал его в `thumbcache`), значок —
+  путём значков, на диск не пишется (кроме RAW — у него своё превью),
+  поколение кэша 8.
 - **SVG** (B8): `PreviewRoute.Svg` перед кодом; `PreviewText.SvgPage` —
   `<img>` с `data:` base64 (скрипт не исполняется) в WebView2;
   `ShowSvgSource` — разметка, на обе половины; больше 1 МБ — разметкой

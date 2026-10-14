@@ -76,8 +76,14 @@ public sealed class ThumbnailDiskCache {
     /// v7 (2026-10-09): fonts by Wander (<c>FontThumbnail</c>) - v6 slots
     /// hold the shell's letters.
     /// </para>
+    ///
+    /// <para>
+    /// v8 (2026-10-13): a file whose Store extension is missing is not kept
+    /// (<c>StoreCodecs</c>) - v7 slots of HEIC, AVIF, JPEG XL, WebP, OGV
+    /// hold the type's icon even after the extension is installed.
+    /// </para>
     /// </summary>
-    private const int Generation = 7;
+    private const int Generation = 8;
 
     private readonly string _directory;
     private readonly ILogger _log;
