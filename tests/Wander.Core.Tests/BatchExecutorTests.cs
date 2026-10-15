@@ -56,6 +56,17 @@ public class BatchExecutorTests {
         return (batch, fs, bin, undo, tracker);
     }
 
+    /// <summary><see cref="Setup"/> whose transient errors are tried again without the pauses.</summary>
+    private static (BatchExecutor Batch, FakeFileSystem Fs, OperationTracker Tracker) SetupQuickRetry() {
+        var fs = new FakeFileSystem();
+        var tracker = new OperationTracker(TimeSpan.Zero);
+        var batch = new BatchExecutor(
+            fs, new FakeRecycleBin(fs), new UndoService(), tracker, NullLogger.Instance,
+            retry: new RetryPolicy(3, new[] { TimeSpan.Zero }));
+
+        return (batch, fs, tracker);
+    }
+
 
     // --- CopyMany: happy paths -----------------------------------------
 
@@ -1080,11 +1091,11 @@ public class BatchExecutorTests {
     }
 
     [Fact]
-    public async Task CopyManyAsync_CancelledInsideAFile_IsCancelled_NotFailed_AndUndoable() {
-        // Cancel used to be possible only between items; now it lands in the
-        // middle of one. The partial copy is a cancellation, not an error,
-        // and Ctrl+Z has to be able to clear it away.
-        var (batch, fs, bin, undo, tracker) = Setup();
+    public async Task CopyManyAsync_CancelledInsideAFile_IsCancelled_NotFailed_AndLeavesNothing() {
+        // Cancel lands in the middle of a file. That is a cancellation, not
+        // an error; and since a file goes under a temporary name until it is
+        // whole, nothing is left at its name for Ctrl+Z to clear away.
+        var (batch, fs, _, undo, tracker) = Setup();
         fs.Files[SrcA] = new byte[1000];
         fs.Files[SrcB] = new byte[1000];
         fs.CopyChunk = 100;
@@ -1103,11 +1114,239 @@ public class BatchExecutorTests {
         Assert.All(results, r => Assert.Equal(BatchItemStatus.Cancelled, r.Status));
         Assert.All(results, r => Assert.Null(r.Error));
 
-        // What landed part-way is on the undo stack, so Ctrl+Z clears it.
+        Assert.False(fs.FileExists(DstA));
+        Assert.Equal(0, undo.Depth);
+    }
+
+    [Fact]
+    public async Task CopyManyAsync_CancelledInsideAFolder_LeavesWhatLanded_Undoable() {
+        // A folder is not copied under a temporary name: what of it landed
+        // is there, and Ctrl+Z still clears it away.
+        var fs = new CancellingFolderCopy();
+        var bin = new FakeRecycleBin(fs);
+        var undo = new UndoService();
+        var batch = new BatchExecutor(fs, bin, undo, new OperationTracker(TimeSpan.Zero), NullLogger.Instance);
+        fs.Directories.Add(@"C:\src\shoot");
+        fs.Directories.Add(DstFolder);
+        using var cts = new CancellationTokenSource();
+        fs.OnCopy = cts.Cancel;
+
+        var results = await batch.CopyManyAsync(new[] { @"C:\src\shoot" }, DstFolder, new FakeConflictResolver(), cts.Token);
+
+        Assert.Equal(BatchItemStatus.Cancelled, results[0].Status);
         Assert.Equal(1, undo.Depth);
         undo.Undo();
-        Assert.Contains($"Recycle:{DstA}", bin.CallLog);
+        Assert.Contains($@"Recycle:{DstFolder}\shoot", bin.CallLog);
+    }
+
+    [Fact]
+    public async Task CopyManyAsync_LeavesARecord_WithTheFailedItem() {
+        var (batch, fs, _, _, tracker) = Setup();
+        fs.Files[SrcA] = new byte[10];
+        fs.Files[SrcB] = new byte[10];
+        fs.Directories.Add(DstFolder);
+        fs.CopyFailures[SrcB] = new Queue<Exception>(new[] { new IOException("Access is denied.") });
+
+        await batch.CopyManyAsync(new[] { SrcA, SrcB }, DstFolder, new FakeConflictResolver(), default);
+
+        Assert.Empty(tracker.Snapshot());
+        var record = Assert.Single(tracker.Finished);
+        Assert.Equal(OperationVerbs.Copy, record.Verb);
+        Assert.Equal(OperationOutcome.Problems, record.Outcome);
+        Assert.Equal(DstFolder, record.Target);
+        Assert.Equal((2, 1, 1), (record.Total, record.Done, record.Failed));
+        var failed = Assert.Single(record.Items, i => i.Status == BatchItemStatus.Failed);
+        Assert.Equal(SrcB, failed.Source);
+        Assert.IsType<IOException>(failed.Error);
+    }
+
+    [Fact]
+    public async Task CopyManyAsync_TwoTransientErrors_ThenTheCopy_IsOk_InThreeTries() {
+        var (batch, fs, tracker) = SetupQuickRetry();
+        fs.Files[SrcA] = new byte[10];
+        fs.Directories.Add(DstFolder);
+        fs.CopyFailures[SrcA] = new Queue<Exception>(new[] { TransientIoTests.Win32(23), TransientIoTests.Win32(1117) });
+
+        var results = await batch.CopyManyAsync(new[] { SrcA }, DstFolder, new FakeConflictResolver(), default);
+
+        Assert.Equal(BatchItemStatus.Ok, results[0].Status);
+        Assert.Equal(3, results[0].Attempts);
+        Assert.Equal(3, tracker.Finished[0].Items[0].Attempts);
+        Assert.True(fs.FileExists(DstA));
+    }
+
+    [Fact]
+    public async Task CopyManyAsync_AnErrorThatStays_FailsOnTheFirstTry() {
+        var (batch, fs, _) = SetupQuickRetry();
+        fs.Files[SrcA] = new byte[10];
+        fs.Directories.Add(DstFolder);
+        fs.CopyFailures[SrcA] = new Queue<Exception>(new[] { TransientIoTests.Win32(5), TransientIoTests.Win32(5) });
+
+        var results = await batch.CopyManyAsync(new[] { SrcA }, DstFolder, new FakeConflictResolver(), default);
+
+        Assert.Equal(BatchItemStatus.Failed, results[0].Status);
+        Assert.Equal(1, results[0].Attempts);
+        Assert.Single(fs.CopyFailures[SrcA]);
+    }
+
+    [Fact]
+    public async Task CopyManyAsync_TransientEveryTime_FailsAfterThreeTries_AndTheBarIsNotCountedTwice() {
+        var (batch, fs, tracker) = SetupQuickRetry();
+        fs.Files[SrcA] = new byte[100];
+        fs.Directories.Add(DstFolder);
+        fs.CopyFailures[SrcA] = new Queue<Exception>(Enumerable.Range(0, 3).Select(_ => TransientIoTests.Win32(21)));
+        long maxDone = 0;
+        tracker.Changed += (_, _) => {
+            foreach (var snap in tracker.Snapshot()) {
+                maxDone = Math.Max(maxDone, snap.BytesDone);
+            }
+        };
+
+        var results = await batch.CopyManyAsync(new[] { SrcA }, DstFolder, new FakeConflictResolver(), default);
+
+        Assert.Equal(BatchItemStatus.Failed, results[0].Status);
+        Assert.Equal(3, results[0].Attempts);
+        Assert.Equal(21, TransientIo.Win32Code(results[0].Error!));
+        Assert.True(maxDone <= 100);
+    }
+
+    [Fact]
+    public async Task CopyManyAsync_ACheckedCopy_IsVerified_InTheResultAndTheRecord() {
+        var (batch, fs, tracker) = SetupQuickRetry();
+        batch.CopyOptionsFor = _ => new CopyOptions(Verify: true);
+        fs.Files[SrcA] = new byte[10];
+        fs.Files[SrcB] = new byte[10];
+        fs.Directories.Add(DstFolder);
+
+        var results = await batch.CopyManyAsync(new[] { SrcA, SrcB }, DstFolder, new FakeConflictResolver(), default);
+
+        Assert.All(results, r => Assert.True(r.Verified));
+        Assert.All(results, r => Assert.Equal(CopyEngine.Own, r.Engine));
+        Assert.Equal(2, tracker.Finished[0].Verified);
+        Assert.All(fs.CopyOptionsSeen, o => Assert.True(o.Verify));
+    }
+
+    [Fact]
+    public async Task CopyManyAsync_ACopyThatDidNotReadBack_IsTriedAgain_AndVerifiedTheSecondTime() {
+        var (batch, fs, _) = SetupQuickRetry();
+        batch.CopyOptionsFor = _ => new CopyOptions(Verify: true);
+        fs.Files[SrcA] = new byte[10];
+        fs.Directories.Add(DstFolder);
+        fs.CorruptCopies[SrcA] = 1;
+
+        var results = await batch.CopyManyAsync(new[] { SrcA }, DstFolder, new FakeConflictResolver(), default);
+
+        Assert.Equal((BatchItemStatus.Ok, 2, true), (results[0].Status, results[0].Attempts, results[0].Verified));
+        Assert.True(fs.FileExists(DstA));
+    }
+
+    [Fact]
+    public async Task CopyManyAsync_ACopyThatNeverReadsBack_Fails_AndLeavesNothing() {
+        var (batch, fs, tracker) = SetupQuickRetry();
+        batch.CopyOptionsFor = _ => new CopyOptions(Verify: true);
+        fs.Files[SrcA] = new byte[10];
+        fs.Directories.Add(DstFolder);
+        fs.CorruptCopies[SrcA] = 3;
+
+        var results = await batch.CopyManyAsync(new[] { SrcA }, DstFolder, new FakeConflictResolver(), default);
+
+        Assert.Equal(BatchItemStatus.Failed, results[0].Status);
+        Assert.IsType<CopyMismatchException>(results[0].Error);
+        Assert.False(results[0].Verified);
         Assert.False(fs.FileExists(DstA));
+        Assert.Equal(0, tracker.Finished[0].Verified);
+    }
+
+    [Fact]
+    public async Task CopyManyAsync_ACopyNotAskedToBeChecked_IsNotVerified() {
+        var (batch, fs, _) = SetupQuickRetry();
+        fs.Files[SrcA] = new byte[10];
+        fs.Directories.Add(DstFolder);
+
+        var results = await batch.CopyManyAsync(new[] { SrcA }, DstFolder, new FakeConflictResolver(), default);
+
+        Assert.False(results[0].Verified);
+        Assert.Equal(CopyEngine.Own, results[0].Engine);
+    }
+
+    [Fact]
+    public async Task DeleteManyAsync_WhatTheBinTookWithNothingToFindItBy_IsGoneForGood_AndNotUndoable() {
+        var (batch, fs, bin, undo, _) = Setup();
+        fs.Files[RootA] = new byte[1];
+        fs.Files[RootB] = new byte[1];
+        bin.Untraceable.Add(RootB);
+
+        var results = await batch.DeleteManyAsync(new[] { RootA, RootB }, permanent: false, default);
+
+        Assert.Equal(new[] { false, true }, results.Select(r => r.Permanent));
+        Assert.All(results, r => Assert.Equal(DeleteStatus.Ok, r.Status));
+        // One step - for the item that can come back.
+        Assert.Equal(1, undo.Depth);
+        undo.Undo();
+        Assert.True(fs.FileExists(RootA));
+        Assert.False(fs.FileExists(RootB));
+    }
+
+    [Fact]
+    public async Task CopyManyAsync_ALinkInsideAFolder_IsAnItemSkipped_WithWhy() {
+        var (batch, fs, _, _, tracker) = Setup();
+        fs.Directories.Add(@"C:\src\shoot");
+        fs.Directories.Add(DstFolder);
+        fs.LinksIn[@"C:\src\shoot"] = new[] { @"C:\src\shoot\raw-link" };
+
+        var results = await batch.CopyManyAsync(new[] { @"C:\src\shoot" }, DstFolder, new FakeConflictResolver(), default);
+
+        Assert.Equal(2, results.Count);
+        Assert.Equal(BatchItemStatus.Ok, results[0].Status);
+        Assert.Equal((@"C:\src\shoot\raw-link", BatchItemStatus.Skipped), (results[1].Source, results[1].Status));
+        Assert.IsType<LinkNotCopiedException>(results[1].Error);
+        Assert.Equal(OperationOutcome.Problems, tracker.Finished[0].Outcome);
+    }
+
+    [Fact]
+    public void MoveMany_ACompanionThatFails_TakesTheMovedMainFileBack() {
+        var (batch, fs, _, undo, _) = Setup();
+        fs.Files[@"C:\src\IMG.CR3"] = new byte[] { 1 };
+        fs.Files[@"C:\src\IMG.xmp"] = new byte[] { 2 };
+        fs.Directories.Add(DstFolder);
+        // The sidecar is held for good: its move fails after the photo's went.
+        fs.MoveInUseFor[@"C:\src\IMG.xmp"] = int.MaxValue;
+        var group = new BatchGroup(@"C:\src\IMG.CR3", new[] { @"C:\src\IMG.xmp" });
+
+        var results = batch.MoveMany(new[] { group }, DstFolder, new FakeConflictResolver());
+
+        Assert.Equal(BatchItemStatus.Failed, Assert.Single(results).Status);
+        Assert.True(fs.FileExists(@"C:\src\IMG.CR3"));
+        Assert.False(fs.FileExists(@"C:\dst\IMG.CR3"));
+        Assert.Equal(0, undo.Depth);
+    }
+
+    [Fact]
+    public async Task DeleteManyAsync_Permanent_AHeldFile_IsWaitedFor_ThenDeleted() {
+        var (batch, fs, _, _, _, probe, pauses) = SetupHeld();
+        fs.Files[RootA] = new byte[1];
+        probe.HeldFor[RootA] = 2;
+
+        var results = await batch.DeleteManyAsync(new[] { RootA }, permanent: true, default);
+
+        Assert.Equal(DeleteStatus.Ok, results[0].Status);
+        Assert.NotNull(results[0].Busy);
+        Assert.True(results[0].Busy!.Released);
+        Assert.Equal(2, pauses.Count);
+        Assert.False(fs.FileExists(RootA));
+    }
+
+    [Fact]
+    public async Task DeleteManyAsync_LeavesARecord_ItemByItem() {
+        var (batch, fs, _, _, tracker) = Setup();
+        fs.Files[RootA] = new byte[1];
+
+        await batch.DeleteManyAsync(new[] { RootA, RootMissing }, permanent: true, default);
+
+        var record = Assert.Single(tracker.Finished);
+        Assert.Equal(OperationVerbs.DeletePermanently, record.Verb);
+        Assert.Null(record.Target);
+        Assert.Equal(new[] { BatchItemStatus.Ok, BatchItemStatus.Failed }, record.Items.Select(i => i.Status));
     }
 
     [Fact]
@@ -1151,6 +1390,21 @@ public class BatchExecutorTests {
             SeenWhileListing.Add(_probe());
 
             return base.Enumerate(path, sort, ct);
+        }
+    }
+
+    /// <summary>A folder copy that lands the folder and is cancelled before it is done.</summary>
+    private sealed class CancellingFolderCopy : FakeFileSystem, IFileSystem {
+        public Action OnCopy { get; set; } = () => { };
+
+
+        public new CopyReport CopyDirectory(string source, string destination, bool overwrite,
+            IProgress<long>? bytesCopied = null, CancellationToken ct = default, CopyOptions? options = null) {
+            Directories.Add(destination);
+            OnCopy();
+            ct.ThrowIfCancellationRequested();
+
+            return CopyReport.None;
         }
     }
 

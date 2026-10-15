@@ -1,3 +1,5 @@
+using Wander.Core.Localization;
+
 namespace Wander.Core.Operations;
 
 /// <summary>
@@ -23,37 +25,70 @@ namespace Wander.Core.Operations;
 /// <see cref="MinInterval"/> - the last state is delivered by a trailing
 /// timer rather than swallowed.
 /// </para>
+///
+/// <para>
+/// A finished operation stays as an <see cref="OperationRecord"/> until the
+/// user clears it away (<see cref="Dismiss"/>), at most
+/// <see cref="MaxFinished"/> of them: what went wrong waits for the user to
+/// read it, what went right is there to look back at. Only the running ones
+/// are anybody's business but the status bar's - <see cref="Snapshot"/> and
+/// <see cref="WhenIdleAsync"/> know nothing of the finished.
+/// </para>
 /// </summary>
 public sealed class OperationTracker {
     /// <summary>Ten redraws a second is more than an eye needs and far less than a copy reports.</summary>
     public static readonly TimeSpan MinInterval = TimeSpan.FromMilliseconds(100);
 
+    /// <summary>How many finished operations are kept; the oldest give way.</summary>
+    public const int MaxFinished = 50;
+
+
     private readonly Lock _gate = new();
     private readonly List<OperationProgress> _ops = new();
+
+    /// <summary>Newest first.</summary>
+    private readonly List<OperationRecord> _finished = new();
     private readonly TimeSpan _minInterval;
     private readonly Func<DateTime> _now;
+    private readonly IPowerGuard? _power;
 
     private DateTime _lastRaise = DateTime.MinValue;
     private Timer? _trailing;
     private bool _trailingScheduled;
     private long _lastId;
 
+    /// <summary>Held from the first running operation to the last: the computer does not sleep under a copy.</summary>
+    private IDisposable? _awake;
+
 
     /// <param name="minInterval">How rarely <see cref="Changed"/> may fire for progress reports.</param>
     /// <param name="now">The clock, so a test can hold it still.</param>
-    public OperationTracker(TimeSpan? minInterval = null, Func<DateTime>? now = null) {
+    /// <param name="power">Keeps the computer awake while anything runs; null lets it sleep.</param>
+    public OperationTracker(TimeSpan? minInterval = null, Func<DateTime>? now = null, IPowerGuard? power = null) {
         _minInterval = minInterval ?? MinInterval;
         _now = now ?? (() => DateTime.UtcNow);
+        _power = power;
     }
 
 
-    /// <summary>Fires after any handle is created, advanced, or completed.</summary>
+    /// <summary>Fires after any handle is created, advanced, or completed, and after a record is dismissed.</summary>
     public event EventHandler? Changed;
 
 
+    /// <summary>The finished operations not yet cleared away, newest first.</summary>
+    public IReadOnlyList<OperationRecord> Finished {
+        get {
+            lock (_gate) {
+                return _finished.ToArray();
+            }
+        }
+    }
+
+
     /// <summary>
-    /// Register a new operation. Dispose the returned handle when the op
-    /// finishes (success or failure) - it removes the entry from the tracker.
+    /// Register a new operation. Finish the returned handle with its items
+    /// when the work is over (<see cref="IOperationHandle.Finish"/>), or
+    /// dispose it: either moves the entry from the running to the finished.
     /// </summary>
     /// <param name="verb">Short user-facing label: "Move", "Copy", "Delete".</param>
     /// <param name="total">Expected total step count (one step per item, usually).</param>
@@ -76,6 +111,9 @@ public sealed class OperationTracker {
         lock (_gate) {
             progress = new OperationProgress(++_lastId, verb, total, totalBytes, bytesAreWork, _now(), token);
             _ops.Add(progress);
+            if (_power is not null && _awake is null) {
+                _awake = _power.KeepAwake(Text.Get("PowerRequestReason"));
+            }
         }
         RaiseNow();
 
@@ -92,6 +130,31 @@ public sealed class OperationTracker {
             }
 
             return copy;
+        }
+    }
+
+    /// <summary>One finished operation off the list - the row's "Убрать", and what a retry does to the record it replaces.</summary>
+    public void Dismiss(long id) {
+        int removed;
+        lock (_gate) {
+            removed = _finished.RemoveAll(r => r.Id == id);
+        }
+        if (removed > 0) {
+            RaiseNow();
+        }
+    }
+
+    /// <summary>
+    /// Clears the finished operations away: the ones that went well, or with
+    /// <paramref name="problemsToo"/> every one of them.
+    /// </summary>
+    public void DismissFinished(bool problemsToo) {
+        int removed;
+        lock (_gate) {
+            removed = _finished.RemoveAll(r => problemsToo || !r.HasProblems);
+        }
+        if (removed > 0) {
+            RaiseNow();
         }
     }
 
@@ -137,11 +200,34 @@ public sealed class OperationTracker {
         }
     }
 
-    private void Remove(OperationProgress op) {
+    /// <summary>
+    /// The operation stops running and becomes a record: from its items when
+    /// it gave them, from its counters and its token when it did not.
+    /// </summary>
+    private OperationRecord Complete(OperationProgress op, IReadOnlyList<OperationItem>? items, string? target) {
+        OperationRecord record;
+        IDisposable? asleep = null;
         lock (_gate) {
             _ops.Remove(op);
+            if (_ops.Count == 0) {
+                asleep = _awake;
+                _awake = null;
+            }
+            var now = _now();
+            var elapsed = now - op.StartedAtUtc;
+            long bytes = op.BytesAreWork ? 0 : op.BytesDone;
+            record = items is null
+                ? OperationRecord.Unitemised(op.Id, op.Verb, op.Total, op.Completed, op.Token.IsCancellationRequested, bytes, elapsed, now)
+                : OperationRecord.FromItems(op.Id, op.Verb, items, bytes, elapsed, now, target);
+            _finished.Insert(0, record);
+            if (_finished.Count > MaxFinished) {
+                _finished.RemoveRange(MaxFinished, _finished.Count - MaxFinished);
+            }
         }
+        asleep?.Dispose();
         RaiseNow();
+
+        return record;
     }
 
     /// <summary>
@@ -239,9 +325,11 @@ public sealed class OperationTracker {
 
         public bool IsWeighing { get; set; }
 
+        public int Attempt { get; set; }
+
 
         public OperationSnapshot ToSnapshot() =>
-            new(Id, Verb, Completed, Total, CurrentPath, BytesDone, BytesTotal, BytesAreWork, StartedAtUtc, Token, IsWeighing);
+            new(Id, Verb, Completed, Total, CurrentPath, BytesDone, BytesTotal, BytesAreWork, StartedAtUtc, Token, IsWeighing, Attempt);
     }
 
 
@@ -307,12 +395,31 @@ public sealed class OperationTracker {
             _owner.RaiseThrottled();
         }
 
+        public void SetAttempt(int attempt) {
+            if (_done) {
+                return;
+            }
+            lock (_owner._gate) {
+                _progress.Attempt = attempt;
+            }
+            _owner.RaiseThrottled();
+        }
+
+        public OperationRecord? Finish(IReadOnlyList<OperationItem> items, string? target) {
+            if (_done) {
+                return null;
+            }
+            _done = true;
+
+            return _owner.Complete(_progress, items, target);
+        }
+
         public void Dispose() {
             if (_done) {
                 return;
             }
             _done = true;
-            _owner.Remove(_progress);
+            _owner.Complete(_progress, null, null);
         }
     }
 }
@@ -345,6 +452,24 @@ public interface IOperationHandle : IDisposable {
     /// a bar standing at zero.
     /// </summary>
     void SetWeighing(bool weighing);
+
+    /// <summary>
+    /// The item in hand is being tried again after a transient error: this
+    /// is try number <paramref name="attempt"/>; 0 once it is over. A number,
+    /// not words - Core has none; the display writes "try 2 of 3".
+    /// </summary>
+    void SetAttempt(int attempt);
+
+    /// <summary>
+    /// The work is over, and this is how each item went: the operation
+    /// leaves the running and stays as a record with an outcome worked out
+    /// from <paramref name="items"/>. A later <see cref="IDisposable.Dispose"/>
+    /// does nothing; a dispose without this records the operation as done,
+    /// or as cancelled when its token was.
+    /// </summary>
+    /// <param name="target">The folder it went into; null for a delete.</param>
+    /// <returns>The record it left; null when the handle was already finished or disposed.</returns>
+    OperationRecord? Finish(IReadOnlyList<OperationItem> items, string? target);
 }
 
 
@@ -358,10 +483,11 @@ public interface IOperationHandle : IDisposable {
 /// it out recognises its own operation among the others.
 /// </param>
 /// <param name="IsWeighing">The sources are still being weighed; the counts mean nothing yet.</param>
+/// <param name="Attempt">The item in hand is on this try after a transient error; 0 when it is on its first.</param>
 public sealed record OperationSnapshot(
     long Id, string Verb, int Completed, int Total, string? CurrentPath,
     long BytesDone, long BytesTotal, bool BytesAreWork, DateTime StartedAtUtc,
-    CancellationToken Token = default, bool IsWeighing = false) {
+    CancellationToken Token = default, bool IsWeighing = false, int Attempt = 0) {
 
     /// <summary>Bytes are the honest measure where there are any; items otherwise.</summary>
     public bool HasBytes => BytesTotal > 0;

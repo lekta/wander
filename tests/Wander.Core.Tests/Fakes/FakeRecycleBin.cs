@@ -21,6 +21,9 @@ internal sealed class FakeRecycleBin : IRecycleBin {
     /// <summary>How many more sends of a path fail "in use" before it goes; <see cref="int.MaxValue"/> never goes.</summary>
     public Dictionary<string, int> InUseFor { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Paths the bin takes and names nothing to find them by - no item id, no file in the bin.</summary>
+    public HashSet<string> Untraceable { get; } = new(StringComparer.OrdinalIgnoreCase);
+
 
     public RecycleHandle Send(string path) {
         CallLog.Add($"Recycle:{path}");
@@ -31,7 +34,9 @@ internal sealed class FakeRecycleBin : IRecycleBin {
 
             throw FileInUse.Error(path);
         }
-        var handle = new RecycleHandle(path, DateTime.UtcNow);
+        var handle = Untraceable.Contains(path)
+            ? new RecycleHandle(path, DateTime.UtcNow)
+            : new RecycleHandle(path, DateTime.UtcNow, BinItemId: Guid.NewGuid().ToString("N"));
         if (_fs.Files.TryGetValue(path, out var bytes)) {
             _bin[handle] = (true, bytes);
             _fs.Files.Remove(path);

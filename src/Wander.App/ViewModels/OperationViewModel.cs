@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows.Input;
 using Wander.App.Resources;
 using Wander.App.Util;
+using Wander.Core.FileSystem;
 using Wander.Core.Operations;
 
 namespace Wander.App.ViewModels;
@@ -24,8 +25,17 @@ namespace Wander.App.ViewModels;
 /// running averages, which is why the rate lives here and not in the
 /// tracker.
 /// </para>
+///
+/// <para>
+/// A finished operation is a row of its own kind, made from its
+/// <see cref="OperationRecord"/>: how it ended, what went wrong, and the two
+/// things to do about it - try again or clear it away.
+/// </para>
 /// </summary>
 public sealed class OperationViewModel : ObservableObject {
+    /// <summary>How many problems the row names before it counts the rest.</summary>
+    private const int ProblemLinesShown = 10;
+
     private readonly TransferRate _rate = new();
 
     private string _verb = "";
@@ -38,6 +48,8 @@ public sealed class OperationViewModel : ObservableObject {
     private bool _hasBytes;
     private bool _weighing;
     private bool _cancelling;
+    private IReadOnlyList<string> _problemLines = Array.Empty<string>();
+    private string? _ejectRoot;
 
 
     /// <param name="show">Brings the operation's window back; null where there is nothing to bring back.</param>
@@ -51,6 +63,26 @@ public sealed class OperationViewModel : ObservableObject {
                 cancel?.Invoke(Id);
             },
             () => cancel is not null && !Cancelling);
+        RetryCommand = new RelayCommand(() => { }, () => false);
+        DismissCommand = new RelayCommand(() => { }, () => false);
+        EjectCommand = new RelayCommand(() => { }, () => false);
+    }
+
+    /// <summary>The row of a finished operation.</summary>
+    /// <param name="canRetry">There is something to try again - the caller knows what a retry can take.</param>
+    /// <param name="retry">Tries again what did not get there.</param>
+    /// <param name="dismiss">Clears the row away.</param>
+    /// <param name="eject">Safely removes the drive at the root it is given (<see cref="ShowEjectable"/>).</param>
+    public OperationViewModel(OperationRecord record, bool canRetry, Action<long> retry, Action<long> dismiss, Action<long, string> eject) {
+        Id = record.Id;
+        Record = record;
+        ShowCommand = new RelayCommand(() => { }, () => false);
+        CancelCommand = new RelayCommand(() => { }, () => false);
+        RetryCommand = new RelayCommand(() => retry(Id), () => canRetry);
+        DismissCommand = new RelayCommand(() => dismiss(Id));
+        EjectCommand = new RelayCommand(() => eject(Id, _ejectRoot!), () => _ejectRoot is not null);
+        Verb = Strings.Get(record.Verb);
+        OutcomeText = OutcomeOf(record);
     }
 
 
@@ -60,6 +92,52 @@ public sealed class OperationViewModel : ObservableObject {
     public ICommand ShowCommand { get; }
 
     public ICommand CancelCommand { get; }
+
+    public ICommand RetryCommand { get; }
+
+    public ICommand DismissCommand { get; }
+
+    /// <summary>"Извлечь E:" - a removable drive the operation touched, while it is there.</summary>
+    public ICommand EjectCommand { get; }
+
+    public bool CanEject => _ejectRoot is not null;
+
+    /// <summary>"Извлечь E:", or empty when there is nothing to eject.</summary>
+    public string EjectText => _ejectRoot is null ? "" : string.Format(Strings.ActionEjectDrive, _ejectRoot.TrimEnd(Path.DirectorySeparatorChar));
+
+    /// <summary>What the finished operation left behind; null while it runs.</summary>
+    public OperationRecord? Record { get; }
+
+    public bool IsFinished => Record is not null;
+
+    public OperationOutcome Outcome => Record?.Outcome ?? OperationOutcome.Done;
+
+    /// <summary>Segoe MDL2: a tick, a warning, an error, a cross - the outcome at a glance.</summary>
+    public string OutcomeGlyph => Outcome switch {
+        OperationOutcome.Problems => "",
+        OperationOutcome.Failed => "",
+        OperationOutcome.Cancelled => "",
+        _ => "",
+    };
+
+    /// <summary>"готово 12", "готово 10, с ошибкой 1, пропущено 2".</summary>
+    public string OutcomeText { get; } = "";
+
+    /// <summary>
+    /// "IMG_0042.CR3 - no room on E:" for each problem, up to ten, then a
+    /// count of the rest. Filled in after the row appears: naming who holds
+    /// a file asks Restart Manager, which is not for the UI thread.
+    /// </summary>
+    public IReadOnlyList<string> ProblemLines {
+        get => _problemLines;
+        private set {
+            if (SetField(ref _problemLines, value)) {
+                Raise(nameof(HasProblemLines));
+            }
+        }
+    }
+
+    public bool HasProblemLines => _problemLines.Count > 0;
 
     /// <summary>"Копирование", "В корзину" - the tracker's key, translated.</summary>
     public string Verb {
@@ -136,6 +214,9 @@ public sealed class OperationViewModel : ObservableObject {
         ItemsText = _weighing
             ? Strings.ProgressWeighing
             : string.Format(Strings.OperationItems, snapshot.Completed, snapshot.Total);
+        if (snapshot.Attempt > 1) {
+            ItemsText += ", " + string.Format(Strings.OperationRetrying, snapshot.Attempt, RetryPolicy.Default.Attempts);
+        }
         Percent = snapshot.Percent;
         Raise(nameof(PercentText));
         Raise(nameof(Summary));
@@ -163,5 +244,68 @@ public sealed class OperationViewModel : ObservableObject {
         RemainingText = _rate.Remaining(snapshot.BytesTotal - snapshot.BytesDone) is { } left
             ? string.Format(Strings.OperationRemaining, DurationFormat.Format(left))
             : "";
+    }
+
+    /// <summary>
+    /// Names the problems of a finished operation, each with its reason in
+    /// the user's words. Slow - <paramref name="describe"/> may ask who holds
+    /// a file - so off the UI thread; the lines arrive through
+    /// <see cref="ShowProblems"/>.
+    /// </summary>
+    /// <param name="describe">The error, the source, where it was going - and back the reason in words.</param>
+    public static IReadOnlyList<string> DescribeProblems(OperationRecord record, Func<Exception, string, string?, string> describe) {
+        var problems = record.Items.Where(i => i.IsProblem).ToList();
+        var lines = problems
+            .Take(ProblemLinesShown)
+            .Select(i => string.Format(Strings.OperationProblemLine, NameOf(i.Source), describe(i.Error!, i.Source, i.Destination)))
+            .ToList();
+        if (problems.Count > ProblemLinesShown) {
+            lines.Add(string.Format(Strings.AndMore, problems.Count - ProblemLinesShown));
+        }
+
+        return lines;
+    }
+
+    /// <summary>What <see cref="DescribeProblems"/> came back with. UI thread.</summary>
+    public void ShowProblems(IReadOnlyList<string> lines) {
+        ProblemLines = lines;
+    }
+
+    /// <summary>The removable drive "Извлечь" is for, or null when none the operation touched is there. UI thread.</summary>
+    public void ShowEjectable(string? root) {
+        if (_ejectRoot == root) {
+            return;
+        }
+
+        _ejectRoot = root;
+        Raise(nameof(CanEject));
+        Raise(nameof(EjectText));
+        CommandManager.InvalidateRequerySuggested();
+    }
+
+
+    private static string OutcomeOf(OperationRecord record) {
+        var parts = new List<string>();
+        if (record.Done > 0 || (record.Failed == 0 && record.Skipped == 0 && record.Cancelled == 0)) {
+            parts.Add(string.Format(Strings.OperationOutcomeDone, record.Done));
+        }
+        if (record.Failed > 0) {
+            parts.Add(string.Format(Strings.OperationOutcomeFailed, record.Failed));
+        }
+        if (record.Skipped > 0) {
+            parts.Add(string.Format(Strings.OperationOutcomeSkipped, record.Skipped));
+        }
+        if (record.Cancelled > 0) {
+            parts.Add(string.Format(Strings.OperationOutcomeCancelled, record.Cancelled));
+        }
+        if (record.Verified > 0) {
+            parts.Add(string.Format(Strings.OperationOutcomeVerified, record.Verified));
+        }
+
+        return string.Join(", ", parts);
+    }
+
+    private static string NameOf(string path) {
+        return Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
     }
 }

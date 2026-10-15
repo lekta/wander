@@ -41,6 +41,7 @@ public static class PanelRules {
             Removed removed => OnRemoved(state, removed),
             FolderChanged changed => OnFolderChanged(state, changed, effects),
             PanelsRefreshRequested => Reread(state, expandedOnly: false, effects),
+            VolumesChanged => Read(state, Pane.Drives, PanelState.TopKey, effects),
             WindowActivated activated => OnActivated(state, activated, effects),
             OptionsChanged options => OnOptions(state, options, effects),
             EditRequested edit => state.WithPanel(edit.Pane, state.Panel(edit.Pane).Find(edit.Path) is { IsRenamable: true }
@@ -578,7 +579,9 @@ public static class PanelRules {
     /// A level went from <paramref name="old"/> to <paramref name="fresh"/>:
     /// the cursor on a row that is gone, or inside one, goes to the next row
     /// that stayed, else the one before, else the row above; what was open
-    /// or being edited or revealed under a gone row is let go of.
+    /// or being edited or revealed under a gone row is let go of, and so are
+    /// the levels read under it - a flash drive that comes back is read anew,
+    /// not shown as it was.
     /// </summary>
     private static PanelState SettleGone(PanelState panel, string levelKey, ImmutableArray<PanelRow> old, ImmutableArray<PanelRow> fresh) {
         var gone = old.Where(o => IndexIn(fresh, o.Path) < 0).ToList();
@@ -596,7 +599,10 @@ public static class PanelRules {
             if (panel.Revealing is { } revealing && PanelPaths.IsUnderOrSelf(revealing, row.Path)) {
                 panel = panel with { Revealing = null };
             }
-            panel = panel with { Expanded = panel.Expanded.Except(panel.Expanded.Where(k => PanelPaths.IsUnderOrSelf(k, row.Path))) };
+            panel = panel with {
+                Expanded = panel.Expanded.Except(panel.Expanded.Where(k => PanelPaths.IsUnderOrSelf(k, row.Path))),
+                Levels = panel.Levels.RemoveRange(panel.Levels.Keys.Where(k => k.Length > 0 && PanelPaths.IsUnderOrSelf(k, row.Path)).ToList()),
+            };
         }
 
         return panel;

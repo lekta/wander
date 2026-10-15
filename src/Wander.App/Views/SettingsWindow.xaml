@@ -701,6 +701,16 @@
                           ToolTip="{x:Static res:Strings.SettingsSkipIdenticalHint}"
                           IsChecked="{Binding Owner.SkipIdenticalOnConflict}"/>
 
+                <TextBlock Text="{x:Static res:Strings.SettingsVerifyGroup}" Style="{StaticResource GroupTitle}"/>
+                <RadioButton GroupName="VerifyCopies" Content="{x:Static res:Strings.SettingsVerifyRemovable}"
+                             IsChecked="{Binding Owner.VerifyCopies, Converter={StaticResource EnumEquals}, ConverterParameter=Removable}"/>
+                <RadioButton GroupName="VerifyCopies" Content="{x:Static res:Strings.SettingsVerifyAlways}"
+                             IsChecked="{Binding Owner.VerifyCopies, Converter={StaticResource EnumEquals}, ConverterParameter=Always}"/>
+                <RadioButton GroupName="VerifyCopies" Content="{x:Static res:Strings.SettingsVerifyNever}"
+                             IsChecked="{Binding Owner.VerifyCopies, Converter={StaticResource EnumEquals}, ConverterParameter=Never}"/>
+                <!-- Kept: the time of reading the copy again is the price of the choice. -->
+                <TextBlock Text="{x:Static res:Strings.SettingsVerifyNote}" Style="{StaticResource CheckNote}"/>
+
                 <TextBlock Text="{x:Static res:Strings.SettingsDragGroup}" Style="{StaticResource GroupTitle}"/>
                 <CheckBox Content="{x:Static res:Strings.SettingsDragHoverEntersFolders}"
                           ToolTip="{x:Static res:Strings.SettingsDragHoverEntersFoldersHint}"
@@ -1465,6 +1475,11 @@
                 <!-- Kept: what goes into a log that is sent out is the
                      price of the switch above. -->
                 <TextBlock Text="{x:Static res:Strings.SettingsLogPathsNote}" Style="{StaticResource CheckNote}"/>
+
+                <TextBlock Text="{x:Static res:Strings.SettingsCopyDebugGroup}" Style="{StaticResource GroupTitle}"/>
+                <CheckBox Content="{x:Static res:Strings.SettingsCopyWithWindows}"
+                          ToolTip="{x:Static res:Strings.SettingsCopyWithWindowsHint}"
+                          IsChecked="{Binding Owner.CopyWithWindows}"/>
 
                 <TextBlock Text="{x:Static res:Strings.SettingsDebugMenuGroup}" Style="{StaticResource GroupTitle}"/>
                 <CheckBox Content="{x:Static res:Strings.SettingsShowDebugMenu}"

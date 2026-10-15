@@ -417,6 +417,44 @@
     <value>Открыта папка: {0}</value>
     <comment>{0} — полный путь папки; строка журнала действий</comment>
   </data>
+  <data name="JournalAppStarted" xml:space="preserve">
+    <value>Запущен Wander {0}</value>
+    <comment>{0} — версия; первая запись журнала сеанса, дата — у времени записи</comment>
+  </data>
+  <data name="JournalBatchHeadline" xml:space="preserve">
+    <value>{0} в {1} — {2}</value>
+    <comment>{0} — VerbCopied / VerbMoved / VerbExtracted, {1} — куда, {2} — сколько, объём, время и что не получилось через запятую; заголовок записи журнала</comment>
+  </data>
+  <data name="JournalItemReplaced" xml:space="preserve">
+    <value>{0} — заменил прежний</value>
+    <comment>{0} — имя файла; строка журнала под заголовком операции</comment>
+  </data>
+  <data name="JournalItemRenamed" xml:space="preserve">
+    <value>{0} → {1}</value>
+    <comment>{0} — имя источника, {1} — под каким именем лёг</comment>
+  </data>
+  <data name="JournalItemSkipped" xml:space="preserve">
+    <value>{0} — пропущен</value>
+  </data>
+  <data name="JournalItemCancelled" xml:space="preserve">
+    <value>{0} — отменён</value>
+  </data>
+  <data name="JournalItemFailed" xml:space="preserve">
+    <value>{0} — не получилось: {1}</value>
+    <comment>{0} — имя файла, {1} — причина</comment>
+  </data>
+  <data name="JournalFileOpened" xml:space="preserve">
+    <value>Открыт файл: {0}</value>
+    <comment>{0} — полный путь файла</comment>
+  </data>
+  <data name="JournalFileOpenWith" xml:space="preserve">
+    <value>«Открыть с помощью»: {0}</value>
+    <comment>{0} — полный путь файла</comment>
+  </data>
+  <data name="JournalArchiveCopyOpened" xml:space="preserve">
+    <value>Открыта временная копия из архива: {0}</value>
+    <comment>{0} — путь записи в архиве</comment>
+  </data>
   <data name="StatusPropertiesFailed" xml:space="preserve">
     <value>Не удалось показать свойства: {0}</value>
   </data>
@@ -465,6 +503,10 @@
   <data name="ProgressUndoing" xml:space="preserve">
     <value>Откат</value>
     <comment>Окно операции и строка состояния во время Ctrl+Z</comment>
+  </data>
+  <data name="PowerRequestReason" xml:space="preserve">
+    <value>Wander: файловая операция</value>
+    <comment>что система показывает в powercfg /requests, пока идёт операция и компьютер не засыпает</comment>
   </data>
   <data name="ProgressWeighing" xml:space="preserve">
     <value>Подсчёт…</value>
@@ -547,6 +589,10 @@
   </data>
   <data name="StatusRecycled" xml:space="preserve">
     <value>В корзину отправлено: {0}</value>
+  </data>
+  <data name="StatusRecycledForGood" xml:space="preserve">
+    <value>удалено безвозвратно: {0} (корзина не приняла)</value>
+    <comment>{0} — сколько; корзина взяла и не назвала, как найти — отменить нельзя</comment>
   </data>
   <data name="StatusRecycledPartly" xml:space="preserve">
     <value>В корзину отправлено: {0}, с ошибкой: {1}{2}</value>
@@ -839,6 +885,45 @@
   <data name="ErrorInUse" xml:space="preserve">
     <value>файл занят другой программой</value>
   </data>
+  <data name="ErrorDiskFull" xml:space="preserve">
+    <value>нет места на {0}</value>
+    <comment>{0} — диск: «E:»</comment>
+  </data>
+  <data name="ErrorFileTooLargeForFat32" xml:space="preserve">
+    <value>файл больше 4 ГБ, а диск {0} — FAT32</value>
+    <comment>{0} — диск: «E:»</comment>
+  </data>
+  <data name="ErrorDeviceGone" xml:space="preserve">
+    <value>устройство отключено или не готово</value>
+  </data>
+  <data name="ErrorDeviceAsleep" xml:space="preserve">
+    <value>устройство перестало отвечать — камера выключилась или уснула: включите её и повторите</value>
+  </data>
+  <data name="ErrorReadFailed" xml:space="preserve">
+    <value>ошибка чтения с диска — носитель или кабель</value>
+  </data>
+  <data name="ErrorCopyMismatch" xml:space="preserve">
+    <value>копия не совпала с оригиналом — носитель или кабель</value>
+  </data>
+  <data name="ErrorLinkNotCopied" xml:space="preserve">
+    <value>ссылка на папку — не копируется</value>
+  </data>
+  <data name="ActionEjectDrive" xml:space="preserve">
+    <value>Извлечь {0}</value>
+    <comment>{0} — диск: «E:»; кнопка у завершённой операции со съёмным диском</comment>
+  </data>
+  <data name="StatusEjected" xml:space="preserve">
+    <value>{0} можно вынимать</value>
+    <comment>{0} — диск: «E:»</comment>
+  </data>
+  <data name="StatusEjectNoVerb" xml:space="preserve">
+    <value>Windows не предлагает извлечь {0} отсюда — попробуйте «Безопасное извлечение» на панели задач</value>
+    <comment>{0} — диск: «E:»</comment>
+  </data>
+  <data name="StatusEjectBusy" xml:space="preserve">
+    <value>{0} не извлечён: {1}</value>
+    <comment>{0} — диск: «E:», {1} — кто держит (ErrorFileInUse / ErrorInUse)</comment>
+  </data>
   <data name="ErrorClaimedByOperation" xml:space="preserve">
     <value>«{0}» занят операцией Wander: {1}</value>
     <comment>{0} — имя, {1} — операция, которая держит файл («Копирование», «Откат»)</comment>
@@ -866,6 +951,14 @@
   <data name="HolderWander" xml:space="preserve">
     <value>Wander: {0}</value>
     <comment>Кто держал файл, когда это фоновое чтение самого Wander; {0} — HolderThumbnail / HolderContentSearch</comment>
+  </data>
+  <data name="HolderFileInFolder" xml:space="preserve">
+    <value>«{0}» держит {1}</value>
+    <comment>кто держит папку: {0} — файл внутри, {1} — программа</comment>
+  </data>
+  <data name="HolderFileInFolderUnnamed" xml:space="preserve">
+    <value>внутри занят «{0}»</value>
+    <comment>{0} — файл внутри папки, который кто-то держит; программу Windows не назвала</comment>
   </data>
   <data name="HolderThumbnail" xml:space="preserve">
     <value>миниатюра</value>
@@ -1239,6 +1332,33 @@
   </data>
   <data name="ProgressRecycling" xml:space="preserve">
     <value>В корзину</value>
+  </data>
+  <data name="ProgressRenaming" xml:space="preserve">
+    <value>Переименование</value>
+  </data>
+  <data name="ProgressCreating" xml:space="preserve">
+    <value>Создание</value>
+  </data>
+  <data name="ProgressRating" xml:space="preserve">
+    <value>Оценка</value>
+  </data>
+  <data name="ProgressLabeling" xml:space="preserve">
+    <value>Цветная метка</value>
+  </data>
+  <data name="UndoWhatNamed" xml:space="preserve">
+    <value>{0} {1}</value>
+    <comment>{0} - что отменяется, со строчной: «копирование»; {1} - что: StatusNamedOne / StatusNamedMany</comment>
+  </data>
+  <data name="UndoWhatCounted" xml:space="preserve">
+    <value>{0} ({1})</value>
+    <comment>{0} - что отменяется, со строчной; {1} - сколько: «3 элемента»</comment>
+  </data>
+  <data name="UndoTooltipNext" xml:space="preserve">
+    <value>Отменить: {0}</value>
+    <comment>{0} - UndoWhatNamed / UndoWhatCounted</comment>
+  </data>
+  <data name="UndoTooltipNothing" xml:space="preserve">
+    <value>Нечего отменять</value>
   </data>
   <data name="ProgressCancelling" xml:space="preserve">
     <value>Отмена…</value>
@@ -2031,6 +2151,22 @@
   <data name="SettingsSkipIdenticalHint" xml:space="preserve">
     <value>Файл, совпадающий побайтово с тем, что уже лежит на месте, не копируется и не переносится; в окне совпадений у такой пары сразу стоит «оставить».</value>
   </data>
+  <data name="SettingsVerifyGroup" xml:space="preserve">
+    <value>Проверка скопированного</value>
+    <comment>заголовок группы на странице «Файловые операции»</comment>
+  </data>
+  <data name="SettingsVerifyRemovable" xml:space="preserve">
+    <value>С флешек, карт памяти, телефонов и фотоаппаратов</value>
+  </data>
+  <data name="SettingsVerifyAlways" xml:space="preserve">
+    <value>Всегда</value>
+  </data>
+  <data name="SettingsVerifyNever" xml:space="preserve">
+    <value>Никогда</value>
+  </data>
+  <data name="SettingsVerifyNote" xml:space="preserve">
+    <value>Копия читается с диска ещё раз и сверяется с оригиналом — копирование дольше на время этого чтения</value>
+  </data>
   <data name="SettingsDragHoverEntersFolders" xml:space="preserve">
     <value>Входить в папку, если задержать над ней перетаскиваемый файл</value>
   </data>
@@ -2116,9 +2252,54 @@
     <value>{0}: подсчёт…</value>
     <comment>{0} - глагол операции; вместо процентов, пока источники взвешиваются</comment>
   </data>
+  <data name="OperationRetrying" xml:space="preserve">
+    <value>повтор {0} из {1}</value>
+    <comment>{0} - какая попытка, {1} - сколько всего; после временной ошибки чтения или записи</comment>
+  </data>
   <data name="OperationMany" xml:space="preserve">
     <value>Операций: {0} — {1} %</value>
     <comment>{0} - сколько операций идёт, {1} - общий процент</comment>
+  </data>
+  <data name="OperationsFinishedOk" xml:space="preserve">
+    <value>✓ {0}</value>
+    <comment>{0} - сколько завершённых операций прошло без ошибок; строка состояния, когда ничего не идёт</comment>
+  </data>
+  <data name="OperationsFinishedProblems" xml:space="preserve">
+    <value>⚠ {0}</value>
+    <comment>{0} - сколько завершённых операций с ошибками</comment>
+  </data>
+  <data name="OperationOutcomeDone" xml:space="preserve">
+    <value>готово {0}</value>
+  </data>
+  <data name="OperationOutcomeFailed" xml:space="preserve">
+    <value>с ошибкой {0}</value>
+  </data>
+  <data name="OperationOutcomeSkipped" xml:space="preserve">
+    <value>пропущено {0}</value>
+  </data>
+  <data name="OperationOutcomeCancelled" xml:space="preserve">
+    <value>отменено {0}</value>
+  </data>
+  <data name="OperationOutcomeVerified" xml:space="preserve">
+    <value>проверено {0}</value>
+    <comment>{0} - сколько копий перечитано и сверено с оригиналом</comment>
+  </data>
+  <data name="OperationProblemLine" xml:space="preserve">
+    <value>{0} — {1}</value>
+    <comment>{0} - имя файла, {1} - причина</comment>
+  </data>
+  <data name="OperationProblemsHeader" xml:space="preserve">
+    <value>Подробнее</value>
+    <comment>раскрывает у завершённой операции список того, что не получилось</comment>
+  </data>
+  <data name="ActionDismiss" xml:space="preserve">
+    <value>Убрать</value>
+  </data>
+  <data name="OperationsDismissFinished" xml:space="preserve">
+    <value>Убрать завершённые</value>
+  </data>
+  <data name="OperationsDismissFinishedHint" xml:space="preserve">
+    <value>Убирает завершённые без ошибок; с Shift — все</value>
   </data>
   <data name="DurationSeconds" xml:space="preserve">
     <value>{0} с</value>
@@ -2973,6 +3154,16 @@
   </data>
   <data name="SettingsLogPathsNote" xml:space="preserve">
     <value>Выключено — вместо путей метки: диск, глубина и расширение видны, имена нет. Такой лог можно приложить к отчёту об ошибке.</value>
+  </data>
+  <data name="SettingsCopyDebugGroup" xml:space="preserve">
+    <value>Копирование</value>
+    <comment>заголовок группы на странице «Отладка и сброс»</comment>
+  </data>
+  <data name="SettingsCopyWithWindows" xml:space="preserve">
+    <value>Копировать средствами Windows</value>
+  </data>
+  <data name="SettingsCopyWithWindowsHint" xml:space="preserve">
+    <value>Для разбора жалоб на копирование: свой цикл Wander выключен, копирует Windows; лог говорит это первой строкой каждой операции</value>
   </data>
   <data name="SettingsDebugMenuGroup" xml:space="preserve">
     <value>Меню «Отладка»</value>

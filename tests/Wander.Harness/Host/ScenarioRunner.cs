@@ -19,6 +19,7 @@ using Wander.Core.FileSystem;
 using Wander.Core.Folders;
 using Wander.Core.Layout;
 using Wander.Core.Navigation;
+using Wander.Core.Operations;
 using Wander.Core.Panels;
 using Wander.Core.Persistence;
 using Wander.Core.Shell;
@@ -224,6 +225,26 @@ public sealed class ScenarioRunner {
                 break;
             case "assert-entries":
                 AssertEntries(step);
+                break;
+            // The finished operations (OPERATIONS, step 1): waits out the
+            // running first - wait-idle does not wait for operations.
+            case "assert-operations":
+                await AssertOperationsAsync(step);
+                break;
+            // A finished row's "Повторить" - the newest that has one.
+            case "retry-last-operation": {
+                    EnsureInSandbox(verb);
+                    await WaitOperationsAsync();
+                    var row = _vm.Operations.FirstOrDefault(o => o.IsFinished && o.RetryCommand.CanExecute(null))
+                        ?? throw new InvalidOperationException("no finished operation to retry");
+                    row.RetryCommand.Execute(null);
+                    await WaitIdleAsync(step);
+                    break;
+                }
+            // "Убрать завершённые"; with "all" the ones with problems too, as Shift does.
+            case "dismiss-operations":
+                ServiceLocator.Get<OperationTracker>().DismissFinished(problemsToo: step.Bool("all") ?? true);
+                await YieldAsync();
                 break;
             case "assert-path":
                 AssertPath(step);
@@ -599,6 +620,16 @@ public sealed class ScenarioRunner {
                     if (!IsInSandbox(to)) {
                         throw new InvalidOperationException($"fs step outside the sandbox: {to}");
                     }
+                    if (Directory.Exists(path)) {
+                        Directory.Move(path, to);
+                    } else {
+                        File.Move(path, to);
+                    }
+                    break;
+                }
+            // A rename made by another program: "to" is the new name, in the same folder.
+            case "rename": {
+                    string to = Path.Combine(Path.GetDirectoryName(path)!, step.Require("to"));
                     if (Directory.Exists(path)) {
                         Directory.Move(path, to);
                     } else {
@@ -1026,6 +1057,50 @@ public sealed class ScenarioRunner {
     /// after a name search asserts nothing at all - "at least a thousand of
     /// them" was true of the unfiltered folder before the search ran.
     /// </summary>
+    /// <summary>
+    /// Waits for the running operations to end - a copy goes on after the
+    /// command that started it returned - up to half a minute.
+    /// </summary>
+    private async Task WaitOperationsAsync() {
+        var tracker = ServiceLocator.Get<OperationTracker>();
+        var until = DateTime.UtcNow.AddSeconds(30);
+        while (tracker.Snapshot().Count > 0) {
+            if (DateTime.UtcNow > until) {
+                throw new TimeoutException($"{tracker.Snapshot().Count} operation(s) still running after 30 s");
+            }
+            await Task.Delay(50);
+        }
+        await YieldAsync();
+    }
+
+    /// <summary>
+    /// <c>{"do": "assert-operations", "finished": 1, "failed": 1, "outcome": "Problems"}</c>:
+    /// how many finished operations the status bar holds, and the newest's
+    /// failed count and outcome.
+    /// </summary>
+    private async Task AssertOperationsAsync(JsonElement step) {
+        await WaitOperationsAsync();
+        var finished = ServiceLocator.Get<OperationTracker>().Finished;
+        if (step.TryGetProperty("finished", out var count) && count.GetInt32() != finished.Count) {
+            throw new InvalidOperationException($"expected {count.GetInt32()} finished operation(s), found {finished.Count}");
+        }
+        if (finished.Count == 0) {
+            if (step.TryGetProperty("failed", out _) || step.TryGetProperty("outcome", out _)) {
+                throw new InvalidOperationException("no finished operation to look at");
+            }
+
+            return;
+        }
+
+        var newest = finished[0];
+        if (step.TryGetProperty("failed", out var failed) && failed.GetInt32() != newest.Failed) {
+            throw new InvalidOperationException($"the newest operation ({newest.Verb}) has {newest.Failed} failed, expected {failed.GetInt32()}");
+        }
+        if (step.Str("outcome") is { } outcome && !string.Equals(outcome, newest.Outcome.ToString(), StringComparison.OrdinalIgnoreCase)) {
+            throw new InvalidOperationException($"the newest operation ({newest.Verb}) ended {newest.Outcome}, expected {outcome}");
+        }
+    }
+
     private void AssertEntries(JsonElement step) {
         bool visible = string.Equals(step.Str("scope"), "visible", StringComparison.OrdinalIgnoreCase);
         var names = visible

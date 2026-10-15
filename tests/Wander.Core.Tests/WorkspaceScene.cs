@@ -67,6 +67,14 @@ internal sealed class WorkspaceScene {
         return this;
     }
 
+    /// <summary>A drive pulled out, with everything on it.</summary>
+    public WorkspaceScene Unplug(string root) {
+        _drives.RemoveAll(d => PanelPaths.Same(d, root));
+        _folders.RemoveWhere(f => PanelPaths.IsUnderOrSelf(f, root));
+
+        return this;
+    }
+
     public WorkspaceScene Advance(long ms) {
         _clock += ms;
 

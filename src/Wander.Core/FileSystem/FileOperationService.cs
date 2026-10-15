@@ -52,7 +52,11 @@ public sealed class FileOperationService {
         _undo = undo;
         _log = log;
         _held = held ?? new HeldPaths(new PathClaims());
-        _batch = new BatchExecutor(fs, bin, undo, tracker, log, _held);
+        _batch = new BatchExecutor(fs, bin, undo, tracker, log, _held) {
+            CopyOptionsFor = source => new CopyOptions(
+                CopyVerification.ShouldVerify(Verify, ServiceLocator.TryGet<IVolumeInfoProvider>()?.KindOf(source) ?? VolumeKind.Unknown),
+                SystemCopyOnly),
+        };
     }
 
     /// <summary>Convenience ctor that pulls collaborators from the locator. Used at app startup.</summary>
@@ -70,6 +74,27 @@ public sealed class FileOperationService {
     }
 
 
+    /// <summary>When copies are read back - the setting "Проверять скопированное"; the app copies it in.</summary>
+    public VerifyPolicy Verify { get; set; } = VerifyPolicy.Removable;
+
+    /// <summary>
+    /// Every copy through Windows' engine, none through Wander's loop - the
+    /// debug switch "Копировать средствами Windows", for a complaint about a
+    /// copy. Said in the log at the start of every operation it applies to.
+    /// </summary>
+    public bool SystemCopyOnly { get; set; }
+
+
+    /// <summary>
+    /// The wait for held files for one undo - the same claims, probe and
+    /// holder names the operations use (<see cref="UndoService.UndoAsync"/>).
+    /// </summary>
+    /// <param name="own">The undo's own claim - never in its own way.</param>
+    public IUndoStepGate UndoGate(IDisposable? own) {
+        return new UndoStepGate(_held.Begin(_log, own));
+    }
+
+
     // --- Single-item ops (internal — see the note on the class) ---------
 
     internal void Copy(string source, string destination, bool overwrite = false) {
@@ -82,7 +107,7 @@ public sealed class FileOperationService {
             throw new FileNotFoundException("Source not found", source);
         }
         _log.Info($"Copy: {source} -> {destination} (overwrite={overwrite})");
-        _undo.Push(new CreateAction(_bin, destination));
+        _undo.Push(new CreateAction(_bin, destination, OperationVerbs.Copy));
     }
 
     internal void Move(string source, string destination) {
@@ -202,7 +227,7 @@ public sealed class FileOperationService {
             throw;
         }
 
-        _undo.Push(new CompositeAction(description ?? $"Rename to '{renames[0].NewName}'", steps));
+        _undo.Push(new CompositeAction(description ?? $"Rename to '{renames[0].NewName}'", steps, OperationVerbs.Rename, renames.Count));
     }
 
 

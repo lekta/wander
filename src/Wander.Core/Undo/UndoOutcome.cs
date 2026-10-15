@@ -12,8 +12,12 @@ public sealed record UndoFailure(IUndoableAction Step, Exception Error);
 /// made it; its <c>PathsAfterUndo</c> / <c>MovesOnUndo</c> /
 /// <c>MetadataTargets</c> are what the UI follows. Null when nothing did.
 /// </param>
-/// <param name="Remaining">The steps a cancel left undone - already back on the stack. Null when the undo ran to its end.</param>
-/// <param name="Failures">Steps that threw. Not on the stack any more.</param>
+/// <param name="Remaining">
+/// The steps a cancel left undone, and the failed ones worth another try
+/// (<see cref="IUndoStepGate.WorthAnotherTry"/>) - already back on the
+/// stack. Null when nothing went back.
+/// </param>
+/// <param name="Failures">Steps that threw. On the stack again only when worth another try.</param>
 /// <param name="Cancelled">Stopped before the last step.</param>
 public sealed record UndoOutcome(
     IUndoableAction? Undone, IUndoableAction? Remaining, IReadOnlyList<UndoFailure> Failures, bool Cancelled);

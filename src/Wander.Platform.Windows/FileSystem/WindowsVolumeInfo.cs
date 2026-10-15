@@ -34,14 +34,7 @@ public sealed class WindowsVolumeInfo : IVolumeInfoProvider {
             return null;
         }
 
-        var kind = drive.DriveType switch {
-            DriveType.Fixed => VolumeKind.Fixed,
-            DriveType.Removable => VolumeKind.Removable,
-            DriveType.Network => VolumeKind.Network,
-            DriveType.CDRom => VolumeKind.Optical,
-            DriveType.Ram => VolumeKind.Ram,
-            _ => VolumeKind.Unknown,
-        };
+        var kind = KindOf(drive.DriveType);
 
         try {
             if (!drive.IsReady) {
@@ -64,6 +57,16 @@ public sealed class WindowsVolumeInfo : IVolumeInfoProvider {
     }
 
 
+    public VolumeKind KindOf(string path) {
+        try {
+            string root = Path.GetPathRoot(Path.GetFullPath(path)) ?? "";
+
+            return root.Length == 0 ? VolumeKind.Unknown : KindOf(new DriveInfo(root).DriveType);
+        } catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) {
+            return VolumeKind.Unknown;
+        }
+    }
+
     public bool IsVolumeRoot(string path) {
         if (string.IsNullOrWhiteSpace(path)) {
             return false;
@@ -79,5 +82,17 @@ public sealed class WindowsVolumeInfo : IVolumeInfoProvider {
         } catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) {
             return false;
         }
+    }
+
+
+    private static VolumeKind KindOf(DriveType type) {
+        return type switch {
+            DriveType.Fixed => VolumeKind.Fixed,
+            DriveType.Removable => VolumeKind.Removable,
+            DriveType.Network => VolumeKind.Network,
+            DriveType.CDRom => VolumeKind.Optical,
+            DriveType.Ram => VolumeKind.Ram,
+            _ => VolumeKind.Unknown,
+        };
     }
 }

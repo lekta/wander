@@ -529,7 +529,7 @@
                 status bar's clipping does not reach it.
             -->
             <StatusBarItem DockPanel.Dock="Right" Margin="12,0,0,0"
-                           Visibility="{Binding HasActiveOperations, Converter={StaticResource BoolToVisibility}}">
+                           Visibility="{Binding HasOperations, Converter={StaticResource BoolToVisibility}}">
                 <Grid>
                     <ToggleButton x:Name="OperationsButton"
                                   Background="Transparent" BorderThickness="0"
@@ -543,7 +543,8 @@
                             <ProgressBar Width="110" Height="12" Margin="8,0,0,0"
                                          VerticalAlignment="Center"
                                          Minimum="0" Maximum="100"
-                                         Value="{Binding AggregateProgress, Mode=OneWay}"/>
+                                         Value="{Binding AggregateProgress, Mode=OneWay}"
+                                         Visibility="{Binding HasActiveOperations, Converter={StaticResource BoolToVisibility}}"/>
                         </StackPanel>
                     </ToggleButton>
 
@@ -551,9 +552,12 @@
                         One row per running operation: the verb, the file in
                         flight, the two counts, and the two things only this
                         panel can do - bring the operation's window back from
-                        where "Свернуть" put it, or stop it. Closes when it
-                        loses the mouse and the keyboard (StaysOpen="False"),
-                        which also unticks the button it is bound to.
+                        where "Свернуть" put it, or stop it. Under them the
+                        finished ones, until cleared away: how each ended,
+                        what went wrong, "Повторить" and "Убрать". Closes when
+                        it loses the mouse and the keyboard
+                        (StaysOpen="False"), which also unticks the button it
+                        is bound to.
                     -->
                     <Popup IsOpen="{Binding ElementName=OperationsButton, Path=IsChecked}"
                            PlacementTarget="{Binding ElementName=OperationsButton}"
@@ -563,49 +567,123 @@
                         <Border Background="{DynamicResource ContentBackground}"
                                 BorderBrush="{DynamicResource CardBorder}" BorderThickness="1"
                                 Padding="12,10" MinWidth="340" MaxWidth="440">
-                            <ItemsControl ItemsSource="{Binding Operations}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Grid Margin="0,4">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <ScrollViewer MaxHeight="480" VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl ItemsSource="{Binding Operations}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid>
+                                                    <Grid Margin="0,4"
+                                                          Visibility="{Binding IsFinished, Converter={StaticResource InverseBoolToVisibility}}">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
 
-                                            <StackPanel Grid.Column="0" Margin="0,0,10,0">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="{Binding Verb}" FontWeight="SemiBold" FontSize="12"/>
-                                                    <TextBlock Text="{Binding PercentText}" FontSize="12"
-                                                               Foreground="{DynamicResource TextMuted}"
-                                                               Margin="8,0,0,0"/>
-                                                </StackPanel>
-                                                <TextBlock Text="{Binding CurrentFile}" FontSize="11"
-                                                           Foreground="{DynamicResource TextCaption}"
-                                                           TextTrimming="CharacterEllipsis"
-                                                           Margin="0,2,0,0"/>
-                                                <ProgressBar Height="6" Margin="0,4,0,0"
-                                                             Minimum="0" Maximum="100"
-                                                             Value="{Binding Percent, Mode=OneWay}"/>
-                                                <TextBlock Text="{Binding ItemsText}" FontSize="11"
-                                                           Foreground="{DynamicResource TextDim}"
-                                                           Margin="0,3,0,0"/>
-                                                <TextBlock Text="{Binding BytesText}" FontSize="11"
-                                                           Foreground="{DynamicResource TextDim}"
-                                                           Margin="0,1,0,0"/>
-                                            </StackPanel>
+                                                        <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <TextBlock Text="{Binding Verb}" FontWeight="SemiBold" FontSize="12"/>
+                                                                <TextBlock Text="{Binding PercentText}" FontSize="12"
+                                                                           Foreground="{DynamicResource TextMuted}"
+                                                                           Margin="8,0,0,0"/>
+                                                            </StackPanel>
+                                                            <TextBlock Text="{Binding CurrentFile}" FontSize="11"
+                                                                       Foreground="{DynamicResource TextCaption}"
+                                                                       TextTrimming="CharacterEllipsis"
+                                                                       Margin="0,2,0,0"/>
+                                                            <ProgressBar Height="6" Margin="0,4,0,0"
+                                                                         Minimum="0" Maximum="100"
+                                                                         Value="{Binding Percent, Mode=OneWay}"/>
+                                                            <TextBlock Text="{Binding ItemsText}" FontSize="11"
+                                                                       Foreground="{DynamicResource TextDim}"
+                                                                       Margin="0,3,0,0"/>
+                                                            <TextBlock Text="{Binding BytesText}" FontSize="11"
+                                                                       Foreground="{DynamicResource TextDim}"
+                                                                       Margin="0,1,0,0"/>
+                                                        </StackPanel>
 
-                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                                <Button Content="{x:Static res:Strings.ActionShow}"
-                                                        Style="{StaticResource DialogButton}"
-                                                        Command="{Binding ShowCommand}"/>
-                                                <Button Content="{x:Static res:Strings.ActionCancel}"
-                                                        Style="{StaticResource DialogButton}" Margin="0,6,0,0"
-                                                        Command="{Binding CancelCommand}"/>
-                                            </StackPanel>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                            <Button Content="{x:Static res:Strings.ActionShow}"
+                                                                    Style="{StaticResource DialogButton}"
+                                                                    Command="{Binding ShowCommand}"/>
+                                                            <Button Content="{x:Static res:Strings.ActionCancel}"
+                                                                    Style="{StaticResource DialogButton}" Margin="0,6,0,0"
+                                                                    Command="{Binding CancelCommand}"/>
+                                                        </StackPanel>
+                                                    </Grid>
+
+                                                    <!-- A finished operation: the outcome's mark, the verb, the counts, what went wrong. -->
+                                                    <Grid Margin="0,4"
+                                                          Visibility="{Binding IsFinished, Converter={StaticResource BoolToVisibility}}">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <TextBlock Grid.Column="0" Text="{Binding OutcomeGlyph}"
+                                                                   FontFamily="Segoe MDL2 Assets" FontSize="12"
+                                                                   Margin="0,2,8,0" VerticalAlignment="Top">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Foreground" Value="{DynamicResource TextMuted}"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding Outcome}" Value="Problems">
+                                                                            <Setter Property="Foreground" Value="{DynamicResource StatusWarningGlyph}"/>
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding Outcome}" Value="Failed">
+                                                                            <Setter Property="Foreground" Value="{DynamicResource StatusErrorGlyph}"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
+
+                                                        <StackPanel Grid.Column="1" Margin="0,0,10,0">
+                                                            <TextBlock Text="{Binding Verb}" FontWeight="SemiBold" FontSize="12"/>
+                                                            <TextBlock Text="{Binding OutcomeText}" FontSize="11"
+                                                                       Foreground="{DynamicResource TextDim}"
+                                                                       TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                                            <Expander Margin="0,2,0,0" FontSize="11"
+                                                                      Header="{x:Static res:Strings.OperationProblemsHeader}"
+                                                                      Visibility="{Binding HasProblemLines, Converter={StaticResource BoolToVisibility}}">
+                                                                <ItemsControl ItemsSource="{Binding ProblemLines}" Margin="0,2,0,0">
+                                                                    <ItemsControl.ItemTemplate>
+                                                                        <DataTemplate>
+                                                                            <TextBlock Text="{Binding}" FontSize="11"
+                                                                                       Foreground="{DynamicResource TextCaption}"
+                                                                                       TextWrapping="Wrap" Margin="0,1,0,0"/>
+                                                                        </DataTemplate>
+                                                                    </ItemsControl.ItemTemplate>
+                                                                </ItemsControl>
+                                                            </Expander>
+                                                        </StackPanel>
+
+                                                        <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                                            <Button Content="{x:Static res:Strings.ActionRetry}"
+                                                                    Style="{StaticResource DialogButton}"
+                                                                    Command="{Binding RetryCommand}"/>
+                                                            <Button Content="{x:Static res:Strings.ActionDismiss}"
+                                                                    Style="{StaticResource DialogButton}" Margin="0,6,0,0"
+                                                                    Command="{Binding DismissCommand}"/>
+                                                            <Button Content="{Binding EjectText}"
+                                                                    Style="{StaticResource DialogButton}" Margin="0,6,0,0"
+                                                                    Command="{Binding EjectCommand}"
+                                                                    Visibility="{Binding CanEject, Converter={StaticResource BoolToVisibility}}"/>
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                                <Button Content="{x:Static res:Strings.OperationsDismissFinished}"
+                                        ToolTip="{x:Static res:Strings.OperationsDismissFinishedHint}"
+                                        Style="{StaticResource DialogButton}" HorizontalAlignment="Right"
+                                        Margin="0,8,0,0"
+                                        Command="{Binding DismissFinishedCommand}"
+                                        Visibility="{Binding HasFinishedOperations, Converter={StaticResource BoolToVisibility}}"/>
+                            </StackPanel>
                         </Border>
                     </Popup>
                 </Grid>

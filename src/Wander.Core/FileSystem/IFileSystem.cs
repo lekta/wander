@@ -58,22 +58,30 @@ public interface IFileSystem {
     /// Copy one file. <paramref name="bytesCopied"/> is told the delta after
     /// each chunk, so a single large file has a bar that moves; passing null
     /// asks for the plain copy. <paramref name="ct"/> stops it part-way and
-    /// leaves no half-written tail behind.
+    /// leaves no half-written tail behind. <paramref name="options"/> asks
+    /// for the copy to be read back (<see cref="CopyOptions.Verify"/>): one
+    /// that does not match throws <see cref="CopyMismatchException"/> and is
+    /// not kept.
     /// </summary>
-    void CopyFile(string source, string destination, bool overwrite,
-        IProgress<long>? bytesCopied = null, CancellationToken ct = default);
-
-    /// <summary>Copy a folder recursively, file by file - see <see cref="CopyFile"/> for the two extra arguments.</summary>
-    void CopyDirectory(string source, string destination, bool overwrite,
-        IProgress<long>? bytesCopied = null, CancellationToken ct = default);
+    /// <returns>What the copy went through: the engine, and whether it was read back.</returns>
+    CopyReport CopyFile(string source, string destination, bool overwrite,
+        IProgress<long>? bytesCopied = null, CancellationToken ct = default, CopyOptions? options = null);
 
     /// <summary>
-    /// Move a file or folder. Within one volume this is a rename and the two
-    /// extra arguments never come into play; across volumes it is a copy
-    /// followed by a delete, and they behave as in <see cref="CopyFile"/>.
+    /// Copy a folder recursively, file by file - see <see cref="CopyFile"/> for
+    /// the extra arguments. Verified when every file in it was.
     /// </summary>
-    void MoveEntry(string source, string destination,
-        IProgress<long>? bytesCopied = null, CancellationToken ct = default);
+    CopyReport CopyDirectory(string source, string destination, bool overwrite,
+        IProgress<long>? bytesCopied = null, CancellationToken ct = default, CopyOptions? options = null);
+
+    /// <summary>
+    /// Move a file or folder. Within one volume this is a rename and the
+    /// extra arguments never come into play; across volumes it is a copy
+    /// followed by a delete, and they behave as in <see cref="CopyFile"/> -
+    /// a copy that does not read back leaves the source where it was.
+    /// </summary>
+    CopyReport MoveEntry(string source, string destination,
+        IProgress<long>? bytesCopied = null, CancellationToken ct = default, CopyOptions? options = null);
 
     void Rename(string path, string newName);
 

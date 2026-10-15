@@ -270,6 +270,30 @@ public static partial class Strings {
     /// <summary>В корзину</summary>
     public static string ProgressRecycling => Get(nameof(ProgressRecycling));
 
+    /// <summary>Переименование</summary>
+    public static string ProgressRenaming => Get(nameof(ProgressRenaming));
+
+    /// <summary>Создание</summary>
+    public static string ProgressCreating => Get(nameof(ProgressCreating));
+
+    /// <summary>Оценка</summary>
+    public static string ProgressRating => Get(nameof(ProgressRating));
+
+    /// <summary>Цветная метка</summary>
+    public static string ProgressLabeling => Get(nameof(ProgressLabeling));
+
+    /// <summary>{0} {1}</summary>
+    public static string UndoWhatNamed => Get(nameof(UndoWhatNamed));
+
+    /// <summary>{0} ({1})</summary>
+    public static string UndoWhatCounted => Get(nameof(UndoWhatCounted));
+
+    /// <summary>Отменить: {0}</summary>
+    public static string UndoTooltipNext => Get(nameof(UndoTooltipNext));
+
+    /// <summary>Нечего отменять</summary>
+    public static string UndoTooltipNothing => Get(nameof(UndoTooltipNothing));
+
     /// <summary>Отмена…</summary>
     public static string ProgressCancelling => Get(nameof(ProgressCancelling));
 
@@ -312,8 +336,47 @@ public static partial class Strings {
     /// <summary>{0}: подсчёт…</summary>
     public static string OperationWeighing => Get(nameof(OperationWeighing));
 
+    /// <summary>повтор {0} из {1}</summary>
+    public static string OperationRetrying => Get(nameof(OperationRetrying));
+
     /// <summary>Операций: {0} — {1} %</summary>
     public static string OperationMany => Get(nameof(OperationMany));
+
+    /// <summary>✓ {0}</summary>
+    public static string OperationsFinishedOk => Get(nameof(OperationsFinishedOk));
+
+    /// <summary>⚠ {0}</summary>
+    public static string OperationsFinishedProblems => Get(nameof(OperationsFinishedProblems));
+
+    /// <summary>готово {0}</summary>
+    public static string OperationOutcomeDone => Get(nameof(OperationOutcomeDone));
+
+    /// <summary>с ошибкой {0}</summary>
+    public static string OperationOutcomeFailed => Get(nameof(OperationOutcomeFailed));
+
+    /// <summary>пропущено {0}</summary>
+    public static string OperationOutcomeSkipped => Get(nameof(OperationOutcomeSkipped));
+
+    /// <summary>отменено {0}</summary>
+    public static string OperationOutcomeCancelled => Get(nameof(OperationOutcomeCancelled));
+
+    /// <summary>проверено {0}</summary>
+    public static string OperationOutcomeVerified => Get(nameof(OperationOutcomeVerified));
+
+    /// <summary>{0} — {1}</summary>
+    public static string OperationProblemLine => Get(nameof(OperationProblemLine));
+
+    /// <summary>Подробнее</summary>
+    public static string OperationProblemsHeader => Get(nameof(OperationProblemsHeader));
+
+    /// <summary>Убрать</summary>
+    public static string ActionDismiss => Get(nameof(ActionDismiss));
+
+    /// <summary>Убрать завершённые</summary>
+    public static string OperationsDismissFinished => Get(nameof(OperationsDismissFinished));
+
+    /// <summary>Убирает завершённые без ошибок; с Shift — все</summary>
+    public static string OperationsDismissFinishedHint => Get(nameof(OperationsDismissFinishedHint));
 
     /// <summary>{0} с</summary>
     public static string DurationSeconds => Get(nameof(DurationSeconds));

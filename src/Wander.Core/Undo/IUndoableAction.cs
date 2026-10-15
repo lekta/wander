@@ -1,3 +1,5 @@
+using Wander.Core.Operations;
+
 namespace Wander.Core.Undo;
 
 /// <summary>
@@ -6,8 +8,18 @@ namespace Wander.Core.Undo;
 /// create, delete, composite).
 /// </summary>
 public interface IUndoableAction {
-    /// <summary>Short human-readable phrase for the status bar / tooltip.</summary>
+    /// <summary>
+    /// Short phrase for the log. English, like every log line: the user is
+    /// told what an undo takes back by <see cref="Verb"/> and
+    /// <see cref="ItemCount"/>, in the app's words.
+    /// </summary>
     string Description { get; }
+
+    /// <summary>What the action did, as a key into the app's string table (<see cref="OperationVerbs"/>).</summary>
+    string Verb => OperationVerbs.Undo;
+
+    /// <summary>How many items the user would count in it - the files of a batch, not its steps.</summary>
+    int ItemCount => 1;
 
     /// <summary>
     /// What the undo has to find where the action left it: the item under

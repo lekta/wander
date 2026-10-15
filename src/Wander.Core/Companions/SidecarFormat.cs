@@ -10,7 +10,7 @@ public enum SidecarFormat {
     /// <c>xmp:Rating</c> / <c>xmp:Label</c> in an <c>.xmp</c> next to the
     /// photo. The default, and the safe one: Adobe, darktable and exiftool
     /// all read it, RawTherapee 5.11+ once its "Load/Save thumbnail rank and
-    /// color from/to XMP sidecars" is on (off by default) — and, crucially,
+    /// color from/to XMP sidecars" is on (off by default) - and, crucially,
     /// an XMP sidecar says nothing about how the raw should be developed.
     /// </summary>
     Xmp,

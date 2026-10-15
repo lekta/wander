@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Wander.App.Controllers;
@@ -27,6 +28,7 @@ using Wander.Core.Persistence;
 using Wander.Core.Preview;
 using Wander.Core.Shell;
 using Wander.Core.Workspace;
+using Wander.Platform.Windows.FileSystem;
 
 
 namespace Wander.App;
@@ -125,6 +127,17 @@ public partial class MainWindow : Window {
     // --- Window geometry persistence -----------------------------------
 
     private void OnSourceInitialized(object? sender, EventArgs e) {
+        // A flash drive put in or pulled out is told to top-level windows:
+        // the hub reads the message, the model hears it (Y2). Not claimed -
+        // whoever else in the window wants the message still gets it.
+        if (ServiceLocator.TryGet<VolumeChangeHub>() is { } volumes && PresentationSource.FromVisual(this) is HwndSource source) {
+            source.AddHook((IntPtr _, int msg, IntPtr wParam, IntPtr lParam, ref bool _) => {
+                volumes.HandleMessage(msg, wParam, lParam);
+
+                return IntPtr.Zero;
+            });
+        }
+
         // A smoke run is parked off-screen on purpose — restoring the saved
         // geometry would drag it onto the desktop, and saving it on the way
         // out would leave the real session pointing at (-32000, -32000).
@@ -142,7 +155,7 @@ public partial class MainWindow : Window {
         // - so there they are stopped on the spot and the close goes on.
         if (Vm.HasActiveOperations && !_operationsStopped) {
             if (App.IsShuttingDown) {
-                Log.Info($"Shutdown with {Vm.Operations.Count} operation(s) running: cancelled without waiting");
+                Log.Info($"Shutdown with {Vm.Operations.Count(o => !o.IsFinished)} operation(s) running: cancelled without waiting");
                 App.AbandonOperations();
             } else {
                 e.Cancel = true;

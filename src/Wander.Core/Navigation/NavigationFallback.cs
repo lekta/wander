@@ -50,6 +50,43 @@ public static class NavigationFallback {
     }
 
 
+    /// <summary>
+    /// Where the listing goes when the volume under it went away - a flash
+    /// drive pulled out with a folder on it open: the most recent place
+    /// that is on a volume still there, else the first of the machine's own
+    /// drives. Null when the folder on screen is not on a drive letter, or
+    /// its volume is still there.
+    /// </summary>
+    /// <param name="roots">The drive roots there now (<c>C:\</c>), in drive order.</param>
+    /// <param name="recent">The places visited, most recent first.</param>
+    /// <param name="kindOf">What kind a root is: the fallback is a fixed drive, not another flash drive.</param>
+    public static string? AfterVolumeRemoved(
+        string? current, IReadOnlyList<string> roots, IReadOnlyList<string> recent, Func<string, VolumeKind> kindOf) {
+        if (current is null || DriveOf(current) is not { } gone || roots.Any(r => SameRoot(r, gone))) {
+            return null;
+        }
+
+        foreach (string place in recent) {
+            if (DriveOf(place) is { } root && roots.Any(r => SameRoot(r, root))) {
+                return place;
+            }
+        }
+
+        return roots.FirstOrDefault(r => kindOf(r) == VolumeKind.Fixed) ?? roots.FirstOrDefault();
+    }
+
+
+    /// <summary>"E:\" for a path on a drive letter, null for a share, a shell place or anything else.</summary>
+    private static string? DriveOf(string path) {
+        return path.Length >= 2 && char.IsAsciiLetter(path[0]) && path[1] == ':'
+            ? char.ToUpperInvariant(path[0]) + @":\"
+            : null;
+    }
+
+    private static bool SameRoot(string a, string b) {
+        return string.Equals(DriveOf(a), DriveOf(b), StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>The path is one of the deleted ones or lies inside one.</summary>
     private static bool IsCovered(string path, IReadOnlyCollection<string> deleted) {
         foreach (string root in deleted) {

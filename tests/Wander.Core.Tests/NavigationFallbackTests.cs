@@ -83,4 +83,32 @@ public class NavigationFallbackTests {
         Assert.Equal(@"C:\work", NavigationFallback.AfterDelete(new[] { @"c:\WORK\New\" }, @"C:\work\new\a"));
         Assert.Equal(@"C:\work", NavigationFallback.AfterDelete(new[] { @"C:\work\new" }, @"C:\work\new\"));
     }
+
+
+    // --- A volume went away ------------------------------------------------
+
+    private static readonly string[] _rootsLeft = { @"C:\", @"D:\", @"F:\" };
+
+    private static VolumeKind KindOf(string root) => root.StartsWith('F') ? VolumeKind.Removable : VolumeKind.Fixed;
+
+
+    [Fact]
+    public void VolumeGone_GoesToTheLatestPlaceOnAVolumeStillThere() {
+        var recent = new[] { @"E:\DCIM\100CANON", @"E:\DCIM", @"D:\Photos\2026", @"C:\Users" };
+
+        Assert.Equal(@"D:\Photos\2026", NavigationFallback.AfterVolumeRemoved(@"E:\DCIM\100CANON", _rootsLeft, recent, KindOf));
+    }
+
+    [Fact]
+    public void VolumeGone_NothingRecentLeft_GoesToTheFirstFixedDrive() {
+        Assert.Equal(@"C:\", NavigationFallback.AfterVolumeRemoved(@"E:\DCIM", _rootsLeft, new[] { @"E:\" }, KindOf));
+        Assert.Equal(@"D:\", NavigationFallback.AfterVolumeRemoved(@"e:\x", new[] { @"F:\", @"D:\" }, Array.Empty<string>(), KindOf));
+    }
+
+    [Fact]
+    public void VolumeStillThere_OrNotADrive_StaysPut() {
+        Assert.Null(NavigationFallback.AfterVolumeRemoved(@"d:\Photos", _rootsLeft, Array.Empty<string>(), KindOf));
+        Assert.Null(NavigationFallback.AfterVolumeRemoved(@"\\nas\share\x", _rootsLeft, Array.Empty<string>(), KindOf));
+        Assert.Null(NavigationFallback.AfterVolumeRemoved(null, _rootsLeft, Array.Empty<string>(), KindOf));
+    }
 }

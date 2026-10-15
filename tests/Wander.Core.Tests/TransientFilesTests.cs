@@ -28,6 +28,14 @@ public class TransientFilesTests {
     }
 
     [Fact]
+    public void ACopysTemporaryName_IsBesideItsTarget_AndTransient() {
+        string temp = TransientFiles.TempNameFor(@"E:\Video\clip.mov");
+
+        Assert.Equal(@"E:\Video\clip.mov.wander-tmp", temp);
+        Assert.True(TransientFiles.IsTransient(temp));
+    }
+
+    [Fact]
     public void SomethingThatMerelyLooksThePart_IsNot() {
         // The hex check is what keeps a real file out of the deny-list; a
         // false positive costs one missed refresh of that file.

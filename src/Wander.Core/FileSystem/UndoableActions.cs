@@ -1,3 +1,4 @@
+using Wander.Core.Operations;
 using Wander.Core.Undo;
 
 namespace Wander.Core.FileSystem;
@@ -7,6 +8,8 @@ namespace Wander.Core.FileSystem;
 /// </summary>
 internal sealed record RenameAction(IFileSystem Fs, string NewPath, string OldName) : IUndoableAction {
     public string Description => $"Rename to '{Path.GetFileName(NewPath)}'";
+
+    public string Verb => OperationVerbs.Rename;
 
     public IReadOnlyList<string> PathsBeforeUndo => new[] { NewPath };
 
@@ -29,6 +32,7 @@ internal sealed record RenameAction(IFileSystem Fs, string NewPath, string OldNa
 /// </summary>
 internal sealed record MoveAction(IFileSystem Fs, string OldPath, string NewPath) : IUndoableAction {
     public string Description => $"Move '{Path.GetFileName(OldPath)}'";
+    public string Verb => OperationVerbs.Move;
     public IReadOnlyList<string> PathsBeforeUndo => new[] { NewPath };
     public IReadOnlyList<string> PathsAfterUndo => new[] { OldPath };
     public IReadOnlyList<(string From, string To)> MovesOnUndo => new[] { (NewPath, OldPath) };
@@ -42,7 +46,8 @@ internal sealed record MoveAction(IFileSystem Fs, string OldPath, string NewPath
 /// Also used as the undo for Copy ops, where the copy at the destination is
 /// just another created item.
 /// </summary>
-public sealed record CreateAction(IRecycleBin Bin, string CreatedPath) : IUndoableAction {
+/// <param name="Verb">What made it - a copy, an action's output; a plain create by default.</param>
+public sealed record CreateAction(IRecycleBin Bin, string CreatedPath, string Verb = OperationVerbs.Create) : IUndoableAction {
     public string Description => $"Create '{Path.GetFileName(CreatedPath)}'";
 
     public IReadOnlyList<string> PathsBeforeUndo => new[] { CreatedPath };
@@ -59,6 +64,7 @@ public sealed record CreateAction(IRecycleBin Bin, string CreatedPath) : IUndoab
 /// </summary>
 internal sealed record DeleteAction(IRecycleBin Bin, RecycleHandle Handle) : IUndoableAction {
     public string Description => $"Delete '{Path.GetFileName(Handle.OriginalPath)}'";
+    public string Verb => OperationVerbs.Recycle;
     public IReadOnlyList<string> PathsAfterUndo => new[] { Handle.OriginalPath };
 
     public void Undo() => Bin.Restore(Handle);
@@ -72,6 +78,8 @@ internal sealed record DeleteAction(IRecycleBin Bin, RecycleHandle Handle) : IUn
 /// </summary>
 internal sealed record ExtractAction(IRecycleBin Bin, string ExtractedPath) : IUndoableAction {
     public string Description => $"Extract '{Path.GetFileName(ExtractedPath)}'";
+
+    public string Verb => OperationVerbs.Extract;
 
     public IReadOnlyList<string> PathsBeforeUndo => new[] { ExtractedPath };
 
@@ -89,13 +97,21 @@ public sealed class CompositeAction : IUndoableAction {
     private readonly IReadOnlyList<IUndoableAction> _actions;
 
 
-    public CompositeAction(string description, IReadOnlyList<IUndoableAction> actions) {
+    /// <param name="verb">What the bundle did; the last member's when null.</param>
+    /// <param name="itemCount">How many items the user would count; one per member when null.</param>
+    public CompositeAction(string description, IReadOnlyList<IUndoableAction> actions, string? verb = null, int? itemCount = null) {
         Description = description;
         _actions = actions;
+        Verb = verb ?? (actions.Count > 0 ? actions[^1].Verb : OperationVerbs.Undo);
+        ItemCount = itemCount ?? actions.Count;
     }
 
 
     public string Description { get; }
+
+    public string Verb { get; }
+
+    public int ItemCount { get; }
 
     public IReadOnlyList<IUndoableAction> Steps => _actions;
 
@@ -121,7 +137,10 @@ public sealed class CompositeAction : IUndoableAction {
 
 
     public IUndoableAction WithSteps(IReadOnlyList<IUndoableAction> steps) {
-        return new CompositeAction(Description, steps);
+        // Part of the bundle: the same verb, and as many items as there are
+        // steps left - the best count there is without knowing which step
+        // was whose.
+        return new CompositeAction(Description, steps, Verb, Math.Min(ItemCount, steps.Count));
     }
 
     public void Undo() {

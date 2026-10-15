@@ -159,6 +159,36 @@ public static partial class Strings {
     /// <summary>Открыта папка: {0}</summary>
     public static string JournalOpenedFolder => Get(nameof(JournalOpenedFolder));
 
+    /// <summary>Запущен Wander {0}</summary>
+    public static string JournalAppStarted => Get(nameof(JournalAppStarted));
+
+    /// <summary>{0} в {1} — {2}</summary>
+    public static string JournalBatchHeadline => Get(nameof(JournalBatchHeadline));
+
+    /// <summary>{0} — заменил прежний</summary>
+    public static string JournalItemReplaced => Get(nameof(JournalItemReplaced));
+
+    /// <summary>{0} → {1}</summary>
+    public static string JournalItemRenamed => Get(nameof(JournalItemRenamed));
+
+    /// <summary>{0} — пропущен</summary>
+    public static string JournalItemSkipped => Get(nameof(JournalItemSkipped));
+
+    /// <summary>{0} — отменён</summary>
+    public static string JournalItemCancelled => Get(nameof(JournalItemCancelled));
+
+    /// <summary>{0} — не получилось: {1}</summary>
+    public static string JournalItemFailed => Get(nameof(JournalItemFailed));
+
+    /// <summary>Открыт файл: {0}</summary>
+    public static string JournalFileOpened => Get(nameof(JournalFileOpened));
+
+    /// <summary>«Открыть с помощью»: {0}</summary>
+    public static string JournalFileOpenWith => Get(nameof(JournalFileOpenWith));
+
+    /// <summary>Открыта временная копия из архива: {0}</summary>
+    public static string JournalArchiveCopyOpened => Get(nameof(JournalArchiveCopyOpened));
+
     /// <summary>Выход</summary>
     public static string MenuExit => Get(nameof(MenuExit));
 

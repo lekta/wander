@@ -89,7 +89,7 @@ public sealed class ShellCommandsController {
         string path = Path.Combine(AppPaths.Logs, $"journal-{Environment.ProcessId}.txt");
         try {
             Directory.CreateDirectory(AppPaths.Logs);
-            File.WriteAllText(path, journal.Render(), System.Text.Encoding.UTF8);
+            File.WriteAllText(path, journal.Render(Strings.AndMore), System.Text.Encoding.UTF8);
         } catch (Exception ex) {
             _log.Error($"Journal write failed: {path}", ex);
             Report(Strings.StatusJournalFailed, ex.Message);

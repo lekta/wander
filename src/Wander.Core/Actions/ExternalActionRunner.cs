@@ -91,12 +91,12 @@ public sealed class ExternalActionRunner {
 
         var created = results
             .Where(r => r.Status == BatchItemStatus.Ok && r.Output is not null && Exists(r.Output))
-            .Select(r => (IUndoableAction)new CreateAction(_bin, r.Output!))
+            .Select(r => (IUndoableAction)new CreateAction(_bin, r.Output!, OperationVerbs.RunAction))
             .ToList();
         if (created.Count == 1) {
             _undo.Push(created[0]);
         } else if (created.Count > 1) {
-            _undo.Push(new CompositeAction($"Run '{title}'", created));
+            _undo.Push(new CompositeAction($"Run '{title}'", created, OperationVerbs.RunAction));
         }
 
         int ok = results.Count(r => r.Status == BatchItemStatus.Ok);

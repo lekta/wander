@@ -96,6 +96,21 @@ public class BusyGateTests {
     }
 
     [Fact]
+    public void Retry_AHeldFolder_IsNamedByTheFileInsideThatIsHeld_AndItsHolder() {
+        var probe = new FakeBusyProbe();
+        var locks = new FixedLocks(new FileLockInfo(77, "Photoshop"));
+        var held = new HeldPaths(new PathClaims(), probe, locks, () => new BusyWait(_ => { }));
+        string cover = Album + @"\cover.psd";
+        probe.HeldInside[Album] = cover;
+
+        using var gate = held.Begin(NullLogger.Instance);
+        Assert.ThrowsAny<IOException>(() => gate.Retry(Album, () => throw FileInUse.Error(Album), default));
+
+        // The one file is what Restart Manager is asked about, not the folder.
+        Assert.Equal(new[] { cover }, locks.Asked);
+    }
+
+    [Fact]
     public void Retry_AnyOtherFailure_IsNotWaitedFor() {
         var (held, _, pauses, _) = Setup();
 
@@ -247,7 +262,12 @@ public class BusyGateTests {
         }
 
 
+        public List<string> Asked { get; } = new();
+
+
         public IReadOnlyList<FileLockInfo> WhoIsLocking(string filePath) {
+            Asked.Add(filePath);
+
             return _holder is null ? Array.Empty<FileLockInfo>() : new[] { _holder };
         }
     }

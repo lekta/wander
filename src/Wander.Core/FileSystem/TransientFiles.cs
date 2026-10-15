@@ -27,6 +27,17 @@ public static class TransientFiles {
 
 
     /// <summary>
+    /// The name a copy is written under until it is whole: beside its
+    /// target, with <see cref="ReplaceSuffix"/>. A folder being copied into
+    /// never shows a half-written file, and one that is left over - the
+    /// process died mid-copy - says what it is.
+    /// </summary>
+    public static string TempNameFor(string destination) {
+        return destination + ReplaceSuffix;
+    }
+
+
+    /// <summary>
     /// True for a scratch file that exists only for the length of a write —
     /// ours or Windows'. Nothing outside the filesystem layer should ever
     /// see one, and a folder listing that reacted to them would rebuild

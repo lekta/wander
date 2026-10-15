@@ -17,10 +17,20 @@ namespace Wander.Core.Logging;
 /// for diagnosing Wander and is written in the vocabulary of the code; this
 /// is what was shown to the user, in their words, and it is theirs to read.
 /// </para>
+///
+/// <para>
+/// An entry is a headline and, for an operation, a line per item under it
+/// (<see cref="Record"/>): "copied to E:\Video - 12 files, 12.3 GB"
+/// says what happened, the lines say to which files. A plain status line is
+/// an entry without lines (<see cref="Note"/>).
+/// </para>
 /// </summary>
 public sealed class ActionJournal {
+    /// <summary>How many lines of one entry are written out before the rest is counted.</summary>
+    public const int LinesShown = 50;
+
     /// <summary>
-    /// How many lines are kept. A long session is a few hundred status
+    /// How many entries are kept. A long session is a few hundred status
     /// lines; past that the oldest go, because a journal that grows without
     /// limit is a leak with a nice name.
     /// </summary>
@@ -31,16 +41,19 @@ public sealed class ActionJournal {
     /// text opened in the user's editor, so these are the Unicode signs for
     /// the status bar's glyphs, which live in an icon font no editor has.
     /// </summary>
-    private const string WarningMark = "\u26A0 ";
-    private const string ErrorMark = "\u2716 ";
+    private const string WarningMark = "⚠ ";
+    private const string ErrorMark = "✖ ";
 
-    private readonly Queue<(DateTime At, string Text, StatusSeverity Severity)> _entries = new();
+    /// <summary>What an entry's lines are indented by under its headline.</summary>
+    private const string Indent = "  ";
+
+    private readonly Queue<JournalEntry> _entries = new();
     private readonly Lock _lock = new();
 
     private string _last = "";
 
 
-    /// <summary>How many lines are on record.</summary>
+    /// <summary>How many entries are on record.</summary>
     public int Count {
         get {
             lock (_lock) {
@@ -68,32 +81,90 @@ public sealed class ActionJournal {
             if (string.Equals(text, _last, StringComparison.Ordinal)) {
                 return;
             }
-            _last = text;
-            _entries.Enqueue((at, text, severity));
-            while (_entries.Count > Limit) {
-                _entries.Dequeue();
-            }
+            Add(new JournalEntry(at, JournalKind.Note, text, Array.Empty<string>(), severity));
         }
     }
 
+    /// <summary>
+    /// Keeps one entry with its lines - an operation and the files it went
+    /// through. Not dropped as a repeat: copying the same thing twice is two
+    /// things that happened.
+    /// </summary>
+    public void Record(JournalEntry entry) {
+        if (string.IsNullOrWhiteSpace(entry.Headline)) {
+            return;
+        }
+
+        lock (_lock) {
+            Add(entry);
+        }
+    }
 
     /// <summary>
-    /// The journal as plain text, oldest first, a line each: the time, two
-    /// spaces, the words - a warning or an error with its mark in front.
+    /// The journal as plain text, oldest first: per entry the time, two
+    /// spaces, the headline - a warning or an error with its mark in front -
+    /// and its lines under it, indented, the first <see cref="LinesShown"/>
+    /// of them and then how many more.
     /// </summary>
-    public string Render() {
+    /// <param name="andMore">The line for what a long entry leaves out, with the count as {0}.</param>
+    public string Render(string andMore = "... {0} more") {
         lock (_lock) {
             var lines = new List<string>(_entries.Count);
-            foreach (var (at, text, severity) in _entries) {
-                string mark = severity switch {
+            foreach (var entry in _entries) {
+                string mark = entry.Severity switch {
                     StatusSeverity.Warning => WarningMark,
                     StatusSeverity.Error => ErrorMark,
                     _ => "",
                 };
-                lines.Add($"{at:yyyy-MM-dd HH:mm:ss}  {mark}{text}");
+                lines.Add($"{entry.At:yyyy-MM-dd HH:mm:ss}  {mark}{entry.Headline}");
+                foreach (string line in entry.Lines.Take(LinesShown)) {
+                    lines.Add(Indent + line);
+                }
+                if (entry.Lines.Count > LinesShown) {
+                    lines.Add(Indent + string.Format(andMore, entry.Lines.Count - LinesShown));
+                }
             }
 
             return string.Join(Environment.NewLine, lines);
         }
     }
+
+
+    /// <summary>Under the lock.</summary>
+    private void Add(JournalEntry entry) {
+        _last = entry.Headline;
+        _entries.Enqueue(entry);
+        while (_entries.Count > Limit) {
+            _entries.Dequeue();
+        }
+    }
 }
+
+
+/// <summary>What a journal entry is about - for whoever reads the journal by kind rather than by text.</summary>
+public enum JournalKind {
+    FolderOpened,
+    FileOpened,
+    Copied,
+    Moved,
+    Renamed,
+    Recycled,
+    Deleted,
+    Restored,
+    Created,
+    Extracted,
+    Cancelled,
+    ActionRun,
+    Error,
+
+    /// <summary>A status line with nothing structured behind it.</summary>
+    Note,
+}
+
+
+/// <summary>One thing that happened, in the user's words.</summary>
+/// <param name="Headline">The line the status bar showed, or the operation's summary.</param>
+/// <param name="Lines">One per file it went through - "IMG_0001.CR3", "a.txt -> b.txt"; empty for a plain line.</param>
+public sealed record JournalEntry(
+    DateTime At, JournalKind Kind, string Headline, IReadOnlyList<string> Lines,
+    StatusSeverity Severity = StatusSeverity.Info);

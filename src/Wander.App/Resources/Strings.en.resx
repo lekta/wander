@@ -378,6 +378,36 @@
   <data name="JournalOpenedFolder" xml:space="preserve">
     <value>Opened folder: {0}</value>
   </data>
+  <data name="JournalAppStarted" xml:space="preserve">
+    <value>Wander {0} started</value>
+  </data>
+  <data name="JournalBatchHeadline" xml:space="preserve">
+    <value>{0} to {1} — {2}</value>
+  </data>
+  <data name="JournalItemReplaced" xml:space="preserve">
+    <value>{0} — replaced the one there</value>
+  </data>
+  <data name="JournalItemRenamed" xml:space="preserve">
+    <value>{0} → {1}</value>
+  </data>
+  <data name="JournalItemSkipped" xml:space="preserve">
+    <value>{0} — skipped</value>
+  </data>
+  <data name="JournalItemCancelled" xml:space="preserve">
+    <value>{0} — cancelled</value>
+  </data>
+  <data name="JournalItemFailed" xml:space="preserve">
+    <value>{0} — failed: {1}</value>
+  </data>
+  <data name="JournalFileOpened" xml:space="preserve">
+    <value>Opened: {0}</value>
+  </data>
+  <data name="JournalFileOpenWith" xml:space="preserve">
+    <value>“Open with”: {0}</value>
+  </data>
+  <data name="JournalArchiveCopyOpened" xml:space="preserve">
+    <value>Opened a temporary copy from an archive: {0}</value>
+  </data>
   <data name="StatusPropertiesFailed" xml:space="preserve">
     <value>Couldn't show properties: {0}</value>
   </data>
@@ -419,6 +449,9 @@
   </data>
   <data name="ProgressUndoing" xml:space="preserve">
     <value>Undoing</value>
+  </data>
+  <data name="PowerRequestReason" xml:space="preserve">
+    <value>Wander: file operation</value>
   </data>
   <data name="ProgressWeighing" xml:space="preserve">
     <value>Counting…</value>
@@ -494,6 +527,9 @@
   </data>
   <data name="StatusRecycled" xml:space="preserve">
     <value>Moved to the Recycle Bin: {0}</value>
+  </data>
+  <data name="StatusRecycledForGood" xml:space="preserve">
+    <value>deleted for good: {0} (the Recycle Bin did not take it)</value>
   </data>
   <data name="StatusRecycledPartly" xml:space="preserve">
     <value>Moved to the Recycle Bin: {0}, failed: {1}{2}</value>
@@ -750,6 +786,39 @@
   <data name="ErrorInUse" xml:space="preserve">
     <value>the file is in use by another program</value>
   </data>
+  <data name="ErrorDiskFull" xml:space="preserve">
+    <value>no room left on {0}</value>
+  </data>
+  <data name="ErrorFileTooLargeForFat32" xml:space="preserve">
+    <value>the file is over 4 GB and {0} is FAT32</value>
+  </data>
+  <data name="ErrorDeviceGone" xml:space="preserve">
+    <value>the device is disconnected or not ready</value>
+  </data>
+  <data name="ErrorDeviceAsleep" xml:space="preserve">
+    <value>the device stopped answering — the camera switched off or went to sleep: switch it on and try again</value>
+  </data>
+  <data name="ErrorReadFailed" xml:space="preserve">
+    <value>read error — the medium or the cable</value>
+  </data>
+  <data name="ErrorCopyMismatch" xml:space="preserve">
+    <value>the copy did not match the original — the medium or the cable</value>
+  </data>
+  <data name="ErrorLinkNotCopied" xml:space="preserve">
+    <value>a link to a folder — not copied</value>
+  </data>
+  <data name="ActionEjectDrive" xml:space="preserve">
+    <value>Eject {0}</value>
+  </data>
+  <data name="StatusEjected" xml:space="preserve">
+    <value>{0} can be removed</value>
+  </data>
+  <data name="StatusEjectNoVerb" xml:space="preserve">
+    <value>Windows offers no way to eject {0} from here — try “Safely Remove Hardware” in the taskbar</value>
+  </data>
+  <data name="StatusEjectBusy" xml:space="preserve">
+    <value>{0} was not ejected: {1}</value>
+  </data>
   <data name="ErrorClaimedByOperation" xml:space="preserve">
     <value>“{0}” is in use by a Wander operation: {1}</value>
   </data>
@@ -770,6 +839,12 @@
   </data>
   <data name="HolderWander" xml:space="preserve">
     <value>Wander: {0}</value>
+  </data>
+  <data name="HolderFileInFolder" xml:space="preserve">
+    <value>“{0}” is held by {1}</value>
+  </data>
+  <data name="HolderFileInFolderUnnamed" xml:space="preserve">
+    <value>“{0}” inside is in use</value>
   </data>
   <data name="HolderThumbnail" xml:space="preserve">
     <value>thumbnail</value>
@@ -1115,6 +1190,30 @@
   </data>
   <data name="ProgressRecycling" xml:space="preserve">
     <value>Moving to the Recycle Bin</value>
+  </data>
+  <data name="ProgressRenaming" xml:space="preserve">
+    <value>Renaming</value>
+  </data>
+  <data name="ProgressCreating" xml:space="preserve">
+    <value>Creating</value>
+  </data>
+  <data name="ProgressRating" xml:space="preserve">
+    <value>Rating</value>
+  </data>
+  <data name="ProgressLabeling" xml:space="preserve">
+    <value>Colour label</value>
+  </data>
+  <data name="UndoWhatNamed" xml:space="preserve">
+    <value>{0} {1}</value>
+  </data>
+  <data name="UndoWhatCounted" xml:space="preserve">
+    <value>{0} ({1})</value>
+  </data>
+  <data name="UndoTooltipNext" xml:space="preserve">
+    <value>Undo: {0}</value>
+  </data>
+  <data name="UndoTooltipNothing" xml:space="preserve">
+    <value>Nothing to undo</value>
   </data>
   <data name="ProgressCancelling" xml:space="preserve">
     <value>Canceling…</value>
@@ -1878,6 +1977,21 @@
   <data name="SettingsSkipIdenticalHint" xml:space="preserve">
     <value>A file that is byte-for-byte identical to the one already there isn't copied or moved; in the conflict window, such a pair is already set to “keep existing”.</value>
   </data>
+  <data name="SettingsVerifyGroup" xml:space="preserve">
+    <value>Checking copies</value>
+  </data>
+  <data name="SettingsVerifyRemovable" xml:space="preserve">
+    <value>From flash drives, memory cards, phones and cameras</value>
+  </data>
+  <data name="SettingsVerifyAlways" xml:space="preserve">
+    <value>Always</value>
+  </data>
+  <data name="SettingsVerifyNever" xml:space="preserve">
+    <value>Never</value>
+  </data>
+  <data name="SettingsVerifyNote" xml:space="preserve">
+    <value>The copy is read from the disk once more and compared with the original — copying takes that much longer</value>
+  </data>
   <data name="SettingsDragHoverEntersFolders" xml:space="preserve">
     <value>Open a folder when a dragged file hovers over it</value>
   </data>
@@ -1956,8 +2070,47 @@
   <data name="OperationWeighing" xml:space="preserve">
     <value>{0}: calculating…</value>
   </data>
+  <data name="OperationRetrying" xml:space="preserve">
+    <value>try {0} of {1}</value>
+  </data>
   <data name="OperationMany" xml:space="preserve">
     <value>Operations: {0} — {1}%</value>
+  </data>
+  <data name="OperationsFinishedOk" xml:space="preserve">
+    <value>✓ {0}</value>
+  </data>
+  <data name="OperationsFinishedProblems" xml:space="preserve">
+    <value>⚠ {0}</value>
+  </data>
+  <data name="OperationOutcomeDone" xml:space="preserve">
+    <value>done {0}</value>
+  </data>
+  <data name="OperationOutcomeFailed" xml:space="preserve">
+    <value>failed {0}</value>
+  </data>
+  <data name="OperationOutcomeSkipped" xml:space="preserve">
+    <value>skipped {0}</value>
+  </data>
+  <data name="OperationOutcomeCancelled" xml:space="preserve">
+    <value>cancelled {0}</value>
+  </data>
+  <data name="OperationOutcomeVerified" xml:space="preserve">
+    <value>verified {0}</value>
+  </data>
+  <data name="OperationProblemLine" xml:space="preserve">
+    <value>{0} — {1}</value>
+  </data>
+  <data name="OperationProblemsHeader" xml:space="preserve">
+    <value>Details</value>
+  </data>
+  <data name="ActionDismiss" xml:space="preserve">
+    <value>Dismiss</value>
+  </data>
+  <data name="OperationsDismissFinished" xml:space="preserve">
+    <value>Clear finished</value>
+  </data>
+  <data name="OperationsDismissFinishedHint" xml:space="preserve">
+    <value>Clears the finished ones that went well; with Shift, all of them</value>
   </data>
   <data name="DurationSeconds" xml:space="preserve">
     <value>{0} s</value>
@@ -2738,6 +2891,15 @@
   </data>
   <data name="SettingsLogPathsNote" xml:space="preserve">
     <value>Off: paths are replaced by masks that keep the drive, depth and extension but not the names. Such a log can be attached to a bug report.</value>
+  </data>
+  <data name="SettingsCopyDebugGroup" xml:space="preserve">
+    <value>Copying</value>
+  </data>
+  <data name="SettingsCopyWithWindows" xml:space="preserve">
+    <value>Copy with Windows’ own engine</value>
+  </data>
+  <data name="SettingsCopyWithWindowsHint" xml:space="preserve">
+    <value>For looking into a complaint about a copy: Wander’s own loop is off and Windows copies; the log says so at the start of each operation</value>
   </data>
   <data name="SettingsDebugMenuGroup" xml:space="preserve">
     <value>“Debug” menu</value>

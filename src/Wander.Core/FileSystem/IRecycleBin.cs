@@ -18,7 +18,15 @@ namespace Wander.Core.FileSystem;
 /// </para>
 /// </summary>
 public sealed record RecycleHandle(
-    string OriginalPath, DateTime DeletedAtUtc, string? BinItemId = null, string? BinFilePath = null);
+    string OriginalPath, DateTime DeletedAtUtc, string? BinItemId = null, string? BinFilePath = null) {
+
+    /// <summary>
+    /// The bin took the item and named nothing to find it by - neither its
+    /// id nor its file. The time fallback is not made (yet), so nothing can
+    /// bring it back: it counts as deleted for good.
+    /// </summary>
+    public bool IsUntraceable => BinItemId is null && BinFilePath is null;
+}
 
 
 /// <summary>
@@ -92,8 +100,13 @@ public interface IRecycleBin {
     /// <param name="paths">What to recycle.</param>
     /// <param name="onItemDone">Called with each path as its answer becomes final, from whatever thread does the work.</param>
     /// <param name="ct">Stops the batch between items; the rest come back with neither handle nor error.</param>
+    /// <param name="checkedBefore">
+    /// The items were looked over by an earlier call of the same operation -
+    /// sent again because they were held - and the checks before sending
+    /// (a path too long for the bin, inside a folder too) are not made twice.
+    /// </param>
     IReadOnlyList<RecycleResult> SendMany(
-        IReadOnlyList<string> paths, Action<string>? onItemDone = null, CancellationToken ct = default) {
+        IReadOnlyList<string> paths, Action<string>? onItemDone = null, CancellationToken ct = default, bool checkedBefore = false) {
         var results = new List<RecycleResult>(paths.Count);
         foreach (string path in paths) {
             if (ct.IsCancellationRequested) {

@@ -1,4 +1,5 @@
 using Wander.Core.FileSystem;
+using Wander.Core.Operations;
 
 namespace Wander.Core.Tests.Fakes;
 
@@ -151,30 +152,70 @@ internal class FakeFileSystem : IFileSystem {
     /// </summary>
     public int CopyChunk { get; set; } = 4;
 
+    /// <summary>What copies of a source throw, one per call, before one goes through.</summary>
+    public Dictionary<string, Queue<Exception>> CopyFailures { get; } = new(StringComparer.OrdinalIgnoreCase);
 
-    public void CopyFile(string source, string destination, bool overwrite,
-        IProgress<long>? bytesCopied = null, CancellationToken ct = default) {
+    /// <summary>
+    /// How many more copies of a source come out different from it - what a
+    /// verified copy finds on reading it back.
+    /// </summary>
+    public Dictionary<string, int> CorruptCopies { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The options every copy was asked with, in order.</summary>
+    public List<CopyOptions> CopyOptionsSeen { get; } = new();
+
+
+    public CopyReport CopyFile(string source, string destination, bool overwrite,
+        IProgress<long>? bytesCopied = null, CancellationToken ct = default, CopyOptions? options = null) {
         CallLog.Add($"CopyFile:{source}->{destination}:{overwrite}");
+        options ??= CopyOptions.Plain;
+        CopyOptionsSeen.Add(options);
         ct.ThrowIfCancellationRequested();
+        if (CopyFailures.TryGetValue(source, out var failures) && failures.Count > 0) {
+            throw failures.Dequeue();
+        }
 
+        // Lands at its name only whole, as the real copy does under a
+        // temporary name: a cancel in the middle leaves nothing there.
         byte[] data = Files[source];
         Files[destination] = data;
-        Report(data.Length, bytesCopied, ct);
+        try {
+            Report(data.Length, bytesCopied, ct);
+        } catch (OperationCanceledException) {
+            Files.Remove(destination);
+
+            throw;
+        }
+
+        // Read back: a copy that came out different is not kept.
+        if (options.Verify && CorruptCopies.TryGetValue(source, out int bad) && bad > 0) {
+            CorruptCopies[source] = bad - 1;
+            Files.Remove(destination);
+
+            throw new CopyMismatchException(source, destination);
+        }
+
+        return new CopyReport(options.SystemOnly ? CopyEngine.System : CopyEngine.Own, options.Verify);
     }
 
-    public void CopyDirectory(string source, string destination, bool overwrite,
-        IProgress<long>? bytesCopied = null, CancellationToken ct = default) {
+    public CopyReport CopyDirectory(string source, string destination, bool overwrite,
+        IProgress<long>? bytesCopied = null, CancellationToken ct = default, CopyOptions? options = null) {
         CallLog.Add($"CopyDirectory:{source}->{destination}:{overwrite}");
         ct.ThrowIfCancellationRequested();
         Directories.Add(destination);
+
+        return LinksIn.TryGetValue(source, out var links) ? new CopyReport(CopyEngine.None, false, links) : CopyReport.None;
     }
+
+    /// <summary>The links to folders a copy of a folder finds inside it and leaves out, by folder.</summary>
+    public Dictionary<string, string[]> LinksIn { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>How many more moves (and renames) of a path fail "in use" before it goes.</summary>
     public Dictionary<string, int> MoveInUseFor { get; } = new(StringComparer.OrdinalIgnoreCase);
 
 
-    public void MoveEntry(string source, string destination,
-        IProgress<long>? bytesCopied = null, CancellationToken ct = default) {
+    public CopyReport MoveEntry(string source, string destination,
+        IProgress<long>? bytesCopied = null, CancellationToken ct = default, CopyOptions? options = null) {
         CallLog.Add($"MoveEntry:{source}->{destination}");
         ct.ThrowIfCancellationRequested();
         if (MoveInUseFor.TryGetValue(source, out int left) && left > 0) {
@@ -191,6 +232,8 @@ internal class FakeFileSystem : IFileSystem {
         if (Directories.Remove(source)) {
             Directories.Add(destination);
         }
+
+        return CopyReport.None;
     }
 
     /// <summary>Paths whose rename must fail — for exercising rollback paths.</summary>

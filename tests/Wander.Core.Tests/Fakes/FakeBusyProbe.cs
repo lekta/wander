@@ -13,6 +13,9 @@ internal sealed class FakeBusyProbe : IFileBusyProbe {
 
     public List<string> Looks { get; } = new();
 
+    /// <summary>The held file a walk of a folder finds, by folder.</summary>
+    public Dictionary<string, string> HeldInside { get; } = new(StringComparer.OrdinalIgnoreCase);
+
 
     public bool IsBusy(string path) {
         Looks.Add(path);
@@ -24,5 +27,9 @@ internal sealed class FakeBusyProbe : IFileBusyProbe {
         }
 
         return true;
+    }
+
+    public string? FirstBusyIn(string folder, TimeSpan budget, CancellationToken ct) {
+        return HeldInside.GetValueOrDefault(folder);
     }
 }

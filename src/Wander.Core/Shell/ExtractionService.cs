@@ -327,7 +327,7 @@ public sealed class ExtractionService {
             ? steps[0]
             : new CompositeAction(
                 extracted.Count == 1 ? steps[^1].Description : $"extract of {extracted.Count} items",
-                steps));
+                steps, OperationVerbs.Extract, Math.Max(1, extracted.Count)));
     }
 
     private static void FillCancelled(IReadOnlyList<Plan> plans, BatchItemResult[] results, int from) {

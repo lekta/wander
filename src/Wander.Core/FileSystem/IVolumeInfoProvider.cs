@@ -77,6 +77,13 @@ public interface IVolumeInfoProvider {
     VolumeInfo? Describe(string path);
 
     /// <summary>
+    /// What kind of volume <paramref name="path"/> sits on, without asking
+    /// the drive anything else - no label, no sizes, no "are you ready": a
+    /// copy asks it for every file it reads.
+    /// </summary>
+    VolumeKind KindOf(string path) => Describe(path)?.Kind ?? VolumeKind.Unknown;
+
+    /// <summary>
     /// True when <paramref name="path"/> is the root of a volume — the one
     /// place where "what is this drive" is the question being asked, rather
     /// than "what is in this folder".

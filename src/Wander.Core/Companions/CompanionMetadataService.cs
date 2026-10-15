@@ -1,6 +1,7 @@
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
 using Wander.Core.Logging;
+using Wander.Core.Operations;
 using Wander.Core.Undo;
 
 namespace Wander.Core.Companions;
@@ -328,7 +329,7 @@ public sealed class CompanionMetadataService {
         } else if (steps.Count > 1) {
             string what = field == RatingField.Rank ? $"Rating {value}" : $"Colour {ColorLabels.Name(value)}";
             string on = touched.Count == 1 ? $"'{touched[0]}'" : $"{touched.Count} items";
-            _undo.Push(new CompositeAction($"{what} on {on}", steps));
+            _undo.Push(new CompositeAction($"{what} on {on}", steps, VerbOf(field), Math.Max(1, touched.Count)));
         }
 
         return results;
@@ -473,6 +474,11 @@ public sealed class CompanionMetadataService {
         }
     }
 
+    /// <summary>What a rating write is called when its undo is named: a rating or a colour label.</summary>
+    internal static string VerbOf(RatingField field) {
+        return field == RatingField.Rank ? OperationVerbs.Rate : OperationVerbs.Label;
+    }
+
 
     /// <summary>
     /// The result for one photo: the first sidecar its rating now lives in,
@@ -491,6 +497,9 @@ internal sealed record SidecarCreatedAction(
     CompanionMetadataService Service, string Path, string MainPath) : IUndoableAction {
 
     public string Description => $"Sidecar '{System.IO.Path.GetFileName(Path)}'";
+
+    /// <summary>A sidecar is made to hold a rating or a label; what the user did was rate.</summary>
+    public string Verb => OperationVerbs.Rate;
 
     public IReadOnlyList<string> PathsBeforeUndo => new[] { Path };
 
@@ -520,6 +529,8 @@ internal sealed record SidecarRatingAction(
         Field == RatingField.Rank
             ? $"Rating {NewValue} on '{System.IO.Path.GetFileName(Path)}'"
             : $"Colour {ColorLabels.Name(NewValue)} on '{System.IO.Path.GetFileName(Path)}'";
+
+    public string Verb => CompanionMetadataService.VerbOf(Field);
 
     public IReadOnlyList<string> PathsBeforeUndo => new[] { Path };
 

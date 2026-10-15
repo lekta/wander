@@ -56,10 +56,13 @@ public sealed class UndoService {
         }
     }
 
-    public string? NextDescription {
+    public string? NextDescription => Next?.Description;
+
+    /// <summary>What the next <c>Ctrl+Z</c> takes back; null when there is nothing.</summary>
+    public IUndoableAction? Next {
         get {
             lock (_gate) {
-                return _stack.TryPeek(out var a) ? a.Description : null;
+                return _stack.TryPeek(out var a) ? a : null;
             }
         }
     }
@@ -106,10 +109,12 @@ public sealed class UndoService {
     /// it shows progress, <see cref="CanUndo"/> is false while it runs, and
     /// it can be cancelled. Cancelled, the steps not reached yet go back on
     /// the stack under the same description, and the next <c>Ctrl+Z</c> goes
-    /// on from there. A step that fails is reported and left behind - the
-    /// rest still comes back; putting the failed one on the stack again would
-    /// wedge everything under it behind an item that is, say, no longer in
-    /// the bin.
+    /// on from there. A step whose file another program holds is waited for
+    /// (<paramref name="gates"/>); one that still fails is reported, and the
+    /// rest still comes back. It goes back on the stack when the failure may
+    /// pass - held, another operation's - and the next <c>Ctrl+Z</c> tries it
+    /// again; otherwise it is left behind: putting it back would wedge
+    /// everything under it behind an item that is, say, no longer in the bin.
     /// </para>
     ///
     /// <para>
@@ -124,7 +129,13 @@ public sealed class UndoService {
     /// Where what the undo puts back, and where from, is claimed while it
     /// runs - so another operation names the undo rather than fighting it.
     /// </param>
-    public async Task<UndoOutcome?> UndoAsync(OperationTracker tracker, CancellationToken ct = default, PathClaims? claims = null) {
+    /// <param name="gates">
+    /// The wait for held files for this undo, given its own claim; null runs
+    /// every step straight and leaves every failed one behind.
+    /// </param>
+    public async Task<UndoOutcome?> UndoAsync(
+        OperationTracker tracker, CancellationToken ct = default, PathClaims? claims = null,
+        Func<IDisposable?, IUndoStepGate>? gates = null) {
         IUndoableAction action;
         lock (_gate) {
             if (_busy > 0 || !_stack.TryPop(out action!)) {
@@ -139,7 +150,8 @@ public sealed class UndoService {
             using var op = tracker.Begin(OperationVerbs.Undo, steps.Count, token: ct);
             var touched = action.MovesOnUndo.SelectMany(m => new[] { m.From, m.To }).Concat(action.PathsAfterUndo);
             using var claim = claims?.Claim(touched, ClaimKind.UserOperation, OperationVerbs.Undo);
-            var outcome = await Task.Run(() => Unwind(action, steps, op, ct), CancellationToken.None).ConfigureAwait(false);
+            using var gate = gates?.Invoke(claim);
+            var outcome = await Task.Run(() => Unwind(action, steps, op, gate, ct), CancellationToken.None).ConfigureAwait(false);
             if (outcome.Remaining is { } remaining) {
                 lock (_gate) {
                     _stack.Push(remaining);
@@ -233,9 +245,11 @@ public sealed class UndoService {
 
 
     private static UndoOutcome Unwind(
-        IUndoableAction action, IReadOnlyList<IUndoableAction> steps, IOperationHandle op, CancellationToken ct) {
+        IUndoableAction action, IReadOnlyList<IUndoableAction> steps, IOperationHandle op, IUndoStepGate? gate,
+        CancellationToken ct) {
         var undone = new List<IUndoableAction>(steps.Count);
         var failures = new List<UndoFailure>();
+        var again = new HashSet<int>();
         int next = steps.Count - 1;
 
         // Last step first, so dependent ones unwind correctly.
@@ -250,10 +264,21 @@ public sealed class UndoService {
                 op.SetCurrentPath(path);
             }
             try {
-                step.Undo();
+                if (gate is null) {
+                    step.Undo();
+                } else {
+                    gate.Run(path ?? step.Description, step.Undo, ct);
+                }
                 undone.Add(step);
+            } catch (OperationCanceledException) when (ct.IsCancellationRequested) {
+                // Stopped while waiting for a held file: this step was not
+                // reached either, and goes back with the rest.
+                break;
             } catch (Exception ex) {
                 failures.Add(new UndoFailure(step, ex));
+                if (gate?.WorthAnotherTry(ex) == true) {
+                    again.Add(next);
+                }
             }
             op.Advance(path ?? step.Description);
         }
@@ -262,9 +287,13 @@ public sealed class UndoService {
         undone.Reverse();
         bool whole = undone.Count == steps.Count;
 
+        // Not reached, and failed in a way worth another try - in the order
+        // they were done in.
+        var left = steps.Where((_, i) => i <= next || again.Contains(i)).ToList();
+
         return new UndoOutcome(
             Undone: undone.Count == 0 ? null : whole ? action : action.WithSteps(undone),
-            Remaining: next < 0 ? null : action.WithSteps(steps.Take(next + 1).ToList()),
+            Remaining: left.Count == 0 ? null : left.Count == steps.Count ? action : action.WithSteps(left),
             Failures: failures,
             Cancelled: next >= 0);
     }

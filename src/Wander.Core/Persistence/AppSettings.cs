@@ -144,6 +144,15 @@ public sealed record AppSettings {
     public bool SkipIdenticalOnConflict { get; init; } = true;
 
     /// <summary>
+    /// Which copies are read back once written and compared with what was
+    /// read from the source (decision 2026-10-15): from flash drives, cards,
+    /// phones and cameras by default - the copies that fail most, and the
+    /// ones whose source is wiped afterwards; or always, or never. The price
+    /// is the time of reading the copy once more.
+    /// </summary>
+    public VerifyPolicy VerifyCopies { get; init; } = VerifyPolicy.Removable;
+
+    /// <summary>
     /// A drag held over a folder in the list goes into it (DragHover).
     /// Off by default (2026-10-07): useful now and then, but more often the
     /// list walks away from under a drag that only paused. A closed folder
@@ -513,6 +522,14 @@ public sealed record AppSettings {
     /// nothing anybody could read a name from (<c>Core/Logging/LogMask</c>).
     /// </summary>
     public bool LogPaths { get; init; }
+
+    /// <summary>
+    /// Every copy through Windows' own engine, none through Wander's loop
+    /// (decision 2026-10-15: a debug switch, not a user's setting - "fast
+    /// or careful" is not a choice anybody can weigh). Off by default; for
+    /// a complaint about a copy.
+    /// </summary>
+    public bool CopyWithWindows { get; init; }
 }
 
 

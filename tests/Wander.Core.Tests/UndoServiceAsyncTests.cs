@@ -33,6 +33,13 @@ public class UndoServiceAsyncTests {
         return (new UndoService(), new OperationTracker(TimeSpan.Zero), new List<string>());
     }
 
+    /// <summary>File operations over the fake, whose wait for held files records its pauses instead of sleeping them.</summary>
+    private static FileOperationService OpsOver(Fakes.FakeFileSystem fs, UndoService undo, OperationTracker tracker) {
+        var held = new HeldPaths(new PathClaims(), newWait: () => new BusyWait(_ => { }));
+
+        return new FileOperationService(fs, new Fakes.FakeRecycleBin(fs), undo, tracker, Logging.NullLogger.Instance, held);
+    }
+
 
     [Fact]
     public async Task WhatTheUndoPutsBack_IsClaimed_WhileItRuns() {
@@ -140,6 +147,46 @@ public class UndoServiceAsyncTests {
         Assert.Same(steps[1], Assert.Single(outcome!.Failures).Step);
         Assert.Equal(new[] { @"C:\back\a", @"C:\back\c" }, outcome.Undone!.PathsAfterUndo);
         Assert.Null(outcome.Remaining);
+        Assert.Equal(0, undo.Depth);
+    }
+
+    [Fact]
+    public async Task AHeldFile_IsWaitedFor_AndTheUndoGoesThroughOnTheNextLook() {
+        var (undo, tracker, _) = Setup();
+        var fs = new Fakes.FakeFileSystem();
+        fs.Files[@"C:\old\a.txt"] = new byte[1];
+        var ops = OpsOver(fs, undo, tracker);
+        ops.Move(@"C:\old\a.txt", @"D:\new\a.txt");
+        fs.MoveInUseFor[@"D:\new\a.txt"] = 1;
+
+        var outcome = await undo.UndoAsync(tracker, default, null, ops.UndoGate);
+
+        Assert.NotNull(outcome!.Undone);
+        Assert.Empty(outcome.Failures);
+        Assert.True(fs.FileExists(@"C:\old\a.txt"));
+        Assert.Equal(0, undo.Depth);
+    }
+
+    [Fact]
+    public async Task AFileHeldPastTheBudget_Fails_AndStaysForTheNextCtrlZ() {
+        var (undo, tracker, _) = Setup();
+        var fs = new Fakes.FakeFileSystem();
+        fs.Files[@"C:\old\a.txt"] = new byte[1];
+        var ops = OpsOver(fs, undo, tracker);
+        ops.Move(@"C:\old\a.txt", @"D:\new\a.txt");
+        fs.MoveInUseFor[@"D:\new\a.txt"] = int.MaxValue;
+
+        var outcome = await undo.UndoAsync(tracker, default, null, ops.UndoGate);
+
+        Assert.Null(outcome!.Undone);
+        Assert.True(FileInUse.Is(Assert.Single(outcome.Failures).Error));
+        Assert.Equal(1, undo.Depth);
+
+        // Let go: the next Ctrl+Z gets it back.
+        fs.MoveInUseFor[@"D:\new\a.txt"] = 0;
+        var again = await undo.UndoAsync(tracker, default, null, ops.UndoGate);
+
+        Assert.NotNull(again!.Undone);
         Assert.Equal(0, undo.Depth);
     }
 

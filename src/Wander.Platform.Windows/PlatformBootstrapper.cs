@@ -20,6 +20,7 @@ using Wander.Platform.Windows.Icons;
 using Wander.Platform.Windows.Imaging;
 using Wander.Platform.Windows.Logging;
 using Wander.Platform.Windows.Persistence;
+using Wander.Platform.Windows.Power;
 using Wander.Platform.Windows.Preview;
 using Wander.Platform.Windows.Search;
 using Wander.Platform.Windows.Shell;
@@ -51,6 +52,11 @@ public static class PlatformBootstrapper {
         // readers claim what they read. Before either of them.
         ServiceLocator.Register<PathClaims>(new PathClaims());
         ServiceLocator.Register<IVolumeInfoProvider>(new WindowsVolumeInfo());
+        // Volumes coming and going: the window's message hook feeds the hub
+        // (Platform has no WPF), Core listens through the interface.
+        var volumes = new VolumeChangeHub(logger);
+        ServiceLocator.Register<VolumeChangeHub>(volumes);
+        ServiceLocator.Register<IVolumeChanges>(volumes);
         ServiceLocator.Register<IKnownFolders>(new WindowsKnownFolders());
         ServiceLocator.Register<ISystemClipboard>(new WindowsClipboard(logger));
         ServiceLocator.Register<IDirectoryWatcher>(new WindowsDirectoryWatcher(logger));
@@ -106,7 +112,7 @@ public static class PlatformBootstrapper {
         // Undo + recycle bin + ops are the single shared instances every
         // caller (VM, drop handlers, future scripting) must reach for.
         ServiceLocator.Register<UndoService>(new UndoService());
-        ServiceLocator.Register<OperationTracker>(new OperationTracker());
+        ServiceLocator.Register<OperationTracker>(new OperationTracker(power: new PowerRequestGuard(logger)));
         ServiceLocator.Register<IRecycleBin>(new ShellRecycleBin(logger));
         ServiceLocator.Register<FileOperationService>(new FileOperationService());
 

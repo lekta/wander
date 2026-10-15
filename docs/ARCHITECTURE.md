@@ -111,24 +111,27 @@ src/
 <!-- deps:generated:begin -->
 ```
 === Wander dependency graph (using sweep) ===
-date   : 2026-10-14
-commit : d368d2d
+date   : 2026-10-15
+commit : 1bd38b5
 
 -- Wander.Core: levels --
-  0: (root), Appearance, Imaging, Layout, Localization, Logging, Operations, Panels
-  1: Diagnostics, Icons, Undo
-  2: FileSystem
-  3: Companions, Folders, Navigation, Preview
-  4: Actions, Rename
-  5: Persistence, Search
-  6: Listing, Shell
-  7: Menu
-  8: Workspace
+  0: (root), Appearance, Imaging, Layout, Localization, Logging, Panels
+  1: Diagnostics, Icons, Operations
+  2: Undo
+  3: FileSystem
+  4: Companions, Folders, Navigation, Preview
+  5: Actions, Rename
+  6: Persistence, Search
+  7: Listing, Shell
+  8: Menu
+  9: Workspace
 
 -- Wander.Platform.Windows: levels --
-  0: Diagnostics, Icons, Imaging, Logging, Persistence, Preview, Search, Shell
-  1: FileSystem
-  2: (root)
+  0: [FileSystem+Shell], Diagnostics, Icons, Imaging, Logging, Persistence, Power, Preview, Search
+  1: (root)
+  cycle edges:
+    FileSystem -> Shell
+    Shell -> FileSystem
 
 -- Wander.App: levels --
   0: Menu, Resources
@@ -268,11 +271,16 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
 `BatchGroup` (файл + спутники: один вопрос, один шаг прогресса,
 `Sprite (1).png` + `.meta`). Синхронные `CopyMany` / `MoveMany` — для
 тестов, продакшн — async на пуле с прогрессом и `CancellationToken`.
-Отмена посреди элемента — `BatchItemStatus.Cancelled`, не `Failed`,
-частично скопированное — в undo. Результаты (`BatchItemResult`,
+Отмена посреди элемента — `BatchItemStatus.Cancelled`, не `Failed`:
+файл копируется под `имя.wander-tmp` (`TransientFiles.TempNameFor`) и
+получает имя целым — отменённый не оставляет ничего; частично
+скопированная папка — в undo. Результаты (`BatchItemResult`,
 `DeleteResult`) — на уровне namespace. Папка между томами —
-`CopyDirectory` + `DeleteDirectory`; read-only цели — список, второй
-вопрос, снятие атрибута.
+`CopyDirectory` + `DeleteDirectory`, сбой копии убирает частичную;
+read-only цели — список, второй вопрос, снятие атрибута. Ссылка на
+папку внутри копируемой не копируется (петля) и идёт в итог отдельным
+`Skipped` с `LinkNotCopiedException`; ссылка на файл копируется
+содержимым цели, ссылка-источник верхнего уровня — насквозь.
 
 - **Undo.** Один LIFO-стек: Move ↔ Move, Rename ↔ Rename, Delete →
   Restore из корзины, Create → Delete в корзину. `PermanentDelete`
@@ -298,9 +306,12 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
 - **Откат — операция.** `UndoService.UndoAsync`: с пула, в
   `OperationTracker` (`OperationVerbs.Undo`), под тем же busy-счётчиком;
   связка разматывается по `IUndoableAction.Steps` с конца. Отмена
-  возвращает несделанное в стек под тем же описанием (`WithSteps`). Сбой
-  шага — в `UndoOutcome.Failures`, остальные откатываются, сбойный в стек
-  не возвращается (иначе запер бы всё под собой). По
+  возвращает несделанное в стек под тем же описанием (`WithSteps`). Шаг
+  идёт через `IUndoStepGate` (`FileOperationService.UndoGate`, над
+  `BusyGate`): занятый файл ждётся из бюджета операции. Сбой шага — в
+  `UndoOutcome.Failures`, остальные откатываются; в стек возвращается
+  только сбой, который может пройти (занят, чужая операция, временная
+  ошибка — `WorthAnotherTry`), — иной запер бы всё под собой. По
   `UndoOutcome.Undone` `UndoLast` ведёт выделение и `FollowRelocated`.
 - **Окно операции — через 400 мс, без фокуса** (`RunWithProgressDialogAsync`,
   `ShowActivated = false`): короткая операция его не показывает, строка
@@ -763,7 +774,10 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
 всё же спрашивает оболочку (`MainWindow.QueryShellMenu`) — извлечь,
 форматировать, BitLocker, как в Проводнике. Поиск
 вглубь из него не идёт; без выделения панель просмотра пуста — у корзины
-так же: переписи сентинела нет. Листинг — ветка `RefreshShellAsync` (эпоха, спиннер,
+так же: переписи сентинела нет. `Backspace` и «вверх» из корня диска в
+«Компьютер» не ведут (решение человека 2026-10-15); заголовки обеих
+панелей сворачивает только треугольник (`PanelHeaderPart`), слово
+«Компьютер» — `OpenComputerCommand`, слово «Закладки» — ничего. Листинг — ветка `RefreshShellAsync` (эпоха, спиннер,
 отмена, `PublishRows`), адрес и крошки обычные (`GetDisplayName` →
 null); `Enumerate` принимает `CancellationToken` и смотрит на него между
 элементами.
@@ -1215,7 +1229,11 @@ X», «листинг эпохи N долетел», «сторож замети
   папки и файлы без данных мимо, `IsShotApplied` зажигает фотоаппарат у
   поля; иначе слова — имя. Сравнение с допуском записи камер (`f/2.8` =
   2.79; выдержка ±3 %). Обход подпапок с параметрами не идёт —
-  нужен кэш EXIF (J3); подсказки значений из папки — PLAN.
+  нужен кэш EXIF (J3); подсказки значений из папки — PLAN. Отклонены
+  (разбор 2026-10-15: Everything, AQS, Lightroom, Bridge, darktable, Photo
+  Mechanic, Capture One): ключ за разделителем (`-iso>800` — `-` в именах
+  частый) и фасеты в полосе фильтра (мышью, «≥ 1600» выбором нескольких);
+  объектив и камера — текст, не число — BACKLOG.
 - **Два критерия через «И»**: маска — ворота, отвергнутый файл не
   открывается (17 файлов / 43 мс против 5074 / 217). Галки «в содержимом»
   нет — её роль играет наличие текста.
@@ -2285,7 +2303,16 @@ SYS ws=431 private=360 gen=167/155/134 alloc=+45 loh=6 handles=1060 threads=40 c
     `AppSettings.ZoomArrows` = `Move` меняет стрелки и `Ctrl`+стрелки
     местами, только пока что-то увеличено (`ZoomedPane`). Видео —
     `VideoZoom_*`: `ScaleTransform` на `VideoStage` с центром под мышью
-    (2× / 4×), рамка `VideoClip` режет; новый клип — вписан.
+    (2× / 4×), рамка `VideoClip` режет; новый клип — вписан. Почему так
+    (разбор 2026-10-15: FastStone, XnView, Lightroom, Photo Mechanic,
+    FastRawViewer, Capture One, darktable, Narrative, Honeyview):
+    `Ctrl`+колесо — зум почти везде, якорь под курсором (в центр —
+    раздражает); навигатор — оверлей только при движении (Honeyview,
+    Narrative), не постоянный; место — в долях кадра (кадры серии
+    разного размера); fit — режим, не процент; стрелки по умолчанию
+    листают с тем же местом — так проверяют серию, FastStone / XnView
+    наоборот — отсюда настройка. Посадка на точку AF / резкое — редкость
+    (darktable `Ctrl+W`), под Windows не нашлось.
   - `MainViewModel.Say` → `StatusSaid` → плашка 4 с. Строки после оценки
     — заново (`RatingsController.FindInSource`, и скрытые фильтром) по
     `Entries.CollectionChanged` и `Ratings.CompanionsChanged`.

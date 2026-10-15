@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
@@ -457,6 +458,9 @@ public sealed class MainViewModel : ObservableObject {
         };
 
         _tracker.Changed += OnTrackerChanged;
+        if (ServiceLocator.TryGet<IVolumeChanges>() is { } volumes) {
+            volumes.Changed += OnVolumeChanged;
+        }
 
         // Every verb below acts on what TargetRules says it acts on: from a
         // key, the target as it is now; from a menu, the menu's snapshot,
@@ -554,6 +558,9 @@ public sealed class MainViewModel : ObservableObject {
             CreateShortcutsForSelection,
             p => ListRowsOf(p) is not null && _nav.Current is not null && !ResolveTarget(p).Place.IsReadOnly);
         OpenJournalCommand = new RelayCommand(_ => OpenJournal(), _ => Journal.Count > 0);
+        DismissFinishedCommand = new RelayCommand(
+            _ => _tracker.DismissFinished(problemsToo: (Keyboard.Modifiers & ModifierKeys.Shift) != 0),
+            _ => HasFinishedOperations);
         TogglePreviewCommand = new RelayCommand(_ => IsPreviewVisible = !IsPreviewVisible);
         ToggleFoldersCommand = new RelayCommand(_ => IsFoldersVisible = !IsFoldersVisible);
         UndoCommand = new RelayCommand(_ => UndoLast(), _ => _undo.CanUndo);
@@ -665,6 +672,10 @@ public sealed class MainViewModel : ObservableObject {
             }
         };
 
+        // The journal starts with the session: what ran, the date is the
+        // entry's own (AD5).
+        Journal.Record(new JournalEntry(
+            DateTime.Now, JournalKind.Note, string.Format(Strings.JournalAppStarted, BuildInfo.Version), Array.Empty<string>()));
         RestoreState();
         // Restored settings decide how big the thumbnail caches may be; the
         // provider starts idle until it is told. Same for where scratch
@@ -865,7 +876,17 @@ public sealed class MainViewModel : ObservableObject {
         private set => SetField(ref _operationsSummary, value);
     }
 
-    public bool HasActiveOperations => Operations.Count > 0;
+    /// <summary>
+    /// Something is running. What the watcher's tick waits on and what an
+    /// exit asks about - a finished row must hold neither, so this counts
+    /// the running only.
+    /// </summary>
+    public bool HasActiveOperations => Operations.Any(o => !o.IsFinished);
+
+    /// <summary>The status bar's operations field is there: something runs, or something finished and is not cleared away.</summary>
+    public bool HasOperations => Operations.Count > 0;
+
+    public bool HasFinishedOperations => Operations.Any(o => o.IsFinished);
 
     /// <summary>
     /// Set during async list enumeration (Recycle Bin and other shell
@@ -1710,6 +1731,9 @@ public sealed class MainViewModel : ObservableObject {
     public RelayCommand OpenJournalCommand { get; }
     public RelayCommand OpenInTerminalCommand { get; }
 
+    /// <summary>The operations panel's "Убрать завершённые": the ones that went well; with Shift, all of them.</summary>
+    public RelayCommand DismissFinishedCommand { get; }
+
     /// <summary>A search result's menu: to the folder it is in, the row selected (<see cref="RevealPath"/>).</summary>
     public RelayCommand GoToLocationCommand { get; }
     public RelayCommand CopyPathCommand { get; }
@@ -1750,7 +1774,9 @@ public sealed class MainViewModel : ObservableObject {
         }
     }
 
-    public string UndoTooltip => _undo.NextDescription is { } next ? $"Undo: {next}" : "Nothing to undo";
+    public string UndoTooltip => _undo.Next is { } next
+        ? string.Format(Strings.UndoTooltipNext, UndoText(next))
+        : Strings.UndoTooltipNothing;
 
     /// <summary>
     /// The folder's name - with a warning appended while this instance is
@@ -1886,6 +1912,7 @@ public sealed class MainViewModel : ObservableObject {
 
             try {
                 _shell.Open(entry.FullPath);
+                NoteOpened(Strings.JournalFileOpened, entry.FullPath);
             } catch (Exception ex) {
                 Fail(string.Format(Strings.StatusOpenFailed, ex.Message));
             }
@@ -1960,27 +1987,11 @@ public sealed class MainViewModel : ObservableObject {
         var groups = await Task.Run(() => GroupPathsWithCompanions(sourcePaths));
 
         _log.Info($"Drop: {effect} {groups.Count} item(s) into {targetFolder}");
-        var resolver = _dialogs.CreateConflictResolver(Settings.SkipIdenticalOnConflict);
-        IReadOnlyList<BatchItemResult> results;
-        if (effect == DropEffect.Move) {
-            ReleasePreview(groups.SelectMany(g => g.All));
-        }
-        try {
-            results = await RunWithProgressDialogAsync(
-                effect == DropEffect.Move ? Strings.ProgressMoving : Strings.ProgressCopying,
-                ct => effect == DropEffect.Move
-                    ? _ops.MoveManyAsync(groups, targetFolder, resolver, ct)
-                    : _ops.CopyManyAsync(groups, targetFolder, resolver, ct));
-        } catch (OperationCanceledException) {
-            Status = Strings.StatusCancelled;
+        var transfer = await TransferAsync(groups, targetFolder, effect == DropEffect.Move, Strings.StatusDropFailed);
+        if (transfer is not { } done) {
             return;
-        } catch (Exception ex) {
-            _log.Error($"Drop failed: {effect} -> {targetFolder}", ex);
-            Fail(string.Format(Strings.StatusDropFailed, ex.Message));
-            return;
-        } finally {
-            RestorePreview();
         }
+        var (results, operationId) = done;
 
         // A folder moved onto a panel's row is in that panel now (2026-10-15):
         // the open folder's place, when that is what moved - the rewrite in
@@ -1999,7 +2010,10 @@ public sealed class MainViewModel : ObservableObject {
         if (pane is { } droppedOn && movedFolder is not null) {
             Workspace.Post(new DroppedIntoPanel(droppedOn, movedFolder));
         }
-        ReportBatchResults(results, effect == DropEffect.Move ? Strings.VerbMoved : Strings.VerbCopied, targetFolder);
+        bool moved = effect == DropEffect.Move;
+        await ReportBatchResultsAsync(
+            results, moved ? Strings.VerbMoved : Strings.VerbCopied, moved ? JournalKind.Moved : JournalKind.Copied, targetFolder,
+            operationId);
     }
 
 
@@ -2178,6 +2192,37 @@ public sealed class MainViewModel : ObservableObject {
         Workspace.Post(new OptionsChanged(new WorkspaceOptions(Settings.TreeKeyboardNavigates, Settings.ShowHidden)));
     }
 
+    /// <summary>
+    /// A volume came or went (Y2): the drives are read again, a bookmark on
+    /// it greys or comes back, a finished operation's "Извлечь" goes with
+    /// it - and the open folder, when it was on the volume that went, moves
+    /// to the most recent place still there. On the UI thread: the window's
+    /// hook raises it.
+    /// </summary>
+    private void OnVolumeChanged(object? sender, VolumeChange change) {
+        Workspace.Post(new VolumesChanged());
+        PostBookmarks();
+        RefreshEjectable();
+        if (!change.Arrived) {
+            _ = LeaveRemovedVolumeAsync();
+        }
+    }
+
+    /// <summary>The open folder was on a volume that went: to the latest place on one still there.</summary>
+    private async Task LeaveRemovedVolumeAsync() {
+        string? current = _nav.Current;
+        // DriveInfo asks every drive whether it is ready - off this thread.
+        var roots = await Task.Run(() => _fs.GetRoots().Select(r => r.FullPath).ToList());
+        if (current is null || !string.Equals(current, _nav.Current, StringComparison.OrdinalIgnoreCase)) {
+            return;
+        }
+
+        if (NavigationFallback.AfterVolumeRemoved(current, roots, _nav.RecentPaths, VolumeKindOf) is { } fallback) {
+            _log.Info($"Volume of {current} removed: going to {fallback}");
+            NavigateTo(fallback, NavigationSource.External);
+        }
+    }
+
     private void CreateShortcuts(IReadOnlyList<string> sources, string targetFolder) {
         var shortcuts = ServiceLocator.Get<IShortcutService>();
         var created = new List<IUndoableAction>();
@@ -2208,7 +2253,7 @@ public sealed class MainViewModel : ObservableObject {
             _log.Info($"Create shortcut: {created.Count} item(s) in {targetFolder}");
             _undo.Push(created.Count == 1
                 ? created[0]
-                : new CompositeAction($"Create {created.Count} shortcuts", created));
+                : new CompositeAction($"Create {created.Count} shortcuts", created, OperationVerbs.Create));
         }
 
         Refresh();
@@ -2321,6 +2366,7 @@ public sealed class MainViewModel : ObservableObject {
         // Before the first navigation, so its lines are written the way
         // the settings say.
         ApplyLogSettings();
+        ApplyCopySettings();
 
         // Until the first folder lands and ChooseView decides, the list
         // wears the default rather than a hard-coded view.
@@ -3681,11 +3727,20 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     private void Say(string text, StatusSeverity severity) {
+        Say(text, severity, entry: null);
+    }
+
+    /// <param name="entry">What the journal keeps instead of the line itself - an operation with its files; null keeps the line.</param>
+    private void Say(string text, StatusSeverity severity, JournalEntry? entry) {
         // Noted before the property changes, so the journal holds every
         // line the user could have seen - including the ones a second
         // message replaced before the eye got to them. That is the whole
         // reason it exists.
-        Journal.Note(text, DateTime.Now, severity);
+        if (entry is null) {
+            Journal.Note(text, DateTime.Now, severity);
+        } else {
+            Journal.Record(entry);
+        }
         StatusSeverity = severity;
         SetField(ref _status, text, nameof(Status));
         StatusSaid?.Invoke(this, new StatusLine(text, severity));
@@ -4255,6 +4310,11 @@ public sealed class MainViewModel : ObservableObject {
             ApplyLogSettings();
         }
 
+        if (e.PropertyName is nameof(SettingsViewModel.VerifyCopies) or nameof(SettingsViewModel.CopyWithWindows)) {
+            // From the next operation on.
+            ApplyCopySettings();
+        }
+
         if (e.PropertyName == nameof(SettingsViewModel.Theme)) {
             // At once and both ways: Cancel and the reset come back through here.
             InterfaceTheme.Apply(Settings.Theme);
@@ -4388,6 +4448,12 @@ public sealed class MainViewModel : ObservableObject {
     private void ApplyLogSettings() {
         Log.Details = Settings.LogActions;
         Log.RevealPaths = Settings.LogPaths;
+    }
+
+    /// <summary>How copies are made and checked, copied into the service: Core has no settings to ask.</summary>
+    private void ApplyCopySettings() {
+        _ops.Verify = Settings.VerifyCopies;
+        _ops.SystemCopyOnly = Settings.CopyWithWindows;
     }
 
 
@@ -4640,7 +4706,18 @@ public sealed class MainViewModel : ObservableObject {
     private void OpenWith(object? parameter) {
         if (OpenWithTarget(parameter) is { } entry) {
             Shell.OpenWith(entry.FullPath);
+            NoteOpened(Strings.JournalFileOpenWith, entry.FullPath);
         }
+    }
+
+    /// <summary>
+    /// A file handed to another program goes into the journal, not the
+    /// status line: the window that opens says it well enough, and "what
+    /// did I open a minute ago" is the journal's question.
+    /// </summary>
+    /// <param name="format">The journal line, with the path as {0}.</param>
+    private void NoteOpened(string format, string path) {
+        Journal.Record(new JournalEntry(DateTime.Now, JournalKind.FileOpened, string.Format(format, path), Array.Empty<string>()));
     }
 
     /// <summary>The one file "Open with" is about: the list's current row, in a place its programs can reach.</summary>
@@ -4877,10 +4954,18 @@ public sealed class MainViewModel : ObservableObject {
         }
 
         string waited = BusyNote(results.Select(r => r.Busy));
+        // Taken by the bin with nothing to find it by: gone for good, and
+        // said so - the user asked for the bin (OPERATIONS, step 9).
+        int lost = results.Count(r => r.Permanent);
+        if (lost > 0) {
+            waited += "; " + string.Format(Strings.StatusRecycledForGood, lost);
+        }
         var failures = results.Where(r => r.Status == DeleteStatus.Failed).Select(r => r.Error).ToList();
-        var severity = OutcomeSeverity(ok, failures, waited);
+        var severity = lost > 0 ? StatusSeverity.Warning : OutcomeSeverity(ok, failures, waited);
         if (failed == 0) {
-            Say(string.Format(permanent ? Strings.StatusDeleted : Strings.StatusRecycled, ok) + waited, severity);
+            // One item by its name, not "1" (AD5).
+            string what = gone.Count == 1 ? Named(gone[0], 1) : ok.ToString(System.Globalization.CultureInfo.CurrentCulture);
+            Say(string.Format(permanent ? Strings.StatusDeleted : Strings.StatusRecycled, what) + waited, severity);
 
             return;
         }
@@ -5030,10 +5115,22 @@ public sealed class MainViewModel : ObservableObject {
         Justification = "A command body, nothing awaits it; every exception is caught, logged and shown in the status bar.")]
     private async void UndoLast() {
         try {
+            // The preview lets go of what the undo takes away or moves back,
+            // as before a delete: its own handle would be the "in use" the
+            // undo waits for.
+            if (_undo.Next is { } next) {
+                ReleasePreview(next.Steps.SelectMany(s => s.PathsBeforeUndo).Concat(next.MovesOnUndo.Select(m => m.From)));
+            }
             // An operation like any other - off this thread, in the tracker,
-            // cancellable, its window held back the same way.
-            var outcome = await RunWithProgressDialogAsync(
-                Strings.ProgressUndoing, ct => _undo.UndoAsync(_tracker, ct, _claims));
+            // cancellable, its window held back the same way; held files
+            // waited for the way the operations wait for them.
+            UndoOutcome? outcome;
+            try {
+                outcome = await RunWithProgressDialogAsync(
+                    Strings.ProgressUndoing, ct => _undo.UndoAsync(_tracker, ct, _claims, _ops.UndoGate));
+            } finally {
+                RestorePreview();
+            }
             if (outcome is null) {
                 return;
             }
@@ -5067,7 +5164,7 @@ public sealed class MainViewModel : ObservableObject {
             } else if (outcome.Failures.Count > 0) {
                 Warn(string.Format(Strings.StatusUndonePartly, NamesOf(action), failedNames, failedReason));
             } else {
-                Status = string.Format(Strings.StatusUndone, action.Description);
+                Status = string.Format(Strings.StatusUndone, UndoText(action));
             }
 
             // An undo that only put a rating back leaves the folder exactly
@@ -5111,7 +5208,7 @@ public sealed class MainViewModel : ObservableObject {
         var first = failures[0];
         string? path = StepPath(first);
         string reason = await Task.Run(() => DescribeError(first.Error, path ?? ""));
-        string names = path is null ? first.Step.Description : Named(path, failures.Count);
+        string names = path is null ? UndoText(first.Step) : Named(path, failures.Count);
 
         return (names, reason);
     }
@@ -5134,9 +5231,24 @@ public sealed class MainViewModel : ObservableObject {
         };
     }
 
-    /// <summary>What an undo brings back, by name; its description when it brings nothing back to name (the undo of a create).</summary>
+    /// <summary>What an undo brings back, by name; what it takes back when it brings nothing back to name (the undo of a create).</summary>
     private static string NamesOf(IUndoableAction action) {
-        return action.PathsAfterUndo is [var first, ..] ? Named(first, action.PathsAfterUndo.Count) : action.Description;
+        return action.PathsAfterUndo is [var first, ..] ? Named(first, action.PathsAfterUndo.Count) : UndoText(action);
+    }
+
+    /// <summary>
+    /// "copying "a.txt" and 2 more", "rating (3 items)": what an undo
+    /// takes back, in the app's words - the action, and the files by name
+    /// where it can name them.
+    /// </summary>
+    private static string UndoText(IUndoableAction action) {
+        string verb = Strings.Get(action.Verb).ToLower(System.Globalization.CultureInfo.CurrentUICulture);
+        string? first = action.PathsAfterUndo.FirstOrDefault()
+            ?? action.Steps.SelectMany(s => s.PathsBeforeUndo).FirstOrDefault();
+
+        return first is not null
+            ? string.Format(Strings.UndoWhatNamed, verb, Named(first, action.ItemCount))
+            : string.Format(Strings.UndoWhatCounted, verb, CountCaption.Items(action.ItemCount));
     }
 
     /// <summary>The first file by name, the rest as a count - how a journal line names files.</summary>
@@ -5430,7 +5542,11 @@ public sealed class MainViewModel : ObservableObject {
         // The renamed rows are new rows: the keyboard went with the old ones.
         _session.SetArrivalHere(ArrivalIntent.Rows(folder, arrived, takeFocus: true));
         Refresh();
-        Status = string.Format(Strings.StatusBatchRenamed, renamed.Length);
+        // The journal keeps what was called what: the line per file is
+        // where a rename that did something unexpected is found out.
+        string done = string.Format(Strings.StatusBatchRenamed, renamed.Length);
+        var lines = plan.Select(p => string.Format(Strings.JournalItemRenamed, Path.GetFileName(p.Path), p.NewName)).ToList();
+        Say(done, StatusSeverity.Info, new JournalEntry(DateTime.Now, JournalKind.Renamed, done, lines));
     }
 
 
@@ -5800,31 +5916,55 @@ public sealed class MainViewModel : ObservableObject {
         var groups = await Task.Run(() => GroupPathsWithCompanions(sources));
 
         _log.Info($"Paste: {(wasCut ? "move" : "copy")} {groups.Count} item(s) into {target} ({how})");
-        var resolver = _dialogs.CreateConflictResolver(Settings.SkipIdenticalOnConflict);
-        IReadOnlyList<BatchItemResult> results;
-        if (wasCut) {
-            ReleasePreview(groups.SelectMany(g => g.All));
-        }
-        try {
-            results = await RunWithProgressDialogAsync(
-                wasCut ? Strings.ProgressMoving : Strings.ProgressCopying,
-                ct => wasCut
-                    ? _ops.MoveManyAsync(groups, target, resolver, ct)
-                    : _ops.CopyManyAsync(groups, target, resolver, ct));
-        } catch (OperationCanceledException) {
-            Status = Strings.StatusCancelled;
+        var transfer = await TransferAsync(groups, target, wasCut, Strings.StatusPasteFailed);
+        if (transfer is not { } done) {
             return;
-        } catch (Exception ex) {
-            _log.Error($"Paste failed into {target}", ex);
-            Fail(string.Format(Strings.StatusPasteFailed, ex.Message));
-            return;
-        } finally {
-            RestorePreview();
         }
+        var (results, operationId) = done;
 
         if (wasCut) {
             _clipboard.Clear();
         }
+        await LandTransferAsync(results, target, wasCut, operationId);
+    }
+
+    /// <summary>
+    /// The copy or the move itself, as a paste runs it: the conflict window,
+    /// the progress window, the preview letting go of what moves. Null when
+    /// it was cancelled or threw - the status line has said so already.
+    /// </summary>
+    /// <param name="failedFormat">The status line for an operation that threw, with the message as {0}.</param>
+    /// <returns>The results, and the operation's id in the tracker - where its record is.</returns>
+    private async Task<(IReadOnlyList<BatchItemResult> Results, long OperationId)?> TransferAsync(
+        IReadOnlyList<BatchGroup> groups, string target, bool move, string failedFormat) {
+        var resolver = _dialogs.CreateConflictResolver(Settings.SkipIdenticalOnConflict);
+        if (move) {
+            ReleasePreview(groups.SelectMany(g => g.All));
+        }
+        var operation = new StrongBox<long>();
+        try {
+            var results = await RunWithProgressDialogAsync(
+                move ? Strings.ProgressMoving : Strings.ProgressCopying,
+                ct => move
+                    ? _ops.MoveManyAsync(groups, target, resolver, ct)
+                    : _ops.CopyManyAsync(groups, target, resolver, ct),
+                operation);
+
+            return (results, operation.Value);
+        } catch (OperationCanceledException) {
+            Status = Strings.StatusCancelled;
+            return null;
+        } catch (Exception ex) {
+            _log.Error($"{(move ? "Move" : "Copy")} failed into {target}", ex);
+            Fail(string.Format(failedFormat, ex.Message));
+            return null;
+        } finally {
+            RestorePreview();
+        }
+    }
+
+    /// <summary>What a paste does once the files are there: the rows that arrived selected, the listing, the status line.</summary>
+    private async Task LandTransferAsync(IReadOnlyList<BatchItemResult> results, string target, bool moved, long operationId) {
         // Select what just arrived — the whole point of the operation is now
         // on screen, and the keyboard should already be on it. Only in the
         // folder on screen (N8): pasted into a subfolder, the rows are not
@@ -5835,10 +5975,12 @@ public sealed class MainViewModel : ObservableObject {
             .Select(r => r.FinalDestination)
             .ToArray();
         _session.SetArrivalHere(ArrivalIntent.Rows(target, arrived, takeFocus: arrived.Length > 0));
-        if (!FollowMoved(results, target, moved: wasCut)) {
+        if (!FollowMoved(results, target, moved)) {
             Refresh();
         }
-        ReportBatchResults(results, wasCut ? Strings.VerbMoved : Strings.VerbCopied, target);
+        await ReportBatchResultsAsync(
+            results, moved ? Strings.VerbMoved : Strings.VerbCopied, moved ? JournalKind.Moved : JournalKind.Copied, target,
+            operationId);
     }
 
     /// <summary>
@@ -6032,10 +6174,12 @@ public sealed class MainViewModel : ObservableObject {
         _log.Info($"Extract: {sources.Count} item(s) into {target}");
 
         IReadOnlyList<BatchItemResult> results;
+        var operation = new StrongBox<long>();
         try {
             results = await RunWithProgressDialogAsync(
                 Strings.ProgressExtracting,
-                ct => service.ExtractAsync(sources, target, resolver, ct));
+                ct => service.ExtractAsync(sources, target, resolver, ct),
+                operation);
         } catch (OperationCanceledException) {
             Status = Strings.StatusCancelled;
             return;
@@ -6055,7 +6199,7 @@ public sealed class MainViewModel : ObservableObject {
         _session.SetArrivalHere(ArrivalIntent.Rows(target, arrived, takeFocus: arrived.Length > 0));
 
         Refresh();
-        ReportBatchResults(results, Strings.VerbExtracted, target);
+        await ReportBatchResultsAsync(results, Strings.VerbExtracted, JournalKind.Extracted, target, operation.Value);
 
         // Nothing came out, and the shell named no cause: it walked the whole
         // batch and wrote no bytes, which is what a password does. A cause
@@ -6082,7 +6226,8 @@ public sealed class MainViewModel : ObservableObject {
         try {
             string copy = await service.ExtractToTempAsync(path, TempFiles.FolderFor(path), CancellationToken.None);
             _shell.Open(copy);
-            Status = string.Format(Strings.StatusArchiveTempCopy, Path.GetFileName(copy));
+            Say(string.Format(Strings.StatusArchiveTempCopy, Path.GetFileName(copy)), StatusSeverity.Info, new JournalEntry(
+                DateTime.Now, JournalKind.FileOpened, string.Format(Strings.JournalArchiveCopyOpened, path), new[] { copy }));
         } catch (Exception ex) {
             _log.Error($"Open from archive failed: {path}", ex);
             Fail(string.Format(Strings.StatusOpenFailed, ex.Message));
@@ -6090,7 +6235,16 @@ public sealed class MainViewModel : ObservableObject {
     }
 
 
-    private void ReportBatchResults(IReadOnlyList<BatchItemResult> results, string verb, string target) {
+    /// <summary>
+    /// The outcome of a copy, a move or an extraction: the status line, and
+    /// the journal entry behind it - "copied to E:\Video - 12 items, 12.3 GB,
+    /// 5 min 27 s" and a line per item under it. The reasons are
+    /// named off the UI thread: naming who holds a file asks Restart Manager.
+    /// </summary>
+    /// <param name="kind">What the journal files it under.</param>
+    /// <param name="operationId">The operation in the tracker, for its bytes and its time; 0 when there is none to ask.</param>
+    private async Task ReportBatchResultsAsync(
+        IReadOnlyList<BatchItemResult> results, string verb, JournalKind kind, string target, long operationId) {
         int ok = results.Count(r =>
             r.Status == BatchItemStatus.Ok ||
             r.Status == BatchItemStatus.Replaced ||
@@ -6105,21 +6259,68 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
-        var parts = new List<string> { string.Format(Strings.StatusBatchDone, verb, CountCaption.Items(ok), target) };
+        var (lines, firstReason) = await Task.Run(() => JournalLines(results));
+        var tail = new List<string>();
         if (skipped > 0) {
-            parts.Add(string.Format(Strings.StatusBatchSkipped, skipped));
+            tail.Add(string.Format(Strings.StatusBatchSkipped, skipped));
         }
         if (cancelled > 0) {
-            parts.Add(string.Format(Strings.StatusBatchCancelled, cancelled));
+            tail.Add(string.Format(Strings.StatusBatchCancelled, cancelled));
         }
+        // One item by its name, not "1 элемент" (AD5).
+        var landed = results.Where(r => r.Status is BatchItemStatus.Ok or BatchItemStatus.Replaced or BatchItemStatus.Renamed or BatchItemStatus.Merged).ToList();
+        string howMany = landed.Count == 1 ? Named(landed[0].FinalDestination, 1) : CountCaption.Items(ok);
+        var parts = new List<string> { string.Format(Strings.StatusBatchDone, verb, howMany, target) };
+        parts.AddRange(tail);
         if (failed > 0) {
-            var firstFail = results.First(r => r.Status == BatchItemStatus.Failed);
-            string detail = firstFail.Error is null ? "" : ": " + DescribeError(firstFail.Error, firstFail.Source);
-            parts.Add(string.Format(Strings.StatusBatchFailed, failed, detail));
+            parts.Add(string.Format(Strings.StatusBatchFailed, failed, firstReason is null ? "" : ": " + firstReason));
+            tail.Add(string.Format(Strings.StatusBatchFailed, failed, ""));
         }
         string waited = BusyNote(results.Select(r => r.Busy));
         var failures = results.Where(r => r.Status == BatchItemStatus.Failed).Select(r => r.Error).ToList();
-        Say(string.Join(", ", parts) + waited, OutcomeSeverity(ok, failures, waited));
+        var severity = OutcomeSeverity(ok, failures, waited);
+
+        var record = operationId == 0 ? null : _tracker.Finished.FirstOrDefault(r => r.Id == operationId);
+        var summary = new List<string> { howMany };
+        if (record is { Bytes: > 0 }) {
+            summary.Add(SizeFormatter.Format(record.Bytes));
+        }
+        if (record is not null) {
+            summary.Add(DurationFormat.Format(record.Elapsed));
+        }
+        summary.AddRange(tail);
+        string headline = string.Format(Strings.JournalBatchHeadline, verb, target, string.Join(", ", summary));
+
+        Say(string.Join(", ", parts) + waited, severity, new JournalEntry(DateTime.Now, kind, headline + waited, lines, severity));
+    }
+
+    /// <summary>
+    /// A journal line per item - "IMG_0001.CR3", "a.txt -> a (1).txt",
+    /// "b.txt - failed: no room on E:" - and the first failure's
+    /// reason for the status line. Slow: on the pool. Only the lines the
+    /// journal will show get a reason looked up.
+    /// </summary>
+    private (IReadOnlyList<string> Lines, string? FirstReason) JournalLines(IReadOnlyList<BatchItemResult> results) {
+        var lines = new List<string>(results.Count);
+        string? firstReason = null;
+        foreach (var result in results) {
+            string name = Path.GetFileName(result.Source.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            bool shown = lines.Count < ActionJournal.LinesShown;
+            string? reason = result.Status == BatchItemStatus.Failed && result.Error is { } error && (shown || firstReason is null)
+                ? DescribeError(error, result.Source, result.FinalDestination)
+                : null;
+            firstReason ??= reason;
+            lines.Add(result.Status switch {
+                BatchItemStatus.Replaced => string.Format(Strings.JournalItemReplaced, name),
+                BatchItemStatus.Renamed => string.Format(Strings.JournalItemRenamed, name, Path.GetFileName(result.FinalDestination)),
+                BatchItemStatus.Skipped => string.Format(Strings.JournalItemSkipped, name),
+                BatchItemStatus.Cancelled => string.Format(Strings.JournalItemCancelled, name),
+                BatchItemStatus.Failed => string.Format(Strings.JournalItemFailed, name, reason ?? result.Error?.Message ?? ""),
+                _ => name,
+            });
+        }
+
+        return (lines, firstReason);
     }
 
     /// <summary>
@@ -6181,7 +6382,34 @@ public sealed class MainViewModel : ObservableObject {
         Workspace.Post(new FolderChanged(_nav.Current));
     }
 
-    private string DescribeError(Exception ex, string path) {
+    /// <param name="destination">Where the item was going, for the errors that are about the target - a full disk, FAT32's 4 GB.</param>
+    private string DescribeError(Exception ex, string path, string? destination = null) {
+        // What a card, a cable or a full disk says, in words; the codes
+        // are Win32's (TransientIo.Win32Code).
+        switch (TransientIo.Win32Code(ex)) {
+            case 112:   // ERROR_DISK_FULL
+            case 39:    // ERROR_HANDLE_DISK_FULL
+                return string.Format(Strings.ErrorDiskFull, DriveOf(destination ?? path));
+            case 223 when ServiceLocator.TryGet<IVolumeInfoProvider>()?.Describe(destination ?? path) is { FileSystem: "FAT32" }:
+                // ERROR_FILE_TOO_LARGE
+                return string.Format(Strings.ErrorFileTooLargeForFat32, DriveOf(destination ?? path));
+            case 21:    // ERROR_NOT_READY
+            case 1167:  // ERROR_DEVICE_NOT_CONNECTED
+                return Strings.ErrorDeviceGone;
+            case 23:    // ERROR_CRC
+            case 1117:  // ERROR_IO_DEVICE
+                return Strings.ErrorReadFailed;
+        }
+
+        if (DeviceErrors.IsAsleep(ex)) {
+            return Strings.ErrorDeviceAsleep;
+        }
+        if (ex is CopyMismatchException) {
+            return Strings.ErrorCopyMismatch;
+        }
+        if (ex is LinkNotCopiedException) {
+            return Strings.ErrorLinkNotCopied;
+        }
         if (ex is RecycleUnavailableException) {
             // The journal is the user's: it names the file, not only the reason.
             return string.Format(Strings.ErrorRecycleUnavailable, Path.GetFileName(path));
@@ -6201,6 +6429,11 @@ public sealed class MainViewModel : ObservableObject {
             }
         }
         return ex.Message;
+    }
+
+    /// <summary>"E:" for a path on E:, the share for a UNC path.</summary>
+    private static string DriveOf(string path) {
+        return (Path.GetPathRoot(path) ?? path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
     }
 
     // --- Operation progress (status bar) -------------------------------
@@ -6232,14 +6465,21 @@ public sealed class MainViewModel : ObservableObject {
     /// Brings the rows in step with the tracker, in place: an operation that
     /// is still running keeps its row, and with it the running speed average
     /// and any button the pointer is on. Only ones that appeared or finished
-    /// change the collection.
+    /// change the collection. The running come first; under them the
+    /// finished, newest first, each a row of its own kind made from its
+    /// record - until the user clears it away.
     /// </summary>
     private void RebuildOperations() {
         var snapshots = _tracker.Snapshot();
+        var finished = _tracker.Finished;
         var now = DateTime.UtcNow;
 
         for (int i = Operations.Count - 1; i >= 0; i--) {
-            if (!snapshots.Any(s => s.Id == Operations[i].Id)) {
+            var row = Operations[i];
+            bool stays = row.IsFinished
+                ? finished.Any(r => r.Id == row.Id)
+                : snapshots.Any(s => s.Id == row.Id);
+            if (!stays) {
                 Operations.RemoveAt(i);
             }
         }
@@ -6248,7 +6488,7 @@ public sealed class MainViewModel : ObservableObject {
         long totalWeighted = 0;
         for (int i = 0; i < snapshots.Count; i++) {
             var snapshot = snapshots[i];
-            var row = Operations.FirstOrDefault(o => o.Id == snapshot.Id);
+            var row = Operations.FirstOrDefault(o => o.Id == snapshot.Id && !o.IsFinished);
             if (row is null) {
                 row = new OperationViewModel(snapshot.Id, ShowOperationWindow, CancelOperation);
                 Operations.Insert(Math.Min(i, Operations.Count), row);
@@ -6267,15 +6507,173 @@ public sealed class MainViewModel : ObservableObject {
             }
         }
 
+        for (int k = 0; k < finished.Count; k++) {
+            var record = finished[k];
+            if (Operations.Any(o => o.IsFinished && o.Id == record.Id)) {
+                continue;
+            }
+
+            var row = new OperationViewModel(
+                record, OperationRetry.Plan(record) is not null, id => _ = RetryOperationAsync(id), _tracker.Dismiss,
+                (id, root) => _ = EjectAsync(id, root));
+            Operations.Insert(Math.Min(snapshots.Count + k, Operations.Count), row);
+            if (record.HasProblems) {
+                _ = DescribeProblemsAsync(row, record);
+            }
+            _ = ProbeEjectableAsync(row, record);
+        }
+
         AggregateProgress = totalWeighted > 0
             ? Math.Clamp((double)doneWeighted * 100.0 / totalWeighted, 0.0, 100.0)
             : 0.0;
-        OperationsSummary = Operations.Count switch {
-            0 => "",
+        OperationsSummary = snapshots.Count switch {
+            0 => FinishedSummary(finished),
             1 => Operations[0].Summary,
-            _ => string.Format(Strings.OperationMany, Operations.Count, (int)Math.Round(AggregateProgress)),
+            _ => string.Format(Strings.OperationMany, snapshots.Count, (int)Math.Round(AggregateProgress)),
         };
         Raise(nameof(HasActiveOperations));
+        Raise(nameof(HasOperations));
+        Raise(nameof(HasFinishedOperations));
+    }
+
+    /// <summary>A tick and a count, a warning sign and a count: the finished, when nothing runs - the ones that went well and the ones to look at.</summary>
+    private static string FinishedSummary(IReadOnlyList<OperationRecord> finished) {
+        int bad = finished.Count(r => r.HasProblems);
+        int good = finished.Count - bad;
+        var parts = new List<string>(2);
+        if (good > 0) {
+            parts.Add(string.Format(Strings.OperationsFinishedOk, good));
+        }
+        if (bad > 0) {
+            parts.Add(string.Format(Strings.OperationsFinishedProblems, bad));
+        }
+
+        return string.Join(" · ", parts);
+    }
+
+    /// <summary>
+    /// Which removable drive a finished row's "Извлечь" is for (E): the
+    /// first the operation touched that is still there. Asked off the UI
+    /// thread - a drive is asked whether it is ready.
+    /// </summary>
+    private async Task ProbeEjectableAsync(OperationViewModel row, OperationRecord record) {
+        try {
+            string? root = await Task.Run(() => record.DriveRoots().FirstOrDefault(r =>
+                ServiceLocator.TryGet<IVolumeInfoProvider>()?.Describe(r) is { Kind: VolumeKind.Removable, IsReady: true }));
+            row.ShowEjectable(root);
+        } catch (Exception ex) {
+            _log.Error($"Operation {record.Id}: probing its drives failed", ex);
+        }
+    }
+
+    /// <summary>A volume came or went: every finished row asks again whether its drive is there to eject.</summary>
+    private void RefreshEjectable() {
+        foreach (var row in Operations) {
+            if (row.Record is { } record) {
+                _ = ProbeEjectableAsync(row, record);
+            }
+        }
+    }
+
+    /// <summary>
+    /// A finished row's "Извлечь E:" (E): the shell's own "eject" of the
+    /// drive, as the drive's menu in "Компьютер" offers it. Wander lets go of
+    /// the drive first - the folder on screen on it moves elsewhere, the
+    /// preview closes what it holds there - or its own handles would be what
+    /// keeps it. The drive going away is what says it worked; still there
+    /// after a few seconds, the files the operation touched there are asked
+    /// who holds them.
+    /// </summary>
+    private async Task EjectAsync(long operationId, string root) {
+        string drive = DriveOf(root);
+        _log.Info($"Eject {drive} from operation {operationId}");
+        if (_nav.Current is { } open && string.Equals(DriveOf(open), drive, StringComparison.OrdinalIgnoreCase)) {
+            var others = await Task.Run(() => _fs.GetRoots()
+                .Select(r => r.FullPath)
+                .Where(r => !string.Equals(DriveOf(r), drive, StringComparison.OrdinalIgnoreCase))
+                .ToList());
+            if (NavigationFallback.AfterVolumeRemoved(open, others, _nav.RecentPaths, VolumeKindOf) is { } elsewhere) {
+                NavigateTo(elsewhere, NavigationSource.External);
+            }
+        }
+
+        ReleasePreview(new[] { root });
+        try {
+            if (!InvokeEject(root)) {
+                Warn(string.Format(Strings.StatusEjectNoVerb, drive));
+
+                return;
+            }
+
+            if (await Task.Run(() => WaitForVolumeGone(root))) {
+                Status = string.Format(Strings.StatusEjected, drive);
+                RefreshEjectable();
+
+                return;
+            }
+
+            var record = _tracker.Finished.FirstOrDefault(r => r.Id == operationId);
+            string reason = await Task.Run(() => WhoHoldsDrive(root, record));
+            Warn(string.Format(Strings.StatusEjectBusy, drive, reason));
+        } finally {
+            RestorePreview();
+        }
+    }
+
+    /// <summary>The shell's "eject" verb on the drive, from its context menu in "Компьютер"; false when it offers none.</summary>
+    private bool InvokeEject(string root) {
+        using var session = ServiceLocator.TryGet<IShellContextMenu>()?.Open(new[] { root }, ShellPaths.Computer);
+        var entry = session?.Items.FirstOrDefault(i => string.Equals(i.Verb, "eject", StringComparison.OrdinalIgnoreCase));
+        if (session is null || entry is null) {
+            _log.Warn($"Eject: the shell offers no eject verb for {root}");
+
+            return false;
+        }
+
+        return session.Invoke(entry.CommandId);
+    }
+
+    /// <summary>Whether the drive is gone - or has no medium - within a few seconds of the eject.</summary>
+    private static bool WaitForVolumeGone(string root) {
+        var volumes = ServiceLocator.TryGet<IVolumeInfoProvider>();
+        for (int i = 0; i < 20; i++) {
+            if (volumes?.Describe(root) is not { IsReady: true }) {
+                return true;
+            }
+            Thread.Sleep(250);
+        }
+
+        return false;
+    }
+
+    /// <summary>Who holds the files the operation touched on the drive - the likeliest reason an eject did not go.</summary>
+    private string WhoHoldsDrive(string root, OperationRecord? record) {
+        if (_lockInspector is not null && record is not null) {
+            var paths = record.Items
+                .SelectMany(i => new[] { i.Source, i.Destination })
+                .OfType<string>()
+                .Where(p => string.Equals(DriveOf(p), DriveOf(root), StringComparison.OrdinalIgnoreCase))
+                .Where(p => _fs.FileExists(p) || _fs.DirectoryExists(p))
+                .Take(20);
+            foreach (string path in paths) {
+                var lockers = _lockInspector.WhoIsLocking(path);
+                if (lockers.Count > 0) {
+                    return string.Format(Strings.ErrorFileInUse, FileLockInfo.Describe(lockers));
+                }
+            }
+        }
+
+        return Strings.ErrorInUse;
+    }
+
+    /// <summary>The problem lines of a finished row, named off the UI thread (Restart Manager may be asked who holds a file).</summary>
+    private async Task DescribeProblemsAsync(OperationViewModel row, OperationRecord record) {
+        try {
+            var lines = await Task.Run(() => OperationViewModel.DescribeProblems(record, DescribeError));
+            row.ShowProblems(lines);
+        } catch (Exception ex) {
+            _log.Error($"Operation {record.Id}: describing its problems failed", ex);
+        }
     }
 
     /// <summary>Brings an operation's window back from the status bar.</summary>
@@ -6286,6 +6684,48 @@ public sealed class MainViewModel : ObservableObject {
     /// <summary>The panel's Cancel, routed to the window that owns the token.</summary>
     private void CancelOperation(long operationId) {
         WindowOf(operationId)?.RequestCancel();
+    }
+
+    /// <summary>
+    /// A finished row's "Повторить": what did not get there, again, the way
+    /// a paste does it - the companions gathered anew, conflicts asked anew,
+    /// a window, a record and an undo step of its own; the old record goes
+    /// as the retry starts. A delete is asked about first, like any delete.
+    /// </summary>
+    private async Task RetryOperationAsync(long id) {
+        var record = _tracker.Finished.FirstOrDefault(r => r.Id == id);
+        if (record is null || OperationRetry.Plan(record) is not { } plan) {
+            return;
+        }
+
+        _log.Info($"Retry of operation {id} ({record.Verb}): {plan.Items.Count} item(s)");
+        if (plan.IsDelete) {
+            var entries = await Task.Run(() => plan.Items
+                .Select(i => _fs.GetEntry(i.Source))
+                .OfType<FileSystemEntry>()
+                .ToList());
+            _tracker.Dismiss(id);
+            await DeleteAsync(entries, permanent: plan.Verb == OperationVerbs.DeletePermanently);
+
+            return;
+        }
+
+        bool move = plan.Verb == OperationVerbs.Move;
+        foreach (var batch in plan.Items.GroupBy(i => i.DestinationFolder!, StringComparer.OrdinalIgnoreCase)) {
+            var sources = batch.Select(i => i.Source).ToList();
+            if (move && !ConfirmMove(sources, batch.Key)) {
+                return;
+            }
+
+            _tracker.Dismiss(id);
+            var groups = await Task.Run(() => GroupPathsWithCompanions(sources));
+            var transfer = await TransferAsync(groups, batch.Key, move, Strings.StatusPasteFailed);
+            if (transfer is not { } done) {
+                return;
+            }
+            var (results, operationId) = done;
+            await LandTransferAsync(results, batch.Key, move, operationId);
+        }
     }
 
     private Wander.App.Views.ProgressDialog? WindowOf(long operationId) {
@@ -6323,7 +6763,9 @@ public sealed class MainViewModel : ObservableObject {
     /// "file is in use" question after a delete).
     /// </para>
     /// </summary>
-    private async Task<TResult> RunWithProgressDialogAsync<TResult>(string headline, Func<CancellationToken, Task<TResult>> work) {
+    /// <param name="operation">Told the id of the operation the work registered - where its record is once it is over.</param>
+    private async Task<TResult> RunWithProgressDialogAsync<TResult>(
+        string headline, Func<CancellationToken, Task<TResult>> work, StrongBox<long>? operation = null) {
         // The window finds its operation by the token it hands the work:
         // the operation registers under that token several layers down.
         var dlg = new Wander.App.Views.ProgressDialog(headline, _tracker) {
@@ -6345,6 +6787,9 @@ public sealed class MainViewModel : ObservableObject {
 
             return await task.ConfigureAwait(true);
         } finally {
+            if (operation is not null) {
+                operation.Value = dlg.OperationId;
+            }
             dlg.Finish();
         }
     }

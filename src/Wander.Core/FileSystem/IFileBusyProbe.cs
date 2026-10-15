@@ -10,4 +10,13 @@ namespace Wander.Core.FileSystem;
 public interface IFileBusyProbe {
     /// <summary>False for a path that is free, missing, or a folder - only a file can be asked cheaply.</summary>
     bool IsBusy(string path);
+
+    /// <summary>
+    /// The first file inside <paramref name="folder"/>, at any depth, that
+    /// <see cref="IsBusy"/> finds held - what a folder that will not move
+    /// is held by; null when none is found within <paramref name="budget"/>,
+    /// or the path is not a folder. A folder of thousands of files is walked
+    /// only as far as the budget goes.
+    /// </summary>
+    string? FirstBusyIn(string folder, TimeSpan budget, CancellationToken ct) => null;
 }

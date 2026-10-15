@@ -149,6 +149,14 @@ public sealed record FolderChanged(string Path) : WorkspaceEvent;
 public sealed record PanelsRefreshRequested : WorkspaceEvent;
 
 /// <summary>
+/// A volume came or went - a flash drive put in, a card pulled out: the
+/// drives are read again. Not <see cref="Removed"/>: that takes rows out of
+/// both panels, and a bookmark on the flash drive stays, greyed, for when it
+/// comes back.
+/// </summary>
+public sealed record VolumesChanged : WorkspaceEvent;
+
+/// <summary>
 /// The list's rows were laid down again: as they stood (<paramref name="Before"/>)
 /// and as they are (<paramref name="After"/>), in order; why; what the
 /// pending intent came to (<see cref="FolderSession.DecideArrival"/>); and the

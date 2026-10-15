@@ -207,8 +207,10 @@ public sealed class SystemIconProvider : IIconProvider {
                 // The type's icon drawn for want of a Store extension stays
                 // off the disk: the extension installed, it would go on
                 // being found there. A RAW is drawn from its own JPEG,
-                // extension or not.
-                if (cacheable && (ImageFormats.IsRaw(path) || !LacksCodec(path))) {
+                // extension or not. A shortcut is drawn from its target,
+                // so the target's codec decides (review 2026-10-15).
+                string drawn = ExistingLinkTarget(path) ?? path;
+                if (cacheable && (ImageFormats.IsRaw(drawn) || !LacksCodec(drawn))) {
                     using (PerfLog.Measure("bg.thumb-disk-write")) {
                         _disk!.Write(path, bytes);
                     }

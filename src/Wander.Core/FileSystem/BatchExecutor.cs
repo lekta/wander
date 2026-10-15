@@ -1,3 +1,4 @@
+using System.Globalization;
 using Wander.Core.Logging;
 using Wander.Core.Operations;
 using Wander.Core.Undo;
@@ -26,17 +27,30 @@ internal sealed class BatchExecutor {
     private readonly OperationTracker _tracker;
     private readonly ILogger _log;
     private readonly HeldPaths _held;
+    private readonly RetryPolicy _retry;
 
 
     /// <param name="held">Claims and the wait for held paths; null has no probe and nobody to name a holder.</param>
-    public BatchExecutor(IFileSystem fs, IRecycleBin bin, UndoService undo, OperationTracker tracker, ILogger log, HeldPaths? held = null) {
+    /// <param name="retry">How a transient error is tried again (<see cref="IoRetry"/>); <see cref="RetryPolicy.Default"/> when null.</param>
+    public BatchExecutor(
+        IFileSystem fs, IRecycleBin bin, UndoService undo, OperationTracker tracker, ILogger log, HeldPaths? held = null,
+        RetryPolicy? retry = null) {
         _fs = fs;
         _bin = bin;
         _undo = undo;
         _tracker = tracker;
         _log = log;
         _held = held ?? new HeldPaths(new PathClaims());
+        _retry = retry ?? RetryPolicy.Default;
     }
+
+
+    /// <summary>
+    /// How a file is copied, by its source: read back or not
+    /// ("Проверять скопированное"), Windows' engine only or not. The
+    /// service sets it from the settings; plain copies until then.
+    /// </summary>
+    public Func<string, CopyOptions> CopyOptionsFor { get; set; } = _ => CopyOptions.Plain;
 
 
     // --- Sync entry points (tests + legacy) ----------------------------
@@ -101,9 +115,12 @@ internal sealed class BatchExecutor {
         string verb = permanent ? OperationVerbs.DeletePermanently : OperationVerbs.Recycle;
         using var op = _tracker.Begin(verb, paths.Count, token: ct);
         using var claim = _held.Claims.Claim(paths, ClaimKind.UserOperation, verb);
-        return await Task.Run(
+        var results = await Task.Run(
             () => DeleteManyCore(paths, permanent, op, claim, ct),
             ct).ConfigureAwait(false);
+        op.Finish(results.Select(ItemOf).ToList(), target: null);
+
+        return results;
     }
 
 
@@ -117,6 +134,11 @@ internal sealed class BatchExecutor {
         // sidecars included - the disk does not care who asked for them.
         string verb = isMove ? OperationVerbs.Move : OperationVerbs.Copy;
         using var op = _tracker.Begin(verb, groups.Count, token: ct);
+        // The debug switch, first thing in the operation's lines: a copy
+        // complained about is told apart by its engine.
+        if (groups.Count > 0 && CopyOptionsFor(groups[0].Primary).SystemOnly) {
+            _log.Warn($"{(isMove ? "Move" : "Copy")}: Windows' copy engine only (debug switch)");
+        }
 
         // The sources and where they go, claimed for as long as the batch
         // runs: an operation that reaches for them meanwhile names this one
@@ -126,9 +148,45 @@ internal sealed class BatchExecutor {
             .SelectMany(source => new[] { source, Path.Combine(targetFolder, NameOf(source)) });
         using var claim = _held.Claims.Claim(claimed, ClaimKind.UserOperation, verb);
 
-        return await Task.Run(
+        var results = await Task.Run(
             () => ApplyBatch(groups, targetFolder, isMove, resolver, op, ct, weigh: true, own: claim),
             ct).ConfigureAwait(false);
+        // One item per result, that is per group: the companions are folded
+        // into their main file here as everywhere else.
+        if (op.Finish(results.Select(ItemOf).ToList(), targetFolder) is { } record) {
+            _log.Info(Summary(isMove ? "Move" : "Copy", record));
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// "Copy done: 12 items, 12.3 GB, 327.4 s, 38.5 MB/s; failed 1, skipped 0" -
+    /// the operation in one line of the technical log, beside the line per item.
+    /// </summary>
+    internal static string Summary(string verb, OperationRecord record) {
+        double seconds = record.Elapsed.TotalSeconds;
+        double mbPerSecond = seconds > 0 ? record.Bytes / 1048576.0 / seconds : 0;
+        string size = record.Bytes >= 1L << 30
+            ? (record.Bytes / (double)(1L << 30)).ToString("F1", CultureInfo.InvariantCulture) + " GB"
+            : (record.Bytes / 1048576.0).ToString("F1", CultureInfo.InvariantCulture) + " MB";
+
+        return string.Create(CultureInfo.InvariantCulture,
+            $"{verb} done: {record.Total} items, {size}, {seconds:F1} s, {mbPerSecond:F1} MB/s; failed {record.Failed}, skipped {record.Skipped}, cancelled {record.Cancelled}, verified {record.Verified}");
+    }
+
+    private static OperationItem ItemOf(BatchItemResult result) {
+        return new OperationItem(result.Source, result.FinalDestination, result.Status, result.Error, result.Attempts, result.Verified, result.Engine);
+    }
+
+    private static OperationItem ItemOf(DeleteResult result) {
+        var status = result.Status switch {
+            DeleteStatus.Ok => BatchItemStatus.Ok,
+            DeleteStatus.Cancelled => BatchItemStatus.Cancelled,
+            _ => BatchItemStatus.Failed,
+        };
+
+        return new OperationItem(result.Path, null, status, result.Error);
     }
 
     /// <summary>
@@ -245,6 +303,12 @@ internal sealed class BatchExecutor {
             progress?.SetCurrentPath(plan.Members[0].Source);
             var (result, applied) = ApplyGroup(plan, run);
             results.Add(result);
+            // A link left out of a copied folder is an item of its own in
+            // the record: skipped, with why.
+            foreach (string link in run.GroupCopy.SkippedLinks ?? Array.Empty<string>()) {
+                _log.Info($"{run.Verb}: {link} - a link to a folder, not copied");
+                results.Add(new BatchItemResult(link, "", BatchItemStatus.Skipped, new LinkNotCopiedException(link)));
+            }
             if (applied) {
                 appliedCount++;
             }
@@ -293,9 +357,11 @@ internal sealed class BatchExecutor {
     /// what was asked.
     ///
     /// <para>
-    /// The group's status is the main file's; Failed when any member failed,
-    /// with the successful members left applied - the composite undo covers
-    /// them, and the user has to be told rather than shown "mostly fine".
+    /// The group's status is the main file's; Failed when any member failed.
+    /// A copy leaves the members that made it - the composite undo covers
+    /// them, and the user has to be told rather than shown "mostly fine". A
+    /// move puts back what of the group had moved (I2): a photo on one side
+    /// and its sidecar on the other is the one outcome worse than either.
     /// </para>
     /// </summary>
     private (BatchItemResult Result, bool Applied) ApplyGroup(GroupPlan plan, Run run) {
@@ -305,7 +371,10 @@ internal sealed class BatchExecutor {
         bool anyApplied = false;
         var primaryStatus = BatchItemStatus.Ok;
         string primaryDest = primary.Dest;
+        int stepsBefore = run.UndoSteps.Count;
         run.GroupBusy = null;
+        run.GroupAttempts = 1;
+        run.GroupCopy = CopyReport.None;
 
         for (int m = 0; m < plan.Members.Count; m++) {
             var member = plan.Members[m];
@@ -339,9 +408,39 @@ internal sealed class BatchExecutor {
             }
         }
 
+        if (failure is not null && run.IsMove && anyApplied && plan.Members.Count > 1) {
+            anyApplied = !PutBack(run, stepsBefore, primary.Source);
+        }
+
         return failure is null
-            ? (new BatchItemResult(primary.Source, primaryDest, primaryStatus, null, run.GroupBusy), anyApplied)
-            : (new BatchItemResult(primary.Source, primaryDest, BatchItemStatus.Failed, failure, run.GroupBusy), anyApplied);
+            ? (new BatchItemResult(primary.Source, primaryDest, primaryStatus, null, run.GroupBusy, run.GroupAttempts,
+                run.GroupCopy.Verified, run.GroupCopy.Engine), anyApplied)
+            : (new BatchItemResult(primary.Source, primaryDest, BatchItemStatus.Failed, failure, run.GroupBusy, run.GroupAttempts,
+                false, run.GroupCopy.Engine), anyApplied);
+    }
+
+    /// <summary>
+    /// A move group in which a member failed: what of it had moved goes back,
+    /// last first - the undo steps it left are run and taken off the batch's
+    /// composite, as <c>RenameMany</c> rolls back. A step that will not go
+    /// back stays in the composite with the ones before it, so <c>Ctrl+Z</c>
+    /// can still try.
+    /// </summary>
+    /// <returns>True when everything went back.</returns>
+    private bool PutBack(Run run, int stepsBefore, string primary) {
+        for (int i = run.UndoSteps.Count - 1; i >= stepsBefore; i--) {
+            try {
+                run.UndoSteps[i].Undo();
+                run.UndoSteps.RemoveAt(i);
+            } catch (Exception ex) {
+                _log.Error($"{run.Verb}: the group of {primary} failed, and putting it back failed too", ex);
+
+                return false;
+            }
+        }
+        _log.Info($"{run.Verb}: the group of {primary} failed - what of it had moved is back");
+
+        return true;
     }
 
     /// <summary>
@@ -385,16 +484,16 @@ internal sealed class BatchExecutor {
                 run.UndoSteps.Add(new DeleteAction(_bin, _bin.Send(dest)));
             }
 
-            ApplyOne(src, dest, run);
+            var copied = ApplyOne(src, dest, run);
             run.UndoSteps.Add(run.IsMove
                 ? new MoveAction(_fs, src, dest)
-                : new CreateAction(_bin, dest));
+                : new CreateAction(_bin, dest, OperationVerbs.Copy));
             var status = choice switch {
                 ConflictResolution.Replace => BatchItemStatus.Replaced,
                 ConflictResolution.Rename => BatchItemStatus.Renamed,
                 _ => BatchItemStatus.Ok,
             };
-            _log.Info($"{run.Verb}: {src} -> {dest} [{status}]");
+            _log.Info($"{run.Verb}: {src} -> {dest} [{status}{Engine(copied)}]");
 
             return new Outcome(status, true, null);
         } catch (OperationCanceledException) {
@@ -402,14 +501,16 @@ internal sealed class BatchExecutor {
             // copy stops in the middle of a file. That is a cancellation,
             // not a failure, and it must not be reported as one.
             //
-            // The system removes a half-written file itself; a folder can be
-            // part-copied, and what did land is undoable like everything
-            // else that lands - "Отмена" then "Ctrl+Z" leaves no leftovers.
-            // For a move the source is still where it was, so binning the
-            // partial destination is the right undo there too.
+            // A file is copied under a temporary name and renamed when whole
+            // (TransientFiles.TempNameFor), so a cancelled one leaves nothing
+            // at its name to undo. A folder can be part-copied, and what did
+            // land is undoable like everything else that lands - "Отмена"
+            // then "Ctrl+Z" leaves no leftovers. For a move the source is
+            // still where it was, so binning the partial destination is the
+            // right undo there too.
             run.Cancelled = true;
-            if (Exists(dest)) {
-                run.UndoSteps.Add(new CreateAction(_bin, dest));
+            if (_fs.DirectoryExists(dest)) {
+                run.UndoSteps.Add(new CreateAction(_bin, dest, run.IsMove ? OperationVerbs.Move : OperationVerbs.Copy));
                 _log.Info($"{run.Verb} cancelled part-way: {src} -> {dest} (partial copy is undoable)");
 
                 return new Outcome(BatchItemStatus.Cancelled, true, null);
@@ -562,6 +663,17 @@ internal sealed class BatchExecutor {
         return tail.StartsWith('.') ? newPrefix + tail : null;
     }
 
+    /// <summary>", own, verified" - what the log line of an item says about how its bytes went.</summary>
+    private static string Engine(CopyReport copied) {
+        string engine = copied.Engine switch {
+            CopyEngine.Own => ", own",
+            CopyEngine.System => ", windows",
+            _ => "",
+        };
+
+        return copied.Verified ? engine + ", verified" : engine;
+    }
+
     private static BatchItemResult Cancelled(GroupPlan plan) {
         return new BatchItemResult(plan.Members[0].Source, plan.Members[0].Dest, BatchItemStatus.Cancelled, null);
     }
@@ -589,7 +701,13 @@ internal sealed class BatchExecutor {
             // gone; the rest of the history stays.
             _undo.Forget(results.Where(r => r.Status == DeleteStatus.Ok).Select(r => r.Path).ToList());
         } else {
-            PushComposite(undoSteps, isMove: false, undoSteps.Count, verbOverride: "delete");
+            PushComposite(undoSteps, isMove: false, undoSteps.Count, verbOverride: "delete", undoVerb: OperationVerbs.Recycle);
+            // What the bin took without a way back is as gone as a permanent
+            // delete, and so is what older undo steps would need of it.
+            var lost = results.Where(r => r.Permanent).Select(r => r.Path).ToList();
+            if (lost.Count > 0) {
+                _undo.Forget(lost);
+            }
         }
 
         return results;
@@ -608,15 +726,23 @@ internal sealed class BatchExecutor {
                     throw new IOException(guardReason);
                 }
                 gate.Check(path);
+                // A held file is waited for, as a move waits: a file is asked
+                // before the delete, a folder is deleted again while it
+                // answers "in use" - out of the operation's one budget.
+                BusyReport? busy;
                 if (_fs.DirectoryExists(path)) {
-                    _fs.DeleteDirectory(path, recursive: true);
+                    busy = gate.Retry(path, () => _fs.DeleteDirectory(path, recursive: true), ct);
                 } else if (_fs.FileExists(path)) {
+                    busy = gate.WaitForFile(path, ct);
                     _fs.DeleteFile(path);
                 } else {
                     throw new FileNotFoundException("Path not found", path);
                 }
                 _log.Warn($"Permanent delete: {path}");
-                results.Add(new DeleteResult(path, DeleteStatus.Ok, null));
+                results.Add(new DeleteResult(path, DeleteStatus.Ok, null, busy));
+            } catch (OperationCanceledException) when (ct.IsCancellationRequested) {
+                // Stopped while waiting for it: still there, as asked.
+                results.Add(new DeleteResult(path, DeleteStatus.Cancelled, null));
             } catch (Exception ex) {
                 _log.Error($"Delete failed: {path}", ex);
                 results.Add(new DeleteResult(path, DeleteStatus.Failed, ex));
@@ -664,7 +790,9 @@ internal sealed class BatchExecutor {
         var sent = new RecycleResult[targets.Count];
         Action<string>? advance = progress.Advance;
         var busy = gate.RetryMany(targets, indices => {
-            var answers = _bin.SendMany(indices.Select(n => targets[n]).ToList(), advance, ct);
+            // The long-path walk of a folder is made once: what is sent again
+            // was held, not too long.
+            var answers = _bin.SendMany(indices.Select(n => targets[n]).ToList(), advance, ct, checkedBefore: advance is null);
             advance = null;
             var held = new List<int>();
             for (int k = 0; k < indices.Count; k++) {
@@ -683,7 +811,12 @@ internal sealed class BatchExecutor {
             // Still held when the user stopped the wait: that is the cancel
             // it was, not a failure to report.
             bool givenUp = ct.IsCancellationRequested && report is { Released: false };
-            if (sent[n].Handle is { } handle) {
+            if (sent[n].Handle is { IsUntraceable: true }) {
+                // Gone, and nothing to find it by in the bin: no undo step that
+                // could only fail - the result says it is gone for good.
+                _log.Warn($"Delete (recycle): {path} - nothing to find it by in the bin, counted as deleted for good");
+                results[allowed[n]] = new DeleteResult(path, DeleteStatus.Ok, null, report, Permanent: true);
+            } else if (sent[n].Handle is { } handle) {
                 undoSteps.Add(new DeleteAction(_bin, handle));
                 _log.Info($"Delete (recycle): {path}");
                 results[allowed[n]] = new DeleteResult(path, DeleteStatus.Ok, null, report);
@@ -698,7 +831,8 @@ internal sealed class BatchExecutor {
         return results.Select(r => r!).ToList();
     }
 
-    private void PushComposite(IReadOnlyList<IUndoableAction> steps, bool isMove, int itemCount, string? verbOverride = null) {
+    private void PushComposite(
+        IReadOnlyList<IUndoableAction> steps, bool isMove, int itemCount, string? verbOverride = null, string? undoVerb = null) {
         if (steps.Count == 0) {
             return;
         }
@@ -709,7 +843,9 @@ internal sealed class BatchExecutor {
         string desc = itemCount == 1
             ? steps[^1].Description
             : $"{verb} of {itemCount} items";
-        _undo.Push(steps.Count == 1 ? steps[0] : new CompositeAction(desc, steps));
+        _undo.Push(steps.Count == 1
+            ? steps[0]
+            : new CompositeAction(desc, steps, undoVerb ?? (isMove ? OperationVerbs.Move : OperationVerbs.Copy), Math.Max(1, itemCount)));
     }
 
     /// <summary>
@@ -719,9 +855,12 @@ internal sealed class BatchExecutor {
     /// settled here, per entry: the counter ends up exactly where the plan
     /// said it would, however wrong either half was.
     /// </summary>
-    private void ApplyOne(string src, string dest, Run run) {
+    /// <returns>What the copy went through - the engine, whether it was read back; nothing for a rename.</returns>
+    private CopyReport ApplyOne(string src, string dest, Run run) {
         long expected = run.Progress is null ? 0 : ExpectedBytes(run, src);
         long reported = 0;
+        var options = CopyOptionsFor(src);
+        var report = CopyReport.None;
         var bytes = run.Progress is null
             ? null
             : new InlineProgress(delta => {
@@ -751,16 +890,23 @@ internal sealed class BatchExecutor {
                 var held = run.Gate.Retry(src, () => _fs.MoveEntry(src, dest, bytes, run.Token), run.Token);
                 run.GroupBusy ??= held;
             } else if (run.IsMove && _fs.DirectoryExists(src)) {
-                _fs.MoveEntry(src, dest, bytes, run.Token);
+                report = _fs.MoveEntry(src, dest, bytes, run.Token, options);
             } else if (run.IsMove) {
                 var held = run.Gate.WaitForFile(src, run.Token);
                 run.GroupBusy ??= held;
-                _fs.MoveEntry(src, dest, bytes, run.Token);
+                if (SameRoot(src, dest)) {
+                    _fs.MoveEntry(src, dest, bytes, run.Token);
+                } else {
+                    Retrying(() => report = _fs.MoveEntry(src, dest, bytes, run.Token, options));
+                }
             } else if (_fs.DirectoryExists(src)) {
-                _fs.CopyDirectory(src, dest, overwrite: false, bytes, run.Token);
+                report = _fs.CopyDirectory(src, dest, overwrite: false, bytes, run.Token, options);
             } else {
-                _fs.CopyFile(src, dest, overwrite: false, bytes, run.Token);
+                Retrying(() => report = _fs.CopyFile(src, dest, overwrite: false, bytes, run.Token, options));
             }
+            run.GroupCopy = run.GroupCopy.And(report);
+
+            return report;
         } finally {
             // Only where the plan had a number to settle against. Nothing
             // walked the insides of a merged folder before the fact, so its
@@ -768,6 +914,30 @@ internal sealed class BatchExecutor {
             // subtracting a zero "expectation" would cancel that out.
             if (expected > 0) {
                 run.Progress?.AdvanceBytes(expected - reported);
+            }
+        }
+
+        // A file copied - or moved to another volume, which is a copy - is
+        // tried again while it fails the way a card or a cable fails for a
+        // moment (TransientIo). The try that failed left nothing behind (the
+        // copy goes under a temporary name), but it did count its bytes:
+        // those are taken back, and the next try counts them again. A folder
+        // is not tried again: half of it is already there.
+        void Retrying(Action io) {
+            int tries = 1;
+            try {
+                IoRetry.Run(io, _retry, run.Token, (attempt, error) => {
+                    tries = attempt;
+                    _log.Warn($"{run.Verb}: {src} -> {dest} - {error.Message} (0x{error.HResult:X8}); try {attempt} of {_retry.Attempts}");
+                    run.Progress?.AdvanceBytes(-reported);
+                    reported = 0;
+                    run.Progress?.SetAttempt(attempt);
+                });
+            } finally {
+                run.GroupAttempts = Math.Max(run.GroupAttempts, tries);
+                if (tries > 1) {
+                    run.Progress?.SetAttempt(0);
+                }
             }
         }
     }
@@ -877,6 +1047,12 @@ internal sealed class BatchExecutor {
         /// <summary>The first held path the current group waited for; reset at each group.</summary>
         public BusyReport? GroupBusy { get; set; }
 
+        /// <summary>What the current group's copies went through, all members together; reset at each group.</summary>
+        public CopyReport GroupCopy { get; set; } = CopyReport.None;
+
+        /// <summary>The most tries any member of the current group took; reset at each group.</summary>
+        public int GroupAttempts { get; set; } = 1;
+
         public string Verb => IsMove ? "Move" : "Copy";
 
         /// <summary>Every answer the resolver gave, nested ones included, by source path.</summary>
@@ -907,10 +1083,17 @@ internal sealed class BatchExecutor {
 // --- Batch result types (top-level so callers don't need to reach into BatchExecutor) ---
 
 /// <param name="Busy">A source of the item was held and waited for - worth a line in the journal either way.</param>
+/// <param name="Attempts">How many tries it took: more than one after a transient error (<see cref="IoRetry"/>).</param>
+/// <param name="Verified">Every copy in it was read back and matched (<see cref="CopyOptions.Verify"/>).</param>
+/// <param name="Engine">What moved its bytes; <see cref="CopyEngine.None"/> for a rename.</param>
 public sealed record BatchItemResult(
-    string Source, string FinalDestination, BatchItemStatus Status, Exception? Error, BusyReport? Busy = null);
-public enum BatchItemStatus { Ok, Skipped, Replaced, Renamed, Merged, Cancelled, Failed }
+    string Source, string FinalDestination, BatchItemStatus Status, Exception? Error, BusyReport? Busy = null, int Attempts = 1,
+    bool Verified = false, CopyEngine Engine = CopyEngine.None);
 
 /// <param name="Busy">The item was held and waited for - worth a line in the journal either way.</param>
-public sealed record DeleteResult(string Path, DeleteStatus Status, Exception? Error, BusyReport? Busy = null);
+/// <param name="Permanent">
+/// Gone with no way back although it was sent to the bin: the bin took it
+/// and named nothing to find it by (<see cref="RecycleHandle.IsUntraceable"/>).
+/// </param>
+public sealed record DeleteResult(string Path, DeleteStatus Status, Exception? Error, BusyReport? Busy = null, bool Permanent = false);
 public enum DeleteStatus { Ok, Failed, Cancelled }

@@ -85,6 +85,59 @@ public class ActionJournalTests {
     }
 
     [Fact]
+    public void AnEntry_HasItsLinesIndentedUnderTheHeadline() {
+        var journal = new ActionJournal();
+
+        journal.Record(new JournalEntry(_at, JournalKind.Copied, "Скопировано в E:\\Video — 2 файла",
+            new[] { "a.mov", "b.mov → b (1).mov" }));
+
+        Assert.Equal(
+            new[] {
+                "2026-09-03 14:23:05  Скопировано в E:\\Video — 2 файла",
+                "  a.mov",
+                "  b.mov → b (1).mov",
+            },
+            journal.Render().Split(Environment.NewLine));
+    }
+
+    [Fact]
+    public void ALongEntry_ShowsTheFirstLines_AndCountsTheRest() {
+        var journal = new ActionJournal();
+        var lines = Enumerable.Range(0, ActionJournal.LinesShown + 7).Select(i => $"f{i}.jpg").ToList();
+
+        journal.Record(new JournalEntry(_at, JournalKind.Copied, "Скопировано", lines));
+
+        var rendered = journal.Render("… ещё {0}").Split(Environment.NewLine);
+        Assert.Equal(1 + ActionJournal.LinesShown + 1, rendered.Length);
+        Assert.Equal($"  f{ActionJournal.LinesShown - 1}.jpg", rendered[^2]);
+        Assert.Equal("  … ещё 7", rendered[^1]);
+    }
+
+    [Fact]
+    public void TheSameOperationTwice_IsRecordedTwice() {
+        var journal = new ActionJournal();
+        var entry = new JournalEntry(_at, JournalKind.Copied, "Скопировано в D:\\ — 1 файл", new[] { "a.txt" });
+
+        journal.Record(entry);
+        journal.Record(entry);
+
+        Assert.Equal(2, journal.Count);
+    }
+
+    [Fact]
+    public void TheLimit_CountsEntries_NotLines() {
+        var journal = new ActionJournal();
+        for (int i = 0; i < 499; i++) {
+            journal.Note($"line {i}", _at.AddSeconds(i));
+        }
+
+        journal.Record(new JournalEntry(_at, JournalKind.Moved, "Перемещено", new[] { "a", "b", "c" }));
+
+        Assert.Equal(500, journal.Count);
+        Assert.Contains("line 0", journal.Render());
+    }
+
+    [Fact]
     public void ALongSession_DropsTheOldestLines() {
         var journal = new ActionJournal();
         for (int i = 0; i < 600; i++) {

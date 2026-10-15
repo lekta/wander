@@ -84,7 +84,7 @@ public sealed class ShellRecycleBin : IRecycleBin {
     /// </para>
     /// </summary>
     public IReadOnlyList<RecycleResult> SendMany(
-        IReadOnlyList<string> paths, Action<string>? onItemDone = null, CancellationToken ct = default) {
+        IReadOnlyList<string> paths, Action<string>? onItemDone = null, CancellationToken ct = default, bool checkedBefore = false) {
         var results = new RecycleResult?[paths.Count];
         var pending = new List<int>(paths.Count);
 
@@ -92,7 +92,7 @@ public sealed class ShellRecycleBin : IRecycleBin {
             string path = paths[i];
             if (!File.Exists(path) && !Directory.Exists(path)) {
                 results[i] = Failed(path, new FileNotFoundException("Cannot recycle non-existent path", path));
-            } else if (TooLongForBin(path, ct) is { } tooLong) {
+            } else if (!checkedBefore && TooLongForBin(path, ct) is { } tooLong) {
                 // Ours, before the engine sees the item: a folder that is
                 // short itself and long inside passes the engine's own test,
                 // and then the shell asks its question on screen, "Yes" by
@@ -141,8 +141,10 @@ public sealed class ShellRecycleBin : IRecycleBin {
                 } else if (item.Result < 0) {
                     results[i] = Failed(paths[i], new IOException($"Recycle failed (hr=0x{item.Result:X8}) for {paths[i]}"));
                 } else {
-                    if (item.BinItemId is null) {
-                        _logger.Warn($"Recycle: the bin named no item for {paths[i]} - Ctrl+Z will not find it");
+                    if (item.BinItemId is null && item.BinFilePath is null) {
+                        _logger.Warn($"Recycle: the bin named neither an item nor a file for {paths[i]} - counted as deleted for good");
+                    } else if (item.BinItemId is null) {
+                        _logger.Warn($"Recycle: the bin named no item for {paths[i]} - Ctrl+Z looks for it by its file in the bin");
                     }
                     _logger.Info($"Recycled: {paths[i]}");
                     results[i] = new RecycleResult(paths[i], new RecycleHandle(paths[i], when, item.BinItemId, item.BinFilePath), null);

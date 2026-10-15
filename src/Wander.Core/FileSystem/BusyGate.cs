@@ -105,6 +105,9 @@ public sealed class BusyGate : IDisposable {
     /// <summary>A claims lookup slower than this is worth a warning.</summary>
     private const double SlowLookupMs = 5;
 
+    /// <summary>How long a held folder is walked for the file that holds it (AF).</summary>
+    private static readonly TimeSpan _folderWalkBudget = TimeSpan.FromSeconds(5);
+
     /// <summary>
     /// How many of a batch's held items are named (<see cref="RetryMany"/>).
     /// The status line and the question name the first; each name is a
@@ -174,7 +177,7 @@ public sealed class BusyGate : IDisposable {
         var result = _wait.UntilFree(() => {
             bool busy = probe.IsBusy(path);
             if (busy && first) {
-                holder = NameHolder(path);
+                holder = NameHolder(path, ct);
             }
             first = false;
 
@@ -208,7 +211,7 @@ public sealed class BusyGate : IDisposable {
 
                 return false;
             } catch (Exception ex) when (FileInUse.Is(ex)) {
-                holder ??= NameHolder(path);
+                holder ??= NameHolder(path, ct);
                 inUse = ex;
 
                 return true;
@@ -245,7 +248,7 @@ public sealed class BusyGate : IDisposable {
 
         var holders = new Dictionary<int, string?>(held.Count);
         foreach (int i in held) {
-            holders[i] = holders.Count < NamedHeldItems && !ct.IsCancellationRequested ? NameHolder(paths[i]) : null;
+            holders[i] = holders.Count < NamedHeldItems && !ct.IsCancellationRequested ? NameHolder(paths[i], ct) : null;
         }
         var released = new Dictionary<int, TimeSpan>();
         var left = _wait.Remaining;
@@ -300,8 +303,12 @@ public sealed class BusyGate : IDisposable {
     /// <summary>
     /// Who holds <paramref name="path"/>: a reader of ours that was told to
     /// let go, then any claim of ours on it, then whoever the platform names.
+    /// A folder is named by the first file inside it that is held, and the
+    /// program holding that one - ""a.psd" is held by Photoshop" says what
+    /// to close; the programs holding anything in the folder are the answer
+    /// when no such file is found in time.
     /// </summary>
-    private string? NameHolder(string path) {
+    private string? NameHolder(string path, CancellationToken ct) {
         string? ours = _yielded.GetValueOrDefault(path);
         if (ours is null) {
             long started = Stopwatch.GetTimestamp();
@@ -310,6 +317,15 @@ public sealed class BusyGate : IDisposable {
         }
         if (ours is not null) {
             return Text.Format("HolderWander", Text.Get(ours));
+        }
+
+        if (_held.Probe?.FirstBusyIn(path, _folderWalkBudget, ct) is { } file) {
+            var holding = _held.Locks?.WhoIsLocking(file);
+            string name = Path.GetFileName(file);
+
+            return holding is { Count: > 0 }
+                ? Text.Format("HolderFileInFolder", name, FileLockInfo.Describe(holding))
+                : Text.Format("HolderFileInFolderUnnamed", name);
         }
 
         var lockers = _held.Locks?.WhoIsLocking(path);

@@ -231,6 +231,13 @@ public sealed class SettingsViewModel : ObservableObject {
         set => SetField(ref _skipIdenticalOnConflict, value);
     }
 
+    private VerifyPolicy _verifyCopies;
+    /// <inheritdoc cref="AppSettings.VerifyCopies"/>
+    public VerifyPolicy VerifyCopies {
+        get => _verifyCopies;
+        set => SetField(ref _verifyCopies, value);
+    }
+
     private bool _dragHoverEntersFolders;
     /// <inheritdoc cref="AppSettings.DragHoverEntersFolders"/>
     public bool DragHoverEntersFolders {
@@ -753,6 +760,13 @@ public sealed class SettingsViewModel : ObservableObject {
         set => SetField(ref _logPaths, value);
     }
 
+    private bool _copyWithWindows;
+    /// <inheritdoc cref="AppSettings.CopyWithWindows"/>
+    public bool CopyWithWindows {
+        get => _copyWithWindows;
+        set => SetField(ref _copyWithWindows, value);
+    }
+
 
     // --- Category list (used by the dialog) ---------------------------
     public ObservableCollection<SettingsCategoryViewModel> Categories { get; }
@@ -781,6 +795,7 @@ public sealed class SettingsViewModel : ObservableObject {
         ConfirmRecycle = s.ConfirmRecycle;
         ConfirmMove = s.ConfirmMove;
         SkipIdenticalOnConflict = s.SkipIdenticalOnConflict;
+        VerifyCopies = s.VerifyCopies;
         DragHoverEntersFolders = s.DragHoverEntersFolders;
         UseSystemTemp = s.UseSystemTemp ?? AppPaths.IsPortable;
         IntegrateCompanions = s.IntegrateCompanions;
@@ -846,6 +861,7 @@ public sealed class SettingsViewModel : ObservableObject {
         ShowDebugMenu = s.ShowDebugMenu;
         LogActions = s.LogActions;
         LogPaths = s.LogPaths;
+        CopyWithWindows = s.CopyWithWindows;
     }
 
 
@@ -1041,6 +1057,7 @@ public sealed class SettingsViewModel : ObservableObject {
             ConfirmRecycle = ConfirmRecycle,
             ConfirmMove = ConfirmMove,
             SkipIdenticalOnConflict = SkipIdenticalOnConflict,
+            VerifyCopies = VerifyCopies,
             DragHoverEntersFolders = DragHoverEntersFolders,
             UseSystemTemp = UseSystemTemp,
             IntegrateCompanions = IntegrateCompanions,
@@ -1097,6 +1114,7 @@ public sealed class SettingsViewModel : ObservableObject {
             ShowDebugMenu = ShowDebugMenu,
             LogActions = LogActions,
             LogPaths = LogPaths,
+            CopyWithWindows = CopyWithWindows,
         };
     }
 

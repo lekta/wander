@@ -24,6 +24,29 @@ public sealed class WindowsFileBusyProbe : IFileBusyProbe {
         return Marshal.GetLastWin32Error() == ERROR_SHARING_VIOLATION;
     }
 
+    public string? FirstBusyIn(string folder, TimeSpan budget, CancellationToken ct) {
+        if (!Directory.Exists(folder)) {
+            return null;
+        }
+
+        var until = DateTime.UtcNow + budget;
+        var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint };
+        try {
+            foreach (string file in Directory.EnumerateFiles(folder, "*", options)) {
+                if (ct.IsCancellationRequested || DateTime.UtcNow > until) {
+                    return null;
+                }
+                if (IsBusy(file)) {
+                    return file;
+                }
+            }
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+            // A folder that went or closed its doors mid-walk names nobody.
+        }
+
+        return null;
+    }
+
 
     // --- P/Invoke ------------------------------------------------------
 

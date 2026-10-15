@@ -177,6 +177,9 @@ public static partial class Strings {
     /// <summary>В корзину отправлено: {0}</summary>
     public static string StatusRecycled => Get(nameof(StatusRecycled));
 
+    /// <summary>удалено безвозвратно: {0} (корзина не приняла)</summary>
+    public static string StatusRecycledForGood => Get(nameof(StatusRecycledForGood));
+
     /// <summary>В корзину отправлено: {0}, с ошибкой: {1}{2}</summary>
     public static string StatusRecycledPartly => Get(nameof(StatusRecycledPartly));
 
@@ -278,6 +281,39 @@ public static partial class Strings {
 
     /// <summary>файл занят другой программой</summary>
     public static string ErrorInUse => Get(nameof(ErrorInUse));
+
+    /// <summary>нет места на {0}</summary>
+    public static string ErrorDiskFull => Get(nameof(ErrorDiskFull));
+
+    /// <summary>файл больше 4 ГБ, а диск {0} — FAT32</summary>
+    public static string ErrorFileTooLargeForFat32 => Get(nameof(ErrorFileTooLargeForFat32));
+
+    /// <summary>устройство отключено или не готово</summary>
+    public static string ErrorDeviceGone => Get(nameof(ErrorDeviceGone));
+
+    /// <summary>устройство перестало отвечать — камера выключилась или уснула: включите её и повторите</summary>
+    public static string ErrorDeviceAsleep => Get(nameof(ErrorDeviceAsleep));
+
+    /// <summary>ошибка чтения с диска — носитель или кабель</summary>
+    public static string ErrorReadFailed => Get(nameof(ErrorReadFailed));
+
+    /// <summary>копия не совпала с оригиналом — носитель или кабель</summary>
+    public static string ErrorCopyMismatch => Get(nameof(ErrorCopyMismatch));
+
+    /// <summary>ссылка на папку — не копируется</summary>
+    public static string ErrorLinkNotCopied => Get(nameof(ErrorLinkNotCopied));
+
+    /// <summary>Извлечь {0}</summary>
+    public static string ActionEjectDrive => Get(nameof(ActionEjectDrive));
+
+    /// <summary>{0} можно вынимать</summary>
+    public static string StatusEjected => Get(nameof(StatusEjected));
+
+    /// <summary>Windows не предлагает извлечь {0} отсюда — попробуйте «Безопасное извлечение» на панели задач</summary>
+    public static string StatusEjectNoVerb => Get(nameof(StatusEjectNoVerb));
+
+    /// <summary>{0} не извлечён: {1}</summary>
+    public static string StatusEjectBusy => Get(nameof(StatusEjectBusy));
 
     /// <summary>«{0}» занят операцией Wander: {1}</summary>
     public static string ErrorClaimedByOperation => Get(nameof(ErrorClaimedByOperation));

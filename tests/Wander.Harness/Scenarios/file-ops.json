@@ -73,6 +73,33 @@
     { "do": "screenshot", "name": "locked-file" },
     { "do": "fs", "op": "unlock", "path": "{sandbox}\\attrs\\locked.txt" },
 
+    // --- A copy that fails, its record, and "Повторить" -------------
+    // Held again: its copy fails, the finished row says so, and once the
+    // file is let go "Повторить" takes it (OPERATIONS, steps 1-2).
+    { "do": "fs", "op": "lock", "path": "{sandbox}\\attrs\\locked.txt" },
+    { "do": "dismiss-operations" },
+    { "do": "select", "names": [ "locked.txt" ] },
+    { "do": "command", "name": "copy" },
+    { "do": "fs", "op": "mkdir", "path": "{sandbox}\\attrs\\copies" },
+    { "do": "navigate", "path": "{sandbox}\\attrs\\copies" },
+    { "do": "command", "name": "paste" },
+    { "do": "assert-operations", "finished": 1, "failed": 1, "outcome": "Failed" },
+    { "do": "screenshot", "name": "failed-copy-record" },
+    { "do": "fs", "op": "unlock", "path": "{sandbox}\\attrs\\locked.txt" },
+    { "do": "retry-last-operation" },
+    { "do": "assert-operations", "finished": 1, "failed": 0, "outcome": "Done" },
+    { "do": "assert-entries", "contains": [ "locked.txt" ] },
+
+    // --- A temporary name taken by its real one ---------------------
+    // What a copy does at its end, done by another program: the watcher
+    // keeps the .wander-tmp to itself and shows the file once it is named.
+    { "do": "fs", "op": "create", "path": "{sandbox}\\attrs\\copies\\clip.mov.wander-tmp", "bytes": 16 },
+    { "do": "fs", "op": "rename", "path": "{sandbox}\\attrs\\copies\\clip.mov.wander-tmp", "to": "clip.mov" },
+    { "do": "wait-idle" },
+    { "do": "assert-entries", "contains": [ "clip.mov" ], "absent": [ "clip.mov.wander-tmp" ] },
+    { "do": "navigate", "path": "{sandbox}\\attrs" },
+    { "do": "fs", "op": "delete", "path": "{sandbox}\\attrs\\copies" },
+
     // --- A path longer than the bin takes ----------------------------
     // A short folder with an over-long path inside: the one case the shell
     // used to answer with its own question, "Yes" by default. The bin
@@ -112,7 +139,7 @@
       // file, the bin's refusal of an over-long path, and the audit line
       // every permanent delete writes.
       "do": "assert-log", "scope": "all", "noErrors": true,
-      "allow": [ "Delete failed", "Recycle refused", "Permanent delete" ]
+      "allow": [ "Delete failed", "Recycle refused", "Permanent delete", "Copy failed" ]
     }
   ]
 }

@@ -1,3 +1,4 @@
+using System.IO;
 using Wander.Core.Logging;
 using Wander.Core.Operations;
 
@@ -84,43 +85,53 @@ public static class DebugOperation {
         log.Info($"Debug operation: {scenario}, {_items.Length} item(s), nothing on disk");
 
         // The scenario's own cancel, and the user's, arrive as one token;
-        // the operation is still registered under the window's.
+        // the operation is still registered under the window's. The record
+        // comes from the items either way (Finish below), so it says
+        // "cancelled" whichever of the two stopped it.
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var token = stop.Token;
 
         using var operation = tracker.Begin(OperationVerbs.Debug, _items.Length, token: ct);
+        var items = new List<OperationItem>(_items.Length);
+        try {
+            operation.SetWeighing(true);
+            await Task.Delay(_weighFor, token).ConfigureAwait(false);
+            operation.SetWeighing(false);
+            operation.SetTotalBytes(_items.Sum(i => i.Bytes));
 
-        operation.SetWeighing(true);
-        await Task.Delay(_weighFor, token).ConfigureAwait(false);
-        operation.SetWeighing(false);
-        operation.SetTotalBytes(_items.Sum(i => i.Bytes));
+            for (int i = 0; i < _items.Length; i++) {
+                var item = _items[i];
+                operation.SetCurrentPath(item.Path);
 
-        int ok = 0;
-        int failed = 0;
-        for (int i = 0; i < _items.Length; i++) {
-            var item = _items[i];
-            operation.SetCurrentPath(item.Path);
+                if (scenario == DebugOperationScenario.FailsOnFourth && i == FailsAt) {
+                    // A failure of its own, as a real copy reports one: the
+                    // finished row names it with the reason.
+                    log.Warn($"Debug operation: {item.Path} failed - {FailureMessage}");
+                    items.Add(new OperationItem(item.Path, null, BatchItemStatus.Failed, new IOException(FailureMessage)));
+                    operation.Advance(item.Path);
+                    continue;
+                }
 
-            if (scenario == DebugOperationScenario.FailsOnFourth && i == FailsAt) {
-                // Block 4 will carry this as a Failed item with an
-                // IOException of its own (OPERATIONS.md, op.Finish); until
-                // then the count and the log line are the whole report.
-                failed++;
-                log.Warn($"Debug operation: {item.Path} failed - {FailureMessage}");
+                if (scenario == DebugOperationScenario.CancelsMidway && i == CancelsAt) {
+                    log.Info($"Debug operation: cancelling itself {_cancelAfter.TotalSeconds:F0} s into {item.Path}");
+                    stop.CancelAfter(_cancelAfter);
+                }
+
+                await MoveAsync(operation, item, token).ConfigureAwait(false);
+                items.Add(new OperationItem(item.Path, null, BatchItemStatus.Ok, null));
                 operation.Advance(item.Path);
-                continue;
             }
+        } catch (OperationCanceledException) {
+            // What was not reached is cancelled, the item in flight included.
+            items.AddRange(_items.Skip(items.Count).Select(i => new OperationItem(i.Path, null, BatchItemStatus.Cancelled, null)));
+            operation.Finish(items, null);
 
-            if (scenario == DebugOperationScenario.CancelsMidway && i == CancelsAt) {
-                log.Info($"Debug operation: cancelling itself {_cancelAfter.TotalSeconds:F0} s into {item.Path}");
-                stop.CancelAfter(_cancelAfter);
-            }
-
-            await MoveAsync(operation, item, token).ConfigureAwait(false);
-            ok++;
-            operation.Advance(item.Path);
+            throw;
         }
 
+        operation.Finish(items, null);
+        int ok = items.Count(i => i.Status == BatchItemStatus.Ok);
+        int failed = items.Count(i => i.Status == BatchItemStatus.Failed);
         log.Info($"Debug operation done: {ok} ok, {failed} failed");
 
         return new DebugOperationOutcome(ok, failed, _items.Length);

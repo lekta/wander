@@ -15,6 +15,13 @@ public static class OperationVerbs {
     public const string RunAction = "ProgressRunningAction";
     public const string Undo = "ProgressUndoing";
 
+    // What an undo step names the action it takes back (IUndoableAction.Verb):
+    // these never run in the tracker on their own.
+    public const string Rename = "ProgressRenaming";
+    public const string Create = "ProgressCreating";
+    public const string Rate = "ProgressRating";
+    public const string Label = "ProgressLabeling";
+
     /// <summary>The debug menu's fake operation. Touches no disk.</summary>
     public const string Debug = "ProgressDebug";
 }

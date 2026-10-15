@@ -66,6 +66,21 @@ public static partial class Strings {
     /// <summary>Файл, совпадающий побайтово с тем, что уже лежит на месте, не копируется и…</summary>
     public static string SettingsSkipIdenticalHint => Get(nameof(SettingsSkipIdenticalHint));
 
+    /// <summary>Проверка скопированного</summary>
+    public static string SettingsVerifyGroup => Get(nameof(SettingsVerifyGroup));
+
+    /// <summary>С флешек, карт памяти, телефонов и фотоаппаратов</summary>
+    public static string SettingsVerifyRemovable => Get(nameof(SettingsVerifyRemovable));
+
+    /// <summary>Всегда</summary>
+    public static string SettingsVerifyAlways => Get(nameof(SettingsVerifyAlways));
+
+    /// <summary>Никогда</summary>
+    public static string SettingsVerifyNever => Get(nameof(SettingsVerifyNever));
+
+    /// <summary>Копия читается с диска ещё раз и сверяется с оригиналом — копирование дольше на время этого чтения</summary>
+    public static string SettingsVerifyNote => Get(nameof(SettingsVerifyNote));
+
     /// <summary>Входить в папку, если задержать над ней перетаскиваемый файл</summary>
     public static string SettingsDragHoverEntersFolders => Get(nameof(SettingsDragHoverEntersFolders));
 
@@ -527,6 +542,15 @@ public static partial class Strings {
 
     /// <summary>Выключено — вместо путей метки: диск, глубина и расширение видны, имена нет.…</summary>
     public static string SettingsLogPathsNote => Get(nameof(SettingsLogPathsNote));
+
+    /// <summary>Копирование</summary>
+    public static string SettingsCopyDebugGroup => Get(nameof(SettingsCopyDebugGroup));
+
+    /// <summary>Копировать средствами Windows</summary>
+    public static string SettingsCopyWithWindows => Get(nameof(SettingsCopyWithWindows));
+
+    /// <summary>Для разбора жалоб на копирование: свой цикл Wander выключен, копирует Windows; лог говорит это первой строкой каждой операции</summary>
+    public static string SettingsCopyWithWindowsHint => Get(nameof(SettingsCopyWithWindowsHint));
 
     /// <summary>Меню «Отладка»</summary>
     public static string SettingsDebugMenuGroup => Get(nameof(SettingsDebugMenuGroup));

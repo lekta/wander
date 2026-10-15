@@ -1,4 +1,5 @@
 using Wander.Core.FileSystem;
+using Wander.Core.Operations;
 using Wander.Core.Tests.Fakes;
 using Wander.Core.Undo;
 
@@ -100,6 +101,40 @@ public class UndoableActionsTests {
         action.Undo();
 
         Assert.Contains($"MoveEntry:{MoveNew}->{MoveOld}", fs.CallLog);
+    }
+
+    [Fact]
+    public void MoveAction_IsNamedAMove_OfOneItem() {
+        IUndoableAction action = new MoveAction(new FakeFileSystem(), MoveOld, MoveNew);
+
+        Assert.Equal(OperationVerbs.Move, action.Verb);
+        Assert.Equal(1, action.ItemCount);
+    }
+
+    [Fact]
+    public void Composite_TakesItsVerbAndCount_OrTheLastMembersVerb_AndOneItemAMember() {
+        var fs = new FakeFileSystem();
+        var steps = new IUndoableAction[] {
+            new MoveAction(fs, @"C:\a", @"D:\a"),
+            new MoveAction(fs, @"C:\b", @"D:\b"),
+            new MoveAction(fs, @"C:\c", @"D:\c"),
+        };
+
+        IUndoableAction told = new CompositeAction("copy of 2 items", steps, OperationVerbs.Copy, 2);
+        IUndoableAction guessed = new CompositeAction("move of 3 items", steps);
+
+        Assert.Equal((OperationVerbs.Copy, 2), (told.Verb, told.ItemCount));
+        Assert.Equal((OperationVerbs.Move, 3), (guessed.Verb, guessed.ItemCount));
+        Assert.Equal(OperationVerbs.Copy, told.WithSteps(steps[..1]).Verb);
+        Assert.Equal(1, told.WithSteps(steps[..1]).ItemCount);
+    }
+
+    [Fact]
+    public void CreateAction_IsNamedByWhatMadeIt() {
+        var bin = new FakeRecycleBin(new FakeFileSystem());
+
+        Assert.Equal(OperationVerbs.Create, ((IUndoableAction)new CreateAction(bin, NewPath)).Verb);
+        Assert.Equal(OperationVerbs.Copy, ((IUndoableAction)new CreateAction(bin, NewPath, OperationVerbs.Copy)).Verb);
     }
 
     [Fact]

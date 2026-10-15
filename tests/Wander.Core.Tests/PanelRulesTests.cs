@@ -822,6 +822,43 @@ public class PanelRulesTests {
     }
 
 
+    // --- Volumes coming and going (Y2) ----------------------------------------------------
+
+    [Fact]
+    public void Y2_AFlashDrivePutIn_IsReadIntoTheDrives_WhereItsLetterGoes() {
+        var s = Scene().Start();
+
+        s.Add(@"F:\DCIM").Post(new VolumesChanged()).Settle();
+
+        Assert.Equal(new[] { @"C:\", @"D:\", @"F:\" }, s.Drives.Top.Select(r => r.Path));
+    }
+
+    [Fact]
+    public void Y2_AFlashDrivePulledOut_LeavesTheDrives_TheCursorOnItsNeighbour_TheBookmarkStaysGreyed() {
+        var s = Scene(@"F:\DCIM").Start().SetBookmarks(Bookmark(@"F:\DCIM"));
+        s.Chevron(Pane.Drives, @"F:\", open: true).Post(new CaretMoved(Pane.Drives, @"F:\DCIM"));
+
+        s.Unplug(@"F:\").Post(new VolumesChanged()).Settle().SetBookmarks(Bookmark(@"F:\DCIM"));
+
+        Assert.DoesNotContain(@"F:\", s.Lines(Pane.Drives));
+        Assert.Equal(@"D:\", s.Drives.Caret);
+        Assert.True(Row(s, @"F:\DCIM").IsMissing);
+        Assert.Equal(LevelState.Unread, s.Drives.LevelOf(@"F:\").State);
+    }
+
+    [Fact]
+    public void Y2_AFlashDriveThatCameBack_IsReadAnew_NotShownAsItWas() {
+        var s = Scene(@"F:\DCIM").Start();
+        s.Chevron(Pane.Drives, @"F:\", open: true);
+        s.Unplug(@"F:\").Post(new VolumesChanged()).Settle();
+
+        s.Add(@"F:\Music").Post(new VolumesChanged()).Settle().Chevron(Pane.Drives, @"F:\", open: true);
+
+        Assert.Contains(@"F:\Music", s.Lines(Pane.Drives));
+        Assert.DoesNotContain(@"F:\DCIM", s.Lines(Pane.Drives));
+    }
+
+
     // --- Helpers -----------------------------------------------------------------------------
 
     private static WorkspaceScene Scene(params string[] more) {
