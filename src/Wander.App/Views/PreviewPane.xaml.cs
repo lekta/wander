@@ -470,6 +470,7 @@ public partial class PreviewPane : UserControl {
                 // opened video starts paused with the play button correct.
                 ExitImageZoom();
                 ResetVideoTransport();
+                ResetVideoZoom();
                 ResetModelView();
                 if (!IsFindable) {
                     CloseFind(keepKeyboard: false);
@@ -738,8 +739,29 @@ public partial class PreviewPane : UserControl {
     //
     // Full screen, Z pins the same zoom (ToggleZoom, 2026-09-24): no button
     // held, the mouse pans it all the same, and Z again lets it go.
+    //
+    // Ctrl+wheel steps it through PictureZoom's levels (2026-10-15), pinned
+    // as Z pins it: the mapping is the same at any scale - the cursor's
+    // share of the area is the picture's share under it.
+
+    /// <summary>How long the zoom's map stays after the zoom last moved (<see cref="FlashZoomMap"/>).</summary>
+    private const int ZoomMapMs = 500;
+
+    /// <summary>The longer side of the zoom's map, in layout units.</summary>
+    private const double ZoomMapSide = 140;
 
     private bool _imageZoomActive;
+
+    // How big the zoom draws the picture: frame pixels to screen pixels, 1
+    // being 1:1. The button and Z zoom 1:1; Ctrl+wheel steps it.
+    private double _zoomScale = 1;
+
+    // The wheel turned short of a notch so far - a touchpad's small steps
+    // add up to one (WheelNotches).
+    private int _wheelZoom;
+
+    // Hides the zoom's map once the zoom has stood still (FlashZoomMap).
+    private DispatcherTimer? _zoomMapTimer;
 
     // The zoom stays without a button held - see ToggleZoom. The other half
     // of a pair follows pinned too, so its own mouse moves pan it.
@@ -819,18 +841,65 @@ public partial class PreviewPane : UserControl {
     }
 
 
+    /// <summary>
+    /// Ctrl+arrow full screen (2026-10-15): the zoom on show moves a third of
+    /// the screen that way (<see cref="PictureZoom.Nudge"/>), the other half
+    /// of a pair with it, as the mouse moves it; a mouse standing still does
+    /// not take it back. False when nothing is zoomed - the key is not this
+    /// pane's.
+    /// </summary>
+    /// <param name="across">+1 right, -1 left, 0 neither.</param>
+    /// <param name="down">+1 down, -1 up, 0 neither.</param>
+    public bool NudgeZoom(int across, int down) {
+        double hw = ImagePreviewHost.ActualWidth;
+        double hh = ImagePreviewHost.ActualHeight;
+        if (!_imageZoomActive || ZoomFrame() is not { } frame || hw <= 0 || hh <= 0) {
+            return false;
+        }
+
+        var dpi = VisualTreeHelper.GetDpi(this);
+        double x = PictureZoom.Nudge(Math.Clamp(_zoomAt.X / hw, 0, 1), hw, frame.Width * _zoomScale / dpi.DpiScaleX, across);
+        double y = PictureZoom.Nudge(Math.Clamp(_zoomAt.Y / hh, 0, 1), hh, frame.Height * _zoomScale / dpi.DpiScaleY, down);
+        _zoomMouse = Mouse.GetPosition(ImagePreviewHost);
+        MoveImageZoom(new Point(x * hw, y * hh), alone: false);
+
+        return true;
+    }
+
+
     private bool IsImageDownscaled() {
+        return CanZoomTo(1);
+    }
+
+    /// <summary>
+    /// Whether the picture drawn at <paramref name="scale"/> is bigger than
+    /// the fitted one, so there is anything to zoom into. A few pixels of
+    /// slop avoid jitter exactly at break-even: a frame whose 1:1 (in DIPs,
+    /// see BeginImageZoom) is already no bigger than the render area gets
+    /// no magnifier cursor.
+    /// </summary>
+    private bool CanZoomTo(double scale) {
         if (ZoomFrame() is not { } frame) {
             return false;
         }
-        // A few pixels of slop avoid jitter exactly at break-even. If the
-        // frame at 1:1 (in DIPs, see BeginImageZoom) is already smaller
-        // than the available render area there's nothing useful to zoom
-        // into, so we don't switch the cursor.
+
         var dpi = VisualTreeHelper.GetDpi(this);
 
-        return frame.Width / dpi.DpiScaleX > ImgFit.ActualWidth + 1
-            || frame.Height / dpi.DpiScaleY > ImgFit.ActualHeight + 1;
+        return frame.Width * scale / dpi.DpiScaleX > ImgFit.ActualWidth + 1
+            || frame.Height * scale / dpi.DpiScaleY > ImgFit.ActualHeight + 1;
+    }
+
+    /// <summary>The scale the fitted picture is drawn at: below 1 for one the pane shrinks, 1 for one it shows whole.</summary>
+    private double FitScale() {
+        if (ZoomFrame() is not { } frame || frame.Width <= 0 || frame.Height <= 0) {
+            return 1;
+        }
+
+        var dpi = VisualTreeHelper.GetDpi(this);
+
+        return Math.Min(
+            ImgFit.ActualWidth * dpi.DpiScaleX / frame.Width,
+            ImgFit.ActualHeight * dpi.DpiScaleY / frame.Height);
     }
 
     /// <summary>
@@ -898,14 +967,15 @@ public partial class PreviewPane : UserControl {
         e.Handled = true;
     }
 
-    /// <summary>Switches to the 1:1 view; false when the picture fits whole and there is nothing to zoom into.</summary>
-    private bool BeginImageZoom() {
-        if (!IsImageDownscaled()) {
+    /// <summary>Switches to the zoomed view, 1:1 unless said; false when the picture at that scale is no bigger than fitted, and there is nothing to zoom into.</summary>
+    private bool BeginImageZoom(double scale = 1) {
+        if (!CanZoomTo(scale)) {
             return false;
         }
 
         // Sized and placed by UpdateZoomPosition, which every caller runs next.
         _imageZoomActive = true;
+        _zoomScale = scale;
         ImgZoomCanvas.Visibility = Visibility.Visible;
         // Nothing over the pixels being looked at: the picture's bar and
         // its chart step aside until the zoom ends (ExitImageZoom).
@@ -921,13 +991,16 @@ public partial class PreviewPane : UserControl {
     /// has nothing to zoom into and stays as it is.
     /// </summary>
     /// <param name="pinned">The zoom there stays without a button - this one does too (<see cref="ToggleZoom"/>).</param>
-    private void FollowZoom(Point? share, bool pinned) {
+    /// <param name="scale">The zoom's scale there - this one takes it too.</param>
+    private void FollowZoom(Point? share, bool pinned, double scale) {
         if (share is not { } at) {
             ExitImageZoom(notify: false);
 
             return;
         }
-        if (!_imageZoomActive && !BeginImageZoom()) {
+        if (_imageZoomActive && CanZoomTo(scale)) {
+            _zoomScale = scale;
+        } else if (!_imageZoomActive && !BeginImageZoom(scale)) {
             return;
         }
 
@@ -942,7 +1015,7 @@ public partial class PreviewPane : UserControl {
     private static void Relay(ZoomLink link, PreviewPane other, ZoomMove move, bool fromFirst, Func<bool>? live) {
         if (move.Share is not { } at) {
             link.End();
-            other.FollowZoom(null, pinned: false);
+            other.FollowZoom(null, pinned: false, scale: 1);
 
             return;
         }
@@ -951,7 +1024,7 @@ public partial class PreviewPane : UserControl {
         }
 
         if (link.Lead(fromFirst, at.X, at.Y, move.Alone) is { } follows) {
-            other.FollowZoom(new Point(follows.X, follows.Y), move.Pinned);
+            other.FollowZoom(new Point(follows.X, follows.Y), move.Pinned, move.Scale);
         }
     }
 
@@ -967,7 +1040,7 @@ public partial class PreviewPane : UserControl {
         if (!_imageZoomActive) {
             return;
         }
-        if (!IsImageDownscaled()) {
+        if (!CanZoomTo(_zoomScale)) {
             // Only the half that holds the mouse speaks for the split; a
             // follower ending on its own must not end the other one.
             ExitImageZoom(notify: ImagePreviewHost.IsMouseCaptured);
@@ -988,7 +1061,7 @@ public partial class PreviewPane : UserControl {
         double hh = ImagePreviewHost.ActualHeight;
         if (hw > 0 && hh > 0) {
             ZoomMoved?.Invoke(this, new ZoomMove(
-                new Point(Math.Clamp(mouse.X / hw, 0, 1), Math.Clamp(mouse.Y / hh, 0, 1)), alone, _zoomPinned));
+                new Point(Math.Clamp(mouse.X / hw, 0, 1), Math.Clamp(mouse.Y / hh, 0, 1)), alone, _zoomPinned, _zoomScale));
         }
     }
 
@@ -1024,6 +1097,56 @@ public partial class PreviewPane : UserControl {
     }
 
     /// <summary>
+    /// Ctrl+wheel over the picture (2026-10-15): the next level up or down
+    /// (<see cref="PictureZoom.Step"/>) under the mouse, kept without a
+    /// button as Z keeps it; down past the smallest, the picture is fitted
+    /// again. A zoom the button holds stays held - letting go still ends it.
+    /// The wheel alone is the list's or the full screen's, as before.
+    /// </summary>
+    private void ImageZoom_Wheel(object sender, MouseWheelEventArgs e) {
+        if (Keyboard.Modifiers != ModifierKeys.Control || Controller.Kind != PreviewKind.Image) {
+            return;
+        }
+
+        e.Handled = true;
+        int notches = WheelNotches(e.Delta);
+        if (notches == 0) {
+            return;
+        }
+
+        double? next = PictureZoom.Step(_imageZoomActive ? _zoomScale : null, FitScale(), notches);
+        if (next is not { } scale || !CanZoomTo(scale)) {
+            ExitImageZoom();
+
+            return;
+        }
+        if (_imageZoomActive) {
+            _zoomScale = scale;
+        } else if (!BeginImageZoom(scale)) {
+            return;
+        }
+
+        if (!ImagePreviewHost.IsMouseCaptured) {
+            _zoomPinned = true;
+        }
+        _zoomMouse = null;
+        MoveImageZoom(e.GetPosition(ImagePreviewHost), alone: false);
+    }
+
+    /// <summary>Whole notches in the wheel's turn so far, up positive; a touchpad's small steps add up, turning back starts the count again.</summary>
+    private int WheelNotches(int delta) {
+        if (Math.Sign(delta) != Math.Sign(_wheelZoom)) {
+            _wheelZoom = 0;
+        }
+
+        _wheelZoom += delta;
+        int notches = _wheelZoom / Mouse.MouseWheelDeltaForOneLine;
+        _wheelZoom -= notches * Mouse.MouseWheelDeltaForOneLine;
+
+        return notches;
+    }
+
+    /// <summary>
     /// Positions the 1:1 zoom image so that the image-pixel under the
     /// cursor stays under the cursor. Pan is per-axis: only the dimension
     /// that doesn't fit the pane scrolls with the cursor. The other one
@@ -1048,20 +1171,25 @@ public partial class PreviewPane : UserControl {
         }
 
         // 1 frame pixel = 1 device pixel, FastStone's "100 %": the size in
-        // DIPs is the pixel size over the monitor's scale. Read here, not
-        // kept in a field - the window may have moved to another monitor.
-        // Sized on every move rather than once, so the box always belongs
-        // to the picture now in ImgFit, not the one the zoom began on.
+        // DIPs is the pixel size over the monitor's scale, times the zoom's
+        // scale. Read here, not kept in a field - the window may have moved
+        // to another monitor. Sized on every move rather than once, so the
+        // box always belongs to the picture now in ImgFit, not the one the
+        // zoom began on.
         var dpi = VisualTreeHelper.GetDpi(this);
-        double srcW = frame.Width / dpi.DpiScaleX;
-        double srcH = frame.Height / dpi.DpiScaleY;
+        double srcW = frame.Width * _zoomScale / dpi.DpiScaleX;
+        double srcH = frame.Height * _zoomScale / dpi.DpiScaleY;
         ImgZoom.Width = srcW;
         ImgZoom.Height = srcH;
-        // Pixel for pixel once the whole frame is here; a copy smaller than
-        // it, stretched until then (ZoomFrame), smoothly rather than in blocks.
-        RenderOptions.SetBitmapScalingMode(ImgZoom, src.PixelWidth < frame.Width || src.PixelHeight < frame.Height
-            ? BitmapScalingMode.Linear
-            : BitmapScalingMode.NearestNeighbor);
+        // Pixel for pixel once the whole frame is here - and in blocks past
+        // 1:1, pixels being what is looked at there; a copy smaller than the
+        // frame, stretched until then (ZoomFrame), and a frame shrunk below
+        // 1:1, smoothly.
+        RenderOptions.SetBitmapScalingMode(ImgZoom, _zoomScale < 1
+            ? BitmapScalingMode.HighQuality
+            : src.PixelWidth < frame.Width || src.PixelHeight < frame.Height
+                ? BitmapScalingMode.Linear
+                : BitmapScalingMode.NearestNeighbor);
         // The helpers' marks are a picture of the same pixels; they are
         // sized and placed with it rather than bound, so the two can never
         // be a frame apart.
@@ -1096,6 +1224,77 @@ public partial class PreviewPane : UserControl {
         Canvas.SetTop(ImgZoom, top);
         Canvas.SetLeft(ImgZoomOverlay, left);
         Canvas.SetTop(ImgZoomOverlay, top);
+
+        ShowZoomLevel();
+        FlashZoomMap(left, top, srcW, srcH, hw, hh);
+    }
+
+    /// <summary>
+    /// The zoom's map (2026-10-15): the picture small, the part on screen
+    /// framed, the scale under it - up as the zoom moves or the picture
+    /// under it changes, faded <see cref="ZoomMapMs"/> after. Nothing when
+    /// the whole picture is on screen anyway.
+    /// </summary>
+    /// <param name="left">The zoomed picture's left edge in the area.</param>
+    /// <param name="top">Its top edge.</param>
+    /// <param name="width">Its width at the zoom's scale.</param>
+    /// <param name="height">Its height.</param>
+    /// <param name="hw">The area's width.</param>
+    /// <param name="hh">The area's height.</param>
+    private void FlashZoomMap(double left, double top, double width, double height, double hw, double hh) {
+        // The part on screen, as shares of the picture.
+        double x0 = Math.Clamp(-left / width, 0, 1);
+        double y0 = Math.Clamp(-top / height, 0, 1);
+        double x1 = Math.Clamp((hw - left) / width, 0, 1);
+        double y1 = Math.Clamp((hh - top) / height, 0, 1);
+        if (x0 <= 0 && y0 <= 0 && x1 >= 1 && y1 >= 1) {
+            HideZoomMap();
+
+            return;
+        }
+
+        double fit = Math.Min(ZoomMapSide / width, ZoomMapSide / height);
+        double mapW = width * fit;
+        double mapH = height * fit;
+        ZoomMapImage.Width = mapW;
+        ZoomMapImage.Height = mapH;
+        foreach (var frame in new[] { ZoomMapShade, ZoomMapFrame }) {
+            Canvas.SetLeft(frame, x0 * mapW);
+            Canvas.SetTop(frame, y0 * mapH);
+            frame.Width = Math.Max(3, (x1 - x0) * mapW);
+            frame.Height = Math.Max(3, (y1 - y0) * mapH);
+        }
+        ZoomMapLevel.Text = ZoomLevelLabel();
+
+        ZoomMap.BeginAnimation(OpacityProperty, null);
+        ZoomMap.Opacity = 1;
+        ZoomMap.Visibility = Visibility.Visible;
+        if (_zoomMapTimer is null) {
+            _zoomMapTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ZoomMapMs) };
+            _zoomMapTimer.Tick += (_, _) => {
+                _zoomMapTimer.Stop();
+                ZoomMap.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(150)));
+            };
+        }
+        _zoomMapTimer.Stop();
+        _zoomMapTimer.Start();
+    }
+
+    private void HideZoomMap() {
+        _zoomMapTimer?.Stop();
+        ZoomMap.BeginAnimation(OpacityProperty, null);
+        ZoomMap.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>The scale beside the picture's name full screen while it is zoomed - the bar is there over a zoom only when pinned.</summary>
+    private void ShowZoomLevel() {
+        ZoomLevelText.Text = ZoomLevelLabel();
+        ZoomLevelText.Visibility = _imageZoomActive && BarPinned ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>"200 %": the zoom's scale.</summary>
+    private string ZoomLevelLabel() {
+        return string.Format(Strings.PreviewZoomLevel, Math.Round(_zoomScale * 100));
     }
 
     /// <summary>
@@ -1140,14 +1339,17 @@ public partial class PreviewPane : UserControl {
         _imageZoomActive = false;
         _zoomPinned = false;
         _zoomMouse = null;
+        _zoomScale = 1;
         ImgZoomCanvas.Visibility = Visibility.Collapsed;
+        HideZoomMap();
+        ShowZoomLevel();
         UpdateBar();
         if (ImagePreviewHost.IsMouseCaptured) {
             ImagePreviewHost.ReleaseMouseCapture();
         }
         UpdateImageCursor();
         if (notify) {
-            ZoomMoved?.Invoke(this, new ZoomMove(null, false, false));
+            ZoomMoved?.Invoke(this, new ZoomMove(null, false, false, 1));
         }
     }
 
@@ -1528,6 +1730,7 @@ public partial class PreviewPane : UserControl {
     /// one running behind the new one.
     /// </summary>
     private void OpenMedia(Uri? uri) {
+        ResetVideoZoom();
         try { VideoPreview.Stop(); } catch { /* not yet loaded */ }
         try { _audioPlayer.Stop(); } catch { /* nothing open */ }
         _system?.Close();
@@ -1818,6 +2021,55 @@ public partial class PreviewPane : UserControl {
         // the previous clip's resolution until MediaOpened reconfigures it.
         VideoPreview.MaxWidth = double.PositiveInfinity;
         VideoPreview.MaxHeight = double.PositiveInfinity;
+    }
+
+
+    // --- Video zoom -------------------------------------------------------
+    //
+    // Ctrl+wheel over a clip (2026-10-15): 2x and 4x under the mouse, the
+    // mouse moving the magnified part as it moves a picture's zoom - the
+    // point under it stays under it. A render transform on the stage, so the
+    // player keeps its size and nothing is decoded again; the stage's border
+    // clips it. A new clip, or anything else in the pane, starts fitted.
+
+    // How much the clip is magnified: 1 is fitted.
+    private double _videoScale = 1;
+
+
+    private void VideoZoom_Wheel(object sender, MouseWheelEventArgs e) {
+        if (Keyboard.Modifiers != ModifierKeys.Control || Controller.Kind != PreviewKind.Video) {
+            return;
+        }
+
+        e.Handled = true;
+        int notches = WheelNotches(e.Delta);
+        if (notches == 0) {
+            return;
+        }
+
+        _videoScale = PictureZoom.Step(_videoScale > 1 ? _videoScale : null, 1, notches) ?? 1;
+        PlaceVideoZoom(e.GetPosition(VideoClip));
+    }
+
+    private void VideoZoom_MouseMove(object sender, MouseEventArgs e) {
+        if (_videoScale > 1) {
+            PlaceVideoZoom(e.GetPosition(VideoClip));
+        }
+    }
+
+    /// <summary>The stage magnified about <paramref name="mouse"/> - a place in the clip's border, which the stage fills.</summary>
+    private void PlaceVideoZoom(Point mouse) {
+        VideoStage.RenderTransform = _videoScale > 1
+            ? new ScaleTransform(
+                _videoScale, _videoScale,
+                Math.Clamp(mouse.X, 0, VideoClip.ActualWidth),
+                Math.Clamp(mouse.Y, 0, VideoClip.ActualHeight))
+            : Transform.Identity;
+    }
+
+    private void ResetVideoZoom() {
+        _videoScale = 1;
+        VideoStage.RenderTransform = Transform.Identity;
     }
 
 
@@ -2377,7 +2629,8 @@ public partial class PreviewPane : UserControl {
     /// </summary>
     /// <param name="Alone">The right button is held as well: the other pane of a pair stays where it is.</param>
     /// <param name="Pinned">No button holds it - Z did (<see cref="ToggleZoom"/>): the other pane's follows pinned too.</param>
-    private readonly record struct ZoomMove(Point? Share, bool Alone, bool Pinned);
+    /// <param name="Scale">The zoom's scale, 1 being 1:1 - the other pane's takes it too.</param>
+    private readonly record struct ZoomMove(Point? Share, bool Alone, bool Pinned, double Scale);
 
 
     /// <summary>What F3 did here - see <see cref="FindAgain"/>.</summary>

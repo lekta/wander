@@ -38,10 +38,18 @@ public sealed record FileSystemEntry(
     // Score) - the number on a gallery cell. Filled by a pass that runs only
     // in the gallery with the sharpness helper on (Listing/SharpListing);
     // null for everything else, and until the pass has been round.
-    double? Sharpness = null) {
+    double? Sharpness = null,
+    // The volume a drive's row stands for in the computer's listing
+    // (ShellPaths.Computer): what its bar and "free of" line are drawn
+    // from. null on every other row, a drive's root opened as a folder
+    // included.
+    VolumeInfo? Volume = null) {
 
     /// <summary>True when this row stands for a file plus its sidecar(s).</summary>
     public bool HasCompanions => Companions is { Count: > 0 };
+
+    /// <summary>A drive in the computer's listing - the rows that get a capacity bar.</summary>
+    public bool IsVolume => Volume is not null;
 
     /// <summary>
     /// Folder this entry lives in. Only interesting in a search result
@@ -81,6 +89,7 @@ public sealed record FileSystemEntry(
             && OriginalLocation == other.OriginalLocation
             && Rating == other.Rating
             && Sharpness == other.Sharpness
+            && Volume == other.Volume
             && SameCompanions(Companions, other.Companions);
     }
 

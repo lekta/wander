@@ -204,6 +204,7 @@ public sealed class MainViewModel : ObservableObject {
 
     private bool _isBookmarksExpanded = true;
     private bool _isDrivesExpanded = true;
+    private bool _isCurrentComputer;
     private bool _isFoldersVisible = true;
     private bool _isPreviewSplit;
     private string? _missingFolderPath;
@@ -561,6 +562,7 @@ public sealed class MainViewModel : ObservableObject {
         DebugOperationCommand = new RelayCommand(p => _ = RunDebugOperationAsync(p as string));
         ToggleBookmarksCommand = new RelayCommand(_ => IsBookmarksExpanded = !IsBookmarksExpanded);
         ToggleDrivesCommand = new RelayCommand(_ => IsDrivesExpanded = !IsDrivesExpanded);
+        OpenComputerCommand = new RelayCommand(_ => _nav.NavigateTo(ShellPaths.Computer, NavigationSource.Drives));
         AddBookmarkCommand = new RelayCommand(p => Bookmarks.Add(p as string));
         RemoveBookmarkCommand = new RelayCommand(p => Bookmarks.Remove((p as TreeNodeViewModel)?.FullPath));
         RemoveMissingBookmarkCommand = new RelayCommand(_ => Bookmarks.Remove(_missingFolderPath), _ => IsMissingBookmark);
@@ -622,8 +624,14 @@ public sealed class MainViewModel : ObservableObject {
             } else if (e.PropertyName == nameof(SearchController.HasRatingFilter)) {
                 Raise(nameof(HasRatingFilter));
                 ClearRatingFilterCommand.RaiseCanExecuteChanged();
+            } else if (e.PropertyName == nameof(SearchController.IsShotApplied)) {
+                Raise(nameof(IsShotFilterApplied));
             }
         };
+        // What the photos say about how they were shot, for the box's
+        // parameters - read on the pool by the filter, once a file.
+        var shotFacts = new ShotFactsCache(ReadShotFacts);
+        _search.ShotFacts = shotFacts.Of;
         _search.FilteredChanged += (filtered, rearranged) => {
             // A folder listing that lands while the list is showing search
             // results would replace them. The watcher, a finishing rating
@@ -1383,6 +1391,13 @@ public sealed class MainViewModel : ObservableObject {
     public bool HasSearchQuery => ContentSearch.FilterText.Length > 0;
 
     /// <summary>
+    /// The list is narrowed by shooting parameters - <c>f/2.8</c>,
+    /// <c>iso800</c> - read as such in a folder of photos: the camera by
+    /// the box says the words are not a name (decision 2026-10-15).
+    /// </summary>
+    public bool IsShotFilterApplied => _search.IsShotApplied;
+
+    /// <summary>
     /// The deep half of search — subfolders, file contents, the system
     /// index. Bound directly by the panel behind the search box.
     /// </summary>
@@ -1682,6 +1697,9 @@ public sealed class MainViewModel : ObservableObject {
     }
     public RelayCommand ToggleBookmarksCommand { get; }
     public RelayCommand ToggleDrivesCommand { get; }
+
+    /// <summary>A click on the "Computer" title: the drives in the list (<see cref="ShellPaths.Computer"/>).</summary>
+    public RelayCommand OpenComputerCommand { get; }
     public RelayCommand ToggleFoldersCommand { get; }
     public RelayCommand AddBookmarkCommand { get; }
 
@@ -1783,6 +1801,16 @@ public sealed class MainViewModel : ObservableObject {
     public bool IsCurrentRecycleBin =>
         string.Equals(_nav.Current, ShellPaths.RecycleBin, StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// The list shows the computer's drives (<see cref="ShellPaths.Computer"/>):
+    /// the table swaps the date for the free space. Raised once per
+    /// navigation, in <see cref="NoteCurrentLocation"/>.
+    /// </summary>
+    public bool IsCurrentComputer {
+        get => _isCurrentComputer;
+        private set => SetField(ref _isCurrentComputer, value);
+    }
+
     private static IShellNamespace? TryGetShellNamespace() {
         return ServiceLocator.TryGet<IShellNamespace>();
     }
@@ -1794,6 +1822,7 @@ public sealed class MainViewModel : ObservableObject {
     private void NoteCurrentLocation() {
         CurrentArchive = Archives.Of(_nav.Current);
         IsCurrentShellNamespace = IsShellPath(_nav.Current);
+        IsCurrentComputer = string.Equals(_nav.Current, ShellPaths.Computer, StringComparison.OrdinalIgnoreCase);
     }
 
     private bool IsShellPath(string? path) {
@@ -3808,9 +3837,24 @@ public sealed class MainViewModel : ObservableObject {
         // would narrow the list by a rule it is not applying.
         _search.Filter(
             ContentSearch.IsDeep ? "" : ContentSearch.NameQuery,
-            ContentSearch.IsDeep ? TypeFilter.None : ContentSearch.Type);
+            ContentSearch.IsDeep ? TypeFilter.None : ContentSearch.Type,
+            ContentSearch.IsDeep ? ShotFilter.None : ContentSearch.Shot);
         Raise(nameof(SearchQuery));
         Raise(nameof(HasSearchQuery));
+    }
+
+    /// <summary>
+    /// A photo's shooting data for the box's parameters (<see cref="ShotQuery"/>):
+    /// read off the file for a picture, nothing for anything else. On the
+    /// pool, through <see cref="ShotFactsCache"/>.
+    /// </summary>
+    private static ShotFacts? ReadShotFacts(string path) {
+        if (PreviewRouter.Route(path) is not PreviewRoute.Image
+            || ServiceLocator.TryGet<IImageMetadataReader>()?.Read(path) is not { } meta) {
+            return null;
+        }
+
+        return new ShotFacts(meta.Iso, meta.FNumber, meta.ExposureSeconds, meta.FocalLengthMm);
     }
 
 

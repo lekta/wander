@@ -15,7 +15,8 @@ namespace Wander.App.Converters;
 /// in the tile, and a photograph's kind is not news) - and its folder in a
 /// search result, from the folder the search started in
 /// (<see cref="ResultPath.Folder"/>; empty right in it): results come from
-/// everywhere, and the path says more than the kind would.
+/// everywhere, and the path says more than the kind would. A drive in the
+/// computer's listing says how much of it is free.
 ///
 /// <para>
 /// One converter over the row instead of a Style with a DataTrigger on
@@ -40,6 +41,10 @@ public sealed class TileSecondLineConverter : IValueConverter {
         }
         if (ShowFolder) {
             return ResultPath.Folder(Root(), entry.FullPath);
+        }
+        // A drive in the computer's listing: "117 GB free of 476 GB" over its bar, as Explorer's tile.
+        if (entry.Volume is { IsReady: true, TotalBytes: > 0 } volume) {
+            return string.Format(Strings.VolumeFreeOf, SizeFormatter.Format(volume.FreeBytes), SizeFormatter.Format(volume.TotalBytes));
         }
 
         int rank = entry.Rating?.Rank ?? 0;

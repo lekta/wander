@@ -53,6 +53,17 @@ public class ContentSnifferTests {
         Assert.Null(ContentSniffer.Extension(Ascii("MZ is how this note starts, and nothing more")));
     }
 
+    [Fact]
+    public void Webp_IsAnimated_ByTheFlagOfItsExtendedHeader() {
+        var animated = Ascii("RIFF\0\0\0\0WEBPVP8X\u000A\0\0\0\u0012\0\0\0");
+        var stillWithAlpha = Ascii("RIFF\0\0\0\0WEBPVP8X\u000A\0\0\0\u0010\0\0\0");
+
+        Assert.True(ContentSniffer.IsAnimatedWebp(animated));
+        Assert.False(ContentSniffer.IsAnimatedWebp(stillWithAlpha));
+        Assert.False(ContentSniffer.IsAnimatedWebp(Ascii("RIFF\0\0\0\0WEBPVP8 \0\0\0\0\u0002\0\0\0")));
+        Assert.False(ContentSniffer.IsAnimatedWebp(Ascii("RIFF\0\0\0\0WEBPVP8X")));
+    }
+
     [Theory]
     [InlineData("Just a note, plain text, nothing to name.")]
     [InlineData("{not json at all}")]

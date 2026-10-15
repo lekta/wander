@@ -11,6 +11,14 @@ public enum VolumeKind {
 }
 
 
+/// <summary>How full a volume is, as its capacity bar is coloured.</summary>
+public enum VolumeFill {
+    Normal,
+    Filling,
+    Full,
+}
+
+
 /// <summary>
 /// A volume, described. Sizes are bytes; <paramref name="TotalBytes"/> is
 /// zero when the drive is not ready (an empty card reader, a disconnected
@@ -29,6 +37,28 @@ public sealed record VolumeInfo(
 
     /// <summary>Share of the volume in use, 0…1. Zero when the size is unknown.</summary>
     public double UsedFraction => TotalBytes > 0 ? Math.Clamp((double)UsedBytes / TotalBytes, 0, 1) : 0;
+
+    /// <summary>
+    /// The bar turns amber and then red as the disk fills, as Explorer's
+    /// does: the one colour on a drive's row that carries information.
+    /// </summary>
+    public VolumeFill Fill => UsedFraction switch {
+        >= 0.95 => VolumeFill.Full,
+        >= 0.85 => VolumeFill.Filling,
+        _ => VolumeFill.Normal,
+    };
+
+
+    /// <summary>
+    /// The drive as Explorer names it: its label and letter - "Data (D:)" -
+    /// or, unlabelled, what it is - "Local Disk (C:)"
+    /// (<paramref name="kindWord"/>).
+    /// </summary>
+    public string DisplayName(string kindWord) {
+        string letter = Root.TrimEnd('\\');
+
+        return $"{(Label.Length > 0 ? Label : kindWord)} ({letter})";
+    }
 }
 
 

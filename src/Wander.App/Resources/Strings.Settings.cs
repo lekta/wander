@@ -243,6 +243,15 @@ public static partial class Strings {
     /// <summary>На точке фокусировки камеры</summary>
     public static string SettingsZoomSpotAf => Get(nameof(SettingsZoomSpotAf));
 
+    /// <summary>Стрелки при увеличении на полном экране</summary>
+    public static string SettingsZoomArrowsGroup => Get(nameof(SettingsZoomArrowsGroup));
+
+    /// <summary>Листают снимки, место держится; Ctrl+стрелки двигают</summary>
+    public static string SettingsZoomArrowsWalk => Get(nameof(SettingsZoomArrowsWalk));
+
+    /// <summary>Двигают снимок; Ctrl+стрелки листают</summary>
+    public static string SettingsZoomArrowsMove => Get(nameof(SettingsZoomArrowsMove));
+
     /// <summary>Вид по умолчанию</summary>
     public static string SettingsDefaultViewMode => Get(nameof(SettingsDefaultViewMode));
 

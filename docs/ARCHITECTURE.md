@@ -720,8 +720,11 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
     того, как рисуется миниатюра, инвалидирует диск; поднимать без
     оглядки (решение человека 2026-10-09): кэш собирается быстро,
     обновивший версию принимает, что что-то перестроится.
-- **«Компьютер»** сворачивается треугольником (`IsDrivesExpanded`;
-  щелчок по заголовку оставлен под «диски в списке», PLAN).
+- **«Компьютер»** сворачивается треугольником (`IsDrivesExpanded`),
+  заголовок до конца полосы открывает диски в списке
+  (`OpenComputerCommand` → `ShellPaths.Computer`, источник `Drives`); у
+  закладок треугольник так же отдельно, текст щелчка не берёт
+  (2026-10-15, стиль `PanelHeaderPart`).
   `FolderTreesView.ApplyPanelsLayout`: свёрнутая — заголовок у низа
   панели (`DrivesRow` — `Auto`), закладки над ней — `*`; делитель — только
   между двумя развёрнутыми. Обе сразу не сворачиваются (2026-10-09):
@@ -745,7 +748,22 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
 (`shell:RecycleBinFolder`) и архив, открытый как папка. Обе за контрактом
 `IShellNamespace` (Core); `WindowsShellNamespace` диспетчеризует:
 корзина — `ShellRecycleBinFolder`, архив — `ShellArchiveFolder`, обе на
-`IShellItem`. Листинг — ветка `RefreshShellAsync` (эпоха, спиннер,
+`IShellItem`. Третья (2026-10-15) — «Компьютер»
+(`shell:MyComputerFolder`, `ComputerDrives`): готовые диски по
+`DriveInfo` в порядке букв, как в панели, не `IShellItem` — шелл добавил
+бы телефоны и сеть, которых Wander ещё не открывает (Y3, Y4). Строка —
+корень диска папкой (`EntryKind.Directory`), имя
+`VolumeInfo.DisplayName`, размер — объём, `FileSystemEntry.Volume` — для
+полосы (`VolumeInfo.Fill`, Core, тест; цвета общие с блоком тома панели
+просмотра — `VolumeFillBrushConverter`). Таблица — «Свободно» вместо даты
+(`IsCurrentComputer` → `ShowVolumeColumns`), плитка — «X свободно из Y»
+и полоса пустым `ContentControl` по триггеру `IsVolume`. Место — только
+чтение, как у корзины: запись Wander'а (вставка по `Ctrl+V`, ярлык,
+действия) ушла бы в открытую «папку» — сентинел; меню строки диска
+всё же спрашивает оболочку (`MainWindow.QueryShellMenu`) — извлечь,
+форматировать, BitLocker, как в Проводнике. Поиск
+вглубь из него не идёт; без выделения панель просмотра пуста — у корзины
+так же: переписи сентинела нет. Листинг — ветка `RefreshShellAsync` (эпоха, спиннер,
 отмена, `PublishRows`), адрес и крошки обычные (`GetDisplayName` →
 null); `Enumerate` принимает `CancellationToken` и смотрит на него между
 элементами.
@@ -1183,6 +1201,21 @@ X», «листинг эпохи N долетел», «сторож замети
   `Enter` / `Tab` — дописать, `Esc` — закрыть); где слово и что
   дописать — `TypeSpan` / `WithType` (Core). В окне — строка «Тип»
   (`TypeGroup`).
+- **Параметры съёмки** (2026-10-15, PLAN S2) — запись фотографа в половине
+  имени: `f/2.8`, `iso800`, `50mm`, `1/250`, сравнения `> >= < <=`,
+  диапазоны `a..b` (`a-b` у ISO, диафрагмы, фокусного). `ShotQuery`
+  (Core, тест) вынимает слова-параметры до `SplitType`; `/` в слове,
+  читающемся параметром, или сразу после `f` / числа в начале слова — не
+  тип (`SearchExpression.TypeSlash`). Кавычки возвращают слово имени.
+  `ContentSearchController.Shot` — `ShotFilter`: условия и то, что поле
+  значит без них (маска и тип всей половины). Применяет живой фильтр
+  (`SearchController.Filter(…, shot)`): если хоть один файл папки говорит,
+  как снят (`ShotFacts` с пула через `ShotFactsCache` — путь + размер +
+  mtime, `IImageMetadataReader` только для картинок), — по условиям,
+  папки и файлы без данных мимо, `IsShotApplied` зажигает фотоаппарат у
+  поля; иначе слова — имя. Сравнение с допуском записи камер (`f/2.8` =
+  2.79; выдержка ±3 %). Обход подпапок с параметрами не идёт —
+  нужен кэш EXIF (J3); подсказки значений из папки — PLAN.
 - **Два критерия через «И»**: маска — ворота, отвергнутый файл не
   открывается (17 файлов / 43 мс против 5074 / 217). Галки «в содержимом»
   нет — её роль играет наличие текста.
@@ -2153,9 +2186,11 @@ SYS ws=431 private=360 gen=167/155/134 alloc=+45 loh=6 handles=1060 threads=40 c
 
 - **`PreviewRouter`** (Core, `PreviewRouterTests`) — «расширение →
   `PreviewRoute`», без диска; `Route` (каким загрузчиком) ≠ `Kind` (каким
-  контролом). Таблица — **порядок правил**, побеждает первое: `.webp` —
+  контролом). Таблица — **порядок правил**, побеждает первое: `.gif` —
   картинка и многокадровый контейнер, `.mtl` — текст, `.svg` рисуется, а
-  для действий остаётся текстом (`TextLike`).
+  для действий остаётся текстом (`TextLike`). `.webp` (2026-10-15) —
+  картинка: лупа, соседи, «Сравнить»; анимированный по флагу заголовка
+  `VP8X` (`ContentSniffer.IsAnimatedWebp`) панель отдаёт `GifImage`.
 - **Медиа.** `Audio` и `Video` делят `MediaUri` и транспорт; проигрыватель
   разный обязательно: `MediaElement` без площади открывает файл и стоит на
   нуле (200×120 играет, 1×1 молчит). Контроллер ставит `Kind` **до**
@@ -2232,7 +2267,25 @@ SYS ws=431 private=360 gen=167/155/134 alloc=+45 loh=6 handles=1060 threads=40 c
     кадр); `_zoomMouse` — где стояла мышь: синтетический `MouseMove` без
     сдвига лупу не уводит, настоящий — забирает. Колесо (по 120, накопление
     тачпада) и `XButton1` / `XButton2` — `WalkByMouse`: как стрелки, с
-    `Shift` — правый из пары.
+    `Shift` — правый из пары; с `Ctrl` колесо окно пропускает — его берёт
+    панель под мышью (зум ниже).
+  - **Зум ступенями** (2026-10-15): `Ctrl`+колесо над картинкой —
+    `PreviewPane.ImageZoom_Wheel`, уровни `PictureZoom.Step` (Core, тест:
+    0,5 / 1 / 2 / 4 только выше вписанного масштаба `FitScale`, ниже
+    наименьшего — снова вписан); масштаб `_zoomScale` — на всех путях лупы
+    (`CanZoomTo`, `UpdateZoomPosition`, `ZoomMove.Scale` для пары);
+    закреплён без кнопки, как `Z`, удержание ЛКМ остаётся удержанием.
+    Отображение: меньше 1:1 — `HighQuality`, больше — блоками. Масштаб — у
+    имени на полосе полного экрана (`ZoomLevelText`, только при
+    `BarPinned`: в панели полоса над зумом прячется); миникарта
+    `ZoomMap` (левый верх, 140 px, рамка — видимая доля кадра) —
+    `FlashZoomMap` из `UpdateZoomPosition`, гаснет через `ZoomMapMs`.
+    `Ctrl`+стрелки — `NudgeZoom` → `PictureZoom.Nudge` (треть экрана, в
+    долях места, через `MoveImageZoom` — пара едет вместе);
+    `AppSettings.ZoomArrows` = `Move` меняет стрелки и `Ctrl`+стрелки
+    местами, только пока что-то увеличено (`ZoomedPane`). Видео —
+    `VideoZoom_*`: `ScaleTransform` на `VideoStage` с центром под мышью
+    (2× / 4×), рамка `VideoClip` режет; новый клип — вписан.
   - `MainViewModel.Say` → `StatusSaid` → плашка 4 с. Строки после оценки
     — заново (`RatingsController.FindInSource`, и скрытые фильтром) по
     `Entries.CollectionChanged` и `Ratings.CompanionsChanged`.
@@ -2476,9 +2529,9 @@ SYS ws=431 private=360 gen=167/155/134 alloc=+45 loh=6 handles=1060 threads=40 c
   кодек мимо MF — миниатюры этого формата станут значками. Панель: не
   открылось → `PreviewController.ExplainMissingCodecAsync`, плашка
   `PreviewNeedsCodec` (HEVC — своя, платное) и `OpenStoreCommand`
-  (`ms-windows-store://pdp/?ProductId=…`, номера — в `OpenStore`); GIF /
-  WebP — заголовок через `ImageDecoder.StoredSize` до `GifImage`, иначе
-  пустая панель. Миниатюры — `SystemIconProvider.LacksCodec`: шелл не
+  (`ms-windows-store://pdp/?ProductId=…`, номера — в `OpenStore`); GIF и
+  анимированный WebP — заголовок через `ImageDecoder.StoredSize` до
+  `GifImage`, иначе пустая панель. Миниатюры — `SystemIconProvider.LacksCodec`: шелл не
   спрашивается (ответил бы значком и записал его в `thumbcache`), значок —
   путём значков, на диск не пишется (кроме RAW — у него своё превью),
   поколение кэша 8.

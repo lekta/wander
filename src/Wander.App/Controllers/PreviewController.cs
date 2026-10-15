@@ -1334,15 +1334,11 @@ public sealed class PreviewController : ObservableObject {
     public double VolumeUsedPercent => (_volume?.UsedFraction ?? 0) * 100;
 
     /// <summary>
-    /// The bar turns amber and then red as the disk fills. Explorer does
-    /// the same thing and it is the one piece of colour on this panel that
-    /// carries information rather than decoration.
+    /// The bar turns amber and then red as the disk fills (<see cref="VolumeInfo.Fill"/>).
+    /// Explorer does the same thing and it is the one piece of colour on
+    /// this panel that carries information rather than decoration.
     /// </summary>
-    public Brush VolumeBarColor => (_volume?.UsedFraction ?? 0) switch {
-        >= 0.95 => Palette.VolumeBarFull,
-        >= 0.85 => Palette.VolumeBarFilling,
-        _ => Palette.VolumeBarNormal,
-    };
+    public Brush VolumeBarColor => VolumeFillBrushConverter.BrushOf(_volume?.Fill ?? VolumeFill.Normal);
 
 
     // --- Review helpers (RAWHELPERS) -----------------------------------
@@ -1931,6 +1927,10 @@ public sealed class PreviewController : ObservableObject {
 
                 return;
             }
+            // The bin and the computer are no folder to count: nothing selected there shows nothing.
+            if (folder is not null && ServiceLocator.TryGet<IShellNamespace>() is { } shell && shell.IsShellPath(folder)) {
+                folder = null;
+            }
             if (folder is not null) {
                 // A slow load this selection overtook never lowers its
                 // veil (it was cancelled), and the census has a spinner of
@@ -2274,7 +2274,22 @@ public sealed class PreviewController : ObservableObject {
         }, ct);
     }
 
-    /// <summary>The loader for <paramref name="route"/>; <paramref name="ext"/> picks the highlighting of code.</summary>
+    /// <summary>Whether a WebP is animated, by its header (<see cref="ContentSniffer.IsAnimatedWebp"/>); unreadable - a still.</summary>
+    private static async Task<bool> IsAnimatedWebpAsync(string path, CancellationToken ct) {
+        return await Task.Run(() => {
+            try {
+                using var file = SharedRead.Open(path);
+                var head = new byte[(int)Math.Min(file.Length, 32)];
+                file.ReadExactly(head);
+
+                return ContentSniffer.IsAnimatedWebp(head);
+            } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+                return false;
+            }
+        }, ct);
+    }
+
+    /// <summary>The loader for <paramref name="route"/>; <paramref name="ext"/> picks the highlighting of code (and tells a WebP).</summary>
     private async Task LoadRoutedAsync(string path, PreviewRoute route, string ext, CancellationToken ct) {
         switch (route) {
             case PreviewRoute.Archive:
@@ -2297,8 +2312,14 @@ public sealed class PreviewController : ObservableObject {
                 await LoadModelAsync(path, ct);
                 break;
 
+            // A WebP is a picture - the loupe, the neighbours, the compare -
+            // unless its header says it moves: then the compositor plays it.
             case PreviewRoute.Image:
-                await LoadImageAsync(path, ct);
+                if (ext.Equals(".webp", StringComparison.OrdinalIgnoreCase) && await IsAnimatedWebpAsync(path, ct)) {
+                    LoadGif(path);
+                } else {
+                    await LoadImageAsync(path, ct);
+                }
                 break;
 
             case PreviewRoute.Web:

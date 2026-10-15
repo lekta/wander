@@ -109,6 +109,10 @@ public sealed class ContentSearchController : ObservableObject {
     private TypeFilter _type = TypeFilter.None;
     private string _textQuery = "";
 
+    // The shooting parameters in the name half - f/2.8, iso800 - taken out
+    // of the mask, with what the box says without them (2026-10-15).
+    private ShotFilter _shot = ShotFilter.None;
+
     // Subfolders by default: the box reached into them always, before the
     // switch beside it (2026-10-14).
     private SearchScope _scope = SearchScope.Subfolders;
@@ -183,10 +187,10 @@ public sealed class ContentSearchController : ObservableObject {
             Raise();
 
             var (head, text) = SearchExpression.Parse(value);
-            var (name, typeWord) = SearchExpression.SplitType(head);
+            var (name, typeWord, shot) = ReadHead(head);
             var type = TypeFilter.Parse(typeWord, TypeFilter.Names());
             _typeQuery = typeWord;
-            if (_nameQuery == name && _type == type && _textQuery == text) {
+            if (_nameQuery == name && _type == type && _textQuery == text && _shot.SameAs(shot)) {
                 // A trailing colon and no colon are the same criteria, and
                 // so are "/i", "/изо" and "/img". The box keeps what was
                 // typed so the rest can be typed after it; nothing else
@@ -197,6 +201,8 @@ public sealed class ContentSearchController : ObservableObject {
             _nameQuery = name;
             _type = type;
             _textQuery = text;
+            _shot = shot;
+            Raise(nameof(Shot));
             Raise(nameof(NameQuery));
             Raise(nameof(TypeGroup));
             Raise(nameof(TextQuery));
@@ -222,6 +228,15 @@ public sealed class ContentSearchController : ObservableObject {
 
     /// <summary>The type word as typed after the slash - "изо" while it is being typed. Empty for none.</summary>
     public string TypeQuery => _typeQuery;
+
+    /// <summary>
+    /// The shooting parameters in the box, for the live filter - which
+    /// applies them in a folder of photos and reads them as the name
+    /// elsewhere (<see cref="ShotFilter"/>). The walk into subfolders does
+    /// not read them: with any in the box it does not start (2026-10-15,
+    /// PLAN S2 - a cache of the photos' data first).
+    /// </summary>
+    public ShotFilter Shot => _shot;
 
     /// <summary>What the type word filters by, for the live filter to apply.</summary>
     public TypeFilter Type => _type;
@@ -420,8 +435,10 @@ public sealed class ContentSearchController : ObservableObject {
         // Inside an archive there is nothing to walk: the search service
         // reads the filesystem, and these paths are not on it. The live
         // name filter still works — it filters the rows already listed,
-        // which is the whole archive level anyway.
-        if (Archives.Contains(root)) {
+        // which is the whole archive level anyway. The computer is the
+        // same to the walker, and a walk of every drive is not what the
+        // box above the drives is for.
+        if (Archives.Contains(root) || string.Equals(root, ShellPaths.Computer, StringComparison.OrdinalIgnoreCase)) {
             return;
         }
 
@@ -430,7 +447,7 @@ public sealed class ContentSearchController : ObservableObject {
         // answer: the same mask and type, under the same folder - and with
         // the subfolders switched off there is nothing to continue.
         bool filterPass = !IsDeep;
-        if (filterPass && _scope == SearchScope.CurrentFolder) {
+        if (filterPass && (_scope == SearchScope.CurrentFolder || !_shot.Query.IsEmpty)) {
             return;
         }
 
@@ -531,6 +548,8 @@ public sealed class ContentSearchController : ObservableObject {
         _type = TypeFilter.None;
         _textQuery = "";
         _filterText = "";
+        _shot = ShotFilter.None;
+        Raise(nameof(Shot));
         Raise(nameof(NameQuery));
         Raise(nameof(TypeGroup));
         Raise(nameof(TextQuery));
@@ -556,8 +575,28 @@ public sealed class ContentSearchController : ObservableObject {
     /// re-formatting it there is what ate the colon.
     /// </summary>
     private void SyncFilterText() {
-        _filterText = SearchExpression.Format(SearchExpression.JoinType(_nameQuery, _typeQuery), _textQuery);
+        // The parameter words stay in the box: the window's name field shows the mask without them.
+        string name = _shot.Query.IsEmpty ? _nameQuery : string.Join(' ', new[] { _shot.Query.Text, _nameQuery }.Where(part => part.Length > 0));
+        _filterText = SearchExpression.Format(SearchExpression.JoinType(name, _typeQuery), _textQuery);
+        _shot = ReadHead(SearchExpression.Parse(_filterText).Name).Shot;
         Raise(nameof(FilterText));
+    }
+
+    /// <summary>
+    /// The name half of the box read: the mask and the type word with the
+    /// shooting parameters taken out, and the parameters with what the
+    /// half says without them.
+    /// </summary>
+    private static (string Name, string TypeWord, ShotFilter Shot) ReadHead(string head) {
+        var (rest, query) = ShotQuery.Extract(head);
+        var (name, typeWord) = SearchExpression.SplitType(rest);
+        if (query.IsEmpty) {
+            return (name, typeWord, ShotFilter.None);
+        }
+
+        var (wholeName, wholeType) = SearchExpression.SplitType(head);
+
+        return (name, typeWord, new ShotFilter(query, wholeName, TypeFilter.Parse(wholeType, TypeFilter.Names())));
     }
 
 

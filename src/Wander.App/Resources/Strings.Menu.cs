@@ -258,6 +258,15 @@ public static partial class Strings {
     /// <summary>Свернуть / развернуть «Компьютер»</summary>
     public static string ComputerToggleHint => Get(nameof(ComputerToggleHint));
 
+    /// <summary>Диски — в списке файлов</summary>
+    public static string ComputerOpenHint => Get(nameof(ComputerOpenHint));
+
+    /// <summary>Свободно</summary>
+    public static string ColumnFree => Get(nameof(ColumnFree));
+
+    /// <summary>{0} свободно из {1}</summary>
+    public static string VolumeFreeOf => Get(nameof(VolumeFreeOf));
+
     /// <summary>Убрать из закладок</summary>
     public static string BookmarksRemove => Get(nameof(BookmarksRemove));
 

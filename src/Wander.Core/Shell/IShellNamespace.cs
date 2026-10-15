@@ -199,6 +199,10 @@ public static class ShellPaths {
     /// <summary>The Recycle Bin root. Matches the well-known shell URI
     /// that <c>explorer.exe shell:RecycleBinFolder</c> accepts.</summary>
     public const string RecycleBin = "shell:RecycleBinFolder";
+
+    /// <summary>The computer's drives, as the list shows them (Explorer's
+    /// "This PC"); the same shell URI Explorer accepts.</summary>
+    public const string Computer = "shell:MyComputerFolder";
 }
 
 

@@ -1411,8 +1411,12 @@ public partial class MainWindow : Window {
     }
 
     private IShellContextMenuSession? QueryShellMenu(ContextMenuTarget target, ContextMenuSettings settings) {
+        // The computer's drives are read-only to Wander's own verbs - its
+        // writes would land in the listing, not on a disk - but the shell's
+        // are the drive's own: eject, format, BitLocker, as in Explorer.
+        bool drives = DataContext is MainViewModel { IsCurrentComputer: true } && !target.IsBackground && !target.IsPanelRow;
         if (!settings.ShellExtensionsEnabled
-            || target.IsReadOnlyLocation
+            || (target.IsReadOnlyLocation && !drives)
             || string.IsNullOrEmpty(target.FolderPath)) {
             return null;
         }

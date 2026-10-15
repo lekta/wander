@@ -6,20 +6,23 @@ using Wander.Core.Shell;
 namespace Wander.Platform.Windows.Shell;
 
 /// <summary>
-/// Read-only shell-namespace enumeration. Two namespaces live behind it:
+/// Read-only shell-namespace enumeration. Three namespaces live behind it:
 /// the Recycle Bin (<see cref="ShellPaths.RecycleBin"/>) -
 /// <see cref="ShellRecycleBinFolder"/> - and archives browsed as folders -
-/// <see cref="ShellArchiveFolder"/>. Both go through <c>IShellItem</c>.
+/// <see cref="ShellArchiveFolder"/> - both through <c>IShellItem</c>; and
+/// the computer's drives (<see cref="ShellPaths.Computer"/>) -
+/// <see cref="ComputerDrives"/>.
 ///
 /// <para>
-/// This class is the dispatcher and nothing else: which of the two a path
-/// belongs to, and the fact that neither can be written to.
+/// This class is the dispatcher and nothing else: which of them a path
+/// belongs to, and the fact that none can be written to.
 /// </para>
 /// </summary>
 public sealed class WindowsShellNamespace : IShellNamespace {
     private readonly ILogger _logger;
     private readonly ShellArchiveFolder _archives;
     private readonly ShellRecycleBinFolder _bin;
+    private readonly ComputerDrives _computer = new();
 
 
     public WindowsShellNamespace(ILogger logger) {
@@ -30,7 +33,7 @@ public sealed class WindowsShellNamespace : IShellNamespace {
 
 
     public bool IsShellPath(string path) {
-        return IsRecycleBin(path) || ParseArchive(path) is not null;
+        return IsRecycleBin(path) || IsComputer(path) || ParseArchive(path) is not null;
     }
 
     /// <summary>
@@ -47,7 +50,7 @@ public sealed class WindowsShellNamespace : IShellNamespace {
     }
 
     public bool CanNavigate(string path) {
-        if (IsRecycleBin(path)) {
+        if (IsRecycleBin(path) || IsComputer(path)) {
             return true;
         }
 
@@ -74,17 +77,23 @@ public sealed class WindowsShellNamespace : IShellNamespace {
     }
 
     /// <summary>
-    /// The Recycle Bin's own label; null for an archive, whose path reads
-    /// correctly as it stands and whose breadcrumbs are the ordinary ones.
+    /// The Recycle Bin's and the computer's own labels; null for an archive,
+    /// whose path reads correctly as it stands and whose breadcrumbs are the
+    /// ordinary ones.
     /// </summary>
     public string? GetDisplayName(string shellPath) {
-        return IsRecycleBin(shellPath) ? Text.Get("SpecialFolderRecycleBin") : null;
+        return IsRecycleBin(shellPath) ? Text.Get("SpecialFolderRecycleBin")
+            : IsComputer(shellPath) ? Text.Get("ComputerHeader")
+            : null;
     }
 
     public IReadOnlyList<FileSystemEntry> Enumerate(
         string shellPath, CancellationToken ct = default, IProgress<IReadOnlyList<FileSystemEntry>>? portions = null) {
         if (IsRecycleBin(shellPath)) {
             return _bin.Enumerate(ct, portions);
+        }
+        if (IsComputer(shellPath)) {
+            return _computer.Enumerate(ct);
         }
         if (ParseArchive(shellPath) is not null) {
             return _archives.Enumerate(shellPath, ct);
@@ -96,5 +105,9 @@ public sealed class WindowsShellNamespace : IShellNamespace {
 
     private static bool IsRecycleBin(string path) {
         return string.Equals(path, ShellPaths.RecycleBin, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsComputer(string path) {
+        return string.Equals(path, ShellPaths.Computer, StringComparison.OrdinalIgnoreCase);
     }
 }

@@ -12,6 +12,7 @@ using Wander.App.ViewModels;
 using Wander.Core.Companions;
 using Wander.Core.FileSystem;
 using Wander.Core.Logging;
+using Wander.Core.Persistence;
 using Wander.Core.Preview;
 
 namespace Wander.App.Views;
@@ -26,7 +27,8 @@ namespace Wander.App.Views;
 /// carries its stars and the helpers' switches on its bar, and a digit
 /// rates it - of two, the one under the mouse; Ctrl+Z takes it back. Delete
 /// sends that picture to the bin (2026-09-25). Z zooms to 1:1 and stays
-/// there until Z again. The pointer goes while the mouse stands still.
+/// there until Z again; Ctrl+wheel steps the zoom, Ctrl+arrows move it
+/// (2026-10-15). The pointer goes while the mouse stands still.
 /// </summary>
 public partial class FullscreenWindow : Window {
     /// <summary>How long a warning or an error stays over the picture.</summary>
@@ -203,6 +205,23 @@ public partial class FullscreenWindow : Window {
 
             return;
         }
+        // Over a zoom, Ctrl and an arrow move it a third of the screen and
+        // the arrows walk, the place kept - or the other way round, as the
+        // settings say (ZoomArrows, 2026-10-15). A held key goes on moving.
+        if (modifiers is ModifierKeys.None or ModifierKeys.Control && e.Key is Key.Left or Key.Up or Key.Right or Key.Down
+            && ZoomedPane() is { } zoomed) {
+            bool moves = (modifiers == ModifierKeys.Control) == (_vm.Settings.ZoomArrows == ZoomArrows.Walk);
+            if (moves) {
+                zoomed.NudgeZoom(
+                    e.Key switch { Key.Left => -1, Key.Right => +1, _ => 0 },
+                    e.Key switch { Key.Up => -1, Key.Down => +1, _ => 0 });
+                e.Handled = true;
+
+                return;
+            }
+            // The keys swapped: Ctrl+arrow walks as an arrow would.
+            modifiers = ModifierKeys.None;
+        }
         if (modifiers != ModifierKeys.None) {
             return;
         }
@@ -301,10 +320,15 @@ public partial class FullscreenWindow : Window {
     /// <summary>
     /// The wheel walks the pictures: down to the next, up to the one before.
     /// A notch a step; a touchpad's small steps add up to one, and turning
-    /// back starts the count again.
+    /// back starts the count again. With Ctrl it zooms - the pane under the
+    /// mouse takes it (2026-10-15).
     /// </summary>
     protected override void OnPreviewMouseWheel(MouseWheelEventArgs e) {
         base.OnPreviewMouseWheel(e);
+        if (Keyboard.Modifiers == ModifierKeys.Control) {
+            return;
+        }
+
         e.Handled = true;
         if (Math.Sign(e.Delta) != Math.Sign(_wheel)) {
             _wheel = 0;
@@ -582,6 +606,13 @@ public partial class FullscreenWindow : Window {
         } else if (_side is null) {
             Step(by);
         }
+    }
+
+    /// <summary>The pane whose picture is zoomed in, the left one first; of a pair, its move carries the other along. Null when neither is.</summary>
+    private PreviewPane? ZoomedPane() {
+        return _mainPane.IsZoomed ? _mainPane
+            : _side is not null && _sidePane is { IsZoomed: true } side ? side
+            : null;
     }
 
     /// <summary>What a digit rates or Delete takes, and on which pane: the picture on show; of two, the one the mouse is over, none when it is over neither.</summary>

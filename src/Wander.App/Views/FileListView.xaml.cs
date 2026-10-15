@@ -172,6 +172,7 @@ public partial class FileListView : UserControl {
             ApplyViewAttachment();
             ShowRatingColumn();
             ShowSearchColumns();
+            ShowVolumeColumns();
         }
     }
 
@@ -210,6 +211,8 @@ public partial class FileListView : UserControl {
             ShowSortIndicator();
         } else if (e.PropertyName == nameof(MainViewModel.IsSearchResults)) {
             ShowSearchColumns();
+        } else if (e.PropertyName == nameof(MainViewModel.IsCurrentComputer)) {
+            ShowVolumeColumns();
         } else if (e.PropertyName == nameof(MainViewModel.ViewMode)) {
             ApplyViewAttachment();
             // The four views are four controls, and the one that had the
@@ -244,6 +247,20 @@ public partial class FileListView : UserControl {
         // replaced wholesale when results come and go, so every tile reads
         // the flag fresh.
         ((TileSecondLineConverter)Resources["TileSecondLine"]).ShowFolder = vm.IsSearchResults;
+    }
+
+    /// <summary>
+    /// The computer's drives: the date - a drive has none - gives its place
+    /// to the free space with the capacity bar. From here for the reason
+    /// the search columns are.
+    /// </summary>
+    private void ShowVolumeColumns() {
+        if (DataContext is not MainViewModel vm) {
+            return;
+        }
+
+        FreeColumn.Visibility = vm.IsCurrentComputer ? Visibility.Visible : Visibility.Collapsed;
+        ModifiedColumn.Visibility = vm.IsCurrentComputer ? Visibility.Collapsed : Visibility.Visible;
     }
 
     /// <summary>

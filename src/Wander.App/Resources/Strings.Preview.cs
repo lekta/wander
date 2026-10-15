@@ -183,6 +183,9 @@ public static partial class Strings {
     /// <summary>Устройство не готово</summary>
     public static string PreviewVolumeNotReady => Get(nameof(PreviewVolumeNotReady));
 
+    /// <summary>{0} %</summary>
+    public static string PreviewZoomLevel => Get(nameof(PreviewZoomLevel));
+
     /// <summary>Поиск по имени/содержимому: имя, имя /тип, имя:текст (Ctrl+F). Окно поиска — Ctrl+Shift+F. Esc — сбросить</summary>
     public static string SearchHint => Get(nameof(SearchHint));
 
@@ -210,6 +213,9 @@ public static partial class Strings {
 
     /// <summary>Искать в подпапках</summary>
     public static string SearchScopeSubfolders => Get(nameof(SearchScopeSubfolders));
+
+    /// <summary>Отбор по данным съёмки — iso800, f/2.8, …</summary>
+    public static string SearchShotHint => Get(nameof(SearchShotHint));
 
     /// <summary>Остановить поиск</summary>
     public static string SearchStop => Get(nameof(SearchStop));

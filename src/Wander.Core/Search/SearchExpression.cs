@@ -78,7 +78,7 @@ public static class SearchExpression {
             return ("", "");
         }
 
-        int at = head.IndexOf(TypeSeparator);
+        int at = TypeSlash(head, head.Length);
 
         return at < 0
             ? (head, "")
@@ -109,7 +109,7 @@ public static class SearchExpression {
 
         int colon = expression.IndexOf(Separator);
         int head = colon < 0 ? expression.Length : colon;
-        int slash = expression.IndexOf(TypeSeparator, 0, head);
+        int slash = TypeSlash(expression, head);
 
         return slash < 0 ? null : (slash + 1, head);
     }
@@ -126,5 +126,39 @@ public static class SearchExpression {
         }
 
         return (expression[..span.Start] + type + expression[span.End..], span.Start + type.Length);
+    }
+
+
+    /// <summary>
+    /// The slash that starts the type word, before <paramref name="end"/>;
+    /// -1 for none. Not the slash of a shooting parameter (2026-10-15,
+    /// <see cref="ShotQuery"/>): one in a word that reads as a parameter,
+    /// or right after an <c>f</c> or a number that start their word - a
+    /// parameter still being typed, <c>f/</c>, <c>&gt;=1/</c>.
+    /// </summary>
+    private static int TypeSlash(string text, int end) {
+        int at = text.IndexOf(TypeSeparator, 0, end);
+        while (at >= 0) {
+            int start = at;
+            while (start > 0 && !char.IsWhiteSpace(text[start - 1])) {
+                start--;
+            }
+            int stop = at;
+            while (stop < end && !char.IsWhiteSpace(text[stop])) {
+                stop++;
+            }
+
+            string before = text[start..at].TrimStart('<', '>', '=');
+            bool parameter = ShotQuery.TryParse(text[start..stop]) is not null
+                || before.Equals("f", StringComparison.OrdinalIgnoreCase)
+                || (before.Length > 0 && before.All(char.IsAsciiDigit));
+            if (!parameter) {
+                return at;
+            }
+
+            at = at + 1 < end ? text.IndexOf(TypeSeparator, at + 1, end - at - 1) : -1;
+        }
+
+        return -1;
     }
 }

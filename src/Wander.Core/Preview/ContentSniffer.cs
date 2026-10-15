@@ -25,6 +25,18 @@ public static class ContentSniffer {
         return Binary(head) ?? Markup(head);
     }
 
+    /// <summary>
+    /// A WebP with the animation flag of its extended header (<c>VP8X</c>,
+    /// the flags byte right after the chunk size). A simple WebP - lossy
+    /// <c>VP8 </c> or lossless <c>VP8L</c> - is a single frame by its format.
+    /// </summary>
+    public static bool IsAnimatedWebp(ReadOnlySpan<byte> head) {
+        const byte animationFlag = 0x02;
+
+        return head.Length >= 21 && Ascii(head, 0, "RIFF") && Ascii(head, 8, "WEBP") && Ascii(head, 12, "VP8X")
+            && (head[20] & animationFlag) != 0;
+    }
+
 
     private static string? Binary(ReadOnlySpan<byte> h) {
         if (Starts(h, 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)) {

@@ -22,6 +22,31 @@
         <conv:TreeIndentConverter x:Key="TreeIndent"/>
 
         <!--
+            A part of a panel's title strip that takes a click: the triangle
+            folds the panel, the "Computer" title opens the drives in the
+            list (2026-10-15). Flat, lit on hover, no keyboard focus - the
+            panel's lines are where the keyboard goes.
+        -->
+        <Style x:Key="PanelHeaderPart" TargetType="Button">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="Transparent" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource RowActionHover}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!--
             One line of either panel. The highlight spans the whole line,
             the way Explorer draws it, and only the content is indented. At
             rest the line is the pane's colour, not transparent: a
@@ -284,35 +309,40 @@
                    AllowDrop="True"
                    DragOver="BookmarksPanel_DragOver"
                    Drop="BookmarksPanel_Drop">
-            <!-- Collapsible header: whole row is clickable to toggle. -->
-            <Button DockPanel.Dock="Top"
-                    Command="{Binding ToggleBookmarksCommand}"
-                    HorizontalContentAlignment="Stretch"
+            <!--
+                Title strip, as the drives': only the triangle folds the
+                panel (2026-10-15) - the title takes no click, as the
+                drives' title is kept for opening the drives in the list.
+            -->
+            <Border DockPanel.Dock="Top"
                     Padding="6,4"
                     Background="{DynamicResource HeaderBackground}"
                     BorderBrush="{DynamicResource Separator}"
-                    BorderThickness="0,0,0,1"
-                    Cursor="Hand"
-                    ToolTip="{x:Static res:Strings.BookmarksToggleHint}">
+                    BorderThickness="0,0,0,1">
                 <DockPanel>
-                    <TextBlock DockPanel.Dock="Left"
-                               Margin="0,0,6,0"
-                               FontSize="10"
-                               VerticalAlignment="Center">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Text" Value="&#x25BC;"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsBookmarksExpanded}" Value="False">
-                                        <Setter Property="Text" Value="&#x25B6;"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-                    <TextBlock Text="{x:Static res:Strings.BookmarksHeader}" FontWeight="SemiBold"/>
+                    <!-- The strip's padding is the button's, as below. -->
+                    <Button DockPanel.Dock="Left"
+                            Style="{StaticResource PanelHeaderPart}"
+                            Margin="-6,-4,0,-4"
+                            Padding="6,4"
+                            Command="{Binding ToggleBookmarksCommand}"
+                            ToolTip="{x:Static res:Strings.BookmarksToggleHint}">
+                        <TextBlock FontSize="10" VerticalAlignment="Center">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Text" Value="&#x25BC;"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsBookmarksExpanded}" Value="False">
+                                            <Setter Property="Text" Value="&#x25B6;"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Button>
+                    <TextBlock Text="{x:Static res:Strings.BookmarksHeader}" FontWeight="SemiBold" VerticalAlignment="Center"/>
                 </DockPanel>
-            </Button>
+            </Border>
 
             <!--
                 Drop zone for new bookmarks. Sits at the bottom of
@@ -469,10 +499,10 @@
 
         <!--
             The drives panel gets a title strip like the bookmarks. Only the
-            triangle folds it (decision 2026-10-02): a click on the title is
-            kept for opening the computer's drives in the list. Folded, the
-            strip sits at the bottom of the pane and the bookmarks take the
-            height (ApplyPanelsLayout).
+            triangle folds it (decision 2026-10-02); the title, to the strip's
+            end, opens the computer's drives in the list (2026-10-15,
+            ShellPaths.Computer). Folded, the strip sits at the bottom of the
+            pane and the bookmarks take the height (ApplyPanelsLayout).
         -->
         <DockPanel Grid.Row="2">
             <Border DockPanel.Dock="Top"
@@ -488,24 +518,11 @@
                         bookmarks' does.
                     -->
                     <Button DockPanel.Dock="Left"
+                            Style="{StaticResource PanelHeaderPart}"
                             Margin="-6,-4,0,-4"
                             Padding="6,4"
-                            Focusable="False"
-                            Cursor="Hand"
                             Command="{Binding ToggleDrivesCommand}"
                             ToolTip="{x:Static res:Strings.ComputerToggleHint}">
-                        <Button.Template>
-                            <ControlTemplate TargetType="Button">
-                                <Border x:Name="Bd" Background="Transparent" Padding="{TemplateBinding Padding}">
-                                    <ContentPresenter VerticalAlignment="Center"/>
-                                </Border>
-                                <ControlTemplate.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter TargetName="Bd" Property="Background" Value="{DynamicResource RowActionHover}"/>
-                                    </Trigger>
-                                </ControlTemplate.Triggers>
-                            </ControlTemplate>
-                        </Button.Template>
                         <TextBlock FontSize="10" VerticalAlignment="Center">
                             <TextBlock.Style>
                                 <Style TargetType="TextBlock">
@@ -519,7 +536,14 @@
                             </TextBlock.Style>
                         </TextBlock>
                     </Button>
-                    <TextBlock Text="{x:Static res:Strings.ComputerHeader}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    <Button Style="{StaticResource PanelHeaderPart}"
+                            Margin="0,-4,-6,-4"
+                            Padding="0,4,6,4"
+                            HorizontalContentAlignment="Left"
+                            Command="{Binding OpenComputerCommand}"
+                            ToolTip="{x:Static res:Strings.ComputerOpenHint}">
+                        <TextBlock Text="{x:Static res:Strings.ComputerHeader}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    </Button>
                 </DockPanel>
             </Border>
             <!--

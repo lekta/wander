@@ -515,6 +515,7 @@
                           MouseMove="ImageZoom_MouseMove"
                           MouseLeftButtonDown="ImageZoom_LmbDown"
                           MouseLeftButtonUp="ImageZoom_LmbUp"
+                          PreviewMouseWheel="ImageZoom_Wheel"
                           LostMouseCapture="ImageZoom_LostCapture">
                         <!--
                             Uniform both ways under a cap of the bitmap's
@@ -602,6 +603,32 @@
                                    Stretch="Fill"
                                    RenderOptions.BitmapScalingMode="NearestNeighbor"/>
                         </Canvas>
+                        <!--
+                            Where the zoom looks (2026-10-15): the picture
+                            small, the part on screen framed, and the scale
+                            under it. Shown as the zoom moves or the picture
+                            under it changes, gone half a second later
+                            (FlashZoomMap) - it answers "where am I" and then
+                            stays out of the pixels being looked at. Sized
+                            and framed from code (ShowZoomMap).
+                        -->
+                        <Border x:Name="ZoomMap"
+                                HorizontalAlignment="Left" VerticalAlignment="Top" Margin="12,12,0,0"
+                                Background="{StaticResource PictureBarPlate}" CornerRadius="3" Padding="4"
+                                IsHitTestVisible="False" Visibility="Collapsed">
+                            <StackPanel>
+                                <Grid>
+                                    <Image x:Name="ZoomMapImage" Source="{Binding DisplayImage}" Stretch="Fill"
+                                           RenderOptions.BitmapScalingMode="HighQuality"/>
+                                    <Canvas>
+                                        <Rectangle x:Name="ZoomMapShade" Stroke="#99000000" StrokeThickness="3"/>
+                                        <Rectangle x:Name="ZoomMapFrame" Stroke="White" StrokeThickness="1"/>
+                                    </Canvas>
+                                </Grid>
+                                <TextBlock x:Name="ZoomMapLevel" HorizontalAlignment="Center" Margin="0,3,0,0"
+                                           FontSize="11" Foreground="White" Opacity="0.75"/>
+                            </StackPanel>
+                        </Border>
                     </Grid>
 
                     <!-- Animated GIF (also in the middle, with the same margin). -->
@@ -662,8 +689,18 @@
                             (once here and once by the player that will
                             actually play it).
                         -->
+                        <!--
+                            The clip's stage: Ctrl+wheel magnifies it under
+                            the mouse, 2x and 4x, and the mouse moves the
+                            magnified part (2026-10-15, VideoZoom_*). Clipped
+                            here, so the picture never spills over the
+                            transport; the frame held between loops and the
+                            system player's picture zoom with it.
+                        -->
+                        <Border x:Name="VideoClip" Grid.Row="0" ClipToBounds="True" Background="Transparent"
+                                PreviewMouseWheel="VideoZoom_Wheel" MouseMove="VideoZoom_MouseMove">
+                        <Grid x:Name="VideoStage">
                         <MediaElement x:Name="VideoPreview"
-                                      Grid.Row="0"
                                       Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Video}"
                                       LoadedBehavior="Manual"
                                       UnloadedBehavior="Stop"
@@ -689,7 +726,6 @@
                             the snapshot lands where the picture was.
                         -->
                         <Image x:Name="VideoHold"
-                               Grid.Row="0"
                                Margin="8,12,8,4"
                                VerticalAlignment="Center" HorizontalAlignment="Center"
                                Stretch="Fill"
@@ -702,13 +738,14 @@
                             element above would have drawn them.
                         -->
                         <Image x:Name="SystemVideo"
-                               Grid.Row="0"
                                Margin="8,12,8,4"
                                VerticalAlignment="Center" HorizontalAlignment="Center"
                                Stretch="Uniform" StretchDirection="DownOnly"
                                RenderOptions.BitmapScalingMode="HighQuality"
                                IsHitTestVisible="False"
                                Visibility="Collapsed"/>
+                        </Grid>
+                        </Border>
 
                         <!--
                             The track's card. The cover gets the room it can
@@ -1363,6 +1400,14 @@
                                                Opacity="0.65"
                                                MaxWidth="400" Margin="0,0,10,2" VerticalAlignment="Center" FontSize="12"
                                                TextTrimming="CharacterEllipsis" controls:TrimmedToolTip.Enabled="True"/>
+                                    <!--
+                                        The zoom's scale while the picture is not
+                                        fitted (2026-10-15): paler than the name,
+                                        beside it. Set from code (ShowZoomLevel).
+                                    -->
+                                    <TextBlock x:Name="ZoomLevelText" Visibility="Collapsed"
+                                               Foreground="{Binding ContentPalette.Foreground}" Opacity="0.4"
+                                               Margin="0,0,10,2" VerticalAlignment="Center" FontSize="12"/>
                                     <!-- The sharpness score: a fact about this picture, beside its name. -->
                                     <TextBlock Text="{Binding SharpnessText}" ToolTip="{Binding SharpnessTip}"
                                                Margin="0,0,0,2" VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold"

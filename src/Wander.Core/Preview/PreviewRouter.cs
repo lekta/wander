@@ -83,7 +83,7 @@ public enum PreviewRoute {
 ///
 /// <para>
 /// Order is the whole content of this table, not an implementation
-/// detail — most of these lists overlap. A <c>.webp</c> is a picture and
+/// detail — most of these lists overlap. A <c>.gif</c> is a picture and
 /// an animation, a <c>.svg</c> is a picture and a source file (drawn, with
 /// the markup a switch away), a <c>.mtl</c> sits next to models
 /// and is text. The first matching rule wins, and moving one rule past
@@ -93,13 +93,14 @@ public enum PreviewRoute {
 public static class PreviewRouter {
     /// <summary>
     /// Animated containers go through a frame compositor rather than a
-    /// one-shot decode. WEBP files are usually static, but the codec can
-    /// surface multiple frames for animated ones, and a compositor handed a
-    /// single frame just shows that frame — so routing every <c>.webp</c>
-    /// here costs static files nothing and unlocks playback for the rest.
+    /// one-shot decode. A <c>.webp</c> is not here: it is a still far more
+    /// often, and a still in the compositor has no loupe, no neighbours
+    /// decoded ahead and no compare - it goes as a picture, and the pane
+    /// plays the animated ones it finds by their header
+    /// (<see cref="ContentSniffer.IsAnimatedWebp"/>).
     /// </summary>
     private static readonly HashSet<string> _animation = new(StringComparer.OrdinalIgnoreCase) {
-        ".gif", ".webp",
+        ".gif",
     };
 
     /// <summary>

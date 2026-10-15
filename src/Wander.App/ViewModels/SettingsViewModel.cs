@@ -519,6 +519,12 @@ public sealed class SettingsViewModel : ObservableObject {
         set => SetField(ref _zoomSpot, value);
     }
 
+    private ZoomArrows _zoomArrows;
+    public ZoomArrows ZoomArrows {
+        get => _zoomArrows;
+        set => SetField(ref _zoomArrows, value);
+    }
+
     private bool _autoGallery;
     public bool AutoGallery {
         get => _autoGallery;
@@ -804,6 +810,7 @@ public sealed class SettingsViewModel : ObservableObject {
         GalleryGreyLevel = s.GalleryGreyLevel;
         GalleryDarkLevel = s.GalleryDarkLevel;
         ZoomSpot = s.ZoomSpot;
+        ZoomArrows = s.ZoomArrows;
         AutoGallery = s.AutoGallery;
         AutoGalleryPercent = s.AutoGalleryPercent;
         DefaultViewMode = s.DefaultViewMode;
@@ -1058,6 +1065,7 @@ public sealed class SettingsViewModel : ObservableObject {
             GalleryGreyLevel = GalleryGreyLevel,
             GalleryDarkLevel = GalleryDarkLevel,
             ZoomSpot = ZoomSpot,
+            ZoomArrows = ZoomArrows,
             AutoGallery = AutoGallery,
             AutoGalleryPercent = AutoGalleryPercent,
             DefaultViewMode = DefaultViewMode,

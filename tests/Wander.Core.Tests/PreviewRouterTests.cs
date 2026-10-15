@@ -53,14 +53,15 @@ public class PreviewRouterTests {
 
     /// <summary>
     /// Both are pictures by <c>ImageFormats</c> — the gallery counts them —
-    /// and both are multi-frame containers. Animation wins, or an animated
-    /// GIF shows its first frame and stops.
+    /// and both are multi-frame containers. A GIF goes to the compositor, or
+    /// an animated one shows its first frame and stops; a WebP is a still far
+    /// more often and goes as a picture - the loupe, the compare - and the
+    /// pane plays it only when its header says it is animated.
     /// </summary>
-    [Theory]
-    [InlineData(".gif")]
-    [InlineData(".webp")]
-    public void AnimatedPictures_GoToTheCompositor_NotTheDecoder(string extension) {
-        Assert.Equal(PreviewRoute.Animation, PreviewRouter.ForExtension(extension));
+    [Fact]
+    public void Gif_GoesToTheCompositor_WebpIsAPicture() {
+        Assert.Equal(PreviewRoute.Animation, PreviewRouter.ForExtension(".gif"));
+        Assert.Equal(PreviewRoute.Image, PreviewRouter.ForExtension(".webp"));
     }
 
 

@@ -318,6 +318,13 @@ public sealed record AppSettings {
     public ZoomSpot ZoomSpot { get; init; } = ZoomSpot.SharpZone;
 
     /// <summary>
+    /// What the arrows do full screen while the picture is zoomed in. Walk
+    /// by default: the zoom kept on one place while the arrows go through a
+    /// series is what Z is for, and Ctrl+arrows move it.
+    /// </summary>
+    public ZoomArrows ZoomArrows { get; init; } = ZoomArrows.Walk;
+
+    /// <summary>
     /// Switch to the gallery by itself on entering a folder that is mostly
     /// pictures (see <see cref="Wander.Core.Listing.ImageFolderProbe"/>).
     /// On by default: the whole point is not having to ask for the right

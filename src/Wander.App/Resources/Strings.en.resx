@@ -1038,6 +1038,15 @@
   <data name="ComputerToggleHint" xml:space="preserve">
     <value>Collapse / expand Computer</value>
   </data>
+  <data name="ComputerOpenHint" xml:space="preserve">
+    <value>Drives in the file list</value>
+  </data>
+  <data name="ColumnFree" xml:space="preserve">
+    <value>Free</value>
+  </data>
+  <data name="VolumeFreeOf" xml:space="preserve">
+    <value>{0} free of {1}</value>
+  </data>
   <data name="BookmarksAddHint" xml:space="preserve">
     <value>Drag a folder here to bookmark it</value>
   </data>
@@ -1317,6 +1326,9 @@
   <data name="SearchScopeSubfolders" xml:space="preserve">
     <value>Search subfolders</value>
   </data>
+  <data name="SearchShotHint" xml:space="preserve">
+    <value>Filtered by shooting data — iso800, f/2.8, 1/250, 50mm, iso&gt;1600, 24..70mm; this folder only</value>
+  </data>
   <data name="SearchStop" xml:space="preserve">
     <value>Stop search</value>
   </data>
@@ -1346,6 +1358,18 @@
   </data>
   <data name="SettingsZoomSpotAf" xml:space="preserve">
     <value>On the camera's focus point</value>
+  </data>
+  <data name="SettingsZoomArrowsGroup" xml:space="preserve">
+    <value>Arrows over a zoom full screen</value>
+  </data>
+  <data name="SettingsZoomArrowsWalk" xml:space="preserve">
+    <value>Go through the photos, the place kept; Ctrl+arrows move it</value>
+  </data>
+  <data name="SettingsZoomArrowsMove" xml:space="preserve">
+    <value>Move the photo; Ctrl+arrows go through the photos</value>
+  </data>
+  <data name="PreviewZoomLevel" xml:space="preserve">
+    <value>{0}%</value>
   </data>
   <data name="StatusRatingApplied" xml:space="preserve">
     <value>Rating {0}, files: {1}</value>

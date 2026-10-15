@@ -34,6 +34,22 @@
         <conv:TimeStampConverter x:Key="TimeStamp"/>
         <conv:FileTypeConverter x:Key="FileType"/>
         <conv:FileSizeConverter x:Key="FileSize"/>
+        <conv:VolumeFillBrushConverter x:Key="VolumeFillBrush"/>
+
+        <!--
+            A drive's capacity bar, as Explorer's tile in "This PC" has it
+            under the "free of" line (TileSecondLineConverter); its colours
+            are the preview's volume block's (VolumeInfo.Fill). Only the
+            computer's rows carry a volume (FileSystemEntry.Volume), and
+            only their tiles get this, through the tile's trigger.
+        -->
+        <DataTemplate x:Key="VolumeBar">
+            <ProgressBar Height="6" Margin="0,3,0,0"
+                         Minimum="0" Maximum="1"
+                         Value="{Binding Volume.UsedFraction, Mode=OneWay}"
+                         Foreground="{Binding Volume, Converter={StaticResource VolumeFillBrush}}"
+                         Background="{DynamicResource TrackBackground}" BorderBrush="{DynamicResource TrackBorder}" BorderThickness="1"/>
+        </DataTemplate>
 
         <!--
             One star of the filter bar: the StarButton of Controls.xaml,
@@ -717,6 +733,18 @@
                     </StackPanel>
                 </Grid>
 
+                <!--
+                    Shooting parameters in the box apply here (2026-10-15):
+                    the camera says f/2.8 or iso800 is no name - in a folder
+                    of photos; elsewhere the words are the name and it is
+                    not up.
+                -->
+                <TextBlock DockPanel.Dock="Right" Margin="6,0,0,0" VerticalAlignment="Center"
+                           Text="&#xE722;" FontFamily="Segoe MDL2 Assets" FontSize="14"
+                           Foreground="{DynamicResource AccentText}"
+                           ToolTip="{x:Static res:Strings.SearchShotHint}"
+                           Visibility="{Binding IsShotFilterApplied, Converter={StaticResource BoolToVisibility}}"/>
+
                 <!-- Walk into subfolders: the field's own switch, at its left. -->
                 <ToggleButton DockPanel.Dock="Right" Margin="12,0,0,0"
                               Style="{StaticResource SubfoldersToggle}"
@@ -874,7 +902,31 @@
                                     Width="*" CanUserSort="False"/>
                 <DataGridTextColumn Header="{x:Static res:Strings.ColumnType}" Binding="{Binding Converter={StaticResource FileType}}" Width="60" SortMemberPath="Type"/>
                 <DataGridTextColumn Header="{x:Static res:Strings.ColumnSize}" Binding="{Binding Size, Converter={StaticResource FileSize}}" Width="80" SortMemberPath="Size"/>
-                <DataGridTextColumn Header="{x:Static res:Strings.ColumnModified}" Binding="{Binding ModifiedUtc, Converter={StaticResource TimeStamp}}" Width="140" SortMemberPath="ModifiedDate"/>
+                <!--
+                    The computer's drives (ShellPaths.Computer): the size
+                    is the drive's total, and the date - a drive has none -
+                    gives its place to the free space with the capacity bar
+                    (ShowVolumeColumns). Not sortable: the drives keep their
+                    letters' order, as in the panel.
+                -->
+                <DataGridTemplateColumn x:Name="FreeColumn"
+                                        Header="{x:Static res:Strings.ColumnFree}"
+                                        Width="150" CanUserSort="False" IsReadOnly="True"
+                                        Visibility="Collapsed">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <DockPanel VerticalAlignment="Center">
+                                <ProgressBar DockPanel.Dock="Left" Width="60" Height="6" Margin="0,0,8,0"
+                                             Minimum="0" Maximum="1"
+                                             Value="{Binding Volume.UsedFraction, Mode=OneWay}"
+                                             Foreground="{Binding Volume, Converter={StaticResource VolumeFillBrush}}"
+                                             Background="{DynamicResource TrackBackground}" BorderBrush="{DynamicResource TrackBorder}" BorderThickness="1"/>
+                                <TextBlock Text="{Binding Volume.FreeBytes, Converter={StaticResource FileSize}}" TextTrimming="CharacterEllipsis"/>
+                            </DockPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn x:Name="ModifiedColumn" Header="{x:Static res:Strings.ColumnModified}" Binding="{Binding ModifiedUtc, Converter={StaticResource TimeStamp}}" Width="140" SortMemberPath="ModifiedDate"/>
                 <!--
                     Rating. Collapsed until the folder has one (see
                     ShowRatingColumn) - an always-present column of nothing
@@ -984,8 +1036,21 @@
                                        ToolTip="{Binding MatchSnippet}"
                                        Foreground="{DynamicResource TextSubtle}" TextTrimming="CharacterEllipsis"
                                        FontSize="{DynamicResource TilesSecondaryFontSize}"/>
+                            <!--
+                                A drive's capacity bar, empty on every other
+                                tile until the trigger below gives a drive
+                                its template - the way the rating badge is
+                                ("what a template may not do").
+                            -->
+                            <ContentControl x:Name="VolumeBar" Focusable="False"/>
                         </StackPanel>
                     </DockPanel>
+                    <DataTemplate.Triggers>
+                        <DataTrigger Binding="{Binding IsVolume}" Value="True">
+                            <Setter TargetName="VolumeBar" Property="Content" Value="{Binding}"/>
+                            <Setter TargetName="VolumeBar" Property="ContentTemplate" Value="{StaticResource VolumeBar}"/>
+                        </DataTrigger>
+                    </DataTemplate.Triggers>
                 </DataTemplate>
             </ListBox.ItemTemplate>
         </controls:FileListBox>

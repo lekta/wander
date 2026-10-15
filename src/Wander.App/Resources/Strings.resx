@@ -1156,6 +1156,17 @@
   <data name="ComputerToggleHint" xml:space="preserve">
     <value>Свернуть / развернуть «Компьютер»</value>
   </data>
+  <data name="ComputerOpenHint" xml:space="preserve">
+    <value>Диски — в списке файлов</value>
+  </data>
+  <data name="ColumnFree" xml:space="preserve">
+    <value>Свободно</value>
+    <comment>Столбец таблицы в «Компьютере»: полоса заполненности и свободное место диска</comment>
+  </data>
+  <data name="VolumeFreeOf" xml:space="preserve">
+    <value>{0} свободно из {1}</value>
+    <comment>Строка диска в «Компьютере»: {0} — свободно, {1} — всего</comment>
+  </data>
   <data name="BookmarksAddHint" xml:space="preserve">
     <value>Перетащите сюда папку, чтобы добавить её в закладки</value>
   </data>
@@ -1449,6 +1460,9 @@
   <data name="SearchScopeSubfolders" xml:space="preserve">
     <value>Искать в подпапках</value>
   </data>
+  <data name="SearchShotHint" xml:space="preserve">
+    <value>Отбор по данным съёмки — iso800, f/2.8, 1/250, 50mm, iso&gt;1600, 24..70mm; только в этой папке</value>
+  </data>
   <data name="SearchStop" xml:space="preserve">
     <value>Остановить поиск</value>
   </data>
@@ -1480,6 +1494,19 @@
   </data>
   <data name="SettingsZoomSpotAf" xml:space="preserve">
     <value>На точке фокусировки камеры</value>
+  </data>
+  <data name="SettingsZoomArrowsGroup" xml:space="preserve">
+    <value>Стрелки при увеличении на полном экране</value>
+  </data>
+  <data name="SettingsZoomArrowsWalk" xml:space="preserve">
+    <value>Листают снимки, место держится; Ctrl+стрелки двигают</value>
+  </data>
+  <data name="SettingsZoomArrowsMove" xml:space="preserve">
+    <value>Двигают снимок; Ctrl+стрелки листают</value>
+  </data>
+  <data name="PreviewZoomLevel" xml:space="preserve">
+    <value>{0} %</value>
+    <comment>Масштаб увеличенного снимка: {0} — проценты</comment>
   </data>
   <data name="StatusRatingApplied" xml:space="preserve">
     <value>Оценка {0} — файлов: {1}</value>

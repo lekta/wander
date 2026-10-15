@@ -659,7 +659,8 @@
 
 
         <!--
-            Галерея: where Z zooms in while the pointer is hidden. Its
+            Галерея: where Z zooms in while the pointer is hidden, and what
+            the arrows do over a zoom full screen (2026-10-15). Its
             background is on Интерфейс with the colour scheme (2026-10-08),
             its sizes with the other views' (Размеры).
         -->
@@ -672,6 +673,12 @@
                              IsChecked="{Binding Owner.ZoomSpot, Converter={StaticResource EnumEquals}, ConverterParameter=SharpZone}"/>
                 <RadioButton GroupName="ZoomSpot" Content="{x:Static res:Strings.SettingsZoomSpotAf}"
                              IsChecked="{Binding Owner.ZoomSpot, Converter={StaticResource EnumEquals}, ConverterParameter=AfPoint}"/>
+
+                <TextBlock Text="{x:Static res:Strings.SettingsZoomArrowsGroup}" Style="{StaticResource GroupTitle}"/>
+                <RadioButton GroupName="ZoomArrows" Content="{x:Static res:Strings.SettingsZoomArrowsWalk}"
+                             IsChecked="{Binding Owner.ZoomArrows, Converter={StaticResource EnumEquals}, ConverterParameter=Walk}"/>
+                <RadioButton GroupName="ZoomArrows" Content="{x:Static res:Strings.SettingsZoomArrowsMove}"
+                             IsChecked="{Binding Owner.ZoomArrows, Converter={StaticResource EnumEquals}, ConverterParameter=Move}"/>
             </StackPanel>
         </DataTemplate>
 
