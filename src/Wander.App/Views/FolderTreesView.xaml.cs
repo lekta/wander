@@ -1001,10 +1001,16 @@ public partial class FolderTreesView : UserControl {
     }
 
     private void OnDrop(object sender, DragEventArgs e) {
+        // The panel of the row dropped on: a folder moved there goes on there.
+        Pane? pane = PaneOf(e.OriginalSource) switch {
+            NavigationSource.Bookmark => Pane.Bookmarks,
+            NavigationSource.Drives => Pane.Drives,
+            _ => null,
+        };
         _drops.Execute(
             e,
-            plan => Vm.HandleDrop(plan.Paths, plan.Target, plan.Effect),
-            plan => DropMenuRequested?.Invoke(this, new DropMenuRequest((FrameworkElement)sender, plan)));
+            plan => Vm.HandleDrop(plan.Paths, plan.Target, plan.Effect, pane),
+            plan => DropMenuRequested?.Invoke(this, new DropMenuRequest((FrameworkElement)sender, plan, pane)));
     }
 
 
@@ -1236,6 +1242,6 @@ public sealed record FolderMenuRequest(FrameworkElement Host, Pane Pane, string 
 
 /// <summary>
 /// A folder panel asking for the menu of a right-button drop, placed at
-/// <paramref name="Host"/>.
+/// <paramref name="Host"/>; <paramref name="Pane"/> is the panel of the row dropped on.
 /// </summary>
-public sealed record DropMenuRequest(FrameworkElement Host, DropPlan Plan);
+public sealed record DropMenuRequest(FrameworkElement Host, DropPlan Plan, Pane? Pane);

@@ -14,8 +14,10 @@ namespace Wander.App.Util;
 ///
 /// <para>
 /// Nothing is added while the element's lightness matches the window's
-/// theme; a switch of the theme re-decides. Popups - tooltips, menus - are
-/// separate windows and keep the window's theme.
+/// theme; a switch of the theme re-decides. Popups - tooltips, menus - find
+/// their resources through the placement target, so over such an element
+/// they take its theme too: a menu in a dark gallery is dark while the
+/// window is light. Kept (2026-10-15).
 /// </para>
 /// </summary>
 public static class ThemeScope {

@@ -290,6 +290,45 @@ public class PanelRulesTests {
         Assert.True(s.Shows(Pane.Drives, @"C:\E\B\C"));
     }
 
+    /// <summary>
+    /// The open folder dragged off the drives onto a bookmark's folder: its
+    /// place, the cursor and the keyboard go on in the bookmarks, the branch
+    /// opened down to it (2026-10-15).
+    /// </summary>
+    [Fact]
+    public void TheOpenFolderDroppedOnABookmark_GoesOnInTheBookmarks() {
+        const string moved = @"D:\Photos\2026\B";
+        var s = Scene().Start().SetBookmarks(Bookmark(Photos)).Navigate(B).Enter(WindowZone.Drives, ZoneReason.Click);
+        s.Delete(B).Add(@"D:\Photos\2026\B\C");
+
+        s.Post(new Relocated(B, moved)).Post(new FolderChanged(Year)).Post(new FolderChanged(A)).Settle();
+        s.Navigate(moved, NavigationSource.Bookmark, NavigationKind.Rewrite);
+        s.Post(new DroppedIntoPanel(Pane.Bookmarks, moved)).Settle();
+
+        Assert.Equal(moved, s.Bookmarks.Location);
+        Assert.Equal(moved, s.Bookmarks.Caret);
+        Assert.True(s.Shows(Pane.Bookmarks, moved));
+        Assert.Null(s.Drives.Location);
+        var focus = Assert.Single(s.Asked<FocusRow>());
+        Assert.Equal((WindowZone.Bookmarks, moved), (focus.Surface, focus.Path));
+    }
+
+    /// <summary>A folder dropped on a panel's row out of the list: the panels stay as they are, and so does the keyboard.</summary>
+    [Fact]
+    public void AFolderDroppedOnAPanel_FromTheList_MovesNoCursor() {
+        const string moved = @"D:\Photos\2026\D";
+        var s = Scene().Start().SetBookmarks(Bookmark(Photos)).Navigate(A).Enter(WindowZone.FileList, ZoneReason.Click);
+        var caret = s.Bookmarks.Caret;
+        s.Delete(D).Add(moved);
+
+        s.Post(new Relocated(D, moved)).Post(new FolderChanged(Year)).Post(new FolderChanged(A)).Settle();
+        s.Post(new DroppedIntoPanel(Pane.Bookmarks, moved)).Settle();
+
+        Assert.Equal(caret, s.Bookmarks.Caret);
+        Assert.False(s.Shows(Pane.Bookmarks, moved));
+        Assert.Empty(s.Asked<FocusRow>());
+    }
+
     /// <summary>P-13: the open folder deleted from its panel: the parent opens, and it is the cursor and the target.</summary>
     [Fact]
     public void P13_TheOpenFolderDeleted_TheParentIsTheCursor() {

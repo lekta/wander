@@ -658,7 +658,7 @@ A rating in a companion takes precedence over a rating in the photo.
 
 **`.xmp` or `.pp3`.** By default, Wander creates `.xmp`: it affects nothing but the rating.
 `.pp3` is a RawTherapee settings file: as soon as it appears next to a photo, RawTherapee stops applying its default processing profile to that photo, even if the file has a single line.
-RawTherapee reads ratings from `.xmp` since version 5.7 and syncs them since version 5.11.
+RawTherapee (since version 5.11) sees ratings in `.xmp` only when "Load/Save thumbnail rank and color from/to XMP sidecars" is on in its preferences, on the File Browser tab; otherwise it shows the rating from `.pp3` or from the photo itself.
 You can switch to `.pp3` on the same settings page.
 
 ### Review helpers

@@ -1588,7 +1588,7 @@ public partial class MainWindow : Window {
     }
 
     private void FolderTrees_DropMenuRequested(object? sender, DropMenuRequest e) {
-        ShowDropMenu(e.Host, e.Plan);
+        ShowDropMenu(e.Host, e.Plan, e.Pane);
     }
 
     /// <summary>
@@ -1620,12 +1620,12 @@ public partial class MainWindow : Window {
     /// </summary>
     [SuppressMessage("ReSharper", "AsyncVoidMethod",
         Justification = "Posted from the drop callback, nothing awaits it. It runs on the dispatcher, so an exception lands in App.HookCrashLogging (DispatcherUnhandledException): logged and offered as a report, not fatal.")]
-    private async void ShowDropMenu(FrameworkElement host, DropPlan plan) {
+    private async void ShowDropMenu(FrameworkElement host, DropPlan plan, Pane? pane = null) {
         var target = await Vm.DescribeDropAsync(plan.Paths, plan.Target, plan.Effect == DropEffect.Move);
         var bindings = new Dictionary<MenuCommandId, MenuBinding> {
-            [MenuCommandId.DropCopyHere] = new(new RelayCommand(() => Vm.HandleDrop(plan.Paths, plan.Target, DropEffect.Copy))),
-            [MenuCommandId.DropMoveHere] = new(new RelayCommand(() => Vm.HandleDrop(plan.Paths, plan.Target, DropEffect.Move))),
-            [MenuCommandId.DropLinkHere] = new(new RelayCommand(() => Vm.HandleDrop(plan.Paths, plan.Target, DropEffect.Link))),
+            [MenuCommandId.DropCopyHere] = new(new RelayCommand(() => Vm.HandleDrop(plan.Paths, plan.Target, DropEffect.Copy, pane))),
+            [MenuCommandId.DropMoveHere] = new(new RelayCommand(() => Vm.HandleDrop(plan.Paths, plan.Target, DropEffect.Move, pane))),
+            [MenuCommandId.DropLinkHere] = new(new RelayCommand(() => Vm.HandleDrop(plan.Paths, plan.Target, DropEffect.Link, pane))),
             // Over the primaries the menu was built for, not the payload:
             // a RAW's sidecars go along with a copy, never into a convert.
             [MenuCommandId.RunActionTo] = new(new RelayCommand(id => Vm.RunActionOnDropped(id as string, target.Paths, plan.Target))),

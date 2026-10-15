@@ -514,7 +514,8 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
   (`ZoneEntered(зона, причина)`, `MenuOpened` / `Closed`,
   `WindowActivated` / `Deactivated`, `PaneHidden`, `DialogOpened` /
   `Closed`, `OptionsChanged`), факты (`Navigated`, `BranchRead` с эпохой,
-  `ChevronsProbed`, `BookmarksChanged`, `MissingProbed`, `Relocated`, `Removed`,
+  `ChevronsProbed`, `BookmarksChanged`, `MissingProbed`, `Relocated`,
+  `DroppedIntoPanel`, `Removed`,
   `FolderChanged`, `ListingLanded`, `ViewModeChanged`, `ThrottleElapsed`).
   Неизвестная причина ничего не выделяет и не раскрывает.
 - **Правила — модули в фиксированном порядке** (`WorkspaceReducer`):
@@ -590,7 +591,11 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
   же обновляет цель в панелях; `Ctrl+Z` — по
   `IUndoableAction.MovesOnUndo` (пары у `MoveAction`, `RenameAction`,
   `CompositeAction`). Листинг, перенаправленный без навигации, —
-  `Listing follows: …`.
+  `Listing follows: …`. Перенос броском на строку панели (2026-10-15) —
+  папка дальше в панели броска: открытая — её место
+  (`NavigationService.SetCurrentSource` до перезаписи истории), при
+  клавиатуре в панели — курсор и клавиатура на первой перенесённой, ветка
+  раскрыта (`DroppedIntoPanel`, `PanelRules.OnDropped`).
 
 | WPF делает | Ответ |
 |---|---|
@@ -1526,9 +1531,11 @@ stem: сайдкар — RAW, если RAW среди них ровно один
   `InvalidOperationException`; снятие оценки не создаёт. Созданный `.xmp`
   несёт `xmp:Rating` и пустой `xmp:Label` — дальше правка на месте.
 - **`.xmp` по умолчанию**: RawTherapee применяет профиль по умолчанию
-  только без сайдкара, `.pp3` с `Rank=3` меняет проявку; `.xmp` не влияет,
-  читается с 5.7, синхронизируется с 5.11. `AppSettings.RawRatingFormat`,
-  при `.pp3` — предупреждение.
+  только без сайдкара, `.pp3` с `Rank=3` меняет проявку; `.xmp` не влияет.
+  RawTherapee 5.11+ читает и пишет оценку в `IMG.xmp` только с включённым у
+  себя `ThumbnailRankColorMode` (File Browser, «Load/Save thumbnail rank
+  and color from/to XMP sidecars»), по умолчанию — `.pp3` и снимок.
+  `AppSettings.RawRatingFormat`, при `.pp3` — предупреждение.
 - **`.meta` только читается** — Unity владеет им, перезапись отвяжет ассет.
 - **Оценка из снимка** (`EmbeddedRating`, 2026-10-07) — читается, не
   пишется: только заголовок (стенд: CR3 0,13 мс тёплый, MetadataExtractor
@@ -1840,7 +1847,9 @@ Aero2 он — хром `DataGridHeaderBorder` с зашитыми цветам�
 `GalleryPalette.IsDark`, полоса снимка поверх картинки —
 `ContentPalette.IsDark`), и полосы прокрутки, звёзды, кнопка RAW берут её
 цвета. Пока поверхность совпадает с темой — ничего не вливается; смена темы
-решает заново. Всплывающее (подсказки, меню) — в теме окна.
+решает заново. Всплывающее (подсказки, меню) ищет ресурсы через цель
+размещения и над такой областью берёт её тему: меню в тёмной галерее
+тёмное при светлом окне — оставлено (решение человека 2026-10-15).
 
 Не в палитре намеренно (шапка `Palette.xaml`): `GalleryPalette`
 (вычисляется); цвета подсветки кода — `*.xshd` и встроенные AvalonEdit
@@ -2395,7 +2404,10 @@ SYS ws=431 private=360 gen=167/155/134 alloc=+45 loh=6 handles=1060 threads=40 c
     `Decode`; остаток в памяти — `StringReader`); `ShownTextLength` —
     слова заметки не ищутся.
 - **`Ctrl+C` в панели** — выделенный текст, не файл; решает окно
-  (`PreviewPane.TryCopySelectedText`), не каждое поле.
+  (`PreviewPane.TryCopySelectedText`), не каждое поле. Веб-вид (таблицы,
+  HTML, Markdown, PDF, книги) копирует сам: WebView2 отдаёт браузеру
+  клавишу, которую никто в WPF не пометил, а привязка окна помечает
+  всегда — оконный `Ctrl+C` к нему не подходит (`Util/FileCopyGesture`).
 - **PSD / PSB** (решение человека 2026-10-09: свой декодер, как TGA):
   `PsdDecoder` (Core, тест) — не слои, а составная
   картинка в конце файла («Максимальная совместимость»): плоские каналы,

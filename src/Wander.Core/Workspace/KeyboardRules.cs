@@ -48,7 +48,8 @@ public static class KeyboardRules {
     /// WPF puts it back where it was, and nothing is asked (K-9). In a panel
     /// it stays on the line under the cursor: after a key moved the cursor,
     /// and when a key brought it in. In the list: see <see cref="Landed"/>;
-    /// another view, the caret's row in it (K-5).
+    /// another view, the caret's row in it (K-5). A folder dragged off a
+    /// panel and dropped on a row: onto it, in the panel dropped on.
     /// </summary>
     private static void Move(WorkspaceState before, WorkspaceState state, WorkspaceEvent e, ICollection<WorkspaceEffect> effects) {
         switch (e) {
@@ -67,6 +68,13 @@ public static class KeyboardRules {
 
             case ListingLanded landed:
                 Landed(before, state, landed, effects);
+
+                return;
+
+            case DroppedIntoPanel dropped when before.KeyboardPanel() is not null:
+                // Onto the folder in the panel it was dropped on - see
+                // PanelRules.OnDropped.
+                effects.Add(new FocusRow(WorkspaceState.ZoneOf(dropped.Pane), dropped.Path));
 
                 return;
 

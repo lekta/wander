@@ -5,6 +5,7 @@
         xmlns:local="clr-namespace:Wander.App"
         xmlns:views="clr-namespace:Wander.App.Views"
         xmlns:res="clr-namespace:Wander.App.Resources"
+        xmlns:util="clr-namespace:Wander.App.Util"
         Title="{Binding WindowTitle}"
         Icon="Assets\app.ico"
         Height="700" Width="1100"
@@ -45,7 +46,12 @@
         <KeyBinding Modifiers="Ctrl" Key="Z" Command="{Binding UndoCommand}"/>
         <KeyBinding Key="Enter" Command="{Binding OpenCommand}"/>
         <KeyBinding Key="Back" Command="{Binding UpCommand}"/>
-        <KeyBinding Modifiers="Ctrl" Key="C" Command="{Binding CopyCommand}"/>
+        <!-- Not over the preview's web view: the browser copies its own selection (FileCopyGesture). -->
+        <KeyBinding Command="{Binding CopyCommand}">
+            <KeyBinding.Gesture>
+                <util:FileCopyGesture/>
+            </KeyBinding.Gesture>
+        </KeyBinding>
         <KeyBinding Modifiers="Ctrl" Key="X" Command="{Binding CutCommand}"/>
         <KeyBinding Modifiers="Ctrl" Key="V" Command="{Binding PasteCommand}"/>
         <KeyBinding Modifiers="Ctrl+Shift" Key="C" Command="{Binding CopyPathCommand}"/>

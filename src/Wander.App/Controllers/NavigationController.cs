@@ -195,6 +195,11 @@ public sealed class NavigationController : ObservableObject {
         return _nav.RewritePaths(oldRoot, newRoot);
     }
 
+    /// <summary>The open folder is in another panel from now on - see <see cref="NavigationService.SetCurrentSource"/>.</summary>
+    public void SetCurrentSource(NavigationSource source) {
+        _nav.SetCurrentSource(source);
+    }
+
 
     /// <summary>Restores the recent-folders list from <c>state.json</c>.</summary>
     public void LoadRecentPaths(IEnumerable<string> paths) {

@@ -132,6 +132,13 @@ public sealed record BookmarksChanged(IReadOnlyList<PanelRow> Rows) : WorkspaceE
 /// <summary>Wander moved or renamed the folder <paramref name="From"/>; it is <paramref name="To"/> now.</summary>
 public sealed record Relocated(string From, string To) : WorkspaceEvent;
 
+/// <summary>
+/// A drop on a row of <paramref name="Pane"/> moved folders into it; the
+/// first of them is <paramref name="Path"/> now. Told after the move's own
+/// <see cref="Relocated"/> and <see cref="Navigated"/>.
+/// </summary>
+public sealed record DroppedIntoPanel(Pane Pane, string Path) : WorkspaceEvent;
+
 /// <summary>These folders are gone - deleted by Wander, or found gone.</summary>
 public sealed record Removed(IReadOnlyList<string> Paths) : WorkspaceEvent;
 

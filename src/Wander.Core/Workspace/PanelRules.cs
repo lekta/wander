@@ -37,6 +37,7 @@ public static class PanelRules {
             BookmarksChanged bookmarks => OnBookmarks(state, bookmarks, effects),
             MissingProbed probed => OnMissingProbed(state, probed, effects),
             Relocated relocated => OnRelocated(state, relocated),
+            DroppedIntoPanel dropped => OnDropped(state, dropped, effects),
             Removed removed => OnRemoved(state, removed),
             FolderChanged changed => OnFolderChanged(state, changed, effects),
             PanelsRefreshRequested => Reread(state, expandedOnly: false, effects),
@@ -260,6 +261,25 @@ public static class PanelRules {
             Bookmarks = Follow(state.Bookmarks, relocated.From, relocated.To),
             Drives = Follow(state.Drives, relocated.From, relocated.To),
         };
+    }
+
+    /// <summary>
+    /// Folders dragged off a panel's row - the keyboard is in a panel - and
+    /// moved by a drop on a row: the panel dropped on puts its cursor on the
+    /// first of them, opened down to it, the keyboard follows
+    /// (<see cref="KeyboardRules"/>; 2026-10-15). The folder went where the
+    /// user put it, and the panel it left would only open its new place on
+    /// the wrong side. Out of the list or another program the panels stay
+    /// as they are.
+    /// </summary>
+    private static WorkspaceState OnDropped(WorkspaceState state, DroppedIntoPanel dropped, ICollection<WorkspaceEffect> effects) {
+        if (state.KeyboardPanel() is null) {
+            return state;
+        }
+
+        var panel = state.Panel(dropped.Pane) with { Caret = dropped.Path };
+
+        return Show(state.WithPanel(dropped.Pane, panel), dropped.Pane, dropped.Path, effects);
     }
 
     /// <summary>

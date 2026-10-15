@@ -1889,11 +1889,12 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     // --- Drop -----------------------------------------------------------
-    public void HandleDrop(IReadOnlyList<string> sourcePaths, string? targetFolder, DropEffect effect) {
-        _ = HandleDropAsync(sourcePaths, targetFolder, effect);
+    /// <param name="pane">The folder panel whose row was dropped on; null for the list and the window.</param>
+    public void HandleDrop(IReadOnlyList<string> sourcePaths, string? targetFolder, DropEffect effect, Pane? pane = null) {
+        _ = HandleDropAsync(sourcePaths, targetFolder, effect, pane);
     }
 
-    private async Task HandleDropAsync(IReadOnlyList<string> sourcePaths, string? targetFolder, DropEffect effect) {
+    private async Task HandleDropAsync(IReadOnlyList<string> sourcePaths, string? targetFolder, DropEffect effect, Pane? pane) {
         if (sourcePaths.Count == 0) {
             return;
         }
@@ -1952,8 +1953,22 @@ public sealed class MainViewModel : ObservableObject {
             RestorePreview();
         }
 
+        // A folder moved onto a panel's row is in that panel now (2026-10-15):
+        // the open folder's place, when that is what moved - the rewrite in
+        // FollowMoved tells the panels - and the keyboard, when the drag came
+        // off a panel (PanelRules.OnDropped).
+        string? movedFolder = effect == DropEffect.Move && pane is not null
+            ? Landed(results).Select(r => r.FinalDestination).FirstOrDefault(_fs.DirectoryExists)
+            : null;
+        if (pane is { } into && movedFolder is not null && _nav.Current is { } open
+            && Landed(results).Any(r => PathRewrite.Under(open, r.Source, r.FinalDestination) is not null)) {
+            _nav.SetCurrentSource(WorkspaceState.SourceOf(into));
+        }
         if (!FollowMoved(results, targetFolder, moved: effect == DropEffect.Move)) {
             Refresh();
+        }
+        if (pane is { } droppedOn && movedFolder is not null) {
+            Workspace.Post(new DroppedIntoPanel(droppedOn, movedFolder));
         }
         ReportBatchResults(results, effect == DropEffect.Move ? Strings.VerbMoved : Strings.VerbCopied, targetFolder);
     }
@@ -2003,9 +2018,7 @@ public sealed class MainViewModel : ObservableObject {
     /// </summary>
     /// <returns>True when the listing was re-pointed; the caller then must not re-list the old path.</returns>
     private bool FollowMoved(IReadOnlyList<BatchItemResult> results, string target, bool moved) {
-        var landed = results
-            .Where(r => r.Status is BatchItemStatus.Ok or BatchItemStatus.Replaced or BatchItemStatus.Renamed or BatchItemStatus.Merged)
-            .ToList();
+        var landed = Landed(results).ToList();
         if (landed.Count == 0) {
             return false;
         }
@@ -2015,6 +2028,11 @@ public sealed class MainViewModel : ObservableObject {
             : Array.Empty<(string, string)>();
 
         return FollowRelocated(moves, target);
+    }
+
+    /// <summary>The items an operation put in place - under their own name, a new one, or over another.</summary>
+    private static IEnumerable<BatchItemResult> Landed(IReadOnlyList<BatchItemResult> results) {
+        return results.Where(r => r.Status is BatchItemStatus.Ok or BatchItemStatus.Replaced or BatchItemStatus.Renamed or BatchItemStatus.Merged);
     }
 
 

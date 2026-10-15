@@ -114,6 +114,15 @@ public sealed record WorkspaceState {
         return Keyboard.Zone == ZoneOf(other) && panel.Location is null ? panel.Caret : null;
     }
 
+    /// <summary>The panel the keyboard is in - or was last in, while it is in no zone; null for anywhere else.</summary>
+    public Pane? KeyboardPanel() {
+        return (Keyboard.Zone ?? Keyboard.LastZone) switch {
+            WindowZone.Bookmarks => Pane.Bookmarks,
+            WindowZone.Drives => Pane.Drives,
+            _ => null,
+        };
+    }
+
 
     /// <summary>The zone a panel is.</summary>
     public static WindowZone ZoneOf(Pane pane) {

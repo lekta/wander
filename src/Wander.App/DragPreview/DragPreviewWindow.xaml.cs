@@ -95,6 +95,13 @@ public partial class DragPreviewWindow : Window {
     }
 
 
+    /// <summary>
+    /// The plaque never takes activation. WS_EX_NOACTIVATE is about clicks;
+    /// showing it - at the start of a drag, and each time it comes back
+    /// after hiding - is ShowActivated's (SW_SHOWNA, not SW_SHOW). Shown
+    /// active, it could make Wander the foreground program in the middle of
+    /// a drag carried by Alt+Tab to another program (2026-10-15).
+    /// </summary>
     private void OnSourceInitialized(object? sender, EventArgs e) {
         var hwnd = new WindowInteropHelper(this).Handle;
         int ex = NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE);

@@ -115,6 +115,17 @@ public sealed class NavigationService {
         return currentChanged;
     }
 
+    /// <summary>
+    /// The open folder is in another panel from now on: a drop on a row of
+    /// that one moved it there. Raises nothing - the move's
+    /// <see cref="RewritePaths"/>, which comes next, does.
+    /// </summary>
+    public void SetCurrentSource(NavigationSource source) {
+        if (_cursor >= 0) {
+            _history[_cursor] = _history[_cursor] with { Source = source };
+        }
+    }
+
 
     /// <summary>
     /// A step taken off the panels - into a folder of the list, a drag held

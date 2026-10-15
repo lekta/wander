@@ -5,6 +5,7 @@
         WindowStyle="None"
         ShowInTaskbar="False"
         Topmost="True"
+        ShowActivated="False"
         Background="Transparent"
         Focusable="False"
         IsHitTestVisible="False"
