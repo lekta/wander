@@ -322,7 +322,7 @@ public sealed record AppSettings {
     /// Where Z zooms in on the full screen while the pointer is hidden. The
     /// sharp zone by default: it is measured on any picture, while an AF area
     /// is recorded by some cameras only and lies where the camera focused
-    /// before the frame was recomposed (ARCHITECTURE, "Хелперы отсмотра").
+    /// before the frame was recomposed (PREVIEW, "Хелперы отсмотра").
     /// </summary>
     public ZoomSpot ZoomSpot { get; init; } = ZoomSpot.SharpZone;
 

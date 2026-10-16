@@ -1631,7 +1631,7 @@ public partial class FileListView : UserControl {
 
 
     // --- Which view holds the rows ---------------------------------------
-    // Only the view on screen is bound to Entries; see ARCHITECTURE.md,
+    // Only the view on screen is bound to Entries; see WINDOW.md,
     // "Вид, которого не видно, не строит ничего".
 
     /// <summary>

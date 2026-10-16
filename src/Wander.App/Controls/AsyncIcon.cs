@@ -37,7 +37,7 @@ namespace Wander.App.Controls;
 /// wears a small clock while an operation the user started is working on
 /// its path: drawn over the picture here rather
 /// than by an element in the template, because a mark most cells never
-/// show must not cost every cell a visual (ARCHITECTURE, "what a tile
+/// show must not cost every cell a visual (WINDOW, "what a tile
 /// template may not do"). The row is a record and is never replaced for it.
 /// The clock comes up once the work has held the path for
 /// <see cref="PathClaims.BadgeDelayMs"/> (2026-09-23): an operation over

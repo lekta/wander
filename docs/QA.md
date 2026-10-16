@@ -33,7 +33,7 @@ exe напрямую (не `start`) с `--folder` на `tests\Fixtures` и чи�
 `UpdateLayout` руками, PNG на диск: какой глиф `Segoe MDL2 Assets` за
 кодом, перебивает ли триггер шаблона значение из `DynamicResource`.
 `VirtualizingWrapPanel` вне окна не строит ничего (владелец
-`IsVisible: false`, ARCHITECTURE, «Вид, которого не видно»), но достижима:
+`IsVisible: false`, WINDOW, «Вид, которого не видно»), но достижима:
 `HwndSource` за экраном (`PositionX/Y = -32000`,
 `WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW`, как `--smoke`), `RootVisual` из
 XAML, скопированного из `FileListView.xaml` с литералами вместо биндингов
@@ -1517,66 +1517,78 @@ zip-документов (`ZipDocumentExtractor`), четыре кодировк
 `stepTimeoutMs`, `steps[]`. Комментарии `//` разрешены.
 
 **Шаги сценария** (`{"do": …}`; пути с `{sandbox}` и `{out}`):
-`navigate path` (ждёт первый экран и тишину), `wait-idle [quietMs,
-idleTimeoutMs]`, `screenshot name`, `view Details|Tiles|LargeIcons|Gallery`,
-`select names[]` (через контрол активного вида — путь клика), `command
-name` (delete, permanent-delete, copy, cut, paste, new-folder, refresh,
-undo, up, back, forward, clear-search; деструктивные — только когда текущая
-папка внутри песочницы), `rename name to`, `key Key [repeat]` (без
-модификаторов — `Keyboard.Modifiers` читает настоящую клавиатуру; для
-`Ctrl`-сочетаний есть `command`), `settings name value` (свойство
-`SettingsViewModel`), `dialogs {default | kind + accept | conflict | prompt
-| folder}`, `fs {op: create | mkdir | append | delete | move | lock |
-unlock, path}` (только в песочнице; `delete` не ругается на отсутствующий
-путь — это шаг сброса; `create` и `delete` с `count` — серия файлов, `{n}`
-в имени — номер с 001; `move {to}` — переименование или перенос «другой
-программой»; `lock` держит хэндл до `unlock` или конца прогона),
-`preview on`, `preview-format {ext, name}` (файл с таким расширением, если
-он тут есть, — выделить и снять; нет — строка в отчёте, не падение),
-`helpers {on[]}` (хелперы отсмотра `ReviewHelpers` по именам свойств:
-названные включены, остальные выключены; `[]` — все выключить),
-`tree-expand path [panel: drives|bookmark] [expand: false]` (шевроны
-событиями модели, курсор панели в конце на строке),
-`tree-rename {path, to}` (папка панели через `RenameFolderAsync`; редактор
-и клавиша `F2` остаются человеку), `tree-target path [panel]` (курсор
-панели на строку и клавиатура в панели — два факта, из которых модель
-выводит цель: `Delete`, `copy`, `paste` про неё), `assert-tree {path,
-panel, exists: false | chevron | expanded | selected | name}` (строка
-панели как она нарисована, `selected` — под курсором панели; закрытые
-ветки по пути не раскрывает — сначала `tree-expand`),
-`post {event, …}` (событие модели окна полями JSON: `WindowActivated`,
-`WindowDeactivated`, `ZoneEntered {zone, reason}`, `CaretMoved`,
-`ChevronToggled {open, all}`, `RowClicked`, `RowActivated`,
-`CaretMoveRequested {key, pageSize}`, `PanelsRefreshRequested`,
-`PaneHidden {zones[]}`, `DialogOpened`, `DialogClosed`, `ViewModeChanged`;
-`panel: bookmark` — закладки; ждёт тишины), `assert-state {field, value}`
-(факт модели: `folder`, `keyboard.zone`, `keyboard.lastZone`,
-`drives.caret` / `.location`, `bookmarks.caret` / `.location`,
-`list.caret`, `list.primary`, `target` — вид цели, `target.folder`;
-`list.selection` с `names[]` в любом порядке; нет значения — «ничего»),
-`assert-focus {zone, row}` (куда исполнитель поставил клавиатуру: зона,
-`none` — никуда; `row` — имя в списке, путь в панели),
-`assert-folders {pinned: {путь: вид}}` (`folders.json` после записи),
-`sort {key}` (порядок открытой папки, как клик по заголовку: тот же ключ —
-другое направление), `stars {rank | clear}` (фильтр по звёздам: «столько и
-выше»), `place {name, rows}` (прокрутить список так, чтобы строка встала
-на `rows` строк ниже верха, и запомнить место), `assert-place {name, kept,
-tolerance, onScreen: false}` (строка на экране; `kept` — там, где её
-оставил последний `place`, под каким бы именем и среди каких бы строк она
-ни была; место читается с контейнера строки, не из арифметики вида),
-`bookmark {op: add|remove, path}`, `search {name, text, subfolders,
-binaries, searchTimeoutMs | box}` (`box` — набрано в поле над списком:
-живой фильтр и обход подпапок, который его продолжает; `subfolders` при
-`box` — кнопка у поля, по умолчанию включена),
-`soak {minutes, maxWorkingSetGrowthMb, maxHandleGrowth, seed}`,
-`assert-log {contains | regex | absent | noErrors [+ allow[]], scope:
-step|all}`, `assert-entries {count | min | max | contains | absent |
-selected, scope: model|visible}`, `assert-path {is, crumbs[]}`,
-`assert-pane {minList}` (ширина окна, панели просмотра и остатка под
-список — в отчёт; `minList` роняет шаг, если списку осталось меньше),
-`drop {paths[], target, effect: Copy|Move|Link}` (drop прямо во вьюмодель,
-минуя WPF: маршрут записи архива в извлечение, подтверждения, прогресс,
-undo; цель только в песочнице), `measure name`, `sleep ms`, `note text`.
+
+- `navigate path` — ждёт первый экран и тишину.
+- `wait-idle [quietMs, idleTimeoutMs]`, `screenshot name`, `measure name`,
+  `sleep ms`, `note text`.
+- `view Details|Tiles|LargeIcons|Gallery`.
+- `select names[]` — через контрол активного вида (путь клика).
+- `command name` — delete, permanent-delete, copy, cut, paste, new-folder,
+  refresh, undo, up, back, forward, clear-search; деструктивные — только
+  когда текущая папка внутри песочницы.
+- `rename name to`.
+- `key Key [repeat]` — без модификаторов (`Keyboard.Modifiers` читает
+  настоящую клавиатуру; для `Ctrl`-сочетаний есть `command`).
+- `settings name value` — свойство `SettingsViewModel`.
+- `dialogs {default | kind + accept | conflict | prompt | folder}`.
+- `fs {op: create | mkdir | append | delete | move | lock | unlock, path}` —
+  только в песочнице; `delete` не ругается на отсутствующий путь (шаг
+  сброса); `create` и `delete` с `count` — серия файлов, `{n}` в имени —
+  номер с 001; `move {to}` — переименование или перенос «другой
+  программой»; `lock` держит хэндл до `unlock` или конца прогона.
+- `preview on`.
+- `preview-format {ext, name}` — файл с таким расширением, если он тут
+  есть, — выделить и снять; нет — строка в отчёте, не падение.
+- `helpers {on[]}` — хелперы отсмотра `ReviewHelpers` по именам свойств:
+  названные включены, остальные выключены; `[]` — все выключить.
+- `tree-expand path [panel: drives|bookmark] [expand: false]` — шевроны
+  событиями модели, курсор панели в конце на строке.
+- `tree-rename {path, to}` — папка панели через `RenameFolderAsync`;
+  редактор и `F2` остаются человеку.
+- `tree-target path [panel]` — курсор панели на строку и клавиатура в
+  панели — два факта, из которых модель выводит цель.
+- `assert-tree {path, panel, exists: false | chevron | expanded | selected |
+  name}` — строка панели как она нарисована, `selected` — под курсором
+  панели; закрытые ветки по пути не раскрывает — сначала `tree-expand`.
+- `post {event, …}` — событие модели окна полями JSON: `WindowActivated`,
+  `WindowDeactivated`, `ZoneEntered {zone, reason}`, `CaretMoved`,
+  `ChevronToggled {open, all}`, `RowClicked`, `RowActivated`,
+  `CaretMoveRequested {key, pageSize}`, `PanelsRefreshRequested`,
+  `PaneHidden {zones[]}`, `DialogOpened`, `DialogClosed`,
+  `ViewModeChanged`; `panel: bookmark` — закладки; ждёт тишины.
+- `assert-state {field, value}` — факт модели: `folder`, `keyboard.zone`,
+  `keyboard.lastZone`, `drives.caret` / `.location`, `bookmarks.caret` /
+  `.location`, `list.caret`, `list.primary`, `target` — вид цели,
+  `target.folder`; `list.selection` с `names[]` в любом порядке; нет
+  значения — «ничего».
+- `assert-focus {zone, row}` — куда исполнитель поставил клавиатуру:
+  зона, `none` — никуда; `row` — имя в списке, путь в панели.
+- `assert-folders {pinned: {путь: вид}}` — `folders.json` после записи.
+- `sort {key}` — порядок открытой папки, как клик по заголовку: тот же
+  ключ — другое направление.
+- `stars {rank | clear}` — фильтр по звёздам: «столько и выше».
+- `place {name, rows}` — прокрутить список так, чтобы строка встала на
+  `rows` строк ниже верха, и запомнить место.
+- `assert-place {name, kept, tolerance, onScreen: false}` — строка на
+  экране; `kept` — там, где её оставил последний `place`, под каким бы
+  именем и среди каких бы строк она ни была; место читается с контейнера
+  строки, не из арифметики вида.
+- `bookmark {op: add|remove, path}`.
+- `search {name, text, subfolders, binaries, searchTimeoutMs | box}` —
+  `box` — набрано в поле над списком: живой фильтр и обход подпапок,
+  который его продолжает; `subfolders` при `box` — кнопка у поля, по
+  умолчанию включена.
+- `soak {minutes, maxWorkingSetGrowthMb, maxHandleGrowth, seed}`.
+- `assert-log {contains | regex | absent | noErrors [+ allow[]], scope:
+  step|all}`.
+- `assert-entries {count | min | max | contains | absent | selected, scope:
+  model|visible}`.
+- `assert-path {is, crumbs[]}`.
+- `assert-pane {minList}` — ширина окна, панели просмотра и остатка под
+  список — в отчёт; `minList` роняет шаг, если списку осталось меньше.
+- `drop {paths[], target, effect: Copy|Move|Link}` — drop прямо во
+  вьюмодель, минуя WPF: маршрут записи архива в извлечение,
+  подтверждения, прогресс, undo; цель только в песочнице.
 
 У любого шага — `ifOpensAsFolder` с путём архива: шаг идёт, только если
 приложение открывает этот архив папкой на этой машине; при WinRAR или

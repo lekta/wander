@@ -17,7 +17,7 @@ namespace Wander.Core.Shell;
 /// undo, conflict dialog): a scratch copy of somebody's file is not the
 /// user's data. It carries no undo step and asks about no conflicts,
 /// because the folder it goes into was made for it and nothing else. The
-/// departure is written down in ARCHITECTURE.md.
+/// departure is written down in FILEOPS.md.
 /// </para>
 ///
 /// <para>

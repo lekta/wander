@@ -993,7 +993,7 @@
                 resources that ApplyTileMetrics rewrites when the settings
                 change. No rename editor, no style triggers, no RelativeSource
                 bindings. What a template may not do is described in
-                ARCHITECTURE.md ("Шаблон плитки").
+                WINDOW.md ("Подсветка плитки и что шаблону нельзя").
             -->
             <ListBox.ItemTemplate>
                 <DataTemplate>

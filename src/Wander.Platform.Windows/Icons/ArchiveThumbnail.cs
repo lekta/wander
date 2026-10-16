@@ -22,7 +22,7 @@ namespace Wander.Platform.Windows.Icons;
 /// <para>
 /// The copy is scratch space outside every rule a file operation follows,
 /// as the preview's copy of an entry is (<see cref="TempExtraction"/>, the
-/// exception written down in ARCHITECTURE): a folder of its own under <see cref="AppPaths.Tmp"/>,
+/// exception written down in FILEOPS): a folder of its own under <see cref="AppPaths.Tmp"/>,
 /// deleted as soon as the thumbnail is drawn - a gallery of five hundred
 /// photographs in a zip would otherwise leave five hundred copies behind
 /// until the next start's sweep. The preview pane's copy, when there is one

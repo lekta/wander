@@ -10,7 +10,7 @@ namespace Wander.Core.FileSystem;
 /// filling a gap - the newest result is then the last one in the list,
 /// and a number never comes back to mean a different file. Explorer,
 /// Finder and browsers fill the first gap instead (decision of 2026-09-16,
-/// ARCHITECTURE "Файловые операции"); every place that invents a name -
+/// FILEOPS "Файловые операции"); every place that invents a name -
 /// a copy kept beside its original, an extraction, an action's output -
 /// comes here, so the two never disagree.
 /// </summary>
