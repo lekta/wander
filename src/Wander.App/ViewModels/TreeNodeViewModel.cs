@@ -36,6 +36,9 @@ public sealed class TreeNodeViewModel : ObservableObject {
 
     public string FullPath => _row.Path;
 
+    /// <summary>Whose icon the line wears: its own, or the device's for a bookmark on a device's folder.</summary>
+    public string IconPath => _row.IconPath ?? _row.Path;
+
     /// <summary>The label: the folder's name, or a bookmark's own title.</summary>
     public string Name => _row.Name;
 
@@ -126,6 +129,9 @@ public sealed class TreeNodeViewModel : ObservableObject {
     private void RaiseRowChanges(PanelRow before, PanelRow after) {
         if (before.Path != after.Path) {
             Raise(nameof(FullPath));
+        }
+        if ((before.IconPath ?? before.Path) != (after.IconPath ?? after.Path)) {
+            Raise(nameof(IconPath));
         }
         if (before.Name != after.Name) {
             Raise(nameof(Name));

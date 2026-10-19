@@ -6,21 +6,29 @@ namespace Wander.Platform.Windows.Shell;
 
 /// <summary>
 /// The computer's listing (<see cref="Core.Shell.ShellPaths.Computer"/>):
-/// one row per ready drive, in letter order, as the drives panel has them.
-/// A row is the drive's root as a folder - it opens, previews and takes the
-/// folder verbs like the panel's row - named and measured the way Explorer's
-/// "This PC" shows it: "Data (D:)", the total as its size, the volume for
-/// the bar (<see cref="FileSystemEntry.Volume"/>).
+/// one row per ready drive, in letter order, as the drives panel has them,
+/// then the phones and cameras plugged in (PLAN Y4b). A drive's row is its
+/// root as a folder - it opens, previews and takes the folder verbs like
+/// the panel's row - named and measured the way Explorer's "This PC" shows
+/// it: "Data (D:)", the total as its size, the volume for the bar
+/// (<see cref="FileSystemEntry.Volume"/>). A device's row is the device:
+/// its name, its storages added up for the bar.
 ///
 /// <para>
-/// Not through <c>IShellItem</c>: the shell's own folder would add phones,
-/// cameras and network places this listing does not open yet (PLAN Y4),
-/// and <see cref="DriveInfo"/> is what the panel and the volume block of
-/// the preview already read.
+/// Drives through <see cref="DriveInfo"/>, not <c>IShellItem</c>: it is
+/// what the panel and the volume block of the preview already read, and
+/// the shell's folder would add network places this listing does not open.
+/// The devices are the shell's (<see cref="DeviceFolders"/>).
 /// </para>
 /// </summary>
 internal sealed class ComputerDrives {
     private readonly WindowsVolumeInfo _volumes = new();
+    private readonly DeviceFolders? _devices;
+
+
+    public ComputerDrives(DeviceFolders? devices) {
+        _devices = devices;
+    }
 
 
     public IReadOnlyList<FileSystemEntry> Enumerate(CancellationToken ct) {
@@ -42,6 +50,11 @@ internal sealed class ComputerDrives {
                 IsSystem: false,
                 LinksToDirectory: false,
                 Volume: volume));
+        }
+
+        if (_devices is not null) {
+            ct.ThrowIfCancellationRequested();
+            rows.AddRange(_devices.Devices());
         }
 
         return rows;

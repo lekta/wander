@@ -29,12 +29,18 @@ public sealed class VolumeChangeHub : IVolumeChanges {
     /// <summary>A removal of the same volume said again within this - the broadcast after the drive's own notice - is the same removal.</summary>
     private const long RepeatMs = 10_000;
 
+    /// <summary>GUID_DEVINTERFACE_WPD: the interface every phone and camera Windows reads files from comes under.</summary>
+    private static readonly Guid _wpdInterface = new("6ac27878-a6fa-4155-ba85-f98f491d4f33");
+
     private readonly ILogger _log;
     private readonly Lock _lock = new();
     private readonly Dictionary<string, long> _removedAt = new(StringComparer.OrdinalIgnoreCase);
 
     private nint _window;
     private Guarded? _guard;
+
+    /// <summary>The registration for phones and cameras: one for the window's life.</summary>
+    private nint _devicesNotify;
     // What the last Guard() asked for: the folder opened before the window
     // was there is guarded once it is (Attach).
     private string? _folder;
@@ -57,10 +63,27 @@ public sealed class VolumeChangeHub : IVolumeChanges {
     public event EventHandler<string>? ReleaseRefused;
 
 
-    /// <summary>The window the drive's notices go to - the one whose hook calls <see cref="HandleMessage"/>. Nothing is guarded before.</summary>
+    /// <summary>
+    /// The window the drive's notices go to - the one whose hook calls
+    /// <see cref="HandleMessage"/>. Nothing is guarded before. Phones and
+    /// cameras are asked about from here on too (PLAN Y4): their coming and
+    /// going is no volume broadcast, it is told to a window that registered
+    /// for the portable-device interface.
+    /// </summary>
     public void Attach(nint window) {
         _window = window;
         Guard(_folder);
+        if (_devicesNotify == 0) {
+            var filter = new DEV_BROADCAST_DEVICEINTERFACE {
+                dbcc_size = Marshal.SizeOf<DEV_BROADCAST_DEVICEINTERFACE>(),
+                dbcc_devicetype = DBT_DEVTYP_DEVICEINTERFACE,
+                dbcc_classguid = _wpdInterface,
+            };
+            _devicesNotify = RegisterDeviceNotificationW(window, ref filter, DEVICE_NOTIFY_WINDOW_HANDLE);
+            if (_devicesNotify == 0) {
+                _log.Warn($"Devices: arrival notices not registered (error {Marshal.GetLastWin32Error()})");
+            }
+        }
     }
 
     /// <summary>
@@ -92,6 +115,7 @@ public sealed class VolumeChangeHub : IVolumeChanges {
         return header.dbch_devicetype switch {
             DBT_DEVTYP_VOLUME => OnVolume((int)wParam, lParam),
             DBT_DEVTYP_HANDLE => OnHandle((int)wParam, lParam),
+            DBT_DEVTYP_DEVICEINTERFACE => OnDevice((int)wParam, lParam),
             _ => false,
         };
     }
@@ -182,6 +206,31 @@ public sealed class VolumeChangeHub : IVolumeChanges {
                 Removed(root, "notice");
                 break;
         }
+
+        return true;
+    }
+
+    /// <summary>
+    /// A phone or a camera came or went: raised with the device's interface
+    /// path, which is no path a listing knows - <see cref="VolumeChange.IsDevice"/>.
+    /// The cable and the camera's switch say the same (stand Y4a).
+    /// </summary>
+    private bool OnDevice(int kind, nint lParam) {
+        if (kind != DBT_DEVICEARRIVAL && kind != DBT_DEVICEREMOVECOMPLETE) {
+            return false;
+        }
+
+        var notice = Marshal.PtrToStructure<DEV_BROADCAST_DEVICEINTERFACE>(lParam);
+        if (notice.dbcc_classguid != _wpdInterface) {
+            return false;
+        }
+
+        string name = Marshal.PtrToStringUni(lParam + Marshal.OffsetOf<DEV_BROADCAST_DEVICEINTERFACE>(nameof(DEV_BROADCAST_DEVICEINTERFACE.dbcc_name))) ?? "";
+        bool arrived = kind == DBT_DEVICEARRIVAL;
+        // The bus and the model, not the serial number after them.
+        string model = string.Join('#', name.Split('#').Skip(1).Take(1));
+        _log.Info($"Device {(arrived ? "arrived" : "removed")}: {model}");
+        Changed?.Invoke(this, new VolumeChange(name, arrived, IsDevice: true));
 
         return true;
     }
@@ -300,6 +349,7 @@ public sealed class VolumeChangeHub : IVolumeChanges {
     private const int DBT_DEVICEREMOVEPENDING = 0x8003;
     private const int DBT_DEVICEREMOVECOMPLETE = 0x8004;
     private const int DBT_DEVTYP_VOLUME = 0x00000002;
+    private const int DBT_DEVTYP_DEVICEINTERFACE = 0x00000005;
     private const int DBT_DEVTYP_HANDLE = 0x00000006;
     private const int DEVICE_NOTIFY_WINDOW_HANDLE = 0x00000000;
 
@@ -343,6 +393,18 @@ public sealed class VolumeChangeHub : IVolumeChanges {
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern nint RegisterDeviceNotificationW(nint hRecipient, ref DEV_BROADCAST_HANDLE notificationFilter, int flags);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct DEV_BROADCAST_DEVICEINTERFACE {
+        public int dbcc_size;
+        public int dbcc_devicetype;
+        public int dbcc_reserved;
+        public Guid dbcc_classguid;
+        public char dbcc_name;
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern nint RegisterDeviceNotificationW(nint hRecipient, ref DEV_BROADCAST_DEVICEINTERFACE notificationFilter, int flags);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool UnregisterDeviceNotification(nint handle);

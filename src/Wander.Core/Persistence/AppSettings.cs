@@ -530,6 +530,15 @@ public sealed record AppSettings {
     /// a complaint about a copy.
     /// </summary>
     public bool CopyWithWindows { get; init; }
+
+    /// <summary>
+    /// What is on phones and cameras read through the shell, as Explorer
+    /// reads it, instead of Windows Portable Devices directly (decision of
+    /// 2026-10-19: the fallback for a device the direct way does not get on
+    /// with). Off by default: the shell lists a phone's big folder in
+    /// minutes where WPD takes seconds (OPERATIONS, "Стенд Y4a").
+    /// </summary>
+    public bool DevicesThroughShell { get; init; }
 }
 
 

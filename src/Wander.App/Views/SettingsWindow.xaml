@@ -1481,6 +1481,11 @@
                           ToolTip="{x:Static res:Strings.SettingsCopyWithWindowsHint}"
                           IsChecked="{Binding Owner.CopyWithWindows}"/>
 
+                <TextBlock Text="{x:Static res:Strings.SettingsDevicesGroup}" Style="{StaticResource GroupTitle}"/>
+                <CheckBox Content="{x:Static res:Strings.SettingsDevicesThroughShell}"
+                          ToolTip="{x:Static res:Strings.SettingsDevicesThroughShellHint}"
+                          IsChecked="{Binding Owner.DevicesThroughShell}"/>
+
                 <TextBlock Text="{x:Static res:Strings.SettingsDebugMenuGroup}" Style="{StaticResource GroupTitle}"/>
                 <CheckBox Content="{x:Static res:Strings.SettingsShowDebugMenu}"
                           IsChecked="{Binding Owner.ShowDebugMenu}"/>

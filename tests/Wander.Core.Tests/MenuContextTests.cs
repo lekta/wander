@@ -29,6 +29,23 @@ public class MenuContextTests {
         Assert.False(panel.ToMenuTarget(Open).IsSearchResult);
     }
 
+    /// <summary>A place on a phone reaches the menu as such: read only, and the device's own short menu (PLAN Y4).</summary>
+    [Fact]
+    public void APlaceOnAPhone_GivesTheMenuItsDeviceShape() {
+        const string camera = @"device:Pixel 6\Storage\DCIM\Camera";
+        var row = new FileSystemEntry("PXL_1.jpg", camera + @"\PXL_1.jpg", EntryKind.File, 1, DateTime.UnixEpoch, false, false, false, false);
+        var place = new PlaceFacts(IsReadOnly: true, IsRecycleBin: false, IsArchive: false, IsDevice: true);
+        var context = MenuContext.For(Target.OfRows(new[] { row }, row), place, clipboardHasContent: true, selectionIsArchive: false);
+
+        var target = context.ToMenuTarget(camera);
+
+        Assert.True(target.IsDevice);
+        Assert.True(target.IsReadOnlyLocation);
+        Assert.False(target.IsArchive);
+        // Nothing is pasted onto a phone.
+        Assert.False(target.CanPaste);
+    }
+
     /// <summary>A panel row is one folder row of its own; the shell's verbs run in that folder.</summary>
     [Fact]
     public void PanelRow_IsAFolderRowOfItsOwn() {

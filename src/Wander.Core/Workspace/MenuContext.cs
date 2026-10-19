@@ -12,7 +12,8 @@ namespace Wander.Core.Workspace;
 /// <param name="IsReadOnly">Nothing may be written there: the Recycle Bin, an archive.</param>
 /// <param name="IsRecycleBin">The Recycle Bin, where rows can be put back.</param>
 /// <param name="IsArchive">Inside an archive.</param>
-public sealed record PlaceFacts(bool IsReadOnly, bool IsRecycleBin, bool IsArchive) {
+/// <param name="IsDevice">On a phone or a camera (PLAN Y4): read only, copied off by an import.</param>
+public sealed record PlaceFacts(bool IsReadOnly, bool IsRecycleBin, bool IsArchive, bool IsDevice = false) {
     /// <summary>An ordinary folder on disk.</summary>
     public static readonly PlaceFacts Ordinary = new(false, false, false);
 }
@@ -80,6 +81,7 @@ public sealed record MenuContext {
             IsReadOnlyLocation = Place.IsReadOnly,
             IsRecycleBin = Place.IsRecycleBin,
             IsArchive = Place.IsArchive,
+            IsDevice = Place.IsDevice,
             SelectionIsArchive = SelectionIsArchive,
             IsSearchResult = InSearchResults && Subject.Kind == TargetKind.ListRows,
             CanPaste = CanPaste,

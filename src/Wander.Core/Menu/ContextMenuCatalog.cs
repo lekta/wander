@@ -56,6 +56,7 @@ public static class ContextMenuCatalog {
 
         [MenuCommandId.Extract] = "MenuCmdExtract",
         [MenuCommandId.ExtractHere] = "MenuCmdExtractHere",
+        [MenuCommandId.CopyTo] = "MenuCmdCopyTo",
 
         [MenuCommandId.RestoreFromRecycleBin] = "MenuCmdRestore",
 
@@ -135,6 +136,7 @@ public static class ContextMenuCatalog {
         new MenuNode(MenuCommandId.Delete, 1),
         new MenuNode(MenuCommandId.ExtractHere, 0),
         new MenuNode(MenuCommandId.Extract, 0),
+        new MenuNode(MenuCommandId.CopyTo, 0),
         new MenuNode(MenuCommandId.NewSubmenu, 0),
         new MenuNode(MenuCommandId.NewFolder, 1),
         // Whole submenus only: they repeat the "Вид" menu, and the one

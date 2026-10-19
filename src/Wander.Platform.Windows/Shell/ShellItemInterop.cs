@@ -57,6 +57,9 @@ internal static class ShellItemInterop {
     /// <summary>The item is a folder - a subfolder inside an archive included.</summary>
     internal const uint SFGAO_FOLDER = 0x20000000;
 
+    /// <summary>The item is a stream - a file, even where the shell also calls it a folder (a zip on a phone).</summary>
+    internal const uint SFGAO_STREAM = 0x00400000;
+
     /// <summary>
     /// Everything off: no progress dialog, no confirmations, no error
     /// popups, no "create folder" prompt. Wander asks its own questions

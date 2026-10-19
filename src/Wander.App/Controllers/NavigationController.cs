@@ -286,9 +286,19 @@ public sealed class NavigationController : ObservableObject {
             return;
         }
 
-        Breadcrumbs = ResolveDisplayName(current) is { } shellName
-            ? new[] { new PathCrumb(shellName, current) }
-            : PathCrumbs.Split(current);
+        if (ResolveDisplayName(current) is { } shellName) {
+            Breadcrumbs = new[] { new PathCrumb(shellName, current) };
+
+            return;
+        }
+
+        // A place on a phone: the first crumb is the device, called by its
+        // name rather than by the path's own text (PLAN Y4b).
+        var crumbs = PathCrumbs.Split(current).ToArray();
+        if (crumbs.Length > 0 && DevicePath.Is(current) && ResolveDisplayName(crumbs[0].Path) is { } device) {
+            crumbs[0] = crumbs[0] with { Label = device };
+        }
+        Breadcrumbs = crumbs;
     }
 
     private void NavigateToAddress() {

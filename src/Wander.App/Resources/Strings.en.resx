@@ -3003,4 +3003,61 @@
   <data name="HotkeyGestureFullscreenPeek" xml:space="preserve">
     <value>Alt (hold)</value>
   </data>
+  <data name="StatusDeviceUnreadable" xml:space="preserve">
+    <value>Can't read “{0}”: {1}</value>
+  </data>
+  <data name="StatusDeviceLocked" xml:space="preserve">
+    <value>{0} shows no storage: unlock the phone and choose “File transfer”</value>
+  </data>
+  <data name="StatusDeviceTempCopy" xml:space="preserve">
+    <value>Opened a temporary copy of “{0}”; changes won't go back to the device</value>
+  </data>
+  <data name="StatusDeviceCopied" xml:space="preserve">
+    <value>Copied from the device: {0}</value>
+  </data>
+  <data name="StatusDeviceReadOnly" xml:space="preserve">
+    <value>Phones and cameras are read only: Wander copies from them, not onto them</value>
+  </data>
+  <data name="PreviewDeviceTooBig" xml:space="preserve">
+    <value>This file on the device is over 32 MB; “Open” copies it to a temporary copy</value>
+  </data>
+  <data name="CopyToPickFolderTitle" xml:space="preserve">
+    <value>Copy to</value>
+  </data>
+  <data name="OperationPaused" xml:space="preserve">
+    <value>{0}: waiting for the device</value>
+  </data>
+  <data name="ErrorDeviceFileGone" xml:space="preserve">
+    <value>the file is no longer on the device — the phone re-read its storage: refresh the folder (F5)</value>
+  </data>
+  <data name="JournalDeviceCopyOpened" xml:space="preserve">
+    <value>Opened a temporary copy from a device: {0}</value>
+  </data>
+  <data name="SettingsDevicesGroup" xml:space="preserve">
+    <value>Phones and cameras</value>
+  </data>
+  <data name="SettingsDevicesThroughShell" xml:space="preserve">
+    <value>Read through the Windows shell</value>
+  </data>
+  <data name="SettingsDevicesThroughShellHint" xml:space="preserve">
+    <value>When a phone's or a camera's folders read with errors: the way Explorer reads them — slower, and without the device's own thumbnails</value>
+  </data>
+  <data name="MenuCmdCopyTo" xml:space="preserve">
+    <value>Copy to…</value>
+  </data>
+  <data name="ProgressWaitingForDevice" xml:space="preserve">
+    <value>waiting for the device — plug it back in and the copy goes on</value>
+  </data>
+  <data name="ProgressWaitingForUnlock" xml:space="preserve">
+    <value>waiting for the phone — unlock it</value>
+  </data>
+  <data name="BookmarksRename" xml:space="preserve">
+    <value>Rename bookmark…</value>
+  </data>
+  <data name="BookmarksRenameTitle" xml:space="preserve">
+    <value>Bookmark name</value>
+  </data>
+  <data name="BookmarksRenameLabel" xml:space="preserve">
+    <value>What the bookmark is called in the panel (empty — the folder's name):</value>
+  </data>
 </root>

@@ -119,6 +119,13 @@ public sealed record ContextMenuTarget {
     public bool IsArchive { get; init; }
 
     /// <summary>
+    /// The listing is on a phone or a camera (PLAN Y4). Read only, and with
+    /// the archive's kind of short menu: open a file, copy it, or copy it
+    /// somewhere picked.
+    /// </summary>
+    public bool IsDevice { get; init; }
+
+    /// <summary>
     /// Every selected item is an archive Wander can open — in an ordinary
     /// folder, which is what earns the row its "Извлечь…". Computed by the
     /// caller: which extensions count is a property of the machine, and

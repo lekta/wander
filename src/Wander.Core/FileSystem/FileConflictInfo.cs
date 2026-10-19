@@ -29,12 +29,19 @@ namespace Wander.Core.FileSystem;
 /// The answers are still keyed by <see cref="Source"/>'s path: the copy is
 /// where the bytes are, not what the user is deciding about.
 /// </param>
+/// <param name="SameBySizeAndDate">
+/// The source is a file on a phone or a camera, whose bytes are not read
+/// twice (OPERATIONS, "Устройства"): one of the same size and date as the
+/// file it would land on is that file - what "skip the identical ones"
+/// goes by when photos are copied off a card again.
+/// </param>
 public sealed record FileConflictInfo(
     FileSystemEntry Source,
     FileSystemEntry ExistingTarget,
     bool IsMove = false,
     bool SourceReachable = true,
-    string? ReadablePath = null) {
+    string? ReadablePath = null,
+    bool SameBySizeAndDate = false) {
 
     /// <summary>Where to open the source's bytes.</summary>
     public string SourceReadPath => ReadablePath ?? Source.FullPath;

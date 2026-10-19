@@ -67,6 +67,12 @@ public sealed class OutgoingDrag {
     /// (<see cref="CountCaption"/>); without it they are only counted.
     /// </param>
     public void Run(DependencyObject src, string[] paths, string[] payload, bool rightButton = false, string? counted = null) {
+        // A phone or a camera itself is nothing to carry - only what is on it
+        // (PLAN Y4b).
+        if (payload.Any(p => DevicePath.Is(p) && !DevicePath.IsInside(p))) {
+            return;
+        }
+
         _pathCount = paths.Length;
         _firstName = Path.GetFileName(paths[0].TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
         _counted = counted ?? CountCaption.Items(paths.Length);
@@ -102,7 +108,7 @@ public sealed class OutgoingDrag {
             // reads the file list and is not handed an icon.png.meta it can
             // only refuse. Our own drop side finds the sidecars on disk
             // again (GroupPathsWithCompanions) and needs nothing more.
-            bool fromArchive = payload.Any(Archives.Inside);
+            bool fromArchive = payload.Any(Containers.Inside);
             var shell = fromArchive ? ShellPayload(payload)
                 : payload.Length > paths.Length ? ShellPayload(payload, fileList: paths)
                 : null;

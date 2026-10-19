@@ -67,6 +67,9 @@
     { "do": "fs", "op": "lock", "path": "{sandbox}\\attrs\\locked.txt" },
     { "do": "select", "names": [ "locked.txt" ] },
     { "do": "command", "name": "permanent-delete" },
+    // The delete waits for the file to be let go before it gives up
+    // (BusyGate) - quietly, so wait-idle is over before it is.
+    { "do": "assert-operations" },
     { "do": "assert-entries", "contains": [ "locked.txt" ] },
     { "do": "assert-log", "scope": "all", "contains": "Delete failed" },
     { "do": "note", "text": "a file held open by another handle survives the delete - the message naming the process is a look-with-your-eyes item" },

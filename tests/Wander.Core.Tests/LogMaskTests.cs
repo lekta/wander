@@ -36,6 +36,20 @@ public class LogMaskTests {
     }
 
     [Fact]
+    public void APlaceOnAPhone_IsMasked_TheDeviceNameToo() {
+        string token = LogMask.Path(@"device:Anna's Pixel\Internal shared storage\DCIM\Camera\PXL_1.jpg");
+
+        Assert.Matches(@"^<device:~[0-9a-f]{6}\\~[0-9a-f]{6}\\~[0-9a-f]{6}\\~[0-9a-f]{6}\\~[0-9a-f]{6}\.jpg>$", token);
+        Assert.DoesNotContain("Anna", token);
+
+        string line = LogMask.Scrub(@"Import: device:Anna's Pixel\Storage\DCIM\PXL_1.jpg -> D:\Photos\PXL_1.jpg [Ok]");
+        Assert.DoesNotContain("Anna", line);
+        Assert.DoesNotContain("PXL_1", line);
+        // Prose is left alone.
+        Assert.Equal("Not on the device: nothing", LogMask.Scrub("Not on the device: nothing"));
+    }
+
+    [Fact]
     public void AShare_HasItsServerAndShareMasked() {
         string token = LogMask.Path(@"\\office-nas\anna\report.pdf");
 

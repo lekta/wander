@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Windows;
@@ -12,6 +13,7 @@ using Wander.App;
 using Wander.App.Controllers;
 using Wander.App.Controls;
 using Wander.App.Dialogs;
+using Wander.App.Resources;
 using Wander.App.Util;
 using Wander.App.ViewModels;
 using Wander.Core;
@@ -24,6 +26,7 @@ using Wander.Core.Panels;
 using Wander.Core.Persistence;
 using Wander.Core.Shell;
 using Wander.Core.Workspace;
+using Wander.Platform.Windows.FileSystem;
 
 namespace Wander.Harness.Host;
 
@@ -54,6 +57,9 @@ public sealed class ScenarioRunner {
     private readonly RunReport _report;
     private readonly MetricsSampler _metrics = new();
     private readonly Dictionary<string, FileStream> _locked = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The phone of the scenarios, when the app runs with one (HarnessApp).</summary>
+    private readonly HarnessDevice? _device;
     private int _shots;
     private string? _awaitedFolder;
     private volatile bool _firstScreenSeen;
@@ -72,6 +78,10 @@ public sealed class ScenarioRunner {
         _dialogs = dialogs;
         _report = report;
         _log.Logged += OnLogged;
+        _device = ServiceLocator.TryGet<IDeviceContent>() as HarnessDevice;
+        if (_device is not null) {
+            _device.WentAway += OnDeviceWentAway;
+        }
     }
 
 
@@ -117,6 +127,9 @@ public sealed class ScenarioRunner {
         }
         _locked.Clear();
         _log.Logged -= OnLogged;
+        if (_device is not null) {
+            _device.WentAway -= OnDeviceWentAway;
+        }
 
         return failed ? 2 : 0;
     }
@@ -249,6 +262,9 @@ public sealed class ScenarioRunner {
             case "assert-path":
                 AssertPath(step);
                 break;
+            case "assert-status":
+                AssertStatus(step);
+                break;
             case "assert-pane":
                 AssertPane(step);
                 break;
@@ -302,6 +318,9 @@ public sealed class ScenarioRunner {
                 Drop(step);
                 await WaitIdleAsync(step);
                 break;
+            case "device":
+                await DeviceAsync(step);
+                break;
             case "measure":
                 _metrics.Take(step.Str("name") ?? "measure");
                 break;
@@ -328,6 +347,10 @@ public sealed class ScenarioRunner {
                 break;
             case "copy":
                 Invoke(name, _vm.CopyCommand);
+                break;
+            // "Скопировать в..." on a phone's rows: the folder comes from the dialog policy.
+            case "copy-to":
+                Invoke(name, _vm.CopyToCommand);
                 break;
             case "cut":
                 Invoke(name, _vm.CutCommand);
@@ -640,6 +663,17 @@ public sealed class ScenarioRunner {
             case "mkdir":
                 Directory.CreateDirectory(path);
                 break;
+            // A file copied by another program - a photo of the sandbox put
+            // on the scenarios' phone, its date with it.
+            case "copy": {
+                    string to = _context.Expand(step.Require("to"));
+                    if (!IsInSandbox(to)) {
+                        throw new InvalidOperationException($"fs step outside the sandbox: {to}");
+                    }
+                    Directory.CreateDirectory(Path.GetDirectoryName(to)!);
+                    File.Copy(path, to, overwrite: true);
+                    break;
+                }
             case "append":
                 File.AppendAllText(path, step.Str("text") ?? "x");
                 break;
@@ -826,7 +860,10 @@ public sealed class ScenarioRunner {
 
         string? parent = PanelPaths.Parent(path);
         var above = parent is null ? null : lines.FirstOrDefault(l => PanelPaths.Same(l.FullPath, parent));
-        if (above is { IsExpanded: true }) {
+        // A bookmark is a row at the top whatever its folder's parent: with
+        // nothing above it shown, it is simply not among the bookmarks - a
+        // device's while the device is unplugged.
+        if (above is { IsExpanded: true } || (bookmarks && above is null)) {
             return null;
         }
 
@@ -876,6 +913,10 @@ public sealed class ScenarioRunner {
                 break;
             case "remove":
                 _vm.Bookmarks.Remove(path);
+                break;
+            // "Переименовать закладку..." - the name from the dialog policy (dialogs prompt).
+            case "rename":
+                _vm.RenameBookmark(path);
                 break;
             default:
                 throw new InvalidDataException($"unknown bookmark op '{step.Str("op")}'");
@@ -1099,6 +1140,9 @@ public sealed class ScenarioRunner {
         if (step.Str("outcome") is { } outcome && !string.Equals(outcome, newest.Outcome.ToString(), StringComparison.OrdinalIgnoreCase)) {
             throw new InvalidOperationException($"the newest operation ({newest.Verb}) ended {newest.Outcome}, expected {outcome}");
         }
+        if (step.TryGetProperty("verified", out var verified) && verified.GetInt32() != newest.Verified) {
+            throw new InvalidOperationException($"the newest operation ({newest.Verb}) read back {newest.Verified} item(s), expected {verified.GetInt32()}");
+        }
     }
 
     private void AssertEntries(JsonElement step) {
@@ -1166,6 +1210,23 @@ public sealed class ScenarioRunner {
         foreach (string path in step.Strings("absent").Select(_context.Expand)) {
             if (File.Exists(path)) {
                 throw new InvalidOperationException($"file still there: {path}");
+            }
+        }
+        // A file's length, and its time of last change against another's -
+        // a copy off a device carries the device's (OPERATIONS, Y4c).
+        foreach (var (raw, expected) in Numbers(step, "sizes")) {
+            long length = new FileInfo(_context.Expand(raw)).Length;
+            if (length != expected) {
+                throw new InvalidOperationException($"{Path.GetFileName(raw)} is {length} bytes, expected {expected}");
+            }
+        }
+        if (step.TryGetProperty("datedAs", out var dated) && dated.ValueKind == JsonValueKind.Object) {
+            foreach (var pair in dated.EnumerateObject()) {
+                var copy = File.GetLastWriteTimeUtc(_context.Expand(pair.Name));
+                var original = File.GetLastWriteTimeUtc(_context.Expand(pair.Value.GetString() ?? ""));
+                if ((copy - original).Duration() > TimeSpan.FromSeconds(2)) {
+                    throw new InvalidOperationException($"{Path.GetFileName(pair.Name)} is dated {copy:u}, its original {original:u}");
+                }
             }
         }
         foreach (var (raw, expected) in Numbers(step, "ranks")) {
@@ -1471,6 +1532,110 @@ public sealed class ScenarioRunner {
     }
 
 
+    /// <summary>
+    /// <c>{"do": "assert-status", "key": "StatusDeviceReadOnly"}</c>: the
+    /// status line says what that string says, in whatever language the run
+    /// has - a string with holes is matched by its text before the first one.
+    /// What the status line says is not logged, so a refusal that only says
+    /// so is checked here.
+    /// </summary>
+    private void AssertStatus(JsonElement step) {
+        string expected = Strings.Get(step.Require("key"));
+        int hole = expected.IndexOf('{');
+        string actual = _vm.Status ?? "";
+        bool matches = hole < 0
+            ? string.Equals(actual, expected, StringComparison.Ordinal)
+            : actual.Contains(expected[..hole], StringComparison.Ordinal);
+        if (!matches) {
+            throw new InvalidOperationException($"the status line says '{actual}', expected {step.Require("key")}: '{expected}'");
+        }
+    }
+
+
+    // --- The scenarios' phone ------------------------------------------
+
+    /// <summary>
+    /// The phone of the scenarios (<see cref="HarnessDevice"/>): <c>plug</c>
+    /// with its storage's folder (<c>root</c>, in the sandbox) and
+    /// <c>locked</c>; <c>unplug</c>; <c>break</c> - the next read of the file
+    /// at <c>path</c> stops after <c>after</c> bytes, the cable pulled;
+    /// <c>wait-paused</c> - the running operation stands waiting for the
+    /// device (<c>reason</c>, the device's by default). Plugging and
+    /// unplugging tell the window the way Windows does: a
+    /// <c>WM_DEVICECHANGE</c> for the portable-device interface, through the
+    /// window's own hub.
+    /// </summary>
+    private async Task DeviceAsync(JsonElement step) {
+        var device = _device ?? throw new InvalidOperationException("no harness device is registered");
+        switch (step.Require("op").ToLowerInvariant()) {
+            case "plug": {
+                    string root = _context.Expand(step.Require("root"));
+                    if (!IsInSandbox(root)) {
+                        throw new InvalidOperationException($"the device's storage outside the sandbox: {root}");
+                    }
+                    Directory.CreateDirectory(root);
+                    device.Plug(root, step.Bool("locked") == true);
+                    NotifyDevice(arrived: true);
+                    await WaitIdleAsync(step);
+                    break;
+                }
+            case "unplug":
+                device.Unplug();
+                NotifyDevice(arrived: false);
+                await WaitIdleAsync(step);
+                break;
+            case "break":
+                device.BreakAfter(_context.Expand(step.Require("path")), step.Int("after", 1 << 20));
+                break;
+            case "wait-paused":
+                await WaitPausedAsync(step.Str("reason") ?? DeviceImportService.PausedUnplugged, step.Int("waitMs", 15_000));
+                break;
+            default:
+                throw new InvalidDataException($"unknown device op '{step.Str("op")}'");
+        }
+    }
+
+    /// <summary>Some running operation stands waiting for <paramref name="reason"/>, within <paramref name="waitMs"/>.</summary>
+    private static async Task WaitPausedAsync(string reason, int waitMs) {
+        var tracker = ServiceLocator.Get<OperationTracker>();
+        var clock = Stopwatch.StartNew();
+        while (!tracker.Snapshot().Any(o => o.PausedReason == reason)) {
+            if (clock.ElapsedMilliseconds > waitMs) {
+                string running = string.Join(", ", tracker.Snapshot().Select(o => $"{o.Verb} paused={o.PausedReason ?? "-"}"));
+                throw new TimeoutException($"no operation waiting for '{reason}' after {waitMs} ms (running: {(running.Length > 0 ? running : "none")})");
+            }
+            await Task.Delay(50);
+        }
+    }
+
+    /// <summary>The device came or went, said to the window's hub as Windows says it: DBT_DEVICEARRIVAL / DBT_DEVICEREMOVECOMPLETE with a DEV_BROADCAST_DEVICEINTERFACE.</summary>
+    private static void NotifyDevice(bool arrived) {
+        if (ServiceLocator.TryGet<VolumeChangeHub>() is not { } hub) {
+            return;
+        }
+
+        char[] name = (HarnessDevice.InterfacePath + '\0').ToCharArray();
+        int size = 28 + name.Length * sizeof(char);
+        IntPtr notice = Marshal.AllocHGlobal(size);
+        try {
+            // dbcc_size, dbcc_devicetype (DBT_DEVTYP_DEVICEINTERFACE), dbcc_reserved, dbcc_classguid, dbcc_name.
+            Marshal.WriteInt32(notice, 0, size);
+            Marshal.WriteInt32(notice, 4, 5);
+            Marshal.WriteInt32(notice, 8, 0);
+            Marshal.Copy(new Guid("6ac27878-a6fa-4155-ba85-f98f491d4f33").ToByteArray(), 0, notice + 12, 16);
+            Marshal.Copy(name, 0, notice + 28, name.Length);
+            hub.HandleMessage(0x0219, arrived ? 0x8000 : 0x8004, notice);
+        } finally {
+            Marshal.FreeHGlobal(notice);
+        }
+    }
+
+    /// <summary>The cable pulled under a read: the window hears of it on its own thread, as from Windows.</summary>
+    private void OnDeviceWentAway() {
+        _window.Dispatcher.BeginInvoke(() => NotifyDevice(arrived: false));
+    }
+
+
     // --- Sandbox guard, screenshots -----------------------------------
 
     private void EnsureInSandbox(string command) {
@@ -1483,6 +1648,10 @@ public sealed class ScenarioRunner {
     private bool IsInSandbox(string path) {
         if (string.IsNullOrEmpty(path)) {
             return false;
+        }
+        // A place on the scenarios' phone is the sandbox folder it stands for.
+        if (DevicePath.Is(path)) {
+            return _device?.DiskPathOf(path) is { } disk && IsInSandbox(disk);
         }
 
         string root = Path.GetFullPath(_context.SandboxRoot).TrimEnd('\\', '/');

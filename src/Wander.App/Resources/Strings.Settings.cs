@@ -554,4 +554,13 @@ public static partial class Strings {
 
     /// <summary>Меню «Отладка»</summary>
     public static string SettingsDebugMenuGroup => Get(nameof(SettingsDebugMenuGroup));
+
+    /// <summary>Телефоны и камеры</summary>
+    public static string SettingsDevicesGroup => Get(nameof(SettingsDevicesGroup));
+
+    /// <summary>Читать через оболочку Windows</summary>
+    public static string SettingsDevicesThroughShell => Get(nameof(SettingsDevicesThroughShell));
+
+    /// <summary>Если папки телефона или камеры читаются с ошибками: как в Проводнике — медленнее и без миниатюр устройства</summary>
+    public static string SettingsDevicesThroughShellHint => Get(nameof(SettingsDevicesThroughShellHint));
 }

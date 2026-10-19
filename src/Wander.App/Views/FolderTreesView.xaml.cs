@@ -720,6 +720,12 @@ public partial class FolderTreesView : UserControl {
             menu.Items.Add(new Separator());
         }
 
+        // The bookmark's own name - its label, not the folder's (2026-10-19).
+        var rename = new MenuItem { Header = Strings.BookmarksRename };
+        rename.Click += (_, _) => Vm.RenameBookmark(line.FullPath);
+        menu.Items.Add(rename);
+        menu.Items.Add(new Separator());
+
         var up = new MenuItem { Header = Strings.BookmarksMoveUp, InputGestureText = "Ctrl+↑" };
         up.Click += (_, _) => MoveBookmark(line.FullPath, -1);
         menu.Items.Add(up);
@@ -819,7 +825,7 @@ public partial class FolderTreesView : UserControl {
     /// </summary>
     public bool StartRename(Pane pane, string path) {
         var line = RenameLine(pane, path);
-        if (line is null || Archives.Contains(line.FullPath)) {
+        if (line is null || Containers.Contains(line.FullPath)) {
             return false;
         }
 
@@ -1048,7 +1054,7 @@ public partial class FolderTreesView : UserControl {
         }
 
         bool acceptable = CanAcceptBookmarkDrop(e);
-        e.Effects = acceptable ? DragDropEffects.Link : DragDropEffects.None;
+        e.Effects = acceptable ? BookmarkEffect(e) : DragDropEffects.None;
         // Clear any leftover highlight from a previous in-folder hover so
         // empty-area drops don't look like they're targeting something -
         // and the hover itself, which would otherwise go on opening it.
@@ -1092,9 +1098,7 @@ public partial class FolderTreesView : UserControl {
             e.Handled = true;
             return;
         }
-        // Link cursor (arrow with curved-arrow overlay) reads as "make a
-        // reference here" - closest stock cursor to "bookmark".
-        e.Effects = DragDropEffects.Link;
+        e.Effects = BookmarkEffect(e);
         e.Handled = true;
     }
 
@@ -1117,18 +1121,15 @@ public partial class FolderTreesView : UserControl {
     /// afterwards.
     /// </summary>
     private void AddDroppedBookmarks(DragEventArgs e) {
-        if (!e.Data.GetDataPresent(DataFormats.FileDrop)) {
-            return;
-        }
-
-        if (e.Data.GetData(DataFormats.FileDrop) is not string[] paths) {
+        // The drag's own paths where its data cannot say them - a folder of
+        // a phone travels as the shell's object (PayloadPaths).
+        if (DropTargetController.PayloadPaths(e.Data) is not { } paths) {
             return;
         }
 
         int added = 0;
         foreach (string p in paths) {
-            if (Directory.Exists(p)) {
-                Vm.Bookmarks.Add(p);
+            if (Vm.Bookmarks.Add(p)) {
                 added++;
             }
         }
@@ -1149,7 +1150,19 @@ public partial class FolderTreesView : UserControl {
             return false;
         }
 
-        return paths.Any(p => Directory.Exists(p) && !Vm.Bookmarks.Contains(p));
+        return paths.Any(Vm.Bookmarks.CanTake);
+    }
+
+    /// <summary>
+    /// What a drop that bookmarks answers with. Link: its cursor (arrow with
+    /// curved-arrow overlay) reads as "make a reference here" - closest stock
+    /// cursor to "bookmark". A drag off a phone or a camera offers only Copy
+    /// (<see cref="OutgoingDrag"/>), and an effect the drag does not offer
+    /// gets no drop at all - the strip lit up and nothing was added
+    /// (2026-10-19) - so that one is answered with Copy.
+    /// </summary>
+    private static DragDropEffects BookmarkEffect(DragEventArgs e) {
+        return e.AllowedEffects.HasFlag(DragDropEffects.Link) ? DragDropEffects.Link : DragDropEffects.Copy;
     }
 
     /// <summary>
@@ -1211,7 +1224,7 @@ public partial class FolderTreesView : UserControl {
     /// container is read-only by decision.
     /// </summary>
     private static bool HasMenu(TreeNodeViewModel line) {
-        return CanDrag(line) && !Archives.Contains(line.FullPath);
+        return CanDrag(line) && !Containers.Contains(line.FullPath);
     }
 
     /// <summary>
@@ -1222,7 +1235,7 @@ public partial class FolderTreesView : UserControl {
     /// </summary>
     private static bool CanDrag(TreeNodeViewModel line) {
         return !string.IsNullOrEmpty(line.FullPath)
-            && line.Kind is not PanelRowKind.Shell
+            && line.Kind is not (PanelRowKind.Shell or PanelRowKind.Device)
             && !line.FullPath.StartsWith("shell:", StringComparison.OrdinalIgnoreCase);
     }
 

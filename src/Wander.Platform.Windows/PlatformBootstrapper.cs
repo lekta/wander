@@ -80,10 +80,16 @@ public static class PlatformBootstrapper {
         ServiceLocator.Register<IAppStateStore>(new JsonAppStateStore(owner));
         ServiceLocator.Register<IFolderSettingsStore>(new JsonFolderSettingsStore(owner));
         ServiceLocator.Register<IModelViews>(new JsonModelViewStore(owner));
+        ServiceLocator.Register<IBookmarkTitleStore>(new JsonBookmarkTitleStore(owner));
         ServiceLocator.Register<IFileLockInspector>(new RestartManagerLockInspector());
         ServiceLocator.Register<IFileBusyProbe>(new WindowsFileBusyProbe());
         ServiceLocator.Register<IShortcutService>(new ShellShortcutService());
-        ServiceLocator.Register<IShellNamespace>(new WindowsShellNamespace(logger));
+        // Phones and cameras (PLAN Y4): a branch of the shell namespace, and
+        // the reader an import copies with. A device coming or going closes
+        // what was opened on it - the hub hears both.
+        var devices = new DeviceFolders(logger, volumes);
+        ServiceLocator.Register<IDeviceContent>(devices);
+        ServiceLocator.Register<IShellNamespace>(new WindowsShellNamespace(logger, devices));
         ServiceLocator.Register<IShellContextMenu>(new ShellContextMenu(logger));
         ServiceLocator.Register<IShellHandlerRegistry>(new ShellHandlerRegistry(logger));
         ServiceLocator.Register<IImageMetadataReader>(new MetadataExtractorImageReader());

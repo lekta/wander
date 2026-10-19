@@ -1,4 +1,6 @@
+using System.Globalization;
 using Wander.Core.FileSystem;
+using Wander.Core.Icons;
 using Wander.Core.Logging;
 using Wander.Core.Persistence;
 
@@ -63,6 +65,48 @@ public static class TempExtraction {
     /// </summary>
     public static string CopyPathFor(string source) {
         return Path.Combine(TempFiles.FolderFor(source), NameOf(source));
+    }
+
+    /// <summary>
+    /// The head of a RAW on a phone or a camera - as much of it as its
+    /// embedded pictures need - for the preview pane, which wants nothing
+    /// else of it: a CR3 has its movie box, the 1620-px preview and the
+    /// full-size JPEG in the first few megabytes and the sensor's data after
+    /// them (2026-10-19). Never the file: it goes into a folder of its own,
+    /// named by the size, that "Open" and the conflict window never look in.
+    /// A head made already is the one returned. Null when the pictures are
+    /// not within <paramref name="limit"/> bytes.
+    /// </summary>
+    public static string? CopyHead(
+        IDeviceContent devices, IFileSystem fs, ILogger log, FileSystemEntry entry, long limit, CancellationToken ct) {
+
+        if (entry.Size is { } listed && fs.FileExists(HeadPathFor(entry.FullPath, listed))) {
+            return HeadPathFor(entry.FullPath, listed);
+        }
+
+        using var device = devices.OpenRead(entry.FullPath);
+        long length = entry.Size ?? device.Length;
+        string destination = HeadPathFor(entry.FullPath, length);
+        if (fs.FileExists(destination)) {
+            return destination;
+        }
+
+        var head = new HeadStream(device, length, limit, ct);
+        if (RawPreviewExtractor.Extract(head, fullSize: true) is null) {
+            return null;
+        }
+
+        fs.CreateDirectory(Path.GetDirectoryName(destination)!);
+        using var kept = head.OpenHead();
+        fs.WriteFromStream(kept, kept.Length, destination, null, null, ct);
+        log.Info($"Extract (head for the preview): {entry.FullPath}, {kept.Length} of {length} bytes -> {destination}");
+
+        return destination;
+    }
+
+    /// <summary>Where <see cref="CopyHead"/> puts the head of <paramref name="source"/> of <paramref name="length"/> bytes.</summary>
+    public static string HeadPathFor(string source, long length) {
+        return Path.Combine(TempFiles.FolderFor(source), "head-" + length.ToString(CultureInfo.InvariantCulture), NameOf(source));
     }
 
 

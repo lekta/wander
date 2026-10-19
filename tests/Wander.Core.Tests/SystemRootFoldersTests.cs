@@ -16,6 +16,15 @@ public class SystemRootFoldersTests {
         Assert.True(SystemRootFolders.IsSystemRoot(path));
     }
 
+    [Theory]
+    [InlineData(@"device:Pixel 6\Storage\System Volume Information")]
+    [InlineData(@"device:Pixel 6\$RECYCLE.BIN")]
+    public void IsSystemRoot_LeavesAPhoneAlone(string path) {
+        // A phone's folders are not a volume's root plumbing - and its path
+        // is no path the filesystem could be asked about.
+        Assert.False(SystemRootFolders.IsSystemRoot(path));
+    }
+
 
     [Fact]
     public void IsSystemRoot_CoversTheSystemFilesInARootToo() {

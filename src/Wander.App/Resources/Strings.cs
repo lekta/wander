@@ -439,4 +439,27 @@ public static partial class Strings {
     public static string Get(string key) {
         return _resources.GetString(key, CultureInfo.CurrentUICulture) ?? key;
     }
+    /// <summary>Устройство «{0}» не прочитано: {1}</summary>
+    public static string StatusDeviceUnreadable => Get(nameof(StatusDeviceUnreadable));
+
+    /// <summary>{0}: хранилищ не видно — разблокируйте телефон и выберите «Передача файлов»</summary>
+    public static string StatusDeviceLocked => Get(nameof(StatusDeviceLocked));
+
+    /// <summary>Открыта временная копия «{0}»; изменения на устройство не попадут</summary>
+    public static string StatusDeviceTempCopy => Get(nameof(StatusDeviceTempCopy));
+
+    /// <summary>Скопировано с устройства: {0}</summary>
+    public static string StatusDeviceCopied => Get(nameof(StatusDeviceCopied));
+
+    /// <summary>Телефон и камера — только для чтения: Wander копирует с них, но не на них</summary>
+    public static string StatusDeviceReadOnly => Get(nameof(StatusDeviceReadOnly));
+
+    /// <summary>Файл на устройстве больше 32 МБ — «Открыть» скопирует его во временную копию</summary>
+    public static string PreviewDeviceTooBig => Get(nameof(PreviewDeviceTooBig));
+
+    /// <summary>Куда скопировать</summary>
+    public static string CopyToPickFolderTitle => Get(nameof(CopyToPickFolderTitle));
+
+    /// <summary>{0}: ждёт устройство</summary>
+    public static string OperationPaused => Get(nameof(OperationPaused));
 }

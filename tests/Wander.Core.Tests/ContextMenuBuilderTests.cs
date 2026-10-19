@@ -247,6 +247,31 @@ public class ContextMenuBuilderTests {
             menu.Where(e => !e.IsSeparator).Select(e => e.Id).ToArray());
     }
 
+    // --- On a phone or a camera -------------------------------------------
+
+    [Fact]
+    public void OnADevice_OffersOpenCopyAndCopyTo_AndNothingThatWrites() {
+        var target = SelectionOf(File("PXL_1.jpg")) with { IsReadOnlyLocation = true, IsDevice = true };
+
+        var menu = ContextMenuBuilder.Build(target, ContextMenuSettings.Default);
+
+        Assert.Equal(
+            new[] { MenuCommandId.Open, MenuCommandId.Copy, MenuCommandId.CopyTo },
+            menu.Where(e => !e.IsSeparator).Select(e => e.Id).ToArray());
+        Assert.True(menu[0].IsDefault);
+    }
+
+    [Fact]
+    public void OnADevice_TheBackgroundOffersHowItIsShown_AndNoPath() {
+        var target = Background() with { IsReadOnlyLocation = true, IsDevice = true };
+
+        var menu = ContextMenuBuilder.Build(target, ContextMenuSettings.Default);
+
+        Assert.Equal(
+            new[] { MenuCommandId.ViewSubmenu, MenuCommandId.SortSubmenu },
+            menu.Where(e => !e.IsSeparator).Select(e => e.Id).ToArray());
+    }
+
     [Fact]
     public void ArchiveInAnOrdinaryFolder_GetsExtractOnTopOfTheUsualMenu() {
         var target = SelectionOf(File("pack.zip")) with { SelectionIsArchive = true };

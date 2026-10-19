@@ -404,4 +404,16 @@ public static partial class Strings {
 
     /// <summary>Видео</summary>
     public static string SpecialFolderVideos => Get(nameof(SpecialFolderVideos));
+
+    /// <summary>Открыта временная копия с устройства: {0}</summary>
+    public static string JournalDeviceCopyOpened => Get(nameof(JournalDeviceCopyOpened));
+
+    /// <summary>Переименовать закладку…</summary>
+    public static string BookmarksRename => Get(nameof(BookmarksRename));
+
+    /// <summary>Название закладки</summary>
+    public static string BookmarksRenameTitle => Get(nameof(BookmarksRenameTitle));
+
+    /// <summary>Как закладка называется в панели (пустое — имя папки):</summary>
+    public static string BookmarksRenameLabel => Get(nameof(BookmarksRenameLabel));
 }

@@ -109,8 +109,18 @@
     // --- A bookmark on a folder follows its rename ---------------------
     { "do": "bookmark", "op": "add", "path": "{sandbox}\\photos\\renamed-in-list" },
     { "do": "assert-tree", "path": "{sandbox}\\photos\\renamed-in-list", "panel": "bookmark" },
+    // The bookmark's own name (2026-10-19): the row's label, the folder keeps its own.
+    { "do": "dialogs", "prompt": "Отчёты" },
+    { "do": "bookmark", "op": "rename", "path": "{sandbox}\\photos\\renamed-in-list" },
+    { "do": "assert-tree", "path": "{sandbox}\\photos\\renamed-in-list", "panel": "bookmark", "name": "Отчёты" },
     { "do": "tree-rename", "path": "{sandbox}\\photos\\renamed-in-list", "to": "bookmarked" },
     { "do": "assert-tree", "path": "{sandbox}\\photos\\bookmarked", "panel": "bookmark" },
+    // The name went with the bookmark; a blank one gives the folder's back.
+    { "do": "assert-tree", "path": "{sandbox}\\photos\\bookmarked", "panel": "bookmark", "name": "Отчёты" },
+    { "do": "dialogs", "prompt": "" },
+    { "do": "bookmark", "op": "rename", "path": "{sandbox}\\photos\\bookmarked" },
+    { "do": "assert-tree", "path": "{sandbox}\\photos\\bookmarked", "panel": "bookmark", "name": "bookmarked" },
+    { "do": "dialogs", "prompt": null },
     { "do": "assert-log", "scope": "all", "contains": "Bookmark followed" },
     { "do": "note", "text": "the bookmark followed the folder to its new name" },
     { "do": "bookmark", "op": "remove", "path": "{sandbox}\\photos\\bookmarked" },

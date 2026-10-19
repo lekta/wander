@@ -76,6 +76,34 @@ public static class NavigationFallback {
     }
 
 
+    /// <summary>
+    /// The same for a phone or a camera that went away with a folder on it
+    /// open (PLAN Y4b): the most recent place still there - on a drive
+    /// still there, or on a device still plugged in - else the first of the
+    /// machine's own drives. Null when the folder on screen is not on a
+    /// device, or its device is still there.
+    /// </summary>
+    /// <param name="deviceThere">Whether the device a path is on is plugged in.</param>
+    public static string? AfterDeviceRemoved(
+        string? current, Func<string, bool> deviceThere, IReadOnlyList<string> roots, IReadOnlyList<string> recent,
+        Func<string, VolumeKind> kindOf) {
+        if (current is null || !DevicePath.Is(current) || deviceThere(current)) {
+            return null;
+        }
+
+        foreach (string place in recent) {
+            bool there = DevicePath.Is(place)
+                ? deviceThere(place)
+                : DriveOf(place) is { } root && roots.Any(r => SameRoot(r, root));
+            if (there) {
+                return place;
+            }
+        }
+
+        return roots.FirstOrDefault(r => kindOf(r) == VolumeKind.Fixed) ?? roots.FirstOrDefault();
+    }
+
+
     /// <summary>"E:\" for a path on a drive letter, null for a share, a shell place or anything else.</summary>
     private static string? DriveOf(string path) {
         return path.Length >= 2 && char.IsAsciiLetter(path[0]) && path[1] == ':'

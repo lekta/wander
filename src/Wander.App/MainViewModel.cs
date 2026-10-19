@@ -124,6 +124,7 @@ public sealed class MainViewModel : ObservableObject {
     private readonly IShellLauncher _shell;
     private readonly IAppStateStore _stateStore;
     private readonly IFolderSettingsStore _folderStore;
+    private readonly IBookmarkTitleStore _bookmarkTitleStore;
     private readonly IDialogs _dialogs;
     private readonly IFileLockInspector? _lockInspector;
     private readonly NavigationController _nav;
@@ -183,6 +184,10 @@ public sealed class MainViewModel : ObservableObject {
     // change; the flag rides the same debounced save as state.json.
     private FolderSettingsBook _folders = new();
     private bool _foldersDirty;
+
+    // The bookmarks' own names (bookmark-titles.json) changed since the last
+    // write: the same debounced save as state.json.
+    private bool _bookmarkTitlesDirty;
 
     // Creation time of the open folder, read on the pool with its listing:
     // the second half of its key in the book (FolderRecord.CreatedUtc).
@@ -304,6 +309,7 @@ public sealed class MainViewModel : ObservableObject {
         _shell = ServiceLocator.Get<IShellLauncher>();
         _stateStore = ServiceLocator.Get<IAppStateStore>();
         _folderStore = ServiceLocator.Get<IFolderSettingsStore>();
+        _bookmarkTitleStore = ServiceLocator.Get<IBookmarkTitleStore>();
         _dialogs = ServiceLocator.Get<IDialogs>();
         _lockInspector = ServiceLocator.TryGet<IFileLockInspector>();
         _ops = ServiceLocator.Get<FileOperationService>();
@@ -462,6 +468,7 @@ public sealed class MainViewModel : ObservableObject {
         Bookmarks.Changed += (_, _) => {
             PostBookmarks();
             SaveState();
+            _bookmarkTitlesDirty = true;
             RaiseMissingFolder();
         };
 
@@ -498,6 +505,7 @@ public sealed class MainViewModel : ObservableObject {
         CopyCommand = new RelayCommand(Copy, CanCopy);
         ExtractCommand = new RelayCommand(p => _ = ExtractSelectionAsync(p), CanExtractSelection);
         ExtractHereCommand = new RelayCommand(p => _ = ExtractHereAsync(p), CanExtractSelection);
+        CopyToCommand = new RelayCommand(p => _ = CopyToAsync(p), CanCopyTo);
         CutCommand = new RelayCommand(Cut, CanCut);
         PasteCommand = new RelayCommand(p => _ = PasteAsync(p), CanPaste);
         NewFolderCommand = new RelayCommand(_ => NewFolder(), _ => _nav.Current is not null && !IsCurrentShellNamespace);
@@ -743,6 +751,8 @@ public sealed class MainViewModel : ObservableObject {
         // were built before either was known.
         PushPalette();
         _ = LocateToolsAsync();
+        // Bookmarks on a phone show once it is known to be plugged in.
+        _ = RefreshPluggedDevicesAsync();
     }
 
 
@@ -1186,11 +1196,12 @@ public sealed class MainViewModel : ObservableObject {
     /// </summary>
     private PlaceFacts PlaceOf(Target target) {
         if (target.Kind != TargetKind.PanelRow) {
-            return new PlaceFacts(IsCurrentShellNamespace, IsCurrentRecycleBin, CurrentArchive is not null);
+            return new PlaceFacts(IsCurrentShellNamespace, IsCurrentRecycleBin, CurrentArchive is not null, CurrentDevice is not null);
         }
 
         if (_panelPlace is not { } known || !known.Row.SameAs(target)) {
-            known = (target, new PlaceFacts(IsReadOnly: IsShellPath(target.Folder), IsRecycleBin: false, IsArchive: false));
+            known = (target, new PlaceFacts(
+                IsReadOnly: IsShellPath(target.Folder), IsRecycleBin: false, IsArchive: false, IsDevice: DevicePath.Is(target.Folder)));
             _panelPlace = known;
         }
 
@@ -1686,6 +1697,9 @@ public sealed class MainViewModel : ObservableObject {
     /// <summary>The same, into the folder the archive sits in, asking nothing.</summary>
     public RelayCommand ExtractHereCommand { get; }
 
+    /// <summary>Copies rows off a phone or a camera into a folder the user picks.</summary>
+    public RelayCommand CopyToCommand { get; }
+
     public RelayCommand SetViewModeCommand { get; }
 
     /// <summary>Takes the pin off the open folder; the view is chosen for it again.</summary>
@@ -1841,6 +1855,12 @@ public sealed class MainViewModel : ObservableObject {
     public ArchivePath? CurrentArchive { get; private set; }
 
     /// <summary>
+    /// The place on a phone or a camera being browsed (PLAN Y4b), or null
+    /// anywhere else. Same cache as <see cref="CurrentArchive"/>.
+    /// </summary>
+    public DevicePath? CurrentDevice { get; private set; }
+
+    /// <summary>
     /// True in the Recycle Bin specifically. Read-only like any shell
     /// namespace, but with one thing you can still do to its contents —
     /// put them back.
@@ -1868,6 +1888,7 @@ public sealed class MainViewModel : ObservableObject {
     /// </summary>
     private void NoteCurrentLocation() {
         CurrentArchive = Archives.Of(_nav.Current);
+        CurrentDevice = DevicePath.Parse(_nav.Current);
         IsCurrentShellNamespace = IsShellPath(_nav.Current);
         IsCurrentComputer = string.Equals(_nav.Current, ShellPaths.Computer, StringComparison.OrdinalIgnoreCase);
     }
@@ -1909,6 +1930,13 @@ public sealed class MainViewModel : ObservableObject {
         }
 
         if (entry.Kind == EntryKind.File) {
+            // A file on a phone or a camera has no path another program could
+            // open, the way an archive entry has none: a copy is made to open.
+            if (DevicePath.IsInside(entry.FullPath)) {
+                _ = OpenArchiveEntryAsync(entry.FullPath);
+                return;
+            }
+
             // A .lnk that points at a folder should behave like that folder:
             // navigate inside Wander rather than handing the .lnk to the OS
             // (which would open it in Explorer). File-targeted shortcuts fall
@@ -1986,7 +2014,7 @@ public sealed class MainViewModel : ObservableObject {
         // an archive by - the same one a paste of them takes, with its own
         // progress, conflict dialog and undo. The modifiers do not apply:
         // there is nothing to move and nothing to point a shortcut at.
-        if (sourcePaths.Any(Archives.Inside)) {
+        if (sourcePaths.Any(Containers.Inside)) {
             await ExtractAsync(sourcePaths, targetFolder);
             return;
         }
@@ -2050,7 +2078,7 @@ public sealed class MainViewModel : ObservableObject {
     /// an entry that is not a file yet.
     /// </summary>
     public async Task<DropMenuTarget> DescribeDropAsync(IReadOnlyList<string> paths, string target, bool moveByDefault) {
-        bool fromArchive = paths.Any(Archives.Inside);
+        bool fromArchive = paths.Any(Containers.Inside);
         var primaries = fromArchive
             ? paths
             : await Task.Run(() => GroupPathsWithCompanions(paths).Select(g => g.Primary).ToArray());
@@ -2228,8 +2256,83 @@ public sealed class MainViewModel : ObservableObject {
         if (IsCurrentComputer) {
             Refresh();
         }
+        if (change.IsDevice) {
+            _ = AfterDeviceChangeAsync(change.Arrived);
+
+            return;
+        }
         if (!change.Arrived) {
             _ = LeaveRemovedVolumeAsync();
+        }
+    }
+
+    /// <summary>
+    /// A phone or a camera came or went (PLAN Y4). The shell learns of a
+    /// device a moment after its notice, and a phone that was just unlocked
+    /// goes and comes back within a second (stand Y4a) - so the drives and
+    /// the open folder are looked at again after that moment: the device's
+    /// row is there by then, and a folder on a phone that only blinked is
+    /// not left.
+    /// </summary>
+    private async Task AfterDeviceChangeAsync(bool arrived) {
+        await Task.Delay(TimeSpan.FromSeconds(2.5));
+        Workspace.Post(new VolumesChanged());
+        if (IsCurrentComputer) {
+            Refresh();
+        }
+        await RefreshPluggedDevicesAsync();
+
+        string? current = _nav.Current;
+        if (CurrentDevice is null || current is null || ServiceLocator.TryGet<IDeviceContent>() is not { } devices) {
+            return;
+        }
+
+        // Asking the device is a shell listing - off this thread.
+        bool there = await Task.Run(() => devices.StateOf(current) != DeviceState.Gone);
+        if (!string.Equals(current, _nav.Current, StringComparison.OrdinalIgnoreCase)) {
+            return;
+        }
+        if (there) {
+            // A phone unlocked shows its storage now.
+            if (arrived) {
+                Refresh();
+            }
+
+            return;
+        }
+
+        var roots = await Task.Run(() => _fs.GetRoots().Select(r => r.FullPath).ToList());
+        var plugged = await Task.Run(() => _nav.RecentPaths
+            .Where(DevicePath.Is)
+            .Select(p => DevicePath.Parse(p)!.Root)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(root => devices.StateOf(root) != DeviceState.Gone)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase));
+        string? fallback = NavigationFallback.AfterDeviceRemoved(
+            current, p => DevicePath.Parse(p) is { } d && plugged.Contains(d.Root), roots, _nav.RecentPaths, VolumeKindOf);
+        if (fallback is not null && string.Equals(current, _nav.Current, StringComparison.OrdinalIgnoreCase)) {
+            _log.Info($"Device of {current} removed: going to {fallback}");
+            NavigateTo(fallback, NavigationSource.External);
+        }
+    }
+
+    /// <summary>
+    /// Which phones and cameras are plugged in, for the bookmarks on them: a
+    /// bookmark on one has a row only while it is (decision of 2026-10-19).
+    /// Asked off this thread - the shell lists the devices - and not at all
+    /// while no bookmark is on a device.
+    /// </summary>
+    private async Task RefreshPluggedDevicesAsync() {
+        if (!Bookmarks.HasDeviceBookmarks || ServiceLocator.TryGet<IDeviceContent>() is not { } devices) {
+            return;
+        }
+
+        var names = await Task.Run(() => devices.Devices()
+            .Select(d => DevicePath.Parse(d.FullPath)?.Device)
+            .OfType<string>()
+            .ToList());
+        if (Bookmarks.SetPlugged(names)) {
+            PostBookmarks();
         }
     }
 
@@ -2447,7 +2550,7 @@ public sealed class MainViewModel : ObservableObject {
         _savedWindowWidth = session.LayoutWindowWidth;
         _savedWindowHeight = session.LayoutWindowHeight;
 
-        Bookmarks.Load(state.Favorites);
+        Bookmarks.Load(state.Favorites, _bookmarkTitleStore.Load());
         _isBookmarksExpanded = session.IsBookmarksExpanded;
         Raise(nameof(IsBookmarksExpanded));
         // Both folded is not a state the panels have (a file from a build
@@ -2577,9 +2680,14 @@ public sealed class MainViewModel : ObservableObject {
     /// Whether a remembered place is still there, cheaply enough for the UI
     /// thread: a folder on disk is asked about, the bin is always there, and
     /// an archive is taken as there while its file is - what is inside it
-    /// the tree finds out as it expands.
+    /// the tree finds out as it expands. A phone or a camera is not: asking
+    /// is a shell listing, and like a flash drive it is no place to reopen
+    /// in on its own.
     /// </summary>
     private bool IsStillThere(string path) {
+        if (DevicePath.Is(path)) {
+            return false;
+        }
         if (!IsShellPath(path)) {
             return _fs.DirectoryExists(path);
         }
@@ -2657,6 +2765,10 @@ public sealed class MainViewModel : ObservableObject {
         if (_foldersDirty) {
             _foldersDirty = false;
             _folderStore.Save(_folders.Records);
+        }
+        if (_bookmarkTitlesDirty) {
+            _bookmarkTitlesDirty = false;
+            _bookmarkTitleStore.Save(Bookmarks.Titles.All);
         }
 
         // Only when the pane pair changed: the state is written after every
@@ -3204,6 +3316,11 @@ public sealed class MainViewModel : ObservableObject {
         // by the same rules the user set for every other folder.
         var sort = CurrentSort;
         var archive = CurrentArchive;
+        var device = CurrentDevice;
+        // A device marks the apps' folders hidden and system (DeviceClutter):
+        // the settings hide them as they hide such folders on a disk.
+        var visibility = Settings.Visibility;
+        int hiddenOnDevice = 0;
 
         // The Recycle Bin gives what it has read so far while a slow listing
         // goes on: the first portion lands as the whole listing
@@ -3212,7 +3329,7 @@ public sealed class MainViewModel : ObservableObject {
         // place. One that comes after the whole is dropped.
         bool landed = false;
         bool complete = false;
-        var portions = archive is null
+        var portions = archive is null && device is null
             ? new Progress<IReadOnlyList<FileSystemEntry>>(rows => {
                 if (!complete && !token.IsCancellationRequested) {
                     Land(rows);
@@ -3229,6 +3346,12 @@ public sealed class MainViewModel : ObservableObject {
                 items = await LongWait.WatchAsync(
                     Task.Run(() => {
                         var listed = ns.Enumerate(shellPath, token, portions);
+                        if (device is not null) {
+                            var shown = listed.Where(visibility.Allows).ToList();
+                            hiddenOnDevice = listed.Count - shown.Count;
+
+                            return EntryComparers.Sort(shown, sort);
+                        }
 
                         return archive is null ? listed : EntryComparers.Sort(listed, sort);
                     }, token),
@@ -3238,8 +3361,8 @@ public sealed class MainViewModel : ObservableObject {
                 return;
             } catch (Exception ex) {
                 _log.Error($"Shell enumerate failed: {shellPath}", ex);
-                Fail(archive is null
-                    ? string.Format(Strings.StatusError, ex.Message)
+                Fail(device is not null ? string.Format(Strings.StatusDeviceUnreadable, device.Device, DescribeError(ex, shellPath))
+                    : archive is null ? string.Format(Strings.StatusError, ex.Message)
                     : string.Format(Strings.StatusArchiveUnreadable, archive.ArchiveName));
                 return;
             }
@@ -3248,6 +3371,7 @@ public sealed class MainViewModel : ObservableObject {
                 return;
             }
             complete = true;
+            _hiddenCount = hiddenOnDevice;
             // Always, not only when slow as on disk: shell listings are few,
             // and their cost is the number the bin's slowness (AD2) is
             // decided on.
@@ -3260,6 +3384,11 @@ public sealed class MainViewModel : ObservableObject {
             // that looks like a mistake.
             if (archive is not null && items.Count == 0) {
                 Warn(string.Format(Strings.StatusArchiveEmptyOrLocked, archive.ArchiveName));
+            }
+            // A phone with its screen locked shows no storage, and says
+            // nothing about why (stand Y4a): the one thing to do is said here.
+            if (device is { IsRoot: true } && items.Count == 0) {
+                Warn(string.Format(Strings.StatusDeviceLocked, device.Device));
             }
         } finally {
             // Only release the spinner if our load is still the active one.
@@ -3292,7 +3421,7 @@ public sealed class MainViewModel : ObservableObject {
                 _sharpness.Cancel();
                 HasRatings = false;
                 if (arriving) {
-                    ChooseView(rows, shellPath, createdUtc: null, vacated: null, inRecycleBin: archive is null);
+                    ChooseView(rows, shellPath, createdUtc: null, vacated: null, inRecycleBin: archive is null && device is null);
                 }
             }
             PublishRows(epoch, rows.ToList(), TakeReordering(arriving));
@@ -4345,7 +4474,8 @@ public sealed class MainViewModel : ObservableObject {
             ApplyLogSettings();
         }
 
-        if (e.PropertyName is nameof(SettingsViewModel.VerifyCopies) or nameof(SettingsViewModel.CopyWithWindows)) {
+        if (e.PropertyName is nameof(SettingsViewModel.VerifyCopies) or nameof(SettingsViewModel.CopyWithWindows)
+            or nameof(SettingsViewModel.DevicesThroughShell)) {
             // From the next operation on.
             ApplyCopySettings();
         }
@@ -4485,10 +4615,13 @@ public sealed class MainViewModel : ObservableObject {
         Log.RevealPaths = Settings.LogPaths;
     }
 
-    /// <summary>How copies are made and checked, copied into the service: Core has no settings to ask.</summary>
+    /// <summary>How copies are made and checked, and how devices are read, copied into the services: Core has no settings to ask.</summary>
     private void ApplyCopySettings() {
         _ops.Verify = Settings.VerifyCopies;
         _ops.SystemCopyOnly = Settings.CopyWithWindows;
+        if (ServiceLocator.TryGet<IDeviceContent>() is { } devices) {
+            devices.ThroughShell = Settings.DevicesThroughShell;
+        }
     }
 
 
@@ -4616,6 +4749,23 @@ public sealed class MainViewModel : ObservableObject {
 
         if (Bookmarks.Relocate(oldPath, folder)) {
             NavigateAndSelectFolder(folder, NavigationSource.Bookmark);
+        }
+    }
+
+
+    /// <summary>
+    /// "Переименовать закладку..." on a bookmark's menu (decision of
+    /// 2026-10-19): the bookmark's own name, asked for - the row's label,
+    /// the folder keeps its name; a blank answer gives the folder's back.
+    /// </summary>
+    public void RenameBookmark(string? path) {
+        if (string.IsNullOrEmpty(path) || !Bookmarks.Contains(path)) {
+            return;
+        }
+
+        string? title = _dialogs.Prompt(Strings.BookmarksRenameTitle, Strings.BookmarksRenameLabel, Bookmarks.NameOf(path), filenameMode: false);
+        if (title is not null) {
+            Bookmarks.Rename(path, title);
         }
     }
 
@@ -4810,11 +4960,18 @@ public sealed class MainViewModel : ObservableObject {
     private bool CanDelete(object? parameter) {
         var (target, place) = ResolveTarget(parameter);
 
-        return TargetRules.Items(target).Count > 0 && !place.IsReadOnly;
+        return TargetRules.Items(target).Count > 0 && (!place.IsReadOnly || place.IsDevice);
     }
 
     private async Task DeleteTargetAsync(object? parameter, bool permanent) {
         if (!CanDelete(parameter)) {
+            return;
+        }
+        // On a phone or a camera: said, not silently ignored (PLAN Y4c) -
+        // writing to a device is not in this version.
+        if (ResolveTarget(parameter).Place.IsDevice) {
+            Warn(Strings.StatusDeviceReadOnly);
+
             return;
         }
 
@@ -5770,8 +5927,11 @@ public sealed class MainViewModel : ObservableObject {
     /// <summary>Copy: the target's items, where the place allows it - an archive included, the bin not.</summary>
     private bool CanCopy(object? parameter) {
         var (target, place) = ResolveTarget(parameter);
+        var items = TargetRules.Items(target);
 
-        return TargetRules.Items(target).Count > 0 && (!place.IsReadOnly || place.IsArchive);
+        // A phone or a camera itself is nothing to copy - only what is on it.
+        return items.Count > 0 && (!place.IsReadOnly || place.IsArchive || place.IsDevice)
+            && !items.Any(e => DevicePath.Is(e.FullPath) && !DevicePath.IsInside(e.FullPath));
     }
 
     /// <summary>Cut: the target's items, where the place can be written to.</summary>
@@ -5800,7 +5960,8 @@ public sealed class MainViewModel : ObservableObject {
         if (ClipboardWriteIssue() is { } issue) {
             Warn(issue);
         } else {
-            Status = string.Format(place.IsArchive ? Strings.StatusArchiveCopied : Strings.StatusCopied, items.Count);
+            Status = string.Format(
+                place.IsDevice ? Strings.StatusDeviceCopied : place.IsArchive ? Strings.StatusArchiveCopied : Strings.StatusCopied, items.Count);
         }
     }
 
@@ -5810,7 +5971,7 @@ public sealed class MainViewModel : ObservableObject {
     /// file list every application understands.
     /// </summary>
     private object? ArchiveDataObject(IReadOnlyList<string> paths) {
-        return paths.Any(Archives.Inside) && TryGetShellNamespace() is { } ns
+        return paths.Any(Containers.Inside) && TryGetShellNamespace() is { } ns
             ? ns.CreateDataObject(paths)
             : null;
     }
@@ -5872,7 +6033,7 @@ public sealed class MainViewModel : ObservableObject {
     private bool CanPaste(object? parameter) {
         var (target, place) = ResolveTarget(parameter);
 
-        return _clipboard.CanPaste && !place.IsReadOnly
+        return _clipboard.CanPaste && (!place.IsReadOnly || place.IsDevice)
             && TargetRules.PasteFolder(target, _nav.Current, fromMenu: parameter is MenuCall) is not null;
     }
 
@@ -5884,6 +6045,11 @@ public sealed class MainViewModel : ObservableObject {
     /// </summary>
     private async Task PasteAsync(object? parameter) {
         if (!CanPaste(parameter)) {
+            return;
+        }
+        if (ResolveTarget(parameter).Place.IsDevice) {
+            Warn(Strings.StatusDeviceReadOnly);
+
             return;
         }
 
@@ -5925,7 +6091,7 @@ public sealed class MainViewModel : ObservableObject {
         // IFileSystem - nothing on disk is at the other end of them. The
         // clipboard carries them as they are, and Paste is where they turn
         // into an extraction.
-        if (sources.Any(Archives.Inside)) {
+        if (sources.Any(Containers.Inside)) {
             await ExtractAsync(sources, target);
             return;
         }
@@ -6200,6 +6366,12 @@ public sealed class MainViewModel : ObservableObject {
     /// answers instead.
     /// </summary>
     private async Task ExtractAsync(IReadOnlyList<string> sources, string target, IConflictResolver? resolver = null) {
+        if (sources.Any(DevicePath.IsInside)) {
+            await ImportAsync(sources, target, resolver);
+
+            return;
+        }
+
         if (TryGetShellNamespace() is not { } ns) {
             return;
         }
@@ -6261,12 +6433,80 @@ public sealed class MainViewModel : ObservableObject {
         try {
             string copy = await service.ExtractToTempAsync(path, TempFiles.FolderFor(path), CancellationToken.None);
             _shell.Open(copy);
-            Say(string.Format(Strings.StatusArchiveTempCopy, Path.GetFileName(copy)), StatusSeverity.Info, new JournalEntry(
-                DateTime.Now, JournalKind.FileOpened, string.Format(Strings.JournalArchiveCopyOpened, path), new[] { copy }));
+            // Said in the words of where it came from: a copy off a phone
+            // goes back to the phone no more than one out of an archive.
+            bool device = DevicePath.Is(path);
+            Say(string.Format(device ? Strings.StatusDeviceTempCopy : Strings.StatusArchiveTempCopy, Path.GetFileName(copy)),
+                StatusSeverity.Info, new JournalEntry(DateTime.Now, JournalKind.FileOpened,
+                    string.Format(device ? Strings.JournalDeviceCopyOpened : Strings.JournalArchiveCopyOpened, path), new[] { copy }));
         } catch (Exception ex) {
-            _log.Error($"Open from archive failed: {path}", ex);
-            Fail(string.Format(Strings.StatusOpenFailed, ex.Message));
+            _log.Error($"Open from a container failed: {path}", ex);
+            Fail(string.Format(Strings.StatusOpenFailed, DescribeError(ex, path)));
         }
+    }
+
+    /// <summary>
+    /// The one route files leave a phone or a camera by (PLAN Y4c): a paste
+    /// or a drop of them into a real folder, "Скопировать в..." and a retry of
+    /// such a copy end here. Each file is read back unless the setting says
+    /// never - a copy off a device is the one most worth checking; a device
+    /// that goes away in the middle is waited for (Y4d).
+    /// </summary>
+    private async Task ImportAsync(IReadOnlyList<string> sources, string target, IConflictResolver? resolver = null) {
+        if (ServiceLocator.TryGet<IDeviceContent>() is not { } devices) {
+            return;
+        }
+
+        var service = new DeviceImportService(devices, _fs, ServiceLocator.Get<IRecycleBin>(), _undo, _tracker, _log, _claims);
+        resolver ??= _dialogs.CreateConflictResolver(Settings.SkipIdenticalOnConflict);
+        bool verify = CopyVerification.ShouldVerify(Settings.VerifyCopies, VolumeKind.Unknown, sourceIsDevice: true);
+        _log.Info($"Import: {sources.Count} item(s) into {target}, verify {verify}");
+
+        IReadOnlyList<BatchItemResult> results;
+        var operation = new StrongBox<long>();
+        try {
+            results = await RunWithProgressDialogAsync(
+                Strings.ProgressCopying,
+                ct => service.ImportAsync(sources, target, resolver, verify, ct),
+                operation);
+        } catch (OperationCanceledException) {
+            Status = Strings.StatusCancelled;
+            return;
+        } catch (Exception ex) {
+            _log.Error($"Import failed into {target}", ex);
+            Fail(string.Format(Strings.StatusPasteFailed, DescribeError(ex, target, target)));
+            return;
+        }
+
+        // What arrived is selected where it arrived, when that is the folder
+        // on screen; a folder on the device is not listed again for nothing -
+        // each listing is a request over the cable.
+        var arrived = Landed(results).Select(r => r.FinalDestination).ToArray();
+        _session.SetArrivalHere(ArrivalIntent.Rows(target, arrived, takeFocus: arrived.Length > 0));
+        if (string.Equals(_nav.Current, target, StringComparison.OrdinalIgnoreCase)) {
+            Refresh();
+        }
+        Workspace.Post(new FolderChanged(target));
+        await ReportBatchResultsAsync(results, Strings.VerbCopied, JournalKind.Copied, target, operation.Value);
+    }
+
+    /// <summary>"Скопировать в..." has something to work on: rows of the list on a device.</summary>
+    private bool CanCopyTo(object? parameter) {
+        return ListRowsOf(parameter) is { Count: > 0 } rows && rows.All(r => DevicePath.IsInside(r.FullPath));
+    }
+
+    /// <summary>"Скопировать в..." (PLAN Y4c): asks where, then copies off the device.</summary>
+    private async Task CopyToAsync(object? parameter) {
+        if (!CanCopyTo(parameter) || ListRowsOf(parameter) is not { } rows) {
+            return;
+        }
+
+        string? target = _dialogs.PickFolder(Strings.CopyToPickFolderTitle);
+        if (string.IsNullOrEmpty(target)) {
+            return;
+        }
+
+        await ImportAsync(rows.Select(r => r.FullPath).ToList(), target);
     }
 
 
@@ -6431,6 +6671,8 @@ public sealed class MainViewModel : ObservableObject {
             case 21:    // ERROR_NOT_READY
             case 1167:  // ERROR_DEVICE_NOT_CONNECTED
                 return Strings.ErrorDeviceGone;
+            case 31 when DevicePath.Is(path):   // ERROR_GEN_FAILURE: the cable or the switch (stand Y4a)
+                return Strings.ErrorDeviceGone;
             case 23:    // ERROR_CRC
             case 1117:  // ERROR_IO_DEVICE
                 return Strings.ErrorReadFailed;
@@ -6438,6 +6680,12 @@ public sealed class MainViewModel : ObservableObject {
 
         if (DeviceErrors.IsAsleep(ex)) {
             return Strings.ErrorDeviceAsleep;
+        }
+        // A phone re-reads its storage now and then, and what was listed
+        // a minute ago may be under another id or gone (OPERATIONS,
+        // "Ошибки устройств").
+        if (ex is FileNotFoundException or DirectoryNotFoundException && DevicePath.Is(path)) {
+            return Strings.ErrorDeviceFileGone;
         }
         if (ex is CopyMismatchException) {
             return Strings.ErrorCopyMismatch;
@@ -6452,7 +6700,7 @@ public sealed class MainViewModel : ObservableObject {
         if (ex is ClaimedByOperationException claimed) {
             return string.Format(Strings.ErrorClaimedByOperation, Path.GetFileName(path), Strings.Get(claimed.Verb));
         }
-        if (ex is IOException && _lockInspector is not null) {
+        if (ex is IOException && _lockInspector is not null && !DevicePath.Is(path)) {
             var lockers = _lockInspector.WhoIsLocking(path);
             if (lockers.Count > 0) {
                 return string.Format(Strings.ErrorFileInUse, FileLockInfo.Describe(lockers));
@@ -6775,6 +7023,17 @@ public sealed class MainViewModel : ObservableObject {
                 .ToList());
             _tracker.Dismiss(id);
             await DeleteAsync(entries, permanent: plan.Verb == OperationVerbs.DeletePermanently);
+
+            return;
+        }
+
+        // Off a phone or a camera: copied off it again, the way it was the
+        // first time - by an import, not by the filesystem's copy.
+        if (plan.Items.Any(i => DevicePath.IsInside(i.Source))) {
+            foreach (var batch in plan.Items.GroupBy(i => i.DestinationFolder!, StringComparer.OrdinalIgnoreCase)) {
+                _tracker.Dismiss(id);
+                await ImportAsync(batch.Select(i => i.Source).ToList(), batch.Key);
+            }
 
             return;
         }

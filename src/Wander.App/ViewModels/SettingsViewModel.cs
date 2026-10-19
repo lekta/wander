@@ -767,6 +767,13 @@ public sealed class SettingsViewModel : ObservableObject {
         set => SetField(ref _copyWithWindows, value);
     }
 
+    private bool _devicesThroughShell;
+    /// <inheritdoc cref="AppSettings.DevicesThroughShell"/>
+    public bool DevicesThroughShell {
+        get => _devicesThroughShell;
+        set => SetField(ref _devicesThroughShell, value);
+    }
+
 
     // --- Category list (used by the dialog) ---------------------------
     public ObservableCollection<SettingsCategoryViewModel> Categories { get; }
@@ -862,6 +869,7 @@ public sealed class SettingsViewModel : ObservableObject {
         LogActions = s.LogActions;
         LogPaths = s.LogPaths;
         CopyWithWindows = s.CopyWithWindows;
+        DevicesThroughShell = s.DevicesThroughShell;
     }
 
 
@@ -1115,6 +1123,7 @@ public sealed class SettingsViewModel : ObservableObject {
             LogActions = LogActions,
             LogPaths = LogPaths,
             CopyWithWindows = CopyWithWindows,
+            DevicesThroughShell = DevicesThroughShell,
         };
     }
 

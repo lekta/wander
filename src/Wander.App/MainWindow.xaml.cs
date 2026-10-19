@@ -1429,7 +1429,9 @@ public partial class MainWindow : Window {
         // The computer's drives are read-only to Wander's own verbs - its
         // writes would land in the listing, not on a disk - but the shell's
         // are the drive's own: eject, format, BitLocker, as in Explorer.
-        bool drives = DataContext is MainViewModel { IsCurrentComputer: true } && !target.IsBackground && !target.IsPanelRow;
+        bool drives = DataContext is MainViewModel { IsCurrentComputer: true } && !target.IsBackground && !target.IsPanelRow
+            // A phone or a camera has no shell menu of its own to give here.
+            && !target.Selection.Any(e => DevicePath.Is(e.FullPath));
         if (!settings.ShellExtensionsEnabled
             || (target.IsReadOnlyLocation && !drives)
             || string.IsNullOrEmpty(target.FolderPath)) {
@@ -1511,6 +1513,7 @@ public partial class MainWindow : Window {
 
             [MenuCommandId.Extract] = new(vm.ExtractCommand),
             [MenuCommandId.ExtractHere] = new(vm.ExtractHereCommand),
+            [MenuCommandId.CopyTo] = new(vm.CopyToCommand),
 
             [MenuCommandId.RestoreFromRecycleBin] = new(vm.RestoreFromRecycleBinCommand),
 

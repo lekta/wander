@@ -327,9 +327,11 @@ public sealed class OperationTracker {
 
         public int Attempt { get; set; }
 
+        public string? PausedReason { get; set; }
+
 
         public OperationSnapshot ToSnapshot() =>
-            new(Id, Verb, Completed, Total, CurrentPath, BytesDone, BytesTotal, BytesAreWork, StartedAtUtc, Token, IsWeighing, Attempt);
+            new(Id, Verb, Completed, Total, CurrentPath, BytesDone, BytesTotal, BytesAreWork, StartedAtUtc, Token, IsWeighing, Attempt, PausedReason);
     }
 
 
@@ -405,6 +407,20 @@ public sealed class OperationTracker {
             _owner.RaiseThrottled();
         }
 
+        public void SetPaused(string? reason) {
+            if (_done) {
+                return;
+            }
+            lock (_owner._gate) {
+                if (_progress.PausedReason == reason) {
+                    return;
+                }
+                _progress.PausedReason = reason;
+            }
+            // A pause and its end are what the person waits on: not throttled away.
+            _owner.RaiseNow();
+        }
+
         public OperationRecord? Finish(IReadOnlyList<OperationItem> items, string? target) {
             if (_done) {
                 return null;
@@ -461,6 +477,15 @@ public interface IOperationHandle : IDisposable {
     void SetAttempt(int attempt);
 
     /// <summary>
+    /// The operation stands, waiting on something only the person can bring
+    /// back - a phone unplugged in the middle of a copy (PLAN Y4d):
+    /// <paramref name="reason"/> is a key into the app's strings, the way
+    /// the verb is ("plug the device back in"); null once it goes on. Still
+    /// running for everyone else: the exit asks about it, Cancel stops it.
+    /// </summary>
+    void SetPaused(string? reason);
+
+    /// <summary>
     /// The work is over, and this is how each item went: the operation
     /// leaves the running and stays as a record with an outcome worked out
     /// from <paramref name="items"/>. A later <see cref="IDisposable.Dispose"/>
@@ -484,10 +509,11 @@ public interface IOperationHandle : IDisposable {
 /// </param>
 /// <param name="IsWeighing">The sources are still being weighed; the counts mean nothing yet.</param>
 /// <param name="Attempt">The item in hand is on this try after a transient error; 0 when it is on its first.</param>
+/// <param name="PausedReason">What the operation stands waiting for, as a string key; null while it moves.</param>
 public sealed record OperationSnapshot(
     long Id, string Verb, int Completed, int Total, string? CurrentPath,
     long BytesDone, long BytesTotal, bool BytesAreWork, DateTime StartedAtUtc,
-    CancellationToken Token = default, bool IsWeighing = false, int Attempt = 0) {
+    CancellationToken Token = default, bool IsWeighing = false, int Attempt = 0, string? PausedReason = null) {
 
     /// <summary>Bytes are the honest measure where there are any; items otherwise.</summary>
     public bool HasBytes => BytesTotal > 0;

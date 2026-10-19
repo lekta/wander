@@ -16,7 +16,7 @@ namespace Wander.Platform.Windows.FileSystem;
 /// </summary>
 public sealed class WindowsVolumeInfo : IVolumeInfoProvider {
     public VolumeInfo? Describe(string path) {
-        if (string.IsNullOrWhiteSpace(path)) {
+        if (string.IsNullOrWhiteSpace(path) || DevicePath.Is(path)) {
             return null;
         }
 

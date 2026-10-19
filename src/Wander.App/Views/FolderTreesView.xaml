@@ -473,7 +473,7 @@
                                 calls on the dispatcher.
                             -->
                             <controls:AsyncIcon DockPanel.Dock="Left"
-                                                IconPath="{Binding FullPath}" IconSize="Small"
+                                                IconPath="{Binding IconPath}" IconSize="Small"
                                                 Width="16" Height="16" Margin="0,0,4,0"/>
                             <TextBlock x:Name="NameLabel" Text="{Binding Name}"
                                        Style="{StaticResource PanelLineName}"

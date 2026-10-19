@@ -438,7 +438,7 @@ public sealed class ContentSearchController : ObservableObject {
         // which is the whole archive level anyway. The computer is the
         // same to the walker, and a walk of every drive is not what the
         // box above the drives is for.
-        if (Archives.Contains(root) || string.Equals(root, ShellPaths.Computer, StringComparison.OrdinalIgnoreCase)) {
+        if (Containers.Contains(root) || string.Equals(root, ShellPaths.Computer, StringComparison.OrdinalIgnoreCase)) {
             return;
         }
 

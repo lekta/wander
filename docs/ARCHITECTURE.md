@@ -70,10 +70,10 @@ src/
 │   ├── Icons/          значки и миниатюры, дисковый кэш, EXIF, проба резкости
 │   ├── Imaging/        кодировщик картинок (WinRT)
 │   ├── Logging/        FileLogger, чистка логов
-│   ├── Persistence/    state.json, folders.json, model-views.json, InstanceLock
+│   ├── Persistence/    state.json, folders.json, model-views.json, bookmark-titles.json, InstanceLock
 │   ├── Preview/        карточка программы, проба кодеков
 │   ├── Search/         IFilter
-│   ├── Shell/          запуск, ярлыки, namespace (корзина, архивы), меню оболочки,
+│   ├── Shell/          запуск, ярлыки, namespace (корзина, архивы, устройства WPD), меню оболочки,
 │   │                   процессы, поиск инструментов
 │   └── PlatformBootstrapper.cs
 │
@@ -111,8 +111,8 @@ src/
 <!-- deps:generated:begin -->
 ```
 === Wander dependency graph (using sweep) ===
-date   : 2026-10-15
-commit : 1bd38b5
+date   : 2026-10-19
+commit : 2cd1a65
 
 -- Wander.Core: levels --
   0: (root), Appearance, Imaging, Layout, Localization, Logging, Panels
@@ -127,8 +127,9 @@ commit : 1bd38b5
   9: Workspace
 
 -- Wander.Platform.Windows: levels --
-  0: [FileSystem+Shell], Diagnostics, Icons, Imaging, Logging, Persistence, Power, Preview, Search
-  1: (root)
+  0: [FileSystem+Shell], Diagnostics, Imaging, Logging, Persistence, Power, Preview, Search
+  1: Icons
+  2: (root)
   cycle edges:
     FileSystem -> Shell
     Shell -> FileSystem
@@ -190,6 +191,7 @@ elevated); (2) платформенные абстракции (`IFileSystem`, `
 | Сервис | Чего не будет |
 |---|---|
 | `IShellNamespace` | закладки на Корзину, `shell:`-пути |
+| `IDeviceContent` | телефонов и камер в «Компьютере» и импорта с них |
 | `IKnownFolders` | закладки по умолчанию |
 | `IShellContextMenu` | пункты сторонних приложений в меню |
 | `IShellHandlerRegistry` | список обработчиков в настройках |
@@ -332,7 +334,10 @@ Debug из Rider делят `%LOCALAPPDATA%\Wander` — так задумано.
 (Platform, тот же `InstanceLock`, своя `Version`, запись через `.tmp` +
 `Move`, `--yield` не пишет). Тем же образцом — `model-views.json`
 (`IModelViews` → `JsonModelViewStore`): ракурс каждой повёрнутой модели,
-до 4000. Читается синхронно в `RestoreState`, пишется из `WriteStateNow`
+до 4000; `bookmark-titles.json` (`IBookmarkTitleStore` →
+`JsonBookmarkTitleStore`): свои названия закладок, путь → название —
+отдельным файлом, потому что старая сборка пишет `state.json` целиком и
+стёрла бы незнакомый блок (BACKLOG AD11). Читается синхронно в `RestoreState`, пишется из `WriteStateNow`
 тем же дебаунсом. На приходе дата создания читается на пуле с листингом;
 папка **без** записи проверяет `AdoptCandidates` (та же дата и том,
 другой путь), и ровно один пропавший усыновляется (`Adopt`) — закрепление

@@ -3269,4 +3269,61 @@
   <data name="HotkeyGestureFullscreenPeek" xml:space="preserve">
     <value>Alt (держать)</value>
   </data>
+  <data name="StatusDeviceUnreadable" xml:space="preserve">
+    <value>Устройство «{0}» не прочитано: {1}</value>
+  </data>
+  <data name="StatusDeviceLocked" xml:space="preserve">
+    <value>{0}: хранилищ не видно — разблокируйте телефон и выберите «Передача файлов»</value>
+  </data>
+  <data name="StatusDeviceTempCopy" xml:space="preserve">
+    <value>Открыта временная копия «{0}»; изменения на устройство не попадут</value>
+  </data>
+  <data name="StatusDeviceCopied" xml:space="preserve">
+    <value>Скопировано с устройства: {0}</value>
+  </data>
+  <data name="StatusDeviceReadOnly" xml:space="preserve">
+    <value>Телефон и камера — только для чтения: Wander копирует с них, но не на них</value>
+  </data>
+  <data name="PreviewDeviceTooBig" xml:space="preserve">
+    <value>Файл на устройстве больше 32 МБ — «Открыть» скопирует его во временную копию</value>
+  </data>
+  <data name="CopyToPickFolderTitle" xml:space="preserve">
+    <value>Куда скопировать</value>
+  </data>
+  <data name="OperationPaused" xml:space="preserve">
+    <value>{0}: ждёт устройство</value>
+  </data>
+  <data name="ErrorDeviceFileGone" xml:space="preserve">
+    <value>файла больше нет на устройстве — телефон обновил список файлов: обновите папку (F5)</value>
+  </data>
+  <data name="JournalDeviceCopyOpened" xml:space="preserve">
+    <value>Открыта временная копия с устройства: {0}</value>
+  </data>
+  <data name="SettingsDevicesGroup" xml:space="preserve">
+    <value>Телефоны и камеры</value>
+  </data>
+  <data name="SettingsDevicesThroughShell" xml:space="preserve">
+    <value>Читать через оболочку Windows</value>
+  </data>
+  <data name="SettingsDevicesThroughShellHint" xml:space="preserve">
+    <value>Если папки телефона или камеры читаются с ошибками: как в Проводнике — медленнее и без миниатюр устройства</value>
+  </data>
+  <data name="MenuCmdCopyTo" xml:space="preserve">
+    <value>Скопировать в…</value>
+  </data>
+  <data name="ProgressWaitingForDevice" xml:space="preserve">
+    <value>ждёт устройство — подключите его снова, копирование продолжится</value>
+  </data>
+  <data name="ProgressWaitingForUnlock" xml:space="preserve">
+    <value>ждёт телефон — разблокируйте его</value>
+  </data>
+  <data name="BookmarksRename" xml:space="preserve">
+    <value>Переименовать закладку…</value>
+  </data>
+  <data name="BookmarksRenameTitle" xml:space="preserve">
+    <value>Название закладки</value>
+  </data>
+  <data name="BookmarksRenameLabel" xml:space="preserve">
+    <value>Как закладка называется в панели (пустое — имя папки):</value>
+  </data>
 </root>

@@ -10,20 +10,22 @@ namespace Wander.Core.FileSystem;
 /// the way, not out of reach.
 ///
 /// <para>
-/// <c>Android</c> itself stays: <c>Android\media</c> is where WhatsApp and
-/// Telegram keep their pictures. What stays besides - <c>DCIM</c>,
-/// <c>Pictures</c>, <c>Download</c>, <c>Documents</c>, <c>Movies</c>,
-/// <c>Music</c>, Quest's <c>Oculus</c> - and anything with something in it,
-/// is not on any list. The list is a proposal checked by the stand on the
-/// devices at hand (OnePlus 6T, Pixel 6, Quest 3).
+/// What a phone is opened for is the camera's pictures, the downloads, and
+/// the books and music the owner put at the root (decision of 2026-10-19).
+/// <c>Android</c> itself stays, and in it <c>media</c>: that is where
+/// WhatsApp and Telegram keep their pictures; everything else in it is the
+/// apps' (<c>data</c>, <c>obb</c>, OnePlus's <c>obj</c>). An empty folder
+/// that is not one of the standard ones stays too: by its name it cannot be
+/// told from one of the owner's, and asking every folder of the root
+/// whether it is empty costs up to 0.7 s each on a OnePlus (stand Y4a).
 /// </para>
 /// </summary>
 public static class DeviceClutter {
-    /// <summary>At the storage's root, always: what the system keeps for itself.</summary>
+    /// <summary>At the storage's root, always: what the system keeps for itself - on memory cards, mostly.</summary>
     private static readonly string[] _systemRoot = { "LOST.DIR" };
 
-    /// <summary>Under <c>Android</c> at the root: the apps' own data and their downloads.</summary>
-    private static readonly string[] _appData = { "data", "obb" };
+    /// <summary>Under <c>Android</c> at the root: the one folder of the owner's.</summary>
+    private const string AndroidMedia = "media";
 
     /// <summary>At the root, when empty: the standard folders Android makes for media that never came.</summary>
     private static readonly string[] _emptyStandard = { "Alarms", "Notifications", "Ringtones", "Podcasts", "Audiobooks", "Recordings" };
@@ -34,7 +36,8 @@ public static class DeviceClutter {
     /// </summary>
     /// <param name="segments">Its path inside the storage, a name per level: <c>["Android", "data"]</c>.</param>
     /// <param name="isEmpty">
-    /// Whether it holds nothing; null when not asked - on a phone each
+    /// Whether it holds nothing - nothing but names starting with a dot,
+    /// which are clutter themselves; null when not asked: on a phone each
     /// question is a request over the cable, and a standard folder not
     /// known to be empty is left showing.
     /// </param>
@@ -50,10 +53,24 @@ public static class DeviceClutter {
         }
 
         if (segments.Count == 1) {
-            return Is(_systemRoot, segments[0]) || (isEmpty == true && Is(_emptyStandard, segments[0]));
+            return Is(_systemRoot, segments[0]) || (isEmpty == true && IsEmptyStandard(segments[0]));
         }
 
-        return segments.Count == 2 && Same(segments[0], "Android") && Is(_appData, segments[1]);
+        return segments.Count == 2 && Same(segments[0], "Android") && !Same(segments[1], AndroidMedia);
+    }
+
+    /// <summary>
+    /// A folder at the root whose emptiness decides: the one question worth
+    /// a listing. Asked before the listing is made, so the others are never
+    /// opened.
+    /// </summary>
+    public static bool IsEmptyStandard(string name) {
+        return Is(_emptyStandard, name);
+    }
+
+    /// <summary>Empty as <see cref="IsClutter"/> means it: nothing in it, or only names starting with a dot.</summary>
+    public static bool LooksEmpty(IEnumerable<string> names) {
+        return names.All(n => n.StartsWith('.'));
     }
 
 

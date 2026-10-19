@@ -1,4 +1,5 @@
 using System.Windows.Threading;
+using Wander.Core;
 using Wander.Core.Diagnostics;
 using Wander.Core.FileSystem;
 using Wander.Core.Logging;
@@ -157,11 +158,36 @@ public sealed class WorkspaceController {
     /// </summary>
     private IReadOnlyList<PanelRow> ReadLevel(string path, EntryVisibility visibility) {
         if (path.Length == 0) {
-            return _fs.GetRoots().Select(root => new PanelRow(root.FullPath, root.Name, PanelRowKind.Drive)).ToList();
+            var top = _fs.GetRoots().Select(root => new PanelRow(root.FullPath, root.Name, PanelRowKind.Drive)).ToList();
+            // The phones and cameras after the drives, as the computer's
+            // listing has them (PLAN Y4b). One that will not say is not there.
+            try {
+                if (ServiceLocator.TryGet<IDeviceContent>() is { } devices) {
+                    top.AddRange(devices.Devices().Select(d => new PanelRow(d.FullPath, d.Name, PanelRowKind.Device)));
+                }
+            } catch (Exception ex) when (ex is not OutOfMemoryException) {
+                _log.Warn($"Devices not listed for the panel ({ex.Message})");
+            }
+
+            return top;
         }
 
         var folders = new List<PanelRow>();
         try {
+            // A device's folders, read over the cable; what the settings
+            // hide - the apps' data, Android's empty standard folders - is
+            // hidden here too.
+            if (DevicePath.Is(path)) {
+                if (_shell is not null) {
+                    foreach (var entry in _shell.Enumerate(path)) {
+                        if (entry.Kind == EntryKind.Directory && visibility.Allows(entry)) {
+                            folders.Add(new PanelRow(entry.FullPath, entry.Name, PanelRowKind.DeviceFolder) { IsHidden = entry.IsHidden });
+                        }
+                    }
+                }
+
+                return folders;
+            }
             if (Archives.Contains(path)) {
                 if (_shell is not null) {
                     foreach (var entry in _shell.Enumerate(path)) {

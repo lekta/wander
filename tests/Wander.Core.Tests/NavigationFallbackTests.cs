@@ -111,4 +111,22 @@ public class NavigationFallbackTests {
         Assert.Null(NavigationFallback.AfterVolumeRemoved(@"\\nas\share\x", _rootsLeft, Array.Empty<string>(), KindOf));
         Assert.Null(NavigationFallback.AfterVolumeRemoved(null, _rootsLeft, Array.Empty<string>(), KindOf));
     }
+
+    [Fact]
+    public void DeviceGone_GoesToTheLatestPlaceStillThere() {
+        static bool Plugged(string path) => path.StartsWith(@"device:Canon EOS R8", StringComparison.OrdinalIgnoreCase);
+        var recent = new[] { @"device:Pixel 6\Storage\DCIM", @"E:\DCIM", @"device:Canon EOS R8\SD1\DCIM", @"D:\Photos" };
+
+        Assert.Equal(@"device:Canon EOS R8\SD1\DCIM",
+            NavigationFallback.AfterDeviceRemoved(@"device:Pixel 6\Storage\DCIM\Camera", Plugged, _rootsLeft, recent, KindOf));
+        Assert.Equal(@"C:\",
+            NavigationFallback.AfterDeviceRemoved(@"device:Pixel 6\Storage", Plugged, _rootsLeft, new[] { @"device:Pixel 6" }, KindOf));
+    }
+
+    [Fact]
+    public void DeviceStillThere_OrNotADevice_StaysPut() {
+        Assert.Null(NavigationFallback.AfterDeviceRemoved(@"device:Pixel 6\Storage", _ => true, _rootsLeft, Array.Empty<string>(), KindOf));
+        Assert.Null(NavigationFallback.AfterDeviceRemoved(@"E:\DCIM", _ => false, _rootsLeft, Array.Empty<string>(), KindOf));
+        Assert.Null(NavigationFallback.AfterDeviceRemoved(null, _ => false, _rootsLeft, Array.Empty<string>(), KindOf));
+    }
 }

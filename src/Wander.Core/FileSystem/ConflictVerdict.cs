@@ -68,16 +68,18 @@ public sealed record ConflictVerdict(
         bool sameKind = source.Kind == target.Kind;
         bool? sameSize = source.Size is { } a && target.Size is { } b ? a == b : null;
 
+        var (age, difference) = CompareDates(source.ModifiedUtc, target.ModifiedUtc);
+
         bool? identical;
         if (!sameKind || sameSize == false) {
             identical = false;
         } else if (source.Kind == EntryKind.File && sameSize == true) {
-            identical = sameContent;
+            // A device's file is not read a second time: size and date are
+            // its whole word on the matter.
+            identical = sameContent ?? (conflict.SameBySizeAndDate && age == ConflictAge.Same ? true : null);
         } else {
             identical = null;
         }
-
-        var (age, difference) = CompareDates(source.ModifiedUtc, target.ModifiedUtc);
 
         return new ConflictVerdict(sameKind, sameSize, age, difference, identical, conflict.SourceReachable);
     }

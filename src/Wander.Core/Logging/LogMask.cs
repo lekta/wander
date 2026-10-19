@@ -33,6 +33,12 @@ public static class LogMask {
     /// <summary>How long an extension may be to survive the mask; longer is part of the name.</summary>
     private const int MaxExtension = 6;
 
+    /// <summary>
+    /// The root of a place on a phone or a camera - <c>DevicePath.Prefix</c>,
+    /// spelled out: Logging is below FileSystem and cannot ask it.
+    /// </summary>
+    private const string DevicePrefix = "device:";
+
 
     /// <summary>
     /// One path or one name as a token: <c>C:\a\b.txt</c> becomes
@@ -200,6 +206,12 @@ public static class LogMask {
     private static int RootLength(string text, int at) {
         if (IsDriveRoot(text, at)) {
             return 3;
+        }
+        // A place on a phone or a camera (DevicePath): "device:" stays, the
+        // device's name and everything under it are masked. Only right
+        // before a name - "the device: x" is prose, not a path.
+        if (string.Compare(text, at, DevicePrefix, 0, DevicePrefix.Length, StringComparison.OrdinalIgnoreCase) == 0) {
+            return at + DevicePrefix.Length < text.Length && IsNameChar(text[at + DevicePrefix.Length]) ? DevicePrefix.Length : 0;
         }
         if (!(At(text, at, '\\') && At(text, at + 1, '\\'))) {
             return 0;

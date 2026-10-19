@@ -87,6 +87,9 @@ public static class ContextMenuBuilder {
     // --- Menu shapes ----------------------------------------------------
 
     private static List<MenuEntry> BuildSelection(ContextMenuTarget t, ShellGroups shell) {
+        if (t.IsDevice) {
+            return BuildOnDevice(t);
+        }
         if (t.IsArchive) {
             return BuildInsideArchive(t);
         }
@@ -217,7 +220,27 @@ public static class ContextMenuBuilder {
         };
     }
 
+    /// <summary>
+    /// The menu on a row on a phone or a camera (PLAN Y4): the archive's
+    /// shape - open it, copy it, copy it to a folder picked - and nothing
+    /// that writes there; writing to a device is not in this version.
+    /// Its path is no path another program could use, so there is no
+    /// "copy path" either.
+    /// </summary>
+    private static List<MenuEntry> BuildOnDevice(ContextMenuTarget t) {
+        return new List<MenuEntry> {
+            Cmd(MenuCommandId.Open, t.IsSingle, isDefault: true),
+            MenuEntry.Divider,
+            Cmd(MenuCommandId.Copy),
+            Cmd(MenuCommandId.CopyTo),
+        };
+    }
+
     private static List<MenuEntry> BuildBackground(ContextMenuTarget t, ShellGroups shell) {
+        if (t.IsDevice) {
+            // How the folder is shown is all a click on empty space gives here.
+            return ShowRows(t);
+        }
         if (t.IsArchive) {
             // Nothing is created, opened in a terminal or pasted here; how
             // the folder is shown and its path are what a click on empty
@@ -289,10 +312,15 @@ public static class ContextMenuBuilder {
             items.Add(Cmd(MenuCommandId.ExtractHere));
             items.Add(Cmd(MenuCommandId.Extract));
         }
+        if (any && t.IsDevice) {
+            items.Add(Cmd(MenuCommandId.CopyTo));
+        }
         if (fs && any && !t.IsPanelRow) {
             items.Add(Cmd(MenuCommandId.CreateShortcut));
         }
-        items.Add(Cmd(MenuCommandId.CopyPath));
+        if (!t.IsDevice) {
+            items.Add(Cmd(MenuCommandId.CopyPath));
+        }
         if (fs && (!any || (t.IsSingle && t.AllFolders))) {
             items.Add(Cmd(MenuCommandId.OpenInTerminal));
         }

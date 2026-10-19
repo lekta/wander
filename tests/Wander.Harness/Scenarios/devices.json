@@ -1,0 +1,179 @@
+{
+  // A phone as a folder (PLAN Y4): the scenarios' own phone (HarnessDevice) -
+  // its storage a folder of the sandbox, plugged in and pulled out by the
+  // "device" step through the window's own hub, the way Windows tells it.
+  // What is checked: the phone in the computer's listing and in the drives
+  // panel, its folders with the clutter hidden (and shown by the setting),
+  // the crumbs, read only (Delete refused in the status line), a copy off it
+  // with the read-back and the device's dates, "the same photo" skipped, undo,
+  // the cable pulled in the middle of a file - the copy waits and goes on when
+  // the phone is back - a locked phone, the folder on a phone that went away,
+  // and "Скопировать в...".
+  //
+  // Ten minutes without the phone is not waited for here: the import's own
+  // tests (DeviceImportServiceTests) run that clock.
+  "name": "devices",
+  "sandbox": "devices",
+  "profiles": [ "photos" ],
+  "steps": [
+    // --- The phone's storage, laid out the way a phone has it -----------
+    { "do": "fs", "op": "delete", "path": "{sandbox}\\phone" },
+    { "do": "fs", "op": "delete", "path": "{sandbox}\\imported" },
+    { "do": "fs", "op": "delete", "path": "{sandbox}\\imported2" },
+    { "do": "fs", "op": "copy", "path": "{sandbox}\\photos\\IMG_0001.jpg", "to": "{sandbox}\\phone\\DCIM\\Camera\\IMG_0001.jpg" },
+    { "do": "fs", "op": "copy", "path": "{sandbox}\\photos\\IMG_0002.jpg", "to": "{sandbox}\\phone\\DCIM\\Camera\\IMG_0002.jpg" },
+    { "do": "fs", "op": "copy", "path": "{sandbox}\\photos\\IMG_0003.jpg", "to": "{sandbox}\\phone\\DCIM\\Camera\\IMG_0003.jpg" },
+    { "do": "fs", "op": "create", "path": "{sandbox}\\phone\\DCIM\\Camera\\big.bin", "bytes": 6291456 },
+    { "do": "fs", "op": "mkdir", "path": "{sandbox}\\phone\\DCIM\\.thumbnails" },
+    { "do": "fs", "op": "mkdir", "path": "{sandbox}\\phone\\Android\\data\\com.example.app" },
+    { "do": "fs", "op": "mkdir", "path": "{sandbox}\\phone\\Android\\media\\com.whatsapp" },
+    { "do": "fs", "op": "mkdir", "path": "{sandbox}\\phone\\Alarms" },
+    { "do": "fs", "op": "create", "path": "{sandbox}\\phone\\Ringtones\\.nomedia" },
+    { "do": "fs", "op": "copy", "path": "{sandbox}\\photos\\notes.txt", "to": "{sandbox}\\phone\\Music\\notes.txt" },
+    { "do": "fs", "op": "mkdir", "path": "{sandbox}\\phone\\Download" },
+    { "do": "fs", "op": "mkdir", "path": "{sandbox}\\imported" },
+    { "do": "fs", "op": "mkdir", "path": "{sandbox}\\imported2" },
+
+    // --- Not plugged in: not there; plugged in: in the computer and the panel
+    { "do": "navigate", "path": "shell:MyComputerFolder" },
+    { "do": "assert-entries", "absent": [ "Harness Phone" ] },
+    { "do": "device", "op": "plug", "root": "{sandbox}\\phone" },
+    { "do": "command", "name": "refresh" },
+    { "do": "assert-entries", "contains": [ "Harness Phone" ] },
+    { "do": "assert-tree", "path": "device:Harness Phone", "panel": "drives" },
+    { "do": "tree-expand", "path": "device:Harness Phone\\Internal storage\\DCIM", "panel": "drives" },
+    { "do": "assert-tree", "path": "device:Harness Phone\\Internal storage\\DCIM\\Camera", "panel": "drives" },
+    { "do": "assert-tree", "path": "device:Harness Phone\\Internal storage\\DCIM\\.thumbnails", "panel": "drives", "exists": false },
+    { "do": "screenshot", "name": "phone-in-panel" },
+
+    // --- Its folders, the clutter hidden ---------------------------------
+    { "do": "navigate", "path": "device:Harness Phone" },
+    { "do": "assert-entries", "count": 1, "contains": [ "Internal storage" ] },
+    { "do": "assert-path", "is": "device:Harness Phone", "crumbs": [ "Harness Phone" ] },
+    { "do": "navigate", "path": "device:Harness Phone\\Internal storage" },
+    { "do": "assert-entries", "contains": [ "DCIM", "Android", "Music", "Download" ], "absent": [ "Alarms", "Ringtones" ] },
+    { "do": "assert-path", "crumbs": [ "Harness Phone", "Internal storage" ] },
+    { "do": "navigate", "path": "device:Harness Phone\\Internal storage\\Android" },
+    { "do": "assert-entries", "count": 1, "contains": [ "media" ] },
+    // "Защищённые системные файлы" shows the apps' data, as on a disk.
+    { "do": "settings", "name": "ShowHidden", "value": "true" },
+    { "do": "settings", "name": "ShowSystem", "value": "true" },
+    { "do": "command", "name": "refresh" },
+    { "do": "assert-entries", "contains": [ "media", "data" ] },
+    { "do": "settings", "name": "ShowSystem", "value": "false" },
+    { "do": "settings", "name": "ShowHidden", "value": "false" },
+
+    { "do": "navigate", "path": "device:Harness Phone\\Internal storage\\DCIM\\Camera" },
+    { "do": "assert-entries", "count": 4, "contains": [ "IMG_0001.jpg", "IMG_0002.jpg", "IMG_0003.jpg", "big.bin" ] },
+    { "do": "assert-path", "crumbs": [ "Harness Phone", "Internal storage", "DCIM", "Camera" ] },
+    { "do": "view", "mode": "Gallery" },
+    { "do": "wait-idle", "quietMs": 1500 },
+    { "do": "screenshot", "name": "phone-gallery" },
+    { "do": "note", "text": "look with your eyes on phone-gallery.png: three photos as pictures off the phone (read whole - this phone keeps no thumbnails), big.bin as a file icon" },
+    { "do": "view", "mode": "Details" },
+
+    // --- Read only: Delete is refused in so many words, the file stays ---
+    { "do": "select", "names": [ "IMG_0001.jpg" ] },
+    { "do": "command", "name": "delete" },
+    { "do": "assert-status", "key": "StatusDeviceReadOnly" },
+    { "do": "assert-files", "exist": [ "{sandbox}\\phone\\DCIM\\Camera\\IMG_0001.jpg" ] },
+    { "do": "command", "name": "new-folder" },
+    { "do": "assert-entries", "count": 4 },
+
+    // --- A copy off the phone: read back, dated as on the phone, undone --
+    { "do": "select", "names": [ "IMG_0001.jpg", "IMG_0002.jpg" ] },
+    { "do": "command", "name": "copy" },
+    { "do": "navigate", "path": "{sandbox}\\imported" },
+    { "do": "command", "name": "paste" },
+    { "do": "assert-operations", "outcome": "Done", "failed": 0, "verified": 2 },
+    { "do": "assert-entries", "count": 2, "contains": [ "IMG_0001.jpg", "IMG_0002.jpg" ] },
+    { "do": "assert-files", "datedAs": { "{sandbox}\\imported\\IMG_0001.jpg": "{sandbox}\\phone\\DCIM\\Camera\\IMG_0001.jpg" } },
+    { "do": "assert-log", "contains": "Import: 2 item(s) into", "scope": "all" },
+
+    // The same photo again: the same size and date - the window says
+    // "identical", and Skip leaves no "(1)" behind.
+    { "do": "navigate", "path": "device:Harness Phone\\Internal storage\\DCIM\\Camera" },
+    { "do": "select", "names": [ "IMG_0001.jpg" ] },
+    { "do": "command", "name": "copy" },
+    { "do": "navigate", "path": "{sandbox}\\imported" },
+    { "do": "dialogs", "conflict": "Skip" },
+    { "do": "command", "name": "paste" },
+    { "do": "assert-entries", "count": 2, "absent": [ "IMG_0001 (1).jpg" ] },
+
+    // Undo of the copy takes what came off the phone to the bin.
+    { "do": "command", "name": "undo" },
+    { "do": "assert-entries", "count": 0 },
+
+    // --- The cable pulled in the middle of a file ------------------------
+    // The preview pane off: it would copy big.bin for a look the moment the
+    // row is selected, and that read would pull the cable before the paste.
+    { "do": "preview", "on": false },
+    { "do": "device", "op": "break", "path": "device:Harness Phone\\Internal storage\\DCIM\\Camera\\big.bin", "after": 1048576 },
+    { "do": "navigate", "path": "device:Harness Phone\\Internal storage\\DCIM\\Camera" },
+    { "do": "select", "names": [ "big.bin" ] },
+    { "do": "command", "name": "copy" },
+    { "do": "navigate", "path": "{sandbox}\\imported" },
+    { "do": "command", "name": "paste" },
+    { "do": "device", "op": "wait-paused" },
+    { "do": "assert-files", "absent": [ "{sandbox}\\imported\\big.bin", "{sandbox}\\imported\\big.bin.wander-tmp" ] },
+    { "do": "screenshot", "name": "copy-waiting-for-phone" },
+    { "do": "note", "text": "look with your eyes on copy-waiting-for-phone.png: the status bar says the copy waits for the device" },
+    { "do": "device", "op": "plug", "root": "{sandbox}\\phone" },
+    { "do": "assert-operations", "outcome": "Done", "failed": 0, "verified": 1 },
+    { "do": "assert-files", "sizes": { "{sandbox}\\imported\\big.bin": 6291456 }, "absent": [ "{sandbox}\\imported\\big.bin.wander-tmp" ] },
+    { "do": "assert-log", "contains": "the device is back", "scope": "all" },
+
+    // --- A bookmark on the phone: there while it is plugged in ----------
+    // Named its own way (2026-10-19) - what "R8 DCIM" is for.
+    { "do": "bookmark", "op": "add", "path": "device:Harness Phone\\Internal storage\\DCIM" },
+    { "do": "assert-tree", "path": "device:Harness Phone\\Internal storage\\DCIM", "panel": "bookmark", "name": "DCIM" },
+    { "do": "dialogs", "prompt": "Phone DCIM" },
+    { "do": "bookmark", "op": "rename", "path": "device:Harness Phone\\Internal storage\\DCIM" },
+    { "do": "dialogs", "prompt": null },
+    { "do": "assert-tree", "path": "device:Harness Phone\\Internal storage\\DCIM", "panel": "bookmark", "name": "Phone DCIM" },
+    { "do": "tree-expand", "path": "device:Harness Phone\\Internal storage\\DCIM", "panel": "bookmark" },
+    { "do": "assert-tree", "path": "device:Harness Phone\\Internal storage\\DCIM\\Camera", "panel": "bookmark" },
+    { "do": "screenshot", "name": "phone-bookmark" },
+    // Unplugged: not greyed like a flash drive's - not there. The window
+    // asks the devices 2.5 s after a notice.
+    { "do": "device", "op": "unplug" },
+    { "do": "sleep", "ms": 3500 },
+    { "do": "wait-idle" },
+    { "do": "assert-tree", "path": "device:Harness Phone\\Internal storage\\DCIM", "panel": "bookmark", "exists": false },
+    { "do": "device", "op": "plug", "root": "{sandbox}\\phone" },
+    { "do": "sleep", "ms": 3500 },
+    { "do": "wait-idle" },
+    { "do": "assert-tree", "path": "device:Harness Phone\\Internal storage\\DCIM", "panel": "bookmark", "name": "Phone DCIM" },
+
+    // --- A locked phone: no storage, and the status line says why --------
+    { "do": "device", "op": "unplug" },
+    { "do": "device", "op": "plug", "root": "{sandbox}\\phone", "locked": true },
+    { "do": "navigate", "path": "device:Harness Phone" },
+    { "do": "assert-entries", "count": 0 },
+    { "do": "assert-status", "key": "StatusDeviceLocked" },
+
+    // --- The phone goes away under its open folder: the listing leaves --
+    { "do": "device", "op": "unplug" },
+    { "do": "device", "op": "plug", "root": "{sandbox}\\phone" },
+    { "do": "navigate", "path": "device:Harness Phone\\Internal storage\\DCIM\\Camera" },
+    { "do": "device", "op": "unplug" },
+    // The window looks again 2.5 s after a device's notice - a phone that
+    // only blinked is not left.
+    { "do": "sleep", "ms": 3500 },
+    { "do": "wait-idle" },
+    { "do": "assert-path", "is": "{sandbox}\\imported" },
+
+    // --- "Скопировать в..." ----------------------------------------------
+    { "do": "device", "op": "plug", "root": "{sandbox}\\phone" },
+    { "do": "navigate", "path": "device:Harness Phone\\Internal storage\\DCIM\\Camera" },
+    { "do": "select", "names": [ "IMG_0003.jpg" ] },
+    { "do": "dialogs", "folder": "{sandbox}\\imported2" },
+    { "do": "command", "name": "copy-to" },
+    { "do": "assert-operations", "outcome": "Done", "verified": 1 },
+    { "do": "assert-files", "exist": [ "{sandbox}\\imported2\\IMG_0003.jpg" ] },
+
+    { "do": "device", "op": "unplug" },
+    { "do": "navigate", "path": "{sandbox}\\imported" },
+    { "do": "assert-log", "noErrors": true, "scope": "all", "allow": [ "Import: the device went away" ] }
+  ]
+}

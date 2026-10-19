@@ -5,6 +5,7 @@ using Wander.App;
 using Wander.App.Dialogs;
 using Wander.Core;
 using Wander.Core.Logging;
+using Wander.Core.Shell;
 using Wander.Harness.Host;
 
 namespace Wander.Harness;
@@ -50,6 +51,12 @@ public sealed class HarnessApp : Wander.App.App {
         ServiceLocator.Register<ILogger>(_log);
         ServiceLocator.Register<ILogFile>(_log);
         ServiceLocator.Register<IDialogs>(_dialogs);
+        // The phone of the scenarios in place of real devices (PLAN Y4): a
+        // run neither needs one plugged in nor reads one that is. Before
+        // the window: the view model and its controllers take both once.
+        var device = new HarnessDevice();
+        ServiceLocator.Register<IDeviceContent>(device);
+        ServiceLocator.Register<IShellNamespace>(new HarnessShellNamespace(ServiceLocator.Get<IShellNamespace>(), device));
 
         // Checked, not assumed. The window is parked off-screen and refuses
         // activation only while this flag is on, and it is read once, in

@@ -443,4 +443,7 @@ public static partial class Strings {
 
     /// <summary>{0} — настройки не сохраняются</summary>
     public static string TitleYielding => Get(nameof(TitleYielding));
+
+    /// <summary>файла больше нет на устройстве — телефон обновил список файлов: обновите папку (F5)</summary>
+    public static string ErrorDeviceFileGone => Get(nameof(ErrorDeviceFileGone));
 }

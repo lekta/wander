@@ -5,11 +5,13 @@ using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using Wander.Core;
 using Wander.Core.Diagnostics;
+using Wander.Core.FileSystem;
 using Wander.Core.Icons;
 using Wander.Core.Logging;
 using Wander.Core.Operations;
 using Wander.Core.Preview;
 using Wander.Core.Shell;
+using Wander.Platform.Windows.Shell;
 
 namespace Wander.Platform.Windows.Icons;
 
@@ -163,7 +165,7 @@ public sealed class SystemIconProvider : IIconProvider {
         // Asked once and carried through: for a path inside an archive the
         // answer costs a shell call, and both the cache key and the icon
         // itself depend on it.
-        bool isFolder = System.IO.Directory.Exists(path) || IsArchiveFolder(path);
+        bool isFolder = DevicePath.Is(path) ? IsDeviceFolder(path) : System.IO.Directory.Exists(path) || IsArchiveFolder(path);
         var (key, perPath) = BuildCacheKey(path, size, isFolder);
 
         lock (_lock) {
@@ -472,6 +474,18 @@ public sealed class SystemIconProvider : IIconProvider {
             && shell.CanNavigate(path);
     }
 
+    /// <summary>
+    /// Is this path a folder on a phone or a camera - the device and its
+    /// storages included? Answered from the listing the row came from;
+    /// a path never listed is looked up on the device, which is why this
+    /// too is background work.
+    /// </summary>
+    private static bool IsDeviceFolder(string path) {
+        return DevicePath.Parse(path) is { } device
+            && (device.InStorage.Count == 0
+                || ServiceLocator.TryGet<IDeviceContent>()?.GetEntry(path) is { Kind: EntryKind.Directory });
+    }
+
 
     /// <summary>
     /// The key a <em>file</em> at this path uses. Split out of
@@ -505,7 +519,7 @@ public sealed class SystemIconProvider : IIconProvider {
         // Medium is a thumbnail only for the files that have one; the rest
         // fall back to the shared per-extension icon, exactly as Normal does.
         // A picture inside an archive has one of its own.
-        if (size == IconSize.Medium && (IsThumbnailable(path) || ArchiveThumbnail.Supports(path))) {
+        if (size == IconSize.Medium && (IsThumbnailable(path) || ArchiveThumbnail.Supports(path) || DeviceThumbnail.Supports(path))) {
             return ($"thumb96|{path}", true);
         }
 
@@ -568,6 +582,11 @@ public sealed class SystemIconProvider : IIconProvider {
             return LoadShellNamespaceIcon(path, size);
         }
 
+        // A phone or a camera: not on disk either - see LoadDeviceIcon.
+        if (DevicePath.Parse(path) is { } device) {
+            return LoadDeviceIcon(path, device, size, isFolder, thumbSide);
+        }
+
         // A folder inside an archive is not on disk, so SHGetFileInfo has
         // to be *told* it is a folder: left to the default it draws the
         // blank "unknown file" page for every one of them. Thumbnails do
@@ -587,7 +606,48 @@ public sealed class SystemIconProvider : IIconProvider {
         };
     }
 
-    /// <summary>PNG bytes of a jumbo bitmap, disposing it. Null in, null out.</summary>
+    /// <summary>
+    /// A place on a phone or a camera (PLAN Y4b). The device and its storages
+    /// are the shell's own pictures - a phone, a camera, a card - asked by
+    /// the shell's name for them; a folder is told it is one, as inside an
+    /// archive; a file is its type's icon, or its picture off the device
+    /// (<see cref="DeviceThumbnail"/>) in the two thumbnail tiers.
+    /// </summary>
+    private static byte[]? LoadDeviceIcon(string path, DevicePath device, IconSize size, bool isFolder, int thumbSide) {
+        if (device.InStorage.Count == 0) {
+            string? shellPath = ServiceLocator.TryGet<IDeviceContent>() is DeviceFolders devices ? devices.ShellPathOf(path) : null;
+            // A tile as big as a drive's: the jumbo picture, like theirs.
+            if (size == IconSize.Large) {
+                return (shellPath is null ? null : JumboToPng(LoadViaParse(shellPath, SHIL_JUMBO)))
+                    ?? JumboToPng(LoadIconBitmapJumbo(path, FILE_ATTRIBUTE_DIRECTORY))
+                    ?? LoadShellIcon(path, IconSize.Normal, FILE_ATTRIBUTE_DIRECTORY);
+            }
+
+            var small = size == IconSize.Small ? IconSize.Small : IconSize.Normal;
+
+            return (shellPath is null ? null
+                    : TryLoadIconViaParseDisplayName(shellPath, small)
+                        ?? JumboToPng(LoadViaParse(shellPath, small == IconSize.Small ? SHIL_SMALL : SHIL_LARGE)))
+                ?? LoadShellIcon(path, small, FILE_ATTRIBUTE_DIRECTORY);
+        }
+
+        if (isFolder) {
+            return size == IconSize.Large
+                ? JumboToPng(LoadIconBitmapJumbo(path, FILE_ATTRIBUTE_DIRECTORY))
+                    ?? LoadShellIcon(path, IconSize.Normal, FILE_ATTRIBUTE_DIRECTORY)
+                : LoadShellIcon(path, size, FILE_ATTRIBUTE_DIRECTORY);
+        }
+
+        return size switch {
+            IconSize.Large => DeviceThumbnail.Render(path, thumbSide)
+                ?? JumboToPng(LoadIconBitmapJumbo(path))
+                ?? LoadShellIcon(path, IconSize.Normal),
+            IconSize.Medium => DeviceThumbnail.Render(path, MediumSize) ?? LoadShellIcon(path, IconSize.Normal),
+            _ => LoadShellIcon(path, size),
+        };
+    }
+
+    /// <summary>PNG bytes of a bitmap - a jumbo one, mostly - disposing it. Null in, null out.</summary>
     private static byte[]? JumboToPng(Bitmap? bitmap) {
         if (bitmap is null) {
             return null;
@@ -1278,7 +1338,7 @@ public sealed class SystemIconProvider : IIconProvider {
     /// disk.
     /// </summary>
     private static bool IsThumbnailable(string path) {
-        if (Archives.Inside(path)) {
+        if (Archives.Inside(path) || DevicePath.Is(path)) {
             return false;
         }
         if (Directory.Exists(path)) {
@@ -1302,6 +1362,60 @@ public sealed class SystemIconProvider : IIconProvider {
             && StoreCodecs.FirstMissing(needed, probe) != MissingCodec.None;
     }
 
+
+    /// <summary>
+    /// The picture of a place the shell names but no path reaches - a
+    /// phone, a camera, a card in one - by its parsing name: the shell's
+    /// icon index through the PIDL, the bitmap of <paramref name="imageList"/>
+    /// for it, the jumbo one trimmed. The small sizes come this way too when
+    /// <c>SHGFI_ICON</c> hands out none: a Canon R8 has the index and no
+    /// icon (2026-10-19).
+    /// </summary>
+    private static Bitmap? LoadViaParse(string shellPath, int imageList) {
+        if (SHParseDisplayName(shellPath, IntPtr.Zero, out IntPtr pidl, 0, out _) != 0 || pidl == IntPtr.Zero) {
+            return null;
+        }
+
+        try {
+            var info = new SHFILEINFO();
+            if (SHGetFileInfoPidl(pidl, 0, ref info, (uint)Marshal.SizeOf<SHFILEINFO>(), SHGFI_PIDL | SHGFI_SYSICONINDEX) == IntPtr.Zero) {
+                return null;
+            }
+
+            var iidImageList = new Guid("46EB5926-582E-4017-9FDF-E8998DAA0950");
+            if (SHGetImageList(imageList, ref iidImageList, out IImageList list) != 0 || list is null) {
+                return null;
+            }
+
+            IntPtr hIcon = IntPtr.Zero;
+            try {
+                if (list.GetIcon(info.iIcon, ILD_TRANSPARENT, ref hIcon) != 0 || hIcon == IntPtr.Zero) {
+                    return null;
+                }
+
+                Bitmap? slot = HIconToBitmap(hIcon);
+                if (slot is null || imageList != SHIL_JUMBO) {
+                    return slot;
+                }
+
+                Bitmap trimmed = TrimJumboSlot(slot);
+                if (!ReferenceEquals(trimmed, slot)) {
+                    slot.Dispose();
+                }
+
+                return trimmed;
+            } finally {
+                if (hIcon != IntPtr.Zero) {
+                    DestroyIcon(hIcon);
+                }
+                Marshal.ReleaseComObject(list);
+            }
+        } catch (COMException) {
+            return null;
+        } finally {
+            ILFree(pidl);
+        }
+    }
 
     /// <summary>
     /// Icon-only path: <c>SHGetFileInfo(SHGFI_SYSICONINDEX)</c> +

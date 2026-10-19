@@ -318,7 +318,7 @@ public sealed class DropTargetController {
 
             return !string.IsNullOrEmpty(node.FullPath)
                 && !node.FullPath.StartsWith("shell:", StringComparison.OrdinalIgnoreCase)
-                && !Archives.Contains(node.FullPath);
+                && !Containers.Contains(node.FullPath);
         }
 
         return false;
@@ -362,7 +362,7 @@ public sealed class DropTargetController {
                     // A folder inside an archive is aimed at and refused,
                     // like an archive node in the tree below: nothing is
                     // written into a container.
-                    return Archives.Contains(entry.FullPath) ? null : entry.FullPath;
+                    return Containers.Contains(entry.FullPath) ? null : entry.FullPath;
                 }
 
                 if (entry.FullPath.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)
@@ -375,7 +375,7 @@ public sealed class DropTargetController {
             if (element.DataContext is TreeNodeViewModel node && !string.IsNullOrEmpty(node.FullPath)) {
                 // An archive row, or a folder inside one, is aimed at and
                 // refused: nothing is written into a container.
-                return Archives.Contains(node.FullPath) ? null : node.FullPath;
+                return Containers.Contains(node.FullPath) ? null : node.FullPath;
             }
         }
 
@@ -385,7 +385,7 @@ public sealed class DropTargetController {
         // The listing of an archive is a container too. Refused - and the
         // caller sees from the flag that nothing was aimed at, and keeps the
         // cursor neutral rather than forbidding.
-        return here is not null && Archives.Contains(here) ? null : here;
+        return here is not null && Containers.Contains(here) ? null : here;
     }
 
     /// <summary>
@@ -499,7 +499,7 @@ public sealed class DropTargetController {
     }
 
     private static bool IsContainer(string? path) {
-        return path is null || Archives.Contains(path) || path.StartsWith("shell:", StringComparison.OrdinalIgnoreCase);
+        return path is null || Containers.Contains(path) || path.StartsWith("shell:", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>A held drag: the edge scrolls, and a place held long enough opens.</summary>
@@ -574,7 +574,7 @@ public sealed class DropTargetController {
         // to, and a shortcut into one opens nothing - so the modifiers do
         // not get a say. The source offers Copy alone for the same reason,
         // and an answer outside what is offered would read as "no drop".
-        if (paths.Any(Archives.Inside)) {
+        if (paths.Any(Containers.Inside)) {
             return DragDropEffects.Copy;
         }
 

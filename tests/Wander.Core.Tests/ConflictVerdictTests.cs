@@ -92,6 +92,28 @@ public class ConflictVerdictTests {
         Assert.False(verdict.ContentUndecided);
     }
 
+    [Fact]
+    public void ADevicesFile_OfTheSameSizeAndDate_IsTheSameFile() {
+        // A photo copied off the phone before: its bytes are not read twice.
+        var conflict = new FileConflictInfo(
+            SomeFile(10, _noon.AddSeconds(1)), SomeFile(10, _noon), SourceReachable: false, SameBySizeAndDate: true);
+
+        var verdict = ConflictVerdict.Of(conflict);
+
+        Assert.True(verdict.Identical);
+        Assert.False(verdict.ContentUndecided);
+    }
+
+    [Fact]
+    public void ADevicesFile_OfTheSameSizeButAnotherDate_StaysOpen() {
+        var conflict = new FileConflictInfo(
+            SomeFile(10, _noon.AddHours(1)), SomeFile(10, _noon), SourceReachable: false, SameBySizeAndDate: true);
+
+        Assert.Null(ConflictVerdict.Of(conflict).Identical);
+        Assert.False(ConflictVerdict.Of(new FileConflictInfo(
+            SomeFile(11, _noon), SomeFile(10, _noon), SourceReachable: false, SameBySizeAndDate: true)).Identical);
+    }
+
 
     // --- Dates -----------------------------------------------------------
 

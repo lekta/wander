@@ -56,7 +56,9 @@ internal class FakeFileSystem : IFileSystem {
             return new FileSystemEntry(System.IO.Path.GetFileName(path), path, EntryKind.Directory, null, DateTime.MinValue, false, false, false, false);
         }
         if (Files.TryGetValue(path, out var bytes)) {
-            return new FileSystemEntry(System.IO.Path.GetFileName(path), path, EntryKind.File, bytes.Length, DateTime.MinValue, false, false, false, false);
+            var modified = ModifiedTimes.TryGetValue(path, out var at) ? at : DateTime.MinValue;
+
+            return new FileSystemEntry(System.IO.Path.GetFileName(path), path, EntryKind.File, bytes.Length, modified, false, false, false, false);
         }
         return null;
     }
@@ -209,6 +211,48 @@ internal class FakeFileSystem : IFileSystem {
 
     /// <summary>The links to folders a copy of a folder finds inside it and leaves out, by folder.</summary>
     public Dictionary<string, string[]> LinksIn { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The time of last change each file written from a stream was given.</summary>
+    public Dictionary<string, DateTime> ModifiedTimes { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>How many more writes to a destination come out different from what was read - what a verified write finds.</summary>
+    public Dictionary<string, int> CorruptWrites { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+
+    public CopyReport WriteFromStream(Stream source, long length, string destination, DateTime? modifiedUtc,
+        IProgress<long>? bytesCopied = null, CancellationToken ct = default, CopyOptions? options = null) {
+        CallLog.Add($"WriteFromStream:{destination}");
+        options ??= CopyOptions.Plain;
+        CopyOptionsSeen.Add(options);
+        ct.ThrowIfCancellationRequested();
+        if (Files.ContainsKey(destination) || Directories.Contains(destination)) {
+            throw new IOException($"The file '{destination}' already exists.");
+        }
+
+        // Read whole before anything lands, as the real write lands under a
+        // temporary name: a stream that breaks half-way leaves nothing.
+        using var copy = new MemoryStream();
+        byte[] buffer = new byte[Math.Max(1, CopyChunk)];
+        int read;
+        while ((read = source.Read(buffer, 0, buffer.Length)) > 0) {
+            ct.ThrowIfCancellationRequested();
+            copy.Write(buffer, 0, read);
+            bytesCopied?.Report(read);
+        }
+
+        if (options.Verify && CorruptWrites.TryGetValue(destination, out int bad) && bad > 0) {
+            CorruptWrites[destination] = bad - 1;
+
+            throw new CopyMismatchException("stream", destination);
+        }
+
+        Files[destination] = copy.ToArray();
+        if (modifiedUtc is { } modified) {
+            ModifiedTimes[destination] = modified;
+        }
+
+        return new CopyReport(CopyEngine.Own, options.Verify);
+    }
 
     /// <summary>How many more moves (and renames) of a path fail "in use" before it goes.</summary>
     public Dictionary<string, int> MoveInUseFor { get; } = new(StringComparer.OrdinalIgnoreCase);

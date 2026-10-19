@@ -16,6 +16,12 @@ public enum PanelRowKind {
 
     /// <summary>A shell location - the Recycle Bin. A leaf: nothing under it is shown.</summary>
     Shell,
+
+    /// <summary>A phone or a camera, after the drives (PLAN Y4b).</summary>
+    Device,
+
+    /// <summary>A storage of a device, or a folder on one. Never probed: each question is a request over the cable.</summary>
+    DeviceFolder,
 }
 
 
@@ -69,6 +75,9 @@ public sealed record PanelRow(string Path, string Name, PanelRowKind Kind) {
 
     /// <summary>The first of the user's own bookmarks under the special folders: a rule is drawn above it.</summary>
     public bool StartsSection { get; init; }
+
+    /// <summary>Whose icon the row wears when not its own - a bookmark on a device's folder wears the device's; null for its own.</summary>
+    public string? IconPath { get; init; }
 
 
     /// <summary>Nothing is ever shown under it: a shell row, or a bookmark whose folder is gone.</summary>

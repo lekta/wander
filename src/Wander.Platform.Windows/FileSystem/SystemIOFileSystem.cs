@@ -240,6 +240,57 @@ public sealed class SystemIOFileSystem : IFileSystem {
         return report;
     }
 
+    /// <summary>
+    /// A file off a phone or a camera (PLAN Y4c), the way <see cref="OwnCopy"/>
+    /// makes a copy: the size claimed first, the bytes hashed on the way,
+    /// flushed to the medium, read back past the cache when asked, dated as
+    /// on the device - under the temporary name, which gives way to the real
+    /// one only when the file is whole and checked.
+    /// </summary>
+    public CopyReport WriteFromStream(Stream source, long length, string destination, DateTime? modifiedUtc,
+        IProgress<long>? bytesCopied = null, CancellationToken ct = default, CopyOptions? options = null) {
+
+        options ??= CopyOptions.Plain;
+        ct.ThrowIfCancellationRequested();
+        if (File.Exists(destination) || Directory.Exists(destination)) {
+            throw new IOException(
+                $"{new Win32Exception(ERROR_FILE_EXISTS).Message} ({destination})",
+                unchecked((int)0x80070000 | ERROR_FILE_EXISTS));
+        }
+
+        string temp = TransientFiles.TempNameFor(destination);
+        TryDelete(temp);
+        try {
+            byte[] hash;
+            using (var to = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None, bufferSize: 0, FileOptions.SequentialScan)) {
+                if (length > 0) {
+                    to.SetLength(length);
+                }
+                hash = StreamCopy.Copy(source, to, bytesCopied, ct);
+                // A device that gave fewer bytes than it said leaves no
+                // claimed tail of zeros behind.
+                if (to.Position != to.Length) {
+                    to.SetLength(to.Position);
+                }
+                to.Flush(flushToDisk: true);
+            }
+
+            if (options.Verify && !HashOf(temp, unbuffered: true, ct).AsSpan().SequenceEqual(hash)) {
+                throw new CopyMismatchException(destination, temp);
+            }
+            if (modifiedUtc is { } modified) {
+                File.SetLastWriteTimeUtc(temp, modified);
+            }
+            File.Move(temp, destination, overwrite: false);
+
+            return new CopyReport(CopyEngine.Own, options.Verify);
+        } catch {
+            TryDelete(temp);
+
+            throw;
+        }
+    }
+
     public CopyReport MoveEntry(string source, string destination,
         IProgress<long>? bytesCopied = null, CancellationToken ct = default, CopyOptions? options = null) {
 

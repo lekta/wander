@@ -12,7 +12,7 @@ public class RawPreviewExtractorTests {
     // these exercise.
 
     /// <summary>A JPEG the way a decoder wants it: baseline frame (SOF0).</summary>
-    private static byte[] BaselineJpeg(int padding = 0) {
+    internal static byte[] BaselineJpeg(int padding = 0) {
         return Jpeg(0xC0, padding);
     }
 
@@ -85,7 +85,7 @@ public class RawPreviewExtractorTests {
     /// mdia / minf / stbl with the first sample's size and place. Real files
     /// have tkhd, mdhd and the rest around these.
     /// </summary>
-    private static byte[] Moov(int sampleAt, int sampleLength, bool wide) {
+    internal static byte[] Moov(int sampleAt, int sampleLength, bool wide) {
         byte[] stsz = Box("stsz", Be32(0), Be32(0), Be32(1), Be32(sampleLength));
         byte[] chunks = wide
             ? Box("co64", Be32(0), Be32(1), Be32(0), Be32(sampleAt))
@@ -95,7 +95,7 @@ public class RawPreviewExtractorTests {
         return Box("moov", Box("mvhd", new byte[8]), Box("trak", Box("mdia", Box("minf", stbl))));
     }
 
-    private static byte[] Box(string type, params byte[][] body) {
+    internal static byte[] Box(string type, params byte[][] body) {
         var box = new List<byte>();
         box.AddRange(Be32(8 + body.Sum(part => part.Length)));
         box.AddRange(Encoding.ASCII.GetBytes(type));
@@ -305,7 +305,7 @@ public class RawPreviewExtractorTests {
         return b;
     }
 
-    private static byte[] Be32(int v) {
+    internal static byte[] Be32(int v) {
         var b = new byte[4];
         BinaryPrimitives.WriteUInt32BigEndian(b, (uint)v);
 

@@ -102,3 +102,21 @@ public class PanelViewTests {
             .WithLevel(@"C:\", new PanelLevel(LevelState.Loaded, ImmutableArray.Create(a, e), 2));
     }
 }
+
+
+/// <summary>What a panel row is to the panel, by what it stands on.</summary>
+public class PanelRowTests {
+    [Theory]
+    [InlineData(PanelRowKind.Device)]
+    [InlineData(PanelRowKind.DeviceFolder)]
+    public void APhonesRow_IsNeverProbed_YetHasItsChevron(PanelRowKind kind) {
+        // Each question about subfolders is a request over the cable
+        // (PLAN Y4b): the chevron is drawn on faith, as Explorer draws it.
+        var row = new PanelRow(@"device:Pixel 6\Storage\DCIM", "DCIM", kind);
+
+        Assert.False(row.IsProbed);
+        Assert.True(row.HasChevron);
+        Assert.False(row.IsRenamable);
+        Assert.False(row.IsLeaf);
+    }
+}

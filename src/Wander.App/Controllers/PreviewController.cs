@@ -1210,7 +1210,7 @@ public sealed class PreviewController : ObservableObject {
         // An entry too big to unpack for a look. Everything else inside an
         // archive is previewed off its scratch copy, and a format the pane
         // cannot read says so in the ordinary words.
-        : _archiveEntryTooBig ? Strings.PreviewArchiveTooBig
+        : _archiveEntryTooBig ? (DevicePath.Is(_primary?.FullPath) ? Strings.PreviewDeviceTooBig : Strings.PreviewArchiveTooBig)
         : _mediaProblem is { } problem ? problem
         : _missingCodec == MissingCodec.Hevc ? Strings.PreviewNeedsHevc
         : _missingCodec != MissingCodec.None ? string.Format(Strings.PreviewNeedsCodec, _missingFor, StoreName(_missingCodec))
@@ -1955,7 +1955,17 @@ public sealed class PreviewController : ObservableObject {
             // copy goes through the ordinary pipeline. Past the ceiling
             // there is no copy: unpacking half a gigabyte because a row was
             // clicked is not a preview, and "Open" is the way to it.
-            if (Archives.Inside(path)) {
+            if (Containers.Inside(path)) {
+                // A RAW on a phone or a camera: the head of it, with its
+                // pictures in it, rather than the whole - 6 MB of a 30 MB
+                // CR3 (2026-10-19), and no ceiling while the pictures are
+                // within it.
+                if (DevicePath.IsInside(path) && ImageFormats.IsRaw(path) && await DeviceHeadAsync(_primary, ct) is { } head) {
+                    await LoadFileAsync(head, ct);
+
+                    return;
+                }
+
                 if (_primary.Size > MaxArchivePreviewBytes) {
                     _archiveEntryTooBig = true;
                     Kind = PreviewKind.Unsupported;
@@ -2440,6 +2450,46 @@ public sealed class PreviewController : ObservableObject {
             log.Info($"Preview: cannot unpack {entry.FullPath} - {ex.Message}");
 
             return null;
+        }
+    }
+
+    /// <summary>
+    /// What the pane shows of a RAW on a device: the whole copy when "Open"
+    /// made one already, else its head (<see cref="TempExtraction.CopyHead"/>)
+    /// - through the same gate as an archive entry's copy. Null when the
+    /// pictures are not within <see cref="MaxArchivePreviewBytes"/> or the
+    /// device would not give them: the caller then goes the way of any
+    /// file on a device.
+    /// </summary>
+    private async Task<string?> DeviceHeadAsync(FileSystemEntry entry, CancellationToken ct) {
+        string whole = TempExtraction.CopyPathFor(entry.FullPath);
+        if (entry.Size is { } size && SizeOnDisk(whole) == size) {
+            return whole;
+        }
+        if (ServiceLocator.TryGet<IDeviceContent>() is not { } devices) {
+            return null;
+        }
+
+        var log = Log.Current;
+        try {
+            return await LongWait.WatchAsync(
+                HeadThroughGateAsync(devices, log, entry, ct), log, $"preview: reading the head of {entry.FullPath}");
+        } catch (OperationCanceledException) {
+            throw;
+        } catch (Exception ex) {
+            log.Info($"Preview: cannot read the head of {entry.FullPath} - {ex.Message}");
+
+            return null;
+        }
+    }
+
+    private async Task<string?> HeadThroughGateAsync(IDeviceContent devices, ILogger log, FileSystemEntry entry, CancellationToken ct) {
+        await _archiveCopyGate.WaitAsync(ct);
+        try {
+            return await Task.Run(
+                () => TempExtraction.CopyHead(devices, ServiceLocator.Get<IFileSystem>(), log, entry, MaxArchivePreviewBytes, ct), ct);
+        } finally {
+            _archiveCopyGate.Release();
         }
     }
 
@@ -3628,7 +3678,7 @@ public sealed class PreviewController : ObservableObject {
         if (RatingRequested is null || entry.IsFolderLike || !ImageFormats.IsImage(entry.Name)) {
             return;
         }
-        if (entry.OriginalLocation is not null || Archives.Of(entry.FullPath) is not null) {
+        if (entry.OriginalLocation is not null || Archives.Of(entry.FullPath) is not null || DevicePath.Is(entry.FullPath)) {
             return;
         }
 
@@ -3994,7 +4044,7 @@ public sealed class PreviewController : ObservableObject {
             // Folders inside contribute nothing - the shell reports no size
             // for them, and guessing one would be worse than leaving it out.
             bool hasFolders = _selection.Any(en => en.Kind == EntryKind.Directory);
-            if (Archives.Inside(_selection[0].FullPath)) {
+            if (Containers.Inside(_selection[0].FullPath)) {
                 var files = _selection.Where(en => en.Kind == EntryKind.File).ToList();
                 Summary = SummaryText.ForSelection(
                     _selection.Count, [], hasFolders, files.Count, files.Sum(en => en.Size ?? 0), null, 0);

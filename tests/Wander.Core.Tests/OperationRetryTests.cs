@@ -23,6 +23,20 @@ public class OperationRetryTests {
     }
 
     [Fact]
+    public void Plan_OfACopyOffAPhone_TakesTheFilesOnThePhone() {
+        // The device did not come back in time (PLAN Y4d): the retry is a
+        // copy off the same places on it, into the same folder.
+        var record = Copy(
+            new OperationItem(@"device:Pixel 6\Storage\DCIM\Camera\PXL_1.jpg", @"E:\Photos\PXL_1.jpg", BatchItemStatus.Ok, null),
+            new OperationItem(@"device:Pixel 6\Storage\DCIM\Camera\PXL_2.jpg", @"E:\Photos\PXL_2.jpg", BatchItemStatus.Failed,
+                new IOException("gone", unchecked((int)0x8007001F))));
+
+        var plan = OperationRetry.Plan(record);
+
+        Assert.Equal(new[] { new RetryItem(@"device:Pixel 6\Storage\DCIM\Camera\PXL_2.jpg", @"E:\Photos") }, plan!.Items);
+    }
+
+    [Fact]
     public void Plan_NothingFailed_IsNull() {
         var record = Copy(new OperationItem(@"C:\a.jpg", @"E:\Photos\a.jpg", BatchItemStatus.Ok, null));
 

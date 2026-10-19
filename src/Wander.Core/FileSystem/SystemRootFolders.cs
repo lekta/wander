@@ -56,7 +56,7 @@ internal static class SystemRootFolders {
     /// folders or files sitting directly in a volume root.
     /// </summary>
     public static bool IsSystemRoot(string path) {
-        if (string.IsNullOrWhiteSpace(path)) {
+        if (string.IsNullOrWhiteSpace(path) || DevicePath.Is(path)) {
             return false;
         }
 

@@ -4,6 +4,7 @@ using Wander.App.ViewModels;
 using Wander.Core;
 using Wander.Core.FileSystem;
 using Wander.Core.Logging;
+using Wander.Core.Navigation;
 using Wander.Core.Panels;
 using Wander.Core.Shell;
 
@@ -36,6 +37,12 @@ public sealed class BookmarksController {
     // The built-in rows of the last build and the settings switch behind
     // each of them: Delete on such a row turns the switch off - see HideSpecial.
     private readonly Dictionary<string, Action> _specialSwitches = new(StringComparer.OrdinalIgnoreCase);
+    private readonly BookmarkTitles _titles = new();
+
+    // The names of the phones and cameras plugged in: a bookmark on one has a
+    // row only while it is (BookmarkTitles.IsShown). Told by the window, which
+    // asks the devices off its thread.
+    private IReadOnlyCollection<string> _plugged = Array.Empty<string>();
 
 
     public BookmarksController(IFileSystem fs, SettingsViewModel settings, ILogger log) {
@@ -55,11 +62,62 @@ public sealed class BookmarksController {
     /// <summary>The user's own bookmarks, in order — what gets persisted.</summary>
     public IReadOnlyList<string> Paths => _favorites;
 
+    /// <summary>The bookmarks' own names - persisted apart from the list (<c>IBookmarkTitleStore</c>).</summary>
+    public BookmarkTitles Titles => _titles;
 
-    /// <summary>Replaces the saved list. Does not rebuild — the caller does.</summary>
-    public void Load(IEnumerable<string> paths) {
+    /// <summary>A bookmark on a phone or a camera is in the list: the devices are worth asking about.</summary>
+    public bool HasDeviceBookmarks => _favorites.Any(DevicePath.Is);
+
+
+    /// <summary>Replaces the saved list and the names. Does not rebuild — the caller does.</summary>
+    public void Load(IEnumerable<string> paths, IReadOnlyDictionary<string, string>? titles = null) {
         _favorites.Clear();
         _favorites.AddRange(paths);
+        _titles.Load(titles);
+    }
+
+    /// <summary>
+    /// The phones and cameras plugged in now, by name. True when that is
+    /// news for a bookmark - the rows are then to be built again.
+    /// </summary>
+    public bool SetPlugged(IEnumerable<string> names) {
+        var now = names.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        bool news = _favorites.Where(DevicePath.Is).Any(p => BookmarkTitles.IsShown(p, now) != BookmarkTitles.IsShown(p, _plugged));
+        _plugged = now;
+
+        return news;
+    }
+
+    /// <summary>What the bookmark on <paramref name="path"/> is called: its own name, or its folder's.</summary>
+    public string NameOf(string path) {
+        return _titles.Of(path) ?? FolderName(path);
+    }
+
+    /// <summary>
+    /// Names a bookmark (decision of 2026-10-19) - the row's label, not the
+    /// folder: the folder keeps its name. A blank name gives the folder's
+    /// back. False when the path is no bookmark of the user's, or nothing
+    /// changed.
+    /// </summary>
+    public bool Rename(string? path, string? title) {
+        if (string.IsNullOrEmpty(path) || IndexOf(path) < 0 || !_titles.Set(path, title, FolderName(path))) {
+            return false;
+        }
+
+        _log.Info($"Bookmark named: {path} -> {(_titles.Of(path) is { } name ? Log.Path(name) : "(its folder's name)")}");
+        Changed?.Invoke(this, EventArgs.Empty);
+
+        return true;
+    }
+
+    /// <summary>
+    /// A drop would add <paramref name="path"/>: a folder not in the list
+    /// yet, or something on a phone or a camera - whether that is a folder
+    /// is asked on the drop (<see cref="Add"/>), not on every move of the
+    /// mouse.
+    /// </summary>
+    public bool CanTake(string path) {
+        return !Contains(path) && (DevicePath.Is(path) || Directory.Exists(path));
     }
 
 
@@ -97,7 +155,7 @@ public sealed class BookmarksController {
         // The divider goes on the first user bookmark, and only when there
         // is a special folder above it to be divided from.
         bool startsSection = rows.Count > 0;
-        foreach (string path in _favorites) {
+        foreach (string path in _favorites.Where(p => BookmarkTitles.IsShown(p, _plugged))) {
             if (BuildFolderRow(path, startsSection) is { } row) {
                 rows.Add(row);
                 startsSection = false;
@@ -119,20 +177,31 @@ public sealed class BookmarksController {
     }
 
 
-    public void Add(string? path) {
-        if (string.IsNullOrEmpty(path) || !_fs.DirectoryExists(path)) {
-            return;
+    /// <summary>
+    /// Adds a bookmark on a folder - one on a phone or a camera too
+    /// (decision of 2026-10-19), which then shows only while the device is
+    /// plugged in. False when it is no folder.
+    /// </summary>
+    public bool Add(string? path) {
+        if (string.IsNullOrEmpty(path) || !IsFolder(path)) {
+            return false;
         }
         if (Contains(path)) {
             StatusReported?.Invoke(this, Strings.StatusAlreadyBookmarked);
 
-            return;
+            return false;
         }
 
         _favorites.Add(path);
+        // On a device that was just asked about: it is plugged in.
+        if (DevicePath.Parse(path) is { } device) {
+            _plugged = _plugged.Append(device.Device).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
         _log.Info($"Bookmark added: {path}");
-        StatusReported?.Invoke(this, string.Format(Strings.StatusBookmarkAdded, LeafName(path)));
+        StatusReported?.Invoke(this, string.Format(Strings.StatusBookmarkAdded, NameOf(path)));
         Changed?.Invoke(this, EventArgs.Empty);
+
+        return true;
     }
 
 
@@ -154,6 +223,7 @@ public sealed class BookmarksController {
         }
 
         _favorites.RemoveAt(idx);
+        _titles.Forget(path);
         _log.Info($"Bookmark removed: {path}");
         Changed?.Invoke(this, EventArgs.Empty);
     }
@@ -208,6 +278,7 @@ public sealed class BookmarksController {
         }
 
         _favorites[idx] = newPath;
+        _titles.Follow(oldPath, newPath);
         _log.Info($"Bookmark relocated: {oldPath} -> {newPath}");
         Changed?.Invoke(this, EventArgs.Empty);
 
@@ -233,6 +304,8 @@ public sealed class BookmarksController {
             _favorites[i] = moved;
             changed = true;
         }
+        // The names go with their bookmarks.
+        changed |= _titles.Follow(oldRoot, newRoot);
 
         if (changed) {
             Changed?.Invoke(this, EventArgs.Empty);
@@ -290,26 +363,29 @@ public sealed class BookmarksController {
     /// thread (PanelRules, ProbeMissing): built here, the row is an ordinary
     /// one. A bookmark inside an archive is not missing, and not a folder
     /// either - the answer the Recycle Bin gets: a leaf. One on the archive
-    /// itself opens like the archive's row under its folder.
+    /// itself opens like the archive's row under its folder. One on a phone
+    /// or a camera is a folder of the device, as under it in the drives
+    /// panel (the caller shows it only while the device is plugged in). The
+    /// label is the bookmark's own name when it has one.
     /// </summary>
-    private static PanelRow? BuildFolderRow(string path, bool startsSection) {
+    private PanelRow? BuildFolderRow(string path, bool startsSection) {
         if (string.IsNullOrEmpty(path)) {
             return null;
         }
 
-        string name = LeafName(path);
-        if (string.IsNullOrEmpty(name)) {
-            // e.g. a drive root — fall back to the trimmed path itself.
-            name = path;
-        }
-
         bool isShell = ServiceLocator.TryGet<IShellNamespace>() is { } shell && shell.IsShellPath(path);
         bool isArchive = isShell && Archives.Of(path) is { IsRoot: true };
-        var kind = isArchive ? PanelRowKind.Archive : isShell ? PanelRowKind.Shell : PanelRowKind.Folder;
+        var kind = DevicePath.Is(path) ? PanelRowKind.DeviceFolder
+            : isArchive ? PanelRowKind.Archive
+            : isShell ? PanelRowKind.Shell
+            : PanelRowKind.Folder;
 
-        return new PanelRow(path, name, kind) {
+        return new PanelRow(path, NameOf(path), kind) {
             Role = PanelRowRole.OwnBookmark,
             StartsSection = startsSection,
+            // The device's own picture says where the folder is: the camera
+            // or the phone, as in the drives panel (2026-10-19).
+            IconPath = DevicePath.Parse(path) is { } device ? DevicePath.RootOf(device.Device) : null,
         };
     }
 
@@ -321,6 +397,27 @@ public sealed class BookmarksController {
 
     private static string LeafName(string path) {
         return Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+    }
+
+    /// <summary>The folder's own name: a phone by its name, a drive root by its whole text.</summary>
+    private static string FolderName(string path) {
+        if (DevicePath.Parse(path) is { IsRoot: true } device) {
+            return device.Device;
+        }
+
+        string name = LeafName(path);
+
+        return string.IsNullOrEmpty(name) ? path : name;
+    }
+
+    /// <summary>
+    /// A folder on disk, or one on a device - the device is asked, from what
+    /// its listing already read.
+    /// </summary>
+    private bool IsFolder(string path) {
+        return DevicePath.Is(path)
+            ? ServiceLocator.TryGet<IDeviceContent>()?.GetEntry(path) is { Kind: EntryKind.Directory }
+            : _fs.DirectoryExists(path);
     }
 
 

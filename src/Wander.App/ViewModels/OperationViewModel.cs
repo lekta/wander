@@ -47,6 +47,7 @@ public sealed class OperationViewModel : ObservableObject {
     private double _percent;
     private bool _hasBytes;
     private bool _weighing;
+    private string? _paused;
     private bool _cancelling;
     private IReadOnlyList<string> _problemLines = Array.Empty<string>();
     private string? _ejectRoot;
@@ -200,9 +201,10 @@ public sealed class OperationViewModel : ObservableObject {
         private set => SetField(ref _cancelling, value);
     }
 
-    /// <summary>One line for a narrow place: the verb and the percentage - or, before there are numbers, the verb and "counting".</summary>
-    public string Summary => _weighing
-        ? string.Format(Strings.OperationWeighing, Verb)
+    /// <summary>One line for a narrow place: the verb and the percentage - or, before there are numbers, the verb and "counting"; standing, the verb and "waiting".</summary>
+    public string Summary =>
+        _paused is not null ? string.Format(Strings.OperationPaused, Verb)
+        : _weighing ? string.Format(Strings.OperationWeighing, Verb)
         : string.Format(Strings.OperationOne, Verb, (int)Math.Round(Percent));
 
 
@@ -216,6 +218,12 @@ public sealed class OperationViewModel : ObservableObject {
             : string.Format(Strings.OperationItems, snapshot.Completed, snapshot.Total);
         if (snapshot.Attempt > 1) {
             ItemsText += ", " + string.Format(Strings.OperationRetrying, snapshot.Attempt, RetryPolicy.Default.Attempts);
+        }
+        // Standing, waiting for the person: what to do goes where the eye
+        // reads the progress (PLAN Y4d).
+        _paused = snapshot.PausedReason is { } reason ? Strings.Get(reason) : null;
+        if (_paused is not null) {
+            ItemsText += " - " + _paused;
         }
         Percent = snapshot.Percent;
         Raise(nameof(PercentText));

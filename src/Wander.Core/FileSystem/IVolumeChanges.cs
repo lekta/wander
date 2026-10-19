@@ -19,6 +19,11 @@ public interface IVolumeChanges {
 }
 
 
-/// <param name="Root">The volume's root: <c>E:\</c>.</param>
+/// <param name="Root">The volume's root: <c>E:\</c>; for a device, the system's name of it, which is no path.</param>
 /// <param name="Arrived">True when it came, false when it went.</param>
-public sealed record VolumeChange(string Root, bool Arrived);
+/// <param name="IsDevice">
+/// A phone or a camera, not a volume (PLAN Y4): which one, by the name
+/// Wander's paths use, is not known here - the device is asked
+/// (<c>IDeviceContent.StateOf</c>).
+/// </param>
+public sealed record VolumeChange(string Root, bool Arrived, bool IsDevice = false);

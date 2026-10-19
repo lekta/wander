@@ -75,6 +75,22 @@ public interface IFileSystem {
         IProgress<long>? bytesCopied = null, CancellationToken ct = default, CopyOptions? options = null);
 
     /// <summary>
+    /// A new file at <paramref name="destination"/> from a stream somebody
+    /// else opened - a file on a phone or a camera (PLAN Y4c) - made the way
+    /// <see cref="CopyFile"/> makes its copy: under a temporary name, whole
+    /// before it takes the real one, read back when
+    /// <paramref name="options"/> ask (<see cref="CopyMismatchException"/>,
+    /// nothing kept), and dated <paramref name="modifiedUtc"/> as its last
+    /// change. Never over another: a name taken throws
+    /// <see cref="IOException"/>. The stream is read to its end and not
+    /// closed - it is the caller's.
+    /// </summary>
+    /// <param name="length">How many bytes the stream holds - claimed on the disk before any is written.</param>
+    /// <param name="modifiedUtc">The source's time of last change; null leaves the copy's own.</param>
+    CopyReport WriteFromStream(Stream source, long length, string destination, DateTime? modifiedUtc,
+        IProgress<long>? bytesCopied = null, CancellationToken ct = default, CopyOptions? options = null);
+
+    /// <summary>
     /// Move a file or folder. Within one volume this is a rename and the
     /// extra arguments never come into play; across volumes it is a copy
     /// followed by a delete, and they behave as in <see cref="CopyFile"/> -

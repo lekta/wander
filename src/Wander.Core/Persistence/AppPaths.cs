@@ -57,6 +57,9 @@ public static class AppPaths {
     /// <summary>How each model was last turned in the preview (<c>IModelViews</c>).</summary>
     public static string ModelViewsFile => Path.Combine(DataRoot, "model-views.json");
 
+    /// <summary>The bookmarks' own names (<c>IBookmarkTitleStore</c>).</summary>
+    public static string BookmarkTitlesFile => Path.Combine(DataRoot, "bookmark-titles.json");
+
     public static string Logs => Path.Combine(DataRoot, "logs");
 
     public static string Thumbs => Path.Combine(DataRoot, "thumbs");

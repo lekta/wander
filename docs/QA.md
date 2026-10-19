@@ -151,8 +151,9 @@ exe), переменная `WANDER_DATA_DIR`, иначе `%LOCALAPPDATA%\Wander`
 | Галерея, оценки, сайдкары | `RatingFilterTests`, `RatingToggleTests`, `ImageFolderProbeTests`, `DesktopIniTests`, `CompanionMetadataServiceTests`; харнесс: клик по звезде не пересобирает | Фокус (клик по звезде, `Shift`+цифры); Просмотр | `bg.ratings`, тик сторожа |
 | Контекстное меню, shell | `ContextMenuBuilderTests`, `ShellExtensionCatalogTests`; харнесс: меню строится без исключений | Обмен с системой (сторонние пункты запускаются); Просмотр и галерея («Сортировка — у папки, меню пустого места») | время `QueryContextMenu`, owner-drawn в логе |
 | Настройки, `state.json`, `folders.json`, палитра | `AppPathsTests`, `PaneSizesTests`, `ViewChoiceTests`, `FolderSettingsBookTests`; `check-resources.ps1` (ключи XAML); харнесс: `state` из фикстур (`state-upgrade`: `assert-folders`) | После обновления; две копии на одних данных (`--yield`) — только вживую; Просмотр и галерея («Вид — у папки», «Сортировка — у папки») | `WARN` при загрузке состояния, `State loaded` / `State written`, `Pane sizes:`, `Started with --yield`, `Sort pinned:` / `Default sort:` |
-| Дерево, закладки, сторож | `PanelRulesTests`, `PanelKeyNavigationTests`, `PanelViewTests`, `PanelPathsTests`, `TreeNavThrottleTests`, `FolderChangesTests`, `NavigationFallbackTests`, `BranchReconcileTests` (уровень панели: строки живут, вставки / перестановки / удаления вокруг), `PathFollowingTests`, `UndoableActionsTests` (пары `MovesOnUndo`), `NavigationServiceTests` (`RewritePaths`), `VolumeInfoTests` (строка диска в «Компьютере»); харнесс: `tree-bookmarks` (таблица сценариев), внешнее создание файла в песочнице → строка появилась | Дерево и закладки | `nav.trees`, `nav.watch`, `WS …` (с `LogActions`) |
+| Дерево, закладки, сторож | `PanelRulesTests`, `PanelKeyNavigationTests`, `PanelViewTests`, `PanelPathsTests`, `TreeNavThrottleTests`, `FolderChangesTests`, `NavigationFallbackTests`, `BranchReconcileTests` (уровень панели: строки живут, вставки / перестановки / удаления вокруг), `PathFollowingTests`, `UndoableActionsTests` (пары `MovesOnUndo`), `NavigationServiceTests` (`RewritePaths`), `VolumeInfoTests` (строка диска в «Компьютере»), `BookmarkTitlesTests` (своё название, следование, показ закладки устройства); харнесс: `tree-bookmarks` (таблица сценариев), внешнее создание файла в песочнице → строка появилась | Дерево и закладки | `nav.trees`, `nav.watch`, `WS …` (с `LogActions`) |
 | Архивы как папки, извлечение, панель просмотра | `ArchivePathTests`, `ExtractionServiceTests`, `PreviewRouterTests`, `ContextMenuBuilderTests` («Извлечь рядом»); харнесс: `selfcheck` (ассоциации машины) + сценарий `archives` | Архивы как папки (извлечь рядом, перетаскивание из дерева); Файловые операции; Обмен с системой (наружу — только глазами) | `Extract:`, `Extract (temporary copy)`, `Archive enumerate`, «Archives open as folders» в первых строках лога |
+| Телефон и камера: `DevicePath`, `Containers`, импорт и пауза, WPD, узел устройств | `DevicePathTests`, `DeviceClutterTests`, `DeviceImportServiceTests` (пауза, 10 минут, совпадения), `HeadStreamTests` (голова RAW для просмотра), `ConflictVerdictTests` («идентичны» по размеру и дате), `NavigationFallbackTests`, `ContextMenuBuilderTests`; харнесс: `devices` (телефон сценариев — WPD и шелл не проверяет) | живой прогон с телефоном и камерой (OPERATIONS «Устройства»): листинг большой папки, миниатюры, копия, выдернутый кабель, запертый телефон, другой порт | `Devices:`, `Device arrived / removed`, `Import:`, `the device went away` / `is back` |
 | Действия, каталог, запуск; групповое переименование | `ActionApplicabilityTests`, `CommandLineTests`, `ExternalActionRunnerTests`, `ActionCatalogTests`, `ActionReportTests`, `BuiltinArgumentsTests`, `ContextMenuBuilderTests`, `RenamePlannerTests`, `HoldFileActionTests`; харнесс: `smoke-walk` (меню), `focus-keys` (`F2`) — окна действий и переименования он не поднимает | **Действия** — целиком; Ход операции (окно действия) | `Action '…'`, `image-convert:`, `Batch rename:`, `Rename:` |
 | Цвет: палитра, `StockControls.xaml`, тема, `ThemeScope`, `GalleryPalette` | `ToneTests`, `UiThemesTests`; `check-resources.ps1` (ключи двух тем совпадают); стенд отрисовки: светлая тема против Aero2 попиксельно, страницы настроек в обеих темах | Настройки («Цветовая схема»); Окружения (тёмная Windows); Просмотр и галерея (фон галереи) | `Theme: …` |
 | Строки, язык, `Strings.en.resx`, руководство и сайт | `check-strings.ps1` (ключи, плейсхолдеры и формы обоих языков), `UiLanguagesTests`, `PluralFormTests`; шаг «site» (`GUIDE.en.md` в пару, цели `guideEn`) | Настройки («Интерфейс»); английский интерфейс — окна по ширине | `Interface language: …` |
@@ -1528,9 +1529,10 @@ zip-документов (`ZipDocumentExtractor`), четыре кодировк
   `sleep ms`, `note text`.
 - `view Details|Tiles|LargeIcons|Gallery`.
 - `select names[]` — через контрол активного вида (путь клика).
-- `command name` — delete, permanent-delete, copy, cut, paste, new-folder,
-  refresh, undo, up, back, forward, clear-search; деструктивные — только
-  когда текущая папка внутри песочницы.
+- `command name` — delete, permanent-delete, copy, copy-to («Скопировать
+  в…», папка — из `dialogs folder`), cut, paste, new-folder, refresh, undo,
+  up, back, forward, clear-search; деструктивные — только когда текущая
+  папка внутри песочницы.
 - `rename name to`.
 - `key Key [repeat]` — без модификаторов (`Keyboard.Modifiers` читает
   настоящую клавиатуру; для `Ctrl`-сочетаний есть `command`).
@@ -1540,7 +1542,8 @@ zip-документов (`ZipDocumentExtractor`), четыре кодировк
   только в песочнице; `delete` не ругается на отсутствующий путь (шаг
   сброса); `create` и `delete` с `count` — серия файлов, `{n}` в имени —
   номер с 001; `move {to}` — переименование или перенос «другой
-  программой»; `lock` держит хэндл до `unlock` или конца прогона.
+  программой»; `copy {to}` — копия «другой программой»; `lock` держит
+  хэндл до `unlock` или конца прогона.
 - `preview on`.
 - `preview-format {ext, name}` — файл с таким расширением, если он тут
   есть, — выделить и снять; нет — строка в отчёте, не падение.
@@ -1578,7 +1581,7 @@ zip-документов (`ZipDocumentExtractor`), четыре кодировк
   экране; `kept` — там, где её оставил последний `place`, под каким бы
   именем и среди каких бы строк она ни была; место читается с контейнера
   строки, не из арифметики вида.
-- `bookmark {op: add|remove, path}`.
+- `bookmark {op: add|remove|rename, path}`; `rename` берёт название из `dialogs prompt`, пустое — имя папки.
 - `search {name, text, subfolders, binaries, searchTimeoutMs | box}` —
   `box` — набрано в поле над списком: живой фильтр и обход подпапок,
   который его продолжает; `subfolders` при `box` — кнопка у поля, по
@@ -1589,11 +1592,26 @@ zip-документов (`ZipDocumentExtractor`), четыре кодировк
 - `assert-entries {count | min | max | contains | absent | selected, scope:
   model|visible}`.
 - `assert-path {is, crumbs[]}`.
+- `assert-status {key}` — строка состояния говорит то, что строка ресурса
+  (с плейсхолдерами — её начало до первого): отказ, который пишется только
+  туда.
+- `assert-operations {finished, failed, outcome, verified}` — завершённые
+  операции; у новейшей — упавшие, итог, проверенные; ждёт конца идущих.
+- `assert-files {exist[], absent[], ranks, sizes, datedAs}` — файлы на
+  диске; размер в байтах, дата изменения — как у другого файла (± 2 с).
 - `assert-pane {minList}` — ширина окна, панели просмотра и остатка под
   список — в отчёт; `minList` роняет шаг, если списку осталось меньше.
 - `drop {paths[], target, effect: Copy|Move|Link}` — drop прямо во
   вьюмодель, минуя WPF: маршрут записи архива в извлечение,
   подтверждения, прогресс, undo; цель только в песочнице.
+- `device {op}` — телефон сценариев (`HarnessDevice`): `plug {root,
+  locked}` — хранилище — папка песочницы, `locked` — без хранилищ;
+  `unplug`; `break {path, after}` — следующее чтение файла обрывается после
+  `after` байт с кодом выдернутого кабеля (0x8007001F), устройство уходит;
+  `wait-paused [reason]` — идущая операция ждёт устройство. Приход и уход —
+  `WM_DEVICECHANGE` в настоящий `VolumeChangeHub` окна. Настоящие
+  устройства харнесс не видит и не читает: `IDeviceContent` и пути
+  `device:` в `IShellNamespace` подменены (`HarnessShellNamespace`).
 
 У любого шага — `ifOpensAsFolder` с путём архива: шаг идёт, только если
 приложение открывает этот архив папкой на этой машине; при WinRAR или
@@ -1655,7 +1673,7 @@ Wander открывать формат сам — шаг пойдёт без п�
 |---|---|---|
 | `smoke-walk` | photos, raw, big | все виды, превью JPEG / CR3 / DNG, 5000 файлов, создание → rename → корзина → undo |
 | `focus-keys` | photos | «Фокус, выделение и клавиатура»: стрелки на краях сетки, `F2` в четырёх видах, три выделенных через все виды, выделение после delete / undo / up, `Enter` в таблице |
-| `tree-bookmarks` | photos, raw, big | ветка не сворачивается после `F5`; папка, созданная и переименованная в списке, отражается в ветке; шеврон возвращается пустой папке с первой подпапкой; `tree-rename` открытой папки ведёт листинг и держит ветку раскрытой, `undo` возвращает; подпапка, созданная снаружи, появляется в раскрытой ветке по `post WindowActivated`; `drop` папки в другую ветку и обратно; цель — строка панели, выделение списка на месте (`assert-state`); `paste` в строку-цель, не в открытую папку; закладка следует за переименованием; закладка добавляется и снимается |
+| `tree-bookmarks` | photos, raw, big | ветка не сворачивается после `F5`; папка, созданная и переименованная в списке, отражается в ветке; шеврон возвращается пустой папке с первой подпапкой; `tree-rename` открытой папки ведёт листинг и держит ветку раскрытой, `undo` возвращает; подпапка, созданная снаружи, появляется в раскрытой ветке по `post WindowActivated`; `drop` папки в другую ветку и обратно; цель — строка панели, выделение списка на месте (`assert-state`); `paste` в строку-цель, не в открытую папку; закладка следует за переименованием, своё название — с ней, пустое возвращает имя папки; закладка добавляется и снимается |
 | `file-ops` | photos, attrs | copy / cut / paste между папками, три ответа на один конфликт, цепочка undo по вставкам, занятый файл, путь длиннее корзины, read-only; после безвозвратного удаления `undo` возвращает несвязанное переименование |
 | `search` | docs, code, big | маска по имени, `needle42` по содержимому во всех форматах, четыре кодировки, подпапки, поиск по 5000 |
 | `preview-formats` | photos, raw, docs, code, media, links | по скриншоту на ветку панели (35 при нынешнем наборе фикстур; чего не хватило — в отчёте), включая документы текстом, карточку программы, TGA, SVG, HEIC и `.msi` из фикстур; хелперы отсмотра на CR3 — три скриншота |
@@ -1663,6 +1681,7 @@ Wander открывать формат сам — шаг пойдёт без п�
 | `follow-row` | big, photos | выделенная строка на своём месте экрана (`place` / `assert-place`), таблица и плитки: файлы снаружи выше неё (три и четыреста — пересборка), `F5`, переименование снаружи, порядок туда и обратно, фильтр по имени, выдача из поля фильтра с подпапками, её пересортировка и возврат в папку, фильтр по звёздам; каждый из четырёх видов показывает выделенную, в том числе с клавиатурой в панели; список в самом начале не уезжает от созданного выше |
 | `archives` | archives | zip / 7z / rar / tar.gz как папки: вход по пути и по Enter, подпапка, `up`, крошки; архив как узел дерева (`tree-expand` до папки внутри, zip и rar); `solid.rar` в панели просмотра — три выделения, копия не переделывается (лог глазами); панель просмотра на архиве и на записи (скриншоты, глазами); delete / cut / new-folder внутри не срабатывают; `copy` -> `paste` в обычную папку -> `undo`; `drop` записи из архива в папку с эффектом Move -> извлечение, запись осталась в архиве, `undo`; настоящая папка `plain.zip`; снимки внутри `photos.zip` — миниатюры (скриншот, глазами); защищённый паролем архив; шаги с rar и tar.gz — `ifOpensAsFolder` |
 | `soak` | photos, raw, big, names | случайная навигация, плато WS и handles, `SYS` в логе |
+| `devices` | photos | телефон сценариев: в «Компьютере» и в панели (раскрытие до `DCIM`), мусор спрятан и показывается настройкой, крошки, `Delete` — отказ строкой статуса, копия с проверкой и датой телефона, «идентичный» пропущен, `undo`, кабель выдернут посреди файла — пауза и продолжение, запертый телефон, уход с папки отключённого, «Скопировать в…», закладка на `DCIM` со своим названием — пропадает с отключением и возвращается с устройством; 10 минут ожидания — в `DeviceImportServiceTests` |
 | `state-upgrade` | photos, attrs | старт на `state.json` чужой сборки: настройки из файла применились (скрытые видны, а они по умолчанию выключены), закрепления видов переехали в `folders.json` (`assert-folders`), пропавшие закладки — строки, а не ошибки |
 
 Что клавиатурой и мышью не воспроизводится (`Shift`-выделение, DnD,
