@@ -43,6 +43,30 @@ public class ContextMenuBuilderTests {
         Assert.Null(Find(several, MenuCommandId.GoToLocation));
     }
 
+    /// <summary>The shell's "Извлечь" is Wander's own row, right under "Открыть" (2026-10-19) - Wander lets go of the drive first.</summary>
+    [Fact]
+    public void Drive_TheShellsEject_IsOurRow_RightAfterOpen() {
+        var eject = new ShellMenuEntry { CommandId = 37, Header = "Извлечь", Verb = "eject" };
+
+        var menu = ContextMenuBuilder.Build(
+            SelectionOf(Drive(@"F:\")), ContextMenuSettings.Default, new[] { ShellItem(1, "7-Zip"), eject });
+
+        Assert.Equal(new[] { MenuCommandId.Open, MenuCommandId.Eject }, menu.Take(2).Select(e => e.Id));
+        Assert.DoesNotContain(Flatten(menu), e => e.ShellCommand == 37);
+    }
+
+    [Fact]
+    public void Eject_IsNotOffered_WithoutTheShellsVerb_OrOnSeveralDrives() {
+        var eject = new ShellMenuEntry { CommandId = 37, Header = "Извлечь", Verb = "eject" };
+
+        var fixedDrive = ContextMenuBuilder.Build(SelectionOf(Drive(@"C:\")), ContextMenuSettings.Default, new[] { ShellItem(1, "7-Zip") });
+        var two = ContextMenuBuilder.Build(SelectionOf(Drive(@"E:\"), Drive(@"F:\")), ContextMenuSettings.Default, new[] { eject });
+
+        Assert.Null(Find(fixedDrive, MenuCommandId.Eject));
+        Assert.Null(Find(two, MenuCommandId.Eject));
+        Assert.DoesNotContain(Flatten(two), e => e.ShellCommand == 37);
+    }
+
     [Fact]
     public void SelectionMenu_EndsWithProperties() {
         var menu = ContextMenuBuilder.Build(SelectionOf(File("a.txt")), ContextMenuSettings.Default);
@@ -1141,6 +1165,10 @@ public class ContextMenuBuilderTests {
         return new FileSystemEntry(
             name, System.IO.Path.Combine(Folder, name), EntryKind.Directory, null, DateTime.UnixEpoch,
             false, false, false, false);
+    }
+
+    private static FileSystemEntry Drive(string root) {
+        return new FileSystemEntry(root, root, EntryKind.Drive, null, DateTime.MinValue, false, false, false, false);
     }
 
     /// <summary>

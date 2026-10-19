@@ -129,13 +129,15 @@ public partial class MainWindow : Window {
     private void OnSourceInitialized(object? sender, EventArgs e) {
         // A flash drive put in or pulled out is told to top-level windows:
         // the hub reads the message, the model hears it (Y2). Not claimed -
-        // whoever else in the window wants the message still gets it.
+        // whoever else in the window wants the message still gets it. The
+        // volume of the open folder sends its own notices here too (E).
         if (ServiceLocator.TryGet<VolumeChangeHub>() is { } volumes && PresentationSource.FromVisual(this) is HwndSource source) {
             source.AddHook((IntPtr _, int msg, IntPtr wParam, IntPtr lParam, ref bool _) => {
                 volumes.HandleMessage(msg, wParam, lParam);
 
                 return IntPtr.Zero;
             });
+            volumes.Attach(source.Handle);
         }
 
         // A smoke run is parked off-screen on purpose — restoring the saved
@@ -1523,6 +1525,7 @@ public partial class MainWindow : Window {
             [MenuCommandId.SortAuto] = new(vm.SetSortAutoCommand),
             [MenuCommandId.MakeDefaultSort] = new(vm.MakeDefaultSortCommand),
 
+            [MenuCommandId.Eject] = new(vm.EjectDriveCommand),
             [MenuCommandId.Properties] = new(vm.PropertiesCommand),
 
             // The row carries the action's id as its argument.

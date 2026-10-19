@@ -92,6 +92,10 @@ public enum MenuCommandId {
     /// <summary>The order on screen becomes the default one.</summary>
     MakeDefaultSort,
 
+    // --- Drives ---------------------------------------------------------
+    /// <summary>A drive the shell offers to eject: Wander lets go of it first, then asks the shell (E, 2026-10-19).</summary>
+    Eject,
+
     // --- Misc -----------------------------------------------------------
     Properties,
 

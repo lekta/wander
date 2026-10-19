@@ -503,8 +503,13 @@ public static class PanelRules {
     /// activation, which leaves closed levels alone. A closed level is
     /// otherwise dropped: it is read when it opens, and the chevron of its
     /// row is asked for meanwhile. A level already being read is left to it.
+    /// F5 reads the drives themselves too: a flash drive taken out without
+    /// the system saying so to the window stayed in them (2026-10-19).
     /// </summary>
     private static WorkspaceState Reread(WorkspaceState state, bool expandedOnly, ICollection<WorkspaceEffect> effects) {
+        if (!expandedOnly) {
+            state = Read(state, Pane.Drives, PanelState.TopKey, effects);
+        }
         foreach (var pane in new[] { Pane.Bookmarks, Pane.Drives }) {
             var probe = new List<string>();
             foreach (var (key, level) in state.Panel(pane).Levels) {

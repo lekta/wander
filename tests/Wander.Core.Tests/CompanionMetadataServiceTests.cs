@@ -422,6 +422,51 @@ public class CompanionMetadataServiceTests {
         Assert.Equal(noRating, Text(fs.Files[XmpPath]));
     }
 
+    // RawTherapee 5.12 beside darktable: no Rank in the .pp3 until rated
+    // there, the stars in darktable's IMG.CR2.xmp.
+    private const string Pp3WithoutRank = "[General]\nColorLabel=0\nInTrash=false\n\n[Exposure]\nCompensation=0.35\n";
+    private const string DarktableXmpPath = @"C:\photos\IMG_1234.CR2.xmp";
+
+    [Fact]
+    public void ReadRatingFor_TakesEachFieldFromTheFirstSidecarThatHoldsIt() {
+        var (service, fs, _) = Build(pp3: Pp3WithoutRank);
+        fs.Files[DarktableXmpPath] = Utf8(Xmp.Replace("xmp:Rating=\"2\"", "xmp:Rating=\"5\""));
+
+        var rating = service.ReadRatingFor(Row("IMG_1234.CR2", Pp3Path, DarktableXmpPath));
+
+        Assert.Equal(5, rating?.Rank);
+        Assert.Equal(0, rating?.ColorLabel);
+    }
+
+    [Fact]
+    public void ApplyRatingToMany_WritesThePp3EvenWithoutRank_AndUndoTakesItOutAgain() {
+        var (service, fs, undo) = Build(pp3: Pp3WithoutRank);
+        fs.Files[DarktableXmpPath] = Utf8(Xmp);
+        var row = Row("IMG_1234.CR2", Pp3Path, DarktableXmpPath);
+
+        var result = Assert.Single(service.ApplyRatingToMany(new[] { row }, RatingField.Rank, 4, SidecarFormat.Xmp));
+
+        Assert.Equal(4, service.ReadRating(Pp3Path)?.Rank);
+        Assert.Equal(4, service.ReadRating(DarktableXmpPath)?.Rank);
+        Assert.Equal(4, result.Rating.Rank);
+        undo.Undo();
+        Assert.Equal(Pp3WithoutRank, Text(fs.Files[Pp3Path]));
+        Assert.Equal(Xmp, Text(fs.Files[DarktableXmpPath]));
+    }
+
+    [Fact]
+    public void ApplyRatingToMany_UndoOfTheFirstRatingInAnXmp_TakesTheKeyOutAgain() {
+        // A missing xmp:Rating leaves the camera's stars; a 0 would take them off.
+        string noRating = Xmp.Replace("   xmp:Rating=\"2\"\n", "");
+        var (service, fs, undo) = Build(pp3: null, xmp: noRating);
+
+        service.ApplyRatingToMany(new[] { Row("IMG_1234.CR2", XmpPath) }, RatingField.Rank, 3, SidecarFormat.Xmp);
+
+        Assert.Equal(3, service.ReadRating(XmpPath)?.Rank);
+        undo.Undo();
+        Assert.Equal(noRating, Text(fs.Files[XmpPath]));
+    }
+
     [Fact]
     public void CarryRatings_SortedByRating_OrdersByWhatWasCarried() {
         var shown = new[] {

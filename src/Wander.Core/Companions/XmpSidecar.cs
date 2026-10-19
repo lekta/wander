@@ -137,6 +137,18 @@ internal static class XmpSidecar {
     }
 
 
+    /// <summary>The same packet without <c>xmp:Rating</c> - undo of a rating written into a file that had none.</summary>
+    public static byte[] WithoutRating(byte[] content) {
+        return SidecarText.Edit(content, text => RemoveProperty(text, RatingProperty));
+    }
+
+
+    /// <summary>The same packet without <c>xmp:Label</c>.</summary>
+    public static byte[] WithoutColorLabel(byte[] content) {
+        return SidecarText.Edit(content, text => RemoveProperty(text, LabelProperty));
+    }
+
+
     // --- Finding ---------------------------------------------------------
 
     /// <summary>
@@ -267,6 +279,24 @@ internal static class XmpSidecar {
         int insertAt = text[tagEnd - 1] == '/' ? tagEnd - 1 : tagEnd;
 
         return text[..insertAt] + $" {property}=\"{escaped}\"" + text[insertAt..];
+    }
+
+    /// <summary>
+    /// Takes the attribute out with the whitespace before it - the inverse
+    /// of <see cref="SetProperty"/>'s insert, the one way a property Wander
+    /// takes out got there. A file without it stays as it is.
+    /// </summary>
+    private static string RemoveProperty(string text, string property) {
+        int from = FindAttribute(text, property, out _, out int valueEnd);
+        if (from < 0) {
+            return text;
+        }
+
+        while (from > 0 && char.IsWhiteSpace(text[from - 1])) {
+            from--;
+        }
+
+        return text[..from] + text[(valueEnd + 1)..];
     }
 
     private static string Escape(string value) {

@@ -858,6 +858,18 @@ public class PanelRulesTests {
         Assert.DoesNotContain(@"F:\DCIM", s.Lines(Pane.Drives));
     }
 
+    /// <summary>F5 reads the drives too: one taken out without the system saying so to the window leaves them (2026-10-19).</summary>
+    [Fact]
+    public void Y2_F5_ReadsTheDrivesAgain_AFlashDriveGoneUnannounced_Leaves() {
+        var s = Scene(@"F:\DCIM").Start();
+        s.Chevron(Pane.Drives, @"F:\", open: true);
+
+        s.Unplug(@"F:\").Post(new PanelsRefreshRequested()).Settle();
+
+        Assert.DoesNotContain(@"F:\", s.Lines(Pane.Drives));
+        Assert.DoesNotContain(@"F:\DCIM", s.Lines(Pane.Drives));
+    }
+
 
     // --- Helpers -----------------------------------------------------------------------------
 

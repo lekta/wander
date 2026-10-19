@@ -1,5 +1,6 @@
 using Wander.Core.FileSystem;
 using Wander.Core.Menu;
+using Wander.Core.Shell;
 
 namespace Wander.Core.Tests;
 
@@ -93,6 +94,13 @@ public class ContextMenuCatalogTests {
         yield return ContextMenuBuilder.Build(
             new ContextMenuTarget { Selection = new[] { file }, FolderPath = @"C:\work", IsSearchResult = true },
             ContextMenuSettings.Default);
+
+        // A drive the shell can eject: "Извлечь" is ours.
+        var drive = new FileSystemEntry(@"F:\", @"F:\", EntryKind.Drive, null, DateTime.MinValue, false, false, false, false);
+        yield return ContextMenuBuilder.Build(
+            new ContextMenuTarget { Selection = new[] { drive }, FolderPath = @"F:\", IsPanelRow = true },
+            ContextMenuSettings.Default,
+            new[] { new ShellMenuEntry { CommandId = 1, Header = "Извлечь", Verb = "eject" } });
 
         // The header's "Actions" menu, with and without a selection: its
         // rows must be hideable and labelled too.

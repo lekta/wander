@@ -59,7 +59,9 @@ public static class PlatformBootstrapper {
         ServiceLocator.Register<IVolumeChanges>(volumes);
         ServiceLocator.Register<IKnownFolders>(new WindowsKnownFolders());
         ServiceLocator.Register<ISystemClipboard>(new WindowsClipboard(logger));
-        ServiceLocator.Register<IDirectoryWatcher>(new WindowsDirectoryWatcher(logger));
+        // The watcher's handle on the open folder is let go of when Windows
+        // asks for the volume it is on (E) - the hub hears the asking.
+        ServiceLocator.Register<IDirectoryWatcher>(new WindowsDirectoryWatcher(logger, volumes));
         ServiceLocator.Register<IShellLauncher>(new ShellLauncher());
         // Thumbnails get a disk tier next to the logs and state.json
         // (AppPaths.Thumbs). Limits arrive from the settings once the view

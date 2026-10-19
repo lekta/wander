@@ -95,6 +95,18 @@ public static class Pp3Sidecar {
     }
 
 
+    /// <summary>The same file without <c>[General] Rank</c> - undo of a rating written into a file that had none.</summary>
+    public static byte[] WithoutRank(byte[] content) {
+        return SidecarText.Edit(content, text => SetKey(text, RankKey, null));
+    }
+
+
+    /// <summary>The same file without <c>[General] ColorLabel</c>.</summary>
+    public static byte[] WithoutColorLabel(byte[] content) {
+        return SidecarText.Edit(content, text => SetKey(text, ColorLabelKey, null));
+    }
+
+
     private static void Guard(int value, int max, string name) {
         if (value < 0 || value > max) {
             throw new ArgumentOutOfRangeException(name, value, $"Value must be 0..{max}.");
@@ -107,10 +119,11 @@ public static class Pp3Sidecar {
     /// <summary>
     /// Rewrites one key in place when it's there, inserts it at the top of
     /// <c>[General]</c> when it isn't, and appends that section if the file
-    /// has none. Everything else is untouched, including comments, blank
-    /// lines and key order.
+    /// has none. A null <paramref name="value"/> takes the key's line out,
+    /// and leaves a file without it as it is. Everything else is untouched,
+    /// including comments, blank lines and key order.
     /// </summary>
-    private static string SetKey(string text, string key, string value) {
+    private static string SetKey(string text, string key, string? value) {
         var lines = text.Split('\n');
         string? section = null;
         int generalStart = -1;
@@ -136,10 +149,18 @@ public static class Pp3Sidecar {
                 continue;
             }
 
+            if (value is null) {
+                return string.Join('\n', lines.Where((_, at) => at != i));
+            }
+
             string eol = lines[i].EndsWith('\r') ? "\r" : "";
             lines[i] = $"{key}={value}{eol}";
 
             return string.Join('\n', lines);
+        }
+
+        if (value is null) {
+            return text;
         }
 
         string newline = SidecarText.NewlineOf(text);

@@ -112,6 +112,14 @@ public sealed class MainViewModel : ObservableObject {
     /// <summary>Smallest the bookmarks panel may be; the drives under it keep their header (FolderTreesView).</summary>
     private const double BookmarksMinHeight = 44;
 
+    /// <summary>
+    /// How long "Извлечь" waits for the drive to go before it says who holds
+    /// it, and how long it watches after that: Windows' own "in use" window
+    /// may still let the drive go, and the drives are read again then.
+    /// </summary>
+    private const int EjectAnswerMs = 5000;
+    private const int EjectLateMs = 120_000;
+
     private readonly IFileSystem _fs;
     private readonly IShellLauncher _shell;
     private readonly IAppStateStore _stateStore;
@@ -460,6 +468,7 @@ public sealed class MainViewModel : ObservableObject {
         _tracker.Changed += OnTrackerChanged;
         if (ServiceLocator.TryGet<IVolumeChanges>() is { } volumes) {
             volumes.Changed += OnVolumeChanged;
+            volumes.Releasing += OnVolumeReleasing;
         }
 
         // Every verb below acts on what TargetRules says it acts on: from a
@@ -570,6 +579,15 @@ public sealed class MainViewModel : ObservableObject {
         ToggleBookmarksCommand = new RelayCommand(_ => IsBookmarksExpanded = !IsBookmarksExpanded);
         ToggleDrivesCommand = new RelayCommand(_ => IsDrivesExpanded = !IsDrivesExpanded);
         OpenComputerCommand = new RelayCommand(_ => _nav.NavigateTo(ShellPaths.Computer, NavigationSource.Drives));
+        // After the menu is gone, as a shell row is run (ContextMenuFactory):
+        // the shell's own "in use" window must not come up under it.
+        EjectDriveCommand = new RelayCommand(
+            p => {
+                if (EjectRootOf(p) is { } root) {
+                    _dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => _ = EjectAsync(root)));
+                }
+            },
+            p => EjectRootOf(p) is not null);
         AddBookmarkCommand = new RelayCommand(p => Bookmarks.Add(p as string));
         RemoveBookmarkCommand = new RelayCommand(p => Bookmarks.Remove((p as TreeNodeViewModel)?.FullPath));
         RemoveMissingBookmarkCommand = new RelayCommand(_ => Bookmarks.Remove(_missingFolderPath), _ => IsMissingBookmark);
@@ -1721,6 +1739,9 @@ public sealed class MainViewModel : ObservableObject {
 
     /// <summary>A click on the "Computer" title: the drives in the list (<see cref="ShellPaths.Computer"/>).</summary>
     public RelayCommand OpenComputerCommand { get; }
+
+    /// <summary>"Извлечь" in a drive's menu - in a panel or in "Компьютер" (E): the same eject as a finished operation's.</summary>
+    public RelayCommand EjectDriveCommand { get; }
     public RelayCommand ToggleFoldersCommand { get; }
     public RelayCommand AddBookmarkCommand { get; }
 
@@ -2203,9 +2224,23 @@ public sealed class MainViewModel : ObservableObject {
         Workspace.Post(new VolumesChanged());
         PostBookmarks();
         RefreshEjectable();
+        // The drives in the list are read like the panel's.
+        if (IsCurrentComputer) {
+            Refresh();
+        }
         if (!change.Arrived) {
             _ = LeaveRemovedVolumeAsync();
         }
+    }
+
+    /// <summary>
+    /// Windows asks for the volume the open folder is on (E): the preview
+    /// lets go of a file on it - a PDF or a video holds its file. Not shown
+    /// again if the volume stays: the eject was asked for, and the next try
+    /// must not run into the same file; the next selection shows it.
+    /// </summary>
+    private void OnVolumeReleasing(object? sender, string root) {
+        ReleasePreview(new[] { root });
     }
 
     /// <summary>The open folder was on a volume that went: to the latest place on one still there.</summary>
@@ -6515,7 +6550,7 @@ public sealed class MainViewModel : ObservableObject {
 
             var row = new OperationViewModel(
                 record, OperationRetry.Plan(record) is not null, id => _ = RetryOperationAsync(id), _tracker.Dismiss,
-                (id, root) => _ = EjectAsync(id, root));
+                (id, root) => _ = EjectAsync(root, id));
             Operations.Insert(Math.Min(snapshots.Count + k, Operations.Count), row);
             if (record.HasProblems) {
                 _ = DescribeProblemsAsync(row, record);
@@ -6576,17 +6611,21 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     /// <summary>
-    /// A finished row's "Извлечь E:" (E): the shell's own "eject" of the
-    /// drive, as the drive's menu in "Компьютер" offers it. Wander lets go of
-    /// the drive first - the folder on screen on it moves elsewhere, the
-    /// preview closes what it holds there - or its own handles would be what
-    /// keeps it. The drive going away is what says it worked; still there
-    /// after a few seconds, the files the operation touched there are asked
-    /// who holds them.
+    /// "Извлечь" - a finished row's "Извлечь E:" or the drive's own menu
+    /// (E): the shell's own "eject" of the drive, as the drive's menu in
+    /// "Компьютер" offers it. Wander lets go of the drive first - the folder
+    /// on screen on it moves elsewhere, the preview closes what it holds
+    /// there - and reads nothing on it while the shell asks Windows: its own
+    /// handles, the panels read again right after the verb, were what kept
+    /// it (2026-10-19). The drive going away is what says it worked, and the
+    /// drives are read again then, whether the system tells the window or
+    /// not; still there after a few seconds, the files the operation touched
+    /// there are asked who holds them, and the drive is watched a while
+    /// longer - Windows' own "in use" window may still let it go.
     /// </summary>
-    private async Task EjectAsync(long operationId, string root) {
+    private async Task EjectAsync(string root, long? operationId = null) {
         string drive = DriveOf(root);
-        _log.Info($"Eject {drive} from operation {operationId}");
+        _log.Info(operationId is { } id ? $"Eject {drive} from operation {id}" : $"Eject {drive}");
         if (_nav.Current is { } open && string.Equals(DriveOf(open), drive, StringComparison.OrdinalIgnoreCase)) {
             var others = await Task.Run(() => _fs.GetRoots()
                 .Select(r => r.FullPath)
@@ -6605,19 +6644,40 @@ public sealed class MainViewModel : ObservableObject {
                 return;
             }
 
-            if (await Task.Run(() => WaitForVolumeGone(root))) {
-                Status = string.Format(Strings.StatusEjected, drive);
-                RefreshEjectable();
+            if (await Task.Run(() => WaitForVolumeGone(root, EjectAnswerMs))) {
+                Ejected(root);
 
                 return;
             }
 
-            var record = _tracker.Finished.FirstOrDefault(r => r.Id == operationId);
+            var record = operationId is { } op ? _tracker.Finished.FirstOrDefault(r => r.Id == op) : null;
             string reason = await Task.Run(() => WhoHoldsDrive(root, record));
             Warn(string.Format(Strings.StatusEjectBusy, drive, reason));
         } finally {
             RestorePreview();
         }
+
+        if (await Task.Run(() => WaitForVolumeGone(root, EjectLateMs))) {
+            Ejected(root);
+        }
+    }
+
+    /// <summary>The drive went after "Извлечь": said in the status line, and taken out of the drives as a removal the system announced would be.</summary>
+    private void Ejected(string root) {
+        _log.Info($"Eject {DriveOf(root)}: the drive is gone");
+        Status = string.Format(Strings.StatusEjected, DriveOf(root));
+        OnVolumeChanged(this, new VolumeChange(root, Arrived: false));
+    }
+
+    /// <summary>
+    /// The drive in a drive's menu: the panel's row, or the one row in
+    /// "Компьютер". Null for anything that is not a drive's root.
+    /// </summary>
+    private string? EjectRootOf(object? parameter) {
+        return TargetRules.PropertiesOf(ResolveTarget(parameter).Target, openFolder: null) is { } path
+            && ServiceLocator.TryGet<IVolumeInfoProvider>()?.IsVolumeRoot(path) == true
+                ? path
+                : null;
     }
 
     /// <summary>The shell's "eject" verb on the drive, from its context menu in "Компьютер"; false when it offers none.</summary>
@@ -6633,14 +6693,23 @@ public sealed class MainViewModel : ObservableObject {
         return session.Invoke(entry.CommandId);
     }
 
-    /// <summary>Whether the drive is gone - or has no medium - within a few seconds of the eject.</summary>
-    private static bool WaitForVolumeGone(string root) {
+    /// <summary>
+    /// Whether the drive is gone - or has no medium - within
+    /// <paramref name="ms"/>. Its letter is what is watched: asking the drive
+    /// itself opens it, and an open drive at the moment Windows asks who
+    /// holds it is a "Wander does". Whether a medium is in - a card reader
+    /// keeps its letter - is asked every two seconds only.
+    /// </summary>
+    private static bool WaitForVolumeGone(string root, int ms) {
         var volumes = ServiceLocator.TryGet<IVolumeInfoProvider>();
-        for (int i = 0; i < 20; i++) {
-            if (volumes?.Describe(root) is not { IsReady: true }) {
+        for (int waited = 250; waited <= ms; waited += 250) {
+            Thread.Sleep(250);
+            if (!Environment.GetLogicalDrives().Contains(root, StringComparer.OrdinalIgnoreCase)) {
                 return true;
             }
-            Thread.Sleep(250);
+            if (waited % 2000 == 0 && volumes?.Describe(root) is not { IsReady: true }) {
+                return true;
+            }
         }
 
         return false;

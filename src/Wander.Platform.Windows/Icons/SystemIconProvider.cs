@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
@@ -67,6 +68,18 @@ public sealed class SystemIconProvider : IIconProvider {
     private const int SlowShellLoadMs = 1000;
 
     /// <summary>
+    /// How far, per channel of 255, a pixel of a rendered page may stray
+    /// from the paper and still be paper - see <see cref="IsBlankPage"/>.
+    /// </summary>
+    private const int BlankTolerance = 16;
+
+    /// <summary>
+    /// One pixel in this many may stand out from the paper and the page
+    /// still reads as blank: a few stray pixels do not make a cover.
+    /// </summary>
+    private const int BlankShare = 1000;
+
+    /// <summary>
     /// The sizes a path can be cached at, held rather than asked for:
     /// <see cref="ForgetCached"/> runs once per file in a watcher burst,
     /// and <c>Enum.GetValues</c> allocates a fresh array on every call.
@@ -84,6 +97,14 @@ public sealed class SystemIconProvider : IIconProvider {
     private static readonly HashSet<string> _ownIconExtensions = new(StringComparer.OrdinalIgnoreCase) {
         ".exe", ".ico", ".cur", ".ani", ".scr", ".cpl", ".url", ".website", ".appref-ms",
     };
+
+    /// <summary>
+    /// PDFs whose first page came out blank in this process (see
+    /// <see cref="RenderCoverPlate"/>). Their tile falls back to the
+    /// shell's, and that stays off the disk: the next process draws the
+    /// page right, and a cached icon would outlive it as the blank did.
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, byte> _blankPages = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly Dictionary<string, byte[]> _cache = new(StringComparer.OrdinalIgnoreCase);
 
@@ -208,9 +229,11 @@ public sealed class SystemIconProvider : IIconProvider {
                 // off the disk: the extension installed, it would go on
                 // being found there. A RAW is drawn from its own JPEG,
                 // extension or not. A shortcut is drawn from its target,
-                // so the target's codec decides (review 2026-10-15).
+                // so the target's codec decides (review 2026-10-15). The
+                // stand-in for a PDF page that came out blank stays off it
+                // too: the next process draws the page.
                 string drawn = ExistingLinkTarget(path) ?? path;
-                if (cacheable && (ImageFormats.IsRaw(drawn) || !LacksCodec(drawn))) {
+                if (cacheable && (ImageFormats.IsRaw(drawn) || !LacksCodec(drawn)) && !_blankPages.ContainsKey(drawn)) {
                     using (PerfLog.Measure("bg.thumb-disk-write")) {
                         _disk!.Write(path, bytes);
                     }
@@ -796,14 +819,17 @@ public sealed class SystemIconProvider : IIconProvider {
             using var buffer = new MemoryStream(bytes);
             using var cover = new Bitmap(buffer);
 
-            // A page of one flat colour is a render that failed without
-            // saying so. Late in a long session Windows.Data.Pdf drew two
+            // A page that reads as blank paper is a render that failed
+            // without saying so. Late in a long session Windows.Data.Pdf drew
             // scanned books (JPEG 2000 under a JBIG2 mask) as blank paper,
             // while a fresh process drew the same files right (2026-10-08).
             // Taken as the cover, the blank went to the disk cache and
-            // outlived the session; refused, the tile is the shell's icon.
-            if (PdfPageImage.Supports(path) && IsFlat(cover)) {
+            // outlived the session. On 2026-10-19 the blank was not one
+            // flat colour and passed a test for one: the test is now what
+            // the plate shows - the page laid on white.
+            if (PdfPageImage.Supports(path) && IsBlankPage(cover)) {
                 IconLog($"PDF page rendered blank - {path}");
+                _blankPages.TryAdd(path, 0);
 
                 return null;
             }
@@ -861,8 +887,13 @@ public sealed class SystemIconProvider : IIconProvider {
         return canvas;
     }
 
-    /// <summary>Whether every pixel of the bitmap is the same colour. False when it cannot be locked.</summary>
-    private static bool IsFlat(Bitmap bmp) {
+    /// <summary>
+    /// Whether a rendered page reads as an empty sheet: laid on white, as
+    /// the plate lays it, hardly a pixel stands out from the paper - the
+    /// colour of its corner. Transparent and white are the same paper there,
+    /// and so is one flat colour. False when it cannot be locked.
+    /// </summary>
+    private static bool IsBlankPage(Bitmap bmp) {
         BitmapData data;
         try {
             data = bmp.LockBits(
@@ -876,14 +907,16 @@ public sealed class SystemIconProvider : IIconProvider {
         try {
             // A row at a time, as in DrawnExtent.
             var row = new int[data.Width];
-            int first = 0;
+            long allowed = (long)data.Width * data.Height / BlankShare;
+            long standing = 0;
+            int paper = 0;
             for (int y = 0; y < data.Height; y++) {
                 Marshal.Copy(data.Scan0 + (y * data.Stride), row, 0, row.Length);
                 if (y == 0) {
-                    first = row[0];
+                    paper = OnWhite(row[0]);
                 }
                 foreach (int pixel in row) {
-                    if (pixel != first) {
+                    if (StandsOut(OnWhite(pixel), paper) && ++standing > allowed) {
                         return false;
                     }
                 }
@@ -893,6 +926,29 @@ public sealed class SystemIconProvider : IIconProvider {
         } finally {
             bmp.UnlockBits(data);
         }
+    }
+
+    /// <summary>A 32bppArgb pixel laid on white, as 0xRRGGBB.</summary>
+    private static int OnWhite(int argb) {
+        int alpha = (argb >> 24) & 0xFF;
+        int rgb = 0;
+        for (int shift = 0; shift <= 16; shift += 8) {
+            int channel = (argb >> shift) & 0xFF;
+            rgb |= ((channel * alpha + 255 * (255 - alpha)) / 255) << shift;
+        }
+
+        return rgb;
+    }
+
+    /// <summary>Whether two 0xRRGGBB colours are further apart than <see cref="BlankTolerance"/> in any channel.</summary>
+    private static bool StandsOut(int rgb, int paper) {
+        for (int shift = 0; shift <= 16; shift += 8) {
+            if (Math.Abs(((rgb >> shift) & 0xFF) - ((paper >> shift) & 0xFF)) > BlankTolerance) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool IsShellNamespacePath(string path) {

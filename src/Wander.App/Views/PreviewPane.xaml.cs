@@ -419,7 +419,16 @@ public partial class PreviewPane : UserControl {
     /// The player is closed already: its source went with the content.
     /// </summary>
     private void OnContentReleased(object? sender, EventArgs e) {
-        if (WebPreview.CoreWebView2 is { } web) {
+        LeaveWebPage();
+    }
+
+    /// <summary>
+    /// The browser leaves its page for a blank one. Hidden, it still held
+    /// the file the page was: a PDF looked at on a flash drive and left for
+    /// a picture kept the drive "in use" to an eject (2026-10-19).
+    /// </summary>
+    private void LeaveWebPage() {
+        if (WebPreview.CoreWebView2 is { } web && web.Source != "about:blank") {
             try { web.Navigate("about:blank"); } catch { /* the view is going away */ }
         }
     }
@@ -472,6 +481,11 @@ public partial class PreviewPane : UserControl {
                 ResetVideoTransport();
                 ResetVideoZoom();
                 ResetModelView();
+                // From page to page the next one replaces it - no blank
+                // between two PDFs.
+                if (Controller.Kind != PreviewKind.Web) {
+                    LeaveWebPage();
+                }
                 if (!IsFindable) {
                     CloseFind(keepKeyboard: false);
                 }

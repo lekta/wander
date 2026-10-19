@@ -3612,15 +3612,9 @@ public sealed class PreviewController : ObservableObject {
         }
 
         var sidecars = _companionMetadata!.RatingSidecars(primary.Name, companions);
-        SidecarRating? fromSidecar = null;
-        foreach (string path in sidecars) {
-            fromSidecar = _companionMetadata.ReadRating(path);
-            if (fromSidecar is not null) {
-                break;
-            }
-        }
+        var fromSidecars = _companionMetadata.ReadRating(sidecars);
 
-        return (meta, sidecars, EmbeddedRating.Merge(fromSidecar, _companionMetadata.PhotoRating(primary)));
+        return (meta, sidecars, EmbeddedRating.Merge(fromSidecars, _companionMetadata.PhotoRating(primary)));
     }
 
     /// <summary>

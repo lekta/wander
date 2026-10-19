@@ -82,8 +82,13 @@ public sealed class ThumbnailDiskCache {
     /// (<c>StoreCodecs</c>) - v7 slots of HEIC, AVIF, JPEG XL, WebP, OGV
     /// hold the type's icon even after the extension is installed.
     /// </para>
+    ///
+    /// <para>
+    /// v9 (2026-10-19): a PDF page rendered blank but not one flat colour
+    /// passed for a cover - v8 slots of scanned books hold an empty sheet.
+    /// </para>
     /// </summary>
-    private const int Generation = 8;
+    private const int Generation = 9;
 
     private readonly string _directory;
     private readonly ILogger _log;

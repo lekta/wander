@@ -22,12 +22,22 @@ namespace Wander.Platform.Windows.FileSystem;
 /// recursive watching on a large tree is exactly the setup that overflows
 /// the buffer.
 /// </para>
+///
+/// <para>
+/// The watcher's handle on the folder is what an eject from the tray runs
+/// into: Windows asks first, through the volumes' hub, and the watcher
+/// closes until the answer is known (<see cref="VolumeChangeHub.Releasing"/>).
+/// </para>
 /// </summary>
 public sealed class WindowsDirectoryWatcher : IDirectoryWatcher {
     private readonly ILogger _log;
+    private readonly VolumeChangeHub? _volumes;
     private readonly Lock _lock = new();
 
     private FileSystemWatcher? _watcher;
+    // The folder whose watcher was closed for a volume Windows asked for:
+    // watched again when the volume stays.
+    private string? _suspended;
 
     // Which Watch() call is the current one. Retargeting runs on the pool,
     // and two calls can be in flight at once — the check inside Retarget is
@@ -35,8 +45,13 @@ public sealed class WindowsDirectoryWatcher : IDirectoryWatcher {
     private int _generation;
 
 
-    public WindowsDirectoryWatcher(ILogger log) {
+    public WindowsDirectoryWatcher(ILogger log, VolumeChangeHub? volumes = null) {
         _log = log;
+        _volumes = volumes;
+        if (volumes is not null) {
+            volumes.Releasing += OnVolumeReleasing;
+            volumes.ReleaseRefused += OnVolumeKept;
+        }
     }
 
 
@@ -53,6 +68,7 @@ public sealed class WindowsDirectoryWatcher : IDirectoryWatcher {
     public void Watch(string? path) {
         int gen = Interlocked.Increment(ref _generation);
         Task.Run(() => Retarget(gen, path));
+        _volumes?.Guard(path);
     }
 
 
@@ -60,6 +76,10 @@ public sealed class WindowsDirectoryWatcher : IDirectoryWatcher {
         // Queued retargets see the bumped generation and stand down instead
         // of resurrecting a watcher after this one is gone.
         Interlocked.Increment(ref _generation);
+        if (_volumes is not null) {
+            _volumes.Releasing -= OnVolumeReleasing;
+            _volumes.ReleaseRefused -= OnVolumeKept;
+        }
         lock (_lock) {
             Stop();
         }
@@ -72,6 +92,7 @@ public sealed class WindowsDirectoryWatcher : IDirectoryWatcher {
                 return;
             }
 
+            _suspended = null;
             Stop();
 
             if (string.IsNullOrEmpty(path) || !Directory.Exists(path)) {
@@ -82,6 +103,33 @@ public sealed class WindowsDirectoryWatcher : IDirectoryWatcher {
         }
     }
 
+
+    /// <summary>
+    /// Windows asks to take the volume the folder is on: the handle is
+    /// closed now, on the window's thread, before the answer goes back.
+    /// </summary>
+    private void OnVolumeReleasing(object? sender, string root) {
+        lock (_lock) {
+            if (_watcher?.Path is { } path && IsOn(path, root)) {
+                _suspended = path;
+                Stop();
+            }
+        }
+    }
+
+    /// <summary>The volume stayed: the folder is watched again, unless Wander has moved on since.</summary>
+    private void OnVolumeKept(object? sender, string root) {
+        lock (_lock) {
+            if (_suspended is { } path && IsOn(path, root) && _watcher is null) {
+                _suspended = null;
+                _watcher = Directory.Exists(path) ? Create(path) : null;
+            }
+        }
+    }
+
+    private static bool IsOn(string path, string root) {
+        return path.StartsWith(root, StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>
     /// A file appeared, vanished or was renamed — the folder now holds a

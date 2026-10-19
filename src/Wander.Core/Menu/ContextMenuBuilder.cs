@@ -111,6 +111,12 @@ public static class ContextMenuBuilder {
         }
 
         items.Add(Cmd(MenuCommandId.Open, t.IsSingle, isDefault: !t.IsRecycleBin));
+        // A flash drive is right-clicked to be taken out (2026-10-19): the
+        // shell's own "Извлечь" becomes Wander's, next to "Открыть" - Wander
+        // has to let go of the drive before the shell asks for it.
+        if (shell.Eject && t.IsSingle) {
+            items.Add(Cmd(MenuCommandId.Eject));
+        }
 
         if (openWith.Count > 0) {
             items.Add(Sub(MenuCommandId.OpenSubmenu, openWith));
@@ -494,7 +500,8 @@ public static class ContextMenuBuilder {
 
     /// <summary>
     /// Sorts what the shell reported into three piles, because they belong
-    /// in three different places.
+    /// in three different places. A drive's "eject" is in none of them: it
+    /// is offered as Wander's own row (<see cref="MenuCommandId.Eject"/>).
     ///
     /// <para>
     /// Classification runs on the canonical verb, never on the label: labels
@@ -515,6 +522,7 @@ public static class ContextMenuBuilder {
         var fileOps = new List<MenuEntry>();
         IReadOnlyList<MenuEntry> openWith = Array.Empty<MenuEntry>();
         IReadOnlyList<MenuEntry> shellNew = Array.Empty<MenuEntry>();
+        bool eject = false;
 
         foreach (var item in shellItems) {
             if (item.IsSeparator) {
@@ -524,6 +532,11 @@ public static class ContextMenuBuilder {
             // Blocking is top-level only: the user blocks "7-Zip", not each
             // of the fourteen verbs inside it.
             if (settings.IsBlocked(item.Verb, item.Header)) {
+                continue;
+            }
+
+            if (!item.HasChildren && string.Equals(item.Verb, "eject", StringComparison.OrdinalIgnoreCase)) {
+                eject = true;
                 continue;
             }
 
@@ -555,7 +568,7 @@ public static class ContextMenuBuilder {
 
         return new ShellGroups(
             TrimSeparators(top), TrimSeparators(fileOps),
-            TrimSeparators(openWith), TrimSeparators(shellNew));
+            TrimSeparators(openWith), TrimSeparators(shellNew), eject);
     }
 
     private static bool IsOpenWithPopup(ShellMenuEntry item) {
@@ -624,16 +637,17 @@ public static class ContextMenuBuilder {
     }
 
 
-    /// <summary>Shell entries split by where they go in Wander's menu.</summary>
+    /// <summary>Shell entries split by where they go in Wander's menu; <paramref name="Eject"/> - the shell offered to eject the drive.</summary>
     private sealed record ShellGroups(
         IReadOnlyList<MenuEntry> TopLevel,
         IReadOnlyList<MenuEntry> FileOperations,
         IReadOnlyList<MenuEntry> OpenWith,
-        IReadOnlyList<MenuEntry> New) {
+        IReadOnlyList<MenuEntry> New,
+        bool Eject) {
 
         public static readonly ShellGroups Empty = new(
             Array.Empty<MenuEntry>(), Array.Empty<MenuEntry>(),
-            Array.Empty<MenuEntry>(), Array.Empty<MenuEntry>());
+            Array.Empty<MenuEntry>(), Array.Empty<MenuEntry>(), false);
     }
 
 

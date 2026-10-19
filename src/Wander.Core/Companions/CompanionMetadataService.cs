@@ -115,15 +115,42 @@ public sealed class CompanionMetadataService {
 
 
     /// <summary>
-    /// The rating a row shows: the first of <see cref="RatingSidecars"/> -
-    /// the same one the preview pane shows - over what the photo itself
-    /// says (<see cref="EmbeddedRating.Merge"/>). Null when neither says
+    /// What <paramref name="sidecars"/> (in <see cref="RatingSidecars"/>
+    /// order) say together: each field from the first one that holds it. A
+    /// <c>.pp3</c> without <c>Rank</c> is RawTherapee's "not rated here yet"
+    /// and must not hide the stars darktable's <c>.xmp</c> beside it holds.
+    /// Null when none of them says anything.
+    /// </summary>
+    public SidecarRating? ReadRating(IReadOnlyList<string> sidecars) {
+        SidecarRating? shown = null;
+        foreach (string path in sidecars) {
+            if (ReadRating(path) is not { } rating) {
+                continue;
+            }
+
+            shown = shown is null
+                ? rating
+                : new SidecarRating(
+                    shown.Rank ?? rating.Rank,
+                    shown.ColorLabel ?? rating.ColorLabel,
+                    shown.ColorLabel is null ? rating.ColorLabelName : shown.ColorLabelName);
+            if (shown.Rank is not null && shown.ColorLabel is not null) {
+                break;
+            }
+        }
+
+        return shown;
+    }
+
+
+    /// <summary>
+    /// The rating a row shows: what its <see cref="RatingSidecars"/> say -
+    /// the same the preview pane shows - over what the photo itself says
+    /// (<see cref="EmbeddedRating.Merge"/>). Null when neither says
     /// anything.
     /// </summary>
     public SidecarRating? ReadRatingFor(FileSystemEntry entry) {
-        var sidecars = RatingSidecars(entry.Name, entry.Companions);
-
-        return EmbeddedRating.Merge(sidecars.Count > 0 ? ReadRating(sidecars[0]) : null, PhotoRating(entry));
+        return EmbeddedRating.Merge(ReadRating(RatingSidecars(entry.Name, entry.Companions)), PhotoRating(entry));
     }
 
 
@@ -259,7 +286,8 @@ public sealed class CompanionMetadataService {
     /// A photo with two rating sidecars - the neutral IMG.xmp and the one
     /// RawTherapee or darktable added - has the field written into every
     /// one that holds it (decision 2026-10-01), so the two editors keep
-    /// agreeing; none holding it, the first of <see cref="RatingSidecars"/>.
+    /// agreeing, and into the <c>.pp3</c> always (<see cref="WriteTargets"/>);
+    /// none of them, the first of <see cref="RatingSidecars"/>.
     /// A created sidecar takes the photo's own other field along: a label
     /// put on a frame the camera gave five stars must not take the stars
     /// off with the new file's 0.
@@ -298,8 +326,8 @@ public sealed class CompanionMetadataService {
             try {
                 var sidecars = RatingSidecars(photo.Name, photo.Companions);
                 if (plan == RatingWrite.Edit) {
-                    foreach (string path in Holding(sidecars, field)) {
-                        int previous = ApplyRating(path, field, value);
+                    foreach (string path in WriteTargets(sidecars, field)) {
+                        int? previous = ApplyRating(path, field, value);
                         steps.Add(new SidecarRatingAction(this, path, field, previous, value, photo.FullPath));
                     }
                 } else {
@@ -314,7 +342,7 @@ public sealed class CompanionMetadataService {
                 }
                 touched.Add(photo.Name);
 
-                var rating = EmbeddedRating.Merge(ReadRating(sidecars[0]), PhotoRating(photo));
+                var rating = EmbeddedRating.Merge(ReadRating(sidecars), PhotoRating(photo));
                 if (rating is not null) {
                     results.Add(new RatingResult(photo.FullPath, sidecars[0], rating));
                 }
@@ -371,7 +399,7 @@ public sealed class CompanionMetadataService {
     /// but costs the caller a listing refresh it did not need.
     /// </param>
     internal void SetRating(string path, RatingField field, int value, string? mainPath = null) {
-        int previous = ApplyRating(path, field, value);
+        int? previous = ApplyRating(path, field, value);
         _undo.Push(new SidecarRatingAction(this, path, field, previous, value, mainPath ?? path));
     }
 
@@ -379,9 +407,10 @@ public sealed class CompanionMetadataService {
     /// <summary>
     /// The same write without touching the undo stack — used by
     /// <see cref="SidecarRatingAction"/>, which is already being popped off it.
-    /// Returns the value that was there before.
+    /// Returns the value that was there before, null when the key was not;
+    /// a null <paramref name="value"/> takes the key out again.
     /// </summary>
-    internal int ApplyRating(string path, RatingField field, int value) {
+    internal int? ApplyRating(string path, RatingField field, int? value) {
         if (!IsRatingSidecar(path)) {
             throw new NotSupportedException($"No rating support for {Path.GetExtension(path)} files");
         }
@@ -396,20 +425,29 @@ public sealed class CompanionMetadataService {
         bool pp3 = IsPp3(path);
         var before = pp3 ? Pp3Sidecar.Read(original) : XmpSidecar.Read(original);
 
-        // A sidecar with no such key reads as "unset", which is what 0 means
-        // — so undo of the first edit writes 0 rather than deleting the key.
-        int previous = (field == RatingField.Rank ? before.Rank : before.ColorLabel) ?? 0;
+        // No key is not a 0: a 0 overrides the camera's stars, a missing
+        // Rank leaves them (RawTherapee reads it the same way) - so undo of
+        // a write into a file without the key takes the key out again.
+        int? previous = field == RatingField.Rank ? before.Rank : before.ColorLabel;
 
         byte[] updated = (pp3, field) switch {
-            (true, RatingField.Rank) => Pp3Sidecar.WithRank(original, value),
-            (true, RatingField.ColorLabel) => Pp3Sidecar.WithColorLabel(original, value),
-            (false, RatingField.Rank) => XmpSidecar.WithRating(original, value),
-            (false, RatingField.ColorLabel) => XmpSidecar.WithColorLabel(original, value),
+            (true, RatingField.Rank) => value is int rank
+                ? Pp3Sidecar.WithRank(original, rank)
+                : Pp3Sidecar.WithoutRank(original),
+            (true, RatingField.ColorLabel) => value is int label
+                ? Pp3Sidecar.WithColorLabel(original, label)
+                : Pp3Sidecar.WithoutColorLabel(original),
+            (false, RatingField.Rank) => value is int rating
+                ? XmpSidecar.WithRating(original, rating)
+                : XmpSidecar.WithoutRating(original),
+            (false, RatingField.ColorLabel) => value is int color
+                ? XmpSidecar.WithColorLabel(original, color)
+                : XmpSidecar.WithoutColorLabel(original),
             _ => throw new NotSupportedException($"Unknown rating field {field}"),
         };
 
         _fs.ReplaceAtomic(path, updated);
-        _log.Info($"Sidecar {field}: {path} {previous} -> {value}");
+        _log.Info($"Sidecar {field}: {path} {previous?.ToString() ?? "-"} -> {value?.ToString() ?? "-"}");
 
         return previous;
     }
@@ -451,13 +489,20 @@ public sealed class CompanionMetadataService {
     }
 
 
-    /// <summary>The sidecars that hold <paramref name="field"/>; none does - the first, as before there were two.</summary>
-    private IReadOnlyList<string> Holding(IReadOnlyList<string> sidecars, RatingField field) {
-        var holding = sidecars
-            .Where(path => ReadRating(path) is { } rating && (field == RatingField.Rank ? rating.Rank : rating.ColorLabel) is not null)
+    /// <summary>
+    /// Where <paramref name="field"/> is written: the sidecars that hold it,
+    /// and a <c>.pp3</c> always (2026-10-16) - RawTherapee writes <c>Rank</c>
+    /// there on every rating of its own, without it the file only says "not
+    /// rated in RawTherapee yet", and RawTherapee would go on showing the
+    /// camera's stars. None of them - the first, as before there were two.
+    /// </summary>
+    private IReadOnlyList<string> WriteTargets(IReadOnlyList<string> sidecars, RatingField field) {
+        var targets = sidecars
+            .Where(path => IsPp3(path)
+                || ReadRating(path) is { } rating && (field == RatingField.Rank ? rating.Rank : rating.ColorLabel) is not null)
             .ToArray();
 
-        return holding.Length > 0 ? holding : new[] { sidecars[0] };
+        return targets.Length > 0 ? targets : new[] { sidecars[0] };
     }
 
     private static bool IsPp3(string path) {
@@ -518,11 +563,12 @@ internal sealed record SidecarCreatedAction(
 
 
 /// <summary>
-/// Undo of a rating change — put the old value back. Restoring is the same
+/// Undo of a rating change - put the old value back, or take the key out
+/// when there was none (<see cref="OldValue"/> null). Restoring is the same
 /// guarded write as setting, so the undo itself stays atomic.
 /// </summary>
 internal sealed record SidecarRatingAction(
-    CompanionMetadataService Service, string Path, RatingField Field, int OldValue, int NewValue, string MainPath)
+    CompanionMetadataService Service, string Path, RatingField Field, int? OldValue, int NewValue, string MainPath)
     : IUndoableAction {
 
     public string Description =>

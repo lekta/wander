@@ -71,6 +71,7 @@ public static class ContextMenuCatalog {
         [MenuCommandId.SortAuto] = "MenuSortAuto",
         [MenuCommandId.MakeDefaultSort] = "MenuSortMakeDefault",
 
+        [MenuCommandId.Eject] = "MenuCmdEject",
         [MenuCommandId.Properties] = "MenuCmdProperties",
 
         [MenuCommandId.DropCopyHere] = "MenuCmdDropCopyHere",
@@ -112,6 +113,7 @@ public static class ContextMenuCatalog {
     /// </summary>
     public static IReadOnlyList<MenuNode> HideableTree { get; } = new[] {
         new MenuNode(MenuCommandId.Open, 0),
+        new MenuNode(MenuCommandId.Eject, 0),
         new MenuNode(MenuCommandId.OpenSubmenu, 0),
         new MenuNode(MenuCommandId.OpenWith, 1),
         new MenuNode(MenuCommandId.OpenInTerminal, 0),

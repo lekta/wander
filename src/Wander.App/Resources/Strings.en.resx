@@ -948,6 +948,9 @@
   <data name="MenuCmdExtractHere" xml:space="preserve">
     <value>Extract here</value>
   </data>
+  <data name="MenuCmdEject" xml:space="preserve">
+    <value>Eject</value>
+  </data>
   <data name="MenuCmdProperties" xml:space="preserve">
     <value>Properties</value>
   </data>

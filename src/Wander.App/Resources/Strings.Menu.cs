@@ -270,6 +270,9 @@ public static partial class Strings {
     /// <summary>Восстановить</summary>
     public static string MenuCmdRestore => Get(nameof(MenuCmdRestore));
 
+    /// <summary>Извлечь</summary>
+    public static string MenuCmdEject => Get(nameof(MenuCmdEject));
+
     /// <summary>Свойства</summary>
     public static string MenuCmdProperties => Get(nameof(MenuCmdProperties));
 
