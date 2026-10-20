@@ -382,10 +382,16 @@
   `Kind = Unsupported`, транспорта нет, в заглушке — причина по кодеку из
   `MediaProbe`; нет расширения из Store — его название и кнопка.
 - **`AudioTags`** (Core): ID3v2.2–2.4 (синх-безопасные размеры), ID3v1,
-  Vorbis, MP4-атомы, RIFF-INFO; WMA / Ogg — нет; AAC — только ID3 (кадр
-  ADTS проходит проверки MP3 и врёт). Длительность FLAC из `STREAMINFO`,
-  MP3 по первому кадру, VBR — `Xing` / `Info` / `VBRI`; кодировка 0 — по
-  всем однобайтовым полям сразу. Обложка: `APIC` / `PICTURE`, иначе
+  Vorbis, MP4-атомы, RIFF-INFO, Ogg Vorbis / Opus (`OggTags`: первые два
+  пакета первого потока через страницы, длительность — гранула последней
+  страницы минус pre-skip, обложка — `METADATA_BLOCK_PICTURE`); WMA, AIFF,
+  AU — нет; AAC — только ID3 (кадр ADTS проходит проверки MP3 и врёт).
+  Длительность FLAC из `STREAMINFO`, WAV — `data` / байты в секунду, MP3
+  по первому кадру, VBR — `Xing` / `Info` / `VBRI`; кодировка 0 — по всем
+  однобайтовым полям сразу. Кодек и разрядность — из тех же заголовков;
+  M4A / MKA — первая звуковая дорожка `MediaProbe` (`WithStream`). Строка
+  карточки — `PreviewController.AudioDetail`, каналы — `MediaRows.Layout`;
+  `ReportUnplayableAsync` без `MediaProbe` берёт кодек карточки. Обложка: `APIC` / `PICTURE`, иначе
   `Cover.jpg`, `folder.jpg`, `front.*`, одноимённая, единственная картинка
   в папке.
 

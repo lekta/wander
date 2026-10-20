@@ -481,7 +481,9 @@ internal sealed class BatchExecutor {
                 // undo (which runs in reverse) first un-moves/un-copies,
                 // then brings the old target back. If the op below fails
                 // the target is still recoverable via the same step.
-                run.UndoSteps.Add(new DeleteAction(_bin, _bin.Send(dest)));
+                if (RecycleUndo.Of(_bin.Send(dest), _bin, _undo, _log) is { } restore) {
+                    run.UndoSteps.Add(restore);
+                }
             }
 
             var copied = ApplyOne(src, dest, run);
@@ -561,7 +563,9 @@ internal sealed class BatchExecutor {
         }
 
         if (run.IsMove && !run.Cancelled && failure is null && _fs.Enumerate(src).Count == 0) {
-            run.UndoSteps.Add(new DeleteAction(_bin, _bin.Send(src)));
+            if (RecycleUndo.Of(_bin.Send(src), _bin, _undo, _log) is { } restore) {
+                run.UndoSteps.Add(restore);
+            }
             anyApplied = true;
         }
         _log.Info($"{run.Verb}: {src} -> {dest} [Merged]");
@@ -700,6 +704,12 @@ internal sealed class BatchExecutor {
             // Not undoable, and neither is anything whose undo needs what is
             // gone; the rest of the history stays.
             _undo.Forget(results.Where(r => r.Status == DeleteStatus.Ok).Select(r => r.Path).ToList());
+            // A folder that failed half-way is partly gone: what went is
+            // forgotten as well, what is still there stays undoable.
+            var partly = results.Where(r => r.Status != DeleteStatus.Ok && _fs.DirectoryExists(r.Path)).Select(r => r.Path).ToList();
+            if (partly.Count > 0) {
+                _undo.ForgetLost(partly, p => _fs.FileExists(p) || _fs.DirectoryExists(p));
+            }
         } else {
             PushComposite(undoSteps, isMove: false, undoSteps.Count, verbOverride: "delete", undoVerb: OperationVerbs.Recycle);
             // What the bin took without a way back is as gone as a permanent

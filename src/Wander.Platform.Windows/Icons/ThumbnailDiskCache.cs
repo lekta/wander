@@ -87,8 +87,13 @@ public sealed class ThumbnailDiskCache {
     /// v9 (2026-10-19): a PDF page rendered blank but not one flat colour
     /// passed for a cover - v8 slots of scanned books hold an empty sheet.
     /// </para>
+    ///
+    /// <para>
+    /// v10 (2026-10-19): RAW thumbnails of EXIF orientation 5 and 7 were
+    /// turned the wrong way (<c>ExifOrientation</c>).
+    /// </para>
     /// </summary>
-    private const int Generation = 9;
+    private const int Generation = 10;
 
     private readonly string _directory;
     private readonly ILogger _log;

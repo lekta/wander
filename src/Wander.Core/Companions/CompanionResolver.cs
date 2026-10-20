@@ -13,8 +13,9 @@ namespace Wander.Core.Companions;
 ///
 /// <para>
 /// The rule set is data, not code: <see cref="Default"/> registers Unity
-/// <c>.meta</c> and RawTherapee <c>.pp3</c>, and every further format is
-/// one more <see cref="CompanionRule"/>.
+/// <c>.meta</c>, RawTherapee <c>.pp3</c>, darktable's <c>.xmp</c> with its
+/// duplicates and the plain <c>.xmp</c> of Adobe and exiftool, and every
+/// further format is one more <see cref="CompanionRule"/>.
 /// </para>
 /// </summary>
 public sealed class CompanionResolver {

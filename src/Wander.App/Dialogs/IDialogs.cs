@@ -27,6 +27,9 @@ public enum DialogKind {
 
     /// <summary>The recycle bin would not take these: delete them for good, or stop here?</summary>
     RecycleUnavailable,
+
+    /// <summary>The folder an undo puts items back into is gone: pick another, or leave the undo for later?</summary>
+    UndoFolderGone,
 }
 
 public enum DialogButtons {
@@ -108,6 +111,14 @@ public interface IDialogs {
     /// is going, not a default answer.
     /// </summary>
     string? PickFolder(string title, string? startAt = null);
+
+    /// <summary>
+    /// File picker for one existing file; null when cancelled.
+    /// <paramref name="filter"/> is the dialog's "label|mask" list,
+    /// <paramref name="startAt"/> the folder to open on and
+    /// <paramref name="fileName"/> the name to offer there.
+    /// </summary>
+    string? PickFile(string title, string filter, string? startAt = null, string? fileName = null);
 
     /// <summary>
     /// The resolver a batch copy / move consults about collisions.

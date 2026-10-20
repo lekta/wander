@@ -111,8 +111,20 @@ internal class FakeFileSystem : IFileSystem {
         Files.Remove(path);
     }
 
+    /// <summary>What a delete of a folder takes before it fails half-way, by folder; the rest stays.</summary>
+    public Dictionary<string, string[]> DeleteDirectoryFailsAfter { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+
     public void DeleteDirectory(string path, bool recursive) {
         CallLog.Add($"DeleteDirectory:{path}:{recursive}");
+        if (DeleteDirectoryFailsAfter.TryGetValue(path, out string[]? went)) {
+            foreach (string p in went) {
+                Files.Remove(p);
+                Directories.Remove(p);
+            }
+
+            throw new IOException($"Delete stopped half-way: {path}");
+        }
         Directories.Remove(path);
     }
 

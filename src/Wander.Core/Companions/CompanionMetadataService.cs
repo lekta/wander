@@ -110,7 +110,7 @@ public sealed class CompanionMetadataService {
             return null;
         }
 
-        return TryRead(path, bytes => IsPp3(path) ? Pp3Sidecar.Read(bytes) : XmpSidecar.Read(bytes));
+        return TryRead(path, bytes => IsPp3(path) ? Pp3Sidecar.Shown(Pp3Sidecar.Read(bytes)) : XmpSidecar.Read(bytes));
     }
 
 

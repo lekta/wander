@@ -724,7 +724,7 @@ public sealed class SystemIconProvider : IIconProvider {
             return psdThumb;
         }
 
-        using Bitmap? bmp = LacksCodec(source) ? null : LoadShellBitmap(source, MediumSize);
+        using Bitmap? bmp = NoShellPicture(source) ? null : LoadShellBitmap(source, MediumSize);
         if (bmp is null) {
             return LoadShellIcon(path, IconSize.Normal);
         }
@@ -1249,7 +1249,7 @@ public sealed class SystemIconProvider : IIconProvider {
             return psdThumb;
         }
 
-        Bitmap? baseBmp = IsThumbnailable(source) && !LacksCodec(source)
+        Bitmap? baseBmp = IsThumbnailable(source) && !NoShellPicture(source)
             ? LoadShellBitmap(source, side)
             : LoadIconBitmapJumbo(path);
 
@@ -1360,6 +1360,16 @@ public sealed class SystemIconProvider : IIconProvider {
 
         return needed.Count > 0 && ServiceLocator.TryGet<ICodecProbe>() is { } probe
             && StoreCodecs.FirstMissing(needed, probe) != MissingCodec.None;
+    }
+
+    /// <summary>
+    /// The shell has no picture to give, only the type's icon it would also
+    /// write into <c>thumbcache_*.db</c>: a missing Store codec, or a TGA -
+    /// Windows has no provider for it, and one <c>TgaThumbnail</c> could not
+    /// decode goes to the icon straight away.
+    /// </summary>
+    private static bool NoShellPicture(string path) {
+        return LacksCodec(path) || Path.GetExtension(path).Equals(".tga", StringComparison.OrdinalIgnoreCase);
     }
 
 

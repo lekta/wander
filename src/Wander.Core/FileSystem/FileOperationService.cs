@@ -127,7 +127,9 @@ public sealed class FileOperationService {
         using var _ = _undo.BeginOperation();
         var handle = _bin.Send(path);
         _log.Info($"Delete (recycle): {path}");
-        _undo.Push(new DeleteAction(_bin, handle));
+        if (RecycleUndo.Of(handle, _bin, _undo, _log) is { } restore) {
+            _undo.Push(restore);
+        }
     }
 
     /// <summary>

@@ -195,7 +195,7 @@ public sealed class ShellArchiveFolder {
             }
 
             try {
-                return ReadAll(items, ct);
+                return ReadAll(items, IsLoneStream(path), ct);
             } finally {
                 Release(items);
             }
@@ -265,7 +265,8 @@ public sealed class ShellArchiveFolder {
 
     // --- Enumeration ----------------------------------------------------
 
-    private IReadOnlyList<FileSystemEntry> ReadAll(IEnumShellItems items, CancellationToken ct) {
+    /// <summary>The rows of one level; a size of 0 is "not stated" when <paramref name="zeroIsUnknown"/> (<see cref="IsLoneStream"/>).</summary>
+    private IReadOnlyList<FileSystemEntry> ReadAll(IEnumShellItems items, bool zeroIsUnknown, CancellationToken ct) {
         var result = new List<FileSystemEntry>();
         var batch = new IShellItem[1];
 
@@ -274,7 +275,7 @@ public sealed class ShellArchiveFolder {
             batch[0] = null!;
             try {
                 ct.ThrowIfCancellationRequested();
-                if (BuildEntry(item) is { } entry) {
+                if (BuildEntry(item, zeroIsUnknown) is { } entry) {
                     result.Add(entry);
                 }
             } catch (Exception ex) when (ex is not OperationCanceledException) {
@@ -287,7 +288,17 @@ public sealed class ShellArchiveFolder {
         return result;
     }
 
-    private static FileSystemEntry? BuildEntry(IShellItem item) {
+    /// <summary>
+    /// A <c>.gz</c>, <c>.bz2</c>, <c>.xz</c> or <c>.zst</c> with no tar
+    /// inside: one compressed file, whose size the format does not keep
+    /// whole - the handler answers 0 (stand 2026-09-25).
+    /// </summary>
+    private static bool IsLoneStream(string path) {
+        return Path.GetExtension(path).ToLowerInvariant() is ".gz" or ".bz2" or ".xz" or ".zst"
+            && !Path.GetExtension(Path.GetFileNameWithoutExtension(path)).Equals(".tar", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static FileSystemEntry? BuildEntry(IShellItem item, bool zeroIsUnknown) {
         string fullPath = DisplayName(item, SIGDN_DESKTOPABSOLUTEPARSING);
         if (fullPath.Length == 0) {
             return null;
@@ -305,7 +316,7 @@ public sealed class ShellArchiveFolder {
         var modified = DateTime.MinValue;
         if (item is IShellItem2 item2) {
             var sizeKey = PKEY_Size;
-            if (item2.GetUInt64(ref sizeKey, out ulong bytes) >= 0) {
+            if (item2.GetUInt64(ref sizeKey, out ulong bytes) >= 0 && (bytes > 0 || !zeroIsUnknown)) {
                 size = (long)bytes;
             }
 
@@ -328,19 +339,6 @@ public sealed class ShellArchiveFolder {
             IsSystem: false,
             LinksToDirectory: false);
     }
-
-    private static string DisplayName(IShellItem item, uint form) {
-        if (item.GetDisplayName(form, out IntPtr buffer) < 0 || buffer == IntPtr.Zero) {
-            return "";
-        }
-
-        try {
-            return Marshal.PtrToStringUni(buffer) ?? "";
-        } finally {
-            Marshal.FreeCoTaskMem(buffer);
-        }
-    }
-
 
     // --- COM plumbing ---------------------------------------------------
 
@@ -365,30 +363,6 @@ public sealed class ShellArchiveFolder {
         return bytes.ToArray();
     }
 
-    private static IShellItem? CreateItem(string path) {
-        var iid = IID_IShellItem;
-        int hr = SHCreateItemFromParsingName(path, IntPtr.Zero, ref iid, out object item);
-
-        return hr >= 0 ? item as IShellItem : null;
-    }
-
-    private static IFileOperation CreateFileOperation() {
-        var clsid = CLSID_FileOperation;
-        var iid = IID_IFileOperation;
-        int hr = CoCreateInstance(ref clsid, IntPtr.Zero, CLSCTX_INPROC_SERVER, ref iid, out object operation);
-        if (hr < 0 || operation is not IFileOperation typed) {
-            throw new IOException($"Cannot create the shell copy engine (hr=0x{hr:X8}).");
-        }
-
-        return typed;
-    }
-
-    private static void Check(int hr, string what) {
-        if (hr < 0) {
-            throw new IOException($"{what} failed (hr=0x{hr:X8}).", Marshal.GetExceptionForHR(hr));
-        }
-    }
-
     /// <summary>
     /// What a run that failed or was aborted is reported as. An item's own
     /// answer is asked first, then the run's: one that names a cause - the
@@ -408,12 +382,6 @@ public sealed class ShellArchiveFolder {
     /// <summary>A failure that says what went wrong - not a bare "failed" or "cancelled".</summary>
     private static bool Names(int hr) {
         return hr < 0 && hr is not (E_FAIL or E_ABORT or ErrorCancelled or CopyEngineUserCancelled or CopyEngineCancelled);
-    }
-
-    private static void Release(object? comObject) {
-        if (comObject is not null && Marshal.IsComObject(comObject)) {
-            Marshal.ReleaseComObject(comObject);
-        }
     }
 
 

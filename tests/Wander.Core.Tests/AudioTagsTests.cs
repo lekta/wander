@@ -45,6 +45,8 @@ public class AudioTagsTests {
         Assert.Equal(200, info!.Duration!.Value.TotalSeconds, precision: 3);
         Assert.Equal(48000, info.SampleRate);
         Assert.Equal(2, info.Channels);
+        Assert.Equal(16, info.BitDepth);
+        Assert.Equal("FLAC", info.Codec);
     }
 
     [Fact]
@@ -281,6 +283,7 @@ public class AudioTagsTests {
         Assert.NotNull(info);
         Assert.Null(info!.Title);
         Assert.Equal(45, info.Duration!.Value.TotalSeconds, tolerance: 1.0);
+        Assert.Equal("MP3", info.Codec);
     }
 
     [Fact]
@@ -386,6 +389,65 @@ public class AudioTagsTests {
     [Fact]
     public void Wav_NotARiff_IsNull() {
         Assert.Null(AudioTags.Read(new MemoryStream(Encoding.ASCII.GetBytes("not a wav at all!!!!")), ".wav"));
+    }
+
+    [Fact]
+    public void Wav_CodecDepthAndLength_FromTheFormatAndTheData() {
+        // 8000 Hz mono 16-bit: 16 000 bytes a second; the builder's data chunk is 256 bytes.
+        var wav = new WavBuilder().Format(sampleRate: 8000, channels: 1, bits: 16).Build();
+
+        var info = AudioTags.Read(new MemoryStream(wav), ".wav");
+
+        Assert.Equal("PCM", info!.Codec);
+        Assert.Equal(16, info.BitDepth);
+        Assert.Equal(128, info.BitrateKbps);
+        Assert.Equal(256 / 16000.0, info.Duration!.Value.TotalSeconds, precision: 6);
+    }
+
+
+    // --- Ogg ---------------------------------------------------------------
+
+    [Fact]
+    public void OggVorbis_ReadsTheHeaderTheCommentsAndTheLength() {
+        var ogg = Ogg(
+            44100L * 10,
+            VorbisHead(channels: 2, rate: 44100),
+            Concat(Encoding.ASCII.GetBytes("\u0003vorbis"), Comments(("TITLE", "Полёт"), ("ARTIST", "Шмель")), new byte[] { 1 }));
+
+        var info = AudioTags.Read(new MemoryStream(ogg), ".ogg");
+
+        Assert.Equal("Полёт", info!.Title);
+        Assert.Equal("Шмель", info.Artist);
+        Assert.Equal("Vorbis", info.Codec);
+        Assert.Equal(44100, info.SampleRate);
+        Assert.Equal(2, info.Channels);
+        Assert.Equal(10, info.Duration!.Value.TotalSeconds, precision: 3);
+    }
+
+    [Fact]
+    public void Opus_LengthLessThePreSkip_AndACoverOverSeveralPages() {
+        // A cover bigger than a page: the comment packet runs on over pages.
+        byte[] cover = new byte[100_000];
+        new Random(3).NextBytes(cover);
+        string picture = Convert.ToBase64String(FlacPictureBlock("image/jpeg", cover));
+        var ogg = Ogg(
+            48000L * 5 + 312,
+            OpusHead(channels: 6, preSkip: 312),
+            Concat(Encoding.ASCII.GetBytes("OpusTags"), Comments(("TITLE", "x"), ("METADATA_BLOCK_PICTURE", picture))));
+
+        var info = AudioTags.Read(new MemoryStream(ogg), ".opus");
+
+        Assert.Equal("Opus", info!.Codec);
+        Assert.Equal(48000, info.SampleRate);
+        Assert.Equal(6, info.Channels);
+        Assert.Equal(5, info.Duration!.Value.TotalSeconds, precision: 3);
+        Assert.Equal(cover, info.Cover);
+    }
+
+    [Fact]
+    public void Ogg_NotAnOggOrAnotherCodec_IsNull() {
+        Assert.Null(AudioTags.Read(new MemoryStream(Encoding.ASCII.GetBytes("not an ogg at all!!!!!!!!!!!!")), ".ogg"));
+        Assert.Null(AudioTags.Read(new MemoryStream(Ogg(0, Encoding.ASCII.GetBytes("Speex   0123456789abcdef"))), ".ogg"));
     }
 
 
@@ -511,6 +573,107 @@ public class AudioTagsTests {
     // --- builders ---------------------------------------------------------
 
     /// <summary>
+    /// One Ogg stream of these packets: segments of up to 255 bytes, pages of
+    /// up to 255 segments, the granule on the last page. No CRC - the reader
+    /// does not check it.
+    /// </summary>
+    private static byte[] Ogg(long lastGranule, params byte[][] packets) {
+        var segments = new List<byte[]>();
+        foreach (byte[] packet in packets) {
+            int at = 0;
+            for (; packet.Length - at >= 255; at += 255) {
+                segments.Add(packet[at..(at + 255)]);
+            }
+            segments.Add(packet[at..]);
+        }
+
+        using var file = new MemoryStream();
+        for (int start = 0; start < segments.Count; start += 255) {
+            var page = segments.Skip(start).Take(255).ToList();
+            var header = new byte[27];
+            Encoding.ASCII.GetBytes("OggS").CopyTo(header, 0);
+            BinaryPrimitives.WriteInt64LittleEndian(header.AsSpan(6), start + 255 >= segments.Count ? lastGranule : -1);
+            BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(14), 0x1234);
+            header[26] = (byte)page.Count;
+            file.Write(header);
+            foreach (byte[] segment in page) {
+                file.WriteByte((byte)segment.Length);
+            }
+            foreach (byte[] segment in page) {
+                file.Write(segment);
+            }
+        }
+
+        return file.ToArray();
+    }
+
+    private static byte[] VorbisHead(int channels, int rate) {
+        var head = new byte[30];
+        head[0] = 1;
+        Encoding.ASCII.GetBytes("vorbis").CopyTo(head, 1);
+        head[11] = (byte)channels;
+        BinaryPrimitives.WriteUInt32LittleEndian(head.AsSpan(12), (uint)rate);
+        head[29] = 1;
+
+        return head;
+    }
+
+    private static byte[] OpusHead(int channels, int preSkip) {
+        var head = new byte[19];
+        Encoding.ASCII.GetBytes("OpusHead").CopyTo(head, 0);
+        head[8] = 1;
+        head[9] = (byte)channels;
+        BinaryPrimitives.WriteUInt16LittleEndian(head.AsSpan(10), (ushort)preSkip);
+        BinaryPrimitives.WriteUInt32LittleEndian(head.AsSpan(12), 44100);
+
+        return head;
+    }
+
+    /// <summary>A Vorbis comment block: vendor, count, then KEY=value, lengths little-endian.</summary>
+    private static byte[] Comments(params (string Key, string Value)[] entries) {
+        using var block = new MemoryStream();
+        var length = new byte[4];
+        BinaryPrimitives.WriteInt32LittleEndian(length, 0);
+        block.Write(length);
+        BinaryPrimitives.WriteInt32LittleEndian(length, entries.Length);
+        block.Write(length);
+        foreach (var (key, value) in entries) {
+            byte[] line = Encoding.UTF8.GetBytes($"{key}={value}");
+            BinaryPrimitives.WriteInt32LittleEndian(length, line.Length);
+            block.Write(length);
+            block.Write(line);
+        }
+
+        return block.ToArray();
+    }
+
+    /// <summary>FLAC's PICTURE block, big-endian - what METADATA_BLOCK_PICTURE carries in base64.</summary>
+    private static byte[] FlacPictureBlock(string mime, byte[] data) {
+        using var block = new MemoryStream();
+        var number = new byte[4];
+        void Write(int value) {
+            BinaryPrimitives.WriteInt32BigEndian(number, value);
+            block.Write(number);
+        }
+
+        Write(3);
+        Write(mime.Length);
+        block.Write(Encoding.ASCII.GetBytes(mime));
+        Write(0);
+        for (int i = 0; i < 4; i++) {
+            Write(0);
+        }
+        Write(data.Length);
+        block.Write(data);
+
+        return block.ToArray();
+    }
+
+    private static byte[] Concat(params byte[][] parts) {
+        return parts.SelectMany(p => p).ToArray();
+    }
+
+    /// <summary>
     /// Encodes text the way a Windows tagger of the CD era did: one byte
     /// per character out of codepage 1251. Written out rather than taken
     /// from Encoding.GetEncoding(1251), which .NET does not ship without
@@ -631,11 +794,14 @@ public class AudioTagsTests {
         private readonly List<byte[]> _chunks = new();
 
 
-        public WavBuilder Format(int sampleRate, int channels) {
+        public WavBuilder Format(int sampleRate, int channels, int bits = 0) {
             var fmt = new byte[16];
             BinaryPrimitives.WriteUInt16LittleEndian(fmt.AsSpan(0), 1);                  // PCM
             BinaryPrimitives.WriteUInt16LittleEndian(fmt.AsSpan(2), (ushort)channels);
             BinaryPrimitives.WriteUInt32LittleEndian(fmt.AsSpan(4), (uint)sampleRate);
+            BinaryPrimitives.WriteUInt32LittleEndian(fmt.AsSpan(8), (uint)(sampleRate * channels * bits / 8));
+            BinaryPrimitives.WriteUInt16LittleEndian(fmt.AsSpan(12), (ushort)(channels * bits / 8));
+            BinaryPrimitives.WriteUInt16LittleEndian(fmt.AsSpan(14), (ushort)bits);
             _chunks.Add(Chunk("fmt ", fmt));
 
             return this;

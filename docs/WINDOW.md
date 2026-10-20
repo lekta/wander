@@ -235,10 +235,11 @@
 `Ask(DialogRequest)` (`DialogKind`, заголовок, текст, кнопки, значок;
 кнопка по умолчанию всегда отменяющая, поэтому не поле),
 `Choose(ChoiceRequest)` (ответы на кнопках, «Отмена» по умолчанию; индекс
-или -1), `Prompt`, `PickFolder`, `CreateConflictResolver(skipIdentical)`.
-Продакшн — `WpfDialogs` (`MessageBox` поверх активного окна, но не окна
-операции, `ITransientWindow`; `ChoiceDialog`, `PromptDialog`,
-`OpenFolderDialog`, `DispatcherConflictResolver`); харнесс подставляет
+или -1), `Prompt`, `PickFolder`, `PickFile`,
+`CreateConflictResolver(skipIdentical)`. Продакшн — `WpfDialogs`
+(`MessageBox` поверх активного окна, но не окна операции,
+`ITransientWindow`; `ChoiceDialog`, `PromptDialog`, `OpenFolderDialog`,
+`OpenFileDialog`, `DispatcherConflictResolver`); харнесс подставляет
 `ScriptedDialogs` до постройки вьюмодели. Голый `MessageBox.Show` — только
 аварийный в `CrashReporter`.
 

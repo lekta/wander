@@ -184,10 +184,11 @@ public sealed class ExtractionService {
 
         var colliding = new List<int>();
         var infos = new List<FileConflictInfo>();
+        var listings = new Dictionary<string, IReadOnlyList<FileSystemEntry>>(StringComparer.OrdinalIgnoreCase);
         for (int i = 0; i < plans.Count; i++) {
             if (Exists(plans[i].Destination)) {
                 colliding.Add(i);
-                infos.Add(BuildInfo(plans[i]));
+                infos.Add(BuildInfo(plans[i], listings));
             }
         }
 
@@ -236,7 +237,9 @@ public sealed class ExtractionService {
                             plan.Source, plan.Destination, BatchItemStatus.Failed, new IOException(reason));
                         continue;
                     }
-                    restores.Add(new DeleteAction(_bin, _bin.Send(plan.Destination)));
+                    if (RecycleUndo.Of(_bin.Send(plan.Destination), _bin, _undo, _log) is { } restore) {
+                        restores.Add(restore);
+                    }
                     plan.Status = BatchItemStatus.Replaced;
                     break;
                 case null:
@@ -340,12 +343,16 @@ public sealed class ExtractionService {
     /// <summary>
     /// What the conflict dialog compares. The source's size and date come
     /// from the archive's own listing - one enumeration per parent folder,
-    /// which is why the answers are looked up rather than asked for one at
-    /// a time.
+    /// kept in <paramref name="listings"/> for the batch: each one may be a
+    /// big zip's whole catalogue read again.
     /// </summary>
-    private FileConflictInfo BuildInfo(Plan plan) {
-        var source = _ns.Enumerate(Path.GetDirectoryName(plan.Source) ?? "")
-            .FirstOrDefault(e => string.Equals(e.FullPath, plan.Source, StringComparison.OrdinalIgnoreCase));
+    private FileConflictInfo BuildInfo(Plan plan, Dictionary<string, IReadOnlyList<FileSystemEntry>> listings) {
+        string parent = Path.GetDirectoryName(plan.Source) ?? "";
+        if (!listings.TryGetValue(parent, out var listing)) {
+            listing = _ns.Enumerate(parent);
+            listings[parent] = listing;
+        }
+        var source = listing.FirstOrDefault(e => string.Equals(e.FullPath, plan.Source, StringComparison.OrdinalIgnoreCase));
 
         // Nothing inside an archive can be opened through IFileSystem, so
         // the pair starts out decided on name, size and date alone.

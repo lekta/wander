@@ -394,6 +394,17 @@ public class FileOperationServiceTests {
     }
 
     [Fact]
+    public void Delete_TheBinTookItWithNothingToFindItBy_PushesNoStepThatCouldOnlyFail() {
+        var (ops, fs, bin, undo) = Setup();
+        fs.Files[FileA] = new byte[] { 1 };
+        bin.Untraceable.Add(FileA);
+
+        ops.Delete(FileA);
+
+        Assert.False(undo.CanUndo);
+    }
+
+    [Fact]
     public void CreateFolder_PushesUndo_ThatRecyclesTheNewFolder() {
         var (ops, fs, bin, undo) = Setup();
 

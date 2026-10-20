@@ -56,6 +56,22 @@ public sealed class WpfDialogs : IDialogs {
         return picker.ShowDialog() == true ? picker.FolderName : null;
     }
 
+    public string? PickFile(string title, string filter, string? startAt = null, string? fileName = null) {
+        var picker = new Microsoft.Win32.OpenFileDialog {
+            Title = title,
+            Filter = filter,
+            CheckFileExists = true,
+        };
+        if (!string.IsNullOrEmpty(startAt)) {
+            picker.InitialDirectory = startAt;
+        }
+        if (!string.IsNullOrEmpty(fileName)) {
+            picker.FileName = fileName;
+        }
+
+        return picker.ShowDialog(ActiveWindow()) == true ? picker.FileName : null;
+    }
+
     public IConflictResolver CreateConflictResolver(bool skipIdentical) {
         return new DispatcherConflictResolver(new InteractiveConflictResolver(skipIdentical));
     }

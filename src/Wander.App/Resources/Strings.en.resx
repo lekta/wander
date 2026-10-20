@@ -792,6 +792,12 @@
   <data name="ErrorFileTooLargeForFat32" xml:space="preserve">
     <value>the file is over 4 GB and {0} is FAT32</value>
   </data>
+  <data name="ErrorFatRootFull" xml:space="preserve">
+    <value>the root of {0} holds no more entries — FAT limits how many fit at the root; put the files in a folder</value>
+  </data>
+  <data name="ErrorArchiveLocked" xml:space="preserve">
+    <value>the archive is password-protected</value>
+  </data>
   <data name="ErrorDeviceGone" xml:space="preserve">
     <value>the device is disconnected or not ready</value>
   </data>
@@ -872,6 +878,18 @@
   </data>
   <data name="DeleteInUseMany" xml:space="preserve">
     <value>Couldn't delete {0}: they're in use. For example, “{1}”: {2}.&#xA;&#xA;Close them there and click “Retry”.</value>
+  </data>
+  <data name="UndoFolderGoneTitle" xml:space="preserve">
+    <value>Folder is gone</value>
+  </data>
+  <data name="UndoFolderGoneMessage" xml:space="preserve">
+    <value>The folder {0} is no longer there: it was deleted or renamed.&#xA;&#xA;{1} can't go back there. Choose another folder.</value>
+  </data>
+  <data name="UndoFolderGonePick" xml:space="preserve">
+    <value>Choose folder…</value>
+  </data>
+  <data name="UndoFolderGonePickTitle" xml:space="preserve">
+    <value>Where to put back {0}</value>
   </data>
   <data name="RecycleUnavailableTitle" xml:space="preserve">
     <value>Can't move to the Recycle Bin</value>
@@ -1559,12 +1577,6 @@
   </data>
   <data name="PreviewAudioSampleRate" xml:space="preserve">
     <value>{0:0.#} kHz</value>
-  </data>
-  <data name="PreviewAudioMono" xml:space="preserve">
-    <value>mono</value>
-  </data>
-  <data name="PreviewAudioStereo" xml:space="preserve">
-    <value>stereo</value>
   </data>
   <data name="PreviewModelDetail" xml:space="preserve">
     <value>Triangles: {0:N0} · Vertices: {1:N0}</value>

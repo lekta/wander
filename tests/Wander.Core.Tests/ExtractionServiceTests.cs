@@ -182,6 +182,19 @@ public class ExtractionServiceTests {
     }
 
     [Fact]
+    public async Task Extract_TwoCollisionsInOneFolder_ListTheArchiveOnce() {
+        var (service, ns, fs, _, _) = Setup();
+        ns.AddFile(InnerHuge, "huge");
+        fs.Files[TargetReadme] = "already here"u8.ToArray();
+        fs.Files[TargetHuge] = "already here"u8.ToArray();
+
+        await service.ExtractAsync(
+            new[] { InnerReadme, InnerHuge }, Target, new FakeConflictResolver(ConflictResolution.Skip), CancellationToken.None);
+
+        Assert.Equal(1, ns.EnumerateCalls);
+    }
+
+    [Fact]
     public async Task Extract_ShowsTheArchiveEntryInTheDialog() {
         var (service, _, fs, _, _) = Setup();
         fs.Files[TargetReadme] = "already here"u8.ToArray();

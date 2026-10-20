@@ -145,7 +145,9 @@ public sealed class FilterTextExtractor : IContentExtractor {
 
         try {
             return ReadAll(filter, token);
-        } catch (COMException ex) {
+        } catch (Exception ex) when (ex is COMException or NullReferenceException) {
+            // NullReferenceException: Word's filter faults inside on a .doc
+            // that is not Word's (live log 2026-09-30, a text "read me.doc").
             _log.Warn($"IFilter failed on {path}: 0x{ex.HResult:X8}");
 
             return null;

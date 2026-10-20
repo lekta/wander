@@ -81,6 +81,15 @@ public interface IUndoableAction {
     /// </summary>
     IUndoableAction WithSteps(IReadOnlyList<IUndoableAction> steps) => this;
 
+    /// <summary>
+    /// The action with every item it moves back into a folder named among
+    /// the keys of <paramref name="folders"/> going into the folder under
+    /// that key instead - the user's answer to "the folder it came from is
+    /// gone" (<see cref="UndoDestinations"/>). Itself when it moves nothing
+    /// back into those. The keys compare as the caller's dictionary does.
+    /// </summary>
+    IUndoableAction Redirected(IReadOnlyDictionary<string, string> folders) => this;
+
     /// <summary>Reverse the original effect. May throw — caller logs.</summary>
     void Undo();
 }

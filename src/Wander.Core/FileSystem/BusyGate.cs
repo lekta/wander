@@ -128,6 +128,7 @@ public sealed class BusyGate : IDisposable {
 
     private int _lookups;
     private double _slowestMs;
+    private TimeSpan _deniedWalks;
 
 
     internal BusyGate(HeldPaths held, BusyWait wait, ILogger log, IDisposable? own) {
@@ -199,19 +200,37 @@ public sealed class BusyGate : IDisposable {
     /// Runs <paramref name="operation"/>, and again every step while it
     /// answers "in use", within the budget - for a folder, which has no
     /// probe. Null when it went through at the first try.
+    ///
+    /// <para>
+    /// A move or a rename of a folder with a held file inside answers
+    /// "access denied" (<see cref="FileInUse.MayBeHeldInside"/>): the folder
+    /// is walked once for a held file - found, it is waited for like any
+    /// other; not found, the denial is real and goes out at once.
+    /// </para>
     /// </summary>
-    /// <exception cref="IOException">Still "in use" when the budget ran out - the operation's own exception.</exception>
+    /// <exception cref="IOException">Still "in use" when the budget ran out - the operation's own exception, or <see cref="FileInUse.Error"/> for a denial.</exception>
     /// <exception cref="OperationCanceledException">The operation was cancelled while waiting.</exception>
     public BusyReport? Retry(string path, Action operation, CancellationToken ct) {
         Exception? inUse = null;
         string? holder = null;
+        string? heldInside = null;
+        bool walked = false;
         var result = _wait.UntilFree(() => {
             try {
                 operation();
 
                 return false;
-            } catch (Exception ex) when (FileInUse.Is(ex)) {
-                holder ??= NameHolder(path, ct);
+            } catch (Exception ex) when (FileInUse.Is(ex) || FileInUse.MayBeHeldInside(ex)) {
+                if (!FileInUse.Is(ex)) {
+                    if (!walked) {
+                        heldInside = HeldInsideDenied(path, ct);
+                        walked = true;
+                    }
+                    if (heldInside is null) {
+                        throw;
+                    }
+                }
+                holder ??= NameHolder(path, ct, heldInside);
                 inUse = ex;
 
                 return true;
@@ -223,6 +242,9 @@ public sealed class BusyGate : IDisposable {
 
         var report = Report(new BusyReport(path, holder, result.Waited, result.Free));
         if (!result.Free) {
+            if (!FileInUse.Is(inUse)) {
+                throw FileInUse.Error(path);
+            }
             ExceptionDispatchInfo.Throw(inUse!);
         }
 
@@ -301,6 +323,26 @@ public sealed class BusyGate : IDisposable {
     }
 
     /// <summary>
+    /// The held file inside a folder that answered "access denied"; null when
+    /// none is found - the denial is real. The walks share one budget per
+    /// operation: a batch of folders the destination refuses costs seconds
+    /// once, not seconds each.
+    /// </summary>
+    private string? HeldInsideDenied(string path, CancellationToken ct) {
+        var left = _folderWalkBudget - _deniedWalks;
+        if (left <= TimeSpan.Zero || _held.Probe is not { } probe) {
+            return null;
+        }
+
+        long started = Stopwatch.GetTimestamp();
+        try {
+            return probe.FirstBusyIn(path, left, ct);
+        } finally {
+            _deniedWalks += Stopwatch.GetElapsedTime(started);
+        }
+    }
+
+    /// <summary>
     /// Who holds <paramref name="path"/>: a reader of ours that was told to
     /// let go, then any claim of ours on it, then whoever the platform names.
     /// A folder is named by the first file inside it that is held, and the
@@ -308,7 +350,10 @@ public sealed class BusyGate : IDisposable {
     /// to close; the programs holding anything in the folder are the answer
     /// when no such file is found in time.
     /// </summary>
-    private string? NameHolder(string path, CancellationToken ct) {
+    /// <param name="path">The held file or folder.</param>
+    /// <param name="ct">Stops the walk of a folder.</param>
+    /// <param name="heldInside">The held file inside the folder, when a walk already found it.</param>
+    private string? NameHolder(string path, CancellationToken ct, string? heldInside = null) {
         string? ours = _yielded.GetValueOrDefault(path);
         if (ours is null) {
             long started = Stopwatch.GetTimestamp();
@@ -319,7 +364,7 @@ public sealed class BusyGate : IDisposable {
             return Text.Format("HolderWander", Text.Get(ours));
         }
 
-        if (_held.Probe?.FirstBusyIn(path, _folderWalkBudget, ct) is { } file) {
+        if ((heldInside ?? _held.Probe?.FirstBusyIn(path, _folderWalkBudget, ct)) is { } file) {
             var holding = _held.Locks?.WhoIsLocking(file);
             string name = Path.GetFileName(file);
 

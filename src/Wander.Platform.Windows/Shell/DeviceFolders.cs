@@ -265,12 +265,12 @@ internal sealed class DeviceFolders : IDeviceContent {
                         found.Add((DevicePath.SafeName(NameOf(item, SIGDN_NORMALDISPLAY)), parsing));
                     }
                 } finally {
-                    WpdInterop.Release(item);
+                    ShellItemInterop.Release(item);
                 }
             }
         } finally {
-            WpdInterop.Release(items);
-            WpdInterop.Release(computer);
+            ShellItemInterop.Release(items);
+            ShellItemInterop.Release(computer);
         }
 
         var devices = new List<Device>(found.Count);

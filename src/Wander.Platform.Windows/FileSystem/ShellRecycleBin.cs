@@ -403,49 +403,6 @@ public sealed class ShellRecycleBin : IRecycleBin {
 
     // --- COM plumbing ---------------------------------------------------
 
-    private static IShellItem? CreateItem(string path) {
-        var iid = IID_IShellItem;
-        int hr = SHCreateItemFromParsingName(path, IntPtr.Zero, ref iid, out object item);
-
-        return hr >= 0 ? item as IShellItem : null;
-    }
-
-    private static IFileOperation CreateFileOperation() {
-        var clsid = CLSID_FileOperation;
-        var iid = IID_IFileOperation;
-        int hr = CoCreateInstance(ref clsid, IntPtr.Zero, CLSCTX_INPROC_SERVER, ref iid, out object operation);
-        if (hr < 0 || operation is not IFileOperation typed) {
-            throw new IOException($"Cannot create the shell copy engine (hr=0x{hr:X8}).");
-        }
-
-        return typed;
-    }
-
-    private static string DisplayName(IShellItem item, uint form) {
-        if (item.GetDisplayName(form, out IntPtr buffer) < 0 || buffer == IntPtr.Zero) {
-            return "";
-        }
-
-        try {
-            return Marshal.PtrToStringUni(buffer) ?? "";
-        } finally {
-            Marshal.FreeCoTaskMem(buffer);
-        }
-    }
-
-    private static void Check(int hr, string what) {
-        if (hr < 0) {
-            throw new IOException($"{what} failed (hr=0x{hr:X8}).", Marshal.GetExceptionForHR(hr));
-        }
-    }
-
-    private static void Release(object? comObject) {
-        if (comObject is not null && Marshal.IsComObject(comObject)) {
-            Marshal.ReleaseComObject(comObject);
-        }
-    }
-
-
     /// <summary>
     /// What the engine tells about the one item of a run. The delete half is
     /// also the guard: an item the engine is about to destroy rather than

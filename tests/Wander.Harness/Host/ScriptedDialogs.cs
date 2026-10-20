@@ -46,6 +46,9 @@ public sealed class ScriptedDialogs : IDialogs {
     /// <summary>What <see cref="PickFolder"/> returns; null cancels.</summary>
     public string? FolderAnswer { get; set; }
 
+    /// <summary>What <see cref="PickFile"/> returns; null cancels.</summary>
+    public string? FileAnswer { get; set; }
+
     public IReadOnlyList<string> Records {
         get {
             lock (_records) {
@@ -92,6 +95,12 @@ public sealed class ScriptedDialogs : IDialogs {
         Record($"PickFolder '{title}' at='{startAt}' -> {FolderAnswer ?? "(cancel)"}");
 
         return FolderAnswer;
+    }
+
+    public string? PickFile(string title, string filter, string? startAt = null, string? fileName = null) {
+        Record($"PickFile '{title}' at='{startAt}' -> {FileAnswer ?? "(cancel)"}");
+
+        return FileAnswer;
     }
 
     public IConflictResolver CreateConflictResolver(bool skipIdentical) {

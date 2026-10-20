@@ -213,6 +213,34 @@ public class UndoServiceTests {
     }
 
     [Fact]
+    public void ForgetLost_FolderGoneInPart_DropsOnlyWhatIsMissing() {
+        var (svc, fs, _) = Paths();
+        svc.Push(new MoveAction(fs, @"C:\a\1.txt", @"C:\d\1.txt"));
+        svc.Push(new MoveAction(fs, @"C:\a\2.txt", @"C:\d\2.txt"));
+        svc.Push(new RenameAction(fs, @"C:\e\w.txt", "x.txt"));
+        fs.Files[@"C:\d\2.txt"] = new byte[] { 2 };
+        fs.Files[@"C:\e\w.txt"] = new byte[] { 3 };
+
+        svc.ForgetLost(new[] { @"C:\d" }, p => fs.FileExists(p));
+
+        Assert.Equal(new[] { "Rename to 'w.txt'", "Move '2.txt'" }, Descriptions(svc));
+    }
+
+    [Fact]
+    public void ForgetLost_MovedOnByANewerStep_IsNotLost() {
+        // Copied into d, then moved on to e: missing from d, yet the newer
+        // step's undo puts it back there before the older one needs it.
+        var (svc, fs, bin) = Paths();
+        svc.Push(new CreateAction(bin, @"C:\d\1.txt"));
+        svc.Push(new MoveAction(fs, @"C:\d\1.txt", @"C:\e\1.txt"));
+        fs.Files[@"C:\e\1.txt"] = new byte[] { 1 };
+
+        svc.ForgetLost(new[] { @"C:\d" }, p => fs.FileExists(p));
+
+        Assert.Equal(2, svc.Depth);
+    }
+
+    [Fact]
     public void Undo_PropagatesExceptionFromAction_AndStillFiresChanged() {
         var svc = new UndoService();
         var a = new TrackingAction("boom") {

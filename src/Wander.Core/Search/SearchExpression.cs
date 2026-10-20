@@ -134,7 +134,8 @@ public static class SearchExpression {
     /// -1 for none. Not the slash of a shooting parameter (2026-10-15,
     /// <see cref="ShotQuery"/>): one in a word that reads as a parameter,
     /// or right after an <c>f</c> or a number that start their word - a
-    /// parameter still being typed, <c>f/</c>, <c>&gt;=1/</c>.
+    /// parameter still being typed, <c>f/</c>, <c>&gt;=1/</c>. A number
+    /// with a letter past the slash is a mask and a type: <c>2024/img</c>.
     /// </summary>
     private static int TypeSlash(string text, int end) {
         int at = text.IndexOf(TypeSeparator, 0, end);
@@ -149,9 +150,10 @@ public static class SearchExpression {
             }
 
             string before = text[start..at].TrimStart('<', '>', '=');
+            bool letterAfter = at + 1 < stop && char.IsLetter(text[at + 1]);
             bool parameter = ShotQuery.TryParse(text[start..stop]) is not null
                 || before.Equals("f", StringComparison.OrdinalIgnoreCase)
-                || (before.Length > 0 && before.All(char.IsAsciiDigit));
+                || (before.Length > 0 && before.All(char.IsAsciiDigit) && !letterAfter);
             if (!parameter) {
                 return at;
             }

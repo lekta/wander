@@ -208,22 +208,4 @@ internal sealed class ShellRecycleBinFolder {
             Marshal.FreeCoTaskMem(buffer);
         }
     }
-
-    private static string DisplayName(IShellItem item, uint form) {
-        if (item.GetDisplayName(form, out IntPtr buffer) < 0 || buffer == IntPtr.Zero) {
-            return "";
-        }
-
-        try {
-            return Marshal.PtrToStringUni(buffer) ?? "";
-        } finally {
-            Marshal.FreeCoTaskMem(buffer);
-        }
-    }
-
-    private static void Release(object? comObject) {
-        if (comObject is not null && Marshal.IsComObject(comObject)) {
-            Marshal.ReleaseComObject(comObject);
-        }
-    }
 }

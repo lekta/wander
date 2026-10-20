@@ -108,7 +108,8 @@ public static class AudioTags {
     /// </summary>
     public static AudioTrackInfo? Read(Stream stream, string extension) {
         try {
-            return extension.ToLowerInvariant() switch {
+            string ext = extension.ToLowerInvariant();
+            var info = ext switch {
                 ".flac" => FlacTags.Read(stream),
                 ".mp3" => Mp3Tags.Read(stream),
                 // Raw AAC carries no container of its own, only an ID3 tag
@@ -117,16 +118,20 @@ public static class AudioTags {
                 // set bits, passes the layer and bitrate checks by
                 // coincidence, and yields a plausible, wrong length — a
                 // 37-second recording measured as 53.
-                ".aac" => Mp3Tags.Read(stream, readFrames: false),
+                ".aac" => Mp3Tags.Read(stream, readFrames: false) is { } aac ? aac with { Codec = "AAC" } : null,
                 ".m4a" or ".m4b" or ".mp4" => Mp4Tags.Read(stream),
                 ".wav" => WavTags.Read(stream),
-                // Playable, but their tags are not read: ASF (.wma) and Ogg
-                // framing are each another container to walk, and neither
-                // is where music with covers usually lives. The card still
+                ".ogg" or ".opus" => OggTags.Read(stream),
+                // Playable, but their tags are not read: ASF (.wma), AIFF
+                // and AU are each another container to walk, and none is
+                // where music with covers usually lives. The card still
                 // shows the file name, the length from the player and a
                 // cover lying next to the track.
                 _ => null,
             };
+
+            // MP4 and Matroska describe the stream in headers MediaProbe reads.
+            return ext is ".m4a" or ".m4b" or ".mp4" or ".mka" ? WithStream(info, MediaProbe.Read(stream)) : info;
         } catch (Exception ex) when (ex is IOException or NotSupportedException or ArgumentException) {
             return null;
         }
@@ -203,6 +208,25 @@ public static class AudioTags {
 
     // --- shared helpers -------------------------------------------------
 
+    /// <summary>The first sound stream's facts from the container, for whatever the tags left out.</summary>
+    private static AudioTrackInfo? WithStream(AudioTrackInfo? info, MediaInfo? media) {
+        if (media?.Tracks.FirstOrDefault(t => t.Kind == MediaTrackKind.Audio) is not { } sound) {
+            return info;
+        }
+
+        info ??= new AudioTrackInfo(null, null, null, null, null, null, null, null, null, null);
+        long? bitsPerSecond = sound.Bitrate ?? media.Bitrate;
+
+        return info with {
+            Duration = info.Duration ?? media.Duration,
+            SampleRate = info.SampleRate ?? (sound.SampleRate > 0 ? sound.SampleRate : null),
+            Channels = info.Channels ?? (sound.Channels > 0 ? sound.Channels : null),
+            BitrateKbps = info.BitrateKbps ?? (bitsPerSecond is > 0 and long bps ? (int)Math.Round(bps / 1000.0) : null),
+            Codec = info.Codec ?? sound.Codec,
+        };
+    }
+
+
     /// <summary>
     /// Reads exactly <paramref name="count"/> bytes, or returns null. Used
     /// everywhere a length came out of the file, so a truncated file ends
@@ -244,6 +268,8 @@ public static class AudioTags {
 /// is optional in both formats.
 /// </summary>
 /// <param name="Cover">Embedded cover art, as the bytes the file stores — a JPEG or a PNG.</param>
+/// <param name="Codec">"FLAC", "MP3", "PCM", "Opus" - as <see cref="MediaTrack.Codec"/> names it.</param>
+/// <param name="BitDepth">Bits per sample, where the format keeps them - PCM and lossless.</param>
 public sealed record AudioTrackInfo(
     string? Title,
     string? Artist,
@@ -254,7 +280,9 @@ public sealed record AudioTrackInfo(
     int? SampleRate,
     int? Channels,
     int? BitrateKbps,
-    byte[]? Cover) {
+    byte[]? Cover,
+    string? Codec = null,
+    int? BitDepth = null) {
     /// <summary>True when there is nothing here worth drawing a panel for.</summary>
     public bool IsEmpty =>
         Title is null && Artist is null && Album is null
@@ -437,7 +465,9 @@ internal static class WavTags {
         }
 
         string? title = null, artist = null, album = null, year = null, track = null;
-        int? sampleRate = null, channels = null;
+        int? sampleRate = null, channels = null, bitDepth = null;
+        string? codec = null;
+        long byteRate = 0, dataBytes = 0;
 
         while (stream.Position + 8 <= stream.Length) {
             byte[]? chunk = AudioTags.ReadExact(stream, 8);
@@ -449,11 +479,22 @@ internal static class WavTags {
             uint size = BinaryPrimitives.ReadUInt32LittleEndian(chunk.AsSpan(4));
             long next = stream.Position + size + (size % 2);        // chunks are word-aligned
 
-            if (id == "fmt " && AudioTags.ReadExact(stream, Math.Min(size, 16)) is { Length: >= 8 } fmt) {
+            // WAVEFORMATEX: tag, channels, rate, bytes a second, block,
+            // bits a sample; past 16 bytes the extensible sub-format.
+            if (id == "fmt " && AudioTags.ReadExact(stream, Math.Min(size, 40)) is { Length: >= 8 } fmt) {
+                codec = MediaCodecs.WaveFormat(fmt, 0, fmt.Length);
                 channels = BinaryPrimitives.ReadUInt16LittleEndian(fmt.AsSpan(2));
                 sampleRate = (int)BinaryPrimitives.ReadUInt32LittleEndian(fmt.AsSpan(4));
+                if (fmt.Length >= 16) {
+                    byteRate = BinaryPrimitives.ReadUInt32LittleEndian(fmt.AsSpan(8));
+                    int bits = BinaryPrimitives.ReadUInt16LittleEndian(fmt.AsSpan(14));
+                    bitDepth = bits > 0 ? bits : null;
+                }
             } else if (id == "LIST" && AudioTags.ReadExact(stream, size) is { } list) {
                 ReadInfo(list, ref title, ref artist, ref album, ref year, ref track);
+            } else if (id == "data") {
+                // A recorder cut short leaves the header's size; the file says how much is there.
+                dataBytes = Math.Min(size, stream.Length - stream.Position);
             }
 
             if (next <= stream.Position && id != "fmt " && id != "LIST") {
@@ -462,7 +503,10 @@ internal static class WavTags {
             stream.Position = Math.Min(next, stream.Length);
         }
 
-        var info = new AudioTrackInfo(title, artist, album, year, track, null, sampleRate, channels, null, null);
+        TimeSpan? duration = byteRate > 0 && dataBytes > 0 ? TimeSpan.FromSeconds(dataBytes / (double)byteRate) : null;
+        int? bitrate = byteRate > 0 ? (int)Math.Round(byteRate * 8 / 1000.0) : null;
+        var info = new AudioTrackInfo(
+            title, artist, album, year, track, duration, sampleRate, channels, bitrate, null, codec, bitDepth);
 
         return info.IsEmpty && sampleRate is null ? null : info;
     }
@@ -514,7 +558,10 @@ internal static class WavTags {
 internal static class FlacTags {
     private const byte StreamInfo = 0;
     private const byte VorbisComment = 4;
-    private const byte Picture = 6;
+    private const byte PictureBlock = 6;
+
+    /// <summary>A cover in a comment: the cover cap and the block around it.</summary>
+    private const int MaxPictureBlockBytes = 16 * 1024 * 1024 + 4096;
 
 
     public static AudioTrackInfo? Read(Stream stream) {
@@ -526,7 +573,7 @@ internal static class FlacTags {
 
         string? title = null, artist = null, album = null, year = null, track = null;
         TimeSpan? duration = null;
-        int? sampleRate = null, channels = null;
+        int? sampleRate = null, channels = null, bitDepth = null;
         byte[]? cover = null;
 
         while (true) {
@@ -556,6 +603,7 @@ internal static class FlacTags {
                         if (rate > 0) {
                             sampleRate = rate;
                             channels = ch;
+                            bitDepth = (((info[12] & 0x01) << 4) | (info[13] >> 4)) + 1;
                             if (samples > 0) {
                                 duration = TimeSpan.FromSeconds(samples / (double)rate);
                             }
@@ -565,11 +613,11 @@ internal static class FlacTags {
 
                 case VorbisComment:
                     if (AudioTags.ReadExact(stream, length) is { } comment) {
-                        ReadComments(comment, ref title, ref artist, ref album, ref year, ref track);
+                        ReadComments(comment, 0, ref title, ref artist, ref album, ref year, ref track, ref cover);
                     }
                     break;
 
-                case Picture:
+                case PictureBlock:
                     cover ??= ReadPicture(stream, length);
                     break;
             }
@@ -584,7 +632,8 @@ internal static class FlacTags {
             ? (int)Math.Round(stream.Length * 8 / d.TotalSeconds / 1000)
             : null;
 
-        var info2 = new AudioTrackInfo(title, artist, album, year, track, duration, sampleRate, channels, bitrate, cover);
+        var info2 = new AudioTrackInfo(
+            title, artist, album, year, track, duration, sampleRate, channels, bitrate, cover, "FLAC", bitDepth);
 
         return info2.IsEmpty ? null : info2;
     }
@@ -595,12 +644,14 @@ internal static class FlacTags {
     /// <c>KEY=value</c> strings — all lengths little-endian, all text UTF-8.
     /// Little-endian in a big-endian container is not a mistake here; it is
     /// what the specification says, and getting it backwards reads a
-    /// four-byte length as a few hundred megabytes.
+    /// four-byte length as a few hundred megabytes. The same block follows
+    /// the packet header in Ogg Vorbis and Opus (<see cref="OggTags"/>),
+    /// with the cover as a base64 PICTURE block in a comment of its own.
     /// </summary>
-    private static void ReadComments(
-        byte[] block, ref string? title, ref string? artist, ref string? album,
-        ref string? year, ref string? track) {
-        int p = 0;
+    internal static void ReadComments(
+        byte[] block, int start, ref string? title, ref string? artist, ref string? album,
+        ref string? year, ref string? track, ref byte[]? cover) {
+        int p = start;
         if (!TryLength(block, ref p, out int vendor)) {
             return;
         }
@@ -633,6 +684,7 @@ internal static class FlacTags {
                 case "DATE": year ??= AudioTags.Clean(value); break;
                 case "YEAR": year ??= AudioTags.Clean(value); break;
                 case "TRACKNUMBER": track ??= AudioTags.Clean(value); break;
+                case "METADATA_BLOCK_PICTURE": cover ??= PictureFromBase64(value); break;
             }
         }
     }
@@ -655,11 +707,23 @@ internal static class FlacTags {
     /// image. Everything big-endian here, unlike the comment block above.
     /// </summary>
     private static byte[]? ReadPicture(Stream stream, int length) {
-        byte[]? block = AudioTags.ReadExact(stream, length);
-        if (block is null) {
+        return AudioTags.ReadExact(stream, length) is { } block ? Picture(block) : null;
+    }
+
+    private static byte[]? PictureFromBase64(string value) {
+        // Four characters per three bytes: past the cap the length was misread.
+        if (value.Length / 4 * 3 > MaxPictureBlockBytes) {
             return null;
         }
 
+        try {
+            return Picture(Convert.FromBase64String(value));
+        } catch (FormatException) {
+            return null;
+        }
+    }
+
+    private static byte[]? Picture(byte[] block) {
         int p = 4;                                  // picture type
         if (!Skip(block, ref p)) {                  // MIME
             return null;
@@ -747,7 +811,8 @@ internal static class Mp3Tags {
 
         var info = new AudioTrackInfo(
             title, artist, album, year, track,
-            duration, frame?.SampleRate, frame?.Channels, frame?.EffectiveBitrate(stream.Length, duration), cover);
+            duration, frame?.SampleRate, frame?.Channels, frame?.EffectiveBitrate(stream.Length, duration), cover,
+            frame is null ? null : "MP3");
 
         return info.IsEmpty ? null : info;
     }

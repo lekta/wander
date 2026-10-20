@@ -316,7 +316,14 @@ public sealed class SystemIOFileSystem : IFileSystem {
 
                     throw;
                 }
-                Directory.Delete(source, recursive: true);
+                // A link the copy left out stays where it is, and so do the
+                // folders holding it: a recursive delete took it with the
+                // source, and it was in neither place.
+                if (report.SkippedLinks is { Count: > 0 }) {
+                    DeleteAllButLinks(source);
+                } else {
+                    Directory.Delete(source, recursive: true);
+                }
 
                 return report;
             }
@@ -734,6 +741,34 @@ public sealed class SystemIOFileSystem : IFileSystem {
             // Best effort: the write already failed, and a stray temp file
             // is not worth masking the original exception with.
         }
+    }
+
+    /// <summary>
+    /// The source of a folder moved off its volume whose copy left links to
+    /// folders out: what was copied goes, the links and the folders that
+    /// hold them stay. Undoing the move pours the rest back in around them.
+    /// </summary>
+    /// <returns>True when the folder itself went - nothing in it was kept.</returns>
+    private static bool DeleteAllButLinks(string folder) {
+        foreach (string file in Directory.EnumerateFiles(folder)) {
+            File.Delete(file);
+        }
+
+        bool kept = false;
+        foreach (string dir in Directory.EnumerateDirectories(folder)) {
+            if ((File.GetAttributes(dir) & FileAttributes.ReparsePoint) != 0) {
+                kept = true;
+                continue;
+            }
+            kept |= !DeleteAllButLinks(dir);
+        }
+        if (kept) {
+            return false;
+        }
+
+        Directory.Delete(folder);
+
+        return true;
     }
 
     /// <summary>The part-copied folder of a failed move, best effort - like <see cref="TryDelete"/>.</summary>

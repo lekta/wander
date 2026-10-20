@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices.WindowsRuntime;
 using Wander.Core.Actions;
 using Wander.Core.Icons;
+using Wander.Core.Imaging;
 using Wander.Core.Localization;
 using Wander.Core.Logging;
 using Windows.Foundation;
@@ -184,15 +185,15 @@ public sealed class ImageConvertAction : IBuiltinAction {
             BitmapPixelFormat.Bgra8,
             opaque ? BitmapAlphaMode.Ignore : BitmapAlphaMode.Straight,
             (uint)scaledWidth, (uint)scaledHeight, 96, 96, pixels);
-        encoder.BitmapTransform.Rotation = orientation switch {
-            3 or 4 => BitmapRotation.Clockwise180Degrees,
-            5 or 6 => BitmapRotation.Clockwise90Degrees,
-            7 or 8 => BitmapRotation.Clockwise270Degrees,
+        // WinRT flips before it turns - the order the rule is written for.
+        var (mirror, clockwise) = ExifOrientation.Upright(orientation);
+        encoder.BitmapTransform.Rotation = clockwise switch {
+            90 => BitmapRotation.Clockwise90Degrees,
+            180 => BitmapRotation.Clockwise180Degrees,
+            270 => BitmapRotation.Clockwise270Degrees,
             _ => BitmapRotation.None,
         };
-        encoder.BitmapTransform.Flip = orientation is 2 or 4 or 5 or 7
-            ? BitmapFlip.Horizontal
-            : BitmapFlip.None;
+        encoder.BitmapTransform.Flip = mirror ? BitmapFlip.Horizontal : BitmapFlip.None;
 
         if (options.CarriesMetadata) {
             // The pixels are upright now; the file must not ask for the turn again.

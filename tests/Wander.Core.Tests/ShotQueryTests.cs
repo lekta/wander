@@ -100,6 +100,8 @@ public class ShotQueryTests {
     [InlineData("f/2.8 /img", "f/2.8", "img")]
     [InlineData("1/250", "1/250", "")]
     [InlineData("отпуск/vid", "отпуск", "vid")]
+    [InlineData("2024/img", "2024", "img")]
+    [InlineData("1/2", "1/2", "")]
     public void SplitType_LeavesAParameter_sSlashAlone(string head, string name, string type) {
         Assert.Equal((name, type), SearchExpression.SplitType(head));
     }

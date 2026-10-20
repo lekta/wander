@@ -542,10 +542,6 @@ public partial class MainWindow : Window {
         return Preview.TryCopySelectedText() ?? _previewSecond?.TryCopySelectedText();
     }
 
-    /// <summary>The keyboard is in a code viewer - either pane's.</summary>
-    private bool IsCodeEditorFocused =>
-        Preview.IsCodeEditorFocused || _previewSecond?.IsCodeEditorFocused == true;
-
     /// <summary>The keyboard is in a find field of the preview - either half's.</summary>
     private bool IsPreviewFindFocused =>
         Preview.IsFindFocused || _previewSecond?.IsFindFocused == true;
@@ -808,35 +804,27 @@ public partial class MainWindow : Window {
             return;
         }
 
-        // Ctrl+Shift+F: the search window, with its own criteria - skipped
-        // inside the code preview.
+        // Ctrl+Shift+F: the search window, with its own criteria.
         // Ctrl+F: the find field of the preview when the keyboard is in a
         // pane showing text (the code preview included); otherwise the box
         // in the toolbar, which is the quick filter.
         if (e.Key == Key.F && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift)) {
-            if (!IsCodeEditorFocused) {
-                OpenSearchWindow();
-                e.Handled = true;
+            OpenSearchWindow();
+            e.Handled = true;
 
-                return;
-            }
+            return;
         }
 
         if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control) {
             // The keyboard in a pane showing text: find in that text,
             // not a filter over the list.
-            if (Preview.OpenFind() || _previewSecond?.OpenFind() == true) {
-                e.Handled = true;
-
-                return;
-            }
-            if (!IsCodeEditorFocused) {
+            if (!Preview.OpenFind() && _previewSecond?.OpenFind() != true) {
                 FileList.SearchBox.Focus();
                 FileList.SearchBox.SelectAll();
-                e.Handled = true;
-
-                return;
             }
+            e.Handled = true;
+
+            return;
         }
 
         if (e.Key == Key.F2 && CanStartRename(null)) {

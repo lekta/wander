@@ -1,3 +1,4 @@
+using Wander.Core.Logging;
 using Wander.Core.Operations;
 using Wander.Core.Undo;
 
@@ -37,6 +38,12 @@ internal sealed record MoveAction(IFileSystem Fs, string OldPath, string NewPath
     public IReadOnlyList<string> PathsAfterUndo => new[] { OldPath };
     public IReadOnlyList<(string From, string To)> MovesOnUndo => new[] { (NewPath, OldPath) };
 
+    public IUndoableAction Redirected(IReadOnlyDictionary<string, string> folders) {
+        return folders.TryGetValue(Path.GetDirectoryName(OldPath) ?? "", out string? instead)
+            ? this with { OldPath = Path.Combine(instead, Path.GetFileName(OldPath)) }
+            : this;
+    }
+
     public void Undo() => Fs.MoveEntry(NewPath, OldPath);
 }
 
@@ -68,6 +75,26 @@ internal sealed record DeleteAction(IRecycleBin Bin, RecycleHandle Handle) : IUn
     public IReadOnlyList<string> PathsAfterUndo => new[] { Handle.OriginalPath };
 
     public void Undo() => Bin.Restore(Handle);
+}
+
+/// <summary>
+/// The undo of something sent to the bin on the way - a replaced target, an
+/// emptied folder, a single delete. None when the bin took it without
+/// anything to find it by (<see cref="RecycleHandle.IsUntraceable"/>): a
+/// step that could only fail. What went that way is as gone as after a
+/// permanent delete, and so is what older steps would need of it.
+/// </summary>
+internal static class RecycleUndo {
+    public static DeleteAction? Of(RecycleHandle handle, IRecycleBin bin, UndoService undo, ILogger log) {
+        if (!handle.IsUntraceable) {
+            return new DeleteAction(bin, handle);
+        }
+
+        log.Warn($"Recycle: {handle.OriginalPath} - nothing to find it by in the bin, counted as deleted for good");
+        undo.Forget(new[] { handle.OriginalPath });
+
+        return null;
+    }
 }
 
 /// <summary>
@@ -141,6 +168,14 @@ public sealed class CompositeAction : IUndoableAction {
         // steps left - the best count there is without knowing which step
         // was whose.
         return new CompositeAction(Description, steps, Verb, Math.Min(ItemCount, steps.Count));
+    }
+
+    public IUndoableAction Redirected(IReadOnlyDictionary<string, string> folders) {
+        var redirected = _actions.Select(a => a.Redirected(folders)).ToList();
+
+        return redirected.Where((a, i) => !ReferenceEquals(a, _actions[i])).Any()
+            ? new CompositeAction(Description, redirected, Verb, ItemCount)
+            : this;
     }
 
     public void Undo() {

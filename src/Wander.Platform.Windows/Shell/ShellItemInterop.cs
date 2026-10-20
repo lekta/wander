@@ -131,6 +131,51 @@ internal static class ShellItemInterop {
     internal static PROPERTYKEY PKEY_Recycle_DateDeleted = new(new("9b174b33-40ff-11d2-a27e-00c04fc30871"), 3);
 
 
+    // The plumbing every IShellItem user shares: one item by path, the copy
+    // engine, a display name, an HRESULT check, a release.
+    internal static IShellItem? CreateItem(string path) {
+        var iid = IID_IShellItem;
+        int hr = SHCreateItemFromParsingName(path, IntPtr.Zero, ref iid, out object item);
+
+        return hr >= 0 ? item as IShellItem : null;
+    }
+
+    internal static IFileOperation CreateFileOperation() {
+        var clsid = CLSID_FileOperation;
+        var iid = IID_IFileOperation;
+        int hr = CoCreateInstance(ref clsid, IntPtr.Zero, CLSCTX_INPROC_SERVER, ref iid, out object operation);
+        if (hr < 0 || operation is not IFileOperation typed) {
+            throw new IOException($"Cannot create the shell copy engine (hr=0x{hr:X8}).");
+        }
+
+        return typed;
+    }
+
+    internal static string DisplayName(IShellItem item, uint form) {
+        if (item.GetDisplayName(form, out IntPtr buffer) < 0 || buffer == IntPtr.Zero) {
+            return "";
+        }
+
+        try {
+            return Marshal.PtrToStringUni(buffer) ?? "";
+        } finally {
+            Marshal.FreeCoTaskMem(buffer);
+        }
+    }
+
+    internal static void Check(int hr, string what) {
+        if (hr < 0) {
+            throw new IOException($"{what} failed (hr=0x{hr:X8}).", Marshal.GetExceptionForHR(hr));
+        }
+    }
+
+    internal static void Release(object? comObject) {
+        if (comObject is not null && Marshal.IsComObject(comObject)) {
+            Marshal.ReleaseComObject(comObject);
+        }
+    }
+
+
     [StructLayout(LayoutKind.Sequential)]
     internal struct PROPERTYKEY {
         public Guid fmtid;

@@ -133,9 +133,14 @@ public sealed class UndoService {
     /// The wait for held files for this undo, given its own claim; null runs
     /// every step straight and leaves every failed one behind.
     /// </param>
+    /// <param name="redirect">
+    /// Gone folders and where the user said their items go back instead
+    /// (<see cref="UndoDestinations"/>); what is left of a stopped undo keeps
+    /// the answer.
+    /// </param>
     public async Task<UndoOutcome?> UndoAsync(
         OperationTracker tracker, CancellationToken ct = default, PathClaims? claims = null,
-        Func<IDisposable?, IUndoStepGate>? gates = null) {
+        Func<IDisposable?, IUndoStepGate>? gates = null, IReadOnlyDictionary<string, string>? redirect = null) {
         IUndoableAction action;
         lock (_gate) {
             if (_busy > 0 || !_stack.TryPop(out action!)) {
@@ -146,6 +151,9 @@ public sealed class UndoService {
         RaiseChanged();
 
         try {
+            if (redirect is { Count: > 0 }) {
+                action = action.Redirected(redirect);
+            }
             var steps = action.Steps;
             using var op = tracker.Begin(OperationVerbs.Undo, steps.Count, token: ct);
             var touched = action.MovesOnUndo.SelectMany(m => new[] { m.From, m.To }).Concat(action.PathsAfterUndo);
@@ -217,6 +225,32 @@ public sealed class UndoService {
         }
         if (changed) {
             RaiseChanged();
+        }
+    }
+
+    /// <summary>
+    /// <see cref="Forget"/> for folders that went only in part - a delete for
+    /// good that failed half-way: what the history needs from inside
+    /// <paramref name="folders"/> and is no longer on disk is forgotten, what
+    /// is still there stays undoable. A path a newer step moved away is not
+    /// lost: that step's undo brings it back first (<see cref="Survives"/>).
+    /// </summary>
+    /// <param name="folders">The folders whose delete failed half-way.</param>
+    /// <param name="exists">Whether a path is on disk now; asked outside the lock.</param>
+    public void ForgetLost(IReadOnlyCollection<string> folders, Func<string, bool> exists) {
+        List<string> wanted;
+        lock (_gate) {
+            wanted = _stack
+                .SelectMany(a => a.Steps)
+                .SelectMany(s => s.PathsBeforeUndo)
+                .Where(p => folders.Any(f => Rebase(p, f, f) is not null))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        var lost = wanted.Where(p => !exists(p)).ToList();
+        if (lost.Count > 0) {
+            Forget(lost);
         }
     }
 

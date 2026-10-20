@@ -50,14 +50,7 @@ internal static class MediaRows {
 
         var audio = media.Tracks.Where(t => t.Kind == MediaTrackKind.Audio).ToList();
         foreach (var track in audio.Take(MaxAudioRows)) {
-            string? layout = track.Channels switch {
-                1 => Strings.MediaMono,
-                2 => Strings.MediaStereo,
-                6 => "5.1",
-                8 => "7.1",
-                > 0 => string.Format(Strings.MediaChannels, track.Channels),
-                _ => null,
-            };
+            string? layout = Layout(track.Channels);
             rows.Add(new MediaRow(
                 AudioGlyph,
                 Strings.MediaAudio,
@@ -110,6 +103,19 @@ internal static class MediaRows {
         string list = string.Join(", ", named);
 
         return oneCodec ? $"{list}{SummaryText.Gap}{tracks[0].Codec}" : list;
+    }
+
+
+    /// <summary>"моно", "стерео", "5.1", "7.1", "3 кан."; null when the container did not say.</summary>
+    public static string? Layout(int channels) {
+        return channels switch {
+            1 => Strings.MediaMono,
+            2 => Strings.MediaStereo,
+            6 => "5.1",
+            8 => "7.1",
+            > 0 => string.Format(Strings.MediaChannels, channels),
+            _ => null,
+        };
     }
 
 

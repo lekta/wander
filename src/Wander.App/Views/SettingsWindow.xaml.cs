@@ -307,18 +307,14 @@ public partial class SettingsWindow : Window {
             return;
         }
 
-        var picker = new Microsoft.Win32.OpenFileDialog {
-            Title = Strings.ActionsPickProgram,
-            Filter = Strings.ActionsProgramFilter,
-            CheckFileExists = true,
-        };
         string program = row.Program.Trim().Trim('"');
-        if (Path.IsPathRooted(program) && Path.GetDirectoryName(program) is { } folder && Directory.Exists(folder)) {
-            picker.InitialDirectory = folder;
-            picker.FileName = Path.GetFileName(program);
-        }
-        if (picker.ShowDialog(this) == true) {
-            row.ChooseProgramFile(picker.FileName);
+        string? folder = Path.IsPathRooted(program) ? Path.GetDirectoryName(program) : null;
+        bool known = folder is not null && Directory.Exists(folder);
+        string? picked = ServiceLocator.Get<IDialogs>().PickFile(
+            Strings.ActionsPickProgram, Strings.ActionsProgramFilter,
+            known ? folder : null, known ? Path.GetFileName(program) : null);
+        if (picked is not null) {
+            row.ChooseProgramFile(picked);
         }
     }
 
@@ -336,20 +332,16 @@ public partial class SettingsWindow : Window {
             return;
         }
 
-        var picker = new Microsoft.Win32.OpenFileDialog {
-            Title = string.Format(Strings.ToolsPointAtTitle, row.Title),
-            Filter = Strings.ToolsProgramFilter,
-            FileName = row.Tool + ".exe",
-            CheckFileExists = true,
-        };
-        if (row.PathText.Length > 0 && Path.GetDirectoryName(row.PathText) is { } folder && Directory.Exists(folder)) {
-            picker.InitialDirectory = folder;
-        }
-        if (picker.ShowDialog(this) != true) {
+        string? folder = row.PathText.Length > 0 && Path.GetDirectoryName(row.PathText) is { } held && Directory.Exists(held)
+            ? held
+            : null;
+        string? picked = ServiceLocator.Get<IDialogs>().PickFile(
+            string.Format(Strings.ToolsPointAtTitle, row.Title), Strings.ToolsProgramFilter, folder, row.Tool + ".exe");
+        if (picked is null) {
             return;
         }
 
-        vm.SetToolPath(row.Tool, picker.FileName);
+        vm.SetToolPath(row.Tool, picked);
         _ = LocateToolsAsync(vm, rescan: false);
     }
 

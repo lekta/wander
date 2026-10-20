@@ -274,12 +274,6 @@ public static partial class Strings {
     /// <summary>{0:0.#} кГц</summary>
     public static string PreviewAudioSampleRate => Get(nameof(PreviewAudioSampleRate));
 
-    /// <summary>моно</summary>
-    public static string PreviewAudioMono => Get(nameof(PreviewAudioMono));
-
-    /// <summary>стерео</summary>
-    public static string PreviewAudioStereo => Get(nameof(PreviewAudioStereo));
-
     /// <summary>{0:N0} треугольников · {1:N0} вершин</summary>
     public static string PreviewModelDetail => Get(nameof(PreviewModelDetail));
 

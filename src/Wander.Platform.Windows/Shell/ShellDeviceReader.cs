@@ -67,7 +67,7 @@ internal sealed class ShellDeviceReader {
             _items.Clear();
         }
         foreach (var item in items) {
-            WpdInterop.Release(item);
+            ShellItemInterop.Release(item);
         }
     }
 
@@ -118,14 +118,14 @@ internal sealed class ShellDeviceReader {
                 var row = Row(folderPath, item);
                 lock (_lock) {
                     if (_items.Remove(row.Id, out var old)) {
-                        WpdInterop.Release(old);
+                        ShellItemInterop.Release(old);
                     }
                     _items[row.Id] = item;
                 }
                 rows.Add(row);
             }
         } finally {
-            WpdInterop.Release(items);
+            ShellItemInterop.Release(items);
         }
 
         return rows;

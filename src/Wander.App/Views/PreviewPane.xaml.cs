@@ -153,13 +153,6 @@ public partial class PreviewPane : UserControl {
     public bool IsZoomed => _imageZoomActive;
 
     /// <summary>
-    /// True while the keyboard is inside the code viewer. The window asks
-    /// before claiming Ctrl+F: AvalonEdit owns that key for its own search
-    /// panel, and stealing it there would be surprising.
-    /// </summary>
-    public bool IsCodeEditorFocused => CodeEditor.IsKeyboardFocusWithin;
-
-    /// <summary>
     /// The text on show was scrolled by the user - to these offsets,
     /// across and down. The compare window passes it to the other text
     /// (<see cref="FollowTextScroll"/>), so the two are read side by side.

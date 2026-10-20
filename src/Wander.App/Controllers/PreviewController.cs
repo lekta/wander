@@ -888,9 +888,9 @@ public sealed class PreviewController : ObservableObject {
     public bool HasAudioAlbum => AudioAlbum.Length > 0;
 
     /// <summary>
-    /// The technical line under the name: bitrate, sampling rate, channels.
-    /// Whatever of it the container actually stated — a missing figure is
-    /// left out rather than printed as a zero.
+    /// The technical line under the name: codec, bitrate, sampling rate,
+    /// bit depth, channels. Whatever of it the container actually stated —
+    /// a missing figure is left out rather than printed as a zero.
     /// </summary>
     public string AudioDetail {
         get {
@@ -899,14 +899,20 @@ public sealed class PreviewController : ObservableObject {
             }
 
             var parts = new List<string>();
+            if (_audio.Codec is { } codec) {
+                parts.Add(codec);
+            }
             if (_audio.BitrateKbps is { } kbps and > 0) {
                 parts.Add(string.Format(Strings.PreviewAudioBitrate, kbps));
             }
             if (_audio.SampleRate is { } rate and > 0) {
                 parts.Add(string.Format(Strings.PreviewAudioSampleRate, rate / 1000.0));
             }
-            if (_audio.Channels is { } channels and > 0) {
-                parts.Add(channels == 1 ? Strings.PreviewAudioMono : Strings.PreviewAudioStereo);
+            if (_audio.BitDepth is { } bits and > 0) {
+                parts.Add(string.Format(Strings.MediaBitDepth, bits));
+            }
+            if (Preview.MediaRows.Layout(_audio.Channels ?? 0) is { } layout) {
+                parts.Add(layout);
             }
 
             return string.Join(" · ", parts);
@@ -2716,7 +2722,9 @@ public sealed class PreviewController : ObservableObject {
         }
 
         string path = uri.LocalPath;
-        var codecs = _media?.Tracks.Where(t => t.Kind != MediaTrackKind.Subtitle).Select(t => (string?)t.Codec).ToList() ?? new();
+        // A track's codec is on its card (AudioTags); a video's, in the probe.
+        var codecs = _media?.Tracks.Where(t => t.Kind != MediaTrackKind.Subtitle).Select(t => (string?)t.Codec).ToList()
+            ?? new List<string?> { _audio?.Codec };
         var (name, missing) = ServiceLocator.TryGet<ICodecProbe>() is { } probe
             ? await Task.Run(() => StoreCodecs.FirstMissingForMedia(path, codecs, probe))
             : (null, MissingCodec.None);
@@ -2725,7 +2733,7 @@ public sealed class PreviewController : ObservableObject {
             return;
         }
 
-        string? codec = _media?.Video?.Codec ?? _media?.Tracks.FirstOrDefault(t => t.Kind == MediaTrackKind.Audio)?.Codec;
+        string? codec = _media?.Video?.Codec ?? _media?.Tracks.FirstOrDefault(t => t.Kind == MediaTrackKind.Audio)?.Codec ?? _audio?.Codec;
         _missingCodec = missing;
         _mediaProblem = missing switch {
             MissingCodec.None when codec is null => Strings.PreviewMediaUnplayable,
@@ -3382,7 +3390,14 @@ public sealed class PreviewController : ObservableObject {
             return;
         }
 
-        if (copy is null || FontCard.Read(copy) is not { } face) {
+        // Off the UI thread: a CJK font walks tens of thousands of glyphs,
+        // and nothing the card holds is a DispatcherObject.
+        var face = copy is null ? null : await Task.Run(() => FontCard.Read(copy), ct);
+        if (ct.IsCancellationRequested) {
+            return;
+        }
+
+        if (face is null) {
             Kind = PreviewKind.Unsupported;
 
             return;

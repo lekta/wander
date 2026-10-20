@@ -182,11 +182,23 @@ public static class ContentSniffer {
         if (text.StartsWith("<!doctype html", StringComparison.OrdinalIgnoreCase) || text.StartsWith("<html", StringComparison.OrdinalIgnoreCase)) {
             return ".html";
         }
-        if (text.Length > 1 && text[0] is '{' or '[' && text.Contains('"') && (text.Contains(':') || text[0] == '[')) {
+        if (text.Length > 1 && text.Contains('"')
+            && (text[0] == '{' && text.Contains(':') || text[0] == '[' && OpensJsonArray(text))) {
             return ".json";
         }
 
         return null;
+    }
+
+
+    /// <summary>
+    /// The array goes on with an object, a string or an array: an INI file's
+    /// <c>[section]</c> with a quote further on is not JSON.
+    /// </summary>
+    private static bool OpensJsonArray(string text) {
+        string rest = text[1..].TrimStart();
+
+        return rest.Length > 0 && rest[0] is '{' or '"' or '[';
     }
 
 

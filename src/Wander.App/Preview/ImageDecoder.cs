@@ -229,34 +229,21 @@ internal static class ImageDecoder {
     /// 1 — return the bitmap untouched.
     /// </summary>
     public static BitmapSource ApplyOrientation(BitmapSource source, int? orientation) {
-        var transform = orientation switch {
-            2 => Mirror(0),
-            3 => new RotateTransform(180),
-            4 => Mirror(180),
-            5 => Mirror(90),
-            6 => new RotateTransform(90),
-            7 => Mirror(270),
-            8 => new RotateTransform(270),
-            _ => (Transform?)null,
-        };
-        if (transform is null) {
+        var (mirror, clockwise) = ExifOrientation.Upright(orientation);
+        if (!mirror && clockwise == 0) {
             return source;
         }
 
+        // Children apply in order: the flip, then the turn.
+        var transform = new TransformGroup();
+        if (mirror) {
+            transform.Children.Add(new ScaleTransform(-1, 1));
+        }
+        transform.Children.Add(new RotateTransform(clockwise));
         var rotated = new TransformedBitmap(source, transform);
         rotated.Freeze();
 
         return rotated;
-    }
-
-
-    /// <summary>Horizontal flip, then <paramref name="degrees"/> of rotation.</summary>
-    private static Transform Mirror(double degrees) {
-        var group = new TransformGroup();
-        group.Children.Add(new ScaleTransform(-1, 1));
-        group.Children.Add(new RotateTransform(degrees));
-
-        return group;
     }
 
 

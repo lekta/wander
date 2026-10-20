@@ -893,6 +893,13 @@
     <value>файл больше 4 ГБ, а диск {0} — FAT32</value>
     <comment>{0} — диск: «E:»</comment>
   </data>
+  <data name="ErrorFatRootFull" xml:space="preserve">
+    <value>в корне {0} больше не помещается записей — у FAT их число в корне ограничено; положите в папку</value>
+    <comment>{0} — диск: «E:»</comment>
+  </data>
+  <data name="ErrorArchiveLocked" xml:space="preserve">
+    <value>архив защищён паролем</value>
+  </data>
   <data name="ErrorDeviceGone" xml:space="preserve">
     <value>устройство отключено или не готово</value>
   </data>
@@ -996,6 +1003,22 @@
 
 Закройте их там и нажмите «Повторить».</value>
     <comment>{0} — сколько: «3 элемента» (MenuCaptionSelection), {1} — имя первого, {2} — причина</comment>
+  </data>
+  <data name="UndoFolderGoneTitle" xml:space="preserve">
+    <value>Папки больше нет</value>
+  </data>
+  <data name="UndoFolderGoneMessage" xml:space="preserve">
+    <value>Папки {0} больше нет — её удалили или переименовали.
+
+Вернуть туда {1} не получится. Выберите другую папку.</value>
+    <comment>Ctrl+Z переноса, а папки, откуда переносили, нет; {0} — путь папки, {1} — что возвращается (StatusNamedOne / StatusNamedMany)</comment>
+  </data>
+  <data name="UndoFolderGonePick" xml:space="preserve">
+    <value>Выбрать папку…</value>
+  </data>
+  <data name="UndoFolderGonePickTitle" xml:space="preserve">
+    <value>Куда вернуть {0}</value>
+    <comment>Заголовок выбора папки; {0} — что возвращается (StatusNamedOne / StatusNamedMany)</comment>
   </data>
   <data name="RecycleUnavailableTitle" xml:space="preserve">
     <value>Не помещается в корзину</value>
@@ -1721,12 +1744,6 @@
   </data>
   <data name="PreviewAudioSampleRate" xml:space="preserve">
     <value>{0:0.#} кГц</value>
-  </data>
-  <data name="PreviewAudioMono" xml:space="preserve">
-    <value>моно</value>
-  </data>
-  <data name="PreviewAudioStereo" xml:space="preserve">
-    <value>стерео</value>
   </data>
   <data name="PreviewModelDetail" xml:space="preserve">
     <value>{0:N0} треугольников · {1:N0} вершин</value>

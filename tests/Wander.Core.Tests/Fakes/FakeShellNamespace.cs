@@ -32,6 +32,9 @@ internal sealed class FakeShellNamespace : IShellNamespace {
     /// <summary>Set to make <see cref="CopyOut"/> throw - a broken or locked archive.</summary>
     public Exception? CopyOutFailure { get; set; }
 
+    /// <summary>How many listings were asked for: each one of a real zip may be its whole catalogue.</summary>
+    public int EnumerateCalls { get; private set; }
+
 
     /// <summary>Adds a file inside an archive: full path, then its contents.</summary>
     /// <param name="size">
@@ -86,6 +89,7 @@ internal sealed class FakeShellNamespace : IShellNamespace {
 
     public IReadOnlyList<FileSystemEntry> Enumerate(
         string shellPath, CancellationToken ct = default, IProgress<IReadOnlyList<FileSystemEntry>>? portions = null) {
+        EnumerateCalls++;
         var children = new List<FileSystemEntry>();
         foreach (string folder in _folders) {
             if (IsChildOf(folder, shellPath)) {

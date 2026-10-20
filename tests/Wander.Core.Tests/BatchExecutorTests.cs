@@ -663,6 +663,23 @@ public class BatchExecutorTests {
         Assert.Equal("Rename to 'x'", undo.NextDescription);
     }
 
+    [Fact]
+    public async Task DeleteManyAsync_Permanent_FolderGoneInPart_ForgetsWhatWent_KeepsWhatStayed() {
+        var (batch, fs, _, undo, _) = Setup();
+        fs.Directories.Add(RootDir);
+        fs.Files[@"C:\dir\went.txt"] = new byte[] { 1 };
+        fs.Files[@"C:\dir\stayed.txt"] = new byte[] { 2 };
+        undo.Push(new MoveAction(fs, @"C:\src\stayed.txt", @"C:\dir\stayed.txt"));
+        undo.Push(new MoveAction(fs, @"C:\src\went.txt", @"C:\dir\went.txt"));
+        fs.DeleteDirectoryFailsAfter[RootDir] = new[] { @"C:\dir\went.txt" };
+
+        var results = await batch.DeleteManyAsync(new[] { RootDir }, permanent: true, default);
+
+        Assert.Equal(DeleteStatus.Failed, Assert.Single(results).Status);
+        Assert.Equal(1, undo.Depth);
+        Assert.Equal("Move 'stayed.txt'", undo.NextDescription);
+    }
+
 
     // --- DeleteManyAsync: cancellation ---------------------------------
 
@@ -1285,6 +1302,23 @@ public class BatchExecutorTests {
         undo.Undo();
         Assert.True(fs.FileExists(RootA));
         Assert.False(fs.FileExists(RootB));
+    }
+
+    [Fact]
+    public void CopyMany_Replace_TargetTheBinTookWithNothingToFindItBy_GetsNoStepThatCouldOnlyFail() {
+        var (batch, fs, bin, undo, _) = Setup();
+        fs.Files[SrcA] = new byte[] { 1 };
+        fs.Directories.Add(DstFolder);
+        fs.Files[DstA] = new byte[] { 9 };
+        bin.Untraceable.Add(DstA);
+        // An older step that needed the old target is as dead as the target.
+        undo.Push(new CreateAction(bin, DstA));
+
+        batch.CopyMany(new[] { SrcA }, DstFolder, new FakeConflictResolver(batchOverride: ConflictResolution.Replace));
+
+        Assert.Equal(1, undo.Depth);
+        Assert.Single(undo.Next!.Steps);
+        Assert.Equal(OperationVerbs.Copy, undo.Next.Verb);
     }
 
     [Fact]

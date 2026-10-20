@@ -117,7 +117,16 @@ public class Pp3SidecarTests {
     [Fact]
     public void WithRank_RejectsValuesOutsideTheScale() {
         Assert.Throws<ArgumentOutOfRangeException>(() => Pp3Sidecar.WithRank(Utf8(Sample), 6));
-        Assert.Throws<ArgumentOutOfRangeException>(() => Pp3Sidecar.WithRank(Utf8(Sample), -1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => Pp3Sidecar.WithRank(Utf8(Sample), -2));
+    }
+
+    [Fact]
+    public void RankMinusOne_ReadsAsIs_ShowsAsNoField_AndIsWrittenBackByUndo() {
+        byte[] written = Pp3Sidecar.WithRank(Utf8(Sample), Pp3Sidecar.NoRank);
+
+        Assert.Equal(Sample.Replace("Rank=2", "Rank=-1"), Text(written));
+        Assert.Equal(-1, Pp3Sidecar.Read(written).Rank);
+        Assert.Null(Pp3Sidecar.Shown(Pp3Sidecar.Read(written)).Rank);
     }
 
 

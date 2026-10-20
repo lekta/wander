@@ -33,6 +33,7 @@ public class ContentSnifferTests {
         yield return new object[] { Ascii("<?xml version=\"1.0\"?>\n<project/>"), ".xml" };
         yield return new object[] { Ascii("<!DOCTYPE html>\n<html>"), ".html" };
         yield return new object[] { Ascii("{\n  \"name\": \"wander\"\n}"), ".json" };
+        yield return new object[] { Ascii("[\n  {\"id\": 1}\n]"), ".json" };
     }
 
     [Theory]
@@ -67,6 +68,7 @@ public class ContentSnifferTests {
     [Theory]
     [InlineData("Just a note, plain text, nothing to name.")]
     [InlineData("{not json at all}")]
+    [InlineData("[section]\nname=\"value\"")]
     public void PlainText_IsNotNamed(string text) {
         Assert.Null(ContentSniffer.Extension(Encoding.UTF8.GetBytes(text)));
     }

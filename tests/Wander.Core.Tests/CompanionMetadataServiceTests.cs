@@ -333,6 +333,29 @@ public class CompanionMetadataServiceTests {
     }
 
     [Fact]
+    public void ReadRatingFor_Pp3RankMinusOne_LeavesTheCamerasStars() {
+        // RawTherapee writes Rank=-1 into every profile it saves: "no rank of its own".
+        var (service, fs, _) = BuildCamera(5);
+        fs.Files[@"C:\photos\IMG_8923.CR3.pp3"] = Utf8("[General]\nRank=-1\n");
+
+        var rating = service.ReadRatingFor(Row("IMG_8923.CR3", @"C:\photos\IMG_8923.CR3.pp3"));
+
+        Assert.Equal(5, rating?.Rank);
+        Assert.True(rating!.InPhoto);
+    }
+
+    [Fact]
+    public void SetRating_OverRankMinusOne_UndoPutsItBack() {
+        const string profile = "[General]\nRank=-1\nColorLabel=0\n";
+        var (service, fs, undo) = Build(pp3: profile);
+
+        service.SetRating(Pp3Path, RatingField.Rank, 3);
+        undo.Undo();
+
+        Assert.Equal(profile, Text(fs.Files[Pp3Path]));
+    }
+
+    [Fact]
     public void PhotoRating_IsReadOnce_UntilTheFileChangesOrIsForgotten() {
         var (service, fs, _) = BuildCamera(5);
         var row = Row("IMG_8923.CR3");

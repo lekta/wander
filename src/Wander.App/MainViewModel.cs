@@ -5307,10 +5307,22 @@ public sealed class MainViewModel : ObservableObject {
         Justification = "A command body, nothing awaits it; every exception is caught, logged and shown in the status bar.")]
     private async void UndoLast() {
         try {
-            // The preview lets go of what the undo takes away or moves back,
-            // as before a delete: its own handle would be the "in use" the
-            // undo waits for.
+            Dictionary<string, string>? redirect = null;
             if (_undo.Next is { } next) {
+                // A folder the undo puts items back into is gone (PLAN K):
+                // where they go instead is the user's answer.
+                var gone = UndoDestinations.Missing(next, _fs.DirectoryExists);
+                if (gone.Count > 0) {
+                    redirect = AskWhereToPutBack(gone);
+                    if (redirect is null) {
+                        _log.Info($"Undo left for later: {next.Description} - the folder it goes back into is gone, no other was picked");
+
+                        return;
+                    }
+                }
+                // The preview lets go of what the undo takes away or moves
+                // back, as before a delete: its own handle would be the "in
+                // use" the undo waits for.
                 ReleasePreview(next.Steps.SelectMany(s => s.PathsBeforeUndo).Concat(next.MovesOnUndo.Select(m => m.From)));
             }
             // An operation like any other - off this thread, in the tracker,
@@ -5319,7 +5331,7 @@ public sealed class MainViewModel : ObservableObject {
             UndoOutcome? outcome;
             try {
                 outcome = await RunWithProgressDialogAsync(
-                    Strings.ProgressUndoing, ct => _undo.UndoAsync(_tracker, ct, _claims, _ops.UndoGate));
+                    Strings.ProgressUndoing, ct => _undo.UndoAsync(_tracker, ct, _claims, _ops.UndoGate, redirect));
             } finally {
                 RestorePreview();
             }
@@ -5388,6 +5400,39 @@ public sealed class MainViewModel : ObservableObject {
             _log.Error("Undo failed", ex);
             Fail(string.Format(Strings.StatusUndoError, ex.Message));
         }
+    }
+
+    /// <summary>
+    /// The folders an undo puts items back into are gone (PLAN K, decision
+    /// of 2026-09-29): for each, the user is told why they are asked and
+    /// picks where the items go instead - the picker opens on what is left
+    /// of the old path, where a folder of that name can be made again. Null
+    /// when they back out: the undo does not run and stays for later.
+    /// </summary>
+    private Dictionary<string, string>? AskWhereToPutBack(IReadOnlyList<MissingDestination> gone) {
+        var redirect = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var place in gone) {
+            string what = Named(place.Items[0], place.Items.Count);
+            int choice = _dialogs.Choose(new ChoiceRequest(
+                DialogKind.UndoFolderGone,
+                Strings.UndoFolderGoneTitle,
+                string.Format(Strings.UndoFolderGoneMessage, place.Folder, what),
+                new[] { Strings.UndoFolderGonePick }));
+            if (choice != 0) {
+                return null;
+            }
+
+            string? startAt = PathCrumbs.NearestExisting(place.Folder, _fs.DirectoryExists);
+            string? folder = _dialogs.PickFolder(string.Format(Strings.UndoFolderGonePickTitle, what), startAt);
+            if (folder is null) {
+                return null;
+            }
+
+            _log.Info($"Undo: {place.Folder} is gone - {place.Items.Count} items go back into {folder}");
+            redirect[place.Folder] = folder;
+        }
+
+        return redirect;
     }
 
     /// <summary>
@@ -6290,7 +6335,7 @@ public sealed class MainViewModel : ObservableObject {
     /// </summary>
     private async Task ExtractSelectionAsync(object? parameter) {
         if (!CanExtractSelection(parameter) || TryGetShellNamespace() is not { } ns
-            || ExtractionSources(ns, _selectedEntries) is not { } sources) {
+            || await ExtractionSourcesAsync(ns, _selectedEntries) is not { } sources) {
             return;
         }
 
@@ -6321,7 +6366,7 @@ public sealed class MainViewModel : ObservableObject {
                 .Select(g => (Folder: g.Key, Rows: (IReadOnlyList<FileSystemEntry>)g.ToList()))
                 .ToArray();
         foreach (var (folder, rows) in batches) {
-            if (string.IsNullOrEmpty(folder) || ExtractionSources(ns, rows) is not { } sources) {
+            if (string.IsNullOrEmpty(folder) || await ExtractionSourcesAsync(ns, rows) is not { } sources) {
                 continue;
             }
 
@@ -6334,13 +6379,20 @@ public sealed class MainViewModel : ObservableObject {
     /// archive the rows themselves; archives in an ordinary folder give
     /// everything they hold, which is what the shell's own "Извлечь все..."
     /// does one row above. Null, said in the status bar, when that is nothing.
+    /// Listed on the pool: zipfldr reads a big zip's whole catalogue first -
+    /// 24 s for one of 400 thousand entries (PLAN F4) - and the window waited.
     /// </summary>
-    private IReadOnlyList<string>? ExtractionSources(IShellNamespace ns, IReadOnlyList<FileSystemEntry> rows) {
+    private async Task<IReadOnlyList<string>?> ExtractionSourcesAsync(IShellNamespace ns, IReadOnlyList<FileSystemEntry> rows) {
+        // The selection may change while the pool lists: what was picked is kept.
+        string[] picked = rows.Select(e => e.FullPath).ToArray();
         var sources = CurrentArchive is not null
-            ? rows.Select(e => e.FullPath).ToList()
-            : rows.SelectMany(e => TopLevelOf(ns, e.FullPath)).ToList();
+            ? picked.ToList()
+            : await LongWait.WatchAsync(
+                Task.Run(() => picked.SelectMany(path => TopLevelOf(ns, path)).ToList()),
+                _log,
+                $"extract: listing {picked.Length} archive(s)");
         if (sources.Count == 0) {
-            Warn(string.Format(Strings.StatusArchiveEmptyOrLocked, rows[0].Name));
+            Warn(string.Format(Strings.StatusArchiveEmptyOrLocked, Path.GetFileName(picked[0])));
 
             return null;
         }
@@ -6677,7 +6729,26 @@ public sealed class MainViewModel : ObservableObject {
             case 1117:  // ERROR_IO_DEVICE
                 return Strings.ErrorReadFailed;
         }
+        // The shell's copy engine (extraction from an archive) has codes of
+        // its own that .NET has no words for (shobjidl_core.h).
+        switch ((uint)ex.HResult) {
+            case 0x8027000E:    // COPYENGINE_E_REMOVABLE_FULL
+            case 0x80270032:    // COPYENGINE_E_DISK_FULL
+            case 0x80270033:    // COPYENGINE_E_DISK_FULL_CLEAN
+                return string.Format(Strings.ErrorDiskFull, DriveOf(destination ?? path));
+            case 0x8027000D when ServiceLocator.TryGet<IVolumeInfoProvider>()?.Describe(destination ?? path) is { FileSystem: "FAT32" }:
+                // COPYENGINE_E_FILE_TOO_LARGE
+                return string.Format(Strings.ErrorFileTooLargeForFat32, DriveOf(destination ?? path));
+            case 0x8027003E:    // COPYENGINE_E_FAT_MAX_IN_ROOT
+                return string.Format(Strings.ErrorFatRootFull, DriveOf(destination ?? path));
+            case 0x80270027:    // COPYENGINE_E_SHARING_VIOLATION_SRC
+            case 0x80270028:    // COPYENGINE_E_SHARING_VIOLATION_DEST
+                return Strings.ErrorInUse;
+        }
 
+        if (ex is ArchiveLockedException) {
+            return Strings.ErrorArchiveLocked;
+        }
         if (DeviceErrors.IsAsleep(ex)) {
             return Strings.ErrorDeviceAsleep;
         }

@@ -288,6 +288,12 @@ public static partial class Strings {
     /// <summary>файл больше 4 ГБ, а диск {0} — FAT32</summary>
     public static string ErrorFileTooLargeForFat32 => Get(nameof(ErrorFileTooLargeForFat32));
 
+    /// <summary>в корне {0} больше не помещается записей — у FAT их число в корне ограничено; положите в папку</summary>
+    public static string ErrorFatRootFull => Get(nameof(ErrorFatRootFull));
+
+    /// <summary>архив защищён паролем</summary>
+    public static string ErrorArchiveLocked => Get(nameof(ErrorArchiveLocked));
+
     /// <summary>устройство отключено или не готово</summary>
     public static string ErrorDeviceGone => Get(nameof(ErrorDeviceGone));
 
@@ -341,6 +347,18 @@ public static partial class Strings {
 
     /// <summary>Не удалось удалить {0} — они заняты. Например, «{1}»: {2}.  Закройте их там и нажмите «Повторить».</summary>
     public static string DeleteInUseMany => Get(nameof(DeleteInUseMany));
+
+    /// <summary>Папки больше нет</summary>
+    public static string UndoFolderGoneTitle => Get(nameof(UndoFolderGoneTitle));
+
+    /// <summary>Папки {0} больше нет — её удалили или переименовали.  Вернуть туда {1} не получится. Выберите другую папку.</summary>
+    public static string UndoFolderGoneMessage => Get(nameof(UndoFolderGoneMessage));
+
+    /// <summary>Выбрать папку…</summary>
+    public static string UndoFolderGonePick => Get(nameof(UndoFolderGonePick));
+
+    /// <summary>Куда вернуть {0}</summary>
+    public static string UndoFolderGonePickTitle => Get(nameof(UndoFolderGonePickTitle));
 
     /// <summary>Не помещается в корзину</summary>
     public static string RecycleUnavailableTitle => Get(nameof(RecycleUnavailableTitle));

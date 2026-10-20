@@ -74,12 +74,6 @@ internal static class WpdInterop {
         return (T)Activator.CreateInstance(Type.GetTypeFromCLSID(clsid, throwOnError: true)!)!;
     }
 
-    internal static void Release(object? comObject) {
-        if (comObject is not null && Marshal.IsComObject(comObject)) {
-            Marshal.ReleaseComObject(comObject);
-        }
-    }
-
 
     /// <summary>A <c>PROPVARIANT</c> as WPD hands one over: the type, and the 8 bytes of the value. 24 bytes on x64.</summary>
     [StructLayout(LayoutKind.Explicit, Size = 24)]

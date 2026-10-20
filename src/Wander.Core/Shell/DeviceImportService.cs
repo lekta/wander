@@ -212,7 +212,9 @@ public sealed class DeviceImportService {
                             plan.Source.FullPath, plan.Destination, BatchItemStatus.Failed, new IOException(reason));
                         break;
                     }
-                    restores.Add(new DeleteAction(_bin, _bin.Send(plan.Destination)));
+                    if (RecycleUndo.Of(_bin.Send(plan.Destination), _bin, _undo, _log) is { } restore) {
+                        restores.Add(restore);
+                    }
                     plan.Status = BatchItemStatus.Replaced;
                     break;
             }

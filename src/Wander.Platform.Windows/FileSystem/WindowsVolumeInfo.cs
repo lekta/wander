@@ -16,7 +16,7 @@ namespace Wander.Platform.Windows.FileSystem;
 /// </summary>
 public sealed class WindowsVolumeInfo : IVolumeInfoProvider {
     public VolumeInfo? Describe(string path) {
-        if (string.IsNullOrWhiteSpace(path) || DevicePath.Is(path)) {
+        if (!OnAVolume(path)) {
             return null;
         }
 
@@ -29,8 +29,8 @@ public sealed class WindowsVolumeInfo : IVolumeInfoProvider {
             }
             drive = new DriveInfo(root);
         } catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) {
-            // A shell-namespace sentinel, or a UNC path with no drive
-            // letter — nothing DriveInfo can be built from.
+            // A UNC path with no drive letter - nothing DriveInfo can be
+            // built from.
             return null;
         }
 
@@ -58,6 +58,10 @@ public sealed class WindowsVolumeInfo : IVolumeInfoProvider {
 
 
     public VolumeKind KindOf(string path) {
+        if (!OnAVolume(path)) {
+            return VolumeKind.Unknown;
+        }
+
         try {
             string root = Path.GetPathRoot(Path.GetFullPath(path)) ?? "";
 
@@ -84,6 +88,16 @@ public sealed class WindowsVolumeInfo : IVolumeInfoProvider {
         }
     }
 
+
+    /// <summary>
+    /// A path on a disk: absolute, with a drive or a share at its head. A
+    /// shell sentinel (<c>shell:...</c>) or a device path (<c>device:...</c>) is
+    /// not - <see cref="Path.GetFullPath(string)"/> does not throw on the
+    /// colon and would put it under the working folder, on C:.
+    /// </summary>
+    private static bool OnAVolume(string path) {
+        return !string.IsNullOrWhiteSpace(path) && Path.IsPathFullyQualified(path);
+    }
 
     private static VolumeKind KindOf(DriveType type) {
         return type switch {

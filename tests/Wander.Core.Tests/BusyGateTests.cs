@@ -111,6 +111,55 @@ public class BusyGateTests {
     }
 
     [Fact]
+    public void Retry_AFolderDenied_WithAHeldFileInside_IsWaitedFor_AndNamedByIt() {
+        // Windows answers the move of a folder with a held file inside
+        // "access denied", not "in use" (stand 2026-10-19).
+        var probe = new FakeBusyProbe();
+        var locks = new FixedLocks(new FileLockInfo(77, "Photoshop"));
+        var pauses = new List<TimeSpan>();
+        var held = new HeldPaths(new PathClaims(), probe, locks, () => new BusyWait(pauses.Add));
+        string cover = Album + @"\cover.psd";
+        probe.HeldInside[Album] = cover;
+        int tries = 0;
+
+        using var gate = held.Begin(NullLogger.Instance);
+        var report = gate.Retry(Album, () => {
+            if (++tries < 3) {
+                throw Denied();
+            }
+        }, default);
+
+        Assert.Equal(3, tries);
+        Assert.NotNull(report);
+        Assert.True(report.Released);
+        Assert.Equal(2, pauses.Count);
+        Assert.Equal(new[] { cover }, locks.Asked);
+    }
+
+    [Fact]
+    public void Retry_AFolderDenied_NeverLetGo_FailsInUse() {
+        var (held, probe, _, _) = Setup();
+        probe.HeldInside[Album] = Album + @"\cover.psd";
+
+        using var gate = held.Begin(NullLogger.Instance);
+        var ex = Assert.ThrowsAny<IOException>(() => gate.Retry(Album, () => throw Denied(), default));
+
+        Assert.True(FileInUse.Is(ex));
+    }
+
+    [Fact]
+    public void Retry_AFolderDenied_NothingHeldInside_GoesOutAtOnce() {
+        var (held, _, pauses, _) = Setup();
+        var denied = Denied();
+
+        using var gate = held.Begin(NullLogger.Instance);
+        var thrown = Assert.ThrowsAny<IOException>(() => gate.Retry(Album, () => throw denied, default));
+
+        Assert.Same(denied, thrown);
+        Assert.Empty(pauses);
+    }
+
+    [Fact]
     public void Retry_AnyOtherFailure_IsNotWaitedFor() {
         var (held, _, pauses, _) = Setup();
 
@@ -250,6 +299,11 @@ public class BusyGateTests {
 
     private static TimeSpan Sum(IEnumerable<TimeSpan> pauses) {
         return pauses.Aggregate(TimeSpan.Zero, (a, b) => a + b);
+    }
+
+    /// <summary>What <c>Directory.Move</c> throws for a folder with a held file inside.</summary>
+    private static IOException Denied() {
+        return new IOException($"Access to the path '{Album}' is denied.", unchecked((int)0x80070005));
     }
 
 

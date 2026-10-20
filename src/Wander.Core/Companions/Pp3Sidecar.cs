@@ -28,6 +28,13 @@ public static class Pp3Sidecar {
     /// <summary>Highest star count RawTherapee's browser shows.</summary>
     public const int MaxRank = 5;
 
+    /// <summary>
+    /// RawTherapee's "no rank of its own - the photo's stands", written into
+    /// every profile it saves. <see cref="Read"/> gives it as it is (undo puts
+    /// it back); shown, it is no field (<see cref="Shown"/>).
+    /// </summary>
+    public const int NoRank = -1;
+
 
     /// <summary>
     /// A brand-new <c>.pp3</c> holding nothing but the rating fields.
@@ -79,9 +86,17 @@ public static class Pp3Sidecar {
     }
 
 
-    /// <summary>The same file with <c>[General] Rank</c> set to <paramref name="rank"/>.</summary>
+    /// <summary>What <see cref="Read"/> found, as stars: <see cref="NoRank"/> leaves the next source to say.</summary>
+    public static SidecarRating Shown(SidecarRating read) {
+        return read.Rank == NoRank ? read with { Rank = null } : read;
+    }
+
+
+    /// <summary>The same file with <c>[General] Rank</c> set to <paramref name="rank"/>; <see cref="NoRank"/> is undo's.</summary>
     public static byte[] WithRank(byte[] content, int rank) {
-        Guard(rank, MaxRank, nameof(rank));
+        if (rank != NoRank) {
+            Guard(rank, MaxRank, nameof(rank));
+        }
 
         return SidecarText.Edit(content, text => SetKey(text, RankKey, rank.ToString()));
     }
