@@ -792,6 +792,9 @@
   <data name="ErrorFileTooLargeForFat32" xml:space="preserve">
     <value>the file is over 4 GB and {0} is FAT32</value>
   </data>
+  <data name="ErrorFatFolderFull" xml:space="preserve">
+    <value>{0} has room, but the folder is out of entries: FAT32 keeps up to 65,534 in a folder, a long name taking several — split the files into folders</value>
+  </data>
   <data name="ErrorFatRootFull" xml:space="preserve">
     <value>the root of {0} holds no more entries — FAT limits how many fit at the root; put the files in a folder</value>
   </data>

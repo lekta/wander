@@ -200,11 +200,12 @@ public static class PanelRules {
     /// <summary>
     /// The bookmarks' rows were built again. What was open, the cursor and
     /// the open folder's place stay by path (P-15, N7); a row that is no
-    /// longer there takes the cursor to its neighbour. Whether the user's
-    /// own bookmarks are still there is asked of the disk off the UI thread
-    /// - one on a sleeping share or a flash drive pulled out held the window
-    /// up on every build; until the answer comes, a row is as it was, a new
-    /// one an ordinary row.
+    /// longer there takes the cursor to its neighbour. Whether the folders of
+    /// the bookmarks - the user's own and the built-in ones - are still there
+    /// is asked of the disk off the UI thread: one on a sleeping share or a
+    /// flash drive pulled out held the window up on every build ("Документы"
+    /// moved to a share, too); until the answer comes, a row is as it was, a
+    /// new one an ordinary row.
     /// </summary>
     private static WorkspaceState OnBookmarks(WorkspaceState state, BookmarksChanged changed, ICollection<WorkspaceEffect> effects) {
         var panel = state.Bookmarks;
@@ -217,9 +218,9 @@ public static class PanelRules {
         state = state with { Bookmarks = panel };
         Probe(state, Pane.Bookmarks, rows, effects);
 
-        var own = rows.Where(r => r.Role == PanelRowRole.OwnBookmark && r.Kind == PanelRowKind.Folder).Select(r => r.Path).ToArray();
-        if (own.Length > 0) {
-            effects.Add(new ProbeMissing(own));
+        var folders = rows.Where(r => IsBookmark(r) && r.Kind == PanelRowKind.Folder).Select(r => r.Path).ToArray();
+        if (folders.Length > 0) {
+            effects.Add(new ProbeMissing(folders));
         }
 
         return state;
@@ -234,7 +235,7 @@ public static class PanelRules {
         var rows = panel.Top;
         foreach (var (path, missing) in probed.Missing) {
             int at = IndexIn(rows, path);
-            if (at >= 0 && rows[at].Role == PanelRowRole.OwnBookmark && rows[at].IsMissing != missing) {
+            if (at >= 0 && IsBookmark(rows[at]) && rows[at].IsMissing != missing) {
                 rows = rows.SetItem(at, rows[at] with { IsMissing = missing });
             }
         }
@@ -549,6 +550,11 @@ public static class PanelRules {
 
 
     // --- Rows ---------------------------------------------------------------
+
+    /// <summary>A bookmark's row - the user's own or a built-in one - whose folder may go missing.</summary>
+    private static bool IsBookmark(PanelRow row) {
+        return row.Role is PanelRowRole.OwnBookmark or PanelRowRole.BuiltInBookmark;
+    }
 
     /// <summary>
     /// The rows of a fresh answer, with what is known of each kept: a row

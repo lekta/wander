@@ -151,6 +151,9 @@ public sealed class PreviewController : ObservableObject {
     /// </summary>
     private const long SignatureByItselfBytes = 200L * 1024 * 1024;
 
+    /// <summary>Checked signatures kept (<c>_signatures</c>): past this the memory starts again.</summary>
+    private const int MaxSignaturesKept = 512;
+
     /// <summary>
     /// Selection changes closer together than this are a held arrow key:
     /// a picture not decoded yet waits
@@ -381,6 +384,11 @@ public sealed class PreviewController : ObservableObject {
     private string? _executablePath;
     private ExecutableInfo? _executableInfo;
     private bool _canCheckSignature;
+
+    // Signatures checked, by path, size and time: an installer of 3 GB
+    // checked once is not read again on the way back to it. UI thread only.
+    private readonly Dictionary<string, SignatureInfo> _signatures = new(StringComparer.OrdinalIgnoreCase);
+    private string? _signatureKey;
 
     // Pictures decoded for the pane - the one on show and its neighbours -
     // and the picture area they are fitted to, in device pixels (0 until
@@ -2305,6 +2313,19 @@ public sealed class PreviewController : ObservableObject {
         }, ct);
     }
 
+    /// <summary>Whether a GIF has a second frame (<see cref="ContentSniffer.IsAnimatedGif"/>); unreadable - the player, as before.</summary>
+    private static async Task<bool> IsAnimatedGifAsync(string path, CancellationToken ct) {
+        return await Task.Run(() => {
+            try {
+                using var file = SharedRead.Open(path);
+
+                return ContentSniffer.IsAnimatedGif(file);
+            } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+                return true;
+            }
+        }, ct);
+    }
+
     /// <summary>The loader for <paramref name="route"/>; <paramref name="ext"/> picks the highlighting of code (and tells a WebP).</summary>
     private async Task LoadRoutedAsync(string path, PreviewRoute route, string ext, CancellationToken ct) {
         switch (route) {
@@ -2312,8 +2333,14 @@ public sealed class PreviewController : ObservableObject {
                 await LoadArchiveAsync(path, ct);
                 break;
 
+            // A GIF of one frame is a picture - the loupe, the zoom, the
+            // compare; one that moves goes to the player.
             case PreviewRoute.Animation:
-                LoadGif(path);
+                if (await IsAnimatedGifAsync(path, ct)) {
+                    LoadGif(path);
+                } else {
+                    await LoadImageAsync(path, ct);
+                }
                 break;
 
             case PreviewRoute.Video:
@@ -3184,7 +3211,8 @@ public sealed class PreviewController : ObservableObject {
             return;
         }
 
-        var (info, icon, size) = await Task.Run(() => (reader.Read(path), LoadIcon(path, IconSize.Large), SizeOf(path)), ct);
+        var (info, icon, size, written) = await Task.Run(
+            () => (reader.Read(path), LoadIcon(path, IconSize.Large), SizeOf(path), File.GetLastWriteTimeUtc(path)), ct);
         if (ct.IsCancellationRequested) {
             return;
         }
@@ -3194,17 +3222,19 @@ public sealed class PreviewController : ObservableObject {
             return;
         }
 
+        _signatureKey = $"{path}|{size}|{written.Ticks}";
+        bool known = _signatures.TryGetValue(_signatureKey, out var signature);
         bool byItself = size <= SignatureByItselfBytes;
         _executablePath = path;
         _executableInfo = info;
         ExecutableIcon = icon;
         ExecutableTitle = info.Description ?? Path.GetFileName(path);
-        ExecutableFacts = ExecutableCard.Facts(info, byItself
-            ? Strings.PreviewExeSignatureChecking
+        ExecutableFacts = ExecutableCard.Facts(info, known ? ExecutableCard.Signature(signature!)
+            : byItself ? Strings.PreviewExeSignatureChecking
             : string.Format(Strings.PreviewExeSignatureNotChecked, SizeFormatter.Format(size)));
-        CanCheckSignature = !byItself;
+        CanCheckSignature = !known && !byItself;
         Kind = PreviewKind.Executable;
-        if (byItself) {
+        if (!known && byItself) {
             _ = CheckSignatureAsync(reader, path, info, dwell: true, ct);
         }
     }
@@ -3232,6 +3262,7 @@ public sealed class PreviewController : ObservableObject {
     private async Task CheckSignatureAsync(
         IExecutableInfoReader reader, string path, ExecutableInfo info, bool dwell, CancellationToken ct) {
         bool gated = false;
+        string? key = _signatureKey;
         try {
             if (dwell) {
                 await Task.Delay(FullSizeDwellMs, ct);
@@ -3240,6 +3271,12 @@ public sealed class PreviewController : ObservableObject {
             gated = true;
 
             var signature = await Task.Run(() => reader.ReadSignature(path));
+            if (key is not null) {
+                if (_signatures.Count >= MaxSignaturesKept) {
+                    _signatures.Clear();
+                }
+                _signatures[key] = signature;
+            }
             if (!ct.IsCancellationRequested && ReferenceEquals(_executableInfo, info)) {
                 ExecutableFacts = ExecutableCard.Facts(info, ExecutableCard.Signature(signature));
             }
@@ -3288,7 +3325,13 @@ public sealed class PreviewController : ObservableObject {
             return;
         }
         if (string.IsNullOrWhiteSpace(read.Text)) {
-            Kind = PreviewKind.Unsupported;
+            // A "read me.doc" of an old archive is plain text under a Word
+            // name; the filter turned it down - it is shown as what it is.
+            if (await Task.Run(() => LooksLikeTextAsync(path, ct), ct)) {
+                await LoadTextAsync(path, ct);
+            } else {
+                Kind = PreviewKind.Unsupported;
+            }
 
             return;
         }
@@ -3571,6 +3614,7 @@ public sealed class PreviewController : ObservableObject {
         // A signature check still running is about the program that went.
         _executablePath = null;
         _executableInfo = null;
+        _signatureKey = null;
         CanCheckSignature = false;
         ModelParts = Array.Empty<ModelPart>();
         _modelPath = null;
@@ -3863,6 +3907,14 @@ public sealed class PreviewController : ObservableObject {
         FolderTypes.Clear();
         SetVolume(DescribeVolume(folder));
         Kind = PreviewKind.Folder;
+        // A drive's root: its block says how full it is, and the pane shows
+        // nothing else - a census there walked the whole disk, anew on every
+        // arrow over the drives.
+        if (_volume is not null) {
+            IsCensusLoading = false;
+
+            return;
+        }
         IsCensusLoading = true;
 
         // Built here, on the UI thread, so Progress<T> captures this

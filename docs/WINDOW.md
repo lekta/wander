@@ -136,7 +136,12 @@
   kindOf)` — путь, пока есть, иначе `PathCrumbs.NearestExisting`, но
   только на `VolumeKind.Fixed` (букву флешки мог получить другой
   носитель); иначе `OpenStartFolderAsync` берёт `AppSettings.WorkFolder` —
-  он же старт, когда последней папки нет. Историю оба не трогают.
+  он же старт, когда последней папки нет. `AfterVolumeRemoved` — ушёл том
+  открытой папки: последний недавний путь на живом томе, иначе первый
+  фиксированный корень; `AfterDeviceRemoved` — то же у телефона и камеры
+  (недавний — на живом томе или подключённом устройстве). Историю они не
+  трогают. Смена томов — `VolumesChanged` (`WorkspaceEvents`) →
+  `PanelRules` читает верх панели дисков (FILEOPS «Съёмные диски»).
 - **`StartFolder`** (Core, тест) — `--folder <путь>` / `--folder=<путь>`
   (`FromArguments`), у харнесса — `Override`; `OpenStartFolderAsync` берёт
   её первой; папки нет — `WARN` и старт как без ключа. Тестовые запуски
@@ -523,9 +528,10 @@ constraint отдаёт прежний `DesiredSize`, и WPF не помечае
   гасится правилом. **Шевроны оптимистичные** до пробы `ProbeChevrons`.
   **Пропавшая закладка** — тоже ответом с пула: `BookmarksController`
   диск не спрашивает, `PanelRules` на `BookmarksChanged` шлёт
-  `ProbeMissing` по своим закладкам-папкам, `MissingProbed` ставит
-  `IsMissing`; до ответа строка как была. Встроенные (`AddSpecialFolder`)
-  проверяются на UI-потоке (TECHDEBT).
+  `ProbeMissing` по закладкам-папкам — своим и встроенным
+  (`AddSpecialFolder` диск тоже не спрашивает), `MissingProbed` ставит
+  `IsMissing`; до ответа строка как была. Решение человека 2026-10-20:
+  [недоступная встроенная — серой, как своя, а не прячется].
 - **Иконки**: `SHGetFileInfo` сериализован (`_shellIconLock` — под
   конкуренцией отдавал пусто для handler-иконок); негативный кэш
   `_missing` — только у миниатюр; `Unloaded` поднимает поколение —

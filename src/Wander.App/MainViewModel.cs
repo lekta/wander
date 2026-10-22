@@ -663,8 +663,7 @@ public sealed class MainViewModel : ObservableObject {
         };
         // What the photos say about how they were shot, for the box's
         // parameters - read on the pool by the filter, once a file.
-        var shotFacts = new ShotFactsCache(ReadShotFacts);
-        _search.ShotFacts = shotFacts.Of;
+        _search.ShotFacts = new ShotFactsCache(ReadShotFacts);
         _search.FilteredChanged += (filtered, rearranged) => {
             // A folder listing that lands while the list is showing search
             // results would replace them. The watcher, a finishing rating
@@ -2045,9 +2044,10 @@ public sealed class MainViewModel : ObservableObject {
         // A folder moved onto a panel's row is in that panel now (2026-10-15):
         // the open folder's place, when that is what moved - the rewrite in
         // FollowMoved tells the panels - and the keyboard, when the drag came
-        // off a panel (PanelRules.OnDropped).
+        // off a panel (PanelRules.OnDropped). Asked on the pool: two thousand
+        // files dropped on a bookmark on a share are as many trips there.
         string? movedFolder = effect == DropEffect.Move && pane is not null
-            ? Landed(results).Select(r => r.FinalDestination).FirstOrDefault(_fs.DirectoryExists)
+            ? await Task.Run(() => Landed(results).Select(r => r.FinalDestination).FirstOrDefault(_fs.DirectoryExists))
             : null;
         if (pane is { } into && movedFolder is not null && _nav.Current is { } open
             && Landed(results).Any(r => PathRewrite.Under(open, r.Source, r.FinalDestination) is not null)) {
@@ -6716,6 +6716,12 @@ public sealed class MainViewModel : ObservableObject {
         switch (TransientIo.Win32Code(ex)) {
             case 112:   // ERROR_DISK_FULL
             case 39:    // ERROR_HANDLE_DISK_FULL
+                // Said by FAT with room to spare: the folder's entries ran out (PLAN K).
+                if (ServiceLocator.TryGet<IVolumeInfoProvider>()?.Describe(destination ?? path) is { } volume
+                    && !Containers.Inside(path) && _fs.GetEntry(path)?.Size is { } needed && volume.OutOfEntries(needed)) {
+                    return string.Format(Strings.ErrorFatFolderFull, DriveOf(destination ?? path));
+                }
+
                 return string.Format(Strings.ErrorDiskFull, DriveOf(destination ?? path));
             case 223 when ServiceLocator.TryGet<IVolumeInfoProvider>()?.Describe(destination ?? path) is { FileSystem: "FAT32" }:
                 // ERROR_FILE_TOO_LARGE

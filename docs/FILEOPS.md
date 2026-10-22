@@ -1,11 +1,12 @@
 # Wander — файловые операции
 
 Конвейер операций и батчей, undo, корзина, занятые пути, прогресс и окно
-операции, конфликты, защита системных путей; корзина и архивы как папки
+операции, конфликты, защита системных путей; надёжное копирование
+(запись операции, повтор, свой цикл, проверка, съёмные диски,
+извлечение); корзина, архивы, телефон и камера как папки
 (shell-namespace), извлечение; файлы-спутники. Слои и композиция —
 ARCHITECTURE; поведение и пределы — DONE «Ход файловых операций»,
-«Файловые операции», «Архивы как папки»; спека блока 0.6 «Надёжное
-копирование» — OPERATIONS, после блока её механизмы приезжают сюда.
+«Файловые операции», «Архивы как папки», «Телефон и камера».
 
 ## Файловые операции
 
@@ -128,15 +129,15 @@ read-only цели — список, второй вопрос, снятие а�
     пачка корзины. Держатель называется один раз (`IFileLockInspector` —
     Restart Manager; своя заявка — «Wander: миниатюра»). Итог —
     `BusyReport` в `DeleteResult` / `BatchItemResult`. Ждут перенос,
-    переименование, корзина; безвозвратное удаление — только заявки
-    (TECHDEBT). Не дождалось удаление — «Файл занят» с «Повторить»
-    (`DialogKind.DeleteInUse`).
+    переименование, корзина, безвозвратное удаление (`DeleteForGood`) и
+    откат (`IUndoStepGate`). Не дождалось удаление — «Файл занят» с
+    «Повторить» (`DialogKind.DeleteInUse`).
   - Чтобы ждать редко: свои читатели — `SharedRead`
     (`FileShare.ReadWrite | Delete`); исключение — оценка в сайдкар
     (`IFileSystem.ReadAllBytesForUpdate`): `.pp3`, который RawTherapee
     как раз сохраняет, читался бы недописанным. Панель просмотра отпускает
-    файл до операции (`PreviewController.Release` / `Restore`); откат — не
-    отпускает (TECHDEBT).
+    файл до операции и до отката (`ReleasePreview` →
+    `PreviewController.Release` / `Restore`).
   - Часы «в работе» рисует `AsyncIcon` (`ShowsWork`, `OnRender`) — не
     элемент в шаблоне каждой ячейки; один статический обработчик
     `PathClaims.Changed` — проход по живым иконкам, `Entries` не
@@ -151,8 +152,8 @@ read-only цели — список, второй вопрос, снятие а�
   источники до старта (`FolderStatistics.Collect`) — **после** вопроса о
   совпадениях, чтобы Cancel в нём ничего не стоил. Перенос —
   `IFileSystem.CopyFile/CopyDirectory/MoveEntry` с `IProgress<long>` и
-  токеном; в `SystemIOFileSystem` — `CopyFileEx` с `LPPROGRESS_ROUTINE`
-  (отмена внутри файла, недописанное убирает система). Извлечение байтов
+  токеном; в `SystemIOFileSystem` — свой цикл под временным именем
+  («Надёжное копирование»). Извлечение байтов
   не знает: `IShellNamespace.CopyOut` отдаёт `IProgress<CopyOutWork>` —
   операция `BytesAreWork`, только процент.
 - **Окно операции и статус-бар.** `RunWithProgressDialogAsync` открывает
@@ -227,6 +228,128 @@ read-only цели — список, второй вопрос, снятие а�
   (подтверждение всегда); восстановление из корзины в `UndoService` не
   кладётся, как в Explorer (откат был бы удалением), не деструктивно,
   логируется, `SystemPathGuard` не нужен — место решает шелл.
+
+## Надёжное копирование
+
+Копирование с флешки, карты и устройства — минутами: видно, что идёт и
+чем кончилось, сбой не теряется, упавшее повторяется. Решения человека
+2026-09-22: [приоритет — надёжность, не скорость]; [завершённые операции
+живут в строке состояния, пока их не убрали]; [журнал — сеанса].
+2026-10-15: [свой цикл копирования для всех копий; откат на системный —
+правилом в коде]; [проверка — настройкой, по умолчанию со съёмных].
+
+- **Запись операции** (`Core/Operations/OperationRecord.cs`).
+  `IOperationHandle.Finish(items, target)` переводит операцию из идущих в
+  `OperationTracker.Finished` (потолок `MaxFinished` = 50); `Dispose` без
+  `Finish` — `Unitemised`. `OperationItem` — источник, назначение,
+  `BatchItemStatus`, ошибка, `Attempts`, `Verified`, `Engine`; в записи —
+  все проблемные и первые `MaxItems` = 200 остальных, строки и числа.
+  `OperationOutcome` — Done / Problems / Cancelled / Failed; `Dismiss(id)`,
+  `DismissFinished(problemsToo)`. App: `MainViewModel.HasActiveOperations` —
+  только идущие (тик сторожа, вопрос при выходе), `HasOperations` —
+  видимость блока; `OperationViewModel` — `IsFinished`, `Outcome`,
+  `ProblemLines`, `RetryCommand`, `DismissCommand`; «Извлечь E:» —
+  `OperationRecord.DriveRoots` плюс проба тома (`RefreshEjectable`).
+- **«Повторить»** — `OperationRetry.Plan(record)`: только `Failed` и
+  `Cancelled` (`IsRetriable`); копия и перенос — по папкам назначения тем
+  же путём, что вставка (спутники и конфликты заново, своя запись и шаг
+  отката; старая запись убирается при старте), удаление — `DeleteAsync` с
+  подтверждением; источники устройства — импорт.
+- **Временные ошибки** — `TransientIo.IsTransient`: Win32 21, 23, 31, 59, 64,
+  121, 1117, 1167, 1231 и `CopyMismatchException`; `IoRetry.Run` с
+  `RetryPolicy.Default` — 3 попытки, паузы 1 / 3 / 5 с, сон отменяемый; зовёт
+  `BatchExecutor.ApplyOne` для копии файла и переноса между томами; номер
+  попытки — `OperationSnapshot.Attempt` («повтор 2 из 3»), итог —
+  `BatchItemResult.Attempts`. Занятость (0x80070020) — не временная
+  ошибка: её ждёт `BusyGate`.
+- **Свой цикл копирования** — `SystemIOFileSystem.CopyThroughTemp` →
+  `CopyBytes`: цель под `имя.wander-tmp` (`TransientFiles.TempNameFor`;
+  сирота с таким именем — наша, удаляется первой), `OwnCopy` —
+  `StreamCopy.Copy` (Core, тест: буфер 1 МБ, `SetLength` заранее, SHA-256
+  на лету), `Flush(flushToDisk)`, атрибуты и время изменения — после;
+  `File.Move` в конечное имя — только целым; сбой и отмена — `TryDelete`.
+  Без прогресса, отмены и проверки — `File.Copy`. `MoveEntry` папки между
+  томами: `CopyDirectory` + удаление источника; сбой — частичная копия
+  убирается, если папки не было до нас; ссылка на папку внутри не
+  копируется (`CopyReport.SkippedLinks` → `Skipped` с
+  `LinkNotCopiedException`), источник — `DeleteAllButLinks`.
+  `CopyReport(Engine, Verified, SkippedLinks)` → итог элемента и строка
+  лога; `IFileSystem.WriteFromStream` — тот же цикл для потока устройства.
+- **Откат на `CopyFileEx`** (решение человека 2026-10-15: правило в коде, не
+  настройка). `SystemCopyReason`: `Encrypted`, `SparseFile`, дополнительные
+  потоки (`FindFirstStreamW`; `Zone.Identifier`), оба конца на одном
+  SMB-сервере, один том ReFS → `CopyFileWithProgress` (`CopyFileExW`,
+  прогресс дельтами, отмена `PROGRESS_CANCEL`), проверка — хэши обеих
+  сторон. Свой цикл упал незнакомой ошибкой (`IsUnfamiliar`) — элемент тем
+  же заходом через системный, прогресс откатывается. «Отладка» →
+  «Копировать средствами Windows» (`AppSettings.CopyWithWindows` →
+  `CopyOptions.SystemOnly`) — целиком, строкой в лог.
+- **Проверка копии** (V). `CopyOptions.Verify`: цель перечитывается мимо
+  кэша (`FILE_FLAG_NO_BUFFERING`, по секторам) и сравнивается с хэшем
+  источника; расхождение — `CopyMismatchException`, копия не остаётся,
+  повтор как у временной ошибки; итог — `OperationItem.Verified`,
+  «проверено N». Настройка «Проверять скопированное» —
+  `AppSettings.VerifyCopies` (`VerifyPolicy`: `Removable` по умолчанию —
+  источник на `VolumeKind.Removable` или устройство; `Always`; `Never`) →
+  `CopyVerification.ShouldVerify` в `FileOperationService.CopyOptionsFor`.
+  Стенд V1 (`measurements/0.6-dev.md`): на SSD свой цикл вровень с
+  `CopyFileEx`, проверка +10–20 %; флешка, кардридер, HDD, SMB — PLAN 0.7.
+  Внешний USB-диск у Windows `Fixed` — по умолчанию не проверяется (TECHDEBT).
+- **Ошибки словами** — `MainViewModel.DescribeError`: 112 / 39 — «нет места»
+  (FAT с местом под файл, но без записей в папке — `VolumeInfo.OutOfEntries`:
+  «в папке кончились записи»); 223 на FAT32 — «файл больше 4 ГБ»; 21 / 1167
+  (и 31 у устройства) — «устройство отключено или не готово»; 23 / 1117 —
+  «ошибка чтения с носителя»; `COPYENGINE_E_*` — у извлечения;
+  `DeviceErrors.IsAsleep` — «камера выключилась или уснула»; «объект не
+  найден» у устройства — «телефон обновил список файлов»;
+  `CopyMismatchException`, `LinkNotCopiedException`,
+  `RecycleUnavailableException`, `ClaimedByOperationException`; держатель —
+  `IFileLockInspector`.
+- **Компьютер не засыпает** — `IPowerGuard.KeepAwake(reason)` ←
+  `Platform/Power/PowerRequestGuard` (`PowerCreateRequest` +
+  `PowerSetRequest(SystemRequired)`, без `DisplayRequired`; `PowerClearRequest`
+  + `CloseHandle` в `Dispose`); `OperationTracker` берёт на первой идущей
+  операции и отпускает на последней; причина — ключ `PowerRequestReason`
+  (`powercfg /requests`); не удалось — `WARN`, операция идёт.
+- **Журнал структурный** (AD5) — `ActionJournal.Record(JournalEntry)`:
+  `JournalKind` (FolderOpened, FileOpened, Copied, Moved, Renamed, Recycled,
+  Deleted, Restored, Created, Extracted, Cancelled, ActionRun, Error, Note),
+  `Headline`, `Lines` (строка на файл, «было → стало»), `Severity`; `Render`
+  — первые 50 строк и «… ещё N», предел 500 записей; `Note` — строки без
+  структуры. `ReportBatchResults` строит запись из `OperationRecord`, статус
+  — `SetStatusQuietly`; открытие и запуск — `FileOpened`. Лог:
+  `BatchExecutor` — `Copy done: 12 items, 12.3 GB, 327.4 s, 38.5 MB/s;
+  failed 1, skipped 0`. Строки отката — `IUndoableAction.Verb` / `ItemCount`,
+  `Description` — только в лог.
+- **Съёмные диски** (Y2) — `IVolumeChanges` (Core): `Changed(VolumeChange(Root,
+  Arrived, IsDevice))`, `Releasing(root)`. `VolumeChangeHub` (Platform):
+  `WM_DEVICECHANGE` через хук `HwndSource` в `MainWindow` (`HandleMessage`;
+  `DEV_BROADCAST_VOLUME`, событие на букву маски); устройства —
+  `RegisterDeviceNotification(GUID_DEVINTERFACE_WPD)`. Широковещательное об
+  уходе приходит не всегда (прогон 2026-10-19) — том открытой папки
+  сторожится своим хэндлом корня (`Guard`, `DBT_DEVTYP_HANDLE`):
+  `DBT_DEVICEQUERYREMOVE` — хэндл закрыт, `Releasing` (сторож закрывается,
+  панель просмотра отпускает файл); `QUERYREMOVEFAILED` — снова;
+  `REMOVECOMPLETE` / `REMOVEPENDING` — «том ушёл», с широковещательным — один
+  раз (окно 10 с). Лог: `Volume guarded`, `Volume removal asked`, `refused`,
+  `Volume removed: F:\ (broadcast | notice)`. App: `VolumesChanged`
+  (`WorkspaceEvents`) → `PanelRules` читает верхний уровень панели дисков
+  (`Read(Pane.Drives, TopKey)`), курсор уходит с ушедших; закладка на ушедший
+  том сереет (`PostBookmarks`), не снимается; `F5` читает и диски; открытый
+  «Компьютер» в списке перечитывается. Папка на ушедшем томе —
+  `NavigationFallback.AfterVolumeRemoved` (WINDOW).
+- **Безопасное извлечение** (E) — один путь `MainViewModel.EjectAsync(root,
+  operationId?)`: кнопка «Извлечь E:» завершённой операции и строка `Eject`
+  меню диска (MENU). Открытая папка на томе уходит, `ReleasePreview`, глагол
+  оболочки `eject` корня свежей сессией меню (`InvokeEject`; нет глагола —
+  `StatusEjectNoVerb`); панели после глагола не перечитываются. Ушёл ли том
+  — по букве (`WaitForVolumeGone`: `GetLogicalDrives` раз в 2 с, до 5 с);
+  ушёл — `Ejected`: статус и перечитывание дисков; не ушёл — `WhoHoldsDrive`
+  (файлы операции → `IFileLockInspector`), «не извлечён: …» и ещё 2 мин
+  ожидания. WebView2 уходит на `about:blank` при уходе с веб-вида
+  (`PreviewPane.LeaveWebPage`). Устройствам WPD извлечение не нужно;
+  `CM_Request_Device_Eject` не понадобился (BACKLOG). Остаётся: миниатюры и
+  поиск хэндлы не отдают (TECHDEBT).
 
 ## Shell-namespace: корзина и архивы
 
@@ -344,7 +467,7 @@ read-only цели — список, второй вопрос, снятие а�
   свой список путей остаётся для вставки внутри Wander (`_sharedShellObject`).
 - **Панель просмотра и миниатюры внутри архива** — PREVIEW («Маршруты»,
   «Миниатюры мимо шелла»).
-- **Телефон и камера** (Y4, спека — OPERATIONS «Шаги Y4b–Y4d»). Путь —
+- **Телефон и камера** (Y4). Путь —
   `DevicePath`: `device:<имя>\<хранилище>\<папки>`, имя — шелла (двойник
   — `(2)`), не parsing name: `\\?\` внутри ломает `GetDirectoryName`, PnP
   ID от порта. Список устройств — элементы «Этого компьютера» с интерфейсом
@@ -354,7 +477,10 @@ read-only цели — список, второй вопрос, снятие а�
   «Отладка»). ID объектов живут сессией: `DeviceFolders` держит сессию и
   кэш «путь → объект» по имени устройства, `VolumeChange.IsDevice` из
   `VolumeChangeHub` (`GUID_DEVINTERFACE_WPD`) закрывает её. Мусор корня —
-  `Hidden` + `System` по `DeviceClutter`, прячет `EntryVisibility`. Общие
+  `Hidden` + `System` по `DeviceClutter` (решение человека 2026-10-19:
+  имена с точки, `LOST.DIR`, в `Android` — всё, кроме `media`, пустые
+  стандартные `Alarms`, `Ringtones`…; пустые нестандартные не прячутся —
+  по имени не отличить от папки человека), прячет `EntryVisibility`. Общие
   с архивом развилки App — `Containers` (`Contains` — запись внутрь
   запрещена, `Inside` — выносится своей копией). Копирование с устройства
   — `DeviceImportService` (Core, тест на `FakeDeviceContent`):
@@ -373,7 +499,53 @@ read-only цели — список, второй вопрос, снятие а�
   по индексу из системного списка (`LoadViaParse`). Только чтение: `Delete` и
   вставка на устройство — отказ строкой статуса, меню — «Открыть»,
   «Копировать», «Скопировать в…». Закладка на папку устройства — строка,
-  пока оно подключено (WINDOW, «Компьютер» и закладки).
+  пока оно подключено (WINDOW, «Компьютер» и закладки). Решения человека
+  2026-10-19: [WPD напрямую, шелл — строка устройства и фолбэк
+  настройкой]; [10 минут ожидания]; [закладки на папки устройства — видны
+  только при подключённом; своё название — у любой закладки].
+  - **Почему WPD напрямую** (развилка 6, 2026-10-19). Холодный листинг
+    большой папки телефона шеллом — минуты (Pixel 6, 1743 файла — 33 с;
+    OnePlus 6T, 7644 — 3 мин) против 1,2 и 10 с у WPD (`EnumObjects` плюс
+    свойства пачкой `IPortableDevicePropertiesBulk`; у PTP / R8 пачки нет —
+    по одному, 6 мс на объект, как шелл). Шелл — строка устройства в
+    «Компьютере» (имя, значок; parsing name = PnP ID) и фолбэк «Отладка» →
+    «Читать устройства через оболочку Windows»
+    (`AppSettings.DevicesThroughShell`). Пакет `MediaDevices` не взят:
+    чужой код ради одной ветки.
+  - **Факты стенда Y4a** (2026-10-19; Pixel 6, OnePlus 6T, Canon R8; стенд
+    `artifacts\stands\DeviceStand`, вне гита). PnP ID у OnePlus и R8 — от
+    порта (другой порт — другой ID), у Pixel — серийный; PUID объекта
+    переживает переподключение, ID объектов WPD — сеансовые; parsing name
+    с PUID обратно не открывается (`E_INVALIDARG`) — в шелл только по
+    display names. `BHID_EnumItems` даёт имя, размер, дату изменения
+    (создания — только камера); атрибуты Android `copy, move, ren, del`,
+    R8 — `ro, copy, del`; `SFGAO_HASSUBFOLDER` у всех папок. Поток — 33–35
+    МБ/с у телефонов (USB 2), R8 — 38 / 63 по USB 2 / 3, буфер 256 КБ;
+    миниатюра шелла — 17–23 мс, WPD-миниатюра R8 — ~14 КБ. Устройство ушло
+    посреди чтения — `IStream::Read` 0x8007001F и `REMOVAL` в ту же 0,1 с;
+    кабель и выключатель не различить. Запертый телефон — устройство есть,
+    хранилищ нет, кода нет; разблокировали и выбрали «Передача файлов» —
+    переподключение; заперли после — доступ остаётся. Новое на телефоне —
+    в листинге через ≤ 4 с, дата папки не меняется. Время изменения копии
+    = устройства, создания — момент копии.
+  - **Ошибки устройств** — `DeviceErrors`: `IsAsleep`
+    (`E_WPD_DEVICE_NOT_OPEN`, `E_WPD_DEVICE_IS_HUNG`), `IsGone` (те же
+    плюс 31, 21, 1167) — пауза импорта; «объект не найден» — «телефон
+    обновил список файлов, обновите папку»; запертый телефон — `StateOf ==
+    Locked`, подсказка в статусе.
+  - **Как источники видит Windows.** Флешка, внешний диск, кардридер — том
+    с буквой (FAT32: файл до 4 ГБ, 65 534 записей в папке, mtime с шагом
+    2 с; плохая карта — 23 / 1117 посреди файла; вынули — 21). Фотоаппарат
+    по USB — PTP / MTP, узел WPD без буквы (Fujifilm, Panasonic, Sony в
+    режиме накопителя — том): чтение, одна передача за раз, свои
+    миниатюры, выключение рвёт сессию. Телефон Android — MTP, тот же узел:
+    доступ при разблокированном экране, листинг из кэша медиасканера.
+    iPhone — PTP драйвером Apple, только `Internal Storage\DCIM`,
+    «Доверять этому компьютеру». Сверх копирования (папка по дате, вторая
+    копия, удаление после проверки, «только новые») — BACKLOG «Импорт с
+    камеры».
+  - **Не в блоке** — TECHDEBT «Устройства: хвосты Y4»; запись на
+    устройство и удаление с него — BACKLOG.
 
 ## Companion-файлы
 

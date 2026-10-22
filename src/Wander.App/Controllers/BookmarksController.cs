@@ -332,12 +332,14 @@ public sealed class BookmarksController {
 
 
     /// <summary>
-    /// Adds one special-folder row. None when the path can't be resolved
-    /// or doesn't exist on disk (e.g. the user moved the folder to a drive
-    /// that is no longer there). The label is a fixed localised name, not
-    /// the on-disk folder name, so the user sees a stable caption. A shell
-    /// location (the Recycle Bin) is a leaf: presented as a list in the
-    /// right pane, not browsed in the panel.
+    /// Adds one special-folder row. None when the path can't be resolved.
+    /// A folder that is not on disk (moved to a share that is offline, a
+    /// drive no longer there) is greyed as the user's own bookmarks are -
+    /// asked of the disk off the UI thread (PanelRules, ProbeMissing): the
+    /// check here held the window up on a sleeping share. The label is a
+    /// fixed localised name, not the on-disk folder name, so the user sees a
+    /// stable caption. A shell location (the Recycle Bin) is a leaf:
+    /// presented as a list in the right pane, not browsed in the panel.
     /// </summary>
     private void AddSpecialFolder(List<PanelRow> rows, string label, string? path, Action switchOff) {
         if (string.IsNullOrEmpty(path)) {
@@ -345,10 +347,6 @@ public sealed class BookmarksController {
         }
 
         bool isShell = ServiceLocator.TryGet<IShellNamespace>() is { } shell && shell.IsShellPath(path);
-        if (!isShell && !_fs.DirectoryExists(path)) {
-            return;
-        }
-
         rows.Add(new PanelRow(path, label, isShell ? PanelRowKind.Shell : PanelRowKind.Folder) { Role = PanelRowRole.BuiltInBookmark });
         _specialSwitches[path] = switchOff;
     }

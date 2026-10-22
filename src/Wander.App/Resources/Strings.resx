@@ -893,6 +893,10 @@
     <value>файл больше 4 ГБ, а диск {0} — FAT32</value>
     <comment>{0} — диск: «E:»</comment>
   </data>
+  <data name="ErrorFatFolderFull" xml:space="preserve">
+    <value>на {0} есть место, но в папке кончились записи: у FAT32 их в папке до 65 534, длинное имя занимает несколько — разложите по папкам</value>
+    <comment>{0} — диск: «E:»</comment>
+  </data>
   <data name="ErrorFatRootFull" xml:space="preserve">
     <value>в корне {0} больше не помещается записей — у FAT их число в корне ограничено; положите в папку</value>
     <comment>{0} — диск: «E:»</comment>

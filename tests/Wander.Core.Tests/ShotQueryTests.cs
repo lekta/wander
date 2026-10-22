@@ -121,7 +121,7 @@ public class ShotQueryTests {
         var a = Photo("a.cr3");
         var b = Photo("b.cr3");
         var facts = new Dictionary<string, ShotFacts> { [a.FullPath] = _portrait, [b.FullPath] = _night };
-        var sc = new SearchController { ShotFacts = e => facts.GetValueOrDefault(e.FullPath) };
+        var sc = new SearchController { ShotFacts = new ShotFactsCache(path => facts.GetValueOrDefault(path)) };
         sc.SetSource(new[] { a, b, Photo("notes.txt") });
 
         var next = NextAsync(sc);
@@ -134,7 +134,7 @@ public class ShotQueryTests {
     [Fact]
     public async Task Filter_WhereNoPhotoSays_ReadsTheWordsAsTheName() {
         var lens = Photo("50mm review.txt");
-        var sc = new SearchController { ShotFacts = _ => null };
+        var sc = new SearchController { ShotFacts = new ShotFactsCache(_ => null) };
         sc.SetSource(new[] { lens, Photo("other.txt") });
 
         var next = NextAsync(sc);
@@ -142,6 +142,37 @@ public class ShotQueryTests {
 
         Assert.Equal(new[] { lens }, await next);
         Assert.False(sc.IsShotApplied);
+    }
+
+
+    [Fact]
+    public async Task Replace_APhotoChangedSinceItWasRead_IsReadOnThePoolNotHere() {
+        var a = Photo("a.cr3");
+        var b = Photo("b.cr3");
+        int caller = Environment.CurrentManagedThreadId;
+        bool replacing = false;
+        bool readHere = false;
+        var sc = new SearchController {
+            ShotFacts = new ShotFactsCache(path => {
+                readHere |= replacing && Environment.CurrentManagedThreadId == caller;
+
+                return path == b.FullPath ? _night : _portrait;
+            }),
+        };
+        sc.SetSource(new[] { a, b });
+        var applied = NextAsync(sc);
+        sc.Filter("", TypeFilter.None, Shot("iso>1600"));
+        Assert.Equal(new[] { b }, await applied);
+
+        // The photo was saved again: its facts are not the ones read.
+        var changed = b with { ModifiedUtc = new DateTime(2026, 10, 20) };
+        var next = NextAsync(sc);
+        replacing = true;
+        sc.Replace(new[] { changed });
+        replacing = false;
+
+        Assert.Equal(new[] { changed }, await next);
+        Assert.False(readHere);
     }
 
 

@@ -288,6 +288,9 @@ public static partial class Strings {
     /// <summary>файл больше 4 ГБ, а диск {0} — FAT32</summary>
     public static string ErrorFileTooLargeForFat32 => Get(nameof(ErrorFileTooLargeForFat32));
 
+    /// <summary>на {0} есть место, но в папке кончились записи: у FAT32 их в папке до 65 534, длинное имя занимает несколько — разложите по папкам</summary>
+    public static string ErrorFatFolderFull => Get(nameof(ErrorFatFolderFull));
+
     /// <summary>в корне {0} больше не помещается записей — у FAT их число в корне ограничено; положите в папку</summary>
     public static string ErrorFatRootFull => Get(nameof(ErrorFatRootFull));
 

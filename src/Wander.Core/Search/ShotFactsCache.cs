@@ -27,11 +27,8 @@ public sealed class ShotFactsCache {
 
     /// <summary>The facts of <paramref name="entry"/>, read the first time they are asked for.</summary>
     public ShotFacts? Of(FileSystemEntry entry) {
-        lock (_gate) {
-            if (_known.TryGetValue(entry.FullPath, out var known)
-                && known.Size == entry.Size && known.Modified == entry.ModifiedUtc) {
-                return known.Facts;
-            }
+        if (TryKnown(entry, out var known)) {
+            return known;
         }
 
         var facts = _read(entry.FullPath);
@@ -46,5 +43,24 @@ public sealed class ShotFactsCache {
         }
 
         return facts;
+    }
+
+    /// <summary>
+    /// The facts of <paramref name="entry"/> without the disk: false for a
+    /// photo not read yet, or changed since - what a caller on the UI thread
+    /// asks.
+    /// </summary>
+    public bool TryKnown(FileSystemEntry entry, out ShotFacts? facts) {
+        lock (_gate) {
+            if (_known.TryGetValue(entry.FullPath, out var known)
+                && known.Size == entry.Size && known.Modified == entry.ModifiedUtc) {
+                facts = known.Facts;
+
+                return true;
+            }
+        }
+        facts = null;
+
+        return false;
     }
 }

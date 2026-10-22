@@ -18,6 +18,19 @@ public class VolumeInfoTests {
         Assert.Equal(expected, volume.Fill);
     }
 
+    /// <summary>"Disk full" on FAT with room for the file: the folder's entries ran out.</summary>
+    [Theory]
+    [InlineData("FAT32", 25_000_000_000, 30_000_000, true)]
+    [InlineData("FAT", 100_000_000, 1_000, true)]
+    [InlineData("FAT32", 30_000_000, 29_000_000, false)]
+    [InlineData("exFAT", 25_000_000_000, 30_000_000, false)]
+    [InlineData("NTFS", 25_000_000_000, 30_000_000, false)]
+    public void OutOfEntries_OnlyFatWithRoomForTheFile(string fileSystem, long free, long needed, bool expected) {
+        var volume = new VolumeInfo(@"E:\", "", fileSystem, VolumeKind.Removable, free * 2, free, IsReady: true);
+
+        Assert.Equal(expected, volume.OutOfEntries(needed));
+    }
+
     [Fact]
     public void DisplayName_IsTheLabel_OrWhatTheDriveIs_WithItsLetter() {
         var labelled = new VolumeInfo(@"D:\", "Data", "NTFS", VolumeKind.Fixed, 100, 50, IsReady: true);

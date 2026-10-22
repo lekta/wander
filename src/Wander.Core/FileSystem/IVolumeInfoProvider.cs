@@ -50,6 +50,20 @@ public sealed record VolumeInfo(
 
 
     /// <summary>
+    /// "No room" said by a FAT volume that has room for
+    /// <paramref name="needed"/> bytes: the folder ran out of entries -
+    /// FAT32 keeps 65 534 in one, a long name taking several, FAT16 512 in
+    /// its root (PLAN K). Four megabytes are left for the clusters a file
+    /// rounds up to.
+    /// </summary>
+    public bool OutOfEntries(long needed) {
+        const long clusterSlack = 4L * 1024 * 1024;
+
+        return FileSystem is "FAT" or "FAT32" && FreeBytes - needed > clusterSlack;
+    }
+
+
+    /// <summary>
     /// The drive as Explorer names it: its label and letter - "Data (D:)" -
     /// or, unlabelled, what it is - "Local Disk (C:)"
     /// (<paramref name="kindWord"/>).

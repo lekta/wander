@@ -1068,98 +1068,106 @@
                                 </Grid>
                             </StackPanel>
 
-                            <TextBlock Text="{Binding FolderTitle}"
-                                       Style="{StaticResource PaneText}"
-                                       FontSize="14" FontWeight="SemiBold"
-                                       TextTrimming="CharacterEllipsis"/>
-                            <TextBlock Text="{Binding FolderHeadline}"
-                                       Style="{StaticResource PaneDim}"
-                                       Margin="0,4,0,0" TextWrapping="Wrap"/>
-                            <TextBlock Text="{Binding FolderNote}"
-                                       Foreground="{DynamicResource TextWarning}" FontSize="11"
-                                       Margin="0,4,0,0" TextWrapping="Wrap"
-                                       Visibility="{Binding HasFolderNote, Converter={StaticResource BoolToVisibility}}"/>
-
                             <!--
-                                Walking a folder takes as long as it takes,
-                                and the spinner for it goes where its
-                                results will land — not over the whole
-                                pane. The name of the folder and the
-                                drive's capacity are already on screen
-                                above, and a veil over them would hide what
-                                the user has in order to announce what they
-                                do not have yet. The caption under it says
-                                which operation is still running.
+                                The census, but not at a volume's root: the
+                                drive's block above answers there, as
+                                Explorer's does, and a walk of the whole disk
+                                on every arrow over the drives costs minutes.
                             -->
-                            <StackPanel Margin="0,18,0,0"
-                                        HorizontalAlignment="Center"
-                                        Visibility="{Binding IsCensusLoading, Converter={StaticResource BoolToVisibility}}">
-                                <controls:Spinner Width="20" Height="20" StrokeThickness="2"
-                                                  Stroke="{DynamicResource AccentStroke}"/>
-                                <TextBlock Text="{x:Static res:Strings.PreviewCounting}"
+                            <StackPanel Visibility="{Binding HasVolume, Converter={StaticResource InverseBoolToVisibility}}">
+                                <TextBlock Text="{Binding FolderTitle}"
+                                           Style="{StaticResource PaneText}"
+                                           FontSize="14" FontWeight="SemiBold"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="{Binding FolderHeadline}"
                                            Style="{StaticResource PaneDim}"
-                                           FontSize="11" Margin="0,8,0,0"
-                                           HorizontalAlignment="Center"/>
+                                           Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding FolderNote}"
+                                           Foreground="{DynamicResource TextWarning}" FontSize="11"
+                                           Margin="0,4,0,0" TextWrapping="Wrap"
+                                           Visibility="{Binding HasFolderNote, Converter={StaticResource BoolToVisibility}}"/>
+
+                                <!--
+                                    Walking a folder takes as long as it takes,
+                                    and the spinner for it goes where its
+                                    results will land — not over the whole
+                                    pane. The name of the folder and the
+                                    drive's capacity are already on screen
+                                    above, and a veil over them would hide what
+                                    the user has in order to announce what they
+                                    do not have yet. The caption under it says
+                                    which operation is still running.
+                                -->
+                                <StackPanel Margin="0,18,0,0"
+                                            HorizontalAlignment="Center"
+                                            Visibility="{Binding IsCensusLoading, Converter={StaticResource BoolToVisibility}}">
+                                    <controls:Spinner Width="20" Height="20" StrokeThickness="2"
+                                                      Stroke="{DynamicResource AccentStroke}"/>
+                                    <TextBlock Text="{x:Static res:Strings.PreviewCounting}"
+                                               Style="{StaticResource PaneDim}"
+                                               FontSize="11" Margin="0,8,0,0"
+                                               HorizontalAlignment="Center"/>
+                                </StackPanel>
+
+                                <!--
+                                    The heading and the "empty" line stand down
+                                    while the walk is running: both describe a
+                                    result that is not in yet, and "Папка пуста"
+                                    under a spinner is a wrong answer, not a
+                                    pending one.
+                                -->
+                                <TextBlock Text="{x:Static res:Strings.PreviewFolderTypes}"
+                                           Style="{StaticResource PaneText}"
+                                           FontWeight="SemiBold" Margin="0,16,0,6"
+                                           Visibility="{Binding IsCensusLoading, Converter={StaticResource InverseBoolToVisibility}}"/>
+
+                                <!-- Empty folder: say so instead of leaving a blank panel. -->
+                                <TextBlock Text="{x:Static res:Strings.PreviewFolderEmpty}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock" BasedOn="{StaticResource PaneDim}">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <MultiDataTrigger>
+                                                    <MultiDataTrigger.Conditions>
+                                                        <Condition Binding="{Binding FolderTypes.Count}" Value="0"/>
+                                                        <Condition Binding="{Binding IsCensusLoading}" Value="False"/>
+                                                    </MultiDataTrigger.Conditions>
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </MultiDataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+
+                                <ItemsControl ItemsSource="{Binding FolderTypes}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <!-- Bars are scaled against the biggest bucket,
+                                                 not the total: with a long tail every bar
+                                                 would otherwise be a hairline. -->
+                                            <Grid Margin="0,3,0,3">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="64"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{Binding Extension}"
+                                                           Style="{StaticResource PaneText}"
+                                                           FontFamily="Consolas" TextTrimming="CharacterEllipsis"
+                                                           VerticalAlignment="Center"/>
+                                                <Border Grid.Column="1" Height="10" CornerRadius="2"
+                                                        HorizontalAlignment="Left" VerticalAlignment="Center"
+                                                        Width="{Binding BarWidth}"
+                                                        Background="{StaticResource AccentFill}" Opacity="0.5"/>
+                                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding SizeText}" Style="{StaticResource PaneText}"/>
+                                                    <TextBlock Text="{Binding CountText}" Style="{StaticResource PaneDim}" Margin="10,0,0,0"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
                             </StackPanel>
-
-                            <!--
-                                The heading and the "empty" line stand down
-                                while the walk is running: both describe a
-                                result that is not in yet, and "Папка пуста"
-                                under a spinner is a wrong answer, not a
-                                pending one.
-                            -->
-                            <TextBlock Text="{x:Static res:Strings.PreviewFolderTypes}"
-                                       Style="{StaticResource PaneText}"
-                                       FontWeight="SemiBold" Margin="0,16,0,6"
-                                       Visibility="{Binding IsCensusLoading, Converter={StaticResource InverseBoolToVisibility}}"/>
-
-                            <!-- Empty folder: say so instead of leaving a blank panel. -->
-                            <TextBlock Text="{x:Static res:Strings.PreviewFolderEmpty}">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock" BasedOn="{StaticResource PaneDim}">
-                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                        <Style.Triggers>
-                                            <MultiDataTrigger>
-                                                <MultiDataTrigger.Conditions>
-                                                    <Condition Binding="{Binding FolderTypes.Count}" Value="0"/>
-                                                    <Condition Binding="{Binding IsCensusLoading}" Value="False"/>
-                                                </MultiDataTrigger.Conditions>
-                                                <Setter Property="Visibility" Value="Visible"/>
-                                            </MultiDataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-
-                            <ItemsControl ItemsSource="{Binding FolderTypes}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <!-- Bars are scaled against the biggest bucket,
-                                             not the total: with a long tail every bar
-                                             would otherwise be a hairline. -->
-                                        <Grid Margin="0,3,0,3">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="64"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0" Text="{Binding Extension}"
-                                                       Style="{StaticResource PaneText}"
-                                                       FontFamily="Consolas" TextTrimming="CharacterEllipsis"
-                                                       VerticalAlignment="Center"/>
-                                            <Border Grid.Column="1" Height="10" CornerRadius="2"
-                                                    HorizontalAlignment="Left" VerticalAlignment="Center"
-                                                    Width="{Binding BarWidth}"
-                                                    Background="{StaticResource AccentFill}" Opacity="0.5"/>
-                                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding SizeText}" Style="{StaticResource PaneText}"/>
-                                                <TextBlock Text="{Binding CountText}" Style="{StaticResource PaneDim}" Margin="10,0,0,0"/>
-                                            </StackPanel>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
                         </StackPanel>
                     </ScrollViewer>
 

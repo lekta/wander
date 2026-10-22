@@ -89,11 +89,11 @@ public sealed class SearchController : INotifyPropertyChanged {
 
     /// <summary>
     /// What a photo says about how it was shot, for the box's parameters
-    /// (<see cref="ShotFilter"/>): asked on the pool, null for a file that
+    /// (<see cref="ShotFilter"/>): read on the pool, null for a file that
     /// says nothing - a folder, a document, a screenshot. Null when the
     /// host reads no photos: the parameters are then the name they look like.
     /// </summary>
-    public Func<FileSystemEntry, ShotFacts?>? ShotFacts { get; set; }
+    public ShotFactsCache? ShotFacts { get; set; }
 
     /// <summary>
     /// The list is narrowed by shooting parameters - the box had some, and
@@ -246,7 +246,12 @@ public sealed class SearchController : INotifyPropertyChanged {
                 continue;
             }
 
-            membershipChanged |= Passes(source[at]) != Passes(entry);
+            // A verdict only the pool can give - a photo whose facts were
+            // never read, or changed since - is a change: the full pass
+            // reads them there, not this thread.
+            bool? was = Passes(source[at]);
+            bool? now = Passes(entry);
+            membershipChanged |= was is null || now is null || was != now;
             source[at] = entry;
             landed.Add(entry);
         }
@@ -266,8 +271,12 @@ public sealed class SearchController : INotifyPropertyChanged {
     }
 
 
-    /// <summary>Whether one row survives the current filters. Cheap enough to run inline: the facts are read by the pass that applied them.</summary>
-    private bool Passes(FileSystemEntry entry) {
+    /// <summary>
+    /// Whether one row survives the current filters, inline and without the
+    /// disk; null when only its photo's facts can say and they are not read
+    /// yet (<see cref="ShotFactsCache.TryKnown"/>).
+    /// </summary>
+    private bool? Passes(FileSystemEntry entry) {
         // Parameters the folder's photos do not answer to are the name they look like.
         bool plain = _shotApplied is null && !_shot.Query.IsEmpty;
         var name = plain ? NameFilter.Parse(_shot.PlainName) : _name;
@@ -275,8 +284,16 @@ public sealed class SearchController : INotifyPropertyChanged {
         if (!name.Matches(entry.Name) || !type.Matches(entry)) {
             return false;
         }
-        if (_shotApplied is { } shot && (entry.IsFolderLike || !shot.Matches(ShotFacts?.Invoke(entry)))) {
-            return false;
+        if (_shotApplied is { } shot) {
+            if (entry.IsFolderLike) {
+                return false;
+            }
+            if (ShotFacts?.TryKnown(entry, out var facts) != true) {
+                return null;
+            }
+            if (!shot.Matches(facts)) {
+                return false;
+            }
         }
 
         return entry.IsFolderLike || _rating.Matches(entry);
@@ -316,7 +333,7 @@ public sealed class SearchController : INotifyPropertyChanged {
                 bool applies = !shot.Query.IsEmpty && facts is not null && source.Any(e => {
                     token.ThrowIfCancellationRequested();
 
-                    return !e.IsFolderLike && facts(e) is not null;
+                    return !e.IsFolderLike && facts.Of(e) is not null;
                 });
                 var useName = applies || shot.Query.IsEmpty ? name : NameFilter.Parse(shot.PlainName);
                 var useType = applies || shot.Query.IsEmpty ? type : shot.PlainType;
@@ -329,7 +346,7 @@ public sealed class SearchController : INotifyPropertyChanged {
                     }
                     // A file that does not say how it was shot is not one
                     // shot so; a folder says nothing.
-                    if (applies && (e.IsFolderLike || !shot.Query.Matches(facts!(e)))) {
+                    if (applies && (e.IsFolderLike || !shot.Query.Matches(facts!.Of(e)))) {
                         continue;
                     }
                     // Folders are never filtered out by a rating: a folder

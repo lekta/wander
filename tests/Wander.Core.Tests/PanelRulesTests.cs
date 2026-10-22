@@ -405,6 +405,23 @@ public class PanelRulesTests {
         Assert.Contains(s.Effects.OfType<ProbeChevrons>(), p => p.Paths.Contains(Gone));
     }
 
+    /// <summary>
+    /// A built-in bookmark - "Документы" moved to a share that is offline -
+    /// is asked about the same way and greyed, not looked for on the UI thread.
+    /// </summary>
+    [Fact]
+    public void ABuiltInBookmarksFolderGone_IsAskedOfTheDisk_AndGreyed() {
+        const string Documents = @"\\nas\docs";
+        var s = Scene().Start();
+
+        s.Post(new BookmarksChanged(new[] { WorkspaceScene.Bookmark(Documents, PanelRowRole.BuiltInBookmark), Bookmark(Photos) }));
+        Assert.Equal(new[] { Documents, Photos }, Assert.Single(s.Asked<ProbeMissing>()).Paths);
+
+        s.Settle();
+        Assert.True(Row(s, Documents).IsMissing);
+        Assert.False(Row(s, Photos).IsMissing);
+    }
+
     /// <summary>P-16: a bookmark moved up keeps the cursor on it.</summary>
     [Fact]
     public void P16_ABookmarkMoved_TheCursorGoesWithIt() {

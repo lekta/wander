@@ -37,6 +37,48 @@ public static class ContentSniffer {
             && (head[20] & animationFlag) != 0;
     }
 
+    /// <summary>
+    /// A GIF with a second frame. The format has no flag for it: the blocks
+    /// are walked - colour tables and the length-prefixed sub-blocks of
+    /// extensions and pictures skipped - up to the second image descriptor
+    /// or the trailer. A file that is not a GIF is a still; one that breaks
+    /// off after its first picture, too.
+    /// </summary>
+    public static bool IsAnimatedGif(Stream stream) {
+        const int imageDescriptor = 0x2C, extension = 0x21;
+
+        var header = new byte[13];
+        stream.Position = 0;
+        if (stream.Read(header, 0, header.Length) < header.Length || !Ascii(header, 0, "GIF8")) {
+            return false;
+        }
+
+        SkipColourTable(stream, header[10]);
+        int frames = 0;
+        while (true) {
+            int block = stream.ReadByte();
+            if (block == extension) {
+                stream.ReadByte();                  // label
+            } else if (block == imageDescriptor) {
+                if (++frames > 1) {
+                    return true;
+                }
+                var descriptor = new byte[9];
+                if (stream.Read(descriptor, 0, descriptor.Length) < descriptor.Length) {
+                    return false;
+                }
+                SkipColourTable(stream, descriptor[8]);
+                stream.ReadByte();                  // LZW minimum code size
+            } else {
+                return false;                       // the trailer, the end, or not a block
+            }
+
+            for (int size = stream.ReadByte(); size > 0; size = stream.ReadByte()) {
+                stream.Seek(size, SeekOrigin.Current);
+            }
+        }
+    }
+
 
     private static string? Binary(ReadOnlySpan<byte> h) {
         if (Starts(h, 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)) {
@@ -204,6 +246,13 @@ public static class ContentSniffer {
 
     private static bool Starts(ReadOnlySpan<byte> h, params byte[] signature) {
         return h.Length >= signature.Length && h[..signature.Length].SequenceEqual(signature);
+    }
+
+    /// <summary>Steps over the colour table a GIF's packed byte announces: 3 * 2^(n+1) bytes when its top bit is set.</summary>
+    private static void SkipColourTable(Stream stream, byte packed) {
+        if ((packed & 0x80) != 0) {
+            stream.Seek(3 << ((packed & 0x07) + 1), SeekOrigin.Current);
+        }
     }
 
     private static bool Ascii(ReadOnlySpan<byte> h, int at, string text) {

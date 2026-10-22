@@ -80,7 +80,9 @@
   нулевой ёмкостью. **Перепись папки** — `FolderStatistics` (Core,
   итеративно; глубина 64 — защита от junction'ов, «числа неполные»);
   `IsCensusLoading` отдельно от `IsLoading`; числа раз в 150 мс через
-  `IProgress<FolderProgress>`, типы — в конце.
+  `IProgress<FolderProgress>`, типы — в конце. На корне тома переписи нет
+  — только блок тома (`ShowFolderCensusAsync` выходит, разметка прячет
+  перепись по `HasVolume`): обход всего диска на каждую стрелку.
 - **Строка панели** в панели просмотра — `PreviewSubject`: запись папки
   читается на пуле (`ShowPanelFolder`), показывается, если цель ещё она.
 - **Ярлык прозрачен**: `.lnk` резолвит `IShortcutService`
@@ -106,7 +108,9 @@
 `PreviewRouter` (Core, `PreviewRouterTests`) — «расширение →
 `PreviewRoute`», без диска; `Route` (каким загрузчиком) ≠ `Kind` (каким
 контролом). Таблица — **порядок правил**, побеждает первое: `.gif` —
-картинка и многокадровый контейнер, `.mtl` — текст, `.svg` рисуется, а
+картинка и многокадровый контейнер (`GifImage`, если кадров больше
+одного — `ContentSniffer.IsAnimatedGif` обходит блоки до второго; иначе
+картинкой, с лупой), `.mtl` — текст, `.svg` рисуется, а
 для действий остаётся текстом (`TextLike`), `.webp` — картинка,
 анимированный по флагу заголовка `VP8X` (`ContentSniffer.IsAnimatedWebp`)
 панель отдаёт `GifImage`. Архив в папке — `PreviewRoute.Archive`: решает
@@ -124,7 +128,7 @@
 | `Document` | `RichTextBox` (RTF) |
 | `Web` | WebView2 — PDF / HTML / MHTML / Markdown / FB2 / SVG / таблицы |
 | `Model` | `Viewport3D` — STL / OBJ / glTF / GLB / PLY / 3MF / FBX |
-| `Folder` | перепись + блок тома на корне |
+| `Folder` | перепись; на корне тома — только блок тома |
 | `Executable` | карточка программы: значок, строки `ExecutableCard` |
 | `Font` | карточка шрифта: имена, образец кеглями (`FontCard`) |
 
@@ -421,6 +425,8 @@
   `ContentSearchService.DocumentText` — только форматные экстракторы
   (общий показал бы бинарник буквами), кэш общий с поиском; `Kind = Text`,
   `TextWrap = Wrap`, пометка первой строкой; до 64 МБ и 200 000 знаков.
+  Экстрактор ничего не дал, а файл — текст (`TextProbe`, «read me.doc»
+  старых архивов) — `LoadTextAsync`.
   `ZipDocumentExtractor` ставит `\n` после `_lineEnds` (p, h, h1–h6, li,
   tr, table-row, row, si, br): абзац — строка и в панели, и в сниппете.
 - **Таблица**: `PreviewRoute.Table` (CSV, TSV, XLSX, XLSM, ODS — до
@@ -498,7 +504,8 @@ FBX (смещения и опоры поворота и масштаба, пре
   `ReadSignature` после `FullSizeDwellMs`, по одной через `_signatureGate`,
   без отмены (ответ про ушедший файл отбрасывается по ссылке); больше
   `SignatureByItselfBytes` = 200 МБ — «не проверялась» и
-  `CheckSignatureCommand`.
+  `CheckSignatureCommand`. Ответ помнится по пути, размеру и времени
+  (`_signatures`, до 512).
 - **Шрифт** (TTF, OTF, TTC): `PreviewRoute.Font` → `LoadFontAsync` — копия
   в `TempFiles` (своя папка на путь, время, размер: WPF не отпускает
   прочитанный файл шрифта до конца процесса) → `FontCard`: имена из

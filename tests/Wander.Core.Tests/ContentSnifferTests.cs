@@ -65,6 +65,14 @@ public class ContentSnifferTests {
         Assert.False(ContentSniffer.IsAnimatedWebp(Ascii("RIFF\0\0\0\0WEBPVP8X")));
     }
 
+    [Fact]
+    public void Gif_IsAnimated_ByItsSecondPicture() {
+        Assert.False(ContentSniffer.IsAnimatedGif(new MemoryStream(Gif(frames: 1))));
+        Assert.True(ContentSniffer.IsAnimatedGif(new MemoryStream(Gif(frames: 2))));
+        Assert.False(ContentSniffer.IsAnimatedGif(new MemoryStream(Gif(frames: 2)[..60])));
+        Assert.False(ContentSniffer.IsAnimatedGif(new MemoryStream(Ascii("not a gif at all"))));
+    }
+
     [Theory]
     [InlineData("Just a note, plain text, nothing to name.")]
     [InlineData("{not json at all}")]
@@ -85,5 +93,28 @@ public class ContentSnifferTests {
 
     private static byte[] Ascii(string text) {
         return text.Select(c => (byte)c).ToArray();
+    }
+
+    /// <summary>
+    /// A 1x1 GIF89a of <paramref name="frames"/> pictures: a global colour
+    /// table, the NETSCAPE loop extension, and per frame a graphic control
+    /// extension, a descriptor and one sub-block of picture data.
+    /// </summary>
+    private static byte[] Gif(int frames) {
+        var bytes = new List<byte>();
+        bytes.AddRange(Ascii("GIF89a"));
+        bytes.AddRange(new byte[] { 1, 0, 1, 0, 0x80, 0, 0 });              // 1x1, a table of two colours
+        bytes.AddRange(new byte[6]);
+        bytes.AddRange(new byte[] { 0x21, 0xFF, 0x0B });
+        bytes.AddRange(Ascii("NETSCAPE2.0"));
+        bytes.AddRange(new byte[] { 0x03, 0x01, 0x00, 0x00, 0x00 });
+        for (int i = 0; i < frames; i++) {
+            bytes.AddRange(new byte[] { 0x21, 0xF9, 0x04, 0x00, 0x0A, 0x00, 0x00, 0x00 });
+            bytes.AddRange(new byte[] { 0x2C, 0, 0, 0, 0, 1, 0, 1, 0, 0x00 });
+            bytes.AddRange(new byte[] { 0x02, 0x02, 0x4C, 0x01, 0x00 });
+        }
+        bytes.Add(0x3B);
+
+        return bytes.ToArray();
     }
 }
