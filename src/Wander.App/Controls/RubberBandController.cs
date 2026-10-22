@@ -46,8 +46,14 @@ namespace Wander.App.Controls;
 ///   adorner layer; each mouse move and each scroll step repaints it.</item>
 ///   <item>Hit-testing walks the host's items and transforms each realised
 ///   container's bounds back into host coordinates.</item>
-///   <item>Mouse capture on the host guarantees the MouseUp even if the
-///   cursor leaves the control; <c>LostMouseCapture</c> is the safety net.</item>
+///   <item>Mouse capture guarantees the MouseUp even if the cursor leaves
+///   the control; <c>LostMouseCapture</c> is the safety net. It is taken on
+///   the list's scroll viewer, not on the list: a <c>ListBox</c> that holds
+///   the capture runs its own auto-scroll timer (<c>DoAutoScroll</c>), which
+///   with the cursor past the left or right edge walked the focused cell
+///   sideways under the rectangle (2026-10-22).</item>
+///   <item>The rectangle is drawn inside the rows' area only: past the
+///   list's edge there is nothing it could take.</item>
 /// </list>
 /// </summary>
 public sealed class RubberBandController {
@@ -61,6 +67,7 @@ public sealed class RubberBandController {
 
     private ItemsControl? _host;
     private ScrollViewer? _scroller;
+    private UIElement? _captured;
     private AdornerLayer? _layer;
     private RubberBandAdorner? _adorner;
     private HashSet<FileSystemEntry>? _baseSelection;
@@ -118,8 +125,9 @@ public sealed class RubberBandController {
         _originOffset = PixelOffset();
         _current = _origin;
         _armed = true;
-        host.CaptureMouse();
-        host.LostMouseCapture += OnLostCapture;
+        _captured = (UIElement?)_scroller ?? host;
+        _captured.CaptureMouse();
+        _captured.LostMouseCapture += OnLostCapture;
     }
 
 
@@ -149,10 +157,10 @@ public sealed class RubberBandController {
         IsActive = false;
         _armed = false;
 
-        if (_host is { } host) {
-            host.LostMouseCapture -= OnLostCapture;
-            if (host.IsMouseCaptured) {
-                host.ReleaseMouseCapture();
+        if (_captured is { } captured) {
+            captured.LostMouseCapture -= OnLostCapture;
+            if (captured.IsMouseCaptured) {
+                captured.ReleaseMouseCapture();
             }
         }
         if (_adorner is not null && _layer is not null) {
@@ -161,6 +169,7 @@ public sealed class RubberBandController {
 
         _host = null;
         _scroller = null;
+        _captured = null;
         _layer = null;
         _adorner = null;
         _baseSelection = null;
@@ -209,6 +218,7 @@ public sealed class RubberBandController {
         if (_adorner is not null) {
             _adorner.StartPoint = start;
             _adorner.CurrentPoint = _current;
+            _adorner.Bounds = RowsArea(_host);
             _adorner.InvalidateVisual();
         }
 
@@ -260,6 +270,24 @@ public sealed class RubberBandController {
         // The new rows are realised on the next layout pass; the selection
         // follows once they are.
         _host.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, Sweep);
+    }
+
+    /// <summary>
+    /// Where the rows are drawn, in the host's coordinates: the scroll
+    /// viewer's content, short of its scroll bar and the table's header.
+    /// The whole host when there is no such part to measure.
+    /// </summary>
+    private Rect RowsArea(ItemsControl host) {
+        var content = _scroller is null ? null : ListVisuals.FindDescendant<ScrollContentPresenter>(_scroller);
+        if (content is not { ActualWidth: > 0, ActualHeight: > 0 }) {
+            return new Rect(host.RenderSize);
+        }
+
+        try {
+            return new Rect(content.TranslatePoint(new Point(0, 0), host), content.RenderSize);
+        } catch (InvalidOperationException) {
+            return new Rect(host.RenderSize);
+        }
     }
 
     /// <summary>How far the list is scrolled, in pixels - a list that scrolls by rows converts at its rows' height.</summary>

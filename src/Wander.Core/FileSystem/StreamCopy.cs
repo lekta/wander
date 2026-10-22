@@ -12,7 +12,7 @@ namespace Wander.Core.FileSystem;
 /// loop knows neither.
 /// </summary>
 public static class StreamCopy {
-    /// <summary>One read, one write: a megabyte (OPERATIONS, "Проверка копии": 1-4 MB, the stand decides).</summary>
+    /// <summary>One read, one write: a megabyte (FILEOPS, "own copy loop": stand V1 found 4 MB no faster).</summary>
     public const int BufferSize = 1 << 20;
 
 

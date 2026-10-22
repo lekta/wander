@@ -10,8 +10,8 @@ namespace Wander.Core.Shell;
 /// obligations of every file operation - the guard on the target, a line
 /// in the log, the conflict window, progress that can be cancelled, an
 /// undo step - carried out against a source <see cref="IFileSystem"/>
-/// cannot read, and with what a copy off a card owes besides (OPERATIONS,
-/// "Чего ждёт фотограф"): each file written whole under a temporary name,
+/// cannot read, and with what a copy off a card owes besides (FILEOPS,
+/// "reliable copying"): each file written whole under a temporary name,
 /// read back, dated as on the device, a transient error tried again.
 ///
 /// <para>
@@ -23,7 +23,7 @@ namespace Wander.Core.Shell;
 /// return copies the file it was on again from the start - the device's
 /// objects are found anew by their names, its ids are new. Done files are
 /// not touched again. Not back within <see cref="WaitForDevice"/> - that
-/// file and the rest fail, and "Повторить" is there for when it is.
+/// file and the rest fail, and "Retry" is there for when it is.
 /// </para>
 ///
 /// <para>

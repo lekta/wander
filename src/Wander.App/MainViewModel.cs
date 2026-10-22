@@ -24,6 +24,7 @@ using Wander.Core.Icons;
 using Wander.Core.Imaging;
 using Wander.Core.Layout;
 using Wander.Core.Listing;
+using Wander.Core.Localization;
 using Wander.Core.Logging;
 using Wander.Core.Menu;
 using Wander.Core.Navigation;
@@ -292,6 +293,19 @@ public sealed class MainViewModel : ObservableObject {
     private readonly SearchController _search = new();
     private int _hiddenCount;
 
+    // Eject by drive letter: the attempts made, and the drives whose
+    // verb is still waiting for Windows' answer (EjectAsync).
+    private readonly Dictionary<string, int> _ejectAttempts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _ejectAsking = new(StringComparer.OrdinalIgnoreCase);
+
+    // The list was read again after a failed landing of the filter's rows,
+    // and none has landed since: the same rows would fail the same way.
+    private bool _relistedAfterFailure;
+
+    // The interface language whose restart the user said no to ("ru" /
+    // "en"): the settings closing again on the same choice does not ask.
+    private string? _restartDeclinedFor;
+
 
     // Rows the running (or last) search found, in arrival order. Kept apart
     // from Entries so a re-sort has something to sort: Entries is the
@@ -508,7 +522,7 @@ public sealed class MainViewModel : ObservableObject {
         CopyToCommand = new RelayCommand(p => _ = CopyToAsync(p), CanCopyTo);
         CutCommand = new RelayCommand(Cut, CanCut);
         PasteCommand = new RelayCommand(p => _ = PasteAsync(p), CanPaste);
-        NewFolderCommand = new RelayCommand(_ => NewFolder(), _ => _nav.Current is not null && !IsCurrentShellNamespace);
+        NewFolderCommand = new RelayCommand(NewFolder, p => NewFolderParent(p) is not null);
         RestoreFromRecycleBinCommand = new RelayCommand(
             _ => RestoreFromRecycleBin(),
             p => ResolveTarget(p).Place.IsRecycleBin && ListRowsOf(p) is not null);
@@ -674,7 +688,9 @@ public sealed class MainViewModel : ObservableObject {
             }
 
             LandRows(filtered, rearranged);
+            _relistedAfterFailure = false;
         };
+        _search.PublishFailed += OnFilterPublishFailed;
         _search.ItemsChanged += changed => {
             if (ContentSearch.IsShowingResults) {
                 return;
@@ -2275,44 +2291,50 @@ public sealed class MainViewModel : ObservableObject {
     /// not left.
     /// </summary>
     private async Task AfterDeviceChangeAsync(bool arrived) {
-        await Task.Delay(TimeSpan.FromSeconds(2.5));
-        Workspace.Post(new VolumesChanged());
-        if (IsCurrentComputer) {
-            Refresh();
-        }
-        await RefreshPluggedDevicesAsync();
-
-        string? current = _nav.Current;
-        if (CurrentDevice is null || current is null || ServiceLocator.TryGet<IDeviceContent>() is not { } devices) {
-            return;
-        }
-
-        // Asking the device is a shell listing - off this thread.
-        bool there = await Task.Run(() => devices.StateOf(current) != DeviceState.Gone);
-        if (!string.Equals(current, _nav.Current, StringComparison.OrdinalIgnoreCase)) {
-            return;
-        }
-        if (there) {
-            // A phone unlocked shows its storage now.
-            if (arrived) {
+        // Run by nobody who awaits it: a failure is said here or not at all
+        // (review of sprint 2).
+        try {
+            await Task.Delay(TimeSpan.FromSeconds(2.5));
+            Workspace.Post(new VolumesChanged());
+            if (IsCurrentComputer) {
                 Refresh();
             }
+            await RefreshPluggedDevicesAsync();
 
-            return;
-        }
+            string? current = _nav.Current;
+            if (CurrentDevice is null || current is null || ServiceLocator.TryGet<IDeviceContent>() is not { } devices) {
+                return;
+            }
 
-        var roots = await Task.Run(() => _fs.GetRoots().Select(r => r.FullPath).ToList());
-        var plugged = await Task.Run(() => _nav.RecentPaths
-            .Where(DevicePath.Is)
-            .Select(p => DevicePath.Parse(p)!.Root)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Where(root => devices.StateOf(root) != DeviceState.Gone)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase));
-        string? fallback = NavigationFallback.AfterDeviceRemoved(
-            current, p => DevicePath.Parse(p) is { } d && plugged.Contains(d.Root), roots, _nav.RecentPaths, VolumeKindOf);
-        if (fallback is not null && string.Equals(current, _nav.Current, StringComparison.OrdinalIgnoreCase)) {
-            _log.Info($"Device of {current} removed: going to {fallback}");
-            NavigateTo(fallback, NavigationSource.External);
+            // Asking the device is a shell listing - off this thread.
+            bool there = await Task.Run(() => devices.StateOf(current) != DeviceState.Gone);
+            if (!string.Equals(current, _nav.Current, StringComparison.OrdinalIgnoreCase)) {
+                return;
+            }
+            if (there) {
+                // A phone unlocked shows its storage now.
+                if (arrived) {
+                    Refresh();
+                }
+
+                return;
+            }
+
+            var roots = await Task.Run(() => _fs.GetRoots().Select(r => r.FullPath).ToList());
+            var plugged = await Task.Run(() => _nav.RecentPaths
+                .Where(DevicePath.Is)
+                .Select(p => DevicePath.Parse(p)!.Root)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Where(root => devices.StateOf(root) != DeviceState.Gone)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase));
+            string? fallback = NavigationFallback.AfterDeviceRemoved(
+                current, p => DevicePath.Parse(p) is { } d && plugged.Contains(d.Root), roots, _nav.RecentPaths, VolumeKindOf);
+            if (fallback is not null && string.Equals(current, _nav.Current, StringComparison.OrdinalIgnoreCase)) {
+                _log.Info($"Device of {current} removed: going to {fallback}");
+                NavigateTo(fallback, NavigationSource.External);
+            }
+        } catch (Exception ex) {
+            _log.Error($"After a device {(arrived ? "arrived" : "went")}: looking again failed", ex);
         }
     }
 
@@ -2327,10 +2349,19 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
-        var names = await Task.Run(() => devices.Devices()
-            .Select(d => DevicePath.Parse(d.FullPath)?.Device)
-            .OfType<string>()
-            .ToList());
+        List<string> names;
+        try {
+            names = await Task.Run(() => devices.Devices()
+                .Select(d => DevicePath.Parse(d.FullPath)?.Device)
+                .OfType<string>()
+                .ToList());
+        } catch (Exception ex) {
+            // A device failing in COM while listed: the bookmarks stay as
+            // they were, and the log says why (review of sprint 2).
+            _log.Error("Plugged devices: listing them failed", ex);
+
+            return;
+        }
         if (Bookmarks.SetPlugged(names)) {
             PostBookmarks();
         }
@@ -2349,8 +2380,16 @@ public sealed class MainViewModel : ObservableObject {
     /// <summary>The open folder was on a volume that went: to the latest place on one still there.</summary>
     private async Task LeaveRemovedVolumeAsync() {
         string? current = _nav.Current;
-        // DriveInfo asks every drive whether it is ready - off this thread.
-        var roots = await Task.Run(() => _fs.GetRoots().Select(r => r.FullPath).ToList());
+        List<string> roots;
+        try {
+            // DriveInfo asks every drive whether it is ready - off this thread.
+            roots = await Task.Run(() => _fs.GetRoots().Select(r => r.FullPath).ToList());
+        } catch (Exception ex) {
+            // Nobody awaits this: said here (review of sprint 2).
+            _log.Error("Volume removed: reading the drives failed", ex);
+
+            return;
+        }
         if (current is null || !string.Equals(current, _nav.Current, StringComparison.OrdinalIgnoreCase)) {
             return;
         }
@@ -3863,6 +3902,22 @@ public sealed class MainViewModel : ObservableObject {
         _search.RatingFilter = RatingFilter.None;
     }
 
+    /// <summary>
+    /// A listener of the list threw while the filter's rows were landing:
+    /// said in the log at once, and the folder read again, so every panel
+    /// gets a whole list rather than half of a change. Once - rows that
+    /// failed would fail again - until a landing goes through.
+    /// </summary>
+    private void OnFilterPublishFailed(Exception ex) {
+        _log.Error($"Rows of the filter did not land, a listener threw - {(_relistedAfterFailure ? "left as they are" : "reading the folder again")}", ex);
+        if (_relistedAfterFailure || ContentSearch.IsShowingResults) {
+            return;
+        }
+
+        _relistedAfterFailure = true;
+        Refresh();
+    }
+
     private void SyncFilterChoices() {
         foreach (var choice in FilterColorChoices) {
             choice.IsSelected = _search.RatingFilter.HasColor(choice.Index);
@@ -4834,6 +4889,37 @@ public sealed class MainViewModel : ObservableObject {
         NavigateTo(folder, NavigationSource.External);
     }
 
+    /// <summary>
+    /// Where the full screen ended - one picture, or the two of a pair -
+    /// becomes the list's selection, unless it is that already. Taken from
+    /// the end, not from the start (2026-10-22): a pair opened and walked on
+    /// as one picture, with a delete on the way that moved the list, left
+    /// the list pictures behind. One picture goes the way of
+    /// <see cref="RevealPath"/>; a pair is selected among the rows on screen.
+    /// </summary>
+    public void LandOnShown(IReadOnlyList<string> paths) {
+        if (paths.Count == 0 || _nav.Current is not { } folder) {
+            return;
+        }
+
+        var selected = _selectedEntries.Select(e => e.FullPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (selected.Count == paths.Count && paths.All(selected.Contains)) {
+            return;
+        }
+        if (paths.Count == 1) {
+            RevealPath(paths[0]);
+
+            return;
+        }
+        // Among search results the pair stays where it was found.
+        if (IsSearchResults) {
+            return;
+        }
+
+        _session.SetArrival(ArrivalIntent.Rows(folder, paths, takeFocus: true));
+        PostLanding(PathsOf(Entries), ListingReason.Relist, _session.DecideArrival(folder, Entries));
+    }
+
 
     // --- Settings dialog and About --------------------------------------
     /// <summary>
@@ -4862,6 +4948,31 @@ public sealed class MainViewModel : ObservableObject {
         ShowModal(dlg);
         // A tool may have been installed or pointed at, a row added.
         _ = LocateToolsAsync();
+        OfferRestartForLanguage();
+    }
+
+    /// <summary>
+    /// Another interface language picked: it is read at start, so the
+    /// settings closing is where Wander offers to start again (2026-10-22).
+    /// A "no" is not asked again until the choice changes once more.
+    /// </summary>
+    private void OfferRestartForLanguage() {
+        string picked = UiLanguages.Resolve(Settings.Language, InterfaceLanguage.Windows);
+        if (picked == InterfaceLanguage.Current || picked == _restartDeclinedFor) {
+            return;
+        }
+
+        bool restart = _dialogs.Ask(new DialogRequest(
+            DialogKind.RestartForLanguage, Strings.RestartLanguageTitle, Strings.RestartLanguageMessage,
+            DialogButtons.YesNo, DialogIcon.Question));
+        _log.Info($"Interface language {InterfaceLanguage.Current} -> {picked}: restart {(restart ? "now" : "declined")}");
+        if (!restart) {
+            _restartDeclinedFor = picked;
+
+            return;
+        }
+
+        App.Restart();
     }
 
 
@@ -5147,7 +5258,8 @@ public sealed class MainViewModel : ObservableObject {
 
         string waited = BusyNote(results.Select(r => r.Busy));
         // Taken by the bin with nothing to find it by: gone for good, and
-        // said so - the user asked for the bin (OPERATIONS, step 9).
+        // said so - the user asked for the bin (FILEOPS, "taken without a
+        // trace").
         int lost = results.Count(r => r.Permanent);
         if (lost > 0) {
             waited += "; " + string.Format(Strings.StatusRecycledForGood, lost);
@@ -6672,22 +6784,35 @@ public sealed class MainViewModel : ObservableObject {
             : string.Format(Strings.StatusWasBusyMany, name, released.Count - 1, holder, seconds));
     }
 
-    private void NewFolder() {
-        if (_nav.Current is null) {
+    /// <summary>
+    /// Where a new folder goes: inside a panel row's folder when its menu
+    /// asked (2026-10-22), the open folder otherwise - the key included;
+    /// null where nothing may be made.
+    /// </summary>
+    private string? NewFolderParent(object? parameter) {
+        if (parameter is MenuCall { Context: { Subject.Kind: TargetKind.PanelRow } context }) {
+            return context.Place.IsReadOnly ? null : context.Subject.Folder;
+        }
+
+        return _nav.Current is not null && !IsCurrentShellNamespace ? _nav.Current : null;
+    }
+
+    private void NewFolder(object? parameter) {
+        if (NewFolderParent(parameter) is not { } parent) {
             return;
         }
 
         string baseName = Strings.NewFolderName;
         string name = baseName;
         int i = 2;
-        while (_fs.DirectoryExists(Path.Combine(_nav.Current, name))) {
+        while (_fs.DirectoryExists(Path.Combine(parent, name))) {
             name = $"{baseName} ({i++})";
         }
 
         try {
-            _ops.CreateFolder(_nav.Current, name);
+            _ops.CreateFolder(parent, name);
         } catch (Exception ex) {
-            _log.Error($"CreateFolder failed in {_nav.Current}: {Log.Path(name)}", ex);
+            _log.Error($"CreateFolder failed in {parent}: {Log.Path(name)}", ex);
             Fail(string.Format(Strings.StatusCreateFailed, ex.Message));
 
             return;
@@ -6697,16 +6822,23 @@ public sealed class MainViewModel : ObservableObject {
         // the user does is type over it. Selecting it and opening the editor
         // are both for the listing Refresh is about to start — the row does
         // not exist to select, let alone edit, until it lands.
-        string created = Path.Combine(_nav.Current, name);
-        _session.SetArrivalHere(ArrivalIntent.Rows(
-            _nav.Current, new[] { created }, takeFocus: true, renameTarget: created));
-        Refresh();
+        string created = Path.Combine(parent, name);
+        var intent = ArrivalIntent.Rows(parent, new[] { created }, takeFocus: true, renameTarget: created);
+        if (IsSamePath(parent, _nav.Current)) {
+            _session.SetArrivalHere(intent);
+            Refresh();
+        } else {
+            // Made inside a panel row's folder: the list goes there, so the
+            // name can be typed over in the same place as anywhere else.
+            _session.SetArrival(intent);
+            NavigateTo(parent);
+        }
 
         // The panels beside the list show folders too, and the folder they
         // are standing on just gained one. Leaving it to the watcher would
         // not do: its tick is held for as long as the editor we just opened
         // is up.
-        Workspace.Post(new FolderChanged(_nav.Current));
+        Workspace.Post(new FolderChanged(parent));
     }
 
     /// <param name="destination">Where the item was going, for the errors that are about the target - a full disk, FAT32's 4 GB.</param>
@@ -6759,8 +6891,8 @@ public sealed class MainViewModel : ObservableObject {
             return Strings.ErrorDeviceAsleep;
         }
         // A phone re-reads its storage now and then, and what was listed
-        // a minute ago may be under another id or gone (OPERATIONS,
-        // "Ошибки устройств").
+        // a minute ago may be under another id or gone (FILEOPS,
+        // "device errors").
         if (ex is FileNotFoundException or DirectoryNotFoundException && DevicePath.Is(path)) {
             return Strings.ErrorDeviceFileGone;
         }
@@ -6950,40 +7082,63 @@ public sealed class MainViewModel : ObservableObject {
     /// </summary>
     private async Task EjectAsync(string root, long? operationId = null) {
         string drive = DriveOf(root);
-        _log.Info(operationId is { } id ? $"Eject {drive} from operation {id}" : $"Eject {drive}");
-        if (_nav.Current is { } open && string.Equals(DriveOf(open), drive, StringComparison.OrdinalIgnoreCase)) {
-            var others = await Task.Run(() => _fs.GetRoots()
-                .Select(r => r.FullPath)
-                .Where(r => !string.Equals(DriveOf(r), drive, StringComparison.OrdinalIgnoreCase))
-                .ToList());
-            if (NavigationFallback.AfterVolumeRemoved(open, others, _nav.RecentPaths, VolumeKindOf) is { } elsewhere) {
-                NavigateTo(elsewhere, NavigationSource.External);
-            }
-        }
+        // A second press while Windows is still being asked adds nothing; a
+        // press after the answer is a new attempt, and only the newest
+        // one's watch says the drive is gone (review of sprint 2).
+        if (!_ejectAsking.Add(drive)) {
+            _log.Info($"Eject {drive}: already asked, waiting for the answer");
 
-        ReleasePreview(new[] { root });
+            return;
+        }
+        int attempt = _ejectAttempts[drive] = _ejectAttempts.GetValueOrDefault(drive) + 1;
+        bool asking = true;
         try {
-            if (!InvokeEject(root)) {
-                Warn(string.Format(Strings.StatusEjectNoVerb, drive));
-
-                return;
+            _log.Info(operationId is { } id ? $"Eject {drive} from operation {id}" : $"Eject {drive}");
+            if (_nav.Current is { } open && string.Equals(DriveOf(open), drive, StringComparison.OrdinalIgnoreCase)) {
+                var others = await Task.Run(() => _fs.GetRoots()
+                    .Select(r => r.FullPath)
+                    .Where(r => !string.Equals(DriveOf(r), drive, StringComparison.OrdinalIgnoreCase))
+                    .ToList());
+                if (NavigationFallback.AfterVolumeRemoved(open, others, _nav.RecentPaths, VolumeKindOf) is { } elsewhere) {
+                    NavigateTo(elsewhere, NavigationSource.External);
+                }
             }
 
-            if (await Task.Run(() => WaitForVolumeGone(root, EjectAnswerMs))) {
+            ReleasePreview(new[] { root });
+            try {
+                if (!InvokeEject(root)) {
+                    Warn(string.Format(Strings.StatusEjectNoVerb, drive));
+
+                    return;
+                }
+
+                if (await Task.Run(() => WaitForVolumeGone(root, EjectAnswerMs))) {
+                    Ejected(root);
+
+                    return;
+                }
+
+                var record = operationId is { } op ? _tracker.Finished.FirstOrDefault(r => r.Id == op) : null;
+                string reason = await Task.Run(() => WhoHoldsDrive(root, record));
+                Warn(string.Format(Strings.StatusEjectBusy, drive, reason));
+            } finally {
+                RestorePreview();
+                _ejectAsking.Remove(drive);
+                asking = false;
+            }
+
+            if (await Task.Run(() => WaitForVolumeGone(root, EjectLateMs)) && _ejectAttempts[drive] == attempt) {
                 Ejected(root);
-
-                return;
             }
-
-            var record = operationId is { } op ? _tracker.Finished.FirstOrDefault(r => r.Id == op) : null;
-            string reason = await Task.Run(() => WhoHoldsDrive(root, record));
-            Warn(string.Format(Strings.StatusEjectBusy, drive, reason));
+        } catch (Exception ex) {
+            // The shell's verb failing in COM, the drive gone mid-question:
+            // said, rather than lost with the task nobody awaits.
+            _log.Error($"Eject {drive} failed", ex);
+            Fail(string.Format(Strings.StatusEjectBusy, drive, ex.Message));
         } finally {
-            RestorePreview();
-        }
-
-        if (await Task.Run(() => WaitForVolumeGone(root, EjectLateMs))) {
-            Ejected(root);
+            if (asking) {
+                _ejectAsking.Remove(drive);
+            }
         }
     }
 

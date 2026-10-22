@@ -301,7 +301,12 @@ public sealed class UndoService {
                 if (gate is null) {
                     step.Undo();
                 } else {
-                    gate.Run(path ?? step.Description, step.Undo, ct);
+                    // The wait asks what holds the item where it is now:
+                    // where it goes back to does not exist yet, and a folder
+                    // with a held file inside was named by nobody (review of
+                    // sprint 2).
+                    string? held = step.PathsBeforeUndo.Count > 0 ? step.PathsBeforeUndo[0] : path;
+                    gate.Run(held ?? step.Description, step.Undo, ct);
                 }
                 undone.Add(step);
             } catch (OperationCanceledException) when (ct.IsCancellationRequested) {

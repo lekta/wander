@@ -117,7 +117,7 @@ src/
 ```
 === Wander dependency graph (using sweep) ===
 date   : 2026-10-22
-commit : 2aa4c01
+commit : 76dae45
 
 -- Wander.Core: levels --
   0: (root), Appearance, Imaging, Layout, Localization, Logging, Panels
@@ -132,12 +132,9 @@ commit : 2aa4c01
   9: Workspace
 
 -- Wander.Platform.Windows: levels --
-  0: [FileSystem+Shell], Diagnostics, Imaging, Logging, Persistence, Power, Preview, Search
-  1: Icons
+  0: Diagnostics, Imaging, Logging, Persistence, Power, Preview, Search, Shell
+  1: FileSystem, Icons
   2: (root)
-  cycle edges:
-    FileSystem -> Shell
-    Shell -> FileSystem
 
 -- Wander.App: levels --
   0: Menu, Resources

@@ -536,7 +536,7 @@ public sealed record AppSettings {
     /// reads it, instead of Windows Portable Devices directly (decision of
     /// 2026-10-19: the fallback for a device the direct way does not get on
     /// with). Off by default: the shell lists a phone's big folder in
-    /// minutes where WPD takes seconds (OPERATIONS, "Стенд Y4a").
+    /// minutes where WPD takes seconds (FILEOPS, "why WPD directly").
     /// </summary>
     public bool DevicesThroughShell { get; init; }
 }

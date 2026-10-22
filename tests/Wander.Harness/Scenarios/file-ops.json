@@ -76,9 +76,10 @@
     { "do": "screenshot", "name": "locked-file" },
     { "do": "fs", "op": "unlock", "path": "{sandbox}\\attrs\\locked.txt" },
 
-    // --- A copy that fails, its record, and "Повторить" -------------
+    // --- A copy that fails, its record, and "Retry" -----------------
     // Held again: its copy fails, the finished row says so, and once the
-    // file is let go "Повторить" takes it (OPERATIONS, steps 1-2).
+    // file is let go "Retry" takes it (FILEOPS, "operation record" and
+    // "retry").
     { "do": "fs", "op": "lock", "path": "{sandbox}\\attrs\\locked.txt" },
     { "do": "dismiss-operations" },
     { "do": "select", "names": [ "locked.txt" ] },

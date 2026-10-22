@@ -24,6 +24,9 @@ internal sealed class RubberBandAdorner : Adorner {
     public Point StartPoint { get; set; }
     public Point CurrentPoint { get; set; }
 
+    /// <summary>The part of the list the rectangle may be drawn on - the rows' area; empty for no limit.</summary>
+    public Rect Bounds { get; set; } = Rect.Empty;
+
 
     public RubberBandAdorner(UIElement adornedElement) : base(adornedElement) {
         IsHitTestVisible = false;       // never block clicks through the marquee
@@ -37,8 +40,13 @@ internal sealed class RubberBandAdorner : Adorner {
 
 
     protected override void OnRender(DrawingContext dc) {
+        // Held past the list's edge, the rectangle stops at it: drawn on
+        // over the panels and the toolbar it promised what it cannot take.
         var rect = GetRect();
-        if (rect.Width < 1 || rect.Height < 1) {
+        if (!Bounds.IsEmpty) {
+            rect.Intersect(Bounds);
+        }
+        if (rect.IsEmpty || rect.Width < 1 || rect.Height < 1) {
             return;
         }
         dc.DrawRectangle(_fillBrush, _strokePen, rect);

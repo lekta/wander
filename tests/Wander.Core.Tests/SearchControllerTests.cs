@@ -56,6 +56,23 @@ public class SearchControllerTests {
     // --- Basic projection --------------------------------------------
 
     [Fact]
+    public async Task AListenerThatThrows_IsReportedAtOnce() {
+        // A panel failing inside its change notification: the pass is
+        // fire-and-forget, and the owner has to hear of it now, not from
+        // the finaliser minutes later.
+        var sc = new SearchController();
+        var reported = new TaskCompletionSource<Exception>(TaskCreationOptions.RunContinuationsAsynchronously);
+        sc.FilteredChanged += (_, _) => throw new InvalidOperationException("panel");
+        sc.PublishFailed += ex => reported.TrySetResult(ex);
+
+        sc.SetSource(new[] { _apple });
+
+        var winner = await Task.WhenAny(reported.Task, Task.Delay(TimeSpan.FromSeconds(2)));
+        Assert.Same(reported.Task, winner);
+        Assert.Equal("panel", (await reported.Task).Message);
+    }
+
+    [Fact]
     public async Task SetSource_EmptyQuery_PublishesEverything() {
         var sc = new SearchController();
         var next = WaitForNextFilteredAsync(sc);
@@ -310,12 +327,13 @@ public class SearchControllerTests {
 
 
     [Fact]
-    public async Task RatingFilter_KeepsWhatReachesTheThreshold() {
-        var keep = Photo("keep.jpg", rank: 4);
+    public async Task RatingFilter_KeepsTheRankPicked() {
+        var keep = Photo("keep.jpg", rank: 3);
         var drop = Photo("drop.jpg", rank: 1);
+        var above = Photo("above.jpg", rank: 4);
         var unrated = Photo("unrated.jpg");
         var sc = new SearchController();
-        sc.SetSource(new[] { keep, drop, unrated });
+        sc.SetSource(new[] { keep, drop, above, unrated });
 
         var next = WaitForNextFilteredAsync(sc);
         sc.RatingFilter = RatingFilter.None.PickRank(3);
@@ -348,7 +366,7 @@ public class SearchControllerTests {
         sc.Query = "beach";
 
         var next = WaitForNextFilteredAsync(sc);
-        sc.RatingFilter = RatingFilter.None.PickRank(3);
+        sc.RatingFilter = RatingFilter.None.PickRank(5);
 
         Assert.Equal(new[] { match }, await next);
     }
@@ -419,7 +437,7 @@ public class SearchControllerTests {
         Assert.False((await initial).Rearranged);
 
         var filtered = WaitForNextPassAsync(sc);
-        sc.RatingFilter = RatingFilter.None.PickRank(3);
+        sc.RatingFilter = RatingFilter.None.PickRank(5);
         Assert.True((await filtered).Rearranged);
 
         // The watcher's next listing is not the user's doing.
@@ -514,7 +532,7 @@ public class SearchControllerTests {
     public async Task Replace_WhileFiltered_ButStillMatching_StaysCheap() {
         var sc = new SearchController();
         sc.SetSource(new[] { Photo("a.jpg", rank: 5), Photo("b.jpg", rank: 1) });
-        sc.RatingFilter = RatingFilter.None.PickRank(4);
+        sc.RatingFilter = RatingFilter.None.PickRank(4).ToggleRank(5);
         await Task.Delay(50);
 
         // 5 -> 4 keeps it inside the filter, so nothing has to be reprojected.
@@ -528,7 +546,7 @@ public class SearchControllerTests {
         // Here the list genuinely has to change, so the full pass is right.
         var sc = new SearchController();
         sc.SetSource(new[] { Photo("a.jpg", rank: 5), Photo("b.jpg", rank: 5) });
-        sc.RatingFilter = RatingFilter.None.PickRank(4);
+        sc.RatingFilter = RatingFilter.None.PickRank(5);
         await Task.Delay(50);
 
         var next = WaitForNextFilteredAsync(sc);

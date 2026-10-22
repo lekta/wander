@@ -28,7 +28,7 @@ namespace Wander.Platform.Windows.Shell;
 /// <para>
 /// A storage's folders the owner has no business in (<see cref="DeviceClutter"/>)
 /// come out hidden and system, as protected Windows files do: the listing
-/// hides them, "Защищённые системные файлы" shows them.
+/// hides them, "Protected operating system files" shows them.
 /// </para>
 /// </summary>
 internal sealed class DeviceFolders : IDeviceContent {
@@ -76,7 +76,10 @@ internal sealed class DeviceFolders : IDeviceContent {
                 var session = SessionFor(device);
                 session.Storages = null;
                 volume = VolumeOf(device, StoragesOf(session));
-            } catch (Exception ex) when (ex is COMException or IOException or UnauthorizedAccessException) {
+            } catch (Exception ex) when (ex is COMException or InvalidComObjectException or IOException or UnauthorizedAccessException) {
+                // A session closed under this listing by another thread (a
+                // camera switched off) says InvalidComObjectException, not a
+                // COM error (review of sprint 2).
                 // A device that will not open now is still in the list;
                 // what it holds is asked when it is opened.
             }
@@ -94,7 +97,7 @@ internal sealed class DeviceFolders : IDeviceContent {
 
         try {
             return Resolve(parsed, CancellationToken.None).Entry;
-        } catch (Exception ex) when (ex is COMException or IOException or UnauthorizedAccessException) {
+        } catch (Exception ex) when (ex is COMException or InvalidComObjectException or IOException or UnauthorizedAccessException) {
             return null;
         }
     }
@@ -128,9 +131,9 @@ internal sealed class DeviceFolders : IDeviceContent {
                 return ThroughShell
                     ? _shell.Open(session.Device, parsed, node.Entry.Size ?? 0)
                     : WpdOf(session).OpenContent(node.ObjectId, node.Entry.Size ?? 0);
-            } catch (COMException ex) when (look == 1) {
-                // An id from before the phone re-read its storage: the names
-                // are asked again, once.
+            } catch (Exception ex) when ((ex is COMException or InvalidComObjectException) && look == 1) {
+                // An id from before the phone re-read its storage, or a
+                // session closed meanwhile: the names are asked again, once.
                 _log.Info($"Device: {path} did not open ({ex.Message}) - looking it up again");
                 Forget(session);
             }
@@ -146,7 +149,7 @@ internal sealed class DeviceFolders : IDeviceContent {
         var node = Resolve(parsed, CancellationToken.None);
         try {
             return node.Entry.Kind == EntryKind.File ? WpdOf(session).Thumbnail(node.ObjectId) : null;
-        } catch (COMException ex) {
+        } catch (Exception ex) when (ex is COMException or InvalidComObjectException) {
             throw new IOException($"The device gave no thumbnail now (0x{ex.HResult:X8})", ex);
         }
     }
@@ -169,8 +172,9 @@ internal sealed class DeviceFolders : IDeviceContent {
                 session.Storages = null;
 
                 return StoragesOf(session).Count == 0 ? DeviceState.Locked : DeviceState.Ready;
-            } catch (Exception ex) when (ex is COMException or IOException) {
-                // A session from before the device went away: a fresh one.
+            } catch (Exception ex) when (ex is COMException or InvalidComObjectException or IOException) {
+                // A session from before the device went away, or one closed
+                // under this question: a fresh one.
                 Session? stale;
                 lock (_lock) {
                     _sessions.TryGetValue(parsed.Device, out stale);

@@ -2,7 +2,7 @@ namespace Wander.Core.Operations;
 
 /// <summary>
 /// What moved a file's bytes: Wander's own loop, which hashes on the way
-/// and can read the copy back (OPERATIONS, "Проверка копии"), or Windows'
+/// and can read the copy back (FILEOPS, "copy check"), or Windows'
 /// <c>CopyFileEx</c>, which keeps what the loop cannot - encryption, sparse
 /// files, extra streams, a copy kept on the server. Written into the
 /// operation's record and log line item by item, so a complaint about a

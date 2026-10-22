@@ -447,6 +447,12 @@ internal sealed class SiteBuilder {
                 .Append("</ul></nav>\n");
         }
 
+        // A page of tables with the same columns - the hotkeys - lines them
+        // up: one width per column down the page, not each table at its
+        // own (decision 2026-10-20). Today no other page has two such.
+        var tables = page.Blocks.OfType<Table>().ToList();
+        bool aligned = tables.Count >= 2 && tables.All(t => ColumnsOf(t) == ColumnsOf(tables[0]));
+
         using var writer = new StringWriter();
         var renderer = new HtmlRenderer(writer);
         _pipeline.Setup(renderer);
@@ -468,6 +474,9 @@ internal sealed class SiteBuilder {
             // own; the stylesheet gives it air above.
             if (block is ParagraphBlock { Inline.FirstChild: EmphasisInline { DelimiterCount: 2 } } topic) {
                 topic.GetAttributes().AddClass("topic");
+            }
+            if (aligned && block is Table table) {
+                table.GetAttributes().AddClass("aligned");
             }
             renderer.Render(block);
         }
@@ -545,6 +554,11 @@ internal sealed class SiteBuilder {
             ContainerBlock container => container.Descendants<ParagraphBlock>(),
             _ => Enumerable.Empty<ParagraphBlock>(),
         };
+    }
+
+    /// <summary>How many cells a table's header row has.</summary>
+    private static int ColumnsOf(Table table) {
+        return table.Count > 0 && table[0] is TableRow header ? header.Count : 0;
     }
 
     private static string Pager(Guide guide, int index, string classes) {

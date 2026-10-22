@@ -454,6 +454,9 @@ internal sealed class BatchExecutor {
             return new Outcome(BatchItemStatus.Skipped, false, null);
         }
 
+        // The copy itself began: what is at the destination from here on is
+        // this item's, not a folder that was there before.
+        bool started = false;
         try {
             // System-path guard: moving a protected path away is as
             // destructive as deleting it; replacing a protected target
@@ -486,6 +489,7 @@ internal sealed class BatchExecutor {
                 }
             }
 
+            started = true;
             var copied = ApplyOne(src, dest, run);
             run.UndoSteps.Add(run.IsMove
                 ? new MoveAction(_fs, src, dest)
@@ -522,6 +526,16 @@ internal sealed class BatchExecutor {
             return new Outcome(BatchItemStatus.Cancelled, false, null);
         } catch (Exception ex) {
             _log.Error($"{run.Verb} failed: {src} -> {dest}", ex);
+            // A folder copy that failed part-way - a bad card, a mismatch on
+            // the check - left what it had copied, as a cancel does, and it
+            // is undone the same way (review of sprint 2). A move takes its
+            // partial copy back itself (IFileSystem.MoveEntry).
+            if (started && !run.IsMove && _fs.DirectoryExists(dest)) {
+                run.UndoSteps.Add(new CreateAction(_bin, dest, OperationVerbs.Copy));
+                _log.Info($"{run.Verb} failed part-way: {src} -> {dest} (partial copy is undoable)");
+
+                return new Outcome(BatchItemStatus.Failed, true, ex);
+            }
 
             return new Outcome(BatchItemStatus.Failed, false, ex);
         }

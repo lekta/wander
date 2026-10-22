@@ -161,8 +161,13 @@ public partial class MainWindow : Window {
                 App.AbandonOperations();
             } else {
                 e.Cancel = true;
-                if (!_stoppingOperations && ConfirmExitWithOperations()) {
-                    StopOperationsThenClose();
+                if (!_stoppingOperations) {
+                    if (ConfirmExitWithOperations()) {
+                        StopOperationsThenClose();
+                    } else {
+                        // Staying: a restart asked for went with this exit.
+                        App.RestartRequested = false;
+                    }
                 }
 
                 return;
@@ -611,17 +616,17 @@ public partial class MainWindow : Window {
     /// <summary>
     /// Enter or Space on pictures in the gallery (<see cref="FullscreenPlan"/>).
     /// The window walks on its own; closed, it leaves the keyboard back in
-    /// the list - on the picture a single one ended on; a pair or a walked
-    /// selection leaves the selection as it was.
+    /// the list - on what it ended on, one picture or a pair
+    /// (<see cref="MainViewModel.LandOnShown"/>); a walked selection leaves
+    /// the selection as it was.
     /// </summary>
     private void FileList_FullscreenRequested(object? sender, FullscreenPlan plan) {
         var window = Views.FullscreenWindow.Open(plan, Vm, this);
         _fullscreen = window;
         window.Closed += (_, _) => {
             _fullscreen = null;
-            if (plan.Mode == FullscreenMode.Single
-                && !string.Equals(window.Current.FullPath, plan.Start.FullPath, StringComparison.OrdinalIgnoreCase)) {
-                Vm.RevealPath(window.Current.FullPath);
+            if (plan.Mode != FullscreenMode.Selection) {
+                Vm.LandOnShown(window.Shown.Select(e => e.FullPath).ToList());
             }
             FileList.FocusList();
         };

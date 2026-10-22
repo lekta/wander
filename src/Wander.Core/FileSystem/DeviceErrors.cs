@@ -1,8 +1,8 @@
 namespace Wander.Core.FileSystem;
 
 /// <summary>
-/// What a phone or a camera says when it stops answering (OPERATIONS,
-/// "Ошибки устройств"), told apart so the status line can say what to do
+/// What a phone or a camera says when it stops answering (FILEOPS,
+/// "device errors"), told apart so the status line can say what to do
 /// and an import can wait for the device instead of failing (PLAN Y4d).
 /// The codes are Windows Portable Devices' own (facility 0x2A) and Win32's;
 /// which of them arrive was the stand's to say (Y4a).

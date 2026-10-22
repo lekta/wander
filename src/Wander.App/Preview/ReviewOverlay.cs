@@ -42,6 +42,13 @@ internal static class ReviewOverlay {
     /// </summary>
     private const long PeaksBudget = 32L * 1024 * 1024;
 
+    /// <summary>
+    /// The autofocus frames are let half through (2026-10-22): drawn solid,
+    /// the pink frame was the loudest thing on the photo it is there to
+    /// help judge. The helper's button keeps the solid colour.
+    /// </summary>
+    private const double AfOpacity = 0.5;
+
     private static readonly Lock _peaksLock = new();
 
     // Newest first; the key is the file, its stamp and which of its pictures
@@ -356,8 +363,8 @@ internal static class ReviewOverlay {
         if (marks is not null) {
             group.Children.Add(new ImageDrawing(marks, new Rect(0, 0, w, h)));
         }
-        var focused = new Pen(new SolidColorBrush(request.AfFocused), pen * 1.5);
-        var other = new Pen(new SolidColorBrush(request.AfOther), pen);
+        var focused = new Pen(new SolidColorBrush(request.AfFocused) { Opacity = AfOpacity }, pen * 1.5);
+        var other = new Pen(new SolidColorBrush(request.AfOther) { Opacity = AfOpacity }, pen);
         foreach (var point in af.OrderBy(p => p.InFocus)) {
             var box = new Rect((point.X - point.W / 2) * w, (point.Y - point.H / 2) * h, point.W * w, point.H * h);
             group.Children.Add(new GeometryDrawing(null, point.InFocus ? focused : other, new RectangleGeometry(box)));

@@ -119,6 +119,18 @@ th {
   background: var(--soft);
 }
 
+/* A page of tables with the same columns (the hotkeys): one width per
+   column down the page, the keys a third of it. */
+table.aligned {
+  display: table;
+  width: 100%;
+  table-layout: fixed;
+}
+
+table.aligned th:first-child {
+  width: 34%;
+}
+
 li {
   margin: .35em 0;
 }

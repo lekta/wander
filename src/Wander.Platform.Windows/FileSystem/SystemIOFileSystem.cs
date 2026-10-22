@@ -341,7 +341,17 @@ public sealed class SystemIOFileSystem : IFileSystem {
         }
 
         var moved = CopyThroughTemp(source, destination, overwrite: false, bytesCopied, ct, options);
-        File.Delete(source);
+        try {
+            File.Delete(source);
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+            // The source would not go - a card gone read-only, a held file:
+            // the copy goes instead, so the move is not done rather than
+            // half-done, and a retry finds the target free and says why the
+            // source stays (review of sprint 2).
+            TryDelete(destination);
+
+            throw;
+        }
 
         return moved;
     }
@@ -484,11 +494,13 @@ public sealed class SystemIOFileSystem : IFileSystem {
     /// flushed to the medium at the end. Read back when asked, past the
     /// system's cache, so it is the medium that answers. Then the attributes
     /// and the time of the last change; the creation time is new, as
-    /// Explorer's is.
+    /// Explorer's is. The source is shared for writing, as CopyFileEx shares
+    /// it: a document open in its program (a .docx, a mailbox, a log) is
+    /// copied as it lies, not refused as held (review of sprint 2).
     /// </summary>
     private static void OwnCopy(string source, string temp, IProgress<long>? progress, CancellationToken ct, bool verify) {
         byte[] hash;
-        using (var from = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, bufferSize: 0, FileOptions.SequentialScan))
+        using (var from = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, bufferSize: 0, FileOptions.SequentialScan))
         using (var to = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None, bufferSize: 0, FileOptions.SequentialScan)) {
             to.SetLength(from.Length);
             hash = StreamCopy.Copy(from, to, progress, ct);
@@ -508,7 +520,7 @@ public sealed class SystemIOFileSystem : IFileSystem {
 
     /// <summary>
     /// Why a file goes through Windows' engine, or null when Wander's loop
-    /// will do (OPERATIONS, "Откат на CopyFileEx"): encrypted or sparse - the
+    /// will do (FILEOPS, "fallback to CopyFileEx"): encrypted or sparse - the
     /// loop would decrypt or fill it in silently; extra streams - the
     /// "downloaded from the internet" mark among them; both ends on one
     /// server - the server copies without the bytes crossing the network;
@@ -627,7 +639,8 @@ public sealed class SystemIOFileSystem : IFileSystem {
             }
         }
 
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, bufferSize: 0, FileOptions.SequentialScan);
+        // Shared for writing: a source open in its program is read as the copy read it.
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, bufferSize: 0, FileOptions.SequentialScan);
 
         return StreamCopy.Hash(stream, ct);
     }

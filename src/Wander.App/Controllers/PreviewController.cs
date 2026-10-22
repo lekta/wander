@@ -2519,8 +2519,16 @@ public sealed class PreviewController : ObservableObject {
     private async Task<string?> HeadThroughGateAsync(IDeviceContent devices, ILogger log, FileSystemEntry entry, CancellationToken ct) {
         await _archiveCopyGate.WaitAsync(ct);
         try {
-            return await Task.Run(
+            bool had = entry.Size is { } size && File.Exists(TempExtraction.HeadPathFor(entry.FullPath, size));
+            string? head = await Task.Run(
                 () => TempExtraction.CopyHead(devices, ServiceLocator.Get<IFileSystem>(), log, entry, MaxArchivePreviewBytes, ct), ct);
+            // A head read just now: the tile is drawn again from it, turned
+            // the way the picture was shot (DeviceThumbnail).
+            if (!had && head is not null) {
+                AsyncIcon.Invalidate(entry.FullPath);
+            }
+
+            return head;
         } finally {
             _archiveCopyGate.Release();
         }

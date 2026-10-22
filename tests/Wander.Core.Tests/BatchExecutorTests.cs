@@ -1157,6 +1157,25 @@ public class BatchExecutorTests {
     }
 
     [Fact]
+    public async Task CopyManyAsync_FailedInsideAFolder_LeavesWhatLanded_Undoable() {
+        // A bad card half-way through a folder: what landed stays, as after
+        // a cancel, and Ctrl+Z clears it away all the same.
+        var fs = new FailingFolderCopy();
+        var bin = new FakeRecycleBin(fs);
+        var undo = new UndoService();
+        var batch = new BatchExecutor(fs, bin, undo, new OperationTracker(TimeSpan.Zero), NullLogger.Instance);
+        fs.Directories.Add(@"C:\src\shoot");
+        fs.Directories.Add(DstFolder);
+
+        var results = await batch.CopyManyAsync(new[] { @"C:\src\shoot" }, DstFolder, new FakeConflictResolver(), default);
+
+        Assert.Equal(BatchItemStatus.Failed, results[0].Status);
+        Assert.Equal(1, undo.Depth);
+        undo.Undo();
+        Assert.Contains($@"Recycle:{DstFolder}\shoot", bin.CallLog);
+    }
+
+    [Fact]
     public async Task CopyManyAsync_LeavesARecord_WithTheFailedItem() {
         var (batch, fs, _, _, tracker) = Setup();
         fs.Files[SrcA] = new byte[10];
@@ -1439,6 +1458,16 @@ public class BatchExecutorTests {
             ct.ThrowIfCancellationRequested();
 
             return CopyReport.None;
+        }
+    }
+
+    /// <summary>A folder copy that lands the folder and fails before it is done - a card read error.</summary>
+    private sealed class FailingFolderCopy : FakeFileSystem, IFileSystem {
+        public new CopyReport CopyDirectory(string source, string destination, bool overwrite,
+            IProgress<long>? bytesCopied = null, CancellationToken ct = default, CopyOptions? options = null) {
+            Directories.Add(destination);
+
+            throw new IOException("Data error (cyclic redundancy check).", unchecked((int)0x80070017));
         }
     }
 

@@ -8,7 +8,7 @@ namespace Wander.Platform.Windows.Shell;
 
 /// <summary>
 /// A device's content read the way Explorer reads it, through the shell:
-/// the fallback "Отладка" switches on for a device Windows Portable
+/// the fallback "Debug and reset" switches on for a device Windows Portable
 /// Devices does not get on with (decision of 2026-10-19). Slower - a cold
 /// listing of a phone's camera folder takes the shell minutes (stand Y4a) -
 /// and with no thumbnails of the device's own, but the same rows.

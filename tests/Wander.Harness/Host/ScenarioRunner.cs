@@ -239,8 +239,8 @@ public sealed class ScenarioRunner {
             case "assert-entries":
                 AssertEntries(step);
                 break;
-            // The finished operations (OPERATIONS, step 1): waits out the
-            // running first - wait-idle does not wait for operations.
+            // The finished operations (FILEOPS, "operation record"): waits
+            // out the running first - wait-idle does not wait for operations.
             case "assert-operations":
                 await AssertOperationsAsync(step);
                 break;
@@ -1213,7 +1213,8 @@ public sealed class ScenarioRunner {
             }
         }
         // A file's length, and its time of last change against another's -
-        // a copy off a device carries the device's (OPERATIONS, Y4c).
+        // a copy off a device carries the device's (FILEOPS, "phone and
+        // camera").
         foreach (var (raw, expected) in Numbers(step, "sizes")) {
             long length = new FileInfo(_context.Expand(raw)).Length;
             if (length != expected) {

@@ -259,6 +259,46 @@ public class UndoServiceTests {
     }
 
 
+    // --- The wait for held files -----------------------------------------
+
+    /// <summary>The paths the wait was asked about, and every step run straight through.</summary>
+    private sealed class RecordingGate : IUndoStepGate {
+        public List<string> Asked { get; } = new();
+
+        public void Run(string path, Action undo, CancellationToken ct) {
+            Asked.Add(path);
+            undo();
+        }
+
+        public bool WorthAnotherTry(Exception error) => false;
+
+        public void Dispose() {
+        }
+    }
+
+    private sealed class MovedFolder : IUndoableAction {
+        public string Description => "move";
+        public IReadOnlyList<string> PathsBeforeUndo => new[] { @"E:\to\photos" };
+        public IReadOnlyList<string> PathsAfterUndo => new[] { @"D:\from\photos" };
+        public void Undo() {
+        }
+    }
+
+    [Fact]
+    public async Task Undo_AsksTheWaitAboutTheItemWhereItIsNow() {
+        // A moved folder with a held file inside: what holds it is looked
+        // for where the folder lies, not where it is going back to - that
+        // path does not exist until the undo has run.
+        var svc = new UndoService();
+        var gate = new RecordingGate();
+        svc.Push(new MovedFolder());
+
+        await svc.UndoAsync(new Operations.OperationTracker(), gates: _ => gate);
+
+        Assert.Equal(new[] { @"E:\to\photos" }, gate.Asked);
+    }
+
+
     // --- BeginOperation busy-guard -------------------------------------
 
     [Fact]

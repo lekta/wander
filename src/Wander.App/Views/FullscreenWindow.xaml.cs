@@ -137,6 +137,9 @@ public partial class FullscreenWindow : Window {
     /// <summary>The picture on show - the left one of two; where the list is left when a single one closes.</summary>
     public FileSystemEntry Current { get; private set; }
 
+    /// <summary>What is on screen now: the one picture, or the two of a pair, left first.</summary>
+    public IReadOnlyList<FileSystemEntry> Shown => _side is { } side ? new[] { Current, side } : new[] { Current };
+
 
     /// <summary>Opens <paramref name="plan"/> over the monitor <paramref name="owner"/> is on.</summary>
     public static FullscreenWindow Open(FullscreenPlan plan, MainViewModel vm, Window owner) {

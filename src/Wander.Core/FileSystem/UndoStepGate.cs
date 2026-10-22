@@ -5,7 +5,7 @@ namespace Wander.Core.FileSystem;
 /// <summary>
 /// <see cref="IUndoStepGate"/> over one <see cref="BusyGate"/>: an undo is a
 /// file operation run backwards, and waits for held files the way the
-/// operations do (OPERATIONS, step 8).
+/// operations do (FILEOPS, "undo is an operation").
 /// </summary>
 internal sealed class UndoStepGate : IUndoStepGate {
     private readonly BusyGate _gate;

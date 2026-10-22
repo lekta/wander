@@ -14,15 +14,14 @@ namespace Wander.Core.Companions;
 /// "What did I leave at two stars to come back to" is a different one, and
 /// so is "what have I not looked at yet". Both fall out of holding the set
 /// of ranks that pass instead of a lower bound: a plain click on a star
-/// selects it and everything above it, and a modified click adds or removes
-/// one rank on its own.
+/// selects that rank alone (decision 2026-10-22: in use, "only these" is
+/// what a culling pass asks; "N and up" was the old click), and a modified
+/// click adds or removes one rank on its own.
 /// </para>
 ///
 /// <para>
 /// Rank 0 is a member like any other and means <em>unrated</em> — a photo
-/// with no sidecar or with a sidecar that says nothing. It is the one rank
-/// that a plain click selects alone: "unrated and above" would be every
-/// photograph in the folder, which is not a filter.
+/// with no sidecar or with a sidecar that says nothing.
 /// </para>
 /// </summary>
 /// <param name="Ranks">
@@ -59,14 +58,14 @@ public sealed record RatingFilter(int Ranks, int Colors) {
 
 
     /// <summary>
-    /// A plain click on a star: that rank and everything above it, and
-    /// nothing else. Clicking the star whose run is already exactly what is
-    /// selected turns the star filter off again — the same "click what is
-    /// set to unset it" the rating widget itself uses, and the only way to
-    /// clear one half of the bar without clearing the other.
+    /// A plain click on a star: that rank and no other. Clicking the star
+    /// that is already exactly what is selected turns the star filter off
+    /// again - the same "click what is set to unset it" the rating widget
+    /// itself uses, and the only way to clear one half of the bar without
+    /// clearing the other.
     /// </summary>
     public RatingFilter PickRank(int rank) {
-        int wanted = rank == Unrated ? Bit(Unrated) : RunFrom(rank);
+        int wanted = Bit(rank);
 
         return this with { Ranks = Ranks == wanted ? 0 : wanted };
     }
@@ -116,15 +115,5 @@ public sealed record RatingFilter(int Ranks, int Colors) {
     /// <summary>Bit for one rank or colour; anything out of range is no bit at all.</summary>
     private static int Bit(int index) {
         return index >= 0 && index <= MaxRank ? 1 << index : 0;
-    }
-
-    /// <summary>Bits for <paramref name="from"/> up to <see cref="MaxRank"/>.</summary>
-    private static int RunFrom(int from) {
-        int bits = 0;
-        for (int i = Math.Max(from, 1); i <= MaxRank; i++) {
-            bits |= Bit(i);
-        }
-
-        return bits;
     }
 }

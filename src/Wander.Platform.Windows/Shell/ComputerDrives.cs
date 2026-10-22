@@ -1,6 +1,6 @@
+using Wander.Core;
 using Wander.Core.FileSystem;
 using Wander.Core.Localization;
-using Wander.Platform.Windows.FileSystem;
 
 namespace Wander.Platform.Windows.Shell;
 
@@ -18,11 +18,13 @@ namespace Wander.Platform.Windows.Shell;
 /// Drives through <see cref="DriveInfo"/>, not <c>IShellItem</c>: it is
 /// what the panel and the volume block of the preview already read, and
 /// the shell's folder would add network places this listing does not open.
-/// The devices are the shell's (<see cref="DeviceFolders"/>).
+/// The devices are the shell's (<see cref="DeviceFolders"/>). The volume
+/// facts come through <see cref="IVolumeInfoProvider"/>, asked when the
+/// listing is read: this folder of Platform does not reach into
+/// FileSystem's (no cycle between folders, CLAUDE.md).
 /// </para>
 /// </summary>
 internal sealed class ComputerDrives {
-    private readonly WindowsVolumeInfo _volumes = new();
     private readonly DeviceFolders? _devices;
 
 
@@ -32,10 +34,11 @@ internal sealed class ComputerDrives {
 
 
     public IReadOnlyList<FileSystemEntry> Enumerate(CancellationToken ct) {
+        var volumes = ServiceLocator.Get<IVolumeInfoProvider>();
         var rows = new List<FileSystemEntry>();
         foreach (var drive in DriveInfo.GetDrives()) {
             ct.ThrowIfCancellationRequested();
-            if (_volumes.Describe(drive.Name) is not { IsReady: true } volume) {
+            if (volumes.Describe(drive.Name) is not { IsReady: true } volume) {
                 continue;
             }
 

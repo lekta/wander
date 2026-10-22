@@ -138,7 +138,7 @@
 
     // === Stars ============================================================
     //
-    // IMG_0057 carries three stars. Under "three and up" the folder is a
+    // IMG_0057 carries three stars. Under "only three" the folder is a
     // screenful and does not scroll; the filter taken off, the row stands
     // where it stood under it. F5 under the filter hides nothing.
     { "do": "navigate", "path": "{sandbox}\\photos" },

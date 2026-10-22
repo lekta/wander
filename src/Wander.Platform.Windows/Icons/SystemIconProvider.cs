@@ -802,7 +802,7 @@ public sealed class SystemIconProvider : IIconProvider {
 
         using Bitmap? overlay = LoadOverlayBitmap(overlayIndex);
         if (overlay is not null) {
-            CompositeOverlay(canvas, overlay);
+            CompositeOverlay(canvas, overlay, isLink: true);
         }
     }
 
@@ -1283,7 +1283,7 @@ public sealed class SystemIconProvider : IIconProvider {
                     IconLog($"overlay bitmap missing for idx={overlayIndex}: {path}");
                 }
                 if (overlayBmp is not null) {
-                    CompositeOverlay(baseBmp, overlayBmp);
+                    CompositeOverlay(baseBmp, overlayBmp, isLnk);
                 }
             }
 
@@ -1770,15 +1770,22 @@ public sealed class SystemIconProvider : IIconProvider {
 
 
     /// <summary>
-    /// Draws <paramref name="overlay"/> in the bottom-left of <paramref name="canvas"/>,
-    /// scaled up to roughly match Explorer's badge size on jumbo icons.
+    /// Draws <paramref name="overlay"/> in the bottom-left of <paramref name="canvas"/>.
+    /// The badge is baked into the picture, so it grows with the cell it
+    /// is drawn in - a stopgap until it is drawn over the cell at its own
+    /// size (TECHDEBT, the overlay badges entry of 2026-10-22). The shortcut
+    /// arrow (<paramref name="isLink"/>) keeps its size; any other badge -
+    /// TortoiseGit's - is drawn small.
     /// </summary>
-    private static void CompositeOverlay(Bitmap canvas, Bitmap overlay) {
-        // ~62% of the canvas — larger than Explorer's default to make
-        // the badge unmissable on tiles that scale down to ~72 px in
-        // the LargeIcons view. At those sizes a 31 % badge becomes ~22 px,
+    private static void CompositeOverlay(Bitmap canvas, Bitmap overlay, bool isLink) {
+        // The arrow: ~62% of the canvas - larger than Explorer's default to
+        // make it unmissable on tiles that scale down to ~72 px in the
+        // LargeIcons view. At those sizes a 31 % badge becomes ~22 px,
         // which is easy to overlook. 62 % gives a clearly visible arrow.
-        int overlayPx = canvas.Width * 5 / 8; // 160 for 256
+        // Every other badge: 3/16, the 48-px list on a 256 jumbo as
+        // Explorer composes it (2026-10-22: at 5/8 a gallery of a working
+        // copy was a wall of TortoiseGit badges the size of the photos).
+        int overlayPx = isLink ? canvas.Width * 5 / 8 : canvas.Width * 3 / 16; // 160 / 48 for 256
 
         using var g = Graphics.FromImage(canvas);
         g.InterpolationMode = InterpolationMode.HighQualityBicubic;

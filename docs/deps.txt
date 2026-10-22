@@ -1,6 +1,6 @@
 === Wander dependency graph (using sweep) ===
 date   : 2026-10-22
-commit : 2aa4c01
+commit : 76dae45
 
 -- projects --
 Wander.App -> Wander.Core   (78 files)
@@ -105,15 +105,11 @@ Wander.Platform.Windows -> Wander.Core   (48 files)
   (root)         -> Shell          (1 files)
   FileSystem     -> Shell          (1 files)
   Icons          -> Shell          (1 files)
-  Shell          -> FileSystem     (1 files)
 
 -- Wander.Platform.Windows: levels --
-  0: [FileSystem+Shell], Diagnostics, Imaging, Logging, Persistence, Power, Preview, Search
-  1: Icons
+  0: Diagnostics, Imaging, Logging, Persistence, Power, Preview, Search, Shell
+  1: FileSystem, Icons
   2: (root)
-  cycle edges:
-    FileSystem -> Shell
-    Shell -> FileSystem
 
 -- Wander.App: folder -> folder --
   (root)         -> Controllers    (2 files)

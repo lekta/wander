@@ -31,7 +31,7 @@ namespace Wander.Core.FileSystem;
 /// </param>
 /// <param name="SameBySizeAndDate">
 /// The source is a file on a phone or a camera, whose bytes are not read
-/// twice (OPERATIONS, "Устройства"): one of the same size and date as the
+/// twice (FILEOPS, "phone and camera"): one of the same size and date as the
 /// file it would land on is that file - what "skip the identical ones"
 /// goes by when photos are copied off a card again.
 /// </param>

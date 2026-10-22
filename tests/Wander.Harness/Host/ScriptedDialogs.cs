@@ -12,12 +12,15 @@ namespace Wander.Harness.Host;
 /// </summary>
 public sealed class ScriptedDialogs : IDialogs {
     /// <summary>
-    /// Kinds answered "accept" whatever <see cref="DefaultAnswer"/> says - a
+    /// Kinds answered the same whatever <see cref="DefaultAnswer"/> says - a
     /// scenario that turns the default to "cancel" must not leave the run
-    /// hanging on its way out. A <c>dialogs</c> step still overrides them.
+    /// hanging on its way out, and one that keeps "accept" must not restart
+    /// the app. A <c>dialogs</c> step still overrides them.
     /// </summary>
     private readonly Dictionary<DialogKind, bool> _answers = new() {
         [DialogKind.ExitWithOperations] = true,
+        // A restart would leave a real window behind the run.
+        [DialogKind.RestartForLanguage] = false,
     };
     private readonly List<string> _records = new();
 

@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
+using Wander.Core.Logging;
 using ComTypes = System.Runtime.InteropServices.ComTypes;
 
 namespace Wander.Platform.Windows.Shell;
@@ -10,6 +12,15 @@ namespace Wander.Platform.Windows.Shell;
 /// file's size in its listing, and its stream may not say (stand Y4a).
 /// Disposing releases the COM stream: a stream dropped half-way is how a
 /// copy is stopped inside a file, and the next one opens at once.
+///
+/// <para>
+/// A device's stream left before its end costs its rest: the R8's driver
+/// reads the file through before letting go - ~420 ms of the 500 a CR3
+/// preview takes off the camera, after its head was read in 80.
+/// <c>IPortableDeviceDataStream.Cancel</c> first did not change that
+/// (2026-10-22: 416-435 ms over 15 files); letting go in the background is
+/// PLAN, version 0.7. One line in the log says what each letting go cost.
+/// </para>
 /// </summary>
 internal sealed class ComReadStream : Stream {
     private readonly long _length;
@@ -76,7 +87,7 @@ internal sealed class ComReadStream : Stream {
 
     protected override void Dispose(bool disposing) {
         if (_stream is not null) {
-            Marshal.ReleaseComObject(_stream);
+            LetGo(_stream);
             _stream = null;
         }
         if (_read != IntPtr.Zero) {
@@ -85,5 +96,15 @@ internal sealed class ComReadStream : Stream {
         }
 
         base.Dispose(disposing);
+    }
+
+
+    private void LetGo(ComTypes.IStream stream) {
+        bool early = _length > 0 && _position < _length;
+        var clock = Stopwatch.StartNew();
+        Marshal.ReleaseComObject(stream);
+        if (early) {
+            Log.Info($"Device stream let go at {_position} of {_length} bytes in {clock.ElapsedMilliseconds} ms");
+        }
     }
 }

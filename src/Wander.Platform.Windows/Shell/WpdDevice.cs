@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Wander.Core.Logging;
 using static Wander.Platform.Windows.Shell.ShellItemInterop;
 using static Wander.Platform.Windows.Shell.WpdInterop;
 using ComTypes = System.Runtime.InteropServices.ComTypes;
@@ -122,14 +123,26 @@ internal sealed class WpdDevice : IDisposable {
         var keys = Keys(WPD_OBJECT_ID, WPD_OBJECT_NAME, WPD_OBJECT_ORIGINAL_FILE_NAME, WPD_OBJECT_CONTENT_TYPE,
             WPD_OBJECT_SIZE, WPD_OBJECT_DATE_MODIFIED);
         try {
-            if (_bulk is not null && Bulk(ids, keys, ct) is { } read) {
-                return ids.Select(id => read.TryGetValue(id, out var row) ? row : null).OfType<WpdObject>().ToList();
-            }
-
+            var read = _bulk is not null ? Bulk(ids, keys, ct) : null;
             var rows = new List<WpdObject>(ids.Count);
             foreach (string id in ids) {
+                if (read is not null && read.TryGetValue(id, out var row)) {
+                    rows.Add(row);
+                    continue;
+                }
+
                 ct.ThrowIfCancellationRequested();
-                _properties.GetValues(id, keys, out var values);
+                // An object the batch gave no answer for is asked on its own
+                // (review of sprint 2); one that does not answer then either
+                // is left out, as before, and said - which it is, and how
+                // often, decides the next step (PLAN, version 0.7).
+                IPortableDeviceValues values;
+                try {
+                    _properties.GetValues(id, keys, out values);
+                } catch (COMException ex) when (read is not null) {
+                    Log.Warn($"Device: an object of {parentId} left out of the listing, no answer (0x{ex.HResult:X8})");
+                    continue;
+                }
                 try {
                     rows.Add(Read(values, id));
                 } finally {
@@ -200,6 +213,14 @@ internal sealed class WpdDevice : IDisposable {
                 for (int i = 0; i < fetched; i++) {
                     ids.Add(Marshal.PtrToStringUni(batch[i]) ?? "");
                     Marshal.FreeCoTaskMem(batch[i]);
+                }
+                // An error ends the list as the end does, as in 0.5 - which
+                // devices say one at the end of an ordinary folder is not
+                // known yet, and throwing would close such a folder for good.
+                // Said, so a cable pulled half-way shows in the log as half a
+                // folder; telling the two apart is PLAN, version 0.7.
+                if (hr < 0) {
+                    Log.Warn($"Device: listing of {parentId} ended with 0x{hr:X8} after {ids.Count} object(s)");
                 }
                 if (hr != 0 || fetched == 0) {
                     break;

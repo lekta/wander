@@ -1125,6 +1125,29 @@ public class ContextMenuBuilderTests {
         Assert.True(Enabled(Find(menu, MenuCommandId.FileSubmenu)!.Children, MenuCommandId.CreateShortcut));
     }
 
+    /// <summary>
+    /// A bookmark is right-clicked to make a folder inside it (2026-10-22):
+    /// a row of its own, with no key - Ctrl+Shift+N works on the open folder.
+    /// </summary>
+    [Fact]
+    public void PanelRow_OffersANewFolderInside() {
+        var row = new ContextMenuTarget { Selection = new[] { Dir("sub") }, FolderPath = Folder, IsPanelRow = true };
+
+        var entry = Find(ContextMenuBuilder.Build(row, ContextMenuSettings.Default), MenuCommandId.NewFolder);
+
+        Assert.NotNull(entry);
+        Assert.Equal(ContextMenuBuilder.NewFolderInsideKey, entry.Header);
+        Assert.Null(entry.Gesture);
+        Assert.Null(Find(ContextMenuBuilder.Build(row with { IsReadOnlyLocation = true }, ContextMenuSettings.Default), MenuCommandId.NewFolder));
+    }
+
+    [Fact]
+    public void ListRow_OffersNoNewFolderInside() {
+        var menu = ContextMenuBuilder.Build(SelectionOf(Dir("sub")), ContextMenuSettings.Default);
+
+        Assert.Null(Find(menu, MenuCommandId.NewFolder));
+    }
+
 
     // --- Helpers ----------------------------------------------------------
 

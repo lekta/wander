@@ -633,6 +633,12 @@
   <data name="ExitWithOperationsMessage" xml:space="preserve">
     <value>Operations in progress: {0}. Stop them and exit?</value>
   </data>
+  <data name="RestartLanguageTitle" xml:space="preserve">
+    <value>Interface language</value>
+  </data>
+  <data name="RestartLanguageMessage" xml:space="preserve">
+    <value>The language changes after a restart. Restart Wander now?</value>
+  </data>
   <data name="ConflictVerdictIdentical" xml:space="preserve">
     <value>Files are identical</value>
   </data>
@@ -959,6 +965,9 @@
   </data>
   <data name="MenuCmdNewFolder" xml:space="preserve">
     <value>Folder</value>
+  </data>
+  <data name="MenuCmdNewFolderInside" xml:space="preserve">
+    <value>New folder</value>
   </data>
   <data name="MenuCmdRestore" xml:space="preserve">
     <value>Restore</value>
@@ -1510,7 +1519,7 @@
     <value>no write access</value>
   </data>
   <data name="FilterRatingHint" xml:space="preserve">
-    <value>Show photos with this rating and higher. With Ctrl, add or remove a single rating. Click again to clear the filter.</value>
+    <value>Show photos with this rating only. With Ctrl, add or remove a single rating. Click again to clear the filter.</value>
   </data>
   <data name="FilterUnratedHint" xml:space="preserve">
     <value>Show unrated photos. With Ctrl, add them to the ratings already selected.</value>

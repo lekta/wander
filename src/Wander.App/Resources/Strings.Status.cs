@@ -249,6 +249,12 @@ public static partial class Strings {
     /// <summary>Идут операции: {0}. Прервать их и выйти?</summary>
     public static string ExitWithOperationsMessage => Get(nameof(ExitWithOperationsMessage));
 
+    /// <summary>Язык интерфейса</summary>
+    public static string RestartLanguageTitle => Get(nameof(RestartLanguageTitle));
+
+    /// <summary>Язык сменится после перезапуска. Перезапустить Wander сейчас?</summary>
+    public static string RestartLanguageMessage => Get(nameof(RestartLanguageMessage));
+
     /// <summary>Wander — отчёт об ошибке</summary>
     public static string CrashTitle => Get(nameof(CrashTitle));
 

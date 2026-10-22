@@ -19,6 +19,9 @@ public enum DialogKind {
     /// <summary>The window is closing with operations still running: stop them and exit?</summary>
     ExitWithOperations,
 
+    /// <summary>The settings closed with another interface language picked: restart now?</summary>
+    RestartForLanguage,
+
     /// <summary>Delete on a bookmark: take the bookmark away, or delete the folder behind it?</summary>
     BookmarkOrFolder,
 

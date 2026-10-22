@@ -25,6 +25,12 @@ namespace Wander.Platform.Windows.Icons;
 /// device answers one request at a time anyway, and four cells at once
 /// would hold up the copy running beside them.
 /// </para>
+///
+/// <para>
+/// The device's picture of a RAW is not turned for a portrait shot. Once
+/// the preview pane has read the file's head, the tile is drawn from that
+/// instead; the rest - PLAN, version 0.7.
+/// </para>
 /// </summary>
 internal static class DeviceThumbnail {
     /// <summary>The device's own pictures are about this wide: past it, a picture is read whole.</summary>
@@ -61,6 +67,17 @@ internal static class DeviceThumbnail {
 
         _gate.Wait();
         try {
+            // A RAW whose head the preview pane read (TempExtraction.CopyHead):
+            // its own pictures, turned the way it was shot. The camera's
+            // 160 px is not turned - the turn is in the file's header only,
+            // and reading that off the device for every tile costs what the
+            // preview's read does (2026-10-22, R8).
+            if (ImageFormats.IsRaw(path) && devices.GetEntry(path) is { Size: { } length }
+                && TempExtraction.HeadPathFor(path, length) is var head && File.Exists(head)
+                && RawThumbnail.Render(head, side) is { } fromHead) {
+                return fromHead;
+            }
+
             bool whole = side > DeviceThumbnailSide && ImageFormats.IsImage(path) && !ImageFormats.IsRaw(path)
                 && devices.GetEntry(path) is { Size: { } size } && size <= MaxPictureBytes;
             if (whole && ReadAll(devices, path) is { } bytes && RawThumbnail.RenderPicture(bytes, side) is { } picture) {

@@ -92,8 +92,13 @@ public sealed class ThumbnailDiskCache {
     /// v10 (2026-10-19): RAW thumbnails of EXIF orientation 5 and 7 were
     /// turned the wrong way (<c>ExifOrientation</c>).
     /// </para>
+    ///
+    /// <para>
+    /// v11 (2026-10-22): badges other than the shortcut arrow (TortoiseGit)
+    /// drawn at 3/16 of the side, not 5/8 - v10 slots hold the giant ones.
+    /// </para>
     /// </summary>
-    private const int Generation = 10;
+    private const int Generation = 11;
 
     private readonly string _directory;
     private readonly ILogger _log;

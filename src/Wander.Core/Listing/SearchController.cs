@@ -70,6 +70,16 @@ public sealed class SearchController : INotifyPropertyChanged {
     /// </summary>
     public event Action<IReadOnlyList<FileSystemEntry>>? ItemsChanged;
 
+    /// <summary>
+    /// A <see cref="FilteredChanged"/> handler threw - a panel of the list
+    /// failing in the middle of its change notification. The pass runs
+    /// fire-and-forget, so without this the exception only surfaced minutes
+    /// later from the finaliser as an unobserved task, and the list stayed
+    /// half-updated (TECHDEBT, 2026-09-22). The owner logs it and reads the
+    /// folder again; with no handler the exception goes on as before.
+    /// </summary>
+    public event Action<Exception>? PublishFailed;
+
 
     /// <summary>
     /// Current filter text. Empty string disables the filter and pushes the
@@ -387,7 +397,11 @@ public sealed class SearchController : INotifyPropertyChanged {
     private void Publish(IReadOnlyList<FileSystemEntry> rows) {
         bool rearranged = _rearranged;
         _rearranged = false;
-        FilteredChanged?.Invoke(rows, rearranged);
+        try {
+            FilteredChanged?.Invoke(rows, rearranged);
+        } catch (Exception ex) when (PublishFailed is not null) {
+            PublishFailed(ex);
+        }
     }
 
     private void Raise([CallerMemberName] string? name = null) {

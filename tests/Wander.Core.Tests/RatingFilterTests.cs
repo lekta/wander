@@ -39,26 +39,36 @@ public class RatingFilterTests {
     }
 
 
-    // --- A plain click on a star: that rank and above ---------------------
+    // --- A plain click on a star: that rank alone (2026-10-22) ------------
 
     [Fact]
-    public void PickRank_TakesThatRankAndEverythingAbove() {
+    public void PickRank_TakesThatRankAlone() {
         var filter = RatingFilter.None.PickRank(3);
 
         Assert.True(filter.HasRank(3));
-        Assert.True(filter.HasRank(4));
-        Assert.True(filter.HasRank(5));
+        Assert.False(filter.HasRank(4));
+        Assert.False(filter.HasRank(5));
         Assert.False(filter.HasRank(2));
         Assert.False(filter.HasRank(RatingFilter.Unrated));
     }
 
     [Fact]
-    public void PickRank_KeepsEqualAndAbove() {
+    public void PickRank_KeepsOnlyThatRank() {
         var filter = RatingFilter.None.PickRank(3);
 
         Assert.False(filter.Matches(Photo(rank: 2)));
         Assert.True(filter.Matches(Photo(rank: 3)));
-        Assert.True(filter.Matches(Photo(rank: 5)));
+        Assert.False(filter.Matches(Photo(rank: 5)));
+    }
+
+    [Fact]
+    public void PickRank_AnotherStar_ReplacesTheSet() {
+        // Not "add": a plain click says "only these", whatever was there.
+        var filter = RatingFilter.None.PickRank(3).ToggleRank(5).PickRank(4);
+
+        Assert.True(filter.HasRank(4));
+        Assert.False(filter.HasRank(3));
+        Assert.False(filter.HasRank(5));
     }
 
     [Fact]
@@ -90,8 +100,6 @@ public class RatingFilterTests {
 
     [Fact]
     public void PickRank_Unrated_TakesOnlyTheUnrated() {
-        // "Unrated and above" would be every photograph in the folder, which
-        // is not a filter.
         var filter = RatingFilter.None.PickRank(RatingFilter.Unrated);
 
         Assert.True(filter.HasRank(RatingFilter.Unrated));
@@ -121,22 +129,23 @@ public class RatingFilterTests {
     // --- Ctrl-click: one rank in or out -----------------------------------
 
     [Fact]
-    public void ToggleRank_TakesOneRankOutOfTheRun() {
-        // The example from the report: three and up, then drop the fives.
+    public void ToggleRank_AddsOneRankToThePicked() {
+        // Three, then the fives as well - and not the fours.
         var filter = RatingFilter.None.PickRank(3).ToggleRank(5);
 
         Assert.True(filter.HasRank(3));
-        Assert.True(filter.HasRank(4));
-        Assert.False(filter.HasRank(5));
-        Assert.True(filter.Matches(Photo(rank: 4)));
-        Assert.False(filter.Matches(Photo(rank: 5)));
+        Assert.False(filter.HasRank(4));
+        Assert.True(filter.HasRank(5));
+        Assert.True(filter.Matches(Photo(rank: 5)));
+        Assert.False(filter.Matches(Photo(rank: 4)));
     }
 
     [Fact]
-    public void ToggleRank_PutsItBack() {
+    public void ToggleRank_TakesItOutAgain() {
         var filter = RatingFilter.None.PickRank(3).ToggleRank(5).ToggleRank(5);
 
-        Assert.True(filter.HasRank(5));
+        Assert.False(filter.HasRank(5));
+        Assert.True(filter.HasRank(3));
     }
 
     [Fact]
@@ -149,9 +158,9 @@ public class RatingFilterTests {
     }
 
     [Fact]
-    public void ToggleRank_CanAddTheUnratedToARun() {
+    public void ToggleRank_CanAddTheUnratedToAPick() {
         // "Everything I have not looked at, plus the good ones."
-        var filter = RatingFilter.None.PickRank(4).ToggleRank(RatingFilter.Unrated);
+        var filter = RatingFilter.None.PickRank(5).ToggleRank(RatingFilter.Unrated);
 
         Assert.True(filter.Matches(Photo()));
         Assert.True(filter.Matches(Photo(rank: 5)));

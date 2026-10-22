@@ -57,6 +57,9 @@ public static class ContextMenuBuilder {
     /// <summary>One item: its name in quotes, as the drop menu and the drag plaque name it.</summary>
     public const string CaptionOneKey = "DragOneItem";
 
+    /// <summary>A panel row's "new folder inside it" - a verb of its own, not the "New" submenu's "Folder" row.</summary>
+    public const string NewFolderInsideKey = "MenuCmdNewFolderInside";
+
     /// <summary>
     /// Verbs whose entries act on the file rather than open it, *despite*
     /// publishing a name. Everything else in that category is caught by
@@ -130,6 +133,12 @@ public static class ContextMenuBuilder {
         // what the row says. So it is dropped, not greyed.
         if (t.IsSingle && t.AllFolders && fs) {
             items.Add(Cmd(MenuCommandId.OpenInTerminal));
+        }
+        // A folder right-clicked in a panel - a bookmark, a drive: the new
+        // folder goes inside it (2026-10-22). Ctrl+Shift+N makes one in the
+        // open folder, so this row names no key.
+        if (t.IsPanelRow && t.IsSingle && t.AllFolders && fs) {
+            items.Add(Cmd(MenuCommandId.NewFolder) with { Header = Text.Get(NewFolderInsideKey), Gesture = null });
         }
         // A result was found somewhere below: where, is the next question.
         if (t.IsSingle && t.IsSearchResult) {

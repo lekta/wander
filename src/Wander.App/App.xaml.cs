@@ -58,6 +58,13 @@ public partial class App : Application {
     /// </summary>
     internal static bool IsShuttingDown { get; private set; }
 
+    /// <summary>
+    /// Wander starts again once this session is over (<see cref="Restart"/>).
+    /// A close the user calls off - the question about running operations -
+    /// calls the restart off with it.
+    /// </summary>
+    internal static bool RestartRequested { get; set; }
+
 
     protected override void OnStartup(StartupEventArgs e) {
         IsSmokeRun = e.Args.Any(arg => string.Equals(arg, "--smoke", StringComparison.OrdinalIgnoreCase));
@@ -108,6 +115,23 @@ public partial class App : Application {
     }
 
 
+    protected override void OnExit(ExitEventArgs e) {
+        if (RestartRequested && Environment.ProcessPath is { } exe) {
+            var start = new System.Diagnostics.ProcessStartInfo(exe) { UseShellExecute = false };
+            foreach (string arg in Environment.GetCommandLineArgs().Skip(1)) {
+                start.ArgumentList.Add(arg);
+            }
+            try {
+                System.Diagnostics.Process.Start(start)?.Dispose();
+                Log.Info($"Restart: {exe} started again");
+            } catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException) {
+                Log.Error($"Restart: {exe} did not start", ex);
+            }
+        }
+        base.OnExit(e);
+    }
+
+
     /// <summary>
     /// Keeps a window off the real desktop while <see cref="Headless"/> is
     /// on: parked outside the virtual screen, never activated, not in the
@@ -140,6 +164,23 @@ public partial class App : Application {
     internal static void ShutdownWithoutAsking(int exitCode) {
         IsShuttingDown = true;
         Current.Shutdown(exitCode);
+    }
+
+
+    /// <summary>
+    /// Closes the window the ordinary way - running operations asked about,
+    /// the state saved - and starts Wander again with the same command line
+    /// once the process is on its way out (2026-10-22: the language is read
+    /// at start). Never under <see cref="Headless"/>: a harness run must not
+    /// leave a real window behind.
+    /// </summary>
+    internal static void Restart() {
+        if (Headless) {
+            return;
+        }
+
+        RestartRequested = true;
+        Current.MainWindow?.Close();
     }
 
 

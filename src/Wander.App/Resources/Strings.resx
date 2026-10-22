@@ -723,6 +723,12 @@
   <data name="ExitWithOperationsMessage" xml:space="preserve">
     <value>Идут операции: {0}. Прервать их и выйти?</value>
   </data>
+  <data name="RestartLanguageTitle" xml:space="preserve">
+    <value>Язык интерфейса</value>
+  </data>
+  <data name="RestartLanguageMessage" xml:space="preserve">
+    <value>Язык сменится после перезапуска. Перезапустить Wander сейчас?</value>
+  </data>
   <data name="ConflictVerdictIdentical" xml:space="preserve">
     <value>Файлы идентичны</value>
   </data>
@@ -1092,6 +1098,9 @@
   </data>
   <data name="MenuCmdNewFolder" xml:space="preserve">
     <value>Папка</value>
+  </data>
+  <data name="MenuCmdNewFolderInside" xml:space="preserve">
+    <value>Создать папку</value>
   </data>
   <data name="MenuCmdRestore" xml:space="preserve">
     <value>Восстановить</value>
@@ -1677,7 +1686,7 @@
     <comment>Причина отказа записи: файл только для чтения или закрыт правами</comment>
   </data>
   <data name="FilterRatingHint" xml:space="preserve">
-    <value>Показывать снимки с этой оценкой и выше. С Ctrl — добавить или убрать одну оценку. Повторный щелчок снимает фильтр.</value>
+    <value>Показывать снимки только с этой оценкой. С Ctrl — добавить или убрать одну оценку. Повторный щелчок снимает фильтр.</value>
   </data>
   <data name="FilterUnratedHint" xml:space="preserve">
     <value>Показывать снимки без оценки. С Ctrl — добавить их к уже выбранным оценкам.</value>
