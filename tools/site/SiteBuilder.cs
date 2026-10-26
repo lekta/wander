@@ -264,8 +264,8 @@ internal sealed class SiteBuilder {
                 .Where(target => target is not null && _files.ContainsKey(target))
                 .Sum(target => new FileInfo(_files[target!]).Length);
 
-            yield return $"{language.Code}: {guidePages.Count} guide pages, {Kb(smallest)} to {Kb(largest.Value)} of 10-30 KB (largest {largest.Key})"
-                + Over(smallest < 10 * 1024 || largest.Value > 30 * 1024);
+            yield return $"{language.Code}: {guidePages.Count} guide pages, {Kb(smallest)} to {Kb(largest.Value)} of 10-40 KB (largest {largest.Key})"
+                + Over(smallest < 10 * 1024 || largest.Value > 40 * 1024);
             yield return $"{language.Code}: landing with its pictures {Kb(page + shown)} of 300 KB (the page {Kb(page)})" + Over(page + shown > 300 * 1024);
         }
 

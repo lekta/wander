@@ -401,6 +401,7 @@ For a folder, the pane counts its files, their total size, and which types take 
 - [“Preview pane”](#preview-pane): loupe, two photos side by side, search in text, shooting data.
 - [“Full screen”](#full-screen): photos across the whole screen, one at a time or in pairs.
 - [“Formats”](#formats): what Wander can do with each file type.
+- [“Preview by type”](#preview-by-type): what the pane shows for each type.
 
 ### Preview pane
 
@@ -452,7 +453,7 @@ Wander remembers a model you rotated: it opens the same way next time, and its t
 
 **File in use.** If another program holds the file and it can't be read, the pane says so and names that program.
 
-What the pane shows for each type is listed on the [“Formats”](#formats) page.
+What the pane shows for each type is listed on the [“Preview by type”](#preview-by-type) page.
 
 ### Full screen
 
@@ -521,7 +522,7 @@ For other files not in the table, you see the system icon instead of a thumbnail
 | **Folder** | preview of contents | breakdown: files, folders, size, top types | | | |
 | **Drive** | icon | volume label, file system, usage | | | |
 
-[^heic]: Requires Windows extensions from the Microsoft Store; which ones are listed in the [“Preview by file type”](#preview-by-file-type) table, in the “HEIC / HEIF” row.
+[^heic]: Requires Windows extensions from the Microsoft Store; which ones are listed on the [“Preview by type”](#preview-by-type) page, in the “HEIC / HEIF” row.
 
 [^avif]: Requires Windows extensions from the Microsoft Store: HEIF and AV1 for AVIF, JPEG XL for JPEG XL. Without them, you see an icon instead of a thumbnail, and the pane names the missing extension, with a button that opens its page in the Store.
 
@@ -529,7 +530,9 @@ For other files not in the table, you see the system icon instead of a thumbnail
 
 The programs that conversion needs are covered on the [“Conversion”](#conversion) page, and ratings and helpers in the [“Culling photos”](#culling-photos) section.
 
-#### Preview by file type
+### Preview by type
+
+What the [Preview pane](#preview-pane) shows for each file type and what you can do with it. Which formats are supported and how far is on the [“Formats”](#formats) page.
 
 | Type | What it shows, what you can do |
 |---|---|

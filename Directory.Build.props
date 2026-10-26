@@ -9,9 +9,9 @@
          wrong, the resource manager answers that culture from them and never
          opens its satellite: "en" here hid Strings.en.resx. -->
     <NeutralLanguage>ru</NeutralLanguage>
-    <Version>0.5.1</Version>
-    <InformationalVersion>0.5.1-beta</InformationalVersion>
-    <FileVersion>0.5.1.0</FileVersion>
+    <Version>0.6.0</Version>
+    <InformationalVersion>0.6.0-beta</InformationalVersion>
+    <FileVersion>0.6.0.0</FileVersion>
     <!-- AssemblyVersion намеренно зафиксирован: это binding-идентичность сборки,
          по релизам двигаем Version / FileVersion / InformationalVersion. -->
     <AssemblyVersion>0.0.0.0</AssemblyVersion>

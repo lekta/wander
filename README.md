@@ -18,7 +18,7 @@
 - ⬇️ **[Download the latest version](https://github.com/lekta/wander/releases/latest)** - `Wander.exe` under Assets.
 - 🛡️ **[Reliability and speed](https://lekta.github.io/wander/en/guide/reliability-and-speed/index.html)** - how it is tested and built.
 
-> ⚠️ **Beta 0.5** - works and is in daily use. Provided as is, without warranty.
+> ⚠️ **Beta 0.6** - works and is in daily use. Provided as is, without warranty.
 
 ## Running
 
