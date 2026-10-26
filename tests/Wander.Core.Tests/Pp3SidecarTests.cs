@@ -115,6 +115,14 @@ public class Pp3SidecarTests {
     }
 
     [Fact]
+    public void Read_NoColorLabel_HasNoName() {
+        var rating = Pp3Sidecar.Read(Utf8(Sample.Replace("ColorLabel=3", "ColorLabel=0")));
+
+        Assert.Equal(0, rating.ColorLabel);
+        Assert.Null(rating.ColorLabelName);
+    }
+
+    [Fact]
     public void WithRank_RejectsValuesOutsideTheScale() {
         Assert.Throws<ArgumentOutOfRangeException>(() => Pp3Sidecar.WithRank(Utf8(Sample), 6));
         Assert.Throws<ArgumentOutOfRangeException>(() => Pp3Sidecar.WithRank(Utf8(Sample), -2));

@@ -103,12 +103,12 @@ public sealed class GallerySettingsCategory : SettingsCategoryViewModel {
 
 /// <summary>
 /// The interface as a whole: its colour scheme, the gallery's background
-/// that goes with it, its language. The guide has no section of its own for
-/// it yet - F1 opens the settings catalog.
+/// that goes with it, its language. F1 opens its section of the settings
+/// catalog.
 /// </summary>
 public sealed class InterfaceSettingsCategory : SettingsCategoryViewModel {
     public InterfaceSettingsCategory(SettingsViewModel owner)
-        : base(Strings.SettingsCategoryInterface, owner, guide: "nastroyki", guideEn: "settings") { }
+        : base(Strings.SettingsCategoryInterface, owner, guide: "nastroyki#interfeys", guideEn: "settings#interface") { }
 
 
     /// <summary>"Как в Windows: Русский" - the first choice names what following Windows means here.</summary>

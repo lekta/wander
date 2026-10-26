@@ -765,6 +765,7 @@ public sealed class MainViewModel : ObservableObject {
         // The restored view mode and palette decide the surround; the panes
         // were built before either was known.
         PushPalette();
+        Preview.ListIsGallery = _viewMode == ViewMode.Gallery;
         _ = LocateToolsAsync();
         // Bookmarks on a phone show once it is known to be plugged in.
         _ = RefreshPluggedDevicesAsync();
@@ -1496,6 +1497,8 @@ public sealed class MainViewModel : ObservableObject {
             if (SetField(ref _viewMode, value)) {
                 Raise(nameof(ContentPalette));
                 PushPalette();
+                // Only the upper half has a footer for the helpers' switches.
+                Preview.ListIsGallery = value == ViewMode.Gallery;
             }
         }
     }

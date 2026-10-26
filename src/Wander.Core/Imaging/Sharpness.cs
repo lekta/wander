@@ -29,6 +29,14 @@ public static class Sharpness {
     /// <summary>Rows of the map one worker takes at a time. Keeps the window buffers small and warm.</summary>
     private const int BandRows = 64;
 
+    /// <summary>
+    /// How much the score's scale bends (2026-10-23). Straight, from 1.5 to
+    /// 3.0, it stopped at 100 for every sharp frame; reaching on to the
+    /// crispest the map stores and bent, it keeps 70 where it was and
+    /// spreads that top over the last fifteen or so.
+    /// </summary>
+    private const double Bend = 2.4;
+
 
     /// <summary>
     /// The crispness of every point of the frame - see <see cref="CrispMap"/>.
@@ -127,9 +135,10 @@ public static class Sharpness {
     /// The sharpness of <paramref name="area"/> as 0..100, from two things:
     /// how crisp its crispest edges are (the <paramref name="quantile"/> of
     /// the edge points, placed between <paramref name="soft"/> and
-    /// <paramref name="crisp"/>), and how much of the area's edges are crisp
-    /// and continuous at all - <paramref name="crispEdges"/>, the peaking
-    /// mask after <see cref="FocusPeaking.Continuous"/>.
+    /// <paramref name="crisp"/> on a scale bent by <see cref="Bend"/> - steep
+    /// at the soft end, flat at the crisp one), and how much of the area's
+    /// edges are crisp and continuous at all - <paramref name="crispEdges"/>,
+    /// the peaking mask after <see cref="FocusPeaking.Continuous"/>.
     ///
     /// <para>
     /// The second half is what keeps a frame of falling snow, or of sensor
@@ -146,7 +155,7 @@ public static class Sharpness {
     /// </summary>
     public static double? Score(
         CrispMap map, byte[] crispEdges, RectI? area = null,
-        double quantile = 0.98, double soft = 1.5, double crisp = 3.0,
+        double quantile = 0.98, double soft = 1.5, double crisp = 255.0 / Unit,
         int minEdges = 200, double fullShare = 0.03) {
         var r = area ?? new RectI(0, 0, map.Width, map.Height);
         var histogram = new int[256];
@@ -180,10 +189,11 @@ public static class Sharpness {
             }
         }
 
-        double howCrisp = (level / (double)Unit - soft) / (crisp - soft);
+        double placed = Math.Clamp((level / (double)Unit - soft) / (crisp - soft), 0, 1);
+        double howCrisp = (1 - Math.Exp(-Bend * placed)) / (1 - Math.Exp(-Bend));
         double howMuch = fullShare <= 0 ? 1 : continuous / 255.0 / edges / fullShare;
 
-        return Math.Round(100 * Math.Clamp(howCrisp, 0, 1) * Math.Clamp(howMuch, 0, 1));
+        return Math.Round(100 * howCrisp * Math.Clamp(howMuch, 0, 1));
     }
 
 

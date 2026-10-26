@@ -5,8 +5,9 @@ namespace Wander.Site;
 
 /// <summary>
 /// The size an SVG icon declares on its root element - the icons of
-/// docs/icons are drawn by hand from the app's XAML, 16 by 16, and get the
-/// same width and height on the page as the screenshots do.
+/// docs/icons are drawn by hand from the app's XAML, 16 by 16 (the helpers'
+/// 18, on their button's plate), and get the same width and height on the
+/// page as the screenshots do.
 /// </summary>
 internal static class Svg {
     private static readonly Regex _root = new(@"<svg\b[^>]*>", RegexOptions.Singleline);

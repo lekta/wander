@@ -357,6 +357,7 @@ public sealed class PreviewController : ObservableObject {
     // helper on does not measure again; it goes with them and when every
     // helper is off.
     private ReviewHelpers? _helpers;
+    private bool _listIsGallery;
     private CancellationTokenSource? _helpersCts;
     private ReviewOverlay.Cache? _helpersCache;
     private ImageSource? _shownInstead;
@@ -567,6 +568,7 @@ public sealed class PreviewController : ObservableObject {
             if (SetField(ref _kind, value)) {
                 Raise(nameof(IsPlaceholderVisible));
                 Raise(nameof(PlaceholderText));
+                Raise(nameof(ShowsHelperSwitches));
             }
         }
     }
@@ -1425,6 +1427,24 @@ public sealed class PreviewController : ObservableObject {
 
     /// <summary>Some helper is switched on.</summary>
     public bool HelpersActive => _helpers?.AnyOn == true;
+
+    /// <summary>The list draws the open folder as a gallery, whose cells carry the helpers too (MainViewModel.ViewMode).</summary>
+    public bool ListIsGallery {
+        get => _listIsGallery;
+        set {
+            if (SetField(ref _listIsGallery, value)) {
+                Raise(nameof(ShowsHelperSwitches));
+            }
+        }
+    }
+
+    /// <summary>
+    /// The helpers' switches in the footer: under a picture, and under the
+    /// open folder - nothing selected - while it is a gallery: the helpers
+    /// on its cells are switched without picking a photo first (2026-10-23).
+    /// </summary>
+    public bool ShowsHelperSwitches => _kind == PreviewKind.Image
+        || (_kind == PreviewKind.Folder && _primary is null && _listIsGallery);
 
     private bool Peeking => _helpers?.Peek == true;
 
@@ -3915,6 +3935,8 @@ public sealed class PreviewController : ObservableObject {
         FolderTypes.Clear();
         SetVolume(DescribeVolume(folder));
         Kind = PreviewKind.Folder;
+        // A subfolder selected and then nothing: the kind is the same, the switches are not.
+        Raise(nameof(ShowsHelperSwitches));
         // A drive's root: its block says how full it is, and the pane shows
         // nothing else - a census there walked the whole disk, anew on every
         // arrow over the drives.

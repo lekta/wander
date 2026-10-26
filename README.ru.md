@@ -2,7 +2,9 @@
 
 🌐 [English](README.md) · **Русский**
 
-**Медиа-менеджер для Windows 10 и 11** - с упором на удобство и работу с фото: навигация без сюрпризов, мгновенный просмотр, отбор снимков, групповые операции.
+**Медиа-менеджер для Windows 10 и 11** - файловый менеджер с упором на
+удобство и работу с медиа: стабильная понятная навигация, быстрый просмотр и сравнение,
+групповые операции, отбор фото.
 
 <p>
   <a href="https://github.com/lekta/wander/releases/latest">
@@ -12,14 +14,13 @@
   <img alt="License" src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-orange">
 </p>
 
-![Главное окно](docs/screenshots/main.webp)
+![Главное окно](docs/screenshots/main.ru.webp)
 
-- 🌐 **[Сайт и руководство](https://lekta.github.io/wander/)** - что умеет Wander и как им пользоваться.
+- 🌐 **[Сайт и руководство](https://lekta.github.io/wander/)** - что умеет приложение и как им пользоваться.
 - ⬇️ **[Скачать последнюю версию](https://github.com/lekta/wander/releases/latest)** - `Wander.exe` в блоке Assets.
-- 🛡️ **[Надёжность и скорость](https://lekta.github.io/wander/guide/nadezhnost-i-skorost/index.html)** - как Wander проверяется и собирается.
+- 🛡️ **[Надёжность и скорость](https://lekta.github.io/wander/guide/nadezhnost-i-skorost/index.html)** - как проверяется и собирается.
 
-> ⚠️ **Beta 0.5** - ранняя версия. Работает, активно используется, но не исключены баги.
-> Распространяется как есть, без гарантий.
+> ⚠️ **Beta 0.5** - работает, активно используется. Распространяется как есть, без гарантий.
 
 ## Запуск
 
@@ -29,11 +30,10 @@
 
 - SmartScreen может предупредить, что файл не подписан сертификатом:
   «Подробнее» → «Выполнить в любом случае».
-- Целостность файла: хэш скачанного - `(Get-FileHash Wander.exe -Algorithm
-  SHA256).Hash` в PowerShell. Сравнивать с `sha256:…` в строке
-  **`Wander.exe`** на странице релиза или с содержимым файла
-  `Wander.exe.sha256`; регистр букв не важен. Хэш в строке
-  `Wander.exe.sha256` - это хэш самого текстового файла, не программы.
+- Целостность файла: получить хэш скачанного через
+`(Get-FileHash Wander.exe -Algorithm SHA256).Hash` в PowerShell.
+Сравнивать с `sha256:…` в строке **`Wander.exe`** на странице релиза или с содержимым файла `Wander.exe.sha256`;
+регистр букв не важен. Хэш в строке `Wander.exe.sha256` - это хэш самого текстового файла, не программы.
 - Превью HTML, Markdown и PDF использует **WebView2 Runtime** - он уже есть
   в Windows 11 и актуальной Windows 10; если нет -
   [Evergreen Runtime от Microsoft](https://developer.microsoft.com/microsoft-edge/webview2/).
@@ -42,8 +42,9 @@
 
 [PolyForm Noncommercial 1.0.0](LICENSE) © Lekta, 2026. Пользоваться,
 изучать и менять код, распространять - свободно **в любых некоммерческих
-целях**. Коммерческое использование - только по договорённости с автором. Это
-source-available лицензия (не OSI open-source); ПО поставляется «как
+целях**. Коммерческое использование - только по договорённости с автором:
+[wander.fleshed218@simplelogin.com](mailto:wander.fleshed218@simplelogin.com).
+Это source-available лицензия (не OSI open-source); ПО поставляется «как
 есть», без гарантий и ответственности.
 
 ## Разработка

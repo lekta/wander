@@ -288,7 +288,9 @@ public partial class FullscreenWindow : Window {
 
     protected override void OnPreviewKeyUp(KeyEventArgs e) {
         base.OnPreviewKeyUp(e);
-        if (e.Key == Key.System && e.SystemKey is Key.LeftAlt or Key.RightAlt) {
+        // After a chord the release of Alt comes as a plain key (MainWindow).
+        var released = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (released is Key.LeftAlt or Key.RightAlt) {
             StopPeeking();
             // Handled, or letting go would put the window into menu mode:
             // the next key would go to a system menu nobody can see.

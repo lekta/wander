@@ -18,8 +18,8 @@ Only the latest beta release; fixes ship in new versions.
 ## Reporting a vulnerability
 
 Do not open a public issue. Report it privately: **GitHub → Security →
-Report a vulnerability**, or by the address in the
-[author's profile](https://github.com/lekta). The project is developed by one
+Report a vulnerability**, or by email to
+[wander.fleshed218@simplelogin.com](mailto:wander.fleshed218@simplelogin.com). The project is developed by one
 person - replies and fixes come as time allows, with no guaranteed timelines
 and no bug bounty. Thank you for responsible disclosure.
 
@@ -41,6 +41,7 @@ Wander — локальное десктоп-приложение: сервер�
 ## Как сообщить об уязвимости
 
 Не открывай публичный issue. Приватно: **GitHub → Security → Report a
-vulnerability**, либо на адрес из [профиля автора](https://github.com/lekta).
-Проект развивает один человек — ответ и фикс по мере возможности, без
+vulnerability**, либо письмом на
+[wander.fleshed218@simplelogin.com](mailto:wander.fleshed218@simplelogin.com).
+Проект развивается малыми силами - ответ и фикс по мере возможности, без
 гарантированных сроков и bug bounty. Спасибо за ответственное раскрытие.

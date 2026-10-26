@@ -2,7 +2,7 @@
 
 🌐 **English** · [Русский](README.ru.md)
 
-**A media manager for Windows 10 and 11** - built for comfort and for working with photos: navigation without surprises, instant preview, photo culling, batch operations.
+**A media manager for Windows 10 and 11** - a file manager focused on comfort and media: stable, clear navigation, fast preview and comparison, batch operations, photo culling.
 
 <p>
   <a href="https://github.com/lekta/wander/releases/latest">
@@ -12,14 +12,13 @@
   <img alt="License" src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-orange">
 </p>
 
-![Main window](docs/screenshots/main.webp)
+![Main window](docs/screenshots/main.en.webp)
 
-- 🌐 **[Website and guide](https://lekta.github.io/wander/en/)** - what Wander can do and how to use it.
+- 🌐 **[Website and guide](https://lekta.github.io/wander/en/)** - what the app can do and how to use it.
 - ⬇️ **[Download the latest version](https://github.com/lekta/wander/releases/latest)** - `Wander.exe` under Assets.
-- 🛡️ **[Reliability and speed](https://lekta.github.io/wander/en/guide/reliability-and-speed/index.html)** - how Wander is tested and built.
+- 🛡️ **[Reliability and speed](https://lekta.github.io/wander/en/guide/reliability-and-speed/index.html)** - how it is tested and built.
 
-> ⚠️ **Beta 0.5** - an early version. It works and is in daily use, but bugs are possible.
-> Provided as is, without warranty.
+> ⚠️ **Beta 0.5** - works and is in daily use. Provided as is, without warranty.
 
 ## Running
 
@@ -42,7 +41,9 @@ version 2004 (build 19041) or later, or Windows 11**, x64.
 
 [PolyForm Noncommercial 1.0.0](LICENSE) © Lekta, 2026. Use, study, change
 and share the code freely **for any noncommercial purpose**. Commercial use
-only by agreement with the author. This is a source-available license (not
+only by agreement with the author:
+[wander.fleshed218@simplelogin.com](mailto:wander.fleshed218@simplelogin.com).
+This is a source-available license (not
 OSI open source); the software is provided “as is”, without warranty or
 liability.
 

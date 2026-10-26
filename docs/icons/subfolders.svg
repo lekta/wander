@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- The "Search in subfolders" toggle left of the search box, SubfoldersShape in src/Wander.App/Views/FileListView.xaml, as it is out of the box (on): TextMuted; lighter on the site's dark theme. -->
+  <style>@media (prefers-color-scheme: dark) { path { stroke: #BDBDBD; } }</style>
+  <path transform="translate(1 1.75)" d="M2,1 V9.5 H5 M2,3.5 H5 M5,1.5 H7.3 L8.1,2.3 H12 V5.5 H5 Z M5,7.5 H7.3 L8.1,8.3 H12 V11.5 H5 Z" fill="none" stroke="#555555" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -113,7 +113,8 @@ public sealed class ReviewThumb : Image {
             return;
         }
 
-        if (_helpers.Sharpness && !_helpers.Peek) {
+        // Alt takes the marks off, not the number - as in the preview pane.
+        if (_helpers.Sharpness) {
             ScoreWanted?.Invoke(entry);
         }
         if (Ask() is not { } ask) {

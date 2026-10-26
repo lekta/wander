@@ -145,6 +145,12 @@
     <!-- A line drawn in the accent - a ring, a chevron under the cursor. -->
     <SolidColorBrush x:Key="AccentStroke" Color="#0078D7"/>
 
+    <!-- The sharpness score on a gallery cell's dark plate: the mark's own
+         pink (ReviewSharp) on a light surround; on a grey or dark one a
+         light tint of it, as the rating's figure is light - the pink itself
+         is as dark as a mid grey and sank into it (2026-10-23). -->
+    <SolidColorBrush x:Key="BadgeSharp" Color="#C838E8"/>
+
 
     <!-- ===== Rows ====================================================== -->
     <!--

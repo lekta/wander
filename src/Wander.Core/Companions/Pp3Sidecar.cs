@@ -82,7 +82,8 @@ public static class Pp3Sidecar {
             }
         }
 
-        return new SidecarRating(rank, color, color is int c ? ColorLabels.Name(c) : null);
+        // No label (0) has no name: "None" would show as a custom label beside the swatches.
+        return new SidecarRating(rank, color, color is int c and > 0 and <= ColorLabels.Max ? ColorLabels.Name(c) : null);
     }
 
 

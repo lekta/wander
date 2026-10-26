@@ -63,6 +63,7 @@
     <SolidColorBrush x:Key="InputBorderError" Color="#E06666"/>
     <SolidColorBrush x:Key="AccentText" Color="#60B0F0"/>
     <SolidColorBrush x:Key="AccentStroke" Color="#4CA0E0"/>
+    <SolidColorBrush x:Key="BadgeSharp" Color="#E8A8F6"/>
 
 
     <!-- ===== Rows ====================================================== -->

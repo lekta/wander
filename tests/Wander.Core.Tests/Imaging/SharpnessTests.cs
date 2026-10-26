@@ -95,6 +95,27 @@ public class SharpnessTests {
     }
 
 
+    /// <summary>
+    /// The scale bends (2026-10-23): the middle stays where it was - 70 is
+    /// still 70 - and a frame crisp to 3, which used to be 100 like every
+    /// sharper one, leaves room above it.
+    /// </summary>
+    [Theory]
+    [InlineData(1.5, 0)]
+    [InlineData(2.55, 70)]
+    [InlineData(3.0, 84)]
+    [InlineData(3.5, 94)]
+    [InlineData(4.0, 100)]
+    public void Score_Scale_KeepsTheMiddle_SpreadsTheTop(double crispness, double expected) {
+        const int Side = 20;
+        byte level = (byte)Math.Min(255, Math.Round(crispness * Sharpness.Unit));
+        var map = new CrispMap(Enumerable.Repeat(level, Side * Side).ToArray(), Side, Side);
+        var continuous = Enumerable.Repeat((byte)255, Side * Side).ToArray();
+
+        Assert.Equal(expected, Sharpness.Score(map, continuous));
+    }
+
+
     /// <summary>Only the area counts: an edge outside it is not the area's sharpness.</summary>
     [Fact]
     public void Score_LooksOnlyInsideTheArea() {

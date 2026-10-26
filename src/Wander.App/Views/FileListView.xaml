@@ -478,7 +478,7 @@
                     Padding="3,0" Margin="2">
                 <TextBlock Text="{Binding Sharpness, Converter={StaticResource SharpnessBadge}}"
                            FontSize="10" FontWeight="SemiBold"
-                           Foreground="{StaticResource ReviewSharp}"
+                           Foreground="{DynamicResource BadgeSharp}"
                            VerticalAlignment="Center"/>
             </Border>
         </DataTemplate>

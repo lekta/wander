@@ -641,7 +641,11 @@ public partial class MainWindow : Window {
 
     protected override void OnPreviewKeyUp(KeyEventArgs e) {
         base.OnPreviewKeyUp(e);
-        if (_peeking && e.Key == Key.System && e.SystemKey is Key.LeftAlt or Key.RightAlt) {
+        // After a chord (Alt+Left, Alt+Shift) Windows reports the release
+        // of Alt as a plain key, not a system one: missed, the marks stayed
+        // off and the gallery's cells stopped asking for scores (2026-10-23).
+        var released = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (_peeking && released is Key.LeftAlt or Key.RightAlt) {
             StopPeeking();
             // Handled, or letting go would put the window into menu mode:
             // the toolbar holds a real Menu, and Alt alone is its key.

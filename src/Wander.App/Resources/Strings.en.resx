@@ -1492,7 +1492,7 @@
     <value>On the camera's focus point</value>
   </data>
   <data name="SettingsZoomArrowsGroup" xml:space="preserve">
-    <value>Arrows over a zoom full screen</value>
+    <value>Arrow keys when zoomed in full screen</value>
   </data>
   <data name="SettingsZoomArrowsWalk" xml:space="preserve">
     <value>Go through the photos, the place kept; Ctrl+arrows move it</value>
@@ -2725,7 +2725,7 @@
     <value>Camera focus point: pink means in focus (Canon)</value>
   </data>
   <data name="HelperSharpScoreTip" xml:space="preserve">
-    <value>Sharpness {0} of 100, from the crispest edges at the center of the frame; isolated dots (noise, snow, glints) count as a fraction of an edge. 70 and above is sharp, 45–70 soft, lower is a miss</value>
+    <value>Sharpness {0} of 100, from the crispest edges at the center of the frame; isolated dots (noise, snow, glints) count as a fraction of an edge. 70 and above is sharp, 50–70 soft, lower is a miss</value>
   </data>
   <data name="MenuViewThisFolder" xml:space="preserve">
     <value>This folder · {0}</value>
