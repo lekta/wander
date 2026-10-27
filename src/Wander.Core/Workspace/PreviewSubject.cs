@@ -44,6 +44,9 @@ public sealed record PreviewSubject {
     /// <summary>The two files side by side, upper one first; null when the target is not such a pair.</summary>
     public (FileSystemEntry First, FileSystemEntry Second)? Pair { get; private init; }
 
+    /// <summary>The sounds whose shapes the pane stacks, in listing order; null when the target is not such a stack (<see cref="SoundStack"/>).</summary>
+    public IReadOnlyList<FileSystemEntry>? Sounds { get; private init; }
+
     /// <summary>The panel row's folder, for <see cref="PreviewSubjectKind.Folder"/>.</summary>
     public string? Folder { get; private init; }
 
@@ -71,6 +74,7 @@ public sealed record PreviewSubject {
                     Selection = target.Rows,
                     Primary = pair is { } p ? p.First : active,
                     Pair = pair,
+                    Sounds = SoundStack.Of(target.Rows, listing),
                 };
 
             case TargetKind.PanelRow:

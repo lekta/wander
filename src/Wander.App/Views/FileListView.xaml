@@ -851,7 +851,7 @@
                 <DataGridTemplateColumn x:Name="IconColumn" Header="" IsReadOnly="True" CanUserSort="False">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
-                            <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Normal" ShowsWork="True"
+                            <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Normal" ShowsWork="True" PlaysSound="True"
                                                 Width="{DynamicResource DetailsIconSize}"
                                                 Height="{DynamicResource DetailsIconSize}"/>
                         </DataTemplate>
@@ -902,6 +902,25 @@
                                     Width="*" CanUserSort="False"/>
                 <DataGridTextColumn Header="{x:Static res:Strings.ColumnType}" Binding="{Binding Converter={StaticResource FileType}}" Width="60" SortMemberPath="Type"/>
                 <DataGridTextColumn Header="{x:Static res:Strings.ColumnSize}" Binding="{Binding Size, Converter={StaticResource FileSize}}" Width="80" SortMemberPath="Size"/>
+                <!--
+                    The shape of a sound file (decision 2026-10-27), for
+                    going through a folder of sounds by eye; the part the
+                    list's play button has played is drawn in another
+                    colour. Collapsed until the listing has a sound file
+                    (ShowSoundColumn), for the reason the rating column is.
+                    Not sortable: a shape has no order.
+                -->
+                <DataGridTemplateColumn x:Name="SoundColumn"
+                                        Header="{x:Static res:Strings.ColumnSound}"
+                                        Width="160" CanUserSort="False" IsReadOnly="True"
+                                        Visibility="Collapsed">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <controls:WaveformStrip FilePath="{Binding FullPath}" FollowsPlayer="True"
+                                                    Height="16" Margin="0,2"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
                 <!--
                     The computer's drives (ShellPaths.Computer): the size
                     is the drive's total, and the date - a drive has none -
@@ -1015,7 +1034,7 @@
                             below: the size is a ceiling, not a target.
                         -->
                         <controls:AsyncIcon DockPanel.Dock="Left"
-                                            IconPath="{Binding FullPath}" IconSize="Medium" ShowsWork="True"
+                                            IconPath="{Binding FullPath}" IconSize="Medium" ShowsWork="True" PlaysSound="True"
                                             Width="{DynamicResource TilesImageSize}"
                                             Height="{DynamicResource TilesImageSize}"
                                             StretchDirection="DownOnly"
@@ -1096,7 +1115,7 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
-                        <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Large" ShowsWork="True"
+                        <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Large" ShowsWork="True" PlaysSound="True"
                                             Width="{DynamicResource IconsImageSize}"
                                             Height="{DynamicResource IconsImageSize}"
                                             StretchDirection="DownOnly"
@@ -1232,7 +1251,7 @@
                         <Grid Width="{DynamicResource GalleryImageSize}"
                               Height="{DynamicResource GalleryImageSize}"
                               Margin="0,2,0,2">
-                            <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Large" ShowsWork="True"
+                            <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Large" ShowsWork="True" PlaysSound="True"
                                                 StretchDirection="DownOnly"
                                                 HorizontalAlignment="Center" VerticalAlignment="Center"
                                                 RenderOptions.BitmapScalingMode="HighQuality"

@@ -366,6 +366,9 @@ public static partial class Strings {
     /// <summary>Оценка</summary>
     public static string ColumnRating => Get(nameof(ColumnRating));
 
+    /// <summary>Звук</summary>
+    public static string ColumnSound => Get(nameof(ColumnSound));
+
     /// <summary>Светлый</summary>
     public static string GalleryBackgroundLight => Get(nameof(GalleryBackgroundLight));
 

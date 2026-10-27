@@ -96,6 +96,7 @@ public static class PlatformBootstrapper {
         ServiceLocator.Register<ISharpnessProbe>(new SharpnessProbe());
         ServiceLocator.Register<IExecutableInfoReader>(new WindowsExecutableInfo());
         ServiceLocator.Register<ICodecProbe>(new WindowsCodecProbe());
+        ServiceLocator.Register<IWaveformSource>(new WaveformSource());
 
         // Search inside files. The extractors are tried in this order, and
         // the order is the whole design: the zip-based documents first

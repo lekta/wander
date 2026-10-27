@@ -38,6 +38,12 @@ public class PreviewPairTests {
     }
 
     [Fact]
+    public void TwoSounds_StackRatherThanSplit() {
+        Assert.Null(PreviewPair.Of(new[] { File("a.wav"), File("b.mp3") }, _listing));
+        Assert.NotNull(PreviewPair.Of(new[] { File("a.wav"), _a }, _listing));
+    }
+
+    [Fact]
     public void ARowNotInTheListing_GoesSecond() {
         var elsewhere = File("z.png");
         var pair = PreviewPair.Of(new[] { elsewhere, _c }, _listing);

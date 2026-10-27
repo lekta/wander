@@ -1,8 +1,10 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using Wander.App.Preview;
 using Wander.App.Resources;
 using Wander.App.ViewModels;
 using Wander.Core;
@@ -11,6 +13,7 @@ using Wander.Core.FileSystem;
 using Wander.Core.Icons;
 using Wander.Core.Logging;
 using Wander.Core.Operations;
+using Wander.Core.Preview;
 using Wander.Core.Shell;
 
 namespace Wander.App.Controls;
@@ -43,6 +46,14 @@ namespace Wander.App.Controls;
 /// <see cref="PathClaims.BadgeDelayMs"/> (2026-09-23): an operation over
 /// before that shows none.
 /// </para>
+///
+/// <para>
+/// With <see cref="PlaysSound"/> on, a sound file's picture wears a play
+/// button under the mouse, and a stop button while it plays (decision
+/// 2026-10-27) - drawn here for the same reason as the clock. The press is
+/// taken by the list before it selects anything (<see cref="TryPlay"/>):
+/// the file is heard, the selection stays.
+/// </para>
 /// </summary>
 public sealed class AsyncIcon : Image {
     /// <summary>One second between the two attempts at a failed icon.</summary>
@@ -52,6 +63,16 @@ public sealed class AsyncIcon : Image {
     private const string WorkGlyph = "\uE823";
 
     private static readonly Typeface _workFace = new("Segoe MDL2 Assets");
+
+    // The play button's disc in its three states, the mark on it white:
+    // light on dark reads on any picture and either theme. Faint while the
+    // mouse is only on the file, the accent once it is on the button - the
+    // moment a press would play (2026-10-27) - dark and solid while it plays.
+    private static readonly Brush _playDiscFaint = Frozen(new SolidColorBrush(Color.FromArgb(0x55, 0x10, 0x10, 0x10)));
+    private static readonly Brush _playDiscHot = Frozen(new SolidColorBrush(Color.FromArgb(0xE8, 0x00, 0x78, 0xD7)));
+    private static readonly Brush _playDiscPlaying = Frozen(new SolidColorBrush(Color.FromArgb(0xC8, 0x10, 0x10, 0x10)));
+
+    private static readonly Brush _playMark = Brushes.White;
 
     public static readonly DependencyProperty IconPathProperty =
         DependencyProperty.Register(
@@ -67,6 +88,11 @@ public sealed class AsyncIcon : Image {
         DependencyProperty.Register(
             nameof(ShowsWork), typeof(bool), typeof(AsyncIcon),
             new PropertyMetadata(false, (d, _) => ((AsyncIcon)d).UpdateWork()));
+
+    public static readonly DependencyProperty PlaysSoundProperty =
+        DependencyProperty.Register(
+            nameof(PlaysSound), typeof(bool), typeof(AsyncIcon),
+            new PropertyMetadata(false, (d, _) => ((AsyncIcon)d).UpdatePlaying()));
 
 
     // Thumbnail extraction is disk- and CPU-heavy, so it is metered rather
@@ -102,6 +128,9 @@ public sealed class AsyncIcon : Image {
     private bool _detached;
     private bool _listening;
     private bool _working;
+    private bool _sound;
+    private bool _playing;
+    private bool _hot;
 
 
     static AsyncIcon() {
@@ -165,6 +194,12 @@ public sealed class AsyncIcon : Image {
         set => SetValue(ShowsWorkProperty, value);
     }
 
+    /// <summary>Wear a play button when <see cref="IconPath"/> is a sound file.</summary>
+    public bool PlaysSound {
+        get => (bool)GetValue(PlaysSoundProperty);
+        set => SetValue(PlaysSoundProperty, value);
+    }
+
 
     /// <summary>
     /// The file at this path is not what it was: drop every cached picture
@@ -220,8 +255,58 @@ public sealed class AsyncIcon : Image {
     }
 
 
+    /// <summary>
+    /// Plays or stops the sound when <paramref name="at"/> - a point on this
+    /// icon - is on its play button; false, and nothing done, when it is not.
+    /// </summary>
+    public bool TryPlay(Point at) {
+        if (!IsOnPlay(at)) {
+            return false;
+        }
+
+        QuickPlayer.Toggle(IconPath!);
+
+        return true;
+    }
+
+    /// <summary>Whether <paramref name="at"/>, a point on this icon, is on its play button as drawn now.</summary>
+    public bool IsOnPlay(Point at) {
+        if (!ShowsPlay) {
+            return false;
+        }
+
+        var (centre, radius) = PlayDisc();
+
+        // A little past the disc: a button of a dozen pixels is easy to just miss.
+        return (at - centre).Length <= radius * 1.2;
+    }
+
+
+    protected override void OnMouseEnter(MouseEventArgs e) {
+        base.OnMouseEnter(e);
+        if (_sound) {
+            InvalidateVisual();
+        }
+    }
+
+    protected override void OnMouseMove(MouseEventArgs e) {
+        base.OnMouseMove(e);
+        SetHot(_sound && IsOnPlay(e.GetPosition(this)));
+    }
+
+    protected override void OnMouseLeave(MouseEventArgs e) {
+        base.OnMouseLeave(e);
+        SetHot(false);
+        if (_sound) {
+            InvalidateVisual();
+        }
+    }
+
     protected override void OnRender(DrawingContext dc) {
         base.OnRender(dc);
+        if (ShowsPlay) {
+            DrawPlay(dc);
+        }
         if (!_working) {
             return;
         }
@@ -239,12 +324,91 @@ public sealed class AsyncIcon : Image {
     }
 
 
+    /// <summary>A sound file under the mouse, or the one playing.</summary>
+    private bool ShowsPlay => _sound && (_playing || IsMouseOver);
+
     private static void OnIconRequestChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) {
         var icon = (AsyncIcon)d;
         icon.Reload();
         if (e.Property == IconPathProperty) {
             icon.UpdateWork();
+            icon.UpdatePlaying();
         }
+    }
+
+    /// <summary>
+    /// Whether this is a sound file, and whether it is the one playing; a
+    /// redraw only when either changes - the player says it moved on twenty
+    /// times a second.
+    /// </summary>
+    private void UpdatePlaying() {
+        bool sound = PlaysSound && IconPath is { Length: > 0 } path && AudioTags.IsAudio(path);
+        bool playing = sound && _listening && QuickPlayer.IsPlaying(IconPath);
+        if (sound == _sound && playing == _playing) {
+            return;
+        }
+
+        _sound = sound;
+        _playing = playing;
+        InvalidateVisual();
+    }
+
+    /// <summary>
+    /// The play button: on the play mark at the left of the tile's band
+    /// (<see cref="SoundTile.ButtonOnTile"/>) - not the middle, where a tile
+    /// is taken to be dragged (2026-10-27); on an icon too small for a band,
+    /// over most of it.
+    /// </summary>
+    private (Point Centre, double Radius) PlayDisc() {
+        double side = Math.Min(RenderSize.Width, RenderSize.Height);
+        var (x, y, r) = SoundTile.ButtonOnTile(side);
+
+        return (new Point((RenderSize.Width - side) / 2 + x, (RenderSize.Height - side) / 2 + y), r);
+    }
+
+    /// <summary>The mouse came onto the button or left it: the disc lights up, the cursor says "press".</summary>
+    private void SetHot(bool hot) {
+        if (hot == _hot) {
+            return;
+        }
+
+        _hot = hot;
+        if (hot) {
+            Cursor = Cursors.Hand;
+        } else {
+            ClearValue(CursorProperty);
+        }
+        InvalidateVisual();
+    }
+
+    private void DrawPlay(DrawingContext dc) {
+        var (c, r) = PlayDisc();
+        dc.DrawEllipse(_hot ? _playDiscHot : _playing ? _playDiscPlaying : _playDiscFaint, null, c, r, r);
+
+        double m = r * 0.42;
+        var mark = new StreamGeometry();
+        using (var ctx = mark.Open()) {
+            if (_playing) {
+                ctx.BeginFigure(new Point(c.X - m * 0.8, c.Y - m * 0.8), isFilled: true, isClosed: true);
+                ctx.LineTo(new Point(c.X + m * 0.8, c.Y - m * 0.8), false, false);
+                ctx.LineTo(new Point(c.X + m * 0.8, c.Y + m * 0.8), false, false);
+                ctx.LineTo(new Point(c.X - m * 0.8, c.Y + m * 0.8), false, false);
+            } else {
+                // Nudged right: a triangle centred by its box looks left of centre.
+                ctx.BeginFigure(new Point(c.X - m * 0.7, c.Y - m), isFilled: true, isClosed: true);
+                ctx.LineTo(new Point(c.X + m * 1.05, c.Y), false, false);
+                ctx.LineTo(new Point(c.X - m * 0.7, c.Y + m), false, false);
+            }
+        }
+
+        mark.Freeze();
+        dc.DrawGeometry(_playMark, null, mark);
+    }
+
+    private static Brush Frozen(Brush brush) {
+        brush.Freeze();
+
+        return brush;
     }
 
     /// <summary>
@@ -320,11 +484,14 @@ public sealed class AsyncIcon : Image {
             _invalidated += OnInvalidated;
             HookWork(Dispatcher);
             _workChanged += UpdateWork;
+            QuickPlayer.Changed += UpdatePlaying;
         } else {
             _invalidated -= OnInvalidated;
             _workChanged -= UpdateWork;
+            QuickPlayer.Changed -= UpdatePlaying;
         }
         UpdateWork();
+        UpdatePlaying();
     }
 
     private void OnInvalidated(string path) {

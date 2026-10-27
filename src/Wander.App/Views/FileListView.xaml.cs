@@ -173,6 +173,7 @@ public partial class FileListView : UserControl {
             ShowRatingColumn();
             ShowSearchColumns();
             ShowVolumeColumns();
+            ShowSoundColumn();
         }
     }
 
@@ -182,6 +183,7 @@ public partial class FileListView : UserControl {
     /// </summary>
     private void OnEntriesChanged(object? sender, NotifyCollectionChangedEventArgs e) {
         _typeAhead.Reset();
+        ShowSoundColumn();
     }
 
 
@@ -273,6 +275,18 @@ public partial class FileListView : UserControl {
     private void ShowRatingColumn() {
         if (DataContext is MainViewModel vm) {
             RatingColumn.Visibility = vm.HasRatings ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
+    /// <summary>
+    /// The sound column appears only while the listing has a sound file -
+    /// a folder of sounds, or an album. From here for the reason the
+    /// rating column is.
+    /// </summary>
+    private void ShowSoundColumn() {
+        if (DataContext is MainViewModel vm) {
+            bool any = vm.Entries.Any(e => e.Kind == EntryKind.File && AudioTags.IsAudio(e.Name));
+            SoundColumn.Visibility = any ? Visibility.Visible : Visibility.Collapsed;
         }
     }
 
@@ -955,6 +969,11 @@ public partial class FileListView : UserControl {
             return;
         }
 
+        // Two quick presses on a play button are play and stop, not "open".
+        if (e.OriginalSource is AsyncIcon icon && icon.IsOnPlay(e.GetPosition(icon))) {
+            return;
+        }
+
         if (Vm.SelectedEntry is { } entry) {
             Vm.OpenEntry(entry);
         }
@@ -975,6 +994,13 @@ public partial class FileListView : UserControl {
         // they are not "empty space", and treating them as such is what
         // turned dragging the scroll thumb into a selection sweep.
         if (ListVisuals.IsChrome(e.OriginalSource)) {
+            return;
+        }
+
+        // The play button on a sound file: heard, not selected, not dragged.
+        if (e.OriginalSource is AsyncIcon icon && icon.TryPlay(e.GetPosition(icon))) {
+            e.Handled = true;
+
             return;
         }
 

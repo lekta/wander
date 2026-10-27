@@ -229,6 +229,7 @@ public sealed class PreviewController : ObservableObject {
 
     private CancellationTokenSource? _previewCts;
     private CancellationTokenSource? _summaryCts;
+    private CancellationTokenSource? _soundsCts;
 
     // What Release let go of, until the next load: the file Restore shows
     // again when the operation left it where it was.
@@ -882,16 +883,21 @@ public sealed class PreviewController : ObservableObject {
 
     public bool HasAudioArtist => !string.IsNullOrEmpty(_audio?.Artist);
 
-    /// <summary>Album and year on one line — they are one fact about the release.</summary>
+    /// <summary>
+    /// Album and year on one line — they are one fact about the release.
+    /// The year only beside an album, and only the year: a WAV's creation
+    /// stamp (<c>ICRD</c>, "2026-04-02T17:32:14-05:00") on its own is when
+    /// a file was written, not something about the sound (2026-10-27).
+    /// </summary>
     public string AudioAlbum {
         get {
-            if (_audio is null) {
+            if (_audio?.Album is not { } album) {
                 return "";
             }
 
-            return _audio.Year is null
-                ? _audio.Album ?? ""
-                : _audio.Album is null ? _audio.Year : $"{_audio.Album} · {_audio.Year}";
+            string? year = _audio.Year is { Length: >= 4 } stamp && stamp[..4].All(char.IsAsciiDigit) ? stamp[..4] : null;
+
+            return year is null ? album : album + SummaryText.Gap + year;
         }
     }
 
@@ -925,7 +931,7 @@ public sealed class PreviewController : ObservableObject {
                 parts.Add(layout);
             }
 
-            return string.Join(" · ", parts);
+            return string.Join(SummaryText.Gap, parts);
         }
     }
 
@@ -1734,6 +1740,67 @@ public sealed class PreviewController : ObservableObject {
     /// <summary>Says the footer again - after a debug switch changed how it is worded.</summary>
     public void RefreshSummary() {
         ScheduleSummaryUpdate();
+    }
+
+    /// <summary>
+    /// Several sounds selected and nothing else: the pane stacks their
+    /// shapes instead of one track's card (<see cref="SoundStack"/>); null
+    /// otherwise.
+    /// </summary>
+    public IReadOnlyList<SoundRow>? Sounds { get; private set; }
+
+    public bool HasSounds => Sounds is not null;
+
+    /// <summary>
+    /// The stack for <paramref name="sounds"/>: rows at once, full width;
+    /// the lengths read from the files' headers on the pool, then the rows
+    /// again with each shape's share of the width (<see cref="SoundStack.Shares"/>).
+    /// The same files again - a selection event that changed nothing - keep
+    /// what is shown.
+    /// </summary>
+    public void SetSounds(IReadOnlyList<FileSystemEntry>? sounds) {
+        if (sounds is null && Sounds is null) {
+            return;
+        }
+        if (sounds is not null && Sounds is { } shown && shown.Count == sounds.Count
+            && shown.Select(r => r.FullPath).SequenceEqual(sounds.Select(e => e.FullPath), StringComparer.OrdinalIgnoreCase)) {
+            return;
+        }
+
+        _soundsCts?.Cancel();
+        _soundsCts = null;
+        ShowSounds(sounds?.Select((e, i) => new SoundRow(e.Name, e.FullPath, "", 1, i == 0)).ToList());
+        if (sounds is null) {
+            return;
+        }
+
+        var cts = new CancellationTokenSource();
+        _soundsCts = cts;
+        var paths = sounds.Select(e => e.FullPath).ToList();
+        _ = Task.Run(() => paths.Select(ReadLength).ToList(), cts.Token).ContinueWith(read => {
+            if (cts.IsCancellationRequested || read.Status != TaskStatus.RanToCompletion) {
+                return;
+            }
+
+            var lengths = read.Result;
+            var shares = SoundStack.Shares(lengths);
+            ShowSounds(sounds.Select((e, i) => new SoundRow(
+                e.Name, e.FullPath, lengths[i] is { } l ? Timecode.Format(l, roundUp: true) : "", shares[i], i == 0)).ToList());
+        }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.FromCurrentSynchronizationContext());
+
+        static TimeSpan? ReadLength(string path) {
+            try {
+                return AudioTags.Read(path)?.Duration;
+            } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+                return null;
+            }
+        }
+    }
+
+    private void ShowSounds(IReadOnlyList<SoundRow>? rows) {
+        Sounds = rows;
+        Raise(nameof(Sounds));
+        Raise(nameof(HasSounds));
     }
 
     public void SetSelection(IReadOnlyList<FileSystemEntry> selection) {

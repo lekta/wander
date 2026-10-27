@@ -64,6 +64,9 @@
     <SolidColorBrush x:Key="AccentText" Color="#60B0F0"/>
     <SolidColorBrush x:Key="AccentStroke" Color="#4CA0E0"/>
     <SolidColorBrush x:Key="BadgeSharp" Color="#E8A8F6"/>
+    <SolidColorBrush x:Key="WaveformPeak" Color="#3D6390"/>
+    <SolidColorBrush x:Key="WaveformBody" Color="#72B2F0"/>
+    <SolidColorBrush x:Key="WaveformPlayed" Color="#F5A04A"/>
 
 
     <!-- ===== Rows ====================================================== -->

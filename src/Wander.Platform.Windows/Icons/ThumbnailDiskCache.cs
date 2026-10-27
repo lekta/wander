@@ -97,8 +97,23 @@ public sealed class ThumbnailDiskCache {
     /// v11 (2026-10-22): badges other than the shortcut arrow (TortoiseGit)
     /// drawn at 3/16 of the side, not 5/8 - v10 slots hold the giant ones.
     /// </para>
+    ///
+    /// <para>
+    /// v12 (2026-10-27): tracks wear their shape - a band over the cover,
+    /// a page of its own without one (<c>WaveformThumbnail</c>).
+    /// </para>
+    ///
+    /// <para>
+    /// v13 (2026-10-27): the page gets its band - play mark, length, rate;
+    /// the band over a cover, the play mark.
+    /// </para>
+    ///
+    /// <para>
+    /// v14 (2026-10-27): a bigger band and play mark, the length in whole
+    /// seconds.
+    /// </para>
     /// </summary>
-    private const int Generation = 11;
+    private const int Generation = 14;
 
     private readonly string _directory;
     private readonly ILogger _log;

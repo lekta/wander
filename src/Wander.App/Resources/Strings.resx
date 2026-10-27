@@ -1529,6 +1529,10 @@
   <data name="ColumnRating" xml:space="preserve">
     <value>Оценка</value>
   </data>
+  <data name="ColumnSound" xml:space="preserve">
+    <value>Звук</value>
+    <comment>Столбец таблицы с формой волны звуковых файлов</comment>
+  </data>
   <data name="GalleryBackgroundLight" xml:space="preserve">
     <value>Светлый</value>
     <comment>Фон галереи; в тёмной теме — на тон темнее белого</comment>

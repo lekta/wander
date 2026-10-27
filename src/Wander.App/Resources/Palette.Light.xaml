@@ -151,6 +151,12 @@
          is as dark as a mid grey and sank into it (2026-10-23). -->
     <SolidColorBrush x:Key="BadgeSharp" Color="#C838E8"/>
 
+    <!-- A track's shape (WaveformStrip): the peak outline, the RMS body over
+         it, and the body of the part already played. -->
+    <SolidColorBrush x:Key="WaveformPeak" Color="#9CC3EE"/>
+    <SolidColorBrush x:Key="WaveformBody" Color="#2B6CC4"/>
+    <SolidColorBrush x:Key="WaveformPlayed" Color="#E8780C"/>
+
 
     <!-- ===== Rows ====================================================== -->
     <!--

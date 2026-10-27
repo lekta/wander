@@ -1247,6 +1247,7 @@ public sealed class MainViewModel : ObservableObject {
         _panelFolderCts?.Cancel();
         _panelFolderPath = null;
         Preview.SetSelection(subject.Selection);
+        Preview.SetSounds(subject.Sounds);
         if (subject.Pair is { } p) {
             PreviewSecond.SetSelection(new[] { p.Second });
             PreviewSecond.SetPrimary(p.Second);
@@ -1384,6 +1385,7 @@ public sealed class MainViewModel : ObservableObject {
         // the pane describes the open folder, as it did before.
         var shown = entry is null ? Array.Empty<FileSystemEntry>() : new[] { entry };
         Preview.SetSelection(shown);
+        Preview.SetSounds(null);
         Preview.SetPrimary(entry);
         PreviewSecond.SetSelection(Array.Empty<FileSystemEntry>());
         PreviewSecond.SetPrimary(null);
@@ -5347,6 +5349,7 @@ public sealed class MainViewModel : ObservableObject {
         var list = paths.ToList();
         Preview.Release(list);
         PreviewSecond.Release(list);
+        QuickPlayer.Release(list);
     }
 
     /// <summary>What <see cref="ReleasePreview"/> let go of and the operation left in place is shown again.</summary>

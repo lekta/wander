@@ -52,6 +52,8 @@ public partial class PreviewPane : UserControl {
 
     public PreviewPane() {
         InitializeComponent();
+        TrackShape.StartRequested += TrackShape_StartRequested;
+        TrackShape.StopRequested += (_, _) => PauseTransport();
         // Wander's own .xshd definitions (batch, ShaderLab, YAML) have to be
         // in the manager before the first file asks for one.
         HighlightingCatalog.EnsureRegistered();
@@ -70,8 +72,13 @@ public partial class PreviewPane : UserControl {
             ReportViewport();
             InterfaceTheme.Changed -= OnThemeChanged;
             InterfaceTheme.Changed += OnThemeChanged;
+            QuickPlayer.Starting -= OnQuickPlayStarting;
+            QuickPlayer.Starting += OnQuickPlayStarting;
         };
-        Unloaded += (_, _) => InterfaceTheme.Changed -= OnThemeChanged;
+        Unloaded += (_, _) => {
+            InterfaceTheme.Changed -= OnThemeChanged;
+            QuickPlayer.Starting -= OnQuickPlayStarting;
+        };
 
         // The audio player has the same three events as the MediaElement,
         // just not as routed ones, so they are hooked here rather than in
@@ -522,6 +529,7 @@ public partial class PreviewPane : UserControl {
                 if (_system is not null) {
                     _system.Volume = Controller.MediaVolume;
                 }
+                QuickPlayer.Volume = Controller.MediaVolume;
                 break;
 
             case nameof(PreviewController.ModelParts):
@@ -1658,7 +1666,7 @@ public partial class PreviewPane : UserControl {
             }
         }
 
-        _videoIsPlaying = true;
+        SetVideoPlaying(true);
         VideoPlayPauseButton.Content = "⏸";
         EnsureVideoTimer();
     }
@@ -1749,6 +1757,8 @@ public partial class PreviewPane : UserControl {
         _finished = false;
         _seen = TimeSpan.Zero;
         _transportIsAudio = Controller.Kind == PreviewKind.Audio;
+        TrackShape.FilePath = _transportIsAudio && uri is { IsFile: true } ? uri.LocalPath : null;
+        QuickPlayer.Volume = Controller.MediaVolume;
 
         if (uri is null) {
             VideoPreview.Source = null;
@@ -1846,7 +1856,7 @@ public partial class PreviewPane : UserControl {
         }
 
         TransportRewind();
-        _videoIsPlaying = false;
+        SetVideoPlaying(false);
         _finished = true;
         VideoPlayPauseButton.Content = "▶";
         UpdateVideoTimeText();
@@ -1939,9 +1949,14 @@ public partial class PreviewPane : UserControl {
     }
 
     private void VideoPlayPause_Click(object sender, RoutedEventArgs e) {
+        // One sound at a time: the list's play button gives way to this one.
+        if (!_videoIsPlaying) {
+            QuickPlayer.Stop();
+        }
+
         if (_videoIsPlaying) {
             TransportPause();
-            _videoIsPlaying = false;
+            SetVideoPlaying(false);
             VideoPlayPauseButton.Content = "▶";
         } else if (_finished || PlaybackClock.AtEnd(TransportPosition, TransportDuration)) {
             // A file that has finished cannot be played from where it
@@ -1953,7 +1968,7 @@ public partial class PreviewPane : UserControl {
         } else {
             _clock.Reset();
             TransportPlay();
-            _videoIsPlaying = true;
+            SetVideoPlaying(true);
             VideoPlayPauseButton.Content = "⏸";
             // The clock only starts once something is playing; for a track
             // opened and played straight away, MediaOpened may already have
@@ -1978,6 +1993,9 @@ public partial class PreviewPane : UserControl {
     }
 
     private void VideoSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) {
+        // The track's shape shows the same position, whoever moved it.
+        TrackShape.Progress = VideoSlider.Maximum > 0 ? e.NewValue / VideoSlider.Maximum : 0;
+
         if (_suppressVideoSliderChanged) {
             return;
         }
@@ -1988,6 +2006,50 @@ public partial class PreviewPane : UserControl {
         // mid-drag, so we apply Position on every tick — feels responsive.
         TransportPosition = TimeSpan.FromSeconds(e.NewValue);
         UpdateVideoTimeText();
+    }
+
+    // --- The track's shape ----------------------------------------------
+
+    /// <summary>
+    /// A click on the shape: play from there - the slider puts the position
+    /// to the player, as a drag of it would - whether the track was paused,
+    /// never started or finished. The list's play button gives way.
+    /// </summary>
+    private void TrackShape_StartRequested(object? sender, double share) {
+        if (TransportDuration is null) {
+            return;
+        }
+
+        QuickPlayer.Stop();
+        VideoSlider.Value = share * VideoSlider.Maximum;
+        _finished = false;
+        _clock.Reset();
+        TransportPlay();
+        SetVideoPlaying(true);
+        VideoPlayPauseButton.Content = "⏸";
+        EnsureVideoTimer();
+    }
+
+    /// <summary>Pauses the transport if it plays - a click on the playing shape, or the list's play button starting.</summary>
+    private void PauseTransport() {
+        if (!_videoIsPlaying) {
+            return;
+        }
+
+        TransportPause();
+        SetVideoPlaying(false);
+        VideoPlayPauseButton.Content = "▶";
+    }
+
+    /// <summary>Whether the transport plays - the shape shows it, and a click on it stops then.</summary>
+    private void SetVideoPlaying(bool playing) {
+        _videoIsPlaying = playing;
+        TrackShape.IsPlaying = playing;
+    }
+
+    /// <summary>The list's play button starts a sound: this pane's own stops talking over it.</summary>
+    private void OnQuickPlayStarting() {
+        PauseTransport();
     }
 
     private void UpdateVideoTimeText() {
@@ -2014,7 +2076,7 @@ public partial class PreviewPane : UserControl {
         _system?.Pause();
         ReleaseHeldFrame();
         _clock.Reset();
-        _videoIsPlaying = false;
+        SetVideoPlaying(false);
         VideoPlayPauseButton.Content = "▶";
         _suppressVideoSliderChanged = true;
         try {

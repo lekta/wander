@@ -15,7 +15,8 @@ public static class PreviewPair {
     /// <param name="listing">The rows on screen; decides which of the two comes first.</param>
     public static (FileSystemEntry First, FileSystemEntry Second)? Of(
         IReadOnlyList<FileSystemEntry> selection, IReadOnlyList<FileSystemEntry> listing) {
-        if (selection.Count != 2 || !CanShow(selection[0]) || !CanShow(selection[1])) {
+        if (selection.Count != 2 || !CanShow(selection[0]) || !CanShow(selection[1])
+            || SoundStack.Applies(selection)) {
             return null;
         }
 

@@ -1371,6 +1371,9 @@
   <data name="ColumnRating" xml:space="preserve">
     <value>Rating</value>
   </data>
+  <data name="ColumnSound" xml:space="preserve">
+    <value>Sound</value>
+  </data>
   <data name="GalleryBackgroundLight" xml:space="preserve">
     <value>Light</value>
   </data>

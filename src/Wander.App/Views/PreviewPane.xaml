@@ -838,10 +838,77 @@
                             the middle both ways, as a clip and a picture
                             (2026-10-09).
                         -->
-                        <StackPanel Grid.Row="0"
-                                    Margin="16,20,16,8"
+                        <Grid Grid.Row="0"
+                              Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Audio}">
+                        <!--
+                            Several sounds selected and nothing else: their
+                            shapes one under another, name above each, so a
+                            handful fits (decision 2026-10-27). A click on a
+                            shape plays it, as the list's play button does;
+                            the transport below stays on the active row.
+                            Virtualized: a selection of hundreds decodes
+                            only the screenful. In the middle while it fits;
+                            taller than the pane, it fills it and scrolls
+                            from the top.
+                        -->
+                        <ItemsControl ItemsSource="{Binding Sounds}"
+                                      Margin="12,12,12,4"
+                                      VerticalAlignment="Center"
+                                      Visibility="{Binding HasSounds, Converter={StaticResource BoolToVisibility}}"
+                                      VirtualizingPanel.IsVirtualizing="True"
+                                      VirtualizingPanel.ScrollUnit="Pixel"
+                                      ScrollViewer.CanContentScroll="True">
+                            <ItemsControl.Template>
+                                <ControlTemplate TargetType="ItemsControl">
+                                    <ScrollViewer CanContentScroll="True" Focusable="False"
+                                                  VerticalScrollBarVisibility="Auto"
+                                                  HorizontalScrollBarVisibility="Disabled">
+                                        <ItemsPresenter/>
+                                    </ScrollViewer>
+                                </ControlTemplate>
+                            </ItemsControl.Template>
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <VirtualizingStackPanel/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <!--
+                                    A row a file: a hairline above it, the
+                                    name and its length on one line, the
+                                    shape under them as wide as its length
+                                    against the longest (Share) - so a stack
+                                    reads file by file, and lengths compare
+                                    at a glance (2026-10-27).
+                                -->
+                                <DataTemplate>
+                                    <StackPanel Margin="0,0,0,9">
+                                        <!-- The hairline: the text's dim colour, faded - the palette follows the surround. -->
+                                        <Rectangle Height="1" Margin="0,0,0,7" Opacity="0.35"
+                                                   Fill="{Binding DataContext.ContentPalette.Dim, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                   Visibility="{Binding First, Converter={StaticResource InverseBoolToVisibility}}"/>
+                                        <DockPanel>
+                                            <TextBlock DockPanel.Dock="Right"
+                                                       Text="{Binding Length}"
+                                                       Style="{StaticResource PaneDim}"
+                                                       FontSize="11" Margin="12,0,0,0"/>
+                                            <TextBlock Text="{Binding Name}"
+                                                       Style="{StaticResource PaneText}"
+                                                       FontSize="12"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </DockPanel>
+                                        <controls:WaveformStrip FilePath="{Binding FullPath}"
+                                                                Share="{Binding Share}"
+                                                                FollowsPlayer="True" PlaysOnClick="True"
+                                                                Height="30" Margin="0,5,0,0"
+                                                                Cursor="Hand"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <StackPanel Margin="16,20,16,8"
                                     VerticalAlignment="Center" HorizontalAlignment="Center"
-                                    Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Audio}">
+                                    Visibility="{Binding HasSounds, Converter={StaticResource InverseBoolToVisibility}}">
                             <Border MaxWidth="260" MaxHeight="260"
                                     HorizontalAlignment="Center"
                                     BorderBrush="{Binding ContentPalette.Dim}" BorderThickness="1"
@@ -869,28 +936,40 @@
                                        Style="{StaticResource PaneText}"
                                        Margin="0,12,0,0"
                                        FontSize="15" FontWeight="SemiBold"
-                                       TextAlignment="Center" TextWrapping="Wrap"
-                                       MaxWidth="320"/>
+                                       TextAlignment="Center" TextWrapping="Wrap"/>
                             <TextBlock Text="{Binding AudioArtist}"
                                        Style="{StaticResource PaneText}"
                                        Margin="0,3,0,0"
                                        FontSize="12"
                                        TextAlignment="Center" TextWrapping="Wrap"
-                                       MaxWidth="320"
                                        Visibility="{Binding HasAudioArtist, Converter={StaticResource BoolToVisibility}}"/>
                             <TextBlock Text="{Binding AudioAlbum}"
                                        Style="{StaticResource PaneDim}"
                                        Margin="0,2,0,0"
                                        FontSize="11"
                                        TextAlignment="Center" TextWrapping="Wrap"
-                                       MaxWidth="320"
                                        Visibility="{Binding HasAudioAlbum, Converter={StaticResource BoolToVisibility}}"/>
                             <TextBlock Text="{Binding AudioDetail}"
                                        Style="{StaticResource PaneDim}"
                                        Margin="0,8,0,0"
                                        FontSize="11"
                                        TextAlignment="Center"/>
+                            <!--
+                                The track's shape (decision 2026-10-27), any
+                                length; the played part in another colour.
+                                A click plays from where it lands or stops,
+                                as in the stack - through this pane's own
+                                transport (TrackShape_StartRequested). The
+                                file is set from OpenMedia, the played part
+                                from the slider (VideoSlider_ValueChanged).
+                            -->
+                            <controls:WaveformStrip x:Name="TrackShape"
+                                                    Limited="False" PlaysOnClick="True"
+                                                    Height="56" MaxWidth="520"
+                                                    Margin="0,14,0,0"
+                                                    Cursor="Hand"/>
                         </StackPanel>
+                        </Grid>
                         <Grid Grid.Row="1" Margin="8,4,8,8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>

@@ -871,8 +871,17 @@ public sealed class SystemIconProvider : IIconProvider {
                 : EmbeddedThumbnail.Supports(path) ? EmbeddedThumbnail.TryRead(path)
                 : BookCover.TryRead(path);
         }
+
+        // A track wears its shape too (decision 2026-10-27): a band over
+        // the cover, or a page of its own when it has none.
+        Waveform? shape = null;
+        if (AudioCover.Supports(path)) {
+            using (PerfLog.Measure("bg.track-shape")) {
+                shape = WaveformThumbnail.Shape(path);
+            }
+        }
         if (bytes is null) {
-            return null;
+            return shape is null ? null : RenderShapePage(shape, path, side);
         }
 
         try {
@@ -894,13 +903,31 @@ public sealed class SystemIconProvider : IIconProvider {
                 return null;
             }
 
-            return RenderFramedCover(cover, side);
+            var plate = RenderFramedCover(cover, side, out var placed);
+            if (shape is not null) {
+                WaveformThumbnail.DrawBand(plate, placed, shape);
+            }
+
+            return plate;
         } catch (Exception ex) when (ex is ArgumentException or OutOfMemoryException) {
             // GDI+ throws both of these for "these bytes are not an image
             // I know" - a cover in a format without a codec, or a truncated
             // one.
-            return null;
+            return shape is null ? null : RenderShapePage(shape, path, side);
         }
+    }
+
+    /// <summary>A track without cover art: its shape on a page, framed as a cover - drawn at the size the frame lays it at.</summary>
+    private static Bitmap RenderShapePage(Waveform shape, string path, int side) {
+        int? rate = AudioTags.Read(path)?.SampleRate;
+        using var page = WaveformThumbnail.RenderPage(shape, rate, side - CoverMargin(side) * 2);
+
+        return RenderFramedCover(page, side, out _);
+    }
+
+    /// <summary>The empty edge around a cover on its tile - <see cref="SoundTile.EdgeShare"/>, which places the list's play button, says the same.</summary>
+    private static int CoverMargin(int side) {
+        return Math.Max(2, side / 12);
     }
 
     /// <summary>
@@ -910,7 +937,7 @@ public sealed class SystemIconProvider : IIconProvider {
     /// a picture that happens to be portrait — and the white backing keeps
     /// a cover with transparency from dissolving into the tile.
     /// </summary>
-    private static Bitmap RenderFramedCover(Image cover, int side) {
+    private static Bitmap RenderFramedCover(Image cover, int side, out Rectangle placed) {
         var canvas = new Bitmap(side, side, PixelFormat.Format32bppArgb);
 
         using var g = Graphics.FromImage(canvas);
@@ -919,7 +946,7 @@ public sealed class SystemIconProvider : IIconProvider {
         g.SmoothingMode = SmoothingMode.HighQuality;
         g.PixelOffsetMode = PixelOffsetMode.HighQuality;
 
-        int margin = Math.Max(2, side / 12);
+        int margin = CoverMargin(side);
         double scale = Math.Min(
             (double)(side - margin * 2) / cover.Width,
             (double)(side - margin * 2) / cover.Height);
@@ -943,6 +970,7 @@ public sealed class SystemIconProvider : IIconProvider {
 
         using var border = new Pen(Color.FromArgb(140, 0, 0, 0));
         g.DrawRectangle(border, x, y, w - 1, h - 1);
+        placed = new Rectangle(x, y, w, h);
 
         return canvas;
     }
