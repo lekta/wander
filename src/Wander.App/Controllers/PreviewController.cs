@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -222,6 +223,10 @@ public sealed class PreviewController : ObservableObject {
     private string _archiveHeadline = "";
     private string _archiveMore = "";
     private bool _archiveEntryTooBig;
+
+    // The last zip whose directory was read: the arrows through one
+    // archive's folders read it once (ShowZipCensusAsync).
+    private ZipSnapshot? _zip;
 
     // One archive entry is unpacked for a preview at a time - see
     // ArchiveEntryCopyAsync for why the queue is kept this short.
@@ -2003,11 +2008,10 @@ public sealed class PreviewController : ObservableObject {
         // census instead of "Select a file to preview". Recycled folders do
         // not: their backing path under $Recycle.Bin is not reliably
         // walkable, and the footer already says where they came from.
-        // Inside an archive the census has nothing to walk - there is no
-        // filesystem in there - but the shell can list the folder, and the
-        // pane shows that listing instead: the same one an archive file
-        // gets when it is selected from outside, and the answer to "where
-        // am I" on a click into empty space.
+        // Inside an archive there is no filesystem to walk: a zip is counted
+        // from its own directory, any other archive gets the shell's
+        // listing of the folder - the same one an archive file gets when it
+        // is selected from outside (LoadArchiveAsync).
         if (_primary is null || _primary.Kind != EntryKind.File) {
             string? folder = _primary?.Kind == EntryKind.Directory && _primary.OriginalLocation is null
                 ? _primary.FullPath
@@ -2649,6 +2653,10 @@ public sealed class PreviewController : ObservableObject {
     /// looking rather than for work.
     /// </summary>
     private async Task LoadArchiveAsync(string path, CancellationToken ct) {
+        if (Archives.Of(path) is { } archive && await ShowZipCensusAsync(archive, ct)) {
+            return;
+        }
+
         FolderTitle = Path.GetFileName(path);
         ArchiveHeadline = "";
         ArchiveMore = "";
@@ -2686,6 +2694,81 @@ public sealed class PreviewController : ObservableObject {
                     Strings.PreviewArchiveHeadline,
                     listing.Files, listing.Folders, SizeFormatter.Format(SizeOf(path)))
                 : string.Format(Strings.PreviewArchiveFolderHeadline, listing.Files, listing.Folders);
+    }
+
+    /// <summary>
+    /// A zip, or a folder in one, counted the way a folder on disk is -
+    /// files, folders, unpacked size, types - from the zip's directory
+    /// (<see cref="ZipCatalog"/>), read once per archive. False when that is
+    /// not to be had - not a zip, a broken one, a folder the directory does
+    /// not name (a name in another code page): the shell's listing then.
+    /// </summary>
+    private async Task<bool> ShowZipCensusAsync(ArchivePath archive, CancellationToken ct) {
+        string ext = Path.GetExtension(archive.Archive);
+        if (!ext.Equals(".zip", StringComparison.OrdinalIgnoreCase) && !ext.Equals(".nupkg", StringComparison.OrdinalIgnoreCase)) {
+            return false;
+        }
+
+        FolderTitle = archive.IsRoot ? archive.ArchiveName : Path.GetFileName(archive.Inner);
+        FolderHeadline = "";
+        FolderNote = "";
+        FolderTypes.Clear();
+        SetVolume(null);
+        Kind = PreviewKind.Folder;
+        Raise(nameof(ShowsHelperSwitches));
+        IsCensusLoading = true;
+
+        var cached = _zip;
+        ZipSnapshot zip;
+        FolderStats? stats;
+        try {
+            (zip, stats) = await LongWait.WatchAsync(
+                Task.Run(() => {
+                    var read = ReadZip(archive.Archive, cached, ct);
+
+                    return (read, read.Catalog.Census(archive.Inner));
+                }, ct),
+                Log.Current, $"preview: zip directory {archive.Archive}");
+        } catch (OperationCanceledException) {
+            // A newer selection took over; it draws its own.
+            return true;
+        } catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException) {
+            Log.Info($"Zip directory not read: {archive.Archive} ({ex.Message}) - the shell lists it");
+            IsCensusLoading = false;
+
+            return false;
+        }
+
+        if (ct.IsCancellationRequested) {
+            return true;
+        }
+
+        _zip = zip;
+        if (stats is null) {
+            IsCensusLoading = false;
+
+            return false;
+        }
+
+        ShowCensus(stats, archive.IsRoot
+            ? string.Format(Strings.PreviewZipHeadline, stats.Files, stats.Folders, SizeFormatter.Format(stats.TotalSize), SizeFormatter.Format(zip.Length))
+            : FormatHeadline(stats.Files, stats.Folders, stats.TotalSize));
+
+        return true;
+    }
+
+    /// <summary>The zip's directory: the one already read if the file is the same, by length and time.</summary>
+    private static ZipSnapshot ReadZip(string file, ZipSnapshot? cached, CancellationToken ct) {
+        var info = new FileInfo(file);
+        if (cached is not null && string.Equals(cached.Path, file, StringComparison.OrdinalIgnoreCase)
+            && cached.Length == info.Length && cached.Modified == info.LastWriteTimeUtc) {
+            return cached;
+        }
+
+        using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        var catalog = ZipCatalog.Read(stream, CultureInfo.CurrentCulture.TextInfo.OEMCodePage, ct);
+
+        return new ZipSnapshot(file, info.Length, info.LastWriteTimeUtc, catalog);
     }
 
     /// <summary>
@@ -4042,11 +4125,17 @@ public sealed class PreviewController : ObservableObject {
             return;
         }
 
+        ShowCensus(stats, FormatHeadline(stats.Files, stats.Folders, stats.TotalSize));
+    }
+
+
+    /// <summary>The census's final numbers - a folder's on disk or a zip's (<see cref="ShowZipCensusAsync"/>).</summary>
+    private void ShowCensus(FolderStats stats, string headline) {
         // Cleared before the final numbers land, so a late progress report
         // finds the walk finished and stands aside.
         IsCensusLoading = false;
 
-        FolderHeadline = FormatHeadline(stats.Files, stats.Folders, stats.TotalSize);
+        FolderHeadline = headline;
         // The only thing that stops a default walk now is the depth guard,
         // and that means a reparse-point loop rather than a big folder.
         FolderNote = stats.Truncated ? Strings.PreviewFolderTruncated : "";
@@ -4117,6 +4206,10 @@ public sealed class PreviewController : ObservableObject {
     /// <param name="Hidden">Entries past <see cref="ArchiveRowLimit"/>.</param>
     private sealed record ArchiveListing(
         IReadOnlyList<ArchiveEntryRow> Rows, int Files, int Folders, int Hidden);
+
+
+    /// <summary>A zip's directory, and the length and time of the file it was read from.</summary>
+    private sealed record ZipSnapshot(string Path, long Length, DateTime Modified, ZipCatalog Catalog);
 
 
     private void ScheduleSummaryUpdate() {

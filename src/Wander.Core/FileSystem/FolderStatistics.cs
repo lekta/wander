@@ -177,19 +177,23 @@ public static class FolderStatistics {
             ReportIfDue();
         }
 
-        // Biggest first: "what is eating this folder" is the question the
-        // panel is there to answer. Count breaks ties so the order is stable.
-        var types = byExtension
+        return new FolderStats(files, folders, total, TopTypes(byExtension, maxTypes), truncated);
+    }
+
+
+    /// <summary>
+    /// Biggest first: "what is eating this folder" is the question the
+    /// panel is there to answer. Count breaks ties so the order is stable.
+    /// </summary>
+    internal static IReadOnlyList<FolderTypeGroup> TopTypes(Dictionary<string, (int Count, long Size)> byExtension, int maxTypes) {
+        return byExtension
             .Select(kv => new FolderTypeGroup(kv.Key, kv.Value.Count, kv.Value.Size))
             .OrderByDescending(t => t.Size)
             .ThenByDescending(t => t.Count)
             .ThenBy(t => t.Extension, StringComparer.OrdinalIgnoreCase)
             .Take(maxTypes)
             .ToArray();
-
-        return new FolderStats(files, folders, total, types, truncated);
     }
-
 
     /// <summary>
     /// Lower-cased extension without the dot; "—" for a file that has none,
@@ -197,7 +201,7 @@ public static class FolderStatistics {
     /// (".gitignore") count as extension-less — that is what they are to a
     /// reader, whatever <c>Path.GetExtension</c> says.
     /// </summary>
-    private static string ExtensionOf(string name) {
+    internal static string ExtensionOf(string name) {
         int dot = name.LastIndexOf('.');
         if (dot <= 0 || dot == name.Length - 1) {
             return "—";

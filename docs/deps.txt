@@ -1,15 +1,15 @@
 === Wander dependency graph (using sweep) ===
-date   : 2026-10-22
-commit : 76dae45
+date   : 2026-10-27
+commit : 5ad70fc
 
 -- projects --
-Wander.App -> Wander.Core   (78 files)
+Wander.App -> Wander.Core   (79 files)
 Wander.App -> Wander.Platform.Windows   (2 files)
-Wander.Core.Tests -> Wander.Core   (192 files)
+Wander.Core.Tests -> Wander.Core   (196 files)
 Wander.Harness -> Wander.App   (4 files)
 Wander.Harness -> Wander.Core   (9 files)
 Wander.Harness -> Wander.Platform.Windows   (4 files)
-Wander.Platform.Windows -> Wander.Core   (48 files)
+Wander.Platform.Windows -> Wander.Core   (53 files)
 
 -- Wander.Core: folder -> folder --
   Actions        -> FileSystem     (6 files)
@@ -54,7 +54,7 @@ Wander.Platform.Windows -> Wander.Core   (48 files)
   Persistence    -> Localization   (1 files)
   Persistence    -> Navigation     (1 files)
   Persistence    -> Rename         (1 files)
-  Preview        -> FileSystem     (13 files)
+  Preview        -> FileSystem     (14 files)
   Preview        -> Icons          (2 files)
   Preview        -> Imaging        (1 files)
   Rename         -> Companions     (1 files)
@@ -64,12 +64,13 @@ Wander.Platform.Windows -> Wander.Core   (48 files)
   Search         -> Localization   (1 files)
   Search         -> Logging        (1 files)
   Search         -> Preview        (1 files)
-  Shell          -> FileSystem     (6 files)
+  Shell          -> FileSystem     (7 files)
   Shell          -> Icons          (1 files)
   Shell          -> Localization   (2 files)
   Shell          -> Logging        (3 files)
   Shell          -> Operations     (2 files)
   Shell          -> Persistence    (2 files)
+  Shell          -> Preview        (1 files)
   Shell          -> Undo           (2 files)
   Undo           -> Operations     (2 files)
   Workspace      -> FileSystem     (3 files)
@@ -134,7 +135,7 @@ Wander.Platform.Windows -> Wander.Core   (48 files)
   Controllers    -> ViewModels     (6 files)
   Controls       -> Converters     (1 files)
   Controls       -> Diagnostics    (1 files)
-  Controls       -> Preview        (1 files)
+  Controls       -> Preview        (3 files)
   Controls       -> Resources      (3 files)
   Controls       -> Util           (1 files)
   Controls       -> ViewModels     (2 files)

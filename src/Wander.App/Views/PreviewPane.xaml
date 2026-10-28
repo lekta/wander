@@ -1334,12 +1334,12 @@
                     </ScrollViewer>
 
                     <!--
-                        Archive listing (P5). An archive file selected in an
-                        ordinary folder: what is in its first level. The
-                        census above cannot answer that - it walks the
-                        filesystem, and there is no filesystem in a zip - so
-                        this is a plain list of names, in the census's
-                        clothes so the two read as one panel.
+                        Archive listing (P5). An archive that is not a zip,
+                        or a folder in one: what is in its first level. A zip
+                        gets the census above, counted from its directory;
+                        for the rest only the shell can list, so this is a
+                        plain list of names, in the census's clothes so the
+                        two read as one panel.
                     -->
                     <ScrollViewer Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Archive}"
                                   VerticalScrollBarVisibility="Auto" Padding="12,10,12,10">

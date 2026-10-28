@@ -4,13 +4,15 @@
 #
 # -Install [-InstallDir C:\Programs\Wander]: положить собранный exe туда,
 # откуда человек запускает Wander как обычную программу (конфигурация Rider
-# «Publish and install»). Запущенный exe перезаписать нельзя, но можно
-# переименовать: образ держится по хендлу, а не по имени. Поэтому старый
-# Wander.exe уезжает в Wander.exe.<время>.old, новый встаёт на его место,
-# работающий экземпляр доживает на старом файле, следующий запуск — уже
-# новый; ярлык на панели задач держится за путь и подмену переживает.
-# Старые .old подметаются при следующем -Install; занятый остаётся до
-# следующего раза. Данные установленной копии — %LOCALAPPDATA%\Wander.
+# «Publish and install»). Подменять exe под работающим экземпляром нельзя:
+# однофайловая сборка дочитывает свои ещё не загруженные сборки из exe по
+# пути, и после подмены первая же такая загрузка падает (закрытие окна —
+# всегда). Поэтому после сборки запущенные из папки установки экземпляры
+# закрываются штатно (как крестиком: состояние сохраняется), exe
+# заменяется, и, если что-то было запущено, новый стартует сам. Не
+# закрылся за 30 с (вопрос об идущих операциях, окна нет) — установка
+# отменяется, файл не тронут. Хвосты .old прежних установок подметаются.
+# Данные установленной копии — %LOCALAPPDATA%\Wander.
 #
 # -Run: сразу запустить собранный exe (с -Install — установленную копию).
 # Это единственный способ пощупать приложение ровно таким, каким его
@@ -72,14 +74,42 @@ Write-Host "OK  -> $exe  (${size} MB, $version)  $stamp" -ForegroundColor Green
 Write-Host "SHA256: $hash"
 
 $toRun = $exe
+$restart = $false
 
 if ($Install) {
     New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-    $target = Join-Path $InstallDir 'Wander.exe'
+    $installFull = [IO.Path]::GetFullPath($InstallDir).TrimEnd('\')
+    $target = Join-Path $installFull 'Wander.exe'
 
-    # Хвосты прошлых установок. Тот, на котором ещё работает старый
-    # экземпляр, удалить нельзя — он дождётся следующего раза.
-    foreach ($stale in Get-ChildItem -Path $InstallDir -Filter 'Wander.exe.*.old' -File) {
+    # Closed before the swap, while their own exe is still in place - see
+    # the header. A renamed .old one still reports the original path.
+    $running = @(Get-Process -Name 'Wander' -ErrorAction SilentlyContinue |
+        Where-Object { $_.Path -and (Split-Path -Parent $_.Path) -eq $installFull })
+    $stuck = @()
+    foreach ($p in $running) {
+        Write-Host "Closing Wander (PID $($p.Id))..." -ForegroundColor Cyan
+        # No window to close: hung on its way out, nothing will answer.
+        if ($p.MainWindowHandle -eq [IntPtr]::Zero -or -not $p.CloseMainWindow()) {
+            $stuck += $p.Id
+        }
+    }
+    foreach ($p in $running) {
+        # 30 s: the close may ask about running operations, and stopping
+        # them takes a moment after the answer.
+        if ($stuck -notcontains $p.Id -and -not $p.WaitForExit(30000)) {
+            $stuck += $p.Id
+        }
+    }
+    if ($stuck.Count -gt 0) {
+        $ids = $stuck -join ','
+        Write-Host "NOT installed: Wander did not close (PID $ids), the installed exe is untouched." -ForegroundColor Red
+        Write-Host "  Close it and run again, or stop it: Stop-Process -Id $ids" -ForegroundColor Red
+        exit 1
+    }
+    $restart = $running.Count -gt 0
+
+    # Leftovers of the installs that renamed the running exe aside.
+    foreach ($stale in Get-ChildItem -Path $installFull -Filter 'Wander.exe.*.old' -File) {
         try {
             Remove-Item -Path $stale.FullName -Force -ErrorAction Stop
         } catch {
@@ -87,17 +117,13 @@ if ($Install) {
         }
     }
 
-    if (Test-Path $target) {
-        $old = Join-Path $InstallDir ('Wander.exe.{0:yyyyMMdd-HHmmss}.old' -f (Get-Date))
-        Move-Item -Path $target -Destination $old -Force
-    }
     Copy-Item -Path $exe -Destination $target -Force
 
     Write-Host "Installed -> $target  $stamp" -ForegroundColor Green
     $toRun = $target
 }
 
-if ($Run) {
+if ($Run -or $restart) {
     Write-Host ""
     Write-Host "Starting $toRun ..." -ForegroundColor Cyan
     # Own window, own lifetime: the script is done, the app is not.

@@ -114,6 +114,9 @@ public static partial class Strings {
     /// <summary>В архиве: {0:N0} файлов · {1:N0} папок</summary>
     public static string PreviewArchiveFolderHeadline => Get(nameof(PreviewArchiveFolderHeadline));
 
+    /// <summary>{0:N0} файлов · {1:N0} папок · {2}, архив {3}</summary>
+    public static string PreviewZipHeadline => Get(nameof(PreviewZipHeadline));
+
     /// <summary>и ещё {0:N0}</summary>
     public static string PreviewArchiveMore => Get(nameof(PreviewArchiveMore));
 

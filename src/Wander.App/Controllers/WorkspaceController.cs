@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Windows.Threading;
 using Wander.Core;
 using Wander.Core.Diagnostics;
@@ -31,6 +32,9 @@ namespace Wander.App.Controllers;
 /// </para>
 /// </summary>
 public sealed class WorkspaceController {
+    /// <summary>How long one batch of chevrons may spend in archives - see <see cref="ProbeAsync"/>.</summary>
+    private static readonly TimeSpan _archiveProbeBudget = TimeSpan.FromMilliseconds(300);
+
     private readonly IFileSystem _fs;
     private readonly IShellNamespace? _shell;
     private readonly Func<EntryVisibility> _visibility;
@@ -229,16 +233,40 @@ public sealed class WorkspaceController {
         return folders;
     }
 
-    /// <summary>Whether each row has subfolders, asked on the pool - a question per row, one disk each.</summary>
+    /// <summary>
+    /// Whether each row has subfolders, asked on the pool - a question per
+    /// row, one disk each. A folder inside an archive is listed through the
+    /// shell, which opens the archive again for each: a zip answers in about
+    /// 15 ms, a tar.gz is unpacked whole. So those are asked within
+    /// <see cref="_archiveProbeBudget"/> per batch; the rest keep the chevron
+    /// on faith.
+    /// </summary>
     private async Task ProbeAsync(ProbeChevrons probe) {
         var answers = await Task.Run(() => {
             var found = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            var inArchives = TimeSpan.Zero;
+            int unasked = 0;
             foreach (string path in probe.Paths) {
+                bool inArchive = Archives.Contains(path);
+                if (inArchive && (_shell is null || inArchives >= _archiveProbeBudget)) {
+                    unasked++;
+                    continue;
+                }
+
+                long started = Stopwatch.GetTimestamp();
                 try {
-                    found[path] = _fs.HasSubdirectories(path);
+                    found[path] = inArchive
+                        ? _shell!.Enumerate(path).Any(e => e.Kind == EntryKind.Directory)
+                        : _fs.HasSubdirectories(path);
                 } catch (Exception ex) when (ex is not OutOfMemoryException) {
                     found[path] = false;
                 }
+                if (inArchive) {
+                    inArchives += Stopwatch.GetElapsedTime(started);
+                }
+            }
+            if (unasked > 0) {
+                _log.Info($"tree: {unasked} archive folder(s) left unasked after {inArchives.TotalMilliseconds:F0} ms");
             }
 
             return found;

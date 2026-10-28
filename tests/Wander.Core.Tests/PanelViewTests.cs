@@ -119,4 +119,13 @@ public class PanelRowTests {
         Assert.False(row.IsRenamable);
         Assert.False(row.IsLeaf);
     }
+
+
+    [Fact]
+    public void AFolderInAnArchive_IsProbed_TheArchiveItselfIsNot() {
+        // Inside, the archive is open already and the chevron is asked for;
+        // the archive's own row would open every archive in its folder.
+        Assert.True(new PanelRow(@"D:\a.zip\icons", "icons", PanelRowKind.ArchiveFolder).IsProbed);
+        Assert.False(new PanelRow(@"D:\a.zip", "a.zip", PanelRowKind.Archive).IsProbed);
+    }
 }

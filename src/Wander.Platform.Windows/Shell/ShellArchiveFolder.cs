@@ -11,9 +11,11 @@ namespace Wander.Platform.Windows.Shell;
 /// <summary>
 /// Archives browsed as folders, through the same shell handlers Explorer
 /// uses: <c>CompressedFolder</c> for zip, <c>ArchiveFolder</c> (libarchive)
-/// for 7z / rar / tar.gz and a dozen more, <c>CABFolder</c> for cab. Wander
-/// writes no archive reader of its own - which formats open is whatever the
-/// machine's shell opens. An association handed to 7-Zip or WinRAR does not
+/// for 7z / rar / tar.gz and a dozen more, <c>CABFolder</c> for cab. Which
+/// formats open is whatever the machine's shell opens; the one reading of
+/// Wander's own is a zip's directory for the preview pane's census
+/// (<c>ZipCatalog</c>) - there is no rule of "shell only" (PLAN, "Свой
+/// листинг zip"). An association handed to 7-Zip or WinRAR does not
 /// close that: it changes what a double click starts, while the shell still
 /// takes the folder handler Windows registers for the type (decision of
 /// 2026-09-24, stand of 2026-09-25) - see <see cref="ReadExtensions"/>.

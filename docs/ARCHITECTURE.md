@@ -116,8 +116,8 @@ src/
 <!-- deps:generated:begin -->
 ```
 === Wander dependency graph (using sweep) ===
-date   : 2026-10-22
-commit : 76dae45
+date   : 2026-10-27
+commit : 5ad70fc
 
 -- Wander.Core: levels --
   0: (root), Appearance, Imaging, Layout, Localization, Logging, Panels

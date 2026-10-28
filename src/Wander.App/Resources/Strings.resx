@@ -190,6 +190,10 @@
     <value>В архиве: {0:N0} файлов · {1:N0} папок</value>
     <comment>{0} — файлов в этой папке архива, {1} — папок в ней</comment>
   </data>
+  <data name="PreviewZipHeadline" xml:space="preserve">
+    <value>{0:N0} файлов · {1:N0} папок · {2}, архив {3}</value>
+    <comment>Корень zip: {0} — файлов во всём архиве, {1} — папок, {2} — распакованный размер, {3} — размер файла архива</comment>
+  </data>
   <data name="PreviewArchiveMore" xml:space="preserve">
     <value>и ещё {0:N0}</value>
     <comment>{0} — сколько записей не поместилось в список</comment>

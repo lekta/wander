@@ -89,9 +89,10 @@ public sealed record PanelRow(string Path, string Name, PanelRowKind Kind) {
     /// <summary>
     /// Its subfolders can be asked of the disk off the UI thread to settle
     /// the chevron. Not an archive: answering would open every archive in a
-    /// folder through the shell on every expansion.
+    /// folder through the shell on every expansion. A folder inside one is:
+    /// its archive is open already, and the asking is on a time budget.
     /// </summary>
-    public bool IsProbed => Kind is PanelRowKind.Folder or PanelRowKind.Drive && !IsMissing;
+    public bool IsProbed => Kind is PanelRowKind.Folder or PanelRowKind.Drive or PanelRowKind.ArchiveFolder && !IsMissing;
 
     /// <summary>
     /// F2 can rename it: a folder on disk, not a drive, not a bookmark whose
