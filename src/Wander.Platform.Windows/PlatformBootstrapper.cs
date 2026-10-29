@@ -89,7 +89,7 @@ public static class PlatformBootstrapper {
         // what was opened on it - the hub hears both.
         var devices = new DeviceFolders(logger, volumes);
         ServiceLocator.Register<IDeviceContent>(devices);
-        ServiceLocator.Register<IShellNamespace>(new WindowsShellNamespace(logger, devices));
+        ServiceLocator.Register<IShellNamespace>(new WindowsShellNamespace(logger, ServiceLocator.Get<IFileSystem>(), devices));
         ServiceLocator.Register<IShellContextMenu>(new ShellContextMenu(logger));
         ServiceLocator.Register<IShellHandlerRegistry>(new ShellHandlerRegistry(logger));
         ServiceLocator.Register<IImageMetadataReader>(new MetadataExtractorImageReader());

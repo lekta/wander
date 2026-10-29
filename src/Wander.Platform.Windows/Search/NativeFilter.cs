@@ -63,10 +63,16 @@ internal enum ChunkState {
 }
 
 
+/// <summary>
+/// PROPSPEC: the second field is a union of a PROPID and an LPOLESTR, so it
+/// is pointer-sized. Declared as a uint it made <see cref="StatChunk"/> 52
+/// bytes instead of 64, and GetChunk wrote the rest over the caller's stack -
+/// an AccessViolationException on every .doc (crash 2026-10-29).
+/// </summary>
 [StructLayout(LayoutKind.Sequential)]
 internal struct PropSpec {
     public uint Kind;
-    public uint PropId;
+    public IntPtr PropIdOrName;
 }
 
 

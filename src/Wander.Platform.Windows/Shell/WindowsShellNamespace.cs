@@ -1,3 +1,4 @@
+using System.Globalization;
 using Wander.Core;
 using Wander.Core.FileSystem;
 using Wander.Core.Localization;
@@ -17,25 +18,29 @@ namespace Wander.Platform.Windows.Shell;
 ///
 /// <para>
 /// This class is the dispatcher and nothing else: which of them a path
-/// belongs to, and the fact that none can be written to.
+/// belongs to, and the fact that none can be written to. A zip the shell
+/// lists as empty though it is not goes to <see cref="ZipFallback"/>.
 /// </para>
 /// </summary>
 public sealed class WindowsShellNamespace : IShellNamespace {
     private readonly ILogger _logger;
     private readonly ShellArchiveFolder _archives;
+    private readonly ZipFallback _zips;
     private readonly ShellRecycleBinFolder _bin;
     private readonly ComputerDrives _computer;
     private readonly DeviceFolders? _devices;
 
 
     /// <summary>Without devices: the harness's own, for archives and the bin.</summary>
-    public WindowsShellNamespace(ILogger logger) : this(logger, null) {
+    public WindowsShellNamespace(ILogger logger, IFileSystem fs) : this(logger, fs, null) {
     }
 
+    /// <param name="fs">What a zip the shell cannot read is read and unpacked through (<see cref="ZipFallback"/>).</param>
     /// <param name="devices">Phones and cameras; null - the computer lists its drives only.</param>
-    internal WindowsShellNamespace(ILogger logger, DeviceFolders? devices) {
+    internal WindowsShellNamespace(ILogger logger, IFileSystem fs, DeviceFolders? devices) {
         _logger = logger;
         _archives = new ShellArchiveFolder(logger);
+        _zips = new ZipFallback(fs, logger, CultureInfo.CurrentCulture.TextInfo.OEMCodePage, ParseArchive);
         _bin = new ShellRecycleBinFolder(logger);
         _devices = devices;
         _computer = new ComputerDrives(devices);
@@ -71,7 +76,7 @@ public sealed class WindowsShellNamespace : IShellNamespace {
             return _devices?.GetEntry(path) is { Kind: EntryKind.Directory };
         }
 
-        return ParseArchive(path) is not null && _archives.CanNavigate(path);
+        return ParseArchive(path) is { } archive && (_zips.Owns(archive) ? _zips.IsFolder(archive) : _archives.CanNavigate(path));
     }
 
     public long? SizeOf(string path) {
@@ -79,11 +84,15 @@ public sealed class WindowsShellNamespace : IShellNamespace {
             return _devices?.GetEntry(path) is { Kind: EntryKind.File } entry ? entry.Size : null;
         }
 
-        return ParseArchive(path) is { IsRoot: false } ? _archives.SizeOf(path) : null;
+        return ParseArchive(path) is { IsRoot: false } archive
+            ? _zips.Owns(archive) ? _zips.SizeOf(archive) : _archives.SizeOf(path)
+            : null;
     }
 
     public byte[]? ReadEntry(string path) {
-        return ParseArchive(path) is { IsRoot: false } ? _archives.ReadEntry(path) : null;
+        return ParseArchive(path) is { IsRoot: false } archive
+            ? _zips.Owns(archive) ? _zips.ReadEntry(archive) : _archives.ReadEntry(path)
+            : null;
     }
 
     public Task CopyOut(
@@ -94,7 +103,14 @@ public sealed class WindowsShellNamespace : IShellNamespace {
             return Task.Run(() => CopyOffDevice(items, targetFolder, progress, ct), ct);
         }
 
-        return Task.Run(() => _archives.CopyOut(items, targetFolder, progress, ct, work), ct);
+        // Wander's own zips first, then the rest in the shell's one pass.
+        var own = items.Where(item => ParseArchive(item.Path) is { } archive && _zips.Owns(archive)).ToList();
+        var shell = items.Where(item => !own.Contains(item)).ToList();
+
+        return Task.Run(() => {
+            _zips.CopyOut(own, targetFolder, progress, ct);
+            _archives.CopyOut(shell, targetFolder, progress, ct, work);
+        }, ct);
     }
 
     public object? CreateDataObject(IReadOnlyList<string> paths, IReadOnlyList<string>? fileList = null) {
@@ -133,8 +149,10 @@ public sealed class WindowsShellNamespace : IShellNamespace {
         if (DevicePath.Is(shellPath)) {
             return _devices?.Enumerate(shellPath, ct) ?? Array.Empty<FileSystemEntry>();
         }
-        if (ParseArchive(shellPath) is not null) {
-            return _archives.Enumerate(shellPath, ct);
+        if (ParseArchive(shellPath) is { } archive) {
+            return _zips.Owns(archive)
+                ? _zips.Enumerate(archive)
+                : _zips.Listed(archive, _archives.Enumerate(shellPath, ct), ct);
         }
 
         return Array.Empty<FileSystemEntry>();

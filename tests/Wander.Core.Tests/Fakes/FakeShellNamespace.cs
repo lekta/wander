@@ -35,6 +35,9 @@ internal sealed class FakeShellNamespace : IShellNamespace {
     /// <summary>How many listings were asked for: each one of a real zip may be its whole catalogue.</summary>
     public int EnumerateCalls { get; private set; }
 
+    /// <summary>Runs after each path <see cref="CopyOut"/> reports - where a test looks at the progress.</summary>
+    public Action<string>? AfterReport { get; set; }
+
 
     /// <summary>Adds a file inside an archive: full path, then its contents.</summary>
     /// <param name="size">
@@ -127,8 +130,8 @@ internal sealed class FakeShellNamespace : IShellNamespace {
             var item = items[i];
             CopiedOut.Add(item);
             string name = item.NewName ?? Path.GetFileName(item.Path);
-            Write(item.Path, Path.Combine(targetFolder, name));
-            progress?.Report(item.Path);
+            Write(item.Path, Path.Combine(targetFolder, name), progress);
+            Report(progress, item.Path);
             // One "work unit" per item, which is as much as the real engine
             // promises: only the ratio of the two numbers means anything.
             work?.Report(new CopyOutWork(i + 1, items.Count));
@@ -138,7 +141,8 @@ internal sealed class FakeShellNamespace : IShellNamespace {
     }
 
 
-    private void Write(string source, string destination) {
+    /// <summary>Like the real engine, every file and folder inside a folder is reported as it lands too.</summary>
+    private void Write(string source, string destination, IProgress<string>? progress) {
         if (_files.TryGetValue(source, out string? content)) {
             _fs.Files[destination] = System.Text.Encoding.UTF8.GetBytes(content);
 
@@ -147,8 +151,14 @@ internal sealed class FakeShellNamespace : IShellNamespace {
 
         _fs.Directories.Add(destination);
         foreach (var child in Enumerate(source)) {
-            Write(child.FullPath, Path.Combine(destination, child.Name));
+            Write(child.FullPath, Path.Combine(destination, child.Name), progress);
+            Report(progress, child.FullPath);
         }
+    }
+
+    private void Report(IProgress<string>? progress, string path) {
+        progress?.Report(path);
+        AfterReport?.Invoke(path);
     }
 
     private void AddParents(string fullPath) {

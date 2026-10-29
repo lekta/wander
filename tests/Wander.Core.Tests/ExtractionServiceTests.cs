@@ -365,6 +365,50 @@ public class ExtractionServiceTests {
     }
 
 
+    // --- Progress ----------------------------------------------------------
+
+    [Fact]
+    public async Task Extract_FromAZip_CountsItsFilesAndBytes() {
+        var fs = new FakeFileSystem();
+        fs.Directories.Add(Target);
+        fs.Files[Archive] = Zip(("readme.txt", "readme"), ("docs/manual.txt", "manual!!"));
+        var ns = new FakeShellNamespace(fs);
+        ns.AddFile(InnerReadme, "readme");
+        ns.AddFile(InnerManual, "manual!!");
+        var tracker = new OperationTracker();
+        var service = new ExtractionService(ns, fs, new FakeRecycleBin(fs), new UndoService(), tracker, NullLogger.Instance);
+        var seen = new List<OperationSnapshot>();
+        ns.AfterReport = _ => seen.Add(Assert.Single(tracker.Snapshot()));
+
+        await service.ExtractAsync(new[] { InnerDocs, InnerReadme }, Target, new FakeConflictResolver(), CancellationToken.None);
+
+        // manual.txt, then the docs folder, then readme.txt.
+        Assert.Equal(3, seen.Count);
+        Assert.All(seen, s => Assert.Equal((2, 14L, false), (s.Total, s.BytesTotal, s.BytesAreWork)));
+        Assert.Equal((1, 8L), (seen[0].Completed, seen[0].BytesDone));
+        Assert.Equal((1, 8L), (seen[1].Completed, seen[1].BytesDone));
+        Assert.Equal((2, 14L), (seen[2].Completed, seen[2].BytesDone));
+    }
+
+    [Fact]
+    public async Task Extract_WithoutAZipDirectory_CountsOnlyTheSelectedEntries() {
+        // The fake archive has no bytes on disk: no directory to read, as
+        // with a .rar or a zip that will not open.
+        var (_, ns, fs, _, _) = Setup();
+        var tracker = new OperationTracker();
+        var service = new ExtractionService(ns, fs, new FakeRecycleBin(fs), new UndoService(), tracker, NullLogger.Instance);
+        var seen = new List<OperationSnapshot>();
+        ns.AfterReport = _ => seen.Add(Assert.Single(tracker.Snapshot()));
+
+        await service.ExtractAsync(new[] { InnerDocs }, Target, new FakeConflictResolver(), CancellationToken.None);
+
+        Assert.Equal(2, seen.Count);
+        Assert.Equal((0, 1, InnerManual), (seen[0].Completed, seen[0].Total, seen[0].CurrentPath));
+        Assert.Equal((1, 1), (seen[1].Completed, seen[1].Total));
+        Assert.True(seen[0].BytesAreWork);
+    }
+
+
     // --- The temporary copy behind "open" -------------------------------
 
     [Fact]
@@ -376,5 +420,18 @@ public class ExtractionServiceTests {
         Assert.Equal(@"C:\tmp\abcd\readme.txt", copy);
         Assert.True(fs.FileExists(copy));
         Assert.Equal(0, undo.Depth);
+    }
+
+
+    private static byte[] Zip(params (string Name, string Content)[] entries) {
+        using var buffer = new MemoryStream();
+        using (var zip = new System.IO.Compression.ZipArchive(buffer, System.IO.Compression.ZipArchiveMode.Create, leaveOpen: true)) {
+            foreach (var (name, content) in entries) {
+                using var writer = new StreamWriter(zip.CreateEntry(name).Open());
+                writer.Write(content);
+            }
+        }
+
+        return buffer.ToArray();
     }
 }

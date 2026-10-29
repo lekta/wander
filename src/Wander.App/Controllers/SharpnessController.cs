@@ -33,6 +33,14 @@ public sealed class SharpnessController {
     /// <summary>How many files are measured at once. The disk is shared with the thumbnails.</summary>
     private const int Parallelism = 2;
 
+    /// <summary>
+    /// How long answers gather before the rows are handed over. Two files at
+    /// a time answer every ~50 ms, so "once the dispatcher is idle" was once
+    /// per answer: a folder of 3425 rows re-published ~30 times a second
+    /// (live log 2026-10-28).
+    /// </summary>
+    private const int PublishMs = 300;
+
     private readonly ISharpnessProbe? _probe;
     private readonly ILogger _log;
     private readonly Func<int, bool> _isCurrent;
@@ -40,6 +48,7 @@ public sealed class SharpnessController {
     private readonly Action<int, IReadOnlyList<FileSystemEntry>> _publish;
     private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
     private readonly RankedGate _gate;
+    private readonly DispatcherTimer _publishTimer;
 
     // What the rows on screen are to say, and what has already been asked
     // about - the file as it was when asked - both for the folder listed
@@ -50,7 +59,6 @@ public sealed class SharpnessController {
     private (string Path, int Epoch)? _listing;
     private CancellationTokenSource? _pass;
     private bool _active;
-    private int _publishPending;
 
 
     /// <param name="isCurrent">Whether an epoch is still the listing on screen.</param>
@@ -70,6 +78,15 @@ public sealed class SharpnessController {
         _isCurrent = isCurrent;
         _rows = rows;
         _publish = publish;
+        _publishTimer = new DispatcherTimer(DispatcherPriority.Background, _dispatcher) {
+            Interval = TimeSpan.FromMilliseconds(PublishMs),
+        };
+        _publishTimer.Tick += (_, _) => {
+            _publishTimer.Stop();
+            if (_listing is { } listing && _isCurrent(listing.Epoch)) {
+                _publish(listing.Epoch, SharpListing.WithScores(_rows(), Shown));
+            }
+        };
     }
 
 
@@ -188,23 +205,16 @@ public sealed class SharpnessController {
 
 
     /// <summary>
-    /// The rows are handed over once per quiet moment, not once per answer:
-    /// a screenful arriving one at a time would rebuild a row and re-run the
-    /// filter thirty times over. To the listing on screen then; while one is
-    /// still being read, the rows it lands with take the answers
-    /// (<see cref="Decorate"/>).
+    /// The rows are handed over once per <see cref="PublishMs"/>, not once
+    /// per answer: a screenful arriving one at a time would rebuild a row and
+    /// re-run the filter thirty times over. To the listing on screen then;
+    /// while one is still being read, the rows it lands with take the answers
+    /// (<see cref="Decorate"/>). UI thread.
     /// </summary>
     private void SchedulePublish() {
-        if (Interlocked.Exchange(ref _publishPending, 1) != 0) {
-            return;
+        if (!_publishTimer.IsEnabled) {
+            _publishTimer.Start();
         }
-
-        _dispatcher.BeginInvoke(DispatcherPriority.Background, () => {
-            Interlocked.Exchange(ref _publishPending, 0);
-            if (_listing is { } listing && _isCurrent(listing.Epoch)) {
-                _publish(listing.Epoch, SharpListing.WithScores(_rows(), Shown));
-            }
-        });
     }
 
 

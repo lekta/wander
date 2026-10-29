@@ -1,3 +1,4 @@
+using System.Globalization;
 using Wander.Core.FileSystem;
 using Wander.Core.Logging;
 using Wander.Core.Operations;
@@ -97,23 +98,39 @@ public sealed class ExtractionService {
             return results;
         }
 
-        // Progress counts the things the user selected, not the files inside
-        // the folders among them: they chose four entries, not four hundred.
-        // The bar underneath it runs on the engine's own "work" units rather
-        // than bytes - nothing here knows how big an entry is until it is
-        // out - which is why it is flagged as work and shown as a percentage.
-        using var operation = _tracker.Begin(
-            OperationVerbs.Extract, queue.Count, totalBytes: 0, bytesAreWork: true, token: ct);
+        // The engine reports every file it lands, those inside a folder
+        // too. A zip's directory says what each one weighs, so there the
+        // operation counts files and bytes, and has a speed and a time left.
+        // Anything else counts the entries the user selected, the inner files
+        // only naming what is in hand, and the bar runs on the engine's own
+        // "work" units: counting the inner files against the selected ones
+        // stood the bar at 100% from the first file (2026-10-29).
+        var weight = await Task.Run(() => Weigh(queue, ct), ct).ConfigureAwait(false);
+        using var operation = weight is null
+            ? _tracker.Begin(OperationVerbs.Extract, queue.Count, totalBytes: 0, bytesAreWork: true, token: ct)
+            : _tracker.Begin(OperationVerbs.Extract, weight.Files, weight.Bytes, token: ct);
+        var selected = new HashSet<string>(queue.Select(item => item.Path), StringComparer.OrdinalIgnoreCase);
         var landed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var progress = new InlineProgress(path => {
             lock (landed) {
                 landed.Add(path);
             }
-            operation.Advance(path);
+            if (weight is null) {
+                if (selected.Contains(path)) {
+                    operation.Advance(path);
+                } else {
+                    operation.SetCurrentPath(path);
+                }
+            } else if (weight.SizeOf(path) is { } size) {
+                operation.Advance(path);
+                operation.AdvanceBytes(size);
+            } else {
+                operation.SetCurrentPath(path);
+            }
         });
 
         long reportedWork = 0;
-        var work = new InlineWorkProgress(units => {
+        var work = weight is not null ? null : new InlineWorkProgress(units => {
             operation.SetTotalBytes(units.Total);
             operation.AdvanceBytes(units.Done - reportedWork);
             reportedWork = units.Done;
@@ -315,6 +332,51 @@ public sealed class ExtractionService {
         }
     }
 
+    /// <summary>
+    /// How many files and bytes the queue holds, from the directories of
+    /// the zips it comes out of; null when any part of it cannot be told -
+    /// another kind of archive, a zip that will not open, a name not found
+    /// in its directory - and the operation counts the old way.
+    /// </summary>
+    private ExtractWeight? Weigh(IReadOnlyList<CopyOutItem> queue, CancellationToken ct) {
+        var catalogs = new Dictionary<string, ZipCatalog>(StringComparer.OrdinalIgnoreCase);
+        int files = 0;
+        long bytes = 0;
+        foreach (var item in queue) {
+            if (_ns.ParseArchive(item.Path) is not { } archive
+                || !string.Equals(Path.GetExtension(archive.Archive), ".zip", StringComparison.OrdinalIgnoreCase)) {
+                return null;
+            }
+
+            if (!catalogs.TryGetValue(archive.Archive, out var catalog)) {
+                try {
+                    using var stream = _fs.OpenRead(archive.Archive);
+                    catalog = ZipCatalog.Read(stream, CultureInfo.CurrentCulture.TextInfo.OEMCodePage, ct);
+                } catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException) {
+                    _log.Info($"Extract: zip directory not read: {archive.Archive} ({ex.Message}) - counted by entries");
+
+                    return null;
+                }
+                catalogs[archive.Archive] = catalog;
+            }
+
+            if (catalog.SizeOf(archive.Inner) is { } size) {
+                files++;
+                bytes += size;
+            } else if (catalog.Census(archive.Inner, maxTypes: 0) is { } stats) {
+                files += stats.Files;
+                bytes += stats.TotalSize;
+            } else {
+                return null;
+            }
+        }
+
+        return new ExtractWeight(files, bytes, path =>
+            _ns.ParseArchive(path) is { } archive && catalogs.TryGetValue(archive.Archive, out var catalog)
+                ? catalog.SizeOf(archive.Inner)
+                : null);
+    }
+
     private void PushUndo(IReadOnlyList<IUndoableAction> restores, IReadOnlyList<string> extracted) {
         var steps = new List<IUndoableAction>(restores.Count + extracted.Count);
         steps.AddRange(restores);
@@ -419,6 +481,10 @@ public sealed class ExtractionService {
 
         public void Report(CopyOutWork value) => _report(value);
     }
+
+
+    /// <summary>What an extraction holds, and what one file landed weighs (null for a folder).</summary>
+    private sealed record ExtractWeight(int Files, long Bytes, Func<string, long?> SizeOf);
 
 
     /// <summary>One source, and what has been decided about it so far.</summary>

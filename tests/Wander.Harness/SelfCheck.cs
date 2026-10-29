@@ -221,7 +221,7 @@ public static class SelfCheck {
     /// </para>
     /// </summary>
     private static int CheckArchives(string dir) {
-        var shell = new WindowsShellNamespace(NullLogger.Instance);
+        var shell = new WindowsShellNamespace(NullLogger.Instance, new SystemIOFileSystem());
         int failures = 0;
 
         foreach (string path in Directory.EnumerateFiles(dir).OrderBy(p => p, StringComparer.OrdinalIgnoreCase)) {
