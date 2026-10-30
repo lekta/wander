@@ -21,6 +21,10 @@ internal class FakeFileSystem : IFileSystem {
 
 
     public virtual IReadOnlyList<FileSystemEntry> Enumerate(string path, SortOptions? sort = null, CancellationToken ct = default) {
+        if (EnumerateFailures.Contains(path)) {
+            throw new UnauthorizedAccessException($"Access to '{path}' is denied.");
+        }
+
         var options = sort ?? SortOptions.Default;
 
         var folderLikes = new List<FileSystemEntry>();
@@ -294,6 +298,9 @@ internal class FakeFileSystem : IFileSystem {
 
     /// <summary>Paths whose rename must fail — for exercising rollback paths.</summary>
     public HashSet<string> RenameFailures { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Folders <see cref="Enumerate"/> is refused on - access denied.</summary>
+    public HashSet<string> EnumerateFailures { get; } = new(StringComparer.OrdinalIgnoreCase);
 
 
     public void Rename(string path, string newName) {

@@ -25,6 +25,11 @@ public class BlendReaderTests {
     }
 
     [Fact]
+    public void Backup_ReadsLikeTheFile() {
+        Assert.Equal(2, MeshFile.Read(Temp("quad.blend1", new BlendFile().Quad().ToArray()))!.TriangleCount);
+    }
+
+    [Fact]
     public void Picture_FoundByTheMaterialsName_IsLaidByTheUvLayer_VFromTheTop() {
         string path = Temp("quad.blend", new BlendFile().Quad().ToArray());
         File.WriteAllBytes(Path.Combine(Path.GetDirectoryName(path)!, "Wood_Albedo.png"), new byte[] { 1 });

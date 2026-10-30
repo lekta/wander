@@ -69,15 +69,17 @@ internal static class FbxReader {
         var materialTextures = new Dictionary<long, long>();
         var textureVideos = new Dictionary<long, long>();
         foreach (var link in root.Child("Connections")?.All("C") ?? Enumerable.Empty<FbxNode>()) {
+            // The other kinds ("PP", "PO") start with a property's name, not an id.
+            if (link.String(0) is not ("OO" or "OP")) {
+                continue;
+            }
+
             long child = link.Long(1), parent = link.Long(2);
             if (link.String(0) == "OP") {
                 if (textureNodes.ContainsKey(child) && materials.ContainsKey(parent) && link.String(3) is "DiffuseColor" or "Diffuse") {
                     materialTextures[parent] = child;
                 }
 
-                continue;
-            }
-            if (link.String(0) != "OO") {
                 continue;
             }
 

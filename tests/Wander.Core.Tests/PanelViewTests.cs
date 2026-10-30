@@ -121,6 +121,26 @@ public class PanelRowTests {
     }
 
 
+    [Theory]
+    [InlineData(PanelRowRole.OwnBookmark, PanelRowKind.Folder, @"D:\Work")]
+    [InlineData(PanelRowRole.OwnBookmark, PanelRowKind.Drive, @"D:\")]
+    [InlineData(PanelRowRole.OwnBookmark, PanelRowKind.DeviceFolder, @"device:Pixel 6\Storage\DCIM")]
+    [InlineData(PanelRowRole.BuiltInBookmark, PanelRowKind.Folder, @"C:\Users\me\Downloads")]
+    [InlineData(PanelRowRole.BuiltInBookmark, PanelRowKind.Shell, "shell:RecycleBinFolder")]
+    public void ABookmarksOwnRow_TakesAName_WhateverItStandsOn(PanelRowRole role, PanelRowKind kind, string path) {
+        var row = new PanelRow(path, "x", kind) { Role = role };
+
+        Assert.True(row.IsBookmarkRoot);
+        Assert.True(row.IsRenamable);
+    }
+
+    [Fact]
+    public void ABookmarkWhoseFolderIsGone_StillTakesAName_AFolderGoneDoesNot() {
+        Assert.True(new PanelRow(@"D:\Gone", "x", PanelRowKind.Folder) { Role = PanelRowRole.OwnBookmark, IsMissing = true }.IsRenamable);
+        Assert.False(new PanelRow(@"D:\Gone", "x", PanelRowKind.Folder) { IsMissing = true }.IsRenamable);
+    }
+
+
     [Fact]
     public void AFolderInAnArchive_IsProbed_TheArchiveItselfIsNot() {
         // Inside, the archive is open already and the chevron is asked for;

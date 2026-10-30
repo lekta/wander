@@ -318,6 +318,19 @@ public partial class MainWindow : Window {
     }
 
 
+    /// <summary>
+    /// The operations' bar on the window's taskbar button, for a copy watched
+    /// from another window. From here rather than bound: a TaskbarItemInfo is
+    /// not in the visual tree, and a binding there fails the way one on a
+    /// DataGridColumn does - silently.
+    /// </summary>
+    private void ShowTaskbarProgress() {
+        TaskbarItemInfo ??= new System.Windows.Shell.TaskbarItemInfo();
+        TaskbarItemInfo.ProgressState = Vm.TaskbarProgress;
+        TaskbarItemInfo.ProgressValue = Vm.AggregateProgress / 100.0;
+    }
+
+
     // --- Preview pane layout --------------------------------------------
 
 
@@ -329,7 +342,7 @@ public partial class MainWindow : Window {
         // Built here rather than in the constructor: the folder it falls
         // back to is the one the view model is listing, and there is no view
         // model yet when the window is constructed.
-        _drops = new DropTargetController(() => Vm.CurrentPath, () => Vm.Settings.DragHoverEntersFolders);
+        _drops = new DropTargetController(() => Vm.CurrentPath, () => Vm.Settings.DragHoverEntersFolders, () => Vm.IsSearchResults);
         _drops.HoverOpened += OnDragHoverOpened;
         _outgoing = new OutgoingDrag(_drops, () => FolderTrees.ClearBookmarkTarget());
         FolderTrees.Connect(_drops, _outgoing);
@@ -407,6 +420,11 @@ public partial class MainWindow : Window {
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e) {
         switch (e.PropertyName) {
+            case nameof(MainViewModel.TaskbarProgress):
+            case nameof(MainViewModel.AggregateProgress):
+                ShowTaskbarProgress();
+                break;
+
             case nameof(MainViewModel.IsPreviewVisible):
             case nameof(MainViewModel.PreviewWidth):
                 ApplyPreviewLayout();
@@ -1465,12 +1483,11 @@ public partial class MainWindow : Window {
 
     private bool CanStartRename(object? parameter) {
         var (target, place) = Vm.ResolveTarget(parameter);
-        if (place.IsReadOnly) {
-            return false;
-        }
 
+        // A panel row answers for itself: the bookmark on the bin or on a
+        // device takes a name though nothing there can be renamed.
         return TargetRules.Rename(target) switch {
-            RenameRoute.ListRow or RenameRoute.ListBatch => true,
+            RenameRoute.ListRow or RenameRoute.ListBatch => !place.IsReadOnly,
             RenameRoute.PanelRow => FolderTrees.CanRename(target.Pane, target.Folder!),
             _ => false,
         };

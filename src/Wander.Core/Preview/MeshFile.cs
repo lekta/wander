@@ -154,18 +154,36 @@ public static class MeshFile {
     /// <summary>How much of a text model to read. A 200 MB OBJ is not a preview.</summary>
     private const long MaxFileSize = 256L * 1024 * 1024;
 
+    private const string BlendExtension = ".blend";
+
+    /// <summary>The most backups Blender's "Save Versions" keeps.</summary>
+    private const int MaxBlenderBackups = 32;
+
     /// <summary>A texture file past this is not read: decoded to 2048 px anyway, and the pane waits for it.</summary>
     private const long MaxTextureSize = 64L * 1024 * 1024;
 
 
     /// <summary>Extensions this reader understands.</summary>
-    public static readonly IReadOnlySet<string> Extensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
-        ".stl", ".obj", ".gltf", ".glb", ".ply", ".3mf", ".fbx", ".blend",
-    };
+    public static readonly IReadOnlySet<string> Extensions = new HashSet<string>(
+        new[] { ".stl", ".obj", ".gltf", ".glb", ".ply", ".3mf", ".fbx", ".blend" }.Concat(BlenderBackups()),
+        StringComparer.OrdinalIgnoreCase);
 
 
     public static bool IsMesh(string path) {
         return Extensions.Contains(Path.GetExtension(path));
+    }
+
+
+    /// <summary>
+    /// A copy Blender keeps of an earlier save - <c>.blend1</c>, <c>.blend2</c>:
+    /// a model like any other, but its tile says it is not the current one.
+    /// </summary>
+    public static bool IsBackup(string path) {
+        string ext = Path.GetExtension(path);
+
+        return ext.Length > BlendExtension.Length
+            && ext.StartsWith(BlendExtension, StringComparison.OrdinalIgnoreCase)
+            && Extensions.Contains(ext);
     }
 
 
@@ -191,7 +209,7 @@ public static class MeshFile {
                 ".glb" or ".gltf" => GltfReader.Read(path, textures),
                 ".ply" => PlyReader.Read(SharedRead.ReadAllBytes(path)),
                 ".fbx" => FbxReader.Read(SharedRead.ReadAllBytes(path), textures),
-                ".blend" => BlendReader.Read(SharedRead.ReadAllBytes(path), textures),
+                _ when ext.StartsWith(BlendExtension, StringComparison.OrdinalIgnoreCase) => BlendReader.Read(SharedRead.ReadAllBytes(path), textures),
                 ".3mf" => ReadPackage(path),
                 _ => null,
             };
@@ -203,6 +221,11 @@ public static class MeshFile {
                 or InvalidDataException or System.Xml.XmlException or OverflowException or IndexOutOfRangeException) {
             return null;
         }
+    }
+
+
+    private static IEnumerable<string> BlenderBackups() {
+        return Enumerable.Range(1, MaxBlenderBackups).Select(i => BlendExtension + i);
     }
 
 

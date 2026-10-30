@@ -48,7 +48,7 @@ public sealed class WindowsShellNamespace : IShellNamespace {
 
 
     public bool IsShellPath(string path) {
-        return IsRecycleBin(path) || IsComputer(path) || DevicePath.Is(path) || ParseArchive(path) is not null;
+        return IsRecycleBin(path) || IsComputer(path) || IsBookmarks(path) || DevicePath.Is(path) || ParseArchive(path) is not null;
     }
 
     /// <summary>
@@ -69,7 +69,7 @@ public sealed class WindowsShellNamespace : IShellNamespace {
     }
 
     public bool CanNavigate(string path) {
-        if (IsRecycleBin(path) || IsComputer(path)) {
+        if (IsRecycleBin(path) || IsComputer(path) || IsBookmarks(path)) {
             return true;
         }
         if (DevicePath.Is(path)) {
@@ -134,6 +134,7 @@ public sealed class WindowsShellNamespace : IShellNamespace {
     public string? GetDisplayName(string shellPath) {
         return IsRecycleBin(shellPath) ? Text.Get("SpecialFolderRecycleBin")
             : IsComputer(shellPath) ? Text.Get("ComputerHeader")
+            : IsBookmarks(shellPath) ? Text.Get("BookmarksHeader")
             : DevicePath.Parse(shellPath) is { IsRoot: true } device ? device.Device
             : null;
     }
@@ -200,5 +201,9 @@ public sealed class WindowsShellNamespace : IShellNamespace {
 
     private static bool IsComputer(string path) {
         return string.Equals(path, ShellPaths.Computer, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsBookmarks(string path) {
+        return string.Equals(path, ShellPaths.Bookmarks, StringComparison.OrdinalIgnoreCase);
     }
 }

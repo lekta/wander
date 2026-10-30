@@ -1,0 +1,186 @@
+<UserControl x:Class="Wander.App.Views.BookmarksManagerView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:Wander.App.Controls"
+             xmlns:res="clr-namespace:Wander.App.Resources">
+    <!--
+        The bookmarks' own page, over the file list (ShellPaths.Bookmarks):
+        every bookmark there is - the ones switched off, the ones on a device
+        not plugged in, the ones whose folder is gone - which the panel cannot
+        show, since it draws only what can be opened. The tick is "has a row
+        in the panel"; the name is the bookmark's, the folder keeps its own.
+        Rows come from BookmarksController.Rows, keys and buttons go back to it.
+    -->
+    <UserControl.Resources>
+        <!-- A row's little action: flat, lit on hover, no keyboard focus - the keyboard stays on the rows. -->
+        <Style x:Key="RowAction" TargetType="Button">
+            <Setter Property="Width" Value="20"/>
+            <Setter Property="Height" Value="18"/>
+            <Setter Property="Margin" Value="2,0,0,0"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMuted}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="2">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource RowActionHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.3"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- The colours and the rule above the user's own are the panel's lines'. -->
+        <Style x:Key="BookmarkRow" TargetType="ListBoxItem">
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <StackPanel>
+                            <Border x:Name="SectionRule"
+                                    Height="1"
+                                    Margin="4,2,4,2"
+                                    Background="{DynamicResource SectionRule}"
+                                    Visibility="Collapsed"/>
+                            <Border x:Name="Row"
+                                    Background="{DynamicResource PaneBackground}"
+                                    MinHeight="24"
+                                    Padding="8,1"
+                                    SnapsToDevicePixels="True">
+                                <ContentPresenter VerticalAlignment="Center"/>
+                            </Border>
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <DataTrigger Binding="{Binding StartsSection}" Value="True">
+                                <Setter TargetName="SectionRule" Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                            <Trigger Property="IsMouseOver" SourceName="Row" Value="True">
+                                <Setter TargetName="Row" Property="Background" Value="{DynamicResource RowHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Row" Property="Background" Value="{DynamicResource RowSelectedInactive}"/>
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsSelected" Value="True"/>
+                                    <Condition Property="Selector.IsSelectionActive" Value="True"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="Row" Property="Background" Value="{DynamicResource RowSelected}"/>
+                            </MultiTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <ListBox x:Name="Rows"
+             ItemsSource="{Binding Bookmarks.Rows}"
+             ItemContainerStyle="{StaticResource BookmarkRow}"
+             Background="{DynamicResource PaneBackground}"
+             BorderThickness="0"
+             Padding="0,4"
+             Grid.IsSharedSizeScope="True"
+             HorizontalContentAlignment="Stretch"
+             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+             VirtualizingPanel.IsVirtualizing="False"
+             SelectionMode="Single"
+             TextSearch.TextPath="Name"
+             PreviewKeyDown="Rows_PreviewKeyDown"
+             MouseDoubleClick="Rows_MouseDoubleClick"
+             PreviewMouseRightButtonUp="Rows_PreviewMouseRightButtonUp">
+        <ListBox.ItemTemplate>
+            <DataTemplate>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="BookmarkName"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="BookmarkState"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <CheckBox Grid.Column="0"
+                              Focusable="False"
+                              VerticalAlignment="Center"
+                              Margin="0,0,8,0"
+                              IsChecked="{Binding IsShown}"
+                              ToolTip="{x:Static res:Strings.BookmarksShownHint}"/>
+
+                    <controls:AsyncIcon x:Name="Icon" Grid.Column="1"
+                                        IconPath="{Binding IconPath}" IconSize="Small"
+                                        Width="16" Height="16" Margin="0,0,6,0"/>
+
+                    <Grid Grid.Column="2" VerticalAlignment="Center">
+                        <TextBlock x:Name="NameLabel"
+                                   Text="{Binding Name}"
+                                   MaxWidth="280"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <TextBox x:Name="NameEditor"
+                                 MinWidth="160"
+                                 Visibility="Collapsed"
+                                 PreviewKeyDown="NameEditor_PreviewKeyDown"
+                                 LostKeyboardFocus="NameEditor_LostKeyboardFocus"/>
+                    </Grid>
+
+                    <TextBlock Grid.Column="3"
+                               Text="{Binding Place}"
+                               ToolTip="{Binding Place}"
+                               Margin="14,0,0,0"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextDim}"
+                               TextTrimming="CharacterEllipsis"/>
+
+                    <TextBlock Grid.Column="4"
+                               Text="{Binding State}"
+                               Margin="14,0,0,0"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextDim}"
+                               FontStyle="Italic"/>
+
+                    <StackPanel Grid.Column="5" Orientation="Horizontal" Margin="14,0,0,0">
+                        <Button Style="{StaticResource RowAction}"
+                                Content="&#x2191;"
+                                IsEnabled="{Binding CanMoveUp}"
+                                ToolTip="{x:Static res:Strings.BookmarksMoveUp}"
+                                Click="MoveUp_Click"/>
+                        <Button Style="{StaticResource RowAction}"
+                                Content="&#x2193;"
+                                IsEnabled="{Binding CanMoveDown}"
+                                ToolTip="{x:Static res:Strings.BookmarksMoveDown}"
+                                Click="MoveDown_Click"/>
+                        <!-- Hidden, not collapsed: the arrows stay in one column. -->
+                        <Button x:Name="RemoveButton"
+                                Style="{StaticResource RowAction}"
+                                Content="&#x2715;"
+                                ToolTip="{x:Static res:Strings.BookmarksRemove}"
+                                Click="Remove_Click"/>
+                    </StackPanel>
+                </Grid>
+                <DataTemplate.Triggers>
+                    <DataTrigger Binding="{Binding IsBuiltIn}" Value="True">
+                        <Setter TargetName="RemoveButton" Property="Visibility" Value="Hidden"/>
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding IsDim}" Value="True">
+                        <Setter TargetName="NameLabel" Property="Foreground" Value="{DynamicResource TextDisabled}"/>
+                        <Setter TargetName="Icon" Property="Opacity" Value="0.55"/>
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                        <Setter TargetName="NameLabel" Property="Visibility" Value="Hidden"/>
+                        <Setter TargetName="NameEditor" Property="Visibility" Value="Visible"/>
+                    </DataTrigger>
+                </DataTemplate.Triggers>
+            </DataTemplate>
+        </ListBox.ItemTemplate>
+    </ListBox>
+</UserControl>

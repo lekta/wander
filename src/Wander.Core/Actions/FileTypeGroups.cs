@@ -14,6 +14,9 @@ public enum FileTypeGroup {
     Documents,
     Archives,
     Folders,
+
+    /// <summary>Camera RAW: a part of <see cref="Images"/>, last so the numbers saved in actions stay.</summary>
+    Raw,
 }
 
 
@@ -69,6 +72,7 @@ public static class FileTypeGroups {
     public static IReadOnlySet<string> Extensions(FileTypeGroup group) {
         return group switch {
             FileTypeGroup.Images => ImageFormats.All,
+            FileTypeGroup.Raw => ImageFormats.Raw,
             FileTypeGroup.Video => PreviewRouter.Video,
             FileTypeGroup.Audio => AudioTags.Extensions,
             FileTypeGroup.TextAndCode => PreviewRouter.TextLike,
@@ -109,6 +113,7 @@ public static class FileTypeGroups {
     public static string NameKey(FileTypeGroup group) {
         return group switch {
             FileTypeGroup.Images => "FileTypeImages",
+            FileTypeGroup.Raw => "FileTypeRaw",
             FileTypeGroup.Video => "FileTypeVideo",
             FileTypeGroup.Audio => "FileTypeAudio",
             FileTypeGroup.TextAndCode => "FileTypeTextAndCode",

@@ -35,6 +35,17 @@ public class ZipCatalogTests {
 
 
     [Fact]
+    public void TheFoldersRightUnderIt_AreWeighedByAllTheyHold() {
+        using var zip = Zip(("root/a.txt", 1), ("root/big/x/y.bin", 500), ("root/big/z.bin", 20), ("root/small/s.bin", 3), ("root/none/", 0));
+
+        var stats = ZipCatalog.Read(zip, 866).Census("root")!;
+
+        Assert.Equal(new[] { "big", "small", "none" }, stats.Subfolders.Select(s => s.Name));
+        Assert.Equal((2, 520L), (stats.Subfolders[0].Files, stats.Subfolders[0].Size));
+    }
+
+
+    [Fact]
     public void AListedEmptyFolder_IsAFolder() {
         using var zip = Zip(("docs/", 0), ("docs/empty/", 0), ("docs/a.txt", 3));
 

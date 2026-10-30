@@ -122,6 +122,27 @@ public class FbxReaderTests {
     }
 
 
+    [Fact]
+    public void Text_LinksBetweenProperties_AreSteppedOver() {
+        // "PP" and "PO" start with a property's name where the others have an id.
+        const string text = "; FBX 7.4.0 project file\n" +
+            "FBXHeaderExtension:  {\n  FBXVersion: 7400\n}\n" +
+            "Objects:  {\n" +
+            "  Geometry: 100, \"Geometry::Quad\", \"Mesh\" {\n" +
+            "    Vertices: *12 {\n      a: 0,0,0,1,0,0,1,1,0,0,1,0\n    }\n" +
+            "    PolygonVertexIndex: *4 {\n      a: 0,1,2,-4\n    }\n" +
+            "  }\n" +
+            "  Model: 200, \"Model::Quad\", \"Mesh\" {\n  }\n" +
+            "}\n" +
+            "Connections:  {\n  C: \"OO\",100,200\n  C: \"OO\",200,0\n" +
+            "  C: \"PP\",\"Constrained object (Child)\",300,\"Lcl Translation\",200\n}\n";
+
+        var mesh = MeshFile.Read(Temp("rope.fbx", Encoding.ASCII.GetBytes(text)));
+
+        Assert.Equal(2, mesh!.TriangleCount);
+    }
+
+
     private static (float, float, float) Corner(MeshData mesh, float x, float y, float z) {
         return (x, y, z);
     }

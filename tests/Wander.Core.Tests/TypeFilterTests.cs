@@ -115,6 +115,15 @@ public class TypeFilterTests {
 
 
     [Fact]
+    public void Raw_PassesTheCameraFiles_AndNoOtherPictures() {
+        Assert.True(TypeFilter.Of(FileTypeGroup.Raw).Matches(File("a.CR3")));
+        Assert.True(TypeFilter.Of(FileTypeGroup.Images).Matches(File("a.cr3")));
+        Assert.False(TypeFilter.Of(FileTypeGroup.Raw).Matches(File("a.jpg")));
+        Assert.False(TypeFilter.Of(FileTypeGroup.Raw).Matches(Dir("a.cr3")));
+    }
+
+
+    [Fact]
     public void Of_All_IsNone() {
         Assert.Same(TypeFilter.None, TypeFilter.Of(FileTypeGroup.All));
     }

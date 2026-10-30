@@ -156,6 +156,15 @@
   <data name="PreviewFolderTypes" xml:space="preserve">
     <value>What's inside</value>
   </data>
+  <data name="PreviewFolderSubfolders" xml:space="preserve">
+    <value>Folders</value>
+  </data>
+  <data name="PreviewCensusFilterHint" xml:space="preserve">
+    <value>Show only these files in the list</value>
+  </data>
+  <data name="PreviewCensusOpenHint" xml:space="preserve">
+    <value>Open the folder</value>
+  </data>
   <data name="PreviewArchiveHeadline" xml:space="preserve">
     <value>Archive · Files: {0:N0} · Folders: {1:N0} · {2}</value>
   </data>
@@ -1374,6 +1383,15 @@
   <data name="ColumnRating" xml:space="preserve">
     <value>Rating</value>
   </data>
+  <data name="ColumnsFit" xml:space="preserve">
+    <value>Size column to fit</value>
+  </data>
+  <data name="ColumnsFitAll" xml:space="preserve">
+    <value>Size all columns to fit</value>
+  </data>
+  <data name="ColumnsNameFills" xml:space="preserve">
+    <value>Name takes the free space</value>
+  </data>
   <data name="ColumnSound" xml:space="preserve">
     <value>Sound</value>
   </data>
@@ -1973,6 +1991,12 @@
   </data>
   <data name="SettingsShowSystemRootFolders" xml:space="preserve">
     <value>System folders and files at drive roots</value>
+  </data>
+  <data name="SettingsShowFolderSizes" xml:space="preserve">
+    <value>Folder sizes in the Details view</value>
+  </data>
+  <data name="SettingsShowFolderSizesNote" xml:space="preserve">
+    <value>Folders on screen are walked in the background; all of them when sorted by size. You'll feel it on a slow disk. Network folders aren't counted.</value>
   </data>
   <data name="SettingsShowGroup" xml:space="preserve">
     <value>Show in the list</value>
@@ -3089,5 +3113,20 @@
   </data>
   <data name="BookmarksRenameLabel" xml:space="preserve">
     <value>What the bookmark is called in the panel (empty — the folder's name):</value>
+  </data>
+  <data name="BookmarksOpenHint" xml:space="preserve">
+    <value>Manage bookmarks</value>
+  </data>
+  <data name="BookmarksShownHint" xml:space="preserve">
+    <value>Show in the panel</value>
+  </data>
+  <data name="BookmarksStateDeviceAway" xml:space="preserve">
+    <value>device not connected</value>
+  </data>
+  <data name="BookmarksStateGone" xml:space="preserve">
+    <value>folder not found</value>
+  </data>
+  <data name="FileTypeRaw" xml:space="preserve">
+    <value>RAW</value>
   </data>
 </root>

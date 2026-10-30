@@ -579,11 +579,10 @@ public partial class FolderTreesView : UserControl {
             return;
         }
 
-        // Ctrl + arrows reorder the user's own bookmarks. Bookmarks panel
-        // only: the drives list what the machine has, in the order the
-        // machine has it.
+        // Ctrl + arrows reorder the bookmarks. Bookmarks panel only: the
+        // drives list what the machine has, in the order the machine has it.
         if (e.Key is Key.Up or Key.Down && modifiers == ModifierKeys.Control) {
-            if (pane == Pane.Bookmarks && caret is { IsRemovableBookmark: true }) {
+            if (pane == Pane.Bookmarks && caret is { Row.IsBookmarkRoot: true }) {
                 Vm.MoveBookmark(caret.FullPath, e.Key == Key.Up ? -1 : 1);
             }
             e.Handled = true;
@@ -805,6 +804,8 @@ public partial class FolderTreesView : UserControl {
     // wait for a holder (MainViewModel.RenameFolderAsync). The row stays
     // where it is, open if it was open: the model follows the new path
     // (Relocated) instead of reading the level as if a folder had gone.
+    // On a bookmark's own row the same editor names the bookmark: the folder
+    // is left alone (2026-10-30; it used to be renamed, and failed while open).
 
     /// <summary>
     /// Whether <see cref="StartRename"/> has a line to open its editor on
@@ -820,12 +821,12 @@ public partial class FolderTreesView : UserControl {
     /// Opens the editor on the line of <paramref name="pane"/> standing on
     /// <paramref name="path"/>. False when there is none on screen, or it is
     /// not one that can be renamed - a drive, a shell folder, an archive or a
-    /// folder inside one, a bookmark whose folder is gone, a built-in bookmark
-    /// (its label is Windows's name for the folder, not the folder's).
+    /// folder inside one, unless the row is a bookmark's own: a name for the
+    /// bookmark, wherever it points.
     /// </summary>
     public bool StartRename(Pane pane, string path) {
         var line = RenameLine(pane, path);
-        if (line is null || Containers.Contains(line.FullPath)) {
+        if (line is null || (!line.Row.IsBookmarkRoot && Containers.Contains(line.FullPath))) {
             return false;
         }
 
@@ -901,8 +902,10 @@ public partial class FolderTreesView : UserControl {
     private void RenameBox_PreviewTextInput(object sender, TextCompositionEventArgs e) {
         // The characters Windows will not take in a name are refused as
         // they are typed, as in the list - a rename rejected after the
-        // fact would only lose what was typed.
-        if (e.Text.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) {
+        // fact would only lose what was typed. A bookmark's name is no
+        // file's: "Work: Q3" is fine.
+        if (((FrameworkElement)sender).DataContext is TreeNodeViewModel { Row.IsBookmarkRoot: false }
+            && e.Text.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) {
             e.Handled = true;
             Vm.Status = Strings.InvalidFileNameChars + "\\ / : * ? \" < > |";
         }
@@ -959,6 +962,12 @@ public partial class FolderTreesView : UserControl {
         Post(new EditEnded(pane));
         if (takeFocus) {
             FocusPanel(list);
+        }
+        // Blank gives the default name back, as in the bookmark's own dialog.
+        if (line.Row.IsBookmarkRoot) {
+            Vm.Bookmarks.Rename(path, newName);
+
+            return;
         }
         if (string.IsNullOrWhiteSpace(newName) || newName == line.Name) {
             return;

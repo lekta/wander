@@ -329,6 +329,35 @@ public class PanelRulesTests {
         Assert.Empty(s.Asked<FocusRow>());
     }
 
+    /// <summary>
+    /// Asked about while it was still empty - an archive unpacking into it:
+    /// no chevron. The operation over, its parent is read again, and the row
+    /// is asked about again.
+    /// </summary>
+    [Fact]
+    public void AFolderFilledAfterItWasAsked_GetsItsChevronWhenItsParentIsReadAgain() {
+        const string Fresh = @"C:\E\Fresh";
+        var s = Scene(Fresh).Start().Navigate(E).Chevron(Pane.Drives, E, open: true);
+        Assert.False(s.Drives.Find(Fresh)!.HasChevron);
+
+        s.Add(@"C:\E\Fresh\Inside");
+        s.Post(new FolderChanged(E)).Settle();
+
+        Assert.True(s.Drives.Find(Fresh)!.HasChevron);
+    }
+
+    /// <summary>The same, open: its own level is read again, and shows what came.</summary>
+    [Fact]
+    public void AnOpenFolderFilledAfterItWasRead_ShowsWhatCame() {
+        const string Fresh = @"C:\E\Fresh";
+        var s = Scene(Fresh).Start().Navigate(E).Chevron(Pane.Drives, E, open: true).Chevron(Pane.Drives, Fresh, open: true);
+
+        s.Add(@"C:\E\Fresh\Inside");
+        s.Post(new FolderChanged(Fresh)).Settle();
+
+        Assert.True(s.Shows(Pane.Drives, @"C:\E\Fresh\Inside"));
+    }
+
     /// <summary>P-13: the open folder deleted from its panel: the parent opens, and it is the cursor and the target.</summary>
     [Fact]
     public void P13_TheOpenFolderDeleted_TheParentIsTheCursor() {

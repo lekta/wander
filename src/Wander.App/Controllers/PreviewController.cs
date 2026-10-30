@@ -217,6 +217,7 @@ public sealed class PreviewController : ObservableObject {
     private GalleryPalette _contentPalette = GalleryPalette.Plain;
     private string? _currentFolderPath;
     private string _currentFolderName = "";
+    private string? _censusFolder;
     private string _folderHeadline = "";
     private string _folderTitle = "";
     private string _folderNote = "";
@@ -1278,7 +1279,30 @@ public sealed class PreviewController : ObservableObject {
     public bool HasFolderNote => _folderNote.Length > 0;
 
     /// <summary>Biggest file types first, with a bar proportional to their share.</summary>
-    public ObservableCollection<FolderTypeRow> FolderTypes { get; } = new();
+    public ObservableCollection<CensusRow> FolderTypes { get; } = new();
+
+    /// <summary>The folders right under the one counted, biggest first.</summary>
+    public ObservableCollection<CensusRow> FolderSubfolders { get; } = new();
+
+    private string _folderSubfoldersMore = "";
+
+    /// <summary>"и ещё 12" under the subfolders, when not all of them made the list.</summary>
+    public string FolderSubfoldersMore {
+        get => _folderSubfoldersMore;
+        private set {
+            if (SetField(ref _folderSubfoldersMore, value)) {
+                Raise(nameof(HasFolderSubfoldersMore));
+            }
+        }
+    }
+
+    public bool HasFolderSubfoldersMore => _folderSubfoldersMore.Length > 0;
+
+    /// <summary>A line of the census clicked: this folder, these files in it (its path, the extension).</summary>
+    public event Action<string, string>? CensusTypeChosen;
+
+    /// <summary>A line of the census clicked: this subfolder (its path).</summary>
+    public event Action<string>? CensusFolderChosen;
 
 
     // --- Archive listing -------------------------------------------------
@@ -2712,7 +2736,7 @@ public sealed class PreviewController : ObservableObject {
         FolderTitle = archive.IsRoot ? archive.ArchiveName : Path.GetFileName(archive.Inner);
         FolderHeadline = "";
         FolderNote = "";
-        FolderTypes.Clear();
+        ClearCensusRows();
         SetVolume(null);
         Kind = PreviewKind.Folder;
         Raise(nameof(ShowsHelperSwitches));
@@ -2750,9 +2774,16 @@ public sealed class PreviewController : ObservableObject {
             return false;
         }
 
-        ShowCensus(stats, archive.IsRoot
-            ? string.Format(Strings.PreviewZipHeadline, stats.Files, stats.Folders, SizeFormatter.Format(stats.TotalSize), SizeFormatter.Format(zip.Length))
-            : FormatHeadline(stats.Files, stats.Folders, stats.TotalSize));
+        // Its folders open like any others; its types do not filter: a filter
+        // does not walk into the folders of an archive, and would show a
+        // fraction of the number it was clicked for.
+        ShowCensus(
+            stats,
+            archive.IsRoot
+                ? string.Format(Strings.PreviewZipHeadline, stats.Files, stats.Folders, SizeFormatter.Format(stats.TotalSize), SizeFormatter.Format(zip.Length))
+                : FormatHeadline(stats.Files, stats.Folders, stats.TotalSize),
+            archive.IsRoot ? archive.Archive : Path.Combine(archive.Archive, archive.Inner),
+            typesFilter: false);
 
         return true;
     }
@@ -4072,17 +4103,38 @@ public sealed class PreviewController : ObservableObject {
 
     // --- Footer summary -----------------------------------------------
 
-    private async Task ShowFolderCensusAsync(string folder, CancellationToken ct) {
-        FolderTitle = Path.GetFileName(folder.TrimEnd(Path.DirectorySeparatorChar));
-        if (FolderTitle.Length == 0) {
-            FolderTitle = folder;
+    /// <summary>
+    /// The name to describe a folder by when it is not its own - a chosen
+    /// bookmark's; null for the folder's. Asked with the census.
+    /// </summary>
+    public Func<string, string?>? FolderLabel { get; set; }
+
+    /// <summary>What <see cref="FolderLabel"/> answers changed: the folder on show takes the new name, nothing is counted again.</summary>
+    public void RefreshFolderLabel() {
+        if (Kind == PreviewKind.Folder && _censusFolder is { } folder) {
+            FolderTitle = CensusTitle(folder);
         }
+    }
+
+    private string CensusTitle(string folder) {
+        if (FolderLabel?.Invoke(folder) is { } label) {
+            return label;
+        }
+
+        string name = Path.GetFileName(folder.TrimEnd(Path.DirectorySeparatorChar));
+
+        return name.Length == 0 ? folder : name;
+    }
+
+    private async Task ShowFolderCensusAsync(string folder, CancellationToken ct) {
+        _censusFolder = folder;
+        FolderTitle = CensusTitle(folder);
         // Blank rather than "counting": the spinner below says that, and
         // the numbers themselves start arriving within the first fraction
         // of a second, growing until the walk is done.
         FolderHeadline = "";
         FolderNote = "";
-        FolderTypes.Clear();
+        ClearCensusRows();
         SetVolume(DescribeVolume(folder));
         Kind = PreviewKind.Folder;
         // A subfolder selected and then nothing: the kind is the same, the switches are not.
@@ -4125,12 +4177,20 @@ public sealed class PreviewController : ObservableObject {
             return;
         }
 
-        ShowCensus(stats, FormatHeadline(stats.Files, stats.Folders, stats.TotalSize));
+        ShowCensus(stats, FormatHeadline(stats.Files, stats.Folders, stats.TotalSize), folder, typesFilter: true);
     }
 
 
+    private void ClearCensusRows() {
+        FolderTypes.Clear();
+        FolderSubfolders.Clear();
+        FolderSubfoldersMore = "";
+    }
+
     /// <summary>The census's final numbers - a folder's on disk or a zip's (<see cref="ShowZipCensusAsync"/>).</summary>
-    private void ShowCensus(FolderStats stats, string headline) {
+    /// <param name="root">The place counted: what a line's click is about.</param>
+    /// <param name="typesFilter">A click on a type filters the list by it.</param>
+    private void ShowCensus(FolderStats stats, string headline, string root, bool typesFilter) {
         // Cleared before the final numbers land, so a late progress report
         // finds the walk finished and stands aside.
         IsCensusLoading = false;
@@ -4142,14 +4202,29 @@ public sealed class PreviewController : ObservableObject {
 
         // Bars are relative to the biggest bucket, not to the total: with a
         // long tail every bar would otherwise be a hairline.
-        long biggest = stats.Types.Count > 0 ? Math.Max(1, stats.Types[0].Size) : 1;
+        long biggestType = stats.Types.Count > 0 ? Math.Max(1, stats.Types[0].Size) : 1;
         foreach (var type in stats.Types) {
-            FolderTypes.Add(new FolderTypeRow(
+            bool filters = typesFilter && type.Extension != FolderStatistics.NoExtension;
+            FolderTypes.Add(new CensusRow(
                 type.Extension,
                 string.Format(Strings.PreviewFolderTypeCount, type.Count),
                 SizeFormatter.Format(type.Size),
-                Math.Max(2, 90.0 * type.Size / biggest)));
+                (double)type.Size / biggestType,
+                filters ? new RelayCommand(_ => CensusTypeChosen?.Invoke(root, type.Extension)) : null,
+                filters ? Strings.PreviewCensusFilterHint : null));
         }
+
+        long biggestFolder = stats.Subfolders.Count > 0 ? Math.Max(1, stats.Subfolders[0].Size) : 1;
+        foreach (var folder in stats.Subfolders) {
+            FolderSubfolders.Add(new CensusRow(
+                folder.Name,
+                string.Format(Strings.PreviewFolderTypeCount, folder.Files),
+                SizeFormatter.Format(folder.Size),
+                (double)folder.Size / biggestFolder,
+                new RelayCommand(_ => CensusFolderChosen?.Invoke(Path.Combine(root, folder.Name))),
+                Strings.PreviewCensusOpenHint));
+        }
+        FolderSubfoldersMore = stats.SubfoldersLeftOut > 0 ? string.Format(Strings.PreviewArchiveMore, stats.SubfoldersLeftOut) : "";
     }
 
 

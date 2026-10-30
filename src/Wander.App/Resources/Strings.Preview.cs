@@ -105,6 +105,15 @@ public static partial class Strings {
     /// <summary>Что внутри</summary>
     public static string PreviewFolderTypes => Get(nameof(PreviewFolderTypes));
 
+    /// <summary>Папки</summary>
+    public static string PreviewFolderSubfolders => Get(nameof(PreviewFolderSubfolders));
+
+    /// <summary>Показать в списке только эти файлы</summary>
+    public static string PreviewCensusFilterHint => Get(nameof(PreviewCensusFilterHint));
+
+    /// <summary>Открыть папку</summary>
+    public static string PreviewCensusOpenHint => Get(nameof(PreviewCensusOpenHint));
+
     /// <summary>Папка пуста</summary>
     public static string PreviewFolderEmpty => Get(nameof(PreviewFolderEmpty));
 

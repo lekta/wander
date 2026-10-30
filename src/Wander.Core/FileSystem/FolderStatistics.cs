@@ -3,23 +3,32 @@ namespace Wander.Core.FileSystem;
 /// <summary>One extension bucket: how many files and how much they weigh.</summary>
 public sealed record FolderTypeGroup(string Extension, int Count, long Size);
 
+/// <summary>One folder right under the one counted: how many files it holds, at any depth, and how much they weigh.</summary>
+public sealed record FolderSubfolder(string Name, int Files, long Size);
+
 /// <summary>
 /// What the preview pane shows instead of a placeholder when a folder is
-/// selected: totals plus the handful of file types that actually fill the
-/// folder up.
+/// selected: totals plus the handful of file types and of subfolders that
+/// actually fill the folder up.
 /// </summary>
 public sealed record FolderStats(
     int Files,
     int Folders,
     long TotalSize,
     IReadOnlyList<FolderTypeGroup> Types,
+    IReadOnlyList<FolderSubfolder> Subfolders,
+    // Subfolders past the list above: the pane says there are more.
+    int SubfoldersLeftOut,
     // True when the walk refused to go somewhere: totals are a floor, not
     // the truth, and the UI has to say so rather than lie quietly. By
     // default only the depth guard can do this — see DefaultMaxDepth.
     bool Truncated) {
 
     public static readonly FolderStats Empty =
-        new(0, 0, 0, Array.Empty<FolderTypeGroup>(), false);
+        new(0, 0, 0, Array.Empty<FolderTypeGroup>(), Array.Empty<FolderSubfolder>(), 0, false);
+
+    /// <summary>The folder itself could not be read - access denied, gone: the zeros say nothing about what is in it.</summary>
+    public bool IsUnreadable { get; init; }
 }
 
 
@@ -72,6 +81,9 @@ public static class FolderStatistics {
     /// </summary>
     public const int DefaultMaxDepth = 64;
 
+    /// <summary>The bucket of the files with no extension to go by.</summary>
+    public const string NoExtension = "—";
+
 
     /// <summary>
     /// Walks <paramref name="path"/> and aggregates it. Unreadable subtrees
@@ -93,16 +105,21 @@ public static class FolderStatistics {
         int maxDepth = DefaultMaxDepth,
         int folderBudget = NoBudget,
         IProgress<FolderProgress>? progress = null,
+        int maxSubfolders = 16,
         CancellationToken ct = default) {
 
         int files = 0;
         int folders = 0;
         long total = 0;
         bool truncated = false;
+        bool unreadable = false;
         var byExtension = new Dictionary<string, (int Count, long Size)>(StringComparer.OrdinalIgnoreCase);
+        // What each folder right under this one has gathered; every folder
+        // below it carries the index of the one it is in.
+        var tops = new List<(string Name, int Files, long Size)>();
 
-        var pending = new Stack<(string Path, int Depth)>();
-        pending.Push((path, 0));
+        var pending = new Stack<(string Path, int Depth, int Top)>();
+        pending.Push((path, 0, -1));
 
         // Started only when somebody is listening: the clock is the whole
         // cost of reporting when nobody is.
@@ -126,19 +143,27 @@ public static class FolderStatistics {
 
         while (pending.Count > 0) {
             ct.ThrowIfCancellationRequested();
-            var (current, depth) = pending.Pop();
+            var (current, depth, top) = pending.Pop();
 
             IReadOnlyList<FileSystemEntry> children;
             try {
                 children = fs.Enumerate(current, ct: ct);
+            } catch (OperationCanceledException) {
+                throw;
             } catch {
                 // Access denied / disappeared mid-walk: skip this subtree.
+                unreadable |= depth == 0;
                 continue;
             }
 
             foreach (var child in children) {
                 if (child.Kind == EntryKind.Directory) {
                     folders++;
+                    int childTop = top;
+                    if (depth == 0) {
+                        tops.Add((child.Name, 0, 0));
+                        childTop = tops.Count - 1;
+                    }
                     // Counted either way — it is part of the folder. Whether
                     // we look *inside* is what the depth guard and the
                     // budgets decide.
@@ -146,13 +171,17 @@ public static class FolderStatistics {
                         truncated = true;
                         continue;
                     }
-                    pending.Push((child.FullPath, depth + 1));
+                    pending.Push((child.FullPath, depth + 1, childTop));
                     continue;
                 }
 
                 files++;
                 long size = child.Size ?? 0;
                 total += size;
+                if (top >= 0) {
+                    var gathered = tops[top];
+                    tops[top] = (gathered.Name, gathered.Files + 1, gathered.Size + size);
+                }
 
                 string ext = ExtensionOf(child.Name);
                 var bucket = byExtension.TryGetValue(ext, out var found) ? found : default;
@@ -177,7 +206,12 @@ public static class FolderStatistics {
             ReportIfDue();
         }
 
-        return new FolderStats(files, folders, total, TopTypes(byExtension, maxTypes), truncated);
+        var subfolders = TopSubfolders(tops.Select(t => new FolderSubfolder(t.Name, t.Files, t.Size)), maxSubfolders);
+
+        return new FolderStats(
+            files, folders, total, TopTypes(byExtension, maxTypes), subfolders, tops.Count - subfolders.Count, truncated) {
+            IsUnreadable = unreadable,
+        };
     }
 
 
@@ -195,6 +229,16 @@ public static class FolderStatistics {
             .ToArray();
     }
 
+    /// <summary>The same question and the same order as <see cref="TopTypes"/>, by subfolder.</summary>
+    internal static IReadOnlyList<FolderSubfolder> TopSubfolders(IEnumerable<FolderSubfolder> subfolders, int maxSubfolders) {
+        return subfolders
+            .OrderByDescending(s => s.Size)
+            .ThenByDescending(s => s.Files)
+            .ThenBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
+            .Take(maxSubfolders)
+            .ToArray();
+    }
+
     /// <summary>
     /// Lower-cased extension without the dot; "—" for a file that has none,
     /// so the bucket is still nameable in the UI. Leading-dot names
@@ -204,7 +248,7 @@ public static class FolderStatistics {
     internal static string ExtensionOf(string name) {
         int dot = name.LastIndexOf('.');
         if (dot <= 0 || dot == name.Length - 1) {
-            return "—";
+            return NoExtension;
         }
 
         return name[(dot + 1)..].ToLowerInvariant();

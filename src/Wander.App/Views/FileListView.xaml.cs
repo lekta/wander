@@ -113,6 +113,12 @@ public partial class FileListView : UserControl {
     // the text change that makes is not typing, and must not reopen the list.
     private bool _pickingType;
 
+    // The table's columns the user can do something to, by the id they are
+    // saved under; the scroll viewer inside the table, once it has one.
+    private readonly (string Id, DataGridColumn Column)[] _namedColumns;
+    private DetailsColumns _columns = new();
+    private ScrollViewer? _detailsScroll;
+
 
     public FileListView() {
         InitializeComponent();
@@ -124,6 +130,14 @@ public partial class FileListView : UserControl {
         foreach (var view in new ItemsControl[] { DetailsView, TilesView, IconsView, GalleryView }) {
             view.ItemContainerGenerator.StatusChanged += OnContainersGenerated;
         }
+        _namedColumns = new (string, DataGridColumn)[] {
+            ("Name", NameColumn), ("Folder", FolderColumn), ("Match", MatchColumn), ("Type", TypeColumn), ("Size", SizeColumn),
+            ("Sound", SoundColumn), ("Free", FreeColumn), ("Modified", ModifiedColumn), ("Rating", RatingColumn),
+        };
+        DetailsView.SizeChanged += (_, _) => FitNameColumn();
+        DetailsView.ColumnReordered += OnColumnReordered;
+        DetailsView.AddHandler(Thumb.DragStartedEvent, new DragStartedEventHandler(OnColumnDragStarted), handledEventsToo: true);
+        DetailsView.AddHandler(Thumb.DragCompletedEvent, new DragCompletedEventHandler(OnColumnDragCompleted), handledEventsToo: true);
     }
 
 
@@ -170,6 +184,7 @@ public partial class FileListView : UserControl {
             ApplyTileMetrics();
             ApplyVisibleFirst();
             ApplyViewAttachment();
+            RestoreColumns();
             ShowRatingColumn();
             ShowSearchColumns();
             ShowVolumeColumns();
@@ -215,6 +230,9 @@ public partial class FileListView : UserControl {
             ShowSearchColumns();
         } else if (e.PropertyName == nameof(MainViewModel.IsCurrentComputer)) {
             ShowVolumeColumns();
+        } else if (e.PropertyName == nameof(MainViewModel.IsCurrentBookmarks) && Vm.IsCurrentBookmarks) {
+            // Once the binding has shown the page: a collapsed control takes no focus.
+            Dispatcher.BeginInvoke(BookmarksPage.FocusRows, DispatcherPriority.Loaded);
         } else if (e.PropertyName == nameof(MainViewModel.ViewMode)) {
             ApplyViewAttachment();
             // The four views are four controls, and the one that had the
@@ -249,6 +267,7 @@ public partial class FileListView : UserControl {
         // replaced wholesale when results come and go, so every tile reads
         // the flag fresh.
         ((TileSecondLineConverter)Resources["TileSecondLine"]).ShowFolder = vm.IsSearchResults;
+        FitNameColumn();
     }
 
     /// <summary>
@@ -262,7 +281,10 @@ public partial class FileListView : UserControl {
         }
 
         FreeColumn.Visibility = vm.IsCurrentComputer ? Visibility.Visible : Visibility.Collapsed;
-        ModifiedColumn.Visibility = vm.IsCurrentComputer ? Visibility.Collapsed : Visibility.Visible;
+        ModifiedColumn.Visibility = vm.IsCurrentComputer || IsColumnHidden("Modified") ? Visibility.Collapsed : Visibility.Visible;
+        TypeColumn.Visibility = IsColumnHidden("Type") ? Visibility.Collapsed : Visibility.Visible;
+        SizeColumn.Visibility = IsColumnHidden("Size") ? Visibility.Collapsed : Visibility.Visible;
+        FitNameColumn();
     }
 
     /// <summary>
@@ -275,6 +297,7 @@ public partial class FileListView : UserControl {
     private void ShowRatingColumn() {
         if (DataContext is MainViewModel vm) {
             RatingColumn.Visibility = vm.HasRatings ? Visibility.Visible : Visibility.Collapsed;
+            FitNameColumn();
         }
     }
 
@@ -287,7 +310,174 @@ public partial class FileListView : UserControl {
         if (DataContext is MainViewModel vm) {
             bool any = vm.Entries.Any(e => e.Kind == EntryKind.File && AudioTags.IsAudio(e.Name));
             SoundColumn.Visibility = any ? Visibility.Visible : Visibility.Collapsed;
+            FitNameColumn();
         }
+    }
+
+
+    // --- The table's columns (WINDOW, "Таблица") -------------------------
+
+    private bool IsColumnHidden(string id) {
+        return _columns.Hidden.Contains(id);
+    }
+
+    /// <summary>What was made of the columns last time: widths, order, the ones switched off.</summary>
+    private void RestoreColumns() {
+        _columns = Vm.DetailsColumns;
+        foreach (var (id, column) in _namedColumns) {
+            if (_columns.Widths.TryGetValue(id, out double width) && width >= column.MinWidth) {
+                column.Width = new DataGridLength(width);
+            }
+        }
+
+        // After the icon, which stays first; a column the saved order does
+        // not know keeps its place after the ones it does.
+        int index = 1;
+        foreach (string id in _columns.Order.Distinct()) {
+            if (_namedColumns.FirstOrDefault(c => c.Id == id).Column is { } column) {
+                column.DisplayIndex = index++;
+            }
+        }
+    }
+
+    /// <summary>
+    /// "Имя" takes what the others leave, while no column has been resized by
+    /// hand. Set in pixels rather than as a star: with a star in the table
+    /// WPF's own resizing takes the width from the neighbours, and a column
+    /// right of it cannot be dragged at all. Called when the list or a column
+    /// changes - the vertical scroll bar coming up is one of those.
+    /// </summary>
+    private void FitNameColumn() {
+        if (_detailsScroll is null && ListVisuals.FindDescendant<ScrollViewer>(DetailsView) is { } scroll) {
+            _detailsScroll = scroll;
+            scroll.ScrollChanged += (_, e) => {
+                if (e.ViewportWidthChange != 0) {
+                    FitNameColumn();
+                }
+            };
+        }
+        if (!_columns.NameFills || _detailsScroll is not { ViewportWidth: > 0 } viewport) {
+            return;
+        }
+
+        double others = DetailsView.Columns
+            .Where(c => c.Visibility == Visibility.Visible && !ReferenceEquals(c, NameColumn))
+            .Sum(c => c.Width.IsAbsolute ? c.Width.Value : c.ActualWidth);
+        double width = DetailsColumns.FillWidth(viewport.ViewportWidth, others);
+        if (Math.Abs(NameColumn.Width.Value - width) >= 0.5 || !NameColumn.Width.IsAbsolute) {
+            NameColumn.Width = new DataGridLength(width);
+        }
+    }
+
+    /// <summary>The columns as they stand go into the session.</summary>
+    private void NoteColumns() {
+        var widths = new Dictionary<string, double>();
+        foreach (var (id, column) in _namedColumns) {
+            double width = column.Width.IsAbsolute ? column.Width.Value : column.ActualWidth;
+            if (width > 0 && (id != "Name" || !_columns.NameFills)) {
+                widths[id] = width;
+            }
+        }
+
+        _columns = _columns with {
+            Widths = widths,
+            Order = _namedColumns.OrderBy(c => c.Column.DisplayIndex).Select(c => c.Id).ToArray(),
+        };
+        Vm.DetailsColumns = _columns;
+    }
+
+    /// <summary>A gripper in the header is taken: from here the widths are the user's. Not the scroll bars' thumbs, which come through here too.</summary>
+    private void OnColumnDragStarted(object sender, DragStartedEventArgs e) {
+        if (ListVisuals.Ancestors(e.OriginalSource).Any(hit => hit is DataGridColumnHeader)) {
+            _columns = _columns with { NameFills = false };
+        }
+    }
+
+    private void OnColumnDragCompleted(object sender, DragCompletedEventArgs e) {
+        if (ListVisuals.Ancestors(e.OriginalSource).Any(hit => hit is DataGridColumnHeader)) {
+            NoteColumns();
+        }
+    }
+
+    /// <summary>A column dragged to another place. The icon belongs to the name's row and stays first.</summary>
+    private void OnColumnReordered(object? sender, DataGridColumnEventArgs e) {
+        IconColumn.DisplayIndex = 0;
+        NoteColumns();
+    }
+
+    /// <summary>A double click on a gripper: the column to its left fits what is on screen, as in Explorer.</summary>
+    private void FitColumnAtGripper(object originalSource) {
+        var hits = ListVisuals.Ancestors(originalSource).ToList();
+        if (hits.OfType<Thumb>().FirstOrDefault() is not { } gripper
+            || hits.OfType<DataGridColumnHeader>().FirstOrDefault()?.Column is not { } column) {
+            return;
+        }
+
+        // The header's left gripper is the edge of the column before it.
+        var target = gripper.Name == "PART_LeftHeaderGripper"
+            ? DetailsView.Columns
+                .Where(c => c.Visibility == Visibility.Visible && c.DisplayIndex < column.DisplayIndex)
+                .MaxBy(c => c.DisplayIndex)
+            : column;
+        if (target is not null && !ReferenceEquals(target, IconColumn)) {
+            FitColumns(new[] { target });
+        }
+    }
+
+    /// <summary>
+    /// To what the rows on screen and the header need. WPF does the measuring
+    /// (Auto), and the answer is put down in pixels: left at Auto, a column
+    /// widens by itself as rows scroll past. Hand-sized, so "Имя" stops filling.
+    /// </summary>
+    private void FitColumns(IReadOnlyList<DataGridColumn> columns) {
+        _columns = _columns with { NameFills = false };
+        foreach (var column in columns) {
+            column.Width = new DataGridLength(column.MinWidth);
+            column.Width = new DataGridLength(1, DataGridLengthUnitType.Auto);
+        }
+        DetailsView.UpdateLayout();
+        foreach (var column in columns) {
+            column.Width = new DataGridLength(Math.Ceiling(column.ActualWidth));
+        }
+        NoteColumns();
+    }
+
+    /// <summary>The header's menu: fit, fill, and which columns there are - the ones that come and go by themselves are not asked about.</summary>
+    private void ShowColumnsMenu(object originalSource) {
+        var clicked = ListVisuals.Ancestors(originalSource).OfType<DataGridColumnHeader>().FirstOrDefault()?.Column;
+        var menu = new ContextMenu { PlacementTarget = DetailsView, Placement = PlacementMode.MousePoint };
+        if (clicked is not null && !ReferenceEquals(clicked, IconColumn)) {
+            menu.Items.Add(ColumnsMenuItem(Strings.ColumnsFit, () => FitColumns(new[] { clicked })));
+        }
+        menu.Items.Add(ColumnsMenuItem(Strings.ColumnsFitAll, () => FitColumns(
+            _namedColumns.Select(c => c.Column).Where(c => c.Visibility == Visibility.Visible).ToArray())));
+        menu.Items.Add(ColumnsMenuItem(Strings.ColumnsNameFills, ToggleNameFills, _columns.NameFills));
+        menu.Items.Add(new Separator());
+        foreach (var (id, label) in new[] { ("Type", Strings.ColumnType), ("Size", Strings.ColumnSize), ("Modified", Strings.ColumnModified) }) {
+            menu.Items.Add(ColumnsMenuItem(label, () => ToggleColumn(id), !IsColumnHidden(id)));
+        }
+        menu.IsOpen = true;
+    }
+
+    private static MenuItem ColumnsMenuItem(string header, Action act, bool? isChecked = null) {
+        var item = new MenuItem { Header = header, IsCheckable = isChecked is not null, IsChecked = isChecked == true };
+        item.Click += (_, _) => act();
+
+        return item;
+    }
+
+    private void ToggleNameFills() {
+        _columns = _columns with { NameFills = !_columns.NameFills };
+        FitNameColumn();
+        NoteColumns();
+    }
+
+    private void ToggleColumn(string id) {
+        _columns = _columns with {
+            Hidden = IsColumnHidden(id) ? _columns.Hidden.Where(h => h != id).ToArray() : _columns.Hidden.Append(id).ToArray(),
+        };
+        ShowVolumeColumns();
+        NoteColumns();
     }
 
     private void OnSettingsChanged(object? sender, PropertyChangedEventArgs e) {
@@ -384,6 +574,7 @@ public partial class FileListView : UserControl {
             // the value over as it stands, without a type converter, and
             // Width would quietly keep its default.
             Resources["DetailsIconSize"] = (double)vm.Settings.DetailsIconSize;
+            FitNameColumn();
         }
     }
 
@@ -456,6 +647,13 @@ public partial class FileListView : UserControl {
     /// resuming from wherever the cursor was last, which is usually the top.
     /// </summary>
     public void FocusList() {
+        // The bookmarks' page stands over the list, and has the keyboard for it.
+        if (Vm.IsCurrentBookmarks) {
+            BookmarksPage.FocusRows();
+
+            return;
+        }
+
         if ((CaretEntry() ?? Vm.SelectedEntry) is { } entry) {
             if (!IsSamePath(entry.FullPath, Vm.CaretPath)) {
                 Vm.Workspace.Post(new ListCaretMoved(entry.FullPath));
@@ -966,6 +1164,10 @@ public partial class FileListView : UserControl {
         // Double-clicking a word inside the rename editor must not open the
         // file that is being renamed.
         if (ListVisuals.IsInsideTextBox(e.OriginalSource) || ListVisuals.IsChrome(e.OriginalSource)) {
+            if (ReferenceEquals(sender, DetailsView)) {
+                FitColumnAtGripper(e.OriginalSource);
+            }
+
             return;
         }
 
@@ -1267,6 +1469,10 @@ public partial class FileListView : UserControl {
         _rightDragArmed = false;
         if (sender is FrameworkElement host && !ListVisuals.IsChrome(e.OriginalSource)) {
             ContextMenuRequested?.Invoke(this, new FileListMenuRequest(host, PlacementMode.MousePoint, _contextIsBackground));
+            e.Handled = true;
+        } else if (ReferenceEquals(sender, DetailsView)
+            && ListVisuals.Ancestors(e.OriginalSource).Any(hit => hit is DataGridColumnHeader or DataGridColumnHeadersPresenter)) {
+            ShowColumnsMenu(e.OriginalSource);
             e.Handled = true;
         }
     }

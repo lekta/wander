@@ -203,6 +203,10 @@ public static class ShellPaths {
     /// <summary>The computer's drives, as the list shows them (Explorer's
     /// "This PC"); the same shell URI Explorer accepts.</summary>
     public const string Computer = "shell:MyComputerFolder";
+
+    /// <summary>The bookmarks' own page in the list, where they are managed.
+    /// Wander's own place: no such URI outside it, nothing to enumerate.</summary>
+    public const string Bookmarks = "shell:WanderBookmarks";
 }
 
 

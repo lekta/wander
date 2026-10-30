@@ -94,11 +94,13 @@ public sealed record PanelRow(string Path, string Name, PanelRowKind Kind) {
     /// </summary>
     public bool IsProbed => Kind is PanelRowKind.Folder or PanelRowKind.Drive or PanelRowKind.ArchiveFolder && !IsMissing;
 
+    /// <summary>A bookmark's own row, not a folder under one: its name is the bookmark's, the folder keeps its own.</summary>
+    public bool IsBookmarkRoot => Role != PanelRowRole.Normal;
+
     /// <summary>
-    /// F2 can rename it: a folder on disk, not a drive, not a bookmark whose
-    /// folder is gone, and not a built-in bookmark - that label is the name
-    /// Windows gives the folder, not the folder's own.
+    /// F2 can edit its name: a bookmark's own row of any kind - the bookmark
+    /// is what gets named (2026-10-30), a folder that is open stays unlocked
+    /// and a shell place has a label too - or a folder on disk, not a drive.
     /// </summary>
-    public bool IsRenamable => Kind == PanelRowKind.Folder && !IsMissing && Role != PanelRowRole.BuiltInBookmark
-        && PanelPaths.Parent(Path) is not null;
+    public bool IsRenamable => IsBookmarkRoot || (Kind == PanelRowKind.Folder && !IsMissing && PanelPaths.Parent(Path) is not null);
 }

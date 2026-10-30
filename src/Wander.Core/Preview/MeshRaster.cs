@@ -25,6 +25,9 @@ public static class MeshRaster {
     /// <summary>The reverse of a face, as the pane's back material darkens it.</summary>
     private const float BackShade = 0.72f;
 
+    /// <summary>How much of its brightness a backup's tile keeps.</summary>
+    private const float BackupShade = 0.6f;
+
     /// <summary>Lights of the pane (<c>Palette.xaml</c>): ambient, key, fill - grey levels.</summary>
     private const float Ambient = 0x40 / 255f;
     private const float Key = 0xC8 / 255f;
@@ -150,6 +153,19 @@ public static class MeshRaster {
         }
 
         return Downsample(colour, size, side);
+    }
+
+
+    /// <summary>The same picture darker, its outline untouched - a tile that says "this is a backup".</summary>
+    public static BgraImage Dimmed(BgraImage image) {
+        var pixels = (byte[])image.Pixels.Clone();
+        for (int at = 0; at + 3 < pixels.Length; at += 4) {
+            pixels[at] = (byte)(pixels[at] * BackupShade);
+            pixels[at + 1] = (byte)(pixels[at + 1] * BackupShade);
+            pixels[at + 2] = (byte)(pixels[at + 2] * BackupShade);
+        }
+
+        return image with { Pixels = pixels };
     }
 
 

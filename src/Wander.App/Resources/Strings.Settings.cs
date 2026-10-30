@@ -384,6 +384,12 @@ public static partial class Strings {
     /// <summary>Служебные папки и файлы в корне дисков</summary>
     public static string SettingsShowSystemRootFolders => Get(nameof(SettingsShowSystemRootFolders));
 
+    /// <summary>Размер папок в таблице</summary>
+    public static string SettingsShowFolderSizes => Get(nameof(SettingsShowFolderSizes));
+
+    /// <summary>Папки на экране обходятся в фоне...</summary>
+    public static string SettingsShowFolderSizesNote => Get(nameof(SettingsShowFolderSizesNote));
+
     /// <summary>Показывать в списке</summary>
     public static string SettingsShowGroup => Get(nameof(SettingsShowGroup));
 

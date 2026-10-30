@@ -506,7 +506,20 @@ public class MeshFileTests {
         Assert.True(MeshFile.IsMesh("thing.3mf"));
         Assert.True(MeshFile.IsMesh("thing.fbx"));
         Assert.True(MeshFile.IsMesh("thing.blend"));
+        Assert.True(MeshFile.IsMesh("thing.blend1"));
+        Assert.True(MeshFile.IsMesh("thing.BLEND32"));
+        Assert.False(MeshFile.IsMesh("thing.blend33"));
         Assert.False(MeshFile.IsMesh("thing.dae"));
+    }
+
+    [Theory]
+    [InlineData("hero.blend1", true)]
+    [InlineData("hero.BLEND12", true)]
+    [InlineData("hero.blend", false)]
+    [InlineData("hero.blender", false)]
+    [InlineData("hero.fbx", false)]
+    public void BlenderBackups_AreToldFromTheModel(string name, bool backup) {
+        Assert.Equal(backup, MeshFile.IsBackup(name));
     }
 
     [Fact]

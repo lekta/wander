@@ -1,4 +1,5 @@
 using Wander.Core.FileSystem;
+using Wander.Core.Layout;
 using Wander.Core.Navigation;
 using Wander.Core.Rename;
 
@@ -48,6 +49,16 @@ public sealed record AppState {
     /// separately and are toggled via <see cref="AppSettings"/>.
     /// </summary>
     public IReadOnlyList<string> Favorites { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Of <see cref="Favorites"/>, the ones switched off in the panel: kept,
+    /// and back with a tick on the bookmarks' page. An older build drops the
+    /// block and they simply show again.
+    /// </summary>
+    public IReadOnlyList<string> HiddenFavorites { get; init; } = Array.Empty<string>();
+
+    /// <summary>The built-in bookmarks' order, by key; empty is the usual one.</summary>
+    public IReadOnlyList<string> BuiltInBookmarkOrder { get; init; } = Array.Empty<string>();
 
     /// <summary>
     /// Window position / size at close. Null on a fresh install (or after a
@@ -238,6 +249,9 @@ public sealed record SessionState {
     /// On by default - the box always did before there was a switch.
     /// </summary>
     public bool SearchSubfolders { get; init; } = true;
+
+    /// <summary>What the user made of the table's columns.</summary>
+    public DetailsColumns DetailsColumns { get; init; } = new();
 }
 
 

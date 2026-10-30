@@ -116,8 +116,8 @@ src/
 <!-- deps:generated:begin -->
 ```
 === Wander dependency graph (using sweep) ===
-date   : 2026-10-27
-commit : 5ad70fc
+date   : 2026-10-30
+commit : fcdcd62
 
 -- Wander.Core: levels --
   0: (root), Appearance, Imaging, Layout, Localization, Logging, Panels
@@ -239,6 +239,7 @@ CS8602 / CS8604 в конструкторе — сломан порядок; (2)
 | `SystemPathGuard._userFolders` | `Lazy`, папки профиля из `IKnownFolders` (`TryGet`) при первом вызове гарда — после бутстраппера; в тестах — только `Environment` |
 | `PictureCache._frames` | доля кадров в бюджете картинок (`PictureMemory`), общая на все панели просмотра — только UI-поток; предел пишет `MainViewModel` из настроек |
 | `StartFolder.Asked` | пишется один раз до окна (`App.OnStartup`, харнесс — `Override` до него); тесты трогают её в одном классе и возвращают |
+| `EntrySizeText.Sizes` | ставится один раз конструктором `MainViewModel`, до окна: у ячейки в шаблоне строки нет своего контекста (как `AsyncIcon.VisibleFirst`) |
 
 `SystemIconProvider`: `_cache` / `_missing` / `_thumbnailOrder` — поля
 **экземпляра** под `_lock`; статика там — только lock-объекты.

@@ -89,6 +89,14 @@ public sealed record AppSettings {
     /// </summary>
     public bool VisibleFirstLoading { get; init; } = true;
 
+    /// <summary>
+    /// The table's "Размер" says what a folder holds, walked in the background
+    /// for the folders on screen (Listing/FolderSizes). A setting for its cost:
+    /// on a slow disk the walks are felt. On by default: it is why anyone opens
+    /// the table of a folder of folders.
+    /// </summary>
+    public bool ShowFolderSizes { get; init; } = true;
+
 
     // --- Safety --------------------------------------------------------
     /// <summary>Show files / folders with the <c>Hidden</c> attribute.</summary>

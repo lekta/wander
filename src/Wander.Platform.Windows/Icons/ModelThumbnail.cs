@@ -16,8 +16,8 @@ namespace Wander.Platform.Windows.Icons;
 /// textures the preview shows, turned the way it was last turned in the
 /// preview (<see cref="IModelViews"/>) or at <see cref="ModelView.Default"/>.
 /// A 3MF never turned that carries its slicer's picture of the plate shows
-/// that instead: it has the colours and the layout the slicer gave it. Null
-/// puts the caller back on the icon.
+/// that instead: it has the colours and the layout the slicer gave it. A
+/// Blender backup is drawn darker. Null puts the caller back on the icon.
 /// </summary>
 internal static class ModelThumbnail {
     /// <summary>Models past this are left to the icon: the whole file is read to draw one tile, as for TGA.</summary>
@@ -70,6 +70,9 @@ internal static class ModelThumbnail {
         }
         if (image is null) {
             return null;
+        }
+        if (MeshFile.IsBackup(path)) {
+            image = MeshRaster.Dimmed(image);
         }
 
         try {

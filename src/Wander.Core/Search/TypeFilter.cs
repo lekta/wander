@@ -39,7 +39,7 @@ public sealed record TypeFilter {
     // What "/" offers, in the order it offers it, with the keywords: the
     // actions' groups but "all", which is what no type already says.
     private static readonly (FileTypeGroup Group, string Keyword)[] _offered = {
-        (FileTypeGroup.Images, "img"), (FileTypeGroup.Video, "vid"), (FileTypeGroup.Audio, "aud"),
+        (FileTypeGroup.Images, "img"), (FileTypeGroup.Raw, "raw"), (FileTypeGroup.Video, "vid"), (FileTypeGroup.Audio, "aud"),
         (FileTypeGroup.TextAndCode, "txt"), (FileTypeGroup.Documents, "doc"), (FileTypeGroup.Archives, "zip"),
         (FileTypeGroup.Folders, "dir"),
     };

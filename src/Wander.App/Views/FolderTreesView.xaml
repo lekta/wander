@@ -311,8 +311,8 @@
                    Drop="BookmarksPanel_Drop">
             <!--
                 Title strip, as the drives': only the triangle folds the
-                panel (2026-10-15) - the title takes no click, as the
-                drives' title is kept for opening the drives in the list.
+                panel (2026-10-15); the title opens the bookmarks' page in
+                the list (2026-10-30, ShellPaths.Bookmarks).
             -->
             <Border DockPanel.Dock="Top"
                     Padding="6,4"
@@ -340,7 +340,14 @@
                             </TextBlock.Style>
                         </TextBlock>
                     </Button>
-                    <TextBlock Text="{x:Static res:Strings.BookmarksHeader}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    <Button Style="{StaticResource PanelHeaderPart}"
+                            Margin="0,-4,-6,-4"
+                            Padding="0,4,6,4"
+                            HorizontalContentAlignment="Left"
+                            Command="{Binding OpenBookmarksCommand}"
+                            ToolTip="{x:Static res:Strings.BookmarksOpenHint}">
+                        <TextBlock Text="{x:Static res:Strings.BookmarksHeader}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    </Button>
                 </DockPanel>
             </Border>
 

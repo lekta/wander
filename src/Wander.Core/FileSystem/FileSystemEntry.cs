@@ -43,7 +43,12 @@ public sealed record FileSystemEntry(
     // (ShellPaths.Computer): what its bar and "free of" line are drawn
     // from. null on every other row, a drive's root opened as a folder
     // included.
-    VolumeInfo? Volume = null) {
+    VolumeInfo? Volume = null,
+    // What a folder holds, at any depth - only for ordering by size: the
+    // table's cell asks Listing/FolderSizes itself, and a row replaced for a
+    // number in it would be a row rebuilt (Listing/SizedListing). null on
+    // everything else, and until the folder has been weighed.
+    long? ContentSize = null) {
 
     /// <summary>True when this row stands for a file plus its sidecar(s).</summary>
     public bool HasCompanions => Companions is { Count: > 0 };
@@ -90,6 +95,7 @@ public sealed record FileSystemEntry(
             && Rating == other.Rating
             && Sharpness == other.Sharpness
             && Volume == other.Volume
+            && ContentSize == other.ContentSize
             && SameCompanions(Companions, other.Companions);
     }
 

@@ -437,8 +437,9 @@ public sealed class ContentSearchController : ObservableObject {
         // name filter still works — it filters the rows already listed,
         // which is the whole archive level anyway. The computer is the
         // same to the walker, and a walk of every drive is not what the
-        // box above the drives is for.
-        if (Containers.Contains(root) || string.Equals(root, ShellPaths.Computer, StringComparison.OrdinalIgnoreCase)) {
+        // box above the drives is for; the bookmarks' page has no files.
+        if (Containers.Contains(root) || string.Equals(root, ShellPaths.Computer, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(root, ShellPaths.Bookmarks, StringComparison.OrdinalIgnoreCase)) {
             return;
         }
 

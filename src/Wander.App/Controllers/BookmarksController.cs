@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.IO;
 using Wander.App.Resources;
 using Wander.App.ViewModels;
@@ -34,9 +35,13 @@ public sealed class BookmarksController {
     private readonly SettingsViewModel _settings;
     private readonly ILogger _log;
     private readonly List<string> _favorites = new();
-    // The built-in rows of the last build and the settings switch behind
-    // each of them: Delete on such a row turns the switch off - see HideSpecial.
-    private readonly Dictionary<string, Action> _specialSwitches = new(StringComparer.OrdinalIgnoreCase);
+    // Of the favourites, those switched off on the bookmarks' page: kept, no row.
+    private readonly HashSet<string> _hidden = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Special[] _specials;
+    private List<string> _specialOrder;
+    // The built-in folders as last resolved, switched on or not: what tells
+    // a built-in row's path from any other - see HideSpecial, NameOf.
+    private readonly Dictionary<string, Special> _specialByPath = new(StringComparer.OrdinalIgnoreCase);
     private readonly BookmarkTitles _titles = new();
 
     // The names of the phones and cameras plugged in: a bookmark on one has a
@@ -49,6 +54,16 @@ public sealed class BookmarksController {
         _fs = fs;
         _settings = settings;
         _log = log;
+        _specials = new[] {
+            new Special("Downloads", () => Strings.SpecialFolderDownloads, () => ResolveKnown(f => f.GetDownloads()), () => _settings.ShowBookmarkDownloads, on => _settings.ShowBookmarkDownloads = on),
+            new Special("Documents", () => Strings.SpecialFolderDocuments, () => ResolveKnown(f => f.GetDocuments()), () => _settings.ShowBookmarkDocuments, on => _settings.ShowBookmarkDocuments = on),
+            new Special("Pictures", () => Strings.SpecialFolderPictures, () => ResolveKnown(f => f.GetPictures()), () => _settings.ShowBookmarkPictures, on => _settings.ShowBookmarkPictures = on),
+            new Special("Desktop", () => Strings.SpecialFolderDesktop, () => ResolveKnown(f => f.GetDesktop()), () => _settings.ShowBookmarkDesktop, on => _settings.ShowBookmarkDesktop = on),
+            new Special("Music", () => Strings.SpecialFolderMusic, () => ResolveKnown(f => f.GetMusic()), () => _settings.ShowBookmarkMusic, on => _settings.ShowBookmarkMusic = on),
+            new Special("Videos", () => Strings.SpecialFolderVideos, () => ResolveKnown(f => f.GetVideos()), () => _settings.ShowBookmarkVideos, on => _settings.ShowBookmarkVideos = on),
+            new Special("RecycleBin", () => Strings.SpecialFolderRecycleBin, () => ServiceLocator.TryGet<IShellNamespace>() is null ? null : ShellPaths.RecycleBin, () => _settings.ShowBookmarkRecycleBin, on => _settings.ShowBookmarkRecycleBin = on),
+        };
+        _specialOrder = _specials.Select(s => s.Key).ToList();
     }
 
 
@@ -68,12 +83,26 @@ public sealed class BookmarksController {
     /// <summary>A bookmark on a phone or a camera is in the list: the devices are worth asking about.</summary>
     public bool HasDeviceBookmarks => _favorites.Any(DevicePath.Is);
 
+    /// <summary>The user's own bookmarks switched off in the panel - what gets persisted.</summary>
+    public IReadOnlyList<string> HiddenPaths => _favorites.Where(_hidden.Contains).ToArray();
+
+    /// <summary>The built-in rows' order, by key - what gets persisted.</summary>
+    public IReadOnlyList<string> SpecialOrder => _specialOrder;
+
+    /// <summary>Every bookmark, for the bookmarks' page: built-in first, the hidden and the absent among them. Kept by <see cref="RefreshRows"/>.</summary>
+    public ObservableCollection<BookmarkRowViewModel> Rows { get; } = new();
+
 
     /// <summary>Replaces the saved list and the names. Does not rebuild — the caller does.</summary>
-    public void Load(IEnumerable<string> paths, IReadOnlyDictionary<string, string>? titles = null) {
+    public void Load(
+        IEnumerable<string> paths, IReadOnlyDictionary<string, string>? titles = null,
+        IEnumerable<string>? hidden = null, IEnumerable<string>? specialOrder = null) {
         _favorites.Clear();
         _favorites.AddRange(paths);
         _titles.Load(titles);
+        _hidden.Clear();
+        _hidden.UnionWith((hidden ?? Array.Empty<string>()).Where(Contains));
+        _specialOrder = BookmarkOrder.Merge(_specials.Select(s => s.Key).ToArray(), specialOrder);
     }
 
     /// <summary>
@@ -88,19 +117,28 @@ public sealed class BookmarksController {
         return news;
     }
 
-    /// <summary>What the bookmark on <paramref name="path"/> is called: its own name, or its folder's.</summary>
+    /// <summary>What the bookmark on <paramref name="path"/> is called: its own name, else the built-in row's, else its folder's.</summary>
     public string NameOf(string path) {
-        return _titles.Of(path) ?? FolderName(path);
+        return _titles.Of(path) ?? DefaultNameOf(path);
     }
 
     /// <summary>
-    /// Names a bookmark (decision of 2026-10-19) - the row's label, not the
-    /// folder: the folder keeps its name. A blank name gives the folder's
-    /// back. False when the path is no bookmark of the user's, or nothing
-    /// changed.
+    /// What to call <paramref name="path"/> while the bookmark on it is what
+    /// was chosen (2026-10-30): the name in the panel; null when no bookmark
+    /// stands on it - a folder under one reads as itself.
+    /// </summary>
+    public string? TitleOf(string? path) {
+        return string.IsNullOrEmpty(path) || (IndexOf(path) < 0 && !_specialByPath.ContainsKey(path)) ? null : NameOf(path);
+    }
+
+    /// <summary>
+    /// Names a bookmark, a built-in one too (decisions of 2026-10-19,
+    /// 2026-10-30) - the row's label, not the folder: the folder keeps its
+    /// name. A blank name gives the default back. False when the path is no
+    /// bookmark, or nothing changed.
     /// </summary>
     public bool Rename(string? path, string? title) {
-        if (string.IsNullOrEmpty(path) || IndexOf(path) < 0 || !_titles.Set(path, title, FolderName(path))) {
+        if (string.IsNullOrEmpty(path) || TitleOf(path) is null || !_titles.Set(path, title, DefaultNameOf(path))) {
             return false;
         }
 
@@ -112,12 +150,12 @@ public sealed class BookmarksController {
 
     /// <summary>
     /// A drop would add <paramref name="path"/>: a folder not in the list
-    /// yet, or something on a phone or a camera - whether that is a folder
-    /// is asked on the drop (<see cref="Add"/>), not on every move of the
-    /// mouse.
+    /// yet or hidden in it, or something on a phone or a camera - whether
+    /// that is a folder is asked on the drop (<see cref="Add"/>), not on
+    /// every move of the mouse.
     /// </summary>
     public bool CanTake(string path) {
-        return !Contains(path) && (DevicePath.Is(path) || Directory.Exists(path));
+        return (!Contains(path) || _hidden.Contains(path)) && (DevicePath.Is(path) || Directory.Exists(path));
     }
 
 
@@ -128,34 +166,16 @@ public sealed class BookmarksController {
     /// </summary>
     public IReadOnlyList<PanelRow> BuildRows() {
         var rows = new List<PanelRow>();
-        _specialSwitches.Clear();
-
-        if (_settings.ShowBookmarkDownloads) {
-            AddSpecialFolder(rows, Strings.SpecialFolderDownloads, ResolveKnown(f => f.GetDownloads()), () => _settings.ShowBookmarkDownloads = false);
-        }
-        if (_settings.ShowBookmarkDocuments) {
-            AddSpecialFolder(rows, Strings.SpecialFolderDocuments, ResolveKnown(f => f.GetDocuments()), () => _settings.ShowBookmarkDocuments = false);
-        }
-        if (_settings.ShowBookmarkPictures) {
-            AddSpecialFolder(rows, Strings.SpecialFolderPictures, ResolveKnown(f => f.GetPictures()), () => _settings.ShowBookmarkPictures = false);
-        }
-        if (_settings.ShowBookmarkDesktop) {
-            AddSpecialFolder(rows, Strings.SpecialFolderDesktop, ResolveKnown(f => f.GetDesktop()), () => _settings.ShowBookmarkDesktop = false);
-        }
-        if (_settings.ShowBookmarkMusic) {
-            AddSpecialFolder(rows, Strings.SpecialFolderMusic, ResolveKnown(f => f.GetMusic()), () => _settings.ShowBookmarkMusic = false);
-        }
-        if (_settings.ShowBookmarkVideos) {
-            AddSpecialFolder(rows, Strings.SpecialFolderVideos, ResolveKnown(f => f.GetVideos()), () => _settings.ShowBookmarkVideos = false);
-        }
-        if (_settings.ShowBookmarkRecycleBin && ServiceLocator.TryGet<IShellNamespace>() is not null) {
-            AddSpecialFolder(rows, Strings.SpecialFolderRecycleBin, ShellPaths.RecycleBin, () => _settings.ShowBookmarkRecycleBin = false);
+        foreach (var (special, path) in ResolveSpecials()) {
+            if (special.IsOn()) {
+                rows.Add(SpecialRow(special, path));
+            }
         }
 
         // The divider goes on the first user bookmark, and only when there
         // is a special folder above it to be divided from.
         bool startsSection = rows.Count > 0;
-        foreach (string path in _favorites.Where(p => BookmarkTitles.IsShown(p, _plugged))) {
+        foreach (string path in _favorites.Where(HasRow)) {
             if (BuildFolderRow(path, startsSection) is { } row) {
                 rows.Add(row);
                 startsSection = false;
@@ -163,6 +183,68 @@ public sealed class BookmarksController {
         }
 
         return rows;
+    }
+
+
+    /// <summary>
+    /// Brings <see cref="Rows"/> in step with the list and the settings, the
+    /// row objects kept by path: the page's selection and keyboard stay on
+    /// them. Asked only while the page is on screen - it goes to the disk,
+    /// off the UI thread (<see cref="ProbeAsync"/>).
+    /// </summary>
+    public void RefreshRows() {
+        var specials = ResolveSpecials().ToArray();
+        var wanted = new List<BookmarkRowViewModel>();
+        for (int i = 0; i < specials.Length; i++) {
+            var (special, path) = specials[i];
+            var row = RowFor(path, isBuiltIn: true, on => special.Switch(on));
+            row.Update(NameOf(path), path, PlaceText(path), special.IsOn(), isDeviceAway: false, startsSection: false,
+                canMoveUp: i > 0, canMoveDown: i < specials.Length - 1);
+            wanted.Add(row);
+        }
+        for (int i = 0; i < _favorites.Count; i++) {
+            string path = _favorites[i];
+            var row = RowFor(path, isBuiltIn: false, on => SetShown(path, on));
+            row.Update(NameOf(path), DevicePath.Parse(path) is { } device ? DevicePath.RootOf(device.Device) : path, PlaceText(path),
+                !_hidden.Contains(path), !BookmarkTitles.IsShown(path, _plugged), startsSection: i == 0 && specials.Length > 0,
+                canMoveUp: i > 0, canMoveDown: i < _favorites.Count - 1);
+            wanted.Add(row);
+        }
+
+        for (int i = Rows.Count - 1; i >= 0; i--) {
+            if (!wanted.Contains(Rows[i])) {
+                Rows.RemoveAt(i);
+            }
+        }
+        for (int i = 0; i < wanted.Count; i++) {
+            int at = Rows.IndexOf(wanted[i]);
+            if (at < 0) {
+                Rows.Insert(i, wanted[i]);
+            } else if (at != i) {
+                Rows.Move(at, i);
+            }
+        }
+
+        foreach (var row in wanted) {
+            _ = ProbeAsync(row);
+        }
+    }
+
+    /// <summary>Switches a bookmark's row in the panel on or off; the built-in ones through their settings.</summary>
+    public void SetShown(string path, bool shown) {
+        if (!Contains(path)) {
+            if (_specialByPath.TryGetValue(path, out var special)) {
+                special.Switch(shown);
+            }
+
+            return;
+        }
+        if (shown ? !_hidden.Remove(path) : !_hidden.Add(path)) {
+            return;
+        }
+
+        _log.Info($"Bookmark {(shown ? "shown" : "hidden")}: {path}");
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 
 
@@ -185,6 +267,14 @@ public sealed class BookmarksController {
     public bool Add(string? path) {
         if (string.IsNullOrEmpty(path) || !IsFolder(path)) {
             return false;
+        }
+        // One hidden comes back where it stood: dropping it says "I want this
+        // in the panel" as plainly as the tick does.
+        if (_hidden.Contains(path)) {
+            SetShown(path, true);
+            StatusReported?.Invoke(this, string.Format(Strings.StatusBookmarkAdded, NameOf(path)));
+
+            return true;
         }
         if (Contains(path)) {
             StatusReported?.Invoke(this, Strings.StatusAlreadyBookmarked);
@@ -224,32 +314,36 @@ public sealed class BookmarksController {
 
         _favorites.RemoveAt(idx);
         _titles.Forget(path);
+        _hidden.Remove(path);
         _log.Info($"Bookmark removed: {path}");
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
 
     /// <summary>
-    /// Moves one user bookmark up or down its section of the panel.
-    /// Special folders are not in the list, so the move can never carry a
-    /// bookmark across the divider. The panel's cursor stays on it: the
-    /// model keeps the cursor by path. False when nothing moved.
+    /// Moves one bookmark up or down its section of the panel. The two
+    /// sections are two lists, so the move can never carry a bookmark across
+    /// the divider. The panel's cursor stays on it: the model keeps the
+    /// cursor by path. False when nothing moved.
     /// </summary>
-    public bool Move(string? path, int delta) {
+    /// <param name="overAbsent">
+    /// Every row counts, as on the bookmarks' page, where all of them are in
+    /// sight; without it, only the rows the panel draws - a press there
+    /// passes the next row on screen.
+    /// </param>
+    public bool Move(string? path, int delta, bool overAbsent = false) {
         if (string.IsNullOrEmpty(path)) {
             return false;
         }
 
-        int from = IndexOf(path);
-        int to = from + delta;
-        if (from < 0 || to < 0 || to >= _favorites.Count) {
+        bool moved = !Contains(path) && _specialByPath.TryGetValue(path, out var special)
+            ? BookmarkOrder.Move(_specialOrder, special.Key, delta, key => overAbsent || _specials.First(s => s.Key == key).IsOn())
+            : BookmarkOrder.Move(_favorites, path, delta, other => overAbsent || HasRow(other));
+        if (!moved) {
             return false;
         }
 
-        string moved = _favorites[from];
-        _favorites.RemoveAt(from);
-        _favorites.Insert(to, moved);
-        _log.Info($"Bookmark moved: {moved} ({from} -> {to})");
+        _log.Info($"Bookmark moved: {path} ({delta:+0;-0})");
         Changed?.Invoke(this, EventArgs.Empty);
 
         return true;
@@ -279,6 +373,9 @@ public sealed class BookmarksController {
 
         _favorites[idx] = newPath;
         _titles.Follow(oldPath, newPath);
+        if (_hidden.Remove(oldPath)) {
+            _hidden.Add(newPath);
+        }
         _log.Info($"Bookmark relocated: {oldPath} -> {newPath}");
         Changed?.Invoke(this, EventArgs.Empty);
 
@@ -301,6 +398,9 @@ public sealed class BookmarksController {
             }
 
             _log.Info($"Bookmark followed: {_favorites[i]} -> {moved}");
+            if (_hidden.Remove(_favorites[i])) {
+                _hidden.Add(moved);
+            }
             _favorites[i] = moved;
             changed = true;
         }
@@ -321,34 +421,47 @@ public sealed class BookmarksController {
     /// False when <paramref name="path"/> is no built-in row.
     /// </summary>
     public bool HideSpecial(string path) {
-        if (!_specialSwitches.TryGetValue(path, out var switchOff)) {
+        if (!_specialByPath.TryGetValue(path, out var special)) {
             return false;
         }
 
-        switchOff();
+        special.Switch(false);
 
         return true;
     }
 
 
     /// <summary>
-    /// Adds one special-folder row. None when the path can't be resolved.
-    /// A folder that is not on disk (moved to a share that is offline, a
-    /// drive no longer there) is greyed as the user's own bookmarks are -
-    /// asked of the disk off the UI thread (PanelRules, ProbeMissing): the
-    /// check here held the window up on a sleeping share. The label is a
-    /// fixed localised name, not the on-disk folder name, so the user sees a
-    /// stable caption. A shell location (the Recycle Bin) is a leaf:
-    /// presented as a list in the right pane, not browsed in the panel.
+    /// The built-in folders that can be resolved, in the user's order,
+    /// switched on or not; a folder a machine has no path for has no row
+    /// anywhere.
     /// </summary>
-    private void AddSpecialFolder(List<PanelRow> rows, string label, string? path, Action switchOff) {
-        if (string.IsNullOrEmpty(path)) {
-            return;
-        }
+    private IEnumerable<(Special Special, string Path)> ResolveSpecials() {
+        _specialByPath.Clear();
+        foreach (string key in _specialOrder) {
+            var special = _specials.First(s => s.Key == key);
+            if (special.Resolve() is { Length: > 0 } path) {
+                _specialByPath[path] = special;
 
+                yield return (special, path);
+            }
+        }
+    }
+
+    /// <summary>
+    /// One special-folder row. A folder that is not on disk (moved to a
+    /// share that is offline, a drive no longer there) is greyed as the
+    /// user's own bookmarks are - asked of the disk off the UI thread
+    /// (PanelRules, ProbeMissing): the check here held the window up on a
+    /// sleeping share. The label is a fixed localised name, not the on-disk
+    /// folder name, so the user sees a stable caption - unless the user gave
+    /// it their own. A shell location (the Recycle Bin) is a leaf: presented
+    /// as a list in the right pane, not browsed in the panel.
+    /// </summary>
+    private PanelRow SpecialRow(Special special, string path) {
         bool isShell = ServiceLocator.TryGet<IShellNamespace>() is { } shell && shell.IsShellPath(path);
-        rows.Add(new PanelRow(path, label, isShell ? PanelRowKind.Shell : PanelRowKind.Folder) { Role = PanelRowRole.BuiltInBookmark });
-        _specialSwitches[path] = switchOff;
+
+        return new PanelRow(path, _titles.Of(path) ?? special.Label(), isShell ? PanelRowKind.Shell : PanelRowKind.Folder) { Role = PanelRowRole.BuiltInBookmark };
     }
 
 
@@ -392,6 +505,46 @@ public sealed class BookmarksController {
         return _favorites.FindIndex(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>The panel draws it: not hidden, and not on a device away.</summary>
+    private bool HasRow(string path) {
+        return !_hidden.Contains(path) && BookmarkTitles.IsShown(path, _plugged);
+    }
+
+    private string DefaultNameOf(string path) {
+        return _specialByPath.TryGetValue(path, out var special) ? special.Label() : FolderName(path);
+    }
+
+    private BookmarkRowViewModel RowFor(string path, bool isBuiltIn, Action<bool> setShown) {
+        // The built-in flag too: a user may bookmark Downloads as well.
+        return Rows.FirstOrDefault(r => r.IsBuiltIn == isBuiltIn && string.Equals(r.Path, path, StringComparison.OrdinalIgnoreCase))
+            ?? new BookmarkRowViewModel(path, isBuiltIn, setShown);
+    }
+
+    /// <summary>
+    /// A row's folder gone or back - a drive plugged out, a folder moved by
+    /// another program. A place that is no folder on disk is not asked: a
+    /// device is told about (<see cref="SetPlugged"/>), the bin is always there.
+    /// </summary>
+    private async Task ProbeAsync(BookmarkRowViewModel row) {
+        if (row.IsProbing || ServiceLocator.TryGet<IShellNamespace>()?.IsShellPath(row.Path) == true) {
+            return;
+        }
+
+        row.IsProbing = true;
+        try {
+            row.IsGone = !await Task.Run(() => _fs.DirectoryExists(row.Path));
+        } finally {
+            row.IsProbing = false;
+        }
+    }
+
+    /// <summary>The path as a row shows it: a device's without its prefix, nothing for the bin.</summary>
+    private static string PlaceText(string path) {
+        return DevicePath.Is(path) ? path[DevicePath.Prefix.Length..]
+            : path.StartsWith("shell:", StringComparison.OrdinalIgnoreCase) ? ""
+            : path;
+    }
+
 
     private static string LeafName(string path) {
         return Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
@@ -428,4 +581,8 @@ public sealed class BookmarksController {
     private static string? ResolveKnown(Func<IKnownFolders, string?> pick) {
         return ServiceLocator.TryGet<IKnownFolders>() is { } known ? pick(known) : null;
     }
+
+
+    /// <summary>A built-in bookmark: what it is called, where it stands, the settings switch behind it.</summary>
+    private sealed record Special(string Key, Func<string> Label, Func<string?> Resolve, Func<bool> IsOn, Action<bool> Switch);
 }

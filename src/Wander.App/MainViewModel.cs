@@ -5,6 +5,7 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Shell;
 using System.Windows.Threading;
 using Wander.App.Controllers;
 using Wander.App.Controls;
@@ -220,6 +221,7 @@ public sealed class MainViewModel : ObservableObject {
     private bool _isBookmarksExpanded = true;
     private bool _isDrivesExpanded = true;
     private bool _isCurrentComputer;
+    private bool _isCurrentBookmarks;
     private bool _isFoldersVisible = true;
     private bool _isPreviewSplit;
     private string? _missingFolderPath;
@@ -239,6 +241,9 @@ public sealed class MainViewModel : ObservableObject {
     // like the ratings one, run only in the gallery with the sharpness
     // helper on.
     private readonly SharpnessController _sharpness;
+
+    /// <summary>The listing the folder sizes are being gathered for - see <see cref="OnFolderSizesDrained"/>.</summary>
+    private int _weighedListing;
 
     // True while Entries is being laid down again (SyncEntries, ReplaceRows):
     // the list drops rebuilt and replaced rows out of its selection on its
@@ -447,6 +452,13 @@ public sealed class MainViewModel : ObservableObject {
                 _sharpness.SetActive(Helpers.Sharpness);
             }
         };
+        FolderSizes = new FolderSizes(
+            _fs, CanWeighFolder,
+            post: answer => _dispatcher.BeginInvoke(DispatcherPriority.Background, answer),
+            run: walk => _ = Task.Run(walk),
+            _log);
+        FolderSizes.Drained += OnFolderSizesDrained;
+        EntrySizeText.Sizes = FolderSizes;
         // The gallery's cells draw the helpers themselves and ask for the
         // score of the frame they are on as they come on screen.
         ReviewThumb.Follow(Helpers);
@@ -484,7 +496,14 @@ public sealed class MainViewModel : ObservableObject {
             SaveState();
             _bookmarkTitlesDirty = true;
             RaiseMissingFolder();
+            RaisePlaceTitle();
         };
+        Preview.FolderLabel = BookmarkLabelOf;
+        PreviewSecond.FolderLabel = BookmarkLabelOf;
+        foreach (var pane in new[] { Preview, PreviewSecond }) {
+            pane.CensusTypeChosen += ShowCensusType;
+            pane.CensusFolderChosen += path => NavigateTo(path, NavigationSource.RightPane);
+        }
 
         _tracker.Changed += OnTrackerChanged;
         if (ServiceLocator.TryGet<IVolumeChanges>() is { } volumes) {
@@ -601,6 +620,7 @@ public sealed class MainViewModel : ObservableObject {
         ToggleBookmarksCommand = new RelayCommand(_ => IsBookmarksExpanded = !IsBookmarksExpanded);
         ToggleDrivesCommand = new RelayCommand(_ => IsDrivesExpanded = !IsDrivesExpanded);
         OpenComputerCommand = new RelayCommand(_ => _nav.NavigateTo(ShellPaths.Computer, NavigationSource.Drives));
+        OpenBookmarksCommand = new RelayCommand(_ => _nav.NavigateTo(ShellPaths.Bookmarks, NavigationSource.Bookmark));
         // After the menu is gone, as a shell row is run (ContextMenuFactory):
         // the shell's own "in use" window must not come up under it.
         EjectDriveCommand = new RelayCommand(
@@ -898,6 +918,20 @@ public sealed class MainViewModel : ObservableObject {
     /// </summary>
     public SettingsViewModel Settings { get; }
 
+    /// <summary>What each folder of the table holds, walked as its cell comes on screen.</summary>
+    public FolderSizes FolderSizes { get; }
+
+    private DetailsColumns _detailsColumns = new();
+
+    /// <summary>What the user made of the table's columns; its view reads it once and writes it back.</summary>
+    public DetailsColumns DetailsColumns {
+        get => _detailsColumns;
+        set {
+            _detailsColumns = value;
+            SaveState();
+        }
+    }
+
     private double _aggregateProgress;
 
     /// <summary>
@@ -907,6 +941,19 @@ public sealed class MainViewModel : ObservableObject {
     public double AggregateProgress {
         get => _aggregateProgress;
         private set => SetField(ref _aggregateProgress, value);
+    }
+
+    private TaskbarItemProgressState _taskbarProgress;
+
+    /// <summary>
+    /// What the window's taskbar button shows of <see cref="AggregateProgress"/>:
+    /// nothing while nothing runs, a moving bar while there is no number yet
+    /// (the sources are being weighed), yellow while an operation stands
+    /// waiting for the person.
+    /// </summary>
+    public TaskbarItemProgressState TaskbarProgress {
+        get => _taskbarProgress;
+        private set => SetField(ref _taskbarProgress, value);
     }
 
     private string _operationsSummary = "";
@@ -1774,6 +1821,9 @@ public sealed class MainViewModel : ObservableObject {
     /// <summary>A click on the "Computer" title: the drives in the list (<see cref="ShellPaths.Computer"/>).</summary>
     public RelayCommand OpenComputerCommand { get; }
 
+    /// <summary>A click on the "Bookmarks" title: the bookmarks' page in the list (<see cref="ShellPaths.Bookmarks"/>).</summary>
+    public RelayCommand OpenBookmarksCommand { get; }
+
     /// <summary>"Извлечь" in a drive's menu - in a panel or in "Компьютер" (E): the same eject as a finished operation's.</summary>
     public RelayCommand EjectDriveCommand { get; }
     public RelayCommand ToggleFoldersCommand { get; }
@@ -1841,7 +1891,37 @@ public sealed class MainViewModel : ObservableObject {
     /// said before it happens.
     /// </summary>
     public string WindowTitle =>
-        _stateStore.IsReadOnly ? string.Format(Strings.TitleYielding, _nav.WindowTitle) : _nav.WindowTitle;
+        _stateStore.IsReadOnly ? string.Format(Strings.TitleYielding, PlaceTitle) : PlaceTitle;
+
+    /// <summary>
+    /// What the open folder is called: the bookmark's name while it was opened
+    /// as that bookmark (2026-10-30), the built-in rows' too; otherwise its own.
+    /// </summary>
+    private string PlaceTitle =>
+        _nav.CurrentSource == NavigationSource.Bookmark ? Bookmarks.TitleOf(_nav.Current) ?? _nav.WindowTitle : _nav.WindowTitle;
+
+    /// <summary>
+    /// The preview's name for a folder it describes: the bookmark's, when
+    /// the bookmark is what is chosen - the row under a panel's cursor, or
+    /// the place opened from it. A row of the list that happens to be
+    /// bookmarked is a folder like any other.
+    /// </summary>
+    private string? BookmarkLabelOf(string folder) {
+        bool chosen = _target.Kind == TargetKind.PanelRow
+            ? _target.Pane == Pane.Bookmarks && PathsEqual(_target.Folder!, folder)
+            : _nav.CurrentSource == NavigationSource.Bookmark && PathsEqual(_nav.Current ?? "", folder);
+
+        return chosen ? Bookmarks.TitleOf(folder) : null;
+    }
+
+    /// <summary>A bookmark's name changed: the title and the preview read it again.</summary>
+    private void RaisePlaceTitle() {
+        Raise(nameof(WindowTitle));
+        Preview.SetCurrentFolder(_nav.Current, PlaceTitle);
+        PreviewSecond.SetCurrentFolder(_nav.Current, PlaceTitle);
+        Preview.RefreshFolderLabel();
+        PreviewSecond.RefreshFolderLabel();
+    }
 
 
     public void NavigateTo(string path, NavigationSource source = NavigationSource.External) {
@@ -1898,6 +1978,15 @@ public sealed class MainViewModel : ObservableObject {
         private set => SetField(ref _isCurrentComputer, value);
     }
 
+    /// <summary>
+    /// The list's place is the bookmarks' page (<see cref="ShellPaths.Bookmarks"/>):
+    /// their rows stand over it. Raised once per navigation, in <see cref="NoteCurrentLocation"/>.
+    /// </summary>
+    public bool IsCurrentBookmarks {
+        get => _isCurrentBookmarks;
+        private set => SetField(ref _isCurrentBookmarks, value);
+    }
+
     private static IShellNamespace? TryGetShellNamespace() {
         return ServiceLocator.TryGet<IShellNamespace>();
     }
@@ -1911,6 +2000,10 @@ public sealed class MainViewModel : ObservableObject {
         CurrentDevice = DevicePath.Parse(_nav.Current);
         IsCurrentShellNamespace = IsShellPath(_nav.Current);
         IsCurrentComputer = string.Equals(_nav.Current, ShellPaths.Computer, StringComparison.OrdinalIgnoreCase);
+        IsCurrentBookmarks = string.Equals(_nav.Current, ShellPaths.Bookmarks, StringComparison.OrdinalIgnoreCase);
+        if (IsCurrentBookmarks) {
+            Bookmarks.RefreshRows();
+        }
     }
 
     private bool IsShellPath(string? path) {
@@ -2252,9 +2345,32 @@ public sealed class MainViewModel : ObservableObject {
         }
     }
 
+    /// <summary>
+    /// An operation is over: the panels and the folder sizes hear about the
+    /// folders it filled. A row is asked once whether it has subfolders; the
+    /// folder an archive is unpacking into was asked as soon as it appeared,
+    /// empty, and stayed without a chevron with everything in it.
+    /// </summary>
+    private void RefreshPanelsAfter(IReadOnlyList<BatchItemResult> results, string target) {
+        Workspace.Post(new FolderChanged(target));
+        var landed = Landed(results).Select(r => r.FinalDestination).ToList();
+        foreach (string path in landed) {
+            if (Workspace.State.Drives.Find(path) is not null || Workspace.State.Bookmarks.Find(path) is not null) {
+                Workspace.Post(new FolderChanged(path));
+            }
+        }
+
+        landed.Add(target);
+        landed.AddRange(results.Select(r => r.Source));
+        FolderSizes.AskAgainFor(landed);
+    }
+
     /// <summary>The bookmarks' rows handed to the model whole: it keeps what is open, the cursor and the place by path.</summary>
     private void PostBookmarks() {
         Workspace.Post(new BookmarksChanged(Bookmarks.BuildRows()));
+        if (IsCurrentBookmarks) {
+            Bookmarks.RefreshRows();
+        }
     }
 
     /// <summary>The settings the model's rules read, copied in.</summary>
@@ -2380,6 +2496,8 @@ public sealed class MainViewModel : ObservableObject {
     /// </summary>
     private void OnVolumeReleasing(object? sender, string root) {
         ReleasePreview(new[] { root });
+        // A walk holds the directory it is reading, and the drive would not let go.
+        FolderSizes.Leave();
     }
 
     /// <summary>The open folder was on a volume that went: to the latest place on one still there.</summary>
@@ -2549,6 +2667,7 @@ public sealed class MainViewModel : ObservableObject {
         // the settings say.
         ApplyLogSettings();
         ApplyCopySettings();
+        FolderSizes.IsOn = Settings.ShowFolderSizes;
 
         // Until the first folder lands and ChooseView decides, the list
         // wears the default rather than a hard-coded view.
@@ -2584,6 +2703,7 @@ public sealed class MainViewModel : ObservableObject {
         Preview.MediaVolume = session.MediaVolume;
         PreviewSecond.MediaVolume = session.MediaVolume;
         ContentSearch.SearchSubfolders = session.SearchSubfolders;
+        _detailsColumns = session.DetailsColumns;
         // Not applied here: what a saved pane size means depends on the
         // window it was saved from and the one it is coming back into, and
         // there is no window yet - the constructor runs before it exists.
@@ -2594,7 +2714,7 @@ public sealed class MainViewModel : ObservableObject {
         _savedWindowWidth = session.LayoutWindowWidth;
         _savedWindowHeight = session.LayoutWindowHeight;
 
-        Bookmarks.Load(state.Favorites, _bookmarkTitleStore.Load());
+        Bookmarks.Load(state.Favorites, _bookmarkTitleStore.Load(), state.HiddenFavorites, state.BuiltInBookmarkOrder);
         _isBookmarksExpanded = session.IsBookmarksExpanded;
         Raise(nameof(IsBookmarksExpanded));
         // Both folded is not a state the panels have (a file from a build
@@ -2799,8 +2919,11 @@ public sealed class MainViewModel : ObservableObject {
                 RecentPaths = _nav.RecentPaths.ToArray(),
                 MediaVolume = Preview.MediaVolume,
                 SearchSubfolders = ContentSearch.SearchSubfolders,
+                DetailsColumns = _detailsColumns,
             },
             Favorites = Bookmarks.Paths.ToArray(),
+            HiddenFavorites = Bookmarks.HiddenPaths,
+            BuiltInBookmarkOrder = Bookmarks.SpecialOrder.ToArray(),
             Settings = Settings.ToRecord(),
             LastRunVersion = BuildInfo.Version,
         });
@@ -2919,6 +3042,7 @@ public sealed class MainViewModel : ObservableObject {
         // filter is the one the folder was left with, when that is kept
         // (AppSettings.RememberFolderFilter), else none.
         _search.Reset(_session.FilterFor(_nav.Current));
+        FolderSizes.Leave();
         // Same rule one level up, and it has to run every time rather than
         // only when results are on screen: the box holds its own copy of
         // the criteria now, so clearing just the filter behind it left the
@@ -2944,8 +3068,8 @@ public sealed class MainViewModel : ObservableObject {
             ExpandCurrentInTrees();
         }
         using (PerfLog.Measure("nav.preview")) {
-            Preview.SetCurrentFolder(_nav.Current, _nav.WindowTitle);
-            PreviewSecond.SetCurrentFolder(_nav.Current, _nav.WindowTitle);
+            Preview.SetCurrentFolder(_nav.Current, PlaceTitle);
+            PreviewSecond.SetCurrentFolder(_nav.Current, PlaceTitle);
         }
         using (PerfLog.Measure("nav.watch")) {
             UpdateFolderWatch();
@@ -3302,6 +3426,7 @@ public sealed class MainViewModel : ObservableObject {
             }
             Ratings.StartPass(items, path, sort, epoch, arriving);
             _sharpness.Listed(path, epoch);
+            WeighForOrder(items, epoch);
             // A record adopted on the way in - the folder was renamed
             // outside - may bring an order of its own: listed again in it.
             if (arriving && _session.IsCurrent(epoch) && CurrentSort != sort) {
@@ -3514,7 +3639,62 @@ public sealed class MainViewModel : ObservableObject {
         AsyncIcon.DropStale(items);
         // Rows listed or rated before the sharpness pass came round would
         // wash its answers out of the list; they are put back here.
-        _search.SetSource(_sharpness.Decorate(items), rearranged);
+        _search.SetSource(_sharpness.Decorate(OrderedByFolderSizes(items)), rearranged);
+    }
+
+    /// <summary>
+    /// Ordered by size, a folder goes by what it holds: the one key a
+    /// directory scan cannot answer, so the rows are put in order here with
+    /// what is known so far. Any other order leaves the rows alone - the
+    /// table's cell asks for its number itself.
+    /// </summary>
+    private IReadOnlyList<FileSystemEntry> OrderedByFolderSizes(IReadOnlyList<FileSystemEntry> items) {
+        var sort = CurrentSort;
+        if (sort.Key != SortKey.Size || !FolderSizes.IsOn) {
+            return items;
+        }
+
+        var sized = SizedListing.WithSizes(items, FolderSizes.Known);
+
+        return ReferenceEquals(sized, items) ? items : EntryComparers.Sort(sized, sort);
+    }
+
+    /// <summary>Ordered by size, every folder of the listing is wanted, on screen or not.</summary>
+    private void WeighForOrder(IReadOnlyList<FileSystemEntry> items, int epoch) {
+        _weighedListing = epoch;
+        if (CurrentSort.Key != SortKey.Size || !FolderSizes.IsOn) {
+            return;
+        }
+
+        foreach (var entry in items) {
+            if (entry is { Kind: EntryKind.Directory, Size: null }) {
+                FolderSizes.Want(entry.FullPath);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The last folder is weighed: ordered by size, the rows take their place,
+    /// once. Not under an open name editor - a listing rebuilt under it would
+    /// close it; the next listing brings the order.
+    /// </summary>
+    private void OnFolderSizesDrained() {
+        if (CurrentSort.Key == SortKey.Size && RenamingPath is null && _session.IsCurrent(_weighedListing)) {
+            PublishRows(_weighedListing, _search.Source);
+        }
+    }
+
+    /// <summary>
+    /// A folder worth walking in the background: one on a drive of this
+    /// machine. A share answers over the network, a device and an archive
+    /// through the shell - a question per file. Off the UI thread.
+    /// </summary>
+    private static bool CanWeighFolder(string path) {
+        if (path.Length < 3 || !char.IsAsciiLetter(path[0]) || path[1] != ':' || Containers.Contains(path)) {
+            return false;
+        }
+
+        return ServiceLocator.TryGet<IVolumeInfoProvider>()?.Describe(Path.GetPathRoot(path)!)?.Kind != VolumeKind.Network;
     }
 
     /// <summary>
@@ -4049,6 +4229,7 @@ public sealed class MainViewModel : ObservableObject {
         // nothing else re-reads them. F5 is where the whole window catches
         // up with the disk, not just the middle of it.
         Workspace.Post(new PanelsRefreshRequested());
+        FolderSizes.AskAgain();
 
         if (ContentSearch.IsShowingResults || ContentSearch.IsDeep) {
             ContentSearch.Rerun();
@@ -4099,6 +4280,30 @@ public sealed class MainViewModel : ObservableObject {
 
         SearchResults.Clear();
         Refresh();
+    }
+
+
+    /// <summary>
+    /// A type clicked in the preview's census: the list shows those files of
+    /// that folder, and the same click takes it off. Written into the filter
+    /// box, where it can be seen and changed. With the subfolders switched on:
+    /// the census counted them, and a list of fewer files than the line clicked
+    /// says would read as wrong.
+    /// </summary>
+    private void ShowCensusType(string folder, string extension) {
+        if (!IsSamePath(_nav.Current, folder)) {
+            NavigateTo(folder, NavigationSource.RightPane);
+        }
+
+        string mask = "*." + extension;
+        if (ContentSearch.FilterText == mask) {
+            ClearSearch();
+
+            return;
+        }
+
+        ContentSearch.SearchSubfolders = true;
+        ContentSearch.FilterText = mask;
     }
 
 
@@ -4527,6 +4732,14 @@ public sealed class MainViewModel : ObservableObject {
             // stay where they are and go with the next startup sweep, which
             // looks in both places.
             AppPaths.UseSystemTemp = Settings.UseSystemTemp;
+        }
+
+        if (e.PropertyName == nameof(SettingsViewModel.ShowFolderSizes)) {
+            FolderSizes.IsOn = Settings.ShowFolderSizes;
+            // Ordered by size, the folders go by something else now.
+            if (CurrentSort.Key == SortKey.Size) {
+                Reorder();
+            }
         }
 
         if (e.PropertyName is nameof(SettingsViewModel.LogActions) or nameof(SettingsViewModel.LogPaths)) {
@@ -6559,6 +6772,9 @@ public sealed class MainViewModel : ObservableObject {
                 operation);
         } catch (OperationCanceledException) {
             Status = Strings.StatusCancelled;
+            // What came out before the cancel is there, half of it asked
+            // about while it was still empty.
+            Workspace.Post(new FolderChanged(target));
             return;
         } catch (Exception ex) {
             _log.Error($"Extract failed into {target}", ex);
@@ -6690,6 +6906,7 @@ public sealed class MainViewModel : ObservableObject {
     /// <param name="operationId">The operation in the tracker, for its bytes and its time; 0 when there is none to ask.</param>
     private async Task ReportBatchResultsAsync(
         IReadOnlyList<BatchItemResult> results, string verb, JournalKind kind, string target, long operationId) {
+        RefreshPanelsAfter(results, target);
         int ok = results.Count(r =>
             r.Status == BatchItemStatus.Ok ||
             r.Status == BatchItemStatus.Replaced ||
@@ -7024,6 +7241,10 @@ public sealed class MainViewModel : ObservableObject {
         AggregateProgress = totalWeighted > 0
             ? Math.Clamp((double)doneWeighted * 100.0 / totalWeighted, 0.0, 100.0)
             : 0.0;
+        TaskbarProgress = snapshots.Count == 0 ? TaskbarItemProgressState.None
+            : snapshots.Any(s => s.PausedReason is not null) ? TaskbarItemProgressState.Paused
+            : totalWeighted == 0 || snapshots.All(s => s.IsWeighing) ? TaskbarItemProgressState.Indeterminate
+            : TaskbarItemProgressState.Normal;
         OperationsSummary = snapshots.Count switch {
             0 => FinishedSummary(finished),
             1 => Operations[0].Summary,

@@ -366,6 +366,15 @@ public static partial class Strings {
     /// <summary>Оценка</summary>
     public static string ColumnRating => Get(nameof(ColumnRating));
 
+    /// <summary>Подогнать ширину столбца</summary>
+    public static string ColumnsFit => Get(nameof(ColumnsFit));
+
+    /// <summary>Подогнать ширину всех столбцов</summary>
+    public static string ColumnsFitAll => Get(nameof(ColumnsFitAll));
+
+    /// <summary>«Имя» занимает свободное место</summary>
+    public static string ColumnsNameFills => Get(nameof(ColumnsNameFills));
+
     /// <summary>Звук</summary>
     public static string ColumnSound => Get(nameof(ColumnSound));
 
@@ -419,4 +428,16 @@ public static partial class Strings {
 
     /// <summary>Как закладка называется в панели (пустое — имя папки):</summary>
     public static string BookmarksRenameLabel => Get(nameof(BookmarksRenameLabel));
+
+    /// <summary>Управление закладками</summary>
+    public static string BookmarksOpenHint => Get(nameof(BookmarksOpenHint));
+
+    /// <summary>Показывать в панели</summary>
+    public static string BookmarksShownHint => Get(nameof(BookmarksShownHint));
+
+    /// <summary>устройство не подключено</summary>
+    public static string BookmarksStateDeviceAway => Get(nameof(BookmarksStateDeviceAway));
+
+    /// <summary>папка не найдена</summary>
+    public static string BookmarksStateGone => Get(nameof(BookmarksStateGone));
 }

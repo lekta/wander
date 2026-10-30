@@ -252,6 +252,16 @@ public class ModelFormatsTests {
     }
 
     [Fact]
+    public void Dimmed_DarkensTheColour_KeepsTheOutline() {
+        var image = new Wander.Core.Imaging.BgraImage(new byte[] { 200, 100, 50, 255, 0, 0, 0, 0 }, 2, 1, 8);
+
+        var dimmed = MeshRaster.Dimmed(image);
+
+        Assert.Equal(new byte[] { 120, 60, 30, 255, 0, 0, 0, 0 }, dimmed.Pixels);
+        Assert.Equal(200, image.Pixels[0]);
+    }
+
+    [Fact]
     public void Raster_EmptyMesh_IsNull() {
         Assert.Null(MeshRaster.Render(new MeshData(Array.Empty<float>(), Array.Empty<MeshPart>()), 64));
     }

@@ -120,8 +120,12 @@ public sealed class ThumbnailDiskCache {
     /// <para>
     /// v16 (2026-10-30): model tiles wear their textures.
     /// </para>
+    ///
+    /// <para>
+    /// v17 (2026-10-30): Blender backups draw their model, darker.
+    /// </para>
     /// </summary>
-    private const int Generation = 16;
+    private const int Generation = 17;
 
     private readonly string _directory;
     private readonly ILogger _log;

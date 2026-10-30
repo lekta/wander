@@ -34,6 +34,46 @@ public class FolderStatisticsTests {
     }
 
     [Fact]
+    public void Collect_WeighsTheFoldersRightUnderIt_ByAllTheyHold() {
+        var fs = Tree();
+        fs.Directories.Add(@"C:\root\small");
+        fs.Files[@"C:\root\small\s.txt"] = new byte[1];
+
+        var stats = FolderStatistics.Collect(fs, Root);
+
+        Assert.Equal(new[] { "sub", "small" }, stats.Subfolders.Select(s => s.Name));
+        Assert.Equal((2, 1005L), (stats.Subfolders[0].Files, stats.Subfolders[0].Size));
+        Assert.Equal(0, stats.SubfoldersLeftOut);
+    }
+
+    [Fact]
+    public void Collect_SaysHowManyFoldersDidNotMakeTheList() {
+        var fs = new FakeFileSystem();
+        fs.Directories.Add(Root);
+        foreach (string name in new[] { "a", "b", "c" }) {
+            fs.Directories.Add($@"C:\root\{name}");
+        }
+
+        var stats = FolderStatistics.Collect(fs, Root, maxSubfolders: 2);
+
+        Assert.Equal(2, stats.Subfolders.Count);
+        Assert.Equal(1, stats.SubfoldersLeftOut);
+    }
+
+    [Fact]
+    public void Collect_AFolderThatCannotBeRead_SaysSo() {
+        var fs = Tree();
+        fs.EnumerateFailures.Add(Root);
+
+        Assert.True(FolderStatistics.Collect(fs, Root).IsUnreadable);
+
+        fs.EnumerateFailures.Clear();
+        fs.EnumerateFailures.Add(@"C:\root\sub");
+
+        Assert.False(FolderStatistics.Collect(fs, Root).IsUnreadable);
+    }
+
+    [Fact]
     public void Collect_GroupsByExtension_CaseInsensitively() {
         var fs = new FakeFileSystem();
         fs.Directories.Add(Root);

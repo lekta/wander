@@ -51,6 +51,7 @@ public sealed class DropTargetController {
 
     private readonly Func<string?> _currentFolder;
     private readonly Func<bool> _entersFolders;
+    private readonly Func<bool> _listIsNoFolder;
     private readonly DispatcherTimer _tick;
 
     private DropTargetAdorner? _adorner;
@@ -74,9 +75,14 @@ public sealed class DropTargetController {
     /// Whether a drag held over a folder of the list goes into it - read on
     /// every tick, so the setting applies to the next drag at once.
     /// </param>
-    public DropTargetController(Func<string?> currentFolder, Func<bool> entersFolders) {
+    /// <param name="listIsNoFolder">
+    /// The list shows something other than the folder's content - search
+    /// results: a drop on its empty space or on a file row goes nowhere.
+    /// </param>
+    public DropTargetController(Func<string?> currentFolder, Func<bool> entersFolders, Func<bool> listIsNoFolder) {
         _currentFolder = currentFolder;
         _entersFolders = entersFolders;
+        _listIsNoFolder = listIsNoFolder;
         _tick = new DispatcherTimer(DispatcherPriority.Input) { Interval = TimeSpan.FromMilliseconds(TickMs) };
         _tick.Tick += OnTick;
     }
@@ -382,10 +388,12 @@ public sealed class DropTargetController {
         aimed = false;
         string? here = _currentFolder();
 
-        // The listing of an archive is a container too. Refused - and the
-        // caller sees from the flag that nothing was aimed at, and keeps the
-        // cursor neutral rather than forbidding.
-        return here is not null && Containers.Contains(here) ? null : here;
+        // The listing of an archive is a container too, and search results
+        // are rows from all over: the root behind them is not what is on
+        // screen, and a slip of the mouse moved a file there (2026-10-30).
+        // Refused - and the caller sees from the flag that nothing was aimed
+        // at, and keeps the cursor neutral rather than forbidding.
+        return here is not null && (Containers.Contains(here) || _listIsNoFolder()) ? null : here;
     }
 
     /// <summary>

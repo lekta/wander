@@ -182,6 +182,15 @@
   <data name="PreviewFolderTypes" xml:space="preserve">
     <value>Что внутри</value>
   </data>
+  <data name="PreviewFolderSubfolders" xml:space="preserve">
+    <value>Папки</value>
+  </data>
+  <data name="PreviewCensusFilterHint" xml:space="preserve">
+    <value>Показать в списке только эти файлы</value>
+  </data>
+  <data name="PreviewCensusOpenHint" xml:space="preserve">
+    <value>Открыть папку</value>
+  </data>
   <data name="PreviewArchiveHeadline" xml:space="preserve">
     <value>Архив: {0:N0} файлов · {1:N0} папок · {2}</value>
     <comment>{0} — файлов в корне, {1} — папок, {2} — размер самого файла архива</comment>
@@ -1533,6 +1542,15 @@
   <data name="ColumnRating" xml:space="preserve">
     <value>Оценка</value>
   </data>
+  <data name="ColumnsFit" xml:space="preserve">
+    <value>Подогнать ширину столбца</value>
+  </data>
+  <data name="ColumnsFitAll" xml:space="preserve">
+    <value>Подогнать ширину всех столбцов</value>
+  </data>
+  <data name="ColumnsNameFills" xml:space="preserve">
+    <value>«Имя» занимает свободное место</value>
+  </data>
   <data name="ColumnSound" xml:space="preserve">
     <value>Звук</value>
     <comment>Столбец таблицы с формой волны звуковых файлов</comment>
@@ -2155,6 +2173,12 @@
   </data>
   <data name="SettingsShowSystemRootFolders" xml:space="preserve">
     <value>Служебные папки и файлы в корне дисков</value>
+  </data>
+  <data name="SettingsShowFolderSizes" xml:space="preserve">
+    <value>Размер папок в таблице</value>
+  </data>
+  <data name="SettingsShowFolderSizesNote" xml:space="preserve">
+    <value>Папки на экране обходятся в фоне, при сортировке по размеру — все. На медленном диске заметно. Сетевые папки не считаются.</value>
   </data>
   <data name="SettingsShowGroup" xml:space="preserve">
     <value>Показывать в списке</value>
@@ -3363,5 +3387,20 @@
   </data>
   <data name="BookmarksRenameLabel" xml:space="preserve">
     <value>Как закладка называется в панели (пустое — имя папки):</value>
+  </data>
+  <data name="BookmarksOpenHint" xml:space="preserve">
+    <value>Управление закладками</value>
+  </data>
+  <data name="BookmarksShownHint" xml:space="preserve">
+    <value>Показывать в панели</value>
+  </data>
+  <data name="BookmarksStateDeviceAway" xml:space="preserve">
+    <value>устройство не подключено</value>
+  </data>
+  <data name="BookmarksStateGone" xml:space="preserve">
+    <value>папка не найдена</value>
+  </data>
+  <data name="FileTypeRaw" xml:space="preserve">
+    <value>RAW</value>
   </data>
 </root>

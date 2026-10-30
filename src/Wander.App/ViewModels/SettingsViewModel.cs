@@ -155,6 +155,13 @@ public sealed class SettingsViewModel : ObservableObject {
         set => SetField(ref _rememberFolderFilter, value);
     }
 
+    private bool _showFolderSizes;
+    /// <summary>The table says what a folder holds - see <see cref="AppSettings.ShowFolderSizes"/>.</summary>
+    public bool ShowFolderSizes {
+        get => _showFolderSizes;
+        set => SetField(ref _showFolderSizes, value);
+    }
+
     private bool _visibleFirstLoading;
     /// <summary>Icons for what is on screen load first - see <see cref="AppSettings.VisibleFirstLoading"/>.</summary>
     public bool VisibleFirstLoading {
@@ -796,6 +803,7 @@ public sealed class SettingsViewModel : ObservableObject {
         RememberFolderPlace = s.RememberFolderPlace;
         RememberFolderFilter = s.RememberFolderFilter;
         VisibleFirstLoading = s.VisibleFirstLoading;
+        ShowFolderSizes = s.ShowFolderSizes;
         ShowHidden = s.ShowHidden;
         ShowSystem = s.ShowSystem;
         HideSystemRootFolders = s.HideSystemRootFolders;
@@ -1059,6 +1067,7 @@ public sealed class SettingsViewModel : ObservableObject {
             RememberFolderPlace = RememberFolderPlace,
             RememberFolderFilter = RememberFolderFilter,
             VisibleFirstLoading = VisibleFirstLoading,
+            ShowFolderSizes = ShowFolderSizes,
             ShowHidden = ShowHidden,
             ShowSystem = ShowSystem,
             HideSystemRootFolders = HideSystemRootFolders,

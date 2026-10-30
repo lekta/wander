@@ -5,6 +5,7 @@
              xmlns:conv="clr-namespace:Wander.App.Converters"
              xmlns:controls="clr-namespace:Wander.App.Controls"
              xmlns:res="clr-namespace:Wander.App.Resources"
+             xmlns:views="clr-namespace:Wander.App.Views"
              xmlns:util="clr-namespace:Wander.App.Util"
              Background="Transparent">
     <!--
@@ -863,7 +864,7 @@
                     that marker; SortMemberPath keeps the header
                     behaving exactly as before.
                 -->
-                <DataGridTemplateColumn Header="{x:Static res:Strings.ColumnName}" Width="*" SortMemberPath="Name" IsReadOnly="True">
+                <DataGridTemplateColumn x:Name="NameColumn" Header="{x:Static res:Strings.ColumnName}" Width="240" SortMemberPath="Name" IsReadOnly="True">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <TextBlock x:Name="NameLabel" Text="{Binding Name}" TextTrimming="CharacterEllipsis"/>
@@ -899,9 +900,20 @@
                 <DataGridTextColumn x:Name="MatchColumn"
                                     Header="{x:Static res:Strings.ColumnMatch}"
                                     Binding="{Binding MatchSnippet}"
-                                    Width="*" CanUserSort="False"/>
-                <DataGridTextColumn Header="{x:Static res:Strings.ColumnType}" Binding="{Binding Converter={StaticResource FileType}}" Width="60" SortMemberPath="Type"/>
-                <DataGridTextColumn Header="{x:Static res:Strings.ColumnSize}" Binding="{Binding Size, Converter={StaticResource FileSize}}" Width="80" SortMemberPath="Size"/>
+                                    Width="240" CanUserSort="False"/>
+                <DataGridTextColumn x:Name="TypeColumn" Header="{x:Static res:Strings.ColumnType}" Binding="{Binding Converter={StaticResource FileType}}" Width="60" SortMemberPath="Type"/>
+                <!--
+                    To the right, as in Explorer: sizes are read by their
+                    length. What a folder holds comes into the cell by itself
+                    (EntrySizeText), the row stays as it is.
+                -->
+                <DataGridTemplateColumn x:Name="SizeColumn" Header="{x:Static res:Strings.ColumnSize}" Width="80" SortMemberPath="Size" IsReadOnly="True">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <controls:EntrySizeText Entry="{Binding}" TextAlignment="Right" Margin="0,0,6,0"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
                 <!--
                     The shape of a sound file (decision 2026-10-27), for
                     going through a folder of sounds by eye; the part the
@@ -1413,6 +1425,13 @@
                 </StackPanel>
             </StackPanel>
         </Grid>
+
+        <!--
+            The bookmarks' own page (ShellPaths.Bookmarks): a place with no
+            files, so the list's commands under it find no rows to act on.
+        -->
+        <views:BookmarksManagerView x:Name="BookmarksPage"
+                                    Visibility="{Binding IsCurrentBookmarks, Converter={StaticResource BoolToVisibility}}"/>
         </Grid>
     </DockPanel>
 </UserControl>

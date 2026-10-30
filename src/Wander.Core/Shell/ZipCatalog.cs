@@ -82,7 +82,7 @@ public sealed class ZipCatalog {
     /// "" for the whole archive): files, folders, their unpacked size and
     /// the types that fill it. Null when there is no such folder in it.
     /// </summary>
-    public FolderStats? Census(string inner, int maxTypes = 8) {
+    public FolderStats? Census(string inner, int maxTypes = 8, int maxSubfolders = 16) {
         string folder = inner.Replace('\\', '/').Trim('/');
         if (folder.Length > 0 && !_folders.Contains(folder)) {
             return null;
@@ -92,6 +92,7 @@ public sealed class ZipCatalog {
         int files = 0;
         long total = 0;
         var byExtension = new Dictionary<string, (int Count, long Size)>(StringComparer.OrdinalIgnoreCase);
+        var tops = new Dictionary<string, (int Count, long Size)>(StringComparer.OrdinalIgnoreCase);
         foreach (var (path, size, _) in _files) {
             if (!path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) {
                 continue;
@@ -102,10 +103,29 @@ public sealed class ZipCatalog {
             string ext = FolderStatistics.ExtensionOf(path[(path.LastIndexOf('/') + 1)..]);
             var bucket = byExtension.TryGetValue(ext, out var found) ? found : default;
             byExtension[ext] = (bucket.Count + 1, bucket.Size + size);
-        }
-        int folders = _folders.Count(f => f.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && f.Length > prefix.Length);
 
-        return new FolderStats(files, folders, total, FolderStatistics.TopTypes(byExtension, maxTypes), false);
+            int slash = path.IndexOf('/', prefix.Length);
+            if (slash >= 0) {
+                string top = path[prefix.Length..slash];
+                var gathered = tops.TryGetValue(top, out var held) ? held : default;
+                tops[top] = (gathered.Count + 1, gathered.Size + size);
+            }
+        }
+        int folders = 0;
+        foreach (string folderPath in _folders) {
+            if (folderPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && folderPath.Length > prefix.Length) {
+                folders++;
+                // A folder with nothing in it weighs nothing, and is still one.
+                if (folderPath.IndexOf('/', prefix.Length) < 0) {
+                    tops.TryAdd(folderPath[prefix.Length..], default);
+                }
+            }
+        }
+        var subfolders = FolderStatistics.TopSubfolders(
+            tops.Select(t => new FolderSubfolder(t.Key, t.Value.Count, t.Value.Size)), maxSubfolders);
+
+        return new FolderStats(
+            files, folders, total, FolderStatistics.TopTypes(byExtension, maxTypes), subfolders, tops.Count - subfolders.Count, false);
     }
 
     /// <summary>The unpacked size of the file at <paramref name="inner"/>; null when no file of the archive is there.</summary>
