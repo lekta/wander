@@ -2174,8 +2174,8 @@ public partial class PreviewPane : UserControl {
         foreach (var part in Controller.ModelParts) {
             ModelParts.Children.Add(new GeometryModel3D {
                 Geometry = part.Geometry,
-                Material = new DiffuseMaterial(part.Front),
-                BackMaterial = new DiffuseMaterial(part.Back),
+                Material = part.Front,
+                BackMaterial = part.Back,
             });
         }
 

@@ -7,7 +7,8 @@ namespace Wander.Core.Preview;
 
 /// <summary>
 /// One node of an FBX file: a name, its properties - numbers, strings,
-/// arrays (<c>double[]</c>, <c>int[]</c>, <c>long[]</c>, <c>float[]</c>) -
+/// arrays (<c>double[]</c>, <c>int[]</c>, <c>long[]</c>, <c>float[]</c>), raw
+/// bytes (<c>byte[]</c>, binary files only) -
 /// and its children. The same tree whether the file was binary or text.
 /// </summary>
 internal sealed class FbxNode {
@@ -156,7 +157,8 @@ internal static class FbxDocument {
                     if (length < 0 || p + 4 + length > d.Length) {
                         throw new FormatException("FBX string out of bounds");
                     }
-                    value = type == 'S' ? Encoding.UTF8.GetString(d, p + 4, length) : Array.Empty<byte>();
+                    // Raw bytes: what a Video keeps its embedded picture in.
+                    value = type == 'S' ? Encoding.UTF8.GetString(d, p + 4, length) : d[(p + 4)..(p + 4 + length)];
                     p += 4 + length;
                     break;
                 }

@@ -112,8 +112,16 @@ public sealed class ThumbnailDiskCache {
     /// v14 (2026-10-27): a bigger band and play mark, the length in whole
     /// seconds.
     /// </para>
+    ///
+    /// <para>
+    /// v15 (2026-10-30): <c>.blend</c> tiles draw their model.
+    /// </para>
+    ///
+    /// <para>
+    /// v16 (2026-10-30): model tiles wear their textures.
+    /// </para>
     /// </summary>
-    private const int Generation = 14;
+    private const int Generation = 16;
 
     private readonly string _directory;
     private readonly ILogger _log;

@@ -73,6 +73,55 @@ public class FbxReaderTests {
     }
 
 
+    [Fact]
+    public void Binary_EmbeddedPicture_IsTheDiffuse_LaidByFlippedUvs() {
+        byte[] picture = { 1, 2, 3, 4 };
+
+        var mesh = MeshFile.Read(Temp("wood.fbx", new BinaryFbx(7400, true).Scene(upAxis: 1, picture)))!;
+
+        var part = Assert.Single(mesh.Parts);
+        Assert.Equal(picture, part.Texture!.Data);
+        Assert.Equal("wood.png", part.Texture.Name);
+        Assert.Equal(new MeshColor(1, 0, 0), part.Color);
+        Assert.Equal(mesh.VertexCount * 2, mesh.TexCoords!.Length);
+        // Corner (1, 1, 0) of the quad carries UV (1, 1): V counted from the top it is 0.
+        int vertex = Corners(mesh).IndexOf((22, 2, 0));
+        Assert.Equal((1f, 0f), (mesh.TexCoords[vertex * 2], mesh.TexCoords[(vertex * 2) + 1]));
+    }
+
+    [Fact]
+    public void Text_PictureByAnotherMachinesPath_IsFoundBesideTheModel() {
+        const string text = "; FBX 7.4.0 project file\n" +
+            "FBXHeaderExtension:  {\n  FBXVersion: 7400\n}\n" +
+            "Objects:  {\n" +
+            "  Geometry: 100, \"Geometry::Quad\", \"Mesh\" {\n" +
+            "    Vertices: *12 {\n      a: 0,0,0,1,0,0,1,1,0,0,1,0\n    }\n" +
+            "    PolygonVertexIndex: *4 {\n      a: 0,1,2,-4\n    }\n" +
+            "    LayerElementUV: 0 {\n" +
+            "      MappingInformationType: \"ByPolygonVertex\"\n" +
+            "      ReferenceInformationType: \"Direct\"\n" +
+            "      UV: *8 {\n        a: 0,0,1,0,1,1,0,1\n      }\n" +
+            "    }\n" +
+            "  }\n" +
+            "  Model: 200, \"Model::Quad\", \"Mesh\" {\n  }\n" +
+            "  Material: 400, \"Material::Wood\", \"\" {\n  }\n" +
+            "  Texture: 500, \"Texture::Wood\", \"\" {\n" +
+            "    FileName: \"G:\\Shared drives\\Art\\Textures\\wood.png\"\n" +
+            "  }\n" +
+            "}\n" +
+            "Connections:  {\n  C: \"OO\",100,200\n  C: \"OO\",200,0\n  C: \"OO\",400,200\n" +
+            "  C: \"OP\",500,400, \"DiffuseColor\"\n}\n";
+        string path = Temp("quad-text.fbx", Encoding.ASCII.GetBytes(text));
+        string picture = Path.Combine(Path.GetDirectoryName(path)!, "wood.png");
+        File.WriteAllBytes(picture, new byte[] { 1 });
+
+        var mesh = MeshFile.Read(path)!;
+
+        Assert.Equal(picture, Assert.Single(mesh.Parts).Texture!.File);
+        Assert.Equal(8, mesh.TexCoords!.Length);
+    }
+
+
     private static (float, float, float) Corner(MeshData mesh, float x, float y, float z) {
         return (x, y, z);
     }
@@ -114,9 +163,12 @@ public class FbxReaderTests {
 
         /// <summary>
         /// A quad on geometry 100, model 200 moved +10 on X, its parent
-        /// model 300 scaled by 2, material 400 red on the child.
+        /// model 300 scaled by 2, material 400 red on the child. With a
+        /// <paramref name="picture"/>: UVs on the quad, by corner through an
+        /// index, texture 500 on the material's diffuse, its video 600
+        /// embedding the bytes.
         /// </summary>
-        public byte[] Scene(int upAxis) {
+        public byte[] Scene(int upAxis, byte[]? picture = null) {
             _out.AddRange(Encoding.ASCII.GetBytes("Kaydara FBX Binary  "));
             _out.Add(0);
             _out.Add(0x1A);
@@ -134,7 +186,24 @@ public class FbxReaderTests {
                         Node("MappingInformationType", new object[] { "AllSame" });
                         Node("Materials", new object[] { new[] { 0 } });
                     });
+                    if (picture is not null) {
+                        Node("LayerElementUV", new object[] { 0 }, () => {
+                            Node("MappingInformationType", new object[] { "ByPolygonVertex" });
+                            Node("ReferenceInformationType", new object[] { "IndexToDirect" });
+                            Node("UV", new object[] { new double[] { 0, 0, 1, 0, 1, 1, 0, 1 } });
+                            Node("UVIndex", new object[] { new[] { 0, 1, 2, 3 } });
+                        });
+                    }
                 });
+                if (picture is not null) {
+                    Node("Texture", new object[] { 500L, "Wood\0\u0001Texture", "" }, () => {
+                        Node("FileName", new object[] { @"G:\Elsewhere\wood.png" });
+                        Node("RelativeFilename", new object[] { @"..\Elsewhere\wood.png" });
+                    });
+                    Node("Video", new object[] { 600L, "Wood\0\u0001Video", "Clip" }, () => {
+                        Node("Content", new object[] { picture });
+                    });
+                }
                 Node("Model", new object[] { 200L, "Child\0\u0001Model", "Mesh" }, () => Node("Properties70", Array.Empty<object>(), () => {
                     Node("P", new object[] { "Lcl Translation", "Lcl Translation", "", "A", 10.0, 0.0, 0.0 });
                 }));
@@ -150,6 +219,10 @@ public class FbxReaderTests {
                 Node("C", new object[] { "OO", 200L, 300L });
                 Node("C", new object[] { "OO", 300L, 0L });
                 Node("C", new object[] { "OO", 400L, 200L });
+                if (picture is not null) {
+                    Node("C", new object[] { "OP", 500L, 400L, "DiffuseColor" });
+                    Node("C", new object[] { "OO", 600L, 500L });
+                }
             });
             End();
             // The footer a real file ends with: never read.
@@ -216,6 +289,12 @@ public class FbxReaderTests {
                 case double d:
                     _out.Add((byte)'D');
                     _out.AddRange(BitConverter.GetBytes(d));
+                    break;
+
+                case byte[] raw:
+                    _out.Add((byte)'R');
+                    _out.AddRange(BitConverter.GetBytes(raw.Length));
+                    _out.AddRange(raw);
                     break;
 
                 case double[] array:

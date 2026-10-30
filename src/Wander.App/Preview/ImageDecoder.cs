@@ -82,6 +82,16 @@ internal static class ImageDecoder {
                 bytes = new byte[file.Length];
                 file.ReadExactly(bytes);
             }
+
+            return Tga(bytes);
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or OutOfMemoryException) {
+            return null;
+        }
+    }
+
+    /// <inheritdoc cref="Tga(string)"/>
+    public static BitmapSource? Tga(byte[] bytes) {
+        try {
             if (TgaDecoder.Decode(bytes) is not { } image) {
                 return null;
             }
@@ -91,7 +101,7 @@ internal static class ImageDecoder {
             bitmap.Freeze();
 
             return bitmap;
-        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or OutOfMemoryException) {
+        } catch (OutOfMemoryException) {
             return null;
         }
     }

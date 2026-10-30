@@ -12,10 +12,12 @@ namespace Wander.Core.Preview;
 /// <c>.bin</c> sitting next to it.
 ///
 /// <para>
-/// Only positions and indices are read. A preview draws an untextured
-/// solid, so materials, textures, skins and animations are skipped — and
-/// skipping them is most of why this reader is a few hundred lines rather
-/// than a library.
+/// Positions, indices, and of the material its base colour: the factor and
+/// the <c>baseColorTexture</c> picture with <c>TEXCOORD_0</c> - a vertex
+/// here already is a (position, UV) pair, so nothing is split; a material
+/// with no such texture may find one around the model. Other maps,
+/// skins and animations are skipped — and skipping them is most of why
+/// this reader is a few hundred lines rather than a library.
 /// </para>
 ///
 /// <para>
@@ -41,12 +43,12 @@ internal static class GltfReader {
     private const int ComponentFloat = 5126;
 
 
-    public static MeshData? Read(string path) {
+    public static MeshData? Read(string path, ModelTextures textures) {
         byte[] bytes = SharedRead.ReadAllBytes(path);
 
         return Path.GetExtension(path).Equals(".glb", StringComparison.OrdinalIgnoreCase)
-            ? ReadGlb(bytes)
-            : ReadJson(Encoding.UTF8.GetString(StripBom(bytes)), null, Path.GetDirectoryName(path));
+            ? ReadGlb(bytes, textures)
+            : ReadJson(Encoding.UTF8.GetString(StripBom(bytes)), null, Path.GetDirectoryName(path), textures);
     }
 
 
@@ -55,7 +57,7 @@ internal static class GltfReader {
     /// Only the first JSON chunk and the first BIN chunk matter; anything
     /// else an exporter appended is stepped over by its own length.
     /// </summary>
-    private static MeshData? ReadGlb(byte[] bytes) {
+    private static MeshData? ReadGlb(byte[] bytes, ModelTextures textures) {
         if (bytes.Length < 12 || BinaryPrimitives.ReadUInt32LittleEndian(bytes) != GlbMagic) {
             return null;
         }
@@ -83,11 +85,11 @@ internal static class GltfReader {
             p = (p + 3) & ~3;                          // chunks are four-byte aligned
         }
 
-        return json is null ? null : ReadJson(json, bin, null);
+        return json is null ? null : ReadJson(json, bin, null, textures);
     }
 
 
-    private static MeshData? ReadJson(string json, byte[]? glbBuffer, string? baseDirectory) {
+    private static MeshData? ReadJson(string json, byte[]? glbBuffer, string? baseDirectory, ModelTextures textures) {
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
@@ -100,8 +102,10 @@ internal static class GltfReader {
         }
 
         var positions = new List<float>();
+        var uvs = new List<float>();
         var parts = new List<MeshPart>();
         var materials = ArrayOf(root, "materials");
+        var pictures = new Dictionary<int, MeshTexture?>();
         int total = 0;
 
         foreach (var (meshIndex, transform) in Placements(root)) {
@@ -142,6 +146,16 @@ internal static class GltfReader {
 
                 var indices = new List<int>();
                 int vertexCount = points.Length / 3;
+
+                // A picture counts only with a UV for every point; the
+                // others stand at zero, so the runs stay aligned.
+                float[]? coords = attributes.TryGetProperty("TEXCOORD_0", out var uvRef)
+                    ? ReadFloats(accessors.Value, views.Value, buffers, uvRef.GetInt32(), 2)
+                    : null;
+                var texture = coords is not null && coords.Length == vertexCount * 2
+                    ? BaseTexture(root, materials, primitive, views.Value, buffers, textures, pictures)
+                    : null;
+                uvs.AddRange(texture is not null ? coords! : new float[vertexCount * 2]);
                 if (primitive.TryGetProperty("indices", out var indexRef)) {
                     int[]? read = ReadIndices(accessors.Value, views.Value, buffers, indexRef.GetInt32());
                     if (read is null) {
@@ -164,7 +178,8 @@ internal static class GltfReader {
                 if (whole >= 3) {
                     parts.Add(new MeshPart(
                         indices.GetRange(0, whole).ToArray(),
-                        BaseColor(materials, primitive)));
+                        BaseColor(materials, primitive),
+                        texture));
                 }
 
                 if (total + whole > MeshFile.MaxTriangles * 3) {
@@ -174,7 +189,90 @@ internal static class GltfReader {
             }
         }
 
-        return parts.Count == 0 ? null : new MeshData(positions.ToArray(), parts);
+        bool textured = parts.Any(p => p.Texture is not null);
+
+        return parts.Count == 0 ? null : new MeshData(positions.ToArray(), parts, textured ? uvs.ToArray() : null);
+    }
+
+
+    /// <summary>
+    /// The picture of the primitive's <c>baseColorTexture</c>, when it is
+    /// laid by <c>TEXCOORD_0</c>: an image's bytes from a buffer view or a
+    /// <c>data:</c> URI, or the file its URI names. Each image is read once
+    /// per model (<paramref name="pictures"/>). A material that has no such
+    /// texture may find one around the model (<see cref="ModelTextures"/>).
+    /// </summary>
+    private static MeshTexture? BaseTexture(
+        JsonElement root, JsonElement? materials, JsonElement primitive, JsonElement views,
+        List<byte[]?> buffers, ModelTextures textures, Dictionary<int, MeshTexture?> pictures) {
+        if (materials is null || !primitive.TryGetProperty("material", out var reference)) {
+            return textures.ForMaterial(null);
+        }
+
+        int material = reference.GetInt32();
+        if (material < 0 || material >= materials.Value.GetArrayLength()) {
+            return textures.ForMaterial(null);
+        }
+
+        var found = materials.Value[material];
+        if (!found.TryGetProperty("pbrMetallicRoughness", out var pbr)
+            || !pbr.TryGetProperty("baseColorTexture", out var info)
+            || !info.TryGetProperty("index", out var textureRef)) {
+            return textures.ForMaterial(found.TryGetProperty("name", out var named) ? named.GetString() : null);
+        }
+        if (info.TryGetProperty("texCoord", out var set) && set.GetInt32() != 0) {
+            return null;
+        }
+
+        int textureIndex = textureRef.GetInt32();
+        if (ArrayOf(root, "textures") is not { } list || textureIndex < 0 || textureIndex >= list.GetArrayLength()
+            || !list[textureIndex].TryGetProperty("source", out var sourceRef)) {
+            return null;
+        }
+
+        int source = sourceRef.GetInt32();
+        if (pictures.TryGetValue(source, out var known)) {
+            return known;
+        }
+
+        MeshTexture? picture = null;
+        if (ArrayOf(root, "images") is { } images && source >= 0 && source < images.GetArrayLength()) {
+            var image = images[source];
+            string name = image.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+            string mime = image.TryGetProperty("mimeType", out var m) ? m.GetString() ?? "" : "";
+            if (image.TryGetProperty("bufferView", out var viewRef)) {
+                picture = ViewBytes(views, buffers, viewRef.GetInt32()) is { } bytes ? new MeshTexture(name.Length > 0 ? name : mime, null, bytes) : null;
+            } else if (image.TryGetProperty("uri", out var uriElement) && uriElement.GetString() is { } uri) {
+                if (uri.StartsWith("data:", StringComparison.OrdinalIgnoreCase)) {
+                    int comma = uri.IndexOf(',');
+                    picture = comma > 0 && TryBase64(uri[(comma + 1)..], out byte[] data) ? new MeshTexture(uri[5..comma], null, data) : null;
+                } else {
+                    picture = textures.Named(Uri.UnescapeDataString(uri));
+                }
+            }
+        }
+        pictures[source] = picture;
+
+        return picture;
+    }
+
+
+    /// <summary>A buffer view's bytes, copied out; null when it does not fit its buffer.</summary>
+    private static byte[]? ViewBytes(JsonElement views, List<byte[]?> buffers, int index) {
+        if (index < 0 || index >= views.GetArrayLength()) {
+            return null;
+        }
+
+        var view = views[index];
+        int bufferIndex = view.TryGetProperty("buffer", out var b) ? b.GetInt32() : -1;
+        int offset = view.TryGetProperty("byteOffset", out var o) ? o.GetInt32() : 0;
+        int length = view.TryGetProperty("byteLength", out var l) ? l.GetInt32() : -1;
+        if (bufferIndex < 0 || bufferIndex >= buffers.Count || buffers[bufferIndex] is not { } bytes
+            || offset < 0 || length <= 0 || offset > bytes.Length - length) {
+            return null;
+        }
+
+        return bytes[offset..(offset + length)];
     }
 
 
@@ -384,28 +482,30 @@ internal static class GltfReader {
 
 
     /// <summary>
-    /// Positions: always three floats each, per the specification, so the
-    /// only thing to get right is the stride — an accessor may walk a
-    /// buffer view in which each element is followed by other attributes.
+    /// Positions (three floats each) or UVs (two): the only thing to get
+    /// right is the stride — an accessor may walk a buffer view in which
+    /// each element is followed by other attributes. UVs stored as
+    /// normalized integers are not read.
     /// </summary>
     private static float[]? ReadFloats(
-        JsonElement accessors, JsonElement views, List<byte[]?> buffers, int index) {
+        JsonElement accessors, JsonElement views, List<byte[]?> buffers, int index, int components = 3) {
         if (!TryAccessor(accessors, views, buffers, index, out var a) || a.Component != ComponentFloat) {
             return null;
         }
 
-        int stride = a.Stride > 0 ? a.Stride : 12;
-        var result = new float[a.Count * 3];
+        int size = components * 4;
+        int stride = a.Stride > 0 ? a.Stride : size;
+        var result = new float[a.Count * components];
 
         for (int i = 0; i < a.Count; i++) {
             int at = a.Offset + (i * stride);
-            if (at + 12 > a.Buffer.Length) {
+            if (at + size > a.Buffer.Length) {
                 return null;
             }
 
-            result[i * 3] = BinaryPrimitives.ReadSingleLittleEndian(a.Buffer.AsSpan(at));
-            result[(i * 3) + 1] = BinaryPrimitives.ReadSingleLittleEndian(a.Buffer.AsSpan(at + 4));
-            result[(i * 3) + 2] = BinaryPrimitives.ReadSingleLittleEndian(a.Buffer.AsSpan(at + 8));
+            for (int c = 0; c < components; c++) {
+                result[(i * components) + c] = BinaryPrimitives.ReadSingleLittleEndian(a.Buffer.AsSpan(at + (c * 4)));
+            }
         }
 
         return result;

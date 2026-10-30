@@ -6,7 +6,8 @@ namespace Wander.Core.Preview;
 /// A model drawn into a square of pixels, for its tile: the view the
 /// preview pane opens on - the camera in front and a little above, Y up,
 /// the model turned by its <see cref="ModelView"/> - lit
-/// by the pane's three lights, flat-shaded, on transparency. Drawn here
+/// by the pane's three lights, flat-shaded, in its colour or picture, on
+/// transparency. Drawn here
 /// rather than by WPF off screen: thumbnails are made on pool threads in
 /// a layer without WPF, and a z-buffer over triangles is arithmetic a test
 /// can reach.
@@ -46,7 +47,8 @@ public static class MeshRaster {
 
     /// <summary>The model on a <paramref name="side"/>-pixel square, or null when it has nothing to draw.</summary>
     /// <param name="view">How the model is turned; <see cref="ModelView.Default"/> when not given.</param>
-    public static BgraImage? Render(MeshData mesh, int side, ModelView? view = null) {
+    /// <param name="pictures">The parts' decoded textures; a part whose picture is not here is drawn in its colour.</param>
+    public static BgraImage? Render(MeshData mesh, int side, ModelView? view = null, IReadOnlyDictionary<MeshTexture, BgraImage>? pictures = null) {
         if (side <= 0 || mesh.Bounds() is not { } box) {
             return null;
         }
@@ -118,6 +120,7 @@ public static class MeshRaster {
         var colour = new uint[size * size];
         foreach (var part in mesh.Parts) {
             var tint = part.Color ?? new MeshColor(Grey, Grey, Grey);
+            var picture = mesh.TexCoords is not null && part.Texture is { } texture && pictures?.GetValueOrDefault(texture) is { } found ? found : null;
             for (int t = 0; t + 2 < part.Indices.Length; t += 3) {
                 int a = part.Indices[t], b = part.Indices[t + 1], c = part.Indices[t + 2];
                 if ((uint)a >= (uint)count || (uint)b >= (uint)count || (uint)c >= (uint)count
@@ -141,7 +144,8 @@ public static class MeshRaster {
                     + Key * Math.Max(0, -normal.Dot(_keyDirection))
                     + Fill * Math.Max(0, -normal.Dot(_fillDirection));
                 uint pixel = Pack(tint, light * shade);
-                Triangle(px, py, depth, a, b, c, size, zbuffer, colour, pixel);
+                var lay = picture is null ? default : new Lay(picture, mesh.TexCoords!, light * shade);
+                Triangle(px, py, depth, a, b, c, size, zbuffer, colour, pixel, lay);
             }
         }
 
@@ -149,8 +153,14 @@ public static class MeshRaster {
     }
 
 
-    /// <summary>Fills one triangle where it is nearer than what is drawn - depth interpolated as 1/z, which is linear on screen.</summary>
-    private static void Triangle(float[] px, float[] py, float[] depth, int a, int b, int c, int size, float[] zbuffer, uint[] colour, uint pixel) {
+    /// <summary>
+    /// Fills one triangle where it is nearer than what is drawn - depth
+    /// interpolated as 1/z, which is linear on screen; so are UV/z, which is
+    /// what keeps a picture straight on a face going away from the camera.
+    /// A textured sample that is mostly transparent is a hole: nothing is
+    /// drawn and what lies behind shows.
+    /// </summary>
+    private static void Triangle(float[] px, float[] py, float[] depth, int a, int b, int c, int size, float[] zbuffer, uint[] colour, uint pixel, Lay lay) {
         double x0 = px[a], y0 = py[a], x1 = px[b], y1 = py[b], x2 = px[c], y2 = py[c];
         double area = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0);
         if (Math.Abs(area) < 1e-12) {
@@ -173,14 +183,67 @@ public static class MeshRaster {
                     continue;
                 }
 
-                float z = (float)(1 / (l0 * w0 + l1 * w1 + l2 * w2));
+                double inverse = l0 * w0 + l1 * w1 + l2 * w2;
+                float z = (float)(1 / inverse);
                 int at = y * size + x;
-                if (z < zbuffer[at]) {
-                    zbuffer[at] = z;
-                    colour[at] = pixel;
+                if (z >= zbuffer[at]) {
+                    continue;
                 }
+
+                uint sample = pixel;
+                if (lay.Picture is not null) {
+                    float[] uv = lay.TexCoords;
+                    double u = (l0 * w0 * uv[a * 2] + l1 * w1 * uv[b * 2] + l2 * w2 * uv[c * 2]) / inverse;
+                    double v = (l0 * w0 * uv[a * 2 + 1] + l1 * w1 * uv[b * 2 + 1] + l2 * w2 * uv[c * 2 + 1]) / inverse;
+                    sample = Sample(lay.Picture, u, v, lay.Light);
+                    if (sample == 0) {
+                        continue;
+                    }
+                }
+                zbuffer[at] = z;
+                colour[at] = sample;
             }
         }
+    }
+
+
+    /// <summary>
+    /// The picture at (u, v), repeating past 0...1 as the pane's tiled brush
+    /// does, blended between its four nearest pixels and lit. Zero under half
+    /// opacity.
+    /// </summary>
+    private static uint Sample(BgraImage picture, double u, double v, double light) {
+        double fx = (u - Math.Floor(u)) * picture.Width - 0.5;
+        double fy = (v - Math.Floor(v)) * picture.Height - 0.5;
+        int x0 = (int)Math.Floor(fx), y0 = (int)Math.Floor(fy);
+        double dx = fx - x0, dy = fy - y0;
+        int x1 = Wrap(x0 + 1, picture.Width), y1 = Wrap(y0 + 1, picture.Height);
+        x0 = Wrap(x0, picture.Width);
+        y0 = Wrap(y0, picture.Height);
+
+        double Channel(int offset) {
+            byte[] p = picture.Pixels;
+            int stride = picture.Stride;
+            double top = p[y0 * stride + x0 * 4 + offset] * (1 - dx) + p[y0 * stride + x1 * 4 + offset] * dx;
+            double bottom = p[y1 * stride + x0 * 4 + offset] * (1 - dx) + p[y1 * stride + x1 * 4 + offset] * dx;
+
+            return top * (1 - dy) + bottom * dy;
+        }
+
+        if (Channel(3) < 128) {
+            return 0;
+        }
+
+        static uint Lit(double value, double light) {
+            return (uint)Math.Clamp(Math.Round(value * light), 0, 255);
+        }
+
+        return 0xFF000000u | (Lit(Channel(2), light) << 16) | (Lit(Channel(1), light) << 8) | Lit(Channel(0), light);
+    }
+
+
+    private static int Wrap(int at, int size) {
+        return at < 0 ? at + size : at >= size ? at - size : at;
     }
 
 
@@ -233,6 +296,10 @@ public static class MeshRaster {
     private static Vector Point(float[] positions, int i) {
         return new Vector(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]);
     }
+
+
+    /// <summary>How a textured triangle is painted: the picture, the mesh's UVs, the face's light. Default when in plain colour.</summary>
+    private readonly record struct Lay(BgraImage? Picture, float[] TexCoords, double Light);
 
 
     private readonly record struct Vector(double X, double Y, double Z) {

@@ -188,12 +188,102 @@ public class ModelFormatsTests {
     }
 
     [Fact]
+    public void Raster_LaysThePictureByTheUvs() {
+        // A square facing the camera, the left half of its picture red, the right blue.
+        var mesh = TexturedSquare();
+        var texture = mesh.Parts[0].Texture!;
+        var image = MeshRaster.Render(mesh, 64, new ModelView(0, 0), new Dictionary<MeshTexture, Wander.Core.Imaging.BgraImage> { [texture] = TwoColours() })!;
+
+        var (leftB, _, leftR) = Colour(image, 12, 32);
+        var (rightB, _, rightR) = Colour(image, 52, 32);
+        Assert.True(leftR > 100 && leftB < 20, $"left {leftR},{leftB}");
+        Assert.True(rightB > 100 && rightR < 20, $"right {rightR},{rightB}");
+    }
+
+    [Fact]
+    public void Raster_UvsAreStraightUnderPerspective() {
+        // The same square turned away: the picture's middle stays on the
+        // square's middle in space, which on screen is not the middle of the
+        // outline - the border sits nearer the far edge than a flat
+        // interpolation would put it.
+        var mesh = TexturedSquare();
+        var texture = mesh.Parts[0].Texture!;
+        var image = MeshRaster.Render(mesh, 128, new ModelView(60, 0), new Dictionary<MeshTexture, Wander.Core.Imaging.BgraImage> { [texture] = TwoColours() })!;
+
+        var (first, last) = (int.MaxValue, 0);
+        int border = -1;
+        int previousRed = -1;
+        for (int x = 0; x < 128; x++) {
+            if (Alpha(image, x, 64) < 128) {
+                continue;
+            }
+            first = Math.Min(first, x);
+            last = Math.Max(last, x);
+            var (blue, _, red) = Colour(image, x, 64);
+            int isRed = red > blue ? 1 : 0;
+            if (previousRed >= 0 && isRed != previousRed) {
+                border = x;
+            }
+            previousRed = isRed;
+        }
+
+        Assert.True(border > first && border < last);
+        Assert.True(Math.Abs(border - (first + last) / 2.0) > 2, $"border {border} in {first}..{last}");
+    }
+
+    [Fact]
+    public void Raster_PictureMissing_KeepsTheColour() {
+        var mesh = TexturedSquare();
+
+        var image = MeshRaster.Render(mesh, 64, new ModelView(0, 0))!;
+
+        var (blue, green, red) = Colour(image, 32, 32);
+        Assert.True(green > 100 && red < 20 && blue < 20, $"{red},{green},{blue}");
+    }
+
+    [Fact]
+    public void Raster_TransparentPixels_AreHoles() {
+        var mesh = TexturedSquare();
+        var clear = new Wander.Core.Imaging.BgraImage(new byte[] { 0, 0, 255, 0 }, 1, 1, 4);
+
+        var image = MeshRaster.Render(mesh, 64, new ModelView(0, 0), new Dictionary<MeshTexture, Wander.Core.Imaging.BgraImage> { [mesh.Parts[0].Texture!] = clear })!;
+
+        Assert.Equal(0, Alpha(image, 32, 32));
+    }
+
+    [Fact]
     public void Raster_EmptyMesh_IsNull() {
         Assert.Null(MeshRaster.Render(new MeshData(Array.Empty<float>(), Array.Empty<MeshPart>()), 64));
     }
 
 
     // --- Builders -----------------------------------------------------------
+
+    /// <summary>A unit square in the XY plane, green; U runs along X, a picture is named but not necessarily given.</summary>
+    private static MeshData TexturedSquare() {
+        var positions = new float[] { -1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0 };
+        var uvs = new float[] { 0, 1, 1, 1, 1, 0, 0, 0 };
+
+        return new MeshData(positions, new[] { new MeshPart(new[] { 0, 1, 2, 0, 2, 3 }, new MeshColor(0, 1, 0), new MeshTexture("t.png", null, new byte[] { 1 })) }, uvs);
+    }
+
+    /// <summary>Eight pixels wide, the left half red, the right blue.</summary>
+    private static Wander.Core.Imaging.BgraImage TwoColours() {
+        var pixels = new byte[8 * 4];
+        for (int x = 0; x < 8; x++) {
+            pixels[x * 4] = (byte)(x < 4 ? 0 : 255);
+            pixels[x * 4 + 2] = (byte)(x < 4 ? 255 : 0);
+            pixels[x * 4 + 3] = 255;
+        }
+
+        return new Wander.Core.Imaging.BgraImage(pixels, 8, 1, 8 * 4);
+    }
+
+    private static (int Blue, int Green, int Red) Colour(Wander.Core.Imaging.BgraImage image, int x, int y) {
+        int at = y * image.Stride + x * 4;
+
+        return (image.Pixels[at], image.Pixels[at + 1], image.Pixels[at + 2]);
+    }
 
     private static MeshData Tetrahedron() {
         float[] positions = { 0, 1, 0, -1, -1, 1, 1, -1, 1, 0, -1, -1 };

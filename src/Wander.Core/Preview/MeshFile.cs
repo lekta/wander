@@ -9,11 +9,18 @@ namespace Wander.Core.Preview;
 /// <para>
 /// Parts exist because a model is rarely one material. An OBJ splits itself
 /// with <c>usemtl</c>, a glTF gives every primitive its own material, and
-/// the difference between them is a colour — so the geometry is shared and
-/// only the index lists are separate. That is also why this stops short of
-/// textures: sharing positions works precisely because a vertex has one
-/// position and no UV, and adding UVs would mean splitting vertices, not
-/// just indices (see BACKLOG.md).
+/// the difference between them is a colour or a picture - so the geometry
+/// is shared and only the index lists are separate.
+/// </para>
+///
+/// <para>
+/// <paramref name="TexCoords"/> - two per vertex, image orientation (V
+/// down, as a bitmap is stored) - only when some part has a
+/// <see cref="MeshPart.Texture"/>; null otherwise. A vertex is then a
+/// (position, UV) pair: a reader whose file indexes the two separately
+/// (OBJ, FBX) splits its points along the seams, and only for a model that
+/// has a texture to show, so an untextured one keeps its shared points and
+/// its shading. Parts without a texture of a textured model carry zeros.
 /// </para>
 ///
 /// <para>
@@ -30,7 +37,7 @@ namespace Wander.Core.Preview;
 /// right and what every file costs to load.
 /// </para>
 /// </summary>
-public sealed record MeshData(float[] Positions, IReadOnlyList<MeshPart> Parts) {
+public sealed record MeshData(float[] Positions, IReadOnlyList<MeshPart> Parts, float[]? TexCoords = null) {
     public int VertexCount => Positions.Length / 3;
 
     public int TriangleCount {
@@ -78,8 +85,20 @@ public sealed record MeshData(float[] Positions, IReadOnlyList<MeshPart> Parts) 
 /// colour they are. <paramref name="Color"/> is null when the file says
 /// nothing about it, which is the normal case for STL and for an OBJ with
 /// no material library beside it — the view then uses its own grey.
+/// <paramref name="Texture"/> is the diffuse picture, drawn instead of the
+/// colour where it decodes; the colour stays for the tile and for a
+/// picture that does not.
 /// </summary>
-public sealed record MeshPart(int[] Indices, MeshColor? Color);
+public sealed record MeshPart(int[] Indices, MeshColor? Color, MeshTexture? Texture = null);
+
+
+/// <summary>
+/// A part's diffuse picture: a file found on disk (<see cref="File"/>) or
+/// bytes the model carries inside itself (<see cref="Data"/>, a GLB image or
+/// FBX embedded media) - one of the two. <see cref="Name"/> is the name the
+/// model gives it, what tells the format (a TGA has no signature).
+/// </summary>
+public sealed record MeshTexture(string Name, string? File, byte[]? Data);
 
 
 /// <summary>A colour as the model files state it: three channels, 0…1.</summary>
@@ -117,10 +136,11 @@ public readonly record struct MeshBounds(
 /// Reads the model formats the preview pane understands, chosen for
 /// being small, documented and self-contained: STL (both flavours), OBJ,
 /// glTF in its binary and JSON forms, PLY (text and binary), the 3MF
-/// package slicers save, and FBX 7 - read here (<see cref="FbxReader"/>)
+/// package slicers save, FBX 7 - read here (<see cref="FbxReader"/>)
 /// rather than by a native importer, fifteen megabytes of DLL per
 /// architecture against a portable single-file executable (decision of
-/// 2026-10-09). Why COLLADA and DXF are not here - BACKLOG.md.
+/// 2026-10-09) - and Blender 4.x (<see cref="BlendReader"/>). Why COLLADA and
+/// DXF are not here - BACKLOG.md.
 /// </para>
 /// </summary>
 public static class MeshFile {
@@ -134,10 +154,13 @@ public static class MeshFile {
     /// <summary>How much of a text model to read. A 200 MB OBJ is not a preview.</summary>
     private const long MaxFileSize = 256L * 1024 * 1024;
 
+    /// <summary>A texture file past this is not read: decoded to 2048 px anyway, and the pane waits for it.</summary>
+    private const long MaxTextureSize = 64L * 1024 * 1024;
+
 
     /// <summary>Extensions this reader understands.</summary>
     public static readonly IReadOnlySet<string> Extensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
-        ".stl", ".obj", ".gltf", ".glb", ".ply", ".3mf", ".fbx",
+        ".stl", ".obj", ".gltf", ".glb", ".ply", ".3mf", ".fbx", ".blend",
     };
 
 
@@ -161,12 +184,14 @@ public static class MeshFile {
             }
 
             string ext = Path.GetExtension(path);
+            var textures = new ModelTextures(path);
             MeshData? mesh = ext.ToLowerInvariant() switch {
                 ".stl" => StlReader.Read(SharedRead.ReadAllBytes(path)),
-                ".obj" => ObjReader.Read(path),
-                ".glb" or ".gltf" => GltfReader.Read(path),
+                ".obj" => ObjReader.Read(path, textures),
+                ".glb" or ".gltf" => GltfReader.Read(path, textures),
                 ".ply" => PlyReader.Read(SharedRead.ReadAllBytes(path)),
-                ".fbx" => FbxReader.Read(SharedRead.ReadAllBytes(path)),
+                ".fbx" => FbxReader.Read(SharedRead.ReadAllBytes(path), textures),
+                ".blend" => BlendReader.Read(SharedRead.ReadAllBytes(path), textures),
                 ".3mf" => ReadPackage(path),
                 _ => null,
             };
@@ -185,6 +210,50 @@ public static class MeshFile {
         using var stream = SharedRead.Open(path);
 
         return ThreeMfReader.Read(stream);
+    }
+
+
+    /// <summary>
+    /// The picture a model names, found on disk, or null. Models travel
+    /// without the folders they were made in - a path written on another
+    /// machine (<c>G:\Shared drives\...\Textures\x.png</c>) is the rule - so
+    /// the name is looked for where people put textures: the path as
+    /// written relative to the model, then the bare name beside it, in its
+    /// <c>textures</c> folder and in one beside the model's folder. An
+    /// absolute path is not opened as written, and a network path or URL
+    /// not at all: previewing a model must not reach a host it is not on.
+    /// </summary>
+    internal static MeshTexture? FindTexture(string? directory, string reference) {
+        reference = reference.Trim().Trim('"');
+        if (directory is null || reference.Length == 0 || reference.Contains("://")
+            || reference.StartsWith(@"\\", StringComparison.Ordinal) || reference.StartsWith("//", StringComparison.Ordinal)) {
+            return null;
+        }
+
+        try {
+            string normal = reference.Replace('/', Path.DirectorySeparatorChar);
+            string name = Path.GetFileName(normal);
+            var candidates = new List<string>();
+            if (!Path.IsPathRooted(normal)) {
+                candidates.Add(Path.Combine(directory, normal));
+            }
+            if (name.Length > 0) {
+                candidates.Add(Path.Combine(directory, name));
+                candidates.Add(Path.Combine(directory, "textures", name));
+                candidates.Add(Path.Combine(directory, "..", "textures", name));
+            }
+
+            foreach (string candidate in candidates) {
+                var info = new FileInfo(Path.GetFullPath(candidate));
+                if (info.Exists && info.Length > 0 && info.Length <= MaxTextureSize) {
+                    return new MeshTexture(name, info.FullName, null);
+                }
+            }
+        } catch (Exception ex) when (ex is IOException or ArgumentException or NotSupportedException or UnauthorizedAccessException) {
+            return null;
+        }
+
+        return null;
     }
 
 

@@ -42,7 +42,7 @@ function Get-Category([string]$name, [string]$folder) {
     }
     switch -Regex ($name) {
         '^Wander\.' { return 'Wander code' }
-        '^(AvalonEdit|Markdig|MetadataExtractor|XmpCore|Microsoft\.Web\.WebView2|WebView2Loader|System\.Drawing\.Common)' {
+        '^(AvalonEdit|Markdig|MetadataExtractor|XmpCore|Microsoft\.Web\.WebView2|WebView2Loader|System\.Drawing\.Common|ZstdSharp)' {
             return 'Wander NuGet deps'
         }
         '^Microsoft\.Windows\.SDK\.NET' { return 'WinRT projection (PDF render)' }

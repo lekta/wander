@@ -221,6 +221,188 @@ public class MeshFileTests {
     }
 
 
+    // --- textures ---------------------------------------------------------
+
+    [Fact]
+    public void Obj_PictureFound_SplitsVerticesByUvAndFlipsV() {
+        string dir = Scratch();
+        File.WriteAllBytes(Path.Combine(dir, "wood grain.png"), new byte[] { 1 });
+        File.WriteAllText(Path.Combine(dir, "p.mtl"), "newmtl wood\nKd 0.8 0.8 0.8\nmap_Kd -bm 1.0 -s 1 1 1 wood grain.png\n");
+        // Vertex 1 is used with two different UVs: it becomes two vertices.
+        File.WriteAllText(
+            Path.Combine(dir, "quad.obj"),
+            "mtllib p.mtl\nv 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\n"
+            + "vt 0 0\nvt 1 0\nvt 1 1\nvt 0 1\nvt 0.5 0.25\n"
+            + "usemtl wood\nf 1/1 2/2 3/3\nf 1/5 3/3 4/4\n");
+
+        var mesh = MeshFile.Read(Path.Combine(dir, "quad.obj"))!;
+
+        var part = Assert.Single(mesh.Parts);
+        Assert.Equal(Path.Combine(dir, "wood grain.png"), part.Texture!.File);
+        Assert.Equal(new MeshColor(0.8f, 0.8f, 0.8f), part.Color);
+        Assert.Equal(5, mesh.VertexCount);
+        Assert.Equal(new float[] { 0, 1, 1, 1, 1, 0, 0.5f, 0.75f, 0, 0 }, mesh.TexCoords);
+        Assert.Equal(new[] { 0, 1, 2, 3, 2, 4 }, part.Indices);
+    }
+
+    [Fact]
+    public void Obj_UvsWithoutAPicture_KeepTheSharedVertices() {
+        string dir = Scratch();
+        File.WriteAllText(Path.Combine(dir, "p.mtl"), "newmtl wood\nKd 1 0 0\nmap_Kd missing.png\n");
+        File.WriteAllText(
+            Path.Combine(dir, "quad.obj"),
+            "mtllib p.mtl\nv 0 0 0\nv 1 0 0\nv 1 1 0\nvt 0 0\nvt 1 0\nvt 0.5 0.5\nusemtl wood\nf 1/1 2/2 3/3\nf 1/3 3/3 2/2\n");
+
+        var mesh = MeshFile.Read(Path.Combine(dir, "quad.obj"))!;
+
+        Assert.Null(mesh.TexCoords);
+        Assert.Null(Assert.Single(mesh.Parts).Texture);
+        Assert.Equal(3, mesh.VertexCount);
+    }
+
+    [Theory]
+    [InlineData(@"G:\Shared drives\Art\Textures\wood.png", "textures")]
+    [InlineData(@"..\textures\wood.png", @"..\textures")]
+    [InlineData("wood.png", "")]
+    public void Texture_IsLookedForWherePeoplePutThem(string reference, string folder) {
+        string dir = Path.Combine(Scratch(), "model");
+        string where = Path.GetFullPath(Path.Combine(dir, folder));
+        Directory.CreateDirectory(where);
+        File.WriteAllBytes(Path.Combine(where, "wood.png"), new byte[] { 1 });
+
+        Assert.Equal(Path.Combine(where, "wood.png"), MeshFile.FindTexture(dir, reference)?.File);
+    }
+
+    [Theory]
+    [InlineData(@"\\host\share\wood.png")]
+    [InlineData("//host/share/wood.png")]
+    [InlineData("https://host/wood.png")]
+    public void Texture_OnAnotherHost_IsNotLookedFor(string reference) {
+        // Not even by its bare name beside the model: the reference is not followed at all.
+        string dir = Scratch();
+        File.WriteAllBytes(Path.Combine(dir, "wood.png"), new byte[] { 1 });
+
+        Assert.Null(MeshFile.FindTexture(dir, reference));
+    }
+
+    [Fact]
+    public void Glb_BaseColorTexture_IsTheImageInItsBufferView() {
+        byte[] picture = { 0x89, 0x50, 0x4E, 0x47 };
+
+        var mesh = MeshFile.Read(Temp("tex.glb", TexturedGlb(picture)))!;
+
+        var part = Assert.Single(mesh.Parts);
+        Assert.Equal(picture, part.Texture!.Data);
+        // glTF counts V from the top already: as stored.
+        Assert.Equal(new float[] { 0, 1, 1, 1, 0, 0 }, mesh.TexCoords);
+        Assert.Equal(3, mesh.VertexCount);
+    }
+
+    [Fact]
+    public void Obj_WithoutALibrary_FindsThePictureByItsMaterialAndName() {
+        // The sample that asked for this: the file's name differs by a letter, the other maps lie beside.
+        string dir = Scratch();
+        string textures = Path.Combine(dir, "textures");
+        Directory.CreateDirectory(textures);
+        foreach (string map in new[] { "BaseColor", "Normal", "Roughness", "Ambiant", "Metallic" }) {
+            File.WriteAllBytes(Path.Combine(textures, $"Indu_table_Table_{map}.png"), new byte[] { 1 });
+        }
+        File.WriteAllText(
+            Path.Combine(dir, "Indus_table.obj"),
+            "mtllib Indus_table.mtl\nv 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0 0\nvt 1 0\nvt 0 1\nusemtl Table\nf 1/1 2/2 3/3\n");
+
+        var mesh = MeshFile.Read(Path.Combine(dir, "Indus_table.obj"))!;
+
+        Assert.Equal("Indu_table_Table_BaseColor.png", Assert.Single(mesh.Parts).Texture!.Name);
+    }
+
+    [Fact]
+    public void Obj_WithoutUvs_LooksForNoPicture() {
+        string dir = Scratch();
+        File.WriteAllBytes(Path.Combine(dir, "wood_albedo.png"), new byte[] { 1 });
+        File.WriteAllText(Path.Combine(dir, "wood.obj"), "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n");
+
+        var mesh = MeshFile.Read(Path.Combine(dir, "wood.obj"))!;
+
+        Assert.Null(Assert.Single(mesh.Parts).Texture);
+        Assert.Null(mesh.TexCoords);
+    }
+
+    [Theory]
+    [InlineData("Hero", "Hero_Albedo.png", new[] { "HeroHead_Albedo.png", "Hero_Albedo.png", "Hero_Normal.png" })]
+    [InlineData("HeroHead", "HeroHead_Albedo.png", new[] { "HeroHead_Albedo.png", "Hero_Albedo.png" })]
+    [InlineData("Wood", "wood.jpg", new[] { "wood.jpg", "wood_normal.jpg" })]
+    [InlineData("Wood", "wood_d.tga", new[] { "wood_d.tga", "wood_n.tga", "wood_ao.tga" })]
+    [InlineData("Whatever", "albedo.png", new[] { "albedo.png", "normal.png" })]
+    public void Picture_IsChosenByItsWords(string material, string expected, string[] files) {
+        string dir = Scratch();
+        foreach (string file in files) {
+            File.WriteAllBytes(Path.Combine(dir, file), new byte[] { 1 });
+        }
+
+        Assert.Equal(expected, new ModelTextures(Path.Combine(dir, "other model.fbx")).ForMaterial(material)?.Name);
+    }
+
+    [Theory]
+    [InlineData("Chainsaw", new[] { "end col.jpg", "dirt_DH.jpg", "chainsaw_low_Nor_2.jpg" })]
+    [InlineData("Wood", new[] { "sketch.png", "wood_sketch.png" })]
+    [InlineData("Wood", new[] { "albedo.png", "basecolor.png" })]
+    public void Picture_ThatDoesNotFit_IsNotTaken(string material, string[] files) {
+        // A wrong picture is worse than the material's colour.
+        string dir = Scratch();
+        foreach (string file in files) {
+            File.WriteAllBytes(Path.Combine(dir, file), new byte[] { 1 });
+        }
+
+        Assert.Null(new ModelTextures(Path.Combine(dir, "other model.fbx")).ForMaterial(material));
+    }
+
+    [Fact]
+    public void FolderAbove_OnlyGivesWhatSaysItIsColour() {
+        // The real layout: reference sheets lie next to the bakes, one level above the parts.
+        string dir = Scratch();
+        string parts = Path.Combine(dir, "parts");
+        Directory.CreateDirectory(parts);
+        File.WriteAllBytes(Path.Combine(dir, "glove.png"), new byte[] { 1 });
+        File.WriteAllBytes(Path.Combine(dir, "Hero_Albedo.png"), new byte[] { 1 });
+
+        var textures = new ModelTextures(Path.Combine(parts, "Part.blend"));
+
+        Assert.Null(textures.ForMaterial("Glove"));
+        Assert.Equal("Hero_Albedo.png", textures.ForMaterial("Hero")?.Name);
+    }
+
+    [Fact]
+    public void UnityMaterial_NamesThePictureByGuid_WhateverItsName() {
+        string dir = Scratch();
+        const string guid = "6ee8d510532468846a57850e22e24c55";
+        File.WriteAllText(Path.Combine(dir, "Axe.mat"), $$"""
+            %YAML 1.1
+            Material:
+              m_SavedProperties:
+                m_TexEnvs:
+                - _BumpMap:
+                    m_Texture: {fileID: 2800000, guid: 0308e966ea926af45b68c3ae34cd023d, type: 3}
+                - _BaseMap:
+                    m_Texture: {fileID: 2800000, guid: {{guid}}, type: 3}
+            """);
+        File.WriteAllBytes(Path.Combine(dir, "paint_17.png"), new byte[] { 1 });
+        File.WriteAllText(Path.Combine(dir, "paint_17.png.meta"), $"fileFormatVersion: 2\nguid: {guid}\nTextureImporter:\n");
+        File.WriteAllBytes(Path.Combine(dir, "Axe_Albedo.png"), new byte[] { 1 });
+
+        Assert.Equal("paint_17.png", new ModelTextures(Path.Combine(dir, "Axe.fbx")).ForMaterial("Axe")?.Name);
+    }
+
+    [Fact]
+    public void UnityMaterial_WithAnEmptySlot_LeavesItToTheNames() {
+        string dir = Scratch();
+        File.WriteAllText(Path.Combine(dir, "Axe.mat"), "Material:\n  m_TexEnvs:\n  - _BaseMap:\n      m_Texture: {fileID: 0}\n");
+        File.WriteAllBytes(Path.Combine(dir, "Axe_Albedo.png"), new byte[] { 1 });
+
+        Assert.Equal("Axe_Albedo.png", new ModelTextures(Path.Combine(dir, "Axe.fbx")).ForMaterial("Axe")?.Name);
+    }
+
+
     // --- glTF -------------------------------------------------------------
 
     [Fact]
@@ -323,7 +505,8 @@ public class MeshFileTests {
         Assert.True(MeshFile.IsMesh("thing.ply"));
         Assert.True(MeshFile.IsMesh("thing.3mf"));
         Assert.True(MeshFile.IsMesh("thing.fbx"));
-        Assert.False(MeshFile.IsMesh("thing.blend"));
+        Assert.True(MeshFile.IsMesh("thing.blend"));
+        Assert.False(MeshFile.IsMesh("thing.dae"));
     }
 
     [Fact]
@@ -434,6 +617,59 @@ public class MeshFileTests {
             + "\"bufferViews\":["
             + "{\"buffer\":0,\"byteOffset\":0,\"byteLength\":" + indicesAt + "},"
             + "{\"buffer\":0,\"byteOffset\":" + indicesAt + ",\"byteLength\":6}],"
+            + "\"buffers\":[{\"byteLength\":" + bin.Length + "}]}";
+
+        byte[] jsonBytes = Pad(Encoding.UTF8.GetBytes(json), (byte)' ');
+        byte[] binBytes = Pad(bin, 0);
+
+        using var file = new MemoryStream();
+        using var w = new BinaryWriter(file);
+        w.Write(0x46546C67u);                            // "glTF"
+        w.Write(2u);
+        w.Write((uint)(12 + 8 + jsonBytes.Length + 8 + binBytes.Length));
+        w.Write((uint)jsonBytes.Length);
+        w.Write(0x4E4F534Au);                            // "JSON"
+        w.Write(jsonBytes);
+        w.Write((uint)binBytes.Length);
+        w.Write(0x004E4942u);                            // "BIN\0"
+        w.Write(binBytes);
+        w.Flush();
+
+        return file.ToArray();
+    }
+
+    /// <summary>
+    /// One triangle with <c>TEXCOORD_0</c> and a material whose
+    /// <c>baseColorTexture</c> is <paramref name="picture"/>, in a buffer view
+    /// of the BIN chunk. Unindexed: the points are the drawing order.
+    /// </summary>
+    private static byte[] TexturedGlb(byte[] picture) {
+        float[] points = Triangle();
+        float[] uvs = { 0, 1, 1, 1, 0, 0 };
+        var bin = new byte[(points.Length * 4) + (uvs.Length * 4) + picture.Length];
+        for (int i = 0; i < points.Length; i++) {
+            BinaryPrimitives.WriteSingleLittleEndian(bin.AsSpan(i * 4), points[i]);
+        }
+        int uvAt = points.Length * 4;
+        for (int i = 0; i < uvs.Length; i++) {
+            BinaryPrimitives.WriteSingleLittleEndian(bin.AsSpan(uvAt + (i * 4)), uvs[i]);
+        }
+        int pictureAt = uvAt + (uvs.Length * 4);
+        picture.CopyTo(bin, pictureAt);
+
+        string json = "{\"asset\":{\"version\":\"2.0\"},"
+            + "\"scene\":0,\"scenes\":[{\"nodes\":[0]}],\"nodes\":[{\"mesh\":0}],"
+            + "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0,\"TEXCOORD_0\":1},\"material\":0}]}],"
+            + "\"materials\":[{\"pbrMetallicRoughness\":{\"baseColorTexture\":{\"index\":0}}}],"
+            + "\"textures\":[{\"source\":0}],"
+            + "\"images\":[{\"bufferView\":2,\"mimeType\":\"image/png\"}],"
+            + "\"accessors\":["
+            + "{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"},"
+            + "{\"bufferView\":1,\"componentType\":5126,\"count\":3,\"type\":\"VEC2\"}],"
+            + "\"bufferViews\":["
+            + "{\"buffer\":0,\"byteOffset\":0,\"byteLength\":" + uvAt + "},"
+            + "{\"buffer\":0,\"byteOffset\":" + uvAt + ",\"byteLength\":" + (uvs.Length * 4) + "},"
+            + "{\"buffer\":0,\"byteOffset\":" + pictureAt + ",\"byteLength\":" + picture.Length + "}],"
             + "\"buffers\":[{\"byteLength\":" + bin.Length + "}]}";
 
         byte[] jsonBytes = Pad(Encoding.UTF8.GetBytes(json), (byte)' ');

@@ -1,14 +1,18 @@
+using System.IO;
+using System.Windows;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Media.Media3D;
+using Wander.Core.FileSystem;
 using Wander.Core.Preview;
 
 namespace Wander.App.Preview;
 
 /// <summary>
-/// One drawable of a model: the triangles of a single material, and the
-/// colour they are painted in front and behind.
+/// One drawable of a model: the triangles of a single material, and what
+/// they are painted with in front and behind.
 /// </summary>
-public sealed record ModelPart(MeshGeometry3D Geometry, Brush Front, Brush Back);
+public sealed record ModelPart(MeshGeometry3D Geometry, Material Front, Material Back);
 
 
 /// <summary>
@@ -34,10 +38,22 @@ public sealed record ModelScene(
 /// none, which is exactly the faceted shading a preview of an untextured
 /// solid wants, and it halves what the readers have to get right.
 /// </para>
+///
+/// <para>
+/// Pictures are decoded here too, before the model is handed over: the
+/// pane shows the model once, already textured, rather than grey first
+/// and repainted on screen.
+/// </para>
 /// </summary>
 internal static class ModelBuilder {
     /// <summary>What a model with no stated colour is drawn in.</summary>
     private const float ModelGrey = 0.76f;
+
+    /// <summary>The reverse of a face, a share of the front's brightness.</summary>
+    private const double BackFactor = 0.72;
+
+    /// <summary>A picture's longest side past this is decoded down to it: a preview pane, not a texture budget.</summary>
+    private const int MaxTextureSide = 2048;
 
 
     /// <summary>
@@ -57,6 +73,16 @@ internal static class ModelBuilder {
         // materials it happens to have.
         points.Freeze();
 
+        PointCollection? texCoords = null;
+        if (mesh.TexCoords is { } uv) {
+            texCoords = new PointCollection(uv.Length / 2);
+            for (int i = 0; i + 1 < uv.Length; i += 2) {
+                texCoords.Add(new Point(uv[i], uv[i + 1]));
+            }
+            texCoords.Freeze();
+        }
+
+        var pictures = new Dictionary<MeshTexture, Brush?>();
         var parts = new List<ModelPart>(mesh.Parts.Count);
         foreach (var part in mesh.Parts) {
             ct.ThrowIfCancellationRequested();
@@ -65,8 +91,17 @@ internal static class ModelBuilder {
                 Positions = points,
                 TriangleIndices = new Int32Collection(part.Indices),
             };
+            if (texCoords is not null) {
+                geometry.TextureCoordinates = texCoords;
+            }
             geometry.Freeze();
-            parts.Add(new ModelPart(geometry, Paint(part.Color), Paint(part.Color, back: true)));
+
+            var picture = part.Texture is { } texture && texCoords is not null
+                ? pictures.TryGetValue(texture, out var known) ? known : pictures[texture] = Picture(texture)
+                : null;
+            parts.Add(picture is not null
+                ? new ModelPart(geometry, Diffuse(picture, 1.0), Diffuse(picture, BackFactor))
+                : new ModelPart(geometry, Diffuse(Paint(part.Color), 1.0), Diffuse(Paint(part.Color, back: true), 1.0)));
         }
 
         if (parts.Count == 0 || mesh.Bounds() is not { } box) {
@@ -106,10 +141,8 @@ internal static class ModelBuilder {
     /// <para>
     /// Colours come from the file where it states one — <c>Kd</c> in an
     /// OBJ's material library, <c>baseColorFactor</c> in a glTF — and a
-    /// model that states none stays the neutral grey it always was.
-    /// Textures are still not read; this is the part of a material that
-    /// costs nothing and takes a model from uniformly grey to
-    /// recognisable, and the rest is a scope of its own (see BACKLOG.md).
+    /// model that states none stays the neutral grey it always was. A part
+    /// with a picture is painted with that instead (<see cref="Picture"/>).
     /// </para>
     ///
     /// <para>
@@ -120,8 +153,6 @@ internal static class ModelBuilder {
     /// </para>
     /// </summary>
     private static Brush Paint(MeshColor? colour, bool back = false) {
-        const double BackFactor = 0.72;
-
         var (r, g, b) = colour is { } c
             ? (c.R, c.G, c.B)
             : (ModelGrey, ModelGrey, ModelGrey);
@@ -134,5 +165,81 @@ internal static class ModelBuilder {
         brush.Freeze();
 
         return brush;
+    }
+
+
+    /// <summary>A diffuse material; <paramref name="shade"/> below one dims it - the back of a textured face.</summary>
+    private static Material Diffuse(Brush brush, double shade) {
+        var material = new DiffuseMaterial(brush);
+        if (shade < 1.0) {
+            byte level = (byte)Math.Round(255 * shade);
+            material.Color = Color.FromRgb(level, level, level);
+        }
+        material.Freeze();
+
+        return material;
+    }
+
+
+    /// <summary>
+    /// A part's picture as a brush laid by the mesh's UVs, or null when it
+    /// cannot be decoded - the part then keeps its colour. The viewport is
+    /// absolute and tiled: UVs are picture coordinates, 0...1 across, and
+    /// past it the picture repeats, as every exporter assumes; a relative
+    /// viewport would stretch the picture over the UVs' own bounds.
+    /// </summary>
+    private static Brush? Picture(MeshTexture texture) {
+        BitmapSource? bitmap;
+        try {
+            byte[]? bytes = texture.Data ?? (texture.File is { } file ? SharedRead.ReadAllBytes(file) : null);
+            bitmap = bytes is null ? null : Decode(bytes, texture.Name);
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or OutOfMemoryException) {
+            bitmap = null;
+        }
+        if (bitmap is null) {
+            return null;
+        }
+
+        var brush = new ImageBrush(bitmap) {
+            ViewportUnits = BrushMappingMode.Absolute,
+            Viewport = new Rect(0, 0, 1, 1),
+            TileMode = TileMode.Tile,
+            Stretch = Stretch.Fill,
+        };
+        brush.Freeze();
+
+        return brush;
+    }
+
+
+    /// <summary>
+    /// Decoded no larger than <see cref="MaxTextureSide"/>: WIC formats
+    /// through the decoder's own downscale, TGA (no codec, no signature -
+    /// told by its name) by Core's decoder and a scale after.
+    /// </summary>
+    private static BitmapSource? Decode(byte[] bytes, string name) {
+        if (Path.GetExtension(name).Equals(".tga", StringComparison.OrdinalIgnoreCase)) {
+            if (ImageDecoder.Tga(bytes) is not { } tga) {
+                return null;
+            }
+
+            int side = Math.Max(tga.PixelWidth, tga.PixelHeight);
+            if (side <= MaxTextureSide) {
+                return tga;
+            }
+
+            double scale = MaxTextureSide / (double)side;
+            var scaled = new TransformedBitmap(tga, new ScaleTransform(scale, scale));
+            scaled.Freeze();
+
+            return scaled;
+        }
+
+        int? width = null;
+        if (ImageDecoder.StoredSize(bytes) is { } size && Math.Max(size.Width, size.Height) > MaxTextureSide) {
+            width = (int)Math.Round(size.Width * (MaxTextureSide / (double)Math.Max(size.Width, size.Height)));
+        }
+
+        return ImageDecoder.Stream(bytes, width);
     }
 }

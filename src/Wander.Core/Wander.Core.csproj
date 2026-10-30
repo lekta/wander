@@ -17,4 +17,9 @@
     <InternalsVisibleTo Include="Wander.Core.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Сжатые .blend. С переходом на .NET 11 - заменить на ZstandardStream и убрать. -->
+    <PackageReference Include="ZstdSharp.Port" Version="0.8.8" />
+  </ItemGroup>
+
 </Project>
