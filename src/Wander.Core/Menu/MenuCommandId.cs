@@ -41,6 +41,8 @@ public enum MenuCommandId {
     OpenInTerminal,
     /// <summary>A search result: to its folder, the row selected.</summary>
     GoToLocation,
+    /// <summary>Two files: the comparison window - texts as their differences, the rest side by side (F3, 2026-11-02).</summary>
+    Compare,
 
     // --- Clipboard / file ops -------------------------------------------
     Cut,

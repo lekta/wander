@@ -157,6 +157,13 @@
     <SolidColorBrush x:Key="WaveformBody" Color="#2B6CC4"/>
     <SolidColorBrush x:Key="WaveformPlayed" Color="#E8780C"/>
 
+    <!-- The rows of a patch and of two files compared (Highlighting/DiffBackground):
+         added, removed, where a block starts, which file. Under the text, never on it. -->
+    <SolidColorBrush x:Key="DiffAddedLine" Color="#E6FFEC"/>
+    <SolidColorBrush x:Key="DiffRemovedLine" Color="#FFEBE9"/>
+    <SolidColorBrush x:Key="DiffHunkLine" Color="#DDF4FF"/>
+    <SolidColorBrush x:Key="DiffHeaderLine" Color="#EEEEEE"/>
+
 
     <!-- ===== Rows ====================================================== -->
     <!--

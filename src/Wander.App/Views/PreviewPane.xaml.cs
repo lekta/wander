@@ -575,13 +575,17 @@ public partial class PreviewPane : UserControl {
         if (string.IsNullOrEmpty(Controller.CodeText)) {
             CodeEditor.Clear();
             CodeEditor.SyntaxHighlighting = null;
+            DiffBackground.Show(CodeEditor, on: false);
             return;
         }
 
         string ext = Controller.CodeExtension ?? "";
+        // A patch is read as before / after - rows painted, not code colours.
+        bool patch = UnifiedDiff.IsPatchExtension(ext);
         // AvalonEdit ships highlighting for: C#, C++, Java, JS, TS, CSS, HTML, XML, JSON, Python, PHP, SQL, Markdown, ...
-        CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinitionByExtension(ext);
+        CodeEditor.SyntaxHighlighting = patch ? null : HighlightingManager.Instance.GetDefinitionByExtension(ext);
         CodeEditor.Text = Controller.CodeText;
+        DiffBackground.Show(CodeEditor, patch);
     }
 
     /// <summary>
@@ -758,6 +762,10 @@ public partial class PreviewPane : UserControl {
     // Ctrl+wheel steps it through PictureZoom's levels (2026-10-15), pinned
     // as Z pins it: the mapping is the same at any scale - the cursor's
     // share of the area is the picture's share under it.
+    //
+    // A click freezes a pinned zoom (FreezeImageZoom, 2026-11-02): with the
+    // whole area mapped onto the whole picture, the way out of the pane
+    // dragged the zoom to the edge it crossed.
 
     /// <summary>How long the zoom's map stays after the zoom last moved (<see cref="FlashZoomMap"/>).</summary>
     private const int ZoomMapMs = 500;
@@ -781,6 +789,11 @@ public partial class PreviewPane : UserControl {
     // The zoom stays without a button held - see ToggleZoom. The other half
     // of a pair follows pinned too, so its own mouse moves pan it.
     private bool _zoomPinned;
+
+    // The pinned zoom stands where a click left it, and the mouse does not
+    // move it - see FreezeImageZoom. The other half of a pair stands too, or
+    // its own mouse moves would pan both.
+    private bool _zoomFrozen;
 
     // Where in the host the zoom was last put - the mouse, or the other
     // half's share of it - so a new picture under a held zoom can be put
@@ -940,7 +953,8 @@ public partial class PreviewPane : UserControl {
     }
 
     private void UpdateImageCursor() {
-        ImagePreviewHost.Cursor = IsImageDownscaled() ? MagnifierCursor.Instance : null;
+        // Frozen, the mouse is not a lens: the arrow says so.
+        ImagePreviewHost.Cursor = !_zoomFrozen && IsImageDownscaled() ? MagnifierCursor.Instance : null;
     }
 
     private void ImgFit_SizeChanged(object sender, SizeChangedEventArgs e) {
@@ -964,8 +978,10 @@ public partial class PreviewPane : UserControl {
     }
 
     private void ImageZoom_LmbDown(object sender, MouseButtonEventArgs e) {
-        // A pinned zoom is on already and stays: the button adds nothing.
+        // A pinned zoom is on already and stays: the button freezes it, or
+        // lets it follow the mouse again.
         if (_zoomPinned) {
+            FreezeImageZoom(!_zoomFrozen, e.GetPosition(ImagePreviewHost));
             e.Handled = true;
 
             return;
@@ -1006,8 +1022,9 @@ public partial class PreviewPane : UserControl {
     /// has nothing to zoom into and stays as it is.
     /// </summary>
     /// <param name="pinned">The zoom there stays without a button - this one does too (<see cref="ToggleZoom"/>).</param>
+    /// <param name="frozen">The zoom there stands still for the mouse - this one does too (<see cref="FreezeImageZoom"/>).</param>
     /// <param name="scale">The zoom's scale there - this one takes it too.</param>
-    private void FollowZoom(Point? share, bool pinned, double scale) {
+    private void FollowZoom(Point? share, bool pinned, bool frozen, double scale) {
         if (share is not { } at) {
             ExitImageZoom(notify: false);
 
@@ -1023,6 +1040,10 @@ public partial class PreviewPane : UserControl {
         if (pinned) {
             _zoomMouse = Mouse.GetPosition(ImagePreviewHost);
         }
+        if (_zoomFrozen != frozen) {
+            _zoomFrozen = frozen;
+            UpdateImageCursor();
+        }
         UpdateZoomPosition(new Point(at.X * ImagePreviewHost.ActualWidth, at.Y * ImagePreviewHost.ActualHeight));
     }
 
@@ -1030,7 +1051,7 @@ public partial class PreviewPane : UserControl {
     private static void Relay(ZoomLink link, PreviewPane other, ZoomMove move, bool fromFirst, Func<bool>? live) {
         if (move.Share is not { } at) {
             link.End();
-            other.FollowZoom(null, pinned: false, scale: 1);
+            other.FollowZoom(null, pinned: false, frozen: false, scale: 1);
 
             return;
         }
@@ -1039,7 +1060,7 @@ public partial class PreviewPane : UserControl {
         }
 
         if (link.Lead(fromFirst, at.X, at.Y, move.Alone) is { } follows) {
-            other.FollowZoom(new Point(follows.X, follows.Y), move.Pinned, move.Scale);
+            other.FollowZoom(new Point(follows.X, follows.Y), move.Pinned, move.Frozen, move.Scale);
         }
     }
 
@@ -1076,7 +1097,37 @@ public partial class PreviewPane : UserControl {
         double hh = ImagePreviewHost.ActualHeight;
         if (hw > 0 && hh > 0) {
             ZoomMoved?.Invoke(this, new ZoomMove(
-                new Point(Math.Clamp(mouse.X / hw, 0, 1), Math.Clamp(mouse.Y / hh, 0, 1)), alone, _zoomPinned, _zoomScale));
+                new Point(Math.Clamp(mouse.X / hw, 0, 1), Math.Clamp(mouse.Y / hh, 0, 1)), alone, _zoomPinned, _zoomFrozen, _zoomScale));
+        }
+    }
+
+    /// <summary>
+    /// A click on a pinned zoom (2026-11-02). Frozen, it stands where it is
+    /// and the mouse may leave the picture without taking it along - the
+    /// arrow instead of the lens says so; Ctrl+arrows still move it, and
+    /// Ctrl+wheel steps it about the place it stands. Let go, it comes
+    /// under the mouse again at once. The other half of a pair does the same.
+    /// </summary>
+    private void FreezeImageZoom(bool frozen, Point mouse) {
+        _zoomFrozen = frozen;
+        UpdateImageCursor();
+        if (frozen) {
+            TellZoomStands();
+        } else {
+            _zoomMouse = null;
+            MoveImageZoom(mouse, alone: false);
+        }
+    }
+
+    /// <summary>The other half of a split is told the zoom here as it stands - frozen, or stepped while frozen - and stays where it is.</summary>
+    private void TellZoomStands() {
+        double hw = ImagePreviewHost.ActualWidth;
+        double hh = ImagePreviewHost.ActualHeight;
+        if (hw > 0 && hh > 0) {
+            // Not clamped as a mouse's place is: a follower's place may lie
+            // past an edge, and clamped it would move the other half.
+            ZoomMoved?.Invoke(this, new ZoomMove(
+                new Point(_zoomAt.X / hw, _zoomAt.Y / hh), false, _zoomPinned, _zoomFrozen, _zoomScale));
         }
     }
 
@@ -1095,6 +1146,9 @@ public partial class PreviewPane : UserControl {
         // capture got stolen), drop out of zoom - unless no button holds it.
         if (!_zoomPinned && e.LeftButton != MouseButtonState.Pressed) {
             ExitImageZoom();
+            return;
+        }
+        if (_zoomFrozen) {
             return;
         }
 
@@ -1144,6 +1198,14 @@ public partial class PreviewPane : UserControl {
         if (!ImagePreviewHost.IsMouseCaptured) {
             _zoomPinned = true;
         }
+        // Frozen, it steps about the place it stands: the mouse is not its.
+        if (_zoomFrozen) {
+            UpdateZoomPosition(_zoomAt);
+            TellZoomStands();
+
+            return;
+        }
+
         _zoomMouse = null;
         MoveImageZoom(e.GetPosition(ImagePreviewHost), alone: false);
     }
@@ -1353,6 +1415,7 @@ public partial class PreviewPane : UserControl {
         }
         _imageZoomActive = false;
         _zoomPinned = false;
+        _zoomFrozen = false;
         _zoomMouse = null;
         _zoomScale = 1;
         ImgZoomCanvas.Visibility = Visibility.Collapsed;
@@ -1364,7 +1427,7 @@ public partial class PreviewPane : UserControl {
         }
         UpdateImageCursor();
         if (notify) {
-            ZoomMoved?.Invoke(this, new ZoomMove(null, false, false, 1));
+            ZoomMoved?.Invoke(this, new ZoomMove(null, false, false, false, 1));
         }
     }
 
@@ -2100,9 +2163,16 @@ public partial class PreviewPane : UserControl {
     // point under it stays under it. A render transform on the stage, so the
     // player keeps its size and nothing is decoded again; the stage's border
     // clips it. A new clip, or anything else in the pane, starts fitted.
+    // A click freezes it as it freezes a picture's (2026-11-02).
 
     // How much the clip is magnified: 1 is fitted.
     private double _videoScale = 1;
+
+    // Where the stage is magnified about - the mouse, or where a click froze it.
+    private Point _videoZoomAt;
+
+    // The magnified part stands where a click left it, see FreezeImageZoom.
+    private bool _videoZoomFrozen;
 
 
     private void VideoZoom_Wheel(object sender, MouseWheelEventArgs e) {
@@ -2117,28 +2187,44 @@ public partial class PreviewPane : UserControl {
         }
 
         _videoScale = PictureZoom.Step(_videoScale > 1 ? _videoScale : null, 1, notches) ?? 1;
-        PlaceVideoZoom(e.GetPosition(VideoClip));
+        _videoZoomFrozen &= _videoScale > 1;
+        PlaceVideoZoom(_videoZoomFrozen ? _videoZoomAt : e.GetPosition(VideoClip));
     }
 
     private void VideoZoom_MouseMove(object sender, MouseEventArgs e) {
-        if (_videoScale > 1) {
+        if (_videoScale > 1 && !_videoZoomFrozen) {
             PlaceVideoZoom(e.GetPosition(VideoClip));
         }
     }
 
+    private void VideoZoom_LmbDown(object sender, MouseButtonEventArgs e) {
+        if (_videoScale <= 1) {
+            return;
+        }
+
+        _videoZoomFrozen = !_videoZoomFrozen;
+        PlaceVideoZoom(_videoZoomFrozen ? _videoZoomAt : e.GetPosition(VideoClip));
+        e.Handled = true;
+    }
+
     /// <summary>The stage magnified about <paramref name="mouse"/> - a place in the clip's border, which the stage fills.</summary>
     private void PlaceVideoZoom(Point mouse) {
+        _videoZoomAt = mouse;
         VideoStage.RenderTransform = _videoScale > 1
             ? new ScaleTransform(
                 _videoScale, _videoScale,
                 Math.Clamp(mouse.X, 0, VideoClip.ActualWidth),
                 Math.Clamp(mouse.Y, 0, VideoClip.ActualHeight))
             : Transform.Identity;
+        // The lens while the mouse moves it, the arrow when it is frozen or fitted.
+        VideoClip.Cursor = _videoScale > 1 && !_videoZoomFrozen ? MagnifierCursor.Instance : null;
     }
 
     private void ResetVideoZoom() {
         _videoScale = 1;
+        _videoZoomFrozen = false;
         VideoStage.RenderTransform = Transform.Identity;
+        VideoClip.Cursor = null;
     }
 
 
@@ -2698,8 +2784,9 @@ public partial class PreviewPane : UserControl {
     /// </summary>
     /// <param name="Alone">The right button is held as well: the other pane of a pair stays where it is.</param>
     /// <param name="Pinned">No button holds it - Z did (<see cref="ToggleZoom"/>): the other pane's follows pinned too.</param>
+    /// <param name="Frozen">A click froze it (<see cref="FreezeImageZoom"/>): the other pane's stands for its mouse too.</param>
     /// <param name="Scale">The zoom's scale, 1 being 1:1 - the other pane's takes it too.</param>
-    private readonly record struct ZoomMove(Point? Share, bool Alone, bool Pinned, double Scale);
+    private readonly record struct ZoomMove(Point? Share, bool Alone, bool Pinned, bool Frozen, double Scale);
 
 
     /// <summary>What F3 did here - see <see cref="FindAgain"/>.</summary>

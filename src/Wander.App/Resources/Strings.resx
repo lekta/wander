@@ -185,12 +185,6 @@
   <data name="PreviewFolderSubfolders" xml:space="preserve">
     <value>Папки</value>
   </data>
-  <data name="PreviewCensusFilterHint" xml:space="preserve">
-    <value>Показать в списке только эти файлы</value>
-  </data>
-  <data name="PreviewCensusOpenHint" xml:space="preserve">
-    <value>Открыть папку</value>
-  </data>
   <data name="PreviewArchiveHeadline" xml:space="preserve">
     <value>Архив: {0:N0} файлов · {1:N0} папок · {2}</value>
     <comment>{0} — файлов в корне, {1} — папок, {2} — размер самого файла архива</comment>
@@ -1085,6 +1079,10 @@
     <value>Перейти к расположению</value>
     <comment>Меню результата поиска: открыть его папку и выделить его</comment>
   </data>
+  <data name="MenuCmdCompare" xml:space="preserve">
+    <value>Сравнить</value>
+    <comment>Два выделенных файла: окно сравнения</comment>
+  </data>
   <data name="MenuCmdCut" xml:space="preserve">
     <value>Вырезать</value>
   </data>
@@ -1185,7 +1183,7 @@
     <comment>Как в Проводнике: скрытый + системный атрибут вместе</comment>
   </data>
   <data name="SettingsHideSystemRootFoldersHint" xml:space="preserve">
-    <value>$RECYCLE.BIN, System Volume Information, pagefile.sys и подобные: в папки всё равно нет доступа. Видны только вместе со скрытыми.</value>
+    <value>desktop.ini, Thumbs.db, .DS_Store, ._* и __MACOSX — в любой папке и в архиве; $RECYCLE.BIN, System Volume Information, pagefile.sys и подобные — в корне диска. Видны только вместе со скрытыми.</value>
   </data>
   <data name="SettingsConfirmRecycle" xml:space="preserve">
     <value>Спрашивать при удалении в корзину</value>
@@ -1885,7 +1883,7 @@
     <value>Показать другую (Пробел)</value>
   </data>
   <data name="CompareOpen" xml:space="preserve">
-    <value>Сравнить: два файла рядом, тексты прокручиваются вместе</value>
+    <value>Сравнить: у текстов — различия, остальное — рядом</value>
   </data>
   <data name="CompareTitlePair" xml:space="preserve">
     <value>Сравнить — {0} ↔ {1}</value>
@@ -1898,6 +1896,29 @@
   <data name="CompareSideB" xml:space="preserve">
     <value>B: {0}</value>
     <comment>{0} — папка правого файла; в режиме наложения</comment>
+  </data>
+  <data name="CompareDiff" xml:space="preserve">
+    <value>Различия одной колонкой; отжать — файлы рядом</value>
+    <comment>Кнопка «±» окна сравнения двух текстов</comment>
+  </data>
+  <data name="CompareIdentical" xml:space="preserve">
+    <value>Файлы одинаковы</value>
+  </data>
+  <data name="CompareLineEndings" xml:space="preserve">
+    <value>Различаются только концы строк (CRLF и LF)</value>
+  </data>
+  <data name="CompareNoGit" xml:space="preserve">
+    <value>git не найден — различия не подсвечены</value>
+  </data>
+  <data name="CompareTooLarge" xml:space="preserve">
+    <value>Файл больше 64 МБ — различия не считаются</value>
+  </data>
+  <data name="CompareFailed" xml:space="preserve">
+    <value>Различия посчитать не удалось</value>
+  </data>
+  <data name="CompareCut" xml:space="preserve">
+    <value>Показано начало различий</value>
+    <comment>Различий больше мегабайта</comment>
   </data>
   <data name="HotkeyGroupNavigation" xml:space="preserve">
     <value>Навигация</value>
@@ -2172,7 +2193,7 @@
     <value>Клавиши</value>
   </data>
   <data name="SettingsShowSystemRootFolders" xml:space="preserve">
-    <value>Служебные папки и файлы в корне дисков</value>
+    <value>Служебные папки и файлы</value>
   </data>
   <data name="SettingsShowFolderSizes" xml:space="preserve">
     <value>Размер папок в таблице</value>

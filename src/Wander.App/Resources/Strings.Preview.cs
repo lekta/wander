@@ -108,12 +108,6 @@ public static partial class Strings {
     /// <summary>Папки</summary>
     public static string PreviewFolderSubfolders => Get(nameof(PreviewFolderSubfolders));
 
-    /// <summary>Показать в списке только эти файлы</summary>
-    public static string PreviewCensusFilterHint => Get(nameof(PreviewCensusFilterHint));
-
-    /// <summary>Открыть папку</summary>
-    public static string PreviewCensusOpenHint => Get(nameof(PreviewCensusOpenHint));
-
     /// <summary>Папка пуста</summary>
     public static string PreviewFolderEmpty => Get(nameof(PreviewFolderEmpty));
 
@@ -412,7 +406,7 @@ public static partial class Strings {
     /// <summary>Показать другую (Пробел)</summary>
     public static string CompareSwitch => Get(nameof(CompareSwitch));
 
-    /// <summary>Сравнить: два файла рядом, тексты прокручиваются вместе</summary>
+    /// <summary>Сравнить: у текстов — различия, остальное — рядом</summary>
     public static string CompareOpen => Get(nameof(CompareOpen));
 
     /// <summary>Сравнить — {0} ↔ {1}</summary>
@@ -423,4 +417,25 @@ public static partial class Strings {
 
     /// <summary>B: {0}</summary>
     public static string CompareSideB => Get(nameof(CompareSideB));
+
+    /// <summary>Различия одной колонкой; отжать — файлы рядом</summary>
+    public static string CompareDiff => Get(nameof(CompareDiff));
+
+    /// <summary>Файлы одинаковы</summary>
+    public static string CompareIdentical => Get(nameof(CompareIdentical));
+
+    /// <summary>Различаются только концы строк (CRLF и LF)</summary>
+    public static string CompareLineEndings => Get(nameof(CompareLineEndings));
+
+    /// <summary>git не найден — различия не подсвечены</summary>
+    public static string CompareNoGit => Get(nameof(CompareNoGit));
+
+    /// <summary>Файл больше 64 МБ — различия не считаются</summary>
+    public static string CompareTooLarge => Get(nameof(CompareTooLarge));
+
+    /// <summary>Различия посчитать не удалось</summary>
+    public static string CompareFailed => Get(nameof(CompareFailed));
+
+    /// <summary>Показано начало различий</summary>
+    public static string CompareCut => Get(nameof(CompareCut));
 }

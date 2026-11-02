@@ -3,11 +3,27 @@
 🌐 **English** · [Русский](CHANGELOG.md)
 
 English edition of [CHANGELOG.md](CHANGELOG.md), from version 0.6 on;
-earlier versions are described in Russian only. Each version's section here
-opens its release notes on GitHub.
+earlier versions are described in Russian only. A version's lead, the lines
+above its first heading, opens its release notes on GitHub.
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions
 follow [SemVer](https://semver.org/). Dates in ISO format.
+
+## [Unreleased]
+
+### Added
+- **Text thumbnails** — `.txt`, `.log`, `.md`: a page with words as bars,
+  the heading stands out.
+- **Patches** `.diff` / `.patch` — lines on green and red.
+- **Compare two files** — in the menu with two selected; texts show the
+  differences (needs git).
+- **Frozen zoom** — click a zoomed picture or video: the spot stays put, the
+  cursor is free.
+
+### Changed
+- **Windows and macOS clutter** (`desktop.ini`, `Thumbs.db`, `.DS_Store`,
+  `._*`, `__MACOSX`) is hidden in every folder and archive — the System
+  folders and files box.
 
 ## [0.6.0-beta] — 2026-10-26
 

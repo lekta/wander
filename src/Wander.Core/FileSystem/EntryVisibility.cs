@@ -14,8 +14,10 @@ namespace Wander.Core.FileSystem;
 /// pair rather than <c>System</c> alone.
 /// </param>
 /// <param name="HideSystemRootFolders">
-/// Hide the volume-root bookkeeping folders regardless of the two flags
-/// above — see <see cref="SystemRootFolders"/>.
+/// Hide Windows' bookkeeping regardless of the two flags above: the
+/// volume-root folders (<see cref="SystemRootFolders"/>) and the files it
+/// leaves in any folder (<see cref="ServiceFiles"/>). Without
+/// <paramref name="ShowHidden"/> they stay hidden whatever this says.
 /// </param>
 public readonly record struct EntryVisibility(
     bool ShowHidden,
@@ -45,7 +47,12 @@ public readonly record struct EntryVisibility(
         if (!ShowHidden && entry.IsHidden) {
             return false;
         }
+        if (ShowHidden && !HideSystemRootFolders) {
+            return true;
+        }
 
-        return !HideSystemRootFolders || !SystemRootFolders.IsSystemRoot(entry.FullPath);
+        // The bookkeeping counts as hidden whatever its attributes say: a
+        // desktop.ini an installer wrote carries none.
+        return !ServiceFiles.Is(entry) && !SystemRootFolders.IsSystemRoot(entry.FullPath);
     }
 }

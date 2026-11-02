@@ -3,11 +3,11 @@ using Wander.Core.FileSystem;
 namespace Wander.Core.Tests;
 
 public class EntryVisibilityTests {
-    private static FileSystemEntry Entry(string path, bool hidden = false, bool system = false) {
+    private static FileSystemEntry Entry(string path, bool hidden = false, bool system = false, bool file = false) {
         return new FileSystemEntry(
             Name: Path.GetFileName(path.TrimEnd('\\')),
             FullPath: path,
-            Kind: EntryKind.Directory,
+            Kind: file ? EntryKind.File : EntryKind.Directory,
             Size: null,
             ModifiedUtc: DateTime.MinValue,
             IsHidden: hidden,
@@ -86,6 +86,64 @@ public class EntryVisibilityTests {
         var visibility = new EntryVisibility(ShowHidden: true, ShowSystem: true, HideSystemRootFolders: false);
 
         Assert.True(visibility.Allows(Entry(@"C:\$RECYCLE.BIN", hidden: true, system: true)));
+    }
+
+
+    /// <summary>
+    /// The same switch covers the bookkeeping Windows leaves in any folder:
+    /// someone who shows hidden and system files wants their own files, not
+    /// a desktop.ini next to every customised folder's contents.
+    /// </summary>
+    [Fact]
+    public void Allows_HidesServiceFilesAnywhere_WithHiddenAndSystemOn() {
+        var visibility = new EntryVisibility(ShowHidden: true, ShowSystem: true, HideSystemRootFolders: true);
+
+        Assert.False(visibility.Allows(Entry(@"C:\photos\desktop.ini", hidden: true, system: true, file: true)));
+        Assert.False(visibility.Allows(Entry(@"\\server\share\photos\Thumbs.db", hidden: true, file: true)));
+        Assert.False(visibility.Allows(Entry(@"E:\from mac\.DS_Store", file: true)));
+        Assert.True(visibility.Allows(Entry(@"C:\photos\settings.ini", hidden: true, file: true)));
+        Assert.True(visibility.Allows(Entry(@"C:\photos\desktop.ini")));
+    }
+
+
+    /// <summary>
+    /// The attributes are not what makes a desktop.ini bookkeeping: one an
+    /// installer wrote carries none, and it is not shown with hidden files
+    /// off either.
+    /// </summary>
+    [Fact]
+    public void Allows_HidesPlainServiceFiles_WithoutHiddenFiles() {
+        var visibility = new EntryVisibility(ShowHidden: false, ShowSystem: false, HideSystemRootFolders: false);
+
+        Assert.False(visibility.Allows(Entry(@"C:\photos\desktop.ini", file: true)));
+        Assert.True(visibility.Allows(Entry(@"C:\photos\IMG_0001.jpg", file: true)));
+    }
+
+
+    /// <summary>
+    /// What a Mac leaves on a drive or in a zip: "._name" beside each file,
+    /// the zip's __MACOSX folder of them. A file by that name stays a file,
+    /// a folder whose name only starts with "._" stays a folder.
+    /// </summary>
+    [Fact]
+    public void Allows_HidesTheMacsLeftovers() {
+        var visibility = new EntryVisibility(ShowHidden: true, ShowSystem: true, HideSystemRootFolders: true);
+
+        Assert.False(visibility.Allows(Entry(@"E:\from mac\._IMG_0001.jpg", file: true)));
+        Assert.False(visibility.Allows(Entry(@"C:\photos.zip\__MACOSX")));
+        Assert.True(visibility.Allows(Entry(@"E:\from mac\IMG_0001.jpg", file: true)));
+        Assert.True(visibility.Allows(Entry(@"E:\from mac\._", file: true)));
+        Assert.True(visibility.Allows(Entry(@"E:\from mac\__MACOSX", file: true)));
+        Assert.True(visibility.Allows(Entry(@"E:\from mac\._drafts")));
+    }
+
+
+    [Fact]
+    public void Allows_ShowsServiceFiles_WhenTheSwitchIsOff() {
+        var visibility = new EntryVisibility(ShowHidden: true, ShowSystem: true, HideSystemRootFolders: false);
+
+        Assert.True(visibility.Allows(Entry(@"C:\photos\desktop.ini", hidden: true, system: true, file: true)));
+        Assert.True(visibility.Allows(Entry(@"E:\from mac\.DS_Store", file: true)));
     }
 
 

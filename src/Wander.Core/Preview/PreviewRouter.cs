@@ -146,8 +146,8 @@ public static class PreviewRouter {
         ".sql",
         ".xml", ".xaml", ".svg",
         ".json", ".yaml", ".yml",
-        // Patches — the editor's own "Patch" definition colours these, so
-        // routing them here is the whole feature.
+        // Patches: the code view paints their rows as before / after
+        // (UnifiedDiff, App's Highlighting/DiffBackground).
         ".diff", ".patch",
         // Unity shaders and their includes.
         ".shader", ".cginc", ".hlsl", ".compute",

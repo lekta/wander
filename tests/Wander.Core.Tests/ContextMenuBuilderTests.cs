@@ -43,6 +43,29 @@ public class ContextMenuBuilderTests {
         Assert.Null(Find(several, MenuCommandId.GoToLocation));
     }
 
+    [Fact]
+    public void TwoFiles_OfferCompare_InTheOpenGroup() {
+        var menu = ContextMenuBuilder.Build(SelectionOf(File("a.txt"), File("b.png")), ContextMenuSettings.Default);
+
+        int at = IndexOf(menu, MenuCommandId.Compare);
+        Assert.True(at > IndexOf(menu, MenuCommandId.Open));
+        Assert.True(menu[at + 1].IsSeparator);
+    }
+
+    [Fact]
+    public void Compare_NeedsExactlyTwoFiles_OutsideTheBin() {
+        var one = ContextMenuBuilder.Build(SelectionOf(File("a.txt")), ContextMenuSettings.Default);
+        var three = ContextMenuBuilder.Build(SelectionOf(File("a.txt"), File("b.txt"), File("c.txt")), ContextMenuSettings.Default);
+        var withFolder = ContextMenuBuilder.Build(SelectionOf(File("a.txt"), Dir("b")), ContextMenuSettings.Default);
+        var inBin = ContextMenuBuilder.Build(
+            SelectionOf(File("a.txt"), File("b.txt")) with { IsRecycleBin = true }, ContextMenuSettings.Default);
+
+        Assert.Null(Find(one, MenuCommandId.Compare));
+        Assert.Null(Find(three, MenuCommandId.Compare));
+        Assert.Null(Find(withFolder, MenuCommandId.Compare));
+        Assert.Null(Find(inBin, MenuCommandId.Compare));
+    }
+
     /// <summary>The shell's "Извлечь" is Wander's own row, right under "Открыть" (2026-10-19) - Wander lets go of the drive first.</summary>
     [Fact]
     public void Drive_TheShellsEject_IsOurRow_RightAfterOpen() {

@@ -12,6 +12,9 @@ public class SystemRootFoldersTests {
     [InlineData(@"C:\Config.Msi")]
     [InlineData(@"C:\Documents and Settings")]
     [InlineData(@"E:\$Windows.~BT")]
+    [InlineData(@"F:\.Spotlight-V100")]
+    [InlineData(@"F:\.Trashes")]
+    [InlineData(@"F:\.fseventsd")]
     public void IsSystemRoot_RecognisesTheVolumeRootPlumbing(string path) {
         Assert.True(SystemRootFolders.IsSystemRoot(path));
     }

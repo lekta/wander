@@ -124,8 +124,13 @@ public sealed class ThumbnailDiskCache {
     /// <para>
     /// v17 (2026-10-30): Blender backups draw their model, darker.
     /// </para>
+    ///
+    /// <para>
+    /// v18 (2026-11-02): plain text files draw a sheet of their words as
+    /// bars (<c>TextThumbnail</c>).
+    /// </para>
     /// </summary>
-    private const int Generation = 17;
+    private const int Generation = 18;
 
     private readonly string _directory;
     private readonly ILogger _log;

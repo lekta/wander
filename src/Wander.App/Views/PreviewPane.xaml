@@ -341,8 +341,10 @@
         </Style>
 
         <!--
-            A line of the folder census: a button the width of the line, with
-            the hover of a list's row, so what is one line is seen at once.
+            A line of the folder census: a button the width of the line, lit
+            on hover in the pane's own palette - the pane may stand on a dark
+            surround in the light theme, and the theme's row colour under its
+            light text left nothing to read. What is one line is seen at once.
             The bar under it runs from the name to the numbers and shows the
             weight: its track is what ties the two together, and it is scaled
             against the biggest line, not the total, or with a long tail every
@@ -350,7 +352,7 @@
             is working.
         -->
         <DataTemplate x:Key="CensusLine">
-            <Button Command="{Binding Open}" ToolTip="{Binding Hint}" Focusable="False"
+            <Button Command="{Binding Open}" Focusable="False"
                     IsHitTestVisible="{Binding IsClickable}"
                     HorizontalContentAlignment="Stretch">
                 <Button.Template>
@@ -360,7 +362,8 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Line" Property="Background" Value="{DynamicResource RowHover}"/>
+                                <Setter TargetName="Line" Property="Background"
+                                        Value="{Binding DataContext.ContentPalette.Hover, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -821,13 +824,15 @@
                         <!--
                             The clip's stage: Ctrl+wheel magnifies it under
                             the mouse, 2x and 4x, and the mouse moves the
-                            magnified part (2026-10-15, VideoZoom_*). Clipped
-                            here, so the picture never spills over the
-                            transport; the frame held between loops and the
-                            system player's picture zoom with it.
+                            magnified part (2026-10-15, VideoZoom_*); a click
+                            freezes it there. Clipped here, so the picture
+                            never spills over the transport; the frame held
+                            between loops and the system player's picture
+                            zoom with it.
                         -->
                         <Border x:Name="VideoClip" Grid.Row="0" ClipToBounds="True" Background="Transparent"
-                                PreviewMouseWheel="VideoZoom_Wheel" MouseMove="VideoZoom_MouseMove">
+                                PreviewMouseWheel="VideoZoom_Wheel" MouseMove="VideoZoom_MouseMove"
+                                MouseLeftButtonDown="VideoZoom_LmbDown">
                         <Grid x:Name="VideoStage">
                         <MediaElement x:Name="VideoPreview"
                                       Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Video}"

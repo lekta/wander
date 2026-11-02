@@ -144,6 +144,12 @@ public static class ContextMenuBuilder {
         if (t.IsSingle && t.IsSearchResult) {
             items.Add(Cmd(MenuCommandId.GoToLocation));
         }
+        // Two files, of any kind and from anywhere a search found them: the
+        // comparison window decides what it can show. Not in the bin - its
+        // rows are backing files under other names.
+        if (t.Selection.Count == 2 && !t.AnyFolder && !t.IsRecycleBin) {
+            items.Add(Cmd(MenuCommandId.Compare));
+        }
         items.Add(MenuEntry.Divider);
 
         // Third-party verbs sit where the eye lands first: for a photo,

@@ -816,11 +816,13 @@ public sealed class SystemIconProvider : IIconProvider {
     /// from the shell. Books carry one inside them; a PDF's first page
     /// stands in for one; documents and packages keep a picture of
     /// themselves (<see cref="EmbeddedThumbnail"/>); a model is drawn, a
-    /// font sets a page of its letters (<see cref="FontThumbnail"/>).
+    /// font sets a page of its letters (<see cref="FontThumbnail"/>), a
+    /// text file a page of its words as bars (<see cref="TextThumbnail"/>).
     /// </summary>
     private static bool HasOwnCover(string path) {
         return BookCover.Supports(path) || PdfPageImage.Supports(path) || AudioCover.Supports(path)
-            || EmbeddedThumbnail.Supports(path) || ModelThumbnail.Supports(path) || FontThumbnail.Supports(path);
+            || EmbeddedThumbnail.Supports(path) || ModelThumbnail.Supports(path) || FontThumbnail.Supports(path)
+            || TextThumbnail.Supports(path);
     }
 
     /// <summary>
@@ -861,6 +863,18 @@ public sealed class SystemIconProvider : IIconProvider {
     private static Bitmap? RenderCoverPlate(string path, int side) {
         if (!HasOwnCover(path)) {
             return null;
+        }
+
+        // A text file's sheet is drawn at the size the frame lays it at,
+        // as a track's page is: no picture to decode, nothing to shrink.
+        if (TextThumbnail.Supports(path)) {
+            Bitmap? sheet;
+            using (PerfLog.Measure("bg.text-sheet")) {
+                sheet = TextThumbnail.Render(path, side - CoverMargin(side) * 2);
+            }
+            using (sheet) {
+                return sheet is null ? null : RenderFramedCover(sheet, side, out _);
+            }
         }
 
         byte[]? bytes;

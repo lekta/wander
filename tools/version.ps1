@@ -104,6 +104,8 @@ function Add-ChangelogSection([string]$Path, [bool]$AnchorsRequired) {
     $section = @(
         "## [$informational] - $today",
         '',
+        'TODO: two or three lines, only the big things - the release page',
+        '',
         '### Added',
         '- TODO',
         '',
@@ -164,7 +166,7 @@ Write-Host "    + link ref -> $releaseUrl"
 Write-Host ""
 Write-Host "Next, by hand:" -ForegroundColor Yellow
 Write-Host "  1. Fill in the TODOs in docs/CHANGELOG.md, then the same section in English"
-Write-Host "     in docs/CHANGELOG.en.md (it becomes the top of the release notes)"
+Write-Host "     in docs/CHANGELOG.en.md; the lines above ### Added are the release notes"
 Write-Host "  2. .\tools\check.bat"
 Write-Host "  3. git commit; git tag $tag; git push origin master --follow-tags"
 Write-Host "     (pushing tag $tag triggers .github/workflows/release.yml)"

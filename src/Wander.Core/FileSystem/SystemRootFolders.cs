@@ -2,7 +2,8 @@ namespace Wander.Core.FileSystem;
 
 /// <summary>
 /// The folders - and the few files - Windows keeps in the root of every
-/// volume for its own bookkeeping. They are not user content, the user has
+/// volume for its own bookkeeping, and a Mac in the root of a drive it has
+/// seen. They are not user content, the user has
 /// no access to the folders' insides anyway (ACLs on <c>System Volume Information</c> deny even an
 /// administrator without taking ownership), and touching them breaks
 /// restore points or the recycle bin.
@@ -42,6 +43,13 @@ internal static class SystemRootFolders {
         // Junction to C:\Users kept for programs from the XP days; listing
         // it is denied, so it is a dead end with a shortcut arrow.
         "Documents and Settings",
+        // A Mac's on a drive it has seen: Spotlight's index, the bin, the
+        // file-event log, scratch space, file versions.
+        ".Spotlight-V100",
+        ".Trashes",
+        ".fseventsd",
+        ".TemporaryItems",
+        ".DocumentRevisions-V100",
         // Files: virtual memory, hibernation, the store apps' swap, and the
         // crash-dump scratch file. Always in use, never the user's.
         "pagefile.sys",

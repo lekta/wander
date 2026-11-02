@@ -4210,8 +4210,7 @@ public sealed class PreviewController : ObservableObject {
                 string.Format(Strings.PreviewFolderTypeCount, type.Count),
                 SizeFormatter.Format(type.Size),
                 (double)type.Size / biggestType,
-                filters ? new RelayCommand(_ => CensusTypeChosen?.Invoke(root, type.Extension)) : null,
-                filters ? Strings.PreviewCensusFilterHint : null));
+                filters ? new RelayCommand(_ => CensusTypeChosen?.Invoke(root, type.Extension)) : null));
         }
 
         long biggestFolder = stats.Subfolders.Count > 0 ? Math.Max(1, stats.Subfolders[0].Size) : 1;
@@ -4221,8 +4220,7 @@ public sealed class PreviewController : ObservableObject {
                 string.Format(Strings.PreviewFolderTypeCount, folder.Files),
                 SizeFormatter.Format(folder.Size),
                 (double)folder.Size / biggestFolder,
-                new RelayCommand(_ => CensusFolderChosen?.Invoke(Path.Combine(root, folder.Name))),
-                Strings.PreviewCensusOpenHint));
+                new RelayCommand(_ => CensusFolderChosen?.Invoke(Path.Combine(root, folder.Name)))));
         }
         FolderSubfoldersMore = stats.SubfoldersLeftOut > 0 ? string.Format(Strings.PreviewArchiveMore, stats.SubfoldersLeftOut) : "";
     }

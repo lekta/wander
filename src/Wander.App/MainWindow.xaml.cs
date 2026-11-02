@@ -1510,6 +1510,7 @@ public partial class MainWindow : Window {
             [MenuCommandId.OpenWith] = new(vm.OpenWithCommand),
             [MenuCommandId.OpenInTerminal] = new(vm.OpenInTerminalCommand),
             [MenuCommandId.GoToLocation] = new(vm.GoToLocationCommand),
+            [MenuCommandId.Compare] = new(vm.CompareCommand),
 
             [MenuCommandId.Cut] = new(vm.CutCommand),
             [MenuCommandId.Copy] = new(vm.CopyCommand),

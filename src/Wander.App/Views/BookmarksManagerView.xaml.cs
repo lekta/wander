@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Threading;
 using Wander.App.Resources;
 using Wander.App.Util;
 using Wander.App.ViewModels;
@@ -16,6 +17,7 @@ namespace Wander.App.Views;
 /// </summary>
 public partial class BookmarksManagerView : UserControl {
     private BookmarkRowViewModel? _editing;
+    private bool _focusPosted;
 
 
     public BookmarksManagerView() {
@@ -26,18 +28,37 @@ public partial class BookmarksManagerView : UserControl {
     private MainViewModel Vm => (MainViewModel)DataContext;
 
 
-    /// <summary>Takes the keyboard, onto the row it was on - else the first.</summary>
+    /// <summary>
+    /// Takes the keyboard, onto the row it was on - else the first. Posted,
+    /// past the layout, never done on the spot: a row moved or removed loses
+    /// its container in the middle of the collection's change, the keyboard
+    /// falls off it, and the model sends it back here (ZoneReason.FocusFell) -
+    /// a layout forced at that moment found the panel half way through the
+    /// change and threw inside WPF, on every pass after it too (2026-10-30).
+    /// </summary>
     public void FocusRows() {
-        if (Rows.SelectedItem is null && Rows.Items.Count > 0) {
-            Rows.SelectedIndex = 0;
+        if (_focusPosted) {
+            return;
         }
 
-        Rows.UpdateLayout();
-        if (Rows.ItemContainerGenerator.ContainerFromItem(Rows.SelectedItem) is FrameworkElement row) {
-            row.Focus();
-        } else {
-            Rows.Focus();
-        }
+        _focusPosted = true;
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => {
+            _focusPosted = false;
+            if (!IsVisible || _editing is not null) {
+                return;
+            }
+
+            if (Rows.SelectedItem is null && Rows.Items.Count > 0) {
+                Rows.SelectedIndex = 0;
+                Rows.UpdateLayout();
+            }
+
+            if (Rows.ItemContainerGenerator.ContainerFromItem(Rows.SelectedItem) is FrameworkElement row) {
+                row.Focus();
+            } else {
+                Rows.Focus();
+            }
+        });
     }
 
 

@@ -103,7 +103,7 @@ Medium, ориентация из контейнера (40 из 40 совпал�
 | `ui.rows` | пересборка `Entries`, возврат выделения |
 | `list.apply` | применение фильтра |
 | `bg.thumb-disk`, `bg.thumb-shell`, `bg.thumb-disk-write` | уровни миниатюр |
-| `bg.book-cover` | обложка книги, страница PDF, обложка трека |
+| `bg.book-cover`, `bg.text-sheet` | обложка книги, страница PDF, обложка трека; лист текста |
 | `bg.model`, `bg.model-pictures`, `bg.model-raster` | плитка модели целиком; декод её текстур; рисунок |
 | `bg.icon-load`, `icon.decode-ui` | загрузка и декод значка |
 | `layout.measure`, `layout.arrange`, `layout.realise` | раскладка плиток |

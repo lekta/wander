@@ -36,6 +36,7 @@ public static class ContextMenuCatalog {
         [MenuCommandId.OpenWith] = "MenuCmdOpenWith",
         [MenuCommandId.OpenInTerminal] = "MenuCmdOpenInTerminal",
         [MenuCommandId.GoToLocation] = "MenuCmdGoToLocation",
+        [MenuCommandId.Compare] = "MenuCmdCompare",
 
         [MenuCommandId.Cut] = "MenuCmdCut",
         [MenuCommandId.Copy] = "MenuCmdCopy",
@@ -119,6 +120,7 @@ public static class ContextMenuCatalog {
         new MenuNode(MenuCommandId.OpenWith, 1),
         new MenuNode(MenuCommandId.OpenInTerminal, 0),
         new MenuNode(MenuCommandId.GoToLocation, 0),
+        new MenuNode(MenuCommandId.Compare, 0),
         // The two action submenus: one switch each, in both menus at once.
         // Single actions are switched off in their own settings table.
         new MenuNode(MenuCommandId.ActionsSubmenu, 0),

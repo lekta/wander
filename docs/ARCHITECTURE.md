@@ -480,7 +480,9 @@ done: …` — листинг архива, уровень панели, пан�
   `ApplyThumbnailCacheSettings`); диск миниатюр — 256 МБ по умолчанию.
 - Служебные файлы корня тома (`pagefile.sys`, `hiberfil.sys`,
   `swapfile.sys`, `DumpStack.log.tmp`) — той же настройкой, что служебные
-  папки (`SystemRootFolders`).
+  папки (`SystemRootFolders`); она же — служебные файлы любой папки
+  (`ServiceFiles`: `desktop.ini`, `Thumbs.db`, `.DS_Store`, `._*`,
+  `__MACOSX`).
 - «Помощь» — `CrashReporter.GuideUrl` (`lekta.github.io/wander/guide/`,
   в английском интерфейсе — `…/en/guide/`).
 - **«Интерфейс»** — цветовая схема (сразу), фон галереи, язык (после

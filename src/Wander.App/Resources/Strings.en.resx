@@ -159,12 +159,6 @@
   <data name="PreviewFolderSubfolders" xml:space="preserve">
     <value>Folders</value>
   </data>
-  <data name="PreviewCensusFilterHint" xml:space="preserve">
-    <value>Show only these files in the list</value>
-  </data>
-  <data name="PreviewCensusOpenHint" xml:space="preserve">
-    <value>Open the folder</value>
-  </data>
   <data name="PreviewArchiveHeadline" xml:space="preserve">
     <value>Archive · Files: {0:N0} · Folders: {1:N0} · {2}</value>
   </data>
@@ -951,6 +945,9 @@
   <data name="MenuCmdGoToLocation" xml:space="preserve">
     <value>Go to location</value>
   </data>
+  <data name="MenuCmdCompare" xml:space="preserve">
+    <value>Compare</value>
+  </data>
   <data name="MenuCmdCut" xml:space="preserve">
     <value>Cut</value>
   </data>
@@ -1048,7 +1045,7 @@
     <value>Protected operating system files</value>
   </data>
   <data name="SettingsHideSystemRootFoldersHint" xml:space="preserve">
-    <value>$RECYCLE.BIN, System Volume Information, pagefile.sys and the like: the folders can't be opened anyway. Shown only together with hidden files.</value>
+    <value>desktop.ini, Thumbs.db, .DS_Store, ._* and __MACOSX in any folder or archive; $RECYCLE.BIN, System Volume Information, pagefile.sys and the like at drive roots. Shown only together with hidden files.</value>
   </data>
   <data name="SettingsConfirmRecycle" xml:space="preserve">
     <value>Ask before moving to the Recycle Bin</value>
@@ -1708,7 +1705,7 @@
     <value>Show the other one (Space)</value>
   </data>
   <data name="CompareOpen" xml:space="preserve">
-    <value>Compare: two files side by side, texts scroll together</value>
+    <value>Compare: differences for texts, side by side for the rest</value>
   </data>
   <data name="CompareTitlePair" xml:space="preserve">
     <value>Compare — {0} ↔ {1}</value>
@@ -1718,6 +1715,27 @@
   </data>
   <data name="CompareSideB" xml:space="preserve">
     <value>B: {0}</value>
+  </data>
+  <data name="CompareDiff" xml:space="preserve">
+    <value>Differences in one column; turn off for the files side by side</value>
+  </data>
+  <data name="CompareIdentical" xml:space="preserve">
+    <value>The files are identical</value>
+  </data>
+  <data name="CompareLineEndings" xml:space="preserve">
+    <value>Only line endings differ (CRLF vs LF)</value>
+  </data>
+  <data name="CompareNoGit" xml:space="preserve">
+    <value>git not found — differences are not highlighted</value>
+  </data>
+  <data name="CompareTooLarge" xml:space="preserve">
+    <value>A file is over 64 MB — differences are not computed</value>
+  </data>
+  <data name="CompareFailed" xml:space="preserve">
+    <value>Could not compute the differences</value>
+  </data>
+  <data name="CompareCut" xml:space="preserve">
+    <value>Showing the start of the differences</value>
   </data>
   <data name="HotkeyGroupNavigation" xml:space="preserve">
     <value>Navigation</value>
@@ -1990,7 +2008,7 @@
     <value>Shortcut</value>
   </data>
   <data name="SettingsShowSystemRootFolders" xml:space="preserve">
-    <value>System folders and files at drive roots</value>
+    <value>System folders and files</value>
   </data>
   <data name="SettingsShowFolderSizes" xml:space="preserve">
     <value>Folder sizes in the Details view</value>

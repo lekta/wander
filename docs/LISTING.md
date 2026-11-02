@@ -132,7 +132,11 @@ X», «листинг эпохи N долетел», «сторож замети
 - **`EntryVisibility`** (Core) — `ShowHidden` / `ShowSystem` /
   `HideSystemRootFolders` одним значением для списка и дерева, в фон —
   снимком. `SystemRootFolders` — отдельно от `SystemPathGuard`: тот
-  запрещает менять, этот решает показывать.
+  запрещает менять, этот решает показывать. `ServiceFiles` — `desktop.ini`,
+  `Thumbs.db`, `ehthumbs*.db`, `.DS_Store`, `._*` и папка `__MACOSX` в
+  любой папке, той же галочкой; служебное по имени без скрытых не видно
+  при любых атрибутах (`desktop.ini` от установщика их не несёт). Архив и
+  телефон — тем же `Allows`, в списке и в дереве.
 - **`ClipboardController`** (Core) — пути + copy / move; хранит пути, не
   содержимое.
 - **`ListVisuals.Ancestors`** (App) — единственный путь вверх от

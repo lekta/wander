@@ -9,7 +9,6 @@ namespace Wander.App.ViewModels;
 /// controller that built the list knows. A click shows it in the list.
 /// </summary>
 /// <param name="Open">What a click does; null when there is nothing to show - files without an extension, the types of an archive.</param>
-/// <param name="Hint">What the click will do.</param>
-public sealed record CensusRow(string Name, string CountText, string SizeText, double Share, ICommand? Open, string? Hint) {
+public sealed record CensusRow(string Name, string CountText, string SizeText, double Share, ICommand? Open) {
     public bool IsClickable => Open is not null;
 }

@@ -195,7 +195,7 @@ public sealed class WorkspaceController {
             if (Archives.Contains(path)) {
                 if (_shell is not null) {
                     foreach (var entry in _shell.Enumerate(path)) {
-                        if (entry.Kind == EntryKind.Directory) {
+                        if (entry.Kind == EntryKind.Directory && visibility.Allows(entry)) {
                             folders.Add(new PanelRow(entry.FullPath, entry.Name, PanelRowKind.ArchiveFolder));
                         }
                     }

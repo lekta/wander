@@ -240,6 +240,9 @@ public static partial class Strings {
     /// <summary>Перейти к расположению</summary>
     public static string MenuCmdGoToLocation => Get(nameof(MenuCmdGoToLocation));
 
+    /// <summary>Сравнить</summary>
+    public static string MenuCmdCompare => Get(nameof(MenuCmdCompare));
+
     /// <summary>Вырезать</summary>
     public static string MenuCmdCut => Get(nameof(MenuCmdCut));
 

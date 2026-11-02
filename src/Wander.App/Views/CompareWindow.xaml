@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:views="clr-namespace:Wander.App.Views"
         xmlns:res="clr-namespace:Wander.App.Resources"
+        xmlns:hl="clr-namespace:Wander.App.Highlighting"
         Width="1100" Height="720" MinWidth="600" MinHeight="360"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
@@ -20,6 +21,12 @@
         bigger (SplitOrientation, 2026-09-23): each pane then has its header
         over it, in rows 0-1 and 2-3. Side by side the panes span all three
         lower rows, and row 2 stays empty.
+
+        Two texts that differ open as their differences instead (F3,
+        2026-11-02): one column over both halves, what git diff prints with
+        the rows painted (DiffView); the plus-minus toggle goes back to side by
+        side. What the comparison found - the same, only line endings, no
+        git - is the note left of the toggles.
     -->
     <Grid x:Name="Room" SizeChanged="Room_SizeChanged">
         <Grid.RowDefinitions>
@@ -38,6 +45,13 @@
                    FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
         <DockPanel x:Name="HeaderBPanel" Grid.Row="0" Grid.Column="1" Margin="6,6,8,4">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <TextBlock x:Name="DiffNote" Foreground="{DynamicResource TextDim}"
+                           VerticalAlignment="Center" Margin="8,0,8,0"
+                           Visibility="Collapsed"/>
+                <ToggleButton x:Name="DiffToggle" Content="±" Padding="8,2" Margin="0,0,4,0"
+                              ToolTip="{x:Static res:Strings.CompareDiff}"
+                              Visibility="Collapsed"
+                              Checked="Diff_Changed" Unchecked="Diff_Changed"/>
                 <ToggleButton x:Name="OverlayToggle" Content="A/B" Padding="8,2" Margin="0,0,4,0"
                               ToolTip="{x:Static res:Strings.CompareOverlay}"
                               Visibility="Collapsed"
@@ -53,5 +67,13 @@
 
         <views:PreviewPane x:Name="PaneA" Grid.Row="1" Grid.RowSpan="3" Grid.Column="0" BorderThickness="0,1,0,0"/>
         <views:PreviewPane x:Name="PaneB" Grid.Row="1" Grid.RowSpan="3" Grid.Column="1" BorderThickness="1,1,0,0"/>
+
+        <hl:ThemedTextEditor x:Name="DiffView" Grid.Row="1" Grid.RowSpan="3" Grid.Column="0" Grid.ColumnSpan="2"
+                             Visibility="Collapsed"
+                             IsReadOnly="True"
+                             FontFamily="Consolas" FontSize="11"
+                             Background="{DynamicResource PreviewBackground}"
+                             BorderBrush="{DynamicResource Separator}" BorderThickness="0,1,0,0"
+                             Padding="4"/>
     </Grid>
 </Window>

@@ -590,6 +590,7 @@ public sealed class MainViewModel : ObservableObject {
                 }
             },
             p => TargetRules.Items(ResolveTarget(p).Target).Count == 1);
+        CompareCommand = new RelayCommand(Compare, p => ListRowsOf(p) is [{ IsFolderLike: false }, { IsFolderLike: false }]);
         // The text they put on the clipboard is noted at once: Wander stays
         // in front, and Ctrl+V pastes it as a file.
         CopyPathCommand = new RelayCommand(
@@ -1841,6 +1842,9 @@ public sealed class MainViewModel : ObservableObject {
 
     /// <summary>A search result's menu: to the folder it is in, the row selected (<see cref="RevealPath"/>).</summary>
     public RelayCommand GoToLocationCommand { get; }
+
+    /// <summary>Two files: the comparison window (<see cref="Compare"/>).</summary>
+    public RelayCommand CompareCommand { get; }
     public RelayCommand CopyPathCommand { get; }
     public RelayCommand CopyNameCommand { get; }
     public RelayCommand CreateShortcutCommand { get; }
@@ -3486,10 +3490,11 @@ public sealed class MainViewModel : ObservableObject {
         var sort = CurrentSort;
         var archive = CurrentArchive;
         var device = CurrentDevice;
-        // A device marks the apps' folders hidden and system (DeviceClutter):
-        // the settings hide them as they hide such folders on a disk.
+        // A device marks the apps' folders hidden and system (DeviceClutter),
+        // an archive holds a Mac's __MACOSX and .DS_Store: the settings hide
+        // them as they hide such entries on a disk.
         var visibility = Settings.Visibility;
-        int hiddenOnDevice = 0;
+        int hiddenHere = 0;
 
         // The Recycle Bin gives what it has read so far while a slow listing
         // goes on: the first portion lands as the whole listing
@@ -3515,14 +3520,14 @@ public sealed class MainViewModel : ObservableObject {
                 items = await LongWait.WatchAsync(
                     Task.Run(() => {
                         var listed = ns.Enumerate(shellPath, token, portions);
-                        if (device is not null) {
+                        if (device is not null || archive is not null) {
                             var shown = listed.Where(visibility.Allows).ToList();
-                            hiddenOnDevice = listed.Count - shown.Count;
+                            hiddenHere = listed.Count - shown.Count;
 
                             return EntryComparers.Sort(shown, sort);
                         }
 
-                        return archive is null ? listed : EntryComparers.Sort(listed, sort);
+                        return listed;
                     }, token),
                     _log,
                     $"list: enumerating {shellPath}");
@@ -3540,7 +3545,7 @@ public sealed class MainViewModel : ObservableObject {
                 return;
             }
             complete = true;
-            _hiddenCount = hiddenOnDevice;
+            _hiddenCount = hiddenHere;
             // Always, not only when slow as on disk: shell listings are few,
             // and their cost is the number the bin's slowness (AD2) is
             // decided on.
@@ -5206,6 +5211,25 @@ public sealed class MainViewModel : ObservableObject {
         if (TargetRules.PropertiesOf(ResolveTarget(parameter).Target, _nav.Current) is { } path) {
             Shell.ShowProperties(path);
         }
+    }
+
+    /// <summary>
+    /// Two files in the comparison window (F3, 2026-11-02) - the one the
+    /// conflict list opens a pair in: texts as their differences, the rest
+    /// side by side. Left is the upper one in the list, whichever was
+    /// clicked first.
+    /// </summary>
+    private void Compare(object? parameter) {
+        if (ListRowsOf(parameter) is not [var left, var right] || Application.Current?.MainWindow is not { } owner) {
+            return;
+        }
+
+        int leftAt = Entries.IndexOf(left);
+        int rightAt = Entries.IndexOf(right);
+        if (rightAt >= 0 && (leftAt < 0 || rightAt < leftAt)) {
+            (left, right) = (right, left);
+        }
+        ServiceLocator.TryGet<Conflict.IPairViewer>()?.Show(left, right, owner);
     }
 
     /// <summary>

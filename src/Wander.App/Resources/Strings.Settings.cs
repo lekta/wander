@@ -45,7 +45,7 @@ public static partial class Strings {
     /// <summary>Защищённые системные файлы</summary>
     public static string SettingsShowSystem => Get(nameof(SettingsShowSystem));
 
-    /// <summary>$RECYCLE.BIN, System Volume Information, pagefile.sys и подобные: в папки…</summary>
+    /// <summary>desktop.ini, Thumbs.db, .DS_Store — в любой папке; $RECYCLE.BIN…</summary>
     public static string SettingsHideSystemRootFoldersHint => Get(nameof(SettingsHideSystemRootFoldersHint));
 
     /// <summary>Спрашивать при удалении в корзину</summary>
@@ -381,7 +381,7 @@ public static partial class Strings {
     /// <summary>Клавиши</summary>
     public static string SettingsOwnColumnGesture => Get(nameof(SettingsOwnColumnGesture));
 
-    /// <summary>Служебные папки и файлы в корне дисков</summary>
+    /// <summary>Служебные папки и файлы</summary>
     public static string SettingsShowSystemRootFolders => Get(nameof(SettingsShowSystemRootFolders));
 
     /// <summary>Размер папок в таблице</summary>

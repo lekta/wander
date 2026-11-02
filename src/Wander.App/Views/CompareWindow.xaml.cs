@@ -1,9 +1,12 @@
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using Wander.App.Conflict;
 using Wander.App.Controllers;
+using Wander.App.Highlighting;
 using Wander.App.Preview;
 using Wander.App.Resources;
 using Wander.App.Util;
@@ -11,18 +14,30 @@ using Wander.App.ViewModels;
 using Wander.Core;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
+using Wander.Core.Logging;
 using Wander.Core.Preview;
 
 namespace Wander.App.Views;
 
 /// <summary>
 /// Two files side by side - opened from a pair of the conflict
-/// window. Each half is a <see cref="PreviewPane"/> with a controller of
-/// its own; this window only ties them together.
+/// window, or from the menu on two files. Each half is a
+/// <see cref="PreviewPane"/> with a controller of its own; this window only
+/// ties them together. Two texts that differ are shown as their
+/// differences over both halves (<see cref="ShowDifferencesAsync"/>).
 /// </summary>
+[SuppressMessage("Design", "CA1001",
+    Justification = "Closing cancels it; not disposed, since the comparison it stops may still ask for the token, and a source with no timer holds nothing to release.")]
 public partial class CompareWindow : Window {
     /// <summary>How long the window waits for its pictures' shapes before it opens with what is known.</summary>
     private const int ShapesWaitMs = 150;
+
+    /// <summary>
+    /// How long it waits for two texts' differences: git answers within this
+    /// on ordinary files, and the window opens on them rather than side by
+    /// side and turning over a moment later.
+    /// </summary>
+    private const int DiffWaitMs = 300;
 
     private readonly PreviewController _a;
     private readonly PreviewController _b;
@@ -39,11 +54,18 @@ public partial class CompareWindow : Window {
     // A/B: both pictures on one place, one of them shown.
     private bool _showingB;
 
+    // The comparison of two texts stops with the window.
+    private readonly CancellationTokenSource _closing;
+
 
     /// <param name="found">The text a search inside files is looking for, when the list shows its results: both texts open on it.</param>
+    /// <param name="differences">The comparison of the two, already running; null for two pictures.</param>
+    /// <param name="closing">Stops <paramref name="differences"/>; the window cancels it as it closes.</param>
     private CompareWindow(
-        FileSystemEntry a, FileSystemEntry b, ReviewHelpers? helpers, string? found, PictureShape? shapeA, PictureShape? shapeB) {
+        FileSystemEntry a, FileSystemEntry b, ReviewHelpers? helpers, string? found, PictureShape? shapeA, PictureShape? shapeB,
+        Task<FileDiffResult>? differences, CancellationTokenSource closing) {
         InitializeComponent();
+        _closing = closing;
 
         _a = Controller(a, helpers, found);
         _b = Controller(b, helpers, found);
@@ -76,9 +98,19 @@ public partial class CompareWindow : Window {
         PaneA.TextScrolled += (_, at) => PaneB.FollowTextScroll(at);
         PaneB.TextScrolled += (_, at) => PaneA.FollowTextScroll(at);
 
+        // Anything but two pictures may be two texts: they open as their
+        // differences - at once when those came in time, else when they do.
+        if (differences is not null) {
+            _ = ShowDifferencesAsync(differences);
+        }
+
         App.ParkIfHeadless(this);
         InterfaceTheme.Attach(this);
+        // The rows of the differences take the new theme's colours.
+        InterfaceTheme.Changed += DiffView.Repaint;
         Closed += (_, _) => {
+            InterfaceTheme.Changed -= DiffView.Repaint;
+            _closing.Cancel();
             _a.Detach();
             _b.Detach();
             PaneA.ReleaseWebView();
@@ -183,13 +215,75 @@ public partial class CompareWindow : Window {
         ShowSides(overlay: true);
     }
 
+    private void Diff_Changed(object sender, RoutedEventArgs e) {
+        Arrange();
+    }
+
+    /// <summary>
+    /// The two files compared (<see cref="FileDiff"/>) and logged, off the
+    /// UI thread.
+    /// </summary>
+    private static async Task<FileDiffResult> CompareAsync(string left, string right, CancellationToken ct) {
+        var diff = new FileDiff(ServiceLocator.Get<IFileSystem>(), ServiceLocator.TryGet<IDiffTool>());
+        var watch = Stopwatch.StartNew();
+        var result = await diff.CompareAsync(left, right, ct);
+        if (result.Verdict == FileDiffVerdict.Failed) {
+            Log.Warn($"Compare: failed in {watch.ElapsedMilliseconds} ms: {result.Error}");
+        } else {
+            Log.Info($"Compare: {result.Verdict} in {watch.ElapsedMilliseconds} ms{(result.Cut ? ", cut" : "")}");
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// What the comparison found: differences open over both panes, toggle
+    /// on; any other answer worth saying is the note, and the panes stay.
+    /// </summary>
+    private async Task ShowDifferencesAsync(Task<FileDiffResult> differences) {
+        FileDiffResult result;
+        try {
+            result = await differences;
+        } catch (OperationCanceledException) {
+            return;
+        }
+
+        if (NoteOf(result) is { } note) {
+            DiffNote.Text = note;
+            DiffNote.Visibility = Visibility.Visible;
+        }
+        if (result.Verdict != FileDiffVerdict.Different) {
+            return;
+        }
+
+        DiffView.Text = result.Text;
+        DiffBackground.Show(DiffView, on: true);
+        DiffToggle.Visibility = Visibility.Visible;
+        DiffToggle.IsChecked = true;
+    }
+
+    private static string? NoteOf(FileDiffResult result) {
+        return result.Verdict switch {
+            FileDiffVerdict.Different => result.Cut ? Strings.CompareCut : null,
+            FileDiffVerdict.Identical => Strings.CompareIdentical,
+            FileDiffVerdict.LineEndingsOnly => Strings.CompareLineEndings,
+            FileDiffVerdict.NoTool => Strings.CompareNoGit,
+            FileDiffVerdict.TooLarge => Strings.CompareTooLarge,
+            FileDiffVerdict.Failed => Strings.CompareFailed,
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// Which pane is seen. Hidden, not collapsed: the other keeps its size,
     /// its picture and its zoom, and the flick between them is instant.
+    /// The differences of two texts cover both.
     /// </summary>
     private void ShowSides(bool overlay) {
-        PaneA.Visibility = !overlay || !_showingB ? Visibility.Visible : Visibility.Hidden;
-        PaneB.Visibility = !overlay || _showingB ? Visibility.Visible : Visibility.Hidden;
+        bool diff = DiffToggle.IsChecked == true;
+        DiffView.Visibility = diff ? Visibility.Visible : Visibility.Collapsed;
+        PaneA.Visibility = !diff && (!overlay || !_showingB) ? Visibility.Visible : Visibility.Hidden;
+        PaneB.Visibility = !diff && (!overlay || _showingB) ? Visibility.Visible : Visibility.Hidden;
         HeaderB.Text = !overlay ? _headerB
             : _showingB ? string.Format(Strings.CompareSideB, _headerB)
             : string.Format(Strings.CompareSideA, _headerA);
@@ -207,14 +301,21 @@ public partial class CompareWindow : Window {
         /// <summary>
         /// The pictures' shapes first, off the UI thread and for a moment at
         /// most - which way the panes are laid out depends on them - then
-        /// the window.
+        /// the window. Anything else may be two texts: their differences are
+        /// asked for here, and waited for a moment too.
         /// </summary>
         private static async Task ShowAsync(FileSystemEntry left, FileSystemEntry right, Window owner) {
             var reader = ServiceLocator.TryGet<IImageMetadataReader>();
             var read = Task.Run(() => (ShapeOf(left, reader), ShapeOf(right, reader)));
-            await Task.WhenAny(read, Task.Delay(ShapesWaitMs));
+            var closing = new CancellationTokenSource();
+            var differences = IsPicture(left) && IsPicture(right)
+                ? null
+                : CompareAsync(left.FullPath, right.FullPath, closing.Token);
+            await Task.WhenAny(differences ?? (Task)read, Task.Delay(differences is null ? ShapesWaitMs : DiffWaitMs));
             var (a, b) = read.IsCompletedSuccessfully ? read.Result : (null, null);
             if (!owner.IsVisible) {
+                closing.Cancel();
+
                 return;
             }
 
@@ -223,7 +324,9 @@ public partial class CompareWindow : Window {
             // the text of a search inside files, when its results are what
             // was copied.
             var main = Application.Current?.MainWindow?.DataContext as MainViewModel;
-            var window = new CompareWindow(left, right, main?.Helpers, main?.FoundText, a, b) { Owner = owner };
+            var window = new CompareWindow(left, right, main?.Helpers, main?.FoundText, a, b, differences, closing) {
+                Owner = owner,
+            };
             window.Show();
         }
 

@@ -131,6 +131,8 @@ public static class PlatformBootstrapper {
         // list file goes where the archive scratch copies go.
         ServiceLocator.Register<IProcessRunner>(new WindowsProcessRunner(logger));
         ServiceLocator.Register<IToolLocator>(new WindowsToolLocator());
+        // Two files compared: git, found where the actions find their tools.
+        ServiceLocator.Register<IDiffTool>(new GitDiffTool(ServiceLocator.Get<IToolLocator>()));
         var builtins = new IBuiltinAction[] {
             new ImageConvertAction(ServiceLocator.Get<IImageMetadataReader>(), logger),
             // Debug only: makes a file genuinely busy on demand.

@@ -65,6 +65,15 @@ internal static class Palette {
     /// <summary>The preview pane's surface - what a code colour has to read on.</summary>
     public static readonly ThemeKey PreviewBackground = Themed("PreviewBackground");
 
+    /// <summary>Under the rows of a patch, and of two files compared: added, removed, a block's start, a file's header.</summary>
+    public static readonly ThemeKey DiffAddedLine = Themed("DiffAddedLine");
+
+    public static readonly ThemeKey DiffRemovedLine = Themed("DiffRemovedLine");
+
+    public static readonly ThemeKey DiffHunkLine = Themed("DiffHunkLine");
+
+    public static readonly ThemeKey DiffHeaderLine = Themed("DiffHeaderLine");
+
 
     // --- No theme changes these --------------------------------------------------------------
 
