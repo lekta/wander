@@ -19,11 +19,40 @@ follow [SemVer](https://semver.org/). Dates in ISO format.
   differences (needs git).
 - **Frozen zoom** — click a zoomed picture or video: the spot stays put, the
   cursor is free.
+- **Waveforms** for sound — in the panel, on tiles, as the Sound column;
+  click the wave to play from there, **▶ on the file** plays without
+  selecting it; several tracks show as a stack.
+- **Textures on 3D models** (OBJ, glTF, FBX) and **Blender** `.blend` /
+  `.blend1`.
+- **Folder sizes in the Details view** — in the background, sort by size.
+- **Bookmarks page** — click "Bookmarks": hidden ones, order, names.
+- **Progress on the taskbar button.**
+- **Folder census** — types and subfolders by weight, click to filter or
+  open; zip archives too.
 
 ### Changed
 - **Windows and macOS clutter** (`desktop.ini`, `Thumbs.db`, `.DS_Store`,
   `._*`, `__MACOSX`) is hidden in every folder and archive — the System
   folders and files box.
+- **Details view** — Name takes the free space, no sideways scrolling;
+  column widths are remembered.
+- **Extracting from zip** — with bytes, speed and time left.
+
+### Fixed
+- **Crash on `.doc`.**
+- **Zip with long names inside** (cloud.mail.ru) looked empty.
+- **TortoiseGit badges** in Large icons and the gallery — their own size,
+  over the cell, fresh after a commit.
+- **Moving to another drive** that fails on a sidecar: the photo goes back
+  with a progress bar, Cancel works.
+- **Copying from a phone**: a dropped connection while counting pauses the
+  copy instead of failing it.
+- **One failed file from a phone** no longer stops the folder.
+- **Date format in batch rename**: `[D:mm-dd]` is month and day; case
+  doesn't matter, `m` next to the hours means minutes.
+- **Minor**: a folder after extraction gets its tree arrow without `F5`;
+  drops onto search results go only into folders; arrows on archive
+  folders only where there are subfolders; `/raw` in the type search.
 
 ## [0.6.0-beta] — 2026-10-26
 

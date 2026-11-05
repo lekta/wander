@@ -57,8 +57,8 @@ public sealed record RenameRow(
 /// </summary>
 /// <param name="RuleErrorKey">
 /// Resource key of a rule that could not be applied at all - a malformed
-/// regular expression, a date format .NET rejects; null when the rules
-/// are usable. <see cref="RuleErrorDetail"/> carries the runtime's own
+/// regular expression (a date format cannot be wrong, see
+/// <see cref="DatePattern"/>); null when the rules are usable. <see cref="RuleErrorDetail"/> carries the runtime's own
 /// words about it.
 /// </param>
 public sealed record RenamePreview(
@@ -126,7 +126,6 @@ public sealed record RenameContext(
 /// </summary>
 public static class RenamePlanner {
     public const string RegexErrorKey = "RenameErrorRegex";
-    public const string DateFormatErrorKey = "RenameErrorDateFormat";
 
     private const string DefaultDateFormat = "yyyy-MM-dd";
 
@@ -157,13 +156,10 @@ public static class RenamePlanner {
         try {
             newNames = NewNames(rules, items, context);
         } catch (ArgumentException ex) {
-            // Regex.Replace and DateTime.ToString both report a bad pattern
-            // this way; the message says which.
+            // A pattern Regex cannot parse; the message says what is wrong.
             return Untouched(items, RegexErrorKey, ex.Message);
         } catch (RegexMatchTimeoutException ex) {
             return Untouched(items, RegexErrorKey, ex.Message);
-        } catch (FormatException ex) {
-            return Untouched(items, DateFormatErrorKey, ex.Message);
         }
 
         return Verify(items, newNames, context);
@@ -231,9 +227,8 @@ public static class RenamePlanner {
                 "N" => stem,
                 "C" => counter.ToString(CultureInfo.InvariantCulture)
                     .PadLeft(Math.Clamp(rules.CounterWidth, 1, RenameRules.MaxCounterWidth), '0'),
-                "D" => item.ModifiedUtc.ToLocalTime().ToString(format, CultureInfo.InvariantCulture),
-                "X" => (context.ShotDate?.Invoke(item.FullPath) ?? item.ModifiedUtc.ToLocalTime())
-                    .ToString(format, CultureInfo.InvariantCulture),
+                "D" => DatePattern.Format(item.ModifiedUtc.ToLocalTime(), format),
+                "X" => DatePattern.Format(context.ShotDate?.Invoke(item.FullPath) ?? item.ModifiedUtc.ToLocalTime(), format),
                 "P" => Path.GetFileName(Path.GetDirectoryName(item.FullPath) ?? string.Empty),
                 _ => match.Value,
             };

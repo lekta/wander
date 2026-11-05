@@ -1,9 +1,11 @@
+using System.Collections.Concurrent;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using Wander.App.Converters;
 using Wander.App.Preview;
 using Wander.App.Resources;
 using Wander.App.ViewModels;
@@ -53,6 +55,13 @@ namespace Wander.App.Controls;
 /// 2026-10-27) - drawn here for the same reason as the clock. The press is
 /// taken by the list before it selects anything (<see cref="TryPlay"/>):
 /// the file is heard, the selection stays.
+/// </para>
+///
+/// <para>
+/// A <see cref="IconSize.Large"/> picture wears the shell's badge - a
+/// TortoiseGit state - in its lower left corner at a size of its own, drawn
+/// here too, not baked into the picture: the picture is cached for days, the
+/// state changes with a commit (<see cref="IIconProvider.OverlayOf"/>).
 /// </para>
 /// </summary>
 public sealed class AsyncIcon : Image {
@@ -105,6 +114,9 @@ public sealed class AsyncIcon : Image {
     // leaves the pool to the rest of the app.
     private static readonly IconLoadGate _gate = new(4);
 
+    /// <summary>The badges, decoded once by overlay index; null where the shell had no picture.</summary>
+    private static readonly ConcurrentDictionary<int, ImageSource?> _badges = new();
+
     /// <summary>
     /// Icons on screen whose file has just changed under them. Static
     /// because the invalidation comes from the folder watcher, which knows
@@ -131,6 +143,7 @@ public sealed class AsyncIcon : Image {
     private bool _sound;
     private bool _playing;
     private bool _hot;
+    private ImageSource? _badge;
 
 
     static AsyncIcon() {
@@ -304,6 +317,12 @@ public sealed class AsyncIcon : Image {
 
     protected override void OnRender(DrawingContext dc) {
         base.OnRender(dc);
+        if (_badge is not null && Source is not null) {
+            // Lower left on the picture, where Explorer puts it: 3/16 of the
+            // side as on its 256 jumbo, held between what reads and a mark.
+            double badge = Math.Clamp(Math.Min(RenderSize.Width, RenderSize.Height) * 3 / 16, 12, 24);
+            dc.DrawImage(_badge, new Rect(0, RenderSize.Height - badge, badge, badge));
+        }
         if (ShowsPlay) {
             DrawPlay(dc);
         }
@@ -505,6 +524,10 @@ public sealed class AsyncIcon : Image {
         // the previous path — its result will be dropped below.
         int generation = ++_generation;
         _detached = false;
+        if (_badge is not null) {
+            _badge = null;
+            InvalidateVisual();
+        }
 
         if (IconPath is not { Length: > 0 } path) {
             Source = null;
@@ -512,6 +535,9 @@ public sealed class AsyncIcon : Image {
         }
 
         IconSize size = IconSize;
+        if (size == IconSize.Large) {
+            _ = LoadBadgeAsync(path, generation);
+        }
         var icons = ServiceLocator.Get<IIconProvider>();
 
         byte[]? cached = icons.TryGetCachedIcon(path, size, RowIsFolder());
@@ -646,6 +672,42 @@ public sealed class AsyncIcon : Image {
         _ = Dispatcher.BeginInvoke(ApplyPriority(size), () => {
             if (generation == _generation) {
                 Source = image;
+            }
+        });
+    }
+
+
+    /// <summary>
+    /// The shell's badge for the file, asked on every load and off the UI
+    /// thread - outside <see cref="_gate"/>: one shell call, no picture to
+    /// make. Landed with the pictures, below input.
+    /// </summary>
+    private async Task LoadBadgeAsync(string path, int generation) {
+        var badge = await Task.Run(() => {
+            if (generation != _generation) {
+                return null;
+            }
+
+            try {
+                var icons = ServiceLocator.Get<IIconProvider>();
+                int index = icons.OverlayOf(path);
+
+                return index == 0
+                    ? null
+                    : _badges.GetOrAdd(index, i => icons.OverlayImage(i) is { } png ? IconConverter.ToImage(png) : null);
+            } catch {
+                // A badge is cosmetic, like the picture under it.
+                return null;
+            }
+        }).ConfigureAwait(false);
+        if (badge is null || generation != _generation) {
+            return;
+        }
+
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () => {
+            if (generation == _generation) {
+                _badge = badge;
+                InvalidateVisual();
             }
         });
     }

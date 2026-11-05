@@ -2364,9 +2364,6 @@
   <data name="RenameErrorRegex" xml:space="preserve">
     <value>Invalid regular expression</value>
   </data>
-  <data name="RenameErrorDateFormat" xml:space="preserve">
-    <value>Invalid date format</value>
-  </data>
   <data name="ActionsErrorPerFileWithList" xml:space="preserve">
     <value>“Per file” mode can't use {paths} or {list}</value>
   </data>

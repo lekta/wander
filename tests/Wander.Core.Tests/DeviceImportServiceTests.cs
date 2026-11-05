@@ -170,6 +170,34 @@ public class DeviceImportServiceTests {
         Assert.Empty(scene.Pauses.OfType<string>());
     }
 
+    [Fact]
+    public async Task AFileThatFailsInAFolder_DoesNotStopTheRest() {
+        var scene = new Scene();
+        scene.Device.ReadFailures[Shot1] = new Queue<Exception>(new[] { new UnauthorizedAccessException("no") });
+
+        var result = Assert.Single(await scene.Import(Camera));
+
+        Assert.Equal(BatchItemStatus.Failed, result.Status);
+        Assert.IsType<UnauthorizedAccessException>(result.Error);
+        Assert.False(scene.Fs.FileExists(@"D:\Photos\Camera\PXL_1.jpg"));
+        Assert.True(scene.Fs.FileExists(@"D:\Photos\Camera\PXL_2.jpg"));
+        Assert.True(scene.Fs.FileExists(@"D:\Photos\Camera\Raw\PXL_3.dng"));
+        Assert.True(OperationRetry.Plan(scene.Tracker.Finished[0]) is { Items.Count: 1 });
+    }
+
+    [Fact]
+    public async Task ALookUpThatThrows_FailsThatSourceAlone() {
+        var scene = new Scene();
+        var busy = new IOException("busy", unchecked((int)0x800700AA));
+        scene.Device.LookUpFailures[Shot1] = busy;
+
+        var results = await scene.Import(Shot1, Shot2);
+
+        Assert.Equal(BatchItemStatus.Failed, results[0].Status);
+        Assert.Same(busy, results[0].Error);
+        Assert.Equal(BatchItemStatus.Ok, results[1].Status);
+    }
+
 
     // --- The device goes away --------------------------------------------
 
@@ -217,6 +245,35 @@ public class DeviceImportServiceTests {
         Assert.Equal(new[] { Shot1 }, scene.Device.Opened);
         Assert.True(scene.Now - started >= DeviceImportService.WaitForDevice);
         Assert.False(scene.Fs.FileExists(@"D:\Photos\PXL_1.jpg"));
+        Assert.True(OperationRetry.Plan(scene.Tracker.Finished[0]) is { Items.Count: 2 });
+    }
+
+    [Fact]
+    public async Task UnpluggedWhileWeighing_Pauses_AndOnItsReturnWalksTheFolderAgain() {
+        var scene = new Scene();
+        scene.Device.BreakListing.Add(Raw);
+        scene.Device.BackAfter = 3;
+
+        var result = Assert.Single(await scene.Import(Camera));
+
+        Assert.Equal(BatchItemStatus.Ok, result.Status);
+        Assert.True(scene.Fs.FileExists(@"D:\Photos\Camera\PXL_1.jpg"));
+        Assert.True(scene.Fs.FileExists(@"D:\Photos\Camera\Raw\PXL_3.dng"));
+        Assert.Contains(DeviceImportService.PausedUnplugged, scene.Pauses);
+        // Each file counted once, the walk before the break not kept.
+        Assert.Equal(3, scene.Device.Opened.Count);
+        Assert.Equal("first picture".Length + "second picture".Length + "a raw one".Length, scene.Tracker.Finished[0].Bytes);
+    }
+
+    [Fact]
+    public async Task NotBackWhileWeighing_FailsThatSourceAndTheRest_WithARecordToRetry() {
+        var scene = new Scene();
+        scene.Device.BreakListing.Add(Camera);
+
+        var results = await scene.Import(Camera, Shot1);
+
+        Assert.All(results, r => Assert.Equal(BatchItemStatus.Failed, r.Status));
+        Assert.Empty(scene.Device.Opened);
         Assert.True(OperationRetry.Plan(scene.Tracker.Finished[0]) is { Items.Count: 2 });
     }
 

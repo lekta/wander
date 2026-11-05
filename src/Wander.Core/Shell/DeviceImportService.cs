@@ -21,9 +21,10 @@ namespace Wander.Core.Shell;
 /// that goes away in the middle be waited for (PLAN Y4d): the operation
 /// pauses, asks every two seconds whether the device is back, and on its
 /// return copies the file it was on again from the start - the device's
-/// objects are found anew by their names, its ids are new. Done files are
-/// not touched again. Not back within <see cref="WaitForDevice"/> - that
-/// file and the rest fail, and "Retry" is there for when it is.
+/// objects are found anew by their names, its ids are new; a folder it was
+/// walking for the bar is walked again. Done files are not touched again.
+/// Not back within <see cref="WaitForDevice"/> - that file and the rest
+/// fail, and "Retry" is there for when it is.
 /// </para>
 ///
 /// <para>
@@ -102,14 +103,25 @@ public sealed class DeviceImportService {
         var plans = new List<Plan>(sources.Count);
         for (int i = 0; i < sources.Count; i++) {
             string source = sources[i];
-            var entry = await Task.Run(() => _devices.GetEntry(source), ct).ConfigureAwait(false);
+            Exception? thrown = null;
+            FileSystemEntry? entry;
+            try {
+                entry = await Task.Run(() => _devices.GetEntry(source), ct).ConfigureAwait(false);
+            } catch (Exception ex) when (ex is not OperationCanceledException) {
+                // A device that blinks throws here rather than answering
+                // null; there is no operation to pause yet, so the source
+                // fails alone and the others go on.
+                _log.Warn($"Import: cannot look up {source} ({ex.Message})");
+                entry = null;
+                thrown = ex;
+            }
             if (entry is null) {
                 // Not there: gone from a phone that is there, or the phone
                 // itself is not - two things to say.
                 var state = await Task.Run(() => _devices.StateOf(source), ct).ConfigureAwait(false);
-                Exception why = state == DeviceState.Ready
-                    ? new FileNotFoundException("Not found on the device", source)
-                    : new IOException("The device is not connected", NotConnected);
+                Exception why = state != DeviceState.Ready
+                    ? new IOException("The device is not connected", NotConnected)
+                    : thrown ?? new FileNotFoundException("Not found on the device", source);
                 results[i] = new BatchItemResult(source, Path.Combine(targetFolder, NameOf(source)), BatchItemStatus.Failed, why);
                 continue;
             }
@@ -132,14 +144,11 @@ public sealed class DeviceImportService {
             using var claim = _claims.Claim(queue.Select(p => p.Destination), ClaimKind.UserOperation, OperationVerbs.Copy);
             using var operation = _tracker.Begin(OperationVerbs.Copy, queue.Count, totalBytes: 0, token: ct);
             operation.SetWeighing(true);
-            long total = 0;
-            foreach (var plan in queue) {
-                total += await Task.Run(() => Weigh(plan, ct), ct).ConfigureAwait(false);
-            }
+            long total = await WeighAll(queue, results, operation, ct).ConfigureAwait(false);
             operation.SetTotalBytes(total);
             operation.SetWeighing(false);
 
-            await CopyAll(queue, results, created, operation, verify, ct).ConfigureAwait(false);
+            await CopyAll(queue.Where(p => results[p.Index] is null).ToList(), results, created, operation, verify, ct).ConfigureAwait(false);
 
             var items = new List<OperationItem>(results.Length);
             foreach (var r in Filled(results, sources, targetFolder)) {
@@ -224,6 +233,49 @@ public sealed class DeviceImportService {
     }
 
     /// <summary>
+    /// Every source walked, under the pause the copy has: a device that
+    /// goes away in the walk is waited for, and on its return the source is
+    /// walked again from its top - the device's ids are new. A walk that
+    /// breaks with the device there fails that source alone; not back in
+    /// time - that source and the rest fail, each an item "Retry" sees.
+    /// </summary>
+    /// <returns>The bytes to come, for the bar.</returns>
+    private async Task<long> WeighAll(List<Plan> queue, BatchItemResult?[] results, IOperationHandle operation, CancellationToken ct) {
+        long total = 0;
+        Exception? deviceLost = null;
+        foreach (var plan in queue) {
+            if (deviceLost is not null) {
+                results[plan.Index] = new BatchItemResult(plan.Source.FullPath, plan.Destination, BatchItemStatus.Failed, deviceLost);
+                continue;
+            }
+
+            while (true) {
+                try {
+                    total += await Task.Run(() => Weigh(plan, ct), ct).ConfigureAwait(false);
+                    break;
+                } catch (Exception ex) when (ex is not OperationCanceledException) {
+                    plan.Files.Clear();
+                    plan.Folders.Clear();
+                    var after = await AfterError(plan.Source.FullPath, ex, operation, ct).ConfigureAwait(false);
+                    if (after == DeviceAfter.Back) {
+                        continue;
+                    }
+
+                    if (after == DeviceAfter.Lost) {
+                        deviceLost = ex;
+                    } else {
+                        _log.Error($"Import: cannot walk {plan.Source.FullPath}", ex);
+                    }
+                    results[plan.Index] = new BatchItemResult(plan.Source.FullPath, plan.Destination, BatchItemStatus.Failed, ex);
+                    break;
+                }
+            }
+        }
+
+        return total;
+    }
+
+    /// <summary>
     /// What a source holds, walked off the device: its files with where each
     /// lands, and the folders to make. The bytes to come, for the bar.
     /// </summary>
@@ -293,6 +345,13 @@ public sealed class DeviceImportService {
     /// everything under it into the bin, so neither its files nor its
     /// subfolders are steps of their own; a file let into a folder that was
     /// there before is.
+    ///
+    /// <para>
+    /// A file of a folder that fails does not stop the folder: the rest are
+    /// copied, and the folder fails with the first error - "Retry" finds the
+    /// folder there, and a merge takes in only what is missing. A device
+    /// gone for good stops it.
+    /// </para>
     /// </summary>
     private async Task<Outcome> CopyPlan(Plan plan, List<string> created, IOperationHandle operation, CopyOptions options, CancellationToken ct) {
         var made = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -317,6 +376,7 @@ public sealed class DeviceImportService {
         int attempts = 1;
         bool verified = options.Verify;
         bool copied = false;
+        Exception? failed = null;
         foreach (var piece in plan.Files) {
             string destination = piece.Destination;
             if (plan.Status == BatchItemStatus.Merged && Exists(destination)) {
@@ -336,8 +396,12 @@ public sealed class DeviceImportService {
             }
 
             attempts = Math.Max(attempts, result.Attempts);
+            if (result.DeviceLost) {
+                return new Outcome(BatchItemStatus.Failed, result.Error, attempts, false, copied, result.Error);
+            }
             if (result.Error is not null) {
-                return new Outcome(BatchItemStatus.Failed, result.Error, attempts, false, copied, result.DeviceLost ? result.Error : null);
+                failed ??= result.Error;
+                continue;
             }
 
             copied = true;
@@ -347,7 +411,9 @@ public sealed class DeviceImportService {
             }
         }
 
-        return new Outcome(plan.Status, null, attempts, verified && copied, copied);
+        return failed is not null
+            ? new Outcome(BatchItemStatus.Failed, failed, attempts, false, copied)
+            : new Outcome(plan.Status, null, attempts, verified && copied, copied);
     }
 
     /// <summary>
@@ -378,28 +444,13 @@ public sealed class DeviceImportService {
                 throw;
             } catch (Exception ex) {
                 operation.AdvanceBytes(-reported);
-                var state = await Task.Run(() => _devices.StateOf(source.FullPath), CancellationToken.None).ConfigureAwait(false);
-                if (state == DeviceState.Ready && DeviceErrors.IsGone(ex)) {
-                    // The read broke the way a pulled cable breaks it, and the
-                    // notice of the removal comes a moment after (stand Y4a):
-                    // asked again after that moment.
-                    await _delay(PollEvery, ct).ConfigureAwait(false);
-                    state = await Task.Run(() => _devices.StateOf(source.FullPath), CancellationToken.None).ConfigureAwait(false);
+                var after = await AfterError(source.FullPath, ex, operation, ct).ConfigureAwait(false);
+                if (after == DeviceAfter.Lost) {
+                    return new FileOutcome(ex, attempt, false, DeviceLost: true);
                 }
-                // Only a device that is really not there is waited for: one
-                // that is there and breaks a read anyway is an error like
-                // any other, tried again and then named.
-                if (state != DeviceState.Ready) {
-                    _log.Warn($"Import: the device went away at {source.FullPath} ({ex.Message}) - waiting for it");
-                    if (!await WaitForDeviceBack(source.FullPath, operation, ct).ConfigureAwait(false)) {
-                        _log.Warn($"Import: the device did not come back in {WaitForDevice.TotalMinutes} min");
-
-                        return new FileOutcome(ex, attempt, false, DeviceLost: true);
-                    }
-
-                    // Back: the same file again from its first byte, under a
-                    // fresh look-up - the device's ids are new.
-                    _log.Info($"Import: the device is back, {source.FullPath} again");
+                if (after == DeviceAfter.Back) {
+                    // The same file again from its first byte, under a fresh
+                    // look-up - the device's ids are new.
                     attempt = 0;
                     continue;
                 }
@@ -420,9 +471,43 @@ public sealed class DeviceImportService {
     }
 
     /// <summary>
+    /// After a call to the device threw: whether the device is still there
+    /// and the error is the call's own, or it went - then the operation
+    /// pauses until it is back (<see cref="WaitForDeviceBack"/>) or the
+    /// wait runs out.
+    /// </summary>
+    private async Task<DeviceAfter> AfterError(string source, Exception ex, IOperationHandle operation, CancellationToken ct) {
+        var state = await Task.Run(() => _devices.StateOf(source), CancellationToken.None).ConfigureAwait(false);
+        if (state == DeviceState.Ready && DeviceErrors.IsGone(ex)) {
+            // The call broke the way a pulled cable breaks it, and the
+            // notice of the removal comes a moment after (stand Y4a):
+            // asked again after that moment.
+            await _delay(PollEvery, ct).ConfigureAwait(false);
+            state = await Task.Run(() => _devices.StateOf(source), CancellationToken.None).ConfigureAwait(false);
+        }
+        // Only a device that is really not there is waited for: one that is
+        // there and breaks a call anyway is an error like any other.
+        if (state == DeviceState.Ready) {
+            return DeviceAfter.There;
+        }
+
+        _log.Warn($"Import: the device went away at {source} ({ex.Message}) - waiting for it");
+        if (!await WaitForDeviceBack(source, operation, ct).ConfigureAwait(false)) {
+            _log.Warn($"Import: the device did not come back in {WaitForDevice.TotalMinutes} min");
+
+            return DeviceAfter.Lost;
+        }
+
+        _log.Info($"Import: the device is back, {source} again");
+
+        return DeviceAfter.Back;
+    }
+
+    /// <summary>
     /// The pause: the operation says what it waits for, and the device is
     /// asked every <see cref="PollEvery"/> until it is back with the file
-    /// there, or <see cref="WaitForDevice"/> runs out.
+    /// there, or <see cref="WaitForDevice"/> runs out. A look-up that throws
+    /// is a device not back yet.
     /// </summary>
     /// <returns>True when the device is back.</returns>
     private async Task<bool> WaitForDeviceBack(string source, IOperationHandle operation, CancellationToken ct) {
@@ -431,7 +516,7 @@ public sealed class DeviceImportService {
             while (true) {
                 var state = await Task.Run(() => _devices.StateOf(source), CancellationToken.None).ConfigureAwait(false);
                 if (state == DeviceState.Ready
-                    && await Task.Run(() => _devices.GetEntry(source), CancellationToken.None).ConfigureAwait(false) is not null) {
+                    && await Task.Run(() => LookUp(source), CancellationToken.None).ConfigureAwait(false) is not null) {
                     return true;
                 }
                 if (_now() >= deadline) {
@@ -491,6 +576,15 @@ public sealed class DeviceImportService {
 
     private bool Exists(string path) => _fs.FileExists(path) || _fs.DirectoryExists(path);
 
+    /// <summary>The entry, or null when it is not there or the device does not answer.</summary>
+    private FileSystemEntry? LookUp(string path) {
+        try {
+            return _devices.GetEntry(path);
+        } catch (Exception ex) when (ex is not OperationCanceledException) {
+            return null;
+        }
+    }
+
     /// <summary>The number after the highest already there - the one rule, see <see cref="UniqueNames"/>.</summary>
     private string UniqueName(string desired) {
         return UniqueNames.Resolve(desired, Exists, folder => _fs.Enumerate(folder).Select(e => e.Name));
@@ -544,6 +638,19 @@ public sealed class DeviceImportService {
 
     /// <summary>How one file went: no error - it is there.</summary>
     private sealed record FileOutcome(Exception? Error, int Attempts, bool Verified, bool DeviceLost = false);
+
+
+    /// <summary>What became of the device after a call to it threw - see <see cref="AfterError"/>.</summary>
+    private enum DeviceAfter {
+        /// <summary>Still there: the error is the call's own.</summary>
+        There,
+
+        /// <summary>Went and came back: the call is made again.</summary>
+        Back,
+
+        /// <summary>Not back within <see cref="WaitForDevice"/>.</summary>
+        Lost,
+    }
 
 
     /// <summary>Reports on the thread that calls it, unlike <see cref="Progress{T}"/>: the count is settled before the file is.</summary>

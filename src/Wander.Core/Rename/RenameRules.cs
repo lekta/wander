@@ -48,8 +48,9 @@ public sealed record RenameRules {
     /// Tokens: <c>[N]</c> the name as step 1 left it, <c>[C]</c> the
     /// counter, <c>[D]</c> the modified date, <c>[X]</c> the shot date from
     /// EXIF (modified date when there is none), <c>[P]</c> the parent
-    /// folder's name. <c>[D:yyyy-MM-dd HH-mm]</c> and <c>[X:...]</c> take a
-    /// .NET date format. Anything else is literal.
+    /// folder's name. <c>[D:yyyy-mm-dd hh-mm]</c> and <c>[X:...]</c> take a
+    /// date format by Excel's rule (<see cref="DatePattern"/>). Anything
+    /// else is literal.
     /// </summary>
     public string Template { get; init; } = IdentityTemplate;
 

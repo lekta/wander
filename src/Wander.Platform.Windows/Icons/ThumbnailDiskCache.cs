@@ -129,8 +129,13 @@ public sealed class ThumbnailDiskCache {
     /// v18 (2026-11-02): plain text files draw a sheet of their words as
     /// bars (<c>TextThumbnail</c>).
     /// </para>
+    ///
+    /// <para>
+    /// v19 (2026-11-02): no badge but the shortcut arrow in the picture -
+    /// the list draws TortoiseGit's over the cell; v18 slots hold it baked in.
+    /// </para>
     /// </summary>
-    private const int Generation = 18;
+    private const int Generation = 19;
 
     private readonly string _directory;
     private readonly ILogger _log;

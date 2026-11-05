@@ -1375,6 +1375,51 @@ public class BatchExecutorTests {
     }
 
     [Fact]
+    public async Task MoveManyAsync_AGroupPutBackFromAnotherVolume_CountsTheWayBack() {
+        var (batch, fs, _, undo, tracker) = Setup();
+        fs.Files[@"C:\src\IMG.CR3"] = new byte[8];
+        fs.Files[@"C:\src\IMG.xmp"] = new byte[2];
+        fs.Directories.Add(@"D:\dst");
+        fs.MoveInUseFor[@"C:\src\IMG.xmp"] = int.MaxValue;
+        var group = new BatchGroup(@"C:\src\IMG.CR3", new[] { @"C:\src\IMG.xmp" });
+
+        var results = await batch.MoveManyAsync(new[] { group }, @"D:\dst", new FakeConflictResolver(), default);
+
+        Assert.Equal(BatchItemStatus.Failed, Assert.Single(results).Status);
+        Assert.True(fs.FileExists(@"C:\src\IMG.CR3"));
+        Assert.Equal(0, undo.Depth);
+        // There and back: the photo's bytes twice, the sidecar's once.
+        Assert.Equal(8 + 2 + 8, tracker.Finished[0].Bytes);
+    }
+
+    [Fact]
+    public async Task MoveManyAsync_CancelWhileAGroupGoesBack_LeavesItToCtrlZ() {
+        var (batch, fs, _, undo, tracker) = Setup();
+        fs.Files[@"C:\src\IMG.CR3"] = new byte[8];
+        fs.Files[@"C:\src\IMG.xmp"] = new byte[2];
+        fs.Directories.Add(@"D:\dst");
+        fs.MoveInUseFor[@"C:\src\IMG.xmp"] = int.MaxValue;
+        var group = new BatchGroup(@"C:\src\IMG.CR3", new[] { @"C:\src\IMG.xmp" });
+        using var cts = new CancellationTokenSource();
+        // The total grows only for the way back: Cancel pressed then.
+        tracker.Changed += (_, _) => {
+            if (tracker.Snapshot() is [{ BytesTotal: > 10 }]) {
+                cts.Cancel();
+            }
+        };
+
+        var results = await batch.MoveManyAsync(new[] { group }, @"D:\dst", new FakeConflictResolver(), cts.Token);
+
+        Assert.Equal(BatchItemStatus.Failed, Assert.Single(results).Status);
+        Assert.True(fs.FileExists(@"D:\dst\IMG.CR3"));
+        Assert.False(fs.FileExists(@"C:\src\IMG.CR3"));
+
+        undo.Undo();
+
+        Assert.True(fs.FileExists(@"C:\src\IMG.CR3"));
+    }
+
+    [Fact]
     public async Task DeleteManyAsync_Permanent_AHeldFile_IsWaitedFor_ThenDeleted() {
         var (batch, fs, _, _, _, probe, pauses) = SetupHeld();
         fs.Files[RootA] = new byte[1];

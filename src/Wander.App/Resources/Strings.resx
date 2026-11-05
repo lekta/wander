@@ -2590,9 +2590,6 @@
     <value>Регулярное выражение с ошибкой</value>
     <comment>Окно группового переименования; рядом — текст ошибки от .NET</comment>
   </data>
-  <data name="RenameErrorDateFormat" xml:space="preserve">
-    <value>Формат даты с ошибкой</value>
-  </data>
   <data name="ActionsErrorPerFileWithList" xml:space="preserve">
     <value>Режим «на каждый файл» не может использовать {paths} и {list}</value>
     <comment>Показывать через Get, не Format: фигурные скобки — часть текста</comment>

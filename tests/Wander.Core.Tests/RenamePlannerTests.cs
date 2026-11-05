@@ -128,11 +128,16 @@ public class RenamePlannerTests {
         Assert.Equal(0, asked);
     }
 
+    /// <summary>The trap of 2026-10-07: <c>[D:mm-dd]</c> printed the minutes where the month was meant.</summary>
     [Fact]
-    public void BadDateFormat_IsARuleError() {
-        var preview = Preview(new RenameRules { Template = "[D:yyyy-MM-dd HH:mm:ss.fffffffff]" }, Items("a.jpg"));
+    public void Date_Mm_IsTheMonth_UnlessNextToTheHours() {
+        var modified = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Local);
+        var items = new[] { new RenameItem(Path.Combine(Folder, "a.jpg"), false, modified.ToUniversalTime()) };
 
-        Assert.Equal(RenamePlanner.DateFormatErrorKey, preview.RuleErrorKey);
+        var preview = Preview(new RenameRules { Template = "[D:mm-dd]_[D:hh-mm]" }, items);
+
+        Assert.Equal("01-02_03-04.jpg", preview.Rows[0].NewName);
+        Assert.Null(preview.RuleErrorKey);
     }
 
     [Fact]

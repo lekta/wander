@@ -28,6 +28,12 @@ internal sealed class FakeDeviceContent : IDeviceContent {
     /// <summary>What reads of a file throw, one per read, before one goes through - the device staying there.</summary>
     public Dictionary<string, Queue<Exception>> ReadFailures { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>A listing of the folder breaks once, the way a pulled cable breaks it, and the device goes.</summary>
+    public HashSet<string> BreakListing { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>What a look-up of the path throws, once - the device staying there.</summary>
+    public Dictionary<string, Exception> LookUpFailures { get; } = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>A device that went comes back once it has been looked at this many times; null - never.</summary>
     public int? BackAfter { get; set; }
 
@@ -60,6 +66,9 @@ internal sealed class FakeDeviceContent : IDeviceContent {
         if (State != DeviceState.Ready) {
             return null;
         }
+        if (LookUpFailures.Remove(path, out var failure)) {
+            throw failure;
+        }
         if (_folders.Contains(path)) {
             return Folder(path);
         }
@@ -68,6 +77,9 @@ internal sealed class FakeDeviceContent : IDeviceContent {
     }
 
     public IReadOnlyList<FileSystemEntry> Enumerate(string path, CancellationToken ct = default) {
+        if (BreakListing.Remove(path)) {
+            State = DeviceState.Gone;
+        }
         if (State != DeviceState.Ready) {
             throw new IOException("The device is gone", GenFailure);
         }

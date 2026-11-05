@@ -285,6 +285,11 @@ internal class FakeFileSystem : IFileSystem {
         }
 
         if (Files.TryGetValue(source, out byte[]? data)) {
+            // Across volumes a move is a copy: it reports its bytes, and a
+            // cancel in the middle leaves the file where it was.
+            if (!string.Equals(Path.GetPathRoot(source), Path.GetPathRoot(destination), StringComparison.OrdinalIgnoreCase)) {
+                Report(data.Length, bytesCopied, ct);
+            }
             Files.Remove(source);
             Files[destination] = data;
         }

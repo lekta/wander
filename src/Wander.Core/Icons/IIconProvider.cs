@@ -22,6 +22,18 @@ public interface IIconProvider {
     byte[]? TryGetCachedIcon(string path, IconSize size, bool? isFolder = null);
 
     /// <summary>
+    /// The shell's badge on a file - a version-control state, a sync state -
+    /// as its overlay index; 0 for none. Not in <see cref="GetIcon"/>'s
+    /// picture, which is cached for days while the state behind the badge
+    /// changes with a commit: asked anew every time, never cached. The
+    /// shortcut arrow is not one of these - it stays in a shortcut's picture.
+    /// </summary>
+    int OverlayOf(string path);
+
+    /// <summary>PNG bytes of the badge <see cref="OverlayOf"/> named; null when the shell has no picture for it.</summary>
+    byte[]? OverlayImage(int index);
+
+    /// <summary>
     /// Applies the user's cache limits. Called at startup and whenever the
     /// settings change, so the provider never has to read settings itself.
     /// </summary>

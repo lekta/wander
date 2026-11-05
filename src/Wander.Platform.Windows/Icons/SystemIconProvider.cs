@@ -36,10 +36,11 @@ namespace Wander.Platform.Windows.Icons;
 ///         returns the real thumbnail when the file has a thumbnail
 ///         provider (images, videos, PDFs…) and falls back to the regular
 ///         icon otherwise.
-///      2. overlay (if any) via <c>SHGetFileInfo(SHGFI_OVERLAYINDEX)</c> +
-///         <c>IImageList(SHIL_EXTRALARGE).GetOverlayImage / GetIcon</c>.
-///         The 48 px arrow is up-scaled to ~80 px and drawn into the
-///         bottom-left corner of the 256 px canvas.
+///      2. a shortcut's arrow via <c>SHGetFileInfo(SHGFI_OVERLAYINDEX)</c> +
+///         <c>IImageList(SHIL_EXTRALARGE).GetOverlayImage / GetIcon</c>,
+///         up-scaled and drawn into the bottom-left corner of the 256 px
+///         canvas. Any other overlay - a TortoiseGit state - stays out of
+///         the picture: the list draws it over the cell (<see cref="OverlayOf"/>).
 ///
 ///    The two-step is required because <c>IShellItemImageFactory.GetImage</c>
 ///    is documented (in samples / community guidance) to NOT compose
@@ -138,6 +139,9 @@ public sealed class SystemIconProvider : IIconProvider {
     /// </summary>
     private readonly Dictionary<string, FileStamp> _stamps = new(StringComparer.OrdinalIgnoreCase);
     private readonly Lock _lock = new();
+
+    /// <summary>The overlay badges by index (<see cref="OverlayImage"/>); null where the shell had no picture.</summary>
+    private readonly ConcurrentDictionary<int, byte[]?> _overlays = new();
 
     /// <summary>
     /// Second tier behind the in-memory one: survives a restart, so the
@@ -366,6 +370,38 @@ public sealed class SystemIconProvider : IIconProvider {
 
             return isFolder == false || perPath ? _cache.GetValueOrDefault(key) : null;
         }
+    }
+
+    /// <summary>
+    /// The shell's overlay index for the file, the one Explorer would draw.
+    /// Nothing for a shortcut - its arrow is in the picture
+    /// (<see cref="LoadJumboImage"/>) - nor for a path no overlay handler
+    /// can know: inside an archive, on a device.
+    /// </summary>
+    public int OverlayOf(string path) {
+        if (string.IsNullOrEmpty(path) || path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)
+            || DevicePath.Is(path) || Archives.Inside(path) || IsShellNamespacePath(path)) {
+            return 0;
+        }
+
+        return GetOverlayIndex(path);
+    }
+
+    /// <summary>The badge, from the sharpest list that has it; kept for the session by index - there are a handful.</summary>
+    public byte[]? OverlayImage(int index) {
+        return index <= 0
+            ? null
+            : _overlays.GetOrAdd(index, i => {
+                using Bitmap? badge = LoadOverlayBitmap(i);
+                if (badge is null) {
+                    return null;
+                }
+
+                using var png = new MemoryStream();
+                badge.Save(png, ImageFormat.Png);
+
+                return png.ToArray();
+            });
     }
 
 
@@ -802,7 +838,7 @@ public sealed class SystemIconProvider : IIconProvider {
 
         using Bitmap? overlay = LoadOverlayBitmap(overlayIndex);
         if (overlay is not null) {
-            CompositeOverlay(canvas, overlay, isLink: true);
+            CompositeOverlay(canvas, overlay);
         }
     }
 
@@ -1303,8 +1339,12 @@ public sealed class SystemIconProvider : IIconProvider {
         }
 
         try {
-            int overlayIndex = GetOverlayIndex(path);
+            // Only a shortcut's arrow goes into the picture: it is what the
+            // file is for good. Every other badge says a state - TortoiseGit's
+            // - that changes while the cached picture stays; the list draws
+            // it over the cell at its own size (OverlayOf, 2026-11-02).
             bool isLnk = path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase);
+            int overlayIndex = isLnk ? GetOverlayIndex(path) : 0;
 
             // Defensive fallback: if the shell didn't report an overlay
             // for a .lnk, force index 1 (the well-known "link arrow"
@@ -1321,11 +1361,10 @@ public sealed class SystemIconProvider : IIconProvider {
                 // shortcut on the way that worked buried the rest of the
                 // session under a folder of .lnk files — and the log is
                 // read before every release now (see RELEASING.md).
-                if (overlayBmp is null && isLnk) {
+                if (overlayBmp is null) {
                     IconLog($"overlay bitmap missing for idx={overlayIndex}: {path}");
-                }
-                if (overlayBmp is not null) {
-                    CompositeOverlay(baseBmp, overlayBmp, isLnk);
+                } else {
+                    CompositeOverlay(baseBmp, overlayBmp);
                 }
             }
 
@@ -1812,22 +1851,17 @@ public sealed class SystemIconProvider : IIconProvider {
 
 
     /// <summary>
-    /// Draws <paramref name="overlay"/> in the bottom-left of <paramref name="canvas"/>.
-    /// The badge is baked into the picture, so it grows with the cell it
-    /// is drawn in - a stopgap until it is drawn over the cell at its own
-    /// size (TECHDEBT, the overlay badges entry of 2026-10-22). The shortcut
-    /// arrow (<paramref name="isLink"/>) keeps its size; any other badge -
-    /// TortoiseGit's - is drawn small.
+    /// Draws the shortcut arrow <paramref name="overlay"/> in the
+    /// bottom-left of <paramref name="canvas"/>, baked into the picture and
+    /// growing with the cell. Any other badge is not drawn here: the list
+    /// puts it over the cell at its own size (<see cref="OverlayOf"/>).
     /// </summary>
-    private static void CompositeOverlay(Bitmap canvas, Bitmap overlay, bool isLink) {
-        // The arrow: ~62% of the canvas - larger than Explorer's default to
-        // make it unmissable on tiles that scale down to ~72 px in the
-        // LargeIcons view. At those sizes a 31 % badge becomes ~22 px,
-        // which is easy to overlook. 62 % gives a clearly visible arrow.
-        // Every other badge: 3/16, the 48-px list on a 256 jumbo as
-        // Explorer composes it (2026-10-22: at 5/8 a gallery of a working
-        // copy was a wall of TortoiseGit badges the size of the photos).
-        int overlayPx = isLink ? canvas.Width * 5 / 8 : canvas.Width * 3 / 16; // 160 / 48 for 256
+    private static void CompositeOverlay(Bitmap canvas, Bitmap overlay) {
+        // ~62% of the canvas - larger than Explorer's default to make it
+        // unmissable on tiles that scale down to ~72 px in the LargeIcons
+        // view. At those sizes a 31 % badge becomes ~22 px, which is easy
+        // to overlook. 62 % gives a clearly visible arrow.
+        int overlayPx = canvas.Width * 5 / 8; // 160 for 256
 
         using var g = Graphics.FromImage(canvas);
         g.InterpolationMode = InterpolationMode.HighQualityBicubic;

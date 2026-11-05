@@ -66,6 +66,18 @@ public class ContextMenuBuilderTests {
         Assert.Null(Find(inBin, MenuCommandId.Compare));
     }
 
+    /// <summary>git reads files on disk: an archive entry or a file on a phone has no differences to show.</summary>
+    [Fact]
+    public void Compare_IsNotOffered_InAnArchive_OrOnADevice() {
+        var inArchive = ContextMenuBuilder.Build(
+            SelectionOf(File("a.txt"), File("b.txt")) with { IsArchive = true }, ContextMenuSettings.Default);
+        var onDevice = ContextMenuBuilder.Build(
+            SelectionOf(File("a.txt"), File("b.txt")) with { IsDevice = true }, ContextMenuSettings.Default);
+
+        Assert.Null(Find(inArchive, MenuCommandId.Compare));
+        Assert.Null(Find(onDevice, MenuCommandId.Compare));
+    }
+
     /// <summary>The shell's "Извлечь" is Wander's own row, right under "Открыть" (2026-10-19) - Wander lets go of the drive first.</summary>
     [Fact]
     public void Drive_TheShellsEject_IsOurRow_RightAfterOpen() {

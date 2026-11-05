@@ -16,6 +16,7 @@ using Wander.Core.FileSystem;
 using Wander.Core.Icons;
 using Wander.Core.Logging;
 using Wander.Core.Preview;
+using Wander.Core.Shell;
 
 namespace Wander.App.Views;
 
@@ -302,13 +303,15 @@ public partial class CompareWindow : Window {
         /// The pictures' shapes first, off the UI thread and for a moment at
         /// most - which way the panes are laid out depends on them - then
         /// the window. Anything else may be two texts: their differences are
-        /// asked for here, and waited for a moment too.
+        /// asked for here, and waited for a moment too - of two files on
+        /// disk only: git cannot read an archive entry or a file on a phone,
+        /// which the conflict window of an extraction or an import opens.
         /// </summary>
         private static async Task ShowAsync(FileSystemEntry left, FileSystemEntry right, Window owner) {
             var reader = ServiceLocator.TryGet<IImageMetadataReader>();
             var read = Task.Run(() => (ShapeOf(left, reader), ShapeOf(right, reader)));
             var closing = new CancellationTokenSource();
-            var differences = IsPicture(left) && IsPicture(right)
+            var differences = (IsPicture(left) && IsPicture(right)) || !OnDisk(left) || !OnDisk(right)
                 ? null
                 : CompareAsync(left.FullPath, right.FullPath, closing.Token);
             await Task.WhenAny(differences ?? (Task)read, Task.Delay(differences is null ? ShapesWaitMs : DiffWaitMs));
@@ -332,6 +335,10 @@ public partial class CompareWindow : Window {
 
         private static PictureShape? ShapeOf(FileSystemEntry entry, IImageMetadataReader? reader) {
             return IsPicture(entry) ? PictureLoader.ShapeOf(entry.FullPath, reader) : null;
+        }
+
+        private static bool OnDisk(FileSystemEntry entry) {
+            return !DevicePath.Is(entry.FullPath) && !Archives.Inside(entry.FullPath);
         }
     }
 }

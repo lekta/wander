@@ -280,7 +280,8 @@ internal sealed class BatchExecutor {
             var weights = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
             progress.SetWeighing(true);
             try {
-                progress.SetTotalBytes(Weigh(groups, weights, ct));
+                run.TotalBytes = Weigh(groups, weights, ct);
+                progress.SetTotalBytes(run.TotalBytes);
             } finally {
                 progress.SetWeighing(false);
             }
@@ -424,14 +425,22 @@ internal sealed class BatchExecutor {
     /// last first - the undo steps it left are run and taken off the batch's
     /// composite, as <c>RenameMany</c> rolls back. A step that will not go
     /// back stays in the composite with the ones before it, so <c>Ctrl+Z</c>
-    /// can still try.
+    /// can still try - a Cancel during the way back included.
     /// </summary>
     /// <returns>True when everything went back.</returns>
     private bool PutBack(Run run, int stepsBefore, string primary) {
         for (int i = run.UndoSteps.Count - 1; i >= stepsBefore; i--) {
             try {
-                run.UndoSteps[i].Undo();
+                if (run.UndoSteps[i] is MoveAction move) {
+                    MoveBack(move, run);
+                } else {
+                    run.UndoSteps[i].Undo();
+                }
                 run.UndoSteps.RemoveAt(i);
+            } catch (OperationCanceledException) {
+                _log.Info($"{run.Verb}: the group of {primary} failed, and putting it back was cancelled - Ctrl+Z has the rest");
+
+                return false;
             } catch (Exception ex) {
                 _log.Error($"{run.Verb}: the group of {primary} failed, and putting it back failed too", ex);
 
@@ -441,6 +450,38 @@ internal sealed class BatchExecutor {
         _log.Info($"{run.Verb}: the group of {primary} failed - what of it had moved is back");
 
         return true;
+    }
+
+    /// <summary>
+    /// One move of a failed group undone the way it was done. Across volumes
+    /// that is a copy back (review of sprint 2: an 8 GB video went back
+    /// silently and Cancel did nothing): it stops on the batch's Cancel, and
+    /// the bar grows by what goes back and counts it.
+    /// </summary>
+    private void MoveBack(MoveAction move, Run run) {
+        long size = run.Progress is not null && run.TotalBytes > 0 && !SameRoot(move.NewPath, move.OldPath)
+            ? _fs.GetEntry(move.NewPath)?.Size ?? 0
+            : 0;
+        long reported = 0;
+        var bytes = size == 0
+            ? null
+            : new InlineProgress(delta => {
+                reported += delta;
+                run.Progress!.AdvanceBytes(delta);
+            });
+        if (size > 0) {
+            run.TotalBytes += size;
+            run.Progress!.SetTotalBytes(run.TotalBytes);
+            run.Progress.SetCurrentPath(move.OldPath);
+        }
+
+        try {
+            _fs.MoveEntry(move.NewPath, move.OldPath, bytes, run.Token, CopyOptionsFor(move.NewPath));
+        } finally {
+            if (size > 0) {
+                run.Progress!.AdvanceBytes(size - reported);
+            }
+        }
     }
 
     /// <summary>
@@ -1095,6 +1136,9 @@ internal sealed class BatchExecutor {
 
         /// <summary>What the up-front walk weighed, by source path; null for the sync entry points.</summary>
         public IReadOnlyDictionary<string, long>? Weights { get; set; }
+
+        /// <summary>The bar's total: the walk's, and what a failed group's way back added (<see cref="MoveBack"/>).</summary>
+        public long TotalBytes { get; set; }
 
 
         public ConflictResolution? AnswerFor(string source) {
